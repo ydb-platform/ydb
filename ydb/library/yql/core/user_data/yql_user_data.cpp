@@ -1,25 +1,25 @@
-#include "yql_user_data.h"
+#include "yql_user_data.h" 
 #include <util/folder/iterator.h>
-
-namespace NYql {
-namespace NUserData {
-
-void TUserData::UserDataToLibraries(
+ 
+namespace NYql { 
+namespace NUserData { 
+ 
+void TUserData::UserDataToLibraries( 
     const TVector<TUserData>& userData,
     THashMap<TString,TString>& modules
-) {
-    for (const TUserData& item : userData) {
-        if (item.Type_ == EType::LIBRARY) {
-            if (item.Disposition_ == EDisposition::RESOURCE) { // TODO: support other disposition options
-                modules[to_lower(item.Name_)] = item.Content_;
+) { 
+    for (const TUserData& item : userData) { 
+        if (item.Type_ == EType::LIBRARY) { 
+            if (item.Disposition_ == EDisposition::RESOURCE) { // TODO: support other disposition options 
+                modules[to_lower(item.Name_)] = item.Content_; 
             } else if (item.Disposition_ == EDisposition::RESOURCE_FILE) {
                 modules[to_lower(item.Name_)] = item.Name_;
-            }
-        }
-    }
-    modules["core"] = "/lib/yql/core.yql";
-}
-
+            } 
+        } 
+    } 
+    modules["core"] = "/lib/yql/core.yql"; 
+} 
+ 
 void TUserData::FillFromFolder(
     TFsPath root,
     EType type,
@@ -39,7 +39,7 @@ void TUserData::FillFromFolder(
             type, EDisposition::FILESYSTEM, filePath.RelativeTo(root), filePath
         });
     }
-}
+} 
 
-}
+} 
 }

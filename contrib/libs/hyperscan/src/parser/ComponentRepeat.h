@@ -42,31 +42,31 @@
 
 namespace ue2 {
 
-/**
- * \brief Encapsulates a repeat of a subexpression ('*', '+', '?', '{M,N}',
+/** 
+ * \brief Encapsulates a repeat of a subexpression ('*', '+', '?', '{M,N}', 
  * etc).
  *
- * ASCII Art Time:
+ * ASCII Art Time: 
  *
  * Our standard representation of standard repeats. Other constructions (fan-in
  * vs fan-out) would also be possible and equivalent for our purposes.
  *
  * {n,m}
  *
- *     S->M->M->M->O->O->O->T
- *              |     ^  ^  ^
- *              |     |  |  |
- *              \-----------/
+ *     S->M->M->M->O->O->O->T 
+ *              |     ^  ^  ^ 
+ *              |     |  |  | 
+ *              \-----------/ 
  *
  * {0,m}
  *
- *     /-----------\
- *     |           |
- *     |           V
- *     S->O->O->O->T
- *        |  ^  ^  ^
- *        |  |  |  |
- *        \--------/
+ *     /-----------\ 
+ *     |           | 
+ *     |           V 
+ *     S->O->O->O->T 
+ *        |  ^  ^  ^ 
+ *        |  |  |  | 
+ *        \--------/ 
  *
  */
 class ComponentRepeat : public Component {
@@ -121,7 +121,7 @@ public:
 
 protected:
     void postSubNotePositionHook();
-    void wireRepeats(GlushkovBuildState &bs);
+    void wireRepeats(GlushkovBuildState &bs); 
 
     std::unique_ptr<Component> sub_comp;
     u32 m_min;

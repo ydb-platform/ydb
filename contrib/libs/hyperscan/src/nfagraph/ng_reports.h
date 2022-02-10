@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -48,10 +48,10 @@ std::set<ReportID> all_reports(const NGHolder &g);
 /** True if *all* reports in the graph are exhaustible. */
 bool can_exhaust(const NGHolder &g, const ReportManager &rm);
 
-/** Replaces all existing reports on the holder with the provided internal
- *  report id. */
-void set_report(NGHolder &g, ReportID internal_report);
-
+/** Replaces all existing reports on the holder with the provided internal 
+ *  report id. */ 
+void set_report(NGHolder &g, ReportID internal_report); 
+ 
 /** Derive a maximum offset for the graph from the max_offset values of its
  * reports. Returns MAX_OFFSET for inf. */
 u64a findMaxOffset(const NGHolder &g, const ReportManager &rm);

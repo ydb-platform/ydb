@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
         TScratch scratch = MakeScratch(db);
 
         unsigned int foundId = 42;
-        auto callback = [&](unsigned int id, unsigned long long /* from */, unsigned long long /* to */) {
+        auto callback = [&](unsigned int id, unsigned long long /* from */, unsigned long long /* to */) { 
             foundId = id;
         };
         NHyperscan::Scan(
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
         UNIT_ASSERT(!NHyperscan::Matches(db, scratch, "FOO"));
 
         TSet<unsigned int> foundIds;
-        auto callback = [&](unsigned int id, unsigned long long /* from */, unsigned long long /* to */) {
+        auto callback = [&](unsigned int id, unsigned long long /* from */, unsigned long long /* to */) { 
             foundIds.insert(id);
         };
         NHyperscan::Scan(

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -38,7 +38,7 @@
 #include "util/container.h"
 #include "util/graph.h"
 #include "util/graph_range.h"
-#include "util/graph_small_color_map.h"
+#include "util/graph_small_color_map.h" 
 #include "util/report_manager.h"
 
 #include <deque>
@@ -58,8 +58,8 @@ namespace ue2 {
 void pruneUnreachable(NGHolder &g) {
     deque<NFAVertex> dead;
 
-    if (in_degree(g.acceptEod, g) == 1 && !in_degree(g.accept, g)
-        && edge(g.accept, g.acceptEod, g).second) {
+    if (in_degree(g.acceptEod, g) == 1 && !in_degree(g.accept, g) 
+        && edge(g.accept, g.acceptEod, g).second) { 
         // Trivial case: there are no in-edges to our accepts (other than
         // accept->acceptEod), so all non-specials are unreachable.
         for (auto v : vertices_range(g)) {
@@ -70,10 +70,10 @@ void pruneUnreachable(NGHolder &g) {
     } else {
         // Walk a reverse graph from acceptEod with Boost's depth_first_visit
         // call.
-        typedef reverse_graph<NGHolder, NGHolder &> RevNFAGraph;
-        RevNFAGraph revg(g);
+        typedef reverse_graph<NGHolder, NGHolder &> RevNFAGraph; 
+        RevNFAGraph revg(g); 
 
-        map<RevNFAGraph::vertex_descriptor, default_color_type> colours;
+        map<RevNFAGraph::vertex_descriptor, default_color_type> colours; 
 
         depth_first_visit(revg, g.acceptEod,
                           make_dfs_visitor(boost::null_visitor()),
@@ -104,23 +104,23 @@ void pruneUnreachable(NGHolder &g) {
 
 template<class nfag_t>
 static
-bool pruneForwardUseless(NGHolder &h, const nfag_t &g,
-                         typename nfag_t::vertex_descriptor s,
-                         decltype(make_small_color_map(NGHolder())) &colors) {
+bool pruneForwardUseless(NGHolder &h, const nfag_t &g, 
+                         typename nfag_t::vertex_descriptor s, 
+                         decltype(make_small_color_map(NGHolder())) &colors) { 
     // Begin with all vertices set to white, as DFV only marks visited
     // vertices.
-    colors.fill(small_color::white);
+    colors.fill(small_color::white); 
 
-    depth_first_visit(g, s, make_dfs_visitor(boost::null_visitor()), colors);
+    depth_first_visit(g, s, make_dfs_visitor(boost::null_visitor()), colors); 
 
     vector<NFAVertex> dead;
 
     // All non-special vertices that are still white can be removed.
     for (auto v : vertices_range(g)) {
-        if (!is_special(v, g) && get(colors, v) == small_color::white) {
-            DEBUG_PRINTF("vertex %zu is unreachable from %zu\n",
+        if (!is_special(v, g) && get(colors, v) == small_color::white) { 
+            DEBUG_PRINTF("vertex %zu is unreachable from %zu\n", 
                          g[v].index, g[s].index);
-            dead.push_back(NFAVertex(v));
+            dead.push_back(NFAVertex(v)); 
         }
     }
 
@@ -139,19 +139,19 @@ bool pruneForwardUseless(NGHolder &h, const nfag_t &g,
 void pruneUseless(NGHolder &g, bool renumber) {
     DEBUG_PRINTF("pruning useless vertices\n");
     assert(hasCorrectlyNumberedVertices(g));
-    auto colors = make_small_color_map(g);
+    auto colors = make_small_color_map(g); 
 
-    bool work_done = pruneForwardUseless(g, g, g.start, colors);
-    work_done |= pruneForwardUseless(g, reverse_graph<NGHolder, NGHolder &>(g),
-                                     g.acceptEod, colors);
+    bool work_done = pruneForwardUseless(g, g, g.start, colors); 
+    work_done |= pruneForwardUseless(g, reverse_graph<NGHolder, NGHolder &>(g), 
+                                     g.acceptEod, colors); 
 
     if (!work_done) {
         return;
     }
 
     if (renumber) {
-        renumber_edges(g);
-        renumber_vertices(g);
+        renumber_edges(g); 
+        renumber_vertices(g); 
     }
 }
 
@@ -168,7 +168,7 @@ void pruneEmptyVertices(NGHolder &g) {
 
         const CharReach &cr = g[v].char_reach;
         if (cr.none()) {
-            DEBUG_PRINTF("empty: %zu\n", g[v].index);
+            DEBUG_PRINTF("empty: %zu\n", g[v].index); 
             dead.push_back(v);
         }
     }
@@ -223,14 +223,14 @@ void pruneHighlanderAccepts(NGHolder &g, const ReportManager &rm) {
 
 static
 bool isDominatedByReporter(const NGHolder &g,
-                           const unordered_map<NFAVertex, NFAVertex> &dom,
+                           const unordered_map<NFAVertex, NFAVertex> &dom, 
                            NFAVertex v, ReportID report_id) {
     for (auto it = dom.find(v); it != end(dom); it = dom.find(v)) {
         NFAVertex u = it->second;
         // Note: reporters with edges only to acceptEod are not considered to
         // dominate.
         if (edge(u, g.accept, g).second && contains(g[u].reports, report_id)) {
-            DEBUG_PRINTF("%zu is dominated by %zu, and both report %u\n",
+            DEBUG_PRINTF("%zu is dominated by %zu, and both report %u\n", 
                           g[v].index, g[u].index, report_id);
             return true;
         }
@@ -292,7 +292,7 @@ void pruneHighlanderDominated(NGHolder &g, const ReportManager &rm) {
     }
 
 
-    sort(begin(reporters), end(reporters));
+    sort(begin(reporters), end(reporters)); 
     reporters.erase(unique(begin(reporters), end(reporters)), end(reporters));
 
     DEBUG_PRINTF("%zu vertices have simple exhaustible reports\n",
@@ -311,14 +311,14 @@ void pruneHighlanderDominated(NGHolder &g, const ReportManager &rm) {
                 continue;
             }
             if (isDominatedByReporter(g, dom, v, report_id)) {
-                DEBUG_PRINTF("removed dominated report %u from vertex %zu\n",
+                DEBUG_PRINTF("removed dominated report %u from vertex %zu\n", 
                              report_id, g[v].index);
                 g[v].reports.erase(report_id);
             }
         }
 
         if (g[v].reports.empty()) {
-            DEBUG_PRINTF("removed edges to accepts from %zu, no reports left\n",
+            DEBUG_PRINTF("removed edges to accepts from %zu, no reports left\n", 
                           g[v].index);
             remove_edge(v, g.accept, g);
             remove_edge(v, g.acceptEod, g);
@@ -333,7 +333,7 @@ void pruneHighlanderDominated(NGHolder &g, const ReportManager &rm) {
         if (hasOnlySelfLoopAndExhaustibleAccepts(g, rm, v)) {
             remove_edge(v, v, g);
             modified = true;
-            DEBUG_PRINTF("removed self-loop on %zu\n", g[v].index);
+            DEBUG_PRINTF("removed self-loop on %zu\n", g[v].index); 
         }
     }
 
@@ -345,7 +345,7 @@ void pruneHighlanderDominated(NGHolder &g, const ReportManager &rm) {
 
     // We may have only removed self-loops, in which case pruneUseless wouldn't
     // renumber, so we do edge renumbering explicitly here.
-    renumber_edges(g);
+    renumber_edges(g); 
 }
 
 /** Removes the given Report ID from vertices connected to accept, and then
@@ -384,8 +384,8 @@ void pruneReport(NGHolder &g, ReportID report) {
 
     remove_edges(dead, g);
     pruneUnreachable(g);
-    renumber_vertices(g);
-    renumber_edges(g);
+    renumber_vertices(g); 
+    renumber_edges(g); 
 }
 
 /** Removes all Report IDs bar the given one from vertices connected to accept,
@@ -427,8 +427,8 @@ void pruneAllOtherReports(NGHolder &g, ReportID report) {
 
     remove_edges(dead, g);
     pruneUnreachable(g);
-    renumber_vertices(g);
-    renumber_edges(g);
+    renumber_vertices(g); 
+    renumber_edges(g); 
 }
 
 } // namespace ue2

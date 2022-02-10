@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -39,7 +39,7 @@
 #include "ng_util.h"
 #include "ue2common.h"
 #include "util/container.h"
-#include "util/flat_containers.h"
+#include "util/flat_containers.h" 
 #include "util/graph_range.h"
 #include "util/make_unique.h"
 
@@ -73,28 +73,28 @@ private:
     ReportID a_rep;
     ReportID b_rep;
 };
-
-/** Comparison functor used to sort by vertex_index. */
-template<typename Graph>
-struct VertexIndexOrdering {
-    explicit VertexIndexOrdering(const Graph &g_in) : g(g_in) {}
-    bool operator()(typename Graph::vertex_descriptor a,
-                    typename Graph::vertex_descriptor b) const {
-        assert(a == b || g[a].index != g[b].index);
-        return g[a].index < g[b].index;
-    }
-private:
-    const Graph &g;
-};
-
-template<typename Graph>
-static
-VertexIndexOrdering<Graph> make_index_ordering(const Graph &g) {
-    return VertexIndexOrdering<Graph>(g);
+ 
+/** Comparison functor used to sort by vertex_index. */ 
+template<typename Graph> 
+struct VertexIndexOrdering { 
+    explicit VertexIndexOrdering(const Graph &g_in) : g(g_in) {} 
+    bool operator()(typename Graph::vertex_descriptor a, 
+                    typename Graph::vertex_descriptor b) const { 
+        assert(a == b || g[a].index != g[b].index); 
+        return g[a].index < g[b].index; 
+    } 
+private: 
+    const Graph &g; 
+}; 
+ 
+template<typename Graph> 
+static 
+VertexIndexOrdering<Graph> make_index_ordering(const Graph &g) { 
+    return VertexIndexOrdering<Graph>(g); 
 }
 
-}
-
+} 
+ 
 static
 bool is_equal_i(const NGHolder &a, const NGHolder &b,
                 const check_report &check_rep) {
@@ -125,7 +125,7 @@ bool is_equal_i(const NGHolder &a, const NGHolder &b,
     for (size_t i = 0; i < vert_a.size(); i++) {
         NFAVertex va = vert_a[i];
         NFAVertex vb = vert_b[i];
-        DEBUG_PRINTF("vertex %zu\n", a[va].index);
+        DEBUG_PRINTF("vertex %zu\n", a[va].index); 
 
         // Vertex index must be the same.
         if (a[va].index != b[vb].index) {
@@ -169,14 +169,14 @@ bool is_equal_i(const NGHolder &a, const NGHolder &b,
     }
 
     /* check top for edges out of start */
-    vector<pair<u32, flat_set<u32>>> top_a;
-    vector<pair<u32, flat_set<u32>>> top_b;
+    vector<pair<u32, flat_set<u32>>> top_a; 
+    vector<pair<u32, flat_set<u32>>> top_b; 
 
     for (const auto &e : out_edges_range(a.start, a)) {
-        top_a.emplace_back(a[target(e, a)].index, a[e].tops);
+        top_a.emplace_back(a[target(e, a)].index, a[e].tops); 
     }
     for (const auto &e : out_edges_range(b.start, b)) {
-        top_b.emplace_back(b[target(e, b)].index, b[e].tops);
+        top_b.emplace_back(b[target(e, b)].index, b[e].tops); 
     }
 
     sort(top_a.begin(), top_a.end());
@@ -196,11 +196,11 @@ u64a hash_holder(const NGHolder &g) {
     size_t rv = 0;
 
     for (auto v : vertices_range(g)) {
-        hash_combine(rv, g[v].index);
-        hash_combine(rv, g[v].char_reach);
+        hash_combine(rv, g[v].index); 
+        hash_combine(rv, g[v].char_reach); 
 
         for (auto w : adjacent_vertices_range(v, g)) {
-            hash_combine(rv, g[w].index);
+            hash_combine(rv, g[w].index); 
         }
     }
 

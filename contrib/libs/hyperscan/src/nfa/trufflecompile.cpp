@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -32,16 +32,16 @@
  * truffle is always able to represent an entire character class, providing a
  * backstop to other acceleration engines.
  */
-
+ 
 #include "trufflecompile.h"
-
+ 
 #include "ue2common.h"
 #include "util/charreach.h"
-#include "util/dump_mask.h"
+#include "util/dump_mask.h" 
 #include "util/simd_types.h"
 
-#include <cstring>
-
+#include <cstring> 
+ 
 using namespace std;
 
 namespace ue2 {
@@ -56,15 +56,15 @@ namespace ue2 {
  * bits 456 is the bit that is set at that offset.
  */
 
-void truffleBuildMasks(const CharReach &cr, u8 *shuf_mask_lo_highclear,
-                       u8 *shuf_mask_lo_highset) {
-    memset(shuf_mask_lo_highset, 0, sizeof(m128));
-    memset(shuf_mask_lo_highclear, 0, sizeof(m128));
+void truffleBuildMasks(const CharReach &cr, u8 *shuf_mask_lo_highclear, 
+                       u8 *shuf_mask_lo_highset) { 
+    memset(shuf_mask_lo_highset, 0, sizeof(m128)); 
+    memset(shuf_mask_lo_highclear, 0, sizeof(m128)); 
 
     for (size_t v = cr.find_first(); v != CharReach::npos;
          v = cr.find_next(v)) {
         DEBUG_PRINTF("adding 0x%02x to %s\n", (u8)v, (v & 0x80) ? "highset" : "highclear");
-        u8 *change_mask = (v & 0x80) ? shuf_mask_lo_highset : shuf_mask_lo_highclear;
+        u8 *change_mask = (v & 0x80) ? shuf_mask_lo_highset : shuf_mask_lo_highclear; 
         u8 low_nibble = v & 0xf;
         u8 bits_456 = (v & 0x70) >> 4;
         change_mask[low_nibble] |= 1 << bits_456;
@@ -74,16 +74,16 @@ void truffleBuildMasks(const CharReach &cr, u8 *shuf_mask_lo_highclear,
 /*
  * Reconstruct the charclass that the truffle masks represent
  */
-CharReach truffle2cr(const u8 *highclear, const u8 *highset) {
+CharReach truffle2cr(const u8 *highclear, const u8 *highset) { 
     CharReach cr;
     for (u8 i = 0; i < 16; i++) {
-        u32 bits_456 = highclear[i];
+        u32 bits_456 = highclear[i]; 
         while (bits_456) {
             u32 pos = findAndClearLSB_32(&bits_456);
             assert(pos < 8);
             cr.set(pos << 4 | i);
         }
-        bits_456 = highset[i];
+        bits_456 = highset[i]; 
         while (bits_456) {
             u32 pos = findAndClearLSB_32(&bits_456);
             assert(pos < 8);

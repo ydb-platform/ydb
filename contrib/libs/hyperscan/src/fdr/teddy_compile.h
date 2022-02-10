@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,8 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * \file
+/** 
+ * \file 
  * \brief FDR literal matcher: Teddy build API.
  */
 
@@ -35,8 +35,8 @@
 #define TEDDY_COMPILE_H
 
 #include "ue2common.h"
-#include "hwlm/hwlm_build.h"
-#include "util/bytecode_ptr.h"
+#include "hwlm/hwlm_build.h" 
+#include "util/bytecode_ptr.h" 
 
 #include <vector>
 
@@ -44,16 +44,16 @@ struct FDR;
 
 namespace ue2 {
 
-class TeddyEngineDescription;
-struct Grey;
+class TeddyEngineDescription; 
+struct Grey; 
 struct hwlmLiteral;
-struct target_t;
+struct target_t; 
 
-bytecode_ptr<FDR> teddyBuildTable(const HWLMProto &proto, const Grey &grey);
+bytecode_ptr<FDR> teddyBuildTable(const HWLMProto &proto, const Grey &grey); 
 
-std::unique_ptr<HWLMProto> teddyBuildProtoHinted(
-                          u8 engType, const std::vector<hwlmLiteral> &lits,
-                          bool make_small, u32 hint, const target_t &target);
+std::unique_ptr<HWLMProto> teddyBuildProtoHinted( 
+                          u8 engType, const std::vector<hwlmLiteral> &lits, 
+                          bool make_small, u32 hint, const target_t &target); 
 } // namespace ue2
 
 #endif // TEDDY_COMPILE_H

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -72,8 +72,8 @@ void buildAccelSingle(const AccelInfo &info, AccelAux *aux) {
     }
 
     DEBUG_PRINTF("attempting shufti for %zu chars\n", outs);
-    if (-1 != shuftiBuildMasks(info.single_stops, (u8 *)&aux->shufti.lo,
-                               (u8 *)&aux->shufti.hi)) {
+    if (-1 != shuftiBuildMasks(info.single_stops, (u8 *)&aux->shufti.lo, 
+                               (u8 *)&aux->shufti.hi)) { 
         aux->accel_type = ACCEL_SHUFTI;
         aux->shufti.offset = offset;
         DEBUG_PRINTF("shufti built OK\n");
@@ -86,55 +86,55 @@ void buildAccelSingle(const AccelInfo &info, AccelAux *aux) {
         DEBUG_PRINTF("building Truffle for %zu chars\n", outs);
         aux->accel_type = ACCEL_TRUFFLE;
         aux->truffle.offset = offset;
-        truffleBuildMasks(info.single_stops, (u8 *)&aux->truffle.mask1,
-                          (u8 *)&aux->truffle.mask2);
+        truffleBuildMasks(info.single_stops, (u8 *)&aux->truffle.mask1, 
+                          (u8 *)&aux->truffle.mask2); 
         return;
     }
 
     DEBUG_PRINTF("unable to accelerate case with %zu outs\n", outs);
 }
 
-bool buildDvermMask(const flat_set<pair<u8, u8>> &escape_set, u8 *m1_out,
-                    u8 *m2_out) {
-    u8 a1 = 0xff;
-    u8 a2 = 0xff;
-    u8 b1 = 0xff;
-    u8 b2 = 0xff;
-
-    for (const auto &e : escape_set) {
-        DEBUG_PRINTF("%0hhx %0hhx\n", e.first, e.second);
-        a1 &= e.first;
-        b1 &= ~e.first;
-        a2 &= e.second;
-        b2 &= ~e.second;
-    }
-
-    u8 m1 = a1 | b1;
-    u8 m2 = a2 | b2;
-
-    u32 holes1 = 8 - popcount32(m1);
-    u32 holes2 = 8 - popcount32(m2);
-
-    DEBUG_PRINTF("aaaa %0hhx %0hhx\n", a1, a2);
-    DEBUG_PRINTF("bbbb %0hhx %0hhx\n", b1, b2);
-    DEBUG_PRINTF("mask %0hhx %0hhx\n", m1, m2);
-
-    assert(holes1 <= 8 && holes2 <= 8);
-    assert(escape_set.size() <= 1U << (holes1 + holes2));
-    if (escape_set.size() != 1U << (holes1 + holes2)) {
-        return false;
-    }
-
-    if (m1_out) {
-        *m1_out = m1;
-    }
-    if (m2_out) {
-        *m2_out = m2;
-    }
-
-    return true;
-}
-
+bool buildDvermMask(const flat_set<pair<u8, u8>> &escape_set, u8 *m1_out, 
+                    u8 *m2_out) { 
+    u8 a1 = 0xff; 
+    u8 a2 = 0xff; 
+    u8 b1 = 0xff; 
+    u8 b2 = 0xff; 
+ 
+    for (const auto &e : escape_set) { 
+        DEBUG_PRINTF("%0hhx %0hhx\n", e.first, e.second); 
+        a1 &= e.first; 
+        b1 &= ~e.first; 
+        a2 &= e.second; 
+        b2 &= ~e.second; 
+    } 
+ 
+    u8 m1 = a1 | b1; 
+    u8 m2 = a2 | b2; 
+ 
+    u32 holes1 = 8 - popcount32(m1); 
+    u32 holes2 = 8 - popcount32(m2); 
+ 
+    DEBUG_PRINTF("aaaa %0hhx %0hhx\n", a1, a2); 
+    DEBUG_PRINTF("bbbb %0hhx %0hhx\n", b1, b2); 
+    DEBUG_PRINTF("mask %0hhx %0hhx\n", m1, m2); 
+ 
+    assert(holes1 <= 8 && holes2 <= 8); 
+    assert(escape_set.size() <= 1U << (holes1 + holes2)); 
+    if (escape_set.size() != 1U << (holes1 + holes2)) { 
+        return false; 
+    } 
+ 
+    if (m1_out) { 
+        *m1_out = m1; 
+    } 
+    if (m2_out) { 
+        *m2_out = m2; 
+    } 
+ 
+    return true; 
+} 
+ 
 static
 bool isCaselessDouble(const flat_set<pair<u8, u8>> &stop) {
     // test for vector containing <A,Z> <A,z> <a,Z> <a,z>
@@ -190,36 +190,36 @@ void buildAccelDouble(const AccelInfo &info, AccelAux *aux) {
         return;
     }
 
-    if (outs1 == 0) {
-        u8 m1;
-        u8 m2;
-
-        if (buildDvermMask(info.double_stop2, &m1, &m2)) {
-            aux->accel_type = ACCEL_DVERM_MASKED;
-            aux->dverm.offset = offset;
-            aux->dverm.c1 = info.double_stop2.begin()->first & m1;
-            aux->dverm.c2 = info.double_stop2.begin()->second & m2;
-            aux->dverm.m1 = m1;
-            aux->dverm.m2 = m2;
-            DEBUG_PRINTF("building maskeddouble-vermicelli for 0x%02hhx%02hhx\n",
-                         aux->dverm.c1, aux->dverm.c2);
+    if (outs1 == 0) { 
+        u8 m1; 
+        u8 m2; 
+ 
+        if (buildDvermMask(info.double_stop2, &m1, &m2)) { 
+            aux->accel_type = ACCEL_DVERM_MASKED; 
+            aux->dverm.offset = offset; 
+            aux->dverm.c1 = info.double_stop2.begin()->first & m1; 
+            aux->dverm.c2 = info.double_stop2.begin()->second & m2; 
+            aux->dverm.m1 = m1; 
+            aux->dverm.m2 = m2; 
+            DEBUG_PRINTF("building maskeddouble-vermicelli for 0x%02hhx%02hhx\n", 
+                         aux->dverm.c1, aux->dverm.c2); 
             return;
         }
     }
 
-    if (outs1 < outs2 && outs1 <= 2) { // Heuristic from UE-438.
-        DEBUG_PRINTF("building double-shufti for %zu one-byte and %zu"
-                     " two-byte literals\n", outs1, outs2);
-        aux->accel_type = ACCEL_DSHUFTI;
-        aux->dshufti.offset = offset;
-        if (shuftiBuildDoubleMasks(
-                info.double_stop1, info.double_stop2, (u8 *)&aux->dshufti.lo1,
-                (u8 *)&aux->dshufti.hi1, (u8 *)&aux->dshufti.lo2,
-                (u8 *)&aux->dshufti.hi2)) {
-            return;
-        }
-    }
-
+    if (outs1 < outs2 && outs1 <= 2) { // Heuristic from UE-438. 
+        DEBUG_PRINTF("building double-shufti for %zu one-byte and %zu" 
+                     " two-byte literals\n", outs1, outs2); 
+        aux->accel_type = ACCEL_DSHUFTI; 
+        aux->dshufti.offset = offset; 
+        if (shuftiBuildDoubleMasks( 
+                info.double_stop1, info.double_stop2, (u8 *)&aux->dshufti.lo1, 
+                (u8 *)&aux->dshufti.hi1, (u8 *)&aux->dshufti.lo2, 
+                (u8 *)&aux->dshufti.hi2)) { 
+            return; 
+        } 
+    } 
+ 
     // drop back to attempt single-byte accel
     DEBUG_PRINTF("dropping back to single-byte acceleration\n");
     aux->accel_type = ACCEL_NONE;
@@ -231,8 +231,8 @@ bool buildAccelAux(const AccelInfo &info, AccelAux *aux) {
         DEBUG_PRINTF("picked red tape\n");
         aux->accel_type = ACCEL_RED_TAPE;
         aux->generic.offset = info.single_offset;
-    }
-    if (aux->accel_type == ACCEL_NONE) {
+    } 
+    if (aux->accel_type == ACCEL_NONE) { 
         buildAccelDouble(info, aux);
     }
     if (aux->accel_type == ACCEL_NONE) {

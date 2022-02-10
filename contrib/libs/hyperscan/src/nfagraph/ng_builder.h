@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -28,7 +28,7 @@
 
 /** \file
  * \brief: NFA Graph Builder: used by Glushkov construction to construct an
- * NGHolder from a parsed expression.
+ * NGHolder from a parsed expression. 
  */
 
 #ifndef NG_BUILDER_H
@@ -37,7 +37,7 @@
 #include "ue2common.h"
 
 #include "parser/position.h"
-#include "util/noncopyable.h"
+#include "util/noncopyable.h" 
 
 #include <memory>
 
@@ -45,14 +45,14 @@ namespace ue2 {
 
 class CharReach;
 class ReportManager;
-struct BuiltExpression;
+struct BuiltExpression; 
 struct CompileContext;
 
 class ParsedExpression;
 
 /** \brief Abstract builder interface. Use \ref makeNFABuilder to construct
  * one. Used by GlushkovBuildState. */
-class NFABuilder : noncopyable {
+class NFABuilder : noncopyable { 
 public:
     virtual ~NFABuilder();
 
@@ -83,10 +83,10 @@ public:
                              unsigned posOffset) = 0;
 
     /**
-     * \brief Returns the built NGHolder graph and ExpressionInfo.
+     * \brief Returns the built NGHolder graph and ExpressionInfo. 
      * Note that this builder cannot be used after this call.
      */
-    virtual BuiltExpression getGraph() = 0;
+    virtual BuiltExpression getGraph() = 0; 
 };
 
 /** Construct a usable NFABuilder. */

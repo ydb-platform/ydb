@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation
+ * Copyright (c) 2015-2016, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -35,7 +35,7 @@
 
 #include "ue2common.h"
 
-/** Index meaning a given exhaustion key is invalid. */
-#define INVALID_EKEY    (~(u32)0)
+/** Index meaning a given exhaustion key is invalid. */ 
+#define INVALID_EKEY    (~(u32)0) 
 
 #endif

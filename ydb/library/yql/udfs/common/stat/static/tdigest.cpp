@@ -8,8 +8,8 @@ TDigest::TDigest(double delta, double k)
     : N(0)
     , Delta(delta)
     , K(k)
-{
-}
+{ 
+} 
 
 TDigest::TDigest(double delta, double k, double firstValue)
     : TDigest(delta, k)
@@ -17,7 +17,7 @@ TDigest::TDigest(double delta, double k, double firstValue)
     AddValue(firstValue);
 }
 
-TDigest::TDigest(const TString& serializedDigest)
+TDigest::TDigest(const TString& serializedDigest) 
     : N(0)
 {
     NTDigest::TDigest digest;
@@ -30,7 +30,7 @@ TDigest::TDigest(const TString& serializedDigest)
     }
 }
 
-TDigest::TDigest(const TDigest* digest1, const TDigest* digest2)
+TDigest::TDigest(const TDigest* digest1, const TDigest* digest2) 
     : N(0)
     , Delta(std::min(digest1->Delta, digest2->Delta))
     , K(std::max(digest1->K, digest2->K))
@@ -46,14 +46,14 @@ void TDigest::Add(const TDigest& otherDigest) {
         Update(it.Mean, it.Count);
 }
 
-TDigest TDigest::operator+(const TDigest& other) {
+TDigest TDigest::operator+(const TDigest& other) { 
     TDigest T(Delta, K);
     T.Add(*this);
     T.Add(other);
     return T;
 }
 
-TDigest& TDigest::operator+=(const TDigest& other) {
+TDigest& TDigest::operator+=(const TDigest& other) { 
     Add(other);
     return *this;
 }

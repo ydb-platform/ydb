@@ -64,12 +64,12 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         if (!ev->Get()->ServerId) {
-            auto reply = Sprintf("Tablet pipe with %" PRIu64 " is not connected with status: %s"
-                                 " (<a href=\"?SsId=%" PRIu64 "\">see State Storage</a>)",
-                                 ev->Get()->TabletId,
-                                 NKikimrProto::EReplyStatus_Name(ev->Get()->Status).c_str(),
-                                 ev->Get()->TabletId);
-            Notify(ctx, reply);
+            auto reply = Sprintf("Tablet pipe with %" PRIu64 " is not connected with status: %s" 
+                                 " (<a href=\"?SsId=%" PRIu64 "\">see State Storage</a>)", 
+                                 ev->Get()->TabletId, 
+                                 NKikimrProto::EReplyStatus_Name(ev->Get()->Status).c_str(), 
+                                 ev->Get()->TabletId); 
+            Notify(ctx, reply); 
             Die(ctx);
         }
     }

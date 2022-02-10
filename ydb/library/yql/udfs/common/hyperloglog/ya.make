@@ -1,19 +1,19 @@
-YQL_UDF(hyperloglog_udf)
-
-YQL_ABI_VERSION(
-    2
+YQL_UDF(hyperloglog_udf) 
+ 
+YQL_ABI_VERSION( 
+    2 
     9
-    0
-)
-
+    0 
+) 
+ 
 OWNER(g:yql g:yql_ydb_core)
-
-SRCS(
-    hyperloglog_udf.cpp
-)
-
-PEERDIR(
+ 
+SRCS( 
+    hyperloglog_udf.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/hyperloglog
-)
-
-END()
+) 
+ 
+END() 

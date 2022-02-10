@@ -8,7 +8,7 @@
 #include <ydb/library/yql/public/issue/yql_warning.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/sql/cluster_mapping.h>
-
+ 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
@@ -16,13 +16,13 @@
 #include <util/generic/stack.h>
 #include <util/generic/vector.h>
 
-namespace NSQLTranslationV0 {
+namespace NSQLTranslationV0 { 
 
     typedef TMap<TString, TNodePtr> TNamedNodesMap;
 
     class TContext {
     public:
-        TContext(const NSQLTranslation::TTranslationSettings& settings,
+        TContext(const NSQLTranslation::TTranslationSettings& settings, 
                  NYql::TIssues& issues);
 
         virtual ~TContext();
@@ -53,11 +53,11 @@ namespace NSQLTranslationV0 {
         }
 
         inline void IncrementMonCounter(const TString& name, const TString& value) {
-            if (IncrementMonCounterFunction) {
-                IncrementMonCounterFunction(name, value);
-            }
-        }
-
+            if (IncrementMonCounterFunction) { 
+                IncrementMonCounterFunction(name, value); 
+            } 
+        } 
+ 
         bool HasCluster(const TString& cluster) const {
             return GetClusterProvider(cluster).Defined();
         }
@@ -126,7 +126,7 @@ namespace NSQLTranslationV0 {
 
     public:
         THashMap<TString, TNodePtr> Variables;
-        NSQLTranslation::TTranslationSettings Settings;
+        NSQLTranslation::TTranslationSettings Settings; 
         std::unique_ptr<TMemoryPool> Pool;
         NYql::TIssues& Issues;
         TMap<TString, TStack<TNodePtr>> NamedNodes;
@@ -134,7 +134,7 @@ namespace NSQLTranslationV0 {
         THashSet<TString> Exports;
         THashMap<TString, TString> ImportModuleAliases;
         TMap<TString, TString> SimpleUdfs;
-        NSQLTranslation::TIncrementMonCounterFunction IncrementMonCounterFunction;
+        NSQLTranslation::TIncrementMonCounterFunction IncrementMonCounterFunction; 
         TString CurrCluster;
         bool HasPendingErrors;
         THashMap<TString, ui32> GenIndexes;
@@ -145,8 +145,8 @@ namespace NSQLTranslationV0 {
         bool PragmaAutoCommit = false;
         bool SimpleColumns = false;
         bool PragmaDirectRead = false;
-        bool PragmaYsonAutoConvert = false;
-        bool PragmaYsonStrict = false;
+        bool PragmaYsonAutoConvert = false; 
+        bool PragmaYsonStrict = false; 
         bool PragmaClassicDivision = true;
         bool PragmaPullUpFlatMapOverJoin = true;
         bool EnableSystemColumns = true;
@@ -154,7 +154,7 @@ namespace NSQLTranslationV0 {
         ui64 ResultSizeLimit = 0;
         ui32 PragmaGroupByLimit = 1 << 5;
         ui32 PragmaGroupByCubeLimit = 5;
-        THashSet<TString> Libraries;
+        THashSet<TString> Libraries; 
         NYql::TWarningPolicy WarningPolicy;
         TVector<TString> AllResults;
         TSet<TString> UsedClusters;
@@ -214,4 +214,4 @@ namespace NSQLTranslationV0 {
     protected:
         TContext& Ctx;
     };
-}  // namespace NSQLTranslationV0
+}  // namespace NSQLTranslationV0 

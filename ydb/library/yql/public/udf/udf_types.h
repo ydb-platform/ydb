@@ -14,18 +14,18 @@ using TType = void;
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 
-#define UDF_TYPE_KIND_MAP(XX) \
-    XX(Unknown)               \
-    XX(Data)                  \
-    XX(Struct)                \
-    XX(List)                  \
-    XX(Optional)              \
-    XX(Tuple)                 \
-    XX(Dict)                  \
-    XX(Callable)              \
-    XX(Resource)              \
-    XX(Void)                  \
-    XX(Variant)               \
+#define UDF_TYPE_KIND_MAP(XX) \ 
+    XX(Unknown)               \ 
+    XX(Data)                  \ 
+    XX(Struct)                \ 
+    XX(List)                  \ 
+    XX(Optional)              \ 
+    XX(Tuple)                 \ 
+    XX(Dict)                  \ 
+    XX(Callable)              \ 
+    XX(Resource)              \ 
+    XX(Void)                  \ 
+    XX(Variant)               \ 
     XX(Stream)                \
     XX(Null)                  \
     XX(EmptyList)             \
@@ -65,16 +65,16 @@ using TType = void;
     XX(Void)                  \
     XX(Variant)               \
     XX(Stream)
-
+ 
 #endif
 
-enum ETypeKind
+enum ETypeKind 
 {
-    UDF_TYPE_KIND_MAP(ENUM_VALUE_GEN_NO_VALUE)
+    UDF_TYPE_KIND_MAP(ENUM_VALUE_GEN_NO_VALUE) 
 };
 
-ENUM_TO_STRING(ETypeKind, UDF_TYPE_KIND_MAP)
-
+ENUM_TO_STRING(ETypeKind, UDF_TYPE_KIND_MAP) 
+ 
 #define UDF_ASSERT_TYPE_SIZE(type, expectedSize)         \
     static_assert(sizeof(type) == (expectedSize),        \
         "Size of " #type " exceeds expected size. "      \

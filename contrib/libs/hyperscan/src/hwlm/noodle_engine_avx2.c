@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -38,11 +38,11 @@ static really_inline m256 getCaseMask(void) {
 }
 
 static really_inline
-hwlm_error_t scanSingleUnaligned(const struct noodTable *n, const u8 *buf,
-                                 size_t len, size_t offset, bool noCase,
-                                 m256 caseMask, m256 mask1,
-                                 const struct cb_info *cbi, size_t start,
-                                 size_t end) {
+hwlm_error_t scanSingleUnaligned(const struct noodTable *n, const u8 *buf, 
+                                 size_t len, size_t offset, bool noCase, 
+                                 m256 caseMask, m256 mask1, 
+                                 const struct cb_info *cbi, size_t start, 
+                                 size_t end) { 
     const u8 *d = buf + offset;
     DEBUG_PRINTF("start %zu end %zu offset %zu\n", start, end, offset);
     const size_t l = end - start;
@@ -67,11 +67,11 @@ hwlm_error_t scanSingleUnaligned(const struct noodTable *n, const u8 *buf,
 }
 
 static really_inline
-hwlm_error_t scanDoubleUnaligned(const struct noodTable *n, const u8 *buf,
-                                 size_t len, size_t offset, bool noCase,
-                                 m256 caseMask, m256 mask1, m256 mask2,
-                                 const struct cb_info *cbi, size_t start,
-                                 size_t end) {
+hwlm_error_t scanDoubleUnaligned(const struct noodTable *n, const u8 *buf, 
+                                 size_t len, size_t offset, bool noCase, 
+                                 m256 caseMask, m256 mask1, m256 mask2, 
+                                 const struct cb_info *cbi, size_t start, 
+                                 size_t end) { 
     const u8 *d = buf + offset;
     DEBUG_PRINTF("start %zu end %zu offset %zu\n", start, end, offset);
     size_t l = end - start;
@@ -101,8 +101,8 @@ hwlm_error_t scanDoubleUnaligned(const struct noodTable *n, const u8 *buf,
 // alignment boundary if needed and to finish off data that the aligned scan
 // function can't handle (due to small/unaligned chunk at end)
 static really_inline
-hwlm_error_t scanSingleShort(const struct noodTable *n, const u8 *buf,
-                             size_t len, bool noCase, m256 caseMask, m256 mask1,
+hwlm_error_t scanSingleShort(const struct noodTable *n, const u8 *buf, 
+                             size_t len, bool noCase, m256 caseMask, m256 mask1, 
                              const struct cb_info *cbi, size_t start,
                              size_t end) {
     const u8 *d = buf + start;
@@ -118,9 +118,9 @@ hwlm_error_t scanSingleShort(const struct noodTable *n, const u8 *buf,
     if (l < 4) {
         u8 *vp = (u8*)&v;
         switch (l) {
-            case 3: vp[2] = d[2]; // fallthrough
-            case 2: vp[1] = d[1]; // fallthrough
-            case 1: vp[0] = d[0]; // fallthrough
+            case 3: vp[2] = d[2]; // fallthrough 
+            case 2: vp[1] = d[1]; // fallthrough 
+            case 1: vp[0] = d[0]; // fallthrough 
         }
     } else {
         v = masked_move256_len(d, l);
@@ -141,10 +141,10 @@ hwlm_error_t scanSingleShort(const struct noodTable *n, const u8 *buf,
 }
 
 static really_inline
-hwlm_error_t scanDoubleShort(const struct noodTable *n, const u8 *buf,
-                             size_t len, bool noCase, m256 caseMask, m256 mask1,
-                             m256 mask2, const struct cb_info *cbi,
-                             size_t start, size_t end) {
+hwlm_error_t scanDoubleShort(const struct noodTable *n, const u8 *buf, 
+                             size_t len, bool noCase, m256 caseMask, m256 mask1, 
+                             m256 mask2, const struct cb_info *cbi, 
+                             size_t start, size_t end) { 
     const u8 *d = buf + start;
     size_t l = end - start;
     if (!l) {
@@ -157,9 +157,9 @@ hwlm_error_t scanDoubleShort(const struct noodTable *n, const u8 *buf,
     if (l < 4) {
         u8 *vp = (u8*)&v;
         switch (l) {
-            case 3: vp[2] = d[2]; // fallthrough
-            case 2: vp[1] = d[1]; // fallthrough
-            case 1: vp[0] = d[0]; // fallthrough
+            case 3: vp[2] = d[2]; // fallthrough 
+            case 2: vp[1] = d[1]; // fallthrough 
+            case 1: vp[0] = d[0]; // fallthrough 
         }
     } else {
         v = masked_move256_len(d, l);
@@ -182,8 +182,8 @@ hwlm_error_t scanDoubleShort(const struct noodTable *n, const u8 *buf,
 }
 
 static really_inline
-hwlm_error_t scanSingleFast(const struct noodTable *n, const u8 *buf,
-                            size_t len, bool noCase, m256 caseMask, m256 mask1,
+hwlm_error_t scanSingleFast(const struct noodTable *n, const u8 *buf, 
+                            size_t len, bool noCase, m256 caseMask, m256 mask1, 
                             const struct cb_info *cbi, size_t start,
                             size_t end) {
     const u8 *d = buf + start, *e = buf + end;
@@ -203,9 +203,9 @@ hwlm_error_t scanSingleFast(const struct noodTable *n, const u8 *buf,
 }
 
 static really_inline
-hwlm_error_t scanDoubleFast(const struct noodTable *n, const u8 *buf,
-                            size_t len, bool noCase, m256 caseMask, m256 mask1,
-                            m256 mask2, const struct cb_info *cbi, size_t start,
+hwlm_error_t scanDoubleFast(const struct noodTable *n, const u8 *buf, 
+                            size_t len, bool noCase, m256 caseMask, m256 mask1, 
+                            m256 mask2, const struct cb_info *cbi, size_t start, 
                             size_t end) {
     const u8 *d = buf + start, *e = buf + end;
     DEBUG_PRINTF("start %zu end %zu \n", start, end);
@@ -220,7 +220,7 @@ hwlm_error_t scanDoubleFast(const struct noodTable *n, const u8 *buf,
         u32 z0 = movemask256(eq256(mask1, v));
         u32 z1 = movemask256(eq256(mask2, v));
         u32 z = (lastz0 | (z0 << 1)) & z1;
-        lastz0 = z0 >> 31;
+        lastz0 = z0 >> 31; 
 
         // On large packet buffers, this prefetch appears to get us about 2%.
         __builtin_prefetch(d + 128);

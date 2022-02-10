@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -30,7 +30,7 @@
 #include "fdr_confirm.h"
 #include "fdr_compile_internal.h"
 #include "fdr_engine_description.h"
-#include "grey.h"
+#include "grey.h" 
 #include "ue2common.h"
 #include "util/alloc.h"
 #include "util/bitutils.h"
@@ -70,7 +70,7 @@ static
 void updateFloodSuffix(vector<FDRFlood> &tmpFlood, u8 c, u32 suffix) {
     FDRFlood &fl = tmpFlood[c];
     fl.suffix = MAX(fl.suffix, suffix + 1);
-    DEBUG_PRINTF("Updated Flood Suffix for char 0x%02x to %u\n", c, fl.suffix);
+    DEBUG_PRINTF("Updated Flood Suffix for char 0x%02x to %u\n", c, fl.suffix); 
 }
 
 static
@@ -85,14 +85,14 @@ void addFlood(vector<FDRFlood> &tmpFlood, u8 c, const hwlmLiteral &lit,
         // when idCount gets to max_ids this flood no longer happens
         // only incremented one more time to avoid arithmetic overflow
         DEBUG_PRINTF("Added Flood for char '%c' suffix=%u len[%hu]=%u\n",
-                     c, fl.suffix, fl.idCount, suffix);
+                     c, fl.suffix, fl.idCount, suffix); 
         fl.idCount++;
    }
 }
 
-bytecode_ptr<u8> setupFDRFloodControl(const vector<hwlmLiteral> &lits,
-                                      const EngineDescription &eng,
-                                      const Grey &grey) {
+bytecode_ptr<u8> setupFDRFloodControl(const vector<hwlmLiteral> &lits, 
+                                      const EngineDescription &eng, 
+                                      const Grey &grey) { 
     vector<FDRFlood> tmpFlood(N_CHARS);
     u32 default_suffix = eng.getDefaultFloodSuffixLength();
 
@@ -125,9 +125,9 @@ bytecode_ptr<u8> setupFDRFloodControl(const vector<hwlmLiteral> &lits,
         for (u32 i = 0; i < iEnd; i++) {
             if (i < litSize) {
                 if (isDifferent(c, lit.s[litSize - i - 1], lit.nocase)) {
-                    DEBUG_PRINTF("non-flood char in literal[%u]: "
-                                 "0x%02x != 0x%02x\n",
-                                 i, c, lit.s[litSize - i - 1]);
+                    DEBUG_PRINTF("non-flood char in literal[%u]: " 
+                                 "0x%02x != 0x%02x\n", 
+                                 i, c, lit.s[litSize - i - 1]); 
                     upSuffix = MIN(upSuffix, i);
                     loSuffix = MIN(loSuffix, i); // makes sense only for case-less
                     break;
@@ -181,19 +181,19 @@ bytecode_ptr<u8> setupFDRFloodControl(const vector<hwlmLiteral> &lits,
         printf("i is %02x fl->idCount is %hd fl->suffix is %d fl->allGroups is "
                "%016llx\n", i, fl.idCount, fl.suffix, fl.allGroups);
         for (u32 j = 0; j < fl.idCount; j++) {
-            printf("j is %d fl.groups[j] %016llx\n", j, fl.groups[j]);
+            printf("j is %d fl.groups[j] %016llx\n", j, fl.groups[j]); 
         }
     }
 #endif
 
-    // If flood detection has been switched off in the grey box, we comply by
-    // setting idCount too high for all floods.
-    if (!grey.fdrAllowFlood) {
-        for (auto &fl : tmpFlood) {
-            fl.idCount = FDR_FLOOD_MAX_IDS;
-        }
-    }
-
+    // If flood detection has been switched off in the grey box, we comply by 
+    // setting idCount too high for all floods. 
+    if (!grey.fdrAllowFlood) { 
+        for (auto &fl : tmpFlood) { 
+            fl.idCount = FDR_FLOOD_MAX_IDS; 
+        } 
+    } 
+ 
     map<FDRFlood, CharReach, FloodComparator> flood2chars;
     for (u32 i = 0; i < N_CHARS; i++) {
         FDRFlood fl = tmpFlood[i];
@@ -204,12 +204,12 @@ bytecode_ptr<u8> setupFDRFloodControl(const vector<hwlmLiteral> &lits,
     size_t floodHeaderSize = sizeof(u32) * N_CHARS;
     size_t floodStructSize = sizeof(FDRFlood) * nDistinctFloods;
     size_t totalSize = ROUNDUP_16(floodHeaderSize + floodStructSize);
-
-    auto buf = make_zeroed_bytecode_ptr<u8>(totalSize, 16);
+ 
+    auto buf = make_zeroed_bytecode_ptr<u8>(totalSize, 16); 
     assert(buf); // otherwise would have thrown std::bad_alloc
 
-    u32 *floodHeader = (u32 *)buf.get();
-    FDRFlood *layoutFlood = (FDRFlood *)(buf.get() + floodHeaderSize);
+    u32 *floodHeader = (u32 *)buf.get(); 
+    FDRFlood *layoutFlood = (FDRFlood *)(buf.get() + floodHeaderSize); 
 
     u32 currentFloodIndex = 0;
     for (const auto &m : flood2chars) {
@@ -225,7 +225,7 @@ bytecode_ptr<u8> setupFDRFloodControl(const vector<hwlmLiteral> &lits,
     DEBUG_PRINTF("made a flood structure with %zu + %zu = %zu\n",
                  floodHeaderSize, floodStructSize, totalSize);
 
-    return buf;
+    return buf; 
 }
 
 } // namespace ue2

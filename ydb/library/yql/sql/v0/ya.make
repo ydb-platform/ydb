@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
+OWNER( 
     g:yql
     g:yql_ydb_core
-)
+) 
 
 PEERDIR(
     library/cpp/charset
@@ -25,7 +25,7 @@ SRCS(
     context.cpp
     join.cpp
     insert.cpp
-    list_builtin.cpp
+    list_builtin.cpp 
     node.cpp
     select.cpp
     sql.cpp

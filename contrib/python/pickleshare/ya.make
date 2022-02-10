@@ -25,6 +25,6 @@ RESOURCE_FILES(
     PREFIX contrib/python/pickleshare/
     .dist-info/METADATA
     .dist-info/top_level.txt
-)
-
+) 
+ 
 END()

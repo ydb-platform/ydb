@@ -40,8 +40,8 @@ struct target_t {
 
     bool has_avx2(void) const;
 
-    bool has_avx512(void) const;
-
+    bool has_avx512(void) const; 
+ 
     bool has_avx512vbmi(void) const;
 
     bool is_atom_class(void) const;

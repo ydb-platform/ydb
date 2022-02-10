@@ -1,5 +1,5 @@
 #include "mkql_builtins_impl.h"
-
+ 
 #include <library/cpp/pop_count/popcount.h>
 
 namespace NKikimr {

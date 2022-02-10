@@ -8,7 +8,7 @@
 #include <ydb/library/yql/public/issue/yql_warning.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/sql/cluster_mapping.h>
-
+ 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
@@ -16,7 +16,7 @@
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 
-namespace NSQLTranslationV1 {
+namespace NSQLTranslationV1 { 
     inline bool IsAnonymousName(const TString& name) {
         return name == "$_";
     }
@@ -40,7 +40,7 @@ namespace NSQLTranslationV1 {
 
     using TNodeWithUsageInfoPtr = TIntrusivePtr<TNodeWithUsageInfo>;
     using TNamedNodesMap = THashMap<TString, TDeque<TNodeWithUsageInfoPtr>>;
-    using TBlocks = TVector<TNodePtr>;
+    using TBlocks = TVector<TNodePtr>; 
 
     struct TScopedState : public TThrRefBase {
         TString CurrService;
@@ -78,7 +78,7 @@ namespace NSQLTranslationV1 {
 
     class TContext {
     public:
-        TContext(const NSQLTranslation::TTranslationSettings& settings,
+        TContext(const NSQLTranslation::TTranslationSettings& settings, 
                  NYql::TIssues& issues);
 
         virtual ~TContext();
@@ -111,11 +111,11 @@ namespace NSQLTranslationV1 {
         }
 
         inline void IncrementMonCounter(const TString& name, const TString& value) {
-            if (IncrementMonCounterFunction) {
-                IncrementMonCounterFunction(name, value);
-            }
-        }
-
+            if (IncrementMonCounterFunction) { 
+                IncrementMonCounterFunction(name, value); 
+            } 
+        } 
+ 
         bool HasCluster(const TString& cluster) const {
             return GetClusterProvider(cluster).Defined();
         }
@@ -202,14 +202,14 @@ namespace NSQLTranslationV1 {
 
     public:
         THashMap<TString, TNodePtr> Variables;
-        NSQLTranslation::TTranslationSettings Settings;
+        NSQLTranslation::TTranslationSettings Settings; 
         std::unique_ptr<TMemoryPool> Pool;
         NYql::TIssues& Issues;
         TMap<TString, TNodePtr> UniversalAliases;
         THashSet<TString> Exports;
         THashMap<TString, TString> ImportModuleAliases;
         TMap<TString, TString> SimpleUdfs;
-        NSQLTranslation::TIncrementMonCounterFunction IncrementMonCounterFunction;
+        NSQLTranslation::TIncrementMonCounterFunction IncrementMonCounterFunction; 
         TScopedStatePtr Scoped;
         int ScopeLevel = 0;
         size_t AnonymousNameIndex = 0;
@@ -223,12 +223,12 @@ namespace NSQLTranslationV1 {
         bool PragmaAllowDotInAlias = false;
         bool PragmaInferSchema = false;
         bool PragmaAutoCommit = false;
-        bool SimpleColumns = true;
+        bool SimpleColumns = true; 
         bool CoalesceJoinKeysOnQualifiedAll = false;
         bool PragmaDirectRead = false;
         bool PragmaYsonFast = true;
-        bool PragmaYsonAutoConvert = false;
-        bool PragmaYsonStrict = true;
+        bool PragmaYsonAutoConvert = false; 
+        bool PragmaYsonStrict = true; 
         bool PragmaRegexUseRe2 = true;
         bool PragmaPullUpFlatMapOverJoin = true;
         bool WarnUnnamedColumns = false;
@@ -344,4 +344,4 @@ namespace NSQLTranslationV1 {
     protected:
         TContext& Ctx;
     };
-}  // namespace NSQLTranslationV1
+}  // namespace NSQLTranslationV1 

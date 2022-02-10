@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -30,11 +30,11 @@
 
 #include "rdfa.h"
 #include "util/container.h"
-#include "util/hash.h"
+#include "util/hash.h" 
 #include "ue2common.h"
 
 #include <deque>
-#include <map>
+#include <map> 
 
 using namespace std;
 
@@ -43,12 +43,12 @@ namespace ue2 {
 #define INIT_STATE 1
 
 static
-bool state_has_reports(const raw_dfa &raw, dstate_id_t s) {
-    const auto &ds = raw.states[s];
-    return !ds.reports.empty() || !ds.reports_eod.empty();
-}
-
-static
+bool state_has_reports(const raw_dfa &raw, dstate_id_t s) { 
+    const auto &ds = raw.states[s]; 
+    return !ds.reports.empty() || !ds.reports_eod.empty(); 
+} 
+ 
+static 
 u32 count_dots(const raw_dfa &raw) {
     assert(raw.start_anchored == INIT_STATE);
 
@@ -65,7 +65,7 @@ u32 count_dots(const raw_dfa &raw) {
             }
         }
 
-        if (state_has_reports(raw, raw.states[i].next[0])) {
+        if (state_has_reports(raw, raw.states[i].next[0])) { 
             goto validate;
         }
 
@@ -126,11 +126,11 @@ u32 remove_leading_dots(raw_dfa &raw) {
 static never_inline
 u32 calc_min_dist_from_bob(raw_dfa &raw, vector<u32> *dist_in) {
     vector<u32> &dist = *dist_in;
-    dist.assign(raw.states.size(), ~0U);
+    dist.assign(raw.states.size(), ~0U); 
 
     assert(raw.start_anchored != DEAD_STATE);
 
-    deque<dstate_id_t> to_visit = { raw.start_anchored };
+    deque<dstate_id_t> to_visit = { raw.start_anchored }; 
     dist[raw.start_anchored] = 0;
 
     u32 last_d = 0;
@@ -145,7 +145,7 @@ u32 calc_min_dist_from_bob(raw_dfa &raw, vector<u32> *dist_in) {
         assert(d >= last_d);
         assert(d != ~0U);
 
-        for (dstate_id_t t : raw.states[s].next) {
+        for (dstate_id_t t : raw.states[s].next) { 
             if (t == DEAD_STATE) {
                 continue;
             }
@@ -163,41 +163,41 @@ u32 calc_min_dist_from_bob(raw_dfa &raw, vector<u32> *dist_in) {
     return last_d;
 }
 
-bool clear_deeper_reports(raw_dfa &raw, u32 max_offset) {
-    DEBUG_PRINTF("clearing reports on states deeper than %u\n", max_offset);
+bool clear_deeper_reports(raw_dfa &raw, u32 max_offset) { 
+    DEBUG_PRINTF("clearing reports on states deeper than %u\n", max_offset); 
     vector<u32> bob_dist;
     u32 max_min_dist_bob = calc_min_dist_from_bob(raw, &bob_dist);
 
     if (max_min_dist_bob <= max_offset) {
-        return false;
+        return false; 
     }
 
-    bool changed = false;
+    bool changed = false; 
     for (u32 s = DEAD_STATE + 1; s < raw.states.size(); s++) {
-        if (bob_dist[s] > max_offset && state_has_reports(raw, s)) {
-            DEBUG_PRINTF("clearing reports on %u (depth %u)\n", s, bob_dist[s]);
-            auto &ds = raw.states[s];
-            ds.reports.clear();
-            ds.reports_eod.clear();
-            changed = true;
+        if (bob_dist[s] > max_offset && state_has_reports(raw, s)) { 
+            DEBUG_PRINTF("clearing reports on %u (depth %u)\n", s, bob_dist[s]); 
+            auto &ds = raw.states[s]; 
+            ds.reports.clear(); 
+            ds.reports_eod.clear(); 
+            changed = true; 
         }
     }
 
-    if (!changed) {
-        return false;
+    if (!changed) { 
+        return false; 
+    } 
+
+    // We may have cleared all reports from the DFA, in which case it should 
+    // become empty. 
+    if (all_of_in(raw.states, [](const dstate &ds) { 
+            return ds.reports.empty() && ds.reports_eod.empty(); 
+        })) { 
+        DEBUG_PRINTF("no reports left at all, dfa is dead\n"); 
+        raw.start_anchored = DEAD_STATE; 
+        raw.start_floating = DEAD_STATE; 
     }
 
-    // We may have cleared all reports from the DFA, in which case it should
-    // become empty.
-    if (all_of_in(raw.states, [](const dstate &ds) {
-            return ds.reports.empty() && ds.reports_eod.empty();
-        })) {
-        DEBUG_PRINTF("no reports left at all, dfa is dead\n");
-        raw.start_anchored = DEAD_STATE;
-        raw.start_floating = DEAD_STATE;
-    }
-
-    return true;
+    return true; 
 }
 
 set<ReportID> all_reports(const raw_dfa &rdfa) {
@@ -230,10 +230,10 @@ bool has_non_eod_accepts(const raw_dfa &rdfa) {
 size_t hash_dfa_no_reports(const raw_dfa &rdfa) {
     size_t v = 0;
     hash_combine(v, rdfa.alpha_size);
-    hash_combine(v, rdfa.alpha_remap);
+    hash_combine(v, rdfa.alpha_remap); 
 
     for (const auto &ds : rdfa.states) {
-        hash_combine(v, ds.next);
+        hash_combine(v, ds.next); 
     }
 
     return v;
@@ -246,41 +246,41 @@ size_t hash_dfa(const raw_dfa &rdfa) {
     return v;
 }
 
-static
-bool can_die_early(const raw_dfa &raw, dstate_id_t s,
-                   map<dstate_id_t, u32> &visited, u32 age_limit) {
-    if (contains(visited, s) && visited[s] >= age_limit) {
-        /* we have already visited (or are in the process of visiting) here with
-         * a looser limit. */
-        return false;
-    }
-    visited[s] = age_limit;
-
-    if (s == DEAD_STATE) {
-        return true;
-    }
-
-    if (age_limit == 0) {
-        return false;
-    }
-
-    for (const auto &next : raw.states[s].next) {
-        if (can_die_early(raw, next, visited, age_limit - 1)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool can_die_early(const raw_dfa &raw, u32 age_limit) {
-    map<dstate_id_t, u32> visited;
-    return can_die_early(raw, raw.start_anchored, visited, age_limit);
-}
-
-bool is_dead(const raw_dfa &rdfa) {
-    return rdfa.start_anchored == DEAD_STATE &&
-           rdfa.start_floating == DEAD_STATE;
-}
-
+static 
+bool can_die_early(const raw_dfa &raw, dstate_id_t s, 
+                   map<dstate_id_t, u32> &visited, u32 age_limit) { 
+    if (contains(visited, s) && visited[s] >= age_limit) { 
+        /* we have already visited (or are in the process of visiting) here with 
+         * a looser limit. */ 
+        return false; 
+    } 
+    visited[s] = age_limit; 
+ 
+    if (s == DEAD_STATE) { 
+        return true; 
+    } 
+ 
+    if (age_limit == 0) { 
+        return false; 
+    } 
+ 
+    for (const auto &next : raw.states[s].next) { 
+        if (can_die_early(raw, next, visited, age_limit - 1)) { 
+            return true; 
+        } 
+    } 
+ 
+    return false; 
+} 
+ 
+bool can_die_early(const raw_dfa &raw, u32 age_limit) { 
+    map<dstate_id_t, u32> visited; 
+    return can_die_early(raw, raw.start_anchored, visited, age_limit); 
+} 
+ 
+bool is_dead(const raw_dfa &rdfa) { 
+    return rdfa.start_anchored == DEAD_STATE && 
+           rdfa.start_floating == DEAD_STATE; 
+} 
+ 
 } // namespace ue2

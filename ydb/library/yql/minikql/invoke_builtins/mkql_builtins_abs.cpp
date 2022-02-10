@@ -56,7 +56,7 @@ struct TDecimalAbs {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto a = arg.GetInt128();
         return a < 0 ? NUdf::TUnboxedValuePod(-a) : arg;
-    }
+    } 
 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*& block)
@@ -69,8 +69,8 @@ struct TDecimalAbs {
         return res;
     }
 #endif
-};
-
+}; 
+ 
 }
 
 void RegisterAbs(IBuiltinFunctionRegistry& registry) {

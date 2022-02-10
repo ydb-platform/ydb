@@ -1,14 +1,14 @@
-#include "sql.h"
-
+#include "sql.h" 
+ 
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/sql/v0/sql.h>
 #include <ydb/library/yql/sql/v0/lexer/lexer.h>
 #include <ydb/library/yql/sql/v1/sql.h>
 #include <ydb/library/yql/sql/v1/lexer/lexer.h>
 #include <ydb/library/yql/sql/pg/pg_sql.h>
-
+ 
 #include <google/protobuf/arena.h>
-
+ 
 #include <util/string/builder.h>
 
 namespace NSQLTranslation {
@@ -36,7 +36,7 @@ namespace NSQLTranslation {
         }
 
         switch (parsedSettings.SyntaxVersion) {
-            case 0:
+            case 0: 
                 if (settings.V0ForceDisable || parsedSettings.V0Behavior == EV0Behavior::Disable) {
                     result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                         "V0 syntax is disabled"));
@@ -50,15 +50,15 @@ namespace NSQLTranslation {
                 }
 
                 return NSQLTranslationV0::SqlToYql(query, parsedSettings, warningRules);
-            case 1:
+            case 1: 
                 return NSQLTranslationV1::SqlToYql(query, parsedSettings, warningRules);
-            default:
+            default: 
                 result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
                 return result;
-        }
-    }
-
+        } 
+    } 
+ 
     google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NYql::TIssues& issues,
         size_t maxErrors, const TTranslationSettings& settings, ui16* actualSyntaxVersion)
     {
@@ -72,7 +72,7 @@ namespace NSQLTranslation {
         }
 
         switch (parsedSettings.SyntaxVersion) {
-            case 0:
+            case 0: 
                 if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
                     issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                         "V0 syntax is disabled"));
@@ -86,15 +86,15 @@ namespace NSQLTranslation {
                 }
 
                 return NSQLTranslationV0::SqlAST(query, queryName, issues, maxErrors, settings.Arena);
-            case 1:
+            case 1: 
                 return NSQLTranslationV1::SqlAST(query, queryName, issues, maxErrors, parsedSettings.AnsiLexer, settings.Arena);
-            default:
+            default: 
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
                 return nullptr;
-        }
-    }
-
+        } 
+    } 
+ 
     ILexer::TPtr SqlLexer(const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings, ui16* actualSyntaxVersion)
     {
         TTranslationSettings parsedSettings(settings);
@@ -130,10 +130,10 @@ namespace NSQLTranslation {
         }
     }
 
-    NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const TTranslationSettings& settings) {
+    NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const TTranslationSettings& settings) { 
         NYql::TAstParseResult result;
-        switch (settings.SyntaxVersion) {
-            case 0:
+        switch (settings.SyntaxVersion) { 
+            case 0: 
                 if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
                     result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                         "V0 syntax is disabled"));
@@ -146,14 +146,14 @@ namespace NSQLTranslation {
                     return result;
                 }
 
-                return NSQLTranslationV0::SqlASTToYql(protoAst, settings);
-            case 1:
-                return NSQLTranslationV1::SqlASTToYql(protoAst, settings);
-            default:
+                return NSQLTranslationV0::SqlASTToYql(protoAst, settings); 
+            case 1: 
+                return NSQLTranslationV1::SqlASTToYql(protoAst, settings); 
+            default: 
                 result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << settings.SyntaxVersion));
                 return result;
-        }
-    }
-
-}  // namespace NSQLTranslation
+        } 
+    } 
+ 
+}  // namespace NSQLTranslation 

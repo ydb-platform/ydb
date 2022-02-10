@@ -49,7 +49,7 @@ void TTopFreqBase<THash, TEquals>::Deserialize(const TUnboxedValuePod& serialize
 
 template <typename THash, typename TEquals>
 TUnboxedValue TTopFreqBase<THash, TEquals>::Convert(const IValueBuilder* valueBuilder) const {
-    TUnboxedValue* values = nullptr;
+    TUnboxedValue* values = nullptr; 
     const auto list = valueBuilder->NewArray(Freqs_.size(), values);
     for (const auto& item : Freqs_) {
         TUnboxedValue* items = nullptr;
@@ -62,7 +62,7 @@ TUnboxedValue TTopFreqBase<THash, TEquals>::Convert(const IValueBuilder* valueBu
 
 template <typename THash, typename TEquals>
 void TTopFreqBase<THash, TEquals>::Add(const TTopFreqBase& otherModeCalc) {
-    for (auto& it : otherModeCalc.Freqs_) {
+    for (auto& it : otherModeCalc.Freqs_) { 
         Update(it.first, it.second);
     }
 

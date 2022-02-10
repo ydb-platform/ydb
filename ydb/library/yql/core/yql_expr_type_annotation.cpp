@@ -4099,8 +4099,8 @@ ui32 GetNumericDataTypeLevel(EDataSlot dataSlot) {
         return 6;
 
     if (dataSlot == EDataSlot::Int64)
-        return 7;
-
+        return 7; 
+ 
     if (dataSlot == EDataSlot::Float)
         return 8;
 
@@ -4428,18 +4428,18 @@ bool IsDataTypeString(EDataSlot dataSlot) {
 
 bool EnsureComparableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx) {
     if (0 == (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::CanCompare)) {
-        TStringBuilder sb;
+        TStringBuilder sb; 
         bool isYson = dataSlot == EDataSlot::Yson;
         bool isJson = dataSlot == EDataSlot::Json;
-        if (isYson || isJson) {
+        if (isYson || isJson) { 
             sb << NKikimr::NUdf::GetDataTypeInfo(dataSlot).Name << " is not a comparable data type." << Endl
-               << "You can use ToBytes(...) to convert it to it's byte representation, which can be compared fast, but can lead to unexpected results in some cases," << Endl
-               << "for example same dictionaries with different order of key/value pairs will be considered unequal or different ways of serialization of same data will also start to matter." << Endl
-               << "Also there's a Yson::Equals(..., ...) function that can correctly determine if arbitrary Yson or Json values are equal, "
-               << "but it's quite slow and CPU-intensive because it needs to parse data and build in-memory representation for each side.";
-        } else {
+               << "You can use ToBytes(...) to convert it to it's byte representation, which can be compared fast, but can lead to unexpected results in some cases," << Endl 
+               << "for example same dictionaries with different order of key/value pairs will be considered unequal or different ways of serialization of same data will also start to matter." << Endl 
+               << "Also there's a Yson::Equals(..., ...) function that can correctly determine if arbitrary Yson or Json values are equal, " 
+               << "but it's quite slow and CPU-intensive because it needs to parse data and build in-memory representation for each side."; 
+        } else { 
             sb << "Expected comparable type, but got: " << NKikimr::NUdf::GetDataTypeInfo(dataSlot).Name;
-        }
+        } 
         ctx.AddError(TIssue(ctx.GetPosition(position), sb));
         return false;
     }
@@ -4466,20 +4466,20 @@ bool EnsureHashableDataType(TPositionHandle position, EDataSlot dataSlot, TExprC
 }
 
 TMaybe<TIssue> NormalizeName(TPosition position, TString& name) {
-    const ui32 inputLength = name.length();
+    const ui32 inputLength = name.length(); 
     ui32 startCharPos = 0;
     ui32 totalSkipped = 0;
     bool atStart = true;
-    bool justSkippedUnderscore = false;
-    for (ui32 i = 0; i < inputLength; ++i) {
-        const char c = name.at(i);
+    bool justSkippedUnderscore = false; 
+    for (ui32 i = 0; i < inputLength; ++i) { 
+        const char c = name.at(i); 
         if (c == '_') {
             if (!atStart) {
-                if (justSkippedUnderscore) {
+                if (justSkippedUnderscore) { 
                     return TIssue(position, TStringBuilder() << "\"" << name << "\" looks weird, has multiple consecutive underscores");
-                }
-                justSkippedUnderscore = true;
-                ++totalSkipped;
+                } 
+                justSkippedUnderscore = true; 
+                ++totalSkipped; 
                 continue;
             } else {
                 ++startCharPos;
@@ -4487,13 +4487,13 @@ TMaybe<TIssue> NormalizeName(TPosition position, TString& name) {
         }
         else {
             atStart = false;
-            justSkippedUnderscore = false;
+            justSkippedUnderscore = false; 
         }
     }
 
-    if (totalSkipped >= 5) {
+    if (totalSkipped >= 5) { 
         return TIssue(position, TStringBuilder() << "\"" << name << "\" looks weird, has multiple consecutive underscores");
-    }
+    } 
 
     ui32 outPos = startCharPos;
     for (ui32 i = startCharPos; i < inputLength; i++) {
@@ -4509,13 +4509,13 @@ TMaybe<TIssue> NormalizeName(TPosition position, TString& name) {
     name.resize(outPos);
     Y_VERIFY(inputLength - outPos == totalSkipped);
 
-    return Nothing();
-}
+    return Nothing(); 
+} 
 
 TString NormalizeName(const TStringBuf& name) {
     TString result(name);
     TMaybe<TIssue> error = NormalizeName(TPosition(), result);
-    YQL_ENSURE(error.Empty(), "" << error->Message);
+    YQL_ENSURE(error.Empty(), "" << error->Message); 
     return result;
 }
 

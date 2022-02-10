@@ -35,7 +35,7 @@
 #include "util/alloc.h"
 #include "util/bitutils.h"
 #include "util/compare.h"
-#include "util/container.h"
+#include "util/container.h" 
 #include "util/verify_types.h"
 
 #include <algorithm>
@@ -46,7 +46,7 @@ using namespace std;
 
 namespace ue2 {
 
-using BC2CONF = map<BucketIndex, bytecode_ptr<FDRConfirm>>;
+using BC2CONF = map<BucketIndex, bytecode_ptr<FDRConfirm>>; 
 
 static
 u64a make_u64a_mask(const vector<u8> &v) {
@@ -80,12 +80,12 @@ void fillLitInfo(const vector<hwlmLiteral> &lits, vector<LitInfo> &tmpLitInfo,
         LitInfo &info = tmpLitInfo[i];
         memset(&info, 0, sizeof(info));
         info.id = lit.id;
-        u8 flags = 0;
+        u8 flags = 0; 
         if (lit.noruns) {
-            flags |= FDR_LIT_FLAG_NOREPEAT;
+            flags |= FDR_LIT_FLAG_NOREPEAT; 
         }
         info.flags = flags;
-        info.size = verify_u8(max(lit.msk.size(), lit.s.size()));
+        info.size = verify_u8(max(lit.msk.size(), lit.s.size())); 
         info.groups = lit.groups;
 
         // these are built up assuming a LE machine
@@ -129,13 +129,13 @@ void fillLitInfo(const vector<hwlmLiteral> &lits, vector<LitInfo> &tmpLitInfo,
 //#define FDR_CONFIRM_DUMP 1
 
 static
-bytecode_ptr<FDRConfirm> getFDRConfirm(const vector<hwlmLiteral> &lits,
-                                       bool make_small) {
-    // Every literal must fit within CONF_TYPE.
-    assert(all_of_in(lits, [](const hwlmLiteral &lit) {
-        return lit.s.size() <= sizeof(CONF_TYPE);
-    }));
-
+bytecode_ptr<FDRConfirm> getFDRConfirm(const vector<hwlmLiteral> &lits, 
+                                       bool make_small) { 
+    // Every literal must fit within CONF_TYPE. 
+    assert(all_of_in(lits, [](const hwlmLiteral &lit) { 
+        return lit.s.size() <= sizeof(CONF_TYPE); 
+    })); 
+ 
     vector<LitInfo> tmpLitInfo(lits.size());
     CONF_TYPE andmsk;
     fillLitInfo(lits, tmpLitInfo, andmsk);
@@ -149,7 +149,7 @@ bytecode_ptr<FDRConfirm> getFDRConfirm(const vector<hwlmLiteral> &lits,
     if (make_small) {
         nBits = min(10U, lg2(lits.size()) + 1);
     } else {
-        nBits = lg2(lits.size()) + 4;
+        nBits = lg2(lits.size()) + 4; 
     }
 
     CONF_TYPE mult = (CONF_TYPE)0x0b4e0ef37bc32127ULL;
@@ -169,61 +169,61 @@ bytecode_ptr<FDRConfirm> getFDRConfirm(const vector<hwlmLiteral> &lits,
 #ifdef FDR_CONFIRM_DUMP
     // print out the literals reversed - makes it easier to line up analyses
     // that are end-offset based
-    for (const auto &m : res2lits) {
-        const u32 &hash = m.first;
-        const vector<LiteralIndex> &vlidx = m.second;
-        if (vlidx.size() <= 1) {
-            continue;
-        }
-        printf("%x -> %zu literals\n", hash, vlidx.size());
-        size_t min_len = lits[vlidx.front()].s.size();
-
-        vector<set<u8>> vsl; // contains the set of chars at each location
-                             // reversed from the end
-
-        for (const auto &litIdx : vlidx) {
-            const auto &lit = lits[litIdx];
-            if (lit.s.size() > vsl.size()) {
-                vsl.resize(lit.s.size());
+    for (const auto &m : res2lits) { 
+        const u32 &hash = m.first; 
+        const vector<LiteralIndex> &vlidx = m.second; 
+        if (vlidx.size() <= 1) { 
+            continue; 
+        } 
+        printf("%x -> %zu literals\n", hash, vlidx.size()); 
+        size_t min_len = lits[vlidx.front()].s.size(); 
+ 
+        vector<set<u8>> vsl; // contains the set of chars at each location 
+                             // reversed from the end 
+ 
+        for (const auto &litIdx : vlidx) { 
+            const auto &lit = lits[litIdx]; 
+            if (lit.s.size() > vsl.size()) { 
+                vsl.resize(lit.s.size()); 
             }
-            for (size_t j = lit.s.size(); j != 0; j--) {
-                vsl[lit.s.size() - j].insert(lit.s[j - 1]);
-            }
-            min_len = min(min_len, lit.s.size());
-        }
-        printf("common     ");
-        for (size_t j = 0; j < min_len; j++) {
-            if (vsl[j].size() == 1) {
-                printf("%02x", *vsl[j].begin());
-            } else {
-                printf("__");
-            }
-        }
-        printf("\n");
-        for (const auto &litIdx : vlidx) {
-            const auto &lit = lits[litIdx];
-            printf("%8x  %c", lit.id, lit.nocase ? '!' : ' ');
-            for (size_t j = lit.s.size(); j != 0; j--) {
-                size_t dist_from_end = lit.s.size() - j;
-                if (dist_from_end < min_len && vsl[dist_from_end].size() == 1) {
-                    printf("__");
+            for (size_t j = lit.s.size(); j != 0; j--) { 
+                vsl[lit.s.size() - j].insert(lit.s[j - 1]); 
+            } 
+            min_len = min(min_len, lit.s.size()); 
+        } 
+        printf("common     "); 
+        for (size_t j = 0; j < min_len; j++) { 
+            if (vsl[j].size() == 1) { 
+                printf("%02x", *vsl[j].begin()); 
+            } else { 
+                printf("__"); 
+            } 
+        } 
+        printf("\n"); 
+        for (const auto &litIdx : vlidx) { 
+            const auto &lit = lits[litIdx]; 
+            printf("%8x  %c", lit.id, lit.nocase ? '!' : ' '); 
+            for (size_t j = lit.s.size(); j != 0; j--) { 
+                size_t dist_from_end = lit.s.size() - j; 
+                if (dist_from_end < min_len && vsl[dist_from_end].size() == 1) { 
+                    printf("__"); 
                 } else {
-                    printf("%02x", lit.s[j - 1]);
+                    printf("%02x", lit.s[j - 1]); 
                 }
             }
             printf("\n");
         }
-        size_t total_compares = 0;
-        for (const auto &v : vsl) {
-            total_compares += v.size();
-        }
-        size_t total_string_size = 0;
-        for (const auto &litIdx : vlidx) {
-            const auto &lit = lits[litIdx];
-            total_string_size += lit.s.size();
-        }
-        printf("Total compare load: %zu Total string size: %zu\n\n",
-               total_compares, total_string_size);
+        size_t total_compares = 0; 
+        for (const auto &v : vsl) { 
+            total_compares += v.size(); 
+        } 
+        size_t total_string_size = 0; 
+        for (const auto &litIdx : vlidx) { 
+            const auto &lit = lits[litIdx]; 
+            total_string_size += lit.s.size(); 
+        } 
+        printf("Total compare load: %zu Total string size: %zu\n\n", 
+               total_compares, total_string_size); 
     }
 #endif
 
@@ -232,20 +232,20 @@ bytecode_ptr<FDRConfirm> getFDRConfirm(const vector<hwlmLiteral> &lits,
     // this size can now be a worst-case as we can always be a bit smaller
     size_t size = ROUNDUP_N(sizeof(FDRConfirm), alignof(u32)) +
                   ROUNDUP_N(bitsToLitIndexSize, alignof(LitInfo)) +
-                  sizeof(LitInfo) * lits.size();
+                  sizeof(LitInfo) * lits.size(); 
     size = ROUNDUP_N(size, alignof(FDRConfirm));
 
-    auto fdrc = make_zeroed_bytecode_ptr<FDRConfirm>(size);
+    auto fdrc = make_zeroed_bytecode_ptr<FDRConfirm>(size); 
     assert(fdrc); // otherwise would have thrown std::bad_alloc
 
     fdrc->andmsk = andmsk;
     fdrc->mult = mult;
-    fdrc->nBits = nBits;
+    fdrc->nBits = nBits; 
 
     fdrc->groups = gm;
 
     // After the FDRConfirm, we have the lit index array.
-    u8 *fdrc_base = (u8 *)fdrc.get();
+    u8 *fdrc_base = (u8 *)fdrc.get(); 
     u8 *ptr = fdrc_base + sizeof(*fdrc);
     ptr = ROUNDUP_PTR(ptr, alignof(u32));
     u32 *bitsToLitIndex = (u32 *)ptr;
@@ -257,23 +257,23 @@ bytecode_ptr<FDRConfirm> getFDRConfirm(const vector<hwlmLiteral> &lits,
 
     // Walk the map by hash value assigning indexes and laying out the
     // elements (and their associated string confirm material) in memory.
-    for (const auto &m : res2lits) {
-        const u32 hash = m.first;
-        const vector<LiteralIndex> &vlidx = m.second;
-        bitsToLitIndex[hash] = verify_u32(ptr - fdrc_base);
-        for (auto i = vlidx.begin(), e = vlidx.end(); i != e; ++i) {
-            LiteralIndex litIdx = *i;
+    for (const auto &m : res2lits) { 
+        const u32 hash = m.first; 
+        const vector<LiteralIndex> &vlidx = m.second; 
+        bitsToLitIndex[hash] = verify_u32(ptr - fdrc_base); 
+        for (auto i = vlidx.begin(), e = vlidx.end(); i != e; ++i) { 
+            LiteralIndex litIdx = *i; 
 
             // Write LitInfo header.
             LitInfo &finalLI = *(LitInfo *)ptr;
             finalLI = tmpLitInfo[litIdx];
 
             ptr += sizeof(LitInfo); // String starts directly after LitInfo.
-            assert(lits[litIdx].s.size() <= sizeof(CONF_TYPE));
-            if (next(i) == e) {
-                finalLI.next = 0;
+            assert(lits[litIdx].s.size() <= sizeof(CONF_TYPE)); 
+            if (next(i) == e) { 
+                finalLI.next = 0; 
             } else {
-                finalLI.next = 1;
+                finalLI.next = 1; 
             }
         }
         assert((size_t)(ptr - fdrc_base) <= size);
@@ -284,57 +284,57 @@ bytecode_ptr<FDRConfirm> getFDRConfirm(const vector<hwlmLiteral> &lits,
     size_t actual_size = ROUNDUP_N((size_t)(ptr - fdrc_base),
                                    alignof(FDRConfirm));
     assert(actual_size <= size);
-    fdrc.shrink(actual_size);
-
-    return fdrc;
+    fdrc.shrink(actual_size); 
+ 
+    return fdrc; 
 }
 
-bytecode_ptr<u8>
-setupFullConfs(const vector<hwlmLiteral> &lits,
-               const EngineDescription &eng,
-               const map<BucketIndex, vector<LiteralIndex>> &bucketToLits,
-               bool make_small) {
+bytecode_ptr<u8> 
+setupFullConfs(const vector<hwlmLiteral> &lits, 
+               const EngineDescription &eng, 
+               const map<BucketIndex, vector<LiteralIndex>> &bucketToLits, 
+               bool make_small) { 
     unique_ptr<TeddyEngineDescription> teddyDescr =
         getTeddyDescription(eng.getID());
 
-    BC2CONF bc2Conf;
+    BC2CONF bc2Conf; 
     u32 totalConfirmSize = 0;
     for (BucketIndex b = 0; b < eng.getNumBuckets(); b++) {
-        if (contains(bucketToLits, b)) {
-            vector<hwlmLiteral> vl;
-            for (const LiteralIndex &lit_idx : bucketToLits.at(b)) {
-                vl.push_back(lits[lit_idx]);
+        if (contains(bucketToLits, b)) { 
+            vector<hwlmLiteral> vl; 
+            for (const LiteralIndex &lit_idx : bucketToLits.at(b)) { 
+                vl.push_back(lits[lit_idx]); 
             }
 
-            DEBUG_PRINTF("b %d sz %zu\n", b, vl.size());
-            auto fc = getFDRConfirm(vl, make_small);
-            totalConfirmSize += fc.size();
-            bc2Conf.emplace(b, move(fc));
+            DEBUG_PRINTF("b %d sz %zu\n", b, vl.size()); 
+            auto fc = getFDRConfirm(vl, make_small); 
+            totalConfirmSize += fc.size(); 
+            bc2Conf.emplace(b, move(fc)); 
         }
     }
 
     u32 nBuckets = eng.getNumBuckets();
-    u32 totalConfSwitchSize = ROUNDUP_CL(nBuckets * sizeof(u32));
-    u32 totalSize = totalConfSwitchSize + totalConfirmSize;
+    u32 totalConfSwitchSize = ROUNDUP_CL(nBuckets * sizeof(u32)); 
+    u32 totalSize = totalConfSwitchSize + totalConfirmSize; 
 
-    auto buf = make_zeroed_bytecode_ptr<u8>(totalSize, 64);
+    auto buf = make_zeroed_bytecode_ptr<u8>(totalSize, 64); 
     assert(buf); // otherwise would have thrown std::bad_alloc
 
-    u32 *confBase = (u32 *)buf.get();
-    u8 *ptr = buf.get() + totalConfSwitchSize;
-    assert(ISALIGNED_CL(ptr));
+    u32 *confBase = (u32 *)buf.get(); 
+    u8 *ptr = buf.get() + totalConfSwitchSize; 
+    assert(ISALIGNED_CL(ptr)); 
 
-    for (const auto &m : bc2Conf) {
-        const BucketIndex &idx = m.first;
-        const bytecode_ptr<FDRConfirm> &p = m.second;
+    for (const auto &m : bc2Conf) { 
+        const BucketIndex &idx = m.first; 
+        const bytecode_ptr<FDRConfirm> &p = m.second; 
         // confirm offset is relative to the base of this structure, now
-        u32 confirm_offset = verify_u32(ptr - buf.get());
-        memcpy(ptr, p.get(), p.size());
-        ptr += p.size();
+        u32 confirm_offset = verify_u32(ptr - buf.get()); 
+        memcpy(ptr, p.get(), p.size()); 
+        ptr += p.size(); 
         confBase[idx] = confirm_offset;
     }
-
-    return buf;
+ 
+    return buf; 
 }
 
 } // namespace ue2

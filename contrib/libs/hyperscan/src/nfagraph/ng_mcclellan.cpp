@@ -41,10 +41,10 @@
 #include "ue2common.h"
 #include "util/bitfield.h"
 #include "util/determinise.h"
-#include "util/flat_containers.h"
+#include "util/flat_containers.h" 
 #include "util/graph_range.h"
-#include "util/hash.h"
-#include "util/hash_dynamic_bitset.h"
+#include "util/hash.h" 
+#include "util/hash_dynamic_bitset.h" 
 #include "util/make_unique.h"
 #include "util/report_manager.h"
 
@@ -52,7 +52,7 @@
 #include <functional>
 #include <map>
 #include <set>
-#include <unordered_map>
+#include <unordered_map> 
 #include <vector>
 
 #include <boost/dynamic_bitset.hpp>
@@ -154,11 +154,11 @@ void getFullTransitionFromState(const raw_dfa &n, dstate_id_t state,
 
 template<typename stateset>
 static
-void populateInit(const NGHolder &g, const flat_set<NFAVertex> &unused,
+void populateInit(const NGHolder &g, const flat_set<NFAVertex> &unused, 
                   stateset *init, stateset *init_deep,
                   vector<NFAVertex> *v_by_index) {
     for (auto v : vertices_range(g)) {
-        if (contains(unused, v)) {
+        if (contains(unused, v)) { 
             continue;
         }
 
@@ -175,11 +175,11 @@ void populateInit(const NGHolder &g, const flat_set<NFAVertex> &unused,
     }
 
     v_by_index->clear();
-    v_by_index->resize(num_vertices(g), NGHolder::null_vertex());
+    v_by_index->resize(num_vertices(g), NGHolder::null_vertex()); 
 
     for (auto v : vertices_range(g)) {
         u32 vert_id = g[v].index;
-        assert((*v_by_index)[vert_id] == NGHolder::null_vertex());
+        assert((*v_by_index)[vert_id] == NGHolder::null_vertex()); 
         (*v_by_index)[vert_id] = v;
     }
 
@@ -189,22 +189,22 @@ void populateInit(const NGHolder &g, const flat_set<NFAVertex> &unused,
 }
 
 template<typename StateSet>
-void populateAccepts(const NGHolder &g, const flat_set<NFAVertex> &unused,
+void populateAccepts(const NGHolder &g, const flat_set<NFAVertex> &unused, 
                      StateSet *accept, StateSet *acceptEod) {
     for (auto v : inv_adjacent_vertices_range(g.accept, g)) {
-        if (contains(unused, v)) {
-            continue;
+        if (contains(unused, v)) { 
+            continue; 
         }
-        accept->set(g[v].index);
+        accept->set(g[v].index); 
     }
     for (auto v : inv_adjacent_vertices_range(g.acceptEod, g)) {
         if (v == g.accept) {
             continue;
         }
-        if (contains(unused, v)) {
-            continue;
+        if (contains(unused, v)) { 
+            continue; 
         }
-        acceptEod->set(g[v].index);
+        acceptEod->set(g[v].index); 
     }
 }
 
@@ -284,8 +284,8 @@ static
 bool triggerAllowed(const NGHolder &g, const NFAVertex v,
                     const vector<vector<CharReach> > &all_triggers,
                     const vector<CharReach> &trigger) {
-    flat_set<NFAVertex> curr({v});
-    flat_set<NFAVertex> next;
+    flat_set<NFAVertex> curr({v}); 
+    flat_set<NFAVertex> next; 
 
     for (auto it = trigger.rbegin(); it != trigger.rend(); ++it) {
         next.clear();
@@ -315,7 +315,7 @@ bool triggerAllowed(const NGHolder &g, const NFAVertex v,
     return true;
 }
 
-void markToppableStarts(const NGHolder &g, const flat_set<NFAVertex> &unused,
+void markToppableStarts(const NGHolder &g, const flat_set<NFAVertex> &unused, 
                         bool single_trigger,
                         const vector<vector<CharReach>> &triggers,
                         dynamic_bitset<> *out) {
@@ -324,13 +324,13 @@ void markToppableStarts(const NGHolder &g, const flat_set<NFAVertex> &unused,
     }
 
     for (auto v : vertices_range(g)) {
-        if (contains(unused, v)) {
+        if (contains(unused, v)) { 
             continue;
         }
         for (const auto &trigger : triggers) {
             if (triggerAllowed(g, v, triggers, trigger)) {
-                DEBUG_PRINTF("idx %zu is valid location for top\n", g[v].index);
-                out->set(g[v].index);
+                DEBUG_PRINTF("idx %zu is valid location for top\n", g[v].index); 
+                out->set(g[v].index); 
                 break;
             }
         }
@@ -341,27 +341,27 @@ void markToppableStarts(const NGHolder &g, const flat_set<NFAVertex> &unused,
 
 namespace {
 
-template<typename Automaton_Traits>
-class Automaton_Base {
+template<typename Automaton_Traits> 
+class Automaton_Base { 
 public:
-    using StateSet = typename Automaton_Traits::StateSet;
-    using StateMap = typename Automaton_Traits::StateMap;
+    using StateSet = typename Automaton_Traits::StateSet; 
+    using StateMap = typename Automaton_Traits::StateMap; 
 
-    Automaton_Base(const ReportManager *rm_in, const NGHolder &graph_in,
-                   bool single_trigger,
-                   const vector<vector<CharReach>> &triggers, bool prunable_in)
-        : rm(rm_in), graph(graph_in), numStates(num_vertices(graph)),
-          unused(getRedundantStarts(graph_in)),
-          init(Automaton_Traits::init_states(numStates)),
-          initDS(Automaton_Traits::init_states(numStates)),
-          squash(Automaton_Traits::init_states(numStates)),
-          accept(Automaton_Traits::init_states(numStates)),
-          acceptEod(Automaton_Traits::init_states(numStates)),
-          toppable(Automaton_Traits::init_states(numStates)),
-          dead(Automaton_Traits::init_states(numStates)),
-          prunable(prunable_in) {
-        populateInit(graph, unused, &init, &initDS, &v_by_index);
-        populateAccepts(graph, unused, &accept, &acceptEod);
+    Automaton_Base(const ReportManager *rm_in, const NGHolder &graph_in, 
+                   bool single_trigger, 
+                   const vector<vector<CharReach>> &triggers, bool prunable_in) 
+        : rm(rm_in), graph(graph_in), numStates(num_vertices(graph)), 
+          unused(getRedundantStarts(graph_in)), 
+          init(Automaton_Traits::init_states(numStates)), 
+          initDS(Automaton_Traits::init_states(numStates)), 
+          squash(Automaton_Traits::init_states(numStates)), 
+          accept(Automaton_Traits::init_states(numStates)), 
+          acceptEod(Automaton_Traits::init_states(numStates)), 
+          toppable(Automaton_Traits::init_states(numStates)), 
+          dead(Automaton_Traits::init_states(numStates)), 
+          prunable(prunable_in) { 
+        populateInit(graph, unused, &init, &initDS, &v_by_index); 
+        populateAccepts(graph, unused, &accept, &acceptEod); 
 
         start_anchored = DEAD_STATE + 1;
         if (initDS == init) {
@@ -378,18 +378,18 @@ public:
             NFAVertex v = sq.first;
             u32 vert_id = graph[v].index;
             squash.set(vert_id);
-            squash_mask[vert_id]
-                = Automaton_Traits::copy_states(std::move(sq.second),
-                                                numStates);
+            squash_mask[vert_id] 
+                = Automaton_Traits::copy_states(std::move(sq.second), 
+                                                numStates); 
         }
 
         cr_by_index = populateCR(graph, v_by_index, alpha);
         if (is_triggered(graph)) {
-            dynamic_bitset<> temp(numStates);
-            markToppableStarts(graph, unused, single_trigger, triggers,
-                               &temp);
-            toppable = Automaton_Traits::copy_states(std::move(temp),
-                                                     numStates);
+            dynamic_bitset<> temp(numStates); 
+            markToppableStarts(graph, unused, single_trigger, triggers, 
+                               &temp); 
+            toppable = Automaton_Traits::copy_states(std::move(temp), 
+                                                     numStates); 
         }
     }
 
@@ -399,7 +399,7 @@ public:
     }
 
     const vector<StateSet> initial() {
-        vector<StateSet> rv = {init};
+        vector<StateSet> rv = {init}; 
         if (start_floating != DEAD_STATE && start_floating != start_anchored) {
             rv.push_back(initDS);
         }
@@ -432,13 +432,13 @@ public:
         }
         return allExternalReports(*rm, test_reports);
     }
-
+ 
 private:
     const ReportManager *rm;
 public:
     const NGHolder &graph;
     u32 numStates;
-    const flat_set<NFAVertex> unused;
+    const flat_set<NFAVertex> unused; 
     vector<NFAVertex> v_by_index;
     vector<CharReach> cr_by_index; /* pre alpha'ed */
     StateSet init;
@@ -448,7 +448,7 @@ public:
     StateSet acceptEod;
     StateSet toppable; /* states which are allowed to be on when a top arrives,
                         * triggered dfas only */
-    StateSet dead;
+    StateSet dead; 
     map<u32, StateSet> squash_mask;
     bool prunable;
     array<u16, ALPHABET_SIZE> alpha;
@@ -459,83 +459,83 @@ public:
     u16 start_floating;
 };
 
-struct Big_Traits {
-    using StateSet = dynamic_bitset<>;
-    using StateMap = unordered_map<StateSet, dstate_id_t, hash_dynamic_bitset>;
+struct Big_Traits { 
+    using StateSet = dynamic_bitset<>; 
+    using StateMap = unordered_map<StateSet, dstate_id_t, hash_dynamic_bitset>; 
 
-    static StateSet init_states(u32 num) {
-        return StateSet(num);
+    static StateSet init_states(u32 num) { 
+        return StateSet(num); 
+    } 
+
+    static StateSet copy_states(dynamic_bitset<> in, UNUSED u32 num) { 
+        assert(in.size() == num); 
+        return in; 
+    } 
+}; 
+
+class Automaton_Big : public Automaton_Base<Big_Traits> { 
+public: 
+    Automaton_Big(const ReportManager *rm_in, const NGHolder &graph_in, 
+                  bool single_trigger, 
+                  const vector<vector<CharReach>> &triggers, bool prunable_in) 
+        : Automaton_Base(rm_in, graph_in, single_trigger, triggers, 
+                         prunable_in) {} 
+}; 
+
+struct Graph_Traits { 
+    using StateSet = bitfield<NFA_STATE_LIMIT>; 
+    using StateMap = unordered_map<StateSet, dstate_id_t>; 
+
+    static StateSet init_states(UNUSED u32 num) { 
+        assert(num <= NFA_STATE_LIMIT); 
+        return StateSet(); 
     }
 
-    static StateSet copy_states(dynamic_bitset<> in, UNUSED u32 num) {
-        assert(in.size() == num);
-        return in;
-    }
-};
-
-class Automaton_Big : public Automaton_Base<Big_Traits> {
-public:
-    Automaton_Big(const ReportManager *rm_in, const NGHolder &graph_in,
-                  bool single_trigger,
-                  const vector<vector<CharReach>> &triggers, bool prunable_in)
-        : Automaton_Base(rm_in, graph_in, single_trigger, triggers,
-                         prunable_in) {}
-};
-
-struct Graph_Traits {
-    using StateSet = bitfield<NFA_STATE_LIMIT>;
-    using StateMap = unordered_map<StateSet, dstate_id_t>;
-
-    static StateSet init_states(UNUSED u32 num) {
-        assert(num <= NFA_STATE_LIMIT);
-        return StateSet();
-    }
-
-    static StateSet copy_states(const dynamic_bitset<> &in, u32 num) {
-        StateSet out = init_states(num);
+    static StateSet copy_states(const dynamic_bitset<> &in, u32 num) { 
+        StateSet out = init_states(num); 
         for (size_t i = in.find_first(); i != in.npos && i < out.size();
              i = in.find_next(i)) {
             out.set(i);
         }
         return out;
     }
-};
+}; 
 
-class Automaton_Graph : public Automaton_Base<Graph_Traits> {
+class Automaton_Graph : public Automaton_Base<Graph_Traits> { 
 public:
-    Automaton_Graph(const ReportManager *rm_in, const NGHolder &graph_in,
-                    bool single_trigger,
-                    const vector<vector<CharReach>> &triggers, bool prunable_in)
-        : Automaton_Base(rm_in, graph_in, single_trigger, triggers,
-                         prunable_in) {}
-};
+    Automaton_Graph(const ReportManager *rm_in, const NGHolder &graph_in, 
+                    bool single_trigger, 
+                    const vector<vector<CharReach>> &triggers, bool prunable_in) 
+        : Automaton_Base(rm_in, graph_in, single_trigger, triggers, 
+                         prunable_in) {} 
+}; 
 
-} // namespace
+} // namespace 
 
-static
-bool startIsRedundant(const NGHolder &g) {
-    set<NFAVertex> start;
-    set<NFAVertex> startDs;
+static 
+bool startIsRedundant(const NGHolder &g) { 
+    set<NFAVertex> start; 
+    set<NFAVertex> startDs; 
 
-    insert(&start, adjacent_vertices(g.start, g));
-    insert(&startDs, adjacent_vertices(g.startDs, g));
-
-    return start == startDs;
-}
-
-flat_set<NFAVertex> getRedundantStarts(const NGHolder &g) {
-    flat_set<NFAVertex> dead;
-    if (startIsRedundant(g)) {
-        dead.insert(g.start);
+    insert(&start, adjacent_vertices(g.start, g)); 
+    insert(&startDs, adjacent_vertices(g.startDs, g)); 
+ 
+    return start == startDs; 
+} 
+ 
+flat_set<NFAVertex> getRedundantStarts(const NGHolder &g) { 
+    flat_set<NFAVertex> dead; 
+    if (startIsRedundant(g)) { 
+        dead.insert(g.start); 
     }
-    if (proper_out_degree(g.startDs, g) == 0) {
-        dead.insert(g.startDs);
+    if (proper_out_degree(g.startDs, g) == 0) { 
+        dead.insert(g.startDs); 
     }
-    return dead;
-}
+    return dead; 
+} 
 
-unique_ptr<raw_dfa> buildMcClellan(const NGHolder &graph,
-                                   const ReportManager *rm, bool single_trigger,
+unique_ptr<raw_dfa> buildMcClellan(const NGHolder &graph, 
+                                   const ReportManager *rm, bool single_trigger, 
                                    const vector<vector<CharReach>> &triggers,
                                    const Grey &grey, bool finalChance) {
     if (!grey.allowMcClellan) {
@@ -546,9 +546,9 @@ unique_ptr<raw_dfa> buildMcClellan(const NGHolder &graph,
                  to_string(graph.kind).c_str());
     assert(allMatchStatesHaveReports(graph));
 
-    bool prunable = grey.highlanderPruneDFA && has_managed_reports(graph);
-    assert(rm || !has_managed_reports(graph));
-    if (!has_managed_reports(graph)) {
+    bool prunable = grey.highlanderPruneDFA && has_managed_reports(graph); 
+    assert(rm || !has_managed_reports(graph)); 
+    if (!has_managed_reports(graph)) { 
         rm = nullptr;
     }
 
@@ -563,18 +563,18 @@ unique_ptr<raw_dfa> buildMcClellan(const NGHolder &graph,
     const u32 numStates = num_vertices(graph);
     DEBUG_PRINTF("determinising nfa with %u vertices\n", numStates);
 
-    if (numStates > FINAL_DFA_STATE_LIMIT) {
-        DEBUG_PRINTF("rejecting nfa as too many vertices\n");
-        return nullptr;
-    }
-
-    auto rdfa = ue2::make_unique<raw_dfa>(graph.kind);
-
+    if (numStates > FINAL_DFA_STATE_LIMIT) { 
+        DEBUG_PRINTF("rejecting nfa as too many vertices\n"); 
+        return nullptr; 
+    } 
+ 
+    auto rdfa = ue2::make_unique<raw_dfa>(graph.kind); 
+ 
     if (numStates <= NFA_STATE_LIMIT) {
         /* Fast path. Automaton_Graph uses a bitfield internally to represent
          * states and is quicker than Automaton_Big. */
-        Automaton_Graph n(rm, graph, single_trigger, triggers, prunable);
-        if (!determinise(n, rdfa->states, state_limit)) {
+        Automaton_Graph n(rm, graph, single_trigger, triggers, prunable); 
+        if (!determinise(n, rdfa->states, state_limit)) { 
             DEBUG_PRINTF("state limit exceeded\n");
             return nullptr; /* over state limit */
         }
@@ -585,8 +585,8 @@ unique_ptr<raw_dfa> buildMcClellan(const NGHolder &graph,
         rdfa->alpha_remap = n.alpha;
     } else {
         /* Slow path. Too many states to use Automaton_Graph. */
-        Automaton_Big n(rm, graph, single_trigger, triggers, prunable);
-        if (!determinise(n, rdfa->states, state_limit)) {
+        Automaton_Big n(rm, graph, single_trigger, triggers, prunable); 
+        if (!determinise(n, rdfa->states, state_limit)) { 
             DEBUG_PRINTF("state limit exceeded\n");
             return nullptr; /* over state limit */
         }

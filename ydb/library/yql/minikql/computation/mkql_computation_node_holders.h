@@ -620,5 +620,5 @@ private:
     const ui32 ObjectIndex;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NMiniKQL 
+} // namespace NKikimr 

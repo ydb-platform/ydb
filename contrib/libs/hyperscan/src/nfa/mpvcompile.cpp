@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,9 +34,9 @@
 #include "shufticompile.h"
 #include "trufflecompile.h"
 #include "util/alloc.h"
-#include "util/multibit_build.h"
+#include "util/multibit_build.h" 
 #include "util/order_check.h"
-#include "util/report_manager.h"
+#include "util/report_manager.h" 
 #include "util/verify_types.h"
 
 #include <algorithm>
@@ -54,8 +54,8 @@ namespace ue2 {
 namespace {
 struct pcomp {
     bool operator()(const raw_puff &a, const raw_puff &b) const {
-        return tie(a.repeats, a.unbounded, a.simple_exhaust, a.report) <
-               tie(b.repeats, b.unbounded, b.simple_exhaust, b.report);
+        return tie(a.repeats, a.unbounded, a.simple_exhaust, a.report) < 
+               tie(b.repeats, b.unbounded, b.simple_exhaust, b.report); 
     }
 };
 
@@ -83,24 +83,24 @@ struct ClusterKey {
 } // namespace
 
 static
-void writePuffette(mpv_puffette *out, const raw_puff &rp,
-                   const ReportManager &rm) {
+void writePuffette(mpv_puffette *out, const raw_puff &rp, 
+                   const ReportManager &rm) { 
     DEBUG_PRINTF("outputting %u %d %u to %p\n", rp.repeats, (int)rp.unbounded,
                  rp.report, out);
     out->repeats = rp.repeats;
     out->unbounded = rp.unbounded;
-    out->simple_exhaust = rp.simple_exhaust;
-    out->report = rm.getProgramOffset(rp.report);
+    out->simple_exhaust = rp.simple_exhaust; 
+    out->report = rm.getProgramOffset(rp.report); 
 }
 
 static
-void writeSentinel(mpv_puffette *out) {
-    DEBUG_PRINTF("outputting sentinel to %p\n", out);
-    memset(out, 0, sizeof(*out));
-    out->report = INVALID_REPORT;
-}
-
-static
+void writeSentinel(mpv_puffette *out) { 
+    DEBUG_PRINTF("outputting sentinel to %p\n", out); 
+    memset(out, 0, sizeof(*out)); 
+    out->report = INVALID_REPORT; 
+} 
+ 
+static 
 void writeDeadPoint(mpv_kilopuff *out, const vector<raw_puff> &puffs) {
     for (const auto &puff : puffs) {
         if (puff.unbounded) { /* mpv can never die */
@@ -156,8 +156,8 @@ void populateClusters(const vector<raw_puff> &puffs_in,
 
 static
 void writeKiloPuff(const map<ClusterKey, vector<raw_puff>>::const_iterator &it,
-                   const ReportManager &rm, u32 counter_offset, mpv *m,
-                   mpv_kilopuff *kp, mpv_puffette **pa) {
+                   const ReportManager &rm, u32 counter_offset, mpv *m, 
+                   mpv_kilopuff *kp, mpv_puffette **pa) { 
     const CharReach &reach = it->first.reach;
     const vector<raw_puff> &puffs = it->second;
 
@@ -175,13 +175,13 @@ void writeKiloPuff(const map<ClusterKey, vector<raw_puff>>::const_iterator &it,
         size_t set = reach.find_first();
         assert(set != CharReach::npos);
         kp->u.verm.c = (char)set;
-    } else if (shuftiBuildMasks(~reach, (u8 *)&kp->u.shuf.mask_lo,
-                                (u8 *)&kp->u.shuf.mask_hi) != -1) {
+    } else if (shuftiBuildMasks(~reach, (u8 *)&kp->u.shuf.mask_lo, 
+                                (u8 *)&kp->u.shuf.mask_hi) != -1) { 
         kp->type = MPV_SHUFTI;
     } else {
         kp->type = MPV_TRUFFLE;
-        truffleBuildMasks(~reach, (u8 *)&kp->u.truffle.mask1,
-                          (u8 *)&kp->u.truffle.mask2);
+        truffleBuildMasks(~reach, (u8 *)&kp->u.truffle.mask1, 
+                          (u8 *)&kp->u.truffle.mask2); 
     }
 
     kp->count = verify_u32(puffs.size());
@@ -191,11 +191,11 @@ void writeKiloPuff(const map<ClusterKey, vector<raw_puff>>::const_iterator &it,
     kp->puffette_offset = verify_u32((char *)*pa - (char *)m);
     for (size_t i = 0; i < puffs.size(); i++) {
         assert(!it->first.auto_restart || puffs[i].unbounded);
-        writePuffette(*pa + i, puffs[i], rm);
+        writePuffette(*pa + i, puffs[i], rm); 
     }
 
     *pa += puffs.size();
-    writeSentinel(*pa);
+    writeSentinel(*pa); 
     ++*pa;
 
     writeDeadPoint(kp, puffs);
@@ -208,7 +208,7 @@ void writeCoreNfa(NFA *nfa, u32 len, u32 min_width, u32 max_counter,
 
     nfa->length = len;
     nfa->nPositions = max_counter - 1;
-    nfa->type = MPV_NFA;
+    nfa->type = MPV_NFA; 
     nfa->streamStateSize = streamStateSize;
     assert(16 >= sizeof(mpv_decomp_kilo));
     nfa->scratchStateSize = scratchStateSize;
@@ -309,9 +309,9 @@ const mpv_counter_info &findCounter(const vector<mpv_counter_info> &counters,
     return counters.front();
 }
 
-bytecode_ptr<NFA> mpvCompile(const vector<raw_puff> &puffs_in,
-                             const vector<raw_puff> &triggered_puffs,
-                             const ReportManager &rm) {
+bytecode_ptr<NFA> mpvCompile(const vector<raw_puff> &puffs_in, 
+                             const vector<raw_puff> &triggered_puffs, 
+                             const ReportManager &rm) { 
     assert(!puffs_in.empty() || !triggered_puffs.empty());
     u32 puffette_count = puffs_in.size() + triggered_puffs.size();
 
@@ -343,7 +343,7 @@ bytecode_ptr<NFA> mpvCompile(const vector<raw_puff> &puffs_in,
 
     DEBUG_PRINTF("%u puffs, len = %u\n", puffette_count, len);
 
-    auto nfa = make_zeroed_bytecode_ptr<NFA>(len);
+    auto nfa = make_zeroed_bytecode_ptr<NFA>(len); 
 
     mpv_puffette *pa_base = (mpv_puffette *)
         ((char *)nfa.get() + sizeof(NFA) + sizeof(mpv)
@@ -351,7 +351,7 @@ bytecode_ptr<NFA> mpvCompile(const vector<raw_puff> &puffs_in,
          + sizeof(mpv_counter_info) * counters.size());
     mpv_puffette *pa = pa_base;
 
-    writeSentinel(pa);
+    writeSentinel(pa); 
 
     ++pa; /* skip init sentinel */
 
@@ -377,9 +377,9 @@ bytecode_ptr<NFA> mpvCompile(const vector<raw_puff> &puffs_in,
     mpv_kilopuff *kp_begin = (mpv_kilopuff *)(m + 1);
     mpv_kilopuff *kp = kp_begin;
     for (auto it = puff_clusters.begin(); it != puff_clusters.end(); ++it) {
-        writeKiloPuff(it, rm,
-                      findCounter(counters, kp - kp_begin).counter_offset, m,
-                      kp, &pa);
+        writeKiloPuff(it, rm, 
+                      findCounter(counters, kp - kp_begin).counter_offset, m, 
+                      kp, &pa); 
         ++kp;
     }
     assert((char *)pa == (char *)nfa.get() + len);

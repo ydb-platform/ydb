@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
         auto res = ParseType(prog, pool, errors);
         if (!res) {
             errors.PrintWithProgramTo(Cerr, "-memory-", TString(prog));
-            UNIT_FAIL(TStringBuilder() << "Parsing failed:" << Endl << prog);
+            UNIT_FAIL(TStringBuilder() << "Parsing failed:" << Endl << prog); 
         }
         UNIT_ASSERT_STRINGS_EQUAL(res->ToString(), expectedType);
     }

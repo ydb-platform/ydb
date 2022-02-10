@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -38,7 +38,7 @@
 #include "nfagraph/ng_holder.h"
 #include "util/charreach.h"
 #include "util/graph_range.h"
-#include "util/flat_containers.h"
+#include "util/flat_containers.h" 
 
 #include <boost/dynamic_bitset.hpp>
 
@@ -63,25 +63,25 @@ void getFullTransitionFromState(const raw_dfa &n, u16 state,
                                 u16 *out_table);
 
 /** produce a map of states on which it is valid to receive tops */
-void markToppableStarts(const NGHolder &g, const flat_set<NFAVertex> &unused,
+void markToppableStarts(const NGHolder &g, const flat_set<NFAVertex> &unused, 
                         bool single_trigger,
                         const std::vector<std::vector<CharReach>> &triggers,
                         boost::dynamic_bitset<> *out);
 
-/**
- * \brief Returns a set of start vertices that will not participate in an
- * implementation of this graph. These are either starts with no successors or
- * starts which are redundant with startDs.
- */
-flat_set<NFAVertex> getRedundantStarts(const NGHolder &g);
-
+/** 
+ * \brief Returns a set of start vertices that will not participate in an 
+ * implementation of this graph. These are either starts with no successors or 
+ * starts which are redundant with startDs. 
+ */ 
+flat_set<NFAVertex> getRedundantStarts(const NGHolder &g); 
+ 
 template<typename autom>
 void transition_graph(autom &nfa, const std::vector<NFAVertex> &vByStateId,
                       const typename autom::StateSet &in,
                       typename autom::StateSet *next) {
     typedef typename autom::StateSet StateSet;
     const NGHolder &graph = nfa.graph;
-    const auto &unused = nfa.unused;
+    const auto &unused = nfa.unused; 
     const auto &alpha = nfa.alpha;
     const StateSet &squash = nfa.squash;
     const std::map<u32, StateSet> &squash_mask = nfa.squash_mask;
@@ -99,7 +99,7 @@ void transition_graph(autom &nfa, const std::vector<NFAVertex> &vByStateId,
         NFAVertex u = vByStateId[i];
 
         for (const auto &v : adjacent_vertices_range(u, graph)) {
-            if (contains(unused, v)) {
+            if (contains(unused, v)) { 
                 continue;
             }
             succ.set(graph[v].index);

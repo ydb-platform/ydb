@@ -41,59 +41,59 @@
 #include "lbr.h"
 #include "limex.h"
 #include "mcclellan.h"
-#include "mcsheng.h"
+#include "mcsheng.h" 
 #include "mpv.h"
-#include "sheng.h"
-#include "tamarama.h"
+#include "sheng.h" 
+#include "tamarama.h" 
 
-#define DISPATCH_CASE(dc_ltype, dc_ftype, dc_func_call)                        \
-    case dc_ltype:                                                             \
-        return nfaExec##dc_ftype##dc_func_call;                                \
+#define DISPATCH_CASE(dc_ltype, dc_ftype, dc_func_call)                        \ 
+    case dc_ltype:                                                             \ 
+        return nfaExec##dc_ftype##dc_func_call;                                \ 
     break
 
 // general framework calls
 
-#define DISPATCH_BY_NFA_TYPE(dbnt_func)                                        \
-    switch (nfa->type) {                                                       \
-        DISPATCH_CASE(LIMEX_NFA_32, LimEx32, dbnt_func);                       \
-        DISPATCH_CASE(LIMEX_NFA_64, LimEx64, dbnt_func);                       \
-        DISPATCH_CASE(LIMEX_NFA_128, LimEx128, dbnt_func);                     \
-        DISPATCH_CASE(LIMEX_NFA_256, LimEx256, dbnt_func);                     \
-        DISPATCH_CASE(LIMEX_NFA_384, LimEx384, dbnt_func);                     \
-        DISPATCH_CASE(LIMEX_NFA_512, LimEx512, dbnt_func);                     \
-        DISPATCH_CASE(MCCLELLAN_NFA_8, McClellan8, dbnt_func);                 \
-        DISPATCH_CASE(MCCLELLAN_NFA_16, McClellan16, dbnt_func);               \
-        DISPATCH_CASE(GOUGH_NFA_8, Gough8, dbnt_func);                         \
-        DISPATCH_CASE(GOUGH_NFA_16, Gough16, dbnt_func);                       \
-        DISPATCH_CASE(MPV_NFA, Mpv, dbnt_func);                                \
-        DISPATCH_CASE(LBR_NFA_DOT, LbrDot, dbnt_func);                         \
-        DISPATCH_CASE(LBR_NFA_VERM, LbrVerm, dbnt_func);                       \
-        DISPATCH_CASE(LBR_NFA_NVERM, LbrNVerm, dbnt_func);                     \
-        DISPATCH_CASE(LBR_NFA_SHUF, LbrShuf, dbnt_func);                       \
-        DISPATCH_CASE(LBR_NFA_TRUF, LbrTruf, dbnt_func);                       \
-        DISPATCH_CASE(CASTLE_NFA, Castle, dbnt_func);                          \
-        DISPATCH_CASE(SHENG_NFA, Sheng, dbnt_func);                            \
-        DISPATCH_CASE(TAMARAMA_NFA, Tamarama, dbnt_func);                      \
-        DISPATCH_CASE(MCSHENG_NFA_8, McSheng8, dbnt_func);                     \
-        DISPATCH_CASE(MCSHENG_NFA_16, McSheng16, dbnt_func);                   \
+#define DISPATCH_BY_NFA_TYPE(dbnt_func)                                        \ 
+    switch (nfa->type) {                                                       \ 
+        DISPATCH_CASE(LIMEX_NFA_32, LimEx32, dbnt_func);                       \ 
+        DISPATCH_CASE(LIMEX_NFA_64, LimEx64, dbnt_func);                       \ 
+        DISPATCH_CASE(LIMEX_NFA_128, LimEx128, dbnt_func);                     \ 
+        DISPATCH_CASE(LIMEX_NFA_256, LimEx256, dbnt_func);                     \ 
+        DISPATCH_CASE(LIMEX_NFA_384, LimEx384, dbnt_func);                     \ 
+        DISPATCH_CASE(LIMEX_NFA_512, LimEx512, dbnt_func);                     \ 
+        DISPATCH_CASE(MCCLELLAN_NFA_8, McClellan8, dbnt_func);                 \ 
+        DISPATCH_CASE(MCCLELLAN_NFA_16, McClellan16, dbnt_func);               \ 
+        DISPATCH_CASE(GOUGH_NFA_8, Gough8, dbnt_func);                         \ 
+        DISPATCH_CASE(GOUGH_NFA_16, Gough16, dbnt_func);                       \ 
+        DISPATCH_CASE(MPV_NFA, Mpv, dbnt_func);                                \ 
+        DISPATCH_CASE(LBR_NFA_DOT, LbrDot, dbnt_func);                         \ 
+        DISPATCH_CASE(LBR_NFA_VERM, LbrVerm, dbnt_func);                       \ 
+        DISPATCH_CASE(LBR_NFA_NVERM, LbrNVerm, dbnt_func);                     \ 
+        DISPATCH_CASE(LBR_NFA_SHUF, LbrShuf, dbnt_func);                       \ 
+        DISPATCH_CASE(LBR_NFA_TRUF, LbrTruf, dbnt_func);                       \ 
+        DISPATCH_CASE(CASTLE_NFA, Castle, dbnt_func);                          \ 
+        DISPATCH_CASE(SHENG_NFA, Sheng, dbnt_func);                            \ 
+        DISPATCH_CASE(TAMARAMA_NFA, Tamarama, dbnt_func);                      \ 
+        DISPATCH_CASE(MCSHENG_NFA_8, McSheng8, dbnt_func);                     \ 
+        DISPATCH_CASE(MCSHENG_NFA_16, McSheng16, dbnt_func);                   \ 
         DISPATCH_CASE(SHENG_NFA_32, Sheng32, dbnt_func);                       \
         DISPATCH_CASE(SHENG_NFA_64, Sheng64, dbnt_func);                       \
         DISPATCH_CASE(MCSHENG_64_NFA_8, McSheng64_8, dbnt_func);               \
         DISPATCH_CASE(MCSHENG_64_NFA_16, McSheng64_16, dbnt_func);             \
-    default:                                                                   \
-        assert(0);                                                             \
+    default:                                                                   \ 
+        assert(0);                                                             \ 
     }
 
 char nfaCheckFinalState(const struct NFA *nfa, const char *state,
                         const char *streamState, u64a offset,
-                        NfaCallback callback, void *context) {
+                        NfaCallback callback, void *context) { 
     assert(ISALIGNED_CL(nfa) && ISALIGNED_CL(getImplNfa(nfa)));
 
     // Caller should avoid calling us if we can never produce matches.
     assert(nfaAcceptsEod(nfa));
 
     DISPATCH_BY_NFA_TYPE(_testEOD(nfa, state, streamState, offset, callback,
-                                  context));
+                                  context)); 
     return 0;
 }
 
@@ -116,14 +116,14 @@ char nfaQueueExec2_i(const struct NFA *nfa, struct mq *q, s64a end) {
     return 0;
 }
 
-char nfaQueueExec_raw(const struct NFA *nfa, struct mq *q, s64a end) {
-    return nfaQueueExec_i(nfa, q, end);
-}
-
-char nfaQueueExec2_raw(const struct NFA *nfa, struct mq *q, s64a end) {
-    return nfaQueueExec2_i(nfa, q, end);
-}
-
+char nfaQueueExec_raw(const struct NFA *nfa, struct mq *q, s64a end) { 
+    return nfaQueueExec_i(nfa, q, end); 
+} 
+ 
+char nfaQueueExec2_raw(const struct NFA *nfa, struct mq *q, s64a end) { 
+    return nfaQueueExec2_i(nfa, q, end); 
+} 
+ 
 static really_inline
 char nfaQueueExecRose_i(const struct NFA *nfa, struct mq *q, ReportID report) {
     DISPATCH_BY_NFA_TYPE(_QR(nfa, q, report));
@@ -303,11 +303,11 @@ char nfaInAcceptState(const struct NFA *nfa, ReportID report, struct mq *q) {
     return 0;
 }
 
-char nfaInAnyAcceptState(const struct NFA *nfa, struct mq *q) {
-    DISPATCH_BY_NFA_TYPE(_inAnyAccept(nfa, q));
-    return 0;
-}
-
+char nfaInAnyAcceptState(const struct NFA *nfa, struct mq *q) { 
+    DISPATCH_BY_NFA_TYPE(_inAnyAccept(nfa, q)); 
+    return 0; 
+} 
+ 
 char nfaQueueExecRose(const struct NFA *nfa, struct mq *q, ReportID r) {
     DEBUG_PRINTF("nfa=%p\n", nfa);
 #ifdef DEBUG
@@ -325,12 +325,12 @@ char nfaQueueExecRose(const struct NFA *nfa, struct mq *q, ReportID r) {
 
 char nfaBlockExecReverse(const struct NFA *nfa, u64a offset, const u8 *buf,
                          size_t buflen, const u8 *hbuf, size_t hlen,
-                         NfaCallback callback, void *context) {
+                         NfaCallback callback, void *context) { 
     assert(nfa);
     assert(ISALIGNED_CL(nfa) && ISALIGNED_CL(getImplNfa(nfa)));
 
     DISPATCH_BY_NFA_TYPE(_B_Reverse(nfa, offset, buf, buflen, hbuf, hlen,
-                                    callback, context));
+                                    callback, context)); 
     return 0;
 }
 

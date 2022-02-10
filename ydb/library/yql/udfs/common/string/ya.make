@@ -1,15 +1,15 @@
 YQL_UDF(string_udf)
 
-YQL_ABI_VERSION(
-    2
+YQL_ABI_VERSION( 
+    2 
     9
-    0
-)
+    0 
+) 
 
 OWNER(g:yql g:yql_ydb_core)
-
+ 
 SRCS(
-    string_udf.cpp
+    string_udf.cpp 
 )
 
 PEERDIR(
@@ -22,7 +22,7 @@ PEERDIR(
 )
 
 TIMEOUT(300)
-
+ 
 SIZE(MEDIUM)
 
 END()

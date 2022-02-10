@@ -397,8 +397,8 @@ namespace NActors {
     void TMon::Start() {
         TBase::Register(new TIndexRedirectMonPage(IndexMonPage));
         TBase::Register(new NMonitoring::TVersionMonPage);
-        TBase::Register(new NMonitoring::TTablesorterCssMonPage);
-        TBase::Register(new NMonitoring::TTablesorterJsMonPage);
+        TBase::Register(new NMonitoring::TTablesorterCssMonPage); 
+        TBase::Register(new NMonitoring::TTablesorterJsMonPage); 
 
         NLwTraceMonPage::RegisterPages((TBase*)this);
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(ACTORLIB_PROVIDER));

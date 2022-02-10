@@ -1,11 +1,11 @@
 LIBRARY()
-
-YQL_ABI_VERSION(
-    2
+ 
+YQL_ABI_VERSION( 
+    2 
     9
-    0
-)
-
+    0 
+) 
+ 
 OWNER(
     xenoxeno
     g:yql

@@ -1107,14 +1107,14 @@ public:
 
     IAsyncQueryResultPtr ExecuteSchemeQuery(const TString& query, bool isSql) override {
         return CheckedProcessQuery(*ExprCtx,
-            [this, &query, isSql] (TExprContext& ctx) {
+            [this, &query, isSql] (TExprContext& ctx) { 
                 return ExecuteSchemeQueryInternal(query, isSql, ctx);
             });
     }
 
     TQueryResult SyncExecuteSchemeQuery(const TString& query, bool isSql) override {
         return CheckedSyncProcessQuery(
-            [this, &query, isSql] () {
+            [this, &query, isSql] () { 
                 return ExecuteSchemeQuery(query, isSql);
             });
     }

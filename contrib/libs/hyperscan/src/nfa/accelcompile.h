@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -31,7 +31,7 @@
 
 #include "ue2common.h"
 #include "util/charreach.h"
-#include "util/flat_containers.h"
+#include "util/flat_containers.h" 
 
 union AccelAux;
 
@@ -51,10 +51,10 @@ struct AccelInfo {
 
 bool buildAccelAux(const AccelInfo &info, AccelAux *aux);
 
-/* returns true is the escape set can be handled with a masked double_verm */
-bool buildDvermMask(const flat_set<std::pair<u8, u8>> &escape_set,
-                    u8 *m1_out = nullptr, u8 *m2_out = nullptr);
-
+/* returns true is the escape set can be handled with a masked double_verm */ 
+bool buildDvermMask(const flat_set<std::pair<u8, u8>> &escape_set, 
+                    u8 *m1_out = nullptr, u8 *m2_out = nullptr); 
+ 
 } // namespace ue2
 
 #endif

@@ -65,92 +65,92 @@ static i64 ParseWithKmgSuffixS(const char* option) {
     return ParseWithKmgSuffixT<i64>(option);
 }
 
-void TBusSessionConfig::ConfigureLastGetopt(NLastGetopt::TOpts& opts,
+void TBusSessionConfig::ConfigureLastGetopt(NLastGetopt::TOpts& opts, 
                                             const TString& prefix) {
-    opts.AddLongOption(prefix + "total-timeout")
+    opts.AddLongOption(prefix + "total-timeout") 
         .RequiredArgument("MILLISECONDS")
         .DefaultValue(ToString(TotalTimeout))
-        .StoreMappedResultT<const char*>(&TotalTimeout,
-                                         &ParseDurationForMessageBus);
-    opts.AddLongOption(prefix + "connect-timeout")
+        .StoreMappedResultT<const char*>(&TotalTimeout, 
+                                         &ParseDurationForMessageBus); 
+    opts.AddLongOption(prefix + "connect-timeout") 
         .RequiredArgument("MILLISECONDS")
         .DefaultValue(ToString(ConnectTimeout))
-        .StoreMappedResultT<const char*>(&ConnectTimeout,
-                                         &ParseDurationForMessageBus);
-    opts.AddLongOption(prefix + "send-timeout")
+        .StoreMappedResultT<const char*>(&ConnectTimeout, 
+                                         &ParseDurationForMessageBus); 
+    opts.AddLongOption(prefix + "send-timeout") 
         .RequiredArgument("MILLISECONDS")
         .DefaultValue(ToString(SendTimeout))
-        .StoreMappedResultT<const char*>(&SendTimeout,
-                                         &ParseDurationForMessageBus);
-    opts.AddLongOption(prefix + "send-threshold")
+        .StoreMappedResultT<const char*>(&SendTimeout, 
+                                         &ParseDurationForMessageBus); 
+    opts.AddLongOption(prefix + "send-threshold") 
         .RequiredArgument("BYTES")
         .DefaultValue(ToString(SendThreshold))
-        .StoreMappedResultT<const char*>(&SendThreshold, &ParseWithKmgSuffix);
-
-    opts.AddLongOption(prefix + "max-in-flight")
+        .StoreMappedResultT<const char*>(&SendThreshold, &ParseWithKmgSuffix); 
+ 
+    opts.AddLongOption(prefix + "max-in-flight") 
         .RequiredArgument("COUNT")
         .DefaultValue(ToString(MaxInFlight))
         .StoreMappedResultT<const char*>(&MaxInFlight, &ParseWithKmgSuffix);
-    opts.AddLongOption(prefix + "max-in-flight-by-size")
+    opts.AddLongOption(prefix + "max-in-flight-by-size") 
         .RequiredArgument("BYTES")
         .DefaultValue(
             ToString(MaxInFlightBySize))
         .StoreMappedResultT<const char*>(&MaxInFlightBySize, &ParseWithKmgSuffixS);
-    opts.AddLongOption(prefix + "per-con-max-in-flight")
+    opts.AddLongOption(prefix + "per-con-max-in-flight") 
         .RequiredArgument("COUNT")
         .DefaultValue(ToString(PerConnectionMaxInFlight))
-        .StoreMappedResultT<const char*>(&PerConnectionMaxInFlight,
-                                         &ParseWithKmgSuffix);
-    opts.AddLongOption(prefix + "per-con-max-in-flight-by-size")
+        .StoreMappedResultT<const char*>(&PerConnectionMaxInFlight, 
+                                         &ParseWithKmgSuffix); 
+    opts.AddLongOption(prefix + "per-con-max-in-flight-by-size") 
         .RequiredArgument("BYTES")
         .DefaultValue(
             ToString(PerConnectionMaxInFlightBySize))
-        .StoreMappedResultT<const char*>(&PerConnectionMaxInFlightBySize,
-                                         &ParseWithKmgSuffix);
-
-    opts.AddLongOption(prefix + "default-buffer-size")
+        .StoreMappedResultT<const char*>(&PerConnectionMaxInFlightBySize, 
+                                         &ParseWithKmgSuffix); 
+ 
+    opts.AddLongOption(prefix + "default-buffer-size") 
         .RequiredArgument("BYTES")
         .DefaultValue(ToString(DefaultBufferSize))
-        .StoreMappedResultT<const char*>(&DefaultBufferSize,
-                                         &ParseWithKmgSuffix);
-    opts.AddLongOption(prefix + "max-buffer-size")
+        .StoreMappedResultT<const char*>(&DefaultBufferSize, 
+                                         &ParseWithKmgSuffix); 
+    opts.AddLongOption(prefix + "max-buffer-size") 
         .RequiredArgument("BYTES")
         .DefaultValue(ToString(MaxBufferSize))
         .StoreMappedResultT<const char*>(&MaxBufferSize, &ParseWithKmgSuffix);
-    opts.AddLongOption(prefix + "max-message-size")
+    opts.AddLongOption(prefix + "max-message-size") 
         .RequiredArgument("BYTES")
         .DefaultValue(ToString(MaxMessageSize))
         .StoreMappedResultT<const char*>(&MaxMessageSize, &ParseWithKmgSuffix);
-    opts.AddLongOption(prefix + "socket-recv-buffer-size")
+    opts.AddLongOption(prefix + "socket-recv-buffer-size") 
         .RequiredArgument("BYTES")
         .DefaultValue(ToString(SocketRecvBufferSize))
-        .StoreMappedResultT<const char*>(&SocketRecvBufferSize,
-                                         &ParseWithKmgSuffix);
-    opts.AddLongOption(prefix + "socket-send-buffer-size")
+        .StoreMappedResultT<const char*>(&SocketRecvBufferSize, 
+                                         &ParseWithKmgSuffix); 
+    opts.AddLongOption(prefix + "socket-send-buffer-size") 
         .RequiredArgument("BYTES")
         .DefaultValue(ToString(SocketSendBufferSize))
-        .StoreMappedResultT<const char*>(&SocketSendBufferSize,
-                                         &ParseWithKmgSuffix);
-
-    opts.AddLongOption(prefix + "socket-tos")
-        .RequiredArgument("[0x00, 0xFF]")
+        .StoreMappedResultT<const char*>(&SocketSendBufferSize, 
+                                         &ParseWithKmgSuffix); 
+ 
+    opts.AddLongOption(prefix + "socket-tos") 
+        .RequiredArgument("[0x00, 0xFF]") 
         .StoreMappedResultT<const char*>(&SocketToS, &ParseToSForMessageBus);
     ;
-    opts.AddLongOption(prefix + "tcp-cork")
+    opts.AddLongOption(prefix + "tcp-cork") 
         .RequiredArgument("BOOL")
         .DefaultValue(ToString(TcpCork))
-        .StoreResult(&TcpCork);
-    opts.AddLongOption(prefix + "cork")
+        .StoreResult(&TcpCork); 
+    opts.AddLongOption(prefix + "cork") 
         .RequiredArgument("SECONDS")
         .DefaultValue(
             ToString(Cork.Seconds()))
-        .StoreMappedResultT<const char*>(&Cork, &TDuration::Parse);
-
-    opts.AddLongOption(prefix + "on-message-in-pool")
+        .StoreMappedResultT<const char*>(&Cork, &TDuration::Parse); 
+ 
+    opts.AddLongOption(prefix + "on-message-in-pool") 
         .RequiredArgument("BOOL")
         .DefaultValue(ToString(ExecuteOnMessageInWorkerPool))
         .StoreResult(&ExecuteOnMessageInWorkerPool);
-    opts.AddLongOption(prefix + "on-reply-in-pool")
+    opts.AddLongOption(prefix + "on-reply-in-pool") 
         .RequiredArgument("BOOL")
         .DefaultValue(ToString(ExecuteOnReplyInWorkerPool))
         .StoreResult(&ExecuteOnReplyInWorkerPool);

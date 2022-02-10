@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -38,9 +38,9 @@
 #include "container.h"
 #include "ue2common.h"
 
-#include <algorithm>
+#include <algorithm> 
 #include <array>
-#include <queue>
+#include <queue> 
 #include <vector>
 
 namespace ue2 {
@@ -72,44 +72,44 @@ namespace ue2 {
  *  \param state_limit limit on the number of dfa states to construct
  *  \param statesets_out a mapping from DFA state to the set of NFA states in
  *         the automaton
- *  \return true on success, false if state limit exceeded
+ *  \return true on success, false if state limit exceeded 
  */
 template<class Auto, class ds>
 never_inline
-bool determinise(Auto &n, std::vector<ds> &dstates, size_t state_limit,
+bool determinise(Auto &n, std::vector<ds> &dstates, size_t state_limit, 
                 std::vector<typename Auto::StateSet> *statesets_out = nullptr) {
     DEBUG_PRINTF("the determinator\n");
-    using StateSet = typename Auto::StateSet;
-    typename Auto::StateMap dstate_ids;
+    using StateSet = typename Auto::StateSet; 
+    typename Auto::StateMap dstate_ids; 
 
     const size_t alphabet_size = n.alphasize;
 
-    dstates.clear();
-    dstates.reserve(state_limit);
+    dstates.clear(); 
+    dstates.reserve(state_limit); 
 
-    dstate_ids.emplace(n.dead, DEAD_STATE);
+    dstate_ids.emplace(n.dead, DEAD_STATE); 
     dstates.push_back(ds(alphabet_size));
     std::fill_n(dstates[0].next.begin(), alphabet_size, DEAD_STATE);
 
-    std::queue<std::pair<StateSet, dstate_id_t>> q;
-    q.emplace(n.dead, DEAD_STATE);
+    std::queue<std::pair<StateSet, dstate_id_t>> q; 
+    q.emplace(n.dead, DEAD_STATE); 
 
     const std::vector<StateSet> &init = n.initial();
     for (u32 i = 0; i < init.size(); i++) {
-        q.emplace(init[i], dstates.size());
+        q.emplace(init[i], dstates.size()); 
         assert(!contains(dstate_ids, init[i]));
-        dstate_ids.emplace(init[i], dstates.size());
+        dstate_ids.emplace(init[i], dstates.size()); 
         dstates.push_back(ds(alphabet_size));
     }
 
     std::vector<StateSet> succs(alphabet_size, n.dead);
 
-    while (!q.empty()) {
-        auto m = std::move(q.front());
-        q.pop();
-        StateSet &curr = m.first;
-        dstate_id_t curr_id = m.second;
-
+    while (!q.empty()) { 
+        auto m = std::move(q.front()); 
+        q.pop(); 
+        StateSet &curr = m.first; 
+        dstate_id_t curr_id = m.second; 
+ 
         DEBUG_PRINTF("curr: %hu\n", curr_id);
 
         /* fill in accepts */
@@ -139,48 +139,48 @@ bool determinise(Auto &n, std::vector<ds> &dstates, size_t state_limit,
             if (s && succs[s] == succs[s - 1]) {
                 succ_id = dstates[curr_id].next[s - 1];
             } else {
-                auto p = dstate_ids.find(succs[s]);
-                if (p != dstate_ids.end()) { // succ[s] is already present
-                    succ_id = p->second;
+                auto p = dstate_ids.find(succs[s]); 
+                if (p != dstate_ids.end()) { // succ[s] is already present 
+                    succ_id = p->second; 
                     if (succ_id > curr_id && !dstates[succ_id].daddy
                         && n.unalpha[s] < N_CHARS) {
                         dstates[succ_id].daddy = curr_id;
                     }
                 } else {
-                    succ_id = dstate_ids.size();
-                    dstate_ids.emplace(succs[s], succ_id);
+                    succ_id = dstate_ids.size(); 
+                    dstate_ids.emplace(succs[s], succ_id); 
                     dstates.push_back(ds(alphabet_size));
                     dstates.back().daddy = n.unalpha[s] < N_CHARS ? curr_id : 0;
-                    q.emplace(succs[s], succ_id);
+                    q.emplace(succs[s], succ_id); 
                 }
 
                 DEBUG_PRINTF("-->%hu on %02hx\n", succ_id, n.unalpha[s]);
             }
 
             if (succ_id >= state_limit) {
-                DEBUG_PRINTF("succ_id %hu >= state_limit %zu\n",
+                DEBUG_PRINTF("succ_id %hu >= state_limit %zu\n", 
                              succ_id, state_limit);
-                dstates.clear();
-                return false;
+                dstates.clear(); 
+                return false; 
             }
 
             dstates[curr_id].next[s] = succ_id;
         }
     }
 
-    // The dstates vector will persist in the raw_dfa.
-    dstates.shrink_to_fit();
-
+    // The dstates vector will persist in the raw_dfa. 
+    dstates.shrink_to_fit(); 
+ 
     if (statesets_out) {
-        auto &statesets = *statesets_out;
-        statesets.resize(dstate_ids.size());
-        for (auto &m : dstate_ids) {
-            statesets[m.second] = std::move(m.first);
-        }
+        auto &statesets = *statesets_out; 
+        statesets.resize(dstate_ids.size()); 
+        for (auto &m : dstate_ids) { 
+            statesets[m.second] = std::move(m.first); 
+        } 
     }
-
+ 
     DEBUG_PRINTF("ok\n");
-    return true;
+    return true; 
 }
 
 static inline

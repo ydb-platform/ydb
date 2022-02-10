@@ -1,15 +1,15 @@
 LIBRARY()
-
+ 
 PEERDIR (
     ydb/library/yql/parser/proto_ast/gen/v1_proto
 )
 
 OWNER(g:yql g:yql_ydb_core)
-
+ 
 SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
 SET(antlr_templates ${antlr_output}/org/antlr/codegen/templates)
 SET(sql_grammar ${antlr_output}/SQLv1.g)
-
+ 
 SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
 SET(PROTOBUF_HEADER_PATH ydb/library/yql/parser/proto_ast/gen/v1_proto)
 
@@ -38,4 +38,4 @@ RUN_ANTLR(
     CWD ${antlr_output}
 )
 
-END()
+END() 

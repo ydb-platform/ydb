@@ -13,7 +13,7 @@
 
 using namespace NYql;
 
-namespace NSQLTranslationV0 {
+namespace NSQLTranslationV0 { 
 
 namespace {
 
@@ -24,8 +24,8 @@ TNodePtr AddTablePathPrefix(TContext &ctx, TStringBuf prefixPath, const TDeferre
     }
 
     YQL_ENSURE(path.GetLiteral(), "TODO support prefix for deferred atoms");
-    prefixPath.SkipPrefix("//");
-
+    prefixPath.SkipPrefix("//"); 
+ 
     TPathSplitUnix prefixPathSplit(prefixPath);
     TPathSplitUnix pathSplit(*path.GetLiteral());
 
@@ -44,7 +44,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
 
 } // namespace
 
-TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
+TContext::TContext(const NSQLTranslation::TTranslationSettings& settings, 
                    TIssues& issues)
     : ClusterMapping(settings.ClusterMapping)
     , PathPrefix(settings.PathPrefix)
@@ -55,7 +55,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , IncrementMonCounterFunction(settings.IncrementCounter)
     , CurrCluster(settings.DefaultCluster)
     , HasPendingErrors(false)
-    , Libraries(settings.Libraries)
+    , Libraries(settings.Libraries) 
 {
     Position.File = settings.File;
 
@@ -395,4 +395,4 @@ void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, cons
     Error() << ruleName << ": alternative is not implemented yet: " << GetDescription(node, descr->FindFieldByNumber(altCase));
 }
 
-} // namespace NSQLTranslationV0
+} // namespace NSQLTranslationV0 

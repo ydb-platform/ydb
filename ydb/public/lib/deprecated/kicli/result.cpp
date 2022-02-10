@@ -55,7 +55,7 @@ NMsgBusProxy::EResponseStatus TResult::GetStatus() const {
         case NBus::MESSAGE_UNKNOWN:
             return NMsgBusProxy::MSTATUS_UNKNOWN;
         case NBus::MESSAGE_BUSY:
-            return NMsgBusProxy::MSTATUS_REJECTED;
+            return NMsgBusProxy::MSTATUS_REJECTED; 
         case NBus::MESSAGE_SHUTDOWN:
             return NMsgBusProxy::MSTATUS_NOTREADY;
         case NBus::MESSAGE_OK:

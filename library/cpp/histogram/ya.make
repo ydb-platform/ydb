@@ -1,5 +1,5 @@
 RECURSE(
-    adaptive
+    adaptive 
     hdr
     hdr/ut
     simple

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -29,53 +29,53 @@
 #ifndef ROSE_BUILD_DUMP_H
 #define ROSE_BUILD_DUMP_H
 
-#include "ue2common.h"
-
-#include <map>
-#include <string>
-#include <vector>
-
+#include "ue2common.h" 
+ 
+#include <map> 
+#include <string> 
+#include <vector> 
+ 
 struct RoseEngine;
 
 namespace ue2 {
 
-class RoseBuildImpl;
+class RoseBuildImpl; 
 struct Grey;
-struct hwlmLiteral;
-struct LitFragment;
-struct left_id;
-struct suffix_id;
+struct hwlmLiteral; 
+struct LitFragment; 
+struct left_id; 
+struct suffix_id; 
 
 #ifdef DUMP_SUPPORT
 // Dump the Rose graph in graphviz representation.
-void dumpRoseGraph(const RoseBuildImpl &build, const char *filename);
+void dumpRoseGraph(const RoseBuildImpl &build, const char *filename); 
 
-void dumpRose(const RoseBuildImpl &build,
-              const std::vector<LitFragment> &fragments,
-              const std::map<left_id, u32> &leftfix_queue_map,
-              const std::map<suffix_id, u32> &suffix_queue_map,
-              const RoseEngine *t);
-
-void dumpMatcherLiterals(const std::vector<hwlmLiteral> &lits,
-                         const std::string &name, const Grey &grey);
-
+void dumpRose(const RoseBuildImpl &build, 
+              const std::vector<LitFragment> &fragments, 
+              const std::map<left_id, u32> &leftfix_queue_map, 
+              const std::map<suffix_id, u32> &suffix_queue_map, 
+              const RoseEngine *t); 
+ 
+void dumpMatcherLiterals(const std::vector<hwlmLiteral> &lits, 
+                         const std::string &name, const Grey &grey); 
+ 
 #else
 
 static UNUSED
-void dumpRoseGraph(const RoseBuildImpl &, const char *) {
+void dumpRoseGraph(const RoseBuildImpl &, const char *) { 
 }
 
 static UNUSED
-void dumpRose(const RoseBuildImpl &, const std::vector<LitFragment> &,
-              const std::map<left_id, u32> &, const std::map<suffix_id, u32> &,
-              const RoseEngine *) {
+void dumpRose(const RoseBuildImpl &, const std::vector<LitFragment> &, 
+              const std::map<left_id, u32> &, const std::map<suffix_id, u32> &, 
+              const RoseEngine *) { 
 }
 
-static UNUSED
-void dumpMatcherLiterals(const std::vector<hwlmLiteral> &, const std::string &,
-                         const Grey &) {
-}
-
+static UNUSED 
+void dumpMatcherLiterals(const std::vector<hwlmLiteral> &, const std::string &, 
+                         const Grey &) { 
+} 
+ 
 #endif
 
 } // namespace ue2

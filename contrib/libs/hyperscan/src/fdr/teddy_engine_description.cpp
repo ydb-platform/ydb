@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -44,35 +44,35 @@ namespace ue2 {
 
 TeddyEngineDescription::TeddyEngineDescription(const TeddyEngineDef &def)
     : EngineDescription(def.id, targetByArchFeatures(def.cpu_features),
-                        def.numBuckets),
+                        def.numBuckets), 
       numMasks(def.numMasks), packed(def.packed) {}
 
 u32 TeddyEngineDescription::getDefaultFloodSuffixLength() const {
     return numMasks;
 }
 
-void getTeddyDescriptions(vector<TeddyEngineDescription> *out) {
-    static const TeddyEngineDef defns[] = {
-        { 3, 0 | HS_CPU_FEATURES_AVX2, 1, 16, false },
-        { 4, 0 | HS_CPU_FEATURES_AVX2, 1, 16, true },
-        { 5, 0 | HS_CPU_FEATURES_AVX2, 2, 16, false },
-        { 6, 0 | HS_CPU_FEATURES_AVX2, 2, 16, true },
-        { 7, 0 | HS_CPU_FEATURES_AVX2, 3, 16, false },
-        { 8, 0 | HS_CPU_FEATURES_AVX2, 3, 16, true },
-        { 9, 0 | HS_CPU_FEATURES_AVX2, 4, 16, false },
-        { 10, 0 | HS_CPU_FEATURES_AVX2, 4, 16, true },
-        { 11, 0, 1, 8, false },
-        { 12, 0, 1, 8, true },
-        { 13, 0, 2, 8, false },
-        { 14, 0, 2, 8, true },
-        { 15, 0, 3, 8, false },
-        { 16, 0, 3, 8, true },
-        { 17, 0, 4, 8, false },
-        { 18, 0, 4, 8, true },
-    };
-    out->clear();
-    for (const auto &def : defns) {
-        out->emplace_back(def);
+void getTeddyDescriptions(vector<TeddyEngineDescription> *out) { 
+    static const TeddyEngineDef defns[] = { 
+        { 3, 0 | HS_CPU_FEATURES_AVX2, 1, 16, false }, 
+        { 4, 0 | HS_CPU_FEATURES_AVX2, 1, 16, true }, 
+        { 5, 0 | HS_CPU_FEATURES_AVX2, 2, 16, false }, 
+        { 6, 0 | HS_CPU_FEATURES_AVX2, 2, 16, true }, 
+        { 7, 0 | HS_CPU_FEATURES_AVX2, 3, 16, false }, 
+        { 8, 0 | HS_CPU_FEATURES_AVX2, 3, 16, true }, 
+        { 9, 0 | HS_CPU_FEATURES_AVX2, 4, 16, false }, 
+        { 10, 0 | HS_CPU_FEATURES_AVX2, 4, 16, true }, 
+        { 11, 0, 1, 8, false }, 
+        { 12, 0, 1, 8, true }, 
+        { 13, 0, 2, 8, false }, 
+        { 14, 0, 2, 8, true }, 
+        { 15, 0, 3, 8, false }, 
+        { 16, 0, 3, 8, true }, 
+        { 17, 0, 4, 8, false }, 
+        { 18, 0, 4, 8, true }, 
+    }; 
+    out->clear(); 
+    for (const auto &def : defns) { 
+        out->emplace_back(def); 
     }
 }
 

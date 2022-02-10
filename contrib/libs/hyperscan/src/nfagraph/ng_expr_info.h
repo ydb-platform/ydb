@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -27,7 +27,7 @@
  */
 
 /** \file
- * \brief Code for discovering properties of an expression used by
+ * \brief Code for discovering properties of an expression used by 
  * hs_expression_info.
  */
 
@@ -38,13 +38,13 @@ struct hs_expr_info;
 
 namespace ue2 {
 
-class ExpressionInfo;
-class NGHolder;
+class ExpressionInfo; 
+class NGHolder; 
 class ReportManager;
-struct CompileContext;
+struct CompileContext; 
 
-void fillExpressionInfo(ReportManager &rm, const CompileContext &cc,
-                        NGHolder &g, ExpressionInfo &expr, hs_expr_info *info);
+void fillExpressionInfo(ReportManager &rm, const CompileContext &cc, 
+                        NGHolder &g, ExpressionInfo &expr, hs_expr_info *info); 
 
 } // namespace ue2
 

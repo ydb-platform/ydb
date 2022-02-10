@@ -1,11 +1,11 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     g:yql
     g:yql_ydb_core
 )
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/deprecated/split
     ydb/library/yql/sql/pg
     ydb/library/yql/sql/settings
@@ -14,11 +14,11 @@ PEERDIR(
     ydb/library/yql/sql/v1
     ydb/library/yql/sql/v1/lexer
     ydb/library/yql/utils
-)
-
-SRCS(
+) 
+ 
+SRCS( 
     cluster_mapping.cpp
-    sql.cpp
-)
-
-END()
+    sql.cpp 
+) 
+ 
+END() 

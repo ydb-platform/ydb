@@ -75,7 +75,7 @@ void TCmdSchemeInitShardConfig::Parse(int argc, char **argv) {
 
     ConfigureBaseLastGetopt(opts);
     TOptsParseResult res(&opts, argc, argv);
-    ConfigureMsgBusLastGetopt(res, argc, argv);
+    ConfigureMsgBusLastGetopt(res, argc, argv); 
 
 #if 0
     if (!configPbFile.empty()) {

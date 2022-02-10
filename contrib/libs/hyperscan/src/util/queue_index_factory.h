@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -33,11 +33,11 @@
 #define UTIL_QUEUE_INDEX_FACTORY_H
 
 #include "ue2common.h"
-#include "util/noncopyable.h"
+#include "util/noncopyable.h" 
 
 namespace ue2 {
 
-class QueueIndexFactory : noncopyable {
+class QueueIndexFactory : noncopyable { 
 public:
     QueueIndexFactory() : val(0) {}
     u32 get_queue() { return val++; }

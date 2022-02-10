@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -29,13 +29,13 @@
 
 #include "ue2common.h"
 #include "masked_move.h"
-#include "util/arch.h"
+#include "util/arch.h" 
 
-#if defined(HAVE_AVX2)
+#if defined(HAVE_AVX2) 
 /* masks for masked moves */
 
 /* magic mask for maskload (vmmaskmovq) - described in UE-2424 */
-const ALIGN_CL_DIRECTIVE u32 mm_mask_mask[16] = {
+const ALIGN_CL_DIRECTIVE u32 mm_mask_mask[16] = { 
     0x00000000U,
     0x00000000U,
     0x00000000U,

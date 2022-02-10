@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,8 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * \file
+/** 
+ * \file 
  * \brief Aligned memory alloc/free.
  */
 
@@ -60,41 +60,41 @@ void aligned_free_internal(void *ptr);
 
 /** \brief Aligned allocator class for use with STL containers. Ensures that
  * your objects are aligned to N bytes. */
-template <class T, std::size_t N>
-class AlignedAllocator {
+template <class T, std::size_t N> 
+class AlignedAllocator { 
 public:
-    using value_type = T;
+    using value_type = T; 
 
-    AlignedAllocator() noexcept {}
+    AlignedAllocator() noexcept {} 
 
-    template <class U, std::size_t N2>
-    AlignedAllocator(const AlignedAllocator<U, N2> &) noexcept {}
+    template <class U, std::size_t N2> 
+    AlignedAllocator(const AlignedAllocator<U, N2> &) noexcept {} 
 
-    template <class U> struct rebind {
-        using other = AlignedAllocator<U, N>;
-    };
+    template <class U> struct rebind { 
+        using other = AlignedAllocator<U, N>; 
+    }; 
 
-    T *allocate(std::size_t size) const {
-        size_t alloc_size = size * sizeof(T);
-        return static_cast<T *>(aligned_malloc_internal(alloc_size, N));
+    T *allocate(std::size_t size) const { 
+        size_t alloc_size = size * sizeof(T); 
+        return static_cast<T *>(aligned_malloc_internal(alloc_size, N)); 
     }
 
-    void deallocate(T *x, std::size_t) const noexcept {
-        aligned_free_internal(x);
+    void deallocate(T *x, std::size_t) const noexcept { 
+        aligned_free_internal(x); 
     }
-};
+}; 
 
-template <class T, class U, std::size_t N, std::size_t N2>
-bool operator==(const AlignedAllocator<T, N> &,
-                const AlignedAllocator<U, N2> &) {
-    return true;
-}
+template <class T, class U, std::size_t N, std::size_t N2> 
+bool operator==(const AlignedAllocator<T, N> &, 
+                const AlignedAllocator<U, N2> &) { 
+    return true; 
+} 
 
-template <class T, class U, std::size_t N, std::size_t N2>
-bool operator!=(const AlignedAllocator<T, N> &a,
-                const AlignedAllocator<U, N2> &b) {
-    return !(a == b);
-}
+template <class T, class U, std::size_t N, std::size_t N2> 
+bool operator!=(const AlignedAllocator<T, N> &a, 
+                const AlignedAllocator<U, N2> &b) { 
+    return !(a == b); 
+} 
 
 } // namespace ue2
 

@@ -1,4 +1,4 @@
-grammar SQLv1;
+grammar SQLv1; 
 
 options {
     language = Cpp;
@@ -66,7 +66,7 @@ cond_expr:
   | ((EQUALS | EQUALS2 | NOT_EQUALS | NOT_EQUALS2 | distinct_from_op) eq_subexpr)+ /* order of the eq subexpressions is reversed! */
 ;
 
-match_op: LIKE | ILIKE | GLOB | REGEXP | RLIKE | MATCH;
+match_op: LIKE | ILIKE | GLOB | REGEXP | RLIKE | MATCH; 
 
 eq_subexpr: neq_subexpr ((LESS | LESS_OR_EQ | GREATER | GREATER_OR_EQ) neq_subexpr)*;
 
@@ -221,7 +221,7 @@ invoke_expr_tail:
 
 using_call_expr: ((an_id_or_type NAMESPACE an_id_or_type) | an_id_expr | bind_parameter | (EXTERNAL FUNCTION)) invoke_expr;
 
-key_expr: LBRACE_SQUARE expr RBRACE_SQUARE;
+key_expr: LBRACE_SQUARE expr RBRACE_SQUARE; 
 
 when_expr: WHEN expr THEN expr;
 
@@ -415,14 +415,14 @@ single_source:
   | LPAREN values_stmt RPAREN
 ;
 
-sample_clause: SAMPLE expr;
-
-tablesample_clause: TABLESAMPLE sampling_mode LPAREN expr RPAREN repeatable_clause?;
-
-sampling_mode: (BERNOULLI | SYSTEM);
-
-repeatable_clause: REPEATABLE LPAREN expr RPAREN;
-
+sample_clause: SAMPLE expr; 
+ 
+tablesample_clause: TABLESAMPLE sampling_mode LPAREN expr RPAREN repeatable_clause?; 
+ 
+sampling_mode: (BERNOULLI | SYSTEM); 
+ 
+repeatable_clause: REPEATABLE LPAREN expr RPAREN; 
+ 
 join_op:
     COMMA
   | (NATURAL)? ((LEFT (ONLY | SEMI)? | RIGHT (ONLY | SEMI)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) SORTED? JOIN
@@ -443,8 +443,8 @@ into_values_source:
 values_stmt: VALUES values_source_row_list;
 
 values_source: values_stmt | select_stmt;
-values_source_row_list: values_source_row (COMMA values_source_row)*;
-values_source_row: LPAREN expr_list RPAREN;
+values_source_row_list: values_source_row (COMMA values_source_row)*; 
+values_source_row: LPAREN expr_list RPAREN; 
 
 simple_values_source: expr_list | select_stmt;
 
@@ -870,7 +870,7 @@ keyword_compat: (
   | AUTOINCREMENT
   | BEFORE
   | BEGIN
-  | BERNOULLI
+  | BERNOULLI 
   | BY
   | CASCADE
   | CHANGEFEED
@@ -924,7 +924,7 @@ keyword_compat: (
   | GROUPING
   | IF
   | IGNORE
-  | ILIKE
+  | ILIKE 
   | IMMEDIATE
   | IMPORT
   | IN
@@ -982,7 +982,7 @@ keyword_compat: (
   | RLIKE
   | ROLLBACK
   | ROW
-  | SAMPLE
+  | SAMPLE 
   | SAVEPOINT
   | SEMI
   | SETS
@@ -990,9 +990,9 @@ keyword_compat: (
   | SUBQUERY
   | SYMBOLS
   | SYNC
-  | SYSTEM
+  | SYSTEM 
   | TABLE
-  | TABLESAMPLE
+  | TABLESAMPLE 
   | TEMP
   | TEMPORARY
   | THEN
@@ -1049,7 +1049,7 @@ LESS_OR_EQ:    '<=';
 GREATER:       '>';
 GREATER_OR_EQ: '>=';
 SHIFT_LEFT:    '<<';
-ROT_LEFT:      '|<<';
+ROT_LEFT:      '|<<'; 
 AMPERSAND:     '&';
 PIPE:          '|';
 DOUBLE_PIPE:   '||';
@@ -1074,7 +1074,7 @@ DOUBLE_AT:     '@@';
 DOLLAR:        '$';
 QUOTE_DOUBLE:  '"'; // This comment for fix syntax highlighting "
 QUOTE_SINGLE:  '\'';
-BACKTICK:      '`';
+BACKTICK:      '`'; 
 LBRACE_CURLY:  '{';
 RBRACE_CURLY:  '}';
 CARET:         '^';
@@ -1131,7 +1131,7 @@ AUTOINCREMENT: A U T O I N C R E M E N T;
 AUTOMAP: A U T O M A P;
 BEFORE: B E F O R E;
 BEGIN: B E G I N;
-BERNOULLI: B E R N O U L L I;
+BERNOULLI: B E R N O U L L I; 
 BETWEEN: B E T W E E N;
 BITCAST: B I T C A S T;
 BY: B Y;
@@ -1212,7 +1212,7 @@ HAVING: H A V I N G;
 HOP: H O P;
 IF: I F;
 IGNORE: I G N O R E;
-ILIKE: I L I K E;
+ILIKE: I L I K E; 
 IMMEDIATE: I M M E D I A T E;
 IMPORT: I M P O R T;
 IN: I N;
@@ -1272,7 +1272,7 @@ REGEXP: R E G E X P;
 REINDEX: R E I N D E X;
 RELEASE: R E L E A S E;
 RENAME: R E N A M E;
-REPEATABLE: R E P E A T A B L E;
+REPEATABLE: R E P E A T A B L E; 
 REPLACE: R E P L A C E;
 RESET: R E S E T;
 RESOURCE: R E S O U R C E;
@@ -1288,7 +1288,7 @@ ROLLBACK: R O L L B A C K;
 ROLLUP: R O L L U P;
 ROW: R O W;
 ROWS: R O W S;
-SAMPLE: S A M P L E;
+SAMPLE: S A M P L E; 
 SAVEPOINT: S A V E P O I N T;
 SCHEMA: S C H E M A;
 SELECT: S E L E C T;
@@ -1301,9 +1301,9 @@ STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;
 SYMBOLS: S Y M B O L S;
 SYNC: S Y N C;
-SYSTEM: S Y S T E M;
+SYSTEM: S Y S T E M; 
 TABLE: T A B L E;
-TABLESAMPLE: T A B L E S A M P L E;
+TABLESAMPLE: T A B L E S A M P L E; 
 TAGGED: T A G G E D;
 TEMP: T E M P;
 TEMPORARY: T E M P O R A R Y;

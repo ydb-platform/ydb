@@ -1,5 +1,5 @@
 #include "mkql_builtins_decimal.h"
-
+ 
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/ymath.h>
@@ -432,35 +432,35 @@ struct TJsonDocumentToJsonConvert {
 }
 
 namespace NDecimal {
-
-template <typename TInput>
-struct TConvertFromIntegral {
+ 
+template <typename TInput> 
+struct TConvertFromIntegral { 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         return NUdf::TUnboxedValuePod(NYql::NDecimal::TInt128(arg.Get<TInput>()));
-    }
-
-#ifndef MKQL_DISABLE_CODEGEN
+    } 
+ 
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    { 
         const auto val = GetterFor<TInput>(arg, ctx.Codegen->GetContext(), block);
         const auto ext = CastInst::Create(std::is_signed<TInput>() ? Instruction::SExt : Instruction::ZExt, val, arg->getType(), "ext", block);
         return SetterForInt128(ext, block);
-    }
-#endif
-    static_assert(std::is_arithmetic<TInput>::value, "Input type must be arithmetic!");
-};
-
-template <typename TOutput>
-struct TConvertToIntegral {
+    } 
+#endif 
+    static_assert(std::is_arithmetic<TInput>::value, "Input type must be arithmetic!"); 
+}; 
+ 
+template <typename TOutput> 
+struct TConvertToIntegral { 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto v = arg.GetInt128();
         return v >= std::numeric_limits<TOutput>::min() && v <= std::numeric_limits<TOutput>::max() ?
             NUdf::TUnboxedValuePod(static_cast<TOutput>(arg.GetInt128())) : NUdf::TUnboxedValuePod();
-    }
-
-#ifndef MKQL_DISABLE_CODEGEN
+    } 
+ 
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    { 
         auto& context = ctx.Codegen->GetContext();
         const auto val = GetterForInt128(arg, block);
         const auto cut = CastInst::Create(Instruction::Trunc, val, GetTypeFor<TOutput>(context), "cut", block);
@@ -468,11 +468,11 @@ struct TConvertToIntegral {
         const auto good = GenInBounds<true>(val, GenConstant(std::numeric_limits<TOutput>::min(), context), GenConstant(std::numeric_limits<TOutput>::max(), context), block);
         const auto res = SelectInst::Create(good, full, ConstantInt::get(arg->getType(), 0), "result", block);
         return res;
-    }
-#endif
-    static_assert(std::is_arithmetic<TOutput>::value, "Output type must be arithmetic!");
-};
-
+    } 
+#endif 
+    static_assert(std::is_arithmetic<TOutput>::value, "Output type must be arithmetic!"); 
+}; 
+ 
 template<typename TOutput, ui8 Scale>
 TOutput GetFP(NYql::NDecimal::TInt128 v);
 
@@ -712,8 +712,8 @@ struct TCheckBounds {
     static_assert(Precision <= NYql::NDecimal::MaxPrecision, "Too large precision!");
 };
 
-}
-
+} 
+ 
 namespace {
 
 constexpr auto convert = "Convert";
@@ -743,16 +743,16 @@ void RegisterIntegralCasts(IBuiltinFunctionRegistry& registry) {
     RegisterConvert<NUdf::TDataType<bool>, TOutput>(registry);
 }
 
-template <typename TInput>
+template <typename TInput> 
 void RegisterDecimalConvertFromIntegral(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionOpt<NUdf::TDataType<TInput>, NUdf::TDataType<NUdf::TDecimal>, NDecimal::TConvertFromIntegral<TInput>, TUnaryArgsOpt>(registry, decimal);
-}
+} 
 
 template <typename TOutput>
 void RegisterDecimalConvertToIntegral(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionImpl<NDecimal::TConvertToIntegral<TOutput>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<TOutput>, false>, TUnaryStub>(registry, integral);
     RegisterFunctionImpl<NDecimal::TConvertToIntegral<TOutput>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<TOutput>, true>, TUnaryWrap>(registry, integral);
-}
+} 
 
 void RegisterDecimalConvert(IBuiltinFunctionRegistry& registry) {
     RegisterDecimalConvertFromIntegral<i8>(registry);
@@ -779,9 +779,9 @@ void RegisterDecimalConvert(IBuiltinFunctionRegistry& registry) {
 
     NDecimal::RegisterCastFunctionForAllPrecisions<NDecimal::TToFloat, TUnaryArgsOpt, NUdf::TDataType<float>>(registry, "ToFloat_");
     NDecimal::RegisterCastFunctionForAllPrecisions<NDecimal::TToDouble, TUnaryArgsOpt, NUdf::TDataType<double>>(registry, "ToDouble_");
-}
-
-template <typename TOutput>
+} 
+ 
+template <typename TOutput> 
 void RegisterRealCasts(IBuiltinFunctionRegistry& registry) {
     RegisterConvert<NUdf::TDataType<float>, TOutput>(registry);
     RegisterConvert<NUdf::TDataType<double>, TOutput>(registry);
@@ -1113,7 +1113,7 @@ void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterStringConvert<NUdf::TDataType<NUdf::TYson>, NUdf::TDataType<char*>>(registry);
     RegisterStringConvert<NUdf::TDataType<NUdf::TJson>, NUdf::TDataType<char*>>(registry);
     RegisterStringConvert<NUdf::TDataType<NUdf::TJson>, NUdf::TDataType<NUdf::TUtf8>>(registry);
-
+ 
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TDate>>(registry);
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TDatetime>>(registry);
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TTimestamp>>(registry);

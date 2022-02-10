@@ -1,38 +1,38 @@
-/*
+/* 
  * Copyright (c) 2015-2020, Intel Corporation
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *  * Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *  * Neither the name of Intel Corporation nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
-
-/**
- * \file
- * \brief Rose runtime: program interpreter.
- */
-
-#include "program_runtime.h"
-
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are met: 
+ * 
+ *  * Redistributions of source code must retain the above copyright notice, 
+ *    this list of conditions and the following disclaimer. 
+ *  * Redistributions in binary form must reproduce the above copyright 
+ *    notice, this list of conditions and the following disclaimer in the 
+ *    documentation and/or other materials provided with the distribution. 
+ *  * Neither the name of Intel Corporation nor the names of its contributors 
+ *    may be used to endorse or promote products derived from this software 
+ *    without specific prior written permission. 
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+ * POSSIBILITY OF SUCH DAMAGE. 
+ */ 
+ 
+/** 
+ * \file 
+ * \brief Rose runtime: program interpreter. 
+ */ 
+ 
+#include "program_runtime.h" 
+ 
 #include "catchup.h"
 #include "counting_miracle.h"
 #include "infix.h"
@@ -1689,14 +1689,14 @@ int roseCheckMultipathShufti64(const struct hs_scratch *scratch,
 }
 
 static rose_inline
-int roseNfaEarliestSom(u64a start, UNUSED u64a end, UNUSED ReportID id,
-                       void *context) {
-    assert(context);
-    u64a *som = context;
-    *som = MIN(*som, start);
-    return MO_CONTINUE_MATCHING;
-}
-
+int roseNfaEarliestSom(u64a start, UNUSED u64a end, UNUSED ReportID id, 
+                       void *context) { 
+    assert(context); 
+    u64a *som = context; 
+    *som = MIN(*som, start); 
+    return MO_CONTINUE_MATCHING; 
+} 
+ 
 static rose_inline
 u64a roseGetHaigSom(const struct RoseEngine *t, struct hs_scratch *scratch,
                     const u32 qi, UNUSED const u32 leftfixLag) {
@@ -2148,9 +2148,9 @@ hwlmcb_rv_t checkPurelyNegatives(const struct RoseEngine *t,
 #define PROGRAM_NEXT_INSTRUCTION_JUMP continue;
 #endif
 
-hwlmcb_rv_t roseRunProgram(const struct RoseEngine *t,
-                           struct hs_scratch *scratch, u32 programOffset,
-                           u64a som, u64a end, u8 prog_flags) {
+hwlmcb_rv_t roseRunProgram(const struct RoseEngine *t, 
+                           struct hs_scratch *scratch, u32 programOffset, 
+                           u64a som, u64a end, u8 prog_flags) { 
     DEBUG_PRINTF("program=%u, offsets [%llu,%llu], flags=%u\n", programOffset,
                  som, end, prog_flags);
 
@@ -3082,7 +3082,7 @@ hwlmcb_rv_t roseRunProgram(const struct RoseEngine *t,
 
     assert(0); // unreachable
     return HWLM_CONTINUE_MATCHING;
-}
+} 
 
 #define L_PROGRAM_CASE(name)                                                   \
     case ROSE_INSTR_##name: {                                                  \

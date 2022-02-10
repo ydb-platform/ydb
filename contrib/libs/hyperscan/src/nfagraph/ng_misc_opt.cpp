@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -69,20 +69,20 @@
 #include "util/charreach.h"
 #include "util/container.h"
 #include "util/graph_range.h"
-#include "util/graph_small_color_map.h"
-#include "util/flat_containers.h"
+#include "util/graph_small_color_map.h" 
+#include "util/flat_containers.h" 
 #include "ue2common.h"
 
-#include <boost/dynamic_bitset.hpp>
-#include <boost/graph/depth_first_search.hpp>
-#include <boost/graph/filtered_graph.hpp>
-
+#include <boost/dynamic_bitset.hpp> 
+#include <boost/graph/depth_first_search.hpp> 
+#include <boost/graph/filtered_graph.hpp> 
+ 
 #include <map>
 #include <set>
 #include <vector>
 
 using namespace std;
-using boost::make_filtered_graph;
+using boost::make_filtered_graph; 
 
 namespace ue2 {
 
@@ -101,8 +101,8 @@ void findCandidates(NGHolder &g, const vector<NFAVertex> &ordering,
         // For `v' to be a candidate, its predecessors must all have the same
         // successor set as `v'.
 
-        auto succ_v = succs(v, g);
-        flat_set<NFAVertex> succ_u;
+        auto succ_v = succs(v, g); 
+        flat_set<NFAVertex> succ_u; 
 
         for (auto u : inv_adjacent_vertices_range(v, g)) {
             succ_u.clear();
@@ -111,7 +111,7 @@ void findCandidates(NGHolder &g, const vector<NFAVertex> &ordering,
                 goto next_cand;
             }
         }
-        DEBUG_PRINTF("vertex %zu is a candidate\n", g[v].index);
+        DEBUG_PRINTF("vertex %zu is a candidate\n", g[v].index); 
         cand->push_back(v);
     next_cand:;
     }
@@ -132,8 +132,8 @@ void findCandidates_rev(NGHolder &g, const vector<NFAVertex> &ordering,
         // For `v' to be a candidate, its predecessors must all have the same
         // successor set as `v'.
 
-        auto pred_v = preds(v, g);
-        flat_set<NFAVertex> pred_u;
+        auto pred_v = preds(v, g); 
+        flat_set<NFAVertex> pred_u; 
 
         for (auto u : adjacent_vertices_range(v, g)) {
             pred_u.clear();
@@ -142,7 +142,7 @@ void findCandidates_rev(NGHolder &g, const vector<NFAVertex> &ordering,
                 goto next_cand;
             }
         }
-        DEBUG_PRINTF("vertex %zu is a candidate\n", g[v].index);
+        DEBUG_PRINTF("vertex %zu is a candidate\n", g[v].index); 
         cand->push_back(v);
     next_cand:;
     }
@@ -179,7 +179,7 @@ void succCRIntersection(const NGHolder &g, NFAVertex v, CharReach &add) {
 static
 set<NFAVertex> findSustainSet(const NGHolder &g, NFAVertex p,
                               bool ignore_starts, const CharReach &new_cr) {
-    auto cand = preds<set<NFAVertex>>(p, g);
+    auto cand = preds<set<NFAVertex>>(p, g); 
     if (ignore_starts) {
         cand.erase(g.startDs);
     }
@@ -215,7 +215,7 @@ set<NFAVertex> findSustainSet(const NGHolder &g, NFAVertex p,
 static
 set<NFAVertex> findSustainSet_rev(const NGHolder &g, NFAVertex p,
                                   const CharReach &new_cr) {
-    auto cand = succs<set<NFAVertex>>(p, g);
+    auto cand = succs<set<NFAVertex>>(p, g); 
     /* remove elements from cand until the sustain set property holds */
     bool changed;
     do {
@@ -245,7 +245,7 @@ set<NFAVertex> findSustainSet_rev(const NGHolder &g, NFAVertex p,
 
 static
 bool enlargeCyclicVertex(NGHolder &g, som_type som, NFAVertex v) {
-    DEBUG_PRINTF("considering vertex %zu\n", g[v].index);
+    DEBUG_PRINTF("considering vertex %zu\n", g[v].index); 
     const CharReach &v_cr = g[v].char_reach;
 
     CharReach add;
@@ -264,7 +264,7 @@ bool enlargeCyclicVertex(NGHolder &g, som_type som, NFAVertex v) {
         if (p == v) {
             continue;
         }
-        DEBUG_PRINTF("looking at pred %zu\n", g[p].index);
+        DEBUG_PRINTF("looking at pred %zu\n", g[p].index); 
 
         bool ignore_sds = som; /* if we are tracking som, entries into a state
                                   from sds are significant. */
@@ -294,13 +294,13 @@ bool enlargeCyclicVertex(NGHolder &g, som_type som, NFAVertex v) {
 
     /* the cr can be increased */
     g[v].char_reach = add;
-    DEBUG_PRINTF("vertex %zu was widened\n", g[v].index);
+    DEBUG_PRINTF("vertex %zu was widened\n", g[v].index); 
     return true;
 }
 
 static
 bool enlargeCyclicVertex_rev(NGHolder &g, NFAVertex v) {
-    DEBUG_PRINTF("considering vertex %zu\n", g[v].index);
+    DEBUG_PRINTF("considering vertex %zu\n", g[v].index); 
     const CharReach &v_cr = g[v].char_reach;
 
     CharReach add;
@@ -319,7 +319,7 @@ bool enlargeCyclicVertex_rev(NGHolder &g, NFAVertex v) {
         if (p == v) {
             continue;
         }
-        DEBUG_PRINTF("looking at succ %zu\n", g[p].index);
+        DEBUG_PRINTF("looking at succ %zu\n", g[p].index); 
 
         set<NFAVertex> sustain = findSustainSet_rev(g, p, add);
         DEBUG_PRINTF("sustain set is %zu\n", sustain.size());
@@ -344,7 +344,7 @@ bool enlargeCyclicVertex_rev(NGHolder &g, NFAVertex v) {
 
     /* the cr can be increased */
     g[v].char_reach = add;
-    DEBUG_PRINTF("vertex %zu was widened\n", g[v].index);
+    DEBUG_PRINTF("vertex %zu was widened\n", g[v].index); 
     return true;
 }
 
@@ -393,7 +393,7 @@ bool improveGraph(NGHolder &g, som_type som) {
  * enlargeCyclicCR. */
 CharReach reduced_cr(NFAVertex v, const NGHolder &g,
                      const map<NFAVertex, BoundedRepeatSummary> &br_cyclic) {
-    DEBUG_PRINTF("find minimal cr for %zu\n", g[v].index);
+    DEBUG_PRINTF("find minimal cr for %zu\n", g[v].index); 
     CharReach v_cr = g[v].char_reach;
     if (proper_in_degree(v, g) != 1) {
         return v_cr;
@@ -551,178 +551,178 @@ bool mergeCyclicDotStars(NGHolder &g) {
     return true;
 }
 
-struct PrunePathsInfo {
-    explicit PrunePathsInfo(const NGHolder &g)
-        : color_map(make_small_color_map(g)), bad(num_vertices(g)) {}
-
-    void clear() {
-        no_explore.clear();
-        color_map.fill(small_color::white);
-        bad.reset();
-    }
-
-    flat_set<NFAEdge> no_explore;
-    using color_map_type = decltype(make_small_color_map(NGHolder()));
-    color_map_type color_map;
-    boost::dynamic_bitset<> bad;
-};
-
-/**
- * Finds the set of vertices that cannot be on if v is not on, setting their
- * indices in bitset PrunePathsInfo::bad.
- */
-static
-void findDependentVertices(const NGHolder &g, PrunePathsInfo &info,
-                           NFAVertex v) {
-    /* We need to exclude any vertex that may be reached on a path which is
-     * incompatible with the vertex v being on. */
-
-    /* A vertex u is bad if:
-     * 1) its reach may be incompatible with v (not a subset)
-     * 2) it if there is an edge from a bad vertex b and there is either not an
-     *     edge v->u or not an edge b->v.
-     * Note: 2) means v is never bad as it has a selfloop
-     *
-     * Can do this with a DFS from all the initial bad states with a conditional
-     * check down edges. Alternately can just filter these edges out of the
-     * graph first.
-     */
-    for (NFAVertex t : adjacent_vertices_range(v, g)) {
-        for (NFAEdge e : in_edges_range(t, g)) {
-            NFAVertex s = source(e, g);
-            if (edge(s, v, g).second) {
-                info.no_explore.insert(e);
-            }
-        }
-    }
-
-    auto filtered_g =
-        make_filtered_graph(g, make_bad_edge_filter(&info.no_explore));
-
-    // We use a bitset to track bad vertices, rather than filling a (potentially
-    // very large) set structure.
-    auto recorder = make_vertex_index_bitset_recorder(info.bad);
-
-    for (NFAVertex b : vertices_range(g)) {
-        if (b != g.start && g[b].char_reach.isSubsetOf(g[v].char_reach)) {
-            continue;
-        }
-        boost::depth_first_visit(filtered_g, b, recorder, info.color_map);
-    }
-}
-
-static
-bool willBeEnabledConcurrently(NFAVertex main_cyclic, NFAVertex v,
-                               const NGHolder &g) {
-    return is_subset_of(preds(main_cyclic, g), preds(v, g));
-}
-
-static
-bool sometimesEnabledConcurrently(NFAVertex main_cyclic, NFAVertex v,
-                                  const NGHolder &g) {
-    return has_intersection(preds(main_cyclic, g), preds(v, g));
-}
-
-static
-bool pruneUsingSuccessors(NGHolder &g, PrunePathsInfo &info, NFAVertex u,
-                          som_type som) {
-    if (som && (is_virtual_start(u, g) || u == g.startDs)) {
-        return false;
-    }
-
-    bool changed = false;
-    DEBUG_PRINTF("using cyclic %zu as base\n", g[u].index);
-    info.clear();
-    findDependentVertices(g, info, u);
-    vector<NFAVertex> u_succs;
-    for (NFAVertex v : adjacent_vertices_range(u, g)) {
-        if (som && is_virtual_start(v, g)) {
-            /* as v is virtual start, its som has been reset so can not override
-             * existing in progress matches. */
-            continue;
-        }
-        u_succs.push_back(v);
-    }
-
-    stable_sort(u_succs.begin(), u_succs.end(),
-         [&](NFAVertex a, NFAVertex b) {
-             return g[a].char_reach.count() > g[b].char_reach.count();
-         });
-
-    flat_set<NFAEdge> dead;
-
-    for (NFAVertex v : u_succs) {
-        DEBUG_PRINTF("    using %zu as killer\n", g[v].index);
-        /* Need to distinguish between vertices that are switched on after the
-         * cyclic vs vertices that are switched on concurrently with the cyclic
-         * if (subject to a suitable reach) */
-        bool v_peer_of_cyclic = willBeEnabledConcurrently(u, v, g);
-        for (NFAVertex s : adjacent_vertices_range(v, g)) {
-            DEBUG_PRINTF("        looking at preds of %zu\n", g[s].index);
-            for (NFAEdge e : in_edges_range(s, g)) {
-                NFAVertex p = source(e, g);
-                if (info.bad.test(g[p].index) || p == v || p == u
-                    || p == g.accept) {
-                    DEBUG_PRINTF("%zu not a cand\n", g[p].index);
-                    continue;
-                }
-                if (is_any_accept(s, g) && g[p].reports != g[v].reports) {
-                    DEBUG_PRINTF("%zu bad reports\n", g[p].index);
-                    continue;
-                }
-                /* the out-edges of a vertex that may be enabled on the same
-                 * byte as the cyclic can only be killed by the out-edges of a
-                 * peer vertex which will be enabled with the cyclic (a non-peer
-                 * may not be switched on until another byte is processed). */
-                if (!v_peer_of_cyclic
-                    && sometimesEnabledConcurrently(u, p, g)) {
-                    DEBUG_PRINTF("%zu can only be squashed by a proper peer\n",
-                                 g[p].index);
-                   continue;
-                }
-
-                if (g[p].char_reach.isSubsetOf(g[v].char_reach)) {
-                    dead.insert(e);
-                    changed = true;
-                    DEBUG_PRINTF("removing edge %zu->%zu\n", g[p].index,
-                                  g[s].index);
-                } else if (is_subset_of(succs(p, g), succs(u, g))) {
-                    if (is_match_vertex(p, g)
-                        && !is_subset_of(g[p].reports, g[v].reports)) {
-                        continue;
-                    }
-                    DEBUG_PRINTF("updating reach on %zu\n", g[p].index);
-                    changed |= (g[p].char_reach & g[v].char_reach).any();
-                    g[p].char_reach &= ~g[v].char_reach;
-                }
-
-            }
-        }
-        remove_edges(dead, g);
-        dead.clear();
-    }
-
-    DEBUG_PRINTF("changed %d\n", (int)changed);
-    return changed;
-}
-
-bool prunePathsRedundantWithSuccessorOfCyclics(NGHolder &g, som_type som) {
-    /* TODO: the reverse form of this is also possible */
-    bool changed = false;
-    PrunePathsInfo info(g);
-
-    for (NFAVertex v : vertices_range(g)) {
-        if (hasSelfLoop(v, g) && g[v].char_reach.all()) {
-            changed |= pruneUsingSuccessors(g, info, v, som);
-        }
-    }
-
-    if (changed) {
-        pruneUseless(g);
-        clearReports(g);
-    }
-
-    return changed;
-}
-
+struct PrunePathsInfo { 
+    explicit PrunePathsInfo(const NGHolder &g) 
+        : color_map(make_small_color_map(g)), bad(num_vertices(g)) {} 
+ 
+    void clear() { 
+        no_explore.clear(); 
+        color_map.fill(small_color::white); 
+        bad.reset(); 
+    } 
+ 
+    flat_set<NFAEdge> no_explore; 
+    using color_map_type = decltype(make_small_color_map(NGHolder())); 
+    color_map_type color_map; 
+    boost::dynamic_bitset<> bad; 
+}; 
+ 
+/** 
+ * Finds the set of vertices that cannot be on if v is not on, setting their 
+ * indices in bitset PrunePathsInfo::bad. 
+ */ 
+static 
+void findDependentVertices(const NGHolder &g, PrunePathsInfo &info, 
+                           NFAVertex v) { 
+    /* We need to exclude any vertex that may be reached on a path which is 
+     * incompatible with the vertex v being on. */ 
+ 
+    /* A vertex u is bad if: 
+     * 1) its reach may be incompatible with v (not a subset) 
+     * 2) it if there is an edge from a bad vertex b and there is either not an 
+     *     edge v->u or not an edge b->v. 
+     * Note: 2) means v is never bad as it has a selfloop 
+     * 
+     * Can do this with a DFS from all the initial bad states with a conditional 
+     * check down edges. Alternately can just filter these edges out of the 
+     * graph first. 
+     */ 
+    for (NFAVertex t : adjacent_vertices_range(v, g)) { 
+        for (NFAEdge e : in_edges_range(t, g)) { 
+            NFAVertex s = source(e, g); 
+            if (edge(s, v, g).second) { 
+                info.no_explore.insert(e); 
+            } 
+        } 
+    } 
+ 
+    auto filtered_g = 
+        make_filtered_graph(g, make_bad_edge_filter(&info.no_explore)); 
+ 
+    // We use a bitset to track bad vertices, rather than filling a (potentially 
+    // very large) set structure. 
+    auto recorder = make_vertex_index_bitset_recorder(info.bad); 
+ 
+    for (NFAVertex b : vertices_range(g)) { 
+        if (b != g.start && g[b].char_reach.isSubsetOf(g[v].char_reach)) { 
+            continue; 
+        } 
+        boost::depth_first_visit(filtered_g, b, recorder, info.color_map); 
+    } 
+} 
+ 
+static 
+bool willBeEnabledConcurrently(NFAVertex main_cyclic, NFAVertex v, 
+                               const NGHolder &g) { 
+    return is_subset_of(preds(main_cyclic, g), preds(v, g)); 
+} 
+ 
+static 
+bool sometimesEnabledConcurrently(NFAVertex main_cyclic, NFAVertex v, 
+                                  const NGHolder &g) { 
+    return has_intersection(preds(main_cyclic, g), preds(v, g)); 
+} 
+ 
+static 
+bool pruneUsingSuccessors(NGHolder &g, PrunePathsInfo &info, NFAVertex u, 
+                          som_type som) { 
+    if (som && (is_virtual_start(u, g) || u == g.startDs)) { 
+        return false; 
+    } 
+ 
+    bool changed = false; 
+    DEBUG_PRINTF("using cyclic %zu as base\n", g[u].index); 
+    info.clear(); 
+    findDependentVertices(g, info, u); 
+    vector<NFAVertex> u_succs; 
+    for (NFAVertex v : adjacent_vertices_range(u, g)) { 
+        if (som && is_virtual_start(v, g)) { 
+            /* as v is virtual start, its som has been reset so can not override 
+             * existing in progress matches. */ 
+            continue; 
+        } 
+        u_succs.push_back(v); 
+    } 
+ 
+    stable_sort(u_succs.begin(), u_succs.end(), 
+         [&](NFAVertex a, NFAVertex b) { 
+             return g[a].char_reach.count() > g[b].char_reach.count(); 
+         }); 
+ 
+    flat_set<NFAEdge> dead; 
+ 
+    for (NFAVertex v : u_succs) { 
+        DEBUG_PRINTF("    using %zu as killer\n", g[v].index); 
+        /* Need to distinguish between vertices that are switched on after the 
+         * cyclic vs vertices that are switched on concurrently with the cyclic 
+         * if (subject to a suitable reach) */ 
+        bool v_peer_of_cyclic = willBeEnabledConcurrently(u, v, g); 
+        for (NFAVertex s : adjacent_vertices_range(v, g)) { 
+            DEBUG_PRINTF("        looking at preds of %zu\n", g[s].index); 
+            for (NFAEdge e : in_edges_range(s, g)) { 
+                NFAVertex p = source(e, g); 
+                if (info.bad.test(g[p].index) || p == v || p == u 
+                    || p == g.accept) { 
+                    DEBUG_PRINTF("%zu not a cand\n", g[p].index); 
+                    continue; 
+                } 
+                if (is_any_accept(s, g) && g[p].reports != g[v].reports) { 
+                    DEBUG_PRINTF("%zu bad reports\n", g[p].index); 
+                    continue; 
+                } 
+                /* the out-edges of a vertex that may be enabled on the same 
+                 * byte as the cyclic can only be killed by the out-edges of a 
+                 * peer vertex which will be enabled with the cyclic (a non-peer 
+                 * may not be switched on until another byte is processed). */ 
+                if (!v_peer_of_cyclic 
+                    && sometimesEnabledConcurrently(u, p, g)) { 
+                    DEBUG_PRINTF("%zu can only be squashed by a proper peer\n", 
+                                 g[p].index); 
+                   continue; 
+                } 
+ 
+                if (g[p].char_reach.isSubsetOf(g[v].char_reach)) { 
+                    dead.insert(e); 
+                    changed = true; 
+                    DEBUG_PRINTF("removing edge %zu->%zu\n", g[p].index, 
+                                  g[s].index); 
+                } else if (is_subset_of(succs(p, g), succs(u, g))) { 
+                    if (is_match_vertex(p, g) 
+                        && !is_subset_of(g[p].reports, g[v].reports)) { 
+                        continue; 
+                    } 
+                    DEBUG_PRINTF("updating reach on %zu\n", g[p].index); 
+                    changed |= (g[p].char_reach & g[v].char_reach).any(); 
+                    g[p].char_reach &= ~g[v].char_reach; 
+                } 
+ 
+            } 
+        } 
+        remove_edges(dead, g); 
+        dead.clear(); 
+    } 
+ 
+    DEBUG_PRINTF("changed %d\n", (int)changed); 
+    return changed; 
+} 
+ 
+bool prunePathsRedundantWithSuccessorOfCyclics(NGHolder &g, som_type som) { 
+    /* TODO: the reverse form of this is also possible */ 
+    bool changed = false; 
+    PrunePathsInfo info(g); 
+ 
+    for (NFAVertex v : vertices_range(g)) { 
+        if (hasSelfLoop(v, g) && g[v].char_reach.all()) { 
+            changed |= pruneUsingSuccessors(g, info, v, som); 
+        } 
+    } 
+ 
+    if (changed) { 
+        pruneUseless(g); 
+        clearReports(g); 
+    } 
+ 
+    return changed; 
+} 
+ 
 } // namespace ue2

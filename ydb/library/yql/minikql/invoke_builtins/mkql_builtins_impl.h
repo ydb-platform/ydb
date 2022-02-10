@@ -664,9 +664,9 @@ void RegisterBinaryRealFunctionOpt(IBuiltinFunctionRegistry& registry, const std
 }
 
 template <
-    template<typename, typename, typename> class TFunc,
-    template<typename, typename, typename, bool, bool> class TArgs
->
+    template<typename, typename, typename> class TFunc, 
+    template<typename, typename, typename, bool, bool> class TArgs 
+> 
 void RegisterBinaryNumericFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterBinaryIntegralFunctionOpt<TFunc, TArgs>(registry, name);
     RegisterBinaryRealFunctionOpt<TFunc, TArgs>(registry, name);
@@ -691,8 +691,8 @@ void RegisterNumericAggregateFunction(IBuiltinFunctionRegistry& registry, const 
 
 template <
     template<typename> class TFunc,
-    template<typename, typename, bool> class TArgs
->
+    template<typename, typename, bool> class TArgs 
+> 
 void RegisterDatetimeAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterAggregateFunction<NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
     RegisterAggregateFunction<NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
@@ -709,9 +709,9 @@ void RegisterTzDatetimeAggregateFunction(IBuiltinFunctionRegistry& registry, con
     RegisterAggregateFunction<NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
     RegisterAggregateFunction<NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
     RegisterAggregateFunction<NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename> class TFunc,
     template<typename, typename, typename, bool, bool> class TArgs
 >

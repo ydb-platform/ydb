@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -40,8 +40,8 @@
 #include "util/charreach.h"
 #include "util/graph_range.h"
 
-#include <set>
-
+#include <set> 
+ 
 using namespace std;
 
 namespace ue2 {

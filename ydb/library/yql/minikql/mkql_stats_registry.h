@@ -134,5 +134,5 @@ private:
     i64 Start_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NMiniKQL 
+} // namespace NKikimr 

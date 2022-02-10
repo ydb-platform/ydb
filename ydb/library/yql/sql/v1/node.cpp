@@ -17,7 +17,7 @@
 
 using namespace NYql;
 
-namespace NSQLTranslationV1 {
+namespace NSQLTranslationV1 { 
 
 TString ErrorDistinctWithoutCorrelation(const TString& column) {
     return TStringBuilder() << "DISTINCT columns for JOIN in SELECT should have table aliases (correlation name),"
@@ -243,7 +243,7 @@ TNodePtr INode::Clone() const {
     if (!clone) {
         clone = const_cast<INode*>(this);
     } else {
-        YQL_ENSURE(!State.Test(ENodeState::Initialized), "Clone should be for uninitialized or persistent node");
+        YQL_ENSURE(!State.Test(ENodeState::Initialized), "Clone should be for uninitialized or persistent node"); 
         clone->SetLabel(Label, LabelPos);
         clone->MarkImplicitLabel(ImplicitLabel);
     }
@@ -408,14 +408,14 @@ TAstNode* TAstListNode::Translate(TContext& ctx) const {
     children.reserve(Nodes.size());
     auto listPos = Pos;
     for (auto& node: Nodes) {
-        if (node) {
+        if (node) { 
             auto astNode = node->Translate(ctx);
-            if (!astNode) {
-                return nullptr;
-            }
-            children.push_back(astNode);
-        } else {
-            ctx.Error(Pos) << "Translation error: encountered empty TNodePtr";
+            if (!astNode) { 
+                return nullptr; 
+            } 
+            children.push_back(astNode); 
+        } else { 
+            ctx.Error(Pos) << "Translation error: encountered empty TNodePtr"; 
             return nullptr;
         }
     }
@@ -1593,19 +1593,19 @@ TWriteSettings ISource::GetWriteSettings() const {
     return {};
 }
 
-bool ISource::SetSamplingOptions(TContext& ctx,
-                                 TPosition pos,
-                                 ESampleMode mode,
-                                 TNodePtr samplingRate,
-                                 TNodePtr samplingSeed) {
-    Y_UNUSED(pos);
-    Y_UNUSED(mode);
-    Y_UNUSED(samplingRate);
-    Y_UNUSED(samplingSeed);
+bool ISource::SetSamplingOptions(TContext& ctx, 
+                                 TPosition pos, 
+                                 ESampleMode mode, 
+                                 TNodePtr samplingRate, 
+                                 TNodePtr samplingSeed) { 
+    Y_UNUSED(pos); 
+    Y_UNUSED(mode); 
+    Y_UNUSED(samplingRate); 
+    Y_UNUSED(samplingSeed); 
     ctx.Error() << "Sampling is only supported for table sources";
-    return false;
-}
-
+    return false; 
+} 
+ 
 bool ISource::SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints) {
     Y_UNUSED(pos);
     Y_UNUSED(contextHints);
@@ -2230,10 +2230,10 @@ TTtlSettings::TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr)
 
 TString IdContent(TContext& ctx, const TString& s) {
     YQL_ENSURE(!s.empty(), "Empty identifier not expected");
-    if (!s.StartsWith('`')) {
+    if (!s.StartsWith('`')) { 
         return s;
     }
-    auto endSym = '`';
+    auto endSym = '`'; 
     if (s.size() < 2 || !s.EndsWith(endSym)) {
         ctx.Error() << "The identifier that starts with: '" << s[0] << "' should ends with: '" << endSym << "'";
         return {};
@@ -2572,10 +2572,10 @@ const TVector<TNodePtr>& TTupleNode::Elements() const {
 bool TTupleNode::DoInit(TContext& ctx, ISource* src) {
     auto node(Y());
     for (auto& expr: Exprs) {
-        if (expr->GetLabel()) {
-            ctx.Error(expr->GetPos()) << "Tuple does not allow named members";
-            return false;
-        }
+        if (expr->GetLabel()) { 
+            ctx.Error(expr->GetPos()) << "Tuple does not allow named members"; 
+            return false; 
+        } 
         node = L(node, expr);
     }
     Add("quote", node);
@@ -2840,8 +2840,8 @@ public:
                     ysonOptions->Add(BuildQuotedAtom(Pos, "yson_fast"));
                 }
                 expr->Add(Q(ysonOptions));
-            }
-        }
+            } 
+        } 
         Node = expr;
         return true;
     }
@@ -3075,7 +3075,7 @@ public:
         Add("lambda", Q(params), body);
     }
 
-protected:
+protected: 
     TPtr DoClone() const final {
         return {};
     }
@@ -3221,53 +3221,53 @@ TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr 
 }
 
 template<bool Fast>
-class TYsonOptionsNode final: public INode {
-public:
-    TYsonOptionsNode(TPosition pos, bool autoConvert, bool strict)
-        : INode(pos)
-        , AutoConvert(autoConvert)
-        , Strict(strict)
-    {
+class TYsonOptionsNode final: public INode { 
+public: 
+    TYsonOptionsNode(TPosition pos, bool autoConvert, bool strict) 
+        : INode(pos) 
+        , AutoConvert(autoConvert) 
+        , Strict(strict) 
+    { 
         auto udf = Y("Udf", Q(Fast ? "Yson2.Options" : "Yson.Options"));
         auto autoConvertNode = BuildLiteralBool(pos, autoConvert);
-        autoConvertNode->SetLabel("AutoConvert");
+        autoConvertNode->SetLabel("AutoConvert"); 
         auto strictNode = BuildLiteralBool(pos, strict);
-        strictNode->SetLabel("Strict");
-        Node = Y("NamedApply", udf, Q(Y()), BuildStructure(pos, { autoConvertNode, strictNode }));
-    }
-
-    TAstNode* Translate(TContext& ctx) const override {
-        return Node->Translate(ctx);
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        if (!Node->Init(ctx, src)) {
-            return false;
-        }
-        return true;
-    }
-
-    TPtr DoClone() const final {
-        return new TYsonOptionsNode(Pos, AutoConvert, Strict);
-    }
-
+        strictNode->SetLabel("Strict"); 
+        Node = Y("NamedApply", udf, Q(Y()), BuildStructure(pos, { autoConvertNode, strictNode })); 
+    } 
+ 
+    TAstNode* Translate(TContext& ctx) const override { 
+        return Node->Translate(ctx); 
+    } 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override { 
+        if (!Node->Init(ctx, src)) { 
+            return false; 
+        } 
+        return true; 
+    } 
+ 
+    TPtr DoClone() const final { 
+        return new TYsonOptionsNode(Pos, AutoConvert, Strict); 
+    } 
+ 
     void DoUpdateState() const override {
         State.Set(ENodeState::Const, true);
     }
 
-protected:
-    TNodePtr Node;
-    const bool AutoConvert;
-    const bool Strict;
-};
-
+protected: 
+    TNodePtr Node; 
+    const bool AutoConvert; 
+    const bool Strict; 
+}; 
+ 
 TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson) {
     if (fastYson)
         return new TYsonOptionsNode<true>(pos, autoConvert, strict);
     else
         return new TYsonOptionsNode<false>(pos, autoConvert, strict);
-}
-
+} 
+ 
 class TDoCall final : public INode {
 public:
     TDoCall(TPosition pos, const TNodePtr& node)
@@ -3421,4 +3421,4 @@ TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize) {
 }
 
 
-} // namespace NSQLTranslationV1
+} // namespace NSQLTranslationV1 

@@ -1,15 +1,15 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
-
+ 
 #include <library/cpp/hyperloglog/hyperloglog.h>
-
+ 
 #include <util/generic/hash_set.h>
 
 #include <variant>
 
-using namespace NKikimr;
-using namespace NUdf;
-
-namespace {
+using namespace NKikimr; 
+using namespace NUdf; 
+ 
+namespace { 
     class THybridHyperLogLog {
     private:
         using THybridSet = THashSet<ui64, std::hash<ui64>, std::equal_to<ui64>, TStdAllocatorForUdf<ui64>>;
@@ -125,296 +125,296 @@ namespace {
         unsigned Precision;
     };
 
-    extern const char HyperLogLogResourceName[] = "HyperLogLog.State";
-
+    extern const char HyperLogLogResourceName[] = "HyperLogLog.State"; 
+ 
     using THyperLogLogResource = TBoxedResource<THybridHyperLogLog, HyperLogLogResourceName>;
 
     class THyperLogLog_Create: public TBoxedValue {
-    public:
+    public: 
         THyperLogLog_Create(TSourcePosition pos)
             : Pos_(pos)
         {}
 
-        static const TStringRef& Name() {
-            static auto nameRef = TStringRef::Of("Create");
-            return nameRef;
-        }
-
+        static const TStringRef& Name() { 
+            static auto nameRef = TStringRef::Of("Create"); 
+            return nameRef; 
+        } 
+ 
     private:
-        TUnboxedValue Run(
+        TUnboxedValue Run( 
             const IValueBuilder*,
             const TUnboxedValuePod* args) const override {
-            try {
+            try { 
                 THolder<THyperLogLogResource> hll(new THyperLogLogResource(THybridHyperLogLog::Create(args[1].Get<ui32>())));
-                hll->Get()->Update(args[0].Get<ui64>());
+                hll->Get()->Update(args[0].Get<ui64>()); 
                 return TUnboxedValuePod(hll.Release());
-            } catch (const std::exception& e) {
+            } catch (const std::exception& e) { 
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-            }
-        }
-
+            } 
+        } 
+ 
     public:
-        static bool DeclareSignature(
-            const TStringRef& name,
-            TType* userType,
-            IFunctionTypeInfoBuilder& builder,
-            bool typesOnly) {
-            Y_UNUSED(userType);
-            if (Name() == name) {
-                builder.SimpleSignature<TResource<HyperLogLogResourceName>(ui64, ui32)>();
-                if (!typesOnly) {
+        static bool DeclareSignature( 
+            const TStringRef& name, 
+            TType* userType, 
+            IFunctionTypeInfoBuilder& builder, 
+            bool typesOnly) { 
+            Y_UNUSED(userType); 
+            if (Name() == name) { 
+                builder.SimpleSignature<TResource<HyperLogLogResourceName>(ui64, ui32)>(); 
+                if (!typesOnly) { 
                     builder.Implementation(new THyperLogLog_Create(builder.GetSourcePosition()));
-                }
-                return true;
-            } else {
-                return false;
-            }
-        }
+                } 
+                return true; 
+            } else { 
+                return false; 
+            } 
+        } 
 
     private:
         TSourcePosition Pos_;
-    };
-
+    }; 
+ 
     class THyperLogLog_AddValue: public TBoxedValue {
-    public:
+    public: 
         THyperLogLog_AddValue(TSourcePosition pos)
             : Pos_(pos)
         {}
 
-        static const TStringRef& Name() {
-            static auto nameRef = TStringRef::Of("AddValue");
-            return nameRef;
-        }
-
+        static const TStringRef& Name() { 
+            static auto nameRef = TStringRef::Of("AddValue"); 
+            return nameRef; 
+        } 
+ 
     private:
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
+        TUnboxedValue Run( 
+            const IValueBuilder* valueBuilder, 
             const TUnboxedValuePod* args) const override {
-            try {
-                Y_UNUSED(valueBuilder);
-                THyperLogLogResource* resource = static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get());
-                resource->Get()->Update(args[1].Get<ui64>());
+            try { 
+                Y_UNUSED(valueBuilder); 
+                THyperLogLogResource* resource = static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get()); 
+                resource->Get()->Update(args[1].Get<ui64>()); 
                 return TUnboxedValuePod(args[0]);
-            } catch (const std::exception& e) {
+            } catch (const std::exception& e) { 
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-            }
-        }
-
+            } 
+        } 
+ 
     public:
-        static bool DeclareSignature(
-            const TStringRef& name,
-            TType* userType,
-            IFunctionTypeInfoBuilder& builder,
-            bool typesOnly) {
-            Y_UNUSED(userType);
-            if (Name() == name) {
-                builder.SimpleSignature<TResource<HyperLogLogResourceName>(TResource<HyperLogLogResourceName>, ui64)>();
-                if (!typesOnly) {
+        static bool DeclareSignature( 
+            const TStringRef& name, 
+            TType* userType, 
+            IFunctionTypeInfoBuilder& builder, 
+            bool typesOnly) { 
+            Y_UNUSED(userType); 
+            if (Name() == name) { 
+                builder.SimpleSignature<TResource<HyperLogLogResourceName>(TResource<HyperLogLogResourceName>, ui64)>(); 
+                if (!typesOnly) { 
                     builder.Implementation(new THyperLogLog_AddValue(builder.GetSourcePosition()));
-                }
-                return true;
-            } else {
-                return false;
-            }
-        }
+                } 
+                return true; 
+            } else { 
+                return false; 
+            } 
+        } 
 
     private:
         TSourcePosition Pos_;
-    };
-
+    }; 
+ 
     class THyperLogLog_Serialize: public TBoxedValue {
-    public:
+    public: 
         THyperLogLog_Serialize(TSourcePosition pos)
             : Pos_(pos)
         {}
 
     public:
-        static const TStringRef& Name() {
-            static auto nameRef = TStringRef::Of("Serialize");
-            return nameRef;
-        }
-
+        static const TStringRef& Name() { 
+            static auto nameRef = TStringRef::Of("Serialize"); 
+            return nameRef; 
+        } 
+ 
     private:
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
+        TUnboxedValue Run( 
+            const IValueBuilder* valueBuilder, 
             const TUnboxedValuePod* args) const override {
-            try {
-                TStringStream result;
-                static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get())->Get()->Save(result);
-                return valueBuilder->NewString(result.Str());
-            } catch (const std::exception& e) {
+            try { 
+                TStringStream result; 
+                static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get())->Get()->Save(result); 
+                return valueBuilder->NewString(result.Str()); 
+            } catch (const std::exception& e) { 
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-            }
-        }
-
+            } 
+        } 
+ 
     public:
-        static bool DeclareSignature(
-            const TStringRef& name,
-            TType* userType,
-            IFunctionTypeInfoBuilder& builder,
-            bool typesOnly) {
-            Y_UNUSED(userType);
-            if (Name() == name) {
-                builder.SimpleSignature<char*(TResource<HyperLogLogResourceName>)>();
-                if (!typesOnly) {
+        static bool DeclareSignature( 
+            const TStringRef& name, 
+            TType* userType, 
+            IFunctionTypeInfoBuilder& builder, 
+            bool typesOnly) { 
+            Y_UNUSED(userType); 
+            if (Name() == name) { 
+                builder.SimpleSignature<char*(TResource<HyperLogLogResourceName>)>(); 
+                if (!typesOnly) { 
                     builder.Implementation(new THyperLogLog_Serialize(builder.GetSourcePosition()));
-                }
-                return true;
-            } else {
-                return false;
-            }
-        }
+                } 
+                return true; 
+            } else { 
+                return false; 
+            } 
+        } 
 
     private:
         TSourcePosition Pos_;
-    };
-
+    }; 
+ 
     class THyperLogLog_Deserialize: public TBoxedValue {
-    public:
+    public: 
         THyperLogLog_Deserialize(TSourcePosition pos)
             : Pos_(pos)
         {}
 
-        static const TStringRef& Name() {
-            static auto nameRef = TStringRef::Of("Deserialize");
-            return nameRef;
-        }
-
+        static const TStringRef& Name() { 
+            static auto nameRef = TStringRef::Of("Deserialize"); 
+            return nameRef; 
+        } 
+ 
     private:
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
+        TUnboxedValue Run( 
+            const IValueBuilder* valueBuilder, 
             const TUnboxedValuePod* args) const override {
-            try {
-                Y_UNUSED(valueBuilder);
-                const TString arg(args[0].AsStringRef());
-                TStringInput input(arg);
+            try { 
+                Y_UNUSED(valueBuilder); 
+                const TString arg(args[0].AsStringRef()); 
+                TStringInput input(arg); 
                 THolder<THyperLogLogResource> hll(new THyperLogLogResource(THybridHyperLogLog::Load(input)));
                 return TUnboxedValuePod(hll.Release());
-            } catch (const std::exception& e) {
+            } catch (const std::exception& e) { 
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-            }
-        }
-
+            } 
+        } 
+ 
     public:
-        static bool DeclareSignature(
-            const TStringRef& name,
-            TType* userType,
-            IFunctionTypeInfoBuilder& builder,
-            bool typesOnly) {
-            Y_UNUSED(userType);
-            if (Name() == name) {
-                builder.SimpleSignature<TResource<HyperLogLogResourceName>(char*)>();
-                if (!typesOnly) {
+        static bool DeclareSignature( 
+            const TStringRef& name, 
+            TType* userType, 
+            IFunctionTypeInfoBuilder& builder, 
+            bool typesOnly) { 
+            Y_UNUSED(userType); 
+            if (Name() == name) { 
+                builder.SimpleSignature<TResource<HyperLogLogResourceName>(char*)>(); 
+                if (!typesOnly) { 
                     builder.Implementation(new THyperLogLog_Deserialize(builder.GetSourcePosition()));
-                }
-                return true;
-            } else {
-                return false;
-            }
-        }
+                } 
+                return true; 
+            } else { 
+                return false; 
+            } 
+        } 
 
     private:
         TSourcePosition Pos_;
-    };
-
+    }; 
+ 
     class THyperLogLog_Merge: public TBoxedValue {
-    public:
+    public: 
         THyperLogLog_Merge(TSourcePosition pos)
             : Pos_(pos)
         {}
 
-        static const TStringRef& Name() {
-            static auto nameRef = TStringRef::Of("Merge");
-            return nameRef;
-        }
-
+        static const TStringRef& Name() { 
+            static auto nameRef = TStringRef::Of("Merge"); 
+            return nameRef; 
+        } 
+ 
     private:
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
+        TUnboxedValue Run( 
+            const IValueBuilder* valueBuilder, 
             const TUnboxedValuePod* args) const override {
-            try {
-                Y_UNUSED(valueBuilder);
-                auto left = static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get())->Get();
-                static_cast<THyperLogLogResource*>(args[1].AsBoxed().Get())->Get()->Merge(*left);
+            try { 
+                Y_UNUSED(valueBuilder); 
+                auto left = static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get())->Get(); 
+                static_cast<THyperLogLogResource*>(args[1].AsBoxed().Get())->Get()->Merge(*left); 
                 return TUnboxedValuePod(args[1]);
-            } catch (const std::exception& e) {
+            } catch (const std::exception& e) { 
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-            }
-        }
-
+            } 
+        } 
+ 
     public:
-        static bool DeclareSignature(
-            const TStringRef& name,
-            TType* userType,
-            IFunctionTypeInfoBuilder& builder,
-            bool typesOnly) {
-            Y_UNUSED(userType);
-            if (Name() == name) {
-                builder.SimpleSignature<TResource<HyperLogLogResourceName>(TResource<HyperLogLogResourceName>, TResource<HyperLogLogResourceName>)>();
-                if (!typesOnly) {
+        static bool DeclareSignature( 
+            const TStringRef& name, 
+            TType* userType, 
+            IFunctionTypeInfoBuilder& builder, 
+            bool typesOnly) { 
+            Y_UNUSED(userType); 
+            if (Name() == name) { 
+                builder.SimpleSignature<TResource<HyperLogLogResourceName>(TResource<HyperLogLogResourceName>, TResource<HyperLogLogResourceName>)>(); 
+                if (!typesOnly) { 
                     builder.Implementation(new THyperLogLog_Merge(builder.GetSourcePosition()));
-                }
-                return true;
-            } else {
-                return false;
-            }
-        }
+                } 
+                return true; 
+            } else { 
+                return false; 
+            } 
+        } 
 
     private:
         TSourcePosition Pos_;
-    };
-
+    }; 
+ 
     class THyperLogLog_GetResult: public TBoxedValue {
-    public:
+    public: 
         THyperLogLog_GetResult(TSourcePosition pos)
             : Pos_(pos)
         {}
 
-        static const TStringRef& Name() {
-            static auto nameRef = TStringRef::Of("GetResult");
-            return nameRef;
-        }
-
+        static const TStringRef& Name() { 
+            static auto nameRef = TStringRef::Of("GetResult"); 
+            return nameRef; 
+        } 
+ 
     private:
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
+        TUnboxedValue Run( 
+            const IValueBuilder* valueBuilder, 
             const TUnboxedValuePod* args) const override {
-            Y_UNUSED(valueBuilder);
-            auto hll = static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get())->Get();
-            return TUnboxedValuePod(hll->Estimate());
-        }
-
+            Y_UNUSED(valueBuilder); 
+            auto hll = static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get())->Get(); 
+            return TUnboxedValuePod(hll->Estimate()); 
+        } 
+ 
     public:
-        static bool DeclareSignature(
-            const TStringRef& name,
-            TType* userType,
-            IFunctionTypeInfoBuilder& builder,
-            bool typesOnly) {
-            Y_UNUSED(userType);
-            if (Name() == name) {
-                auto resource = builder.Resource(HyperLogLogResourceName);
-                builder.Args()->Add(resource).Done().Returns<ui64>();
-
-                if (!typesOnly) {
+        static bool DeclareSignature( 
+            const TStringRef& name, 
+            TType* userType, 
+            IFunctionTypeInfoBuilder& builder, 
+            bool typesOnly) { 
+            Y_UNUSED(userType); 
+            if (Name() == name) { 
+                auto resource = builder.Resource(HyperLogLogResourceName); 
+                builder.Args()->Add(resource).Done().Returns<ui64>(); 
+ 
+                if (!typesOnly) { 
                     builder.Implementation(new THyperLogLog_GetResult(builder.GetSourcePosition()));
-                }
-                return true;
-            } else {
-                return false;
-            }
-        }
+                } 
+                return true; 
+            } else { 
+                return false; 
+            } 
+        } 
 
     private:
         TSourcePosition Pos_;
-    };
-
-    SIMPLE_MODULE(THyperLogLogModule,
-                  THyperLogLog_Create,
-                  THyperLogLog_AddValue,
-                  THyperLogLog_Serialize,
-                  THyperLogLog_Deserialize,
-                  THyperLogLog_Merge,
-                  THyperLogLog_GetResult)
-}
-
-REGISTER_MODULES(THyperLogLogModule)
+    }; 
+ 
+    SIMPLE_MODULE(THyperLogLogModule, 
+                  THyperLogLog_Create, 
+                  THyperLogLog_AddValue, 
+                  THyperLogLog_Serialize, 
+                  THyperLogLog_Deserialize, 
+                  THyperLogLog_Merge, 
+                  THyperLogLog_GetResult) 
+} 
+ 
+REGISTER_MODULES(THyperLogLogModule) 

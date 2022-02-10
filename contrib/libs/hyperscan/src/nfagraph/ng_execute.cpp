@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation
+ * Copyright (c) 2015-2016, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -58,7 +58,7 @@ namespace ue2 {
 
 struct StateInfo {
     StateInfo(NFAVertex v, const CharReach &cr) : vertex(v), reach(cr) {}
-    StateInfo() : vertex(NGHolder::null_vertex()) {}
+    StateInfo() : vertex(NGHolder::null_vertex()) {} 
     NFAVertex vertex;
     CharReach reach;
 };
@@ -193,14 +193,14 @@ public:
           info(info_in), input_g(input_g_in), states(states_in),
           succs(vertex_count) {}
 
-    void finish_vertex(NFAVertex input_v,
-                   const boost::reverse_graph<NGHolder, const NGHolder &> &) {
+    void finish_vertex(NFAVertex input_v, 
+                   const boost::reverse_graph<NGHolder, const NGHolder &> &) { 
         if (input_v == input_g.accept) {
             return;
         }
         assert(input_v != input_g.acceptEod);
 
-        DEBUG_PRINTF("finished p%zu\n", input_g[input_v].index);
+        DEBUG_PRINTF("finished p%zu\n", input_g[input_v].index); 
 
         /* finish vertex is called on vertex --> implies that all its parents
          * (in the forward graph) are also finished. Our parents will have
@@ -235,7 +235,7 @@ public:
         /* we need to push into all our (forward) children their successors
          * from us. */
         for (auto v : adjacent_vertices_range(input_v, input_g)) {
-            DEBUG_PRINTF("pushing our states to pstate %zu\n",
+            DEBUG_PRINTF("pushing our states to pstate %zu\n", 
                          input_g[v].index);
             if (v == input_g.startDs) {
                 /* no need for intra start edges */
@@ -288,7 +288,7 @@ flat_set<NFAVertex> execute_graph(const NGHolder &running_g,
     map<NFAVertex, boost::default_color_type> colours;
     /* could just a topo order, but really it is time to pull a slightly bigger
      * gun: DFS */
-    boost::reverse_graph<NGHolder, const NGHolder &> revg(input_dag);
+    boost::reverse_graph<NGHolder, const NGHolder &> revg(input_dag); 
     map<NFAVertex, dynamic_bitset<> > dfs_states;
 
     auto info = makeInfoTable(running_g);
@@ -307,7 +307,7 @@ flat_set<NFAVertex> execute_graph(const NGHolder &running_g,
 #ifdef DEBUG
     DEBUG_PRINTF("  output rstates:");
     for (const auto &v : states) {
-        printf(" %zu", running_g[v].index);
+        printf(" %zu", running_g[v].index); 
     }
     printf("\n");
 #endif
@@ -323,49 +323,49 @@ flat_set<NFAVertex> execute_graph(const NGHolder &running_g,
                          initial_states);
 }
 
-static
-bool can_die_early(const NGHolder &g, const vector<StateInfo> &info,
-                   const dynamic_bitset<> &s,
-                   map<dynamic_bitset<>, u32> &visited, u32 age_limit) {
-    if (contains(visited, s) && visited[s] >= age_limit) {
-        /* we have already (or are in the process) of visiting here with a
-         * looser limit. */
-        return false;
-    }
-    visited[s] = age_limit;
-
-    if (s.none()) {
-        DEBUG_PRINTF("dead\n");
-        return true;
-    }
-
-    if (age_limit == 0) {
-        return false;
-    }
-
-    dynamic_bitset<> all_succ(s.size());
-    step(g, info, s, &all_succ);
-    all_succ.reset(NODE_START_DOTSTAR);
-
-    for (u32 i = 0; i < N_CHARS; i++) {
-        dynamic_bitset<> next = all_succ;
-        filter_by_reach(info, &next, CharReach(i));
-        if (can_die_early(g, info, next, visited, age_limit - 1)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool can_die_early(const NGHolder &g, u32 age_limit) {
-    if (proper_out_degree(g.startDs, g)) {
-        return false;
-    }
-    const vector<StateInfo> &info = makeInfoTable(g);
-    map<dynamic_bitset<>, u32> visited;
-    return can_die_early(g, info, makeStateBitset(g, {g.start}), visited,
-                         age_limit);
-}
-
+static 
+bool can_die_early(const NGHolder &g, const vector<StateInfo> &info, 
+                   const dynamic_bitset<> &s, 
+                   map<dynamic_bitset<>, u32> &visited, u32 age_limit) { 
+    if (contains(visited, s) && visited[s] >= age_limit) { 
+        /* we have already (or are in the process) of visiting here with a 
+         * looser limit. */ 
+        return false; 
+    } 
+    visited[s] = age_limit; 
+ 
+    if (s.none()) { 
+        DEBUG_PRINTF("dead\n"); 
+        return true; 
+    } 
+ 
+    if (age_limit == 0) { 
+        return false; 
+    } 
+ 
+    dynamic_bitset<> all_succ(s.size()); 
+    step(g, info, s, &all_succ); 
+    all_succ.reset(NODE_START_DOTSTAR); 
+ 
+    for (u32 i = 0; i < N_CHARS; i++) { 
+        dynamic_bitset<> next = all_succ; 
+        filter_by_reach(info, &next, CharReach(i)); 
+        if (can_die_early(g, info, next, visited, age_limit - 1)) { 
+            return true; 
+        } 
+    } 
+ 
+    return false; 
+} 
+ 
+bool can_die_early(const NGHolder &g, u32 age_limit) { 
+    if (proper_out_degree(g.startDs, g)) { 
+        return false; 
+    } 
+    const vector<StateInfo> &info = makeInfoTable(g); 
+    map<dynamic_bitset<>, u32> visited; 
+    return can_die_early(g, info, makeStateBitset(g, {g.start}), visited, 
+                         age_limit); 
+} 
+ 
 } // namespace ue2

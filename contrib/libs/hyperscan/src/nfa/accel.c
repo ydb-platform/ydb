@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -81,18 +81,18 @@ const u8 *run_accel(const union AccelAux *accel, const u8 *c, const u8 *c_end) {
                                   c_end - 1);
         break;
 
-    case ACCEL_DVERM_MASKED:
-        DEBUG_PRINTF("accel dverm masked %p %p\n", c, c_end);
-        if (c + 16 + 1 >= c_end) {
-            return c;
-        }
-
-        /* need to stop one early to get an accurate end state */
-        rv = vermicelliDoubleMaskedExec(accel->dverm.c1, accel->dverm.c2,
-                                        accel->dverm.m1, accel->dverm.m2,
-                                        c, c_end - 1);
-        break;
-
+    case ACCEL_DVERM_MASKED: 
+        DEBUG_PRINTF("accel dverm masked %p %p\n", c, c_end); 
+        if (c + 16 + 1 >= c_end) { 
+            return c; 
+        } 
+ 
+        /* need to stop one early to get an accurate end state */ 
+        rv = vermicelliDoubleMaskedExec(accel->dverm.c1, accel->dverm.c2, 
+                                        accel->dverm.m1, accel->dverm.m2, 
+                                        c, c_end - 1); 
+        break; 
+ 
     case ACCEL_SHUFTI:
         DEBUG_PRINTF("accel shufti %p %p\n", c, c_end);
         if (c + 15 >= c_end) {
@@ -129,7 +129,7 @@ const u8 *run_accel(const union AccelAux *accel, const u8 *c, const u8 *c_end) {
         rv = c_end;
         break;
 
-
+ 
     default:
         assert(!"not here");
         return c;
@@ -140,7 +140,7 @@ const u8 *run_accel(const union AccelAux *accel, const u8 *c, const u8 *c_end) {
     rv = MAX(c + accel->generic.offset, rv);
     rv -= accel->generic.offset;
 
-    DEBUG_PRINTF("advanced %zd\n", rv - c);
-
+    DEBUG_PRINTF("advanced %zd\n", rv - c); 
+ 
     return rv;
 }

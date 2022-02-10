@@ -29,12 +29,12 @@ ids {
 ids {
   code: CORE_PRE_TYPE_ANN
   severity: S_INFO
-  format: "Pre type annotation"
+  format: "Pre type annotation" 
 }
 ids {
   code: CORE_TYPE_ANN
   severity: S_INFO
-  format: "Type annotation"
+  format: "Type annotation" 
 }
 ids {
   code: CORE_POST_TYPE_ANN
@@ -44,22 +44,22 @@ ids {
 ids {
   code: CORE_INTENT
   severity: S_INFO
-  format: "Table intent determination"
+  format: "Table intent determination" 
 }
 ids {
   code: CORE_TABLE_METADATA_LOADER
   severity: S_INFO
-  format: "Table metadata loading"
+  format: "Table metadata loading" 
 }
 ids {
   code: CORE_EXEC
   severity: S_INFO
-  format: "Execution"
+  format: "Execution" 
 }
 ids {
   code: CORE_OPTIMIZATION
   severity: S_INFO
-  format: "Optimization"
+  format: "Optimization" 
 }
 ids {
   code: CORE_PARAM_EVALUATION
@@ -316,10 +316,10 @@ ids {
   code: YQL_DEPRECATED_DOUBLE_QUOTE_IN_BRACKETS
   severity: S_WARNING
 }
-ids {
-  code: YQL_DEPRECATED_JSON_UDF
-  severity: S_WARNING
-}
+ids { 
+  code: YQL_DEPRECATED_JSON_UDF 
+  severity: S_WARNING 
+} 
 ids {
   code: YQL_MISSING_IS_BEFORE_NOT_NULL
   severity: S_WARNING
@@ -341,14 +341,14 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: YQL_DEPRECATED_DATETIME2
-  severity: S_WARNING
-}
-ids {
-  code: YQL_S_EXPRESSIONS_CALL
-  severity: S_WARNING
-}
-ids {
+  code: YQL_DEPRECATED_DATETIME2 
+  severity: S_WARNING 
+} 
+ids { 
+  code: YQL_S_EXPRESSIONS_CALL 
+  severity: S_WARNING 
+} 
+ids { 
   code: YT_INFER_SCHEMA
   severity: S_ERROR
 }

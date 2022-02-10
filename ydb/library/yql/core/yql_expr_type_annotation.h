@@ -255,7 +255,7 @@ bool EnsureEquatableDataType(TPositionHandle position, EDataSlot dataSlot, TExpr
 bool EnsureHashableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
 TMaybe<TIssue> NormalizeName(TPosition position, TString& name);
 TString NormalizeName(const TStringBuf& name);
-
+ 
 bool HasError(const TTypeAnnotationNode* type, TExprContext& ctx);
 bool HasError(const TTypeAnnotationNode* type, TIssue& errIssue);
 bool IsNull(const TExprNode& node);

@@ -152,8 +152,8 @@ void TCmdCompileAndExecMiniKQLConfig::Parse(int argc, char **argv) {
 
     TOptsParseResult res(&opts, argc, argv);
 
-    ConfigureMsgBusLastGetopt(res, argc, argv);
-
+    ConfigureMsgBusLastGetopt(res, argc, argv); 
+ 
     if (!PathToBinPgm && !PathToTextPgm) {
         ythrow yexception() << "One of the ['pgm-txt', 'pgm-bin'] options must be set.";
     }

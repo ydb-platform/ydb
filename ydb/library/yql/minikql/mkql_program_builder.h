@@ -96,9 +96,9 @@ inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
     xx(CustomPython2, 8, custompython2) \
     xx(Python3, 9, python3) \
     xx(ArcPython3, 10, arcpython3) \
-    xx(CustomPython3, 11, custompython3) \
-    xx(SystemPython2, 12, systempython2) \
-    xx(SystemPython3, 13, systempython3) \
+    xx(CustomPython3, 11, custompython3) \ 
+    xx(SystemPython2, 12, systempython2) \ 
+    xx(SystemPython3, 13, systempython3) \ 
 
 enum class EScriptType {
     MKQL_SCRIPT_TYPES(ENUM_VALUE_GEN)
@@ -499,10 +499,10 @@ public:
     //-- arithmetic functions
     TRuntimeNode Increment(TRuntimeNode data);
     TRuntimeNode Decrement(TRuntimeNode data);
-    TRuntimeNode Abs(TRuntimeNode data);
+    TRuntimeNode Abs(TRuntimeNode data); 
     TRuntimeNode Plus(TRuntimeNode data);
     TRuntimeNode Minus(TRuntimeNode data);
-
+ 
     TRuntimeNode Add(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode Sub(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode Mul(TRuntimeNode data1, TRuntimeNode data2);

@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
     Y_UNIT_TEST_LLVM(TestFilterOverList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto optionalType = pb.NewOptionalType(dataType);
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
     Y_UNIT_TEST_LLVM(TestFilterOverListLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<ui32>::Id));
         const auto data = pb.NewEmptyOptional(dataType);
         const auto data2 = pb.NewOptional(pb.NewDataLiteral<ui32>(2U));

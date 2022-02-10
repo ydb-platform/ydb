@@ -1,12 +1,12 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
 #include <library/cpp/json/easy_parse/json_easy_parser.h>
-
+ 
 using namespace NKikimr;
 using namespace NUdf;
 
-namespace {
-    class TGetField: public TBoxedValue {
+namespace { 
+    class TGetField: public TBoxedValue { 
     public:
         typedef bool TTypeAwareMarker;
 
@@ -14,7 +14,7 @@ namespace {
         static TStringRef Name() {
             return TStringRef::Of("GetField");
         }
-
+ 
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const override {
@@ -35,7 +35,7 @@ namespace {
             TVector<TString> result;
             parser.Parse(json, &result);
 
-            TUnboxedValue* items = nullptr;
+            TUnboxedValue* items = nullptr; 
             const auto list = valueBuilder->NewArray(result.size(), items);
             for (const TString& item : result) {
                 *items++ = valueBuilder->NewString(item);
@@ -105,14 +105,14 @@ namespace {
                     builder.Implementation(new TGetField);
                 }
                 return true;
-            } else {
+            } else { 
                 return false;
             }
         }
     };
-}
-
-SIMPLE_MODULE(TJsonModule,
-              TGetField)
-
-REGISTER_MODULES(TJsonModule)
+} 
+ 
+SIMPLE_MODULE(TJsonModule, 
+              TGetField) 
+ 
+REGISTER_MODULES(TJsonModule) 

@@ -3,8 +3,8 @@
 #include "actor.h"
 #include "log_iface.h"
 #include <util/generic/vector.h>
-#include <util/digest/murmur.h>
-#include <util/random/easy.h>
+#include <util/digest/murmur.h> 
+#include <util/random/easy.h> 
 
 namespace NActors {
     namespace NLog {
@@ -68,7 +68,7 @@ namespace NActors {
         };
 
         struct TSettings: public TThrRefBase {
-        public:
+        public: 
             TActorId LoggerActorId;
             EComponent LoggerComponent;
             ui64 TimeThresholdMs;
@@ -80,20 +80,20 @@ namespace NActors {
             EComponent MaxVal;
             EComponent Mask;
             EPriority DefPriority;
-            EPriority DefSamplingPriority;
-            ui32 DefSamplingRate;
+            EPriority DefSamplingPriority; 
+            ui32 DefSamplingRate; 
             bool UseLocalTimestamps;
 
-            enum ELogFormat {
-                PLAIN_FULL_FORMAT,
-                PLAIN_SHORT_FORMAT,
-                JSON_FORMAT
-            };
-            ELogFormat Format;
+            enum ELogFormat { 
+                PLAIN_FULL_FORMAT, 
+                PLAIN_SHORT_FORMAT, 
+                JSON_FORMAT 
+            }; 
+            ELogFormat Format; 
             TString ShortHostName;
             TString ClusterName;
             TString MessagePrefix;
-
+ 
             // The best way to provide minVal, maxVal and func is to have
             // protobuf enumeration of components. In this case protoc
             // automatically generates YOURTYPE_MIN, YOURTYPE_MAX and
@@ -106,7 +106,7 @@ namespace NActors {
             TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
                       EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG,
                       ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000);
-
+ 
             void Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func);
 
             template <typename T>
@@ -145,10 +145,10 @@ namespace NActors {
 
             inline TComponentSettings GetComponentSettings(EComponent component) const {
                 Y_VERIFY_DEBUG((component & Mask) == component);
-                // by using Mask we don't get outside of array boundaries
+                // by using Mask we don't get outside of array boundaries 
                 return TComponentSettings(AtomicGet(ComponentInfo[component & Mask]));
-            }
-
+            } 
+ 
             const char* ComponentName(EComponent component) const {
                 Y_VERIFY_DEBUG((component & Mask) == component);
                 return ComponentNames[component & Mask].data();
@@ -164,9 +164,9 @@ namespace NActors {
             void SetAllowDrop(bool val);
             void SetThrottleDelay(TDuration value);
             void SetUseLocalTimestamps(bool value);
-
-        private:
-            int SetLevelImpl(
+ 
+        private: 
+            int SetLevelImpl( 
                 const TString& name, bool isSampling,
                 EPriority priority, EComponent component, TString& explanation);
         };

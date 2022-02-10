@@ -94,5 +94,5 @@ private:
     mutable bool Rethrow_ = false;
 };
 
-} // namespace NMiniKQL
-} // namespace Nkikimr
+} // namespace NMiniKQL 
+} // namespace Nkikimr 

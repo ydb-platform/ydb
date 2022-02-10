@@ -8,27 +8,27 @@
 #include <contrib/libs/hyperscan/runtime_avx2/hs_runtime.h>
 #include <contrib/libs/hyperscan/runtime_avx512/hs_common.h>
 #include <contrib/libs/hyperscan/runtime_avx512/hs_runtime.h>
-
-#include <util/generic/singleton.h>
-
+ 
+#include <util/generic/singleton.h> 
+ 
 namespace NHyperscan {
     using TSerializedDatabase = THolder<char, TDeleter<decltype(&free), &free>>;
 
     using TCompileError = THolder<hs_compile_error_t, TDeleter<decltype(&hs_free_compile_error), &hs_free_compile_error>>;
 
-    namespace NPrivate {
+    namespace NPrivate { 
         ERuntime DetectCurrentRuntime() {
-            if (NX86::HaveAVX512F() && NX86::HaveAVX512BW()) {
+            if (NX86::HaveAVX512F() && NX86::HaveAVX512BW()) { 
                 return ERuntime::AVX512;
-            } else if (NX86::HaveAVX() && NX86::HaveAVX2()) {
+            } else if (NX86::HaveAVX() && NX86::HaveAVX2()) { 
                 return ERuntime::AVX2;
-            } else if (NX86::HaveSSE42() && NX86::HavePOPCNT()) {
+            } else if (NX86::HaveSSE42() && NX86::HavePOPCNT()) { 
                 return ERuntime::Corei7;
-            } else {
+            } else { 
                 return ERuntime::Core2;
-            }
-        }
-
+            } 
+        } 
+ 
         TCPUFeatures RuntimeCpuFeatures(ERuntime runtime) {
             switch (runtime) {
                 default:
@@ -252,7 +252,7 @@ namespace NHyperscan {
     TString Serialize(const TDatabase& db) {
         char* databaseBytes = nullptr;
         size_t databaseLength;
-        hs_error_t status = Singleton<NPrivate::TImpl>()->SerializeDatabase(
+        hs_error_t status = Singleton<NPrivate::TImpl>()->SerializeDatabase( 
             db.Get(),
             &databaseBytes,
             &databaseLength);
@@ -265,7 +265,7 @@ namespace NHyperscan {
 
     TDatabase Deserialize(const TStringBuf& serialization) {
         hs_database_t* rawDb = nullptr;
-        hs_error_t status = Singleton<NPrivate::TImpl>()->DeserializeDatabase(
+        hs_error_t status = Singleton<NPrivate::TImpl>()->DeserializeDatabase( 
             serialization.begin(),
             serialization.size(),
             &rawDb);

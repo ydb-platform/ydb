@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation
+ * Copyright (c) 2015-2016, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -96,9 +96,9 @@ char subCastleReportCurrent(const struct Castle *c, struct mq *q,
         repeatHasMatch(info, rctrl, rstate, offset);
     DEBUG_PRINTF("repeatHasMatch returned %d\n", match);
     if (match == REPEAT_MATCH) {
-        DEBUG_PRINTF("firing match at %llu for sub %u, report %u\n", offset,
-                     subIdx, sub->report);
-        if (q->cb(0, offset, sub->report, q->context) == MO_HALT_MATCHING) {
+        DEBUG_PRINTF("firing match at %llu for sub %u, report %u\n", offset, 
+                     subIdx, sub->report); 
+        if (q->cb(0, offset, sub->report, q->context) == MO_HALT_MATCHING) { 
             return MO_HALT_MATCHING;
         }
     }
@@ -112,22 +112,22 @@ int castleReportCurrent(const struct Castle *c, struct mq *q) {
     DEBUG_PRINTF("offset=%llu\n", offset);
 
     if (c->exclusive) {
-        u8 *active = (u8 *)q->streamState;
-        u8 *groups = active + c->groupIterOffset;
-        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID);
-             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) {
-            u8 *cur = active + i * c->activeIdxSize;
-            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize);
-            DEBUG_PRINTF("subcastle %u\n", activeIdx);
-            if (subCastleReportCurrent(c, q,
-                    offset, activeIdx) == MO_HALT_MATCHING) {
-                return MO_HALT_MATCHING;
-            }
+        u8 *active = (u8 *)q->streamState; 
+        u8 *groups = active + c->groupIterOffset; 
+        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID); 
+             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) { 
+            u8 *cur = active + i * c->activeIdxSize; 
+            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize); 
+            DEBUG_PRINTF("subcastle %u\n", activeIdx); 
+            if (subCastleReportCurrent(c, q, 
+                    offset, activeIdx) == MO_HALT_MATCHING) { 
+                return MO_HALT_MATCHING; 
+            } 
         }
     }
 
-    if (c->exclusive != PURE_EXCLUSIVE) {
-        const u8 *active = (const u8 *)q->streamState + c->activeOffset;
+    if (c->exclusive != PURE_EXCLUSIVE) { 
+        const u8 *active = (const u8 *)q->streamState + c->activeOffset; 
         for (u32 i = mmbit_iterate(active, c->numRepeats, MMB_INVALID);
              i != MMB_INVALID; i = mmbit_iterate(active, c->numRepeats, i)) {
             DEBUG_PRINTF("subcastle %u\n", i);
@@ -168,18 +168,18 @@ static really_inline
 char castleInAccept(const struct Castle *c, struct mq *q,
                     const ReportID report, const u64a offset) {
     DEBUG_PRINTF("offset=%llu\n", offset);
-     /* ignore when just catching up due to full queue */
-    if (report == MO_INVALID_IDX) {
-        return 0;
-    }
+     /* ignore when just catching up due to full queue */ 
+    if (report == MO_INVALID_IDX) { 
+        return 0; 
+    } 
 
     if (c->exclusive) {
-        u8 *active = (u8 *)q->streamState;
-        u8 *groups = active + c->groupIterOffset;
-        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID);
-             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) {
-            u8 *cur = active + i * c->activeIdxSize;
-            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize);
+        u8 *active = (u8 *)q->streamState; 
+        u8 *groups = active + c->groupIterOffset; 
+        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID); 
+             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) { 
+            u8 *cur = active + i * c->activeIdxSize; 
+            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize); 
             DEBUG_PRINTF("subcastle %u\n", activeIdx);
             if (subCastleInAccept(c, q, report, offset, activeIdx)) {
                 return 1;
@@ -187,10 +187,10 @@ char castleInAccept(const struct Castle *c, struct mq *q,
         }
     }
 
-    if (c->exclusive != PURE_EXCLUSIVE) {
-        const u8 *active = (const u8 *)q->streamState + c->activeOffset;
+    if (c->exclusive != PURE_EXCLUSIVE) { 
+        const u8 *active = (const u8 *)q->streamState + c->activeOffset; 
         for (u32 i = mmbit_iterate(active, c->numRepeats, MMB_INVALID);
-             i != MMB_INVALID; i = mmbit_iterate(active, c->numRepeats, i)) {
+             i != MMB_INVALID; i = mmbit_iterate(active, c->numRepeats, i)) { 
             DEBUG_PRINTF("subcastle %u\n", i);
             if (subCastleInAccept(c, q, report, offset, i)) {
                 return 1;
@@ -214,13 +214,13 @@ void subCastleDeactivateStaleSubs(const struct Castle *c, const u64a offset,
 
     if (repeatHasMatch(info, rctrl, rstate, offset) == REPEAT_STALE) {
         DEBUG_PRINTF("sub %u is stale at offset %llu\n", subIdx, offset);
-        if (sub->exclusiveId < c->numRepeats) {
-            u8 *active = (u8 *)stream_state;
-            u8 *groups = active + c->groupIterOffset;
-            mmbit_unset(groups, c->numGroups, sub->exclusiveId);
+        if (sub->exclusiveId < c->numRepeats) { 
+            u8 *active = (u8 *)stream_state; 
+            u8 *groups = active + c->groupIterOffset; 
+            mmbit_unset(groups, c->numGroups, sub->exclusiveId); 
         } else {
-            u8 *active = (u8 *)stream_state + c->activeOffset;
-            mmbit_unset(active, c->numRepeats, subIdx);
+            u8 *active = (u8 *)stream_state + c->activeOffset; 
+            mmbit_unset(active, c->numRepeats, subIdx); 
         }
     }
 }
@@ -230,47 +230,47 @@ void castleDeactivateStaleSubs(const struct Castle *c, const u64a offset,
                                void *full_state, void *stream_state) {
     DEBUG_PRINTF("offset=%llu\n", offset);
 
-    if (!c->staleIterOffset) {
-        DEBUG_PRINTF("{no repeats can go stale}\n");
-        return; /* no subcastle can ever go stale */
-    }
-
+    if (!c->staleIterOffset) { 
+        DEBUG_PRINTF("{no repeats can go stale}\n"); 
+        return; /* no subcastle can ever go stale */ 
+    } 
+ 
     if (c->exclusive) {
-        u8 *active = (u8 *)stream_state;
-        u8 *groups = active + c->groupIterOffset;
-        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID);
-             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) {
-            u8 *cur = active + i * c->activeIdxSize;
-            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize);
+        u8 *active = (u8 *)stream_state; 
+        u8 *groups = active + c->groupIterOffset; 
+        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID); 
+             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) { 
+            u8 *cur = active + i * c->activeIdxSize; 
+            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize); 
             DEBUG_PRINTF("subcastle %u\n", activeIdx);
             subCastleDeactivateStaleSubs(c, offset, full_state,
                                          stream_state, activeIdx);
         }
     }
 
-    if (c->exclusive != PURE_EXCLUSIVE) {
-        const u8 *active = (const u8 *)stream_state + c->activeOffset;
-        const struct mmbit_sparse_iter *it
-            = (const void *)((const char *)c + c->staleIterOffset);
-
-        struct mmbit_sparse_state si_state[MAX_SPARSE_ITER_STATES];
-        u32 numRepeats = c->numRepeats;
-        u32 idx = 0;
-
-        u32 i = mmbit_sparse_iter_begin(active, numRepeats, &idx, it, si_state);
-        while(i != MMB_INVALID) {
+    if (c->exclusive != PURE_EXCLUSIVE) { 
+        const u8 *active = (const u8 *)stream_state + c->activeOffset; 
+        const struct mmbit_sparse_iter *it 
+            = (const void *)((const char *)c + c->staleIterOffset); 
+ 
+        struct mmbit_sparse_state si_state[MAX_SPARSE_ITER_STATES]; 
+        u32 numRepeats = c->numRepeats; 
+        u32 idx = 0; 
+ 
+        u32 i = mmbit_sparse_iter_begin(active, numRepeats, &idx, it, si_state); 
+        while(i != MMB_INVALID) { 
             DEBUG_PRINTF("subcastle %u\n", i);
-            subCastleDeactivateStaleSubs(c, offset, full_state, stream_state, i);
-            i = mmbit_sparse_iter_next(active, numRepeats, i, &idx, it,
-                                       si_state);
+            subCastleDeactivateStaleSubs(c, offset, full_state, stream_state, i); 
+            i = mmbit_sparse_iter_next(active, numRepeats, i, &idx, it, 
+                                       si_state); 
         }
     }
 }
 
 static really_inline
 void castleProcessTop(const struct Castle *c, const u32 top, const u64a offset,
-                      void *full_state, void *stream_state,
-                      UNUSED char stale_checked) {
+                      void *full_state, void *stream_state, 
+                      UNUSED char stale_checked) { 
     assert(top < c->numRepeats);
 
     const struct SubCastle *sub = getSubCastle(c, top);
@@ -280,20 +280,20 @@ void castleProcessTop(const struct Castle *c, const u32 top, const u64a offset,
                    info->packedCtrlSize;
 
     char is_alive = 0;
-    u8 *active = (u8 *)stream_state;
-    if (sub->exclusiveId < c->numRepeats) {
-        u8 *groups = active + c->groupIterOffset;
-        active += sub->exclusiveId * c->activeIdxSize;
-        if (mmbit_set(groups, c->numGroups, sub->exclusiveId)) {
-            const u32 activeIdx = partial_load_u32(active, c->activeIdxSize);
-            is_alive = (activeIdx == top);
-        }
-
-        if (!is_alive) {
-            partial_store_u32(active, top, c->activeIdxSize);
-        }
+    u8 *active = (u8 *)stream_state; 
+    if (sub->exclusiveId < c->numRepeats) { 
+        u8 *groups = active + c->groupIterOffset; 
+        active += sub->exclusiveId * c->activeIdxSize; 
+        if (mmbit_set(groups, c->numGroups, sub->exclusiveId)) { 
+            const u32 activeIdx = partial_load_u32(active, c->activeIdxSize); 
+            is_alive = (activeIdx == top); 
+        } 
+ 
+        if (!is_alive) { 
+            partial_store_u32(active, top, c->activeIdxSize); 
+        } 
     } else {
-        active += c->activeOffset;
+        active += c->activeOffset; 
         is_alive = mmbit_set(active, c->numRepeats, top);
     }
 
@@ -302,8 +302,8 @@ void castleProcessTop(const struct Castle *c, const u32 top, const u64a offset,
     } else {
         DEBUG_PRINTF("repeat %u is already alive\n", top);
         // Caller should ensure we're not stale.
-        assert(!stale_checked
-               || repeatHasMatch(info, rctrl, rstate, offset) != REPEAT_STALE);
+        assert(!stale_checked 
+               || repeatHasMatch(info, rctrl, rstate, offset) != REPEAT_STALE); 
 
         // Ignore duplicate top events.
         u64a last = repeatLastTop(info, rctrl, rstate);
@@ -331,11 +331,11 @@ void subCastleFindMatch(const struct Castle *c, const u64a begin,
     u64a match = repeatNextMatch(info, rctrl, rstate, begin);
     if (match == 0) {
         DEBUG_PRINTF("no more matches for sub %u\n", subIdx);
-        if (sub->exclusiveId < c->numRepeats) {
-            u8 *groups = (u8 *)stream_state + c->groupIterOffset;
-            mmbit_unset(groups, c->numGroups, sub->exclusiveId);
+        if (sub->exclusiveId < c->numRepeats) { 
+            u8 *groups = (u8 *)stream_state + c->groupIterOffset; 
+            mmbit_unset(groups, c->numGroups, sub->exclusiveId); 
         } else {
-            u8 *active = (u8 *)stream_state + c->activeOffset;
+            u8 *active = (u8 *)stream_state + c->activeOffset; 
             mmbit_unset(active, c->numRepeats, subIdx);
         }
         return;
@@ -368,20 +368,20 @@ char castleFindMatch(const struct Castle *c, const u64a begin, const u64a end,
     *mloc = 0;
 
     if (c->exclusive) {
-        u8 *active = (u8 *)stream_state;
-        u8 *groups = active + c->groupIterOffset;
-        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID);
-             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) {
-            u8 *cur = active + i * c->activeIdxSize;
-            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize);
+        u8 *active = (u8 *)stream_state; 
+        u8 *groups = active + c->groupIterOffset; 
+        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID); 
+             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) { 
+            u8 *cur = active + i * c->activeIdxSize; 
+            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize); 
             DEBUG_PRINTF("subcastle %u\n", activeIdx);
             subCastleFindMatch(c, begin, end, full_state, stream_state, mloc,
                                &found, activeIdx);
         }
     }
 
-    if (c->exclusive != PURE_EXCLUSIVE) {
-        u8 *active = (u8 *)stream_state + c->activeOffset;
+    if (c->exclusive != PURE_EXCLUSIVE) { 
+        u8 *active = (u8 *)stream_state + c->activeOffset; 
         for (u32 i = mmbit_iterate(active, c->numRepeats, MMB_INVALID);
              i != MMB_INVALID;
              i = mmbit_iterate(active, c->numRepeats, i)) {
@@ -411,37 +411,37 @@ u64a subCastleNextMatch(const struct Castle *c, void *full_state,
 }
 
 static really_inline
-void set_matching(const struct Castle *c, const u64a match, u8 *active,
-                  u8 *matching, const u32 active_size, const u32 active_id,
-                  const u32 matching_id, u64a *offset, const u64a end) {
-    if (match == 0) {
-        DEBUG_PRINTF("no more matches\n");
-        mmbit_unset(active, active_size, active_id);
-    } else if (match > end) {
-        // If we had a local copy of the active mmbit, we could skip
-        // looking at this repeat again. But we don't, so we just move
-        // on.
-    } else if (match == *offset) {
-        mmbit_set(matching, c->numRepeats, matching_id);
-    } else if (match < *offset) {
-        // New minimum offset.
-        *offset = match;
-        mmbit_clear(matching, c->numRepeats);
-        mmbit_set(matching, c->numRepeats, matching_id);
-    }
-}
-
-static really_inline
+void set_matching(const struct Castle *c, const u64a match, u8 *active, 
+                  u8 *matching, const u32 active_size, const u32 active_id, 
+                  const u32 matching_id, u64a *offset, const u64a end) { 
+    if (match == 0) { 
+        DEBUG_PRINTF("no more matches\n"); 
+        mmbit_unset(active, active_size, active_id); 
+    } else if (match > end) { 
+        // If we had a local copy of the active mmbit, we could skip 
+        // looking at this repeat again. But we don't, so we just move 
+        // on. 
+    } else if (match == *offset) { 
+        mmbit_set(matching, c->numRepeats, matching_id); 
+    } else if (match < *offset) { 
+        // New minimum offset. 
+        *offset = match; 
+        mmbit_clear(matching, c->numRepeats); 
+        mmbit_set(matching, c->numRepeats, matching_id); 
+    } 
+} 
+ 
+static really_inline 
 void subCastleMatchLoop(const struct Castle *c, void *full_state,
                         void *stream_state, const u64a end,
                         const u64a loc, u64a *offset) {
-    u8 *active = (u8 *)stream_state + c->activeOffset;
+    u8 *active = (u8 *)stream_state + c->activeOffset; 
     u8 *matching = full_state;
     for (u32 i = mmbit_iterate(active, c->numRepeats, MMB_INVALID);
          i != MMB_INVALID; i = mmbit_iterate(active, c->numRepeats, i)) {
         u64a match = subCastleNextMatch(c, full_state, stream_state, loc, i);
-        set_matching(c, match, active, matching, c->numRepeats, i,
-                     i, offset, end);
+        set_matching(c, match, active, matching, c->numRepeats, i, 
+                     i, offset, end); 
     }
 }
 
@@ -457,7 +457,7 @@ char subCastleFireMatch(const struct Castle *c, const void *full_state,
          i = mmbit_iterate(matching, c->numRepeats, i)) {
         const struct SubCastle *sub = getSubCastle(c, i);
         DEBUG_PRINTF("firing match at %llu for sub %u\n", offset, i);
-        if (cb(0, offset, sub->report, ctx) == MO_HALT_MATCHING) {
+        if (cb(0, offset, sub->report, ctx) == MO_HALT_MATCHING) { 
             DEBUG_PRINTF("caller told us to halt\n");
             return MO_HALT_MATCHING;
         }
@@ -485,36 +485,36 @@ char castleMatchLoop(const struct Castle *c, const u64a begin, const u64a end,
 
         u64a offset = end; // min offset of next match
         u32 activeIdx = 0;
-        mmbit_clear(matching, c->numRepeats);
+        mmbit_clear(matching, c->numRepeats); 
         if (c->exclusive) {
-            u8 *active = (u8 *)stream_state;
-            u8 *groups = active + c->groupIterOffset;
-            for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID);
-                 i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) {
-                u8 *cur = active + i * c->activeIdxSize;
-                activeIdx = partial_load_u32(cur, c->activeIdxSize);
+            u8 *active = (u8 *)stream_state; 
+            u8 *groups = active + c->groupIterOffset; 
+            for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID); 
+                 i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) { 
+                u8 *cur = active + i * c->activeIdxSize; 
+                activeIdx = partial_load_u32(cur, c->activeIdxSize); 
                 u64a match = subCastleNextMatch(c, full_state, stream_state,
-                                                loc, activeIdx);
-                set_matching(c, match, groups, matching, c->numGroups, i,
-                             activeIdx, &offset, end);
+                                                loc, activeIdx); 
+                set_matching(c, match, groups, matching, c->numGroups, i, 
+                             activeIdx, &offset, end); 
             }
         }
 
-        if (c->exclusive != PURE_EXCLUSIVE) {
+        if (c->exclusive != PURE_EXCLUSIVE) { 
             subCastleMatchLoop(c, full_state, stream_state,
-                               end, loc, &offset);
+                               end, loc, &offset); 
         }
-        DEBUG_PRINTF("offset=%llu\n", offset);
-        if (!mmbit_any(matching, c->numRepeats)) {
-            DEBUG_PRINTF("no more matches\n");
+        DEBUG_PRINTF("offset=%llu\n", offset); 
+        if (!mmbit_any(matching, c->numRepeats)) { 
+            DEBUG_PRINTF("no more matches\n"); 
             break;
         }
-
-        if (subCastleFireMatch(c, full_state, stream_state,
-                cb, ctx, offset) == MO_HALT_MATCHING) {
-            return MO_HALT_MATCHING;
-        }
-        loc = offset;
+ 
+        if (subCastleFireMatch(c, full_state, stream_state, 
+                cb, ctx, offset) == MO_HALT_MATCHING) { 
+            return MO_HALT_MATCHING; 
+        } 
+        loc = offset; 
     }
 
     return MO_CONTINUE_MATCHING;
@@ -573,8 +573,8 @@ char castleScanShufti(const struct Castle *c, const u8 *buf, const size_t begin,
 static really_inline
 char castleScanTruffle(const struct Castle *c, const u8 *buf, const size_t begin,
                       const size_t end, size_t *loc) {
-    const u8 *ptr = truffleExec(c->u.truffle.mask1, c->u.truffle.mask2,
-                                buf + begin, buf + end);
+    const u8 *ptr = truffleExec(c->u.truffle.mask1, c->u.truffle.mask2, 
+                                buf + begin, buf + end); 
     if (ptr == buf + end) {
         DEBUG_PRINTF("no escape found\n");
         return 0;
@@ -616,103 +616,103 @@ char castleScan(const struct Castle *c, const u8 *buf, const size_t begin,
 }
 
 static really_inline
-char castleRevScanVerm(const struct Castle *c, const u8 *buf,
-                       const size_t begin, const size_t end, size_t *loc) {
-    const u8 *ptr = rvermicelliExec(c->u.verm.c, 0, buf + begin, buf + end);
-    if (ptr == buf + begin - 1) {
-        DEBUG_PRINTF("no escape found\n");
-        return 0;
-    }
-
-    assert(loc);
-    assert(ptr >= buf && ptr < buf + end);
-    *loc = (size_t)(ptr - buf);
-    DEBUG_PRINTF("escape found at offset %zu\n", *loc);
-    return 1;
-}
-
-static really_inline
-char castleRevScanNVerm(const struct Castle *c, const u8 *buf,
-                        const size_t begin, const size_t end, size_t *loc) {
-    const u8 *ptr = rnvermicelliExec(c->u.verm.c, 0, buf + begin, buf + end);
-    if (ptr == buf + begin - 1) {
-        DEBUG_PRINTF("no escape found\n");
-        return 0;
-    }
-
-    assert(loc);
-    assert(ptr >= buf && ptr < buf + end);
-    *loc = (size_t)(ptr - buf);
-    DEBUG_PRINTF("escape found at offset %zu\n", *loc);
-    return 1;
-}
-
-static really_inline
-char castleRevScanShufti(const struct Castle *c, const u8 *buf,
-                         const size_t begin, const size_t end, size_t *loc) {
-    const m128 mask_lo = c->u.shuf.mask_lo;
-    const m128 mask_hi = c->u.shuf.mask_hi;
-    const u8 *ptr = rshuftiExec(mask_lo, mask_hi, buf + begin, buf + end);
-    if (ptr == buf + begin - 1) {
-        DEBUG_PRINTF("no escape found\n");
-        return 0;
-    }
-
-    assert(loc);
-    assert(ptr >= buf && ptr < buf + end);
-    *loc = (size_t)(ptr - buf);
-    DEBUG_PRINTF("escape found at offset %zu\n", *loc);
-    return 1;
-}
-
-static really_inline
-char castleRevScanTruffle(const struct Castle *c, const u8 *buf,
-                          const size_t begin, const size_t end, size_t *loc) {
-    const u8 *ptr = rtruffleExec(c->u.truffle.mask1, c->u.truffle.mask2,
-                                 buf + begin, buf + end);
-    if (ptr == buf + begin - 1) {
-        DEBUG_PRINTF("no escape found\n");
-        return 0;
-    }
-
-    assert(loc);
-    assert(ptr >= buf && ptr < buf + end);
-    *loc = (size_t)(ptr - buf);
-    DEBUG_PRINTF("escape found at offset %zu\n", *loc);
-    return 1;
-}
-
-static really_inline
-char castleRevScan(const struct Castle *c, const u8 *buf, const size_t begin,
-                const size_t end, size_t *loc) {
-    assert(begin <= end);
-    DEBUG_PRINTF("scanning backwards over (%zu,%zu]\n", begin, end);
-    if (begin == end) {
-        return 0;
-    }
-
-    switch (c->type) {
-    case CASTLE_DOT:
-        // Nothing can stop a dot scan!
-        return 0;
-    case CASTLE_VERM:
-        return castleRevScanVerm(c, buf, begin, end, loc);
-    case CASTLE_NVERM:
-        return castleRevScanNVerm(c, buf, begin, end, loc);
-    case CASTLE_SHUFTI:
-        return castleRevScanShufti(c, buf, begin, end, loc);
-    case CASTLE_TRUFFLE:
-        return castleRevScanTruffle(c, buf, begin, end, loc);
-    default:
-        DEBUG_PRINTF("unknown scan type!\n");
-        assert(0);
-        return 0;
-    }
-}
-
-static really_inline
-void castleHandleEvent(const struct Castle *c, struct mq *q, const u64a sp,
-                       char stale_checked) {
+char castleRevScanVerm(const struct Castle *c, const u8 *buf, 
+                       const size_t begin, const size_t end, size_t *loc) { 
+    const u8 *ptr = rvermicelliExec(c->u.verm.c, 0, buf + begin, buf + end); 
+    if (ptr == buf + begin - 1) { 
+        DEBUG_PRINTF("no escape found\n"); 
+        return 0; 
+    } 
+ 
+    assert(loc); 
+    assert(ptr >= buf && ptr < buf + end); 
+    *loc = (size_t)(ptr - buf); 
+    DEBUG_PRINTF("escape found at offset %zu\n", *loc); 
+    return 1; 
+} 
+ 
+static really_inline 
+char castleRevScanNVerm(const struct Castle *c, const u8 *buf, 
+                        const size_t begin, const size_t end, size_t *loc) { 
+    const u8 *ptr = rnvermicelliExec(c->u.verm.c, 0, buf + begin, buf + end); 
+    if (ptr == buf + begin - 1) { 
+        DEBUG_PRINTF("no escape found\n"); 
+        return 0; 
+    } 
+ 
+    assert(loc); 
+    assert(ptr >= buf && ptr < buf + end); 
+    *loc = (size_t)(ptr - buf); 
+    DEBUG_PRINTF("escape found at offset %zu\n", *loc); 
+    return 1; 
+} 
+ 
+static really_inline 
+char castleRevScanShufti(const struct Castle *c, const u8 *buf, 
+                         const size_t begin, const size_t end, size_t *loc) { 
+    const m128 mask_lo = c->u.shuf.mask_lo; 
+    const m128 mask_hi = c->u.shuf.mask_hi; 
+    const u8 *ptr = rshuftiExec(mask_lo, mask_hi, buf + begin, buf + end); 
+    if (ptr == buf + begin - 1) { 
+        DEBUG_PRINTF("no escape found\n"); 
+        return 0; 
+    } 
+ 
+    assert(loc); 
+    assert(ptr >= buf && ptr < buf + end); 
+    *loc = (size_t)(ptr - buf); 
+    DEBUG_PRINTF("escape found at offset %zu\n", *loc); 
+    return 1; 
+} 
+ 
+static really_inline 
+char castleRevScanTruffle(const struct Castle *c, const u8 *buf, 
+                          const size_t begin, const size_t end, size_t *loc) { 
+    const u8 *ptr = rtruffleExec(c->u.truffle.mask1, c->u.truffle.mask2, 
+                                 buf + begin, buf + end); 
+    if (ptr == buf + begin - 1) { 
+        DEBUG_PRINTF("no escape found\n"); 
+        return 0; 
+    } 
+ 
+    assert(loc); 
+    assert(ptr >= buf && ptr < buf + end); 
+    *loc = (size_t)(ptr - buf); 
+    DEBUG_PRINTF("escape found at offset %zu\n", *loc); 
+    return 1; 
+} 
+ 
+static really_inline 
+char castleRevScan(const struct Castle *c, const u8 *buf, const size_t begin, 
+                const size_t end, size_t *loc) { 
+    assert(begin <= end); 
+    DEBUG_PRINTF("scanning backwards over (%zu,%zu]\n", begin, end); 
+    if (begin == end) { 
+        return 0; 
+    } 
+ 
+    switch (c->type) { 
+    case CASTLE_DOT: 
+        // Nothing can stop a dot scan! 
+        return 0; 
+    case CASTLE_VERM: 
+        return castleRevScanVerm(c, buf, begin, end, loc); 
+    case CASTLE_NVERM: 
+        return castleRevScanNVerm(c, buf, begin, end, loc); 
+    case CASTLE_SHUFTI: 
+        return castleRevScanShufti(c, buf, begin, end, loc); 
+    case CASTLE_TRUFFLE: 
+        return castleRevScanTruffle(c, buf, begin, end, loc); 
+    default: 
+        DEBUG_PRINTF("unknown scan type!\n"); 
+        assert(0); 
+        return 0; 
+    } 
+} 
+ 
+static really_inline 
+void castleHandleEvent(const struct Castle *c, struct mq *q, const u64a sp, 
+                       char stale_checked) { 
     const u32 event = q->items[q->cur].type;
     switch (event) {
     case MQE_TOP:
@@ -726,29 +726,29 @@ void castleHandleEvent(const struct Castle *c, struct mq *q, const u64a sp,
         assert(event < MQE_INVALID);
         u32 top = event - MQE_TOP_FIRST;
         DEBUG_PRINTF("top %u at offset %llu\n", top, sp);
-        castleProcessTop(c, top, sp, q->state, q->streamState, stale_checked);
+        castleProcessTop(c, top, sp, q->state, q->streamState, stale_checked); 
         break;
     }
 }
 
 static really_inline
-void clear_repeats(const struct Castle *c, const struct mq *q, u8 *active) {
-    DEBUG_PRINTF("clearing active repeats due to escape\n");
-    if (c->exclusive) {
-        u8 *groups = (u8 *)q->streamState + c->groupIterOffset;
-        mmbit_clear(groups, c->numGroups);
-    }
-
-    if (c->exclusive != PURE_EXCLUSIVE) {
-        mmbit_clear(active, c->numRepeats);
-    }
-}
-
-static really_inline
-char nfaExecCastle_Q_i(const struct NFA *n, struct mq *q, s64a end,
-                       enum MatchMode mode) {
+void clear_repeats(const struct Castle *c, const struct mq *q, u8 *active) { 
+    DEBUG_PRINTF("clearing active repeats due to escape\n"); 
+    if (c->exclusive) { 
+        u8 *groups = (u8 *)q->streamState + c->groupIterOffset; 
+        mmbit_clear(groups, c->numGroups); 
+    } 
+ 
+    if (c->exclusive != PURE_EXCLUSIVE) { 
+        mmbit_clear(active, c->numRepeats); 
+    } 
+} 
+ 
+static really_inline 
+char nfaExecCastle_Q_i(const struct NFA *n, struct mq *q, s64a end, 
+                       enum MatchMode mode) { 
     assert(n && q);
-    assert(n->type == CASTLE_NFA);
+    assert(n->type == CASTLE_NFA); 
 
     DEBUG_PRINTF("state=%p, streamState=%p\n", q->state, q->streamState);
 
@@ -766,7 +766,7 @@ char nfaExecCastle_Q_i(const struct NFA *n, struct mq *q, s64a end,
         return 1;
     }
 
-    u8 *active = (u8 *)q->streamState + c->activeOffset;// active multibit
+    u8 *active = (u8 *)q->streamState + c->activeOffset;// active multibit 
 
     assert(q->cur + 1 < q->end); // require at least two items
     assert(q_cur_type(q) == MQE_START);
@@ -780,8 +780,8 @@ char nfaExecCastle_Q_i(const struct NFA *n, struct mq *q, s64a end,
 
         char found = 0;
         if (c->exclusive) {
-            u8 *groups = (u8 *)q->streamState + c->groupIterOffset;
-            found = mmbit_any(groups, c->numGroups);
+            u8 *groups = (u8 *)q->streamState + c->groupIterOffset; 
+            found = mmbit_any(groups, c->numGroups); 
         }
 
         if (!found && !mmbit_any(active, c->numRepeats)) {
@@ -828,7 +828,7 @@ char nfaExecCastle_Q_i(const struct NFA *n, struct mq *q, s64a end,
             }
 
             if (escape_found) {
-                clear_repeats(c, q, active);
+                clear_repeats(c, q, active); 
             }
         }
 
@@ -842,63 +842,63 @@ char nfaExecCastle_Q_i(const struct NFA *n, struct mq *q, s64a end,
         }
 
         sp = q_cur_offset(q);
-        castleHandleEvent(c, q, sp, 1);
+        castleHandleEvent(c, q, sp, 1); 
         q->cur++;
     }
 
     if (c->exclusive) {
-        u8 *groups = (u8 *)q->streamState + c->groupIterOffset;
-        if (mmbit_any_precise(groups, c->numGroups)) {
-            return 1;
+        u8 *groups = (u8 *)q->streamState + c->groupIterOffset; 
+        if (mmbit_any_precise(groups, c->numGroups)) { 
+            return 1; 
         }
     }
 
     return mmbit_any_precise(active, c->numRepeats);
 }
 
-char nfaExecCastle_Q(const struct NFA *n, struct mq *q, s64a end) {
+char nfaExecCastle_Q(const struct NFA *n, struct mq *q, s64a end) { 
     DEBUG_PRINTF("entry\n");
-    return nfaExecCastle_Q_i(n, q, end, CALLBACK_OUTPUT);
+    return nfaExecCastle_Q_i(n, q, end, CALLBACK_OUTPUT); 
 }
 
-char nfaExecCastle_Q2(const struct NFA *n, struct mq *q, s64a end) {
+char nfaExecCastle_Q2(const struct NFA *n, struct mq *q, s64a end) { 
     DEBUG_PRINTF("entry\n");
-    return nfaExecCastle_Q_i(n, q, end, STOP_AT_MATCH);
+    return nfaExecCastle_Q_i(n, q, end, STOP_AT_MATCH); 
 }
 
-static
-s64a castleLastKillLoc(const struct Castle *c, struct mq *q) {
-    assert(q_cur_type(q) == MQE_START);
-    assert(q_last_type(q) == MQE_END);
-    s64a sp = q_cur_loc(q);
-    s64a ep = q_last_loc(q);
+static 
+s64a castleLastKillLoc(const struct Castle *c, struct mq *q) { 
+    assert(q_cur_type(q) == MQE_START); 
+    assert(q_last_type(q) == MQE_END); 
+    s64a sp = q_cur_loc(q); 
+    s64a ep = q_last_loc(q); 
 
-    DEBUG_PRINTF("finding final squash in (%lld, %lld]\n", sp, ep);
+    DEBUG_PRINTF("finding final squash in (%lld, %lld]\n", sp, ep); 
 
-    size_t loc;
-
-    if (ep > 0) {
-        if (castleRevScan(c, q->buffer, sp > 0 ? sp : 0, ep, &loc)) {
-            return (s64a)loc;
+    size_t loc; 
+ 
+    if (ep > 0) { 
+        if (castleRevScan(c, q->buffer, sp > 0 ? sp : 0, ep, &loc)) { 
+            return (s64a)loc; 
         }
-        ep = 0;
-    }
+        ep = 0; 
+    } 
 
-    if (sp < 0) {
-        s64a hlen = q->hlength;
-
-        if (castleRevScan(c, q->history, sp + hlen, ep + hlen, &loc)) {
-            return (s64a)loc - hlen;
+    if (sp < 0) { 
+        s64a hlen = q->hlength; 
+ 
+        if (castleRevScan(c, q->history, sp + hlen, ep + hlen, &loc)) { 
+            return (s64a)loc - hlen; 
         }
-        ep = 0;
+        ep = 0; 
     }
-
-    return sp - 1; /* the repeats are never killed */
+ 
+    return sp - 1; /* the repeats are never killed */ 
 }
 
-char nfaExecCastle_QR(const struct NFA *n, struct mq *q, ReportID report) {
+char nfaExecCastle_QR(const struct NFA *n, struct mq *q, ReportID report) { 
     assert(n && q);
-    assert(n->type == CASTLE_NFA);
+    assert(n->type == CASTLE_NFA); 
     DEBUG_PRINTF("entry\n");
 
     if (q->cur == q->end) {
@@ -909,42 +909,42 @@ char nfaExecCastle_QR(const struct NFA *n, struct mq *q, ReportID report) {
     assert(q_cur_type(q) == MQE_START);
 
     const struct Castle *c = getImplNfa(n);
-    u8 *active = (u8 *)q->streamState + c->activeOffset;
+    u8 *active = (u8 *)q->streamState + c->activeOffset; 
 
-    u64a end_offset = q_last_loc(q) + q->offset;
-    s64a last_kill_loc = castleLastKillLoc(c, q);
-    DEBUG_PRINTF("all repeats killed at %lld (exec range %lld, %lld)\n",
-                 last_kill_loc, q_cur_loc(q), q_last_loc(q));
-    assert(last_kill_loc < q_last_loc(q));
+    u64a end_offset = q_last_loc(q) + q->offset; 
+    s64a last_kill_loc = castleLastKillLoc(c, q); 
+    DEBUG_PRINTF("all repeats killed at %lld (exec range %lld, %lld)\n", 
+                 last_kill_loc, q_cur_loc(q), q_last_loc(q)); 
+    assert(last_kill_loc < q_last_loc(q)); 
 
-    if (last_kill_loc != q_cur_loc(q) - 1) {
-        clear_repeats(c, q, active);
-    }
+    if (last_kill_loc != q_cur_loc(q) - 1) { 
+        clear_repeats(c, q, active); 
+    } 
 
-    q->cur++; /* skip start event */
+    q->cur++; /* skip start event */ 
 
-    /* skip events prior to the repeats being squashed */
-    while (q_cur_loc(q) <= last_kill_loc) {
-        DEBUG_PRINTF("skipping moot event at %lld\n", q_cur_loc(q));
+    /* skip events prior to the repeats being squashed */ 
+    while (q_cur_loc(q) <= last_kill_loc) { 
+        DEBUG_PRINTF("skipping moot event at %lld\n", q_cur_loc(q)); 
+        q->cur++; 
+        assert(q->cur < q->end); 
+    } 
+
+    while (q->cur < q->end) { 
+        DEBUG_PRINTF("q item type=%d offset=%llu\n", q_cur_type(q), 
+                     q_cur_offset(q)); 
+        u64a sp = q_cur_offset(q); 
+        castleHandleEvent(c, q, sp, 0); 
         q->cur++;
-        assert(q->cur < q->end);
     }
 
-    while (q->cur < q->end) {
-        DEBUG_PRINTF("q item type=%d offset=%llu\n", q_cur_type(q),
-                     q_cur_offset(q));
-        u64a sp = q_cur_offset(q);
-        castleHandleEvent(c, q, sp, 0);
-        q->cur++;
-    }
-
-    castleDeactivateStaleSubs(c, end_offset, q->state, q->streamState);
-
-    char found = 0;
+    castleDeactivateStaleSubs(c, end_offset, q->state, q->streamState); 
+ 
+    char found = 0; 
     if (c->exclusive) {
-        u8 *groups = (u8 *)q->streamState + c->groupIterOffset;
-        found = mmbit_any_precise(groups, c->numGroups);
-
+        u8 *groups = (u8 *)q->streamState + c->groupIterOffset; 
+        found = mmbit_any_precise(groups, c->numGroups); 
+ 
     }
 
     if (!found && !mmbit_any_precise(active, c->numRepeats)) {
@@ -952,16 +952,16 @@ char nfaExecCastle_QR(const struct NFA *n, struct mq *q, ReportID report) {
         return 0;
     }
 
-    if (castleInAccept(c, q, report, end_offset)) {
+    if (castleInAccept(c, q, report, end_offset)) { 
         return MO_MATCHES_PENDING;
     }
 
     return 1;
 }
 
-char nfaExecCastle_reportCurrent(const struct NFA *n, struct mq *q) {
+char nfaExecCastle_reportCurrent(const struct NFA *n, struct mq *q) { 
     assert(n && q);
-    assert(n->type == CASTLE_NFA);
+    assert(n->type == CASTLE_NFA); 
     DEBUG_PRINTF("entry\n");
 
     const struct Castle *c = getImplNfa(n);
@@ -969,89 +969,89 @@ char nfaExecCastle_reportCurrent(const struct NFA *n, struct mq *q) {
     return 0;
 }
 
-char nfaExecCastle_inAccept(const struct NFA *n, ReportID report,
-                            struct mq *q) {
+char nfaExecCastle_inAccept(const struct NFA *n, ReportID report, 
+                            struct mq *q) { 
     assert(n && q);
-    assert(n->type == CASTLE_NFA);
+    assert(n->type == CASTLE_NFA); 
     DEBUG_PRINTF("entry\n");
 
     const struct Castle *c = getImplNfa(n);
     return castleInAccept(c, q, report, q_cur_offset(q));
 }
 
-char nfaExecCastle_inAnyAccept(const struct NFA *n, struct mq *q) {
+char nfaExecCastle_inAnyAccept(const struct NFA *n, struct mq *q) { 
     assert(n && q);
-    assert(n->type == CASTLE_NFA);
+    assert(n->type == CASTLE_NFA); 
     DEBUG_PRINTF("entry\n");
 
     const struct Castle *c = getImplNfa(n);
-    const u64a offset = q_cur_offset(q);
-    DEBUG_PRINTF("offset=%llu\n", offset);
-
-    if (c->exclusive) {
-        u8 *active = (u8 *)q->streamState;
-        u8 *groups = active + c->groupIterOffset;
-        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID);
-             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) {
-            u8 *cur = active + i * c->activeIdxSize;
-            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize);
-            DEBUG_PRINTF("subcastle %u\n", activeIdx);
-            const struct SubCastle *sub = getSubCastle(c, activeIdx);
-            if (subCastleInAccept(c, q, sub->report, offset, activeIdx)) {
-                return 1;
-            }
-        }
-    }
-
-    if (c->exclusive != PURE_EXCLUSIVE) {
-        const u8 *active = (const u8 *)q->streamState + c->activeOffset;
-        for (u32 i = mmbit_iterate(active, c->numRepeats, MMB_INVALID);
-             i != MMB_INVALID; i = mmbit_iterate(active, c->numRepeats, i)) {
-            DEBUG_PRINTF("subcastle %u\n", i);
-            const struct SubCastle *sub = getSubCastle(c, i);
-            if (subCastleInAccept(c, q, sub->report, offset, i)) {
-                return 1;
-            }
-        }
-    }
-
-    return 0;
-}
-
-
-char nfaExecCastle_queueInitState(UNUSED const struct NFA *n, struct mq *q) {
-    assert(n && q);
-    assert(n->type == CASTLE_NFA);
-    DEBUG_PRINTF("entry\n");
-
-    const struct Castle *c = getImplNfa(n);
+    const u64a offset = q_cur_offset(q); 
+    DEBUG_PRINTF("offset=%llu\n", offset); 
+ 
+    if (c->exclusive) { 
+        u8 *active = (u8 *)q->streamState; 
+        u8 *groups = active + c->groupIterOffset; 
+        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID); 
+             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) { 
+            u8 *cur = active + i * c->activeIdxSize; 
+            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize); 
+            DEBUG_PRINTF("subcastle %u\n", activeIdx); 
+            const struct SubCastle *sub = getSubCastle(c, activeIdx); 
+            if (subCastleInAccept(c, q, sub->report, offset, activeIdx)) { 
+                return 1; 
+            } 
+        } 
+    } 
+ 
+    if (c->exclusive != PURE_EXCLUSIVE) { 
+        const u8 *active = (const u8 *)q->streamState + c->activeOffset; 
+        for (u32 i = mmbit_iterate(active, c->numRepeats, MMB_INVALID); 
+             i != MMB_INVALID; i = mmbit_iterate(active, c->numRepeats, i)) { 
+            DEBUG_PRINTF("subcastle %u\n", i); 
+            const struct SubCastle *sub = getSubCastle(c, i); 
+            if (subCastleInAccept(c, q, sub->report, offset, i)) { 
+                return 1; 
+            } 
+        } 
+    } 
+ 
+    return 0; 
+} 
+ 
+ 
+char nfaExecCastle_queueInitState(UNUSED const struct NFA *n, struct mq *q) { 
+    assert(n && q); 
+    assert(n->type == CASTLE_NFA); 
+    DEBUG_PRINTF("entry\n"); 
+ 
+    const struct Castle *c = getImplNfa(n); 
     assert(q->streamState);
     if (c->exclusive) {
-        u8 *groups = (u8 *)q->streamState + c->groupIterOffset;
-        mmbit_clear(groups, c->numGroups);
+        u8 *groups = (u8 *)q->streamState + c->groupIterOffset; 
+        mmbit_clear(groups, c->numGroups); 
     }
 
-    if (c->exclusive != PURE_EXCLUSIVE) {
-        u8 *active = (u8 *)q->streamState + c->activeOffset;
+    if (c->exclusive != PURE_EXCLUSIVE) { 
+        u8 *active = (u8 *)q->streamState + c->activeOffset; 
         mmbit_clear(active, c->numRepeats);
     }
     return 0;
 }
 
-char nfaExecCastle_initCompressedState(const struct NFA *n, UNUSED u64a offset,
-                                       void *state, UNUSED u8 key) {
+char nfaExecCastle_initCompressedState(const struct NFA *n, UNUSED u64a offset, 
+                                       void *state, UNUSED u8 key) { 
     assert(n && state);
-    assert(n->type == CASTLE_NFA);
+    assert(n->type == CASTLE_NFA); 
     DEBUG_PRINTF("entry\n");
 
     const struct Castle *c = getImplNfa(n);
     if (c->exclusive) {
-        u8 *groups = (u8 *)state + c->groupIterOffset;
-        mmbit_clear(groups, c->numGroups);
+        u8 *groups = (u8 *)state + c->groupIterOffset; 
+        mmbit_clear(groups, c->numGroups); 
     }
 
-    if (c->exclusive != PURE_EXCLUSIVE) {
-        u8 *active = (u8 *)state + c->activeOffset;
+    if (c->exclusive != PURE_EXCLUSIVE) { 
+        u8 *active = (u8 *)state + c->activeOffset; 
         mmbit_clear(active, c->numRepeats);
     }
     return 0;
@@ -1070,10 +1070,10 @@ void subCastleQueueCompressState(const struct Castle *c, const u32 subIdx,
     repeatPack(packed, info, rctrl, offset);
 }
 
-char nfaExecCastle_queueCompressState(const struct NFA *n, const struct mq *q,
-                                      s64a loc) {
+char nfaExecCastle_queueCompressState(const struct NFA *n, const struct mq *q, 
+                                      s64a loc) { 
     assert(n && q);
-    assert(n->type == CASTLE_NFA);
+    assert(n->type == CASTLE_NFA); 
     DEBUG_PRINTF("entry, loc=%lld\n", loc);
 
     const struct Castle *c = getImplNfa(n);
@@ -1082,19 +1082,19 @@ char nfaExecCastle_queueCompressState(const struct NFA *n, const struct mq *q,
     const u64a offset = q->offset + loc;
     DEBUG_PRINTF("offset=%llu\n", offset);
     if (c->exclusive) {
-        u8 *active = (u8 *)q->streamState;
-        u8 *groups = active + c->groupIterOffset;
-        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID);
-             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) {
-            u8 *cur = active + i * c->activeIdxSize;
-            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize);
+        u8 *active = (u8 *)q->streamState; 
+        u8 *groups = active + c->groupIterOffset; 
+        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID); 
+             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) { 
+            u8 *cur = active + i * c->activeIdxSize; 
+            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize); 
             DEBUG_PRINTF("packing state for sub %u\n", activeIdx);
             subCastleQueueCompressState(c, activeIdx, q, offset);
         }
     }
 
-    if (c->exclusive != PURE_EXCLUSIVE) {
-        const u8 *active = (const u8 *)q->streamState + c->activeOffset;
+    if (c->exclusive != PURE_EXCLUSIVE) { 
+        const u8 *active = (const u8 *)q->streamState + c->activeOffset; 
         for (u32 i = mmbit_iterate(active, c->numRepeats, MMB_INVALID);
              i != MMB_INVALID; i = mmbit_iterate(active, c->numRepeats, i)) {
             DEBUG_PRINTF("packing state for sub %u\n", i);
@@ -1118,28 +1118,28 @@ void subCastleExpandState(const struct Castle *c, const u32 subIdx,
                                  packed + info->packedCtrlSize, offset));
 }
 
-char nfaExecCastle_expandState(const struct NFA *n, void *dest, const void *src,
-                               u64a offset, UNUSED u8 key) {
+char nfaExecCastle_expandState(const struct NFA *n, void *dest, const void *src, 
+                               u64a offset, UNUSED u8 key) { 
     assert(n && dest && src);
-    assert(n->type == CASTLE_NFA);
+    assert(n->type == CASTLE_NFA); 
     DEBUG_PRINTF("entry, src=%p, dest=%p, offset=%llu\n", src, dest, offset);
 
     const struct Castle *c = getImplNfa(n);
 
     if (c->exclusive) {
-        const u8 *active = (const u8 *)src;
-        const u8 *groups = active + c->groupIterOffset;
-        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID);
-             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) {
-            const u8 *cur = active + i * c->activeIdxSize;
-            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize);
+        const u8 *active = (const u8 *)src; 
+        const u8 *groups = active + c->groupIterOffset; 
+        for (u32 i = mmbit_iterate(groups, c->numGroups, MMB_INVALID); 
+             i != MMB_INVALID; i = mmbit_iterate(groups, c->numGroups, i)) { 
+            const u8 *cur = active + i * c->activeIdxSize; 
+            const u32 activeIdx = partial_load_u32(cur, c->activeIdxSize); 
             subCastleExpandState(c, activeIdx, dest, src, offset);
         }
     }
 
-    if (c->exclusive != PURE_EXCLUSIVE) {
+    if (c->exclusive != PURE_EXCLUSIVE) { 
         // Unpack state for all active repeats.
-        const u8 *active = (const u8 *)src + c->activeOffset;
+        const u8 *active = (const u8 *)src + c->activeOffset; 
         for (u32 i = mmbit_iterate(active, c->numRepeats, MMB_INVALID);
              i != MMB_INVALID; i = mmbit_iterate(active, c->numRepeats, i)) {
             subCastleExpandState(c, i, dest, src, offset);

@@ -1,6 +1,6 @@
 """
 wcwidth module.
-
+ 
 https://github.com/jquast/wcwidth
 """
 # re-export all functions & definitions, even private ones, from top-level

@@ -148,12 +148,12 @@ public:
             auto abiVersionFunc = reinterpret_cast<NUdf::TAbiVersionFunctionPtr>(
                         lib->Lib.Sym(AbiVersionFuncName));
             ui32 version = abiVersionFunc();
-            Y_ENSURE(NUdf::IsAbiCompatible(version),
-                     "Non compatible ABI version of UDF library " << libraryPath
+            Y_ENSURE(NUdf::IsAbiCompatible(version), 
+                     "Non compatible ABI version of UDF library " << libraryPath 
                      << ", expected up to " << NUdf::AbiVersionToStr(NUdf::CurrentCompatibilityAbiVersion() * 100)
-                     << ", got " << NUdf::AbiVersionToStr(version)
-                     << "; try to re-compile library using "
-                     << "YQL_ABI_VERSION(" << UDF_ABI_VERSION_MAJOR
+                     << ", got " << NUdf::AbiVersionToStr(version) 
+                     << "; try to re-compile library using " 
+                     << "YQL_ABI_VERSION(" << UDF_ABI_VERSION_MAJOR 
                      << " " << UDF_ABI_VERSION_MINOR << " 0) macro in ya.make");
             lib->AbiVersion = version;
             if (version < NUdf::MakeAbiVersion(2, 8, 0)) {
@@ -212,8 +212,8 @@ public:
 
     const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const override {
         return Builtins_;
-    }
-
+    } 
+ 
     TStatus FindFunctionTypeInfo(
             const TTypeEnvironment& env,
             NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
@@ -350,15 +350,15 @@ public:
 
     TIntrusivePtr<IMutableFunctionRegistry> Clone() const override {
         return new TMutableFunctionRegistry(*this);
-    }
-
+    } 
+ 
     void SetBackTraceCallback(NUdf::TBackTraceCallback callback) override {
         BackTraceCallback_ = callback;
     }
 
 private:
     const IBuiltinFunctionRegistry::TPtr Builtins_;
-
+ 
     THashMap<TString, TUdfLibraryPtr> LoadedLibraries_;
     TUdfModulesMap UdfModules_;
     THolder<TMemoryUsageInfo> UdfMemoryInfo_;
@@ -542,5 +542,5 @@ void FillStaticModules(IMutableFunctionRegistry& registry) {
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKiki
+} // namespace NMiniKQL 
+} // namespace NKiki 

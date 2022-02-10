@@ -165,5 +165,5 @@ NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type);
 NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type);
 NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type);
 
-} // namespace NMiniKQL
-} // namespace Nkikimr
+} // namespace NMiniKQL 
+} // namespace Nkikimr 

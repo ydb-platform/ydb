@@ -1,9 +1,9 @@
-PROTO_LIBRARY()
-
+PROTO_LIBRARY() 
+ 
 OWNER(g:yql g:yql_ydb_core)
-
+ 
 EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
-
+ 
 IF (CPP_PROTO)
 
     SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
@@ -14,10 +14,10 @@ IF (CPP_PROTO)
     SET(PROTOBUF_HEADER_PATH ${MODDIR})
     SET(LEXER_PARSER_NAMESPACE NALP)
 
-
+ 
     CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in ${antlr_templates}/Cpp/Cpp.stg)
     CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in ${antlr_templates}/protobuf/protobuf.stg)
-
+ 
     RUN_ANTLR(
         ${sql_grammar}
         -lib .
@@ -47,4 +47,4 @@ ENDIF()
 
 SRCS(SQLParser.proto)
 
-END()
+END() 

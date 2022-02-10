@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -82,7 +82,7 @@ char roseCountingMiracleScan(u8 c, const u8 *d, const u8 *d_end,
 }
 
 #define GET_LO_4(chars) and128(chars, low4bits)
-#define GET_HI_4(chars) rshift64_m128(andnot128(low4bits, chars), 4)
+#define GET_HI_4(chars) rshift64_m128(andnot128(low4bits, chars), 4) 
 
 static really_inline
 u32 roseCountingMiracleScanShufti(m128 mask_lo, m128 mask_hi, u8 poison,
@@ -98,8 +98,8 @@ u32 roseCountingMiracleScanShufti(m128 mask_lo, m128 mask_hi, u8 poison,
 
     for (; d + 16 <= d_end; d_end -= 16) {
         m128 data = loadu128(d_end - 16);
-        m128 c_lo  = pshufb_m128(mask_lo, GET_LO_4(data));
-        m128 c_hi  = pshufb_m128(mask_hi, GET_HI_4(data));
+        m128 c_lo  = pshufb_m128(mask_lo, GET_LO_4(data)); 
+        m128 c_hi  = pshufb_m128(mask_hi, GET_HI_4(data)); 
         m128 t     = and128(c_lo, c_hi);
         u32 z1 = movemask128(eq128(t, zeroes));
         count += popcount32(z1 ^ 0xffff);
@@ -117,8 +117,8 @@ u32 roseCountingMiracleScanShufti(m128 mask_lo, m128 mask_hi, u8 poison,
         memset(temp, poison, sizeof(temp));
         memcpy(temp, d, d_end - d);
         m128 data  = loadu128(temp);
-        m128 c_lo  = pshufb_m128(mask_lo, GET_LO_4(data));
-        m128 c_hi  = pshufb_m128(mask_hi, GET_HI_4(data));
+        m128 c_lo  = pshufb_m128(mask_lo, GET_LO_4(data)); 
+        m128 c_hi  = pshufb_m128(mask_hi, GET_HI_4(data)); 
         m128 t     = and128(c_lo, c_hi);
         u32 z1 = movemask128(eq128(t, zeroes));
         count += popcount32(z1 ^ 0xffff);

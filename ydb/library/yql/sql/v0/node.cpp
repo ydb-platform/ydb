@@ -15,7 +15,7 @@
 
 using namespace NYql;
 
-namespace NSQLTranslationV0 {
+namespace NSQLTranslationV0 { 
 
 TString ErrorDistinctWithoutCorrelation(const TString& column) {
     return TStringBuilder() << "DISTINCT columns for JOIN in SELECT should have table aliases (correlation name),"
@@ -348,14 +348,14 @@ TAstNode* TAstListNode::Translate(TContext& ctx) const {
     children.reserve(Nodes.size());
     auto listPos = Pos;
     for (auto& node: Nodes) {
-        if (node) {
-            auto astNode = node->Translate(ctx);
-            if (!astNode) {
-                return nullptr;
-            }
-            children.push_back(astNode);
-        } else {
-            ctx.Error(Pos) << "Translation error: encountered empty TNodePtr";
+        if (node) { 
+            auto astNode = node->Translate(ctx); 
+            if (!astNode) { 
+                return nullptr; 
+            } 
+            children.push_back(astNode); 
+        } else { 
+            ctx.Error(Pos) << "Translation error: encountered empty TNodePtr"; 
             return nullptr;
         }
     }
@@ -436,7 +436,7 @@ bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& node
             continue;
         }
         if (!node->IsAggregated() && !node->IsOverWindow()) {
-            ctx.Error(node->GetPos()) << "Expression has to be an aggregation function or key column, because aggregation is used elsewhere in this subquery";
+            ctx.Error(node->GetPos()) << "Expression has to be an aggregation function or key column, because aggregation is used elsewhere in this subquery"; 
             return false;
         }
     }
@@ -1333,19 +1333,19 @@ TWriteSettings ISource::GetWriteSettings() const {
     return {};
 }
 
-bool ISource::SetSamplingOptions(TContext& ctx,
-                                 TPosition pos,
-                                 ESampleMode mode,
-                                 TNodePtr samplingRate,
-                                 TNodePtr samplingSeed) {
-    Y_UNUSED(pos);
-    Y_UNUSED(mode);
-    Y_UNUSED(samplingRate);
-    Y_UNUSED(samplingSeed);
+bool ISource::SetSamplingOptions(TContext& ctx, 
+                                 TPosition pos, 
+                                 ESampleMode mode, 
+                                 TNodePtr samplingRate, 
+                                 TNodePtr samplingSeed) { 
+    Y_UNUSED(pos); 
+    Y_UNUSED(mode); 
+    Y_UNUSED(samplingRate); 
+    Y_UNUSED(samplingSeed); 
     ctx.Error() << "Sampling is only supported for table sources";
-    return false;
-}
-
+    return false; 
+} 
+ 
 bool ISource::CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const {
     Y_UNUSED(columns);
     Y_UNUSED(hint);
@@ -1762,10 +1762,10 @@ bool TryStringContent(const TString& str, TString& result, ui32& flags, TString&
     if (str.size() >= 2 && (doubleQuoted || singleQuoted)) {
         flags = TNodeFlags::ArbitraryContent;
         char quoteChar = doubleQuoted ? '"' : '\'';
-        size_t readBytes = 0;
-        TStringBuf atom(str);
+        size_t readBytes = 0; 
+        TStringBuf atom(str); 
         TStringOutput sout(result);
-        atom.Skip(1);
+        atom.Skip(1); 
         result.reserve(str.size());
 
         auto unescapeResult = UnescapeArbitraryAtom(atom, quoteChar, &sout, &readBytes);
@@ -2315,8 +2315,8 @@ public:
                     ysonOptions->Add(BuildQuotedAtom(Pos, "yson_strict"));
                 }
                 expr->Add(Q(ysonOptions));
-            }
-        }
+            } 
+        } 
         Node = expr;
         return true;
     }
@@ -2615,47 +2615,47 @@ TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr 
     return new TCalcOverWindow(pos, windowName, call);
 }
 
-class TYsonOptionsNode final: public INode {
-public:
-    TYsonOptionsNode(TPosition pos, bool autoConvert, bool strict)
-        : INode(pos)
-        , AutoConvert(autoConvert)
-        , Strict(strict)
-    {
-        auto udf = Y("Udf", Q("Yson.Options"));
-        auto autoConvertNode = BuildLiteralBool(pos, autoConvert ? "true" : "false");
-        autoConvertNode->SetLabel("AutoConvert");
-        auto strictNode = BuildLiteralBool(pos, strict ? "true" : "false");
-        strictNode->SetLabel("Strict");
-        Node = Y("NamedApply", udf, Q(Y()), BuildStructure(pos, { autoConvertNode, strictNode }));
-    }
-
-    TAstNode* Translate(TContext& ctx) const override {
-        return Node->Translate(ctx);
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        YQL_ENSURE(src);
-        if (!Node->Init(ctx, src)) {
-            return false;
-        }
-        return true;
-    }
-
-    TPtr DoClone() const final {
-        return new TYsonOptionsNode(Pos, AutoConvert, Strict);
-    }
-
-protected:
-    TNodePtr Node;
-    const bool AutoConvert;
-    const bool Strict;
-};
-
-TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict) {
-    return new TYsonOptionsNode(pos, autoConvert, strict);
-}
-
+class TYsonOptionsNode final: public INode { 
+public: 
+    TYsonOptionsNode(TPosition pos, bool autoConvert, bool strict) 
+        : INode(pos) 
+        , AutoConvert(autoConvert) 
+        , Strict(strict) 
+    { 
+        auto udf = Y("Udf", Q("Yson.Options")); 
+        auto autoConvertNode = BuildLiteralBool(pos, autoConvert ? "true" : "false"); 
+        autoConvertNode->SetLabel("AutoConvert"); 
+        auto strictNode = BuildLiteralBool(pos, strict ? "true" : "false"); 
+        strictNode->SetLabel("Strict"); 
+        Node = Y("NamedApply", udf, Q(Y()), BuildStructure(pos, { autoConvertNode, strictNode })); 
+    } 
+ 
+    TAstNode* Translate(TContext& ctx) const override { 
+        return Node->Translate(ctx); 
+    } 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override { 
+        YQL_ENSURE(src); 
+        if (!Node->Init(ctx, src)) { 
+            return false; 
+        } 
+        return true; 
+    } 
+ 
+    TPtr DoClone() const final { 
+        return new TYsonOptionsNode(Pos, AutoConvert, Strict); 
+    } 
+ 
+protected: 
+    TNodePtr Node; 
+    const bool AutoConvert; 
+    const bool Strict; 
+}; 
+ 
+TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict) { 
+    return new TYsonOptionsNode(pos, autoConvert, strict); 
+} 
+ 
 class TShortcutNode: public TAstAtomNode {
     TNodePtr ShortcutNode;
     TNodePtr SameNode;
@@ -2888,4 +2888,4 @@ TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize) {
 }
 
 
-} // namespace NSQLTranslationV0
+} // namespace NSQLTranslationV0 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -30,30 +30,30 @@
  * \brief Literal Component Splitting. Identifies literals that span the
  * graph and moves them into Rose.
  */
-
-#include "ng_literal_component.h"
-
+ 
+#include "ng_literal_component.h" 
+ 
 #include "grey.h"
 #include "ng.h"
 #include "ng_prune.h"
 #include "ng_util.h"
 #include "ue2common.h"
-#include "compiler/compiler.h"
+#include "compiler/compiler.h" 
 #include "rose/rose_build.h"
 #include "util/container.h"
 #include "util/graph.h"
 #include "util/graph_range.h"
 #include "util/ue2string.h"
 
-#include <unordered_set>
-
+#include <unordered_set> 
+ 
 using namespace std;
 
 namespace ue2 {
 
 static
-bool isLiteralChar(const NGHolder &g, NFAVertex v, bool &nocase,
-                   bool &casefixed) {
+bool isLiteralChar(const NGHolder &g, NFAVertex v, bool &nocase, 
+                   bool &casefixed) { 
     const CharReach &cr = g[v].char_reach;
     const size_t num = cr.count();
     if (num > 2) {
@@ -98,9 +98,9 @@ void addToString(string &s, const NGHolder &g, NFAVertex v) {
 }
 
 static
-bool splitOffLiteral(NG &ng, NGHolder &g, NFAVertex v, const bool anchored,
+bool splitOffLiteral(NG &ng, NGHolder &g, NFAVertex v, const bool anchored, 
                      set<NFAVertex> &dead) {
-    DEBUG_PRINTF("examine vertex %zu\n", g[v].index);
+    DEBUG_PRINTF("examine vertex %zu\n", g[v].index); 
     bool nocase = false, casefixed = false;
 
     assert(!is_special(v, g));
@@ -114,7 +114,7 @@ bool splitOffLiteral(NG &ng, NGHolder &g, NFAVertex v, const bool anchored,
         assert(edge(g.start, v, g).second);
         assert(edge(g.startDs, v, g).second);
     }
-    if (in_degree(v, g) > reqInDegree) {
+    if (in_degree(v, g) > reqInDegree) { 
         DEBUG_PRINTF("extra in-edges\n");
         return false;
     }
@@ -139,7 +139,7 @@ bool splitOffLiteral(NG &ng, NGHolder &g, NFAVertex v, const bool anchored,
         u = v; // previous vertex
         v = *(adjacent_vertices(v, g).first);
 
-        DEBUG_PRINTF("loop, v=%zu\n", g[v].index);
+        DEBUG_PRINTF("loop, v=%zu\n", g[v].index); 
 
         if (is_special(v, g)) {
             if (v == g.accept || v == g.acceptEod) {
@@ -190,15 +190,15 @@ bool splitOffLiteral(NG &ng, NGHolder &g, NFAVertex v, const bool anchored,
 }
 
 /** \brief Split off literals. True if any changes were made to the graph. */
-bool splitOffLiterals(NG &ng, NGHolder &g) {
-    if (!ng.cc.grey.allowLiteral) {
+bool splitOffLiterals(NG &ng, NGHolder &g) { 
+    if (!ng.cc.grey.allowLiteral) { 
         return false;
     }
 
     bool changed = false;
     set<NFAVertex> dead;
 
-    unordered_set<NFAVertex> unanchored; // for faster lookup.
+    unordered_set<NFAVertex> unanchored; // for faster lookup. 
     insert(&unanchored, adjacent_vertices(g.startDs, g));
 
     // Anchored literals.

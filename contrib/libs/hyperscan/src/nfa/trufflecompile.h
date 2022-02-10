@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation
+ * Copyright (c) 2015-2016, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,8 +34,8 @@
 
 namespace ue2 {
 
-void truffleBuildMasks(const CharReach &cr, u8 *mask1, u8 *mask2);
-CharReach truffle2cr(const u8 *lo_in, const u8 *hi_in);
+void truffleBuildMasks(const CharReach &cr, u8 *mask1, u8 *mask2); 
+CharReach truffle2cr(const u8 *lo_in, const u8 *hi_in); 
 
 }
 

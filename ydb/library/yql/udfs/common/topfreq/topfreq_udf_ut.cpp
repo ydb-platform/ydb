@@ -390,7 +390,7 @@ namespace NYql {
                 {
                     pgmvalue = pgmBuilder.NewDataLiteral<ui64>(values[i * BlockSize]);
                     param = pgmBuilder.NewDataLiteral<ui32>(AskFor);
-                    params = {pgmvalue, param};
+                    params = {pgmvalue, param}; 
                     pgmTopFreqs[i] = pgmBuilder.Apply(udfTopFreq_Create, params);
                 }
 

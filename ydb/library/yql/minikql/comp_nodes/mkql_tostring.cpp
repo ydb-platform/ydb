@@ -1,5 +1,5 @@
 #include "mkql_tostring.h"
-
+ 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -9,7 +9,7 @@
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <ydb/library/yql/public/udf/udf_terminator.h>
-
+ 
 #ifndef MKQL_DISABLE_CODEGEN
 extern "C" NYql::NUdf::TUnboxedValuePod DataToString(NYql::NUdf::TUnboxedValuePod data, NYql::NUdf::EDataSlot slot) {
     return NKikimr::NMiniKQL::ValueToString(slot, data);
@@ -50,7 +50,7 @@ public:
 
         if (const auto str = NYql::NDecimal::ToString(dataValue.GetInt128(), Precision, Scale)) {
             return MakeString(NUdf::TStringRef(str, std::strlen(str)));
-        }
+        } 
 
         Throw();
     }

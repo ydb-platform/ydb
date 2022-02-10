@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation
+ * Copyright (c) 2015-2016, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -80,9 +80,9 @@ public:
         return numPositions <= MAX_REFERENT_POSITIONS;
     }
 
-    using DefaultConstComponentVisitor::pre;
-    using DefaultConstComponentVisitor::post;
-
+    using DefaultConstComponentVisitor::pre; 
+    using DefaultConstComponentVisitor::post; 
+ 
     void pre(const AsciiComponentClass &) override {
         numPositions++;
     }
@@ -167,8 +167,8 @@ public:
     explicit FindSequenceVisitor(unsigned ref_id) : id(ref_id) {}
     explicit FindSequenceVisitor(const std::string &s) : name(s) {}
 
-    using DefaultConstComponentVisitor::pre;
-
+    using DefaultConstComponentVisitor::pre; 
+ 
     void pre(const ComponentSequence &c) override {
         if (!name.empty()) {
             if (c.getCaptureName() == name) {
@@ -208,8 +208,8 @@ public:
     PrefilterVisitor(Component *c, const ParseMode &m) : root(c), mode(m) {}
     ~PrefilterVisitor() override;
 
-    using DefaultComponentVisitor::visit;
-
+    using DefaultComponentVisitor::visit; 
+ 
     /** \brief Calls the visitor (recursively) on a new replacement component
      * we've just created. Takes care of freeing it if the sequence is itself
      * replaced. */
@@ -295,16 +295,16 @@ public:
 
     Component *visit(ComponentWordBoundary *c) override {
         assert(c);
-
-        // TODO: Right now, we do not have correct code for resolving these
-        // when prefiltering is on, UCP is on, and UTF-8 is *off*. For now, we
-        // just replace with an empty sequence (as that will return a superset
-        // of matches).
-        if (mode.ucp && !mode.utf8) {
-            return new ComponentSequence();
-        }
-
-        // All other cases can be prefiltered.
+ 
+        // TODO: Right now, we do not have correct code for resolving these 
+        // when prefiltering is on, UCP is on, and UTF-8 is *off*. For now, we 
+        // just replace with an empty sequence (as that will return a superset 
+        // of matches). 
+        if (mode.ucp && !mode.utf8) { 
+            return new ComponentSequence(); 
+        } 
+ 
+        // All other cases can be prefiltered. 
         c->setPrefilter(true);
         return c;
     }

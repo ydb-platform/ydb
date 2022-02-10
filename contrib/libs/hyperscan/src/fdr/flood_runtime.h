@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -94,13 +94,13 @@ const u8 * floodDetect(const struct FDR * fdr,
     const u8 * buf = a->buf;
     const size_t len = a->len;
     HWLMCallback cb = a->cb;
-    struct hs_scratch *scratch = a->scratch;
+    struct hs_scratch *scratch = a->scratch; 
 
     const u8 * ptr = *ptrPtr;
     // tryFloodDetect is never put in places where unconditional
     // reads a short distance forward or backward here
     // TODO: rationale for this line needs to be rediscovered!!
-    size_t mainLoopLen = len > 2 * iterBytes ? len - 2 * iterBytes : 0;
+    size_t mainLoopLen = len > 2 * iterBytes ? len - 2 * iterBytes : 0; 
     const u32 i = ptr - buf;
     u32 j = i;
 
@@ -197,67 +197,67 @@ const u8 * floodDetect(const struct FDR * fdr,
                      t += 4) {
                     DEBUG_PRINTF("aaa %u %llx\n", t, fl->groups[0]);
                     if (*control & fl->groups[0]) {
-                        *control = cb(i + t + 0, fl->ids[0], scratch);
+                        *control = cb(i + t + 0, fl->ids[0], scratch); 
                     }
                     if (*control & fl->groups[0]) {
-                        *control = cb(i + t + 1, fl->ids[0], scratch);
+                        *control = cb(i + t + 1, fl->ids[0], scratch); 
                     }
                     if (*control & fl->groups[0]) {
-                        *control = cb(i + t + 2, fl->ids[0], scratch);
+                        *control = cb(i + t + 2, fl->ids[0], scratch); 
                     }
                     if (*control & fl->groups[0]) {
-                        *control = cb(i + t + 3, fl->ids[0], scratch);
+                        *control = cb(i + t + 3, fl->ids[0], scratch); 
                     }
                 }
                 break;
             case 2:
                 for (u32 t = 0; t < floodSize && (*control & fl->allGroups); t += 4) {
                     if (*control & fl->groups[0]) {
-                        *control = cb(i + t, fl->ids[0], scratch);
+                        *control = cb(i + t, fl->ids[0], scratch); 
                     }
                     if (*control & fl->groups[1]) {
-                        *control = cb(i + t, fl->ids[1], scratch);
+                        *control = cb(i + t, fl->ids[1], scratch); 
                     }
                     if (*control & fl->groups[0]) {
                         *control =
-                            cb(i + t + 1, fl->ids[0], scratch);
+                            cb(i + t + 1, fl->ids[0], scratch); 
                     }
                     if (*control & fl->groups[1]) {
-                        *control = cb(i + t + 1, fl->ids[1], scratch);
+                        *control = cb(i + t + 1, fl->ids[1], scratch); 
                     }
                     if (*control & fl->groups[0]) {
-                        *control = cb(i + t + 2, fl->ids[0], scratch);
+                        *control = cb(i + t + 2, fl->ids[0], scratch); 
                     }
                     if (*control & fl->groups[1]) {
-                        *control = cb(i + t + 2, fl->ids[1], scratch);
+                        *control = cb(i + t + 2, fl->ids[1], scratch); 
                     }
                     if (*control & fl->groups[0]) {
-                        *control = cb(i + t + 3, fl->ids[0], scratch);
+                        *control = cb(i + t + 3, fl->ids[0], scratch); 
                     }
                     if (*control & fl->groups[1]) {
-                        *control = cb(i + t + 3, fl->ids[1], scratch);
+                        *control = cb(i + t + 3, fl->ids[1], scratch); 
                     }
                 }
                 break;
             case 3:
                 for (u32 t = 0; t < floodSize && (*control & fl->allGroups); t += 2) {
                     if (*control & fl->groups[0]) {
-                        *control = cb(i + t, fl->ids[0], scratch);
+                        *control = cb(i + t, fl->ids[0], scratch); 
                     }
                     if (*control & fl->groups[1]) {
-                        *control = cb(i + t, fl->ids[1], scratch);
+                        *control = cb(i + t, fl->ids[1], scratch); 
                     }
                     if (*control & fl->groups[2]) {
-                        *control = cb(i + t, fl->ids[2], scratch);
+                        *control = cb(i + t, fl->ids[2], scratch); 
                     }
                     if (*control & fl->groups[0]) {
-                        *control = cb(i + t + 1, fl->ids[0], scratch);
+                        *control = cb(i + t + 1, fl->ids[0], scratch); 
                     }
                     if (*control & fl->groups[1]) {
-                        *control = cb(i + t + 1, fl->ids[1], scratch);
+                        *control = cb(i + t + 1, fl->ids[1], scratch); 
                     }
                     if (*control & fl->groups[2]) {
-                        *control = cb(i + t + 1, fl->ids[2], scratch);
+                        *control = cb(i + t + 1, fl->ids[2], scratch); 
                     }
                 }
                 break;
@@ -266,40 +266,40 @@ const u8 * floodDetect(const struct FDR * fdr,
                 for (u32 t = 0; t < floodSize && (*control & fl->allGroups); t += 2) {
 
                     if (*control & fl->groups[0]) {
-                        *control = cb(i + t, fl->ids[0], scratch);
+                        *control = cb(i + t, fl->ids[0], scratch); 
                     }
                     if (*control & fl->groups[1]) {
-                        *control = cb(i + t, fl->ids[1], scratch);
+                        *control = cb(i + t, fl->ids[1], scratch); 
                     }
                     if (*control & fl->groups[2]) {
-                        *control = cb(i + t, fl->ids[2], scratch);
+                        *control = cb(i + t, fl->ids[2], scratch); 
                     }
                     if (*control & fl->groups[3]) {
-                        *control = cb(i + t, fl->ids[3], scratch);
+                        *control = cb(i + t, fl->ids[3], scratch); 
                     }
 
                     for (u32 t2 = 4; t2 < fl->idCount; t2++) {
                         if (*control & fl->groups[t2]) {
-                            *control = cb(i + t, fl->ids[t2], scratch);
+                            *control = cb(i + t, fl->ids[t2], scratch); 
                         }
                     }
 
                     if (*control & fl->groups[0]) {
-                        *control = cb(i + t + 1, fl->ids[0], scratch);
+                        *control = cb(i + t + 1, fl->ids[0], scratch); 
                     }
                     if (*control & fl->groups[1]) {
-                        *control = cb(i + t + 1, fl->ids[1], scratch);
+                        *control = cb(i + t + 1, fl->ids[1], scratch); 
                     }
                     if (*control & fl->groups[2]) {
-                        *control = cb(i + t + 1, fl->ids[2], scratch);
+                        *control = cb(i + t + 1, fl->ids[2], scratch); 
                     }
                     if (*control & fl->groups[3]) {
-                        *control = cb(i + t + 1, fl->ids[3], scratch);
+                        *control = cb(i + t + 1, fl->ids[3], scratch); 
                     }
 
                     for (u32 t2 = 4; t2 < fl->idCount; t2++) {
                         if (*control & fl->groups[t2]) {
-                            *control = cb(i + t + 1, fl->ids[t2], scratch);
+                            *control = cb(i + t + 1, fl->ids[t2], scratch); 
                         }
                     }
                 }
@@ -310,7 +310,7 @@ const u8 * floodDetect(const struct FDR * fdr,
                 for (u32 t = 0; t < floodSize && (*control & fl->allGroups); t++) {
                     for (u32 t2 = 0; t2 < fl->idCount; t2++) {
                         if (*control & fl->groups[t2]) {
-                            *control = cb(i + t, fl->ids[t2], scratch);
+                            *control = cb(i + t, fl->ids[t2], scratch); 
                         }
                     }
                 }

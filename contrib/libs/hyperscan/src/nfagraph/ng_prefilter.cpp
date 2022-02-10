@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,8 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * \file
+/** 
+ * \file 
  * \brief Prefilter Reductions.
  *
  * This file contains routines for reducing the size of an NFA graph that we
@@ -58,8 +58,8 @@
 #include "util/graph_range.h"
 
 #include <queue>
-#include <unordered_map>
-#include <unordered_set>
+#include <unordered_map> 
+#include <unordered_set> 
 
 #include <boost/range/adaptor/map.hpp>
 
@@ -82,10 +82,10 @@ static const size_t BOUNDED_REPEAT_COUNT = 4;
 /** Scoring penalty for boundary regions. */
 static const size_t PENALTY_BOUNDARY = 32;
 
-/** Regions with max bounds greater than this value will have their max bound
- * replaced with inf. */
-static const size_t MAX_REPLACE_BOUND = 10000;
-
+/** Regions with max bounds greater than this value will have their max bound 
+ * replaced with inf. */ 
+static const size_t MAX_REPLACE_BOUND = 10000; 
+ 
 namespace {
 
 /** Information describing a region. */
@@ -94,13 +94,13 @@ struct RegionInfo {
     u32 id;                             //!< region id
     deque<NFAVertex> vertices;          //!< vertices in the region
     CharReach reach;                    //!< union of region reach
-    depth minWidth{0};                  //!< min width of region subgraph
-    depth maxWidth{depth::infinity()};  //!< max width of region subgraph
+    depth minWidth{0};                  //!< min width of region subgraph 
+    depth maxWidth{depth::infinity()};  //!< max width of region subgraph 
     bool atBoundary = false;            //!< region is next to an accept
 
     // Bigger score is better.
     size_t score() const {
-        // TODO: charreach should be a signal?
+        // TODO: charreach should be a signal? 
         size_t numVertices = vertices.size();
         if (atBoundary) {
             return numVertices - min(PENALTY_BOUNDARY, numVertices);
@@ -128,16 +128,16 @@ struct RegionInfoQueueComp {
 
 static
 void findWidths(const NGHolder &g,
-                const unordered_map<NFAVertex, u32> &region_map,
+                const unordered_map<NFAVertex, u32> &region_map, 
                 RegionInfo &ri) {
     NGHolder rg;
-    unordered_map<NFAVertex, NFAVertex> mapping;
+    unordered_map<NFAVertex, NFAVertex> mapping; 
     fillHolder(&rg, g, ri.vertices, &mapping);
 
     // Wire our entries to start and our exits to accept.
     for (auto v : ri.vertices) {
         NFAVertex v_new = mapping[v];
-        assert(v_new != NGHolder::null_vertex());
+        assert(v_new != NGHolder::null_vertex()); 
 
         if (isRegionEntry(g, v, region_map) &&
             !edge(rg.start, v_new, rg).second) {
@@ -156,7 +156,7 @@ void findWidths(const NGHolder &g,
 // acc can be either h.accept or h.acceptEod.
 static
 void markBoundaryRegions(const NGHolder &h,
-                         const unordered_map<NFAVertex, u32> &region_map,
+                         const unordered_map<NFAVertex, u32> &region_map, 
                          map<u32, RegionInfo> &regions, NFAVertex acc) {
     for (auto v : inv_adjacent_vertices_range(acc, h)) {
         if (is_special(v, h)) {
@@ -164,7 +164,7 @@ void markBoundaryRegions(const NGHolder &h,
         }
         u32 id = region_map.at(v);
 
-        auto ri = regions.find(id);
+        auto ri = regions.find(id); 
         if (ri == regions.end()) {
             continue; // Not tracking this region as it's too small.
         }
@@ -175,21 +175,21 @@ void markBoundaryRegions(const NGHolder &h,
 
 static
 map<u32, RegionInfo> findRegionInfo(const NGHolder &h,
-               const unordered_map<NFAVertex, u32> &region_map) {
+               const unordered_map<NFAVertex, u32> &region_map) { 
     map<u32, RegionInfo> regions;
     for (auto v : vertices_range(h)) {
         if (is_special(v, h)) {
             continue;
         }
         u32 id = region_map.at(v);
-        RegionInfo &ri = regions.emplace(id, RegionInfo(id)).first->second;
+        RegionInfo &ri = regions.emplace(id, RegionInfo(id)).first->second; 
         ri.vertices.push_back(v);
         ri.reach |= h[v].char_reach;
     }
 
     // There's no point tracking more information about regions that we won't
     // consider replacing, so we remove them from the region map.
-    for (auto it = regions.begin(); it != regions.end();) {
+    for (auto it = regions.begin(); it != regions.end();) { 
         if (it->second.vertices.size() < MIN_REPLACE_VERTICES) {
             regions.erase(it++);
         } else {
@@ -214,15 +214,15 @@ map<u32, RegionInfo> findRegionInfo(const NGHolder &h,
 }
 
 static
-void copyInEdges(NGHolder &g, NFAVertex from, NFAVertex to) {
+void copyInEdges(NGHolder &g, NFAVertex from, NFAVertex to) { 
     for (const auto &e : in_edges_range(from, g)) {
         NFAVertex u = source(e, g);
-        add_edge_if_not_present(u, to, g[e], g);
+        add_edge_if_not_present(u, to, g[e], g); 
     }
 }
 
 static
-void copyOutEdges(NGHolder &g, NFAVertex from, NFAVertex to) {
+void copyOutEdges(NGHolder &g, NFAVertex from, NFAVertex to) { 
     for (const auto &e : out_edges_range(from, g)) {
         NFAVertex t = target(e, g);
         add_edge_if_not_present(to, t, g[e], g);
@@ -235,48 +235,48 @@ void copyOutEdges(NGHolder &g, NFAVertex from, NFAVertex to) {
 }
 
 static
-void removeInteriorEdges(NGHolder &g, const RegionInfo &ri) {
-    // Set of vertices in region, for quick lookups.
-    const unordered_set<NFAVertex> rverts(ri.vertices.begin(),
-                                          ri.vertices.end());
-
-    auto is_interior_in_edge = [&](const NFAEdge &e) {
-        return contains(rverts, source(e, g));
-    };
-
-    for (auto v : ri.vertices) {
-        remove_in_edge_if(v, is_interior_in_edge, g);
-    }
-}
-
-static
+void removeInteriorEdges(NGHolder &g, const RegionInfo &ri) { 
+    // Set of vertices in region, for quick lookups. 
+    const unordered_set<NFAVertex> rverts(ri.vertices.begin(), 
+                                          ri.vertices.end()); 
+ 
+    auto is_interior_in_edge = [&](const NFAEdge &e) { 
+        return contains(rverts, source(e, g)); 
+    }; 
+ 
+    for (auto v : ri.vertices) { 
+        remove_in_edge_if(v, is_interior_in_edge, g); 
+    } 
+} 
+ 
+static 
 void replaceRegion(NGHolder &g, const RegionInfo &ri,
                    size_t *verticesAdded, size_t *verticesRemoved) {
     // TODO: more complex replacements.
     assert(ri.vertices.size() >= MIN_REPLACE_VERTICES);
     assert(ri.minWidth.is_finite());
 
-    depth minWidth = ri.minWidth;
-    depth maxWidth = ri.maxWidth;
-
-    if (maxWidth > depth(MAX_REPLACE_BOUND)) {
-        DEBUG_PRINTF("using inf instead of large bound %s\n",
-                     maxWidth.str().c_str());
-        maxWidth = depth::infinity();
-    }
-
+    depth minWidth = ri.minWidth; 
+    depth maxWidth = ri.maxWidth; 
+ 
+    if (maxWidth > depth(MAX_REPLACE_BOUND)) { 
+        DEBUG_PRINTF("using inf instead of large bound %s\n", 
+                     maxWidth.str().c_str()); 
+        maxWidth = depth::infinity(); 
+    } 
+ 
     size_t replacementSize;
-    if (minWidth == maxWidth || maxWidth.is_infinite()) {
-        replacementSize = minWidth; // {N} or {N,}
+    if (minWidth == maxWidth || maxWidth.is_infinite()) { 
+        replacementSize = minWidth; // {N} or {N,} 
     } else {
-        replacementSize = maxWidth; // {N,M} case
+        replacementSize = maxWidth; // {N,M} case 
     }
 
     DEBUG_PRINTF("orig size %zu, replace size %zu\n", ri.vertices.size(),
                  replacementSize);
 
-    vector<NFAVertex> verts;
-    verts.reserve(replacementSize);
+    vector<NFAVertex> verts; 
+    verts.reserve(replacementSize); 
     for (size_t i = 0; i < replacementSize; i++) {
         NFAVertex v = add_vertex(g);
         g[v].char_reach = ri.reach;
@@ -286,21 +286,21 @@ void replaceRegion(NGHolder &g, const RegionInfo &ri,
         verts.push_back(v);
     }
 
-    if (maxWidth.is_infinite()) {
+    if (maxWidth.is_infinite()) { 
         add_edge(verts.back(), verts.back(), g);
     }
 
-    removeInteriorEdges(g, ri);
+    removeInteriorEdges(g, ri); 
 
     for (size_t i = 0; i < replacementSize; i++) {
         NFAVertex v_new = verts[i];
 
         for (auto v_old : ri.vertices) {
             if (i == 0) {
-                copyInEdges(g, v_old, v_new);
+                copyInEdges(g, v_old, v_new); 
             }
             if (i + 1 >= ri.minWidth) {
-                copyOutEdges(g, v_old, v_new);
+                copyOutEdges(g, v_old, v_new); 
             }
         }
     }
@@ -360,7 +360,7 @@ void reduceRegions(NGHolder &h) {
     // We may have vertices that have edges to both accept and acceptEod: in
     // this case, we can optimize for performance by removing the acceptEod
     // edges.
-    remove_in_edge_if(h.acceptEod, SourceHasEdgeToAccept(h), h);
+    remove_in_edge_if(h.acceptEod, SourceHasEdgeToAccept(h), h); 
 }
 
 void prefilterReductions(NGHolder &h, const CompileContext &cc) {
@@ -374,20 +374,20 @@ void prefilterReductions(NGHolder &h, const CompileContext &cc) {
         return;
     }
 
-    DEBUG_PRINTF("before: graph with %zu vertices, %zu edges\n",
-                 num_vertices(h), num_edges(h));
+    DEBUG_PRINTF("before: graph with %zu vertices, %zu edges\n", 
+                 num_vertices(h), num_edges(h)); 
 
-    renumber_vertices(h);
-    renumber_edges(h);
+    renumber_vertices(h); 
+    renumber_edges(h); 
 
     reduceRegions(h);
 
-    renumber_vertices(h);
-    renumber_edges(h);
-
-    DEBUG_PRINTF("after: graph with %zu vertices, %zu edges\n",
-                 num_vertices(h), num_edges(h));
-
+    renumber_vertices(h); 
+    renumber_edges(h); 
+ 
+    DEBUG_PRINTF("after: graph with %zu vertices, %zu edges\n", 
+                 num_vertices(h), num_edges(h)); 
+ 
 }
 
 } // namespace ue2

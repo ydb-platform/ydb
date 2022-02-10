@@ -55,7 +55,7 @@ cond_expr:
   | ((EQUALS | EQUALS2 | NOT_EQUALS | NOT_EQUALS2) eq_subexpr)+ /* order of the eq subexpressions is reversed! */
 ;
 
-match_op: LIKE | ILIKE | GLOB | REGEXP | RLIKE | MATCH;
+match_op: LIKE | ILIKE | GLOB | REGEXP | RLIKE | MATCH; 
 
 eq_subexpr: neq_subexpr ((LESS | LESS_OR_EQ | GREATER | GREATER_OR_EQ) neq_subexpr)*;
 
@@ -258,7 +258,7 @@ ordinary_named_column_list:
 
 flatten_source: named_single_source (FLATTEN ((OPTIONAL|LIST|DICT)? BY ordinary_named_column_list | COLUMNS))?;
 
-named_single_source: single_source (AS id_or_string)? (sample_clause | tablesample_clause)?;
+named_single_source: single_source (AS id_or_string)? (sample_clause | tablesample_clause)?; 
 
 single_source:
     table_ref
@@ -266,14 +266,14 @@ single_source:
   | AT? bind_parameter (LPAREN expr_list? RPAREN)?
 ;
 
-sample_clause: SAMPLE expr;
-
-tablesample_clause: TABLESAMPLE sampling_mode LPAREN expr RPAREN repeatable_clause?;
-
-sampling_mode: (BERNOULLI | SYSTEM);
-
-repeatable_clause: REPEATABLE LPAREN expr RPAREN;
-
+sample_clause: SAMPLE expr; 
+ 
+tablesample_clause: TABLESAMPLE sampling_mode LPAREN expr RPAREN repeatable_clause?; 
+ 
+sampling_mode: (BERNOULLI | SYSTEM); 
+ 
+repeatable_clause: REPEATABLE LPAREN expr RPAREN; 
+ 
 join_op:
     COMMA
   | (NATURAL)? ((LEFT (ONLY | SEMI_JOIN)? | RIGHT (ONLY | SEMI_JOIN)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) JOIN
@@ -291,9 +291,9 @@ into_values_source:
   | DEFAULT VALUES
 ;
 
-values_source: VALUES values_source_row_list | select_stmt;
-values_source_row_list: values_source_row (COMMA values_source_row)*;
-values_source_row: LPAREN expr_list RPAREN;
+values_source: VALUES values_source_row_list | select_stmt; 
+values_source_row_list: values_source_row (COMMA values_source_row)*; 
+values_source_row: LPAREN expr_list RPAREN; 
 
 simple_values_source: expr_list | select_stmt;
 
@@ -401,7 +401,7 @@ window_frame_exclusion: EXCLUDE CURRENT ROW | EXCLUDE GROUP | EXCLUDE TIES | EXC
 // EXTRAS
 use_stmt: USE id_or_string;
 
-named_nodes_stmt: bind_parameter_list EQUALS (expr | LPAREN select_stmt RPAREN);
+named_nodes_stmt: bind_parameter_list EQUALS (expr | LPAREN select_stmt RPAREN); 
 
 commit_stmt: COMMIT;
 
@@ -480,7 +480,7 @@ keyword_compat: (
   | AUTOINCREMENT
   | BEFORE
   | BEGIN
-  | BERNOULLI
+  | BERNOULLI 
   | BETWEEN
   | BY
   | CASCADE
@@ -527,7 +527,7 @@ keyword_compat: (
   | GROUPING
   | IF
   | IGNORE
-  | ILIKE
+  | ILIKE 
   | IMMEDIATE
   | IMPORT
   | IN
@@ -586,16 +586,16 @@ keyword_compat: (
   | ROLLBACK
   | ROW
   | ROWS
-  | SAMPLE
+  | SAMPLE 
   | SAVEPOINT
   | SEMI_JOIN
   | SET
   | SETS
   | SUBQUERY
   | SYMBOLS
-  | SYSTEM
+  | SYSTEM 
   | TABLE
-  | TABLESAMPLE
+  | TABLESAMPLE 
   | TEMPORARY
   | TIES
   | THEN
@@ -634,8 +634,8 @@ GREATER:       '>';
 GREATER_OR_EQ: '>=';
 SHIFT_LEFT:    '<<';
 SHIFT_RIGHT:   '>>';
-ROT_LEFT:      '|<<';
-ROT_RIGHT:     '>>|';
+ROT_LEFT:      '|<<'; 
+ROT_RIGHT:     '>>|'; 
 AMPERSAND:     '&';
 PIPE:          '|';
 DOUBLE_PIPE:   '||';
@@ -711,7 +711,7 @@ ATTACH: A T T A C H;
 AUTOINCREMENT: A U T O I N C R E M E N T;
 BEFORE: B E F O R E;
 BEGIN: B E G I N;
-BERNOULLI: B E R N O U L L I;
+BERNOULLI: B E R N O U L L I; 
 BETWEEN: B E T W E E N;
 BITCAST: B I T C A S T;
 BY: B Y;
@@ -775,7 +775,7 @@ HAVING: H A V I N G;
 HOP: H O P;
 IF: I F;
 IGNORE: I G N O R E;
-ILIKE: I L I K E;
+ILIKE: I L I K E; 
 IMMEDIATE: I M M E D I A T E;
 IMPORT: I M P O R T;
 IN: I N;
@@ -828,7 +828,7 @@ REGEXP: R E G E X P;
 REINDEX: R E I N D E X;
 RELEASE: R E L E A S E;
 RENAME: R E N A M E;
-REPEATABLE: R E P E A T A B L E;
+REPEATABLE: R E P E A T A B L E; 
 REPLACE: R E P L A C E;
 RESPECT: R E S P E C T;
 RESTRICT: R E S T R I C T;
@@ -841,7 +841,7 @@ ROLLBACK: R O L L B A C K;
 ROLLUP: R O L L U P;
 ROW: R O W;
 ROWS: R O W S;
-SAMPLE: S A M P L E;
+SAMPLE: S A M P L E; 
 SAVEPOINT: S A V E P O I N T;
 SELECT: S E L E C T;
 SEMI_JOIN: S E M I;
@@ -850,9 +850,9 @@ SETS: S E T S;
 SUBQUERY: S U B Q U E R Y;
 STREAM: S T R E A M;
 SYMBOLS: S Y M B O L S;
-SYSTEM: S Y S T E M;
+SYSTEM: S Y S T E M; 
 TABLE: T A B L E;
-TABLESAMPLE: T A B L E S A M P L E;
+TABLESAMPLE: T A B L E S A M P L E; 
 TEMPORARY: T E M P ( O R A R Y )?;
 THEN: T H E N;
 TIES: T I E S;

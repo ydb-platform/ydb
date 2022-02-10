@@ -40,12 +40,12 @@
 #include "util/bitfield.h"
 #include "util/container.h"
 #include "util/determinise.h"
-#include "util/flat_containers.h"
-#include "util/graph.h"
+#include "util/flat_containers.h" 
+#include "util/graph.h" 
 #include "util/graph_range.h"
-#include "util/hash_dynamic_bitset.h"
+#include "util/hash_dynamic_bitset.h" 
 #include "util/make_unique.h"
-#include "util/unordered.h"
+#include "util/unordered.h" 
 
 #include <algorithm>
 #include <functional>
@@ -70,15 +70,15 @@ struct haig_too_wide {
 
 template<typename stateset>
 static
-void populateInit(const NGHolder &g, const flat_set<NFAVertex> &unused,
+void populateInit(const NGHolder &g, const flat_set<NFAVertex> &unused, 
                   stateset *init, stateset *initDS,
                   vector<NFAVertex> *v_by_index) {
     DEBUG_PRINTF("graph kind: %s\n", to_string(g.kind).c_str());
     for (auto v : vertices_range(g)) {
-        if (contains(unused, v)) {
+        if (contains(unused, v)) { 
             continue;
         }
-        u32 v_index = g[v].index;
+        u32 v_index = g[v].index; 
         if (is_any_start(v, g)) {
             init->set(v_index);
             if (hasSelfLoop(v, g) || is_triggered(g)) {
@@ -90,11 +90,11 @@ void populateInit(const NGHolder &g, const flat_set<NFAVertex> &unused,
     }
 
     v_by_index->clear();
-    v_by_index->resize(num_vertices(g), NGHolder::null_vertex());
+    v_by_index->resize(num_vertices(g), NGHolder::null_vertex()); 
 
     for (auto v : vertices_range(g)) {
         u32 v_index = g[v].index;
-        assert((*v_by_index)[v_index] == NGHolder::null_vertex());
+        assert((*v_by_index)[v_index] == NGHolder::null_vertex()); 
         (*v_by_index)[v_index] = v;
     }
 }
@@ -112,29 +112,29 @@ void populateAccepts(const NGHolder &g, StateSet *accept, StateSet *acceptEod) {
     }
 }
 
-template<typename Automaton_Traits>
+template<typename Automaton_Traits> 
 class Automaton_Base {
-public:
-    using StateSet = typename Automaton_Traits::StateSet;
-    using StateMap = typename Automaton_Traits::StateMap;
-
+public: 
+    using StateSet = typename Automaton_Traits::StateSet; 
+    using StateMap = typename Automaton_Traits::StateMap; 
+ 
 protected:
-    Automaton_Base(const NGHolder &graph_in, som_type som,
-                   const vector<vector<CharReach>> &triggers,
-                   bool unordered_som)
-        : graph(graph_in), numStates(num_vertices(graph)),
-          unused(getRedundantStarts(graph_in)),
-          init(Automaton_Traits::init_states(numStates)),
-          initDS(Automaton_Traits::init_states(numStates)),
-          squash(Automaton_Traits::init_states(numStates)),
-          accept(Automaton_Traits::init_states(numStates)),
-          acceptEod(Automaton_Traits::init_states(numStates)),
-          toppable(Automaton_Traits::init_states(numStates)),
-          dead(Automaton_Traits::init_states(numStates)) {
+    Automaton_Base(const NGHolder &graph_in, som_type som, 
+                   const vector<vector<CharReach>> &triggers, 
+                   bool unordered_som) 
+        : graph(graph_in), numStates(num_vertices(graph)), 
+          unused(getRedundantStarts(graph_in)), 
+          init(Automaton_Traits::init_states(numStates)), 
+          initDS(Automaton_Traits::init_states(numStates)), 
+          squash(Automaton_Traits::init_states(numStates)), 
+          accept(Automaton_Traits::init_states(numStates)), 
+          acceptEod(Automaton_Traits::init_states(numStates)), 
+          toppable(Automaton_Traits::init_states(numStates)), 
+          dead(Automaton_Traits::init_states(numStates)) { 
         calculateAlphabet(graph, alpha, unalpha, &alphasize);
         assert(alphasize <= ALPHABET_SIZE);
 
-        populateInit(graph, unused, &init, &initDS, &v_by_index);
+        populateInit(graph, unused, &init, &initDS, &v_by_index); 
         populateAccepts(graph, &accept, &acceptEod);
 
         start_anchored = DEAD_STATE + 1;
@@ -146,8 +146,8 @@ protected:
             start_floating = DEAD_STATE;
         }
 
-        cr_by_index = populateCR(graph, v_by_index, alpha);
-
+        cr_by_index = populateCR(graph, v_by_index, alpha); 
+ 
         if (!unordered_som) {
             for (const auto &sq : findSquashers(graph, som)) {
                 NFAVertex v = sq.first;
@@ -158,16 +158,16 @@ protected:
         }
 
         if (is_triggered(graph)) {
-            dynamic_bitset<> temp(numStates);
-            markToppableStarts(graph, unused, false, triggers, &temp);
-            toppable = Automaton_Traits::copy_states(temp, numStates);
+            dynamic_bitset<> temp(numStates); 
+            markToppableStarts(graph, unused, false, triggers, &temp); 
+            toppable = Automaton_Traits::copy_states(temp, numStates); 
         }
     }
 
 private:
     // Convert an NFAStateSet (as used by the squash code) into a StateSet.
     StateSet shrinkStateSet(const NFAStateSet &in) const {
-        StateSet out = Automaton_Traits::init_states(numStates);
+        StateSet out = Automaton_Traits::init_states(numStates); 
         for (size_t i = in.find_first(); i != in.npos && i < out.size();
              i = in.find_next(i)) {
             out.set(i);
@@ -175,24 +175,24 @@ private:
         return out;
     }
 
-    void reports_i(const StateSet &in, bool eod, flat_set<ReportID> &rv) {
-        StateSet acc = in & (eod ? acceptEod : accept);
-        for (size_t i = acc.find_first(); i != StateSet::npos;
-             i = acc.find_next(i)) {
-            NFAVertex v = v_by_index[i];
-            DEBUG_PRINTF("marking report\n");
-            const auto &my_reports = graph[v].reports;
-            rv.insert(my_reports.begin(), my_reports.end());
-        }
-    }
-
+    void reports_i(const StateSet &in, bool eod, flat_set<ReportID> &rv) { 
+        StateSet acc = in & (eod ? acceptEod : accept); 
+        for (size_t i = acc.find_first(); i != StateSet::npos; 
+             i = acc.find_next(i)) { 
+            NFAVertex v = v_by_index[i]; 
+            DEBUG_PRINTF("marking report\n"); 
+            const auto &my_reports = graph[v].reports; 
+            rv.insert(my_reports.begin(), my_reports.end()); 
+        } 
+    } 
+ 
 public:
     void transition(const StateSet &in, StateSet *next) {
         transition_graph(*this, v_by_index, in, next);
     }
 
     const vector<StateSet> initial() {
-        vector<StateSet> rv = {init};
+        vector<StateSet> rv = {init}; 
         if (start_floating != DEAD_STATE && start_floating != start_anchored) {
             rv.push_back(initDS);
         }
@@ -202,27 +202,27 @@ public:
     void reports(const StateSet &in, flat_set<ReportID> &rv) {
         reports_i(in, false, rv);
     }
-
+ 
     void reportsEod(const StateSet &in, flat_set<ReportID> &rv) {
         reports_i(in, true, rv);
     }
 
-    static bool canPrune(const flat_set<ReportID> &) { return false; }
-
-    const NGHolder &graph;
-    const u32 numStates;
-    const flat_set<NFAVertex> unused;
-
-    array<u16, ALPHABET_SIZE> alpha;
-    array<u16, ALPHABET_SIZE> unalpha;
-    u16 alphasize;
-
-    set<dstate_id_t> done_a;
-    set<dstate_id_t> done_b;
-
-    u16 start_anchored;
-    u16 start_floating;
-
+    static bool canPrune(const flat_set<ReportID> &) { return false; } 
+ 
+    const NGHolder &graph; 
+    const u32 numStates; 
+    const flat_set<NFAVertex> unused; 
+ 
+    array<u16, ALPHABET_SIZE> alpha; 
+    array<u16, ALPHABET_SIZE> unalpha; 
+    u16 alphasize; 
+ 
+    set<dstate_id_t> done_a; 
+    set<dstate_id_t> done_b; 
+ 
+    u16 start_anchored; 
+    u16 start_floating; 
+ 
     vector<NFAVertex> v_by_index;
     vector<CharReach> cr_by_index; /* pre alpha'ed */
     StateSet init;
@@ -236,58 +236,58 @@ public:
     StateSet dead;
 };
 
-struct Big_Traits {
-    using StateSet = dynamic_bitset<>;
-    using StateMap = unordered_map<StateSet, dstate_id_t, hash_dynamic_bitset>;
+struct Big_Traits { 
+    using StateSet = dynamic_bitset<>; 
+    using StateMap = unordered_map<StateSet, dstate_id_t, hash_dynamic_bitset>; 
 
-    static StateSet init_states(u32 num) {
-        return StateSet(num);
+    static StateSet init_states(u32 num) { 
+        return StateSet(num); 
+    } 
+
+    static StateSet copy_states(const dynamic_bitset<> &in, UNUSED u32 num) { 
+        assert(in.size() == num); 
+        return in; 
+    } 
+}; 
+
+class Automaton_Big : public Automaton_Base<Big_Traits> { 
+public: 
+    Automaton_Big(const NGHolder &graph_in, som_type som, 
+                  const vector<vector<CharReach>> &triggers, bool unordered_som) 
+        : Automaton_Base(graph_in, som, triggers, unordered_som) {} 
+}; 
+
+struct Graph_Traits { 
+    using StateSet = bitfield<NFA_STATE_LIMIT>; 
+    using StateMap = unordered_map<StateSet, dstate_id_t>; 
+ 
+    static StateSet init_states(UNUSED u32 num) { 
+        assert(num <= NFA_STATE_LIMIT); 
+        return StateSet(); 
     }
 
-    static StateSet copy_states(const dynamic_bitset<> &in, UNUSED u32 num) {
-        assert(in.size() == num);
-        return in;
-    }
-};
-
-class Automaton_Big : public Automaton_Base<Big_Traits> {
-public:
-    Automaton_Big(const NGHolder &graph_in, som_type som,
-                  const vector<vector<CharReach>> &triggers, bool unordered_som)
-        : Automaton_Base(graph_in, som, triggers, unordered_som) {}
-};
-
-struct Graph_Traits {
-    using StateSet = bitfield<NFA_STATE_LIMIT>;
-    using StateMap = unordered_map<StateSet, dstate_id_t>;
-
-    static StateSet init_states(UNUSED u32 num) {
-        assert(num <= NFA_STATE_LIMIT);
-        return StateSet();
-    }
-
-    static StateSet copy_states(const dynamic_bitset<> &in, u32 num) {
-        StateSet out = init_states(num);
+    static StateSet copy_states(const dynamic_bitset<> &in, u32 num) { 
+        StateSet out = init_states(num); 
         for (size_t i = in.find_first(); i != in.npos && i < out.size();
              i = in.find_next(i)) {
             out.set(i);
         }
         return out;
     }
-};
+}; 
 
-class Automaton_Graph : public Automaton_Base<Graph_Traits> {
+class Automaton_Graph : public Automaton_Base<Graph_Traits> { 
 public:
-    Automaton_Graph(const NGHolder &graph_in, som_type som,
-                    const vector<vector<CharReach>> &triggers,
-                    bool unordered_som)
-        : Automaton_Base(graph_in, som, triggers, unordered_som) {}
+    Automaton_Graph(const NGHolder &graph_in, som_type som, 
+                    const vector<vector<CharReach>> &triggers, 
+                    bool unordered_som) 
+        : Automaton_Base(graph_in, som, triggers, unordered_som) {} 
 };
 
 class Automaton_Haig_Merge {
 public:
-    using StateSet = vector<u16>;
-    using StateMap = ue2_unordered_map<StateSet, dstate_id_t>;
+    using StateSet = vector<u16>; 
+    using StateMap = ue2_unordered_map<StateSet, dstate_id_t>; 
 
     explicit Automaton_Haig_Merge(const vector<const raw_som_dfa *> &in)
         : nfas(in.begin(), in.end()), dead(in.size()) {
@@ -430,10 +430,10 @@ bool is_any_start_inc_virtual(NFAVertex v, const NGHolder &g) {
 }
 
 static
-s32 getSlotID(const NGHolder &g, UNUSED const flat_set<NFAVertex> &unused,
+s32 getSlotID(const NGHolder &g, UNUSED const flat_set<NFAVertex> &unused, 
               NFAVertex v) {
     if (is_triggered(g) && v == g.start) {
-        assert(!contains(unused, v));
+        assert(!contains(unused, v)); 
     } else if (is_any_start_inc_virtual(v, g)) {
         return CREATE_NEW_SOM;
     }
@@ -451,7 +451,7 @@ void haig_do_preds(const NGHolder &g, const stateset &nfa_states,
         NFAVertex v = state_mapping[i];
         s32 slot_id = g[v].index;
 
-        DEBUG_PRINTF("d vertex %zu\n", g[v].index);
+        DEBUG_PRINTF("d vertex %zu\n", g[v].index); 
         vector<u32> &out_map = preds[slot_id];
         for (auto u : inv_adjacent_vertices_range(v, g)) {
             out_map.push_back(g[u].index);
@@ -464,7 +464,7 @@ void haig_do_preds(const NGHolder &g, const stateset &nfa_states,
 
 template<typename stateset>
 static
-void haig_do_report(const NGHolder &g, const flat_set<NFAVertex> &unused,
+void haig_do_report(const NGHolder &g, const flat_set<NFAVertex> &unused, 
                     NFAVertex accept_v, const stateset &source_nfa_states,
                     const vector<NFAVertex> &state_mapping,
                     set<som_report> &out) {
@@ -475,7 +475,7 @@ void haig_do_report(const NGHolder &g, const flat_set<NFAVertex> &unused,
             continue;
         }
         for (ReportID report_id : g[v].reports) {
-            out.insert(som_report(report_id, getSlotID(g, unused, v)));
+            out.insert(som_report(report_id, getSlotID(g, unused, v))); 
         }
     }
 }
@@ -492,7 +492,7 @@ void haig_note_starts(const NGHolder &g, map<u32, u32> *out) {
 
     for (auto v : vertices_range(g)) {
         if (is_any_start_inc_virtual(v, g)) {
-            DEBUG_PRINTF("%zu creates new som value\n", g[v].index);
+            DEBUG_PRINTF("%zu creates new som value\n", g[v].index); 
             out->emplace(g[v].index, 0U);
             continue;
         }
@@ -503,7 +503,7 @@ void haig_note_starts(const NGHolder &g, map<u32, u32> *out) {
 
         const DepthMinMax &d = depths[g[v].index];
         if (d.min == d.max && d.min.is_finite()) {
-            DEBUG_PRINTF("%zu is fixed at %u\n", g[v].index, (u32)d.min);
+            DEBUG_PRINTF("%zu is fixed at %u\n", g[v].index, (u32)d.min); 
             out->emplace(g[v].index, d.min);
         }
     }
@@ -511,16 +511,16 @@ void haig_note_starts(const NGHolder &g, map<u32, u32> *out) {
 
 template<class Auto>
 static
-bool doHaig(const NGHolder &g, som_type som,
-            const vector<vector<CharReach>> &triggers, bool unordered_som,
-            raw_som_dfa *rdfa) {
+bool doHaig(const NGHolder &g, som_type som, 
+            const vector<vector<CharReach>> &triggers, bool unordered_som, 
+            raw_som_dfa *rdfa) { 
     u32 state_limit = HAIG_FINAL_DFA_STATE_LIMIT; /* haig never backs down from
                                                      a fight */
-    using StateSet = typename Auto::StateSet;
+    using StateSet = typename Auto::StateSet; 
     vector<StateSet> nfa_state_map;
-    Auto n(g, som, triggers, unordered_som);
+    Auto n(g, som, triggers, unordered_som); 
     try {
-        if (!determinise(n, rdfa->states, state_limit, &nfa_state_map)) {
+        if (!determinise(n, rdfa->states, state_limit, &nfa_state_map)) { 
             DEBUG_PRINTF("state limit exceeded\n");
             return false;
         }
@@ -548,9 +548,9 @@ bool doHaig(const NGHolder &g, som_type som,
         haig_do_preds(g, source_states, n.v_by_index,
                       rdfa->state_som.back().preds);
 
-        haig_do_report(g, n.unused, g.accept, source_states, n.v_by_index,
+        haig_do_report(g, n.unused, g.accept, source_states, n.v_by_index, 
                        rdfa->state_som.back().reports);
-        haig_do_report(g, n.unused, g.acceptEod, source_states, n.v_by_index,
+        haig_do_report(g, n.unused, g.acceptEod, source_states, n.v_by_index, 
                        rdfa->state_som.back().reports_eod);
     }
 
@@ -559,10 +559,10 @@ bool doHaig(const NGHolder &g, som_type som,
     return true;
 }
 
-unique_ptr<raw_som_dfa>
-attemptToBuildHaig(const NGHolder &g, som_type som, u32 somPrecision,
-                   const vector<vector<CharReach>> &triggers, const Grey &grey,
-                   bool unordered_som) {
+unique_ptr<raw_som_dfa> 
+attemptToBuildHaig(const NGHolder &g, som_type som, u32 somPrecision, 
+                   const vector<vector<CharReach>> &triggers, const Grey &grey, 
+                   bool unordered_som) { 
     assert(is_triggered(g) != triggers.empty());
     assert(!unordered_som || is_triggered(g));
 
@@ -588,11 +588,11 @@ attemptToBuildHaig(const NGHolder &g, som_type som, u32 somPrecision,
     bool rv;
     if (numStates <= NFA_STATE_LIMIT) {
         /* fast path */
-        rv = doHaig<Automaton_Graph>(g, som, triggers, unordered_som,
+        rv = doHaig<Automaton_Graph>(g, som, triggers, unordered_som, 
                                      rdfa.get());
     } else {
         /* not the fast path */
-        rv = doHaig<Automaton_Big>(g, som, triggers, unordered_som, rdfa.get());
+        rv = doHaig<Automaton_Big>(g, som, triggers, unordered_som, rdfa.get()); 
     }
 
     if (!rv) {
@@ -722,14 +722,14 @@ unique_ptr<raw_som_dfa> attemptToMergeHaig(const vector<const raw_som_dfa *> &df
         }
     }
 
-    using StateSet = Automaton_Haig_Merge::StateSet;
+    using StateSet = Automaton_Haig_Merge::StateSet; 
     vector<StateSet> nfa_state_map;
     auto rdfa = ue2::make_unique<raw_som_dfa>(dfas[0]->kind, unordered_som,
                                               NODE_START,
                                               dfas[0]->stream_som_loc_width);
 
-    if (!determinise(n, rdfa->states, limit, &nfa_state_map)) {
-        DEBUG_PRINTF("state limit (%u) exceeded\n", limit);
+    if (!determinise(n, rdfa->states, limit, &nfa_state_map)) { 
+        DEBUG_PRINTF("state limit (%u) exceeded\n", limit); 
         return nullptr; /* over state limit */
     }
 

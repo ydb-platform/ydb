@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,17 +26,17 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * \file
+/** 
+ * \file 
  * \brief Component tree analysis that checks that references (such as
  * back-refs, conditionals) have valid referents.
  */
 
-#ifndef PARSER_CHECK_REFS_H
-#define PARSER_CHECK_REFS_H
+#ifndef PARSER_CHECK_REFS_H 
+#define PARSER_CHECK_REFS_H 
 
-#include "util/flat_containers.h"
-
+#include "util/flat_containers.h" 
+ 
 #include <string>
 
 namespace ue2 {
@@ -45,8 +45,8 @@ class Component;
 class ComponentSequence;
 
 void checkReferences(const Component &root, unsigned int groupIndices,
-                     const flat_set<std::string> &groupNames);
+                     const flat_set<std::string> &groupNames); 
 
 } // namespace ue2
 
-#endif // PARSER_CHECK_REFS_H
+#endif // PARSER_CHECK_REFS_H 

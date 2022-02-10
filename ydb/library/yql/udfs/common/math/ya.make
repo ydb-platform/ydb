@@ -1,15 +1,15 @@
 YQL_UDF(math_udf)
 
-YQL_ABI_VERSION(
-    2
+YQL_ABI_VERSION( 
+    2 
     16
-    0
-)
+    0 
+) 
 
 OWNER(g:yql g:yql_ydb_core)
-
+ 
 SRCS(
-    math_udf.cpp
+    math_udf.cpp 
 )
 
 LLVM_BC(
@@ -60,8 +60,8 @@ LLVM_BC(
     RemIR
 )
 
-PEERDIR(
+PEERDIR( 
     ydb/library/yql/udfs/common/math/lib
-)
-
+) 
+ 
 END()

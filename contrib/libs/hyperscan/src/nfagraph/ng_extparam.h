@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,31 +34,31 @@
 #ifndef NG_EXTPARAM_H
 #define NG_EXTPARAM_H
 
-#include "som/som.h"
-
+#include "som/som.h" 
+ 
 namespace ue2 {
 
-class ExpressionInfo;
-class NGHolder;
+class ExpressionInfo; 
+class NGHolder; 
 class ReportManager;
 
-/**
- * \brief Propagate extended parameter information to vertex reports. Will
- * throw CompileError if this expression's extended parameters are not
- * satisfiable.
- *
- * This will also remove extended parameter constraints that are guaranteed to
- * be satisfied from ExpressionInfo.
- */
-void propagateExtendedParams(NGHolder &g, ExpressionInfo &expr,
-                             ReportManager &rm);
+/** 
+ * \brief Propagate extended parameter information to vertex reports. Will 
+ * throw CompileError if this expression's extended parameters are not 
+ * satisfiable. 
+ * 
+ * This will also remove extended parameter constraints that are guaranteed to 
+ * be satisfied from ExpressionInfo. 
+ */ 
+void propagateExtendedParams(NGHolder &g, ExpressionInfo &expr, 
+                             ReportManager &rm); 
 
-/**
- * \brief Perform graph reductions (if possible) to do with extended parameter
- * constraints on reports.
- */
-void reduceExtendedParams(NGHolder &g, ReportManager &rm, som_type som);
-
+/** 
+ * \brief Perform graph reductions (if possible) to do with extended parameter 
+ * constraints on reports. 
+ */ 
+void reduceExtendedParams(NGHolder &g, ReportManager &rm, som_type som); 
+ 
 } // namespace ue2
 
 #endif

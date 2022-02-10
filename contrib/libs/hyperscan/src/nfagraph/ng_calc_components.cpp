@@ -54,7 +54,7 @@
 #include "ng_holder.h"
 #include "ng_prune.h"
 #include "ng_util.h"
-#include "grey.h"
+#include "grey.h" 
 #include "ue2common.h"
 #include "util/graph_range.h"
 #include "util/graph_undirected.h"
@@ -64,7 +64,7 @@
 #include <vector>
 
 #include <boost/graph/connected_components.hpp>
-#include <boost/graph/filtered_graph.hpp>
+#include <boost/graph/filtered_graph.hpp> 
 
 using namespace std;
 
@@ -164,7 +164,7 @@ flat_set<NFAVertex> findHeadShell(const NGHolder &g,
     }
 
     for (UNUSED auto v : shell) {
-        DEBUG_PRINTF("shell: %zu\n", g[v].index);
+        DEBUG_PRINTF("shell: %zu\n", g[v].index); 
     }
 
     return shell;
@@ -186,7 +186,7 @@ flat_set<NFAVertex> findTailShell(const NGHolder &g,
     }
 
     for (UNUSED auto v : shell) {
-        DEBUG_PRINTF("shell: %zu\n", g[v].index);
+        DEBUG_PRINTF("shell: %zu\n", g[v].index); 
     }
 
     return shell;
@@ -211,8 +211,8 @@ vector<NFAEdge> findShellEdges(const NGHolder &g,
 
         if ((is_special(u, g) || contains(head_shell, u)) &&
             (is_special(v, g) || contains(tail_shell, v))) {
-            DEBUG_PRINTF("edge (%zu,%zu) is a shell edge\n", g[u].index,
-                         g[v].index);
+            DEBUG_PRINTF("edge (%zu,%zu) is a shell edge\n", g[u].index, 
+                         g[v].index); 
             shell_edges.push_back(e);
         }
     }
@@ -220,50 +220,50 @@ vector<NFAEdge> findShellEdges(const NGHolder &g,
     return shell_edges;
 }
 
-template<typename GetAdjRange>
-bool shellHasOnePath(const NGHolder &g, const flat_set<NFAVertex> &shell,
-                     GetAdjRange adj_range_func) {
-    if (shell.empty()) {
-        DEBUG_PRINTF("no shell\n");
-        return false;
+template<typename GetAdjRange> 
+bool shellHasOnePath(const NGHolder &g, const flat_set<NFAVertex> &shell, 
+                     GetAdjRange adj_range_func) { 
+    if (shell.empty()) { 
+        DEBUG_PRINTF("no shell\n"); 
+        return false; 
     }
-
-    NFAVertex exit_vertex = NGHolder::null_vertex();
-    for (auto u : shell) {
-        for (auto v : adj_range_func(u, g)) {
-            if (contains(shell, v)) {
-                continue;
-            }
-            if (!exit_vertex) {
-                exit_vertex = v;
-                continue;
-            }
-            if (exit_vertex == v) {
-                continue;
-            }
-            return false;
-        }
-    }
-
-    return true;
+ 
+    NFAVertex exit_vertex = NGHolder::null_vertex(); 
+    for (auto u : shell) { 
+        for (auto v : adj_range_func(u, g)) { 
+            if (contains(shell, v)) { 
+                continue; 
+            } 
+            if (!exit_vertex) { 
+                exit_vertex = v; 
+                continue; 
+            } 
+            if (exit_vertex == v) { 
+                continue; 
+            } 
+            return false; 
+        } 
+    } 
+ 
+    return true; 
 }
 
-/**
- * True if all edges out of vertices in the head shell lead to at most a single
- * outside vertex, or the inverse for the tail shell.
- */
+/** 
+ * True if all edges out of vertices in the head shell lead to at most a single 
+ * outside vertex, or the inverse for the tail shell. 
+ */ 
 static
-bool shellHasOnePath(const NGHolder &g, const flat_set<NFAVertex> &head_shell,
-                     const flat_set<NFAVertex> &tail_shell) {
-    if (shellHasOnePath(g, head_shell, adjacent_vertices_range<NGHolder>)) {
-        DEBUG_PRINTF("head shell has only one path through it\n");
-        return true;
+bool shellHasOnePath(const NGHolder &g, const flat_set<NFAVertex> &head_shell, 
+                     const flat_set<NFAVertex> &tail_shell) { 
+    if (shellHasOnePath(g, head_shell, adjacent_vertices_range<NGHolder>)) { 
+        DEBUG_PRINTF("head shell has only one path through it\n"); 
+        return true; 
     }
-    if (shellHasOnePath(g, tail_shell, inv_adjacent_vertices_range<NGHolder>)) {
-        DEBUG_PRINTF("tail shell has only one path into it\n");
-        return true;
-    }
-    return false;
+    if (shellHasOnePath(g, tail_shell, inv_adjacent_vertices_range<NGHolder>)) { 
+        DEBUG_PRINTF("tail shell has only one path into it\n"); 
+        return true; 
+    } 
+    return false; 
 }
 
 /**
@@ -271,44 +271,44 @@ bool shellHasOnePath(const NGHolder &g, const flat_set<NFAVertex> &head_shell,
  * one or more connected components, adding them to the comps deque.
  */
 static
-void splitIntoComponents(unique_ptr<NGHolder> g,
-                         deque<unique_ptr<NGHolder>> &comps,
+void splitIntoComponents(unique_ptr<NGHolder> g, 
+                         deque<unique_ptr<NGHolder>> &comps, 
                          const depth &max_head_depth,
                          const depth &max_tail_depth, bool *shell_comp) {
-    DEBUG_PRINTF("graph has %zu vertices\n", num_vertices(*g));
+    DEBUG_PRINTF("graph has %zu vertices\n", num_vertices(*g)); 
 
     assert(shell_comp);
     *shell_comp = false;
 
     // Compute "shell" head and tail subgraphs.
-    auto depths = calcBidiDepths(*g);
-    auto head_shell = findHeadShell(*g, depths, max_head_depth);
-    auto tail_shell = findTailShell(*g, depths, max_tail_depth);
+    auto depths = calcBidiDepths(*g); 
+    auto head_shell = findHeadShell(*g, depths, max_head_depth); 
+    auto tail_shell = findTailShell(*g, depths, max_tail_depth); 
     for (auto v : head_shell) {
         tail_shell.erase(v);
     }
 
-    if (head_shell.size() + tail_shell.size() + N_SPECIALS >=
-        num_vertices(*g)) {
+    if (head_shell.size() + tail_shell.size() + N_SPECIALS >= 
+        num_vertices(*g)) { 
         DEBUG_PRINTF("all in shell component\n");
-        comps.push_back(std::move(g));
+        comps.push_back(std::move(g)); 
         *shell_comp = true;
         return;
     }
 
-    // Find edges connecting the head and tail shells directly.
-    vector<NFAEdge> shell_edges = findShellEdges(*g, head_shell, tail_shell);
+    // Find edges connecting the head and tail shells directly. 
+    vector<NFAEdge> shell_edges = findShellEdges(*g, head_shell, tail_shell); 
 
     DEBUG_PRINTF("%zu vertices in head, %zu in tail, %zu shell edges\n",
                  head_shell.size(), tail_shell.size(), shell_edges.size());
 
-    // If there are no shell edges and only one path out of the head shell or
-    // into the tail shell, we aren't going to find more than one component.
-    if (shell_edges.empty() && shellHasOnePath(*g, head_shell, tail_shell)) {
-        DEBUG_PRINTF("single component\n");
-        comps.push_back(std::move(g));
-        return;
-    }
+    // If there are no shell edges and only one path out of the head shell or 
+    // into the tail shell, we aren't going to find more than one component. 
+    if (shell_edges.empty() && shellHasOnePath(*g, head_shell, tail_shell)) { 
+        DEBUG_PRINTF("single component\n"); 
+        comps.push_back(std::move(g)); 
+        return; 
+    } 
 
     auto ug = make_undirected_graph(*g);
 
@@ -318,18 +318,18 @@ void splitIntoComponents(unique_ptr<NGHolder> g,
     bad_vertices.insert(head_shell.begin(), head_shell.end());
     bad_vertices.insert(tail_shell.begin(), tail_shell.end());
 
-    auto filtered_ug = boost::make_filtered_graph(
+    auto filtered_ug = boost::make_filtered_graph( 
         ug, boost::keep_all(), make_bad_vertex_filter(&bad_vertices));
 
-    // Actually run the connected components algorithm.
+    // Actually run the connected components algorithm. 
     map<NFAVertex, u32> split_components;
     const u32 num = connected_components(
-        filtered_ug, boost::make_assoc_property_map(split_components));
+        filtered_ug, boost::make_assoc_property_map(split_components)); 
 
     assert(num > 0);
     if (num == 1 && shell_edges.empty()) {
         DEBUG_PRINTF("single component\n");
-        comps.push_back(std::move(g));
+        comps.push_back(std::move(g)); 
         return;
     }
 
@@ -342,27 +342,27 @@ void splitIntoComponents(unique_ptr<NGHolder> g,
         NFAVertex v = m.first;
         u32 c = m.second;
         verts[c].push_back(v);
-        DEBUG_PRINTF("vertex %zu is in comp %u\n", (*g)[v].index, c);
+        DEBUG_PRINTF("vertex %zu is in comp %u\n", (*g)[v].index, c); 
     }
 
-    unordered_map<NFAVertex, NFAVertex> v_map; // temp map for fillHolder
+    unordered_map<NFAVertex, NFAVertex> v_map; // temp map for fillHolder 
     for (auto &vv : verts) {
         // Shells are in every component.
         vv.insert(vv.end(), begin(head_shell), end(head_shell));
         vv.insert(vv.end(), begin(tail_shell), end(tail_shell));
 
-        /* Sort for determinism. Still required as NFAUndirectedVertex have
-         * no deterministic ordering (split_components map). */
-        sort(begin(vv), end(vv));
+        /* Sort for determinism. Still required as NFAUndirectedVertex have 
+         * no deterministic ordering (split_components map). */ 
+        sort(begin(vv), end(vv)); 
 
         auto gc = ue2::make_unique<NGHolder>();
         v_map.clear();
-        fillHolder(gc.get(), *g, vv, &v_map);
+        fillHolder(gc.get(), *g, vv, &v_map); 
 
         // Remove shell edges, which will get their own component.
         for (const auto &e : shell_edges) {
-            auto cu = v_map.at(source(e, *g));
-            auto cv = v_map.at(target(e, *g));
+            auto cu = v_map.at(source(e, *g)); 
+            auto cv = v_map.at(target(e, *g)); 
             assert(edge(cu, cv, *gc).second);
             remove_edge(cu, cv, *gc);
         }
@@ -381,7 +381,7 @@ void splitIntoComponents(unique_ptr<NGHolder> g,
 
         auto gc = ue2::make_unique<NGHolder>();
         v_map.clear();
-        fillHolder(gc.get(), *g, vv, &v_map);
+        fillHolder(gc.get(), *g, vv, &v_map); 
 
         pruneUseless(*gc);
         DEBUG_PRINTF("shell edge component %zu has %zu vertices\n",
@@ -390,12 +390,12 @@ void splitIntoComponents(unique_ptr<NGHolder> g,
         *shell_comp = true;
     }
 
-    // Ensure that only vertices with accept edges have reports.
-    for (auto &gc : comps) {
-        assert(gc);
-        clearReports(*gc);
-    }
-
+    // Ensure that only vertices with accept edges have reports. 
+    for (auto &gc : comps) { 
+        assert(gc); 
+        clearReports(*gc); 
+    } 
+ 
     // We should never produce empty component graphs.
     assert(all_of(begin(comps), end(comps),
                   [](const unique_ptr<NGHolder> &g_comp) {
@@ -403,39 +403,39 @@ void splitIntoComponents(unique_ptr<NGHolder> g,
                   }));
 }
 
-deque<unique_ptr<NGHolder>> calcComponents(unique_ptr<NGHolder> g,
-                                           const Grey &grey) {
+deque<unique_ptr<NGHolder>> calcComponents(unique_ptr<NGHolder> g, 
+                                           const Grey &grey) { 
     deque<unique_ptr<NGHolder>> comps;
 
     // For trivial cases, we needn't bother running the full
     // connected_components algorithm.
-    if (!grey.calcComponents || isAlternationOfClasses(*g)) {
-        comps.push_back(std::move(g));
+    if (!grey.calcComponents || isAlternationOfClasses(*g)) { 
+        comps.push_back(std::move(g)); 
         return comps;
     }
 
     bool shell_comp = false;
-    splitIntoComponents(std::move(g), comps, depth(MAX_HEAD_SHELL_DEPTH),
-                        depth(MAX_TAIL_SHELL_DEPTH), &shell_comp);
+    splitIntoComponents(std::move(g), comps, depth(MAX_HEAD_SHELL_DEPTH), 
+                        depth(MAX_TAIL_SHELL_DEPTH), &shell_comp); 
 
     if (shell_comp) {
         DEBUG_PRINTF("re-running on shell comp\n");
         assert(!comps.empty());
-        auto sc = std::move(comps.back());
+        auto sc = std::move(comps.back()); 
         comps.pop_back();
-        splitIntoComponents(std::move(sc), comps, depth(0), depth(0),
-                            &shell_comp);
+        splitIntoComponents(std::move(sc), comps, depth(0), depth(0), 
+                            &shell_comp); 
     }
 
     DEBUG_PRINTF("finished; split into %zu components\n", comps.size());
     return comps;
 }
 
-void recalcComponents(deque<unique_ptr<NGHolder>> &comps, const Grey &grey) {
-    if (!grey.calcComponents) {
-        return;
-    }
-
+void recalcComponents(deque<unique_ptr<NGHolder>> &comps, const Grey &grey) { 
+    if (!grey.calcComponents) { 
+        return; 
+    } 
+ 
     deque<unique_ptr<NGHolder>> out;
 
     for (auto &gc : comps) {
@@ -444,13 +444,13 @@ void recalcComponents(deque<unique_ptr<NGHolder>> &comps, const Grey &grey) {
         }
 
         if (isAlternationOfClasses(*gc)) {
-            out.push_back(std::move(gc));
+            out.push_back(std::move(gc)); 
             continue;
         }
 
-        auto gc_comps = calcComponents(std::move(gc), grey);
-        out.insert(end(out), std::make_move_iterator(begin(gc_comps)),
-                   std::make_move_iterator(end(gc_comps)));
+        auto gc_comps = calcComponents(std::move(gc), grey); 
+        out.insert(end(out), std::make_move_iterator(begin(gc_comps)), 
+                   std::make_move_iterator(end(gc_comps))); 
     }
 
     // Replace comps with our recalculated list.

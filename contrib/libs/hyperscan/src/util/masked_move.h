@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -29,21 +29,21 @@
 #ifndef MASKED_MOVE_H
 #define MASKED_MOVE_H
 
-#include "arch.h"
+#include "arch.h" 
 
-#if defined(HAVE_AVX2)
-
+#if defined(HAVE_AVX2) 
+ 
 #include "unaligned.h"
 #include "simd_utils.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#ifdef __cplusplus 
+extern "C" { 
+#endif 
 extern const u32 mm_mask_mask[16];
 extern const u32 mm_shuffle_end[32][8];
-#ifdef __cplusplus
-}
-#endif
+#ifdef __cplusplus 
+} 
+#endif 
 
 /* load mask for len bytes from start of buffer */
 static really_inline m256
@@ -70,8 +70,8 @@ masked_move256_len(const u8 *buf, const u32 len) {
     u32 end = unaligned_load_u32(buf + len - 4);
     m256 preshufend = _mm256_broadcastq_epi64(_mm_cvtsi32_si128(end));
     m256 v = _mm256_maskload_epi32((const int *)buf, lmask);
-    m256 shufend = pshufb_m256(preshufend,
-                               loadu256(&mm_shuffle_end[len - 4]));
+    m256 shufend = pshufb_m256(preshufend, 
+                               loadu256(&mm_shuffle_end[len - 4])); 
     m256 target = or256(v, shufend);
 
     return target;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -56,9 +56,9 @@
 #include "ng_util.h"
 #include "ue2common.h"
 #include "util/container.h"
-#include "util/flat_containers.h"
+#include "util/flat_containers.h" 
 #include "util/graph_range.h"
-#include "util/graph_small_color_map.h"
+#include "util/graph_small_color_map.h" 
 
 #include <set>
 #include <utility>
@@ -71,61 +71,61 @@ using namespace std;
 
 namespace ue2 {
 
-using BackEdgeSet = unordered_set<NFAEdge>;
-using AcyclicGraph =
-    boost::filtered_graph<NGHolder, bad_edge_filter<BackEdgeSet>>;
+using BackEdgeSet = unordered_set<NFAEdge>; 
+using AcyclicGraph = 
+    boost::filtered_graph<NGHolder, bad_edge_filter<BackEdgeSet>>; 
 
 namespace {
 struct exit_info {
     explicit exit_info(NFAVertex v) : exit(v) {}
 
     NFAVertex exit;
-    flat_set<NFAVertex> open;
+    flat_set<NFAVertex> open; 
 };
 }
 
 static
 void checkAndAddExitCandidate(const AcyclicGraph &g,
-                              const unordered_set<NFAVertex> &r, NFAVertex v,
-                              vector<exit_info> &exits) {
-    exit_info v_exit(v);
-    auto &open = v_exit.open;
+                              const unordered_set<NFAVertex> &r, NFAVertex v, 
+                              vector<exit_info> &exits) { 
+    exit_info v_exit(v); 
+    auto &open = v_exit.open; 
 
     /* find the set of vertices reachable from v which are not in r */
     for (auto w : adjacent_vertices_range(v, g)) {
         if (!contains(r, w)) {
-            open.insert(w);
+            open.insert(w); 
         }
     }
 
-    if (!open.empty()) {
-        DEBUG_PRINTF("exit %zu\n", g[v].index);
-        exits.push_back(move(v_exit));
+    if (!open.empty()) { 
+        DEBUG_PRINTF("exit %zu\n", g[v].index); 
+        exits.push_back(move(v_exit)); 
     }
 }
 
 static
-void findExits(const AcyclicGraph &g, const unordered_set<NFAVertex> &r,
-               vector<exit_info> &exits) {
-    exits.clear();
+void findExits(const AcyclicGraph &g, const unordered_set<NFAVertex> &r, 
+               vector<exit_info> &exits) { 
+    exits.clear(); 
     for (auto v : r) {
         checkAndAddExitCandidate(g, r, v, exits);
     }
 }
 
 static
-void refineExits(const AcyclicGraph &g, const unordered_set<NFAVertex> &r,
-                 NFAVertex new_v, vector<exit_info> &exits) {
-    /* new_v is no long an open edge */
-    for (auto &exit : exits) {
-        exit.open.erase(new_v);
+void refineExits(const AcyclicGraph &g, const unordered_set<NFAVertex> &r, 
+                 NFAVertex new_v, vector<exit_info> &exits) { 
+    /* new_v is no long an open edge */ 
+    for (auto &exit : exits) { 
+        exit.open.erase(new_v); 
     }
 
-    /* no open edges: no longer an exit */
-    exits.erase(remove_if(exits.begin(), exits.end(),
-                  [&](const exit_info &exit) { return exit.open.empty(); }),
-                exits.end());
-
+    /* no open edges: no longer an exit */ 
+    exits.erase(remove_if(exits.begin(), exits.end(), 
+                  [&](const exit_info &exit) { return exit.open.empty(); }), 
+                exits.end()); 
+ 
     checkAndAddExitCandidate(g, r, new_v, exits);
 }
 
@@ -133,12 +133,12 @@ void refineExits(const AcyclicGraph &g, const unordered_set<NFAVertex> &r,
  */
 static
 bool exitValid(UNUSED const AcyclicGraph &g, const vector<exit_info> &exits,
-               const flat_set<NFAVertex> &open_jumps) {
+               const flat_set<NFAVertex> &open_jumps) { 
     if (exits.empty() || (exits.size() < 2 && open_jumps.empty())) {
         return true;
     }
     if (exits.size() == 1 && open_jumps.size() == 1) {
-        DEBUG_PRINTF("oj %zu, e %zu\n", g[*open_jumps.begin()].index,
+        DEBUG_PRINTF("oj %zu, e %zu\n", g[*open_jumps.begin()].index, 
                      g[exits[0].exit].index);
         if (*open_jumps.begin() == exits[0].exit) {
             return true;
@@ -162,8 +162,8 @@ bool exitValid(UNUSED const AcyclicGraph &g, const vector<exit_info> &exits,
 }
 
 static
-void setRegion(const unordered_set<NFAVertex> &r, u32 rid,
-               unordered_map<NFAVertex, u32> &regions) {
+void setRegion(const unordered_set<NFAVertex> &r, u32 rid, 
+               unordered_map<NFAVertex, u32> &regions) { 
     for (auto v : r) {
         regions[v] = rid;
     }
@@ -173,36 +173,36 @@ static
 void buildInitialCandidate(const AcyclicGraph &g,
                            vector<NFAVertex>::const_reverse_iterator &it,
                            const vector<NFAVertex>::const_reverse_iterator &ite,
-                           unordered_set<NFAVertex> &candidate,
+                           unordered_set<NFAVertex> &candidate, 
                            /* in exits of prev region;
                             * out exits from candidate */
-                           vector<exit_info> &exits,
-                           flat_set<NFAVertex> &open_jumps) {
+                           vector<exit_info> &exits, 
+                           flat_set<NFAVertex> &open_jumps) { 
     if (it == ite) {
-        candidate.clear();
-        exits.clear();
+        candidate.clear(); 
+        exits.clear(); 
         return;
     }
 
-    if (exits.empty()) {
+    if (exits.empty()) { 
         DEBUG_PRINTF("odd\n");
-        candidate.clear();
-        DEBUG_PRINTF("adding %zu to initial\n", g[*it].index);
-        candidate.insert(*it);
-        open_jumps.erase(*it);
-        checkAndAddExitCandidate(g, candidate, *it, exits);
+        candidate.clear(); 
+        DEBUG_PRINTF("adding %zu to initial\n", g[*it].index); 
+        candidate.insert(*it); 
+        open_jumps.erase(*it); 
+        checkAndAddExitCandidate(g, candidate, *it, exits); 
         ++it;
         return;
     }
 
-    // Note: findExits() will clear exits, so it's safe to mutate/move its
-    // elements here.
-    auto &enters = exits.front().open;
-    candidate.clear();
+    // Note: findExits() will clear exits, so it's safe to mutate/move its 
+    // elements here. 
+    auto &enters = exits.front().open; 
+    candidate.clear(); 
 
     for (; it != ite; ++it) {
-        DEBUG_PRINTF("adding %zu to initial\n", g[*it].index);
-        candidate.insert(*it);
+        DEBUG_PRINTF("adding %zu to initial\n", g[*it].index); 
+        candidate.insert(*it); 
         if (contains(enters, *it)) {
             break;
         }
@@ -210,35 +210,35 @@ void buildInitialCandidate(const AcyclicGraph &g,
 
     if (it != ite) {
         enters.erase(*it);
-        open_jumps = move(enters);
-        DEBUG_PRINTF("oj size = %zu\n", open_jumps.size());
+        open_jumps = move(enters); 
+        DEBUG_PRINTF("oj size = %zu\n", open_jumps.size()); 
         ++it;
     } else {
-        open_jumps.clear();
+        open_jumps.clear(); 
     }
 
-    findExits(g, candidate, exits);
+    findExits(g, candidate, exits); 
 }
 
 static
 void findDagLeaders(const NGHolder &h, const AcyclicGraph &g,
                     const vector<NFAVertex> &topo,
-                    unordered_map<NFAVertex, u32> &regions) {
+                    unordered_map<NFAVertex, u32> &regions) { 
     assert(!topo.empty());
     u32 curr_id = 0;
-    auto t_it = topo.rbegin();
-    unordered_set<NFAVertex> candidate;
-    flat_set<NFAVertex> open_jumps;
-    DEBUG_PRINTF("adding %zu to current\n", g[*t_it].index);
+    auto t_it = topo.rbegin(); 
+    unordered_set<NFAVertex> candidate; 
+    flat_set<NFAVertex> open_jumps; 
+    DEBUG_PRINTF("adding %zu to current\n", g[*t_it].index); 
     assert(t_it != topo.rend());
     candidate.insert(*t_it++);
-    DEBUG_PRINTF("adding %zu to current\n", g[*t_it].index);
+    DEBUG_PRINTF("adding %zu to current\n", g[*t_it].index); 
     assert(t_it != topo.rend());
     candidate.insert(*t_it++);
 
-    vector<exit_info> exits;
-    findExits(g, candidate, exits);
-
+    vector<exit_info> exits; 
+    findExits(g, candidate, exits); 
+ 
     while (t_it != topo.rend()) {
         assert(!candidate.empty());
 
@@ -253,14 +253,14 @@ void findDagLeaders(const NGHolder &h, const AcyclicGraph &g,
                 DEBUG_PRINTF("setting region %u\n", curr_id);
             }
             setRegion(candidate, curr_id++, regions);
-            buildInitialCandidate(g, t_it, topo.rend(), candidate, exits,
-                                  open_jumps);
+            buildInitialCandidate(g, t_it, topo.rend(), candidate, exits, 
+                                  open_jumps); 
         } else {
             NFAVertex curr = *t_it;
-            DEBUG_PRINTF("adding %zu to current\n", g[curr].index);
+            DEBUG_PRINTF("adding %zu to current\n", g[curr].index); 
             candidate.insert(curr);
             open_jumps.erase(curr);
-            refineExits(g, candidate, *t_it, exits);
+            refineExits(g, candidate, *t_it, exits); 
             DEBUG_PRINTF("    open jumps %zu exits %zu\n", open_jumps.size(),
                          exits.size());
             ++t_it;
@@ -273,7 +273,7 @@ void findDagLeaders(const NGHolder &h, const AcyclicGraph &g,
 static
 void mergeUnderBackEdges(const NGHolder &g, const vector<NFAVertex> &topo,
                          const BackEdgeSet &backEdges,
-                         unordered_map<NFAVertex, u32> &regions) {
+                         unordered_map<NFAVertex, u32> &regions) { 
     for (const auto &e : backEdges) {
         NFAVertex u = source(e, g);
         NFAVertex v = target(e, g);
@@ -284,7 +284,7 @@ void mergeUnderBackEdges(const NGHolder &g, const vector<NFAVertex> &topo,
             continue;
         }
 
-        DEBUG_PRINTF("merging v = %zu(%u), u = %zu(%u)\n", g[v].index, rv,
+        DEBUG_PRINTF("merging v = %zu(%u), u = %zu(%u)\n", g[v].index, rv, 
                      g[u].index, ru);
         assert(rv < ru);
 
@@ -343,15 +343,15 @@ void reorderSpecials(const NGHolder &w, const AcyclicGraph &acyclic_g,
 
 static
 void liftSinks(const AcyclicGraph &acyclic_g, vector<NFAVertex> &topoOrder) {
-    unordered_set<NFAVertex> sinks;
+    unordered_set<NFAVertex> sinks; 
     for (auto v : vertices_range(acyclic_g)) {
         if (is_special(v, acyclic_g)) {
             continue;
         }
 
         if (isLeafNode(v, acyclic_g)) {
-            DEBUG_PRINTF("sink found %zu\n", acyclic_g[v].index);
-            sinks.insert(NFAVertex(v));
+            DEBUG_PRINTF("sink found %zu\n", acyclic_g[v].index); 
+            sinks.insert(NFAVertex(v)); 
         }
     }
 
@@ -365,18 +365,18 @@ void liftSinks(const AcyclicGraph &acyclic_g, vector<NFAVertex> &topoOrder) {
         DEBUG_PRINTF("look\n");
         changed = false;
         for (auto v : vertices_range(acyclic_g)) {
-            if (is_special(v, acyclic_g) || contains(sinks, NFAVertex(v))) {
+            if (is_special(v, acyclic_g) || contains(sinks, NFAVertex(v))) { 
                 continue;
             }
 
             for (auto w : adjacent_vertices_range(v, acyclic_g)) {
-                if (!contains(sinks, NFAVertex(w))) {
+                if (!contains(sinks, NFAVertex(w))) { 
                     goto next;
                 }
             }
 
-            DEBUG_PRINTF("sink found %zu\n", acyclic_g[v].index);
-            sinks.insert(NFAVertex(v));
+            DEBUG_PRINTF("sink found %zu\n", acyclic_g[v].index); 
+            sinks.insert(NFAVertex(v)); 
             changed = true;
         next:;
         }
@@ -387,10 +387,10 @@ void liftSinks(const AcyclicGraph &acyclic_g, vector<NFAVertex> &topoOrder) {
             continue;
         }
         NFAVertex s = *ri;
-        DEBUG_PRINTF("handling sink %zu\n", acyclic_g[s].index);
-        unordered_set<NFAVertex> parents;
+        DEBUG_PRINTF("handling sink %zu\n", acyclic_g[s].index); 
+        unordered_set<NFAVertex> parents; 
         for (const auto &e : in_edges_range(s, acyclic_g)) {
-            parents.insert(NFAVertex(source(e, acyclic_g)));
+            parents.insert(NFAVertex(source(e, acyclic_g))); 
         }
 
         /* vertex has no children not reachable on a back edge, bubble the
@@ -408,20 +408,20 @@ void liftSinks(const AcyclicGraph &acyclic_g, vector<NFAVertex> &topoOrder) {
     }
 }
 
-using ColorMap = decltype(make_small_color_map(NGHolder()));
-
+using ColorMap = decltype(make_small_color_map(NGHolder())); 
+ 
 /** Build a reverse topo ordering (with only the specials that are in use). We
  * also want to ensure vertices which only lead to back edges are placed near
  * their parents. */
 static
 vector<NFAVertex> buildTopoOrder(const NGHolder &w,
                                  const AcyclicGraph &acyclic_g,
-                                 ColorMap &colours) {
+                                 ColorMap &colours) { 
     vector<NFAVertex> topoOrder;
-    topoOrder.reserve(num_vertices(w));
+    topoOrder.reserve(num_vertices(w)); 
 
-    topological_sort(acyclic_g, back_inserter(topoOrder),
-                     color_map(colours));
+    topological_sort(acyclic_g, back_inserter(topoOrder), 
+                     color_map(colours)); 
 
     reorderSpecials(w, acyclic_g, topoOrder);
 
@@ -433,35 +433,35 @@ vector<NFAVertex> buildTopoOrder(const NGHolder &w,
 
     DEBUG_PRINTF("TOPO ORDER\n");
     for (auto ri = topoOrder.rbegin(); ri != topoOrder.rend(); ++ri) {
-        DEBUG_PRINTF("[%zu]\n", acyclic_g[*ri].index);
+        DEBUG_PRINTF("[%zu]\n", acyclic_g[*ri].index); 
     }
     DEBUG_PRINTF("----------\n");
 
     return topoOrder;
 }
 
-unordered_map<NFAVertex, u32> assignRegions(const NGHolder &g) {
+unordered_map<NFAVertex, u32> assignRegions(const NGHolder &g) { 
     assert(hasCorrectlyNumberedVertices(g));
     const u32 numVertices = num_vertices(g);
     DEBUG_PRINTF("assigning regions for %u vertices in holder\n", numVertices);
 
-    auto colours = make_small_color_map(g);
+    auto colours = make_small_color_map(g); 
 
     // Build an acyclic graph for this NGHolder.
     BackEdgeSet deadEdges;
-    depth_first_search(g,
-                       visitor(BackEdges<BackEdgeSet>(deadEdges))
-                       .root_vertex(g.start)
-                       .color_map(colours));
+    depth_first_search(g, 
+                       visitor(BackEdges<BackEdgeSet>(deadEdges)) 
+                       .root_vertex(g.start) 
+                       .color_map(colours)); 
 
-    auto af = make_bad_edge_filter(&deadEdges);
-    AcyclicGraph acyclic_g(g, af);
+    auto af = make_bad_edge_filter(&deadEdges); 
+    AcyclicGraph acyclic_g(g, af); 
 
     // Build a (reverse) topological ordering.
     vector<NFAVertex> topoOrder = buildTopoOrder(g, acyclic_g, colours);
 
     // Everybody starts in region 0.
-    unordered_map<NFAVertex, u32> regions;
+    unordered_map<NFAVertex, u32> regions; 
     regions.reserve(numVertices);
     for (auto v : vertices_range(g)) {
         regions.emplace(v, 0);

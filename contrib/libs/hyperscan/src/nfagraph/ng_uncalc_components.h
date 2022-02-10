@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation
+ * Copyright (c) 2015-2016, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -49,16 +49,16 @@ class ReportManager;
  * The CPL is calculated based the topological ordering given by the state
  * indices for each graph.
  */
-u32 commonPrefixLength(const NGHolder &ga, const NGHolder &gb);
+u32 commonPrefixLength(const NGHolder &ga, const NGHolder &gb); 
 
 /**
  * \brief Merge the group of graphs in \p cluster where possible.
  *
- * The (from, to) mapping of merged graphs is returned.
+ * The (from, to) mapping of merged graphs is returned. 
  */
-std::map<NGHolder *, NGHolder *>
-mergeNfaCluster(const std::vector<NGHolder *> &cluster, const ReportManager *rm,
-                const CompileContext &cc);
+std::map<NGHolder *, NGHolder *> 
+mergeNfaCluster(const std::vector<NGHolder *> &cluster, const ReportManager *rm, 
+                const CompileContext &cc); 
 
 /**
  * \brief Merge graph \p ga into graph \p gb.
@@ -66,7 +66,7 @@ mergeNfaCluster(const std::vector<NGHolder *> &cluster, const ReportManager *rm,
  * Returns false on failure. On success, \p gb is reduced via \ref
  * reduceImplementableGraph and renumbered.
  */
-bool mergeNfaPair(const NGHolder &ga, NGHolder &gb, const ReportManager *rm,
+bool mergeNfaPair(const NGHolder &ga, NGHolder &gb, const ReportManager *rm, 
                   const CompileContext &cc);
 
 } // namespace ue2

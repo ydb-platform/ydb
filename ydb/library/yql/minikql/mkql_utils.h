@@ -53,5 +53,5 @@ private:
     TString Error_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NMiniKQL 
+} // namespace NKikimr 

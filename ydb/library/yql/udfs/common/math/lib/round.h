@@ -1,16 +1,16 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/system/types.h>
-#include <cmath>
+#include <cmath> 
 #include <optional>
-
+ 
 namespace NMathUdf {
 
-template <class T>
-inline T RoundToDecimal(T v, int decShift) {
-    T div = std::pow(T(10), decShift);
-    return std::floor(v / div + T(0.5)) * div;
-}
+template <class T> 
+inline T RoundToDecimal(T v, int decShift) { 
+    T div = std::pow(T(10), decShift); 
+    return std::floor(v / div + T(0.5)) * div; 
+} 
 
 inline std::optional<i64> Mod(i64 value, i64 m) {
     if (!m) {

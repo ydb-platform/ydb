@@ -11,10 +11,10 @@ PY_SRCS(
     ya.py
 )
 
-PEERDIR(
-    contrib/python/six
-)
-
+PEERDIR( 
+    contrib/python/six 
+) 
+ 
 IF(PYTHON2)
     PEERDIR(
         contrib/python/enum34

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -37,7 +37,7 @@
 #include "ue2common.h"
 #include "util/depth.h"
 #include "util/graph.h"
-#include "util/graph_small_color_map.h"
+#include "util/graph_small_color_map.h" 
 
 #include <deque>
 #include <vector>
@@ -59,18 +59,18 @@ namespace {
 struct SpecialEdgeFilter {
     SpecialEdgeFilter() {}
     explicit SpecialEdgeFilter(const NGHolder &h_in) : h(&h_in) {}
-    SpecialEdgeFilter(const NGHolder &h_in, u32 top_in)
+    SpecialEdgeFilter(const NGHolder &h_in, u32 top_in) 
         : h(&h_in), single_top(true), top(top_in) {}
 
     bool operator()(const NFAEdge &e) const {
-        NFAVertex u = source(e, *h);
-        NFAVertex v = target(e, *h);
-        if ((is_any_start(u, *h) && is_any_start(v, *h)) ||
-            (is_any_accept(u, *h) && is_any_accept(v, *h))) {
+        NFAVertex u = source(e, *h); 
+        NFAVertex v = target(e, *h); 
+        if ((is_any_start(u, *h) && is_any_start(v, *h)) || 
+            (is_any_accept(u, *h) && is_any_accept(v, *h))) { 
             return false;
         }
         if (single_top) {
-            if (u == h->start && !contains((*h)[e].tops, top)) {
+            if (u == h->start && !contains((*h)[e].tops, top)) { 
                 return false;
             }
             if (u == h->startDs) {
@@ -95,7 +95,7 @@ depth findMinWidth(const NGHolder &h, const SpecialEdgeFilter &filter,
         return depth::unreachable();
     }
 
-    boost::filtered_graph<NGHolder, SpecialEdgeFilter> g(h, filter);
+    boost::filtered_graph<NGHolder, SpecialEdgeFilter> g(h, filter); 
 
     assert(hasCorrectlyNumberedVertices(h));
     const size_t num = num_vertices(h);
@@ -107,10 +107,10 @@ depth findMinWidth(const NGHolder &h, const SpecialEdgeFilter &filter,
     // Since we are interested in the single-source shortest paths on a graph
     // with the same weight on every edge, using BFS will be faster than
     // Dijkstra here.
-    breadth_first_search(g, src,
+    breadth_first_search(g, src, 
         visitor(make_bfs_visitor(record_distances(
                     make_iterator_property_map(distance.begin(), index_map),
-                    boost::on_tree_edge()))));
+                    boost::on_tree_edge())))); 
 
     DEBUG_PRINTF("d[accept]=%s, d[acceptEod]=%s\n",
                  distance.at(NODE_ACCEPT).str().c_str(),
@@ -130,7 +130,7 @@ depth findMinWidth(const NGHolder &h, const SpecialEdgeFilter &filter,
 static
 depth findMaxWidth(const NGHolder &h, const SpecialEdgeFilter &filter,
                    NFAVertex src) {
-    if (isLeafNode(src, h)) {
+    if (isLeafNode(src, h)) { 
         return depth::unreachable();
     }
 
@@ -139,31 +139,31 @@ depth findMaxWidth(const NGHolder &h, const SpecialEdgeFilter &filter,
         return depth::infinity();
     }
 
-    boost::filtered_graph<NGHolder, SpecialEdgeFilter> g(h, filter);
+    boost::filtered_graph<NGHolder, SpecialEdgeFilter> g(h, filter); 
 
     assert(hasCorrectlyNumberedVertices(h));
     const size_t num = num_vertices(h);
     vector<int> distance(num);
-    auto colors = make_small_color_map(h);
+    auto colors = make_small_color_map(h); 
 
     auto index_map = get(&NFAGraphVertexProps::index, g);
 
     // DAG shortest paths with negative edge weights.
-    dag_shortest_paths(g, src,
+    dag_shortest_paths(g, src, 
         distance_map(make_iterator_property_map(distance.begin(), index_map))
             .weight_map(boost::make_constant_property<NFAEdge>(-1))
-            .color_map(colors));
+            .color_map(colors)); 
 
     depth acceptDepth, acceptEodDepth;
-    if (get(colors, h.accept) == small_color::white) {
+    if (get(colors, h.accept) == small_color::white) { 
         acceptDepth = depth::unreachable();
     } else {
-        acceptDepth = depth(-1 * distance.at(NODE_ACCEPT));
+        acceptDepth = depth(-1 * distance.at(NODE_ACCEPT)); 
     }
-    if (get(colors, h.acceptEod) == small_color::white) {
+    if (get(colors, h.acceptEod) == small_color::white) { 
         acceptEodDepth = depth::unreachable();
     } else {
-        acceptEodDepth = depth(-1 * distance.at(NODE_ACCEPT_EOD));
+        acceptEodDepth = depth(-1 * distance.at(NODE_ACCEPT_EOD)); 
     }
 
     depth d;

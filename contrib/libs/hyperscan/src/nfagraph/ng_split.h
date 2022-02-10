@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -33,9 +33,9 @@
 #ifndef NG_SPLIT_H
 #define NG_SPLIT_H
 
-#include "ng_holder.h"
-
-#include <unordered_map>
+#include "ng_holder.h" 
+ 
+#include <unordered_map> 
 #include <vector>
 
 namespace ue2 {
@@ -47,29 +47,29 @@ class NGHolder;
  * is in the lhs if it is reachable from start without going through the
  * pivot. The pivot ends up in the LHS and any adjacent vertices in the RHS.
  *
- * Note: The RHS is setup to be triggered by TOP 0
- *
+ * Note: The RHS is setup to be triggered by TOP 0 
+ * 
  * When multiple split vertices are provided:
  * - RHS contains all vertices reachable from every pivot
  * - LHS contains all vertices which are reachable from start ignoring any
  *   vertices which have an edge to every pivot
  */
 void splitGraph(const NGHolder &base, NFAVertex pivot, NGHolder *lhs,
-                std::unordered_map<NFAVertex, NFAVertex> *lhs_map,
+                std::unordered_map<NFAVertex, NFAVertex> *lhs_map, 
                 NGHolder *rhs,
-                std::unordered_map<NFAVertex, NFAVertex> *rhs_map);
+                std::unordered_map<NFAVertex, NFAVertex> *rhs_map); 
 
 void splitGraph(const NGHolder &base, const std::vector<NFAVertex> &pivots,
                 NGHolder *lhs,
-                std::unordered_map<NFAVertex, NFAVertex> *lhs_map,
+                std::unordered_map<NFAVertex, NFAVertex> *lhs_map, 
                 NGHolder *rhs,
-                std::unordered_map<NFAVertex, NFAVertex> *rhs_map);
+                std::unordered_map<NFAVertex, NFAVertex> *rhs_map); 
 
 void splitLHS(const NGHolder &base, NFAVertex pivot, NGHolder *lhs,
-              std::unordered_map<NFAVertex, NFAVertex> *lhs_map);
+              std::unordered_map<NFAVertex, NFAVertex> *lhs_map); 
 
 void splitRHS(const NGHolder &base, const std::vector<NFAVertex> &pivots,
-              NGHolder *rhs, std::unordered_map<NFAVertex, NFAVertex> *rhs_map);
+              NGHolder *rhs, std::unordered_map<NFAVertex, NFAVertex> *rhs_map); 
 
 } // namespace ue2
 

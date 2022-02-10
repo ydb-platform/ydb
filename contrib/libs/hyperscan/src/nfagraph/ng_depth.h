@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,15 +26,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * \file
+/** 
+ * \file 
  * \brief NFA graph vertex depth calculations.
  */
 
-#ifndef NG_DEPTH_H
-#define NG_DEPTH_H
+#ifndef NG_DEPTH_H 
+#define NG_DEPTH_H 
 
-#include "ue2common.h"
+#include "ue2common.h" 
 #include "nfagraph/ng_holder.h"
 #include "util/depth.h"
 
@@ -63,37 +63,37 @@ struct NFAVertexRevDepth {
 /**
  * \brief Encapsulates min/max depths relative to all of our special vertices.
  */
-struct NFAVertexBidiDepth {
-    DepthMinMax fromStart;
-    DepthMinMax fromStartDotStar;
-    DepthMinMax toAccept;
-    DepthMinMax toAcceptEod;
+struct NFAVertexBidiDepth { 
+    DepthMinMax fromStart; 
+    DepthMinMax fromStartDotStar; 
+    DepthMinMax toAccept; 
+    DepthMinMax toAcceptEod; 
 };
 
 /**
- * \brief Calculate depths from start and startDs. Returns them in a vector,
- * indexed by vertex index.
+ * \brief Calculate depths from start and startDs. Returns them in a vector, 
+ * indexed by vertex index. 
  */
-std::vector<NFAVertexDepth> calcDepths(const NGHolder &g);
+std::vector<NFAVertexDepth> calcDepths(const NGHolder &g); 
 
 /**
- * \brief Calculate depths to accept and acceptEod. Returns them in a vector,
- * indexed by vertex index.
+ * \brief Calculate depths to accept and acceptEod. Returns them in a vector, 
+ * indexed by vertex index. 
  */
-std::vector<NFAVertexRevDepth> calcRevDepths(const NGHolder &g);
+std::vector<NFAVertexRevDepth> calcRevDepths(const NGHolder &g); 
 
 /**
- * \brief Calculate depths to/from all special vertices. Returns them in a
- * vector, indexed by vertex index.
+ * \brief Calculate depths to/from all special vertices. Returns them in a 
+ * vector, indexed by vertex index. 
  */
-std::vector<NFAVertexBidiDepth> calcBidiDepths(const NGHolder &g);
+std::vector<NFAVertexBidiDepth> calcBidiDepths(const NGHolder &g); 
 
-/**
- * \brief Calculate the (min, max) depths from the given \p src to every vertex
- * in the graph and return them in a vector, indexed by \p vertex_index.
- */
-std::vector<DepthMinMax> calcDepthsFrom(const NGHolder &g, const NFAVertex src);
+/** 
+ * \brief Calculate the (min, max) depths from the given \p src to every vertex 
+ * in the graph and return them in a vector, indexed by \p vertex_index. 
+ */ 
+std::vector<DepthMinMax> calcDepthsFrom(const NGHolder &g, const NFAVertex src); 
 
 } // namespace ue2
 
-#endif // NG_DEPTH_H
+#endif // NG_DEPTH_H 

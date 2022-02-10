@@ -52,7 +52,7 @@
 
 #define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
 #define LOG_LOG_S(actorCtxOrSystem, priority, component, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
-
+ 
 // use these macros for logging via actor system or actor context
 #define LOG_EMERG(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, __VA_ARGS__)
 #define LOG_ALERT(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, __VA_ARGS__)
@@ -89,11 +89,11 @@
 #define LOG_CRIT_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_CRIT, component, sampleBy, stream)
 #define LOG_ERROR_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_ERROR, component, sampleBy, stream)
 #define LOG_WARN_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_WARN, component, sampleBy, stream)
-#define LOG_NOTICE_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_NOTICE, component, sampleBy, stream)
+#define LOG_NOTICE_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_NOTICE, component, sampleBy, stream) 
 #define LOG_INFO_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_INFO, component, sampleBy, stream)
 #define LOG_DEBUG_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, sampleBy, stream)
 #define LOG_TRACE_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, sampleBy, stream)
-
+ 
 // Log Throttling
 #define LOG_LOG_THROTTLE(throttler, actorCtxOrSystem, priority, component, ...) \
     do {                                                                        \
@@ -196,8 +196,8 @@ namespace NActors {
             return IActor::LOG_ACTOR;
         }
 
-        TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
-                     TAutoPtr<TLogBackend> logBackend,
+        TLoggerActor(TIntrusivePtr<NLog::TSettings> settings, 
+                     TAutoPtr<TLogBackend> logBackend, 
                      TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
         TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                      std::shared_ptr<TLogBackend> logBackend,
@@ -295,7 +295,7 @@ namespace NActors {
     // SYSLOG BACKEND
     ////////////////////////////////////////////////////////////////////////////////
     TAutoPtr<TLogBackend> CreateSysLogBackend(const TString& ident,
-                                              bool logPError, bool logCons);
+                                              bool logPError, bool logCons); 
     TAutoPtr<TLogBackend> CreateStderrBackend();
     TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName);
     TAutoPtr<TLogBackend> CreateNullBackend();

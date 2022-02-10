@@ -159,26 +159,26 @@ public:
 ConstructLiteralVisitor::~ConstructLiteralVisitor() {}
 
 /** \brief True if the literal expression \a expr could be added to Rose. */
-bool shortcutLiteral(NG &ng, const ParsedExpression &pe) {
-    assert(pe.component);
+bool shortcutLiteral(NG &ng, const ParsedExpression &pe) { 
+    assert(pe.component); 
 
-    if (!ng.cc.grey.allowLiteral) {
+    if (!ng.cc.grey.allowLiteral) { 
         return false;
     }
 
-    const auto &expr = pe.expr;
-
+    const auto &expr = pe.expr; 
+ 
     // XXX: don't shortcut literals with extended params (yet)
-    if (expr.min_offset || expr.max_offset != MAX_OFFSET || expr.min_length ||
-        expr.edit_distance || expr.hamm_distance) {
+    if (expr.min_offset || expr.max_offset != MAX_OFFSET || expr.min_length || 
+        expr.edit_distance || expr.hamm_distance) { 
         DEBUG_PRINTF("extended params not allowed\n");
         return false;
     }
 
     ConstructLiteralVisitor vis;
     try {
-        assert(pe.component);
-        pe.component->accept(vis);
+        assert(pe.component); 
+        pe.component->accept(vis); 
         assert(vis.repeat_stack.empty());
     } catch (const ConstructLiteralVisitor::NotLiteral&) {
         DEBUG_PRINTF("not a literal\n");
@@ -198,7 +198,7 @@ bool shortcutLiteral(NG &ng, const ParsedExpression &pe) {
     }
 
     DEBUG_PRINTF("constructed literal %s\n", dumpString(lit).c_str());
-    return ng.addLiteral(lit, expr.index, expr.report, expr.highlander,
+    return ng.addLiteral(lit, expr.index, expr.report, expr.highlander, 
                          expr.som, expr.quiet);
 }
 

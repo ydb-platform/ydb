@@ -1654,7 +1654,7 @@ namespace {
                 res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("world"), pool);
                 break;
             default:
-                YQL_ENSURE(false, "Unknown type: " << static_cast<ui32>(node.Type()));
+                YQL_ENSURE(false, "Unknown type: " << static_cast<ui32>(node.Type())); 
             }
         }
 

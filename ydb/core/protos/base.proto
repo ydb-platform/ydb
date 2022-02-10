@@ -15,7 +15,7 @@ enum EReplyStatus {
     TRYLATER_TIME = 10;
     TRYLATER_SIZE = 11;
     DEADLINE = 12;
-    CORRUPTED = 13;
+    CORRUPTED = 13; 
     SCHEDULED = 14;
     OUT_OF_SPACE = 15;
     VDISK_ERROR_STATE = 16;

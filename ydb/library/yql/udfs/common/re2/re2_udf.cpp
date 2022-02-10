@@ -3,14 +3,14 @@
 
 #include <contrib/libs/re2/re2/re2.h>
 
-#include <util/charset/utf8.h>
-#include <util/string/cast.h>
+#include <util/charset/utf8.h> 
+#include <util/string/cast.h> 
 
 using namespace re2;
 using namespace NKikimr;
 using namespace NUdf;
 
-namespace {
+namespace { 
 
     template <typename T>
     T Id(T x) {
@@ -21,24 +21,24 @@ namespace {
         return x ? re2::RE2::Options::Encoding::EncodingUTF8 : re2::RE2::Options::Encoding::EncodingLatin1;
     }
 
-#define OPTIONS_MAP(xx)                                                                                  \
-    xx(Utf8, 0, bool, true, set_encoding, EncodingFromBool)                                              \
-        xx(PosixSyntax, 1, bool, false, set_posix_syntax, Id)                                            \
-            xx(LongestMatch, 2, bool, false, set_longest_match, Id)                                      \
-                xx(LogErrors, 3, bool, true, set_log_errors, Id)                                         \
-                    xx(MaxMem, 4, ui64, 8 << 20, set_max_mem, Id)                                        \
-                        xx(Literal, 5, bool, false, set_literal, Id)                                     \
-                            xx(NeverNl, 6, bool, false, set_never_nl, Id)                                \
-                                xx(DotNl, 7, bool, false, set_dot_nl, Id)                                \
-                                    xx(NeverCapture, 8, bool, false, set_never_capture, Id)              \
-                                        xx(CaseSensitive, 9, bool, true, set_case_sensitive, Id)         \
-                                            xx(PerlClasses, 10, bool, false, set_perl_classes, Id)       \
-                                                xx(WordBoundary, 11, bool, false, set_word_boundary, Id) \
-                                                    xx(OneLine, 12, bool, false, set_one_line, Id)
+#define OPTIONS_MAP(xx)                                                                                  \ 
+    xx(Utf8, 0, bool, true, set_encoding, EncodingFromBool)                                              \ 
+        xx(PosixSyntax, 1, bool, false, set_posix_syntax, Id)                                            \ 
+            xx(LongestMatch, 2, bool, false, set_longest_match, Id)                                      \ 
+                xx(LogErrors, 3, bool, true, set_log_errors, Id)                                         \ 
+                    xx(MaxMem, 4, ui64, 8 << 20, set_max_mem, Id)                                        \ 
+                        xx(Literal, 5, bool, false, set_literal, Id)                                     \ 
+                            xx(NeverNl, 6, bool, false, set_never_nl, Id)                                \ 
+                                xx(DotNl, 7, bool, false, set_dot_nl, Id)                                \ 
+                                    xx(NeverCapture, 8, bool, false, set_never_capture, Id)              \ 
+                                        xx(CaseSensitive, 9, bool, true, set_case_sensitive, Id)         \ 
+                                            xx(PerlClasses, 10, bool, false, set_perl_classes, Id)       \ 
+                                                xx(WordBoundary, 11, bool, false, set_word_boundary, Id) \ 
+                                                    xx(OneLine, 12, bool, false, set_one_line, Id) 
 
     enum EOptionsField : ui32 {
         OPTIONS_MAP(ENUM_VALUE_GEN)
-            Count
+            Count 
     };
 
     struct TOptionsSchema {
@@ -46,104 +46,104 @@ namespace {
         ui32 Indices[EOptionsField::Count];
     };
 
-    struct TRegexpGroups {
+    struct TRegexpGroups { 
         TVector<TString> Names;
         TVector<ui32> Indexes;
-    };
-
-    class TRe2Udf: public TBoxedValue {
-    public:
-        enum EMode {
-            MATCH,
-            GREP,
-            CAPTURE,
-            REPLACE,
+    }; 
+ 
+    class TRe2Udf: public TBoxedValue { 
+    public: 
+        enum EMode { 
+            MATCH, 
+            GREP, 
+            CAPTURE, 
+            REPLACE, 
             COUNT,
             FIND_AND_CONSUME,
-        };
-
-        template <bool posix>
-        class TFactory: public TBoxedValue {
-        public:
-            TFactory(
-                EMode mode,
+        }; 
+ 
+        template <bool posix> 
+        class TFactory: public TBoxedValue { 
+        public: 
+            TFactory( 
+                EMode mode, 
                 const TOptionsSchema& optionsSchema,
                 TSourcePosition pos,
-                const TRegexpGroups& regexpGroups = TRegexpGroups())
-                : Mode(mode)
+                const TRegexpGroups& regexpGroups = TRegexpGroups()) 
+                : Mode(mode) 
                 , OptionsSchema(optionsSchema)
                 , Pos_(pos)
-                , RegexpGroups(regexpGroups)
-            {
-            }
-
+                , RegexpGroups(regexpGroups) 
+            { 
+            } 
+ 
         private:
-            TUnboxedValue Run(
-                const IValueBuilder* valueBuilder,
+            TUnboxedValue Run( 
+                const IValueBuilder* valueBuilder, 
                 const TUnboxedValuePod* args) const override {
                 return TUnboxedValuePod(
-                    new TRe2Udf(
-                        valueBuilder,
-                        args[0],
-                        RegexpGroups,
-                        Mode,
+                    new TRe2Udf( 
+                        valueBuilder, 
+                        args[0], 
+                        RegexpGroups, 
+                        Mode, 
                         posix,
                         OptionsSchema,
                         Pos_));
-            }
+            } 
 
-            EMode Mode;
+            EMode Mode; 
             const TOptionsSchema OptionsSchema;
             TSourcePosition Pos_;
-            const TRegexpGroups RegexpGroups;
-        };
-
-        static const TStringRef& Name(EMode mode) {
-            static auto match = TStringRef::Of("Match");
-            static auto grep = TStringRef::Of("Grep");
-            static auto capture = TStringRef::Of("Capture");
-            static auto replace = TStringRef::Of("Replace");
-            static auto count = TStringRef::Of("Count");
+            const TRegexpGroups RegexpGroups; 
+        }; 
+ 
+        static const TStringRef& Name(EMode mode) { 
+            static auto match = TStringRef::Of("Match"); 
+            static auto grep = TStringRef::Of("Grep"); 
+            static auto capture = TStringRef::Of("Capture"); 
+            static auto replace = TStringRef::Of("Replace"); 
+            static auto count = TStringRef::Of("Count"); 
             static auto findAndconsume = TStringRef::Of("FindAndConsume");
-
-            switch (mode) {
-                case EMode::MATCH:
-                    return match;
-                case EMode::GREP:
-                    return grep;
-                case EMode::CAPTURE:
-                    return capture;
-                case EMode::REPLACE:
-                    return replace;
-                case EMode::COUNT:
-                    return count;
+ 
+            switch (mode) { 
+                case EMode::MATCH: 
+                    return match; 
+                case EMode::GREP: 
+                    return grep; 
+                case EMode::CAPTURE: 
+                    return capture; 
+                case EMode::REPLACE: 
+                    return replace; 
+                case EMode::COUNT: 
+                    return count; 
                 case EMode::FIND_AND_CONSUME:
                     return findAndconsume;
-            }
+            } 
             Y_FAIL("Unexpected mode");
-        }
+        } 
 
-        TRe2Udf(
+        TRe2Udf( 
             const IValueBuilder*,
             const TUnboxedValuePod& runConfig,
-            const TRegexpGroups regexpGroups,
-            EMode mode,
+            const TRegexpGroups regexpGroups, 
+            EMode mode, 
             bool posix,
             const TOptionsSchema& optionsSchema,
             TSourcePosition pos)
-            : RegexpGroups(regexpGroups)
-            , Mode(mode)
-            , Captured()
+            : RegexpGroups(regexpGroups) 
+            , Mode(mode) 
+            , Captured() 
             , OptionsSchema(optionsSchema)
             , Pos_(pos)
-        {
-            try {
+        { 
+            try { 
                 auto patternValue = runConfig.GetElement(0);
                 auto optionsValue = runConfig.GetElement(1);
                 const std::string_view pattern(patternValue.AsStringRef());
-                RE2::Options options;
-
-                options.set_posix_syntax(posix);
+                RE2::Options options; 
+ 
+                options.set_posix_syntax(posix); 
                 bool needUtf8 = (UTF8Detect(pattern) == UTF8);
                 options.set_encoding(
                     needUtf8
@@ -155,27 +155,27 @@ namespace {
                     OPTIONS_MAP(FIELD_HANDLE)
 #undef FIELD_HANDLE
                 }
-
+ 
                 Regexp = std::make_unique<RE2>(StringPiece(pattern.data(), pattern.size()), options);
-
-                if (mode == EMode::CAPTURE) {
+ 
+                if (mode == EMode::CAPTURE) { 
                     Captured = std::make_unique<StringPiece[]>(Regexp->NumberOfCapturingGroups() + 1);
-                }
-
-            } catch (const std::exception& e) {
+                } 
+ 
+            } catch (const std::exception& e) { 
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-            }
-        }
+            } 
+        } 
 
     private:
-        TUnboxedValue Run(
+        TUnboxedValue Run( 
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const final try {
             RE2::Anchor anchor = RE2::UNANCHORED;
             if (args[0]) {
                 const std::string_view input(args[0].AsStringRef());
                 const StringPiece piece(input.data(), input.size());
-
+ 
                 switch (Mode) {
                     case MATCH:
                         anchor = RE2::ANCHOR_BOTH;
@@ -190,11 +190,11 @@ namespace {
                             for (int i = 0; i < count; ++i) {
                                 if (!Captured[i].empty()) {
                                     items[RegexpGroups.Indexes[i]] = valueBuilder->SubString(args[0], std::distance(piece.begin(), Captured[i].begin()), Captured[i].size());
-                                }
-                            }
+                                } 
+                            } 
                         } else {
                             return BuildEmptyStruct(valueBuilder);
-                        }
+                        } 
                         return result;
                     }
                     case REPLACE: {
@@ -203,7 +203,7 @@ namespace {
                         TString rewriteError;
                         if (!Regexp->CheckRewriteString(rewrite, &rewriteError)) {
                             UdfTerminate((TStringBuilder() << Pos_ << " [rewrite error] " << rewriteError).data());
-                        }
+                        } 
                         std::string result(input);
                         RE2::GlobalReplace(&result, *Regexp, rewrite);
                         return input == result ? TUnboxedValue(args[0]) : valueBuilder->NewString(result);
@@ -218,10 +218,10 @@ namespace {
                         std::vector<TUnboxedValue> matches;
                         for (StringPiece w; RE2::FindAndConsume(&text, *Regexp, &w);) {
                             matches.emplace_back(valueBuilder->SubString(args[0], std::distance(piece.begin(), w.begin()), w.size()));
-                        }
+                        } 
                         return valueBuilder->NewList(matches.data(), matches.size());
-                    }
-                }
+                    } 
+                } 
                 Y_FAIL("Unexpected mode");
             } else {
                 switch (Mode) {
@@ -238,65 +238,65 @@ namespace {
                         return valueBuilder->NewEmptyList();
                 }
                 Y_FAIL("Unexpected mode");
-            }
+            } 
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
 
         std::unique_ptr<RE2> Regexp;
-        const TRegexpGroups RegexpGroups;
-        EMode Mode;
+        const TRegexpGroups RegexpGroups; 
+        EMode Mode; 
         std::unique_ptr<StringPiece[]> Captured;
         const TOptionsSchema OptionsSchema;
         TSourcePosition Pos_;
-
-        TUnboxedValue BuildEmptyStruct(const IValueBuilder* valueBuilder) const {
+ 
+        TUnboxedValue BuildEmptyStruct(const IValueBuilder* valueBuilder) const { 
             TUnboxedValue* items = nullptr;
             return valueBuilder->NewArray(RegexpGroups.Names.size(), items);
-        }
-    };
+        } 
+    }; 
 
-    SIMPLE_UDF(TEscape, char*(char*)) {
+    SIMPLE_UDF(TEscape, char*(char*)) { 
         const std::string_view input(args[0].AsStringRef());
         const auto& result = RE2::QuoteMeta(StringPiece(input.data(), input.size()));
         return input == result ? TUnboxedValue(args[0]) : valueBuilder->NewString(result);
-    }
-
+    } 
+ 
     TOptionsSchema MakeOptionsSchema(::NKikimr::NUdf::IFunctionTypeInfoBuilder& builder) {
         TOptionsSchema ret;
         auto structBuilder = builder.Struct(EOptionsField::Count);
 #define FIELD_HANDLE(name, index, type, ...) structBuilder->AddField<type>(TStringRef::Of(#name), &ret.Indices[index]);
-        OPTIONS_MAP(FIELD_HANDLE)
+        OPTIONS_MAP(FIELD_HANDLE) 
 #undef FIELD_HANDLE
 
         ret.StructType = structBuilder->Build();
         return ret;
     }
 
-    class TOptions: public TBoxedValue {
+    class TOptions: public TBoxedValue { 
     private:
         const TOptionsSchema Schema_;
 
     public:
         TOptions(const TOptionsSchema& schema)
             : Schema_(schema)
-        {
-        }
+        { 
+        } 
 
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const override {
             TUnboxedValue* items = nullptr;
             const auto result = valueBuilder->NewArray(EOptionsField::Count, items);
-#define FIELD_HANDLE(name, index, type, defVal, ...)                          \
-    {                                                                         \
-        auto structIndex = Schema_.Indices[index];                            \
-        if (!args[index]) {                                                   \
-            items[structIndex] = TUnboxedValuePod(static_cast<type>(defVal)); \
-        } else {                                                              \
-            items[structIndex] = args[index].GetOptionalValue();              \
-        }                                                                     \
-    }
+#define FIELD_HANDLE(name, index, type, defVal, ...)                          \ 
+    {                                                                         \ 
+        auto structIndex = Schema_.Indices[index];                            \ 
+        if (!args[index]) {                                                   \ 
+            items[structIndex] = TUnboxedValuePod(static_cast<type>(defVal)); \ 
+        } else {                                                              \ 
+            items[structIndex] = args[index].GetOptionalValue();              \ 
+        }                                                                     \ 
+    } 
 
             OPTIONS_MAP(FIELD_HANDLE)
 #undef FIELD_HANDLE
@@ -312,7 +312,7 @@ namespace {
             const ::NKikimr::NUdf::TStringRef& name,
             ::NKikimr::NUdf::TType* userType,
             ::NKikimr::NUdf::IFunctionTypeInfoBuilder& builder,
-            bool typesOnly) {
+            bool typesOnly) { 
             Y_UNUSED(userType);
             if (Name() == name) {
                 auto argsBuilder = builder.Args();
@@ -333,81 +333,81 @@ namespace {
         }
     };
 
-    SIMPLE_UDF_OPTIONS(TPatternFromLike, char*(char*, TOptional<char*>), builder.OptionalArgs(1)) {
+    SIMPLE_UDF_OPTIONS(TPatternFromLike, char*(char*, TOptional<char*>), builder.OptionalArgs(1)) { 
         const std::string_view input(args[0].AsStringRef());
         const bool hasEscape = bool(args[1]);
-        char escape = 0;
-        if (hasEscape) {
+        char escape = 0; 
+        if (hasEscape) { 
             const std::string_view escapeRef(args[1].AsStringRef());
             if (escapeRef.size() != 1U) {
                 UdfTerminate((TStringBuilder() << Pos_ << " Escape should be single character").data());
-            }
+            } 
             escape = escapeRef.front();
-        }
+        } 
         const TString escaped(RE2::QuoteMeta(StringPiece(input.data(), input.size())));
-
-        TStringBuilder result;
-        result << "(?s)";
-        bool slash = false;
-        bool escapeOn = false;
-
-        for (const char& c : escaped) {
-            switch (c) {
-                case '\\':
+ 
+        TStringBuilder result; 
+        result << "(?s)"; 
+        bool slash = false; 
+        bool escapeOn = false; 
+ 
+        for (const char& c : escaped) { 
+            switch (c) { 
+                case '\\': 
                     if (slash) {
                         result << "\\\\";
                     }
                     slash = !slash;
-                    break;
-                case '%':
-                    if (escapeOn) {
-                        result << "\\%";
-                        escapeOn = false;
-                    } else {
-                        result << ".*";
-                    }
+                    break; 
+                case '%': 
+                    if (escapeOn) { 
+                        result << "\\%"; 
+                        escapeOn = false; 
+                    } else { 
+                        result << ".*"; 
+                    } 
                     slash = false;
-                    break;
-                case '_':
-                    if (escapeOn) {
-                        result << "\\_";
-                        escapeOn = false;
-                    } else {
+                    break; 
+                case '_': 
+                    if (escapeOn) { 
+                        result << "\\_"; 
+                        escapeOn = false; 
+                    } else { 
                         result << '.';
-                    }
+                    } 
                     slash = false;
-                    break;
-                default:
-                    if (hasEscape && c == escape) {
-                        if (escapeOn) {
-                            result << c;
-                        }
+                    break; 
+                default: 
+                    if (hasEscape && c == escape) { 
+                        if (escapeOn) { 
+                            result << c; 
+                        } 
                         escapeOn = !escapeOn;
-                    } else {
+                    } else { 
                         if (slash)
                             result << '\\';
-                        result << c;
-                    }
+                        result << c; 
+                    } 
                     slash = false;
                     break;
-            }
-        }
+            } 
+        } 
         return valueBuilder->NewString(result);
-    }
-
+    } 
+ 
     TType* MakeRunConfigType(IFunctionTypeInfoBuilder& builder, TType* optOptionsStructType) {
         return builder.Tuple()->Add<char*>().Add(optOptionsStructType).Build();
     }
 
-    template <bool posix>
-    class TRe2Module: public IUdfModule {
-    public:
-        TStringRef Name() const {
-            return posix ? TStringRef::Of("Re2posix") : TStringRef::Of("Re2");
-        }
-
-        void CleanupOnTerminate() const final {
-        }
+    template <bool posix> 
+    class TRe2Module: public IUdfModule { 
+    public: 
+        TStringRef Name() const { 
+            return posix ? TStringRef::Of("Re2posix") : TStringRef::Of("Re2"); 
+        } 
+ 
+        void CleanupOnTerminate() const final { 
+        } 
 
         void GetAllFunctions(IFunctionsSink& sink) const final {
             sink.Add(TRe2Udf::Name(TRe2Udf::EMode::MATCH));
@@ -419,9 +419,9 @@ namespace {
             sink.Add(TEscape::Name());
             sink.Add(TPatternFromLike::Name());
             sink.Add(TOptions::Name());
-        }
+        } 
 
-        void BuildFunctionTypeInfo(
+        void BuildFunctionTypeInfo( 
             const TStringRef& name,
             TType* userType,
             const TStringRef& typeConfig,
@@ -464,27 +464,27 @@ namespace {
                         auto it = groupNames.find(i);
                         if (it != groupNames.end()) {
                             fieldName = it->second;
-                        } else {
+                        } else { 
                             fieldName = "_" + ToString(unnamedCount);
                             ++unnamedCount;
-                        }
+                        } 
                         groups.Names[i] = fieldName;
                         structBuilder->AddField(fieldName, optionalStringType, &groups.Indexes[i]);
-                    }
+                    } 
                     builder.Args(1)->Add(optionalStringType).Done().Returns(structBuilder->Build()).RunConfig(MakeRunConfigType(builder, optOptionsStructType));
-
-                    if (!typesOnly) {
+ 
+                    if (!typesOnly) { 
                         builder.Implementation(
                             new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::CAPTURE, optionsSchema, builder.GetSourcePosition(), groups));
-                    }
-
+                    } 
+ 
                 } else {
                     if (regexp.ok()) {
                         builder.SetError("Regexp contains no capturing groups");
                     } else {
                         builder.SetError(regexp.error());
-                    }
-                }
+                    } 
+                } 
             } else if (isReplace) {
                 builder.SimpleSignature<TOptional<char*>(TOptional<char*>, char*)>()
                     .RunConfig(MakeRunConfigType(builder, optOptionsStructType));
@@ -511,14 +511,14 @@ namespace {
                             TOptions::DeclareSignature(name, userType, builder, typesOnly))) {
                 builder.SetError(
                     TStringBuilder() << "Unknown function name: " << TString(name));
-            }
+            } 
         } catch (const std::exception& e) {
             builder.SetError(CurrentExceptionMessage());
         }
-    };
+    }; 
 
-}
+} 
 
-REGISTER_MODULES(
-    TRe2Module<false>,
-    TRe2Module<true>)
+REGISTER_MODULES( 
+    TRe2Module<false>, 
+    TRe2Module<true>) 

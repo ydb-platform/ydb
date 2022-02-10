@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -30,8 +30,8 @@
 #define PARTITIONED_SET_H
 
 #include "container.h"
-#include "noncopyable.h"
-#include "flat_containers.h"
+#include "noncopyable.h" 
+#include "flat_containers.h" 
 #include "ue2common.h"
 
 #include <algorithm>
@@ -53,7 +53,7 @@ static constexpr size_t INVALID_SUBSET = ~(size_t)0;
  */
 
 template<typename T>
-class partitioned_set : noncopyable {
+class partitioned_set : noncopyable { 
 public:
     class subset {
     public:
@@ -98,7 +98,7 @@ public:
      * If the set was not split (due to there being no overlap with splitter or
      * being a complete subset), INVALID_SUBSET is returned.
      */
-    size_t split(size_t subset_index, const flat_set<T> &splitter) {
+    size_t split(size_t subset_index, const flat_set<T> &splitter) { 
         assert(!splitter.empty());
         if (splitter.empty()) {
             return INVALID_SUBSET;
@@ -128,10 +128,10 @@ public:
         }
 
         for (auto it = orig.members.begin(); it != orig.members.end(); ++it) {
-            const auto &member = *it;
+            const auto &member = *it; 
             assert(member < member_to_subset.size());
 
-            sp_it = std::lower_bound(sp_it, sp_e, member);
+            sp_it = std::lower_bound(sp_it, sp_e, member); 
             if (sp_it == sp_e) {
                 split_temp_diff.insert(split_temp_diff.end(), it,
                                        orig.members.end());
@@ -190,7 +190,7 @@ public:
     /**
      * Returns all subsets which have a member in keys.
      */
-    void find_overlapping(const flat_set<T> &keys,
+    void find_overlapping(const flat_set<T> &keys, 
                           std::vector<size_t> *containing) const {
         boost::dynamic_bitset<> seen(subsets.size()); // all zero by default.
 

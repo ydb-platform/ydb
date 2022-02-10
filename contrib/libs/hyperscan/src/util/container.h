@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -41,7 +41,7 @@
 #include <set>
 #include <type_traits>
 #include <utility>
-#include <vector>
+#include <vector> 
 
 namespace ue2 {
 
@@ -79,9 +79,9 @@ void insert(C *container, typename C::iterator pos, const D &donor) {
 }
 
 /**
- * \brief Constructs a vector from a range bounded by the given pair of
- * iterators.
- */
+ * \brief Constructs a vector from a range bounded by the given pair of 
+ * iterators. 
+ */ 
 template <typename It>
 auto make_vector_from(const std::pair<It, It> &range)
     -> std::vector<decltype(*range.first)> {
@@ -89,14 +89,14 @@ auto make_vector_from(const std::pair<It, It> &range)
     return std::vector<T>(range.first, range.second);
 }
 
-/** \brief Sort a sequence container and remove duplicates. */
-template <typename C, typename Compare = std::less<typename C::value_type>>
-void sort_and_unique(C &container, Compare comp = Compare()) {
-    std::sort(std::begin(container), std::end(container), comp);
-    container.erase(std::unique(std::begin(container), std::end(container)),
-                    std::end(container));
-}
-
+/** \brief Sort a sequence container and remove duplicates. */ 
+template <typename C, typename Compare = std::less<typename C::value_type>> 
+void sort_and_unique(C &container, Compare comp = Compare()) { 
+    std::sort(std::begin(container), std::end(container), comp); 
+    container.erase(std::unique(std::begin(container), std::end(container)), 
+                    std::end(container)); 
+} 
+ 
 /** \brief Returns a set containing the keys in the given associative
  * container. */
 template <typename C>
@@ -111,9 +111,9 @@ std::set<typename C::key_type> assoc_keys(const C &container) {
 /**
  * \brief Return the length in bytes of the given vector of (POD) objects.
  */
-template <typename T, typename Alloc>
-typename std::vector<T, Alloc>::size_type
-byte_length(const std::vector<T, Alloc> &vec) {
+template <typename T, typename Alloc> 
+typename std::vector<T, Alloc>::size_type 
+byte_length(const std::vector<T, Alloc> &vec) { 
     static_assert(std::is_pod<T>::value, "should be pod");
     return vec.size() * sizeof(T);
 }
@@ -122,8 +122,8 @@ byte_length(const std::vector<T, Alloc> &vec) {
  * \brief Copy the given vector of POD objects to the given location in memory.
  * It is safe to give this function an empty vector.
  */
-template<typename T, typename Alloc>
-void *copy_bytes(void *dest, const std::vector<T, Alloc> &vec) {
+template<typename T, typename Alloc> 
+void *copy_bytes(void *dest, const std::vector<T, Alloc> &vec) { 
     static_assert(std::is_pod<T>::value, "should be pod");
     assert(dest);
 
@@ -202,17 +202,17 @@ void erase_all(C *container, const D &donor) {
     }
 }
 
-
-template<typename C, typename Pred>
-bool any_of_in(const C &c, Pred p) {
-    return std::any_of(c.begin(), c.end(), std::move(p));
-}
-
-template<typename C, typename Pred>
-bool all_of_in(const C &c, Pred p) {
-    return std::all_of(c.begin(), c.end(), std::move(p));
-}
-
+ 
+template<typename C, typename Pred> 
+bool any_of_in(const C &c, Pred p) { 
+    return std::any_of(c.begin(), c.end(), std::move(p)); 
+} 
+ 
+template<typename C, typename Pred> 
+bool all_of_in(const C &c, Pred p) { 
+    return std::all_of(c.begin(), c.end(), std::move(p)); 
+} 
+ 
 } // namespace ue2
 
 #ifdef DUMP_SUPPORT

@@ -2,7 +2,7 @@
 #include "mkql_builtins_datetime.h"
 
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
-
+ 
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -80,7 +80,7 @@ struct TIntegralDiv {
 #endif
 };
 
-template <typename TLeft, typename TRight, typename TOutput>
+template <typename TLeft, typename TRight, typename TOutput> 
 struct TNumDivInterval {
     static_assert(std::is_integral<TLeft>::value, "left must be integral");
     static_assert(std::is_integral<TRight>::value, "right must be integral");
@@ -137,12 +137,12 @@ struct TNumDivInterval {
 #endif
 };
 
-}
-
+} 
+ 
 void RegisterDiv(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryRealFunctionOpt<TDiv, TBinaryArgsOpt>(registry, "Div");
     RegisterBinaryIntegralFunctionOpt<TIntegralDiv, TBinaryArgsOptWithNullableResult>(registry, "Div");
-
+ 
     RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<i64>, TIntegralDiv, TBinaryArgsOptWithNullableResult>(registry, "Div");
 

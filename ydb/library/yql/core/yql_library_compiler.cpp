@@ -93,11 +93,11 @@ bool CompileLibrary(const TString& alias, const TString& script, TExprContext& c
     if (!res.IsOk()) {
         for (const auto& originalError : res.Issues) {
             TIssue error(originalError);
-            TStringBuilder message;
-            message << error.Message << " (at " << alias << ")";
-            error.Message = message;
+            TStringBuilder message; 
+            message << error.Message << " (at " << alias << ")"; 
+            error.Message = message; 
             ctx.AddError(error);
-        }
+        } 
         return false;
     }
 
@@ -194,7 +194,7 @@ bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModule
     for (const auto& data : userData) {
         if (data.first.IsFile() && data.second.Usage.Test(EUserDataBlockUsage::Library)) {
             TString libraryData;
-            const TString& alias = data.first.Alias();
+            const TString& alias = data.first.Alias(); 
             if (data.second.Type == EUserDataType::PATH) {
                 libraryData = Load(data.second.Data);
             } else if (data.second.Type == EUserDataType::RAW_INLINE_DATA) {

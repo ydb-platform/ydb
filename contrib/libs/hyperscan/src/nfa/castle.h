@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation
+ * Copyright (c) 2015-2016, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -38,24 +38,24 @@ extern "C" {
 struct mq;
 struct NFA;
 
-char nfaExecCastle_Q(const struct NFA *n, struct mq *q, s64a end);
-char nfaExecCastle_Q2(const struct NFA *n, struct mq *q, s64a end);
-char nfaExecCastle_QR(const struct NFA *n, struct mq *q, ReportID report);
-char nfaExecCastle_reportCurrent(const struct NFA *n, struct mq *q);
-char nfaExecCastle_inAccept(const struct NFA *n, ReportID report,
-                            struct mq *q);
-char nfaExecCastle_inAnyAccept(const struct NFA *n, struct mq *q);
-char nfaExecCastle_queueInitState(const struct NFA *n, struct mq *q);
-char nfaExecCastle_initCompressedState(const struct NFA *n, u64a offset,
-                                       void *state, u8 key);
-char nfaExecCastle_queueCompressState(const struct NFA *nfa, const struct mq *q,
-                                      s64a loc);
-char nfaExecCastle_expandState(const struct NFA *nfa, void *dest,
-                               const void *src, u64a offset, u8 key);
+char nfaExecCastle_Q(const struct NFA *n, struct mq *q, s64a end); 
+char nfaExecCastle_Q2(const struct NFA *n, struct mq *q, s64a end); 
+char nfaExecCastle_QR(const struct NFA *n, struct mq *q, ReportID report); 
+char nfaExecCastle_reportCurrent(const struct NFA *n, struct mq *q); 
+char nfaExecCastle_inAccept(const struct NFA *n, ReportID report, 
+                            struct mq *q); 
+char nfaExecCastle_inAnyAccept(const struct NFA *n, struct mq *q); 
+char nfaExecCastle_queueInitState(const struct NFA *n, struct mq *q); 
+char nfaExecCastle_initCompressedState(const struct NFA *n, u64a offset, 
+                                       void *state, u8 key); 
+char nfaExecCastle_queueCompressState(const struct NFA *nfa, const struct mq *q, 
+                                      s64a loc); 
+char nfaExecCastle_expandState(const struct NFA *nfa, void *dest, 
+                               const void *src, u64a offset, u8 key); 
 
-#define nfaExecCastle_testEOD NFA_API_NO_IMPL
-#define nfaExecCastle_B_Reverse NFA_API_NO_IMPL
-#define nfaExecCastle_zombie_status NFA_API_ZOMBIE_NO_IMPL
+#define nfaExecCastle_testEOD NFA_API_NO_IMPL 
+#define nfaExecCastle_B_Reverse NFA_API_NO_IMPL 
+#define nfaExecCastle_zombie_status NFA_API_ZOMBIE_NO_IMPL 
 
 #ifdef __cplusplus
 }

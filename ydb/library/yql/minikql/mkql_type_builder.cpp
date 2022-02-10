@@ -1839,5 +1839,5 @@ NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type) {
     }
 }
 
-} // namespace NMiniKQL
-} // namespace Nkikimr
+} // namespace NMiniKQL 
+} // namespace Nkikimr 

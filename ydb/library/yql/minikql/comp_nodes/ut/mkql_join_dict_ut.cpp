@@ -8,7 +8,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
             const auto key2 = pb.NewDataLiteral<ui32>(2);
             const auto key3 = pb.NewDataLiteral<ui32>(2);
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
             const auto key2 = pb.NewDataLiteral<ui32>(2);
             const auto key3 = pb.NewDataLiteral<ui32>(2);
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
         for (ui32 pass = 0; pass < 1; ++pass) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
             const auto key1 = pb.NewDataLiteral<ui32>(1);
             const auto key2 = pb.NewDataLiteral<ui32>(2);
             const auto key3 = pb.NewDataLiteral<ui32>(2);
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
     Y_UNIT_TEST_LLVM(TestFull) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto key1 = pb.NewDataLiteral<ui32>(1);
         const auto key2 = pb.NewDataLiteral<ui32>(2);
         const auto key3 = pb.NewDataLiteral<ui32>(2);
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
     Y_UNIT_TEST_LLVM(TestInnerFlat) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto key1 = pb.NewDataLiteral<ui32>(1U);
         const auto key2 = pb.NewDataLiteral<ui32>(2U);
         const auto key3 = pb.NewDataLiteral<ui32>(3U);
@@ -337,7 +337,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
             pb.NewStruct(structType, {{"Key", key3}, {"Payload", payload3}}),
             pb.NewStruct(structType, {{"Key", key4}, {"Payload", payload4}})
         });
-
+ 
         const auto list2 = pb.NewList(structType, {
             pb.NewStruct(structType, {{"Key", key2}, {"Payload", payload8}}),
             pb.NewStruct(structType, {{"Key", key3}, {"Payload", payload7}}),

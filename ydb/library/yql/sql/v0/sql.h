@@ -8,10 +8,10 @@
 
 #include <google/protobuf/message.h>
 
-namespace NSQLTranslationV0 {
+namespace NSQLTranslationV0 { 
 
-    NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules = nullptr);
+    NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules = nullptr); 
     google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NYql::TIssues& err, size_t maxErrors, google::protobuf::Arena* arena = nullptr);
-    NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const NSQLTranslation::TTranslationSettings& settings);
+    NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const NSQLTranslation::TTranslationSettings& settings); 
 
-}  // namespace NSQLTranslationV0
+}  // namespace NSQLTranslationV0 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -36,12 +36,12 @@
 #include "nfagraph/ng_mcclellan_internal.h"
 #include "util/container.h"
 #include "util/determinise.h"
-#include "util/flat_containers.h"
+#include "util/flat_containers.h" 
 #include "util/make_unique.h"
 #include "util/report_manager.h"
-#include "util/unordered.h"
+#include "util/unordered.h" 
 
-#include <algorithm>
+#include <algorithm> 
 #include <queue>
 
 using namespace std;
@@ -54,8 +54,8 @@ namespace {
 
 class Automaton_Merge {
 public:
-    using StateSet = vector<u16>;
-    using StateMap = ue2_unordered_map<StateSet, dstate_id_t>;
+    using StateSet = vector<u16>; 
+    using StateMap = ue2_unordered_map<StateSet, dstate_id_t>; 
 
     Automaton_Merge(const raw_dfa *rdfa1, const raw_dfa *rdfa2,
                     const ReportManager *rm_in, const Grey &grey_in)
@@ -137,10 +137,10 @@ public:
             }
         }
 
-        // Sort so that our alphabet mapping isn't dependent on the order of
-        // rdfas passed in.
-        sort(esets.begin(), esets.end());
-
+        // Sort so that our alphabet mapping isn't dependent on the order of 
+        // rdfas passed in. 
+        sort(esets.begin(), esets.end()); 
+ 
         alphasize = buildAlphabetFromEquivSets(esets, alpha, unalpha);
     }
 
@@ -290,7 +290,7 @@ unique_ptr<raw_dfa> mergeTwoDfas(const raw_dfa *d1, const raw_dfa *d2,
     auto rdfa = ue2::make_unique<raw_dfa>(d1->kind);
 
     Automaton_Merge autom(d1, d2, rm, grey);
-    if (determinise(autom, rdfa->states, max_states)) {
+    if (determinise(autom, rdfa->states, max_states)) { 
         rdfa->start_anchored = autom.start_anchored;
         rdfa->start_floating = autom.start_floating;
         rdfa->alpha_size = autom.alphasize;
@@ -375,7 +375,7 @@ unique_ptr<raw_dfa> mergeAllDfas(const vector<const raw_dfa *> &dfas,
 
     DEBUG_PRINTF("merging dfa\n");
 
-    if (!determinise(n, rdfa->states, max_states)) {
+    if (!determinise(n, rdfa->states, max_states)) { 
         DEBUG_PRINTF("state limit (%zu) exceeded\n", max_states);
         return nullptr; /* over state limit */
     }

@@ -1,4 +1,4 @@
-#include "hyperloglog.h"
+#include "hyperloglog.h" 
 
 #include <util/generic/bitops.h>
 #include <util/generic/yexception.h>
@@ -39,18 +39,18 @@ namespace {
     };
 
     double EstimateBias(double e, unsigned precision) {
-        static const TCorrection CORRECTIONS[1 + THyperLogLog::PRECISION_MAX - THyperLogLog::PRECISION_MIN] = {
+        static const TCorrection CORRECTIONS[1 + THyperLogLog::PRECISION_MAX - THyperLogLog::PRECISION_MIN] = { 
 #include "hyperloglog_corrections.inc"
         };
-        if (precision < THyperLogLog::PRECISION_MIN || precision > THyperLogLog::PRECISION_MAX) {
+        if (precision < THyperLogLog::PRECISION_MIN || precision > THyperLogLog::PRECISION_MAX) { 
             return 0.;
         }
 
-        return CORRECTIONS[precision - THyperLogLog::PRECISION_MIN].GetBias(e);
+        return CORRECTIONS[precision - THyperLogLog::PRECISION_MIN].GetBias(e); 
     }
 
     double GetThreshold(unsigned precision) {
-        static const double THRESHOLD_DATA[1 + THyperLogLog::PRECISION_MAX - THyperLogLog::PRECISION_MIN] = {
+        static const double THRESHOLD_DATA[1 + THyperLogLog::PRECISION_MAX - THyperLogLog::PRECISION_MIN] = { 
             10,     // Precision  4
             20,     // Precision  5
             40,     // Precision  6
@@ -67,11 +67,11 @@ namespace {
             120000, // Precision 17
             350000  // Precision 18
         };
-        if (precision < THyperLogLog::PRECISION_MIN || precision > THyperLogLog::PRECISION_MAX) {
+        if (precision < THyperLogLog::PRECISION_MIN || precision > THyperLogLog::PRECISION_MAX) { 
             return 0.;
         }
 
-        return THRESHOLD_DATA[precision - THyperLogLog::PRECISION_MIN];
+        return THRESHOLD_DATA[precision - THyperLogLog::PRECISION_MIN]; 
     }
 
     double EmpiricAlpha(size_t m) {

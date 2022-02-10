@@ -106,11 +106,11 @@ message TIssuesIds {
         YQL_DEPRECATED_INFERSCHEME = 4503;
         YQL_ORDER_BY_WITHOUT_LIMIT_IN_SUBQUERY = 4504;
         YQL_DEPRECATED_DOUBLE_QUOTE_IN_BRACKETS = 4505;
-        YQL_DEPRECATED_JSON_UDF = 4506;
+        YQL_DEPRECATED_JSON_UDF = 4506; 
         YQL_MISSING_IS_BEFORE_NOT_NULL = 4507;
         YQL_DEPRECATED_TINY_INT_LITERAL_SUFFIX = 4508;
-        YQL_DEPRECATED_DATETIME2 = 4509;
-        YQL_S_EXPRESSIONS_CALL = 4510;
+        YQL_DEPRECATED_DATETIME2 = 4509; 
+        YQL_S_EXPRESSIONS_CALL = 4510; 
         YQL_DEPRECATED_INTERVAL_CONSTANT = 4511;
         YQL_DEPRECATED_FUNCTION_OR_SIGNATURE = 4512;
         YQL_DEPRECATED_INLINE_ACTION_TERMINATOR = 4513;
@@ -178,7 +178,7 @@ message TIssuesIds {
     message TIssueId {
         optional EIssueCode code = 2;
         optional TSeverityIds.ESeverityId severity = 1;
-        optional string format = 3;
+        optional string format = 3; 
     }
 
     repeated TIssueId ids = 1;

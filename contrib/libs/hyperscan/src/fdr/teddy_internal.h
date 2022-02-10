@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,28 +26,28 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Teddy bytecode layout:
- * * |-----|
- * * |     | struct Teddy
- * * |-----|
- * * |     | teddy masks
- * * |     |
- * * |-----|
- * * |     | reinforcement mask table for bucket 0..7
- * * |     |
- * * |-----|
- * * |     | reinforcement mask table for bucket 8..15 (FAT teddy)
- * * |     |
- * * |-----|
- * * |     | confirm
- * * |     |
- * * |     |
- * * |-----|
- * * |     | flood control
- * * |     |
- * * |-----|
- */
-
+/* Teddy bytecode layout: 
+ * * |-----| 
+ * * |     | struct Teddy 
+ * * |-----| 
+ * * |     | teddy masks 
+ * * |     | 
+ * * |-----| 
+ * * |     | reinforcement mask table for bucket 0..7 
+ * * |     | 
+ * * |-----| 
+ * * |     | reinforcement mask table for bucket 8..15 (FAT teddy) 
+ * * |     | 
+ * * |-----| 
+ * * |     | confirm 
+ * * |     | 
+ * * |     | 
+ * * |-----| 
+ * * |     | flood control 
+ * * |     | 
+ * * |-----| 
+ */ 
+ 
 #ifndef TEDDY_INTERNAL_H
 #define TEDDY_INTERNAL_H
 
@@ -58,8 +58,8 @@ struct Teddy {
     u32 engineID;
     u32 size;
     u32 maxStringLen;
-    u32 numStrings;
-    u32 confOffset;
+    u32 numStrings; 
+    u32 confOffset; 
     u32 floodOffset;
 };
 

@@ -92,7 +92,7 @@ public:
     // settings for result data provider
     struct TFillSettings {
         TMaybe<ui64> AllResultsBytesLimit = 100000;
-        TMaybe<ui64> RowsLimitPerWrite = 1000; // only if list is written
+        TMaybe<ui64> RowsLimitPerWrite = 1000; // only if list is written 
         EResultFormat Format;
         TString FormatDetails;
         bool Discard = false;
@@ -197,18 +197,18 @@ struct TDataProviderInfo {
     std::function<TMaybe<TString>(const TMaybe<TSet<TString>>& usedClusters, const TMaybe<TSet<TString>>& usedProviders,
         ESourceSyntax syntax)> RemoteClusterProvider;
 
-    std::function<TFutureStatus(const TString& cluster, ESourceSyntax sourceSyntax, const TString& sourceCode,
+    std::function<TFutureStatus(const TString& cluster, ESourceSyntax sourceSyntax, const TString& sourceCode, 
         TExprContext& ctx)> RemoteValidate;
 
     std::function<TFutureStatus(const TString& cluster,
-        ESourceSyntax sourceSyntax, const TString& sourceCode,
+        ESourceSyntax sourceSyntax, const TString& sourceCode, 
         const IPipelineConfigurator* pipelineConf,
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         TExprNode::TPtr& root, TExprContext& ctx,
         TMaybe<TString>& externalQueryAst, TMaybe<TString>& externalQueryPlan)> RemoteOptimize;
 
     std::function<TFutureStatus(const TString& cluster,
-        ESourceSyntax sourceSyntax, const TString& sourceCode,
+        ESourceSyntax sourceSyntax, const TString& sourceCode, 
         const NYson::EYsonFormat& outputFormat, const NYson::EYsonFormat& resultFormat,
         const IPipelineConfigurator* pipelineConf,
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -37,9 +37,9 @@
 
 #include <cstdio>
 #include <ostream>
-#include <sstream>
+#include <sstream> 
 #include <string>
-#include <vector>
+#include <vector> 
 
 namespace ue2 {
 
@@ -50,23 +50,23 @@ enum cc_output_t {
 
 class CharReach;
 
-void describeClass(std::ostream &os, const CharReach &cr, size_t maxLength = 16,
-                   enum cc_output_t out_type  = CC_OUT_TEXT);
+void describeClass(std::ostream &os, const CharReach &cr, size_t maxLength = 16, 
+                   enum cc_output_t out_type  = CC_OUT_TEXT); 
 
 std::string describeClass(const CharReach &cr, size_t maxLength = 16,
                           enum cc_output_t out_type = CC_OUT_TEXT);
 
-template<typename Container>
-std::string describeClasses(const Container &container,
-                            size_t maxClassLength = 16,
-                            enum cc_output_t out_type = CC_OUT_TEXT) {
-    std::ostringstream oss;
-    for (const CharReach &cr : container) {
-        describeClass(oss, cr, maxClassLength, out_type);
-    }
-    return oss.str();
-}
-
+template<typename Container> 
+std::string describeClasses(const Container &container, 
+                            size_t maxClassLength = 16, 
+                            enum cc_output_t out_type = CC_OUT_TEXT) { 
+    std::ostringstream oss; 
+    for (const CharReach &cr : container) { 
+        describeClass(oss, cr, maxClassLength, out_type); 
+    } 
+    return oss.str(); 
+} 
+ 
 void describeClass(FILE *f, const CharReach &cr, size_t maxLength,
                    enum cc_output_t out_type);
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -75,7 +75,7 @@ bool findPaths(const NGHolder &g, vector<Path> &paths) {
 
         read_count[g[v].index] = out_degree(v, g);
 
-        DEBUG_PRINTF("setting read_count to %zu for %zu\n",
+        DEBUG_PRINTF("setting read_count to %zu for %zu\n", 
                       read_count[g[v].index], g[v].index);
 
         if (v == g.start || v == g.startDs) {
@@ -115,7 +115,7 @@ bool findPaths(const NGHolder &g, vector<Path> &paths) {
 
             read_count[g[u].index]--;
             if (!read_count[g[u].index]) {
-                DEBUG_PRINTF("clearing %zu as finished reading\n", g[u].index);
+                DEBUG_PRINTF("clearing %zu as finished reading\n", g[u].index); 
                 built[g[u].index].clear();
                 built[g[u].index].shrink_to_fit();
             }
@@ -136,9 +136,9 @@ bool hasLargeDegreeVertex(const NGHolder &g) {
         if (is_special(v, g)) { // specials can have large degree
             continue;
         }
-        if (degree(v, g) > MAX_VERTEX_DEGREE) {
-            DEBUG_PRINTF("vertex %zu has degree %zu\n", g[v].index,
-                         degree(v, g));
+        if (degree(v, g) > MAX_VERTEX_DEGREE) { 
+            DEBUG_PRINTF("vertex %zu has degree %zu\n", g[v].index, 
+                         degree(v, g)); 
             return true;
         }
     }
@@ -186,13 +186,13 @@ struct PathMask {
         }
 
         // Reports are attached to the second-to-last vertex.
-        NFAVertex u = *std::next(path.rbegin());
-        reports = g[u].reports;
+        NFAVertex u = *std::next(path.rbegin()); 
+        reports = g[u].reports; 
         assert(!reports.empty());
     }
 
     vector<CharReach> mask;
-    flat_set<ReportID> reports;
+    flat_set<ReportID> reports; 
     bool is_anchored;
     bool is_eod;
 };
@@ -208,11 +208,11 @@ bool handleDecoratedLiterals(RoseBuild &rose, const NGHolder &g,
         return false;
     }
 
-    if (!hasNarrowReachVertex(g)) {
-        DEBUG_PRINTF("no narrow reach vertices\n");
-        return false;
-    }
-
+    if (!hasNarrowReachVertex(g)) { 
+        DEBUG_PRINTF("no narrow reach vertices\n"); 
+        return false; 
+    } 
+ 
     if (hasLargeDegreeVertex(g)) {
         DEBUG_PRINTF("large degree\n");
         return false;

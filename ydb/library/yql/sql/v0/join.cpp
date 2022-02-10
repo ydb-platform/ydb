@@ -11,7 +11,7 @@
 
 using namespace NYql;
 
-namespace NSQLTranslationV0 {
+namespace NSQLTranslationV0 { 
 
 namespace {
 
@@ -599,4 +599,4 @@ TSourcePtr BuildEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources) {
     return new TEquiJoin(pos, std::move(sources));
 }
 
-} // namespace NSQLTranslationV0
+} // namespace NSQLTranslationV0 

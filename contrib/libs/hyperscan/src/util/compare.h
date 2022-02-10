@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation
+ * Copyright (c) 2015-2016, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -97,10 +97,10 @@ u64a theirtoupper64(const u64a x) {
 
 static really_inline
 int cmpNocaseNaive(const u8 *p1, const u8 *p2, size_t len) {
-    const u8 *pEnd = p1 + len;
+    const u8 *pEnd = p1 + len; 
     for (; p1 < pEnd; p1++, p2++) {
-        assert(!ourisalpha(*p2) || myisupper(*p2)); // Already upper-case.
-        if ((u8)mytoupper(*p1) != *p2) {
+        assert(!ourisalpha(*p2) || myisupper(*p2)); // Already upper-case. 
+        if ((u8)mytoupper(*p1) != *p2) { 
             return 1;
         }
     }
@@ -109,7 +109,7 @@ int cmpNocaseNaive(const u8 *p1, const u8 *p2, size_t len) {
 
 static really_inline
 int cmpCaseNaive(const u8 *p1, const u8 *p2, size_t len) {
-    const u8 *pEnd = p1 + len;
+    const u8 *pEnd = p1 + len; 
     for (; p1 < pEnd; p1++, p2++) {
         if (*p1 != *p2) {
             return 1;
@@ -130,11 +130,11 @@ int cmpCaseNaive(const u8 *p1, const u8 *p2, size_t len) {
 
 #define CMP_SIZE sizeof(CMP_T)
 
-/**
- * \brief Compare two strings, optionally caselessly.
- *
- * Note: If nocase is true, p2 is assumed to be already upper-case.
- */
+/** 
+ * \brief Compare two strings, optionally caselessly. 
+ * 
+ * Note: If nocase is true, p2 is assumed to be already upper-case. 
+ */ 
 #if defined(ARCH_IA32)
 static UNUSED never_inline
 #else
@@ -151,13 +151,13 @@ int cmpForward(const u8 *p1, const u8 *p2, size_t len, char nocase) {
 
     if (nocase) { // Case-insensitive version.
         for (; p1 < p1_end; p1 += CMP_SIZE, p2 += CMP_SIZE) {
-            assert(ULOAD(p2) == TOUPPER(ULOAD(p2))); // Already upper-case.
-            if (TOUPPER(ULOAD(p1)) != ULOAD(p2)) {
+            assert(ULOAD(p2) == TOUPPER(ULOAD(p2))); // Already upper-case. 
+            if (TOUPPER(ULOAD(p1)) != ULOAD(p2)) { 
                 return 1;
             }
         }
-        assert(ULOAD(p2_end) == TOUPPER(ULOAD(p2_end))); // Already upper-case.
-        if (TOUPPER(ULOAD(p1_end)) != ULOAD(p2_end)) {
+        assert(ULOAD(p2_end) == TOUPPER(ULOAD(p2_end))); // Already upper-case. 
+        if (TOUPPER(ULOAD(p1_end)) != ULOAD(p2_end)) { 
             return 1;
         }
     } else { // Case-sensitive version.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -77,7 +77,7 @@ void lbrExpandState(const struct lbr_common *l, u64a offset,
 
     const struct RepeatInfo *info = getRepeatInfo(l);
     repeatUnpack(stream_state, info, offset, &lstate->ctrl);
-    lstate->lastEscape = 0;
+    lstate->lastEscape = 0; 
 }
 
 static really_inline
@@ -131,9 +131,9 @@ char repeatIsDead(const struct RepeatInfo *info,
         return lstate->ctrl.ring.offset == REPEAT_DEAD;
     case REPEAT_TRAILER:
         return lstate->ctrl.trailer.offset == REPEAT_DEAD;
-    case REPEAT_ALWAYS:
-        assert(!"REPEAT_ALWAYS should only be used by Castle");
-        return 0;
+    case REPEAT_ALWAYS: 
+        assert(!"REPEAT_ALWAYS should only be used by Castle"); 
+        return 0; 
     }
 
     assert(0);
@@ -294,7 +294,7 @@ char lbrMatchLoop(const struct lbr_common *l, const u64a begin, const u64a end,
         }
 
         DEBUG_PRINTF("firing match at %llu\n", i);
-        if (cb(0, i, l->report, ctx) == MO_HALT_MATCHING) {
+        if (cb(0, i, l->report, ctx) == MO_HALT_MATCHING) { 
             return MO_HALT_MATCHING;
         }
     }
@@ -308,7 +308,7 @@ char lbrRevScanDot(UNUSED const struct NFA *nfa, UNUSED const u8 *buf,
                    UNUSED size_t begin, UNUSED size_t end,
                    UNUSED size_t *loc) {
     assert(begin <= end);
-    assert(nfa->type == LBR_NFA_DOT);
+    assert(nfa->type == LBR_NFA_DOT); 
     // Nothing can kill a dot!
     return 0;
 }
@@ -317,7 +317,7 @@ static really_inline
 char lbrRevScanVerm(const struct NFA *nfa, const u8 *buf,
                     size_t begin, size_t end, size_t *loc) {
     assert(begin <= end);
-    assert(nfa->type == LBR_NFA_VERM);
+    assert(nfa->type == LBR_NFA_VERM); 
     const struct lbr_verm *l = getImplNfa(nfa);
 
     if (begin == end) {
@@ -341,7 +341,7 @@ static really_inline
 char lbrRevScanNVerm(const struct NFA *nfa, const u8 *buf,
                      size_t begin, size_t end, size_t *loc) {
     assert(begin <= end);
-    assert(nfa->type == LBR_NFA_NVERM);
+    assert(nfa->type == LBR_NFA_NVERM); 
     const struct lbr_verm *l = getImplNfa(nfa);
 
     if (begin == end) {
@@ -366,7 +366,7 @@ char lbrRevScanShuf(const struct NFA *nfa, const u8 *buf,
                     size_t begin, size_t end,
                     size_t *loc) {
     assert(begin <= end);
-    assert(nfa->type == LBR_NFA_SHUF);
+    assert(nfa->type == LBR_NFA_SHUF); 
     const struct lbr_shuf *l = getImplNfa(nfa);
 
     if (begin == end) {
@@ -390,7 +390,7 @@ char lbrRevScanTruf(const struct NFA *nfa, const u8 *buf,
                     size_t begin, size_t end,
                     size_t *loc) {
     assert(begin <= end);
-    assert(nfa->type == LBR_NFA_TRUF);
+    assert(nfa->type == LBR_NFA_TRUF); 
     const struct lbr_truf *l = getImplNfa(nfa);
 
     if (begin == end) {
@@ -414,7 +414,7 @@ char lbrFwdScanDot(UNUSED const struct NFA *nfa, UNUSED const u8 *buf,
                    UNUSED size_t begin, UNUSED size_t end,
                    UNUSED size_t *loc) {
     assert(begin <= end);
-    assert(nfa->type == LBR_NFA_DOT);
+    assert(nfa->type == LBR_NFA_DOT); 
     // Nothing can kill a dot!
     return 0;
 }
@@ -423,7 +423,7 @@ static really_inline
 char lbrFwdScanVerm(const struct NFA *nfa, const u8 *buf,
                     size_t begin, size_t end, size_t *loc) {
     assert(begin <= end);
-    assert(nfa->type == LBR_NFA_VERM);
+    assert(nfa->type == LBR_NFA_VERM); 
     const struct lbr_verm *l = getImplNfa(nfa);
 
     if (begin == end) {
@@ -447,7 +447,7 @@ static really_inline
 char lbrFwdScanNVerm(const struct NFA *nfa, const u8 *buf,
                      size_t begin, size_t end, size_t *loc) {
     assert(begin <= end);
-    assert(nfa->type == LBR_NFA_NVERM);
+    assert(nfa->type == LBR_NFA_NVERM); 
     const struct lbr_verm *l = getImplNfa(nfa);
 
     if (begin == end) {
@@ -472,7 +472,7 @@ char lbrFwdScanShuf(const struct NFA *nfa, const u8 *buf,
                     size_t begin, size_t end,
                     size_t *loc) {
     assert(begin <= end);
-    assert(nfa->type == LBR_NFA_SHUF);
+    assert(nfa->type == LBR_NFA_SHUF); 
     const struct lbr_shuf *l = getImplNfa(nfa);
 
     if (begin == end) {
@@ -496,7 +496,7 @@ char lbrFwdScanTruf(const struct NFA *nfa, const u8 *buf,
                     size_t begin, size_t end,
                     size_t *loc) {
     assert(begin <= end);
-    assert(nfa->type == LBR_NFA_TRUF);
+    assert(nfa->type == LBR_NFA_TRUF); 
     const struct lbr_truf *l = getImplNfa(nfa);
 
     if (begin == end) {

@@ -11,7 +11,7 @@
 
 using namespace NYql;
 
-namespace NSQLTranslationV1 {
+namespace NSQLTranslationV1 { 
 
 TString NormalizeJoinOp(const TString& joinOp) {
     TVector<TString> joinOpsParts;
@@ -659,4 +659,4 @@ TSourcePtr BuildEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources, TVector<b
     return new TEquiJoin(pos, std::move(sources), std::move(anyFlags), strictJoinKeyTypes);
 }
 
-} // namespace NSQLTranslationV1
+} // namespace NSQLTranslationV1 

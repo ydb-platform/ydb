@@ -9,20 +9,20 @@ class TDigest {
         double Mean;
         double Count;
 
-        TCentroid()
-            : Mean(0)
-            , Count(0)
-        {
-        }
-        TCentroid(double x, double weight)
-            : Mean(x)
-            , Count(weight)
-        {
-        }
+        TCentroid() 
+            : Mean(0) 
+            , Count(0) 
+        { 
+        } 
+        TCentroid(double x, double weight) 
+            : Mean(x) 
+            , Count(weight) 
+        { 
+        } 
 
-        bool operator<(const TCentroid& centroid) const {
-            return Mean < centroid.Mean;
-        }
+        bool operator<(const TCentroid& centroid) const { 
+            return Mean < centroid.Mean; 
+        } 
 
         void Update(double x, double weight) {
             Count += weight;
@@ -50,11 +50,11 @@ protected:
 public:
     TDigest(double delta = 0.01, double k = 25);
     TDigest(double delta, double k, double firstValue);
-    TDigest(const TString& serializedDigest);
+    TDigest(const TString& serializedDigest); 
     TDigest(const TDigest* digest1, const TDigest* digest2); // merge
     TString Serialize();
-    TDigest operator+(const TDigest& other);
-    TDigest& operator+=(const TDigest& other);
+    TDigest operator+(const TDigest& other); 
+    TDigest& operator+=(const TDigest& other); 
     void AddValue(double value);
     void Compress();
     void Clear();

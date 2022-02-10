@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -30,22 +30,22 @@
  * \brief Data structures for Noodle literal matcher engine.
  */
 
-#ifndef NOODLE_INTERNAL_H
-#define NOODLE_INTERNAL_H
+#ifndef NOODLE_INTERNAL_H 
+#define NOODLE_INTERNAL_H 
 
 #include "ue2common.h"
 
 struct noodTable {
     u32 id;
-    u64a msk;
-    u64a cmp;
-    u8 msk_len;
-    u8 key_offset;
-    u8 nocase;
-    u8 single;
-    u8 key0;
-    u8 key1;
+    u64a msk; 
+    u64a cmp; 
+    u8 msk_len; 
+    u8 key_offset; 
+    u8 nocase; 
+    u8 single; 
+    u8 key0; 
+    u8 key1; 
 };
 
-#endif /* NOODLE_INTERNAL_H */
+#endif /* NOODLE_INTERNAL_H */ 
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,7 +34,7 @@
 #include "scatter.h"
 #include "ue2common.h"
 #include "rose/rose_build_scatter.h"
-#include "util/compile_error.h"
+#include "util/compile_error.h" 
 
 #include <cassert>
 #include <cstring> // for memset
@@ -46,32 +46,32 @@ using namespace std;
 
 namespace ue2 {
 
-u32 mmbit_size(u32 total_bits) {
-    if (total_bits > MMB_MAX_BITS) {
-        throw ResourceLimitError();
-    }
-
-    // Flat model multibit structures are just stored as a bit vector.
-    if (total_bits <= MMB_FLAT_MAX_BITS) {
-        return ROUNDUP_N(total_bits, 8) / 8;
-    }
-
-    u64a current_level = 1; // Number of blocks on current level.
-    u64a total = 0;         // Total number of blocks.
-    while (current_level * MMB_KEY_BITS < total_bits) {
-        total += current_level;
-        current_level <<= MMB_KEY_SHIFT;
-    }
-
-    // Last level is a one-for-one bit vector. It needs room for total_bits
-    // elements, rounded up to the nearest block.
-    u64a last_level = ((u64a)total_bits + MMB_KEY_BITS - 1) / MMB_KEY_BITS;
-    total += last_level;
-
-    assert(total * sizeof(MMB_TYPE) <= UINT32_MAX);
-    return (u32)(total * sizeof(MMB_TYPE));
-}
-
+u32 mmbit_size(u32 total_bits) { 
+    if (total_bits > MMB_MAX_BITS) { 
+        throw ResourceLimitError(); 
+    } 
+ 
+    // Flat model multibit structures are just stored as a bit vector. 
+    if (total_bits <= MMB_FLAT_MAX_BITS) { 
+        return ROUNDUP_N(total_bits, 8) / 8; 
+    } 
+ 
+    u64a current_level = 1; // Number of blocks on current level. 
+    u64a total = 0;         // Total number of blocks. 
+    while (current_level * MMB_KEY_BITS < total_bits) { 
+        total += current_level; 
+        current_level <<= MMB_KEY_SHIFT; 
+    } 
+ 
+    // Last level is a one-for-one bit vector. It needs room for total_bits 
+    // elements, rounded up to the nearest block. 
+    u64a last_level = ((u64a)total_bits + MMB_KEY_BITS - 1) / MMB_KEY_BITS; 
+    total += last_level; 
+ 
+    assert(total * sizeof(MMB_TYPE) <= UINT32_MAX); 
+    return (u32)(total * sizeof(MMB_TYPE)); 
+} 
+ 
 namespace {
 struct TreeNode {
     MMB_TYPE mask = 0;
@@ -155,12 +155,12 @@ void bfs(vector<mmbit_sparse_iter> &out, const TreeNode &tree) {
 
 /** \brief Construct a sparse iterator over the values in \a bits for a
  * multibit of size \a total_bits. */
-vector<mmbit_sparse_iter> mmbBuildSparseIterator(const vector<u32> &bits,
-                                                 u32 total_bits) {
-    vector<mmbit_sparse_iter> out;
+vector<mmbit_sparse_iter> mmbBuildSparseIterator(const vector<u32> &bits, 
+                                                 u32 total_bits) { 
+    vector<mmbit_sparse_iter> out; 
     assert(!bits.empty());
     assert(total_bits > 0);
-    assert(total_bits <= MMB_MAX_BITS);
+    assert(total_bits <= MMB_MAX_BITS); 
 
     DEBUG_PRINTF("building sparse iter for %zu of %u bits\n",
                  bits.size(), total_bits);
@@ -186,7 +186,7 @@ vector<mmbit_sparse_iter> mmbBuildSparseIterator(const vector<u32> &bits,
 #endif
 
     DEBUG_PRINTF("iter has %zu records\n", out.size());
-    return out;
+    return out; 
 }
 
 template<typename T>
@@ -273,7 +273,7 @@ void mmbBuildInitRangePlan(u32 total_bits, u32 begin, u32 end,
         }
 
         // Partial block to deal with beginning.
-        block_offset += (k1 / MMB_KEY_BITS) * sizeof(MMB_TYPE);
+        block_offset += (k1 / MMB_KEY_BITS) * sizeof(MMB_TYPE); 
         if (k1 % MMB_KEY_BITS) {
             u32 idx = k1 / MMB_KEY_BITS;
             u32 block_end = (idx + 1) * MMB_KEY_BITS;

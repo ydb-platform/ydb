@@ -7135,7 +7135,7 @@
                 "sandbox_id": 32521995,
                 "match": "KiWi python protos"
             }
-        },
+        }, 
         "allure_commandline": {
             "formula": {
                 "sandbox_id": 569859192,

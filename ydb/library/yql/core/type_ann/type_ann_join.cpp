@@ -290,7 +290,7 @@ namespace NTypeAnnImpl {
                 ctx.Expr.AddError(*err);
                 ctx.Expr.AddError(TIssue(
                     ctx.Expr.GetPosition(input->Child(idx)->Pos()),
-                    TStringBuilder() << "Failed to parse labels of struct as second element of " << idx << " argument"
+                    TStringBuilder() << "Failed to parse labels of struct as second element of " << idx << " argument" 
                     ));
                 return IGraphTransformer::TStatus::Error;
             }

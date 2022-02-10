@@ -61,7 +61,7 @@ class TJavascriptTypeChecker : public TExploringNodeVisitor {
     using TExploringNodeVisitor::Visit;
     MKQL_BAD_TYPE_VISIT(TAnyType, "Javascript");
 };
-
+ 
 #undef MKQL_BAD_TYPE_VISIT
 
 void EnsureScriptSpecificTypes(
@@ -81,8 +81,8 @@ void EnsureScriptSpecificTypes(
         case EScriptType::CustomPython2:
         case EScriptType::CustomPython3:
             return TPythonTypeChecker().Walk(funcType, env);
-        case EScriptType::Javascript:
-            return TJavascriptTypeChecker().Walk(funcType, env);
+        case EScriptType::Javascript: 
+            return TJavascriptTypeChecker().Walk(funcType, env); 
     default:
         MKQL_ENSURE(false, "Unknown script type " << static_cast<ui32>(scriptType));
     }
@@ -225,7 +225,7 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
     return multiOptional;
 }
 
-} // namespace
+} // namespace 
 
 std::string_view ScriptTypeAsStr(EScriptType type) {
     switch (type) {
@@ -1899,8 +1899,8 @@ TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::DyNumber>(const NU
 
 TRuntimeNode TProgramBuilder::NewDecimalLiteral(NYql::NDecimal::TInt128 data, ui8 precision, ui8 scale) const {
     return TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(data), TDataDecimalType::Create(precision, scale, Env), Env), true);
-}
-
+} 
+ 
 TRuntimeNode TProgramBuilder::NewOptional(TRuntimeNode data) {
     auto type = TOptionalType::Create(data.GetStaticType(), Env);
     return TRuntimeNode(TOptionalLiteral::Create(data, type, Env), true);
@@ -2171,11 +2171,11 @@ TRuntimeNode TProgramBuilder::Decrement(TRuntimeNode data) {
     return Invoke(TString("Dec_") += ::ToString(static_cast<TDataDecimalType*>(type)->GetParams().first), data.GetStaticType(), args);
 }
 
-TRuntimeNode TProgramBuilder::Abs(TRuntimeNode data) {
+TRuntimeNode TProgramBuilder::Abs(TRuntimeNode data) { 
     const std::array<TRuntimeNode, 1> args = {{ data }};
     return Invoke(__func__, data.GetStaticType(), args);
-}
-
+} 
+ 
 TRuntimeNode TProgramBuilder::Plus(TRuntimeNode data) {
     const std::array<TRuntimeNode, 1> args = {{ data }};
     return Invoke(__func__, data.GetStaticType(), args);
@@ -3819,7 +3819,7 @@ TRuntimeNode TProgramBuilder::Apply(TRuntimeNode callableNode, const TArrayRef<c
         TRuntimeNode arg = args[i];
         MKQL_ENSURE(arg.GetStaticType()->IsConvertableTo(*argType),
                     "Argument type mismatch for argument " << i << ": runtime " << argType->GetKindAsStr()
-                                   << " with static " << arg.GetStaticType()->GetKindAsStr());
+                                   << " with static " << arg.GetStaticType()->GetKindAsStr()); 
     }
 
     TCallableBuilder callableBuilder(Env, RuntimeVersion >= 8 ? "Apply2" : "Apply", callableType->GetReturnType());
@@ -4030,12 +4030,12 @@ TRuntimeNode TProgramBuilder::RandomUuid(const TArrayRef<const TRuntimeNode>& de
 TRuntimeNode TProgramBuilder::Now(const TArrayRef<const TRuntimeNode>& args) {
     TCallableBuilder callableBuilder(Env, __func__, NewDataType(NUdf::TDataType<ui64>::Id));
     for (const auto& x : args) {
-        callableBuilder.Add(x);
-    }
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+        callableBuilder.Add(x); 
+    } 
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TProgramBuilder::CurrentUtcDate(const TArrayRef<const TRuntimeNode>& args) {
     return Cast(CurrentUtcTimestamp(args), NewDataType(NUdf::TDataType<NUdf::TDate>::Id));
 }

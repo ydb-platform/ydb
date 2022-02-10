@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation
+ * Copyright (c) 2015-2016, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -83,13 +83,13 @@ void make_caseless(CodePointSet *cps) {
 
     CodePointSet base = *cps;
 
-    auto uc_begin = begin(ucp_caseless_def);
-    auto uc_end = end(ucp_caseless_def);
-    DEBUG_PRINTF("uc len %zd\n", distance(uc_begin, uc_end));
+    auto uc_begin = begin(ucp_caseless_def); 
+    auto uc_end = end(ucp_caseless_def); 
+    DEBUG_PRINTF("uc len %zd\n", distance(uc_begin, uc_end)); 
 
-    for (const auto &elem : base) {
-        unichar b = lower(elem);
-        unichar e = upper(elem) + 1;
+    for (const auto &elem : base) { 
+        unichar b = lower(elem); 
+        unichar e = upper(elem) + 1; 
 
         for (; b < e; b++) {
             DEBUG_PRINTF("decasing %x\n", b);
@@ -100,7 +100,7 @@ void make_caseless(CodePointSet *cps) {
                 DEBUG_PRINTF("EOL\n");
                 return;
             }
-            while (uc_begin != uc_end && uc_begin->base == b) {
+            while (uc_begin != uc_end && uc_begin->base == b) { 
                 DEBUG_PRINTF("at {%x,%x}\n", uc_begin->base, uc_begin->caseless);
                 cps->set(uc_begin->caseless);
                 ++uc_begin;
@@ -116,12 +116,12 @@ void make_caseless(CodePointSet *cps) {
 bool flip_case(unichar *c) {
     assert(c);
 
-    const unicase test = { *c, 0 };
+    const unicase test = { *c, 0 }; 
 
-    const auto uc_begin = begin(ucp_caseless_def);
-    const auto uc_end = end(ucp_caseless_def);
-    const auto f = lower_bound(uc_begin, uc_end, test);
-    if (f != uc_end && f->base == *c) {
+    const auto uc_begin = begin(ucp_caseless_def); 
+    const auto uc_end = end(ucp_caseless_def); 
+    const auto f = lower_bound(uc_begin, uc_end, test); 
+    if (f != uc_end && f->base == *c) { 
         DEBUG_PRINTF("flipped c=%x to %x\n", *c, f->caseless);
         *c = f->caseless;
         return true;

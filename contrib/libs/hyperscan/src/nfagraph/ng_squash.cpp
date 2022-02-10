@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -111,8 +111,8 @@
 
 #include <deque>
 #include <map>
-#include <unordered_map>
-#include <unordered_set>
+#include <unordered_map> 
+#include <unordered_set> 
 
 #include <boost/graph/depth_first_search.hpp>
 #include <boost/graph/reverse_graph.hpp>
@@ -121,26 +121,26 @@ using namespace std;
 
 namespace ue2 {
 
-using PostDomTree = unordered_map<NFAVertex, unordered_set<NFAVertex>>;
+using PostDomTree = unordered_map<NFAVertex, unordered_set<NFAVertex>>; 
 
 static
-PostDomTree buildPDomTree(const NGHolder &g) {
-    PostDomTree tree;
-    tree.reserve(num_vertices(g));
+PostDomTree buildPDomTree(const NGHolder &g) { 
+    PostDomTree tree; 
+    tree.reserve(num_vertices(g)); 
 
-    auto postdominators = findPostDominators(g);
-
+    auto postdominators = findPostDominators(g); 
+ 
     for (auto v : vertices_range(g)) {
         if (is_special(v, g)) {
             continue;
         }
         NFAVertex pdom = postdominators[v];
         if (pdom) {
-            DEBUG_PRINTF("vertex %zu -> %zu\n", g[pdom].index, g[v].index);
+            DEBUG_PRINTF("vertex %zu -> %zu\n", g[pdom].index, g[v].index); 
             tree[pdom].insert(v);
         }
     }
-    return tree;
+    return tree; 
 }
 
 /**
@@ -153,13 +153,13 @@ void buildSquashMask(NFAStateSet &mask, const NGHolder &g, NFAVertex v,
                      const CharReach &cr, const NFAStateSet &init,
                      const vector<NFAVertex> &vByIndex, const PostDomTree &tree,
                      som_type som, const vector<DepthMinMax> &som_depths,
-                     const unordered_map<NFAVertex, u32> &region_map,
+                     const unordered_map<NFAVertex, u32> &region_map, 
                      smgb_cache &cache) {
-    DEBUG_PRINTF("build base squash mask for vertex %zu)\n", g[v].index);
+    DEBUG_PRINTF("build base squash mask for vertex %zu)\n", g[v].index); 
 
     vector<NFAVertex> q;
 
-    auto it = tree.find(v);
+    auto it = tree.find(v); 
     if (it != tree.end()) {
         q.insert(q.end(), it->second.begin(), it->second.end());
     }
@@ -275,9 +275,9 @@ void buildPred(NFAStateSet &pred, const NGHolder &g, NFAVertex v) {
 static
 void findDerivedSquashers(const NGHolder &g, const vector<NFAVertex> &vByIndex,
                           const PostDomTree &pdom_tree, const NFAStateSet &init,
-                          unordered_map<NFAVertex, NFAStateSet> *squash,
-                          som_type som, const vector<DepthMinMax> &som_depths,
-                          const unordered_map<NFAVertex, u32> &region_map,
+                          unordered_map<NFAVertex, NFAStateSet> *squash, 
+                          som_type som, const vector<DepthMinMax> &som_depths, 
+                          const unordered_map<NFAVertex, u32> &region_map, 
                           smgb_cache &cache) {
     deque<NFAVertex> remaining;
     for (const auto &m : *squash) {
@@ -302,7 +302,7 @@ void findDerivedSquashers(const NGHolder &g, const vector<NFAVertex> &vByIndex,
             }
 
             NFAStateSet u_squash(init.size());
-            size_t u_index = g[u].index;
+            size_t u_index = g[u].index; 
 
             buildSquashMask(u_squash, g, u, g[u].char_reach, init, vByIndex,
                             pdom_tree, som, som_depths, region_map, cache);
@@ -310,7 +310,7 @@ void findDerivedSquashers(const NGHolder &g, const vector<NFAVertex> &vByIndex,
             u_squash.set(u_index); /* never clear ourselves */
 
             if ((~u_squash).any()) { // i.e. some bits unset in mask
-                DEBUG_PRINTF("%zu is an upstream squasher of %zu\n", u_index,
+                DEBUG_PRINTF("%zu is an upstream squasher of %zu\n", u_index, 
                              g[v].index);
                 (*squash)[u] = u_squash;
                 remaining.push_back(u);
@@ -319,61 +319,61 @@ void findDerivedSquashers(const NGHolder &g, const vector<NFAVertex> &vByIndex,
     }
 }
 
-/* If there are redundant states in the graph, it may be possible for two
- * sibling .* states to try to squash each other -- which should be prevented.
- *
- * Note: this situation should only happen if ng_equivalence has not been run.
- */
-static
-void clearMutualSquashers(const NGHolder &g, const vector<NFAVertex> &vByIndex,
-                          unordered_map<NFAVertex, NFAStateSet> &squash) {
-    for (auto it = squash.begin(); it != squash.end();) {
-        NFAVertex a = it->first;
-        u32 a_index = g[a].index;
+/* If there are redundant states in the graph, it may be possible for two 
+ * sibling .* states to try to squash each other -- which should be prevented. 
+ * 
+ * Note: this situation should only happen if ng_equivalence has not been run. 
+ */ 
+static 
+void clearMutualSquashers(const NGHolder &g, const vector<NFAVertex> &vByIndex, 
+                          unordered_map<NFAVertex, NFAStateSet> &squash) { 
+    for (auto it = squash.begin(); it != squash.end();) { 
+        NFAVertex a = it->first; 
+        u32 a_index = g[a].index; 
 
-        NFAStateSet a_squash = ~it->second;  /* default is mask of survivors */
-        for (auto b_index = a_squash.find_first(); b_index != a_squash.npos;
-             b_index = a_squash.find_next(b_index)) {
-            assert(b_index != a_index);
-            NFAVertex b = vByIndex[b_index];
-
-            auto b_it = squash.find(b);
-            if (b_it == squash.end()) {
-                continue;
-            }
-            auto &b_squash = b_it->second;
-            if (!b_squash.test(a_index)) {
-                /* b and a squash each other, prevent this */
-                DEBUG_PRINTF("removing mutual squash %u %zu\n",
-                             a_index, b_index);
-                b_squash.set(a_index);
-                it->second.set(b_index);
-            }
-        }
-
-        if (it->second.all()) {
-            DEBUG_PRINTF("%u is no longer an effective squash state\n",
-                         a_index);
-            it = squash.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
-unordered_map<NFAVertex, NFAStateSet> findSquashers(const NGHolder &g,
-                                                    som_type som) {
-    unordered_map<NFAVertex, NFAStateSet> squash;
-
+        NFAStateSet a_squash = ~it->second;  /* default is mask of survivors */ 
+        for (auto b_index = a_squash.find_first(); b_index != a_squash.npos; 
+             b_index = a_squash.find_next(b_index)) { 
+            assert(b_index != a_index); 
+            NFAVertex b = vByIndex[b_index]; 
+ 
+            auto b_it = squash.find(b); 
+            if (b_it == squash.end()) { 
+                continue; 
+            } 
+            auto &b_squash = b_it->second; 
+            if (!b_squash.test(a_index)) { 
+                /* b and a squash each other, prevent this */ 
+                DEBUG_PRINTF("removing mutual squash %u %zu\n", 
+                             a_index, b_index); 
+                b_squash.set(a_index); 
+                it->second.set(b_index); 
+            } 
+        } 
+ 
+        if (it->second.all()) { 
+            DEBUG_PRINTF("%u is no longer an effective squash state\n", 
+                         a_index); 
+            it = squash.erase(it); 
+        } else { 
+            ++it; 
+        } 
+    } 
+} 
+ 
+unordered_map<NFAVertex, NFAStateSet> findSquashers(const NGHolder &g, 
+                                                    som_type som) { 
+    unordered_map<NFAVertex, NFAStateSet> squash; 
+ 
     // Number of bits to use for all our masks. If we're a triggered graph,
     // tops have already been assigned, so we don't have to account for them.
     const u32 numStates = num_vertices(g);
 
     // Build post-dominator tree.
-    auto pdom_tree = buildPDomTree(g);
+    auto pdom_tree = buildPDomTree(g); 
 
     // Build list of vertices by state ID and a set of init states.
-    vector<NFAVertex> vByIndex(numStates, NGHolder::null_vertex());
+    vector<NFAVertex> vByIndex(numStates, NGHolder::null_vertex()); 
     NFAStateSet initStates(numStates);
     smgb_cache cache(g);
 
@@ -398,7 +398,7 @@ unordered_map<NFAVertex, NFAStateSet> findSquashers(const NGHolder &g,
 
     for (u32 i = 0; i < numStates; i++) {
         NFAVertex v = vByIndex[i];
-        assert(v != NGHolder::null_vertex());
+        assert(v != NGHolder::null_vertex()); 
         const CharReach &cr = g[v].char_reach;
 
         /* only non-init cyclics can be squashers */
@@ -502,8 +502,8 @@ unordered_map<NFAVertex, NFAStateSet> findSquashers(const NGHolder &g,
     findDerivedSquashers(g, vByIndex, pdom_tree, initStates, &squash, som,
                          som_depths, region_map, cache);
 
-    clearMutualSquashers(g, vByIndex, squash);
-
+    clearMutualSquashers(g, vByIndex, squash); 
+ 
     return squash;
 }
 
@@ -515,11 +515,11 @@ unordered_map<NFAVertex, NFAStateSet> findSquashers(const NGHolder &g,
  * -# squash only a few acyclic states
  */
 void filterSquashers(const NGHolder &g,
-                     unordered_map<NFAVertex, NFAStateSet> &squash) {
-    assert(hasCorrectlyNumberedVertices(g));
-
+                     unordered_map<NFAVertex, NFAStateSet> &squash) { 
+    assert(hasCorrectlyNumberedVertices(g)); 
+ 
     DEBUG_PRINTF("filtering\n");
-    vector<NFAVertex> rev(num_vertices(g)); /* vertex_index -> vertex */
+    vector<NFAVertex> rev(num_vertices(g)); /* vertex_index -> vertex */ 
     for (auto v : vertices_range(g)) {
         rev[g[v].index] = v;
     }
@@ -528,7 +528,7 @@ void filterSquashers(const NGHolder &g,
         if (!contains(squash, v)) {
             continue;
         }
-        DEBUG_PRINTF("looking at squash set for vertex %zu\n", g[v].index);
+        DEBUG_PRINTF("looking at squash set for vertex %zu\n", g[v].index); 
 
         if (!hasSelfLoop(v, g)) {
             DEBUG_PRINTF("acyclic\n");
@@ -538,8 +538,8 @@ void filterSquashers(const NGHolder &g,
 
         NFAStateSet squashed = squash[v];
         squashed.flip(); /* default sense for mask of survivors */
-        for (auto sq = squashed.find_first(); sq != squashed.npos;
-             sq = squashed.find_next(sq)) {
+        for (auto sq = squashed.find_first(); sq != squashed.npos; 
+             sq = squashed.find_next(sq)) { 
             NFAVertex u = rev[sq];
             if (hasSelfLoop(u, g)) {
                 DEBUG_PRINTF("squashing a cyclic (%zu) is always good\n", sq);
@@ -606,7 +606,7 @@ void removeEdgesToAccept(NGHolder &g, NFAVertex v) {
         NFAVertex u = source(e, g);
         const auto &r = g[u].reports;
         if (!r.empty() && is_subset_of(r, reports)) {
-            DEBUG_PRINTF("vertex %zu\n", g[u].index);
+            DEBUG_PRINTF("vertex %zu\n", g[u].index); 
             dead.insert(e);
         }
     }
@@ -615,7 +615,7 @@ void removeEdgesToAccept(NGHolder &g, NFAVertex v) {
         NFAVertex u = source(e, g);
         const auto &r = g[u].reports;
         if (!r.empty() && is_subset_of(r, reports)) {
-            DEBUG_PRINTF("vertex %zu\n", g[u].index);
+            DEBUG_PRINTF("vertex %zu\n", g[u].index); 
             dead.insert(e);
         }
     }
@@ -626,9 +626,9 @@ void removeEdgesToAccept(NGHolder &g, NFAVertex v) {
 
 static
 vector<NFAVertex> findUnreachable(const NGHolder &g) {
-    const boost::reverse_graph<NGHolder, const NGHolder &> revg(g);
+    const boost::reverse_graph<NGHolder, const NGHolder &> revg(g); 
 
-    unordered_map<NFAVertex, boost::default_color_type> colours;
+    unordered_map<NFAVertex, boost::default_color_type> colours; 
     colours.reserve(num_vertices(g));
 
     depth_first_visit(revg, g.acceptEod,
@@ -639,7 +639,7 @@ vector<NFAVertex> findUnreachable(const NGHolder &g) {
     vector<NFAVertex> unreach;
     for (auto v : vertices_range(revg)) {
         if (!contains(colours, v)) {
-            unreach.push_back(NFAVertex(v));
+            unreach.push_back(NFAVertex(v)); 
         }
     }
     return unreach;
@@ -647,9 +647,9 @@ vector<NFAVertex> findUnreachable(const NGHolder &g) {
 
 /** Populates squash masks for states that can be switched off by highlander
  * (single match) reporters. */
-unordered_map<NFAVertex, NFAStateSet>
+unordered_map<NFAVertex, NFAStateSet> 
 findHighlanderSquashers(const NGHolder &g, const ReportManager &rm) {
-    unordered_map<NFAVertex, NFAStateSet> squash;
+    unordered_map<NFAVertex, NFAStateSet> squash; 
 
     set<NFAVertex> verts;
     getHighlanderReporters(g, g.accept, rm, verts);
@@ -662,7 +662,7 @@ findHighlanderSquashers(const NGHolder &g, const ReportManager &rm) {
     const u32 numStates = num_vertices(g);
 
     for (auto v : verts) {
-        DEBUG_PRINTF("vertex %zu with %zu reports\n", g[v].index,
+        DEBUG_PRINTF("vertex %zu with %zu reports\n", g[v].index, 
                      g[v].reports.size());
 
         // Find the set of vertices that lead to v or any other reporter with a
@@ -670,7 +670,7 @@ findHighlanderSquashers(const NGHolder &g, const ReportManager &rm) {
         // cutting the appropriate out-edges to accept and seeing which
         // vertices become unreachable.
 
-        unordered_map<NFAVertex, NFAVertex> orig_to_copy;
+        unordered_map<NFAVertex, NFAVertex> orig_to_copy; 
         NGHolder h;
         cloneHolder(h, g, &orig_to_copy);
         removeEdgesToAccept(h, orig_to_copy[v]);
@@ -689,7 +689,7 @@ findHighlanderSquashers(const NGHolder &g, const ReportManager &rm) {
         NFAStateSet &mask = squash[v];
 
         for (auto uv : unreach) {
-            DEBUG_PRINTF("squashes index %zu\n", h[uv].index);
+            DEBUG_PRINTF("squashes index %zu\n", h[uv].index); 
             mask.reset(h[uv].index);
         }
     }

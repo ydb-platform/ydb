@@ -36,7 +36,7 @@
 #include "ue2common.h"
 #include "popcount.h"
 #include "util/bitutils.h"
-#include "util/hash.h"
+#include "util/hash.h" 
 
 #include <array>
 #include <cassert>
@@ -187,16 +187,16 @@ public:
     size_t count() const {
         static_assert(block_size == 64, "adjust popcount for block_type");
         size_t sum = 0;
-        size_t i = 0;
-        for (; i + 4 <= num_blocks; i += 4) {
-            sum += popcount64(bits[i]);
-            sum += popcount64(bits[i + 1]);
-            sum += popcount64(bits[i + 2]);
-            sum += popcount64(bits[i + 3]);
+        size_t i = 0; 
+        for (; i + 4 <= num_blocks; i += 4) { 
+            sum += popcount64(bits[i]); 
+            sum += popcount64(bits[i + 1]); 
+            sum += popcount64(bits[i + 2]); 
+            sum += popcount64(bits[i + 3]); 
         }
-        for (; i < num_blocks; i++) {
-            sum += popcount64(bits[i]);
-        }
+        for (; i < num_blocks; i++) { 
+            sum += popcount64(bits[i]); 
+        } 
         assert(sum <= size());
         return sum;
     }
@@ -313,14 +313,14 @@ public:
 
     /// Bitwise OR-equals.
     void operator|=(const bitfield &a) {
-        size_t i = 0;
-        for (; i + 4 <= num_blocks; i += 4) {
-            bits[i]     |= a.bits[i];
-            bits[i + 1] |= a.bits[i + 1];
-            bits[i + 2] |= a.bits[i + 2];
-            bits[i + 3] |= a.bits[i + 3];
-        }
-        for (; i < num_blocks; i++) {
+        size_t i = 0; 
+        for (; i + 4 <= num_blocks; i += 4) { 
+            bits[i]     |= a.bits[i]; 
+            bits[i + 1] |= a.bits[i + 1]; 
+            bits[i + 2] |= a.bits[i + 2]; 
+            bits[i + 3] |= a.bits[i + 3]; 
+        } 
+        for (; i < num_blocks; i++) { 
             bits[i] |= a.bits[i];
         }
     }
@@ -334,34 +334,34 @@ public:
 
     /// Bitwise AND-equals.
     void operator&=(const bitfield &a) {
-        size_t i = 0;
-        for (; i + 4 <= num_blocks; i += 4) {
-            bits[i]     &= a.bits[i];
-            bits[i + 1] &= a.bits[i + 1];
-            bits[i + 2] &= a.bits[i + 2];
-            bits[i + 3] &= a.bits[i + 3];
-        }
-        for (; i < num_blocks; i++) {
+        size_t i = 0; 
+        for (; i + 4 <= num_blocks; i += 4) { 
+            bits[i]     &= a.bits[i]; 
+            bits[i + 1] &= a.bits[i + 1]; 
+            bits[i + 2] &= a.bits[i + 2]; 
+            bits[i + 3] &= a.bits[i + 3]; 
+        } 
+        for (; i < num_blocks; i++) { 
             bits[i] &= a.bits[i];
         }
     }
 
     /// Bitwise XOR.
-    bitfield operator^(bitfield a) const {
-        a ^= *this;
-        return a;
+    bitfield operator^(bitfield a) const { 
+        a ^= *this; 
+        return a; 
     }
 
     /// Bitwise XOR-equals.
-    void operator^=(bitfield a) {
-        size_t i = 0;
-        for (; i + 4 <= num_blocks; i += 4) {
-            bits[i]     ^= a.bits[i];
-            bits[i + 1] ^= a.bits[i + 1];
-            bits[i + 2] ^= a.bits[i + 2];
-            bits[i + 3] ^= a.bits[i + 3];
-        }
-        for (; i < num_blocks; i++) {
+    void operator^=(bitfield a) { 
+        size_t i = 0; 
+        for (; i + 4 <= num_blocks; i += 4) { 
+            bits[i]     ^= a.bits[i]; 
+            bits[i + 1] ^= a.bits[i + 1]; 
+            bits[i + 2] ^= a.bits[i + 2]; 
+            bits[i + 3] ^= a.bits[i + 3]; 
+        } 
+        for (; i < num_blocks; i++) { 
             bits[i] ^= a.bits[i];
         }
     }
@@ -375,7 +375,7 @@ public:
 
     /// Simple hash.
     size_t hash() const {
-        return ue2_hasher()(bits);
+        return ue2_hasher()(bits); 
     }
 
     /// Sentinel value meaning "no more bits", used by find_first and
@@ -422,17 +422,17 @@ private:
     std::array<block_type, num_blocks> bits;
 };
 
-} // namespace ue2
-
-namespace std {
-
+} // namespace ue2 
+ 
+namespace std { 
+ 
 template<size_t requested_size>
-struct hash<ue2::bitfield<requested_size>> {
-    size_t operator()(const ue2::bitfield<requested_size> &b) const {
-        return b.hash();
-    }
-};
+struct hash<ue2::bitfield<requested_size>> { 
+    size_t operator()(const ue2::bitfield<requested_size> &b) const { 
+        return b.hash(); 
+    } 
+}; 
 
-} // namespace std
+} // namespace std 
 
 #endif // BITFIELD_H

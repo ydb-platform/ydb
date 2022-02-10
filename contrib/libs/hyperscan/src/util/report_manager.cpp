@@ -29,12 +29,12 @@
 /** \file
  * \brief ReportManager: tracks Report structures, exhaustion and dedupe keys.
  */
-
-#include "report_manager.h"
-
+ 
+#include "report_manager.h" 
+ 
 #include "grey.h"
 #include "ue2common.h"
-#include "compiler/compiler.h"
+#include "compiler/compiler.h" 
 #include "nfagraph/ng.h"
 #include "rose/rose_build.h"
 #include "util/compile_error.h"
@@ -67,7 +67,7 @@ u32 ReportManager::getInternalId(const Report &ir) {
 
     u32 size = reportIds.size();
     reportIds.push_back(ir);
-    reportIdToInternalMap.emplace(ir, size);
+    reportIdToInternalMap.emplace(ir, size); 
     DEBUG_PRINTF("new report %u\n", size);
     return size;
 }
@@ -170,7 +170,7 @@ vector<ReportID> ReportManager::getDkeyToReportTable() const {
 void ReportManager::assignDkeys(const RoseBuild *rose) {
     DEBUG_PRINTF("assigning...\n");
 
-    map<u32, flat_set<ReportID>> ext_to_int;
+    map<u32, flat_set<ReportID>> ext_to_int; 
 
     for (u32 i = 0; i < reportIds.size(); i++) {
         const Report &ir = reportIds[i];
@@ -211,9 +211,9 @@ u32 ReportManager::getDkey(const Report &r) const {
 
 void ReportManager::registerExtReport(ReportID id,
                                       const external_report_info &ext) {
-    auto it = externalIdMap.find(id);
-    if (it != externalIdMap.end()) {
-        const external_report_info &eri = it->second;
+    auto it = externalIdMap.find(id); 
+    if (it != externalIdMap.end()) { 
+        const external_report_info &eri = it->second; 
         if (eri.highlander != ext.highlander) {
             /* we have a problem */
             ostringstream out;
@@ -242,35 +242,35 @@ void ReportManager::registerExtReport(ReportID id,
     }
 }
 
-Report ReportManager::getBasicInternalReport(const ExpressionInfo &expr,
-                                             s32 adj) {
+Report ReportManager::getBasicInternalReport(const ExpressionInfo &expr, 
+                                             s32 adj) { 
     /* validate that we are not violating highlander constraints, this will
      * throw a CompileError if so. */
-    registerExtReport(expr.report,
-                      external_report_info(expr.highlander, expr.index));
+    registerExtReport(expr.report, 
+                      external_report_info(expr.highlander, expr.index)); 
 
     /* create the internal report */
     u32 ekey = INVALID_EKEY;
-    if (expr.highlander) {
+    if (expr.highlander) { 
         /* all patterns with the same report id share an ekey */
-        ekey = getExhaustibleKey(expr.report);
+        ekey = getExhaustibleKey(expr.report); 
     }
 
     return makeECallback(expr.report, adj, ekey, expr.quiet);
 }
 
-void ReportManager::setProgramOffset(ReportID id, u32 programOffset) {
-    assert(id < reportIds.size());
-    assert(!contains(reportIdToProgramOffset, id));
-    reportIdToProgramOffset.emplace(id, programOffset);
-}
-
-u32 ReportManager::getProgramOffset(ReportID id) const {
-    assert(id < reportIds.size());
-    assert(contains(reportIdToProgramOffset, id));
-    return reportIdToProgramOffset.at(id);
-}
-
+void ReportManager::setProgramOffset(ReportID id, u32 programOffset) { 
+    assert(id < reportIds.size()); 
+    assert(!contains(reportIdToProgramOffset, id)); 
+    reportIdToProgramOffset.emplace(id, programOffset); 
+} 
+ 
+u32 ReportManager::getProgramOffset(ReportID id) const { 
+    assert(id < reportIds.size()); 
+    assert(contains(reportIdToProgramOffset, id)); 
+    return reportIdToProgramOffset.at(id); 
+} 
+ 
 static
 void ekeysUnion(std::set<u32> *ekeys, u32 more) {
     if (!ekeys->empty()) {

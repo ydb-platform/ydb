@@ -11,9 +11,9 @@
 namespace NYql {
 using namespace NKikimr::NMiniKQL;
 
-    namespace NUdf {
-        extern NUdf::TUniquePtr<NUdf::IUdfModule> CreateStatModule();
-    }
+    namespace NUdf { 
+        extern NUdf::TUniquePtr<NUdf::IUdfModule> CreateStatModule(); 
+    } 
 
     Y_UNIT_TEST_SUITE(TUDFStatTest) {
         Y_UNIT_TEST(SimplePercentile) {
@@ -77,7 +77,7 @@ using namespace NKikimr::NMiniKQL;
                 auto param1 = pgmBuilder.NewDataLiteral<double>(75.0);
                 TVector<TRuntimeNode> params = {param1};
                 pgmDigest = pgmBuilder.Apply(udfTDigest_Create, params);
-            }
+            } 
 
             TVector<double> vals = {800, 20, 150};
             for (auto val : vals) {
@@ -124,7 +124,7 @@ using namespace NKikimr::NMiniKQL;
                 auto param1 = pgmBuilder.NewDataLiteral<double>(0.0);
                 TVector<TRuntimeNode> params = {param1};
                 pgmDigest = pgmBuilder.Apply(udfTDigest_Create, params);
-            }
+            } 
 
             for (int n = 1; n < 10; n += 1) {
                 auto param2 = pgmBuilder.NewDataLiteral((double)n);
@@ -180,40 +180,40 @@ using namespace NKikimr::NMiniKQL;
             TVector<TRuntimeNode> pgmSerializedDataVector;
 
             for (int i = 0; i < 100; i += 10) {
-                TRuntimeNode pgmDigest;
-                {
+                TRuntimeNode pgmDigest; 
+                { 
                     auto param1 = pgmBuilder.NewDataLiteral(double(i) / 10);
-                    TVector<TRuntimeNode> params = {param1};
-                    pgmDigest = pgmBuilder.Apply(udfTDigest_Create, params);
-                }
+                    TVector<TRuntimeNode> params = {param1}; 
+                    pgmDigest = pgmBuilder.Apply(udfTDigest_Create, params); 
+                } 
 
                 for (int n = i + 1; n < i + 10; n += 1) {
                     auto param2 = pgmBuilder.NewDataLiteral(double(n) / 10);
-                    TVector<TRuntimeNode> params = {pgmDigest, param2};
-                    pgmDigest = pgmBuilder.Apply(udfTDigest_AddValue, params);
-                }
+                    TVector<TRuntimeNode> params = {pgmDigest, param2}; 
+                    pgmDigest = pgmBuilder.Apply(udfTDigest_AddValue, params); 
+                } 
 
-                TRuntimeNode pgmSerializedData;
-                {
-                    TVector<TRuntimeNode> params = {pgmDigest};
-                    pgmSerializedData = pgmBuilder.Apply(udfTDigest_Serialize, params);
-                }
+                TRuntimeNode pgmSerializedData; 
+                { 
+                    TVector<TRuntimeNode> params = {pgmDigest}; 
+                    pgmSerializedData = pgmBuilder.Apply(udfTDigest_Serialize, params); 
+                } 
                 pgmSerializedDataVector.push_back(pgmSerializedData);
             }
 
             TRuntimeNode pgmDigest;
             for (size_t i = 0; i < pgmSerializedDataVector.size(); ++i) {
-                TRuntimeNode pgmDigest2;
-                {
+                TRuntimeNode pgmDigest2; 
+                { 
                     TVector<TRuntimeNode> params = {pgmSerializedDataVector[i]};
-                    pgmDigest2 = pgmBuilder.Apply(udfTDigest_Deserialize, params);
-                }
+                    pgmDigest2 = pgmBuilder.Apply(udfTDigest_Deserialize, params); 
+                } 
                 if (!pgmDigest) {
                     pgmDigest = pgmDigest2;
                 } else {
                     TVector<TRuntimeNode> params = {pgmDigest, pgmDigest2};
                     pgmDigest = pgmBuilder.Apply(udfTDigest_Merge, params);
-                }
+                } 
             }
 
             TRuntimeNode pgmReturn;
@@ -221,7 +221,7 @@ using namespace NKikimr::NMiniKQL;
                 auto param2 = pgmBuilder.NewDataLiteral<double>(0.9);
                 TVector<TRuntimeNode> params = {pgmDigest, param2};
                 pgmReturn = pgmBuilder.Apply(udfTDigest_GetPercentile, params);
-            }
+            } 
 
             TExploringNodeVisitor explorer;
             explorer.Walk(pgmReturn.GetNode(), env);
@@ -322,7 +322,7 @@ using namespace NKikimr::NMiniKQL;
             numbers.reserve(NUMBERS);
             for (size_t n = 0; n < NUMBERS - 2; ++n) {
                 numbers.push_back(pgmBuilder.NewDataLiteral(majorityValue));
-            }
+            } 
             numbers.push_back(pgmBuilder.NewDataLiteral(minValue));
             numbers.push_back(pgmBuilder.NewDataLiteral(maxValue));
             TRuntimeNode bigList = pgmBuilder.AsList(numbers);

@@ -26,11 +26,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * \file
+/** 
+ * \file 
  * \brief Main NFA build code.
  */
-
+ 
 #include "limex_compile.h"
 
 #include "accel.h"
@@ -39,7 +39,7 @@
 #include "limex_internal.h"
 #include "limex_limits.h"
 #include "nfa_build_util.h"
-#include "nfagraph/ng_dominators.h"
+#include "nfagraph/ng_dominators.h" 
 #include "nfagraph/ng_holder.h"
 #include "nfagraph/ng_limex_accel.h"
 #include "nfagraph/ng_repeat.h"
@@ -49,16 +49,16 @@
 #include "repeatcompile.h"
 #include "util/alloc.h"
 #include "util/bitutils.h"
-#include "util/bytecode_ptr.h"
+#include "util/bytecode_ptr.h" 
 #include "util/charreach.h"
 #include "util/compile_context.h"
 #include "util/container.h"
-#include "util/flat_containers.h"
+#include "util/flat_containers.h" 
 #include "util/graph.h"
 #include "util/graph_range.h"
-#include "util/graph_small_color_map.h"
+#include "util/graph_small_color_map.h" 
 #include "util/order_check.h"
-#include "util/unordered.h"
+#include "util/unordered.h" 
 #include "util/verify_types.h"
 
 #include <algorithm>
@@ -69,22 +69,22 @@
 #include <map>
 #include <set>
 #include <vector>
-
+ 
 #include <boost/graph/breadth_first_search.hpp>
-#include <boost/graph/depth_first_search.hpp>
-#include <boost/range/adaptor/map.hpp>
+#include <boost/graph/depth_first_search.hpp> 
+#include <boost/range/adaptor/map.hpp> 
 
 using namespace std;
-using boost::adaptors::map_values;
+using boost::adaptors::map_values; 
 
 namespace ue2 {
 
-/**
- * \brief Special state index value meaning that the vertex will not
- * participate in an (NFA/DFA/etc) implementation.
- */
-static constexpr u32 NO_STATE = ~0;
-
+/** 
+ * \brief Special state index value meaning that the vertex will not 
+ * participate in an (NFA/DFA/etc) implementation. 
+ */ 
+static constexpr u32 NO_STATE = ~0; 
+ 
 /* Maximum number of states taken as a small NFA */
 static constexpr u32 MAX_SMALL_NFA_STATES = 64;
 
@@ -109,21 +109,21 @@ struct precalcAccel {
     u32 double_offset;
 };
 
-struct limex_accel_info {
-    unordered_set<NFAVertex> accelerable;
+struct limex_accel_info { 
+    unordered_set<NFAVertex> accelerable; 
     map<NFAStateSet, precalcAccel> precalc;
-    unordered_map<NFAVertex, flat_set<NFAVertex>> friends;
-    unordered_map<NFAVertex, AccelScheme> accel_map;
+    unordered_map<NFAVertex, flat_set<NFAVertex>> friends; 
+    unordered_map<NFAVertex, AccelScheme> accel_map; 
 };
 
 static
-unordered_map<NFAVertex, NFAStateSet>
-reindexByStateId(const unordered_map<NFAVertex, NFAStateSet> &in,
-                 const NGHolder &g,
-                 const unordered_map<NFAVertex, u32> &state_ids,
+unordered_map<NFAVertex, NFAStateSet> 
+reindexByStateId(const unordered_map<NFAVertex, NFAStateSet> &in, 
+                 const NGHolder &g, 
+                 const unordered_map<NFAVertex, u32> &state_ids, 
                  const u32 num_states) {
-    unordered_map<NFAVertex, NFAStateSet> out;
-    out.reserve(in.size());
+    unordered_map<NFAVertex, NFAStateSet> out; 
+    out.reserve(in.size()); 
 
     vector<u32> indexToState(num_vertices(g), NO_STATE);
     for (const auto &m : state_ids) {
@@ -153,20 +153,20 @@ reindexByStateId(const unordered_map<NFAVertex, NFAStateSet> &in,
 
 struct build_info {
     build_info(NGHolder &hi,
-               const unordered_map<NFAVertex, u32> &states_in,
+               const unordered_map<NFAVertex, u32> &states_in, 
                const vector<BoundedRepeatData> &ri,
-               const unordered_map<NFAVertex, NFAStateSet> &rsmi,
-               const unordered_map<NFAVertex, NFAStateSet> &smi,
-               const map<u32, set<NFAVertex>> &ti, const set<NFAVertex> &zi,
-               bool dai, bool sci, const CompileContext &cci, u32 nsi)
-        : h(hi), state_ids(states_in), repeats(ri), tops(ti), tugs(nsi),
-          zombies(zi), do_accel(dai), stateCompression(sci), cc(cci),
+               const unordered_map<NFAVertex, NFAStateSet> &rsmi, 
+               const unordered_map<NFAVertex, NFAStateSet> &smi, 
+               const map<u32, set<NFAVertex>> &ti, const set<NFAVertex> &zi, 
+               bool dai, bool sci, const CompileContext &cci, u32 nsi) 
+        : h(hi), state_ids(states_in), repeats(ri), tops(ti), tugs(nsi), 
+          zombies(zi), do_accel(dai), stateCompression(sci), cc(cci), 
           num_states(nsi) {
         for (const auto &br : repeats) {
-            for (auto v : br.tug_triggers) {
-                assert(state_ids.at(v) != NO_STATE);
-                tugs.set(state_ids.at(v));
-            }
+            for (auto v : br.tug_triggers) { 
+                assert(state_ids.at(v) != NO_STATE); 
+                tugs.set(state_ids.at(v)); 
+            } 
             br_cyclic[br.cyclic] =
                 BoundedRepeatSummary(br.repeatMin, br.repeatMax);
         }
@@ -178,28 +178,28 @@ struct build_info {
     }
 
     NGHolder &h;
-    const unordered_map<NFAVertex, u32> &state_ids;
+    const unordered_map<NFAVertex, u32> &state_ids; 
     const vector<BoundedRepeatData> &repeats;
 
     // Squash maps; state sets are indexed by state_id.
-    unordered_map<NFAVertex, NFAStateSet> reportSquashMap;
-    unordered_map<NFAVertex, NFAStateSet> squashMap;
+    unordered_map<NFAVertex, NFAStateSet> reportSquashMap; 
+    unordered_map<NFAVertex, NFAStateSet> squashMap; 
 
-    const map<u32, set<NFAVertex>> &tops;
-    NFAStateSet tugs;
+    const map<u32, set<NFAVertex>> &tops; 
+    NFAStateSet tugs; 
     map<NFAVertex, BoundedRepeatSummary> br_cyclic;
     const set<NFAVertex> &zombies;
     bool do_accel;
     bool stateCompression;
     const CompileContext &cc;
     u32 num_states;
-    limex_accel_info accel;
+    limex_accel_info accel; 
 };
 
-#define LAST_LIMEX_NFA LIMEX_NFA_512
-
+#define LAST_LIMEX_NFA LIMEX_NFA_512 
+ 
 // Constants for scoring mechanism
-const int SHIFT_COST = 10; // limex: cost per shift mask
+const int SHIFT_COST = 10; // limex: cost per shift mask 
 const int EXCEPTION_COST = 4; // limex: per exception
 
 template<NFAEngineType t> struct NFATraits { };
@@ -256,7 +256,7 @@ bool isLimitedTransition(int from, int to, int maxshift) {
 
 // Fill a bit mask
 template<class Mask>
-void maskFill(Mask &m, u8 c) {
+void maskFill(Mask &m, u8 c) { 
     memset(&m, c, sizeof(m));
 }
 
@@ -288,17 +288,17 @@ void maskSetBits(Mask &m, const NFAStateSet &bits) {
     }
 }
 
-template<class Mask>
-bool isMaskZero(Mask &m) {
-    u8 *m8 = (u8 *)&m;
-    for (u32 i = 0; i < sizeof(m); i++) {
-        if (m8[i]) {
-            return false;
-        }
-    }
-    return true;
-}
-
+template<class Mask> 
+bool isMaskZero(Mask &m) { 
+    u8 *m8 = (u8 *)&m; 
+    for (u32 i = 0; i < sizeof(m); i++) { 
+        if (m8[i]) { 
+            return false; 
+        } 
+    } 
+    return true; 
+} 
+ 
 // Sets an entire byte in a mask to the given value
 template<class Mask>
 void maskSetByte(Mask &m, const unsigned int idx, const char val) {
@@ -374,7 +374,7 @@ void buildReachMapping(const build_info &args, vector<NFAStateSet> &reach,
 }
 
 struct AccelBuild {
-    AccelBuild() : v(NGHolder::null_vertex()), state(0), offset(0) {}
+    AccelBuild() : v(NGHolder::null_vertex()), state(0), offset(0) {} 
     NFAVertex v;
     u32 state;
     u32 offset; // offset correction to apply
@@ -496,7 +496,7 @@ bool allow_wide_accel(const vector<NFAVertex> &vv, const NGHolder &g,
 static
 void nfaFindAccelSchemes(const NGHolder &g,
                          const map<NFAVertex, BoundedRepeatSummary> &br_cyclic,
-                         unordered_map<NFAVertex, AccelScheme> *out) {
+                         unordered_map<NFAVertex, AccelScheme> *out) { 
     vector<CharReach> refined_cr = reduced_cr(g, br_cyclic);
 
     NFAVertex sds_or_proxy = get_sds_or_proxy(g);
@@ -505,7 +505,7 @@ void nfaFindAccelSchemes(const NGHolder &g,
         // We want to skip any vertices that don't lead to at least one other
         // (self-loops don't count) vertex.
         if (!has_proper_successor(v, g)) {
-            DEBUG_PRINTF("skipping vertex %zu\n", g[v].index);
+            DEBUG_PRINTF("skipping vertex %zu\n", g[v].index); 
             continue;
         }
 
@@ -513,7 +513,7 @@ void nfaFindAccelSchemes(const NGHolder &g,
 
         AccelScheme as;
         if (nfaCheckAccel(g, v, refined_cr, br_cyclic, &as, allow_wide)) {
-            DEBUG_PRINTF("graph vertex %zu is accelerable with offset %u.\n",
+            DEBUG_PRINTF("graph vertex %zu is accelerable with offset %u.\n", 
                           g[v].index, as.offset);
             (*out)[v] = as;
         }
@@ -521,11 +521,11 @@ void nfaFindAccelSchemes(const NGHolder &g,
 }
 
 struct fas_visitor : public boost::default_bfs_visitor {
-    fas_visitor(const unordered_map<NFAVertex, AccelScheme> &am_in,
-                unordered_map<NFAVertex, AccelScheme> *out_in)
+    fas_visitor(const unordered_map<NFAVertex, AccelScheme> &am_in, 
+                unordered_map<NFAVertex, AccelScheme> *out_in) 
         : accel_map(am_in), out(out_in) {}
 
-    void discover_vertex(NFAVertex v, const NGHolder &) {
+    void discover_vertex(NFAVertex v, const NGHolder &) { 
         if (accel_map.find(v) != accel_map.end()) {
             (*out)[v] = accel_map.find(v)->second;
         }
@@ -533,50 +533,50 @@ struct fas_visitor : public boost::default_bfs_visitor {
             throw this; /* done */
         }
     }
-    const unordered_map<NFAVertex, AccelScheme> &accel_map;
-    unordered_map<NFAVertex, AccelScheme> *out;
+    const unordered_map<NFAVertex, AccelScheme> &accel_map; 
+    unordered_map<NFAVertex, AccelScheme> *out; 
 };
 
 static
-void filterAccelStates(NGHolder &g, const map<u32, set<NFAVertex>> &tops,
-                       unordered_map<NFAVertex, AccelScheme> *accel_map) {
+void filterAccelStates(NGHolder &g, const map<u32, set<NFAVertex>> &tops, 
+                       unordered_map<NFAVertex, AccelScheme> *accel_map) { 
     /* We want the NFA_MAX_ACCEL_STATES best acceleration states, everything
      * else should be ditched. We use a simple BFS to choose accel states near
      * the start. */
 
-    vector<NFAEdge> tempEdges;
-    for (const auto &vv : tops | map_values) {
-        for (NFAVertex v : vv) {
-            if (!edge(g.start, v, g).second) {
-                tempEdges.push_back(add_edge(g.start, v, g).first);
-            }
-        }
-    }
+    vector<NFAEdge> tempEdges; 
+    for (const auto &vv : tops | map_values) { 
+        for (NFAVertex v : vv) { 
+            if (!edge(g.start, v, g).second) { 
+                tempEdges.push_back(add_edge(g.start, v, g).first); 
+            } 
+        } 
+    } 
 
     // Similarly, connect (start, startDs) if necessary.
     if (!edge(g.start, g.startDs, g).second) {
-        NFAEdge e = add_edge(g.start, g.startDs, g);
-        tempEdges.push_back(e); // Remove edge later.
+        NFAEdge e = add_edge(g.start, g.startDs, g); 
+        tempEdges.push_back(e); // Remove edge later. 
     }
 
-    unordered_map<NFAVertex, AccelScheme> out;
+    unordered_map<NFAVertex, AccelScheme> out; 
 
     try {
-        boost::breadth_first_search(g, g.start,
-                                    visitor(fas_visitor(*accel_map, &out))
-                                        .color_map(make_small_color_map(g)));
+        boost::breadth_first_search(g, g.start, 
+                                    visitor(fas_visitor(*accel_map, &out)) 
+                                        .color_map(make_small_color_map(g))); 
     } catch (fas_visitor *) {
         ; /* found max accel_states */
     }
 
-    remove_edges(tempEdges, g);
+    remove_edges(tempEdges, g); 
 
     assert(out.size() <= NFA_MAX_ACCEL_STATES);
     accel_map->swap(out);
 }
 
 static
-bool containsBadSubset(const limex_accel_info &accel,
+bool containsBadSubset(const limex_accel_info &accel, 
                        const NFAStateSet &state_set, const u32 effective_sds) {
     NFAStateSet subset(state_set.size());
     for (size_t j = state_set.find_first(); j != state_set.npos;
@@ -597,28 +597,28 @@ bool containsBadSubset(const limex_accel_info &accel,
 }
 
 static
-bool is_too_wide(const AccelScheme &as) {
-    return as.cr.count() > MAX_MERGED_ACCEL_STOPS;
-}
-
-static
-void fillAccelInfo(build_info &bi) {
-    if (!bi.do_accel) {
-        return;
-    }
-
-    NGHolder &g = bi.h;
-    limex_accel_info &accel = bi.accel;
-    unordered_map<NFAVertex, AccelScheme> &accel_map = accel.accel_map;
-    const map<NFAVertex, BoundedRepeatSummary> &br_cyclic = bi.br_cyclic;
-    const unordered_map<NFAVertex, u32> &state_ids = bi.state_ids;
-    const u32 num_states = bi.num_states;
-
-    nfaFindAccelSchemes(g, br_cyclic, &accel_map);
-    filterAccelStates(g, bi.tops, &accel_map);
-
-    assert(accel_map.size() <= NFA_MAX_ACCEL_STATES);
-
+bool is_too_wide(const AccelScheme &as) { 
+    return as.cr.count() > MAX_MERGED_ACCEL_STOPS; 
+} 
+ 
+static 
+void fillAccelInfo(build_info &bi) { 
+    if (!bi.do_accel) { 
+        return; 
+    } 
+ 
+    NGHolder &g = bi.h; 
+    limex_accel_info &accel = bi.accel; 
+    unordered_map<NFAVertex, AccelScheme> &accel_map = accel.accel_map; 
+    const map<NFAVertex, BoundedRepeatSummary> &br_cyclic = bi.br_cyclic; 
+    const unordered_map<NFAVertex, u32> &state_ids = bi.state_ids; 
+    const u32 num_states = bi.num_states; 
+ 
+    nfaFindAccelSchemes(g, br_cyclic, &accel_map); 
+    filterAccelStates(g, bi.tops, &accel_map); 
+ 
+    assert(accel_map.size() <= NFA_MAX_ACCEL_STATES); 
+ 
     vector<CharReach> refined_cr = reduced_cr(g, br_cyclic);
 
     vector<NFAVertex> astates;
@@ -635,7 +635,7 @@ void fillAccelInfo(build_info &bi) {
 
     /* for each subset of the accel keys need to find an accel scheme */
     assert(astates.size() < 32);
-    sort(astates.begin(), astates.end());
+    sort(astates.begin(), astates.end()); 
 
     for (u32 i = 1, i_end = 1U << astates.size(); i < i_end; i++) {
         DEBUG_PRINTF("saving info for accel %u\n", i);
@@ -649,7 +649,7 @@ void fillAccelInfo(build_info &bi) {
             }
         }
 
-        if (containsBadSubset(accel, state_set, effective_sds)) {
+        if (containsBadSubset(accel, state_set, effective_sds)) { 
             DEBUG_PRINTF("accel %u has bad subset\n", i);
             continue; /* if a subset failed to build we would too */
         }
@@ -657,27 +657,27 @@ void fillAccelInfo(build_info &bi) {
         const bool allow_wide = allow_wide_accel(states, g, sds_or_proxy);
 
         AccelScheme as = nfaFindAccel(g, states, refined_cr, br_cyclic,
-                                      allow_wide, true);
-        if (is_too_wide(as)) {
+                                      allow_wide, true); 
+        if (is_too_wide(as)) { 
             DEBUG_PRINTF("accel %u too wide (%zu, %d)\n", i,
                          as.cr.count(), MAX_MERGED_ACCEL_STOPS);
             continue;
         }
 
-        DEBUG_PRINTF("accel %u ok with offset s%u, d%u\n", i, as.offset,
-                     as.double_offset);
+        DEBUG_PRINTF("accel %u ok with offset s%u, d%u\n", i, as.offset, 
+                     as.double_offset); 
 
-        precalcAccel &pa = accel.precalc[state_set];
+        precalcAccel &pa = accel.precalc[state_set]; 
         pa.single_offset = as.offset;
         pa.single_cr = as.cr;
 
-        if (as.double_byte.size() != 0) {
-            pa.double_offset = as.double_offset;
-            pa.double_lits = as.double_byte;
-            pa.double_cr = as.double_cr;
+        if (as.double_byte.size() != 0) { 
+            pa.double_offset = as.double_offset; 
+            pa.double_lits = as.double_byte; 
+            pa.double_cr = as.double_cr; 
         }
-
-        useful |= state_set;
+ 
+        useful |= state_set; 
     }
 
     for (const auto &m : accel_map) {
@@ -694,169 +694,169 @@ void fillAccelInfo(build_info &bi) {
         state_set.reset();
         state_set.set(state_id);
 
-        accel.accelerable.insert(v);
-        findAccelFriends(g, v, br_cyclic, offset, &accel.friends[v]);
+        accel.accelerable.insert(v); 
+        findAccelFriends(g, v, br_cyclic, offset, &accel.friends[v]); 
     }
 }
 
-/** The AccelAux structure has large alignment specified, and this makes some
- * compilers do odd things unless we specify a custom allocator. */
-typedef vector<AccelAux, AlignedAllocator<AccelAux, alignof(AccelAux)>>
-    AccelAuxVector;
-
-#define IMPOSSIBLE_ACCEL_MASK (~0U)
-
+/** The AccelAux structure has large alignment specified, and this makes some 
+ * compilers do odd things unless we specify a custom allocator. */ 
+typedef vector<AccelAux, AlignedAllocator<AccelAux, alignof(AccelAux)>> 
+    AccelAuxVector; 
+ 
+#define IMPOSSIBLE_ACCEL_MASK (~0U) 
+ 
 static
-u32 getEffectiveAccelStates(const build_info &args,
-                            const unordered_map<NFAVertex, NFAVertex> &dom_map,
-                            u32 active_accel_mask,
-                            const vector<AccelBuild> &accelStates) {
-    /* accelStates is indexed by the acceleration bit index and contains a
-     * reference to the original vertex & state_id */
-
-    /* Cases to consider:
-     *
-     * 1: Accel states a and b are on and b can squash a
-     *    --> we can ignore a. This will result in a no longer being accurately
-     *        modelled - we may miss escapes turning it off and we may also miss
-     *        its successors being activated.
-     *
-     * 2: Accel state b is on but accel state a is off and a is .* and must be
-     *    seen before b is reached (and would not be covered by (1))
-     *    --> if a is squashable (or may die unexpectedly) we should continue
-     *        as is
-     *    --> if a is not squashable we can treat this as a+b or as a no accel,
-     *        impossible case
-     *    --> this case could be extended to handle non dot reaches by
-     *        effectively creating something similar to squash masks for the
-     *        reverse graph
-     *
-     *
-     * Other cases:
-     *
-     * 3: Accel states a and b are on but have incompatible reaches
-     *    --> we should treat this as an impossible case. Actually, this case
-     *        is unlikely to arise as we pick states with wide reaches to
-     *        accelerate so an empty intersection is unlikely.
-     *
-     * Note: we need to be careful when dealing with accel states corresponding
-     * to bounded repeat cyclics - they may 'turn off' based on a max bound and
-     * so we may still require on earlier states to be accurately modelled.
-     */
-    const NGHolder &h = args.h;
-
-    /* map from accel_id to mask of accel_ids that it is dominated by */
-    vector<u32> dominated_by(accelStates.size());
-
-    map<NFAVertex, u32> accel_id_map;
-    for (u32 accel_id = 0; accel_id < accelStates.size(); accel_id++) {
-        NFAVertex v = accelStates[accel_id].v;
-        accel_id_map[v] = accel_id;
+u32 getEffectiveAccelStates(const build_info &args, 
+                            const unordered_map<NFAVertex, NFAVertex> &dom_map, 
+                            u32 active_accel_mask, 
+                            const vector<AccelBuild> &accelStates) { 
+    /* accelStates is indexed by the acceleration bit index and contains a 
+     * reference to the original vertex & state_id */ 
+ 
+    /* Cases to consider: 
+     * 
+     * 1: Accel states a and b are on and b can squash a 
+     *    --> we can ignore a. This will result in a no longer being accurately 
+     *        modelled - we may miss escapes turning it off and we may also miss 
+     *        its successors being activated. 
+     * 
+     * 2: Accel state b is on but accel state a is off and a is .* and must be 
+     *    seen before b is reached (and would not be covered by (1)) 
+     *    --> if a is squashable (or may die unexpectedly) we should continue 
+     *        as is 
+     *    --> if a is not squashable we can treat this as a+b or as a no accel, 
+     *        impossible case 
+     *    --> this case could be extended to handle non dot reaches by 
+     *        effectively creating something similar to squash masks for the 
+     *        reverse graph 
+     * 
+     * 
+     * Other cases: 
+     * 
+     * 3: Accel states a and b are on but have incompatible reaches 
+     *    --> we should treat this as an impossible case. Actually, this case 
+     *        is unlikely to arise as we pick states with wide reaches to 
+     *        accelerate so an empty intersection is unlikely. 
+     * 
+     * Note: we need to be careful when dealing with accel states corresponding 
+     * to bounded repeat cyclics - they may 'turn off' based on a max bound and 
+     * so we may still require on earlier states to be accurately modelled. 
+     */ 
+    const NGHolder &h = args.h; 
+ 
+    /* map from accel_id to mask of accel_ids that it is dominated by */ 
+    vector<u32> dominated_by(accelStates.size()); 
+ 
+    map<NFAVertex, u32> accel_id_map; 
+    for (u32 accel_id = 0; accel_id < accelStates.size(); accel_id++) { 
+        NFAVertex v = accelStates[accel_id].v; 
+        accel_id_map[v] = accel_id; 
     }
 
-    /* Note: we want a slightly less strict defn of dominate as skip edges
-     * prevent .* 'truly' dominating */
-    for (u32 local_accel_mask = active_accel_mask; local_accel_mask; ) {
-        u32 accel_id = findAndClearLSB_32(&local_accel_mask);
-        assert(accel_id < accelStates.size());
-        NFAVertex v = accelStates[accel_id].v;
-        while (contains(dom_map, v) && dom_map.at(v)) {
-            v = dom_map.at(v);
-            if (contains(accel_id_map, v)) {
-                dominated_by[accel_id] |= 1U << accel_id_map[v];
-            }
-            /* TODO: could also look at inv_adj vertices to handle fan-in */
-            for (NFAVertex a : adjacent_vertices_range(v, h)) {
-                if (a == v || !contains(accel_id_map, a)
-                    || a == accelStates[accel_id].v /* not likely */) {
-                    continue;
-                }
-                if (!is_subset_of(h[v].reports, h[a].reports)) {
-                    continue;
-                }
-                auto v_succ = succs(v, h);
-                auto a_succ = succs(a, h);
-                if (is_subset_of(v_succ, a_succ)) {
-                    dominated_by[accel_id] |= 1U << accel_id_map[a];
-                }
-            }
-        }
-    }
-
-    u32 may_turn_off = 0; /* BR with max bound, non-dots, squashed, etc */
-    for (u32 local_accel_mask = active_accel_mask; local_accel_mask; ) {
-        u32 accel_id = findAndClearLSB_32(&local_accel_mask);
-        NFAVertex v = accelStates[accel_id].v;
-        u32 state_id = accelStates[accel_id].state;
-        assert(contains(args.accel.accelerable, v));
-        if (!h[v].char_reach.all()) {
-            may_turn_off |= 1U << accel_id;
-            continue;
-        }
-        if (contains(args.br_cyclic, v)
-            && args.br_cyclic.at(v).repeatMax != depth::infinity()) {
-            may_turn_off |= 1U << accel_id;
-            continue;
-        }
-        for (const auto &s_mask : args.squashMap | map_values) {
-            if (!s_mask.test(state_id)) {
-                may_turn_off |= 1U << accel_id;
-                break;
-            }
-        }
-        for (const auto &s_mask : args.reportSquashMap | map_values) {
-            if (!s_mask.test(state_id)) {
-                may_turn_off |= 1U << accel_id;
-                break;
-            }
-        }
-    }
-
-    /* Case 1: */
-    u32 ignored = 0;
-    for (u32 local_accel_mask = active_accel_mask; local_accel_mask; ) {
-        u32 accel_id_b = findAndClearLSB_32(&local_accel_mask);
-        NFAVertex v = accelStates[accel_id_b].v;
-        if (!contains(args.squashMap, v)) {
-            continue;
-        }
-        assert(!contains(args.br_cyclic, v)
-               || args.br_cyclic.at(v).repeatMax == depth::infinity());
-        NFAStateSet squashed = args.squashMap.at(v);
-        squashed.flip(); /* default sense for mask of survivors */
-
-        for (u32 local_accel_mask2 = active_accel_mask; local_accel_mask2; ) {
-            u32 accel_id_a = findAndClearLSB_32(&local_accel_mask2);
-            if (squashed.test(accelStates[accel_id_a].state)) {
-                ignored |= 1U << accel_id_a;
-            }
-        }
-    }
-
-    /* Case 2: */
-    for (u32 local_accel_mask = active_accel_mask; local_accel_mask; ) {
-        u32 accel_id = findAndClearLSB_32(&local_accel_mask);
-
-        u32 stuck_dominators = dominated_by[accel_id] & ~may_turn_off;
-        if ((stuck_dominators & active_accel_mask) != stuck_dominators) {
-            DEBUG_PRINTF("only %08x on, but we require %08x\n",
-                         active_accel_mask, stuck_dominators);
-            return IMPOSSIBLE_ACCEL_MASK;
-        }
-    }
-
-    if (ignored) {
-        DEBUG_PRINTF("in %08x, ignoring %08x\n", active_accel_mask, ignored);
-    }
-
-    return active_accel_mask & ~ignored;
+    /* Note: we want a slightly less strict defn of dominate as skip edges 
+     * prevent .* 'truly' dominating */ 
+    for (u32 local_accel_mask = active_accel_mask; local_accel_mask; ) { 
+        u32 accel_id = findAndClearLSB_32(&local_accel_mask); 
+        assert(accel_id < accelStates.size()); 
+        NFAVertex v = accelStates[accel_id].v; 
+        while (contains(dom_map, v) && dom_map.at(v)) { 
+            v = dom_map.at(v); 
+            if (contains(accel_id_map, v)) { 
+                dominated_by[accel_id] |= 1U << accel_id_map[v]; 
+            } 
+            /* TODO: could also look at inv_adj vertices to handle fan-in */ 
+            for (NFAVertex a : adjacent_vertices_range(v, h)) { 
+                if (a == v || !contains(accel_id_map, a) 
+                    || a == accelStates[accel_id].v /* not likely */) { 
+                    continue; 
+                } 
+                if (!is_subset_of(h[v].reports, h[a].reports)) { 
+                    continue; 
+                } 
+                auto v_succ = succs(v, h); 
+                auto a_succ = succs(a, h); 
+                if (is_subset_of(v_succ, a_succ)) { 
+                    dominated_by[accel_id] |= 1U << accel_id_map[a]; 
+                } 
+            } 
+        } 
+    } 
+ 
+    u32 may_turn_off = 0; /* BR with max bound, non-dots, squashed, etc */ 
+    for (u32 local_accel_mask = active_accel_mask; local_accel_mask; ) { 
+        u32 accel_id = findAndClearLSB_32(&local_accel_mask); 
+        NFAVertex v = accelStates[accel_id].v; 
+        u32 state_id = accelStates[accel_id].state; 
+        assert(contains(args.accel.accelerable, v)); 
+        if (!h[v].char_reach.all()) { 
+            may_turn_off |= 1U << accel_id; 
+            continue; 
+        } 
+        if (contains(args.br_cyclic, v) 
+            && args.br_cyclic.at(v).repeatMax != depth::infinity()) { 
+            may_turn_off |= 1U << accel_id; 
+            continue; 
+        } 
+        for (const auto &s_mask : args.squashMap | map_values) { 
+            if (!s_mask.test(state_id)) { 
+                may_turn_off |= 1U << accel_id; 
+                break; 
+            } 
+        } 
+        for (const auto &s_mask : args.reportSquashMap | map_values) { 
+            if (!s_mask.test(state_id)) { 
+                may_turn_off |= 1U << accel_id; 
+                break; 
+            } 
+        } 
+    } 
+ 
+    /* Case 1: */ 
+    u32 ignored = 0; 
+    for (u32 local_accel_mask = active_accel_mask; local_accel_mask; ) { 
+        u32 accel_id_b = findAndClearLSB_32(&local_accel_mask); 
+        NFAVertex v = accelStates[accel_id_b].v; 
+        if (!contains(args.squashMap, v)) { 
+            continue; 
+        } 
+        assert(!contains(args.br_cyclic, v) 
+               || args.br_cyclic.at(v).repeatMax == depth::infinity()); 
+        NFAStateSet squashed = args.squashMap.at(v); 
+        squashed.flip(); /* default sense for mask of survivors */ 
+ 
+        for (u32 local_accel_mask2 = active_accel_mask; local_accel_mask2; ) { 
+            u32 accel_id_a = findAndClearLSB_32(&local_accel_mask2); 
+            if (squashed.test(accelStates[accel_id_a].state)) { 
+                ignored |= 1U << accel_id_a; 
+            } 
+        } 
+    } 
+ 
+    /* Case 2: */ 
+    for (u32 local_accel_mask = active_accel_mask; local_accel_mask; ) { 
+        u32 accel_id = findAndClearLSB_32(&local_accel_mask); 
+ 
+        u32 stuck_dominators = dominated_by[accel_id] & ~may_turn_off; 
+        if ((stuck_dominators & active_accel_mask) != stuck_dominators) { 
+            DEBUG_PRINTF("only %08x on, but we require %08x\n", 
+                         active_accel_mask, stuck_dominators); 
+            return IMPOSSIBLE_ACCEL_MASK; 
+        } 
+    } 
+ 
+    if (ignored) { 
+        DEBUG_PRINTF("in %08x, ignoring %08x\n", active_accel_mask, ignored); 
+    } 
+ 
+    return active_accel_mask & ~ignored; 
 }
 
 static
 void buildAccel(const build_info &args, NFAStateSet &accelMask,
                 NFAStateSet &accelFriendsMask, AccelAuxVector &auxvec,
                 vector<u8> &accelTable) {
-    const limex_accel_info &accel = args.accel;
+    const limex_accel_info &accel = args.accel; 
 
     // Init, all zeroes.
     accelMask.resize(args.num_states);
@@ -874,8 +874,8 @@ void buildAccel(const build_info &args, NFAStateSet &accelMask,
         return;
     }
 
-    const auto dom_map = findDominators(args.h);
-
+    const auto dom_map = findDominators(args.h); 
+ 
     // We have 2^n different accel entries, one for each possible
     // combination of accelerable states.
     assert(accelStates.size() < 32);
@@ -885,24 +885,24 @@ void buildAccel(const build_info &args, NFAStateSet &accelMask,
     // Set up a unioned AccelBuild for every possible combination of the set
     // bits in accelStates.
     vector<AccelBuild> accelOuts(accelCount);
-    vector<u32> effective_accel_set;
-    effective_accel_set.push_back(0); /* empty is effectively empty */
-
+    vector<u32> effective_accel_set; 
+    effective_accel_set.push_back(0); /* empty is effectively empty */ 
+ 
     for (u32 i = 1; i < accelCount; i++) {
-        u32 effective_i = getEffectiveAccelStates(args, dom_map, i,
-                                                  accelStates);
-        effective_accel_set.push_back(effective_i);
-
-        if (effective_i == IMPOSSIBLE_ACCEL_MASK) {
-            DEBUG_PRINTF("this combination of accel states is not possible\n");
-            accelOuts[i].stop1 = CharReach::dot();
-            continue;
+        u32 effective_i = getEffectiveAccelStates(args, dom_map, i, 
+                                                  accelStates); 
+        effective_accel_set.push_back(effective_i); 
+ 
+        if (effective_i == IMPOSSIBLE_ACCEL_MASK) { 
+            DEBUG_PRINTF("this combination of accel states is not possible\n"); 
+            accelOuts[i].stop1 = CharReach::dot(); 
+            continue; 
         }
-
-        while (effective_i) {
-            u32 base_accel_state = findAndClearLSB_32(&effective_i);
-            combineAccel(accelStates[base_accel_state], accelOuts[i]);
-        }
+ 
+        while (effective_i) { 
+            u32 base_accel_state = findAndClearLSB_32(&effective_i); 
+            combineAccel(accelStates[base_accel_state], accelOuts[i]); 
+        } 
         minimiseAccel(accelOuts[i]);
     }
 
@@ -921,25 +921,25 @@ void buildAccel(const build_info &args, NFAStateSet &accelMask,
     for (u32 i = 1; i < accelCount; i++) {
         memset(&aux, 0, sizeof(aux));
 
-        NFAStateSet effective_states(args.num_states);
-        u32 effective_i = effective_accel_set[i];
+        NFAStateSet effective_states(args.num_states); 
+        u32 effective_i = effective_accel_set[i]; 
 
         AccelInfo ainfo;
         ainfo.double_offset = accelOuts[i].offset;
         ainfo.double_stop1 = accelOuts[i].stop1;
         ainfo.double_stop2 = accelOuts[i].stop2;
 
-        if (effective_i != IMPOSSIBLE_ACCEL_MASK) {
-            while (effective_i) {
-                u32 base_accel_id = findAndClearLSB_32(&effective_i);
-                effective_states.set(accelStates[base_accel_id].state);
-            }
-
-            if (contains(accel.precalc, effective_states)) {
-                const auto &precalc = accel.precalc.at(effective_states);
-                ainfo.single_offset = precalc.single_offset;
-                ainfo.single_stops = precalc.single_cr;
-            }
+        if (effective_i != IMPOSSIBLE_ACCEL_MASK) { 
+            while (effective_i) { 
+                u32 base_accel_id = findAndClearLSB_32(&effective_i); 
+                effective_states.set(accelStates[base_accel_id].state); 
+            } 
+ 
+            if (contains(accel.precalc, effective_states)) { 
+                const auto &precalc = accel.precalc.at(effective_states); 
+                ainfo.single_offset = precalc.single_offset; 
+                ainfo.single_stops = precalc.single_cr; 
+            } 
         }
 
         buildAccelAux(ainfo, &aux);
@@ -981,105 +981,105 @@ void buildAccel(const build_info &args, NFAStateSet &accelMask,
 }
 
 static
-u32 addSquashMask(const build_info &args, const NFAVertex &v,
-                  vector<NFAStateSet> &squash) {
-    auto sit = args.reportSquashMap.find(v);
-    if (sit == args.reportSquashMap.end()) {
-        return MO_INVALID_IDX;
-    }
-
-    // This state has a squash mask. Paw through the existing vector to
-    // see if we've already seen it, otherwise add a new one.
-    auto it = find(squash.begin(), squash.end(), sit->second);
-    if (it != squash.end()) {
+u32 addSquashMask(const build_info &args, const NFAVertex &v, 
+                  vector<NFAStateSet> &squash) { 
+    auto sit = args.reportSquashMap.find(v); 
+    if (sit == args.reportSquashMap.end()) { 
+        return MO_INVALID_IDX; 
+    } 
+ 
+    // This state has a squash mask. Paw through the existing vector to 
+    // see if we've already seen it, otherwise add a new one. 
+    auto it = find(squash.begin(), squash.end(), sit->second); 
+    if (it != squash.end()) { 
         return verify_u32(std::distance(squash.begin(), it));
-    }
-    u32 idx = verify_u32(squash.size());
-    squash.push_back(sit->second);
-    return idx;
-}
-
-using ReportListCache = ue2_unordered_map<vector<ReportID>, u32>;
-
-static
-u32 addReports(const flat_set<ReportID> &r, vector<ReportID> &reports,
-               ReportListCache &reports_cache) {
-    assert(!r.empty());
-
-    vector<ReportID> my_reports(begin(r), end(r));
-    my_reports.push_back(MO_INVALID_IDX); // sentinel
-
-    auto cache_it = reports_cache.find(my_reports);
-    if (cache_it != end(reports_cache)) {
-        u32 offset = cache_it->second;
-        DEBUG_PRINTF("reusing cached report list at %u\n", offset);
-        return offset;
-    }
-
-    auto it = search(begin(reports), end(reports), begin(my_reports),
-                     end(my_reports));
-    if (it != end(reports)) {
+    } 
+    u32 idx = verify_u32(squash.size()); 
+    squash.push_back(sit->second); 
+    return idx; 
+} 
+ 
+using ReportListCache = ue2_unordered_map<vector<ReportID>, u32>; 
+ 
+static 
+u32 addReports(const flat_set<ReportID> &r, vector<ReportID> &reports, 
+               ReportListCache &reports_cache) { 
+    assert(!r.empty()); 
+ 
+    vector<ReportID> my_reports(begin(r), end(r)); 
+    my_reports.push_back(MO_INVALID_IDX); // sentinel 
+ 
+    auto cache_it = reports_cache.find(my_reports); 
+    if (cache_it != end(reports_cache)) { 
+        u32 offset = cache_it->second; 
+        DEBUG_PRINTF("reusing cached report list at %u\n", offset); 
+        return offset; 
+    } 
+ 
+    auto it = search(begin(reports), end(reports), begin(my_reports), 
+                     end(my_reports)); 
+    if (it != end(reports)) { 
         u32 offset = verify_u32(std::distance(begin(reports), it));
-        DEBUG_PRINTF("reusing found report list at %u\n", offset);
-        return offset;
-    }
-
-    u32 offset = verify_u32(reports.size());
-    insert(&reports, reports.end(), my_reports);
-    reports_cache.emplace(move(my_reports), offset);
-    return offset;
-}
-
-static
-void buildAcceptsList(const build_info &args, ReportListCache &reports_cache,
-                      vector<NFAVertex> &verts, vector<NFAAccept> &accepts,
-                      vector<ReportID> &reports, vector<NFAStateSet> &squash) {
-    if (verts.empty()) {
-        return;
-    }
-
-    DEBUG_PRINTF("building accept lists for %zu states\n", verts.size());
-
-    auto cmp_state_id = [&args](NFAVertex a, NFAVertex b) {
-        u32 a_state = args.state_ids.at(a);
-        u32 b_state = args.state_ids.at(b);
-        assert(a_state != b_state || a == b);
-        return a_state < b_state;
-    };
-
-    sort(begin(verts), end(verts), cmp_state_id);
-
+        DEBUG_PRINTF("reusing found report list at %u\n", offset); 
+        return offset; 
+    } 
+ 
+    u32 offset = verify_u32(reports.size()); 
+    insert(&reports, reports.end(), my_reports); 
+    reports_cache.emplace(move(my_reports), offset); 
+    return offset; 
+} 
+ 
+static 
+void buildAcceptsList(const build_info &args, ReportListCache &reports_cache, 
+                      vector<NFAVertex> &verts, vector<NFAAccept> &accepts, 
+                      vector<ReportID> &reports, vector<NFAStateSet> &squash) { 
+    if (verts.empty()) { 
+        return; 
+    } 
+ 
+    DEBUG_PRINTF("building accept lists for %zu states\n", verts.size()); 
+ 
+    auto cmp_state_id = [&args](NFAVertex a, NFAVertex b) { 
+        u32 a_state = args.state_ids.at(a); 
+        u32 b_state = args.state_ids.at(b); 
+        assert(a_state != b_state || a == b); 
+        return a_state < b_state; 
+    }; 
+ 
+    sort(begin(verts), end(verts), cmp_state_id); 
+ 
     const NGHolder &h = args.h;
-    for (const auto &v : verts) {
-        DEBUG_PRINTF("state=%u, reports: [%s]\n", args.state_ids.at(v),
-                     as_string_list(h[v].reports).c_str());
-        NFAAccept a;
-        memset(&a, 0, sizeof(a));
-        assert(!h[v].reports.empty());
-        if (h[v].reports.size() == 1) {
-            a.single_report = 1;
-            a.reports = *h[v].reports.begin();
-        } else {
-            a.single_report = 0;
-            a.reports = addReports(h[v].reports, reports, reports_cache);
-        }
-        a.squash = addSquashMask(args, v, squash);
-        accepts.push_back(move(a));
-    }
-}
+    for (const auto &v : verts) { 
+        DEBUG_PRINTF("state=%u, reports: [%s]\n", args.state_ids.at(v), 
+                     as_string_list(h[v].reports).c_str()); 
+        NFAAccept a; 
+        memset(&a, 0, sizeof(a)); 
+        assert(!h[v].reports.empty()); 
+        if (h[v].reports.size() == 1) { 
+            a.single_report = 1; 
+            a.reports = *h[v].reports.begin(); 
+        } else { 
+            a.single_report = 0; 
+            a.reports = addReports(h[v].reports, reports, reports_cache); 
+        } 
+        a.squash = addSquashMask(args, v, squash); 
+        accepts.push_back(move(a)); 
+    } 
+} 
 
-static
-void buildAccepts(const build_info &args, ReportListCache &reports_cache,
-                  NFAStateSet &acceptMask, NFAStateSet &acceptEodMask,
-                  vector<NFAAccept> &accepts, vector<NFAAccept> &acceptsEod,
-                  vector<ReportID> &reports, vector<NFAStateSet> &squash) {
-    const NGHolder &h = args.h;
-
+static 
+void buildAccepts(const build_info &args, ReportListCache &reports_cache, 
+                  NFAStateSet &acceptMask, NFAStateSet &acceptEodMask, 
+                  vector<NFAAccept> &accepts, vector<NFAAccept> &acceptsEod, 
+                  vector<ReportID> &reports, vector<NFAStateSet> &squash) { 
+    const NGHolder &h = args.h; 
+ 
     acceptMask.resize(args.num_states);
     acceptEodMask.resize(args.num_states);
 
-    vector<NFAVertex> verts_accept, verts_accept_eod;
-
+    vector<NFAVertex> verts_accept, verts_accept_eod; 
+ 
     for (auto v : vertices_range(h)) {
         u32 state_id = args.state_ids.at(v);
 
@@ -1089,18 +1089,18 @@ void buildAccepts(const build_info &args, ReportListCache &reports_cache,
 
         if (edge(v, h.accept, h).second) {
             acceptMask.set(state_id);
-            verts_accept.push_back(v);
+            verts_accept.push_back(v); 
         } else {
             assert(edge(v, h.acceptEod, h).second);
             acceptEodMask.set(state_id);
-            verts_accept_eod.push_back(v);
+            verts_accept_eod.push_back(v); 
         }
-    }
+    } 
 
-    buildAcceptsList(args, reports_cache, verts_accept, accepts, reports,
-                     squash);
-    buildAcceptsList(args, reports_cache, verts_accept_eod, acceptsEod, reports,
-                     squash);
+    buildAcceptsList(args, reports_cache, verts_accept, accepts, reports, 
+                     squash); 
+    buildAcceptsList(args, reports_cache, verts_accept_eod, acceptsEod, reports, 
+                     squash); 
 }
 
 static
@@ -1116,15 +1116,15 @@ void buildTopMasks(const build_info &args, vector<NFAStateSet> &topMasks) {
 
     for (const auto &m : args.tops) {
         u32 mask_idx = m.first;
-        for (NFAVertex v : m.second) {
-            u32 state_id = args.state_ids.at(v);
-            DEBUG_PRINTF("state %u is in top mask %u\n", state_id, mask_idx);
+        for (NFAVertex v : m.second) { 
+            u32 state_id = args.state_ids.at(v); 
+            DEBUG_PRINTF("state %u is in top mask %u\n", state_id, mask_idx); 
 
-            assert(mask_idx < numMasks);
-            assert(state_id != NO_STATE);
+            assert(mask_idx < numMasks); 
+            assert(state_id != NO_STATE); 
 
-            topMasks[mask_idx].set(state_id);
-        }
+            topMasks[mask_idx].set(state_id); 
+        } 
     }
 }
 
@@ -1136,7 +1136,7 @@ u32 uncompressedStateSize(u32 num_states) {
 
 static
 u32 compressedStateSize(const NGHolder &h, const NFAStateSet &maskedStates,
-                        const unordered_map<NFAVertex, u32> &state_ids) {
+                        const unordered_map<NFAVertex, u32> &state_ids) { 
     // Shrink state requirement to enough to fit the compressed largest reach.
     vector<u32> allreach(N_CHARS, 0);
 
@@ -1207,7 +1207,7 @@ bool hasSquashableInitDs(const build_info &args) {
 
 static
 bool hasInitDsStates(const NGHolder &h,
-                     const unordered_map<NFAVertex, u32> &state_ids) {
+                     const unordered_map<NFAVertex, u32> &state_ids) { 
     if (state_ids.at(h.startDs) != NO_STATE) {
         return true;
     }
@@ -1236,8 +1236,8 @@ void findMaskedCompressionStates(const build_info &args,
     // Suffixes and outfixes can mask out leaf states, which should all be
     // accepts. Right now we can only do this when there is nothing in initDs,
     // as we switch that on unconditionally in the expand call.
-    if (!inspects_states_for_accepts(h)
-        && !hasInitDsStates(h, args.state_ids)) {
+    if (!inspects_states_for_accepts(h) 
+        && !hasInitDsStates(h, args.state_ids)) { 
         NFAStateSet nonleaf(args.num_states);
         for (const auto &e : edges_range(h)) {
             u32 from = args.state_ids.at(source(e, h));
@@ -1375,16 +1375,16 @@ struct ExceptionProto {
 };
 
 static
-u32 buildExceptionMap(const build_info &args, ReportListCache &reports_cache,
-                      const unordered_set<NFAEdge> &exceptional,
-                      map<ExceptionProto, vector<u32>> &exceptionMap,
-                      vector<ReportID> &reportList) {
+u32 buildExceptionMap(const build_info &args, ReportListCache &reports_cache, 
+                      const unordered_set<NFAEdge> &exceptional, 
+                      map<ExceptionProto, vector<u32>> &exceptionMap, 
+                      vector<ReportID> &reportList) { 
     const NGHolder &h = args.h;
     const u32 num_states = args.num_states;
-    u32 exceptionCount = 0;
+    u32 exceptionCount = 0; 
 
-    unordered_map<NFAVertex, u32> pos_trigger;
-    unordered_map<NFAVertex, u32> tug_trigger;
+    unordered_map<NFAVertex, u32> pos_trigger; 
+    unordered_map<NFAVertex, u32> tug_trigger; 
 
     for (u32 i = 0; i < args.repeats.size(); i++) {
         const BoundedRepeatData &br = args.repeats[i];
@@ -1414,12 +1414,12 @@ u32 buildExceptionMap(const build_info &args, ReportListCache &reports_cache,
             DEBUG_PRINTF("state %u is exceptional due to accept "
                          "(%zu reports)\n", i, reports.size());
 
-            if (reports.empty()) {
-                e.reports_index = MO_INVALID_IDX;
-            } else {
-                e.reports_index =
-                    addReports(reports, reportList, reports_cache);
-            }
+            if (reports.empty()) { 
+                e.reports_index = MO_INVALID_IDX; 
+            } else { 
+                e.reports_index = 
+                    addReports(reports, reportList, reports_cache); 
+            } 
 
             // We may be applying a report squash too.
             auto mi = args.reportSquashMap.find(v);
@@ -1511,13 +1511,13 @@ u32 buildExceptionMap(const build_info &args, ReportListCache &reports_cache,
             assert(e.succ_states.size() == num_states);
             assert(e.squash_states.size() == num_states);
             exceptionMap[e].push_back(i);
-            exceptionCount++;
+            exceptionCount++; 
         }
     }
 
-    DEBUG_PRINTF("%u exceptions found (%zu unique)\n", exceptionCount,
-                 exceptionMap.size());
-    return exceptionCount;
+    DEBUG_PRINTF("%u exceptions found (%zu unique)\n", exceptionCount, 
+                 exceptionMap.size()); 
+    return exceptionCount; 
 }
 
 static
@@ -1532,164 +1532,164 @@ u32 depth_to_u32(const depth &d) {
     return d_val;
 }
 
-static
-bool isExceptionalTransition(u32 from, u32 to, const build_info &args,
-                             u32 maxShift) {
-    if (!isLimitedTransition(from, to, maxShift)) {
-        return true;
-    }
-
-    // All transitions out of a tug trigger are exceptional.
-    if (args.tugs.test(from)) {
-        return true;
-    }
-    return false;
-}
-
-static
-u32 findMaxVarShift(const build_info &args, u32 nShifts) {
-    const NGHolder &h = args.h;
-    u32 shiftMask = 0;
-    for (const auto &e : edges_range(h)) {
-        u32 from = args.state_ids.at(source(e, h));
-        u32 to = args.state_ids.at(target(e, h));
-        if (from == NO_STATE || to == NO_STATE) {
-            continue;
-        }
-        if (!isExceptionalTransition(from, to, args, MAX_SHIFT_AMOUNT)) {
-            shiftMask |= (1UL << (to - from));
-        }
-    }
-
-    u32 maxVarShift = 0;
-    for (u32 shiftCnt = 0; shiftMask != 0 && shiftCnt < nShifts; shiftCnt++) {
-        maxVarShift = findAndClearLSB_32(&shiftMask);
-    }
-
-    return maxVarShift;
-}
-
-static
-int getLimexScore(const build_info &args, u32 nShifts) {
-    const NGHolder &h = args.h;
-    u32 maxVarShift = nShifts;
-    int score = 0;
-
-    score += SHIFT_COST * nShifts;
-    maxVarShift = findMaxVarShift(args, nShifts);
-
-    NFAStateSet exceptionalStates(args.num_states);
-    for (const auto &e : edges_range(h)) {
-        u32 from = args.state_ids.at(source(e, h));
-        u32 to = args.state_ids.at(target(e, h));
-        if (from == NO_STATE || to == NO_STATE) {
-            continue;
-        }
-        if (isExceptionalTransition(from, to, args, maxVarShift)) {
-            exceptionalStates.set(from);
-        }
-    }
-    score += EXCEPTION_COST * exceptionalStates.count();
-    return score;
-}
-
-// This function finds the best shift scheme with highest score
-// Returns number of shifts and score calculated for appropriate scheme
-// Returns zero if no appropriate scheme was found
-static
-u32 findBestNumOfVarShifts(const build_info &args,
-                           int *bestScoreRet = nullptr) {
-    u32 bestNumOfVarShifts = 0;
-    int bestScore = INT_MAX;
-    for (u32 shiftCount = 1; shiftCount <= MAX_SHIFT_COUNT; shiftCount++) {
-        int score = getLimexScore(args, shiftCount);
-        if (score < bestScore) {
-            bestScore = score;
-            bestNumOfVarShifts = shiftCount;
-        }
-    }
-    if (bestScoreRet != nullptr) {
-        *bestScoreRet = bestScore;
-    }
-    return bestNumOfVarShifts;
-}
-
-static
-bool cannotDie(const build_info &args, const set<NFAVertex> &tops) {
-    const auto &h = args.h;
-
-    // When this top is activated, all of the vertices in 'tops' are switched
-    // on. If any of those lead to a graph that cannot die, then this top
-    // cannot die.
-
-    // For each top, we use a depth-first search to traverse the graph from the
-    // top, looking for a cyclic path consisting of vertices of dot reach. If
-    // one exists, than the NFA cannot die after this top is triggered.
-
-    auto colour_map = make_small_color_map(h);
-
-    struct CycleFound {};
-    struct CannotDieVisitor : public boost::default_dfs_visitor {
-        void back_edge(const NFAEdge &e, const NGHolder &g) const {
-            DEBUG_PRINTF("back-edge %zu,%zu\n", g[source(e, g)].index,
-                         g[target(e, g)].index);
-            if (g[target(e, g)].char_reach.all()) {
-                assert(g[source(e, g)].char_reach.all());
-                throw CycleFound();
-            }
-        }
-    };
-
-    try {
-        for (const auto &top : tops) {
-            DEBUG_PRINTF("checking top vertex %zu\n", h[top].index);
-
-            // Constrain the search to the top vertices and any dot vertices it
-            // can reach.
-            auto term_func = [&](NFAVertex v, const NGHolder &g) {
-                if (v == top) {
-                    return false;
-                }
-                if (!g[v].char_reach.all()) {
-                    return true;
-                }
-                if (contains(args.br_cyclic, v) &&
-                    args.br_cyclic.at(v).repeatMax != depth::infinity()) {
-                    // Bounded repeat vertices without inf max can be turned
-                    // off.
-                    return true;
-                }
-                return false;
-            };
-
-            boost::depth_first_visit(h, top, CannotDieVisitor(), colour_map,
-                                     term_func);
-        }
-    } catch (const CycleFound &) {
-        DEBUG_PRINTF("cycle found\n");
-        return true;
-    }
-
-    return false;
-}
-
-/** \brief True if this NFA cannot ever be in no states at all. */
-static
-bool cannotDie(const build_info &args) {
-    const auto &h = args.h;
-    const auto &state_ids = args.state_ids;
-
-    // If we have a startDs we're actually using, we can't die.
-    if (state_ids.at(h.startDs) != NO_STATE) {
-        DEBUG_PRINTF("is using startDs\n");
-        return true;
-    }
-
-    return all_of_in(args.tops | map_values, [&](const set<NFAVertex> &verts) {
-        return cannotDie(args, verts);
-    });
-}
-
+static 
+bool isExceptionalTransition(u32 from, u32 to, const build_info &args, 
+                             u32 maxShift) { 
+    if (!isLimitedTransition(from, to, maxShift)) { 
+        return true; 
+    } 
+ 
+    // All transitions out of a tug trigger are exceptional. 
+    if (args.tugs.test(from)) { 
+        return true; 
+    } 
+    return false; 
+} 
+ 
+static 
+u32 findMaxVarShift(const build_info &args, u32 nShifts) { 
+    const NGHolder &h = args.h; 
+    u32 shiftMask = 0; 
+    for (const auto &e : edges_range(h)) { 
+        u32 from = args.state_ids.at(source(e, h)); 
+        u32 to = args.state_ids.at(target(e, h)); 
+        if (from == NO_STATE || to == NO_STATE) { 
+            continue; 
+        } 
+        if (!isExceptionalTransition(from, to, args, MAX_SHIFT_AMOUNT)) { 
+            shiftMask |= (1UL << (to - from)); 
+        } 
+    } 
+ 
+    u32 maxVarShift = 0; 
+    for (u32 shiftCnt = 0; shiftMask != 0 && shiftCnt < nShifts; shiftCnt++) { 
+        maxVarShift = findAndClearLSB_32(&shiftMask); 
+    } 
+ 
+    return maxVarShift; 
+} 
+ 
+static 
+int getLimexScore(const build_info &args, u32 nShifts) { 
+    const NGHolder &h = args.h; 
+    u32 maxVarShift = nShifts; 
+    int score = 0; 
+ 
+    score += SHIFT_COST * nShifts; 
+    maxVarShift = findMaxVarShift(args, nShifts); 
+ 
+    NFAStateSet exceptionalStates(args.num_states); 
+    for (const auto &e : edges_range(h)) { 
+        u32 from = args.state_ids.at(source(e, h)); 
+        u32 to = args.state_ids.at(target(e, h)); 
+        if (from == NO_STATE || to == NO_STATE) { 
+            continue; 
+        } 
+        if (isExceptionalTransition(from, to, args, maxVarShift)) { 
+            exceptionalStates.set(from); 
+        } 
+    } 
+    score += EXCEPTION_COST * exceptionalStates.count(); 
+    return score; 
+} 
+ 
+// This function finds the best shift scheme with highest score 
+// Returns number of shifts and score calculated for appropriate scheme 
+// Returns zero if no appropriate scheme was found 
+static 
+u32 findBestNumOfVarShifts(const build_info &args, 
+                           int *bestScoreRet = nullptr) { 
+    u32 bestNumOfVarShifts = 0; 
+    int bestScore = INT_MAX; 
+    for (u32 shiftCount = 1; shiftCount <= MAX_SHIFT_COUNT; shiftCount++) { 
+        int score = getLimexScore(args, shiftCount); 
+        if (score < bestScore) { 
+            bestScore = score; 
+            bestNumOfVarShifts = shiftCount; 
+        } 
+    } 
+    if (bestScoreRet != nullptr) { 
+        *bestScoreRet = bestScore; 
+    } 
+    return bestNumOfVarShifts; 
+} 
+ 
+static 
+bool cannotDie(const build_info &args, const set<NFAVertex> &tops) { 
+    const auto &h = args.h; 
+ 
+    // When this top is activated, all of the vertices in 'tops' are switched 
+    // on. If any of those lead to a graph that cannot die, then this top 
+    // cannot die. 
+ 
+    // For each top, we use a depth-first search to traverse the graph from the 
+    // top, looking for a cyclic path consisting of vertices of dot reach. If 
+    // one exists, than the NFA cannot die after this top is triggered. 
+ 
+    auto colour_map = make_small_color_map(h); 
+ 
+    struct CycleFound {}; 
+    struct CannotDieVisitor : public boost::default_dfs_visitor { 
+        void back_edge(const NFAEdge &e, const NGHolder &g) const { 
+            DEBUG_PRINTF("back-edge %zu,%zu\n", g[source(e, g)].index, 
+                         g[target(e, g)].index); 
+            if (g[target(e, g)].char_reach.all()) { 
+                assert(g[source(e, g)].char_reach.all()); 
+                throw CycleFound(); 
+            } 
+        } 
+    }; 
+ 
+    try { 
+        for (const auto &top : tops) { 
+            DEBUG_PRINTF("checking top vertex %zu\n", h[top].index); 
+ 
+            // Constrain the search to the top vertices and any dot vertices it 
+            // can reach. 
+            auto term_func = [&](NFAVertex v, const NGHolder &g) { 
+                if (v == top) { 
+                    return false; 
+                } 
+                if (!g[v].char_reach.all()) { 
+                    return true; 
+                } 
+                if (contains(args.br_cyclic, v) && 
+                    args.br_cyclic.at(v).repeatMax != depth::infinity()) { 
+                    // Bounded repeat vertices without inf max can be turned 
+                    // off. 
+                    return true; 
+                } 
+                return false; 
+            }; 
+ 
+            boost::depth_first_visit(h, top, CannotDieVisitor(), colour_map, 
+                                     term_func); 
+        } 
+    } catch (const CycleFound &) { 
+        DEBUG_PRINTF("cycle found\n"); 
+        return true; 
+    } 
+ 
+    return false; 
+} 
+ 
+/** \brief True if this NFA cannot ever be in no states at all. */ 
+static 
+bool cannotDie(const build_info &args) { 
+    const auto &h = args.h; 
+    const auto &state_ids = args.state_ids; 
+ 
+    // If we have a startDs we're actually using, we can't die. 
+    if (state_ids.at(h.startDs) != NO_STATE) { 
+        DEBUG_PRINTF("is using startDs\n"); 
+        return true; 
+    } 
+ 
+    return all_of_in(args.tops | map_values, [&](const set<NFAVertex> &verts) { 
+        return cannotDie(args, verts); 
+    }); 
+} 
+ 
 template<NFAEngineType dtype>
 struct Factory {
     // typedefs for readability, for types derived from traits
@@ -1713,8 +1713,8 @@ struct Factory {
                      sizeof(limex->init), stateSize, repeatscratchStateSize,
                      repeatStreamState);
 
-        size_t scratchStateSize = NFATraits<dtype>::scratch_state_size;
-
+        size_t scratchStateSize = NFATraits<dtype>::scratch_state_size; 
+ 
         if (repeatscratchStateSize) {
             scratchStateSize
                 = ROUNDUP_N(scratchStateSize, alignof(RepeatControl));
@@ -1753,8 +1753,8 @@ struct Factory {
 
     static
     void buildRepeats(const build_info &args,
-                      vector<bytecode_ptr<NFARepeatInfo>> &out,
-                      u32 *scratchStateSize, u32 *streamState) {
+                      vector<bytecode_ptr<NFARepeatInfo>> &out, 
+                      u32 *scratchStateSize, u32 *streamState) { 
         out.reserve(args.repeats.size());
 
         u32 repeat_idx = 0;
@@ -1765,7 +1765,7 @@ struct Factory {
 
             u32 tableOffset, tugMaskOffset;
             size_t len = repeatAllocSize(br, &tableOffset, &tugMaskOffset);
-            auto info = make_zeroed_bytecode_ptr<NFARepeatInfo>(len);
+            auto info = make_zeroed_bytecode_ptr<NFARepeatInfo>(len); 
             char *info_ptr = (char *)info.get();
 
             // Collect state space info.
@@ -1819,7 +1819,7 @@ struct Factory {
             *streamState += streamStateLen;
             *scratchStateSize += sizeof(RepeatControl);
 
-            out.emplace_back(move(info));
+            out.emplace_back(move(info)); 
         }
     }
 
@@ -1856,19 +1856,19 @@ struct Factory {
             assert(cyclic != NO_STATE);
             maskSetBit(limex->repeatCyclicMask, cyclic);
         }
-        /* also include tugs in repeat cyclic mask */
-        for (size_t i = args.tugs.find_first(); i != args.tugs.npos;
-             i = args.tugs.find_next(i)) {
-            maskSetBit(limex->repeatCyclicMask, i);
-        }
+        /* also include tugs in repeat cyclic mask */ 
+        for (size_t i = args.tugs.find_first(); i != args.tugs.npos; 
+             i = args.tugs.find_next(i)) { 
+            maskSetBit(limex->repeatCyclicMask, i); 
+        } 
     }
 
     static
     void writeShiftMasks(const build_info &args, implNFA_t *limex) {
         const NGHolder &h = args.h;
-        u32 maxShift = findMaxVarShift(args, limex->shiftCount);
-        u32 shiftMask = 0;
-        int shiftMaskIdx = 0;
+        u32 maxShift = findMaxVarShift(args, limex->shiftCount); 
+        u32 shiftMask = 0; 
+        int shiftMaskIdx = 0; 
 
         for (const auto &e : edges_range(h)) {
             u32 from = args.state_ids.at(source(e, h));
@@ -1880,32 +1880,32 @@ struct Factory {
             // We check for exceptional transitions here, as we don't want tug
             // trigger transitions emitted as limited transitions (even if they
             // could be in this model).
-            if (!isExceptionalTransition(from, to, args, maxShift)) {
-                u32 shift = to - from;
-                if ((shiftMask & (1UL << shift)) == 0UL) {
-                    shiftMask |= (1UL << shift);
-                    limex->shiftAmount[shiftMaskIdx++] = (u8)shift;
-                }
-                assert(limex->shiftCount <= MAX_SHIFT_COUNT);
-                for (u32 i = 0; i < limex->shiftCount; i++) {
-                    if (limex->shiftAmount[i] == (u8)shift) {
-                        maskSetBit(limex->shift[i], from);
-                        break;
-                    }
-                }
+            if (!isExceptionalTransition(from, to, args, maxShift)) { 
+                u32 shift = to - from; 
+                if ((shiftMask & (1UL << shift)) == 0UL) { 
+                    shiftMask |= (1UL << shift); 
+                    limex->shiftAmount[shiftMaskIdx++] = (u8)shift; 
+                } 
+                assert(limex->shiftCount <= MAX_SHIFT_COUNT); 
+                for (u32 i = 0; i < limex->shiftCount; i++) { 
+                    if (limex->shiftAmount[i] == (u8)shift) { 
+                        maskSetBit(limex->shift[i], from); 
+                        break; 
+                    } 
+                } 
             }
         }
-        if (maxShift && limex->shiftCount > 1) {
-            for (u32 i = 0; i < limex->shiftCount; i++) {
-                assert(!isMaskZero(limex->shift[i]));
-            }
-        }
+        if (maxShift && limex->shiftCount > 1) { 
+            for (u32 i = 0; i < limex->shiftCount; i++) { 
+                assert(!isMaskZero(limex->shift[i])); 
+            } 
+        } 
     }
 
     static
     void findExceptionalTransitions(const build_info &args,
-                                    unordered_set<NFAEdge> &exceptional,
-                                    u32 maxShift) {
+                                    unordered_set<NFAEdge> &exceptional, 
+                                    u32 maxShift) { 
         const NGHolder &h = args.h;
 
         for (const auto &e : edges_range(h)) {
@@ -1915,7 +1915,7 @@ struct Factory {
                 continue;
             }
 
-            if (isExceptionalTransition(from, to, args, maxShift)) {
+            if (isExceptionalTransition(from, to, args, maxShift)) { 
                 exceptional.insert(e);
             }
         }
@@ -1924,41 +1924,41 @@ struct Factory {
     static
     void writeExceptions(const build_info &args,
                          const map<ExceptionProto, vector<u32>> &exceptionMap,
-                         const vector<u32> &repeatOffsets, implNFA_t *limex,
-                         const u32 exceptionsOffset,
-                         const u32 reportListOffset) {
+                         const vector<u32> &repeatOffsets, implNFA_t *limex, 
+                         const u32 exceptionsOffset, 
+                         const u32 reportListOffset) { 
         DEBUG_PRINTF("exceptionsOffset=%u\n", exceptionsOffset);
 
         exception_t *etable = (exception_t *)((char *)limex + exceptionsOffset);
         assert(ISALIGNED(etable));
 
-        map<u32, ExceptionProto> exception_by_state;
+        map<u32, ExceptionProto> exception_by_state; 
         for (const auto &m : exceptionMap) {
             const ExceptionProto &proto = m.first;
             const vector<u32> &states = m.second;
-            for (u32 i : states) {
-                assert(!contains(exception_by_state, i));
-                exception_by_state.emplace(i, proto);
-            }
-        }
+            for (u32 i : states) { 
+                assert(!contains(exception_by_state, i)); 
+                exception_by_state.emplace(i, proto); 
+            } 
+        } 
 
-        u32 ecount = 0;
-        for (const auto &m : exception_by_state) {
-            const ExceptionProto &proto = m.second;
-            u32 state_id = m.first;
-            DEBUG_PRINTF("exception %u, triggered by state %u\n", ecount,
-                         state_id);
-
+        u32 ecount = 0; 
+        for (const auto &m : exception_by_state) { 
+            const ExceptionProto &proto = m.second; 
+            u32 state_id = m.first; 
+            DEBUG_PRINTF("exception %u, triggered by state %u\n", ecount, 
+                         state_id); 
+ 
             // Write the exception entry.
             exception_t &e = etable[ecount];
             maskSetBits(e.squash, proto.squash_states);
             maskSetBits(e.successors, proto.succ_states);
-            if (proto.reports_index == MO_INVALID_IDX) {
-                e.reports = MO_INVALID_IDX;
-            } else {
-                e.reports = reportListOffset +
-                            proto.reports_index * sizeof(ReportID);
-            }
+            if (proto.reports_index == MO_INVALID_IDX) { 
+                e.reports = MO_INVALID_IDX; 
+            } else { 
+                e.reports = reportListOffset + 
+                            proto.reports_index * sizeof(ReportID); 
+            } 
             e.hasSquash = verify_u8(proto.squash);
             e.trigger = verify_u8(proto.trigger);
             u32 repeat_offset = proto.repeat_index == MO_INVALID_IDX
@@ -1966,10 +1966,10 @@ struct Factory {
                                     : repeatOffsets[proto.repeat_index];
             e.repeatOffset = repeat_offset;
 
-            // for the state that can switch it on
-            // set this bit in the exception mask
-            maskSetBit(limex->exceptionMask, state_id);
-
+            // for the state that can switch it on 
+            // set this bit in the exception mask 
+            maskSetBit(limex->exceptionMask, state_id); 
+ 
             ecount++;
         }
 
@@ -2130,9 +2130,9 @@ struct Factory {
                       const vector<NFAAccept> &acceptsEod,
                       const vector<NFAStateSet> &squash, implNFA_t *limex,
                       const u32 acceptsOffset, const u32 acceptsEodOffset,
-                      const u32 squashOffset, const u32 reportListOffset) {
-        char *limex_base = (char *)limex;
-
+                      const u32 squashOffset, const u32 reportListOffset) { 
+        char *limex_base = (char *)limex; 
+ 
         DEBUG_PRINTF("acceptsOffset=%u, acceptsEodOffset=%u, squashOffset=%u\n",
                      acceptsOffset, acceptsEodOffset, squashOffset);
 
@@ -2140,39 +2140,39 @@ struct Factory {
         maskSetBits(limex->accept, acceptMask);
         maskSetBits(limex->acceptAtEOD, acceptEodMask);
 
-        // Transforms the indices (report list, squash mask) into offsets
-        // relative to the base of the limex.
-        auto transform_offset_fn = [&](NFAAccept a) {
-            if (!a.single_report) {
-                a.reports = reportListOffset + a.reports * sizeof(ReportID);
-            }
-            a.squash = squashOffset + a.squash * sizeof(tableRow_t);
-            return a;
-        };
-
+        // Transforms the indices (report list, squash mask) into offsets 
+        // relative to the base of the limex. 
+        auto transform_offset_fn = [&](NFAAccept a) { 
+            if (!a.single_report) { 
+                a.reports = reportListOffset + a.reports * sizeof(ReportID); 
+            } 
+            a.squash = squashOffset + a.squash * sizeof(tableRow_t); 
+            return a; 
+        }; 
+ 
         // Write accept table.
         limex->acceptOffset = acceptsOffset;
         limex->acceptCount = verify_u32(accepts.size());
         DEBUG_PRINTF("NFA has %zu accepts\n", accepts.size());
-        NFAAccept *acceptsTable = (NFAAccept *)(limex_base + acceptsOffset);
+        NFAAccept *acceptsTable = (NFAAccept *)(limex_base + acceptsOffset); 
         assert(ISALIGNED(acceptsTable));
-        transform(accepts.begin(), accepts.end(), acceptsTable,
-                  transform_offset_fn);
+        transform(accepts.begin(), accepts.end(), acceptsTable, 
+                  transform_offset_fn); 
 
         // Write eod accept table.
         limex->acceptEodOffset = acceptsEodOffset;
         limex->acceptEodCount = verify_u32(acceptsEod.size());
         DEBUG_PRINTF("NFA has %zu EOD accepts\n", acceptsEod.size());
-        NFAAccept *acceptsEodTable = (NFAAccept *)(limex_base + acceptsEodOffset);
+        NFAAccept *acceptsEodTable = (NFAAccept *)(limex_base + acceptsEodOffset); 
         assert(ISALIGNED(acceptsEodTable));
-        transform(acceptsEod.begin(), acceptsEod.end(), acceptsEodTable,
-                  transform_offset_fn);
+        transform(acceptsEod.begin(), acceptsEod.end(), acceptsEodTable, 
+                  transform_offset_fn); 
 
         // Write squash mask table.
         limex->squashCount = verify_u32(squash.size());
         limex->squashOffset = squashOffset;
         DEBUG_PRINTF("NFA has %zu report squash masks\n", squash.size());
-        tableRow_t *mask = (tableRow_t *)(limex_base + squashOffset);
+        tableRow_t *mask = (tableRow_t *)(limex_base + squashOffset); 
         assert(ISALIGNED(mask));
         for (size_t i = 0, end = squash.size(); i < end; i++) {
             maskSetBits(mask[i], squash[i]);
@@ -2180,7 +2180,7 @@ struct Factory {
     }
 
     static
-    void writeRepeats(const vector<bytecode_ptr<NFARepeatInfo>> &repeats,
+    void writeRepeats(const vector<bytecode_ptr<NFARepeatInfo>> &repeats, 
                       vector<u32> &repeatOffsets, implNFA_t *limex,
                       const u32 repeatOffsetsOffset, const u32 repeatOffset) {
         const u32 num_repeats = verify_u32(repeats.size());
@@ -2193,9 +2193,9 @@ struct Factory {
 
         for (u32 i = 0; i < num_repeats; i++) {
             repeatOffsets[i] = offset;
-            assert(repeats[i]);
-            memcpy((char *)limex + offset, repeats[i].get(), repeats[i].size());
-            offset += repeats[i].size();
+            assert(repeats[i]); 
+            memcpy((char *)limex + offset, repeats[i].get(), repeats[i].size()); 
+            offset += repeats[i].size(); 
         }
 
         // Write repeat offset lookup table.
@@ -2207,48 +2207,48 @@ struct Factory {
     }
 
     static
-    void writeReportList(const vector<ReportID> &reports, implNFA_t *limex,
-                         const u32 reportListOffset) {
-        DEBUG_PRINTF("reportListOffset=%u\n", reportListOffset);
-        assert(ISALIGNED_N((char *)limex + reportListOffset,
+    void writeReportList(const vector<ReportID> &reports, implNFA_t *limex, 
+                         const u32 reportListOffset) { 
+        DEBUG_PRINTF("reportListOffset=%u\n", reportListOffset); 
+        assert(ISALIGNED_N((char *)limex + reportListOffset, 
                            alignof(ReportID)));
-        copy_bytes((char *)limex + reportListOffset, reports);
+        copy_bytes((char *)limex + reportListOffset, reports); 
     }
 
     static
-    bytecode_ptr<NFA> generateNfa(const build_info &args) {
+    bytecode_ptr<NFA> generateNfa(const build_info &args) { 
         if (args.num_states > NFATraits<dtype>::maxStates) {
             return nullptr;
         }
 
         // Build bounded repeat structures.
-        vector<bytecode_ptr<NFARepeatInfo>> repeats;
+        vector<bytecode_ptr<NFARepeatInfo>> repeats; 
         u32 repeats_full_state = 0;
         u32 repeats_stream_state = 0;
         buildRepeats(args, repeats, &repeats_full_state, &repeats_stream_state);
         size_t repeatSize = 0;
         for (size_t i = 0; i < repeats.size(); i++) {
-            repeatSize += repeats[i].size();
+            repeatSize += repeats[i].size(); 
         }
 
-        // We track report lists that have already been written into the global
-        // list in case we can reuse them.
-        ReportListCache reports_cache;
+        // We track report lists that have already been written into the global 
+        // list in case we can reuse them. 
+        ReportListCache reports_cache; 
 
-        unordered_set<NFAEdge> exceptional;
-        u32 shiftCount = findBestNumOfVarShifts(args);
-        assert(shiftCount);
-        u32 maxShift = findMaxVarShift(args, shiftCount);
-        findExceptionalTransitions(args, exceptional, maxShift);
+        unordered_set<NFAEdge> exceptional; 
+        u32 shiftCount = findBestNumOfVarShifts(args); 
+        assert(shiftCount); 
+        u32 maxShift = findMaxVarShift(args, shiftCount); 
+        findExceptionalTransitions(args, exceptional, maxShift); 
 
-        map<ExceptionProto, vector<u32>> exceptionMap;
-        vector<ReportID> reportList;
+        map<ExceptionProto, vector<u32>> exceptionMap; 
+        vector<ReportID> reportList; 
 
-        u32 exceptionCount = buildExceptionMap(args, reports_cache, exceptional,
-                                               exceptionMap, reportList);
-
-        assert(exceptionCount <= args.num_states);
-
+        u32 exceptionCount = buildExceptionMap(args, reports_cache, exceptional, 
+                                               exceptionMap, reportList); 
+ 
+        assert(exceptionCount <= args.num_states); 
+ 
         // Build reach table and character mapping.
         vector<NFAStateSet> reach;
         vector<u8> reachMap;
@@ -2262,8 +2262,8 @@ struct Factory {
         NFAStateSet acceptMask, acceptEodMask;
         vector<NFAAccept> accepts, acceptsEod;
         vector<NFAStateSet> squash;
-        buildAccepts(args, reports_cache, acceptMask, acceptEodMask, accepts,
-                     acceptsEod, reportList, squash);
+        buildAccepts(args, reports_cache, acceptMask, acceptEodMask, accepts, 
+                     acceptsEod, reportList, squash); 
 
         // Build all our accel info.
         NFAStateSet accelMask, accelFriendsMask;
@@ -2302,10 +2302,10 @@ struct Factory {
 
         offset = ROUNDUP_CL(offset);
         const u32 exceptionsOffset = offset;
-        offset += sizeof(exception_t) * exceptionCount;
+        offset += sizeof(exception_t) * exceptionCount; 
 
-        const u32 reportListOffset = offset;
-        offset += sizeof(ReportID) * reportList.size();
+        const u32 reportListOffset = offset; 
+        offset += sizeof(ReportID) * reportList.size(); 
 
         const u32 repeatOffsetsOffset = offset;
         offset += sizeof(u32) * args.repeats.size();
@@ -2318,7 +2318,7 @@ struct Factory {
 
         size_t nfaSize = sizeof(NFA) + offset;
         DEBUG_PRINTF("nfa size %zu\n", nfaSize);
-        auto nfa = make_zeroed_bytecode_ptr<NFA>(nfaSize);
+        auto nfa = make_zeroed_bytecode_ptr<NFA>(nfaSize); 
         assert(nfa); // otherwise we would have thrown std::bad_alloc
 
         implNFA_t *limex = (implNFA_t *)getMutableImplNfa(nfa.get());
@@ -2332,21 +2332,21 @@ struct Factory {
                    limex, accelTableOffset, accelAuxOffset);
 
         writeAccepts(acceptMask, acceptEodMask, accepts, acceptsEod, squash,
-                     limex, acceptsOffset, acceptsEodOffset, squashOffset,
-                     reportListOffset);
+                     limex, acceptsOffset, acceptsEodOffset, squashOffset, 
+                     reportListOffset); 
 
-        limex->shiftCount = shiftCount;
+        limex->shiftCount = shiftCount; 
         writeShiftMasks(args, limex);
 
-        if (cannotDie(args)) {
-            DEBUG_PRINTF("nfa cannot die\n");
-            setLimexFlag(limex, LIMEX_FLAG_CANNOT_DIE);
-        }
-
+        if (cannotDie(args)) { 
+            DEBUG_PRINTF("nfa cannot die\n"); 
+            setLimexFlag(limex, LIMEX_FLAG_CANNOT_DIE); 
+        } 
+ 
         // Determine the state required for our state vector.
         findStateSize(args, limex);
 
-        writeReportList(reportList, limex, reportListOffset);
+        writeReportList(reportList, limex, reportListOffset); 
 
         // Repeat structures and offset table.
         vector<u32> repeatOffsets;
@@ -2354,7 +2354,7 @@ struct Factory {
                      repeatsOffset);
 
         writeExceptions(args, exceptionMap, repeatOffsets, limex, exceptionsOffset,
-                        reportListOffset);
+                        reportListOffset); 
 
         writeLimexMasks(args, limex);
 
@@ -2393,10 +2393,10 @@ struct Factory {
 
         // We are of the right size, calculate a score based on the number
         // of exceptions and the number of shifts used by this LimEx.
-        int score;
-        u32 shiftCount = findBestNumOfVarShifts(args, &score);
-        if (shiftCount == 0) {
-            return -1;
+        int score; 
+        u32 shiftCount = findBestNumOfVarShifts(args, &score); 
+        if (shiftCount == 0) { 
+            return -1; 
         }
         return score;
     }
@@ -2404,7 +2404,7 @@ struct Factory {
 
 template<NFAEngineType dtype>
 struct generateNfa {
-    static bytecode_ptr<NFA> call(const build_info &args) {
+    static bytecode_ptr<NFA> call(const build_info &args) { 
         return Factory<dtype>::generateNfa(args);
     }
 };
@@ -2416,40 +2416,40 @@ struct scoreNfa {
     }
 };
 
-#define MAKE_LIMEX_TRAITS(mlt_size)                                            \
-    template<> struct NFATraits<LIMEX_NFA_##mlt_size> {                        \
-        typedef LimExNFA##mlt_size implNFA_t;                                  \
-        typedef u_##mlt_size tableRow_t;                                       \
-        typedef NFAException##mlt_size exception_t;                            \
-        static const size_t maxStates = mlt_size;                              \
-        static const size_t scratch_state_size = mlt_size == 64 ? sizeof(m128) \
-                                                 : sizeof(tableRow_t);         \
-    };
+#define MAKE_LIMEX_TRAITS(mlt_size)                                            \ 
+    template<> struct NFATraits<LIMEX_NFA_##mlt_size> {                        \ 
+        typedef LimExNFA##mlt_size implNFA_t;                                  \ 
+        typedef u_##mlt_size tableRow_t;                                       \ 
+        typedef NFAException##mlt_size exception_t;                            \ 
+        static const size_t maxStates = mlt_size;                              \ 
+        static const size_t scratch_state_size = mlt_size == 64 ? sizeof(m128) \ 
+                                                 : sizeof(tableRow_t);         \ 
+    }; 
 
-MAKE_LIMEX_TRAITS(32)
-MAKE_LIMEX_TRAITS(64)
-MAKE_LIMEX_TRAITS(128)
-MAKE_LIMEX_TRAITS(256)
-MAKE_LIMEX_TRAITS(384)
-MAKE_LIMEX_TRAITS(512)
+MAKE_LIMEX_TRAITS(32) 
+MAKE_LIMEX_TRAITS(64) 
+MAKE_LIMEX_TRAITS(128) 
+MAKE_LIMEX_TRAITS(256) 
+MAKE_LIMEX_TRAITS(384) 
+MAKE_LIMEX_TRAITS(512) 
 
 } // namespace
 
 #ifndef NDEBUG
 // Some sanity tests, called by an assertion in generate().
 static UNUSED
-bool isSane(const NGHolder &h, const map<u32, set<NFAVertex>> &tops,
-            const unordered_map<NFAVertex, u32> &state_ids,
+bool isSane(const NGHolder &h, const map<u32, set<NFAVertex>> &tops, 
+            const unordered_map<NFAVertex, u32> &state_ids, 
             u32 num_states) {
-    unordered_set<u32> seen;
-    unordered_set<NFAVertex> top_starts;
-    for (const auto &vv : tops | map_values) {
-        insert(&top_starts, vv);
+    unordered_set<u32> seen; 
+    unordered_set<NFAVertex> top_starts; 
+    for (const auto &vv : tops | map_values) { 
+        insert(&top_starts, vv); 
     }
 
     for (auto v : vertices_range(h)) {
         if (!contains(state_ids, v)) {
-            DEBUG_PRINTF("no entry for vertex %zu in state map\n", h[v].index);
+            DEBUG_PRINTF("no entry for vertex %zu in state map\n", h[v].index); 
             return false;
         }
         const u32 i = state_ids.at(v);
@@ -2457,7 +2457,7 @@ bool isSane(const NGHolder &h, const map<u32, set<NFAVertex>> &tops,
             continue;
         }
 
-        DEBUG_PRINTF("checking vertex %zu (state %u)\n", h[v].index, i);
+        DEBUG_PRINTF("checking vertex %zu (state %u)\n", h[v].index, i); 
 
         if (i >= num_states || contains(seen, i)) {
             DEBUG_PRINTF("vertex %u/%u has invalid state\n", i, num_states);
@@ -2467,7 +2467,7 @@ bool isSane(const NGHolder &h, const map<u32, set<NFAVertex>> &tops,
 
         // All our states should be reachable and have a state assigned.
         if (h[v].char_reach.none()) {
-            DEBUG_PRINTF("vertex %zu has empty reachability\n", h[v].index);
+            DEBUG_PRINTF("vertex %zu has empty reachability\n", h[v].index); 
             return false;
         }
 
@@ -2475,7 +2475,7 @@ bool isSane(const NGHolder &h, const map<u32, set<NFAVertex>> &tops,
         // must have at least one predecessor that is not itself.
         if (v != h.start && v != h.startDs && !contains(top_starts, v)
             && !proper_in_degree(v, h)) {
-            DEBUG_PRINTF("vertex %zu has no pred\n", h[v].index);
+            DEBUG_PRINTF("vertex %zu has no pred\n", h[v].index); 
             return false;
         }
     }
@@ -2551,7 +2551,7 @@ bool isFast(const build_info &args) {
 }
 
 static
-u32 max_state(const unordered_map<NFAVertex, u32> &state_ids) {
+u32 max_state(const unordered_map<NFAVertex, u32> &state_ids) { 
     u32 rv = 0;
     for (const auto &m : state_ids) {
         DEBUG_PRINTF("state %u\n", m.second);
@@ -2563,15 +2563,15 @@ u32 max_state(const unordered_map<NFAVertex, u32> &state_ids) {
     return rv;
 }
 
-bytecode_ptr<NFA> generate(NGHolder &h,
-                const unordered_map<NFAVertex, u32> &states,
-                const vector<BoundedRepeatData> &repeats,
-                const unordered_map<NFAVertex, NFAStateSet> &reportSquashMap,
-                const unordered_map<NFAVertex, NFAStateSet> &squashMap,
-                const map<u32, set<NFAVertex>> &tops,
-                const set<NFAVertex> &zombies, bool do_accel,
+bytecode_ptr<NFA> generate(NGHolder &h, 
+                const unordered_map<NFAVertex, u32> &states, 
+                const vector<BoundedRepeatData> &repeats, 
+                const unordered_map<NFAVertex, NFAStateSet> &reportSquashMap, 
+                const unordered_map<NFAVertex, NFAStateSet> &squashMap, 
+                const map<u32, set<NFAVertex>> &tops, 
+                const set<NFAVertex> &zombies, bool do_accel, 
                 bool stateCompression, bool &fast, u32 hint,
-                const CompileContext &cc) {
+                const CompileContext &cc) { 
     const u32 num_states = max_state(states) + 1;
     DEBUG_PRINTF("total states: %u\n", num_states);
 
@@ -2594,18 +2594,18 @@ bytecode_ptr<NFA> generate(NGHolder &h,
     // Acceleration analysis.
     fillAccelInfo(arg);
 
-    vector<pair<int, NFAEngineType>> scores;
+    vector<pair<int, NFAEngineType>> scores; 
 
     if (hint != INVALID_NFA) {
         // The caller has told us what to (attempt to) build.
-        scores.emplace_back(0, (NFAEngineType)hint);
+        scores.emplace_back(0, (NFAEngineType)hint); 
     } else {
         for (size_t i = 0; i <= LAST_LIMEX_NFA; i++) {
             NFAEngineType ntype = (NFAEngineType)i;
             int score = DISPATCH_BY_LIMEX_TYPE(ntype, scoreNfa, arg);
             if (score >= 0) {
                 DEBUG_PRINTF("%s scores %d\n", nfa_type_name(ntype), score);
-                scores.emplace_back(score, ntype);
+                scores.emplace_back(score, ntype); 
             }
         }
     }
@@ -2615,39 +2615,39 @@ bytecode_ptr<NFA> generate(NGHolder &h,
         return nullptr;
     }
 
-    // Sort acceptable models in priority order, lowest score first.
-    sort(scores.begin(), scores.end());
+    // Sort acceptable models in priority order, lowest score first. 
+    sort(scores.begin(), scores.end()); 
 
-    for (const auto &elem : scores) {
-        assert(elem.first >= 0);
-        NFAEngineType limex_model = elem.second;
-        auto nfa = DISPATCH_BY_LIMEX_TYPE(limex_model, generateNfa, arg);
-        if (nfa) {
-            DEBUG_PRINTF("successful build with NFA engine: %s\n",
-                         nfa_type_name(limex_model));
+    for (const auto &elem : scores) { 
+        assert(elem.first >= 0); 
+        NFAEngineType limex_model = elem.second; 
+        auto nfa = DISPATCH_BY_LIMEX_TYPE(limex_model, generateNfa, arg); 
+        if (nfa) { 
+            DEBUG_PRINTF("successful build with NFA engine: %s\n", 
+                         nfa_type_name(limex_model)); 
             fast = isFast(arg);
-            return nfa;
-        }
+            return nfa; 
+        } 
     }
 
-    DEBUG_PRINTF("NFA build failed.\n");
-    return nullptr;
+    DEBUG_PRINTF("NFA build failed.\n"); 
+    return nullptr; 
 }
 
 u32 countAccelStates(NGHolder &h,
-                const unordered_map<NFAVertex, u32> &states,
-                const vector<BoundedRepeatData> &repeats,
-                const unordered_map<NFAVertex, NFAStateSet> &reportSquashMap,
-                const unordered_map<NFAVertex, NFAStateSet> &squashMap,
-                const map<u32, set<NFAVertex>> &tops,
-                const set<NFAVertex> &zombies,
-                const CompileContext &cc) {
+                const unordered_map<NFAVertex, u32> &states, 
+                const vector<BoundedRepeatData> &repeats, 
+                const unordered_map<NFAVertex, NFAStateSet> &reportSquashMap, 
+                const unordered_map<NFAVertex, NFAStateSet> &squashMap, 
+                const map<u32, set<NFAVertex>> &tops, 
+                const set<NFAVertex> &zombies, 
+                const CompileContext &cc) { 
     const u32 num_states = max_state(states) + 1;
     DEBUG_PRINTF("total states: %u\n", num_states);
 
     if (!cc.grey.allowLimExNFA) {
         DEBUG_PRINTF("limex not allowed\n");
-        return 0;
+        return 0; 
     }
 
     // Sanity check the input data.
@@ -2661,11 +2661,11 @@ u32 countAccelStates(NGHolder &h,
                   do_accel, state_compression, cc, num_states);
 
     // Acceleration analysis.
-    nfaFindAccelSchemes(bi.h, bi.br_cyclic, &bi.accel.accel_map);
+    nfaFindAccelSchemes(bi.h, bi.br_cyclic, &bi.accel.accel_map); 
 
-    u32 num_accel = verify_u32(bi.accel.accel_map.size());
+    u32 num_accel = verify_u32(bi.accel.accel_map.size()); 
     DEBUG_PRINTF("found %u accel states\n", num_accel);
-    return num_accel;
+    return num_accel; 
 }
 
 } // namespace ue2

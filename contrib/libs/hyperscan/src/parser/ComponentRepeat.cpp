@@ -87,7 +87,7 @@ ComponentRepeat::ComponentRepeat(const ComponentRepeat &other)
       type(other.type), sub_comp(unique_ptr<Component>(other.sub_comp->clone())),
       m_min(other.m_min), m_max(other.m_max),
       m_firsts(other.m_firsts), m_lasts(other.m_lasts),
-      posFirst(other.posFirst), posLast(other.posLast) {}
+      posFirst(other.posFirst), posLast(other.posLast) {} 
 
 bool ComponentRepeat::empty() const {
     return m_min == 0 || sub_comp->empty();
@@ -174,24 +174,24 @@ void ComponentRepeat::notePositions(GlushkovBuildState &bs) {
     }
 
     recordPosBounds(posFirst, bs.getBuilder().numVertices());
-
-    // Each optional repeat has an epsilon at the end of its firsts list.
-    for (u32 i = m_min; i < m_firsts.size(); i++) {
-        m_firsts[i].push_back(GlushkovBuildState::POS_EPSILON);
-    }
-
+ 
+    // Each optional repeat has an epsilon at the end of its firsts list. 
+    for (u32 i = m_min; i < m_firsts.size(); i++) { 
+        m_firsts[i].push_back(GlushkovBuildState::POS_EPSILON); 
+    } 
+ 
 }
 
 vector<PositionInfo> ComponentRepeat::first() const {
-    if (!m_max) {
-        return {};
-    }
-
-    assert(!m_firsts.empty()); // notePositions should already have run
-    const vector<PositionInfo> &firsts = m_firsts.front();
-    DEBUG_PRINTF("firsts = %s\n",
-                 dumpPositions(begin(firsts), end(firsts)).c_str());
-    return firsts;
+    if (!m_max) { 
+        return {}; 
+    } 
+ 
+    assert(!m_firsts.empty()); // notePositions should already have run 
+    const vector<PositionInfo> &firsts = m_firsts.front(); 
+    DEBUG_PRINTF("firsts = %s\n", 
+                 dumpPositions(begin(firsts), end(firsts)).c_str()); 
+    return firsts; 
 }
 
 void ComponentRepeat::buildFollowSet(GlushkovBuildState &bs,
@@ -218,7 +218,7 @@ void ComponentRepeat::buildFollowSet(GlushkovBuildState &bs,
         }
     }
 
-    wireRepeats(bs);
+    wireRepeats(bs); 
 
     DEBUG_PRINTF("leave\n");
 }
@@ -234,7 +234,7 @@ void ComponentRepeat::optimise(bool connected_to_sds) {
 }
 
 bool ComponentRepeat::vacuous_everywhere() const {
-    return !m_min || sub_comp->vacuous_everywhere();
+    return !m_min || sub_comp->vacuous_everywhere(); 
 }
 
 bool ComponentRepeat::checkEmbeddedStartAnchor(bool at_start) const {
@@ -288,24 +288,24 @@ vector<PositionInfo> ComponentRepeat::last() const {
     assert(!m_firsts.empty()); // notePositions should already have run
     assert(!m_lasts.empty());
 
-    const auto &l = m_min ? m_lasts[m_min - 1] : m_lasts[0];
-    lasts.insert(lasts.end(), l.begin(), l.end());
-
+    const auto &l = m_min ? m_lasts[m_min - 1] : m_lasts[0]; 
+    lasts.insert(lasts.end(), l.begin(), l.end()); 
+ 
     if (!m_min || m_min != m_lasts.size()) {
         lasts.insert(lasts.end(), m_lasts.back().begin(), m_lasts.back().end());
     }
-
-    DEBUG_PRINTF("lasts = %s\n",
-                 dumpPositions(lasts.begin(), lasts.end()).c_str());
+ 
+    DEBUG_PRINTF("lasts = %s\n", 
+                 dumpPositions(lasts.begin(), lasts.end()).c_str()); 
     return lasts;
 }
 
-void ComponentRepeat::wireRepeats(GlushkovBuildState &bs) {
+void ComponentRepeat::wireRepeats(GlushkovBuildState &bs) { 
     /* note: m_lasts[0] already valid */
     u32 copies = m_firsts.size();
     const bool isEmpty = sub_comp->empty();
-    const vector<PositionInfo> &optLasts =
-        m_min ? m_lasts[m_min - 1] : m_lasts[0];
+    const vector<PositionInfo> &optLasts = 
+        m_min ? m_lasts[m_min - 1] : m_lasts[0]; 
 
     if (!copies) {
         goto inf_check;
@@ -324,7 +324,7 @@ void ComponentRepeat::wireRepeats(GlushkovBuildState &bs) {
     DEBUG_PRINTF("wiring up %d optional repeats\n", copies - m_min);
     for (u32 rep = MAX(m_min, 1); rep < copies; rep++) {
         vector<PositionInfo> lasts = m_lasts[rep - 1];
-        if (rep != m_min) {
+        if (rep != m_min) { 
             lasts.insert(lasts.end(), optLasts.begin(), optLasts.end());
             sort(lasts.begin(), lasts.end());
             lasts.erase(unique(lasts.begin(), lasts.end()), lasts.end());

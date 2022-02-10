@@ -6,7 +6,7 @@ using namespace NMonitoring;
 
 void THtmlMonPage::Output(NMonitoring::IMonHttpRequest& request) {
     IOutputStream& out = request.Output();
-
+ 
     out << HTTPOKHTML;
     HTML(out) {
         out << "<!DOCTYPE html>\n";
@@ -18,12 +18,12 @@ void THtmlMonPage::Output(NMonitoring::IMonHttpRequest& request) {
                 out << "<link rel='stylesheet' href='https://yastatic.net/bootstrap/3.3.1/css/bootstrap.min.css'>\n";
                 out << "<script language='javascript' type='text/javascript' src='https://yastatic.net/jquery/2.1.3/jquery.min.js'></script>\n";
                 out << "<script language='javascript' type='text/javascript' src='https://yastatic.net/bootstrap/3.3.1/js/bootstrap.min.js'></script>\n";
-
-                if (OutputTableSorterJsCss) {
+ 
+                if (OutputTableSorterJsCss) { 
                     out << "<link rel='stylesheet' href='/jquery.tablesorter.css'>\n";
                     out << "<script language='javascript' type='text/javascript' src='/jquery.tablesorter.js'></script>\n";
-                }
-
+                } 
+ 
                 out << "<style type=\"text/css\">\n";
                 out << ".table-nonfluid { width: auto; }\n";
                 out << ".narrow-line50 {line-height: 50%}\n";

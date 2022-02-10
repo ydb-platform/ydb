@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -39,15 +39,15 @@
 namespace ue2 {
 
 class NGHolder;
-struct Grey;
+struct Grey; 
 
 bool isAlternationOfClasses(const NGHolder &g);
 
-std::deque<std::unique_ptr<NGHolder>>
-calcComponents(std::unique_ptr<NGHolder> g, const Grey &grey);
+std::deque<std::unique_ptr<NGHolder>> 
+calcComponents(std::unique_ptr<NGHolder> g, const Grey &grey); 
 
-void recalcComponents(std::deque<std::unique_ptr<NGHolder>> &comps,
-                      const Grey &grey);
+void recalcComponents(std::deque<std::unique_ptr<NGHolder>> &comps, 
+                      const Grey &grey); 
 
 } // namespace ue2
 

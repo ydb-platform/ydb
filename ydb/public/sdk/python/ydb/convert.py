@@ -308,8 +308,8 @@ def _unwrap_optionality(column):
 class _ResultSet(object):
     __slots__ = ("columns", "rows", "truncated")
 
-    def __init__(self, columns, rows, truncated):
-        self.columns = columns
+    def __init__(self, columns, rows, truncated): 
+        self.columns = columns 
         self.rows = rows
         self.truncated = truncated
 
@@ -323,7 +323,7 @@ class _ResultSet(object):
                 column_parsers.append(_unwrap_optionality(column))
 
         for row_proto in message.rows:
-            row = _Row(message.columns)
+            row = _Row(message.columns) 
             for column, value, column_info in six.moves.zip(
                 message.columns, row_proto.items, column_parsers
             ):
@@ -341,7 +341,7 @@ class _ResultSet(object):
                     unwrapped_type, value, table_client_settings
                 )
             rows.append(row)
-        return cls(message.columns, rows, message.truncated)
+        return cls(message.columns, rows, message.truncated) 
 
     @classmethod
     def lazy_from_message(cls, message, table_client_settings=None):
@@ -353,19 +353,19 @@ ResultSet = _ResultSet
 
 
 class _Row(_DotDict):
-    def __init__(self, columns):
-        super(_Row, self).__init__()
-        self._columns = columns
+    def __init__(self, columns): 
+        super(_Row, self).__init__() 
+        self._columns = columns 
 
-    def __getitem__(self, key):
-        if isinstance(key, int):
-            return self[self._columns[key].name]
+    def __getitem__(self, key): 
+        if isinstance(key, int): 
+            return self[self._columns[key].name] 
         elif isinstance(key, slice):
             return tuple(map(lambda x: self[x.name], self._columns[key]))
-        else:
-            return super(_Row, self).__getitem__(key)
+        else: 
+            return super(_Row, self).__getitem__(key) 
 
-
+ 
 class _LazyRowItem:
 
     __slots__ = ["_item", "_type", "_table_client_settings", "_processed", "_parser"]

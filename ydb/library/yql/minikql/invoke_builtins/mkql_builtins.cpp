@@ -211,7 +211,7 @@ TFunctionDescriptor TBuiltinFunctionRegistry::GetBuiltin(const std::string_view&
     for (const TFunctionDescriptor& desc: FindCandidates(name)) {
         PrintFunctionSignature(name, desc, ss);
         ss << '\n';
-        if (++i > 32) {
+        if (++i > 32) { 
             ss << "\t...\n";
             break;
         }

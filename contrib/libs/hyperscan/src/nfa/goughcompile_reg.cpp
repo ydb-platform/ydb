@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -32,7 +32,7 @@
 #include "gough_internal.h"
 #include "grey.h"
 #include "util/container.h"
-#include "util/flat_containers.h"
+#include "util/flat_containers.h" 
 #include "util/graph.h"
 #include "util/graph_range.h"
 #include "util/order_check.h"
@@ -235,7 +235,7 @@ void handle_pending_vertices(GoughSSAVar *def, const GoughGraph &g,
     if (contains(aux.containing_v, def)) {
         def_v = aux.containing_v.at(def);
     }
-    unordered_set<GoughVertex> done;
+    unordered_set<GoughVertex> done; 
     while (!pending_vertex.empty()) {
         GoughVertex current = *pending_vertex.begin();
         pending_vertex.erase(current);

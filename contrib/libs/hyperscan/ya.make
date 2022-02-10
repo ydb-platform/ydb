@@ -26,7 +26,7 @@ PEERDIR(
 )
 
 ADDINCL(
-    contrib/libs/hyperscan
+    contrib/libs/hyperscan 
     contrib/libs/hyperscan/include
     contrib/libs/hyperscan/src
 )
@@ -40,7 +40,7 @@ CFLAGS(
 )
 
 SRCS(
-    src/alloc.c
+    src/alloc.c 
     src/compiler/asserts.cpp
     src/compiler/compiler.cpp
     src/compiler/error.cpp
@@ -57,8 +57,8 @@ SRCS(
     src/fdr/teddy_avx2.c
     src/fdr/teddy_compile.cpp
     src/fdr/teddy_engine_description.cpp
-    src/grey.cpp
-    src/hs.cpp
+    src/grey.cpp 
+    src/hs.cpp 
     src/hs_valid_platform.c
     src/hs_version.c
     src/hwlm/hwlm.c
@@ -71,11 +71,11 @@ SRCS(
     src/nfa/accelcompile.cpp
     src/nfa/castle.c
     src/nfa/castlecompile.cpp
-    src/nfa/dfa_build_strat.cpp
+    src/nfa/dfa_build_strat.cpp 
     src/nfa/dfa_min.cpp
     src/nfa/gough.c
     src/nfa/goughcompile.cpp
-    src/nfa/goughcompile_accel.cpp
+    src/nfa/goughcompile_accel.cpp 
     src/nfa/goughcompile_reg.cpp
     src/nfa/lbr.c
     src/nfa/limex_64.c
@@ -124,13 +124,13 @@ SRCS(
     src/nfagraph/ng_expr_info.cpp
     src/nfagraph/ng_extparam.cpp
     src/nfagraph/ng_fixed_width.cpp
-    src/nfagraph/ng_fuzzy.cpp
+    src/nfagraph/ng_fuzzy.cpp 
     src/nfagraph/ng_haig.cpp
     src/nfagraph/ng_holder.cpp
     src/nfagraph/ng_is_equal.cpp
     src/nfagraph/ng_lbr.cpp
     src/nfagraph/ng_limex.cpp
-    src/nfagraph/ng_limex_accel.cpp
+    src/nfagraph/ng_limex_accel.cpp 
     src/nfagraph/ng_literal_analysis.cpp
     src/nfagraph/ng_literal_component.cpp
     src/nfagraph/ng_literal_decorated.cpp
@@ -150,7 +150,7 @@ SRCS(
     src/nfagraph/ng_sep.cpp
     src/nfagraph/ng_small_literal_set.cpp
     src/nfagraph/ng_som.cpp
-    src/nfagraph/ng_som_add_redundancy.cpp
+    src/nfagraph/ng_som_add_redundancy.cpp 
     src/nfagraph/ng_som_util.cpp
     src/nfagraph/ng_split.cpp
     src/nfagraph/ng_squash.cpp
@@ -159,7 +159,7 @@ SRCS(
     src/nfagraph/ng_utf8.cpp
     src/nfagraph/ng_util.cpp
     src/nfagraph/ng_vacuous.cpp
-    src/nfagraph/ng_violet.cpp
+    src/nfagraph/ng_violet.cpp 
     src/nfagraph/ng_width.cpp
     src/parser/AsciiComponentClass.cpp
     src/parser/Component.cpp
@@ -172,7 +172,7 @@ SRCS(
     src/parser/ComponentClass.cpp
     src/parser/ComponentCondReference.cpp
     src/parser/ComponentEUS.cpp
-    src/parser/ComponentEmpty.cpp
+    src/parser/ComponentEmpty.cpp 
     src/parser/ComponentRepeat.cpp
     src/parser/ComponentSequence.cpp
     src/parser/ComponentVisitor.cpp
@@ -200,22 +200,22 @@ SRCS(
     src/rose/rose_build_add_mask.cpp
     src/rose/rose_build_anchored.cpp
     src/rose/rose_build_bytecode.cpp
-    src/rose/rose_build_castle.cpp
+    src/rose/rose_build_castle.cpp 
     src/rose/rose_build_compile.cpp
     src/rose/rose_build_convert.cpp
-    src/rose/rose_build_dedupe.cpp
-    src/rose/rose_build_engine_blob.cpp
-    src/rose/rose_build_exclusive.cpp
-    src/rose/rose_build_groups.cpp
+    src/rose/rose_build_dedupe.cpp 
+    src/rose/rose_build_engine_blob.cpp 
+    src/rose/rose_build_exclusive.cpp 
+    src/rose/rose_build_groups.cpp 
     src/rose/rose_build_infix.cpp
-    src/rose/rose_build_instructions.cpp
-    src/rose/rose_build_lit_accel.cpp
-    src/rose/rose_build_long_lit.cpp
+    src/rose/rose_build_instructions.cpp 
+    src/rose/rose_build_lit_accel.cpp 
+    src/rose/rose_build_long_lit.cpp 
     src/rose/rose_build_lookaround.cpp
-    src/rose/rose_build_matchers.cpp
+    src/rose/rose_build_matchers.cpp 
     src/rose/rose_build_merge.cpp
     src/rose/rose_build_misc.cpp
-    src/rose/rose_build_program.cpp
+    src/rose/rose_build_program.cpp 
     src/rose/rose_build_role_aliasing.cpp
     src/rose/rose_build_scatter.cpp
     src/rose/rose_build_width.cpp
@@ -223,20 +223,20 @@ SRCS(
     src/rose/stream.c
     src/runtime.c
     src/scratch.c
-    src/smallwrite/smallwrite_build.cpp
-    src/som/slot_manager.cpp
+    src/smallwrite/smallwrite_build.cpp 
+    src/som/slot_manager.cpp 
     src/som/som_runtime.c
     src/som/som_stream.c
     src/stream_compress.c
     src/util/alloc.cpp
     src/util/charreach.cpp
-    src/util/clique.cpp
+    src/util/clique.cpp 
     src/util/compile_context.cpp
     src/util/compile_error.cpp
     src/util/cpuid_flags.c
     src/util/depth.cpp
     src/util/dump_mask.cpp
-    src/util/fatbit_build.cpp
+    src/util/fatbit_build.cpp 
     src/util/masked_move.c
     src/util/multibit.c
     src/util/multibit_build.cpp

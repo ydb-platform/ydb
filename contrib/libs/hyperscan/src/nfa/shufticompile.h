@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -35,7 +35,7 @@
 
 #include "ue2common.h"
 #include "util/charreach.h"
-#include "util/flat_containers.h"
+#include "util/flat_containers.h" 
 
 #include <utility>
 
@@ -48,15 +48,15 @@ namespace ue2 {
  *
  * Note: always able to construct masks for 8 or fewer characters.
  */
-int shuftiBuildMasks(const CharReach &chars, u8 *lo, u8 *hi);
+int shuftiBuildMasks(const CharReach &chars, u8 *lo, u8 *hi); 
 
-/** \brief Double-byte variant
- *
- * Returns false if we are unable to build the masks (too many buckets required)
- */
-bool shuftiBuildDoubleMasks(const CharReach &onechar,
+/** \brief Double-byte variant 
+ * 
+ * Returns false if we are unable to build the masks (too many buckets required) 
+ */ 
+bool shuftiBuildDoubleMasks(const CharReach &onechar, 
                             const flat_set<std::pair<u8, u8>> &twochar,
-                            u8 *lo1, u8 *hi1, u8 *lo2, u8 *hi2);
+                            u8 *lo1, u8 *hi1, u8 *lo2, u8 *hi2); 
 
 #ifdef DUMP_SUPPORT
 
@@ -64,7 +64,7 @@ bool shuftiBuildDoubleMasks(const CharReach &onechar,
  * \brief Dump code: returns a CharReach with the reach that would match this
  * shufti.
  */
-CharReach shufti2cr(const u8 *lo, const u8 *hi);
+CharReach shufti2cr(const u8 *lo, const u8 *hi); 
 
 #endif // DUMP_SUPPORT
 

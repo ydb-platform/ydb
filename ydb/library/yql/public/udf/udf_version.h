@@ -56,11 +56,11 @@ constexpr ui32 CurrentAbiVersion()
     return MakeAbiVersion(UDF_ABI_VERSION_MAJOR, UDF_ABI_VERSION_MINOR, UDF_ABI_VERSION_PATCH);
 }
 
-constexpr ui32 CurrentCompatibilityAbiVersion()
-{
-    return MakeAbiCompatibilityVersion(UDF_ABI_VERSION_MAJOR, UDF_ABI_VERSION_MINOR);
-}
-
+constexpr ui32 CurrentCompatibilityAbiVersion() 
+{ 
+    return MakeAbiCompatibilityVersion(UDF_ABI_VERSION_MAJOR, UDF_ABI_VERSION_MINOR); 
+} 
+ 
 constexpr bool IsAbiCompatible(ui32 version)
 {
     // backward compatibility in greater minor versions of host

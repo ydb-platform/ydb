@@ -5,7 +5,7 @@
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 
 #include <util/generic/hash.h>
-
+ 
 #include <google/protobuf/text_format.h>
 
 namespace NKikimr {

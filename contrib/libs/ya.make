@@ -202,7 +202,7 @@ RECURSE(
     libxslt
     libyang
     libyuv
-    linenoise
+    linenoise 
     linux-headers
     linuxvdso
     liquidfun

@@ -226,23 +226,23 @@ EDataReqStatusExcerpt ExtractDataRequestStatus(const NKikimrClient::TResponse *r
         return EDataReqStatusExcerpt::Unknown;
     }
 }
-
+ 
 }
 
-void SetMsgBusDefaults(NBus::TBusSessionConfig& sessionConfig,
-                              NBus::TBusQueueConfig& queueConfig) {
-   size_t memorySize = NSystemInfo::TotalMemorySize();
-   if (!memorySize) {
-       memorySize = 1 << 30;
-   }
-   sessionConfig.MaxInFlightBySize =
-           (memorySize / 20);
-   sessionConfig.MaxInFlight =
-           sessionConfig.MaxInFlightBySize / 1024;
-   queueConfig.NumWorkers =
-           ((NSystemInfo::CachedNumberOfCpus() - 1) / 4 + 1);
-   sessionConfig.TotalTimeout = TDuration::Minutes(5).MilliSeconds();
-   sessionConfig.ConnectTimeout = TDuration::Seconds(15).MilliSeconds();
+void SetMsgBusDefaults(NBus::TBusSessionConfig& sessionConfig, 
+                              NBus::TBusQueueConfig& queueConfig) { 
+   size_t memorySize = NSystemInfo::TotalMemorySize(); 
+   if (!memorySize) { 
+       memorySize = 1 << 30; 
+   } 
+   sessionConfig.MaxInFlightBySize = 
+           (memorySize / 20); 
+   sessionConfig.MaxInFlight = 
+           sessionConfig.MaxInFlightBySize / 1024; 
+   queueConfig.NumWorkers = 
+           ((NSystemInfo::CachedNumberOfCpus() - 1) / 4 + 1); 
+   sessionConfig.TotalTimeout = TDuration::Minutes(5).MilliSeconds(); 
+   sessionConfig.ConnectTimeout = TDuration::Seconds(15).MilliSeconds(); 
 }
-
-}
+ 
+} 

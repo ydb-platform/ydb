@@ -1,6 +1,6 @@
 #pragma once
 
-#include "udf_allocator.h"
+#include "udf_allocator.h" 
 #include "udf_string.h"
 #include "udf_terminator.h"
 #include "udf_version.h"
@@ -604,7 +604,7 @@ struct TBoxedValueAccessor
 #undef MAP_HANDLER
         }
 
-        Y_FAIL("unknown method");
+        Y_FAIL("unknown method"); 
     }
 
     template<EMethod Method> static uintptr_t GetMethodPtr();

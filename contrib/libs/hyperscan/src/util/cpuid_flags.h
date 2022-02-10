@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation
+ * Copyright (c) 2015-2017, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,17 +26,17 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef UTIL_CPUID_H_
-#define UTIL_CPUID_H_
+#ifndef UTIL_CPUID_H_ 
+#define UTIL_CPUID_H_ 
 
 #include "ue2common.h"
 
-#if !defined(_WIN32) && !defined(CPUID_H_)
-#include <cpuid.h>
- /* system header doesn't have a header guard */
-#define CPUID_H_
-#endif
-
+#if !defined(_WIN32) && !defined(CPUID_H_) 
+#include <cpuid.h> 
+ /* system header doesn't have a header guard */ 
+#define CPUID_H_ 
+#endif 
+ 
 #ifdef __cplusplus
 extern "C"
 {
@@ -51,5 +51,5 @@ u32 cpuid_tune(void);
 } /* extern "C" */
 #endif
 
-#endif /* UTIL_CPUID_H_ */
+#endif /* UTIL_CPUID_H_ */ 
 

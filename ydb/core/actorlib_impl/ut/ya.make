@@ -6,8 +6,8 @@ OWNER(
     g:kikimr
 )
 
-FORK_SUBTESTS() 
- 
+FORK_SUBTESTS()
+
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SPLIT_FACTOR(20)

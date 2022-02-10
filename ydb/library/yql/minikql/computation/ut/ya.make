@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/minikql/computation)
 
-FORK_SUBTESTS() 
+FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(1800)

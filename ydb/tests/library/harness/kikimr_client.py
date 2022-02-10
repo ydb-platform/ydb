@@ -215,7 +215,7 @@ class KiKiMRMessageBusClient(object):
             request.SecurityToken = token
         return self.send_and_poll_request(request, 'SchemeOperation')
 
-    def hive_create_tablets(self, list_of_tablets): 
+    def hive_create_tablets(self, list_of_tablets):
         request = msgbus.THiveCreateTablet()
         for tablet in list_of_tablets:
             create_tablet_cmd = request.CmdCreateTablet.add()
@@ -250,7 +250,7 @@ class KiKiMRMessageBusClient(object):
         request.TabletType = int(tablet_type)
 
         return self.invoke(request, 'LocalEnumerateTablets')
- 
+
     def kv_cmd_write(self, tablet_id, cmd_writes, generation=None):
         request = msgbus_kv.TKeyValueRequest()
         for cmd in cmd_writes:
@@ -260,7 +260,7 @@ class KiKiMRMessageBusClient(object):
         request.TabletId = tablet_id
         if generation is not None:
             request.Generation = generation
- 
+
         response = self.invoke(request, 'KeyValue')
         return response
 
@@ -281,15 +281,15 @@ class KiKiMRMessageBusClient(object):
         response = self.invoke(request, 'KeyValue')
         return response
 
-    def increment_generation(self, tablet_id): 
+    def increment_generation(self, tablet_id):
         request = msgbus_kv.TKeyValueRequest()
         request.CmdIncrementGeneration.CopyFrom(request.TCmdIncrementGeneration())
         request.TabletId = tablet_id
- 
+
         return self.invoke(request, 'KeyValue')
 
     def kv_cmd_read_range(self, tablet_id, cmd_range_reads, generation=None):
- 
+
         request = msgbus_kv.TKeyValueRequest()
         for cmd in cmd_range_reads:
             read_range = request.CmdReadRange.add()
@@ -307,7 +307,7 @@ class KiKiMRMessageBusClient(object):
         return self.invoke(request, 'KeyValue')
 
     def kv_cmd_rename(self, tablet_id, cmd_renames, generation=None):
- 
+
         request = msgbus_kv.TKeyValueRequest()
         for cmd in cmd_renames:
             rename_cmd = request.CmdRename.add()
@@ -382,7 +382,7 @@ class KiKiMRMessageBusClient(object):
     def tablet_kill(self, tablet_id):
         request = msgbus.TTabletKillRequest(TabletID=tablet_id)
         return self.invoke(request, 'TabletKillRequest')
- 
+
     def tablet_state(self, tablet_type=None, tablet_ids=()):
         request = msgbus.TTabletStateRequest()
         if tablet_type is not None:

@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/tablet_flat)
 
-FORK_SUBTESTS() 
+FORK_SUBTESTS()
 
 IF (WITH_VALGRIND)
     TIMEOUT(2400)

@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/util)
 
 OWNER(vvvv g:kikimr)
 
-FORK_SUBTESTS() 
+FORK_SUBTESTS()
 IF (WITH_VALGRIND)
     SPLIT_FACTOR(30)
     TIMEOUT(1200)
@@ -12,7 +12,7 @@ ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
- 
+
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion

@@ -4,12 +4,12 @@ OWNER(
     g:kikimr
 )
 
-FORK_SUBTESTS() 
+FORK_SUBTESTS()
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(300)
     SIZE(MEDIUM)
 ENDIF()
- 
+
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion

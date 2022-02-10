@@ -5,7 +5,7 @@ OWNER(
     g:kikimr
 )
 
-FORK_SUBTESTS() 
+FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 

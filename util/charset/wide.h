@@ -438,7 +438,7 @@ inline TString WideToUTF8(const wchar32* text, size_t len) {
 }
 
 inline TString WideToUTF8(const TWtringBuf w) {
-    return WideToUTF8(w.data(), w.size()); 
+    return WideToUTF8(w.data(), w.size());
 }
 
 inline TString WideToUTF8(const TUtf32StringBuf w) {
@@ -675,7 +675,7 @@ inline bool IsSpace(const wchar16* s, size_t n) {
 
 //! returns @c true if string contains whitespace characters only
 inline bool IsSpace(const TWtringBuf s) {
-    return IsSpace(s.data(), s.length()); 
+    return IsSpace(s.data(), s.length());
 }
 
 //! replaces multiple sequential whitespace characters with a single space character

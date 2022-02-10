@@ -43,7 +43,7 @@ RESOURCE_FILES(
     PREFIX contrib/python/attrs/
     .dist-info/METADATA
     .dist-info/top_level.txt
-    attr/py.typed
+    attr/py.typed 
 )
 
 END()

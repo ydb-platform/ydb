@@ -453,9 +453,9 @@
         },
         "grpc_cli": {
             "description": "GRPC command-line tool"
-        },
-        "buf": {
-            "description": "Protobuf lint and breaking change detector"
+        }, 
+        "buf": { 
+            "description": "Protobuf lint and breaking change detector" 
         },
         "iceflame": {
             "description": "Performance data collection and analysis"
@@ -5539,22 +5539,22 @@
                     "default": true
                 }
             ]
-        },
-        "buf": {
-            "tools": {
-                "buf": {
-                    "bottle": "buf",
-                    "executable": "buf"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+        }, 
+        "buf": { 
+            "tools": { 
+                "buf": { 
+                    "bottle": "buf", 
+                    "executable": "buf" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "iceflame": {
             "tools": {
@@ -7862,17 +7862,17 @@
                     "grpc_cli"
                 ]
             }
-        },
-        "buf": {
-            "formula": {
-                "sandbox_id": 813444352,
-                "match": "buf"
-            },
-            "executable": {
-                "buf": [
-                    "buf"
-                ]
-            }
+        }, 
+        "buf": { 
+            "formula": { 
+                "sandbox_id": 813444352, 
+                "match": "buf" 
+            }, 
+            "executable": { 
+                "buf": [ 
+                    "buf" 
+                ] 
+            } 
         },
         "iceflame": {
             "formula": {

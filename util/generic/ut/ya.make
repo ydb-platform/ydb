@@ -38,7 +38,7 @@ SRCS(
     generic/serialized_enum_ut.cpp
     generic/set_ut.cpp
     generic/singleton_ut.cpp
-    generic/size_literals_ut.cpp
+    generic/size_literals_ut.cpp 
     generic/stack_ut.cpp
     generic/store_policy_ut.cpp
     generic/strbuf_ut.cpp

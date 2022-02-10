@@ -79,7 +79,7 @@ protected:
             return true;
         }
 
-        ctx.PushBlockShortcuts(); 
+        ctx.PushBlockShortcuts();
         if (!Expr->Init(ctx, src)) {
             return false;
         }
@@ -98,22 +98,22 @@ protected:
             if (src->GetJoin()) {
                 const auto sourcePtr = Expr->GetSourceName();
                 if (!sourcePtr || !*sourcePtr) {
-                    if (!src->IsGroupByColumn(DistinctKey)) { 
-                        ctx.Error(Expr->GetPos()) << ErrorDistinctWithoutCorrelation(DistinctKey); 
-                        return false; 
-                    } 
-                } else { 
-                    DistinctKey = DotJoin(*sourcePtr, DistinctKey); 
-                } 
-            } 
-            if (src->IsGroupByColumn(DistinctKey)) { 
-                ctx.Error(Expr->GetPos()) << ErrorDistinctByGroupKey(DistinctKey); 
-                return false; 
-            } 
+                    if (!src->IsGroupByColumn(DistinctKey)) {
+                        ctx.Error(Expr->GetPos()) << ErrorDistinctWithoutCorrelation(DistinctKey);
+                        return false;
+                    }
+                } else {
+                    DistinctKey = DotJoin(*sourcePtr, DistinctKey);
+                }
+            }
+            if (src->IsGroupByColumn(DistinctKey)) {
+                ctx.Error(Expr->GetPos()) << ErrorDistinctByGroupKey(DistinctKey);
+                return false;
+            }
             Expr = AstNode("row");
-            ctx.PopBlockShortcuts(); 
-        } else { 
-            Expr = ctx.GroundBlockShortcutsForExpr(Expr); 
+            ctx.PopBlockShortcuts();
+        } else {
+            Expr = ctx.GroundBlockShortcutsForExpr(Expr);
         }
 
         if (FakeSource) {
@@ -153,63 +153,63 @@ public:
     TAggregationFactoryImpl(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi)
         : TAggregationFactory(pos, name, func, aggMode, multi)
     {}
- 
+
 private:
     TNodePtr DoClone() const final {
         return new TAggregationFactoryImpl(Pos, Name, Func, AggMode, Multi);
-    } 
+    }
 };
- 
-class TAggregationFactoryWinAutoargImpl final : public TAggregationFactory { 
-public: 
-    TAggregationFactoryWinAutoargImpl(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode) 
-        : TAggregationFactory(pos, name, func, aggMode) 
-    {} 
- 
+
+class TAggregationFactoryWinAutoargImpl final : public TAggregationFactory {
+public:
+    TAggregationFactoryWinAutoargImpl(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode)
+        : TAggregationFactory(pos, name, func, aggMode)
+    {}
+
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) override {
         Y_UNUSED(isFactory);
-        if (!IsOverWindow()) { 
-            ctx.Error(Pos) << "Expected aggregation function: " << GetName() << " only as window function. You may have forgotten OVER instruction."; 
-            return false; 
-        } 
+        if (!IsOverWindow()) {
+            ctx.Error(Pos) << "Expected aggregation function: " << GetName() << " only as window function. You may have forgotten OVER instruction.";
+            return false;
+        }
         TVector<TNodePtr> exprsAuto;
-        if (!exprs) { 
-            auto winNamePtr = src->GetWindowName(); 
-            YQL_ENSURE(winNamePtr); 
-            auto winSpecPtr = src->FindWindowSpecification(ctx, *winNamePtr); 
-            if (!winSpecPtr) { 
-                return false; 
-            } 
-            const auto& orderSpec = winSpecPtr->OrderBy; 
-            if (!orderSpec) { 
-                ctx.Warning(Pos, TIssuesIds::YQL_AGGREGATE_BY_WIN_FUNC_WITHOUT_ORDER_BY) << 
-                    "Expected ORDER BY specification for window: '" << *winNamePtr << 
-                    "' used in aggregation function: '" << GetName() << 
-                    " You may have forgotten to ORDER BY in WINDOW specification or choose the wrong WINDOW."; 
-            } 
-            for (const auto& spec: orderSpec) { 
-                exprsAuto.push_back(spec->OrderExpr); 
-            } 
-            if (exprsAuto.size() > 1) { 
-                exprsAuto = {BuildTuple(GetPos(), exprsAuto)}; 
-            } 
-        } 
+        if (!exprs) {
+            auto winNamePtr = src->GetWindowName();
+            YQL_ENSURE(winNamePtr);
+            auto winSpecPtr = src->FindWindowSpecification(ctx, *winNamePtr);
+            if (!winSpecPtr) {
+                return false;
+            }
+            const auto& orderSpec = winSpecPtr->OrderBy;
+            if (!orderSpec) {
+                ctx.Warning(Pos, TIssuesIds::YQL_AGGREGATE_BY_WIN_FUNC_WITHOUT_ORDER_BY) <<
+                    "Expected ORDER BY specification for window: '" << *winNamePtr <<
+                    "' used in aggregation function: '" << GetName() <<
+                    " You may have forgotten to ORDER BY in WINDOW specification or choose the wrong WINDOW.";
+            }
+            for (const auto& spec: orderSpec) {
+                exprsAuto.push_back(spec->OrderExpr);
+            }
+            if (exprsAuto.size() > 1) {
+                exprsAuto = {BuildTuple(GetPos(), exprsAuto)};
+            }
+        }
         return TAggregationFactory::InitAggr(ctx, isFactory, src, node, exprsAuto ? exprsAuto : exprs);
-    } 
-private: 
-    TNodePtr DoClone() const final { 
-        return new TAggregationFactoryWinAutoargImpl(Pos, Name, Func, AggMode); 
-    } 
-}; 
- 
+    }
+private:
+    TNodePtr DoClone() const final {
+        return new TAggregationFactoryWinAutoargImpl(Pos, Name, Func, AggMode);
+    }
+};
+
 TAggregationPtr BuildFactoryAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi) {
     return new TAggregationFactoryImpl(pos, name, func, aggMode, multi);
 }
 
-TAggregationPtr BuildFactoryAggregationWinAutoarg(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode) { 
-    return new TAggregationFactoryWinAutoargImpl(pos, name, func, aggMode); 
-} 
- 
+TAggregationPtr BuildFactoryAggregationWinAutoarg(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode) {
+    return new TAggregationFactoryWinAutoargImpl(pos, name, func, aggMode);
+}
+
 class TKeyPayloadAggregationFactory final : public TAggregationFactory {
 public:
     TKeyPayloadAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
@@ -269,16 +269,16 @@ private:
             return true;
         }
 
-        ctx.PushBlockShortcuts(); 
+        ctx.PushBlockShortcuts();
         if (!Key->Init(ctx, src)) {
             return false;
         }
-        Key = ctx.GroundBlockShortcutsForExpr(Key); 
-        ctx.PushBlockShortcuts(); 
+        Key = ctx.GroundBlockShortcutsForExpr(Key);
+        ctx.PushBlockShortcuts();
         if (!Payload->Init(ctx, src)) {
             return false;
         }
-        Payload = ctx.GroundBlockShortcutsForExpr(Payload); 
+        Payload = ctx.GroundBlockShortcutsForExpr(Payload);
         if (!Limit->Init(ctx, src)) {
             return false;
         }
@@ -347,16 +347,16 @@ private:
             return true;
         }
 
-        ctx.PushBlockShortcuts(); 
+        ctx.PushBlockShortcuts();
         if (!Predicate->Init(ctx, src)) {
             return false;
         }
-        Predicate = ctx.GroundBlockShortcutsForExpr(Predicate); 
-        ctx.PushBlockShortcuts(); 
+        Predicate = ctx.GroundBlockShortcutsForExpr(Predicate);
+        ctx.PushBlockShortcuts();
         if (!Payload->Init(ctx, src)) {
             return false;
         }
-        Payload = ctx.GroundBlockShortcutsForExpr(Payload); 
+        Payload = ctx.GroundBlockShortcutsForExpr(Payload);
 
         if (Payload->IsAggregated()) {
             ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
@@ -420,16 +420,16 @@ private:
             return true;
         }
 
-        ctx.PushBlockShortcuts(); 
+        ctx.PushBlockShortcuts();
         if (!One->Init(ctx, src)) {
             return false;
         }
-        One = ctx.GroundBlockShortcutsForExpr(One); 
-        ctx.PushBlockShortcuts(); 
+        One = ctx.GroundBlockShortcutsForExpr(One);
+        ctx.PushBlockShortcuts();
         if (!Two->Init(ctx, src)) {
             return false;
         }
-        Two = ctx.GroundBlockShortcutsForExpr(Two); 
+        Two = ctx.GroundBlockShortcutsForExpr(Two);
 
         if ((One->IsAggregated() || Two->IsAggregated()) && !IsOverWindow()) {
             ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
@@ -522,16 +522,16 @@ private:
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        ctx.PushBlockShortcuts(); 
+        ctx.PushBlockShortcuts();
         if (!Weight->Init(ctx, src)) {
             return false;
         }
-        Weight = ctx.GroundBlockShortcutsForExpr(Weight); 
-        ctx.PushBlockShortcuts(); 
+        Weight = ctx.GroundBlockShortcutsForExpr(Weight);
+        ctx.PushBlockShortcuts();
         if (!Intervals->Init(ctx, FakeSource.Get())) {
             return false;
         }
-        Intervals = ctx.GroundBlockShortcutsForExpr(Intervals); 
+        Intervals = ctx.GroundBlockShortcutsForExpr(Intervals);
 
         return TAggregationFactory::DoInit(ctx, src);
     }
@@ -1127,7 +1127,7 @@ private:
             const auto j = adjustArgsCount + i;
             Lambdas[i] = BuildLambda(Pos, Y("state"), j >= exprs.size() ? AstNode("state") : Y("Apply", exprs[j], "state"));
         }
- 
+
         DefVal = (exprs.size() == (7 + adjustArgsCount)) ? exprs[adjustArgsCount + 6] : Y("Null");
         return TAggregationFactory::InitAggr(ctx, isFactory, src, node, isFactory ? TVector<TNodePtr>() : TVector<TNodePtr>(1, exprs.front()));
     }
@@ -1184,15 +1184,15 @@ private:
             return true;
         }
 
-        if (Expr->IsAsterisk()) { 
+        if (Expr->IsAsterisk()) {
             Expr = Y("Void");
-        } 
-        ctx.PushBlockShortcuts(); 
-        if (!Expr->Init(ctx, src)) { 
-            return false; 
-        } 
+        }
+        ctx.PushBlockShortcuts();
+        if (!Expr->Init(ctx, src)) {
+            return false;
+        }
         Expr->SetCountHint(Expr->IsConstant());
-        Expr = ctx.GroundBlockShortcutsForExpr(Expr); 
+        Expr = ctx.GroundBlockShortcutsForExpr(Expr);
         return TAggregationFactory::DoInit(ctx, src);
     }
 };

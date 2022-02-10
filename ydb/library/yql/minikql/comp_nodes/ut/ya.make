@@ -39,7 +39,7 @@ SRCS(
     mkql_join_ut.cpp
     mkql_join_dict_ut.cpp
     mkql_map_join_ut.cpp
-    mkql_safe_circular_buffer_ut.cpp 
+    mkql_safe_circular_buffer_ut.cpp
     mkql_sort_ut.cpp
     mkql_switch_ut.cpp
     mkql_todict_ut.cpp

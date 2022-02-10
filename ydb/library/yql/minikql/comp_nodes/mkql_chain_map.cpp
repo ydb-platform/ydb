@@ -3,10 +3,10 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 struct TComputationNodes {
@@ -105,20 +105,20 @@ private:
 
 template <bool IsStream>
 class TBaseChainMapWrapper {
-public: 
-    class TListValue : public TCustomListValue { 
-    public: 
+public:
+    class TListValue : public TCustomListValue {
+    public:
         class TIterator : public TComputationValue<TIterator> {
-        public: 
+        public:
             TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, const NUdf::TUnboxedValue& init, const TComputationNodes& computationNodes)
                 : TComputationValue<TIterator>(memInfo)
-                , CompCtx(compCtx) 
+                , CompCtx(compCtx)
                 , ComputationNodes(computationNodes)
                 , Iter(std::move(iter))
                 , Init(init)
-            { 
-            } 
- 
+            {
+            }
+
         private:
             bool Next(NUdf::TUnboxedValue& value) final {
                 if (!Init.IsInvalid()) {
@@ -130,59 +130,59 @@ public:
                     return false;
                 }
 
-                value = ComputationNodes.NewItem->GetValue(CompCtx); 
-                ComputationNodes.StateArg->SetValue(CompCtx, ComputationNodes.NewState->GetValue(CompCtx)); 
+                value = ComputationNodes.NewItem->GetValue(CompCtx);
+                ComputationNodes.StateArg->SetValue(CompCtx, ComputationNodes.NewState->GetValue(CompCtx));
                 return true;
             }
 
-            TComputationContext& CompCtx; 
+            TComputationContext& CompCtx;
             const TComputationNodes& ComputationNodes;
             const NUdf::TUnboxedValue Iter;
             NUdf::TUnboxedValue Init;
-        }; 
- 
+        };
+
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, NUdf::TUnboxedValue&& init, const TComputationNodes& computationNodes)
-            : TCustomListValue(memInfo) 
-            , CompCtx(compCtx) 
+            : TCustomListValue(memInfo)
+            , CompCtx(compCtx)
             , List(std::move(list))
             , Init(std::move(init))
-            , ComputationNodes(computationNodes) 
+            , ComputationNodes(computationNodes)
         {}
- 
+
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
             return CompCtx.HolderFactory.Create<TIterator>(CompCtx, List.GetListIterator(), Init, ComputationNodes);
         }
 
         ui64 GetListLength() const final {
-            if (!Length) { 
-                Length = List.GetListLength(); 
-            } 
- 
-            return *Length;
-        } 
- 
-        bool HasListItems() const final {
-            if (!HasItems) { 
-                HasItems = List.HasListItems(); 
-            } 
- 
-            return *HasItems; 
-        } 
+            if (!Length) {
+                Length = List.GetListLength();
+            }
 
-        TComputationContext& CompCtx; 
+            return *Length;
+        }
+
+        bool HasListItems() const final {
+            if (!HasItems) {
+                HasItems = List.HasListItems();
+            }
+
+            return *HasItems;
+        }
+
+        TComputationContext& CompCtx;
         const NUdf::TUnboxedValue List;
         const NUdf::TUnboxedValue Init;
         const TComputationNodes& ComputationNodes;
-    }; 
- 
+    };
+
     class TStreamValue : public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, NUdf::TUnboxedValue&& init, const TComputationNodes& computationNodes)
             : TBase(memInfo)
-            , CompCtx(compCtx) 
+            , CompCtx(compCtx)
             , ComputationNodes(computationNodes)
             , List(std::move(list))
             , Init(std::move(init))
@@ -200,12 +200,12 @@ public:
                 return status;
             }
 
-            value = ComputationNodes.NewItem->GetValue(CompCtx); 
-            ComputationNodes.StateArg->SetValue(CompCtx, ComputationNodes.NewState->GetValue(CompCtx)); 
+            value = ComputationNodes.NewItem->GetValue(CompCtx);
+            ComputationNodes.StateArg->SetValue(CompCtx, ComputationNodes.NewState->GetValue(CompCtx));
             return NUdf::EFetchStatus::Ok;
         }
 
-        TComputationContext& CompCtx; 
+        TComputationContext& CompCtx;
         const TComputationNodes& ComputationNodes;
         const NUdf::TUnboxedValue List;
         NUdf::TUnboxedValue Init;
@@ -213,8 +213,8 @@ public:
 
     TBaseChainMapWrapper(IComputationNode* list, IComputationNode* init, IComputationExternalNode* itemArg, IComputationExternalNode* stateArg, IComputationNode* newItem, IComputationNode* newState)
         : List(list), Init(init), ComputationNodes({itemArg, stateArg, newItem, newState})
-    {} 
- 
+    {}
+
 #ifndef MKQL_DISABLE_CODEGEN
     Function* GenerateMapper(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name) const {
         auto& module = codegen->GetModule();
@@ -300,11 +300,11 @@ public:
     TChainMapPtr ChainMap = nullptr;
 #endif
 
-    IComputationNode* const List; 
+    IComputationNode* const List;
     IComputationNode* const Init;
     const TComputationNodes ComputationNodes;
-}; 
- 
+};
+
 class TStreamChainMapWrapper : public TCustomValueCodegeneratorNode<TStreamChainMapWrapper>, private TBaseChainMapWrapper<true> {
     typedef TCustomValueCodegeneratorNode<TStreamChainMapWrapper> TBaseComputation;
     typedef TBaseChainMapWrapper<true> TBaseWrapper;
@@ -522,7 +522,7 @@ IComputationNode* WrapChainMap(TCallable& callable, const TComputationNodeFactor
     }
 
     THROW yexception() << "Expected flow, list or stream.";
-} 
+}
 
-} 
+}
 }

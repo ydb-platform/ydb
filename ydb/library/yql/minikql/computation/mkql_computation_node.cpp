@@ -32,8 +32,8 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     const TComputationMutables& mutables,
     arrow::MemoryPool& arrowMemoryPool)
     : TComputationContextLLVM{holderFactory, opts.Stats, std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), builder}
-    , RandomProvider(opts.RandomProvider) 
-    , TimeProvider(opts.TimeProvider) 
+    , RandomProvider(opts.RandomProvider)
+    , TimeProvider(opts.TimeProvider)
     , ArrowMemoryPool(arrowMemoryPool)
 {
     std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
@@ -41,7 +41,7 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
 
 TComputationContext::~TComputationContext() {
 #ifndef NDEBUG
-    if (RssCounter) { 
+    if (RssCounter) {
         Cerr << "UsageOnFinish: graph=" << HolderFactory.GetPagePool().GetUsed()
             << ", rss=" << TRusage::Get().MaxRss
             << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated()
@@ -58,9 +58,9 @@ void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
     }
 
 #ifndef NDEBUG
-    // Print first time and then each 30 seconds 
-    bool printUsage = LastPrintUsage == TInstant::Zero() 
-        || TInstant::Now() > TDuration::Seconds(30).ToDeadLine(LastPrintUsage); 
+    // Print first time and then each 30 seconds
+    bool printUsage = LastPrintUsage == TInstant::Zero()
+        || TInstant::Now() > TDuration::Seconds(30).ToDeadLine(LastPrintUsage);
 #endif
 
     if (auto peakAlloc = HolderFactory.GetPagePool().GetPeakAllocated()) {
@@ -71,17 +71,17 @@ void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
             printUsage = UsageAdjustor > 1.f;
 #endif
         }
-    } 
+    }
 
 #ifndef NDEBUG
-    if (printUsage) { 
+    if (printUsage) {
         Cerr << "Usage: graph=" << HolderFactory.GetPagePool().GetUsed()
-            << ", rss=" << rss 
-            << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated() 
-            << ", adjustor=" << UsageAdjustor 
-            << Endl; 
-        LastPrintUsage = TInstant::Now(); 
-    } 
+            << ", rss=" << rss
+            << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated()
+            << ", adjustor=" << UsageAdjustor
+            << Endl;
+        LastPrintUsage = TInstant::Now();
+    }
 #endif
 }
 

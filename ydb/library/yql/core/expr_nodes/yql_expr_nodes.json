@@ -963,12 +963,12 @@
         },
         {
             "Name": "TCoDictFromKeys",
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "DictFromKeys"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "Type", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "Keys", "Type": "TExprList"} 
-            ] 
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "DictFromKeys"},
+            "Children": [
+                {"Index": 0, "Name": "Type", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Keys", "Type": "TExprList"}
+            ]
         },
         {
             "Name": "TCoSqueezeToDict",
@@ -1287,17 +1287,17 @@
             "Children": [
                 {"Index": 0, "Name": "Type", "Type": "TExprBase"}
             ]
-        }, 
-        { 
+        },
+        {
             "Name": "TCoCalcOverWindowBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
             "Builder": {"Generate": "None"},
-            "Children": [ 
+            "Children": [
                 {"Index": 1, "Name": "Keys",      "Type": "TCoAtomList"},
-                {"Index": 2, "Name": "SortSpec",  "Type": "TExprBase"}, 
-                {"Index": 3, "Name": "Frames",    "Type": "TExprList"} 
-            ] 
+                {"Index": 2, "Name": "SortSpec",  "Type": "TExprBase"},
+                {"Index": 3, "Name": "Frames",    "Type": "TExprList"}
+            ]
         },
         {
             "Name": "TCoCalcOverWindow",

@@ -75,7 +75,7 @@ protected:
         public:
             TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, IComputationNode* newItem)
                 : TComputationValue<TIterator>(memInfo)
-                , CompCtx(compCtx) 
+                , CompCtx(compCtx)
                 , Iter(std::move(iter))
                 , Item(item)
                 , NewItem(newItem)
@@ -87,11 +87,11 @@ protected:
                     return false;
                 }
 
-                value = NewItem->GetValue(CompCtx); 
+                value = NewItem->GetValue(CompCtx);
                 return true;
             }
 
-            TComputationContext& CompCtx; 
+            TComputationContext& CompCtx;
             const NUdf::TUnboxedValue Iter;
             IComputationExternalNode* const Item;
             IComputationNode* const NewItem;
@@ -99,7 +99,7 @@ protected:
 
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, IComputationExternalNode* item, IComputationNode* newItem)
             : TCustomListValue(memInfo)
-            , CompCtx(compCtx) 
+            , CompCtx(compCtx)
             , List(std::move(list))
             , Item(item)
             , NewItem(newItem)
@@ -130,7 +130,7 @@ protected:
             return List.HasFastListLength();
         }
 
-        TComputationContext& CompCtx; 
+        TComputationContext& CompCtx;
         const NUdf::TUnboxedValue List;
         IComputationExternalNode* const Item;
         IComputationNode* const NewItem;
@@ -142,7 +142,7 @@ protected:
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& stream, IComputationExternalNode* item, IComputationNode* newItem)
             : TBase(memInfo)
-            , CompCtx(compCtx) 
+            , CompCtx(compCtx)
             , Stream(std::move(stream))
             , Item(item)
             , NewItem(newItem)
@@ -170,11 +170,11 @@ protected:
                 return status;
             }
 
-            result = NewItem->GetValue(CompCtx); 
+            result = NewItem->GetValue(CompCtx);
             return NUdf::EFetchStatus::Ok;
         }
 
-        TComputationContext& CompCtx; 
+        TComputationContext& CompCtx;
         const NUdf::TUnboxedValue Stream;
         IComputationExternalNode* const Item;
         IComputationNode* const NewItem;

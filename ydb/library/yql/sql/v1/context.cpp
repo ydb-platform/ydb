@@ -5,7 +5,7 @@
 #include <ydb/library/yql/utils/yql_paths.h>
 
 #include <util/folder/pathsplit.h>
-#include <util/string/join.h> 
+#include <util/string/join.h>
 #include <util/stream/null.h>
 
 #ifdef GetMessage
@@ -72,7 +72,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
     , Settings(settings)
     , Pool(new TMemoryPool(4096))
-    , Issues(issues) 
+    , Issues(issues)
     , IncrementMonCounterFunction(settings.IncrementCounter)
     , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
@@ -124,14 +124,14 @@ const NYql::TPosition& TContext::Pos() const {
 }
 
 TString TContext::MakeName(const TString& name) {
-    auto iter = GenIndexes.find(name); 
-    if (iter == GenIndexes.end()) { 
-        iter = GenIndexes.emplace(name, 0).first; 
-    } 
-    TStringBuilder str; 
-    str << name << iter->second; 
-    ++iter->second; 
-    return str; 
+    auto iter = GenIndexes.find(name);
+    if (iter == GenIndexes.end()) {
+        iter = GenIndexes.emplace(name, 0).first;
+    }
+    TStringBuilder str;
+    str << name << iter->second;
+    ++iter->second;
+    return str;
 }
 
 IOutputStream& TContext::Error(NYql::TIssueCode code) {
@@ -143,14 +143,14 @@ IOutputStream& TContext::Error(NYql::TPosition pos, NYql::TIssueCode code) {
     return MakeIssue(TSeverityIds::S_ERROR, code, pos);
 }
 
-IOutputStream& TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code) { 
-    return MakeIssue(TSeverityIds::S_WARNING, code, pos); 
-} 
- 
-IOutputStream& TContext::Info(NYql::TPosition pos) { 
-    return MakeIssue(TSeverityIds::S_INFO, TIssuesIds::INFO, pos); 
-} 
- 
+IOutputStream& TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code) {
+    return MakeIssue(TSeverityIds::S_WARNING, code, pos);
+}
+
+IOutputStream& TContext::Info(NYql::TPosition pos) {
+    return MakeIssue(TSeverityIds::S_INFO, TIssuesIds::INFO, pos);
+}
+
 void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action) {
     TString codePattern = ToString(code);
     TString actionString = ToString(action);
@@ -162,7 +162,7 @@ void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction a
     WarningPolicy.AddRule(rule);
 }
 
-IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TPosition pos) { 
+IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TPosition pos) {
     if (severity == TSeverityIds::S_WARNING) {
         auto action = WarningPolicy.GetAction(code);
         if (action == EWarningAction::ERROR) {
@@ -191,13 +191,13 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
     }
 
     Issues.AddIssue(TIssue(pos, TString()));
-    auto& curIssue = Issues.back(); 
-    curIssue.Severity = severity; 
-    curIssue.IssueCode = code; 
-    IssueMsgHolder.Reset(new TStringOutput(Issues.back().Message)); 
-    return *IssueMsgHolder; 
-} 
- 
+    auto& curIssue = Issues.back();
+    curIssue.Severity = severity;
+    curIssue.IssueCode = code;
+    IssueMsgHolder.Reset(new TStringOutput(Issues.back().Message));
+    return *IssueMsgHolder;
+}
+
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (arg.Defined()) {
         if (*arg == YtProviderName
@@ -241,20 +241,20 @@ TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& 
 }
 
 TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {
-    auto alias = MakeName(baseName); 
-    UniversalAliases.emplace(alias, node); 
-    return BuildAtom(node->GetPos(), alias, TNodeFlags::Default); 
-} 
- 
+    auto alias = MakeName(baseName);
+    UniversalAliases.emplace(alias, node);
+    return BuildAtom(node->GetPos(), alias, TNodeFlags::Default);
+}
+
 void TContext::DeclareVariable(const TString& varName, const TNodePtr& typeNode) {
-    Variables.emplace(varName, typeNode); 
-} 
- 
+    Variables.emplace(varName, typeNode);
+}
+
 bool TContext::AddExport(TPosition pos, const TString& name) {
     if (IsAnonymousName(name)) {
         Error(pos) << "Can not export anonymous name " << name;
         return false;
-    } 
+    }
     if (Exports.contains(name)) {
         Error(pos) << "Duplicate export symbol: " << name;
         return false;
@@ -264,20 +264,20 @@ bool TContext::AddExport(TPosition pos, const TString& name) {
         return false;
     }
     Exports.emplace(name);
-    return true; 
-} 
- 
+    return true;
+}
+
 TString TContext::AddImport(const TVector<TString>& modulePath) {
-    YQL_ENSURE(!modulePath.empty()); 
-    const TString path = JoinRange("/", modulePath.cbegin(), modulePath.cend()); 
-    auto iter = ImportModuleAliases.find(path); 
-    if (iter == ImportModuleAliases.end()) { 
-        const TString alias = MakeName(TStringBuilder() << modulePath.back() << "_module"); 
-        iter = ImportModuleAliases.emplace(path, alias).first; 
-    } 
-    return iter->second; 
-} 
- 
+    YQL_ENSURE(!modulePath.empty());
+    const TString path = JoinRange("/", modulePath.cbegin(), modulePath.cend());
+    auto iter = ImportModuleAliases.find(path);
+    if (iter == ImportModuleAliases.end()) {
+        const TString alias = MakeName(TStringBuilder() << modulePath.back() << "_module");
+        iter = ImportModuleAliases.emplace(path, alias).first;
+    }
+    return iter->second;
+}
+
 TString TContext::AddSimpleUdf(const TString& udf) {
     auto& name = SimpleUdfs[udf];
     if (name.empty()) {
@@ -544,14 +544,14 @@ void TTranslation::WarnUnusedNodes() const {
 }
 
 TString GetDescription(const google::protobuf::Message& node, const google::protobuf::FieldDescriptor* d) {
-    const auto& field = node.GetReflection()->GetMessage(node, d); 
-    return field.GetReflection()->GetString(field, d->message_type()->FindFieldByName("Descr")); 
-} 
- 
+    const auto& field = node.GetReflection()->GetMessage(node, d);
+    return field.GetReflection()->GetString(field, d->message_type()->FindFieldByName("Descr"));
+}
+
 TString TTranslation::AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const {
-    return GetDescription(node, descr->FindFieldByNumber(altCase)); 
-} 
- 
+    return GetDescription(node, descr->FindFieldByNumber(altCase));
+}
+
 void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr) {
     Error() << ruleName << ": alternative is not implemented yet: " << AltDescription(node, altCase, descr);
 }

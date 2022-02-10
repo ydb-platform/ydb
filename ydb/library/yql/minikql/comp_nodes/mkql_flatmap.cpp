@@ -895,7 +895,7 @@ public:
     public:
         TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, IComputationNode* newItem)
             : TComputationValue<TIterator>(memInfo)
-            , CompCtx(compCtx) 
+            , CompCtx(compCtx)
             , Iter(std::move(iter))
             , Item(item)
             , NewItem(newItem)
@@ -908,14 +908,14 @@ public:
                     return false;
                 }
 
-                if (auto newItem = NewItem->GetValue(CompCtx)) { 
+                if (auto newItem = NewItem->GetValue(CompCtx)) {
                     value = newItem.Release().template GetOptionalValueIf<MultiOptional>();
                     return true;
                 }
             }
         }
 
-        TComputationContext& CompCtx; 
+        TComputationContext& CompCtx;
         const NUdf::TUnboxedValue Iter;
 
         IComputationExternalNode* const Item;
@@ -924,7 +924,7 @@ public:
 
     TSimpleListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, IComputationExternalNode* item, IComputationNode* newItem)
         : TCustomListValue(memInfo)
-        , CompCtx(compCtx) 
+        , CompCtx(compCtx)
         , List(std::move(list))
         , Item(item)
         , NewItem(newItem)
@@ -936,7 +936,7 @@ private:
         return CompCtx.HolderFactory.Create<TIterator>(CompCtx, List.GetListIterator(), Item, NewItem);
     }
 
-    TComputationContext& CompCtx; 
+    TComputationContext& CompCtx;
     const NUdf::TUnboxedValue List;
     IComputationExternalNode* const Item;
     IComputationNode* const NewItem;
@@ -949,7 +949,7 @@ public:
 
     TSimpleStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& stream, IComputationExternalNode* item, IComputationNode* newItem)
         : TBase(memInfo)
-        , CompCtx(compCtx) 
+        , CompCtx(compCtx)
         , Stream(std::move(stream))
         , Item(item)
         , NewItem(newItem)
@@ -980,7 +980,7 @@ private:
                 return status;
             }
 
-            if (auto newItem = NewItem->GetValue(CompCtx)) { 
+            if (auto newItem = NewItem->GetValue(CompCtx)) {
                 result = newItem.Release().template GetOptionalValueIf<MultiOptional>();
                 return NUdf::EFetchStatus::Ok;
             }
@@ -988,7 +988,7 @@ private:
     }
 
 private:
-    TComputationContext& CompCtx; 
+    TComputationContext& CompCtx;
     const NUdf::TUnboxedValue Stream;
     IComputationExternalNode* const Item;
     IComputationNode* const NewItem;
@@ -1001,7 +1001,7 @@ public:
     public:
         TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, IComputationNode* newItem)
             : TComputationValue<TIterator>(memInfo)
-            , CompCtx(compCtx) 
+            , CompCtx(compCtx)
             , Iter(std::move(iter))
             , Item(item)
             , NewItem(newItem)
@@ -1012,7 +1012,7 @@ public:
             for (NUdf::TUnboxedValue current = std::move(Current);; current.Clear()) {
                 if (!current) {
                     if (Iter.Next(Item->RefValue(CompCtx))) {
-                        current = IsNewStream ? NewItem->GetValue(CompCtx) : NewItem->GetValue(CompCtx).GetListIterator(); 
+                        current = IsNewStream ? NewItem->GetValue(CompCtx) : NewItem->GetValue(CompCtx).GetListIterator();
                     } else {
                         return false;
                     }
@@ -1035,7 +1035,7 @@ public:
             }
         }
 
-        TComputationContext& CompCtx; 
+        TComputationContext& CompCtx;
         const NUdf::TUnboxedValue Iter;
 
         IComputationExternalNode* const Item;
@@ -1046,7 +1046,7 @@ public:
 
     TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, IComputationExternalNode* item, IComputationNode* newItem)
         : TCustomListValue(memInfo)
-        , CompCtx(compCtx) 
+        , CompCtx(compCtx)
         , List(std::move(list))
         , Item(item)
         , NewItem(newItem)
@@ -1057,7 +1057,7 @@ private:
         return CompCtx.HolderFactory.Create<TIterator>(CompCtx, List.GetListIterator(), Item, NewItem);
     }
 
-    TComputationContext& CompCtx; 
+    TComputationContext& CompCtx;
     const NUdf::TUnboxedValue List;
     IComputationExternalNode* const Item;
     IComputationNode* const NewItem;
@@ -1070,7 +1070,7 @@ public:
 
     TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& stream, IComputationExternalNode* item, IComputationNode* newItem)
         : TBase(memInfo)
-        , CompCtx(compCtx) 
+        , CompCtx(compCtx)
         , Stream(std::move(stream))
         , Item(item)
         , NewItem(newItem)
@@ -1101,7 +1101,7 @@ private:
                 if (NUdf::EFetchStatus::Ok != status) {
                     return status;
                 }
-                current = IsNewStream ? NewItem->GetValue(CompCtx) : NewItem->GetValue(CompCtx).GetListIterator(); 
+                current = IsNewStream ? NewItem->GetValue(CompCtx) : NewItem->GetValue(CompCtx).GetListIterator();
             }
 
             auto status = NUdf::EFetchStatus::Ok;
@@ -1122,7 +1122,7 @@ private:
     }
 
 private:
-    TComputationContext& CompCtx; 
+    TComputationContext& CompCtx;
     const NUdf::TUnboxedValue Stream;
     IComputationExternalNode* const Item;
     IComputationNode* const NewItem;

@@ -283,9 +283,9 @@ private:
 class TSkipWrapper : public TMutableCodegeneratorNode<TSkipWrapper> {
     typedef TMutableCodegeneratorNode<TSkipWrapper> TBaseComputation;
 public:
-    TSkipWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count) 
+    TSkipWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count)
         : TBaseComputation(mutables, list->GetRepresentation())
-        , List(list) 
+        , List(list)
         , Count(count)
     {
     }

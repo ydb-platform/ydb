@@ -154,7 +154,7 @@ bool EnsureNewSeqType(const TExprNode& node, TExprContext& ctx, const TTypeAnnot
 template <bool WithOptional, bool WithList = true, bool WithStream = true>
 bool EnsureNewSeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, const TTypeAnnotationNode** itemType = nullptr);
 bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx);
-bool EnsureDependsOnTail(const TExprNode& node, TExprContext& ctx, unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0); 
+bool EnsureDependsOnTail(const TExprNode& node, TExprContext& ctx, unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0);
 
 const TTypeAnnotationNode* MakeTypeHandleResourceType(TExprContext& ctx);
 bool EnsureTypeHandleResourceType(const TExprNode& node, TExprContext& ctx);

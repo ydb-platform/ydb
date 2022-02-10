@@ -12,7 +12,7 @@ public:
     TFold1Wrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list, IComputationExternalNode* item, IComputationExternalNode* state,
         IComputationNode* newState, IComputationNode* initialState)
         : TBaseComputation(mutables, kind)
-        , List(list) 
+        , List(list)
         , Item(item)
         , State(state)
         , NewState(newState)
@@ -20,17 +20,17 @@ public:
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const { 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         ui64 length = 0ULL;
 
-        TThresher<false>::DoForEachItem(List->GetValue(compCtx), 
-            [this, &length, &compCtx] (NUdf::TUnboxedValue&& item) { 
-                Item->SetValue(compCtx, std::move(item)); 
-                State->SetValue(compCtx, (length++ ? NewState : InitialState)->GetValue(compCtx)); 
+        TThresher<false>::DoForEachItem(List->GetValue(compCtx),
+            [this, &length, &compCtx] (NUdf::TUnboxedValue&& item) {
+                Item->SetValue(compCtx, std::move(item));
+                State->SetValue(compCtx, (length++ ? NewState : InitialState)->GetValue(compCtx));
             }
         );
 
-        return length ? State->GetValue(compCtx).Release().MakeOptional() : NUdf::TUnboxedValuePod(); 
+        return length ? State->GetValue(compCtx).Release().MakeOptional() : NUdf::TUnboxedValuePod();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -204,7 +204,7 @@ private:
 }
 
 IComputationNode* WrapFold1(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args"); 
+    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
     MKQL_ENSURE(callable.GetInput(0).GetStaticType()->IsList(), "Expected List");
 
     const auto list = LocateNode(ctx.NodeLocator, callable, 0);

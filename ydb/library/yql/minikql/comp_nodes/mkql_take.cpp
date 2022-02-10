@@ -241,9 +241,9 @@ private:
 class TTakeWrapper : public TMutableCodegeneratorNode<TTakeWrapper> {
     typedef TMutableCodegeneratorNode<TTakeWrapper> TBaseComputation;
 public:
-    TTakeWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count) 
+    TTakeWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count)
         : TBaseComputation(mutables, list->GetRepresentation())
-        , List(list) 
+        , List(list)
         , Count(count)
     {
     }

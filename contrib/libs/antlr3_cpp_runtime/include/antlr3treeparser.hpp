@@ -1,5 +1,5 @@
-#ifndef	ANTLR3TREEPARSER_HPP 
-#define	ANTLR3TREEPARSER_HPP 
+#ifndef	ANTLR3TREEPARSER_HPP
+#define	ANTLR3TREEPARSER_HPP
 
 // [The "BSD licence"]
 // Copyright (c) 2005-2009 Gokulakannan Somasundaram, ElectronDB
@@ -34,66 +34,66 @@
  *  if necessary, and contains function can be supported If the hash key
  *  could be unique I would have invented the perfect compression algorithm ;-)
  */
-namespace antlr3 { 
+namespace antlr3 {
 
 template<class ImplTraits>
-class  TreeParser : public ImplTraits::template RecognizerType< typename ImplTraits::TreeNodeStreamType > 
+class  TreeParser : public ImplTraits::template RecognizerType< typename ImplTraits::TreeNodeStreamType >
 {
 public:
-	typedef typename ImplTraits::TreeNodeStreamType TreeNodeStreamType; 
-	typedef TreeNodeStreamType StreamType; 
-	typedef typename TreeNodeStreamType::IntStreamType IntStreamType; 
-	typedef typename ImplTraits::TreeType TreeType; 
-	typedef typename ImplTraits::TreeTypePtr TreeTypePtr; 
-	typedef TreeType TokenType; 
-	typedef typename ImplTraits::template ExceptionBaseType<TreeNodeStreamType> ExceptionBaseType; 
-	typedef typename ImplTraits::template RecognizerType< typename ImplTraits::TreeNodeStreamType > RecognizerType; 
-	typedef typename RecognizerType::RecognizerSharedStateType RecognizerSharedStateType; 
-	typedef Empty TokenSourceType; 
-	typedef typename ImplTraits::BitsetListType BitsetListType; 
-	typedef typename ImplTraits::StringType StringType; 
-	typedef typename ImplTraits::CommonTokenType CommonTokenType; 
+	typedef typename ImplTraits::TreeNodeStreamType TreeNodeStreamType;
+	typedef TreeNodeStreamType StreamType;
+	typedef typename TreeNodeStreamType::IntStreamType IntStreamType;
+	typedef typename ImplTraits::TreeType TreeType;
+	typedef typename ImplTraits::TreeTypePtr TreeTypePtr;
+	typedef TreeType TokenType;
+	typedef typename ImplTraits::template ExceptionBaseType<TreeNodeStreamType> ExceptionBaseType;
+	typedef typename ImplTraits::template RecognizerType< typename ImplTraits::TreeNodeStreamType > RecognizerType;
+	typedef typename RecognizerType::RecognizerSharedStateType RecognizerSharedStateType;
+	typedef Empty TokenSourceType;
+	typedef typename ImplTraits::BitsetListType BitsetListType;
+	typedef typename ImplTraits::StringType StringType;
+	typedef typename ImplTraits::CommonTokenType CommonTokenType;
 
 private:
     /** Pointer to the common tree node stream for the parser
      */
-    TreeNodeStreamType*		m_ctnstream; 
+    TreeNodeStreamType*		m_ctnstream;
 
 public:
-	TreeParser( ANTLR_UINT32 sizeHint, TreeNodeStreamType* ctnstream, 
-											RecognizerSharedStateType* state); 
-	TreeNodeStreamType* get_ctnstream() const; 
-	IntStreamType* get_istream() const; 
-	RecognizerType* get_rec(); 
+	TreeParser( ANTLR_UINT32 sizeHint, TreeNodeStreamType* ctnstream,
+											RecognizerSharedStateType* state);
+	TreeNodeStreamType* get_ctnstream() const;
+	IntStreamType* get_istream() const;
+	RecognizerType* get_rec();
 
-	//same as above. Just that get_istream exists for lexer, parser, treeparser 
-	//get_parser_istream exists only for parser, treeparser. So use it accordingly 
-	IntStreamType* get_parser_istream() const; 
+	//same as above. Just that get_istream exists for lexer, parser, treeparser
+	//get_parser_istream exists only for parser, treeparser. So use it accordingly
+	IntStreamType* get_parser_istream() const;
 
     /** Set the input stream and reset the parser
      */
-    void	setTreeNodeStream(TreeNodeStreamType* input); 
+    void	setTreeNodeStream(TreeNodeStreamType* input);
 
     /** Return a pointer to the input stream
      */
     TreeNodeStreamType* getTreeNodeStream();
 
-	TokenType*	getMissingSymbol( IntStreamType* istream, 
-										  ExceptionBaseType*		e, 
-										  ANTLR_UINT32			expectedTokenType, 
-										  BitsetListType*	follow); 
+	TokenType*	getMissingSymbol( IntStreamType* istream,
+										  ExceptionBaseType*		e,
+										  ANTLR_UINT32			expectedTokenType,
+										  BitsetListType*	follow);
 
     /** Pointer to a function that knows how to free resources of an ANTLR3 tree parser.
      */
-	~TreeParser(); 
+	~TreeParser();
 
-	void fillExceptionData( ExceptionBaseType* ex ); 
-	void displayRecognitionError( ANTLR_UINT8** tokenNames, ExceptionBaseType* ex ); 
-	void exConstruct(); 
-	void mismatch(ANTLR_UINT32 ttype, BitsetListType* follow); 
+	void fillExceptionData( ExceptionBaseType* ex );
+	void displayRecognitionError( ANTLR_UINT8** tokenNames, ExceptionBaseType* ex );
+	void exConstruct();
+	void mismatch(ANTLR_UINT32 ttype, BitsetListType* follow);
 };
 
-} 
+}
 
 #include "antlr3treeparser.inl"
 

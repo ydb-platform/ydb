@@ -20,12 +20,12 @@ public:
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx, const NUdf::TUnboxedValuePod& value) const { 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx, const NUdf::TUnboxedValuePod& value) const {
         if (value) {
             return value.GetOptionalValue();
         }
 
-        Throw(this, &compCtx); 
+        Throw(this, &compCtx);
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
@@ -41,7 +41,7 @@ public:
         const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TUnwrapWrapper::Throw));
         const auto doFuncArg = ConstantInt::get(Type::getInt64Ty(context), (ui64)this);
         const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(FunctionType::get(Type::getVoidTy(context), { Type::getInt64Ty(context), ctx.Ctx->getType() }, false)), "thrower", block);
-        CallInst::Create(doFuncPtr, { doFuncArg, ctx.Ctx }, "", block)->setTailCall(); 
+        CallInst::Create(doFuncPtr, { doFuncArg, ctx.Ctx }, "", block)->setTailCall();
         new UnreachableInst(context, block);
 
         block = good;
@@ -50,7 +50,7 @@ public:
 #endif
 private:
     [[noreturn]] static void Throw(TUnwrapWrapper const* thisPtr, TComputationContext* ctxPtr) {
-        auto message = thisPtr->Message->GetValue(*ctxPtr); 
+        auto message = thisPtr->Message->GetValue(*ctxPtr);
         auto messageStr = message.AsStringRef();
         TStringBuilder res;
         res << thisPtr->Pos << " Failed to unwrap empty optional";

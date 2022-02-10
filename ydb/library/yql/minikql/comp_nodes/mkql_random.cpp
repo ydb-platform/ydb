@@ -31,16 +31,16 @@ private:
 };
 
 class TNewMTRandWrapper : public TMutableComputationNode<TNewMTRandWrapper> {
-    typedef TMutableComputationNode<TNewMTRandWrapper> TBaseComputation; 
+    typedef TMutableComputationNode<TNewMTRandWrapper> TBaseComputation;
 public:
-    TNewMTRandWrapper(TComputationMutables& mutables, IComputationNode* seed) 
-        : TBaseComputation(mutables) 
-        , Seed(seed) 
+    TNewMTRandWrapper(TComputationMutables& mutables, IComputationNode* seed)
+        : TBaseComputation(mutables)
+        , Seed(seed)
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const { 
-        const ui64 seedValue = Seed->GetValue(compCtx).Get<ui64>(); 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        const ui64 seedValue = Seed->GetValue(compCtx).Get<ui64>();
         return compCtx.HolderFactory.Create<TRandomMTResource>(seedValue);
     }
 
@@ -53,17 +53,17 @@ private:
 };
 
 class TNextMTRandWrapper : public TMutableComputationNode<TNextMTRandWrapper> {
-    typedef TMutableComputationNode<TNextMTRandWrapper> TBaseComputation; 
+    typedef TMutableComputationNode<TNextMTRandWrapper> TBaseComputation;
 public:
-    TNextMTRandWrapper(TComputationMutables& mutables, IComputationNode* rand) 
-        : TBaseComputation(mutables) 
-        , Rand(rand) 
-        , ResPair(mutables) 
+    TNextMTRandWrapper(TComputationMutables& mutables, IComputationNode* rand)
+        : TBaseComputation(mutables)
+        , Rand(rand)
+        , ResPair(mutables)
     {
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& compCtx) const {
-        auto rand = Rand->GetValue(compCtx); 
+        auto rand = Rand->GetValue(compCtx);
         Y_VERIFY_DEBUG(rand.GetResourceTag() == NUdf::TStringRef(RandomMTResource));
         NUdf::TUnboxedValue *items = nullptr;
         const auto tuple = ResPair.NewArray(compCtx, 2, items);
@@ -85,18 +85,18 @@ template <ERandom Rnd>
 class TRandomWrapper : public TMutableComputationNode<TRandomWrapper<Rnd>> {
     typedef TMutableComputationNode<TRandomWrapper<Rnd>> TBaseComputation;
 public:
-    TRandomWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes) 
-        : TBaseComputation(mutables) 
-        , DependentNodes(dependentNodes) 
+    TRandomWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes)
+        : TBaseComputation(mutables)
+        , DependentNodes(dependentNodes)
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         switch (Rnd) {
         case ERandom::Double:
-            return NUdf::TUnboxedValuePod(ctx.RandomProvider.GenRandReal2()); 
+            return NUdf::TUnboxedValuePod(ctx.RandomProvider.GenRandReal2());
         case ERandom::Number:
-            return NUdf::TUnboxedValuePod(ctx.RandomProvider.GenRand64()); 
+            return NUdf::TUnboxedValuePod(ctx.RandomProvider.GenRand64());
         case ERandom::Uuid: {
             auto uuid = ctx.RandomProvider.GenUuid4();
             return MakeString(NUdf::TStringRef((const char*)&uuid, sizeof(uuid)));
@@ -124,7 +124,7 @@ IComputationNode* WrapNewMTRand(TCallable& callable, const TComputationNodeFacto
         "Expected ui64");
 
     auto data = LocateNode(ctx.NodeLocator, callable, 0);
-    return new TNewMTRandWrapper(ctx.Mutables, data); 
+    return new TNewMTRandWrapper(ctx.Mutables, data);
 }
 
 IComputationNode* WrapNextMTRand(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -133,7 +133,7 @@ IComputationNode* WrapNextMTRand(TCallable& callable, const TComputationNodeFact
     AS_TYPE(TResourceType, callable.GetInput(0));
 
     auto rand = LocateNode(ctx.NodeLocator, callable, 0);
-    return new TNextMTRandWrapper(ctx.Mutables, rand); 
+    return new TNextMTRandWrapper(ctx.Mutables, rand);
 }
 
 template <ERandom Rnd>

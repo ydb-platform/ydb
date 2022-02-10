@@ -3,10 +3,10 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 struct TComputationNodes {
@@ -114,18 +114,18 @@ private:
 
 template <bool IsStream>
 class TBaseChain1MapWrapper {
-public: 
-    class TListValue : public TCustomListValue { 
-    public: 
+public:
+    class TListValue : public TCustomListValue {
+    public:
         class TIterator : public TComputationValue<TIterator> {
-        public: 
-            TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, const TComputationNodes& computationNodes) 
+        public:
+            TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, const TComputationNodes& computationNodes)
                 : TComputationValue<TIterator>(memInfo)
-                , CompCtx(compCtx) 
+                , CompCtx(compCtx)
                 , Iter(std::move(iter))
-                , ComputationNodes(computationNodes) 
-            {} 
- 
+                , ComputationNodes(computationNodes)
+            {}
+
         private:
             bool Next(NUdf::TUnboxedValue& value) final {
                 if (!Iter.Next(ComputationNodes.ItemArg->RefValue(CompCtx))) {
@@ -136,57 +136,57 @@ public:
 
                 auto itemNode = Length == 1 ? ComputationNodes.InitItem : ComputationNodes.UpdateItem;
                 auto stateNode = Length == 1 ? ComputationNodes.InitState : ComputationNodes.UpdateState;
-                value = itemNode->GetValue(CompCtx); 
-                ComputationNodes.StateArg->SetValue(CompCtx, stateNode->GetValue(CompCtx)); 
+                value = itemNode->GetValue(CompCtx);
+                ComputationNodes.StateArg->SetValue(CompCtx, stateNode->GetValue(CompCtx));
                 return true;
             }
 
-            TComputationContext& CompCtx; 
+            TComputationContext& CompCtx;
             const NUdf::TUnboxedValue Iter;
             const TComputationNodes& ComputationNodes;
-            ui64 Length = 0; 
-        }; 
- 
-        TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, const TComputationNodes& computationNodes) 
-            : TCustomListValue(memInfo) 
-            , CompCtx(compCtx) 
+            ui64 Length = 0;
+        };
+
+        TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, const TComputationNodes& computationNodes)
+            : TCustomListValue(memInfo)
+            , CompCtx(compCtx)
             , List(std::move(list))
-            , ComputationNodes(computationNodes) 
-        {} 
- 
+            , ComputationNodes(computationNodes)
+        {}
+
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
             return CompCtx.HolderFactory.Create<TIterator>(CompCtx, List.GetListIterator(), ComputationNodes);
         }
 
         ui64 GetListLength() const final {
-            if (!Length) { 
-                Length = List.GetListLength(); 
-            } 
- 
-            return *Length;
-        } 
- 
-        bool HasListItems() const final {
-            if (!HasItems) { 
-                HasItems = List.HasListItems(); 
-            } 
- 
-            return *HasItems; 
-        } 
+            if (!Length) {
+                Length = List.GetListLength();
+            }
 
-        TComputationContext& CompCtx; 
+            return *Length;
+        }
+
+        bool HasListItems() const final {
+            if (!HasItems) {
+                HasItems = List.HasListItems();
+            }
+
+            return *HasItems;
+        }
+
+        TComputationContext& CompCtx;
         const NUdf::TUnboxedValue List;
         const TComputationNodes& ComputationNodes;
-    }; 
- 
+    };
+
     class TStreamValue : public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
-        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, const TComputationNodes& computationNodes) 
+        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, const TComputationNodes& computationNodes)
             : TBase(memInfo)
-            , CompCtx(compCtx) 
+            , CompCtx(compCtx)
             , List(std::move(list))
             , ComputationNodes(computationNodes)
         {}
@@ -202,23 +202,23 @@ public:
 
             auto itemNode = Length == 1 ? ComputationNodes.InitItem : ComputationNodes.UpdateItem;
             auto stateNode = Length == 1 ? ComputationNodes.InitState : ComputationNodes.UpdateState;
-            value = itemNode->GetValue(CompCtx); 
-            ComputationNodes.StateArg->SetValue(CompCtx, stateNode->GetValue(CompCtx)); 
+            value = itemNode->GetValue(CompCtx);
+            ComputationNodes.StateArg->SetValue(CompCtx, stateNode->GetValue(CompCtx));
             return NUdf::EFetchStatus::Ok;
         }
 
-        TComputationContext& CompCtx; 
+        TComputationContext& CompCtx;
         const NUdf::TUnboxedValue List;
         const TComputationNodes& ComputationNodes;
         ui64 Length = 0;
     };
 
     TBaseChain1MapWrapper(IComputationNode* list, IComputationExternalNode* itemArg, IComputationExternalNode* stateArg,
-        IComputationNode* initItem, IComputationNode* initState, 
-        IComputationNode* updateItem, IComputationNode* updateState) 
+        IComputationNode* initItem, IComputationNode* initState,
+        IComputationNode* updateItem, IComputationNode* updateState)
         : List(list), ComputationNodes({itemArg, stateArg, initItem, initState, updateItem, updateState})
-    {} 
- 
+    {}
+
 #ifndef MKQL_DISABLE_CODEGEN
     template<bool IsFirst>
     Function* GenerateMapper(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name) const {
@@ -296,10 +296,10 @@ public:
     TChainMapPtr MapTwo = nullptr;
 #endif
 
-    IComputationNode* const List; 
+    IComputationNode* const List;
     const TComputationNodes ComputationNodes;
-}; 
- 
+};
+
 class TStreamChain1MapWrapper : public TCustomValueCodegeneratorNode<TStreamChain1MapWrapper>, private TBaseChain1MapWrapper<true> {
     typedef TCustomValueCodegeneratorNode<TStreamChain1MapWrapper> TBaseComputation;
     typedef TBaseChain1MapWrapper<true> TBaseWrapper;
@@ -543,7 +543,7 @@ IComputationNode* WrapChain1Map(TCallable& callable, const TComputationNodeFacto
     }
 
     THROW yexception() << "Expected flow, list or stream.";
-} 
+}
 
-} 
+}
 }

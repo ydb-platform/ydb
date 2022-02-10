@@ -2732,15 +2732,15 @@ bool EnsureTaggedType(const TExprNode& node, TExprContext& ctx) {
 
 bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
-        YQL_ENSURE(node.Type() == TExprNode::Lambda); 
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() <<
-            "Expected either data (optional of data) or non-empty tuple of data (optional of data), but got lambda")); 
+            "Expected either data (optional of data) or non-empty tuple of data (optional of data), but got lambda"));
         return false;
     }
 
     return EnsureOneOrTupleOfDataOrOptionalOfData(node.Pos(), *node.GetTypeAnn(), ctx);
-} 
- 
+}
+
 bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
     bool ok = false;
     bool isOptional = false;
@@ -2748,8 +2748,8 @@ bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTyp
     TIssue err;
     bool hasErrorType = false;
     TPosition pos = ctx.GetPosition(position);
-    if (type.GetKind() == ETypeAnnotationKind::Tuple) { 
-        for (auto& child: type.Cast<TTupleExprType>()->GetItems()) { 
+    if (type.GetKind() == ETypeAnnotationKind::Tuple) {
+        for (auto& child: type.Cast<TTupleExprType>()->GetItems()) {
             ok = IsDataOrOptionalOfData(pos, child, isOptional, dataType, err, hasErrorType);
             if (!ok) {
                 break;
@@ -3274,18 +3274,18 @@ bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
-bool EnsureDependsOnTail(const TExprNode& node, TExprContext& ctx, unsigned requiredArgumentCount, unsigned requiredDependsOnCount) { 
-    if (!EnsureMinArgsCount(node, requiredArgumentCount+requiredDependsOnCount, ctx)) { 
+bool EnsureDependsOnTail(const TExprNode& node, TExprContext& ctx, unsigned requiredArgumentCount, unsigned requiredDependsOnCount) {
+    if (!EnsureMinArgsCount(node, requiredArgumentCount+requiredDependsOnCount, ctx)) {
         return false;
-    } 
-    for (unsigned i = requiredArgumentCount; i < node.ChildrenSize(); ++i) { 
-        if (!EnsureDependsOn(*node.Child(i), ctx)) { 
-            return false; 
-        } 
-    } 
-    return true; 
-} 
- 
+    }
+    for (unsigned i = requiredArgumentCount; i < node.ChildrenSize(); ++i) {
+        if (!EnsureDependsOn(*node.Child(i), ctx)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 const TTypeAnnotationNode* MakeTypeHandleResourceType(TExprContext& ctx) {
     return ctx.MakeType<TResourceExprType>(TypeResourceTag);
 }

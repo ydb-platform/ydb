@@ -553,7 +553,7 @@ public:
             , Stream(std::move(stream))
             , Nodes(nodes)
             , MemLimit(memLimit)
-            , CompCtx(compCtx) 
+            , CompCtx(compCtx)
         {}
 
     private:
@@ -616,7 +616,7 @@ public:
         NUdf::TUnboxedValue Iterator;
         const TCombineCoreNodes Nodes;
         const ui64 MemLimit;
-        TComputationContext& CompCtx; 
+        TComputationContext& CompCtx;
     };
 
     TCombineCoreWrapper(TComputationMutables& mutables, IComputationNode* stream, const TCombineCoreNodes& nodes, TKeyTypes&& keyTypes, bool isTuple, ui64 memLimit)
@@ -971,7 +971,7 @@ IComputationNode* WrapCombineCore(TCallable& callable, const TComputationNodeFac
         updateResultNode,
         finishResultNode
     };
- 
+
     if (type->IsFlow()) {
         const auto kind = GetValueRepresentation(AS_TYPE(TFlowType, type)->GetItemType());
         if (finishResultType->IsStream()) {

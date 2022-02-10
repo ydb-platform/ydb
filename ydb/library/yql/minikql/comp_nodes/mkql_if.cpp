@@ -14,12 +14,12 @@ using TBaseComputation = TMutableCodegeneratorNode<TIfWrapper<IsOptional>>;
 public:
     TIfWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* predicate, IComputationNode* thenBranch, IComputationNode* elseBranch)
         : TBaseComputation(mutables, kind)
-        , Predicate(predicate) 
+        , Predicate(predicate)
         , ThenBranch(thenBranch)
         , ElseBranch(elseBranch)
     {}
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& predicate = Predicate->GetValue(ctx);
         if (IsOptional && !predicate) {
             return NUdf::TUnboxedValuePod();

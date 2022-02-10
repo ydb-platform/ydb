@@ -676,7 +676,7 @@ private:
 public:
     TSwitchWrapper(TComputationMutables& mutables, IComputationNode* stream, ui64 memLimit, TSwitchHandlersList&& handlers)
         : TBaseComputation(mutables)
-        , Stream(stream) 
+        , Stream(stream)
         , MemLimit(memLimit)
         , Handlers(std::move(handlers))
     {}
@@ -692,10 +692,10 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Stream); 
+        this->DependsOn(Stream);
         for (const auto& x : Handlers) {
             this->Own(x.Item);
-            this->DependsOn(x.NewItem); 
+            this->DependsOn(x.NewItem);
         }
     }
 
@@ -890,7 +890,7 @@ private:
 #endif
 
     IComputationNode *const Stream;
-    const ui64 MemLimit; 
+    const ui64 MemLimit;
     const TSwitchHandlersList Handlers;
 };
 
@@ -927,7 +927,7 @@ IComputationNode* WrapSwitch(TCallable& callable, const TComputationNodeFactoryC
         handlers.emplace_back(handler);
     }
 
-    const bool trackRss = EGraphPerProcess::Single == ctx.GraphPerProcess; 
+    const bool trackRss = EGraphPerProcess::Single == ctx.GraphPerProcess;
     if (type->IsFlow()) {
         const bool isInputVariant = AS_TYPE(TFlowType, callable.GetInput(0))->GetItemType()->IsVariant();
         const auto kind = GetValueRepresentation(type);
@@ -951,7 +951,7 @@ IComputationNode* WrapSwitch(TCallable& callable, const TComputationNodeFactoryC
         } else {
             return new TSwitchWrapper<false, false>(ctx.Mutables, stream, memLimit, std::move(handlers));
         }
-    } 
+    }
 
     THROW yexception() << "Expected flow or stream.";
 }

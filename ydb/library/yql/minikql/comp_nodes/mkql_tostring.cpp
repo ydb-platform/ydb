@@ -34,7 +34,7 @@ class TDecimalToStringWrapper : public TMutableCodegeneratorNode<TDecimalToStrin
 public:
     TDecimalToStringWrapper(TComputationMutables& mutables, IComputationNode* data, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::String)
-        , Data(data) 
+        , Data(data)
         , Precision(precision)
         , Scale(scale)
     {
@@ -42,8 +42,8 @@ public:
         MKQL_ENSURE(scale <= precision, "Wrong scale.");
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
-        const auto& dataValue = Data->GetValue(ctx); 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        const auto& dataValue = Data->GetValue(ctx);
         if (IsOptional && !dataValue) {
             return NUdf::TUnboxedValuePod();
         }

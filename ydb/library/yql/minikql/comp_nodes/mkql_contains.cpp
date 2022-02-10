@@ -10,15 +10,15 @@ namespace {
 class TContainsWrapper : public TMutableCodegeneratorNode<TContainsWrapper> {
     typedef TMutableCodegeneratorNode<TContainsWrapper> TBaseComputation;
 public:
-    TContainsWrapper(TComputationMutables& mutables, IComputationNode* dict, IComputationNode* key) 
+    TContainsWrapper(TComputationMutables& mutables, IComputationNode* dict, IComputationNode* key)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Dict(dict) 
+        , Dict(dict)
         , Key(key)
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const { 
-        return NUdf::TUnboxedValuePod(Dict->GetValue(compCtx).Contains(Key->GetValue(compCtx))); 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        return NUdf::TUnboxedValuePod(Dict->GetValue(compCtx).Contains(Key->GetValue(compCtx)));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -57,7 +57,7 @@ IComputationNode* WrapContains(TCallable& callable, const TComputationNodeFactor
 
     const auto dict = LocateNode(ctx.NodeLocator, callable, 0);
     const auto key = LocateNode(ctx.NodeLocator, callable, 1);
-    return new TContainsWrapper(ctx.Mutables, dict, key); 
+    return new TContainsWrapper(ctx.Mutables, dict, key);
 }
 
 }

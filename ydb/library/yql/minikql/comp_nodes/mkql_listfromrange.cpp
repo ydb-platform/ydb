@@ -306,9 +306,9 @@ private:
         this->DependsOn(Step);
     }
 
-    IComputationNode* const Start; 
-    IComputationNode* const End; 
-    IComputationNode* const Step; 
+    IComputationNode* const Start;
+    IComputationNode* const End;
+    IComputationNode* const Step;
 };
 
 }

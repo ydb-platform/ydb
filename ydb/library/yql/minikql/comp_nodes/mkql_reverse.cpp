@@ -11,9 +11,9 @@ namespace {
 class TReverseWrapper : public TMutableCodegeneratorNode<TReverseWrapper> {
     typedef TMutableCodegeneratorNode<TReverseWrapper> TBaseComputation;
 public:
-    TReverseWrapper(TComputationMutables& mutables, IComputationNode* list) 
+    TReverseWrapper(TComputationMutables& mutables, IComputationNode* list)
         : TBaseComputation(mutables, list->GetRepresentation())
-        , List(list) 
+        , List(list)
     {
     }
 
@@ -66,7 +66,7 @@ private:
 IComputationNode* WrapReverse(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
 
-    return new TReverseWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0)); 
+    return new TReverseWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
 }
 
 }

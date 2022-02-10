@@ -237,7 +237,7 @@ private:
 struct TAstParseResult {
     std::unique_ptr<TMemoryPool> Pool;
     TAstNode* Root = nullptr;
-    TIssues Issues; 
+    TIssues Issues;
 
     inline bool IsOk() const {
         return !!Root;

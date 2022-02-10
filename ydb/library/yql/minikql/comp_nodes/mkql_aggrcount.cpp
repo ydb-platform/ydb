@@ -57,9 +57,9 @@ public:
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const { 
-        auto state = State->GetValue(compCtx); 
-        return Arg->GetValue(compCtx) ? NUdf::TUnboxedValuePod(state.Get<ui64>() + 1U) : state.Release(); 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        auto state = State->GetValue(compCtx);
+        return Arg->GetValue(compCtx) ? NUdf::TUnboxedValuePod(state.Get<ui64>() + 1U) : state.Release();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

@@ -63,10 +63,10 @@ public:
             const TString& sourceCode,
             const TString& sessionId = TString());
 
-    void UnrepeatableRandom(); 
+    void UnrepeatableRandom();
 private:
     const bool UseRepeatableRandomAndTimeProviders_;
-    bool UseUnrepeatableRandom = false; 
+    bool UseUnrepeatableRandom = false;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const ui64 NextUniqueId_;
     TVector<TDataProviderInitializer> DataProvidersInit_;
@@ -233,7 +233,7 @@ public:
     void SetValidateOptions(NUdf::EValidateMode validateMode);
     void SetDisableNativeUdfSupport(bool disable);
     void SetUseTableMetaFromGraph(bool use);
- 
+
     void SetProgressWriter(TOperationProgressWriter writer) {
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
         ProgressWriter_ = ThreadSafeProgressWriter(writer);
@@ -331,7 +331,7 @@ private:
     bool FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRules* warningRules = nullptr);
     TString GetSessionId() const;
     TString TakeSessionId();
- 
+
     NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransformWithFallback(bool applyAsyncChanges);
 
 private:

@@ -91,7 +91,7 @@ bool CompileLibrary(const TString& alias, const TString& script, TExprContext& c
 {
     const auto& res = ParseAst(script, nullptr, alias);
     if (!res.IsOk()) {
-        for (const auto& originalError : res.Issues) { 
+        for (const auto& originalError : res.Issues) {
             TIssue error(originalError);
             TStringBuilder message;
             message << error.Message << " (at " << alias << ")";

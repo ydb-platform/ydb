@@ -85,7 +85,7 @@ namespace {
 
         static bool DeclareSignature(
             const TStringRef& name,
-            TType* userType, 
+            TType* userType,
             IFunctionTypeInfoBuilder& builder,
             bool typesOnly) {
             Y_UNUSED(userType);

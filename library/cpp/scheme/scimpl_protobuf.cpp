@@ -10,7 +10,7 @@
 using namespace google::protobuf;
 
 namespace NSc {
-    TValue TValue::From(const Message& msg, bool mapAsDict) { 
+    TValue TValue::From(const Message& msg, bool mapAsDict) {
         TValue v;
         const Reflection* r = msg.GetReflection();
         TVector<const FieldDescriptor*> fields;
@@ -22,18 +22,18 @@ namespace NSc {
             const FieldDescriptor* field = *it;
             try {
                 if (field->is_repeated()) {
-                    if (field->is_map() && mapAsDict) { 
+                    if (field->is_map() && mapAsDict) {
                         auto& elem = v[field->name()];
-                        for (int i2 = 0; i2 < r->FieldSize(msg, field); ++i2) { 
-                            auto val = FromRepeatedField(msg, field, i2); 
-                            if (val.IsDict()) { 
-                                elem[TStringBuf(val["key"])] = val["value"]; 
-                            } 
-                        } 
-                    } else { 
-                        for (int i2 = 0; i2 < r->FieldSize(msg, field); ++i2) 
-                            v[field->name()][i2] = FromRepeatedField(msg, field, i2); 
-                    } 
+                        for (int i2 = 0; i2 < r->FieldSize(msg, field); ++i2) {
+                            auto val = FromRepeatedField(msg, field, i2);
+                            if (val.IsDict()) {
+                                elem[TStringBuf(val["key"])] = val["value"];
+                            }
+                        }
+                    } else {
+                        for (int i2 = 0; i2 < r->FieldSize(msg, field); ++i2)
+                            v[field->name()][i2] = FromRepeatedField(msg, field, i2);
+                    }
                 } else {
                     v[field->name()] = FromField(msg, field);
                 }
@@ -143,9 +143,9 @@ namespace NSc {
         const Descriptor* descriptor = msg.GetDescriptor();
         for (int i = 0, count = descriptor->field_count(); i < count; ++i) {
             const FieldDescriptor* field = descriptor->field(i);
-            if (field->is_map()) { 
+            if (field->is_map()) {
                 ToMapField(msg, field, opts);
-            } else if (field->is_repeated()) { 
+            } else if (field->is_repeated()) {
                 ToRepeatedField(msg, field, opts);
             } else {
                 ToField(msg, field, opts);
@@ -203,11 +203,11 @@ namespace NSc {
     }
 
     void TValue::ToField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name(); 
-        const TValue& value = Get(name); 
+        const TString& name = field->name();
+        const TValue& value = Get(name);
         ValueToField(value, msg, field, opts);
-    } 
- 
+    }
+
     void TValue::ToEnumField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
         const EnumDescriptor* enumField = field->enum_type();
 
@@ -291,39 +291,39 @@ namespace NSc {
     }
 
     void TValue::ToMapField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name(); 
- 
-        const TValue& fieldValue = Get(name); 
-        if (fieldValue.IsNull()) { 
-            return; 
-        } 
- 
-        if (fieldValue.IsArray()) { 
-            // read dict from key, value array 
+        const TString& name = field->name();
+
+        const TValue& fieldValue = Get(name);
+        if (fieldValue.IsNull()) {
+            return;
+        }
+
+        if (fieldValue.IsArray()) {
+            // read dict from key, value array
             ToRepeatedField(msg, field, opts);
-            return; 
-        } 
- 
-        if (!fieldValue.IsDict()) { 
+            return;
+        }
+
+        if (!fieldValue.IsDict()) {
             if (opts.SkipTypeMismatch) {
                 return; // leave map field empty
             } else {
                 ythrow TSchemeException() << "invalid type of map field " << name << ": not dict or array";
             }
-        } 
- 
-        const Reflection* reflection = msg.GetReflection(); 
- 
-        auto mutableField = reflection->GetMutableRepeatedFieldRef<Message>(&msg, field); 
-        for (const auto& value : fieldValue.GetDict()) { 
+        }
+
+        const Reflection* reflection = msg.GetReflection();
+
+        auto mutableField = reflection->GetMutableRepeatedFieldRef<Message>(&msg, field);
+        for (const auto& value : fieldValue.GetDict()) {
             THolder<Message> entry(mutableField.NewMessage());
-            auto entryDesc = entry->GetDescriptor(); 
-            auto keyField = entryDesc->FindFieldByNumber(1); 
-            auto valueField = entryDesc->FindFieldByNumber(2); 
-            auto entryReflection = entry->GetReflection(); 
-            entryReflection->SetString(entry.Get(), keyField, TString(value.first)); 
+            auto entryDesc = entry->GetDescriptor();
+            auto keyField = entryDesc->FindFieldByNumber(1);
+            auto valueField = entryDesc->FindFieldByNumber(2);
+            auto entryReflection = entry->GetReflection();
+            entryReflection->SetString(entry.Get(), keyField, TString(value.first));
             ValueToField(value.second, *entry, valueField, opts);
-            mutableField.Add(*entry); 
-        } 
-    } 
+            mutableField.Add(*entry);
+        }
+    }
 }

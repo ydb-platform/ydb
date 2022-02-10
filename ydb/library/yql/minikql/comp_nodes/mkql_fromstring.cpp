@@ -29,7 +29,7 @@ class TDecimalFromStringWrapper : public TMutableCodegeneratorNode<TDecimalFromS
 public:
     TDecimalFromStringWrapper(TComputationMutables& mutables, IComputationNode* data, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Data(data) 
+        , Data(data)
         , Precision(precision)
         , Scale(scale)
     {
@@ -163,7 +163,7 @@ public:
     {}
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        const auto& data = Data->GetValue(ctx); 
+        const auto& data = Data->GetValue(ctx);
         if (IsOptional && !data) {
             return NUdf::TUnboxedValuePod();
         }

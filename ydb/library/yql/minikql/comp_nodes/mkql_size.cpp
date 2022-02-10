@@ -36,13 +36,13 @@ template<bool IsOptional>
 class TSizeWrapper : public TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> {
     typedef TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> TBaseComputation;
 public:
-    TSizeWrapper(TComputationMutables& mutables, IComputationNode* data) 
+    TSizeWrapper(TComputationMutables& mutables, IComputationNode* data)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Data(data) 
+        , Data(data)
     {}
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
-        const auto& data = Data->GetValue(ctx); 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        const auto& data = Data->GetValue(ctx);
         if (IsOptional && !data) {
             return NUdf::TUnboxedValuePod();
         }

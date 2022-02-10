@@ -977,16 +977,16 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return MkqlBuildSplitLambda(*node.Child(2), ctx, {item, state});
         });
      });
- 
+
     AddCallable("Fold1Map", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto list = MkqlBuildExpr(node.Head(), ctx);
         return ctx.ProgramBuilder.Chain1Map(list, [&](TRuntimeNode item) {
             return MkqlBuildSplitLambda(*node.Child(1), ctx, {item});
-        }, [&](TRuntimeNode item, TRuntimeNode state) { 
+        }, [&](TRuntimeNode item, TRuntimeNode state) {
             return MkqlBuildSplitLambda(*node.Child(2), ctx, {item, state});
         });
-    }); 
- 
+    });
+
     AddCallable("Chain1Map", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto list = MkqlBuildExpr(node.Head(), ctx);
         return ctx.ProgramBuilder.Chain1Map(list,
@@ -2235,15 +2235,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto& args = GetArgumentsFrom<3U>(node, ctx);
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
         return ctx.ProgramBuilder.QueueCreate(initCapacity, initSize, args, returnType);
-    }); 
- 
+    });
+
     AddCallable("QueuePeek", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto resource = MkqlBuildExpr(node.Head(), ctx);
         const auto index = MkqlBuildExpr(*node.Child(1), ctx);
         const auto& args = GetArgumentsFrom<2U>(node, ctx);
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
         return ctx.ProgramBuilder.QueuePeek(resource, index, args, returnType);
-    }); 
+    });
 
     AddCallable("QueueRange", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto resource = MkqlBuildExpr(node.Head(), ctx);
@@ -2264,16 +2264,16 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto input = MkqlBuildExpr(node.Head(), ctx);
         const auto schemeType = ParseDataType(node, node.Child(1)->Content());
         return ctx.ProgramBuilder.FromYsonSimpleType(input, schemeType);
-    }); 
- 
+    });
+
     AddCallable("TryWeakMemberFromDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto other = MkqlBuildExpr(node.Head(), ctx);
         const auto rest = MkqlBuildExpr(*node.Child(1), ctx);
         const auto schemeType = ParseDataType(node, node.Child(2)->Content());
         const auto member = node.Child(3)->Content();
         return ctx.ProgramBuilder.TryWeakMemberFromDict(other, rest, schemeType, member);
-    }); 
- 
+    });
+
     AddCallable("DependsOn", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });

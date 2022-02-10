@@ -10,7 +10,7 @@ namespace {
 
 template <bool All>
 class TZipWrapper : public TMutableComputationNode<TZipWrapper<All>> {
-    typedef TMutableComputationNode<TZipWrapper<All>> TBaseComputation; 
+    typedef TMutableComputationNode<TZipWrapper<All>> TBaseComputation;
 public:
     using TSelf = TZipWrapper<All>;
 
@@ -158,10 +158,10 @@ public:
         const TSelf *const Self;
     };
 
-    TZipWrapper(TComputationMutables& mutables, TComputationNodePtrVector& lists) 
-        : TBaseComputation(mutables) 
-        , Lists(std::move(lists)) 
-        , ResTuple(mutables) 
+    TZipWrapper(TComputationMutables& mutables, TComputationNodePtrVector& lists)
+        : TBaseComputation(mutables)
+        , Lists(std::move(lists))
+        , ResTuple(mutables)
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
@@ -170,7 +170,7 @@ public:
         listValues.reserve(Lists.size());
         arrays.reserve(Lists.size());
         for (auto& list : Lists) {
-            listValues.emplace_back(list->GetValue(ctx)); 
+            listValues.emplace_back(list->GetValue(ctx));
             arrays.emplace_back(listValues.back().GetElements());
         }
 
@@ -227,7 +227,7 @@ IComputationNode* WrapZip(TCallable& callable, const TComputationNodeFactoryCont
         lists.push_back(LocateNode(ctx.NodeLocator, callable, i));
     }
 
-    return new TZipWrapper<All>(ctx.Mutables, lists); 
+    return new TZipWrapper<All>(ctx.Mutables, lists);
 }
 
 template

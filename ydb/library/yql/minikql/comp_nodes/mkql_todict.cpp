@@ -682,7 +682,7 @@ public:
     TSetWrapper(TComputationMutables& mutables, TType* keyType, IComputationNode* list, IComputationExternalNode* item,
         IComputationNode* key, ui64 itemsCountHint)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , KeyType(keyType) 
+        , KeyType(keyType)
         , List(list)
         , Item(item)
         , Key(key)
@@ -697,7 +697,7 @@ public:
                 TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint), ctx);
         }
 
-        const auto& list = List->GetValue(ctx); 
+        const auto& list = List->GetValue(ctx);
         auto itemsCountHint = ItemsCountHint;
         if (list.HasFastListLength()) {
             if (const auto size = list.GetListLength())
@@ -709,9 +709,9 @@ public:
         TSetAccumulator accumulator(KeyType, KeyTypes, IsTuple, Encoded, ctx, itemsCountHint);
 
         TThresher<false>::DoForEachItem(list,
-            [this, &accumulator, &ctx] (NUdf::TUnboxedValue&& item) { 
-                Item->SetValue(ctx, std::move(item)); 
-                accumulator.Add(Key->GetValue(ctx)); 
+            [this, &accumulator, &ctx] (NUdf::TUnboxedValue&& item) {
+                Item->SetValue(ctx, std::move(item));
+                accumulator.Add(Key->GetValue(ctx));
             }
         );
 
@@ -725,7 +725,7 @@ private:
         this->DependsOn(Key);
     }
 
-    TType* const KeyType; 
+    TType* const KeyType;
     IComputationNode* const List;
     IComputationExternalNode* const Item;
     IComputationNode* const Key;
@@ -1164,7 +1164,7 @@ public:
     TMapWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType, IComputationNode* list, IComputationExternalNode* item,
         IComputationNode* key, IComputationNode* payload, ui64 itemsCountHint)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , KeyType(keyType) 
+        , KeyType(keyType)
         , PayloadType(payloadType)
         , List(list)
         , Item(item)
@@ -1181,7 +1181,7 @@ public:
                 TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint), ctx);
         }
 
-        const auto& list = List->GetValue(ctx); 
+        const auto& list = List->GetValue(ctx);
 
         auto itemsCountHint = ItemsCountHint;
         if (list.HasFastListLength()) {
@@ -1194,9 +1194,9 @@ public:
         TMapAccumulator accumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, ctx, itemsCountHint);
 
         TThresher<false>::DoForEachItem(list,
-            [this, &accumulator, &ctx] (NUdf::TUnboxedValue&& item) { 
-                Item->SetValue(ctx, std::move(item)); 
-                accumulator.Add(Key->GetValue(ctx), Payload->GetValue(ctx)); 
+            [this, &accumulator, &ctx] (NUdf::TUnboxedValue&& item) {
+                Item->SetValue(ctx, std::move(item));
+                accumulator.Add(Key->GetValue(ctx), Payload->GetValue(ctx));
             }
         );
 
@@ -1211,7 +1211,7 @@ private:
         this->DependsOn(Payload);
     }
 
-    TType* const KeyType; 
+    TType* const KeyType;
     TType* PayloadType;
     IComputationNode* const List;
     IComputationExternalNode* const Item;
@@ -1781,7 +1781,7 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
 #define USE_HASHED_SINGLE_FIXED_COMPACT_SET(xType, xLayoutType) \
                 case NUdf::TDataType<xType>::Id: \
                     return WrapToSet< \
-                        THashedSingleFixedCompactSetAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables); 
+                        THashedSingleFixedCompactSetAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables);
 
                 switch (AS_TYPE(TDataType, keyType)->GetSchemeType()) {
                     KNOWN_FIXED_VALUE_TYPES(USE_HASHED_SINGLE_FIXED_COMPACT_SET)
@@ -1789,21 +1789,21 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
 #undef USE_HASHED_SINGLE_FIXED_COMPACT_SET
             }
 
-            return WrapToSet<THashedCompactSetAccumulator>(callable, ctx.NodeLocator, ctx.Mutables); 
+            return WrapToSet<THashedCompactSetAccumulator>(callable, ctx.NodeLocator, ctx.Mutables);
         }
 
         if (keyType->IsData()) {
 #define USE_HASHED_SINGLE_FIXED_SET(xType, xLayoutType) \
             case NUdf::TDataType<xType>::Id: \
                 return WrapToSet< \
-                    THashedSingleFixedSetAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables); 
+                    THashedSingleFixedSetAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables);
 
             switch (AS_TYPE(TDataType, keyType)->GetSchemeType()) {
                 KNOWN_FIXED_VALUE_TYPES(USE_HASHED_SINGLE_FIXED_SET)
             }
 #undef USE_HASHED_SINGLE_FIXED_SET
         }
-        return WrapToSet<THashedSetAccumulator>(callable, ctx.NodeLocator, ctx.Mutables); 
+        return WrapToSet<THashedSetAccumulator>(callable, ctx.NodeLocator, ctx.Mutables);
     }
 
     if (isCompact) {
@@ -1812,10 +1812,10 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
                 case NUdf::TDataType<xType>::Id: \
                     if (multi) { \
                         return WrapToMap< \
-                            THashedSingleFixedCompactMapAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \ 
+                            THashedSingleFixedCompactMapAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
                     } else { \
                         return WrapToMap< \
-                            THashedSingleFixedCompactMapAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \ 
+                            THashedSingleFixedCompactMapAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
                     }
 
             switch (AS_TYPE(TDataType, keyType)->GetSchemeType()) {
@@ -1825,9 +1825,9 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
         }
 
         if (multi) {
-            return WrapToMap<THashedCompactMapAccumulator<true>>(callable, ctx.NodeLocator, ctx.Mutables); 
-        } else { 
-            return WrapToMap<THashedCompactMapAccumulator<false>>(callable, ctx.NodeLocator, ctx.Mutables); 
+            return WrapToMap<THashedCompactMapAccumulator<true>>(callable, ctx.NodeLocator, ctx.Mutables);
+        } else {
+            return WrapToMap<THashedCompactMapAccumulator<false>>(callable, ctx.NodeLocator, ctx.Mutables);
         }
     }
 
@@ -1836,10 +1836,10 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
             case NUdf::TDataType<xType>::Id: \
                 if (multi) { \
                     return WrapToMap< \
-                        THashedSingleFixedMultiMapAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables); \ 
+                        THashedSingleFixedMultiMapAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables); \
                 } else { \
                     return WrapToMap< \
-                        THashedSingleFixedMapAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables); \ 
+                        THashedSingleFixedMapAccumulator<xLayoutType>>(callable, ctx.NodeLocator, ctx.Mutables); \
                 }
 
         switch (AS_TYPE(TDataType, keyType)->GetSchemeType()) {
@@ -1849,9 +1849,9 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
     }
 
     if (multi) {
-        return WrapToMap<THashedMultiMapAccumulator>(callable, ctx.NodeLocator, ctx.Mutables); 
+        return WrapToMap<THashedMultiMapAccumulator>(callable, ctx.NodeLocator, ctx.Mutables);
     } else {
-        return WrapToMap<THashedMapAccumulator>(callable, ctx.NodeLocator, ctx.Mutables); 
+        return WrapToMap<THashedMapAccumulator>(callable, ctx.NodeLocator, ctx.Mutables);
     }
 }
 

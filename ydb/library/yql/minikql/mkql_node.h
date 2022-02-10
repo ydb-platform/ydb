@@ -278,7 +278,7 @@ class TOptionalLiteral;
 class TAnyType;
 class TTupleLiteral;
 class TResourceType;
-class TDataType; 
+class TDataType;
 
 
 // A non-owning reference to internalized string
@@ -437,10 +437,10 @@ public:
         return Ui32;
     }
 
-    TDataType* GetUi64() const { 
-        return Ui64; 
-    } 
- 
+    TDataType* GetUi64() const {
+        return Ui64;
+    }
+
 
     std::vector<TNode*>& GetNodeStack() const {
         return Stack;
@@ -698,10 +698,10 @@ public:
         return Data;
     }
 
-    TDataType* IndexDictKeyType() const { 
-        return IndexDictKey; 
-    } 
- 
+    TDataType* IndexDictKeyType() const {
+        return IndexDictKey;
+    }
+
 private:
     TListType(TType* itemType, const TTypeEnvironment& env, bool validate = true);
 
@@ -711,7 +711,7 @@ private:
 
 private:
     TType* Data;
-    TDataType* IndexDictKey; 
+    TDataType* IndexDictKey;
 };
 
 class TListLiteral : public TNode {

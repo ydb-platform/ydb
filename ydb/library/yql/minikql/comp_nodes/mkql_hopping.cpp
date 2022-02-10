@@ -17,7 +17,7 @@ const TStatKey Hop_NewHopsCount("Hop_NewHopsCount", true);
 const TStatKey Hop_ThrownEventsCount("Hop_ThrownEventsCount", true);
 
 class THoppingCoreWrapper : public TMutableComputationNode<THoppingCoreWrapper> {
-    typedef TMutableComputationNode<THoppingCoreWrapper> TBaseComputation; 
+    typedef TMutableComputationNode<THoppingCoreWrapper> TBaseComputation;
 public:
     using TSelf = THoppingCoreWrapper;
 
@@ -62,9 +62,9 @@ public:
                 WriteBool(out, bucket.HasValue);
                 if (bucket.HasValue) {
                     Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
-                    if (Self->StateType) { 
+                    if (Self->StateType) {
                         WriteUnboxedValue(out, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Self->OutSave->GetValue(Ctx));
-                    } 
+                    }
                 }
             }
 
@@ -84,10 +84,10 @@ public:
             for (auto& bucket : Buckets) {
                 bucket.HasValue = ReadBool(in);
                 if (bucket.HasValue) {
-                    if (Self->StateType) { 
+                    if (Self->StateType) {
                         Self->InLoad->SetValue(Ctx, ReadUnboxedValue(in, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx));
-                    } 
-                    bucket.Value = Self->OutLoad->GetValue(Ctx); 
+                    }
+                    bucket.Value = Self->OutLoad->GetValue(Ctx);
                 }
             }
 
@@ -132,8 +132,8 @@ public:
                     return status;
                 }
 
-                Self->Item->SetValue(Ctx, std::move(item)); 
-                auto time = Self->OutTime->GetValue(Ctx); 
+                Self->Item->SetValue(Ctx, std::move(item));
+                auto time = Self->OutTime->GetValue(Ctx);
                 if (!time) {
                     continue;
                 }
@@ -161,7 +161,7 @@ public:
                             } else {
                                 Self->State->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
                                 Self->State2->SetValue(Ctx, NUdf::TUnboxedValue(*aggregated));
-                                aggregated = Self->OutMerge->GetValue(Ctx); 
+                                aggregated = Self->OutMerge->GetValue(Ctx);
                             }
                         }
                         if (++bucketIndex == Buckets.size()) {
@@ -175,8 +175,8 @@ public:
 
                     if (aggregated) {
                         Self->State->SetValue(Ctx, NUdf::TUnboxedValue(*aggregated));
-                        Self->Time->SetValue(Ctx, NUdf::TUnboxedValuePod((HopIndex - DelayHopCount) * HopTime)); 
-                        Ready.emplace_back(Self->OutFinish->GetValue(Ctx)); 
+                        Self->Time->SetValue(Ctx, NUdf::TUnboxedValuePod((HopIndex - DelayHopCount) * HopTime));
+                        Ready.emplace_back(Self->OutFinish->GetValue(Ctx));
                     }
 
                     ++newHops;
@@ -186,11 +186,11 @@ public:
                 if (hopIndex + DelayHopCount + 1 >= HopIndex) {
                     auto& bucket = Buckets[hopIndex % Buckets.size()];
                     if (!bucket.HasValue) {
-                        bucket.Value = Self->OutInit->GetValue(Ctx); 
+                        bucket.Value = Self->OutInit->GetValue(Ctx);
                         bucket.HasValue = true;
                     } else {
                         Self->State->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
-                        bucket.Value = Self->OutUpdate->GetValue(Ctx); 
+                        bucket.Value = Self->OutUpdate->GetValue(Ctx);
                     }
                 } else {
                     ++thrownEvents;
@@ -221,7 +221,7 @@ public:
     };
 
     THoppingCoreWrapper(
-        TComputationMutables& mutables, 
+        TComputationMutables& mutables,
         IComputationNode* stream,
         IComputationExternalNode* item,
         IComputationExternalNode* state,
@@ -240,8 +240,8 @@ public:
         IComputationNode* interval,
         IComputationNode* delay,
         TType* stateType)
-        : TBaseComputation(mutables) 
-        , Stream(stream) 
+        : TBaseComputation(mutables)
+        , Stream(stream)
         , Item(item)
         , State(state)
         , State2(state2)
@@ -258,16 +258,16 @@ public:
         , Hop(hop)
         , Interval(interval)
         , Delay(delay)
-        , StateType(stateType) 
-        , Packer(mutables) 
+        , StateType(stateType)
+        , Packer(mutables)
     {
         Stateless = false;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto hopTime = Hop->GetValue(ctx).Get<i64>(); 
-        const auto interval = Interval->GetValue(ctx).Get<i64>(); 
-        const auto delay = Delay->GetValue(ctx).Get<i64>(); 
+        const auto hopTime = Hop->GetValue(ctx).Get<i64>();
+        const auto interval = Interval->GetValue(ctx).Get<i64>();
+        const auto delay = Delay->GetValue(ctx).Get<i64>();
 
         // TODO: move checks from here
         MKQL_ENSURE(hopTime > 0, "hop must be positive");
@@ -280,7 +280,7 @@ public:
         MKQL_ENSURE(intervalHopCount <= 100000, "too many hops in interval");
         MKQL_ENSURE(delayHopCount <= 100000, "too many hops in delay");
 
-        return ctx.HolderFactory.Create<TStreamValue>(Stream->GetValue(ctx), this, (ui64)hopTime, (ui64)intervalHopCount, (ui64)delayHopCount, ctx); 
+        return ctx.HolderFactory.Create<TStreamValue>(Stream->GetValue(ctx), this, (ui64)hopTime, (ui64)intervalHopCount, (ui64)delayHopCount, ctx);
     }
 
 private:
@@ -325,8 +325,8 @@ private:
     IComputationNode* const Interval;
     IComputationNode* const Delay;
 
-    TType* const StateType; 
-    TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer; 
+    TType* const StateType;
+    TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer;
 };
 
 }
@@ -371,7 +371,7 @@ IComputationNode* WrapHoppingCore(TCallable& callable, const TComputationNodeFac
 
     auto stateType = hasSaveLoad ? callable.GetInput(10).GetStaticType() : nullptr;
 
-    return new THoppingCoreWrapper(ctx.Mutables, 
+    return new THoppingCoreWrapper(ctx.Mutables,
         stream, item, state, state2, time, inSave, inLoad,
         outTime, outInit, outUpdate, outSave, outLoad, outMerge, outFinish,
         hop, interval, delay, stateType);

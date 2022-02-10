@@ -1,8 +1,8 @@
 #include "yql_issue_manager.h"
 
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 #include <util/string/builder.h>
- 
+
 using namespace NYql;
 
 void TIssueManager::AddScope(std::function<TIssuePtr()> fn) {
@@ -126,9 +126,9 @@ bool TIssueManager::RaiseWarning(TIssue issue) {
     if (issue.GetSeverity() == ESeverity::TSeverityIds_ESeverityId_S_WARNING) {
         const auto action = WarningPolicy_.GetAction(issue.GetCode());
         switch (action) {
-            case EWarningAction::DISABLE: 
+            case EWarningAction::DISABLE:
                 return isWarning;
-            case EWarningAction::ERROR: 
+            case EWarningAction::ERROR:
                 issue.Severity = ESeverity::TSeverityIds_ESeverityId_S_ERROR;
                 if (WarningToErrorTreatMessage_) {
                     TIssue newIssue;

@@ -31,9 +31,9 @@ public:
             Finished,
         };
 
-        TSplitStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const TSelf* self, NUdf::TUnboxedValue&& stream) 
+        TSplitStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const TSelf* self, NUdf::TUnboxedValue&& stream)
             : TBase(memInfo)
-            , CompCtx(compCtx) 
+            , CompCtx(compCtx)
             , Self(self)
             , Stream(std::move(stream))
         {
@@ -64,7 +64,7 @@ public:
             }
 
             Self->KeyExtractorItemNode->SetValue(CompCtx, NUdf::TUnboxedValue(Value));
-            key = Self->KeyExtractorResultNode->GetValue(CompCtx); 
+            key = Self->KeyExtractorResultNode->GetValue(CompCtx);
             Self->GroupSwitchKeyNode->SetValue(CompCtx, NUdf::TUnboxedValue(key));
             Self->GroupSwitchItemNode->SetValue(CompCtx, NUdf::TUnboxedValue(Value));
             State = AtGroupStart;
@@ -108,7 +108,7 @@ public:
         }
 
     private:
-        TComputationContext& CompCtx; 
+        TComputationContext& CompCtx;
         const TSelf* const Self;
         NUdf::TUnboxedValue Stream;
         EState State = AtStart;
@@ -119,10 +119,10 @@ public:
     public:
         using TBase = TComputationValue<TGroupStreamValue>;
 
-        TGroupStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const TSelf* self, NUdf::TUnboxedValue&& stream) 
+        TGroupStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const TSelf* self, NUdf::TUnboxedValue&& stream)
             : TBase(memInfo)
-            , CompCtx(compCtx) 
-            , SplitStream(CompCtx.HolderFactory.Create<TSplitStreamValue>(CompCtx, self, std::move(stream))) 
+            , CompCtx(compCtx)
+            , SplitStream(CompCtx.HolderFactory.Create<TSplitStreamValue>(CompCtx, self, std::move(stream)))
             , SplitStreamValue(static_cast<TSplitStreamValue*>(SplitStream.AsBoxed().Get()))
         {
         }
@@ -136,7 +136,7 @@ public:
             }
 
             NKikimr::NUdf::TUnboxedValue* itemsPtr;
-            result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, itemsPtr); 
+            result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, itemsPtr);
             itemsPtr[0] = std::move(key);
             itemsPtr[1] = SplitStream;
 
@@ -144,7 +144,7 @@ public:
         }
 
     private:
-        TComputationContext& CompCtx; 
+        TComputationContext& CompCtx;
         NUdf::TUnboxedValue SplitStream;
         TSplitStreamValue* SplitStreamValue;
     };
@@ -171,7 +171,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TGroupStreamValue>(ctx, this, Stream->GetValue(ctx)); 
+        return ctx.HolderFactory.Create<TGroupStreamValue>(ctx, this, Stream->GetValue(ctx));
     }
 
 private:

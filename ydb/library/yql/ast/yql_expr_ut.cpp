@@ -9,7 +9,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 
     static TAstParseResult ParseAstWithCheck(const TStringBuf& s) {
         TAstParseResult res = ParseAst(s);
-        res.Issues.PrintTo(Cout); 
+        res.Issues.PrintTo(Cout);
         UNIT_ASSERT(res.IsOk());
         return res;
     }

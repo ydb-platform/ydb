@@ -3,8 +3,8 @@
 /// runtime function that can deal with all cyclic dfa
 /// structures and show Java how it is done ;-)
 ///
-#ifndef	ANTLR3_CYCLICDFA_HPP 
-#define	ANTLR3_CYCLICDFA_HPP 
+#ifndef	ANTLR3_CYCLICDFA_HPP
+#define	ANTLR3_CYCLICDFA_HPP
 
 // [The "BSD licence"]
 // Copyright (c) 2005-2009 Gokulakannan Somasundaram, ElectronDB
@@ -34,61 +34,61 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-namespace antlr3 { 
+namespace antlr3 {
 
 template<class ImplTraits, class CtxType>
 class CyclicDFA : public ImplTraits::AllocPolicyType
 {
 public:
-	typedef typename CtxType::StreamType StreamType; 
-	typedef typename CtxType::ExceptionBaseType ExceptionBaseType; 
-	typedef typename ImplTraits::template RecognizerType<StreamType> RecognizerType; 
-	typedef typename StreamType::IntStreamType IntStreamType; 
-	typedef typename StreamType::TokenType	TokenType; 
-	typedef TokenType	CommonTokenType; 
-	typedef CtxType ContextType; 
+	typedef typename CtxType::StreamType StreamType;
+	typedef typename CtxType::ExceptionBaseType ExceptionBaseType;
+	typedef typename ImplTraits::template RecognizerType<StreamType> RecognizerType;
+	typedef typename StreamType::IntStreamType IntStreamType;
+	typedef typename StreamType::TokenType	TokenType;
+	typedef TokenType	CommonTokenType;
+	typedef CtxType ContextType;
 
 private:
     /// Decision number that a particular static structure
     ///  represents.
     ///
-    const ANTLR_INT32		m_decisionNumber; 
+    const ANTLR_INT32		m_decisionNumber;
 
     /// What this decision represents
     ///
-    const ANTLR_UCHAR*			m_description; 
-	const ANTLR_INT32* const	m_eot; 
-    const ANTLR_INT32* const	m_eof; 
-    const ANTLR_INT32* const	m_min; 
-    const ANTLR_INT32* const	m_max; 
-    const ANTLR_INT32* const	m_accept; 
-    const ANTLR_INT32* const	m_special; 
-    const ANTLR_INT32* const *const	m_transition; 
+    const ANTLR_UCHAR*			m_description;
+	const ANTLR_INT32* const	m_eot;
+    const ANTLR_INT32* const	m_eof;
+    const ANTLR_INT32* const	m_min;
+    const ANTLR_INT32* const	m_max;
+    const ANTLR_INT32* const	m_accept;
+    const ANTLR_INT32* const	m_special;
+    const ANTLR_INT32* const *const	m_transition;
 
 public:
-	CyclicDFA( ANTLR_INT32	decisionNumber 
-				, const ANTLR_UCHAR*	description 
-				, const ANTLR_INT32* const	eot 
-				, const ANTLR_INT32* const	eof 
-				, const ANTLR_INT32* const	min 
-				, const ANTLR_INT32* const	max 
-				, const ANTLR_INT32* const	accept 
-				, const ANTLR_INT32* const	special 
-				, const ANTLR_INT32* const *const	transition ); 
-	CyclicDFA( const CyclicDFA& cdfa ); 
+	CyclicDFA( ANTLR_INT32	decisionNumber
+				, const ANTLR_UCHAR*	description
+				, const ANTLR_INT32* const	eot
+				, const ANTLR_INT32* const	eof
+				, const ANTLR_INT32* const	min
+				, const ANTLR_INT32* const	max
+				, const ANTLR_INT32* const	accept
+				, const ANTLR_INT32* const	special
+				, const ANTLR_INT32* const *const	transition );
+	CyclicDFA( const CyclicDFA& cdfa );
     CyclicDFA& operator=( const CyclicDFA& dfa);
-	 
-	ANTLR_INT32	specialStateTransition(CtxType * ctx, RecognizerType* recognizer, IntStreamType* is, ANTLR_INT32 s); 
-    ANTLR_INT32	specialTransition(CtxType * ctx, RecognizerType* recognizer, IntStreamType* is, ANTLR_INT32 s); 
+	
+	ANTLR_INT32	specialStateTransition(CtxType * ctx, RecognizerType* recognizer, IntStreamType* is, ANTLR_INT32 s);
+    ANTLR_INT32	specialTransition(CtxType * ctx, RecognizerType* recognizer, IntStreamType* is, ANTLR_INT32 s);
 
-	template<typename SuperType> 
-    ANTLR_INT32	predict(CtxType* ctx, RecognizerType* recognizer, IntStreamType* is, SuperType& super); 
-	 
+	template<typename SuperType>
+    ANTLR_INT32	predict(CtxType* ctx, RecognizerType* recognizer, IntStreamType* is, SuperType& super);
+	
 private:
-	void noViableAlt(RecognizerType* rec, ANTLR_UINT32	s); 
+	void noViableAlt(RecognizerType* rec, ANTLR_UINT32	s);
 };
 
-} 
+}
 
 #include "antlr3cyclicdfa.inl"
 

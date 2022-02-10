@@ -361,8 +361,8 @@ NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer
         }
         if (ctx.RepeatTransformCounter >= ctx.RepeatTransformLimit) {
             AddTooManyTransformationsError(root->Pos(), "AsyncTransform", ctx);
-            return NThreading::MakeFuture(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error)); 
-        } 
+            return NThreading::MakeFuture(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error));
+        }
     }
     catch (const std::exception& e) {
         ctx.AddError(ExceptionToIssue(e));

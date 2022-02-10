@@ -768,19 +768,19 @@ TRuntimeNode TProgramBuilder::ChainMap(TRuntimeNode list, TRuntimeNode state, co
 TRuntimeNode TProgramBuilder::ChainMap(TRuntimeNode list, TRuntimeNode state, const TBinarySplitLambda& handler) {
     const auto listType = list.GetStaticType();
     MKQL_ENSURE(listType->IsFlow() || listType->IsList() || listType->IsStream(), "Expected flow, list or stream");
- 
+
     const auto itemType = listType->IsFlow() ?
         AS_TYPE(TFlowType, listType)->GetItemType():
         listType->IsList() ?
             AS_TYPE(TListType, listType)->GetItemType():
             AS_TYPE(TStreamType, listType)->GetItemType();
 
-    ThrowIfListOfVoid(itemType); 
- 
+    ThrowIfListOfVoid(itemType);
+
     const auto stateNodeArg = Arg(state.GetStaticType());
     const auto itemArg = Arg(itemType);
     const auto newItemAndState = handler(itemArg, stateNodeArg);
- 
+
     MKQL_ENSURE(std::get<1U>(newItemAndState).GetStaticType()->IsSameType(*state.GetStaticType()), "State type is changed by the handler");
     const auto resultItemType = std::get<0U>(newItemAndState).GetStaticType();
     TType* resultListType = nullptr;
@@ -791,17 +791,17 @@ TRuntimeNode TProgramBuilder::ChainMap(TRuntimeNode list, TRuntimeNode state, co
     } else if (listType->IsStream()) {
         resultListType = TStreamType::Create(resultItemType, Env);
     }
- 
+
     TCallableBuilder callableBuilder(Env, __func__, resultListType);
-    callableBuilder.Add(list); 
-    callableBuilder.Add(state); 
-    callableBuilder.Add(itemArg); 
-    callableBuilder.Add(stateNodeArg); 
+    callableBuilder.Add(list);
+    callableBuilder.Add(state);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(stateNodeArg);
     callableBuilder.Add(std::get<0U>(newItemAndState));
     callableBuilder.Add(std::get<1U>(newItemAndState));
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::Chain1Map(TRuntimeNode list, const TUnaryLambda& init, const TBinaryLambda& handler) {
     return Chain1Map(list,
         [&](TRuntimeNode item) -> TRuntimeNodePair {
@@ -818,15 +818,15 @@ TRuntimeNode TProgramBuilder::Chain1Map(TRuntimeNode list, const TUnaryLambda& i
 TRuntimeNode TProgramBuilder::Chain1Map(TRuntimeNode list, const TUnarySplitLambda& init, const TBinarySplitLambda& handler) {
     const auto listType = list.GetStaticType();
     MKQL_ENSURE(listType->IsFlow() || listType->IsList() || listType->IsStream(), "Expected flow, list or stream");
- 
+
     const auto itemType = listType->IsFlow() ?
         AS_TYPE(TFlowType, listType)->GetItemType():
         listType->IsList() ?
             AS_TYPE(TListType, listType)->GetItemType():
             AS_TYPE(TStreamType, listType)->GetItemType();
 
-    ThrowIfListOfVoid(itemType); 
- 
+    ThrowIfListOfVoid(itemType);
+
     const auto itemArg = Arg(itemType);
     const auto initItemAndState = init(itemArg);
     const auto resultItemType = std::get<0U>(initItemAndState).GetStaticType();
@@ -839,23 +839,23 @@ TRuntimeNode TProgramBuilder::Chain1Map(TRuntimeNode list, const TUnarySplitLamb
     } else if (listType->IsStream()) {
         resultListType = TStreamType::Create(resultItemType, Env);
     }
- 
+
     const auto stateArg = Arg(stateType);
     const auto updateItemAndState = handler(itemArg, stateArg);
     MKQL_ENSURE(std::get<0U>(updateItemAndState).GetStaticType()->IsSameType(*resultItemType), "Item type is changed by the handler");
     MKQL_ENSURE(std::get<1U>(updateItemAndState).GetStaticType()->IsSameType(*stateType), "State type is changed by the handler");
- 
+
     TCallableBuilder callableBuilder(Env, __func__, resultListType);
-    callableBuilder.Add(list); 
-    callableBuilder.Add(itemArg); 
+    callableBuilder.Add(list);
+    callableBuilder.Add(itemArg);
     callableBuilder.Add(std::get<0U>(initItemAndState));
     callableBuilder.Add(std::get<1U>(initItemAndState));
-    callableBuilder.Add(stateArg); 
+    callableBuilder.Add(stateArg);
     callableBuilder.Add(std::get<0U>(updateItemAndState));
     callableBuilder.Add(std::get<1U>(updateItemAndState));
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::ToList(TRuntimeNode optional) {
     const auto optionalType = optional.GetStaticType();
     MKQL_ENSURE(optionalType->IsOptional(), "Expected optional");
@@ -2722,8 +2722,8 @@ TRuntimeNode TProgramBuilder::AggrAdd(TRuntimeNode data1, TRuntimeNode data2) {
 }
 
 TRuntimeNode TProgramBuilder::QueueCreate(TRuntimeNode initCapacity, TRuntimeNode initSize, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType) {
-    auto resType = AS_TYPE(TResourceType, returnType); 
-    const auto tag = resType->GetTag(); 
+    auto resType = AS_TYPE(TResourceType, returnType);
+    const auto tag = resType->GetTag();
 
     if (initCapacity.GetStaticType()->IsVoid()) {
         MKQL_ENSURE(RuntimeVersion >= 13, "Unbounded queue is not supported in runtime version " << RuntimeVersion);
@@ -2732,54 +2732,54 @@ TRuntimeNode TProgramBuilder::QueueCreate(TRuntimeNode initCapacity, TRuntimeNod
         MKQL_ENSURE(initCapacityType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "init capcity must be ui64");
     }
 
-    auto initSizeType = AS_TYPE(TDataType, initSize); 
+    auto initSizeType = AS_TYPE(TDataType, initSize);
     MKQL_ENSURE(initSizeType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "init size must be ui64");
 
     TCallableBuilder callableBuilder(Env, __func__, returnType, true);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(tag));
-    callableBuilder.Add(initCapacity); 
-    callableBuilder.Add(initSize); 
-    for (auto node : dependentNodes) { 
-        callableBuilder.Add(node); 
-    } 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
-TRuntimeNode TProgramBuilder::QueuePush(TRuntimeNode resource, TRuntimeNode value) { 
-    auto resType = AS_TYPE(TResourceType, resource); 
-    const auto tag = resType->GetTag(); 
+    callableBuilder.Add(initCapacity);
+    callableBuilder.Add(initSize);
+    for (auto node : dependentNodes) {
+        callableBuilder.Add(node);
+    }
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::QueuePush(TRuntimeNode resource, TRuntimeNode value) {
+    auto resType = AS_TYPE(TResourceType, resource);
+    const auto tag = resType->GetTag();
     MKQL_ENSURE(tag.StartsWith(ResourceQueuePrefix), "Expected Queue resource");
     TCallableBuilder callableBuilder(Env, __func__, resource.GetStaticType());
-    callableBuilder.Add(resource); 
-    callableBuilder.Add(value); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
-TRuntimeNode TProgramBuilder::QueuePop(TRuntimeNode resource) { 
-    auto resType = AS_TYPE(TResourceType, resource); 
-    const auto tag = resType->GetTag(); 
+    callableBuilder.Add(resource);
+    callableBuilder.Add(value);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::QueuePop(TRuntimeNode resource) {
+    auto resType = AS_TYPE(TResourceType, resource);
+    const auto tag = resType->GetTag();
     MKQL_ENSURE(tag.StartsWith(ResourceQueuePrefix), "Expected Queue resource");
     TCallableBuilder callableBuilder(Env, __func__, resource.GetStaticType());
-    callableBuilder.Add(resource); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    callableBuilder.Add(resource);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::QueuePeek(TRuntimeNode resource, TRuntimeNode index, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType) {
-    MKQL_ENSURE(returnType->IsOptional(), "Expected optional type as result of QueuePeek"); 
-    auto resType = AS_TYPE(TResourceType, resource); 
-    auto indexType = AS_TYPE(TDataType, index); 
+    MKQL_ENSURE(returnType->IsOptional(), "Expected optional type as result of QueuePeek");
+    auto resType = AS_TYPE(TResourceType, resource);
+    auto indexType = AS_TYPE(TDataType, index);
     MKQL_ENSURE(indexType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "index size must be ui64");
-    const auto tag = resType->GetTag(); 
+    const auto tag = resType->GetTag();
     MKQL_ENSURE(tag.StartsWith(ResourceQueuePrefix), "Expected Queue resource");
     TCallableBuilder callableBuilder(Env, __func__, returnType);
-    callableBuilder.Add(resource); 
-    callableBuilder.Add(index); 
-    for (auto node : dependentNodes) { 
-        callableBuilder.Add(node); 
-    } 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    callableBuilder.Add(resource);
+    callableBuilder.Add(index);
+    for (auto node : dependentNodes) {
+        callableBuilder.Add(node);
+    }
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::QueueRange(TRuntimeNode resource, TRuntimeNode begin, TRuntimeNode end, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType) {
     MKQL_ENSURE(RuntimeVersion >= 14, "QueueRange is not supported in runtime version " << RuntimeVersion);
 
@@ -2804,20 +2804,20 @@ TRuntimeNode TProgramBuilder::QueueRange(TRuntimeNode resource, TRuntimeNode beg
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::PreserveStream(TRuntimeNode stream, TRuntimeNode queue, TRuntimeNode outpace) { 
-    auto streamType = AS_TYPE(TStreamType, stream); 
-    auto resType = AS_TYPE(TResourceType, queue); 
-    auto outpaceType = AS_TYPE(TDataType, outpace); 
+TRuntimeNode TProgramBuilder::PreserveStream(TRuntimeNode stream, TRuntimeNode queue, TRuntimeNode outpace) {
+    auto streamType = AS_TYPE(TStreamType, stream);
+    auto resType = AS_TYPE(TResourceType, queue);
+    auto outpaceType = AS_TYPE(TDataType, outpace);
     MKQL_ENSURE(outpaceType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "PreserveStream: outpace size must be ui64");
-    const auto tag = resType->GetTag(); 
-    MKQL_ENSURE(tag.StartsWith(ResourceQueuePrefix), "PreserveStream: Expected Queue resource"); 
+    const auto tag = resType->GetTag();
+    MKQL_ENSURE(tag.StartsWith(ResourceQueuePrefix), "PreserveStream: Expected Queue resource");
     TCallableBuilder callableBuilder(Env, __func__, streamType);
-    callableBuilder.Add(stream); 
-    callableBuilder.Add(queue); 
-    callableBuilder.Add(outpace); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    callableBuilder.Add(stream);
+    callableBuilder.Add(queue);
+    callableBuilder.Add(outpace);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::Seq(const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
     MKQL_ENSURE(RuntimeVersion >= 15, "Seq is not supported in runtime version " << RuntimeVersion);
 
@@ -2829,31 +2829,31 @@ TRuntimeNode TProgramBuilder::Seq(const TArrayRef<const TRuntimeNode>& args, TTy
 }
 
 TRuntimeNode TProgramBuilder::FromYsonSimpleType(TRuntimeNode input, NUdf::TDataTypeId schemeType) {
-    auto type = input.GetStaticType(); 
-    if (type->IsOptional()) { 
-        type = static_cast<const TOptionalType&>(*type).GetItemType(); 
-    } 
-    MKQL_ENSURE(type->IsData(), "Expected data type"); 
-    auto resDataType = NewDataType(schemeType); 
-    auto resultType = NewOptionalType(resDataType); 
+    auto type = input.GetStaticType();
+    if (type->IsOptional()) {
+        type = static_cast<const TOptionalType&>(*type).GetItemType();
+    }
+    MKQL_ENSURE(type->IsData(), "Expected data type");
+    auto resDataType = NewDataType(schemeType);
+    auto resultType = NewOptionalType(resDataType);
     TCallableBuilder callableBuilder(Env, __func__, resultType);
-    callableBuilder.Add(input); 
-    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(schemeType))); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    callableBuilder.Add(input);
+    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(schemeType)));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::TryWeakMemberFromDict(TRuntimeNode other, TRuntimeNode rest, NUdf::TDataTypeId schemeType, const std::string_view& memberName) {
-    auto resDataType = NewDataType(schemeType); 
-    auto resultType = NewOptionalType(resDataType); 
- 
+    auto resDataType = NewDataType(schemeType);
+    auto resultType = NewOptionalType(resDataType);
+
     TCallableBuilder callableBuilder(Env, __func__, resultType);
-    callableBuilder.Add(other); 
-    callableBuilder.Add(rest); 
-    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(schemeType))); 
-    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(memberName)); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+    callableBuilder.Add(other);
+    callableBuilder.Add(rest);
+    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(schemeType)));
+    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(memberName));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::TimezoneId(TRuntimeNode name) {
     bool isOptional;
     auto dataType = UnpackOptionalData(name, isOptional);

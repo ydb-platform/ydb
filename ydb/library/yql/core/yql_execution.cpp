@@ -811,9 +811,9 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
                     hasErrors = true;
                 }
             } else if (collectCalcOverWindow && node->IsCallable({"CalcOverWindow", "CalcOverSessionWindow", "CalcOverWindowGroup"})) {
-                overWinNodes.emplace(node.Get()); 
-                return false; 
-            } else if (node->IsCallable(notAllowList)) { 
+                overWinNodes.emplace(node.Get());
+                return false;
+            } else if (node->IsCallable(notAllowList)) {
                 hasErrors = true;
                 const auto err = TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Can't execute " << node->Content());
                 if (added.insert(err).second) {
@@ -847,19 +847,19 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
             }
 
             return true;
-        }; 
+        };
         static const THashSet<TStringBuf> noExecutionList = {"InstanceOf", "Lag", "Lead", "Rank", "DenseRank", "RowNumber"};
         static const THashSet<TStringBuf> noExecutionListForCalcOverWindow = {"InstanceOf"};
-        VisitExpr(input, [funcCheckExecution](const TExprNode::TPtr& node) { 
+        VisitExpr(input, [funcCheckExecution](const TExprNode::TPtr& node) {
             bool collectCalcOverWindow = true;
             return funcCheckExecution(noExecutionList, collectCalcOverWindow, node);
         });
-        for (auto overWin: overWinNodes) { 
-            VisitExpr(overWin, [funcCheckExecution](const TExprNode::TPtr& node) { 
+        for (auto overWin: overWinNodes) {
+            VisitExpr(overWin, [funcCheckExecution](const TExprNode::TPtr& node) {
                 bool collectCalcOverWindow = false;
                 return funcCheckExecution(noExecutionListForCalcOverWindow, collectCalcOverWindow, node);
-            }); 
-        } 
+            });
+        }
 
         return hasErrors ? IGraphTransformer::TStatus::Error : IGraphTransformer::TStatus::Ok;
     });

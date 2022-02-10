@@ -76,8 +76,8 @@ class TFlowExprType;
 class TEmptyListExprType;
 class TEmptyDictExprType;
 
-const size_t DefaultMistypeDistance = 3; 
- 
+const size_t DefaultMistypeDistance = 3;
+
 extern const TStringBuf ZeroString;
 
 struct TTypeAnnotationVisitor {
@@ -395,7 +395,7 @@ struct TExprContext;
 
 bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprContext& ctx);
 bool ValidateName(TPositionHandle position, TStringBuf name, TStringBuf descr, TExprContext& ctx);
- 
+
 class TItemExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Item;
@@ -499,9 +499,9 @@ public:
     }
 
     TMaybe<TStringBuf> FindMistype(const TStringBuf& name) const {
-        for (const auto& item: Items) { 
+        for (const auto& item: Items) {
             if (NLevenshtein::Distance(name, item->GetName()) < DefaultMistypeDistance) {
-                return item->GetName(); 
+                return item->GetName();
             }
         }
         return TMaybe<TStringBuf>();

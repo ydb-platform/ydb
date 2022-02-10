@@ -35,36 +35,36 @@ enum class EGraphPerProcess {
     Single
 };
 
-struct TComputationOpts { 
-    TComputationOpts(IStatsRegistry* stats) 
-        : Stats(stats) 
-    {} 
+struct TComputationOpts {
+    TComputationOpts(IStatsRegistry* stats)
+        : Stats(stats)
+    {}
 
     IStatsRegistry *const Stats;
-}; 
- 
-struct TComputationOptsFull: public TComputationOpts { 
-    TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, IRandomProvider& randomProvider, 
+};
+
+struct TComputationOptsFull: public TComputationOpts {
+    TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, IRandomProvider& randomProvider,
             ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider)
-        : TComputationOpts(stats) 
-        , AllocState(allocState) 
-        , RandomProvider(randomProvider) 
-        , TimeProvider(timeProvider) 
-        , ValidatePolicy(validatePolicy) 
+        : TComputationOpts(stats)
+        , AllocState(allocState)
+        , RandomProvider(randomProvider)
+        , TimeProvider(timeProvider)
+        , ValidatePolicy(validatePolicy)
         , SecureParamsProvider(secureParamsProvider)
-    {} 
-    TAllocState& AllocState; 
-    IRandomProvider& RandomProvider; 
-    ITimeProvider& TimeProvider; 
-    NUdf::EValidatePolicy ValidatePolicy; 
+    {}
+    TAllocState& AllocState;
+    IRandomProvider& RandomProvider;
+    ITimeProvider& TimeProvider;
+    NUdf::EValidatePolicy ValidatePolicy;
     const NUdf::ISecureParamsProvider* SecureParamsProvider;
-}; 
- 
-struct TComputationMutables { 
+};
+
+struct TComputationMutables {
     ui32 CurValueIndex = 0U;
     std::vector<ui32> SerializableValues; // Indices of values that need to be saved in IComputationGraph::SaveGraphState() and restored in IComputationGraph::LoadGraphState().
-}; 
- 
+};
+
 class THolderFactory;
 
 // Do not reorder: used in LLVM!
@@ -79,8 +79,8 @@ struct TComputationContextLLVM {
 };
 
 struct TComputationContext : public TComputationContextLLVM {
-    IRandomProvider& RandomProvider; 
-    ITimeProvider& TimeProvider; 
+    IRandomProvider& RandomProvider;
+    ITimeProvider& TimeProvider;
     bool ExecuteLLVM = true;
     arrow::MemoryPool& ArrowMemoryPool;
 
@@ -114,7 +114,7 @@ public:
 
     virtual void InitNode(TComputationContext&) const = 0;
 
-    virtual NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const = 0; 
+    virtual NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const = 0;
 
     virtual IComputationNode* AddDependence(const IComputationNode* node) = 0;
 
@@ -195,7 +195,7 @@ public:
     virtual void LoadGraphState(TStringBuf state) = 0;
 };
 
-class TNodeFactory; 
+class TNodeFactory;
 typedef std::function<IComputationNode* (TNode* node, bool pop)> TNodeLocator;
 typedef std::function<void (IComputationNode*)> TNodePushBack;
 
@@ -212,7 +212,7 @@ struct TComputationNodeFactoryContext {
     NUdf::EValidateMode ValidateMode;
     NUdf::EValidatePolicy ValidatePolicy;
     EGraphPerProcess GraphPerProcess;
-    TComputationMutables& Mutables; 
+    TComputationMutables& Mutables;
     TComputationNodeOnNodeMap& ElementsCache;
     const TNodePushBack NodePushBack;
 
@@ -228,7 +228,7 @@ struct TComputationNodeFactoryContext {
             const NUdf::IValueBuilder* builder,
             NUdf::EValidateMode validateMode,
             NUdf::EValidatePolicy validatePolicy,
-            EGraphPerProcess graphPerProcess, 
+            EGraphPerProcess graphPerProcess,
             TComputationMutables& mutables,
             TComputationNodeOnNodeMap& elementsCache,
             TNodePushBack&& nodePushBack
@@ -245,7 +245,7 @@ struct TComputationNodeFactoryContext {
         , ValidateMode(validateMode)
         , ValidatePolicy(validatePolicy)
         , GraphPerProcess(graphPerProcess)
-        , Mutables(mutables) 
+        , Mutables(mutables)
         , ElementsCache(elementsCache)
         , NodePushBack(std::move(nodePushBack))
     {}
@@ -254,20 +254,20 @@ struct TComputationNodeFactoryContext {
 using TComputationNodeFactory = std::function<IComputationNode* (TCallable&, const TComputationNodeFactoryContext&)>;
 using TStreamEmitter = std::function<void(NUdf::TUnboxedValue&&)>;
 
-struct TComputationPatternOpts { 
+struct TComputationPatternOpts {
     TComputationPatternOpts(const std::shared_ptr<TInjectedAlloc>& cacheAlloc, const std::shared_ptr<TTypeEnvironment>& cacheEnv)
-        : CacheAlloc(std::move(cacheAlloc)) 
-        , CacheEnv(std::move(cacheEnv)) 
-        , AllocState(CacheAlloc->InjectedState()) 
-        , Env(*CacheEnv) 
-    {} 
- 
-    TComputationPatternOpts(TAllocState& allocState, const TTypeEnvironment& env) 
-        : AllocState(allocState) 
-        , Env(env) 
-    {} 
- 
-    TComputationPatternOpts( 
+        : CacheAlloc(std::move(cacheAlloc))
+        , CacheEnv(std::move(cacheEnv))
+        , AllocState(CacheAlloc->InjectedState())
+        , Env(*CacheEnv)
+    {}
+
+    TComputationPatternOpts(TAllocState& allocState, const TTypeEnvironment& env)
+        : AllocState(allocState)
+        , Env(env)
+    {}
+
+    TComputationPatternOpts(
         TAllocState& allocState,
         const TTypeEnvironment& env,
         TComputationNodeFactory factory,
@@ -288,28 +288,28 @@ struct TComputationPatternOpts {
         , GraphPerProcess(graphPerProcess)
         , Stats(stats)
         , CountersProvider(countersProvider)
-    {} 
- 
-    void SetOptions(TComputationNodeFactory factory, const IFunctionRegistry* functionRegistry, 
-        NUdf::EValidateMode validateMode, NUdf::EValidatePolicy validatePolicy, 
+    {}
+
+    void SetOptions(TComputationNodeFactory factory, const IFunctionRegistry* functionRegistry,
+        NUdf::EValidateMode validateMode, NUdf::EValidatePolicy validatePolicy,
         const TString& optLLVM, EGraphPerProcess graphPerProcess, IStatsRegistry* stats = nullptr,
         NUdf::ICountersProvider* counters = nullptr, const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr) {
-        Factory = factory; 
-        FunctionRegistry = functionRegistry; 
-        ValidateMode = validateMode; 
-        ValidatePolicy = validatePolicy; 
+        Factory = factory;
+        FunctionRegistry = functionRegistry;
+        ValidateMode = validateMode;
+        ValidatePolicy = validatePolicy;
         OptLLVM = optLLVM;
-        GraphPerProcess = graphPerProcess; 
-        Stats = stats; 
+        GraphPerProcess = graphPerProcess;
+        Stats = stats;
         CountersProvider = counters;
         SecureParamsProvider = secureParamsProvider;
     }
- 
+
     mutable std::shared_ptr<TInjectedAlloc> CacheAlloc;
     mutable std::shared_ptr<TTypeEnvironment> CacheEnv;
     TAllocState& AllocState;
     const TTypeEnvironment& Env;
- 
+
     TComputationNodeFactory Factory;
     const IFunctionRegistry* FunctionRegistry = nullptr;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
@@ -319,42 +319,42 @@ struct TComputationPatternOpts {
     IStatsRegistry* Stats = nullptr;
     NUdf::ICountersProvider* CountersProvider = nullptr;
     const NUdf::ISecureParamsProvider* SecureParamsProvider = nullptr;
- 
-    /// \todo split and exclude 
+
+    /// \todo split and exclude
     TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TAllocState* allocStatePtr = nullptr) const {
         return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider);
-    } 
+    }
 };
 
-class IComputationPattern: public TAtomicRefCount<IComputationPattern> { 
-public: 
-    typedef TIntrusivePtr<IComputationPattern> TPtr; 
- 
-    virtual ~IComputationPattern() = default; 
-    virtual THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) = 0; 
-}; 
- 
+class IComputationPattern: public TAtomicRefCount<IComputationPattern> {
+public:
+    typedef TIntrusivePtr<IComputationPattern> TPtr;
+
+    virtual ~IComputationPattern() = default;
+    virtual THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) = 0;
+};
+
 // node cookie's will be clean up when graph will be destroyed, explorer must not be changed/destroyed until that time
-IComputationPattern::TPtr MakeComputationPattern( 
+IComputationPattern::TPtr MakeComputationPattern(
         TExploringNodeVisitor& explorer,
-        const TRuntimeNode& root, 
-        const std::vector<TNode*>& entryPoints, 
+        const TRuntimeNode& root,
+        const std::vector<TNode*>& entryPoints,
         const TComputationPatternOpts& opts);
 
-class IComputationPatternCache { 
-public: 
-    typedef THolder<IComputationPatternCache> TPtr; 
-    typedef std::function<IComputationPattern::TPtr()> PrepareFunc; 
- 
-    virtual ~IComputationPatternCache() = default; 
-    static TPtr Create(); 
- 
-    virtual IComputationPattern::TPtr EmplacePattern(const TString& serialized, PrepareFunc prepareFunc) = 0; 
-    virtual void CleanCache() = 0; 
-    virtual size_t GetSize() const = 0; 
-    virtual size_t GetCacheHits() const = 0; 
-}; 
- 
+class IComputationPatternCache {
+public:
+    typedef THolder<IComputationPatternCache> TPtr;
+    typedef std::function<IComputationPattern::TPtr()> PrepareFunc;
+
+    virtual ~IComputationPatternCache() = default;
+    static TPtr Create();
+
+    virtual IComputationPattern::TPtr EmplacePattern(const TString& serialized, PrepareFunc prepareFunc) = 0;
+    virtual void CleanCache() = 0;
+    virtual size_t GetSize() const = 0;
+    virtual size_t GetCacheHits() const = 0;
+};
+
 std::unique_ptr<NUdf::ISecureParamsProvider> MakeSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams);
 
 } // namespace NMiniKQL

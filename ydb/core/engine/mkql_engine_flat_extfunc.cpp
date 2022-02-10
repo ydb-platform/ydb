@@ -91,7 +91,7 @@ namespace {
     };
 
     class TResultWrapper : public TMutableComputationNode<TResultWrapper> {
-        typedef TMutableComputationNode<TResultWrapper> TBaseComputation; 
+        typedef TMutableComputationNode<TResultWrapper> TBaseComputation;
     public:
         class TResult : public TComputationValue<TResult> {
         public:
@@ -129,18 +129,18 @@ namespace {
         };
 
         TResultWrapper(
-            TComputationMutables& mutables, 
+            TComputationMutables& mutables,
             const TStringBuf& label,
             IComputationNode* payload)
             :
-            TBaseComputation(mutables), 
+            TBaseComputation(mutables),
             Label(label),
             Payload(payload)
         {
         }
 
         NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-            return ctx.HolderFactory.Create<TResult>(Payload->GetValue(ctx), Label); 
+            return ctx.HolderFactory.Create<TResult>(Payload->GetValue(ctx), Label);
         }
 
     private:
@@ -153,10 +153,10 @@ namespace {
     };
 
     class TAcquireLocksWrapper : public TMutableComputationNode<TAcquireLocksWrapper> {
-        typedef TMutableComputationNode<TAcquireLocksWrapper> TBaseComputation; 
+        typedef TMutableComputationNode<TAcquireLocksWrapper> TBaseComputation;
     public:
         TAcquireLocksWrapper(TComputationMutables& mutables, NUdf::TUnboxedValue locks, NUdf::TUnboxedValue locks2)
-            : TBaseComputation(mutables) 
+            : TBaseComputation(mutables)
             , Labels({TxLocksResultLabel, TxLocksResultLabel2})
         {
             Locks.reserve(2);
@@ -176,11 +176,11 @@ namespace {
     };
 
     class TDiagnosticsWrapper : public TMutableComputationNode<TDiagnosticsWrapper> {
-        typedef TMutableComputationNode<TDiagnosticsWrapper> TBaseComputation; 
+        typedef TMutableComputationNode<TDiagnosticsWrapper> TBaseComputation;
     public:
-        TDiagnosticsWrapper(TComputationMutables& mutables, NUdf::TUnboxedValue&& diags) 
-            : TBaseComputation(mutables) 
-            , Diagnostics(std::move(diags)) 
+        TDiagnosticsWrapper(TComputationMutables& mutables, NUdf::TUnboxedValue&& diags)
+            : TBaseComputation(mutables)
+            , Diagnostics(std::move(diags))
         {}
 
         NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
@@ -198,12 +198,12 @@ namespace {
     }
 
     class TDummyWrapper : public TMutableComputationNode<TDummyWrapper> {
-        typedef TMutableComputationNode<TDummyWrapper> TBaseComputation; 
+        typedef TMutableComputationNode<TDummyWrapper> TBaseComputation;
     public:
-        TDummyWrapper(TComputationMutables& mutables) 
-            : TBaseComputation(mutables) 
-        {} 
- 
+        TDummyWrapper(TComputationMutables& mutables)
+            : TBaseComputation(mutables)
+        {}
+
         NUdf::TUnboxedValuePod DoCalculate(TComputationContext&) const {
             Y_FAIL("Failed to build value for dummy node");
         }
@@ -212,7 +212,7 @@ namespace {
     };
 
     class TEraseRowWrapper : public TMutableComputationNode<TEraseRowWrapper> {
-        typedef TMutableComputationNode<TEraseRowWrapper> TBaseComputation; 
+        typedef TMutableComputationNode<TEraseRowWrapper> TBaseComputation;
     public:
         friend class TResult;
 
@@ -240,16 +240,16 @@ namespace {
             const NUdf::TUnboxedValue Row;
         };
 
-        TEraseRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row) 
-            : TBaseComputation(mutables) 
-            , TableId(tableId) 
+        TEraseRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row)
+            : TBaseComputation(mutables)
+            , TableId(tableId)
             , RowType(rowType)
             , Row(row)
         {
         }
 
         NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-            return ctx.HolderFactory.Create<TResult>(this, Row->GetValue(ctx)); 
+            return ctx.HolderFactory.Create<TResult>(this, Row->GetValue(ctx));
         }
 
     private:
@@ -263,7 +263,7 @@ namespace {
     };
 
     class TUpdateRowWrapper : public TMutableComputationNode<TUpdateRowWrapper> {
-        typedef TMutableComputationNode<TUpdateRowWrapper> TBaseComputation; 
+        typedef TMutableComputationNode<TUpdateRowWrapper> TBaseComputation;
     public:
         friend class TResult;
 
@@ -322,10 +322,10 @@ namespace {
             const NUdf::TUnboxedValue Update;
         };
 
-        TUpdateRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row, 
+        TUpdateRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row,
             TStructLiteral* updateStruct, IComputationNode* update)
-            : TBaseComputation(mutables) 
-            , TableId(tableId) 
+            : TBaseComputation(mutables)
+            , TableId(tableId)
             , RowType(rowType)
             , Row(row)
             , UpdateStruct(updateStruct)
@@ -334,7 +334,7 @@ namespace {
         }
 
         NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-            return ctx.HolderFactory.Create<TResult>(this, Row->GetValue(ctx), Update->GetValue(ctx)); 
+            return ctx.HolderFactory.Create<TResult>(this, Row->GetValue(ctx), Update->GetValue(ctx));
         }
 
     private:
@@ -350,8 +350,8 @@ namespace {
         IComputationNode* const Update;
     };
 
-    IComputationNode* WrapAsDummy(TComputationMutables& mutables) { 
-        return new TDummyWrapper(mutables); 
+    IComputationNode* WrapAsDummy(TComputationMutables& mutables) {
+        return new TDummyWrapper(mutables);
     }
 
     IComputationNode* WrapResult(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -366,7 +366,7 @@ namespace {
         TStringBuf label = labelData.AsValue().AsStringRef();
 
         auto payloadNode = LocateNode(ctx.NodeLocator, callable, 1);
-        return new TResultWrapper(ctx.Mutables, label, payloadNode); 
+        return new TResultWrapper(ctx.Mutables, label, payloadNode);
     }
 
     IComputationNode* WrapAcquireLocks(TCallable& callable, const TComputationNodeFactoryContext& ctx,
@@ -442,7 +442,7 @@ namespace {
                 NUdf::TUnboxedValuePod(info.TxInfo.ExecLatency.MilliSeconds());
         }
 
-        return new TDiagnosticsWrapper(ctx.Mutables, std::move(diagList)); 
+        return new TDiagnosticsWrapper(ctx.Mutables, std::move(diagList));
     }
 
     IComputationNode* WrapAbort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -741,7 +741,7 @@ namespace {
         const auto tableId = ExtractTableId(tableNode);
         auto tupleType = AS_TYPE(TTupleType, callable.GetInput(1));
 
-        return new TEraseRowWrapper(ctx.Mutables, tableId, tupleType, 
+        return new TEraseRowWrapper(ctx.Mutables, tableId, tupleType,
             LocateNode(ctx.NodeLocator, callable, 1));
     }
 
@@ -784,7 +784,7 @@ namespace {
             }
         }
 
-        return new TUpdateRowWrapper(ctx.Mutables, tableId, tupleType, 
+        return new TUpdateRowWrapper(ctx.Mutables, tableId, tupleType,
             LocateNode(ctx.NodeLocator, callable, 1), structUpdate, LocateNode(ctx.NodeLocator, callable, 2));
     }
 
@@ -851,7 +851,7 @@ TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, b
 
         if (nameStr == strings.SelectRow) {
             if (validateOnly) {
-                return WrapAsDummy(ctx.Mutables); 
+                return WrapAsDummy(ctx.Mutables);
             }
             else {
                 return WrapMergedSelectRow(
@@ -861,7 +861,7 @@ TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, b
 
         if (nameStr == strings.SelectRange) {
             if (validateOnly) {
-                return WrapAsDummy(ctx.Mutables); 
+                return WrapAsDummy(ctx.Mutables);
             }
             else {
                 return WrapMergedSelectRange(

@@ -67,12 +67,12 @@ private:
     friend struct TValuePackerDetails;
 };
 
-class TValuePackerBoxed : public TComputationValue<TValuePackerBoxed>, public TValuePacker { 
-    typedef TComputationValue<TValuePackerBoxed> TBase; 
-public: 
+class TValuePackerBoxed : public TComputationValue<TValuePackerBoxed>, public TValuePacker {
+    typedef TComputationValue<TValuePackerBoxed> TBase;
+public:
     TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, const TType* type, bool tryUseCodegen = false);
-    TValuePackerBoxed(TMemoryUsageInfo* memInfo, const TValuePacker& other); 
-}; 
- 
+    TValuePackerBoxed(TMemoryUsageInfo* memInfo, const TValuePacker& other);
+};
+
 }
 }

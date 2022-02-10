@@ -14,13 +14,13 @@ class TGuessWrapper: public TMutableCodegeneratorPtrNode<TGuessWrapper<IsOptiona
 public:
     TGuessWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, ui32 index)
         : TBaseComputation(mutables, kind)
-        , VarNode(varNode) 
+        , VarNode(varNode)
         , Index(index)
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const { 
-        auto var = VarNode->GetValue(compCtx); 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        auto var = VarNode->GetValue(compCtx);
 
         if (IsOptional && !var) {
             return NUdf::TUnboxedValuePod();

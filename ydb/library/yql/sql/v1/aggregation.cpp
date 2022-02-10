@@ -117,18 +117,18 @@ protected:
             if (!IsGeneratedKeyColumn && src->GetJoin()) {
                 const auto sourcePtr = Expr->GetSourceName();
                 if (!sourcePtr || !*sourcePtr) {
-                    if (!src->IsGroupByColumn(DistinctKey)) { 
-                        ctx.Error(Expr->GetPos()) << ErrorDistinctWithoutCorrelation(DistinctKey); 
-                        return false; 
-                    } 
-                } else { 
-                    DistinctKey = DotJoin(*sourcePtr, DistinctKey); 
-                } 
-            } 
-            if (src->IsGroupByColumn(DistinctKey)) { 
-                ctx.Error(Expr->GetPos()) << ErrorDistinctByGroupKey(DistinctKey); 
-                return false; 
-            } 
+                    if (!src->IsGroupByColumn(DistinctKey)) {
+                        ctx.Error(Expr->GetPos()) << ErrorDistinctWithoutCorrelation(DistinctKey);
+                        return false;
+                    }
+                } else {
+                    DistinctKey = DotJoin(*sourcePtr, DistinctKey);
+                }
+            }
+            if (src->IsGroupByColumn(DistinctKey)) {
+                ctx.Error(Expr->GetPos()) << ErrorDistinctByGroupKey(DistinctKey);
+                return false;
+            }
             Expr = AstNode("row");
         }
 
@@ -169,13 +169,13 @@ public:
     TAggregationFactoryImpl(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi)
         : TAggregationFactory(pos, name, func, aggMode, multi)
     {}
- 
+
 private:
     TNodePtr DoClone() const final {
         return new TAggregationFactoryImpl(Pos, Name, Func, AggMode, Multi);
-    } 
+    }
 };
- 
+
 TAggregationPtr BuildFactoryAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi) {
     return new TAggregationFactoryImpl(pos, name, func, aggMode, multi);
 }
@@ -1132,7 +1132,7 @@ private:
             const auto j = adjustArgsCount + i;
             Lambdas[i] = BuildLambda(Pos, Y("state"), j >= exprs.size() ? AstNode("state") : Y("Apply", exprs[j], "state"));
         }
- 
+
         DefVal = (exprs.size() == (7 + adjustArgsCount)) ? exprs[adjustArgsCount + 6] : Y("Null");
         return TAggregationFactory::InitAggr(ctx, isFactory, src, node, isFactory ? TVector<TNodePtr>() : TVector<TNodePtr>(1, exprs.front()));
     }
@@ -1189,12 +1189,12 @@ private:
             return true;
         }
 
-        if (Expr->IsAsterisk()) { 
+        if (Expr->IsAsterisk()) {
             Expr = Y("Void");
-        } 
-        if (!Expr->Init(ctx, src)) { 
-            return false; 
-        } 
+        }
+        if (!Expr->Init(ctx, src)) {
+            return false;
+        }
         Expr->SetCountHint(Expr->IsConstant());
         return TAggregationFactory::DoInit(ctx, src);
     }

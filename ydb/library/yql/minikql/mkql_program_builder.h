@@ -579,20 +579,20 @@ public:
     TRuntimeNode AggrMax(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode AggrAdd(TRuntimeNode data1, TRuntimeNode data2);
 
-    //-- queue functions 
+    //-- queue functions
     TRuntimeNode QueueCreate(TRuntimeNode initCapacity, TRuntimeNode initCreate, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType);
-    TRuntimeNode QueuePush(TRuntimeNode resource, TRuntimeNode value); 
-    TRuntimeNode QueuePop(TRuntimeNode resource); 
+    TRuntimeNode QueuePush(TRuntimeNode resource, TRuntimeNode value);
+    TRuntimeNode QueuePop(TRuntimeNode resource);
     TRuntimeNode QueuePeek(TRuntimeNode resource, TRuntimeNode index, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType);
     TRuntimeNode QueueRange(TRuntimeNode resource, TRuntimeNode begin, TRuntimeNode end, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType);
 
-    TRuntimeNode PreserveStream(TRuntimeNode stream, TRuntimeNode preserve, TRuntimeNode outpace); 
- 
+    TRuntimeNode PreserveStream(TRuntimeNode stream, TRuntimeNode preserve, TRuntimeNode outpace);
+
     TRuntimeNode Seq(const TArrayRef<const TRuntimeNode>& items, TType* returnType);
 
     TRuntimeNode FromYsonSimpleType(TRuntimeNode input, NUdf::TDataTypeId schemeType);
     TRuntimeNode TryWeakMemberFromDict(TRuntimeNode other, TRuntimeNode rest, NUdf::TDataTypeId schemeType, const std::string_view& memberName);
- 
+
     TRuntimeNode TimezoneId(TRuntimeNode name);
     TRuntimeNode TimezoneName(TRuntimeNode id);
     TRuntimeNode AddTimezone(TRuntimeNode utc, TRuntimeNode id);

@@ -17,7 +17,7 @@ public:
         IComputationNode* initialState1, IComputationExternalNode* itemState2, IComputationExternalNode* state3,
         IComputationNode* newState3, IComputationNode* initialState3)
         : TBaseComputation(mutables, kind)
-        , List(list) 
+        , List(list)
         , Item(item)
         , State1(state1)
         , NewState1(newState1)
@@ -30,19 +30,19 @@ public:
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const { 
-        State1->SetValue(compCtx, InitialState1->GetValue(compCtx)); 
-        State3->SetValue(compCtx, InitialState3->GetValue(compCtx)); 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        State1->SetValue(compCtx, InitialState1->GetValue(compCtx));
+        State3->SetValue(compCtx, InitialState3->GetValue(compCtx));
 
-        TThresher<IsStream>::DoForEachItem(List->GetValue(compCtx), 
-            [this, &compCtx] (NUdf::TUnboxedValue&& item) { 
-                Item->SetValue(compCtx, std::move(item)); 
-                State1->SetValue(compCtx, NewState1->GetValue(compCtx)); 
+        TThresher<IsStream>::DoForEachItem(List->GetValue(compCtx),
+            [this, &compCtx] (NUdf::TUnboxedValue&& item) {
+                Item->SetValue(compCtx, std::move(item));
+                State1->SetValue(compCtx, NewState1->GetValue(compCtx));
             }
         );
 
-        ItemState2->SetValue(compCtx, NewState2->GetValue(compCtx)); 
-        return NewState3->GetValue(compCtx).Release(); 
+        ItemState2->SetValue(compCtx, NewState2->GetValue(compCtx));
+        return NewState3->GetValue(compCtx).Release();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

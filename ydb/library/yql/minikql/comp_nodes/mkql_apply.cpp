@@ -16,7 +16,7 @@ public:
     TApplyWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* callableNode,
         TComputationNodePtrVector&& argNodes, ui32 usedArgs, const NUdf::TSourcePosition& pos)
         : TBaseComputation(mutables, kind)
-        , CallableNode(callableNode) 
+        , CallableNode(callableNode)
         , ArgNodes(std::move(argNodes))
         , UsedArgs(usedArgs)
         , Position(pos)
@@ -25,10 +25,10 @@ public:
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        NStackArray::TStackArray<NUdf::TUnboxedValue> values(ALLOC_ON_STACK(NUdf::TUnboxedValue, UsedArgs)); 
+        NStackArray::TStackArray<NUdf::TUnboxedValue> values(ALLOC_ON_STACK(NUdf::TUnboxedValue, UsedArgs));
         for (size_t i = 0; i < UsedArgs; ++i) {
             if (const auto valueNode = ArgNodes[i]) {
-                values[i] = valueNode->GetValue(ctx); 
+                values[i] = valueNode->GetValue(ctx);
             }
         }
 

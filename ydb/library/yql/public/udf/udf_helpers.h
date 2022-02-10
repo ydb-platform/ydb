@@ -5,7 +5,7 @@
 #include "udf_value_builder.h"
 #include "udf_terminator.h"
 #include "udf_type_builder.h"
-#include "udf_type_inspection.h" 
+#include "udf_type_inspection.h"
 #include "udf_version.h"
 
 #include <util/generic/yexception.h>
@@ -213,16 +213,16 @@ namespace NUdf {
 
 template<bool CheckOptional, const char* TFuncName, template<class> class TFunc, typename... TUserTypes>
 class TUserDataTypeFuncFactory : public ::NYql::NUdf::TBoxedValue {
-public: 
+public:
     typedef bool TTypeAwareMarker;
 
 public:
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto name = ::NYql::NUdf::TStringRef(TFuncName, std::strlen(TFuncName));
-        return name; 
-    } 
- 
-    template<typename TUserType> 
+        return name;
+    }
+
+    template<typename TUserType>
     static bool DeclareSignatureImpl(
         TDataTypeId typeId,
         ::NYql::NUdf::TType* userType,
@@ -230,13 +230,13 @@ public:
         bool typesOnly)
     {
         if (TDataType<TUserType>::Id != typeId) {
-            return false; 
-        } 
+            return false;
+        }
         TFunc<TUserType>::DeclareSignature(userType, builder, typesOnly);
-        return true; 
-    } 
- 
-    template<typename TUserType, typename THead, typename... TTail> 
+        return true;
+    }
+
+    template<typename TUserType, typename THead, typename... TTail>
     static bool DeclareSignatureImpl(
         TDataTypeId typeId,
         ::NYql::NUdf::TType* userType,
@@ -244,21 +244,21 @@ public:
         bool typesOnly)
     {
         if (DeclareSignatureImpl<TUserType>(typeId, userType, builder, typesOnly)) {
-            return true; 
-        } 
+            return true;
+        }
         return DeclareSignatureImpl<THead, TTail...>(typeId, userType, builder, typesOnly);
-    } 
- 
-    static bool DeclareSignature( 
+    }
+
+    static bool DeclareSignature(
         const ::NYql::NUdf::TStringRef& name,
         ::NYql::NUdf::TType* userType,
         ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,
         bool typesOnly)
-    { 
+    {
         if (Name() != name) {
             // the only case when we return false
-            return false; 
-        } 
+            return false;
+        }
 
         if (!userType) {
             builder.SetError("User type is not specified");
@@ -270,7 +270,7 @@ public:
         if (!userTypeInspector || userTypeInspector.GetElementsCount() < 1) {
             builder.SetError("Missing or invalid user type");
             return true;
-        } 
+        }
 
         auto argsTypeInspector = TTupleTypeInspector(*typeHelper, userTypeInspector.GetElementType(0));
         if (!argsTypeInspector || argsTypeInspector.GetElementsCount() < 1) {
@@ -302,9 +302,9 @@ public:
         }
 
         return true;
-    } 
-}; 
- 
+    }
+};
+
 template<typename... TUdfs>
 class TSimpleUdfModuleHelper : public IUdfModule
 {
@@ -338,7 +338,7 @@ public:
     {
         Y_UNUSED(typeConfig);
         bool typesOnly = (flags & TFlags::TypesOnly);
-        return TUdfType::DeclareSignature(name, userType, builder, typesOnly); 
+        return TUdfType::DeclareSignature(name, userType, builder, typesOnly);
     }
 
     template<typename THead1, typename THead2, typename... TTail>

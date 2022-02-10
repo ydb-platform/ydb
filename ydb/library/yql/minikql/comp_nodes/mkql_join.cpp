@@ -1598,11 +1598,11 @@ private:
     NUdf::TUnboxedValue LiveValue;
 };
 
-template <EJoinKind Kind, bool TTrackRss> 
-class TCommonJoinCoreWrapper : public TMutableComputationNode<TCommonJoinCoreWrapper<Kind, TTrackRss>> { 
-    using TSelf = TCommonJoinCoreWrapper<Kind, TTrackRss>; 
-    using TBase = TMutableComputationNode<TSelf>; 
-    typedef TBase TBaseComputation; 
+template <EJoinKind Kind, bool TTrackRss>
+class TCommonJoinCoreWrapper : public TMutableComputationNode<TCommonJoinCoreWrapper<Kind, TTrackRss>> {
+    using TSelf = TCommonJoinCoreWrapper<Kind, TTrackRss>;
+    using TBase = TMutableComputationNode<TSelf>;
+    typedef TBase TBaseComputation;
 public:
     class TValue : public TComputationValue<TValue> {
     public:
@@ -1979,10 +1979,10 @@ public:
         std::vector<ui32>&& leftInputColumns, std::vector<ui32>&& rightInputColumns, std::vector<ui32>&& requiredColumns,
         std::vector<ui32>&& leftOutputColumns, std::vector<ui32>&& rightOutputColumns, ui64 memLimit,
         std::optional<ui32> sortedTableOrder, std::vector<ui32>&& keyColumns, EAnyJoinSettings anyJoinSettings)
-        : TBaseComputation(mutables) 
-        , Stream(stream) 
-        , InputStructType(inputStructType) 
-        , Packer(mutables) 
+        : TBaseComputation(mutables)
+        , Stream(stream)
+        , InputStructType(inputStructType)
+        , Packer(mutables)
         , TableIndexPos(tableIndexPos)
         , LeftInputColumns(std::move(leftInputColumns))
         , RightInputColumns(std::move(rightInputColumns))
@@ -1993,21 +1993,21 @@ public:
         , SortedTableOrder(sortedTableOrder)
         , KeyColumns(std::move(keyColumns))
         , IsRequiredColumn(FillRequiredStructColumn(inputWidth, RequiredColumns))
-        , ResStruct(mutables) 
-        , ResStreamIndex(mutables.CurValueIndex++) 
+        , ResStruct(mutables)
+        , ResStreamIndex(mutables.CurValueIndex++)
         , AnyJoinSettings(anyJoinSettings)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto& resStream = ctx.MutableValues[ResStreamIndex]; 
-        if (!resStream || resStream.IsInvalid() || !resStream.UniqueBoxed()) { 
-            resStream = ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx), ctx, this); 
+        auto& resStream = ctx.MutableValues[ResStreamIndex];
+        if (!resStream || resStream.IsInvalid() || !resStream.UniqueBoxed()) {
+            resStream = ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx), ctx, this);
         } else {
-            static_cast<TValue&>(*resStream.AsBoxed()).Reset(Stream->GetValue(ctx)); 
+            static_cast<TValue&>(*resStream.AsBoxed()).Reset(Stream->GetValue(ctx));
         }
 
-        return static_cast<const NUdf::TUnboxedValuePod&>(resStream); 
+        return static_cast<const NUdf::TUnboxedValuePod&>(resStream);
     }
 
 private:
@@ -2030,7 +2030,7 @@ private:
     const std::vector<bool> IsRequiredColumn;
 
     const TContainerCacheOnContext ResStruct;
-    const ui32 ResStreamIndex; 
+    const ui32 ResStreamIndex;
     const EAnyJoinSettings AnyJoinSettings;
 };
 
@@ -2149,7 +2149,7 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
         AS_VALUE(TDataLiteral, callable.GetInput(11U))->AsValue().Get<ui32>():
         AS_TYPE(TStructType, inputRowType)->GetMemberIndex("_yql_table_index");
 
-    const bool trackRss = EGraphPerProcess::Single == ctx.GraphPerProcess; 
+    const bool trackRss = EGraphPerProcess::Single == ctx.GraphPerProcess;
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0U);
 
     const auto leftInputType = TTupleType::Create(leftTypes.size(), leftTypes.data(), ctx.Env);

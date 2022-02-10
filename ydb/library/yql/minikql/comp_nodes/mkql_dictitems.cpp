@@ -54,10 +54,10 @@ public:
         class TIterator : public TComputationValue<TIterator> {
         public:
             TIterator(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& inner,
-                TComputationContext& compCtx, const TSelf* self) 
+                TComputationContext& compCtx, const TSelf* self)
                 : TComputationValue<TIterator>(memInfo)
                 , Inner(std::move(inner))
-                , CompCtx(compCtx) 
+                , CompCtx(compCtx)
                 , Self(self)
             {
             }
@@ -80,17 +80,17 @@ public:
             }
 
             const NUdf::TUnboxedValue Inner;
-            TComputationContext& CompCtx; 
+            TComputationContext& CompCtx;
             const TSelf* const Self;
         };
 
         TValue(
             TMemoryUsageInfo* memInfo,
-            const NUdf::TUnboxedValue&& dict, 
-            TComputationContext& compCtx, const TSelf* self) 
+            const NUdf::TUnboxedValue&& dict,
+            TComputationContext& compCtx, const TSelf* self)
             : TComputationValue<TValue>(memInfo)
-            , Dict(std::move(dict)) 
-            , CompCtx(compCtx) 
+            , Dict(std::move(dict))
+            , CompCtx(compCtx)
             , Self(self)
         {
         }
@@ -113,22 +113,22 @@ public:
         }
 
         const NUdf::TUnboxedValue Dict;
-        TComputationContext& CompCtx; 
+        TComputationContext& CompCtx;
         const TSelf* const Self;
     };
 
     TDictItemsWrapper(TComputationMutables& mutables, IComputationNode* dict)
-        : TBaseComputation(mutables) 
+        : TBaseComputation(mutables)
         , Dict(dict)
-        , ResPair(mutables) 
+        , ResPair(mutables)
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && Next)
-            return ctx.HolderFactory.Create<TCodegenValue>(Next, &ctx, Dict->GetValue(ctx)); 
+            return ctx.HolderFactory.Create<TCodegenValue>(Next, &ctx, Dict->GetValue(ctx));
 #endif
-        return ctx.HolderFactory.Create<TValue>(Dict->GetValue(ctx), ctx, this); 
+        return ctx.HolderFactory.Create<TValue>(Dict->GetValue(ctx), ctx, this);
     }
 
 private:

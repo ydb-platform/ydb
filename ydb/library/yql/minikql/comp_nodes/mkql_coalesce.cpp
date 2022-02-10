@@ -17,7 +17,7 @@ public:
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const { 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         if (auto left = this->Left->GetValue(compCtx)) {
             return left.Release().template GetOptionalValueIf<Unpack>();
         }

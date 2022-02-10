@@ -71,7 +71,7 @@ private:
                 return TStatus::Ok;
         }
 
-        return TStatus::Error; 
+        return TStatus::Error;
     }
 
 private:

@@ -14,7 +14,7 @@ public:
     TIfPresentWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* optional, IComputationExternalNode* item, IComputationNode* presentBranch,
         IComputationNode* missingBranch)
         : TBaseComputation(mutables, kind)
-        , Optional(optional) 
+        , Optional(optional)
         , Item(item)
         , PresentBranch(presentBranch)
         , MissingBranch(missingBranch)

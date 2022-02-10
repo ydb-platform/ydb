@@ -1,9 +1,9 @@
-namespace antlr3 { 
+namespace antlr3 {
 
-//static  
+//static 
 ANTLR_INLINE void GenericStream::displayRecognitionError( const StringType& str )
 {
-	fprintf(stderr, str.c_str() ); 
+	fprintf(stderr, str.c_str() );
 }
 
-} 
+}

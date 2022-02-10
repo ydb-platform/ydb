@@ -197,7 +197,7 @@ private:
             }
         }
 
-        return TStatus::Error; 
+        return TStatus::Error;
     }
 
     TStatus HandleRead(TExprBase node, TExprContext& ctx) override {

@@ -2067,30 +2067,30 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestMapUnwrapThrowMessage) {
-        TSetup<LLVM> setup; 
+        TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i8>::Id));
         const auto data1 = pb.NewOptional(pb.NewDataLiteral<i8>(1));
         const auto data2 = pb.NewOptional(pb.NewDataLiteral<i8>(7));
         const auto data0 = pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<i8>::Id);
         const auto list = pb.LazyList(pb.NewList(dataType, {data1, data0}));
- 
+
         const auto pgmReturn = pb.Map(list,
-            [&](TRuntimeNode item) { 
+            [&](TRuntimeNode item) {
             return pb.Sub(data2, pb.Unwrap(item, pb.Concat(
                 pb.NewDataLiteral<NUdf::EDataSlot::String>("a"),
                 pb.NewDataLiteral<NUdf::EDataSlot::String>("b")),
-                "", 0, 0)); 
-        }); 
- 
+                "", 0, 0));
+        });
+
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
-        NUdf::TUnboxedValue item; 
-        UNIT_ASSERT(iterator.Next(item)); 
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i8>(), 6); 
-        UNIT_ASSERT_EXCEPTION(iterator.Next(item), yexception); 
-    } 
+        NUdf::TUnboxedValue item;
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i8>(), 6);
+        UNIT_ASSERT_EXCEPTION(iterator.Next(item), yexception);
+    }
 
     Y_UNIT_TEST_LLVM(TestMapEnsureThrowMessage) {
         TSetup<LLVM> setup;
@@ -4890,7 +4890,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             for (ui32 i = 0; i < n; ++i) {
                 items[keyIndex] = NUdf::TUnboxedValuePod(i);
                 items[valueIndex] = NUdf::TUnboxedValuePod::Embedded("ABCDF");
-                row->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(structObj)); 
+                row->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(structObj));
                 const bool keep = graph->GetValue().template Get<bool>();
                 UNIT_ASSERT(!keep);
             }

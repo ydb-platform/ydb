@@ -44,13 +44,13 @@ namespace {
             PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry));
         }
 
-        THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) { 
+        THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
             Explorer.Walk(pgm.GetNode(), *Env);
             TComputationPatternOpts opts(Alloc.Ref(), *Env, GetAuxCallableFactory(),
-                FunctionRegistry.Get(), 
+                FunctionRegistry.Get(),
                 NUdf::EValidateMode::None, NUdf::EValidatePolicy::Fail, "OFF", EGraphPerProcess::Multi);
             Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
-            TComputationOptsFull compOpts = opts.ToComputationOptions(*RandomProvider, *TimeProvider); 
+            TComputationOptsFull compOpts = opts.ToComputationOptions(*RandomProvider, *TimeProvider);
             return Pattern->Clone(compOpts);
         }
 
@@ -63,7 +63,7 @@ namespace {
         THolder<TProgramBuilder> PgmBuilder;
 
         TExploringNodeVisitor Explorer;
-        IComputationPattern::TPtr Pattern; 
+        IComputationPattern::TPtr Pattern;
     };
 
     struct TStreamWithYield : public NUdf::TBoxedValue {
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
 
             auto graph = setup.BuildGraph(pgmReturn, {streamNode});
             auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex));
-            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue)); 
+            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
             return graph;
         };
 
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
 
             auto graph = setup.BuildGraph(pgmReturn, {streamNode});
             auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex));
-            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue)); 
+            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
             return graph;
         };
 
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSaveLoadTest) {
             }
 
             auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex));
-            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue)); 
+            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
             return graph;
         };
 

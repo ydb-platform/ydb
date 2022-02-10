@@ -56,7 +56,7 @@ class TUdfWrapper: public TMutableCodegeneratorPtrNode<TUdfWrapper<TValidatePoli
     typedef TMutableCodegeneratorPtrNode<TUdfWrapper<TValidatePolicy,TValidateMode>> TBaseComputation;
 public:
     TUdfWrapper(
-            TComputationMutables& mutables, 
+            TComputationMutables& mutables,
             IComputationNode* functionImpl,
             TString&& functionName,
             IComputationNode* runConfigNode,
@@ -71,7 +71,7 @@ public:
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        const auto runConfig = RunConfigNode->GetValue(ctx); 
+        const auto runConfig = RunConfigNode->GetValue(ctx);
         auto callable = FunctionImpl->GetValue(ctx).Run(ctx.Builder, &runConfig);
         Wrap(callable);
         return callable;
@@ -111,8 +111,8 @@ private:
 
     IComputationNode* const FunctionImpl;
     const TString FunctionName;
-    IComputationNode* const RunConfigNode; 
-    const TCallableType* const CallableType; 
+    IComputationNode* const RunConfigNode;
+    const TCallableType* const CallableType;
 };
 
 inline IComputationNode* CreateUdfWrapper(

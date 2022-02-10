@@ -24,7 +24,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& predicate = Predicate->GetValue(ctx); 
+        const auto& predicate = Predicate->GetValue(ctx);
         if (predicate && predicate.Get<bool>()) {
             return Arg->GetValue(ctx).Release();
         }

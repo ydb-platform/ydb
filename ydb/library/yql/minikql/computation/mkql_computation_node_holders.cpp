@@ -555,10 +555,10 @@ public:
 class TArrayNode: public TMutableCodegeneratorFallbackNode<TArrayNode> {
     typedef TMutableCodegeneratorFallbackNode<TArrayNode> TBaseComputation;
 public:
-    TArrayNode(TComputationMutables& mutables, TComputationNodePtrVector&& valueNodes) 
+    TArrayNode(TComputationMutables& mutables, TComputationNodePtrVector&& valueNodes)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , ValueNodes(std::move(valueNodes)) 
-        , Cache(mutables) 
+        , ValueNodes(std::move(valueNodes))
+        , Cache(mutables)
     {
     }
 
@@ -585,7 +585,7 @@ public:
         const auto valType = Type::getInt128Ty(context);
         const auto idxType = Type::getInt32Ty(context);
         const auto type = ArrayType::get(valType, ValueNodes.size());
-        /// TODO: how to get computation context or other workaround 
+        /// TODO: how to get computation context or other workaround
         const auto itms = *Stateless || ctx.AlwaysInline ?
             new AllocaInst(PointerType::getUnqual(type), 0U, "itms", &ctx.Func->getEntryBlock().back()):
             new AllocaInst(PointerType::getUnqual(type), 0U, "itms", block);
@@ -612,10 +612,10 @@ private:
 class TEmptyNode : public TMutableCodegeneratorNode<TEmptyNode> {
     typedef TMutableCodegeneratorNode<TEmptyNode> TBaseComputation;
 public:
-    TEmptyNode(TComputationMutables& mutables) 
+    TEmptyNode(TComputationMutables& mutables)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-    {} 
- 
+    {}
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.GetEmptyContainer();
     }
@@ -1730,7 +1730,7 @@ public:
                     return false;
                 }
 
-                value = Parent->PayloadPacker.Unpack(GetSmallValue(Iterator.GetValue()), Parent->CompCtx.HolderFactory); 
+                value = Parent->PayloadPacker.Unpack(GetSmallValue(Iterator.GetValue()), Parent->CompCtx.HolderFactory);
                 ++Iterator;
                 return true;
             }
@@ -1840,7 +1840,7 @@ public:
         , Map(std::move(map))
         , KeyPacker(true, keyType)
         , PayloadPacker(false, payloadType)
-        , CompCtx(*ctx) 
+        , CompCtx(*ctx)
     {
     }
 
@@ -1858,7 +1858,7 @@ private:
         if (!it.Ok())
             return NUdf::TUnboxedValuePod();
 
-        return CompCtx.HolderFactory.Create<TPayloadList>(this, it); 
+        return CompCtx.HolderFactory.Create<TPayloadList>(this, it);
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const override {
@@ -1889,7 +1889,7 @@ private:
     const TMapType Map;
     mutable TValuePacker KeyPacker;
     mutable TValuePacker PayloadPacker;
-    TComputationContext& CompCtx; 
+    TComputationContext& CompCtx;
 };
 
 class THashedDictHolder: public TComputationValue<THashedDictHolder> {
@@ -2423,13 +2423,13 @@ private:
 };
 
 class TDictNode: public TMutableComputationNode<TDictNode> {
-    typedef TMutableComputationNode<TDictNode> TBaseComputation; 
+    typedef TMutableComputationNode<TDictNode> TBaseComputation;
 public:
-    TDictNode(TComputationMutables& mutables, 
+    TDictNode(TComputationMutables& mutables,
             std::vector<std::pair<IComputationNode*, IComputationNode*>>&& itemNodes,
             const TKeyTypes& types, bool isTuple, TType* encodedType)
-        : TBaseComputation(mutables) 
-        , ItemNodes(std::move(itemNodes)) 
+        : TBaseComputation(mutables)
+        , ItemNodes(std::move(itemNodes))
         , Types(types)
         , IsTuple(isTuple)
         , EncodedType(encodedType)
@@ -2439,7 +2439,7 @@ public:
         TKeyPayloadPairVector items;
         items.reserve(ItemNodes.size());
         for (const auto& node : ItemNodes) {
-            items.emplace_back(node.first->GetValue(ctx), node.second->GetValue(ctx)); 
+            items.emplace_back(node.first->GetValue(ctx), node.second->GetValue(ctx));
         }
 
         std::optional<TValuePacker> packer;
@@ -2480,9 +2480,9 @@ private:
 class TVariantNode : public TMutableCodegeneratorNode<TVariantNode> {
     typedef TMutableCodegeneratorNode<TVariantNode> TBaseComputation;
 public:
-    TVariantNode(TComputationMutables& mutables, IComputationNode* itemNode, ui32 index) 
+    TVariantNode(TComputationMutables& mutables, IComputationNode* itemNode, ui32 index)
         : TBaseComputation(mutables, EValueRepresentation::Any)
-        , ItemNode(itemNode) 
+        , ItemNode(itemNode)
         , Index(index)
     {}
 
@@ -3512,7 +3512,7 @@ TNodeFactory::TNodeFactory(TMemoryUsageInfo& memInfo, TComputationMutables& muta
 
 IComputationNode* TNodeFactory::CreateEmptyNode() const
 {
-    return new TEmptyNode(Mutables); 
+    return new TEmptyNode(Mutables);
 }
 
 IComputationNode* TNodeFactory::CreateOptionalNode(IComputationNode* item) const
@@ -3523,10 +3523,10 @@ IComputationNode* TNodeFactory::CreateOptionalNode(IComputationNode* item) const
 IComputationNode* TNodeFactory::CreateArrayNode(TComputationNodePtrVector&& values) const
 {
     if (values.empty()) {
-        return new TEmptyNode(Mutables); 
+        return new TEmptyNode(Mutables);
     }
 
-    return new TArrayNode(Mutables, std::move(values)); 
+    return new TArrayNode(Mutables, std::move(values));
 }
 
 IComputationNode* TNodeFactory::CreateDictNode(
@@ -3534,14 +3534,14 @@ IComputationNode* TNodeFactory::CreateDictNode(
         const TKeyTypes& types, bool isTuple, TType* encodedType) const
 {
     if (items.empty()) {
-        return new TEmptyNode(Mutables); 
+        return new TEmptyNode(Mutables);
     }
 
     return new TDictNode(Mutables, std::move(items), types, isTuple, encodedType);
 }
 
 IComputationNode* TNodeFactory::CreateVariantNode(IComputationNode* item, ui32 index) const {
-    return new TVariantNode(Mutables, item, index); 
+    return new TVariantNode(Mutables, item, index);
 }
 
 IComputationNode* TNodeFactory::CreateTypeNode(TType* type) const {
@@ -3754,7 +3754,7 @@ Value* TContainerCacheOnContext::GenNewArray(ui32 sz, Value* items, const TCodeg
 }
 #endif
 
-TPlainContainerCache::TPlainContainerCache() { 
+TPlainContainerCache::TPlainContainerCache() {
     Clear();
 }
 

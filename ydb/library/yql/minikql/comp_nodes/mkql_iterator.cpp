@@ -12,7 +12,7 @@ namespace {
 class TIteratorWrapper : public TMutableCodegeneratorNode<TIteratorWrapper> {
     typedef TMutableCodegeneratorNode<TIteratorWrapper> TBaseComputation;
 public:
-    TIteratorWrapper(TComputationMutables& mutables, IComputationNode* list, TComputationNodePtrVector&& dependentNodes) 
+    TIteratorWrapper(TComputationMutables& mutables, IComputationNode* list, TComputationNodePtrVector&& dependentNodes)
         : TBaseComputation(mutables, EValueRepresentation::Boxed), List(list), DependentNodes(std::move(dependentNodes))
     {}
 
@@ -58,7 +58,7 @@ private:
 class TForwardListWrapper : public TMutableCodegeneratorNode<TForwardListWrapper> {
     typedef TMutableCodegeneratorNode<TForwardListWrapper> TBaseComputation;
 public:
-    TForwardListWrapper(TComputationMutables& mutables, IComputationNode* stream) 
+    TForwardListWrapper(TComputationMutables& mutables, IComputationNode* stream)
         : TBaseComputation(mutables, EValueRepresentation::Boxed), Stream(stream)
     {}
 
@@ -268,7 +268,7 @@ IComputationNode* WrapIterator(TCallable& callable, const TComputationNodeFactor
         dependentNodes[i - 1] = LocateNode(ctx.NodeLocator, callable, i);
     }
 
-    return new TIteratorWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), std::move(dependentNodes)); 
+    return new TIteratorWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), std::move(dependentNodes));
 }
 
 IComputationNode* WrapForwardList(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

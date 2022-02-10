@@ -116,12 +116,12 @@ template <bool IsList>
 class TCollectWrapper : public TMutableCodegeneratorNode<TCollectWrapper<IsList>> {
     typedef TMutableCodegeneratorNode<TCollectWrapper<IsList>> TBaseComputation;
 public:
-    TCollectWrapper(TComputationMutables& mutables, IComputationNode* seq) 
+    TCollectWrapper(TComputationMutables& mutables, IComputationNode* seq)
         : TBaseComputation(mutables, EValueRepresentation::Boxed), Seq(seq)
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto seq = Seq->GetValue(ctx); 
+        auto seq = Seq->GetValue(ctx);
         if (IsList && seq.GetElements()) {
             return seq.Release();
         }

@@ -14,15 +14,15 @@ template <bool Stable>
 class TPickleWrapper : public TMutableComputationNode<TPickleWrapper<Stable>> {
     typedef TMutableComputationNode<TPickleWrapper<Stable>> TBaseComputation;
 public:
-    TPickleWrapper(TComputationMutables& mutables, TType* type, IComputationNode* data) 
-        : TBaseComputation(mutables) 
-        , Type(type) 
-        , ValuePacker(mutables) 
+    TPickleWrapper(TComputationMutables& mutables, TType* type, IComputationNode* data)
+        : TBaseComputation(mutables)
+        , Type(type)
+        , ValuePacker(mutables)
         , Data(data)
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return MakeString(ValuePacker.RefMutableObject(ctx, Stable, Type).Pack(Data->GetValue(ctx)));
     }
 
@@ -31,24 +31,24 @@ private:
         this->DependsOn(Data);
     }
 
-    TType* Type; 
-    TMutableObjectOverBoxedValue<TValuePackerBoxed> ValuePacker; 
+    TType* Type;
+    TMutableObjectOverBoxedValue<TValuePackerBoxed> ValuePacker;
     IComputationNode *const Data;
 };
 
 class TUnpickleWrapper : public TMutableComputationNode<TUnpickleWrapper> {
-    typedef TMutableComputationNode<TUnpickleWrapper> TBaseComputation; 
+    typedef TMutableComputationNode<TUnpickleWrapper> TBaseComputation;
 public:
-    TUnpickleWrapper(TComputationMutables& mutables, TType* type, IComputationNode* data) 
-        : TBaseComputation(mutables) 
-        , Type(type) 
-        , ValuePacker(mutables) 
+    TUnpickleWrapper(TComputationMutables& mutables, TType* type, IComputationNode* data)
+        : TBaseComputation(mutables)
+        , Type(type)
+        , ValuePacker(mutables)
         , Data(data)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto data = Data->GetValue(ctx); 
+        auto data = Data->GetValue(ctx);
         auto buffer = data.AsStringRef();
         return ValuePacker.RefMutableObject(ctx, false, Type).Unpack(buffer, ctx.HolderFactory).Release();
     }
@@ -58,8 +58,8 @@ private:
         DependsOn(Data);
     }
 
-    TType* const Type; 
-    TMutableObjectOverBoxedValue<TValuePackerBoxed> ValuePacker; 
+    TType* const Type;
+    TMutableObjectOverBoxedValue<TValuePackerBoxed> ValuePacker;
     IComputationNode *const Data;
 };
 
@@ -114,7 +114,7 @@ IComputationNode* WrapStablePickle(TCallable& callable, const TComputationNodeFa
 IComputationNode* WrapUnpickle(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
     MKQL_ENSURE(callable.GetInput(0).IsImmediate() && callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
-    return new TUnpickleWrapper(ctx.Mutables, static_cast<TType*>(callable.GetInput(0).GetNode()), LocateNode(ctx.NodeLocator, callable, 1)); 
+    return new TUnpickleWrapper(ctx.Mutables, static_cast<TType*>(callable.GetInput(0).GetNode()), LocateNode(ctx.NodeLocator, callable, 1));
 }
 
 IComputationNode* WrapAscending(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

@@ -127,72 +127,72 @@ private:
     TAllocState* PrevState_ = nullptr;
 };
 
-class TInjectedAlloc { 
-public: 
+class TInjectedAlloc {
+public:
     explicit TInjectedAlloc(const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters(), bool supportsSizedAllocators = false)
-        : OldTlsAllocState(TlsAllocState) 
-    { 
-        TlsAllocState = nullptr; 
+        : OldTlsAllocState(TlsAllocState)
+    {
+        TlsAllocState = nullptr;
         InjectedAlloc = std::make_shared<TScopedAlloc>(counters, supportsSizedAllocators);
-        AcquireOriginal(); 
-    } 
- 
-    ~TInjectedAlloc() { 
-        AcquireOriginal(); 
-    } 
- 
-    TScopedAlloc& ScopedRef() { 
-        return *InjectedAlloc; 
-    } 
- 
-    TAllocState& InjectedState() { 
-        return InjectedAlloc->Ref(); 
-    } 
- 
+        AcquireOriginal();
+    }
+
+    ~TInjectedAlloc() {
+        AcquireOriginal();
+    }
+
+    TScopedAlloc& ScopedRef() {
+        return *InjectedAlloc;
+    }
+
+    TAllocState& InjectedState() {
+        return InjectedAlloc->Ref();
+    }
+
     std::shared_ptr<TScopedAlloc> InjectedScopeAlloc() {
-        return InjectedAlloc; 
-    } 
- 
-    void AcquireOriginal() { 
-        InjectedAlloc->Release(); 
-        TlsAllocState = OldTlsAllocState; 
-    } 
- 
-    void AcquireInjected() { 
-        TlsAllocState = nullptr; 
-        InjectedAlloc->Acquire(); 
-    } 
-private: 
-    TAllocState* OldTlsAllocState; 
+        return InjectedAlloc;
+    }
+
+    void AcquireOriginal() {
+        InjectedAlloc->Release();
+        TlsAllocState = OldTlsAllocState;
+    }
+
+    void AcquireInjected() {
+        TlsAllocState = nullptr;
+        InjectedAlloc->Acquire();
+    }
+private:
+    TAllocState* OldTlsAllocState;
     std::shared_ptr<TScopedAlloc> InjectedAlloc;
-}; 
- 
-class TInjectFreeGuard: TNonCopyable { 
-public: 
-    TInjectFreeGuard(TInjectedAlloc* injectedAlloc = nullptr) 
-        : InjectedAllocPtr(injectedAlloc) 
-    { 
-        if (InjectedAllocPtr) { 
-            InjectedAllocPtr->AcquireInjected(); 
-        } 
-    } 
- 
-    ~TInjectFreeGuard() { 
-        if (InjectedAllocPtr) { 
-            InjectedAllocPtr->AcquireOriginal(); 
-        } 
-    } 
- 
-    void Free() { 
-        if (InjectedAllocPtr) { 
-            InjectedAllocPtr->AcquireOriginal(); 
-            InjectedAllocPtr = nullptr; 
-        } 
-    } 
-private: 
-    TInjectedAlloc* InjectedAllocPtr; 
-}; 
- 
+};
+
+class TInjectFreeGuard: TNonCopyable {
+public:
+    TInjectFreeGuard(TInjectedAlloc* injectedAlloc = nullptr)
+        : InjectedAllocPtr(injectedAlloc)
+    {
+        if (InjectedAllocPtr) {
+            InjectedAllocPtr->AcquireInjected();
+        }
+    }
+
+    ~TInjectFreeGuard() {
+        if (InjectedAllocPtr) {
+            InjectedAllocPtr->AcquireOriginal();
+        }
+    }
+
+    void Free() {
+        if (InjectedAllocPtr) {
+            InjectedAllocPtr->AcquireOriginal();
+            InjectedAllocPtr = nullptr;
+        }
+    }
+private:
+    TInjectedAlloc* InjectedAllocPtr;
+};
+
 class TPagedArena {
 public:
     TPagedArena(TAlignedPagePool* pagePool) noexcept

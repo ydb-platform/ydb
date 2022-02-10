@@ -13,14 +13,14 @@ class TRemoveMemberWrapper : public TMutableCodegeneratorFallbackNode<TRemoveMem
 public:
     TRemoveMemberWrapper(TComputationMutables& mutables, IComputationNode* structObj, ui32 index, std::vector<EValueRepresentation>&& representations)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , StructObj(structObj) 
+        , StructObj(structObj)
         , Index(index)
         , Representations(std::move(representations))
-        , Cache(mutables) 
+        , Cache(mutables)
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& baseStruct = StructObj->GetValue(ctx); 
+        const auto& baseStruct = StructObj->GetValue(ctx);
 
         NUdf::TUnboxedValue* itemsPtr = nullptr;
         const auto result = Cache.NewArray(ctx, Representations.size() - 1U, itemsPtr);

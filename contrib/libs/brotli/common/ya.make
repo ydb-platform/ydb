@@ -18,7 +18,7 @@ ADDINCL(contrib/libs/brotli/include)
 
 SRCS(
     dictionary.c
-    transform.c
+    transform.c 
 )
 
 CFLAGS(-DBROTLI_BUILD_PORTABLE)

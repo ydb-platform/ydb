@@ -179,9 +179,9 @@ namespace NCodecs {
             TRegistry Registry;
 
             TBlockCodecsFactory() {
-                for (TStringBuf codec : NBlockCodecs::ListAllCodecs()) {
-                    Register(codec);
-                }
+                for (TStringBuf codec : NBlockCodecs::ListAllCodecs()) { 
+                    Register(codec); 
+                } 
             }
 
             void Register(TStringBuf name) {

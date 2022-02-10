@@ -11,7 +11,7 @@
 
 #include "../common/constants.h"
 #include "../common/dictionary.h"
-#include "../common/platform.h"
+#include "../common/platform.h" 
 #include <brotli/types.h>
 #include "./command.h"
 #include "./hash.h"
@@ -22,27 +22,27 @@
 extern "C" {
 #endif
 
-BROTLI_INTERNAL void BrotliCreateZopfliBackwardReferences(MemoryManager* m,
-    size_t num_bytes, size_t position, const uint8_t* ringbuffer,
-    size_t ringbuffer_mask, const BrotliEncoderParams* params,
-    HasherHandle hasher, int* dist_cache, size_t* last_insert_len,
-    Command* commands, size_t* num_commands, size_t* num_literals);
+BROTLI_INTERNAL void BrotliCreateZopfliBackwardReferences(MemoryManager* m, 
+    size_t num_bytes, size_t position, const uint8_t* ringbuffer, 
+    size_t ringbuffer_mask, const BrotliEncoderParams* params, 
+    HasherHandle hasher, int* dist_cache, size_t* last_insert_len, 
+    Command* commands, size_t* num_commands, size_t* num_literals); 
 
-BROTLI_INTERNAL void BrotliCreateHqZopfliBackwardReferences(MemoryManager* m,
-    size_t num_bytes, size_t position, const uint8_t* ringbuffer,
-    size_t ringbuffer_mask, const BrotliEncoderParams* params,
-    HasherHandle hasher, int* dist_cache, size_t* last_insert_len,
-    Command* commands, size_t* num_commands, size_t* num_literals);
+BROTLI_INTERNAL void BrotliCreateHqZopfliBackwardReferences(MemoryManager* m, 
+    size_t num_bytes, size_t position, const uint8_t* ringbuffer, 
+    size_t ringbuffer_mask, const BrotliEncoderParams* params, 
+    HasherHandle hasher, int* dist_cache, size_t* last_insert_len, 
+    Command* commands, size_t* num_commands, size_t* num_literals); 
 
 typedef struct ZopfliNode {
-  /* Best length to get up to this byte (not including this byte itself)
-     highest 7 bit is used to reconstruct the length code. */
+  /* Best length to get up to this byte (not including this byte itself) 
+     highest 7 bit is used to reconstruct the length code. */ 
   uint32_t length;
-  /* Distance associated with the length. */
+  /* Distance associated with the length. */ 
   uint32_t distance;
-  /* Number of literal inserts before this copy; highest 5 bits contain
-     distance short code + 1 (or zero if no short code). */
-  uint32_t dcode_insert_length;
+  /* Number of literal inserts before this copy; highest 5 bits contain 
+     distance short code + 1 (or zero if no short code). */ 
+  uint32_t dcode_insert_length; 
 
   /* This union holds information used by dynamic-programming. During forward
      pass |cost| it used to store the goal function. When node is processed its
@@ -75,13 +75,13 @@ BROTLI_INTERNAL void BrotliInitZopfliNodes(ZopfliNode* array, size_t length);
      (2) nodes[i].command_length() <= i and
      (3) nodes[i - nodes[i].command_length()].cost < kInfinity */
 BROTLI_INTERNAL size_t BrotliZopfliComputeShortestPath(
-    MemoryManager* m, size_t num_bytes,
+    MemoryManager* m, size_t num_bytes, 
     size_t position, const uint8_t* ringbuffer, size_t ringbuffer_mask,
-    const BrotliEncoderParams* params,
+    const BrotliEncoderParams* params, 
     const int* dist_cache, HasherHandle hasher, ZopfliNode* nodes);
 
 BROTLI_INTERNAL void BrotliZopfliCreateCommands(
-    const size_t num_bytes, const size_t block_start, const ZopfliNode* nodes,
+    const size_t num_bytes, const size_t block_start, const ZopfliNode* nodes, 
     int* dist_cache, size_t* last_insert_len, const BrotliEncoderParams* params,
     Command* commands, size_t* num_literals);
 

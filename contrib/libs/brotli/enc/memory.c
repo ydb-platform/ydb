@@ -12,7 +12,7 @@
 #include <stdlib.h>  /* exit, free, malloc */
 #include <string.h>  /* memcpy */
 
-#include "../common/platform.h"
+#include "../common/platform.h" 
 #include <brotli/types.h>
 
 #if defined(__cplusplus) || defined(c_plusplus)
@@ -31,8 +31,8 @@ void BrotliInitMemoryManager(
     MemoryManager* m, brotli_alloc_func alloc_func, brotli_free_func free_func,
     void* opaque) {
   if (!alloc_func) {
-    m->alloc_func = BrotliDefaultAllocFunc;
-    m->free_func = BrotliDefaultFreeFunc;
+    m->alloc_func = BrotliDefaultAllocFunc; 
+    m->free_func = BrotliDefaultFreeFunc; 
     m->opaque = 0;
   } else {
     m->alloc_func = alloc_func;
@@ -121,11 +121,11 @@ static void CollectGarbagePointers(MemoryManager* m) {
         m->pointers + NEW_FREED_OFFSET, m->new_freed);
     m->perm_allocated -= annihilated;
     m->new_freed -= annihilated;
-    BROTLI_DCHECK(m->new_freed == 0);
+    BROTLI_DCHECK(m->new_freed == 0); 
   }
 
   if (m->new_allocated != 0) {
-    BROTLI_DCHECK(m->perm_allocated + m->new_allocated <= MAX_PERM_ALLOCATED);
+    BROTLI_DCHECK(m->perm_allocated + m->new_allocated <= MAX_PERM_ALLOCATED); 
     memcpy(m->pointers + PERM_ALLOCATED_OFFSET + m->perm_allocated,
            m->pointers + NEW_ALLOCATED_OFFSET,
            sizeof(void*) * m->new_allocated);

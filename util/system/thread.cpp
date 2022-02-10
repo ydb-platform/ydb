@@ -125,18 +125,18 @@ namespace {
         }
 
         inline void Start() {
-            //do not do this, kids, at home 
-            P_->Ref(); 
+            //do not do this, kids, at home
+            P_->Ref();
     #if _WIN32_WINNT < 0x0502
             Handle = reinterpret_cast<HANDLE>(::_beginthreadex(nullptr, (unsigned)StackSize(*P_), Proxy, (void*)P_.Get(), 0, &ThreadId));
     #else
             Handle = reinterpret_cast<HANDLE>(::_beginthreadex(nullptr, (unsigned)StackSize(*P_), Proxy, (void*)P_.Get(), 0, nullptr));
     #endif
 
-            if (!Handle) { 
-                P_->UnRef(); 
-                ythrow yexception() << "failed to create a thread"; 
-            } 
+            if (!Handle) {
+                P_->UnRef();
+                ythrow yexception() << "failed to create a thread";
+            }
         }
 
     private:

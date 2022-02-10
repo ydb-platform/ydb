@@ -43,7 +43,7 @@ namespace NSc {
     TValue& TValue::ReverseMergeJson(TStringBuf data) {
         return ReverseMerge(FromJson(data));
     }
-
+ 
     bool TValue::MergeUpdateJson(TValue& v, TStringBuf data) {
         NSc::TValue m;
         if (!FromJson(m, data)) {

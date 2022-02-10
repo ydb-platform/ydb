@@ -24,8 +24,8 @@ Y_UNIT_TEST_SUITE(TSchemeMergeTest) {
         DoTestReverseMerge("null", "[b]", "[b]");
         DoTestReverseMerge("[a]", "[b]", "[a]");
         DoTestReverseMerge("{x:null}", "{x:b}", "{x:b}");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestMerge) {
         TStringBuf data = "{ a : [ { b : 1, d : { e : -1.e5 } }, { f : 0, g : [ h, i ] } ] }";
         NSc::TValue v = NSc::TValue::FromJson(data);

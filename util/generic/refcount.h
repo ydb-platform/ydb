@@ -3,7 +3,7 @@
 #include <util/system/guard.h>
 #include <util/system/atomic.h>
 #include <util/system/defaults.h>
-#include <util/system/yassert.h>
+#include <util/system/yassert.h> 
 
 template <class TCounterCheckPolicy>
 class TSimpleCounterTemplate: public TCounterCheckPolicy {
@@ -55,14 +55,14 @@ public:
 private:
     TAtomicBase Counter_;
 };
-
+ 
 class TNoCheckPolicy {
 protected:
     inline void Check() const {
     }
 };
 
-#if defined(SIMPLE_COUNTER_THREAD_CHECK)
+#if defined(SIMPLE_COUNTER_THREAD_CHECK) 
 
     #include <util/system/thread.i>
 
@@ -71,18 +71,18 @@ public:
     inline TCheckPolicy() {
         ThreadId = SystemCurrentThreadId();
     }
-
+ 
 protected:
     inline void Check() const {
         Y_VERIFY(ThreadId == SystemCurrentThreadId(), "incorrect usage of TSimpleCounter");
     }
-
+ 
 private:
     size_t ThreadId;
 };
-#else
+#else 
 using TCheckPolicy = TNoCheckPolicy;
-#endif
+#endif 
 
 // Use this one if access from multiple threads to your pointer is an error and you want to enforce thread checks
 using TSimpleCounter = TSimpleCounterTemplate<TCheckPolicy>;

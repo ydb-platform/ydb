@@ -580,7 +580,7 @@ void EscapeHtmlChars(TUtf16String& str) {
     const TUtf16String& cs = str;
 
     for (size_t i = 0; i < cs.size(); ++i)
-        escapedLen += EscapedLen<insertBr>(cs[i]);
+        escapedLen += EscapedLen<insertBr>(cs[i]); 
 
     if (escapedLen == cs.size())
         return;
@@ -606,11 +606,11 @@ void EscapeHtmlChars(TUtf16String& str) {
                 ent = &quot;
                 break;
             default:
-                if (insertBr && (cs[i] == '\r' || cs[i] == '\n')) {
-                    ent = &br;
-                    break;
-                } else
-                    continue;
+                if (insertBr && (cs[i] == '\r' || cs[i] == '\n')) { 
+                    ent = &br; 
+                    break; 
+                } else 
+                    continue; 
         }
 
         res.append(cs.begin() + start, cs.begin() + i);

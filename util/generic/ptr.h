@@ -31,16 +31,16 @@ template <class T>
 inline void CheckedDelete(T* t) {
     AssertTypeComplete<T>();
 
-    delete t;
-}
-
+    delete t; 
+} 
+ 
 template <class T>
 inline void CheckedArrayDelete(T* t) {
     AssertTypeComplete<T>();
 
     delete[] t;
-}
-
+} 
+ 
 class TNoAction {
 public:
     template <class T>

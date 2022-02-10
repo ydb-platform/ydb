@@ -38,7 +38,7 @@
 #include <util/string/cast.h>
 #include <util/stream/mem.h>
 #include <util/system/datetime.h>
-#include <util/system/error.h>
+#include <util/system/error.h> 
 #include <util/memory/tempbuf.h>
 #include <util/generic/singleton.h>
 #include <util/generic/hash_set.h>
@@ -782,23 +782,23 @@ public:
 
         return ret;
     }
-
+ 
     ssize_t SendV(SOCKET fd, const TPart* parts, size_t count) override {
         ssize_t ret = SendVImpl(fd, parts, count);
-
+ 
         if (ret < 0) {
             return ret;
         }
-
+ 
         size_t len = TContIOVector::Bytes(parts, count);
-
+ 
         if ((size_t)ret == len) {
             return ret;
         }
-
+ 
         return SendVPartial(fd, parts, count, ret);
     }
-
+ 
     inline ssize_t SendVImpl(SOCKET fd, const TPart* parts, size_t count) {
         return TSender < (sizeof(iovec) == sizeof(TPart)) && (offsetof(iovec, iov_base) == offsetof(TPart, buf)) && (offsetof(iovec, iov_len) == offsetof(TPart, len)) > ::SendV(fd, parts, count);
     }
@@ -806,32 +806,32 @@ public:
     ssize_t SendVPartial(SOCKET fd, const TPart* constParts, size_t count, size_t written);
 };
 
-ssize_t TCommonSockOps::SendVPartial(SOCKET fd, const TPart* constParts, size_t count, size_t written) {
-    TTempBuf tempbuf(sizeof(TPart) * count);
-    TPart* parts = (TPart*)tempbuf.Data();
-
-    for (size_t i = 0; i < count; ++i) {
-        parts[i] = constParts[i];
-    }
-
-    TContIOVector vec(parts, count);
-    vec.Proceed(written);
-
-    while (!vec.Complete()) {
-        ssize_t ret = SendVImpl(fd, vec.Parts(), vec.Count());
-
+ssize_t TCommonSockOps::SendVPartial(SOCKET fd, const TPart* constParts, size_t count, size_t written) { 
+    TTempBuf tempbuf(sizeof(TPart) * count); 
+    TPart* parts = (TPart*)tempbuf.Data(); 
+ 
+    for (size_t i = 0; i < count; ++i) { 
+        parts[i] = constParts[i]; 
+    } 
+ 
+    TContIOVector vec(parts, count); 
+    vec.Proceed(written); 
+ 
+    while (!vec.Complete()) { 
+        ssize_t ret = SendVImpl(fd, vec.Parts(), vec.Count()); 
+ 
         if (ret < 0) {
-            return ret;
+            return ret; 
         }
-
-        written += ret;
-
-        vec.Proceed((size_t)ret);
-    }
-
-    return written;
-}
-
+ 
+        written += ret; 
+ 
+        vec.Proceed((size_t)ret); 
+    } 
+ 
+    return written; 
+} 
+ 
 static inline TSocket::TOps* GetCommonSockOps() noexcept {
     return Singleton<TCommonSockOps>();
 }

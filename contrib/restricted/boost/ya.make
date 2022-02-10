@@ -9,7 +9,7 @@ LICENSE(
     Public-Domain AND
     Zlib
 )
-
+ 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(1.67)

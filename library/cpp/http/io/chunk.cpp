@@ -204,7 +204,7 @@ public:
 
     inline void Finish() {
         Slave_->Write("0\r\n\r\n", 5);
-
+ 
         Flush();
     }
 

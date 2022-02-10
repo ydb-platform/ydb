@@ -809,9 +809,9 @@ public:
 
     void TestEscapeHtmlChars() {
         // characters from the first half of the ASCII table
-        for (wchar16 c = 1; c < 0x7F; ++c) {
+        for (wchar16 c = 1; c < 0x7F; ++c) { 
             TUtf16String w(1, c);
-            EscapeHtmlChars<false>(w);
+            EscapeHtmlChars<false>(w); 
 
             switch (c) {
                 case '<':
@@ -831,12 +831,12 @@ public:
                     break;
             }
         }
-
-        for (wchar16 c = 1; c < 0x7F; ++c) {
+ 
+        for (wchar16 c = 1; c < 0x7F; ++c) { 
             TUtf16String w(1, c);
-            EscapeHtmlChars<true>(w);
-
-            switch (c) {
+            EscapeHtmlChars<true>(w); 
+ 
+            switch (c) { 
                 case '<':
                     UNIT_ASSERT(w == ASCIIToWide("&lt;"));
                     break;
@@ -856,10 +856,10 @@ public:
                 default:
                     UNIT_ASSERT(w == TUtf16String(1, c));
                     break;
-            }
-        }
+            } 
+        } 
     }
-
+ 
     void TestToLower() {
         const size_t n = 32;
         wchar16 upperCase[n];

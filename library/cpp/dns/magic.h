@@ -3,7 +3,7 @@
 #include <util/generic/yexception.h>
 #include <util/generic/ptr.h>
 
-namespace NDns { 
+namespace NDns {
     class IError {
     public:
         virtual ~IError() = default;

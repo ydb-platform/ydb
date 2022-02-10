@@ -1,11 +1,11 @@
 #pragma once
 
-#include "impl.h" 
+#include "impl.h"
 #include "network.h"
 
-#include <util/network/address.h> 
-#include <util/network/socket.h> 
-#include <util/system/mutex.h> 
+#include <util/network/address.h>
+#include <util/network/socket.h>
+#include <util/system/mutex.h>
 
 extern void SetCommonSockOpts(SOCKET sock, const struct sockaddr* sa = nullptr);
 
@@ -143,7 +143,7 @@ class TSocketPool {
 
 public:
     typedef TAtomicSharedPtr<NAddr::IRemoteAddr> TAddrRef;
- 
+
     TSocketPool(int ip, int port)
         : Addr_(new NAddr::TIPv4Addr(TIpAddress((ui32)ip, (ui16)port)))
     {
@@ -153,7 +153,7 @@ public:
         : Addr_(addr)
     {
     }
- 
+
     void EraseStale(const TInstant& maxAge) noexcept {
         TSockets toDelete;
 

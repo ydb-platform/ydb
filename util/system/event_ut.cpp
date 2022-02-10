@@ -96,22 +96,22 @@ Y_UNIT_TEST_SUITE(EventTest) {
     }
 
     Y_UNIT_TEST(ConcurrentSignalAndWaitTest) {
-        // test for problem detected by thread-sanitizer (signal/wait race) SEARCH-2113 
-        const size_t limit = 200; 
-        TManualEvent event[limit]; 
+        // test for problem detected by thread-sanitizer (signal/wait race) SEARCH-2113
+        const size_t limit = 200;
+        TManualEvent event[limit];
         TThreadPool queue;
-        queue.Start(limit); 
+        queue.Start(limit);
         TVector<THolder<IObjectInQueue>> tasks;
-        for (size_t i = 0; i < limit; ++i) { 
+        for (size_t i = 0; i < limit; ++i) {
             tasks.emplace_back(MakeHolder<TSignalTask>(event[i]));
-            UNIT_ASSERT(queue.Add(tasks.back().Get())); 
-        } 
-        for (size_t i = limit; i != 0; --i) { 
-            UNIT_ASSERT(event[i - 1].WaitT(TDuration::Seconds(90))); 
-        } 
-        queue.Stop(); 
-    } 
- 
+            UNIT_ASSERT(queue.Add(tasks.back().Get()));
+        }
+        for (size_t i = limit; i != 0; --i) {
+            UNIT_ASSERT(event[i - 1].WaitT(TDuration::Seconds(90)));
+        }
+        queue.Stop();
+    }
+
     /** Test for a problem: http://nga.at.yandex-team.ru/5772 */
     Y_UNIT_TEST(DestructorBeforeSignalFinishTest) {
         return;

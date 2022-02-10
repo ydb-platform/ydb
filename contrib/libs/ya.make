@@ -257,7 +257,7 @@ RECURSE(
     openmp
     openssl
     opentracing-cpp
-    opus 
+    opus
     ortools
     ortools/proto
     osrm

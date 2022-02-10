@@ -20,7 +20,7 @@ SRCS(
     iostatus.cpp
     network.cpp
     poller.cpp
-    sockpool.cpp 
+    sockpool.cpp
     stack/stack.cpp
     stack/stack_allocator.cpp
     stack/stack_guards.cpp

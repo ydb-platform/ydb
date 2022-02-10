@@ -38,7 +38,7 @@ public:
     ELogPriority Priority() const noexcept {
         return Priority_;
     }
- 
+
 protected:
     void DoFlush() override;
 

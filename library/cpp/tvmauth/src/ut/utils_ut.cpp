@@ -10,52 +10,52 @@ Y_UNIT_TEST_SUITE(UtilsTestSuite) {
     using namespace NTvmAuth;
 
     Y_UNIT_TEST(base64Test) {
-        UNIT_ASSERT_VALUES_EQUAL("-hHx", NUtils::Bin2base64url("\xfa\x11\xf1"));
-        UNIT_ASSERT_VALUES_EQUAL("-hHx_g", NUtils::Bin2base64url("\xfa\x11\xf1\xfe"));
-        UNIT_ASSERT_VALUES_EQUAL("-hHx_v8", NUtils::Bin2base64url("\xfa\x11\xf1\xfe\xff"));
+        UNIT_ASSERT_VALUES_EQUAL("-hHx", NUtils::Bin2base64url("\xfa\x11\xf1")); 
+        UNIT_ASSERT_VALUES_EQUAL("-hHx_g", NUtils::Bin2base64url("\xfa\x11\xf1\xfe")); 
+        UNIT_ASSERT_VALUES_EQUAL("-hHx_v8", NUtils::Bin2base64url("\xfa\x11\xf1\xfe\xff")); 
 
-        UNIT_ASSERT_VALUES_EQUAL("", NUtils::Base64url2bin("hHx++"));
-        UNIT_ASSERT_VALUES_EQUAL("", NUtils::Base64url2bin("&*^"));
-        UNIT_ASSERT_VALUES_EQUAL("", NUtils::Base64url2bin(""));
-        UNIT_ASSERT_VALUES_EQUAL("", NUtils::Bin2base64url(""));
+        UNIT_ASSERT_VALUES_EQUAL("", NUtils::Base64url2bin("hHx++")); 
+        UNIT_ASSERT_VALUES_EQUAL("", NUtils::Base64url2bin("&*^")); 
+        UNIT_ASSERT_VALUES_EQUAL("", NUtils::Base64url2bin("")); 
+        UNIT_ASSERT_VALUES_EQUAL("", NUtils::Bin2base64url("")); 
 
-        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1", NUtils::Base64url2bin("-hHx"));
-        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1\xfe", NUtils::Base64url2bin("-hHx_g"));
-        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1\xfe", NUtils::Base64url2bin("-hHx_g="));
-        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1\xfe", NUtils::Base64url2bin("-hHx_g=="));
-        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1\xfe\xff", NUtils::Base64url2bin("-hHx_v8"));
-        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1\xfe\xff", NUtils::Base64url2bin("-hHx_v8="));
+        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1", NUtils::Base64url2bin("-hHx")); 
+        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1\xfe", NUtils::Base64url2bin("-hHx_g")); 
+        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1\xfe", NUtils::Base64url2bin("-hHx_g=")); 
+        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1\xfe", NUtils::Base64url2bin("-hHx_g==")); 
+        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1\xfe\xff", NUtils::Base64url2bin("-hHx_v8")); 
+        UNIT_ASSERT_VALUES_EQUAL("\xfa\x11\xf1\xfe\xff", NUtils::Base64url2bin("-hHx_v8=")); 
 
-        UNIT_ASSERT_VALUES_EQUAL("SGVsbG8sIGV2ZXJ5Ym9keSE",
+        UNIT_ASSERT_VALUES_EQUAL("SGVsbG8sIGV2ZXJ5Ym9keSE", 
                                  NUtils::Bin2base64url(("Hello, everybody!")));
-        UNIT_ASSERT_VALUES_EQUAL("Hello, everybody!",
+        UNIT_ASSERT_VALUES_EQUAL("Hello, everybody!", 
                                  NUtils::Base64url2bin(("SGVsbG8sIGV2ZXJ5Ym9keSE")));
-        UNIT_ASSERT_VALUES_EQUAL("VGhlIE1hZ2ljIFdvcmRzIGFyZSBTcXVlYW1pc2ggT3NzaWZyYWdl",
+        UNIT_ASSERT_VALUES_EQUAL("VGhlIE1hZ2ljIFdvcmRzIGFyZSBTcXVlYW1pc2ggT3NzaWZyYWdl", 
                                  NUtils::Bin2base64url(("The Magic Words are Squeamish Ossifrage")));
-        UNIT_ASSERT_VALUES_EQUAL("The Magic Words are Squeamish Ossifrage",
+        UNIT_ASSERT_VALUES_EQUAL("The Magic Words are Squeamish Ossifrage", 
                                  NUtils::Base64url2bin(("VGhlIE1hZ2ljIFdvcmRzIGFyZSBTcXVlYW1pc2ggT3NzaWZyYWdl")));
     }
 
     Y_UNIT_TEST(sign) {
-        UNIT_ASSERT_VALUES_EQUAL("wkGfeuopf709ozPAeGcDMqtZXPzsWvuNJ1BL586dSug",
+        UNIT_ASSERT_VALUES_EQUAL("wkGfeuopf709ozPAeGcDMqtZXPzsWvuNJ1BL586dSug", 
                                  NUtils::SignCgiParamsForTvm(NUtils::Base64url2bin("GRMJrKnj4fOVnvOqe-WyD1"),
                                                              "1490000000",
                                                              "13,19",
                                                              "bb:sess,bb:sess2"));
 
-        UNIT_ASSERT_VALUES_EQUAL("HANDYrA4ApQMQ5cfSWZk_InHWJffoXAa57P_X_B5s4M",
+        UNIT_ASSERT_VALUES_EQUAL("HANDYrA4ApQMQ5cfSWZk_InHWJffoXAa57P_X_B5s4M", 
                                  NUtils::SignCgiParamsForTvm(NUtils::Base64url2bin("GRMJrKnj4fOasvOqe-WyD1"),
                                                              "1490000000",
                                                              "13,19",
                                                              "bb:sess,bb:sess2"));
 
-        UNIT_ASSERT_VALUES_EQUAL("T-M-3_qtjRM1dR_3hS1CRlHBTZRKK04doHXBJw-5VRk",
+        UNIT_ASSERT_VALUES_EQUAL("T-M-3_qtjRM1dR_3hS1CRlHBTZRKK04doHXBJw-5VRk", 
                                  NUtils::SignCgiParamsForTvm(NUtils::Base64url2bin("GRMJrKnj4fOasvOqe-WyD1"),
                                                              "1490000001",
                                                              "13,19",
                                                              "bb:sess,bb:sess2"));
 
-        UNIT_ASSERT_VALUES_EQUAL("gwB6M_9Jij50ZADmlDMnoyLc6AhQmtq6MClgGzO1PBE",
+        UNIT_ASSERT_VALUES_EQUAL("gwB6M_9Jij50ZADmlDMnoyLc6AhQmtq6MClgGzO1PBE", 
                                  NUtils::SignCgiParamsForTvm(NUtils::Base64url2bin("GRMJrKnj4fOasvOqe-WyD1"),
                                                              "1490000001",
                                                              "13,19",

@@ -62,13 +62,13 @@ dependencies {{
 android {{
     {keystore}
 
-    compileSdkVersion 30 
-    buildToolsVersion "30.0.3" 
+    compileSdkVersion 30
+    buildToolsVersion "30.0.3"
 
 
     defaultConfig {{
         minSdkVersion 21
-        targetSdkVersion 30 
+        targetSdkVersion 30
         applicationId "{app_id}"
     }}
 

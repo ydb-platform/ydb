@@ -318,8 +318,8 @@ RECURSE(
     subversion
     sundials
     svm
-    svt-hevc 
-    svt-vp9 
+    svt-hevc
+    svt-vp9
     szip
     t1ha
     taocrypt

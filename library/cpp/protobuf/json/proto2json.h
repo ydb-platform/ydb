@@ -66,7 +66,7 @@ namespace NProtobufJson {
     /// @throw yexception
     TString Proto2Json(const NProtoBuf::Message& proto,
                        const TProto2JsonConfig& config);
-    // Returns incorrect result if proto contains another NProtoBuf::Message 
+    // Returns incorrect result if proto contains another NProtoBuf::Message
     // Generated code shortcut
     template <class T>
     inline TString Proto2Json(const T& proto) {

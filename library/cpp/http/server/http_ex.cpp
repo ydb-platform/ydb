@@ -22,10 +22,10 @@ bool THttpClientRequestExtension::Parse(char* req, TBaseServerRequestData& rd) {
 
 bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBlob& postData) {
     for (const auto& header : ParsedHeaders) {
-        rd.AddHeader(header.first, header.second); 
+        rd.AddHeader(header.first, header.second);
     }
 
-    char* s = RequestString.begin(); 
+    char* s = RequestString.begin();
 
     enum EMethod {
         NotImplemented,

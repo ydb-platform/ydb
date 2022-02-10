@@ -77,22 +77,22 @@ namespace NSc::NUt {
         Y_FAIL(); \
     }
 
-#define Y_GEN_PTR_OP(op, arg, st, act) \ 
-    if (auto* r = (op)) { \ 
-        switch (act.GetRef(arg).Type) { \ 
-        case TRef::T_CREATE_BACK: \ 
-            Y_GEN_TRY_OP(st.TryPushBack(*r)) \ 
-            break; \ 
-        case TRef::T_CREATE_FRONT: \ 
-            Y_GEN_TRY_OP(st.TryPushFront(*r)) \ 
-            break; \ 
-        case TRef::T_REF__POS: \ 
-            st.LRef(act.GetRef(arg).Pos) = *r; \ 
-            break; \ 
-        default: \ 
-            Y_FAIL(); \ 
-        } \ 
-    } 
+#define Y_GEN_PTR_OP(op, arg, st, act) \
+    if (auto* r = (op)) { \
+        switch (act.GetRef(arg).Type) { \
+        case TRef::T_CREATE_BACK: \
+            Y_GEN_TRY_OP(st.TryPushBack(*r)) \
+            break; \
+        case TRef::T_CREATE_FRONT: \
+            Y_GEN_TRY_OP(st.TryPushFront(*r)) \
+            break; \
+        case TRef::T_REF__POS: \
+            st.LRef(act.GetRef(arg).Pos) = *r; \
+            break; \
+        default: \
+            Y_FAIL(); \
+        } \
+    }
 
     bool ApplyNextAction(TVMState& st, TVMAction act) {
         switch (act.Type) {
@@ -228,7 +228,7 @@ namespace NSc::NUt {
             return true;
 
         case VMA_ARRAY_GET_NO_ADD__IDX_REF:
-            Y_GEN_PTR_OP(st.Current().GetNoAdd(act.GetIdx(0)), 1, st, act); 
+            Y_GEN_PTR_OP(st.Current().GetNoAdd(act.GetIdx(0)), 1, st, act);
             return true;
 
         case VMA_DICT_CLEAR:
@@ -260,7 +260,7 @@ namespace NSc::NUt {
             return true;
 
         case VMA_DICT_GET_NO_ADD__IDX_REF:
-            Y_GEN_PTR_OP(st.Current().GetNoAdd(act.GetKey(0)), 1, st, act); 
+            Y_GEN_PTR_OP(st.Current().GetNoAdd(act.GetKey(0)), 1, st, act);
             return true;
 
         case VMA_MERGE_UPDATE__POS:
@@ -288,7 +288,7 @@ namespace NSc::NUt {
             return true;
 
         case VMA_SELECT_OR_ADD__PATH_REF:
-            Y_GEN_PTR_OP(st.Current().TrySelectOrAdd(act.GetPath(0)), 1, st, act); 
+            Y_GEN_PTR_OP(st.Current().TrySelectOrAdd(act.GetPath(0)), 1, st, act);
             return true;
 
         case VMA_SELECT_AND_DELETE__PATH_REF:

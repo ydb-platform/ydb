@@ -7,9 +7,9 @@ cdef extern from "<util/generic/strbuf.h>" nogil:
         TStringBuf(const char*) except +
         TStringBuf(const char*, size_t) except +
         const char* data()
-        char* Data() 
+        char* Data()
         size_t size()
-        size_t Size() 
+        size_t Size()
 
 
 cdef extern from "<util/generic/string.h>" nogil:

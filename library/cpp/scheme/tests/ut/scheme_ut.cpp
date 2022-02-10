@@ -317,12 +317,12 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
     }
 
     Y_UNIT_TEST(TestAssignmentDictChild) {
-        { 
-            NSc::TValue v; 
-            { 
-                NSc::TValue b; 
-                v["a"] = b; 
-            } 
+        {
+            NSc::TValue v;
+            {
+                NSc::TValue b;
+                v["a"] = b;
+            }
             v = v["a"];
         }
         {
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
                 NSc::TValue b;
                 v["a"] = b;
             }
-            v = v.Get("a"); 
+            v = v.Get("a");
         }
         {
             NSc::TValue v;
@@ -341,8 +341,8 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             }
             v = std::move(v["a"]);
         }
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestInsert) {
         NSc::TValue v;
         v.Insert(0, "b");
@@ -767,18 +767,18 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             UNIT_ASSERT(w.IsDict());
             UNIT_ASSERT_VALUES_EQUAL(w.Get("foo").GetString(), "baz");
         }
-        UNIT_ASSERT(NSc::TValue::DefaultValue().IsNull()); 
+        UNIT_ASSERT(NSc::TValue::DefaultValue().IsNull());
     }
 
-    //SPI-25156 
-    Y_UNIT_TEST(TestMoveNotCorruptingDefault) { 
-        using namespace NSc; 
-        TValue w = TValue::FromJson("{foo:bar}"); 
-        TValue v = std::move(w); 
-        w["foo"] = "baz";  // no crash here 
-        UNIT_ASSERT(NSc::TValue::DefaultValue().IsNull()); 
-    } 
- 
+    //SPI-25156
+    Y_UNIT_TEST(TestMoveNotCorruptingDefault) {
+        using namespace NSc;
+        TValue w = TValue::FromJson("{foo:bar}");
+        TValue v = std::move(w);
+        w["foo"] = "baz";  // no crash here
+        UNIT_ASSERT(NSc::TValue::DefaultValue().IsNull());
+    }
+
     Y_UNIT_TEST(TestCopyFrom) {
         {
             TString sa = "[1,2]";
@@ -845,34 +845,34 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestCopyingDictIntoSelf) { //Found by fuzzing 
-        NSc::TValue a; 
-        NSc::TValue b = a.GetOrAdd("aa"); 
-        b.CopyFrom(a); 
-        NSc::TValue target = NSc::TValue::FromJsonThrow("{\"aa\":null}"); 
-        UNIT_ASSERT_VALUES_EQUAL(b, target); 
-        UNIT_ASSERT_VALUES_EQUAL(a, target); 
-    } 
- 
-    Y_UNIT_TEST(TestCopyingDictIntoSelfByRef) { //Found by fuzzing 
-        NSc::TValue a; 
-        NSc::TValue& b = a.GetOrAdd("aa"); 
-        b.CopyFrom(a); 
-        UNIT_ASSERT_VALUES_EQUAL(b, NSc::TValue::FromJsonThrow("{\"aa\":null}")); 
-        UNIT_ASSERT_VALUES_EQUAL(a, NSc::TValue::FromJsonThrow("{\"aa\": {\"aa\": null}}")); 
-    } 
- 
+    Y_UNIT_TEST(TestCopyingDictIntoSelf) { //Found by fuzzing
+        NSc::TValue a;
+        NSc::TValue b = a.GetOrAdd("aa");
+        b.CopyFrom(a);
+        NSc::TValue target = NSc::TValue::FromJsonThrow("{\"aa\":null}");
+        UNIT_ASSERT_VALUES_EQUAL(b, target);
+        UNIT_ASSERT_VALUES_EQUAL(a, target);
+    }
+
+    Y_UNIT_TEST(TestCopyingDictIntoSelfByRef) { //Found by fuzzing
+        NSc::TValue a;
+        NSc::TValue& b = a.GetOrAdd("aa");
+        b.CopyFrom(a);
+        UNIT_ASSERT_VALUES_EQUAL(b, NSc::TValue::FromJsonThrow("{\"aa\":null}"));
+        UNIT_ASSERT_VALUES_EQUAL(a, NSc::TValue::FromJsonThrow("{\"aa\": {\"aa\": null}}"));
+    }
+
     Y_UNIT_TEST(TestGetNoAdd) {
         NSc::TValue v = NSc::NUt::AssertFromJson("{a:[null,-1,2,3.4],b:3,c:{d:5}}");
-        UNIT_ASSERT(v.GetNoAdd("a") != nullptr); 
-        UNIT_ASSERT(v.GetNoAdd("b") != nullptr); 
-        UNIT_ASSERT(v.GetNoAdd("c") != nullptr); 
-        UNIT_ASSERT(v.GetNoAdd("d") == nullptr); 
-        UNIT_ASSERT(v.GetNoAdd("value") == nullptr); 
+        UNIT_ASSERT(v.GetNoAdd("a") != nullptr);
+        UNIT_ASSERT(v.GetNoAdd("b") != nullptr);
+        UNIT_ASSERT(v.GetNoAdd("c") != nullptr);
+        UNIT_ASSERT(v.GetNoAdd("d") == nullptr);
+        UNIT_ASSERT(v.GetNoAdd("value") == nullptr);
 
-        NSc::TValue* child = v.GetNoAdd("c"); 
-        UNIT_ASSERT(child != nullptr); 
-        (*child)["e"]["f"] = 42; 
+        NSc::TValue* child = v.GetNoAdd("c");
+        UNIT_ASSERT(child != nullptr);
+        (*child)["e"]["f"] = 42;
         const NSc::TValue expectedResult = NSc::NUt::AssertFromJson("{a:[null,-1,2,3.4],b:3,c:{d:5,e:{f:42}}}");
         UNIT_ASSERT_VALUES_EQUAL(v, expectedResult);
     }

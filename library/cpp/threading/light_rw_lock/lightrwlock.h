@@ -83,21 +83,21 @@ namespace NS_LightRWLock {
         int prev = __atomic_fetch_and(&item, ~(1 << bit), __ATOMIC_SEQ_CST);
         return (prev & (1 << bit)) != 0 ? 1 : 0;
     }
-#endif 
+#endif
 
-#if defined(_x86_64_) || defined(_i386_) || defined (__aarch64__) || defined (__powerpc64__) 
-    static bool AtomicLockHighByte(volatile int& item) { 
-        union TA { 
-            int x; 
-            char y[4]; 
-        }; 
- 
-        volatile TA* ptr = reinterpret_cast<volatile TA*>(&item); 
-        char zero = 0; 
-        return __atomic_compare_exchange_n(&(ptr->y[3]), &zero, (char)128, true, 
-                                           __ATOMIC_SEQ_CST, __ATOMIC_RELAXED); 
-    } 
- 
+#if defined(_x86_64_) || defined(_i386_) || defined (__aarch64__) || defined (__powerpc64__)
+    static bool AtomicLockHighByte(volatile int& item) {
+        union TA {
+            int x;
+            char y[4];
+        };
+
+        volatile TA* ptr = reinterpret_cast<volatile TA*>(&item);
+        char zero = 0;
+        return __atomic_compare_exchange_n(&(ptr->y[3]), &zero, (char)128, true,
+                                           __ATOMIC_SEQ_CST, __ATOMIC_RELAXED);
+    }
+
 #endif
 
     template <typename TInt>

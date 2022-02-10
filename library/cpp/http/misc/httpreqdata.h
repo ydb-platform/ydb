@@ -115,7 +115,7 @@ public:
     {
         Scan();
     }
- 
+
     void Scan() {
         CgiParam.Scan(QueryStringBuf());
     }

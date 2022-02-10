@@ -161,7 +161,7 @@ namespace NSc {
             return *this;
         }
 
-        CoreMutableForSet(); // trigger COW 
+        CoreMutableForSet(); // trigger COW
 
         TScCore& selfCore = *TheCore;
         const TScCore& otherCore = other.Core();
@@ -191,28 +191,28 @@ namespace NSc {
                 selfCore.SetNumber(otherCore.FloatNumber);
                 break;
             case EType::String:
-                if (selfCore.Pool.Get() == otherCore.Pool.Get()) { 
-                    selfCore.SetOwnedString(otherCore.String); 
-                } else { 
-                    selfCore.SetString(otherCore.String); 
-                } 
+                if (selfCore.Pool.Get() == otherCore.Pool.Get()) {
+                    selfCore.SetOwnedString(otherCore.String);
+                } else {
+                    selfCore.SetString(otherCore.String);
+                }
                 break;
             case EType::Array:
                 selfCore.SetArray();
                 for (const TValue& e : otherCore.GetArray()) {
-                    selfCore.Push().DoCopyFromImpl(e, otherLoopCtx, selfOverrideCtx); 
+                    selfCore.Push().DoCopyFromImpl(e, otherLoopCtx, selfOverrideCtx);
                 }
                 break;
             case EType::Dict: {
-                TCorePtr tmp = NewCore(selfCore.Pool); 
-                auto& tmpCore = *tmp; 
-                tmpCore.SetDict(); 
+                TCorePtr tmp = NewCore(selfCore.Pool);
+                auto& tmpCore = *tmp;
+                tmpCore.SetDict();
                 const TDict& d = otherCore.GetDict();
-                tmpCore.Dict.reserve(d.size()); 
+                tmpCore.Dict.reserve(d.size());
                 for (const TDict::value_type& e : d) {
-                    tmpCore.Add(e.first).DoCopyFromImpl(e.second, otherLoopCtx, selfOverrideCtx); 
+                    tmpCore.Add(e.first).DoCopyFromImpl(e.second, otherLoopCtx, selfOverrideCtx);
                 }
-                TheCore = std::move(tmp); 
+                TheCore = std::move(tmp);
                 break;
             }
         }
@@ -231,7 +231,7 @@ namespace NSc {
     }
 
     bool TValue::SamePool(const TValue& a, const TValue& b) {
-        return Same(a, b) || a.TheCore->Pool.Get() == b.TheCore->Pool.Get(); 
+        return Same(a, b) || a.TheCore->Pool.Get() == b.TheCore->Pool.Get();
     }
 
     bool TValue::Equal(const TValue& a, const TValue& b) {
@@ -323,7 +323,7 @@ namespace NSc {
             const TDict& ddelta = deltaCore.Dict;
 
             for (const auto& dit : ddelta) {
-                core.GetOrAdd(dit.first).DoMergeImpl(dit.second, lowPriorityDelta, otherLoopCtx, selfOverrideGuard); 
+                core.GetOrAdd(dit.first).DoMergeImpl(dit.second, lowPriorityDelta, otherLoopCtx, selfOverrideGuard);
             }
         } else if (!delta.IsNull() && (!lowPriorityDelta || IsNull())) {
             DoCopyFromImpl(delta, otherLoopCtx, selfOverrideGuard);
@@ -394,7 +394,7 @@ namespace NSc {
     }
 
     TValue& TValue::FromJsonValue(TValue& res, const NJson::TJsonValue& val) {
-        TScCore& core = res.CoreMutableForSet(); 
+        TScCore& core = res.CoreMutableForSet();
         core.SetNull();
 
         switch (val.GetType()) {
@@ -415,19 +415,19 @@ namespace NSc {
                 core.SetNumber(val.GetDouble());
                 break;
             case NJson::JSON_STRING:
-                core.SetString(val.GetString()); 
+                core.SetString(val.GetString());
                 break;
             case NJson::JSON_ARRAY: {
                 core.SetArray();
                 for (const auto& item : val.GetArray()) {
-                    FromJsonValue(core.Push(), item); 
+                    FromJsonValue(core.Push(), item);
                 }
                 break;
             }
             case NJson::JSON_MAP: {
                 core.SetDict();
                 for (const auto& item : val.GetMap()) {
-                    FromJsonValue(core.Add(item.first), item.second); 
+                    FromJsonValue(core.Add(item.first), item.second);
                 }
                 break;
             }

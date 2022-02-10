@@ -4,8 +4,8 @@
 #include "concepts/iterator.h"
 
 #include <util/generic/algorithm.h>
-#include <util/generic/mapfindptr.h> 
- 
+#include <util/generic/mapfindptr.h>
+
 namespace NFlatHash {
 
 namespace NPrivate {
@@ -34,15 +34,15 @@ class TMap : private TTable<Hash,
                             NPrivate::TMapKeyGetter,
                             Probing,
                             SizeFitter,
-                            Expander>, 
-             public TMapOps<TMap<Key, 
-                                 T, 
-                                 Hash, 
-                                 KeyEqual, 
-                                 Container, 
-                                 Probing, 
-                                 SizeFitter, 
-                                 Expander>> 
+                            Expander>,
+             public TMapOps<TMap<Key,
+                                 T,
+                                 Hash,
+                                 KeyEqual,
+                                 Container,
+                                 Probing,
+                                 SizeFitter,
+                                 Expander>>
 {
 private:
     using TBase = TTable<Hash,

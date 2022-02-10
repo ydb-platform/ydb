@@ -38,15 +38,15 @@ namespace NXml {
     DEF_PTR(xmlNodeSet, xmlXPathFreeNodeSet);
 
     //    xmlSchemaParserCtxtPtr ctxt;
-    DEF_HOLDER(xmlSchemaParserCtxt, xmlSchemaFreeParserCtxt); 
+    DEF_HOLDER(xmlSchemaParserCtxt, xmlSchemaFreeParserCtxt);
     DEF_PTR(xmlSchemaParserCtxt, xmlSchemaFreeParserCtxt);
 
     //    xmlSchemaPtr schema;
-    DEF_HOLDER(xmlSchema, xmlSchemaFree); 
+    DEF_HOLDER(xmlSchema, xmlSchemaFree);
     DEF_PTR(xmlSchema, xmlSchemaFree);
 
     //    xmlSchemaValidCtxt ctxt;
-    DEF_HOLDER(xmlSchemaValidCtxt, xmlSchemaFreeValidCtxt); 
+    DEF_HOLDER(xmlSchemaValidCtxt, xmlSchemaFreeValidCtxt);
     DEF_PTR(xmlSchemaValidCtxt, xmlSchemaFreeValidCtxt);
 
     // xmlSaveCtxtPtr

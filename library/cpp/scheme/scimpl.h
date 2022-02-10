@@ -6,7 +6,7 @@
 
 namespace NSc {
     struct TValue::TScCore : TAtomicRefCount<TScCore, TDestructor>, TNonCopyable {
-        TPoolPtr Pool; 
+        TPoolPtr Pool;
         double FloatNumber = 0;
         i64 IntNumber = 0;
         TStringBuf String;
@@ -15,9 +15,9 @@ namespace NSc {
         TValue::EType ValueType = TValue::EType::Null;
 
         TScCore(TPoolPtr& p)
-            : Pool(p) 
-            , Dict(Pool->Get()) 
-            , Array(Pool->Get()) 
+            : Pool(p)
+            , Dict(Pool->Get())
+            , Array(Pool->Get())
         {
         }
 
@@ -90,13 +90,13 @@ namespace NSc {
             IntNumber = b;
         }
 
-        void SetString(TStringBuf s) { 
-            SetOwnedString(Pool->AppendBuf(s)); 
-        } 
- 
-        void SetOwnedString(TStringBuf s) { 
+        void SetString(TStringBuf s) {
+            SetOwnedString(Pool->AppendBuf(s));
+        }
+
+        void SetOwnedString(TStringBuf s) {
             ValueType = TValue::EType::String;
-            String = s; 
+            String = s;
         }
 
         double& GetNumberMutable(double defaultnum) {
@@ -208,9 +208,9 @@ namespace NSc {
             a.back().CopyOnWrite = false;
         }
 
-        TValue& Push() { 
+        TValue& Push() {
             SetArray();
-            DoPush(Pool, Array); 
+            DoPush(Pool, Array);
             return Array.back();
         }
 
@@ -228,36 +228,36 @@ namespace NSc {
             return IsArray() && Array.size() > key ? Array[key] : TValue::DefaultValue();
         }
 
-        TValue* GetNoAdd(size_t key) { 
-            return IsArray() && Array.size() > key ? &Array[key] : nullptr; 
+        TValue* GetNoAdd(size_t key) {
+            return IsArray() && Array.size() > key ? &Array[key] : nullptr;
         }
 
-        TValue& GetOrAdd(size_t key) { 
+        TValue& GetOrAdd(size_t key) {
             SetArray();
             for (size_t i = Array.size(); i <= key; ++i) {
-                DoPush(Pool, Array); 
+                DoPush(Pool, Array);
             }
 
             return Array[key];
         }
 
-        TValue& Back() { 
+        TValue& Back() {
             SetArray();
 
             if (Array.empty()) {
-                DoPush(Pool, Array); 
+                DoPush(Pool, Array);
             }
 
             return Array.back();
         }
 
-        TValue& Insert(size_t key) { 
+        TValue& Insert(size_t key) {
             SetArray();
 
             if (Array.size() <= key) {
-                return GetOrAdd(key); 
+                return GetOrAdd(key);
             } else {
-                Array.insert(Array.begin() + key, TValue(Pool)); 
+                Array.insert(Array.begin() + key, TValue(Pool));
                 Array[key].CopyOnWrite = false;
                 return Array[key];
             }
@@ -282,28 +282,28 @@ namespace NSc {
             return it != Dict.end() ? it->second : TValue::DefaultValue();
         }
 
-        TValue* GetNoAdd(TStringBuf key) { 
+        TValue* GetNoAdd(TStringBuf key) {
             if (!IsDict()) {
-                return nullptr; 
+                return nullptr;
             }
 
-            return Dict.FindPtr(key); 
+            return Dict.FindPtr(key);
         }
 
-        TValue& Add(TStringBuf key) { 
+        TValue& Add(TStringBuf key) {
             SetDict();
-            TDict::iterator it = Dict.insert(std::make_pair(Pool->AppendBuf(key), TValue(Pool))).first; 
+            TDict::iterator it = Dict.insert(std::make_pair(Pool->AppendBuf(key), TValue(Pool))).first;
             it->second.CopyOnWrite = false;
             return it->second;
         }
 
-        TValue& GetOrAdd(TStringBuf key) { 
+        TValue& GetOrAdd(TStringBuf key) {
             SetDict();
             TDict::insert_ctx ctx;
             TDict::iterator it = Dict.find(key, ctx);
 
             if (it == Dict.end()) {
-                it = Dict.insert_direct(std::make_pair(Pool->AppendBuf(key), TValue(Pool)), ctx); 
+                it = Dict.insert_direct(std::make_pair(Pool->AppendBuf(key), TValue(Pool)), ctx);
                 it->second.CopyOnWrite = false;
             }
 
@@ -331,9 +331,9 @@ namespace NSc {
         return new (p->Pool.Allocate<TScCore>()) TScCore(p);
     }
 
-    TValue::TValue() { 
-        auto p = TPoolPtr(new NDefinitions::TPool); 
-        TheCore = NewCore(p); 
+    TValue::TValue() {
+        auto p = TPoolPtr(new NDefinitions::TPool);
+        TheCore = NewCore(p);
     }
 
     TValue::TValue(double t)
@@ -397,19 +397,19 @@ namespace NSc {
     }
 
     TValue::TValue(TValue& v)
-        : TheCore(v.TheCore) 
+        : TheCore(v.TheCore)
         , CopyOnWrite(v.CopyOnWrite)
     {
     }
 
     TValue::TValue(const TValue& v)
-        : TheCore(v.TheCore) 
+        : TheCore(v.TheCore)
         , CopyOnWrite(true)
     {
     }
 
     TValue::TValue(TValue&& v) noexcept
-        : TheCore(std::move(v.TheCore)) 
+        : TheCore(std::move(v.TheCore))
         , CopyOnWrite(v.CopyOnWrite)
     {}
 
@@ -529,8 +529,8 @@ namespace NSc {
 
     TValue& TValue::operator=(const TValue& v) & {
         if (!Same(*this, v)) {
-            //Extend TheCore lifetime not to trigger possible v deletion via parent-child chain 
-            auto tmpCore = TheCore; 
+            //Extend TheCore lifetime not to trigger possible v deletion via parent-child chain
+            auto tmpCore = TheCore;
             TheCore = v.TheCore;
             CopyOnWrite = true;
         }
@@ -539,8 +539,8 @@ namespace NSc {
 
     TValue& TValue::operator=(TValue&& v) & noexcept {
         if (!Same(*this, v)) {
-            //Extend TheCore lifetime not to trigger possible v deletion via parent-child chain 
-            auto tmpCore = TheCore; 
+            //Extend TheCore lifetime not to trigger possible v deletion via parent-child chain
+            auto tmpCore = TheCore;
             TheCore = std::move(v.TheCore);
             CopyOnWrite = v.CopyOnWrite;
         }
@@ -556,18 +556,18 @@ namespace NSc {
     }
 
     TValue& TValue::GetOrAddUnsafe(size_t idx) {
-        return CoreMutable().GetOrAdd(idx); 
+        return CoreMutable().GetOrAdd(idx);
     }
 
     TValue& TValue::GetOrAdd(TStringBuf idx) {
-        return CoreMutable().GetOrAdd(idx); 
+        return CoreMutable().GetOrAdd(idx);
     }
 
     const TValue& TValue::Get(size_t idx) const {
         return Core().Get(idx);
     }
 
-    TValue* TValue::GetNoAdd(size_t idx) { 
+    TValue* TValue::GetNoAdd(size_t idx) {
         return CoreMutable().GetNoAdd(idx);
     }
 
@@ -575,12 +575,12 @@ namespace NSc {
         return Core().Get(idx);
     }
 
-    TValue* TValue::GetNoAdd(TStringBuf key) { 
+    TValue* TValue::GetNoAdd(TStringBuf key) {
         return CoreMutable().GetNoAdd(key);
     }
 
     TValue& TValue::Back() {
-        return CoreMutable().Back(); 
+        return CoreMutable().Back();
     }
 
     const TValue& TValue::Back() const {
@@ -604,7 +604,7 @@ namespace NSc {
     }
 
     TValue& TValue::InsertUnsafe(size_t idx) {
-        return CoreMutable().Insert(idx); 
+        return CoreMutable().Insert(idx);
     }
 
     template <class TIt>
@@ -623,7 +623,7 @@ namespace NSc {
     }
 
     TValue& TValue::Push() {
-        return CoreMutable().Push(); 
+        return CoreMutable().Push();
     }
 
     TValue TValue::Pop() {
@@ -663,22 +663,22 @@ namespace NSc {
     }
 
     TValue& TValue::SetNumber(double i) {
-        CoreMutableForSet().SetNumber(i); 
+        CoreMutableForSet().SetNumber(i);
         return *this;
     }
 
     TValue& TValue::SetIntNumber(i64 n) {
-        CoreMutableForSet().SetIntNumber(n); 
+        CoreMutableForSet().SetIntNumber(n);
         return *this;
     }
 
     TValue& TValue::SetBool(bool val) {
-        CoreMutableForSet().SetBool(val); 
+        CoreMutableForSet().SetBool(val);
         return *this;
     }
 
     TValue& TValue::SetString(TStringBuf s) {
-        CoreMutableForSet().SetString(s); 
+        CoreMutableForSet().SetString(s);
         return *this;
     }
 
@@ -767,13 +767,13 @@ namespace NSc {
     }
 
     TValue::TValue(TPoolPtr& p)
-        : TheCore(NewCore(p)) 
+        : TheCore(NewCore(p))
     {
     }
 
     TValue::TScCore& TValue::CoreMutable() {
         if (Y_UNLIKELY(!TheCore)) {
-            *this = TValue(); 
+            *this = TValue();
         } else if (Y_UNLIKELY(CopyOnWrite) && Y_UNLIKELY(TheCore->RefCount() > 1)) {
             *this = Clone();
         }
@@ -783,22 +783,22 @@ namespace NSc {
         return *TheCore;
     }
 
-    TValue::TScCore& TValue::CoreMutableForSet() { 
-        if (Y_UNLIKELY(!TheCore) || Y_UNLIKELY(CopyOnWrite) && Y_UNLIKELY(TheCore->RefCount() > 1)) { 
-            *this = TValue(); 
-        } 
- 
-        CopyOnWrite = false; 
- 
-        return *TheCore; 
-    } 
- 
+    TValue::TScCore& TValue::CoreMutableForSet() {
+        if (Y_UNLIKELY(!TheCore) || Y_UNLIKELY(CopyOnWrite) && Y_UNLIKELY(TheCore->RefCount() > 1)) {
+            *this = TValue();
+        }
+
+        CopyOnWrite = false;
+
+        return *TheCore;
+    }
+
     const TValue::TScCore& TValue::Core() const {
         return TheCore ? *TheCore : DefaultCore();
     }
 
     TValue& TValue::SetNull() {
-        CoreMutableForSet().SetNull(); 
+        CoreMutableForSet().SetNull();
         return *this;
     }
 

@@ -193,7 +193,7 @@ namespace NSc {
         inline bool Has(size_t idx) const;
 
         inline const TValue& Get(size_t idx) const; // returns child or default
-        inline TValue* GetNoAdd(size_t idx); // returns link to existing child or nullptr 
+        inline TValue* GetNoAdd(size_t idx); // returns link to existing child or nullptr
 
         inline TValue& Push(); // returns new child
 
@@ -260,7 +260,7 @@ namespace NSc {
         inline bool Has(TStringBuf idx) const;
 
         inline const TValue& Get(TStringBuf idx) const;
-        inline TValue* GetNoAdd(TStringBuf idx); // returns link to existing child or nullptr 
+        inline TValue* GetNoAdd(TStringBuf idx); // returns link to existing child or nullptr
 
         TValue& Add(TStringBuf idx) {
             return GetOrAdd(idx);
@@ -364,7 +364,7 @@ namespace NSc {
                                                         // if the path is syntactically valid and the target value exists
                                                         // otherwise returns NSc::Null()
 
-        TValue* TrySelectOrAdd(TStringBuf path); // returns the target value if it exists or creates if not 
+        TValue* TrySelectOrAdd(TStringBuf path); // returns the target value if it exists or creates if not
                                                 // if the path is syntactically valid
                                                 // otherwise returns NSc::Null()
 
@@ -413,7 +413,7 @@ namespace NSc {
         bool IsSameOrAncestorOfImpl(const TScCore& other, NImpl::TSelfLoopContext& loopCtx) const;
 
         inline TScCore& CoreMutable();
-        inline TScCore& CoreMutableForSet(); 
+        inline TScCore& CoreMutableForSet();
         inline const TScCore& Core() const;
 
         static inline TScCore* NewCore(TPoolPtr&);

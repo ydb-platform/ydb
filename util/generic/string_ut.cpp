@@ -745,19 +745,19 @@ public:
     UNIT_TEST(TestCharRef);
 #endif
     UNIT_TEST(TestBack)
-    UNIT_TEST(TestFront) 
+    UNIT_TEST(TestFront)
     UNIT_TEST(TestIterators);
     UNIT_TEST(TestReverseIterators);
-    UNIT_TEST(TestAppendUtf16) 
+    UNIT_TEST(TestAppendUtf16)
     UNIT_TEST(TestFillingAssign)
     UNIT_TEST(TestStdStreamApi)
     //UNIT_TEST(TestOperatorsCI); must fail
     UNIT_TEST_SUITE_END();
- 
-    void TestAppendUtf16() { 
+
+    void TestAppendUtf16() {
         TString appended = TString("А роза упала").AppendUtf16(u" на лапу Азора");
         UNIT_ASSERT(appended == "А роза упала на лапу Азора");
-    } 
+    }
 
     void TestFillingAssign() {
         TString s("abc");
@@ -807,7 +807,7 @@ public:
     UNIT_TEST(TestCharRef);
 #endif
     UNIT_TEST(TestBack);
-    UNIT_TEST(TestFront) 
+    UNIT_TEST(TestFront)
     UNIT_TEST(TestDecodingMethods);
     UNIT_TEST(TestIterators);
     UNIT_TEST(TestReverseIterators);

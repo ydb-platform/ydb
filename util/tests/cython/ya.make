@@ -14,7 +14,7 @@ PY_SRCS(
     generic/array_ref_ut.pyx
     generic/deque_ut.pyx
     generic/maybe_ut.pyx
-    generic/ptr_ut.pyx 
+    generic/ptr_ut.pyx
     generic/string_ut.pyx
     generic/vector_ut.pyx
     generic/list_ut.pyx

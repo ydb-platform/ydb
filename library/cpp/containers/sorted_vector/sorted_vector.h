@@ -12,35 +12,35 @@
 
 namespace NSorted {
     namespace NPrivate {
-        template <class TPredicate> 
+        template <class TPredicate>
         struct TEqual {
-            template<typename TValueType1, typename TValueType2> 
-            inline bool operator()(const TValueType1& l, const TValueType2& r) const { 
+            template<typename TValueType1, typename TValueType2>
+            inline bool operator()(const TValueType1& l, const TValueType2& r) const {
                 TPredicate comp;
                 return comp(l, r) == comp(r, l);
             }
         };
 
-        template <typename TValueType, class TPredicate, class TKeyExtractor> 
+        template <typename TValueType, class TPredicate, class TKeyExtractor>
         struct TKeyCompare {
             inline bool operator()(const TValueType& l, const TValueType& r) const {
                 TKeyExtractor extractKey;
                 return TPredicate()(extractKey(l), extractKey(r));
             }
-            template<typename TKeyType> 
+            template<typename TKeyType>
             inline bool operator()(const TKeyType& l, const TValueType& r) const {
                 return TPredicate()(l, TKeyExtractor()(r));
             }
-            template<typename TKeyType> 
+            template<typename TKeyType>
             inline bool operator()(const TValueType& l, const TKeyType& r) const {
                 return TPredicate()(TKeyExtractor()(l), r);
             }
         };
 
         template <typename TValueType, class TPredicate>
-        struct TKeyCompare<TValueType, TPredicate, TIdentity> { 
-            template <typename TValueType1, typename TValueType2> 
-            inline bool operator()(const TValueType1& l, const TValueType2& r) const { 
+        struct TKeyCompare<TValueType, TPredicate, TIdentity> {
+            template <typename TValueType1, typename TValueType2>
+            inline bool operator()(const TValueType1& l, const TValueType2& r) const {
                 return TPredicate()(l, r);
             }
         };
@@ -53,9 +53,9 @@ namespace NSorted {
     class TSortedVector: public TVector<TValueType, A> {
     private:
         typedef TVector<TValueType, A> TBase;
-        typedef NPrivate::TKeyCompare<TValueType, TPredicate, TKeyExtractor> TKeyCompare; 
-        typedef NPrivate::TEqual<TKeyCompare> TValueEqual; 
-        typedef NPrivate::TEqual<TPredicate> TKeyEqual; 
+        typedef NPrivate::TKeyCompare<TValueType, TPredicate, TKeyExtractor> TKeyCompare;
+        typedef NPrivate::TEqual<TKeyCompare> TValueEqual;
+        typedef NPrivate::TEqual<TPredicate> TKeyEqual;
 
     public:
         typedef TValueType value_type;
@@ -197,8 +197,8 @@ namespace NSorted {
             this->MakeUnique();
         }
 
-        template<class K> 
-        inline const_iterator Find(const K& key) const { 
+        template<class K>
+        inline const_iterator Find(const K& key) const {
             const_iterator i = LowerBound(key);
             if (i == TBase::end() || !TKeyEqual()(TKeyExtractor()(*i), key))
                 return TBase::end();
@@ -207,13 +207,13 @@ namespace NSorted {
         }
 
         // STL-compatible synonym
-        template<class K> 
-        Y_FORCE_INLINE const_iterator find(const K& key) const { 
+        template<class K>
+        Y_FORCE_INLINE const_iterator find(const K& key) const {
             return this->Find(key);
         }
 
-        template<class K> 
-        inline iterator Find(const K& key) { 
+        template<class K>
+        inline iterator Find(const K& key) {
             iterator i = LowerBound(key);
             if (i == TBase::end() || !TKeyEqual()(TKeyExtractor()(*i), key))
                 return TBase::end();
@@ -222,89 +222,89 @@ namespace NSorted {
         }
 
         // STL-compatible synonym
-        template<class K> 
-        Y_FORCE_INLINE iterator find(const K& key) { 
+        template<class K>
+        Y_FORCE_INLINE iterator find(const K& key) {
             return this->Find(key);
         }
 
-        template<class K> 
-        Y_FORCE_INLINE bool Has(const K& key) const { 
+        template<class K>
+        Y_FORCE_INLINE bool Has(const K& key) const {
             return this->find(key) != TBase::end();
         }
 
-        template<class K> 
-        Y_FORCE_INLINE bool has(const K& key) const { 
+        template<class K>
+        Y_FORCE_INLINE bool has(const K& key) const {
             return this->Has(key);
         }
 
-        template<class K> 
-        Y_FORCE_INLINE iterator LowerBound(const K& key) { 
+        template<class K>
+        Y_FORCE_INLINE iterator LowerBound(const K& key) {
             return ::LowerBound(TBase::begin(), TBase::end(), key, TKeyCompare());
         }
 
         // STL-compatible synonym
-        template<class K> 
-        Y_FORCE_INLINE iterator lower_bound(const K& key) { 
+        template<class K>
+        Y_FORCE_INLINE iterator lower_bound(const K& key) {
             return this->LowerBound(key);
         }
 
-        template<class K> 
-        Y_FORCE_INLINE const_iterator LowerBound(const K& key) const { 
+        template<class K>
+        Y_FORCE_INLINE const_iterator LowerBound(const K& key) const {
             return ::LowerBound(TBase::begin(), TBase::end(), key, TKeyCompare());
         }
 
         // STL-compatible synonym
-        template<class K> 
-        Y_FORCE_INLINE const_iterator lower_bound(const K& key) const { 
+        template<class K>
+        Y_FORCE_INLINE const_iterator lower_bound(const K& key) const {
             return this->LowerBound(key);
         }
 
-        template<class K> 
-        Y_FORCE_INLINE iterator UpperBound(const K& key) { 
+        template<class K>
+        Y_FORCE_INLINE iterator UpperBound(const K& key) {
             return ::UpperBound(TBase::begin(), TBase::end(), key, TKeyCompare());
         }
 
         // STL-compatible synonym
-        template<class K> 
-        Y_FORCE_INLINE iterator upper_bound(const K& key) { 
+        template<class K>
+        Y_FORCE_INLINE iterator upper_bound(const K& key) {
             return this->UpperBound(key);
         }
 
-        template<class K> 
-        Y_FORCE_INLINE const_iterator UpperBound(const K& key) const { 
+        template<class K>
+        Y_FORCE_INLINE const_iterator UpperBound(const K& key) const {
             return ::UpperBound(TBase::begin(), TBase::end(), key, TKeyCompare());
         }
 
         // STL-compatible synonym
-        template<class K> 
-        Y_FORCE_INLINE const_iterator upper_bound(const K& key) const { 
+        template<class K>
+        Y_FORCE_INLINE const_iterator upper_bound(const K& key) const {
             return this->UpperBound(key);
         }
 
-        template<class K> 
-        Y_FORCE_INLINE std::pair<iterator, iterator> EqualRange(const K& key) { 
+        template<class K>
+        Y_FORCE_INLINE std::pair<iterator, iterator> EqualRange(const K& key) {
             return std::equal_range(TBase::begin(), TBase::end(), key, TKeyCompare());
         }
 
         // STL-compatible synonym
-        template<class K> 
-        Y_FORCE_INLINE std::pair<iterator, iterator> equal_range(const K& key) { 
+        template<class K>
+        Y_FORCE_INLINE std::pair<iterator, iterator> equal_range(const K& key) {
             return this->EqualRange(key);
         }
 
-        template<class K> 
-        Y_FORCE_INLINE std::pair<const_iterator, const_iterator> EqualRange(const K& key) const { 
+        template<class K>
+        Y_FORCE_INLINE std::pair<const_iterator, const_iterator> EqualRange(const K& key) const {
             return std::equal_range(TBase::begin(), TBase::end(), key, TKeyCompare());
         }
 
         // STL-compatible synonym
-        template<class K> 
-        Y_FORCE_INLINE std::pair<const_iterator, const_iterator> equal_range(const K& key) const { 
+        template<class K>
+        Y_FORCE_INLINE std::pair<const_iterator, const_iterator> equal_range(const K& key) const {
             return this->EqualRange(key);
         }
 
-        template<class K> 
-        inline void Erase(const K& key) { 
+        template<class K>
+        inline void Erase(const K& key) {
             std::pair<iterator, iterator> res = EqualRange(key);
             TBase::erase(res.first, res.second);
         }
@@ -314,8 +314,8 @@ namespace NSorted {
             this->Erase(key);
         }
 
-        template<class K> 
-        inline size_t count(const K& key) const { 
+        template<class K>
+        inline size_t count(const K& key) const {
             const std::pair<const_iterator, const_iterator> range = this->EqualRange(key);
             return std::distance(range.first, range.second);
         }
@@ -369,19 +369,19 @@ namespace NSorted {
                 return i->second;
         }
 
-        template<class K> 
-        inline const TValueType& Get(const K& key, const TValueType& def) const { 
+        template<class K>
+        inline const TValueType& Get(const K& key, const TValueType& def) const {
             typename TBase::const_iterator i = TBase::Find(key);
             return i != TBase::end() ? i->second : def;
         }
 
-        template<class K> 
-        Y_FORCE_INLINE TValueType& operator[](const K& key) { 
+        template<class K>
+        Y_FORCE_INLINE TValueType& operator[](const K& key) {
             return Get(key);
         }
 
-        template<class K> 
-        const TValueType& at(const K& key) const { 
+        template<class K>
+        const TValueType& at(const K& key) const {
             const auto i = TBase::Find(key);
             if (i == TBase::end()) {
                 throw std::out_of_range("NSorted::TSimpleMap: missing key");
@@ -390,8 +390,8 @@ namespace NSorted {
             return i->second;
         }
 
-        template<class K> 
-        TValueType& at(const K& key) { 
+        template<class K>
+        TValueType& at(const K& key) {
             return const_cast<TValueType&>(
                     const_cast<const TSimpleMap<TKeyType, TValueType, TPredicate, A>*>(this)->at(key));
         }
@@ -412,7 +412,7 @@ namespace NSorted {
         typedef typename TBase::iterator iterator;
         typedef typename TBase::const_iterator const_iterator;
         typedef typename TBase::size_type size_type;
-        typedef NPrivate::TEqual<TPredicate> TKeyEqual; 
+        typedef NPrivate::TEqual<TPredicate> TKeyEqual;
 
     public:
         inline TSimpleSet()
@@ -441,14 +441,14 @@ namespace NSorted {
             return *i;
         }
 
-        template<class K> 
-        inline const TValueType& Get(const K& key, const TValueType& def) const { 
+        template<class K>
+        inline const TValueType& Get(const K& key, const TValueType& def) const {
             typename TBase::const_iterator i = TBase::Find(key);
             return i != TBase::end() ? *i : def;
         }
 
-        template<class K> 
-        Y_FORCE_INLINE TValueType& operator[](const K& key) { 
+        template<class K>
+        Y_FORCE_INLINE TValueType& operator[](const K& key) {
             return Get(key);
         }
 

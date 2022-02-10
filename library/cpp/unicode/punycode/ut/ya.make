@@ -1,9 +1,9 @@
 UNITTEST_FOR(library/cpp/unicode/punycode)
 
 OWNER(
-    g:base 
-    g:middle 
-    g:upper 
+    g:base
+    g:middle
+    g:upper
 )
 
 SRCS(

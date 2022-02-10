@@ -216,13 +216,13 @@ namespace NSc {
         return DefaultValue();
     }
 
-    TValue* TValue::TrySelectOrAdd(TStringBuf path) { 
+    TValue* TValue::TrySelectOrAdd(TStringBuf path) {
         TSelectorCtx<TSelector<TValue, TGetNext<false> > > ctx(*this, path);
 
         if (ctx.SelectPath()) {
-            return ctx.Selector.Current; 
+            return ctx.Selector.Current;
         } else {
-            return nullptr; 
+            return nullptr;
         }
     }
 

@@ -1,7 +1,7 @@
 OWNER(g:python-contrib)
 
 PY23_LIBRARY()
- 
+
 LICENSE(MIT)
 
 VERSION(1.16.0)

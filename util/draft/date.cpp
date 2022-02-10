@@ -17,23 +17,23 @@ time_t GetDateStart(time_t ts) {
     return mktime(&dateTm);
 }
 
-static time_t ParseDate(const char* date, const char* format) { 
+static time_t ParseDate(const char* date, const char* format) {
     tm dateTm;
     memset(&dateTm, 0, sizeof(tm));
     if (!strptime(date, format, &dateTm)) {
-        ythrow yexception() << "Invalid date string and format: " << date << ", " << format; 
+        ythrow yexception() << "Invalid date string and format: " << date << ", " << format;
     }
     return mktime(&dateTm);
 }
 
-static time_t ParseDate(const char* dateStr) { 
+static time_t ParseDate(const char* dateStr) {
     if (strlen(dateStr) != 8) {
-        ythrow yexception() << "Invalid date string: " << dateStr; 
+        ythrow yexception() << "Invalid date string: " << dateStr;
     }
- 
-    return ParseDate(dateStr, "%Y%m%d"); 
-} 
- 
+
+    return ParseDate(dateStr, "%Y%m%d");
+}
+
 template <>
 TDate FromStringImpl<TDate>(const char* data, size_t len) {
     return TDate(ParseDate(TString(data, len).data()));
@@ -56,9 +56,9 @@ TDate::TDate(time_t ts)
 
 TDate::TDate(const TString& date, const TString& format)
     : Timestamp(GetDateStart(ParseDate(date.data(), format.data())))
-{ 
-} 
- 
+{
+}
+
 TDate::TDate(unsigned year, unsigned month, unsigned monthDay) {
     tm dateTm;
     Zero(dateTm);

@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
     };
 
     Y_UNIT_TEST(SimpleTest) {
-        for (ui32 i = 0; i < Y_ARRAY_SIZE(VALS); ++i) { 
+        for (ui32 i = 0; i < Y_ARRAY_SIZE(VALS); ++i) {
             const TString data = *TCache::Get<TCallbacks>(i);
             UNIT_ASSERT(data == VALS[i]);
         }
@@ -405,39 +405,39 @@ Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
         UNIT_ASSERT(*item == "hjk");
     }
 }
- 
-Y_UNIT_TEST_SUITE(TThreadSafeCacheUnsafeTest) { 
-    typedef TThreadSafeCache<ui32, TString, ui32> TCache; 
- 
-    const char* VALS[] = {"abcd", "defg", "hjkl"}; 
-    const ui32 FAILED_IDX = 1; 
- 
-    class TCallbacks: public TCache::ICallbacks { 
-    public: 
-        TKey GetKey(ui32 i) const override { 
-            return i; 
-        } 
-        TValue* CreateObject(ui32 i) const override { 
-            if (i == FAILED_IDX) { 
-                return nullptr; 
-            } 
-            return new TString(VALS[i]); 
-        } 
-    }; 
- 
-    Y_UNIT_TEST(SimpleTest) { 
-        TCallbacks callbacks; 
-        TCache cache(callbacks, Y_ARRAY_SIZE(VALS)); 
-        for (ui32 i = 0; i < Y_ARRAY_SIZE(VALS); ++i) { 
-            const TString* data = cache.GetUnsafe(i).Get(); 
-            if (i == FAILED_IDX) { 
-                UNIT_ASSERT(data == nullptr); 
-            } else { 
-                UNIT_ASSERT(*data == VALS[i]); 
-            } 
-        } 
-    } 
-} 
+
+Y_UNIT_TEST_SUITE(TThreadSafeCacheUnsafeTest) {
+    typedef TThreadSafeCache<ui32, TString, ui32> TCache;
+
+    const char* VALS[] = {"abcd", "defg", "hjkl"};
+    const ui32 FAILED_IDX = 1;
+
+    class TCallbacks: public TCache::ICallbacks {
+    public:
+        TKey GetKey(ui32 i) const override {
+            return i;
+        }
+        TValue* CreateObject(ui32 i) const override {
+            if (i == FAILED_IDX) {
+                return nullptr;
+            }
+            return new TString(VALS[i]);
+        }
+    };
+
+    Y_UNIT_TEST(SimpleTest) {
+        TCallbacks callbacks;
+        TCache cache(callbacks, Y_ARRAY_SIZE(VALS));
+        for (ui32 i = 0; i < Y_ARRAY_SIZE(VALS); ++i) {
+            const TString* data = cache.GetUnsafe(i).Get();
+            if (i == FAILED_IDX) {
+                UNIT_ASSERT(data == nullptr);
+            } else {
+                UNIT_ASSERT(*data == VALS[i]);
+            }
+        }
+    }
+}
 
 Y_UNIT_TEST_SUITE(TThreadSafeLRUCacheTest) {
     typedef TThreadSafeLRUCache<size_t, TString, size_t> TCache;

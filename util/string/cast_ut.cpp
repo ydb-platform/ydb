@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/charset/wide.h> 
+#include <util/charset/wide.h>
 #include <util/system/defaults.h>
 
 #include <limits>
@@ -372,71 +372,71 @@ Y_UNIT_TEST_SUITE(TCastTest) {
     }
 
     Y_UNIT_TEST(TestDefault) {
-        size_t res = 0; 
-        const size_t def1 = 42; 
- 
+        size_t res = 0;
+        const size_t def1 = 42;
+
         TString s1("100500");
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s1, res, def1), true);
         UNIT_ASSERT_VALUES_EQUAL(res, 100500);
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s1, res), true);
         UNIT_ASSERT_VALUES_EQUAL(res, 100500);
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault("100500", res, def1), true);
         UNIT_ASSERT_VALUES_EQUAL(res, 100500);
- 
-        UNIT_CHECK_GENERATED_NO_EXCEPTION(FromStringWithDefault(s1, def1), yexception); 
+
+        UNIT_CHECK_GENERATED_NO_EXCEPTION(FromStringWithDefault(s1, def1), yexception);
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault(s1, def1), 100500);
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault<size_t>(s1), 100500);
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault("100500", def1), 100500);
- 
+
         TString s2("100q500");
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s2, res), false);
         UNIT_ASSERT_VALUES_EQUAL(res, size_t());
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s2, res, def1), false);
         UNIT_ASSERT_VALUES_EQUAL(res, def1);
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault("100q500", res), false);
         UNIT_ASSERT_VALUES_EQUAL(res, size_t());
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault("100 500", res), false);
         UNIT_ASSERT_VALUES_EQUAL(res, size_t());
 
-        UNIT_CHECK_GENERATED_NO_EXCEPTION(FromStringWithDefault(s2, def1), yexception); 
-        UNIT_CHECK_GENERATED_NO_EXCEPTION(FromStringWithDefault("100q500", def1), yexception); 
+        UNIT_CHECK_GENERATED_NO_EXCEPTION(FromStringWithDefault(s2, def1), yexception);
+        UNIT_CHECK_GENERATED_NO_EXCEPTION(FromStringWithDefault("100q500", def1), yexception);
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault(s2, def1), def1);
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault<size_t>(s2), size_t());
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault<size_t>("100q500"), size_t());
-        UNIT_CHECK_GENERATED_EXCEPTION(FromString<size_t>(s2), TFromStringException); 
- 
-        int res2 = 0; 
-        const int def2 = -6; 
- 
+        UNIT_CHECK_GENERATED_EXCEPTION(FromString<size_t>(s2), TFromStringException);
+
+        int res2 = 0;
+        const int def2 = -6;
+
         TUtf16String s3 = u"-100500";
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s3, res2, def2), true);
         UNIT_ASSERT_VALUES_EQUAL(res2, -100500);
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s3, res2), true);
         UNIT_ASSERT_VALUES_EQUAL(res2, -100500);
- 
-        UNIT_CHECK_GENERATED_NO_EXCEPTION(FromStringWithDefault(s3, def1), yexception); 
+
+        UNIT_CHECK_GENERATED_NO_EXCEPTION(FromStringWithDefault(s3, def1), yexception);
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault(s3, def2), -100500);
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault<size_t>(s3), size_t());
- 
+
         TUtf16String s4 = u"-f100500";
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s4, res2, def2), false);
         UNIT_ASSERT_VALUES_EQUAL(res2, def2);
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s4, res2), false);
         UNIT_ASSERT_VALUES_EQUAL(res2, size_t());
- 
-        UNIT_CHECK_GENERATED_NO_EXCEPTION(FromStringWithDefault(s4, def2), yexception); 
+
+        UNIT_CHECK_GENERATED_NO_EXCEPTION(FromStringWithDefault(s4, def2), yexception);
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault(s4, def2), def2);
-        UNIT_CHECK_GENERATED_EXCEPTION(FromString<size_t>(s4), yexception); 
+        UNIT_CHECK_GENERATED_EXCEPTION(FromString<size_t>(s4), yexception);
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault<size_t>(s4), size_t());
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestBool) {
         // True cases
         UNIT_ASSERT_VALUES_EQUAL(FromString<bool>("yes"), true);

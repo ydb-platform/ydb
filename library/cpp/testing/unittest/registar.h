@@ -547,7 +547,7 @@ public:                       \
         }                                                                                    \
         UNIT_ASSERT_C(0, "Exception hasn't been thrown, but it should have happened " << C); \
     } while (false)
- 
+
 #define UNIT_CHECK_GENERATED_EXCEPTION(A, E) UNIT_CHECK_GENERATED_EXCEPTION_C(A, E, "")
 
 #define UNIT_CHECK_GENERATED_NO_EXCEPTION_C(A, E, C)                                             \
@@ -560,7 +560,7 @@ public:                       \
             UNIT_ASSERT_C(0, "Exception has been thrown, but it shouldn't have happened " << C); \
         }                                                                                        \
     } while (false)
- 
+
 #define UNIT_CHECK_GENERATED_NO_EXCEPTION(A, E) UNIT_CHECK_GENERATED_NO_EXCEPTION_C(A, E, "and exception message is:\n" << CurrentExceptionMessage())
 
 // Same as UNIT_ASSERT_EXCEPTION_SATISFIES but prints additional string C when nothing was thrown

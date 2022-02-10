@@ -28,7 +28,7 @@ RECURSE(
     omni/print_omni
     omni/usage
     omni/ut
-    prog_options 
+    prog_options
     prog_options/ut
     sgi_hash
     threadable

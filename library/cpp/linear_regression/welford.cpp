@@ -1,5 +1,5 @@
 #include "welford.h"
- 
+
 #include <util/generic/ymath.h>
 
 void TMeanCalculator::Multiply(const double value) {
@@ -28,10 +28,10 @@ double TMeanCalculator::GetSumWeights() const {
     return SumWeights.Get();
 }
 
-void TMeanCalculator::Reset() { 
-    *this = TMeanCalculator(); 
-} 
- 
+void TMeanCalculator::Reset() {
+    *this = TMeanCalculator();
+}
+
 void TCovariationCalculator::Add(const double firstValue, const double secondValue, const double weight /*= 1.*/) {
     SumWeights += weight;
     if (SumWeights.Get()) {
@@ -66,10 +66,10 @@ double TCovariationCalculator::GetSumWeights() const {
     return SumWeights.Get();
 }
 
-void TCovariationCalculator::Reset() { 
-    *this = TCovariationCalculator(); 
-} 
- 
+void TCovariationCalculator::Reset() {
+    *this = TCovariationCalculator();
+}
+
 void TDeviationCalculator::Add(const double value, const double weight /*= 1.*/) {
     const double lastMean = MeanCalculator.GetMean();
     MeanCalculator.Add(value, weight);
@@ -101,7 +101,7 @@ double TDeviationCalculator::GetStdDev() const {
 double TDeviationCalculator::GetSumWeights() const {
     return MeanCalculator.GetSumWeights();
 }
- 
-void TDeviationCalculator::Reset() { 
-    *this = TDeviationCalculator(); 
-} 
+
+void TDeviationCalculator::Reset() {
+    *this = TDeviationCalculator();
+}

@@ -298,77 +298,77 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
     Y_UNIT_TEST(SigmaTest10000000) {
         TransformationTest(ETransformationType::TT_SIGMA, 10000000);
     }
- 
+
     Y_UNIT_TEST(ResetCalculatorTest) {
         TVector<double> arguments;
         TVector<double> weights;
-        const double eps = 1e-10; 
- 
-        const size_t argumentsCount = 100; 
-        for (size_t i = 0; i < argumentsCount; ++i) { 
-            arguments.push_back(i); 
-            weights.push_back(i); 
-        } 
- 
-        TDeviationCalculator deviationCalculator1, deviationCalculator2; 
-        TMeanCalculator meanCalculator1, meanCalculator2; 
-        TCovariationCalculator covariationCalculator1, covariationCalculator2; 
-        for (size_t i = 0; i < arguments.size(); ++i) { 
-            meanCalculator1.Add(arguments[i], weights[i]); 
-            meanCalculator2.Add(arguments[i], weights[i]); 
-            deviationCalculator1.Add(arguments[i], weights[i]); 
-            deviationCalculator2.Add(arguments[i], weights[i]); 
-            covariationCalculator1.Add(arguments[i], arguments[arguments.size() - i - 1], weights[i]); 
-            covariationCalculator2.Add(arguments[i], arguments[arguments.size() - i - 1], weights[i]); 
-        } 
- 
-        UNIT_ASSERT_DOUBLES_EQUAL(meanCalculator1.GetMean(), meanCalculator2.GetMean(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(meanCalculator1.GetSumWeights(), meanCalculator2.GetSumWeights(), eps); 
- 
-        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetMean(), deviationCalculator2.GetMean(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetDeviation(), deviationCalculator2.GetDeviation(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetStdDev(), deviationCalculator2.GetStdDev(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetSumWeights(), deviationCalculator2.GetSumWeights(), eps); 
- 
-        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetFirstValueMean(), covariationCalculator2.GetFirstValueMean(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetSecondValueMean(), covariationCalculator2.GetSecondValueMean(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetCovariation(), covariationCalculator2.GetCovariation(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetSumWeights(), covariationCalculator2.GetSumWeights(), eps); 
- 
-        meanCalculator2.Reset(); 
-        deviationCalculator2.Reset(); 
-        covariationCalculator2.Reset(); 
- 
-        UNIT_ASSERT_DOUBLES_EQUAL(0.0, meanCalculator2.GetMean(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(0.0, meanCalculator2.GetSumWeights(), eps); 
- 
-        UNIT_ASSERT_DOUBLES_EQUAL(0.0, deviationCalculator2.GetMean(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(0.0, deviationCalculator2.GetDeviation(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(0.0, deviationCalculator2.GetStdDev(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(0.0, deviationCalculator2.GetSumWeights(), eps); 
- 
-        UNIT_ASSERT_DOUBLES_EQUAL(0.0, covariationCalculator2.GetFirstValueMean(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(0.0, covariationCalculator2.GetSecondValueMean(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(0.0, covariationCalculator2.GetCovariation(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(0.0, covariationCalculator2.GetSumWeights(), eps); 
- 
-        for (size_t i = 0; i < arguments.size(); ++i) { 
-            meanCalculator2.Add(arguments[i], weights[i]); 
-            deviationCalculator2.Add(arguments[i], weights[i]); 
-            covariationCalculator2.Add(arguments[i], arguments[arguments.size() - i - 1], weights[i]); 
-        } 
- 
-        UNIT_ASSERT_DOUBLES_EQUAL(meanCalculator1.GetMean(), meanCalculator2.GetMean(), 1e-10); 
-        UNIT_ASSERT_DOUBLES_EQUAL(meanCalculator1.GetSumWeights(), meanCalculator2.GetSumWeights(), 1e-10); 
- 
-        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetMean(), deviationCalculator2.GetMean(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetDeviation(), deviationCalculator2.GetDeviation(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetStdDev(), deviationCalculator2.GetStdDev(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetSumWeights(), deviationCalculator2.GetSumWeights(), eps); 
- 
-        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetFirstValueMean(), covariationCalculator2.GetFirstValueMean(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetSecondValueMean(), covariationCalculator2.GetSecondValueMean(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetCovariation(), covariationCalculator2.GetCovariation(), eps); 
-        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetSumWeights(), covariationCalculator2.GetSumWeights(), eps); 
-    } 
+        const double eps = 1e-10;
+
+        const size_t argumentsCount = 100;
+        for (size_t i = 0; i < argumentsCount; ++i) {
+            arguments.push_back(i);
+            weights.push_back(i);
+        }
+
+        TDeviationCalculator deviationCalculator1, deviationCalculator2;
+        TMeanCalculator meanCalculator1, meanCalculator2;
+        TCovariationCalculator covariationCalculator1, covariationCalculator2;
+        for (size_t i = 0; i < arguments.size(); ++i) {
+            meanCalculator1.Add(arguments[i], weights[i]);
+            meanCalculator2.Add(arguments[i], weights[i]);
+            deviationCalculator1.Add(arguments[i], weights[i]);
+            deviationCalculator2.Add(arguments[i], weights[i]);
+            covariationCalculator1.Add(arguments[i], arguments[arguments.size() - i - 1], weights[i]);
+            covariationCalculator2.Add(arguments[i], arguments[arguments.size() - i - 1], weights[i]);
+        }
+
+        UNIT_ASSERT_DOUBLES_EQUAL(meanCalculator1.GetMean(), meanCalculator2.GetMean(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(meanCalculator1.GetSumWeights(), meanCalculator2.GetSumWeights(), eps);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetMean(), deviationCalculator2.GetMean(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetDeviation(), deviationCalculator2.GetDeviation(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetStdDev(), deviationCalculator2.GetStdDev(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetSumWeights(), deviationCalculator2.GetSumWeights(), eps);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetFirstValueMean(), covariationCalculator2.GetFirstValueMean(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetSecondValueMean(), covariationCalculator2.GetSecondValueMean(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetCovariation(), covariationCalculator2.GetCovariation(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetSumWeights(), covariationCalculator2.GetSumWeights(), eps);
+
+        meanCalculator2.Reset();
+        deviationCalculator2.Reset();
+        covariationCalculator2.Reset();
+
+        UNIT_ASSERT_DOUBLES_EQUAL(0.0, meanCalculator2.GetMean(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(0.0, meanCalculator2.GetSumWeights(), eps);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(0.0, deviationCalculator2.GetMean(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(0.0, deviationCalculator2.GetDeviation(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(0.0, deviationCalculator2.GetStdDev(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(0.0, deviationCalculator2.GetSumWeights(), eps);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(0.0, covariationCalculator2.GetFirstValueMean(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(0.0, covariationCalculator2.GetSecondValueMean(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(0.0, covariationCalculator2.GetCovariation(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(0.0, covariationCalculator2.GetSumWeights(), eps);
+
+        for (size_t i = 0; i < arguments.size(); ++i) {
+            meanCalculator2.Add(arguments[i], weights[i]);
+            deviationCalculator2.Add(arguments[i], weights[i]);
+            covariationCalculator2.Add(arguments[i], arguments[arguments.size() - i - 1], weights[i]);
+        }
+
+        UNIT_ASSERT_DOUBLES_EQUAL(meanCalculator1.GetMean(), meanCalculator2.GetMean(), 1e-10);
+        UNIT_ASSERT_DOUBLES_EQUAL(meanCalculator1.GetSumWeights(), meanCalculator2.GetSumWeights(), 1e-10);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetMean(), deviationCalculator2.GetMean(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetDeviation(), deviationCalculator2.GetDeviation(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetStdDev(), deviationCalculator2.GetStdDev(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(deviationCalculator1.GetSumWeights(), deviationCalculator2.GetSumWeights(), eps);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetFirstValueMean(), covariationCalculator2.GetFirstValueMean(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetSecondValueMean(), covariationCalculator2.GetSecondValueMean(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetCovariation(), covariationCalculator2.GetCovariation(), eps);
+        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator1.GetSumWeights(), covariationCalculator2.GetSumWeights(), eps);
+    }
 }

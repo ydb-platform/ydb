@@ -488,7 +488,7 @@ int main(int argc, char** argv) {
     opts.AddHelpOption('?');
     opts.SetTitle(
         "Archiver\n"
-        "Docs: https://wiki.yandex-team.ru/Development/Poisk/arcadia/tools/archiver" 
+        "Docs: https://wiki.yandex-team.ru/Development/Poisk/arcadia/tools/archiver"
     );
 
     bool hexdump = false;

@@ -3,7 +3,7 @@
 #include <util/stream/output.h>
 #include <util/stream/input.h>
 #include <util/generic/string.h>
-#include <util/datetime/constants.h> 
+#include <util/datetime/constants.h>
 
 #include <ctime>
 
@@ -43,31 +43,31 @@ public:
     TString ToStroka(const char* format = "%Y%m%d") const;
 
     TDate& operator++() {
-        Timestamp = GetDateStart(Timestamp + 3 * (SECONDS_IN_DAY / 2)); 
+        Timestamp = GetDateStart(Timestamp + 3 * (SECONDS_IN_DAY / 2));
         return *this;
     }
 
     TDate& operator--() {
-        Timestamp = GetDateStart(Timestamp - SECONDS_IN_DAY / 2); 
+        Timestamp = GetDateStart(Timestamp - SECONDS_IN_DAY / 2);
         return *this;
     }
 
     TDate& operator+=(unsigned days) {
-        Timestamp = GetDateStart(Timestamp + days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2); 
+        Timestamp = GetDateStart(Timestamp + days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2);
         return *this;
     }
 
     TDate& operator-=(unsigned days) {
-        Timestamp = GetDateStart(Timestamp - days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2); 
+        Timestamp = GetDateStart(Timestamp - days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2);
         return *this;
     }
 
     TDate operator+(unsigned days) const {
-        return TDate(Timestamp + days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2); 
+        return TDate(Timestamp + days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2);
     }
 
     TDate operator-(unsigned days) const {
-        return TDate(Timestamp - days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2); 
+        return TDate(Timestamp - days * SECONDS_IN_DAY + SECONDS_IN_DAY / 2);
     }
 
     unsigned GetWeekDay() const; // days since Sunday
@@ -113,7 +113,7 @@ inline int operator-(const TDate& left, const TDate& right) {
     if (left < right) {
         return -(right - left);
     }
-    return static_cast<int>((left.Timestamp + SECONDS_IN_DAY / 2 - right.Timestamp) / SECONDS_IN_DAY); 
+    return static_cast<int>((left.Timestamp + SECONDS_IN_DAY / 2 - right.Timestamp) / SECONDS_IN_DAY);
 }
 
 inline IInputStream& operator>>(IInputStream& left, TDate& right) {

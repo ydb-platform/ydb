@@ -14,17 +14,17 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
         NSc::TValue v;
         UNIT_ASSERT(!v.PathExists(path));
         UNIT_ASSERT(NSc::TValue::PathValid(path));
-        UNIT_ASSERT(NSc::TValue::Same(v.TrySelect(path), NSc::Null())); 
+        UNIT_ASSERT(NSc::TValue::Same(v.TrySelect(path), NSc::Null()));
         *v.TrySelectOrAdd(path) = 1;
         NSc::NUt::AssertSchemeJson(expected, v);
         UNIT_ASSERT(v.PathExists(path));
         UNIT_ASSERT(1 == v.TrySelectOrAdd(path)->GetNumber());
         UNIT_ASSERT(1 == v.TrySelect(path).GetNumber());
         UNIT_ASSERT(1 == v.TrySelectAndDelete(path).GetNumber());
-        UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete(path), NSc::Null())); 
+        UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete(path), NSc::Null()));
         NSc::NUt::AssertSchemeJson(delexpected, v);
         UNIT_ASSERT(!v.PathExists(path));
-        UNIT_ASSERT(NSc::TValue::Same(v.TrySelect(path), NSc::Null())); 
+        UNIT_ASSERT(NSc::TValue::Same(v.TrySelect(path), NSc::Null()));
     }
 
     Y_UNIT_TEST(TestSelect) {
@@ -35,19 +35,19 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
 
         UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//")));
         NSc::NUt::AssertSchemeJson("null", v);
-        UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null())); 
+        UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null()));
         NSc::NUt::AssertSchemeJson("null", v);
 
         v.SetDict();
         UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//")));
         NSc::NUt::AssertSchemeJson("{}", v);
-        UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null())); 
+        UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null()));
         NSc::NUt::AssertSchemeJson("{}", v);
 
         v.SetArray();
         UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//")));
         NSc::NUt::AssertSchemeJson("[]", v);
-        UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null())); 
+        UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null()));
         NSc::NUt::AssertSchemeJson("[]", v);
 
         DoTestSelect("[]", "{'':1}", "{}");

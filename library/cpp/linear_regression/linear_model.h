@@ -5,8 +5,8 @@
 
 #include <util/ysaveload.h>
 
-#include <utility> 
- 
+#include <utility>
+
 class TLinearModel {
 private:
     TVector<double> Coefficients;

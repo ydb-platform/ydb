@@ -18,7 +18,7 @@ public:
     void Remove(const double value, const double weight = 1.);
     double GetMean() const;
     double GetSumWeights() const;
-    void Reset(); 
+    void Reset();
 
     bool operator<(const TMeanCalculator& other) const {
         return Mean < other.Mean;
@@ -51,8 +51,8 @@ public:
     double GetCovariation() const;
 
     double GetSumWeights() const;
- 
-    void Reset(); 
+
+    void Reset();
 };
 
 // accurately computes (w_1 * x_1 * x_1 + w_2 * x_2 * x_2 + ... + w_n * x_n * x_n) / (w_1 + w_2 + ... + w_n)
@@ -72,6 +72,6 @@ public:
     double GetStdDev() const;
 
     double GetSumWeights() const;
- 
-    void Reset(); 
+
+    void Reset();
 };

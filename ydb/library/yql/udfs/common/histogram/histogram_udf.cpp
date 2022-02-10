@@ -791,28 +791,28 @@ namespace {
             double minValue = args[0].GetElement(HistogramIndexes.Min).Get<double>();
             double maxValue = args[0].GetElement(HistogramIndexes.Max).Get<double>();
             double area = args[1].GetOrDefault<double>(100.0);
-            bool cdfNormalization = args[2].GetOrDefault<bool>(false);
+            bool cdfNormalization = args[2].GetOrDefault<bool>(false); 
             double sum = 0.0;
             double weightsSum = 0.0;
-            double lastBinFrequency = 0.0;
+            double lastBinFrequency = 0.0; 
             std::vector<TUnboxedValue> resultBins;
             if (bins.HasFastListLength())
                 resultBins.reserve(bins.GetListLength());
             auto binsIterator = bins.GetListIterator();
             for (TUnboxedValue current; binsIterator.Next(current);) {
                 sum += current.GetElement(HistogramIndexes.Frequency).Get<double>();
-                lastBinFrequency = current.GetElement(HistogramIndexes.Frequency).Get<double>();
+                lastBinFrequency = current.GetElement(HistogramIndexes.Frequency).Get<double>(); 
             }
             binsIterator = bins.GetListIterator();
             for (TUnboxedValue current; binsIterator.Next(current);) {
                 TUnboxedValue* binFields = nullptr;
                 auto resultCurrent = valueBuilder->NewArray(HistogramIndexes.BinFieldsCount, binFields);
                 double frequency = current.GetElement(HistogramIndexes.Frequency).Get<double>();
-                if (cdfNormalization) {
-                    frequency = area * frequency / lastBinFrequency;
-                } else {
-                    frequency = area * frequency / sum;
-                }
+                if (cdfNormalization) { 
+                    frequency = area * frequency / lastBinFrequency; 
+                } else { 
+                    frequency = area * frequency / sum; 
+                } 
                 weightsSum += frequency;
                 binFields[HistogramIndexes.Frequency] = TUnboxedValuePod(frequency);
                 binFields[HistogramIndexes.Position] = current.GetElement(HistogramIndexes.Position);
@@ -835,10 +835,10 @@ namespace {
             if (Name() == name) {
                 THistogramIndexes histogramIndexes(builder);
                 auto optionalDouble = builder.Optional()->Item<double>().Build();
-                auto optionalCdfNormalization = builder.Optional()->Item<bool>().Build();
-                builder.Args()->Add(histogramIndexes.ResultStructType).Flags(ICallablePayload::TArgumentFlags::AutoMap).Add(optionalDouble).Add(optionalCdfNormalization).Done().Returns(histogramIndexes.ResultStructType);
+                auto optionalCdfNormalization = builder.Optional()->Item<bool>().Build(); 
+                builder.Args()->Add(histogramIndexes.ResultStructType).Flags(ICallablePayload::TArgumentFlags::AutoMap).Add(optionalDouble).Add(optionalCdfNormalization).Done().Returns(histogramIndexes.ResultStructType); 
                 builder.OptionalArgs(1);
-                builder.OptionalArgs(2);
+                builder.OptionalArgs(2); 
                 if (!typesOnly) {
                     builder.Implementation(new THistogramNormalize(histogramIndexes));
                 }

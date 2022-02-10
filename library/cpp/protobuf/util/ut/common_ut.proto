@@ -62,11 +62,11 @@ message TMergeTest {
 message TTextTest {
     optional uint32 Foo = 1;
 }
-
-message TTextEnumTest {
-   enum EnumTest {
-      EET_SLOT_1 = 1;
-      EET_SLOT_2 = 2;
-   }
-   optional EnumTest Slot = 1;
-}
+ 
+message TTextEnumTest { 
+   enum EnumTest { 
+      EET_SLOT_1 = 1; 
+      EET_SLOT_2 = 2; 
+   } 
+   optional EnumTest Slot = 1; 
+} 

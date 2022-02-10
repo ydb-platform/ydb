@@ -42,9 +42,9 @@ struct TMemoryMapCommon {
         void* Ptr;
         size_t Size;
         i32 Head;
- 
+
         TMapResult(void) noexcept {
-            Reset(); 
+            Reset();
         }
     };
 

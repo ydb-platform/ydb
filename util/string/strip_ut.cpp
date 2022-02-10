@@ -46,8 +46,8 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
 
     Y_UNIT_TEST(TestCustomStrip) {
         struct TTest {
-            const char* Str; 
-            const char* Result; 
+            const char* Str;
+            const char* Result;
         };
         static const TTest tests[] = {
             {"//012//", "012"},
@@ -55,14 +55,14 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
             {"012", "012"},
             {"012//", "012"},
         };
- 
+
         for (auto test : tests) {
-            UNIT_ASSERT_EQUAL( 
+            UNIT_ASSERT_EQUAL(
                 StripString(TString(test.Str), EqualsStripAdapter('/')),
                 test.Result);
-        }; 
-    } 
- 
+        };
+    }
+
     Y_UNIT_TEST(TestCustomStripLeftRight) {
         struct TTest {
             const char* Str;
@@ -88,11 +88,11 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
 
     Y_UNIT_TEST(TestNullStringStrip) {
         TStringBuf nullString(nullptr, nullptr);
-        UNIT_ASSERT_EQUAL( 
+        UNIT_ASSERT_EQUAL(
             StripString(nullString),
             TString());
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestWtrokaStrip) {
         UNIT_ASSERT_EQUAL(StripString(TWtringBuf(u" abc ")), u"abc");
         UNIT_ASSERT_EQUAL(StripStringLeft(TWtringBuf(u" abc ")), u"abc ");
@@ -100,13 +100,13 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
     }
 
     Y_UNIT_TEST(TestWtrokaCustomStrip) {
-        UNIT_ASSERT_EQUAL( 
+        UNIT_ASSERT_EQUAL(
             StripString(
                 TWtringBuf(u"/abc/"),
                 EqualsStripAdapter(u'/')),
             u"abc");
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestCollapse) {
         TString s;
         Collapse(TString("  123    456  "), s);

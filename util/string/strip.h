@@ -6,62 +6,62 @@
 #include <util/generic/strbuf.h>
 #include <utility>
 
-template <class It> 
-struct TIsAsciiSpaceAdapter { 
+template <class It>
+struct TIsAsciiSpaceAdapter {
     bool operator()(const It& it) const noexcept {
-        return IsAsciiSpace(*it); 
-    } 
-}; 
- 
-template <class It> 
-TIsAsciiSpaceAdapter<It> IsAsciiSpaceAdapter(It) { 
-    return {};
-} 
- 
-template <class TChar> 
-struct TEqualsStripAdapter { 
-    TEqualsStripAdapter(TChar ch) 
-        : Ch(ch) 
-    { 
-    } 
+        return IsAsciiSpace(*it);
+    }
+};
 
-    template <class It> 
+template <class It>
+TIsAsciiSpaceAdapter<It> IsAsciiSpaceAdapter(It) {
+    return {};
+}
+
+template <class TChar>
+struct TEqualsStripAdapter {
+    TEqualsStripAdapter(TChar ch)
+        : Ch(ch)
+    {
+    }
+
+    template <class It>
     bool operator()(const It& it) const noexcept {
-        return *it == Ch; 
-    } 
- 
+        return *it == Ch;
+    }
+
     const TChar Ch;
-}; 
- 
-template <class TChar> 
-TEqualsStripAdapter<TChar> EqualsStripAdapter(TChar ch) { 
+};
+
+template <class TChar>
+TEqualsStripAdapter<TChar> EqualsStripAdapter(TChar ch) {
     return {ch};
-} 
- 
+}
+
 template <class It, class TStripCriterion>
 inline void StripRangeBegin(It& b, const It& e, TStripCriterion&& criterion) noexcept {
-    while (b < e && criterion(b)) { 
+    while (b < e && criterion(b)) {
         ++b;
     }
 }
 
 template <class It>
 inline void StripRangeBegin(It& b, const It& e) noexcept {
-    StripRangeBegin(b, e, IsAsciiSpaceAdapter(b)); 
-} 
- 
+    StripRangeBegin(b, e, IsAsciiSpaceAdapter(b));
+}
+
 template <class It, class TStripCriterion>
 inline void StripRangeEnd(const It& b, It& e, TStripCriterion&& criterion) noexcept {
-    while (b < e && criterion(e - 1)) { 
+    while (b < e && criterion(e - 1)) {
         --e;
     }
 }
 
 template <class It>
 inline void StripRangeEnd(const It& b, It& e) noexcept {
-    StripRangeEnd(b, e, IsAsciiSpaceAdapter(b)); 
-} 
- 
+    StripRangeEnd(b, e, IsAsciiSpaceAdapter(b));
+}
+
 template <bool stripBeg, bool stripEnd>
 struct TStripImpl {
     template <class It, class TStripCriterion>
@@ -116,9 +116,9 @@ inline bool StripRange(It& b, It& e, TStripCriterion&& criterion) noexcept {
 
 template <class It>
 inline bool StripRange(It& b, It& e) noexcept {
-    return StripRange(b, e, IsAsciiSpaceAdapter(b)); 
-} 
- 
+    return StripRange(b, e, IsAsciiSpaceAdapter(b));
+}
+
 template <class It, class TStripCriterion>
 inline bool Strip(It& b, size_t& len, TStripCriterion&& criterion) noexcept {
     It e = b + len;
@@ -132,31 +132,31 @@ inline bool Strip(It& b, size_t& len, TStripCriterion&& criterion) noexcept {
     return false;
 }
 
-template <class It> 
+template <class It>
 inline bool Strip(It& b, size_t& len) noexcept {
-    return Strip(b, len, IsAsciiSpaceAdapter(b)); 
-} 
- 
+    return Strip(b, len, IsAsciiSpaceAdapter(b));
+}
+
 template <class T, class TStripCriterion>
 static inline bool StripString(const T& from, T& to, TStripCriterion&& criterion) {
     return TStripImpl<true, true>::StripString(from, to, criterion);
 }
 
 template <class T>
-static inline bool StripString(const T& from, T& to) { 
-    return StripString(from, to, IsAsciiSpaceAdapter(from.begin())); 
-} 
- 
+static inline bool StripString(const T& from, T& to) {
+    return StripString(from, to, IsAsciiSpaceAdapter(from.begin()));
+}
+
 template <class T, class TStripCriterion>
 static inline T StripString(const T& from, TStripCriterion&& criterion) {
     return TStripImpl<true, true>::StripString(from, criterion);
 }
 
-template <class T> 
-static inline T StripString(const T& from) { 
+template <class T>
+static inline T StripString(const T& from) {
     return TStripImpl<true, true>::StripString(from);
-} 
- 
+}
+
 template <class T>
 static inline T StripStringLeft(const T& from) {
     return TStripImpl<true, false>::StripString(from);

@@ -971,7 +971,7 @@ RECURSE(
     scancode-toolkit
     scandir
     schedule
-    schema
+    schema 
     schematics
     schwifty
     scikit-image

@@ -56,7 +56,7 @@ namespace {
         return buf.WriteJsonValue(&json).Str();
     }
 
-    void TestComplexMapAsObject(std::function<void(TComplexMapType&)>&& init, const TString& json, const TJson2ProtoConfig& config = TJson2ProtoConfig().SetMapAsObject(true)) { 
+    void TestComplexMapAsObject(std::function<void(TComplexMapType&)>&& init, const TString& json, const TJson2ProtoConfig& config = TJson2ProtoConfig().SetMapAsObject(true)) {
         TComplexMapType modelProto;
 
         init(modelProto);
@@ -902,32 +902,32 @@ Y_UNIT_TEST(TestComplexMapAsObject_Enum) {
         R"_({"Enum":{"key1":1,"key2":2,"key3":3}})_");
 } // TestComplexMapAsObject_Enum
 
-Y_UNIT_TEST(TestComplexMapAsObject_EnumString) { 
-    TestComplexMapAsObject( 
-        [](TComplexMapType& proto) { 
-            auto& items = *proto.MutableEnum(); 
-            items["key1"] = EEnum::E_1; 
-            items["key2"] = EEnum::E_2; 
-            items["key3"] = EEnum::E_3; 
-        }, 
-        R"_({"Enum":{"key1":"E_1","key2":"E_2","key3":"E_3"}})_"); 
-} // TestComplexMapAsObject_EnumString 
- 
-Y_UNIT_TEST(TestComplexMapAsObject_EnumStringCaseInsensetive) { 
-    TestComplexMapAsObject( 
-        [](TComplexMapType& proto) { 
-            auto& items = *proto.MutableEnum(); 
-            items["key1"] = EEnum::E_1; 
-            items["key2"] = EEnum::E_2; 
-            items["key3"] = EEnum::E_3; 
-        }, 
-        R"_({"Enum":{"key1":"e_1","key2":"E_2","key3":"e_3"}})_", 
-        TJson2ProtoConfig() 
-                .SetMapAsObject(true) 
-                .SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive) 
-    ); 
-} // TestComplexMapAsObject_EnumStringCaseInsensetive 
- 
+Y_UNIT_TEST(TestComplexMapAsObject_EnumString) {
+    TestComplexMapAsObject(
+        [](TComplexMapType& proto) {
+            auto& items = *proto.MutableEnum();
+            items["key1"] = EEnum::E_1;
+            items["key2"] = EEnum::E_2;
+            items["key3"] = EEnum::E_3;
+        },
+        R"_({"Enum":{"key1":"E_1","key2":"E_2","key3":"E_3"}})_");
+} // TestComplexMapAsObject_EnumString
+
+Y_UNIT_TEST(TestComplexMapAsObject_EnumStringCaseInsensetive) {
+    TestComplexMapAsObject(
+        [](TComplexMapType& proto) {
+            auto& items = *proto.MutableEnum();
+            items["key1"] = EEnum::E_1;
+            items["key2"] = EEnum::E_2;
+            items["key3"] = EEnum::E_3;
+        },
+        R"_({"Enum":{"key1":"e_1","key2":"E_2","key3":"e_3"}})_",
+        TJson2ProtoConfig()
+                .SetMapAsObject(true)
+                .SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive)
+    );
+} // TestComplexMapAsObject_EnumStringCaseInsensetive
+
 Y_UNIT_TEST(TestComplexMapAsObject_EnumStringSnakeCaseInsensitive) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {

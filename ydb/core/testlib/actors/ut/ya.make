@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/testlib/actors)
 
 OWNER(
-    g:kikimr 
+    g:kikimr
 )
 
 FORK_SUBTESTS()

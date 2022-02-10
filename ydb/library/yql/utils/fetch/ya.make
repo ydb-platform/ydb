@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:yql) 
+OWNER(g:yql)
 
 SRCS(
     fetch.cpp

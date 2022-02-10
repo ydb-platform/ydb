@@ -1,6 +1,6 @@
 Y_BENCHMARK()
 
-OWNER(g:util) 
+OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
 
 SRCS(

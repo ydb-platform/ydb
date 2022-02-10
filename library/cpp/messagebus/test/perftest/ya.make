@@ -1,6 +1,6 @@
 PROGRAM(messagebus_perftest)
 
-OWNER(g:messagebus) 
+OWNER(g:messagebus)
 
 PEERDIR(
     library/cpp/deprecated/threadable

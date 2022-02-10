@@ -180,7 +180,7 @@ RECURSE(
     step
     strings
     strings/ut
-    svn_ssh 
+    svn_ssh
     svn_version
     svn_version/ut
     symbols
@@ -212,7 +212,7 @@ RECURSE(
     yt/test
     ylock
     ylock/tests
-    zipatch 
+    zipatch
 )
 
 IF (NOT MUSL)

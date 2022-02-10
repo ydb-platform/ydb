@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/sql/v0)
 
-OWNER(g:yql) 
+OWNER(g:yql)
 
 SRCS(
     sql_ut.cpp

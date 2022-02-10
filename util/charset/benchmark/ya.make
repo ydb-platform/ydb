@@ -1,6 +1,6 @@
 OWNER(
     agorodilov
-    g:util 
+    g:util
 )
 SUBSCRIBER(g:util-subscribers)
 

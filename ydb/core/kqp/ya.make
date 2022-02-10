@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     spuchin
-    g:kikimr 
+    g:kikimr
 )
 
 SRCS(

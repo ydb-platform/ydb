@@ -11,7 +11,7 @@ VERSION(0.9.5)
 
 OWNER(
     jamel
-    g:contrib 
+    g:contrib
     g:cpp-contrib
 )
 

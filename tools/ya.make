@@ -71,10 +71,10 @@ RECURSE(
     memcheck
     mirrorsWrapper
     misc_index_print
-    mkdocs_builder 
-    mkdocs_builder/arcadium_helper_plugin 
-    mkdocs_builder/mkdocs_yandex 
-    mkdocs_builder/theme 
+    mkdocs_builder
+    mkdocs_builder/arcadium_helper_plugin
+    mkdocs_builder/mkdocs_yandex
+    mkdocs_builder/theme
     mstand
     mtime0
     mx_bin2info

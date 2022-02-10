@@ -4,8 +4,8 @@ OWNER(
     pg
     mvel
     kulikov
-    g:base 
-    g:middle 
+    g:base
+    g:middle
 )
 
 SRCS(

@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:messagebus) 
+OWNER(g:messagebus)
 
 SRCS(
     html_output.cpp

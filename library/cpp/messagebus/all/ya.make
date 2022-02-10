@@ -1,4 +1,4 @@
-OWNER(g:messagebus) 
+OWNER(g:messagebus)
 
 RECURSE_ROOT_RELATIVE(
     library/python/messagebus

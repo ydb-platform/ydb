@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     mvel
-    g:base 
+    g:base
 )
 
 SRCS(

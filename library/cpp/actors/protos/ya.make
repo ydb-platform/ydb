@@ -1,6 +1,6 @@
 PROTO_LIBRARY()
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 SRCS(
     actors.proto

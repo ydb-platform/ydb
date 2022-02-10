@@ -2,7 +2,7 @@ UNITTEST_FOR(util)
 
 REQUIREMENTS(network:full)
 
-OWNER(g:util) 
+OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
 
 PEERDIR(

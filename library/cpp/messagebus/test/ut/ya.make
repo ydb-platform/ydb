@@ -1,4 +1,4 @@
-OWNER(g:messagebus) 
+OWNER(g:messagebus)
 
 UNITTEST_FOR(library/cpp/messagebus)
 

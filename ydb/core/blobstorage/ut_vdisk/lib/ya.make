@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     fomichev
-    g:kikimr 
+    g:kikimr
 )
 
 SRCS(

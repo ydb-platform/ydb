@@ -1,4 +1,4 @@
-OWNER(g:ymake) 
+OWNER(g:ymake)
 
 PY2_LIBRARY()
 

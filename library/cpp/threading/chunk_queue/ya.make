@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:rtmr) 
+OWNER(g:rtmr)
 
 SRCS(
     queue.cpp

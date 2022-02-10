@@ -1,6 +1,6 @@
 OWNER(
     yazevnul
-    g:contrib 
+    g:contrib
     g:cpp-contrib
 )
 

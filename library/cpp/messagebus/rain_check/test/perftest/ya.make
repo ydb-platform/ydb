@@ -1,6 +1,6 @@
 PROGRAM(messagebus_rain_check_perftest)
 
-OWNER(g:messagebus) 
+OWNER(g:messagebus)
 
 PEERDIR(
     library/cpp/messagebus/rain_check/core

@@ -1,9 +1,9 @@
-import sys 
-import subprocess 
+import sys
+import subprocess
 import optparse
- 
+
 from process_whole_archive_option import ProcessWholeArchiveOption
- 
+
 
 def get_leaks_suppressions(cmd):
     supp, newcmd = [], []
@@ -57,7 +57,7 @@ def parse_args():
     return parser.parse_args()
 
 
-if __name__ == '__main__': 
+if __name__ == '__main__':
     opts, args = parse_args()
 
     cmd = fix_cmd(opts.musl, args)
@@ -79,4 +79,4 @@ if __name__ == '__main__':
         stdout = sys.stdout
 
     rc = subprocess.call(cmd, shell=False, stderr=sys.stderr, stdout=stdout)
-    sys.exit(rc) 
+    sys.exit(rc)

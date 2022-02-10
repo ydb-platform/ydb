@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/public/udf)
 
-OWNER(g:yql) 
+OWNER(g:yql)
 
 SRCS(
     udf_counter_ut.cpp

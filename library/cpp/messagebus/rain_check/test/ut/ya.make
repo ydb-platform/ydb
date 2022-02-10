@@ -1,6 +1,6 @@
 PROGRAM(library-messagebus-rain_check-test-ut)
 
-OWNER(g:messagebus) 
+OWNER(g:messagebus)
 
 PEERDIR(
     library/cpp/testing/unittest_main

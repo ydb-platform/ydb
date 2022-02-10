@@ -1,4 +1,4 @@
-OWNER(g:util) 
+OWNER(g:util)
 
 LIBRARY()
 

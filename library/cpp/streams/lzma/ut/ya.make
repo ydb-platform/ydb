@@ -2,7 +2,7 @@ UNITTEST_FOR(library/cpp/streams/lzma)
 
 OWNER(
     pg
-    g:util 
+    g:util
 )
 
 SRCS(

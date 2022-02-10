@@ -13,7 +13,7 @@ ENDIF()
 
 OWNER(
     vvvv
-    g:kikimr 
+    g:kikimr
 )
 
 SRCS(

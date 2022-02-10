@@ -1,6 +1,6 @@
 LIBRARY(yutil)
 
-OWNER(g:util) 
+OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
 
 NEED_CHECK()

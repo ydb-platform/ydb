@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/util)
 
-OWNER(vvvv g:kikimr) 
+OWNER(vvvv g:kikimr)
 
 FORK_SUBTESTS()
 IF (WITH_VALGRIND)

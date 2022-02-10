@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 SRCS(
     yql_db_scheme_resolver.h

@@ -1,6 +1,6 @@
 OWNER(
     alexvru
-    g:kikimr 
+    g:kikimr
 )
 
 LIBRARY()

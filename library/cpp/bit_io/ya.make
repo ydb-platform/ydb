@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     velavokr
-    g:util 
+    g:util
 )
 
 PEERDIR(

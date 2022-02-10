@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/client/minikql_result_lib)
 
-OWNER(g:kikimr) 
+OWNER(g:kikimr)
 
 FORK_SUBTESTS()
 

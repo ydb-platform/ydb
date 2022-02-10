@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/ast)
 
-OWNER(vvvv g:kikimr) 
+OWNER(vvvv g:kikimr)
 
 FORK_SUBTESTS()
 

@@ -9,7 +9,7 @@ PEERDIR(
 
 OWNER(
     ermolovd
-    g:yt 
+    g:yt
 )
 
 SRCS(

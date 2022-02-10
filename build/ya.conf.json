@@ -357,9 +357,9 @@
         "yd-migrate": {
             "description": "Run deploy migration"
         },
-        "yfm-docs": { 
-            "description": "YFM-extended markdown processor for Cloud deploy (v3)" 
-        }, 
+        "yfm-docs": {
+            "description": "YFM-extended markdown processor for Cloud deploy (v3)"
+        },
         "aws": {
             "description": "Run aws"
         },
@@ -3352,8 +3352,8 @@
                 }
             ]
         },
-        "svn110": { 
-            "tools": { 
+        "svn110": {
+            "tools": {
                 "svn": {
                     "bottle": "svn110",
                     "executable": "svn"
@@ -3370,8 +3370,8 @@
                     "bottle": "svn110",
                     "executable": "svnversion"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3390,16 +3390,16 @@
                         "default": true
                     }
                 }
-            ] 
-        }, 
-        "zipatcher": { 
-            "tools": { 
+            ]
+        },
+        "zipatcher": {
+            "tools": {
                 "zipatcher": {
                     "bottle": "zipatcher",
                     "executable": "zipatcher"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3412,8 +3412,8 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
+            ]
+        },
         "cmake": {
             "tools": {
                 "cmake": {
@@ -4824,7 +4824,7 @@
                 "type": "golang",
                 "version": "1.17.6"
             }
-        }, 
+        },
         "golang_1_18beta2": {
             "tools": {
                 "golang_1.18beta2": {
@@ -5236,34 +5236,34 @@
                 }
             ]
         },
-        "yfm-docs": { 
-            "tools": { 
-                "yfm-docs": { 
-                    "bottle": "yfm-docs", 
-                    "executable": "yfm-docs" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "WIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "yfm-docs": {
+            "tools": {
+                "yfm-docs": {
+                    "bottle": "yfm-docs",
+                    "executable": "yfm-docs"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "aws": {
             "tools": {
                 "aws": {
@@ -6963,12 +6963,12 @@
                 ]
             }
         },
-        "svn110": { 
-            "formula": { 
-                "sandbox_id": 368201676, 
-                "match": "svn" 
-            }, 
-            "executable": { 
+        "svn110": {
+            "formula": {
+                "sandbox_id": 368201676,
+                "match": "svn"
+            },
+            "executable": {
                 "svn": [
                     "svn"
                 ],
@@ -6981,19 +6981,19 @@
                 "svnversion": [
                     "svnversion"
                 ]
-            } 
-        }, 
-        "zipatcher": { 
-            "formula": { 
+            }
+        },
+        "zipatcher": {
+            "formula": {
                 "sandbox_id": 897674372,
-                "match": "zipatcher" 
-            }, 
-            "executable": { 
+                "match": "zipatcher"
+            },
+            "executable": {
                 "zipatcher": [
                     "zipatcher"
                 ]
-            } 
-        }, 
+            }
+        },
         "cmake": {
             "formula": {
                 "sandbox_id": 105454515,
@@ -7417,7 +7417,7 @@
                     "gofmt"
                 ]
             }
-        }, 
+        },
         "qemu": {
             "formula": {
                 "sandbox_id": [
@@ -7723,17 +7723,17 @@
                 ]
             }
         },
-        "yfm-docs": { 
-            "formula": { 
+        "yfm-docs": {
+            "formula": {
                 "sandbox_id": 1150530779,
-                "match": "yfm-docs" 
-            }, 
-            "executable": { 
-                "yfm-docs": [ 
-                    "yfm-docs" 
-                ] 
-            } 
-        }, 
+                "match": "yfm-docs"
+            },
+            "executable": {
+                "yfm-docs": [
+                    "yfm-docs"
+                ]
+            }
+        },
         "aws": {
             "formula": {
                 "sandbox_id": 489186634,

@@ -1,7 +1,7 @@
 # coding: utf-8
 
 import os
-import stat 
+import stat
 import sys
 import shutil
 import logging
@@ -125,8 +125,8 @@ if on_win():
 
     _ATOMIC_RENAME_FILE_TRANSACTION_DEFAULT_TIMEOUT = 1000
 
-    _HANDLE_FLAG_INHERIT = 0x1 
- 
+    _HANDLE_FLAG_INHERIT = 0x1
+
     @win_only
     def require_ctypes(f):
         def f_wrapped(*args, **kwargs):
@@ -218,16 +218,16 @@ if on_win():
     def file_handle(f):
         return msvcrt.get_osfhandle(f.fileno())
 
-    # https://www.python.org/dev/peps/pep-0446/ 
-    # http://mihalop.blogspot.ru/2014/05/python-subprocess-and-file-descriptors.html 
-    @require_ctypes 
+    # https://www.python.org/dev/peps/pep-0446/
+    # http://mihalop.blogspot.ru/2014/05/python-subprocess-and-file-descriptors.html
+    @require_ctypes
     @win_only
-    def open_file(*args, **kwargs): 
-        f = open(*args, **kwargs) 
-        ctypes.windll.kernel32.SetHandleInformation(file_handle(f), _HANDLE_FLAG_INHERIT, 0) 
-        return f 
- 
-    @win_only 
+    def open_file(*args, **kwargs):
+        f = open(*args, **kwargs)
+        ctypes.windll.kernel32.SetHandleInformation(file_handle(f), _HANDLE_FLAG_INHERIT, 0)
+        return f
+
+    @win_only
     @require_ctypes
     def replace_file(src, dst):
         if not ctypes.windll.kernel32.MoveFileExW(unicode_path(src), unicode_path(dst), _MOVEFILE_REPLACE_EXISTING | _MOVEFILE_WRITE_THROUGH):
@@ -293,16 +293,16 @@ if on_win():
                 handling_path = "\\\\?\\" + handling_path  # handle path over 256 symbols
                 if os.path.exists(path):
                     return func(handling_path)
-            if e.winerror == ERRORS['ACCESS_DENIED']: 
-                try: 
-                    # removing of r/w directory with read-only files in it yields ACCESS_DENIED 
-                    # which is not an insuperable obstacle https://bugs.python.org/issue19643 
-                    os.chmod(handling_path, stat.S_IWRITE) 
-                except OSError: 
-                    pass 
-                else: 
-                    # propagate true last error if this attempt fails 
-                    return func(handling_path) 
+            if e.winerror == ERRORS['ACCESS_DENIED']:
+                try:
+                    # removing of r/w directory with read-only files in it yields ACCESS_DENIED
+                    # which is not an insuperable obstacle https://bugs.python.org/issue19643
+                    os.chmod(handling_path, stat.S_IWRITE)
+                except OSError:
+                    pass
+                else:
+                    # propagate true last error if this attempt fails
+                    return func(handling_path)
             raise e
         shutil.rmtree(path, onerror=error_handler)
 
@@ -310,7 +310,7 @@ if on_win():
     # http://msdn.microsoft.com/en-us/library/windows/desktop/ms680621.aspx
     @win_only
     def disable_error_dialogs():
-        set_error_mode(_SEM_NOGPFAULTERRORBOX | _SEM_FAILCRITICALERRORS) 
+        set_error_mode(_SEM_NOGPFAULTERRORBOX | _SEM_FAILCRITICALERRORS)
 
     @win_only
     def default_process_creation_flags():

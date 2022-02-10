@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     pg
-    g:util 
+    g:util
 )
 
 PEERDIR(

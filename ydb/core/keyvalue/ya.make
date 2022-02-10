@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(
     alexvru
     cthulhu
-    g:kikimr 
+    g:kikimr
 )
 
 SRCS(

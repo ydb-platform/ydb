@@ -1,5 +1,5 @@
 OWNER(
-    workfork 
+    workfork
 )
 
 RESOURCES_LIBRARY()
@@ -16,4 +16,4 @@ DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(
     sbr:2614617315 FOR WIN32
 )
 
-END() 
+END()

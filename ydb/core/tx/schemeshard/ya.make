@@ -46,7 +46,7 @@ LIBRARY()
 
 OWNER(
     ddoarn
-    g:kikimr 
+    g:kikimr
 )
 
 IF (KIKIMR_ALLOW_SHARDED_COMPACTION)

@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/regex/pcre)
 
-OWNER(g:util) 
+OWNER(g:util)
 
 SRCS(
     pcre_ut.cpp

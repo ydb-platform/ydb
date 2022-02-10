@@ -2,7 +2,7 @@ LIBRARY(run)
 
 OWNER(
     ddoarn
-    g:kikimr 
+    g:kikimr
 )
 
 IF (PROFILE_MEMORY_ALLOCATIONS)

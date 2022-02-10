@@ -4,7 +4,7 @@ PEERDIR(
     library/cpp/iterator
 )
 
-OWNER(g:util) 
+OWNER(g:util)
 
 SRCS(
     filtering_ut.cpp

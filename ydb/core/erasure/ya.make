@@ -5,7 +5,7 @@ OWNER(
     ddoarn
     fomichev
     va-kuznecov
-    g:kikimr 
+    g:kikimr
 )
 
 SRCS(

@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    g:base 
+    g:base
     velavokr
 )
 

@@ -1,6 +1,6 @@
 LIBRARY(messagebus_actor)
 
-OWNER(g:messagebus) 
+OWNER(g:messagebus)
 
 SRCS(
     executor.cpp

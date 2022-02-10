@@ -1,6 +1,6 @@
 PROTO_LIBRARY()
 
-OWNER(g:messagebus) 
+OWNER(g:messagebus)
 
 PEERDIR(
     library/cpp/monlib/encode/legacy_protobuf/protos

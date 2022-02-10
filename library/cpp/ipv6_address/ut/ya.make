@@ -1,4 +1,4 @@
-OWNER(g:zora) 
+OWNER(g:zora)
 
 UNITTEST_FOR(library/cpp/ipv6_address)
 

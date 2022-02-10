@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    g:util 
+    g:util
     mvel
 )
 

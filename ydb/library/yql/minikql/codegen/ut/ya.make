@@ -1,6 +1,6 @@
 UNITTEST_FOR(yql/library/codegen)
 
-OWNER(g:yql) 
+OWNER(g:yql)
 
 NO_COMPILER_WARNINGS()
 

@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/core/file_storage)
 
-OWNER(g:yql) 
+OWNER(g:yql)
 
 IF (OPENSOURCE)
     CFLAGS(

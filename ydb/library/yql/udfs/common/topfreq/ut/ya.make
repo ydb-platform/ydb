@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/library/yql/udfs/common/topfreq/static)
 
 OWNER(
     vmakeev
-    g:yql 
+    g:yql
 )
 
 SRCS(

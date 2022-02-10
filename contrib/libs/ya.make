@@ -344,7 +344,7 @@ RECURSE(
     tree_sitter
     uatraits
     usrsctp
-    utf8proc 
+    utf8proc
     util-linux
     valgrind
     vlfeat

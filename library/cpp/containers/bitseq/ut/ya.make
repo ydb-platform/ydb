@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/containers/bitseq)
 
-OWNER(g:util) 
+OWNER(g:util)
 
 SRCS(
     bititerator_ut.cpp

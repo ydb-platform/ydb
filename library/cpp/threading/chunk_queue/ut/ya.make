@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/threading/chunk_queue)
 
-OWNER(g:rtmr) 
+OWNER(g:rtmr)
 
 SRCS(
     queue_ut.cpp

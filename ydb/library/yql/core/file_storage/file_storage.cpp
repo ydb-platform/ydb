@@ -65,7 +65,7 @@ public:
         Downloaders.push_back(std::move(downloader));
     }
 
-    TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) override {
+    TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) override { 
         YQL_LOG(INFO) << "PutFile to cache: " << file;
         const auto md5 = MD5::File(file);
         const TString storageFileName = md5 + ".file";
@@ -86,7 +86,7 @@ public:
         });
     }
 
-    TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5 = {}) override {
+    TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5 = {}) override { 
         YQL_LOG(INFO) << "PutFileStripped to cache: " << file;
         if (originalMd5.empty()) {
             YQL_LOG(WARN) << "Empty md5 for: " << file;
@@ -127,7 +127,7 @@ public:
         return result;
     }
 
-    TFileLinkPtr PutInline(const TString& data) override {
+    TFileLinkPtr PutInline(const TString& data) override { 
         const auto md5 = MD5::Calc(data);
         const TString storageFileName = md5 + ".file";
         YQL_LOG(INFO) << "PutInline to cache. md5=" << md5;
@@ -149,7 +149,7 @@ public:
         });
     }
 
-    TFileLinkPtr PutUrl(const TString& urlStr, const TString& oauthToken) override {
+    TFileLinkPtr PutUrl(const TString& urlStr, const TString& oauthToken) override { 
         try {
             TString convertedUrl;
             if (!Mapper.MapUrl(urlStr, convertedUrl)) {
@@ -192,11 +192,11 @@ public:
         }, *MtpQueue);
     }
 
-    TFsPath GetRoot() const override {
+    TFsPath GetRoot() const override { 
         return Storage.GetRoot();
     }
 
-    TFsPath GetTemp() const override {
+    TFsPath GetTemp() const override { 
         return Storage.GetTemp();
     }
 

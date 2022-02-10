@@ -57,7 +57,7 @@ public:
         return deletedTablet;
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
         const NKikimrHive::TEvDeleteTablet& rec = Event->Get()->Record;
         NIceDb::TNiceDb db(txc.DB);
         OwnerId = rec.GetShardOwnerId();
@@ -102,7 +102,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         BLOG_D("THive::TTxDeleteTablet::Complete(" << TabletIds << ")");
         THolder<TEvHive::TEvDeleteTabletReply> response = MakeHolder<TEvHive::TEvDeleteTabletReply>(Status, Self->TabletID(), Event->Get()->Record.GetTxId_Deprecated(), OwnerId, LocalIdxs);
         if (ForwardRequest.HasHiveTabletId()) {
@@ -165,7 +165,7 @@ public:
         return deletedTablet;
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
         const NKikimrHive::TEvDeleteOwnerTablets& rec = Event->Get()->Record;
         BLOG_D("THive::TEvDeleteOwnerTablets::Execute Owner: " << rec.GetOwner());
         for (auto item : Self->OwnerToTablet) {
@@ -194,7 +194,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         BLOG_D("THive::TEvDeleteOwnerTablets::Complete(" << Event->Get()->Record.GetOwner() << "), " << ToDelete.size() << " tablet has been deleted");
         Self->BlockedOwners.emplace(Event->Get()->Record.GetOwner());
         ctx.Send(Event->Sender, new TEvHive::TEvDeleteOwnerTabletsReply(Status, Self->TabletID(), Event->Get()->Record.GetOwner(), Event->Get()->Record.GetTxId()));

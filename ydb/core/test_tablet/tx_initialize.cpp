@@ -32,7 +32,7 @@ namespace NKikimr::NTestShard {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) override { 
             ctx.Send(Sender, new TEvControlResponse, 0, Cookie);
             Self->Settings = Cmd;
             Self->StartActivities();

@@ -406,7 +406,7 @@ public:
         , Args(args)
     {}
 
-    TAstNode* Translate(TContext& ctx) const override {
+    TAstNode* Translate(TContext& ctx) const override { 
         if (Args.size() != 1) {
             ctx.Error(Pos) << "Expected 1 argument in ParseType function";
             return nullptr;
@@ -1316,7 +1316,7 @@ public:
         return true;
     }
 
-    void DoUpdateState() const final {
+    void DoUpdateState() const final { 
         State.Set(ENodeState::Const, false);
     }
 

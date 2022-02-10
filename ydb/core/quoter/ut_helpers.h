@@ -121,11 +121,11 @@ public:
         public:
             TTestTabletPipe(TTestTabletPipeFactory* parent);
 
-            MOCK_METHOD(void, OnStart, (), ());
-            MOCK_METHOD(void, OnPoisonPill, (), ());
-            MOCK_METHOD(void, OnSubscribeOnResources, (const NKikimrKesus::TEvSubscribeOnResources&, ui64 cookie), ());
-            MOCK_METHOD(void, OnUpdateConsumptionState, (const NKikimrKesus::TEvUpdateConsumptionState&, ui64 cookie), ());
-            MOCK_METHOD(void, OnResourcesAllocatedAck, (const NKikimrKesus::TEvResourcesAllocatedAck&, ui64 cookie), ());
+            MOCK_METHOD(void, OnStart, (), ()); 
+            MOCK_METHOD(void, OnPoisonPill, (), ()); 
+            MOCK_METHOD(void, OnSubscribeOnResources, (const NKikimrKesus::TEvSubscribeOnResources&, ui64 cookie), ()); 
+            MOCK_METHOD(void, OnUpdateConsumptionState, (const NKikimrKesus::TEvUpdateConsumptionState&, ui64 cookie), ()); 
+            MOCK_METHOD(void, OnResourcesAllocatedAck, (const NKikimrKesus::TEvResourcesAllocatedAck&, ui64 cookie), ()); 
 
             void SendNotConnected();
             void SendConnected();

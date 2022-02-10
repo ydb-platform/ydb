@@ -56,7 +56,7 @@ namespace NUdf {
         ui32 Index;
         ui32 HolePos;
 
-        bool Next(NUdf::TUnboxedValue& value) final {
+        bool Next(NUdf::TUnboxedValue& value) final { 
             if (++Index >= ListRef.size())
                 return false;
             value = Index == HolePos ? NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(42)) : ToUnboxedValue(ListRef[Index]);
@@ -215,11 +215,11 @@ namespace NImpl {
         ui32 HolePos;
         ui32 Index;
 
-        bool Skip() final {
+        bool Skip() final { 
             return ++Index < Size;
         }
 
-        bool Next(NUdf::TUnboxedValue& value) final {
+        bool Next(NUdf::TUnboxedValue& value) final { 
             if (!Skip())
                 return false;
             value = Index == HolePos ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(Index);
@@ -325,18 +325,18 @@ namespace {
         PosPair HolePos;
         ui32 Index;
 
-        bool Skip() final {
+        bool Skip() final { 
             return ++Index < DictData.size();
         }
 
-        bool Next(NUdf::TUnboxedValue& key) final {
+        bool Next(NUdf::TUnboxedValue& key) final { 
             if (!Skip())
                 return false;
             key = Index == HolePos.first ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(DictData[Index].first);
             return true;
         }
 
-        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final {
+        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final { 
             if (!Next(key))
                 return false;
             payload = Index == HolePos.second ? NUdf::TUnboxedValue() : ToUnboxedValue(DictData[Index].second);

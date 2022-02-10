@@ -81,15 +81,15 @@ public:
         HttpInput.Reset(new THttpInput(Ssl ? (IInputStream*)Ssl.Get() : (IInputStream*)SocketInput.Get()));
     }
 
-    THttpInput& GetStream() override {
+    THttpInput& GetStream() override { 
         return *HttpInput;
     }
 
-    unsigned GetRetCode() override {
+    unsigned GetRetCode() override { 
         return ParseHttpRetCode(HttpInput->FirstLine());
     }
 
-    THttpURL GetRedirectURL(const THttpURL& baseUrl) override {
+    THttpURL GetRedirectURL(const THttpURL& baseUrl) override { 
         for (auto i = HttpInput->Headers().Begin(); i != HttpInput->Headers().End(); ++i) {
             if (0 == TCiString::compare(i->Name(), TStringBuf("location"))) {
                 THttpURL target = ParseURL(i->Value(), THttpURL::FeaturesAll | NUri::TFeature::FeatureConvertHostIDN);

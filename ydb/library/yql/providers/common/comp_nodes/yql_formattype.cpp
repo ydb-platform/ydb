@@ -21,7 +21,7 @@ public:
         return MakeString(NYql::FormatType(type));
     }
 
-    void RegisterDependencies() const override {
+    void RegisterDependencies() const override { 
         DependsOn(Handle_);
     }
 

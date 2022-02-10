@@ -91,10 +91,10 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
         OnCreateProcessor(++CreateCallsCount);
     }
 
-    MOCK_METHOD(void, ValidateConnectTimeout, (TDuration), ());
+    MOCK_METHOD(void, ValidateConnectTimeout, (TDuration), ()); 
 
     // Handler is called in CreateProcessor() method after parameter validation.
-    MOCK_METHOD(void, OnCreateProcessor, (size_t callNumber)); // 1-based
+    MOCK_METHOD(void, OnCreateProcessor, (size_t callNumber)); // 1-based 
 
     // Actions to use in OnCreateProcessor handler:
     void CreateProcessor(typename IFactory::IProcessor::TPtr processor) { // Success.
@@ -381,12 +381,12 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
         }
     }
 
-    MOCK_METHOD(void, OnInitRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::InitRequest&), ());
-    MOCK_METHOD(void, OnReadRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Read&), ());
-    MOCK_METHOD(void, OnStartReadRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::StartRead&), ());
-    MOCK_METHOD(void, OnCommitRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit&), ());
-    MOCK_METHOD(void, OnReleasedRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Released&), ());
-    MOCK_METHOD(void, OnStatusRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Status&), ());
+    MOCK_METHOD(void, OnInitRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::InitRequest&), ()); 
+    MOCK_METHOD(void, OnReadRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Read&), ()); 
+    MOCK_METHOD(void, OnStartReadRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::StartRead&), ()); 
+    MOCK_METHOD(void, OnCommitRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit&), ()); 
+    MOCK_METHOD(void, OnReleasedRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Released&), ()); 
+    MOCK_METHOD(void, OnStatusRequest, (const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Status&), ()); 
 
     void Wait() {
         std::queue<std::future<void>> callbackFutures;
@@ -451,7 +451,7 @@ public:
     using TMockProcessorFactory = ::TMockProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>;
 
     struct TMockErrorHandler : public IErrorHandler {
-        MOCK_METHOD(void, AbortSession, (TSessionClosedEvent&& closeEvent), (override));
+        MOCK_METHOD(void, AbortSession, (TSessionClosedEvent&& closeEvent), (override)); 
     };
 
     struct TFakeContext : public NGrpc::IQueueClientContext {

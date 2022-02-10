@@ -26,7 +26,7 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
         Reply = MakeHolder<TEvKesus::TEvDeleteQuoterResourceResult>(result);
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
             "[" << Self->TabletID() << "] TTxQuoterResourceDelete::Execute (sender=" << Sender
                 << ", cookie=" << Cookie << ", id=" << Record.GetResourceId() << ", path=\"" << Record.GetResourcePath() << "\")");

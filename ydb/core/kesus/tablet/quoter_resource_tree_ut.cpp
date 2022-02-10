@@ -86,9 +86,9 @@ public:
             }
         }
 
-        MOCK_METHOD(void, OnSend, (ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props), ());
-        MOCK_METHOD(void, OnNotFound, (ui64 resourceId), ());
-        MOCK_METHOD(void, OnSessionExpired, (ui64 resourceId), ());
+        MOCK_METHOD(void, OnSend, (ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props), ()); 
+        MOCK_METHOD(void, OnNotFound, (ui64 resourceId), ()); 
+        MOCK_METHOD(void, OnSessionExpired, (ui64 resourceId), ()); 
 
         const ui64 ResourceId;
         THashSet<ui64> SessionClosed;

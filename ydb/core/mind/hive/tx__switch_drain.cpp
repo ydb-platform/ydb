@@ -17,7 +17,7 @@ public:
         , Initiator(initiator)
     {}
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
         BLOG_D("THive::TTxSwitchDrainOn::Execute Node: " << NodeId
                 << " Persist: " << Settings.Persist << " KeepDown: " << Settings.KeepDown);
         NIceDb::TNiceDb db(txc.DB);
@@ -49,7 +49,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) override { 
         BLOG_D("THive::TTxSwitchDrainOn::Complete NodeId: " << NodeId << " Status: " << Status);
         if (Status != NKikimrProto::OK) {
             if (Initiator) {
@@ -75,7 +75,7 @@ public:
         , Movements(movements)
     {}
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
         BLOG_D("THive::TTxSwitchDrainOff::Execute Node: " << NodeId);
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo* node = Self->FindNode(NodeId);
@@ -94,7 +94,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) override { 
         BLOG_D("THive::TTxSwitchDrainOff::Complete NodeId: " << NodeId
             << " Status: " << NKikimrProto::EReplyStatus_Name(Status) << " Movements: " << Movements);
         for (const TActorId& initiator : Initiators) {

@@ -70,7 +70,7 @@ namespace NOps {
                 delete DetachScan();
         }
 
-        void Describe(IOutputStream &out) const noexcept override
+        void Describe(IOutputStream &out) const noexcept override 
         {
             out
                 << "Scan{" << Serial << " on " << Snapshot->Table

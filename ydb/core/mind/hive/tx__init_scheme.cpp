@@ -13,7 +13,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_INIT_SCHEME; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
         BLOG_D("THive::TTxInitScheme::Execute");
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
         if (!txc.DB.GetScheme().IsEmpty()) {
@@ -92,7 +92,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         BLOG_D("THive::TTxInitScheme::Complete");
         const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());

@@ -1021,7 +1021,7 @@ public:
         return Source.Get();
     }
 
-    TWriteSettings GetWriteSettings() const override {
+    TWriteSettings GetWriteSettings() const override { 
         return Settings;
     }
 

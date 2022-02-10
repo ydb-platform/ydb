@@ -574,7 +574,7 @@ public:
     size_t Bytes() const override;
 
 private:
-    std::unique_ptr<IBlockBuilder> Clone() const override;
+    std::unique_ptr<IBlockBuilder> Clone() const override; 
 
 private:
     const TDataTypeRegistryPtr DataTypeRegistry;

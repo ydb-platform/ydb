@@ -15,7 +15,7 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_SCHEMA_CHANGED; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
         TxId = Ev->Get()->Record.GetTxId();
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Got TEvSchemaChangedResult from SS at "
@@ -26,7 +26,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         NTabletPipe::CloseAndForgetClient(Self->SelfId(), Self->SchemeShardPipe);
         Self->CheckStateChange(ctx);
     }

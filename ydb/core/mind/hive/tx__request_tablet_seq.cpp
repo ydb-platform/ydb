@@ -19,7 +19,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_REQUEST_TABLET_SEQUENCE; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
         BLOG_D("THive::TTxRequestTabletSequence()::Execute");
         const auto& pbRecord(Event->Get()->Record);
         Size = pbRecord.GetSize();
@@ -52,7 +52,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) override { 
         BLOG_D("THive::TTxRequestTabletSequence()::Complete");
         if (Sequence == TSequencer::NO_SEQUENCE) {
             BLOG_CRIT("Could not allocate sequence of " << Size << " elements for " << Owner);

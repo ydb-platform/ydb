@@ -90,7 +90,7 @@ namespace {
             Y_UNUSED(state);
         }
 
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final { 
             if (Index >= Items.size()) {
                 return NUdf::EFetchStatus::Finish;
             }

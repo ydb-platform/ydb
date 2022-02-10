@@ -53,7 +53,7 @@ TOpts ParseOptions(TUnboxedValuePod x) {
 }
 
 class TOptions : public TBoxedValue {
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
         ui8 options = 0;
 
         if (args[0] && args[0].Get<bool>()) {
@@ -175,7 +175,7 @@ private:
         return TUnboxedValuePod(new TIterator<true>(Original.GetKeysIterator(), ValueBuilder, Pos_));
     }
 
-    TUnboxedValue GetPayloadsIterator() const override {
+    TUnboxedValue GetPayloadsIterator() const override { 
         return TUnboxedValuePod(new TIterator<false>(Original.GetPayloadsIterator(), ValueBuilder, Pos_));
     }
 

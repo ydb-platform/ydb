@@ -29,7 +29,7 @@ struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
         Reply = MakeHolder<TEvKesus::TEvAddQuoterResourceResult>(result);
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
             "[" << Self->TabletID() << "] TTxQuoterResourceAdd::Execute (sender=" << Sender
                 << ", cookie=" << Cookie << ", path=\"" << Record.GetResource().GetResourcePath()

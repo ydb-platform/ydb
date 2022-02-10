@@ -203,7 +203,7 @@ public:
         NextReplyCb_ = cb;
     }
 
-    void AddTrailingMetadata(const TString& key, const TString& value) override {
+    void AddTrailingMetadata(const TString& key, const TString& value) override { 
         this->Context.AddTrailingMetadata(key, value);
     }
 

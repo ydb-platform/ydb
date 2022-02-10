@@ -190,7 +190,7 @@ public:
         CatchHTTPRequestError(std::move(error));
     }
 
-    void CatchReadDataError(TString error) noexcept override
+    void CatchReadDataError(TString error) noexcept override 
     {
         CatchHTTPRequestError(std::move(error));
     }

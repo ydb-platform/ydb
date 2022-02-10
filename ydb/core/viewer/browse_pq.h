@@ -278,7 +278,7 @@ public:
         Become(&TThis::StateWork);
     }
 
-    void ReplyAndDie(const TActorContext &ctx) override = 0;
+    void ReplyAndDie(const TActorContext &ctx) override = 0; 
 };
 
 class TBrowseConsumers : public TBrowseCommon {

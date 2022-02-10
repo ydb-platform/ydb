@@ -109,7 +109,7 @@ public:
         }
     }
 
-    void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
+    void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override { 
         RegisterDqClickHouseMkqlCompilers(compiler, State_);
     }
 

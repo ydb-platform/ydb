@@ -51,7 +51,7 @@ public:
 
 protected:
     int CheckHeaders() {
-        if (Header->http_status < HTTP_OK || Header->http_status == HTTP_NO_CONTENT || Header->http_status == HTTP_NOT_MODIFIED) {
+        if (Header->http_status < HTTP_OK || Header->http_status == HTTP_NO_CONTENT || Header->http_status == HTTP_NOT_MODIFIED) { 
             Header->content_length = 0;
             Header->transfer_chunked = 0;
         }
@@ -65,7 +65,7 @@ protected:
             Header->error = HTTP_BAD_CONTENT_LENGTH;
             return 1;
         }
-        if (Header->http_status == HTTP_OK) {
+        if (Header->http_status == HTTP_OK) { 
             if (Header->compression_method != HTTP_COMPRESSION_UNSET &&
                 Header->compression_method != HTTP_COMPRESSION_IDENTITY &&
                 Header->compression_method != HTTP_COMPRESSION_GZIP &&
@@ -290,12 +290,12 @@ public:
     using TBaseT::ParseGeneric;
     using TBaseT::State;
 
-    int Init(THttpHeader* H, int parsHeader, int assumeConnectionClosed = 0, bool headRequest = false) {
+    int Init(THttpHeader* H, int parsHeader, int assumeConnectionClosed = 0, bool headRequest = false) { 
         Header = H;
         Eoferr = 1;
         Size = 0;
         AssumeConnectionClosed = assumeConnectionClosed;
-        HeadRequest = headRequest;
+        HeadRequest = headRequest; 
         return parsHeader ? ParseHeader() : SkipHeader();
     }
 

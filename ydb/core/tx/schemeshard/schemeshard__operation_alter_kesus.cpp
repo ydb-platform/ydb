@@ -52,7 +52,7 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TAlterKesus TConfigureParts"
                 << " operationId#" << OperationId;
@@ -150,7 +150,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TAlterKesus TPropose"
                 << " operationId#" << OperationId;

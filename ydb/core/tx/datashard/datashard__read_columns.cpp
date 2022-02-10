@@ -211,7 +211,7 @@ public:
         return ready;
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
         Result = new TEvDataShard::TEvReadColumnsResponse(Self->TabletID());
 
         bool useScan = Self->ReadColumnsScanEnabled;
@@ -494,7 +494,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         if (Result) {
             ctx.Send(Ev->Sender, Result.Release());
         }

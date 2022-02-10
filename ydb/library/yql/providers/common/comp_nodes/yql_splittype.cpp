@@ -188,7 +188,7 @@ public:
         }
     }
 
-    void RegisterDependencies() const override {
+    void RegisterDependencies() const override { 
         this->DependsOn(Handle_);
     }
 

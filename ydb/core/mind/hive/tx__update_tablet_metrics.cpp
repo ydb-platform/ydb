@@ -15,7 +15,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_METRIC; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
         TInstant now = TInstant::Now();
         Reply = new TEvLocal::TEvTabletMetricsAck;
         auto& record = Event->Get()->Record;
@@ -68,7 +68,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         ctx.Send(Event->Sender, Reply.Release());
         Self->UpdateTabletMetricsInProgress--;
     }

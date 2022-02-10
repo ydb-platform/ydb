@@ -26,7 +26,7 @@ namespace NUtil {
 
         }
 
-        TLogLn Log(ELnLev level_) const noexcept override
+        TLogLn Log(ELnLev level_) const noexcept override 
         {
             const NActors::NLog::TLevel level{ ui32(level_) };
 

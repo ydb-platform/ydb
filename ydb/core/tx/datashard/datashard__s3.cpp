@@ -27,7 +27,7 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_S3_LISTING; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
         ++RestartCount;
 
         if (!Result) {
@@ -232,7 +232,7 @@ public:
         return iter->Last() != NTable::EReady::Page;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: finished "
                     << " status: " << Result->Record.GetStatus()
                     << " description: \"" << Result->Record.GetErrorDescription() << "\""

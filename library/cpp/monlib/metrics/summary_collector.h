@@ -41,7 +41,7 @@ namespace NMonitoring {
             Count_.fetch_add(1ul, std::memory_order_relaxed);
         }
 
-        ISummaryDoubleSnapshotPtr Snapshot() const override {
+        ISummaryDoubleSnapshotPtr Snapshot() const override { 
             return new TSummaryDoubleSnapshot(
                     Sum_.load(std::memory_order_relaxed),
                     Min_.load(std::memory_order_relaxed),

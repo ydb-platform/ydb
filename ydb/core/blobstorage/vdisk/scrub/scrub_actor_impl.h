@@ -87,7 +87,7 @@ namespace NKikimr {
     public:
         TScrubCoroImpl(TScrubContext::TPtr scrubCtx, NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint,
             ui64 scrubEntrypointLsn);
-        void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) override;
+        void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) override; 
         void Handle(NMon::TEvHttpInfo::TPtr ev);
         void ForwardToBlobRecoveryActor(TAutoPtr<IEventHandle> ev);
 

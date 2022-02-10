@@ -18,7 +18,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_RELEASE_TABLETS; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
         const NKikimrHive::TEvReleaseTablets& request(Request->Get()->Record);
         NKikimrHive::TEvReleaseTabletsReply& response(Response->Record);
         BLOG_D("THive::TTxReleaseTablets::Execute " << request);
@@ -75,7 +75,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         BLOG_D("THive::TTxReleaseTablets::Complete " << Request->Get()->Record);
         for (const auto& unlockedFromActor : UnlockedFromActor) {
             // Notify lock owner that lock has been lost

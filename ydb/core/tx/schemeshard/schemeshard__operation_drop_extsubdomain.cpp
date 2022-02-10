@@ -13,7 +13,7 @@ class TDeletePrivateShards: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TDropExtSubdomain TDeletePrivateShards"
             << ", operationId: " << OperationId;
@@ -50,7 +50,7 @@ class TDeleteExternalShards: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TDropExtSubdomain TDeleteExternalShards"
             << ", operationId: " << OperationId;
@@ -138,7 +138,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TDropExtSubdomain TPropose"
             << ", operationId: " << OperationId;

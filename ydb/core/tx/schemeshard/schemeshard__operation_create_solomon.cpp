@@ -90,7 +90,7 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TCreateSolomon TConfigureParts"
                 << ", operationId: " << OperationId;
@@ -139,7 +139,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TCreateSolomon TPropose"
                 << ", operationId: " << OperationId;

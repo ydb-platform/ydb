@@ -475,7 +475,7 @@ public:
     }
 
     // Lambda(row) -> AsTuple(output, state)
-    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         return ctx.Builder(GetPos())
             .Lambda()
                 .Param("row")
@@ -491,7 +491,7 @@ public:
     }
 
     // Lambda(row, state) -> AsTuple(output, state)
-    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         return ctx.Builder(GetPos())
             .Lambda()
                 .Param("row")
@@ -539,7 +539,7 @@ public:
     }
 
     // Lambda(row) -> AsTuple(output, state)
-    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         Y_UNUSED(dataQueue);
         return ctx.Builder(GetPos())
             .Lambda()
@@ -553,7 +553,7 @@ public:
     }
 
     // Lambda(row, state) -> AsTuple(output, state)
-    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         Y_UNUSED(dataQueue);
         return ctx.Builder(GetPos())
             .Lambda()
@@ -595,7 +595,7 @@ public:
     }
 
     // Lambda(row) -> AsTuple(output, state)
-    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const final {
+    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const final { 
         Y_UNUSED(dataQueue);
 
 
@@ -622,7 +622,7 @@ public:
     }
 
     // Lambda(row, state) -> AsTuple(output, state)
-    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const final {
+    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const final { 
         Y_UNUSED(dataQueue);
 
         bool useAggrEquals = Ansi;
@@ -722,7 +722,7 @@ public:
     {
     }
 
-    TExprNode::TPtr BuildRawInitLambda(TExprContext& ctx) const final {
+    TExprNode::TPtr BuildRawInitLambda(TExprContext& ctx) const final { 
         auto one = BuildUint64(GetPos(), 1, ctx);
         return ctx.Builder(GetPos())
             .Lambda()
@@ -736,7 +736,7 @@ public:
             .Build();
     }
 
-    TExprNode::TPtr BuildRawUpdateLambda(bool useAggrEquals, TExprContext& ctx) const final {
+    TExprNode::TPtr BuildRawUpdateLambda(bool useAggrEquals, TExprContext& ctx) const final { 
         return ctx.Builder(GetPos())
             .Lambda()
                 .Param("key")
@@ -773,7 +773,7 @@ public:
             .Build();
     }
 
-    const TTypeAnnotationNode* GetStateType(const TTypeAnnotationNode* keyType, TExprContext& ctx) const final {
+    const TTypeAnnotationNode* GetStateType(const TTypeAnnotationNode* keyType, TExprContext& ctx) const final { 
         return ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
             ctx.MakeType<TDataExprType>(EDataSlot::Uint64),
             ctx.MakeType<TDataExprType>(EDataSlot::Uint64),
@@ -789,7 +789,7 @@ public:
     {
     }
 
-    TExprNode::TPtr BuildRawInitLambda(TExprContext& ctx) const final {
+    TExprNode::TPtr BuildRawInitLambda(TExprContext& ctx) const final { 
         return ctx.Builder(GetPos())
             .Lambda()
                 .Param("key")
@@ -801,7 +801,7 @@ public:
             .Build();
     }
 
-    TExprNode::TPtr BuildRawUpdateLambda(bool useAggrEquals, TExprContext& ctx) const final {
+    TExprNode::TPtr BuildRawUpdateLambda(bool useAggrEquals, TExprContext& ctx) const final { 
         return ctx.Builder(GetPos())
             .Lambda()
                 .Param("key")
@@ -832,7 +832,7 @@ public:
             .Build();
     }
 
-    const TTypeAnnotationNode* GetStateType(const TTypeAnnotationNode* keyType, TExprContext& ctx) const final {
+    const TTypeAnnotationNode* GetStateType(const TTypeAnnotationNode* keyType, TExprContext& ctx) const final { 
         return ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
             ctx.MakeType<TDataExprType>(EDataSlot::Uint64),
             keyType
@@ -886,19 +886,19 @@ public:
     }
 
     // Lambda(row) -> AsTuple(output, state)
-    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         Y_UNUSED(dataQueue);
         return BuildInitLambdaForChain1Map(GetPos(), GetInitLambda(), GetCalculateLambda(), ctx);
     }
 
     // Lambda(row, state) -> AsTuple(output, state)
-    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         Y_UNUSED(dataQueue);
         return BuildUpdateLambdaForChain1Map(GetPos(), GetUpdateLambda(), GetCalculateLambda(), ctx);
     }
 
-    TExprNode::TPtr ExtractLaggingOutput(const TExprNode::TPtr& lagQueue,
-        const TExprNode::TPtr& dependsOn, TExprContext& ctx) const override
+    TExprNode::TPtr ExtractLaggingOutput(const TExprNode::TPtr& lagQueue, 
+        const TExprNode::TPtr& dependsOn, TExprContext& ctx) const override 
     {
         if (!LaggingQueueIndex.Defined()) {
             return {};
@@ -934,7 +934,7 @@ public:
     }
 
     // Lambda(row) -> AsTuple(output, state)
-    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         YQL_ENSURE(dataQueue);
         auto originalInit = GetInitLambda();
         auto originalUpdate = GetUpdateLambda();
@@ -966,7 +966,7 @@ public:
     }
 
     // Lambda(row, state) -> AsTuple(output, state)
-    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         YQL_ENSURE(dataQueue);
         auto originalInit = GetInitLambda();
         auto originalUpdate = GetUpdateLambda();
@@ -1017,7 +1017,7 @@ public:
 
     // Lambda(row) -> AsTuple(output, state)
     // state == output
-    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         auto originalInit = GetInitLambda();
         auto originalUpdate = GetUpdateLambda();
         auto calculate = GetCalculateLambda();
@@ -1048,7 +1048,7 @@ public:
     }
 
     // Lambda(row, state) -> AsTuple(output, state)
-    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         Y_UNUSED(dataQueue);
         return ctx.Builder(GetPos())
             .Lambda()
@@ -1079,7 +1079,7 @@ public:
     }
 
     // Lambda(row) -> AsTuple(output, state)
-    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         auto rowArg = ctx.NewArgument(GetPos(), "row");
         auto body = ctx.Builder(GetPos())
             .List()
@@ -1092,7 +1092,7 @@ public:
     }
 
     // Lambda(row, state) -> AsTuple(output, state)
-    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         auto rowArg = ctx.NewArgument(GetPos(), "row");
         auto stateArg = ctx.NewArgument(GetPos(), "state");
         auto body = ctx.Builder(GetPos())
@@ -1162,7 +1162,7 @@ public:
     }
 
     // Lambda(row) -> AsTuple(output, state)
-    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildInitLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         Y_UNUSED(dataQueue);
         return ctx.Builder(GetPos())
             .Lambda()
@@ -1177,7 +1177,7 @@ public:
     }
 
     // Lambda(row, state) -> AsTuple(output, state)
-    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override {
+    TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const override { 
         Y_UNUSED(dataQueue);
         return ctx.Builder(GetPos())
             .Lambda()

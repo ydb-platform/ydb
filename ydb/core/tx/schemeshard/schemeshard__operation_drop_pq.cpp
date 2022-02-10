@@ -13,7 +13,7 @@ class TDropParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TDropPQ TDropParts"
                 << " operationId#" << OperationId;
@@ -123,7 +123,7 @@ class TDeleteParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TDropPQ TProposedDeletePart"
                 << ", operationId: " << OperationId;
@@ -163,7 +163,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TDropPQ TPropose"
                 << ", operationId: " << OperationId;

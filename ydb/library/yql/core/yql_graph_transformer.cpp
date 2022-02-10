@@ -83,7 +83,7 @@ public:
         return HandleStatus(status);
     }
 
-    TStatistics GetStatistics() const final {
+    TStatistics GetStatistics() const final { 
         if (Statistics.Stages.empty()) {
             Statistics.Stages.resize(Stages.size());
         }

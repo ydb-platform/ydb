@@ -310,7 +310,7 @@ public:
         return NUdf::TUnboxedValuePod(new TYqlTypeResource(exprCtxPtr, retType));
     }
 
-    void RegisterDependencies() const override {
+    void RegisterDependencies() const override { 
         for (auto arg : Args_) {
             this->DependsOn(arg);
         }

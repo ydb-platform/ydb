@@ -26,7 +26,7 @@ public:
         DoUpdate(pos, false);
     }
 
-    void Finish(const TString& freeMessage) override {
+    void Finish(const TString& freeMessage) override { 
         if (LastUpdateValue_) {
             DoUpdate(LastUpdateValue_.GetRef(), true);
             Cerr << Endl;

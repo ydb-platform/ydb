@@ -21,8 +21,8 @@ public:
 
 class TTestMock: public ITestIface {
 public:
-    MOCK_METHOD(void, Func1, (), (override));
-    MOCK_METHOD(int, Func2, (const TString&), (const, override));
+    MOCK_METHOD(void, Func1, (), (override)); 
+    MOCK_METHOD(int, Func2, (const TString&), (const, override)); 
 };
 
 using namespace testing;

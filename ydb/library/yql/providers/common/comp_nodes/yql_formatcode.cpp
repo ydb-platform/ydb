@@ -28,7 +28,7 @@ public:
         return MakeString(str);
     }
 
-    void RegisterDependencies() const override {
+    void RegisterDependencies() const override { 
         DependsOn(Code_);
     }
 
@@ -57,7 +57,7 @@ public:
         return MakeString(str);
     }
 
-    void RegisterDependencies() const override {
+    void RegisterDependencies() const override { 
         DependsOn(Code_);
     }
 

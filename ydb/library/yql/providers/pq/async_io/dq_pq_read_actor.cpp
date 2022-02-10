@@ -189,7 +189,7 @@ public:
         }
     }
 
-    void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
+    void CommitState(const NDqProto::TCheckpoint& checkpoint) override { 
         const auto checkpointId = checkpoint.GetId();
         while (!DeferredCommits.empty() && DeferredCommits.front().first <= checkpointId) {
             DeferredCommits.front().second.Commit();
@@ -197,7 +197,7 @@ public:
         }
     }
 
-    ui64 GetInputIndex() const override {
+    ui64 GetInputIndex() const override { 
         return InputIndex;
     };
 
@@ -236,7 +236,7 @@ private:
         TActor<TDqPqReadActor>::PassAway();
     }
 
-    i64 GetSourceData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool&, i64 freeSpace) override {
+    i64 GetSourceData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool&, i64 freeSpace) override { 
         auto events = GetReadSession().GetEvents(false, TMaybe<size_t>(), static_cast<size_t>(Max<i64>(freeSpace, 0)));
 
         ui32 batchSize = 0;

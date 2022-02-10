@@ -131,23 +131,23 @@ public:
         return IsValid () ? EReady::Data : EReady::Gone;
     }
 
-    bool IsValid() override {
+    bool IsValid() override { 
         return RowIt != RowEnd;
     }
 
-    bool IsRowDeleted() override {
+    bool IsRowDeleted() override { 
         Y_ASSERT(IsValid());
         return RowIt->second.IsDeleted;
     }
 
-    TDbTupleRef GetKey() override {
+    TDbTupleRef GetKey() override { 
         if (!IsValid())
             return TDbTupleRef();
 
         return TDbTupleRef(&KeyTypes[0], &KeyCells[0], KeyCells.size());
     }
 
-    TDbTupleRef GetValues() override {
+    TDbTupleRef GetValues() override { 
         if (!IsValid())
             return TDbTupleRef();
 
@@ -157,7 +157,7 @@ public:
         return TDbTupleRef(&ValueTypes[0], &ValueCells[0], ValueCells.size());
     }
 
-    TCell GetValue(ui32 idx) override {
+    TCell GetValue(ui32 idx) override { 
         if (!IsValid())
             return TCell();
 
@@ -185,15 +185,15 @@ private:
     TAutoPtr<TScheme> Scheme;
 
 public:
-    void Init(const TScheme& scheme) override {
+    void Init(const TScheme& scheme) override { 
         Scheme.Reset(new TScheme(scheme));
     }
 
-    const TScheme& GetScheme() const override {
+    const TScheme& GetScheme() const override { 
         return *Scheme;
     }
 
-    TString FinishTransaction(bool commit) override {
+    TString FinishTransaction(bool commit) override { 
         if (commit) {
             TAutoPtr<TSchemeChanges> schemeDeltaRecs = SchemeChanges.Flush();
             TSchemeModifier(*Scheme).Apply(*schemeDeltaRecs);
@@ -268,9 +268,9 @@ public:
         TxChanges[root][fk] = fv;
     }
 
-    void Precharge(ui32 root,
+    void Precharge(ui32 root, 
                            TRawVals keyFrom, TRawVals keyTo,
-                           TTagsRef tags, ui32 flags) override {
+                           TTagsRef tags, ui32 flags) override { 
         Y_UNUSED(root);
         Y_UNUSED(keyFrom);
         Y_UNUSED(keyTo);
@@ -278,7 +278,7 @@ public:
         Y_UNUSED(flags);
     }
 
-    ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup mode) noexcept override {
+    ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup mode) noexcept override { 
         if (!key) {
             return new TFakeDbIterator(GetScheme(), root, tags, Tables[root].begin(), Tables[root].end());
         }

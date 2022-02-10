@@ -377,7 +377,7 @@ public:
         Cost = drive.SeekTimeNs() + drive.TimeForSizeNs((ui64)RemainingSize, ChunkIdx, TDriveModel::OP_TYPE_READ);
     }
 
-    bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override {
+    bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override { 
         Y_UNUSED(appendBlockSize); Y_UNUSED(adhesion);
         // Calculate how many bytes can we read within given slack (with single seek)
         SlackSize = (ui32)drive.SizeForTimeNs(slackNs > drive.SeekTimeNs()? slackNs - drive.SeekTimeNs(): 0,
@@ -493,7 +493,7 @@ public:
         return UnenqueuedSize == 0;
     }
 
-    bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override {
+    bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override { 
         // Calculate how many bytes can we write within given slack (with single seek)
         // TODO[serxa]: use write speed? but there is no write speed in drive model!
         SlackSize = (ui32)drive.SizeForTimeNs(slackNs > drive.SeekTimeNs()? slackNs - drive.SeekTimeNs(): 0,
@@ -562,7 +562,7 @@ public:
         Cost = drive.TrimTimeForSizeNs(Size);
     }
 
-    bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override {
+    bool TryStealSlack(ui64& slackNs, const TDriveModel &drive, ui64 appendBlockSize, bool adhesion) override { 
         Y_UNUSED(drive); Y_UNUSED(appendBlockSize); Y_UNUSED(adhesion);
         if (slackNs > Cost) {
             slackNs -= Cost;

@@ -44,7 +44,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) override { 
         TNodeId nodeId = Local.NodeId();
         BLOG_D("THive::TTxStatus(" << nodeId << ")::Complete");
         TNodeInfo* node = Self->FindNode(nodeId);

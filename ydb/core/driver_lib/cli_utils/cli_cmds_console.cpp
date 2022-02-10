@@ -206,7 +206,7 @@ public:
             Request.MutableConfigureRequest()->SetFillAffectedConfigs(true);
     }
 
-    virtual void PrintResponse(const NKikimrClient::TConsoleResponse &response) override
+    virtual void PrintResponse(const NKikimrClient::TConsoleResponse &response) override 
     {
         if (response.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             Cout << "ERROR: " << response.GetStatus().GetCode()
@@ -296,7 +296,7 @@ public:
             rec.MutableNode()->SetHost(Host);
     }
 
-    virtual void PrintResponse(const NKikimrClient::TConsoleResponse &response) override
+    virtual void PrintResponse(const NKikimrClient::TConsoleResponse &response) override 
     {
         if (response.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             Cout << "ERROR: " << response.GetStatus().GetCode()

@@ -56,7 +56,7 @@ private:
     TOperationId OperationId;
     TTxState::ETxState& NextState;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TDropTableIndex TPropose"
             << ", operationId: " << OperationId;

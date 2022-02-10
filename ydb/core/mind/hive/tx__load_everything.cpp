@@ -12,7 +12,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_LOAD_EVERYTHING; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
         BLOG_D("THive::TTxLoadEverything::Execute");
 
         TAppData* appData = AppData();
@@ -617,7 +617,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         BLOG_D("THive::TTxLoadEverything::Complete " << Self->DatabaseConfig.ShortDebugString());
         i64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {

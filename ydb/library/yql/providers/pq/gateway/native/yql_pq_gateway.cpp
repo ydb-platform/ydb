@@ -19,12 +19,12 @@ public:
     NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override;
     void CloseSession(const TString& sessionId) override;
 
-    NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(
-        const TString& sessionId,
-        const TString& cluster,
-        const TString& database,
-        const TString& path,
-        const TString& token) override;
+    NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath( 
+        const TString& sessionId, 
+        const TString& cluster, 
+        const TString& database, 
+        const TString& path, 
+        const TString& token) override; 
 
     void UpdateClusterConfigs(
         const TString& clusterName,

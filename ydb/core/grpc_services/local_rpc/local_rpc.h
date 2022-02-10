@@ -98,7 +98,7 @@ public:
     }
 
     void SendResult(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<NGRpcService::TYdbIssueMessageType>& message) override
+        const google::protobuf::RepeatedPtrField<NGRpcService::TYdbIssueMessageType>& message) override 
     {
         TResp resp;
         auto deferred = resp.mutable_operation();
@@ -111,7 +111,7 @@ public:
         CbWrapper(resp);
     }
 
-    void SendOperation(const Ydb::Operations::Operation& operation) override {
+    void SendOperation(const Ydb::Operations::Operation& operation) override { 
         TResp resp;
         resp.mutable_operation()->CopyFrom(operation);
         CbWrapper(resp);
@@ -157,7 +157,7 @@ public:
         return Nothing();
     }
 
-    void SetCostInfo(float consumed_units) override {
+    void SetCostInfo(float consumed_units) override { 
         CostInfo = std::make_unique<Ydb::CostInfo>();
         CostInfo->set_consumed_units(consumed_units);
     }

@@ -153,7 +153,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_CREATE_TABLET; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
         BLOG_D("THive::TTxCreateTablet::Execute");
         State = ETabletState::Unknown;
         ErrorReason = NKikimrHive::ERROR_REASON_UNKNOWN;
@@ -460,7 +460,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         if (Status != NKikimrProto::UNKNOWN) {
             BLOG_D("THive::TTxCreateTablet::Complete TabletId: " << TabletId <<
                 " Status: " << NKikimrProto::EReplyStatus_Name(Status) << " State: " << ETabletStateName(State));

@@ -61,7 +61,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_RELEASE_TABLETS_REPLY; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
         const NKikimrHive::TEvReleaseTabletsReply& request(Request->Get()->Record);
         BLOG_D("THive::TTxReleaseTabletsReply::Execute " << request);
         NIceDb::TNiceDb db(txc.DB);
@@ -71,7 +71,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         const NKikimrHive::TEvReleaseTabletsReply& request(Request->Get()->Record);
         BLOG_D("THive::TTxReleaseTabletsReply::Complete");
 

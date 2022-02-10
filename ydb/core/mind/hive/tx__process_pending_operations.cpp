@@ -15,7 +15,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_PENDING_OPERATIONS; }
 
-    bool Execute(TTransactionContext&, const TActorContext&) override {
+    bool Execute(TTransactionContext&, const TActorContext&) override { 
         BLOG_D("THive::TTxProcessPendingOperations()::Execute");
         for (auto& [owner, pendingCreateTablet] : Self->PendingCreateTablets) {
             THolder<TEvHive::TEvCreateTablet> evCreateTablet(new TEvHive::TEvCreateTablet());
@@ -25,7 +25,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) override { 
         BLOG_D("THive::TTxProcessPendingOperations()::Complete");
         for (THolder<IEventHandle>& event : Events) {
             BLOG_D("THive::TTxProcessPendingOperations(): retry event " << event->Type);

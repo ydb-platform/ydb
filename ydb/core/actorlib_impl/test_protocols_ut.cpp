@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
             Send(Edge, new TEvents::TEvWakeup);
         }
 
-        void CatchReadDataError(TString error) noexcept override
+        void CatchReadDataError(TString error) noexcept override 
         {
             Error = std::move(error);
             Send(Edge, new TEvents::TEvWakeup);

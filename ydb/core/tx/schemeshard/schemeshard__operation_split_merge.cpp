@@ -13,7 +13,7 @@ class TConfigureDestination: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TSplitMerge TConfigureDestination"
                 << " operationId#" << OperationId;
@@ -183,7 +183,7 @@ class TTranserData: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TSplitMerge TTranserData"
                 << " operationId#" << OperationId;
@@ -343,7 +343,7 @@ class TNotifySrc: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TSplitMerge TNotifySrc"
                 << ", operationId: " << OperationId;

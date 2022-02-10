@@ -54,7 +54,7 @@ class TDropParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TDropTable TDropParts"
                 << " operationId#" << OperationId;
@@ -151,7 +151,7 @@ private:
     TOperationId OperationId;
     TTxState::ETxState& NextState;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TDropTable TPropose"
                 << " operationId#" << OperationId;
@@ -391,7 +391,7 @@ class TProposedDeletePart: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TDropTable TProposedDeletePart"
                 << " operationId: " << OperationId;

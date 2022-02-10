@@ -275,7 +275,7 @@ namespace NSQLTranslationV0 {
         TAstListNode(TPosition pos);
         virtual ~TAstListNode();
 
-        TAstNode* Translate(TContext& ctx) const override;
+        TAstNode* Translate(TContext& ctx) const override; 
 
     protected:
         explicit TAstListNode(const TAstListNode& node);
@@ -552,11 +552,11 @@ namespace NSQLTranslationV0 {
         TColumnNode(TPosition pos, const TNodePtr& column, const TString& source);
 
         virtual ~TColumnNode();
-        bool IsAsterisk() const override;
+        bool IsAsterisk() const override; 
         virtual bool IsArtificial() const;
-        const TString* GetColumnName() const override;
-        const TString* GetSourceName() const override;
-        TAstNode* Translate(TContext& ctx) const override;
+        const TString* GetColumnName() const override; 
+        const TString* GetSourceName() const override; 
+        TAstNode* Translate(TContext& ctx) const override; 
         void ResetColumn(const TString& column, const TString& source);
         void ResetColumn(const TNodePtr& column, const TString& source);
 
@@ -669,7 +669,7 @@ namespace NSQLTranslationV0 {
 
     protected:
         IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode mode);
-        TAstNode* Translate(TContext& ctx) const override;
+        TAstNode* Translate(TContext& ctx) const override; 
 
         TString Name;
         const TString Func;

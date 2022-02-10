@@ -20,7 +20,7 @@ public:
         return MakeString(ToString(type->GetKind()));
     }
 
-    void RegisterDependencies() const override {
+    void RegisterDependencies() const override { 
         DependsOn(Handle_);
     }
 

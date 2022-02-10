@@ -24,7 +24,7 @@ struct TKesusTablet::TTxSemaphoreTimeout : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_SEMAPHORE_TIMEOUT; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
             "[" << Self->TabletID() << "] TTxSemaphoreTimeout::Execute (session=" << SessionId
                 << ", semaphore=" << SemaphoreId << ")");

@@ -61,7 +61,7 @@ public:
         return str;
     }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
         TTabletInfo* tablet = Self->FindTablet(TabletId, FollowerId);
         if (tablet != nullptr) {
             BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet "
@@ -185,7 +185,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         BLOG_D("THive::TTxUpdateTabletStatus::Complete TabletId: " << TabletId << " Notifications: " << Notifications);
         Notifications.Send(ctx);
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);

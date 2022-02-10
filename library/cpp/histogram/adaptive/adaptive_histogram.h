@@ -59,7 +59,7 @@ namespace NKiwiAggr {
 
         TQualityFunction GetQualityFunc();
 
-        void Clear() override;
+        void Clear() override; 
 
         void Add(double value, double weight) override;
         void Add(const THistoRec& histoRec) override;

@@ -19,7 +19,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_STOP_TABLET; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
         BLOG_D("THive::TTxStopTablet::Execute Tablet: " << TabletId);
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
@@ -73,7 +73,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) override { 
         BLOG_D("THive::TTxStopTablet::Complete TabletId: " << TabletId);
         if (Status != NKikimrProto::UNKNOWN) {
             ctx.Send(ActorToNotify, new TEvHive::TEvStopTabletResult(Status, TabletId), 0, 0);

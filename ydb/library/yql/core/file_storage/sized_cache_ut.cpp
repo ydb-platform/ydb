@@ -12,13 +12,13 @@ struct TTestCacheObj: public TSizedCache::ICacheObj {
     {
     }
 
-    TString GetName() override {
+    TString GetName() override { 
         return Name;
     }
-    ui64 GetSize() override {
+    ui64 GetSize() override { 
         return Size;
     }
-    void Dismiss() override {
+    void Dismiss() override { 
         Dismissed = true;
     }
 

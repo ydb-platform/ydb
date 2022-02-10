@@ -1128,7 +1128,7 @@ public:
         return true;
     }
 
-    TAstNode* Translate(TContext& ctx) const override {
+    TAstNode* Translate(TContext& ctx) const override { 
         return Node->Translate(ctx);
     }
 

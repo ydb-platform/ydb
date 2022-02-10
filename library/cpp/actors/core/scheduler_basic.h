@@ -41,13 +41,13 @@ namespace NActors {
         TBasicSchedulerThread(const TSchedulerConfig& config = TSchedulerConfig());
         ~TBasicSchedulerThread();
 
-        void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) override;
+        void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) override; 
         void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) override;
 
         void PrepareStart() override;
-        void Start() override;
-        void PrepareStop() override;
-        void Stop() override;
+        void Start() override; 
+        void PrepareStop() override; 
+        void Stop() override; 
     };
 
     class TMockSchedulerThread: public ISchedulerThread {

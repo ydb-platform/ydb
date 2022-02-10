@@ -24,7 +24,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_REASSIGN_GROUPS; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
         //SetTxType(NHive::TXTYPE_KILL_TABLET);
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
@@ -53,7 +53,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) override { 
         BLOG_D("THive::TTxReassignGroups(" << TabletId << ")::Complete");
         if (InitiatedReassignTablet) {
             TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);

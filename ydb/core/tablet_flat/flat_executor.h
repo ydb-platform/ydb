@@ -561,7 +561,7 @@ class TExecutor
             NKikimrSchemeOp::ECompactionStrategy strategy);
 
 public:
-    void Describe(IOutputStream &out) const noexcept override
+    void Describe(IOutputStream &out) const noexcept override 
     {
         out
             << (Stats->IsFollower ? "Follower" : "Leader")

@@ -86,7 +86,7 @@ namespace NFake {
 
         }
 
-        NUtil::TLogLn Log(ELnLev prio) const noexcept override
+        NUtil::TLogLn Log(ELnLev prio) const noexcept override 
         {
             return { prio <= Level ? this : nullptr, prio };
         }

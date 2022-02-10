@@ -156,7 +156,7 @@ private:
 class CompactVectorTestBase : public testing::Test {
 protected:
 
-  void SetUp() override {
+  void SetUp() override { 
     Constructable::reset();
   }
 

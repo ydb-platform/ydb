@@ -62,7 +62,7 @@ public:
     void Close() override { }
 
     void OnStreamBegin() override { }
-    void OnStreamEnd() override { }
+    void OnStreamEnd() override { } 
 
     void OnCommonTime(TInstant) override { }
 

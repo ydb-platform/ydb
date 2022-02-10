@@ -201,7 +201,7 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TAlterOlapStore TConfigureParts"
                 << " operationId#" << OperationId;
@@ -335,7 +335,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TAlterOlapStore TPropose"
                 << " operationId#" << OperationId;
@@ -430,7 +430,7 @@ private:
     TDeque<TPathId> TablesToUpdate;
     bool TablesInitialized = false;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
                 << "TAlterOlapStore TProposedWaitParts"
                 << " operationId#" << OperationId;

@@ -14,7 +14,7 @@ class TWait: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TWaiting"
             << " operationId: " << OperationId;
@@ -85,7 +85,7 @@ private:
     TTabletId TenantSchemeShardId = InvalidTabletId;
     THashSet<TPathId> PathesInside;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TConfigure"
             << " operationId: " << OperationId;
@@ -442,7 +442,7 @@ private:
     TOperationId OperationId;
     TTabletId TenantSchemeShardId = InvalidTabletId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TPublishTenantReadOnly"
             << " operationId: " << OperationId;
@@ -514,7 +514,7 @@ private:
 
     TPathElement::TChildrenCont HidenChildren;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TPublishGlobal"
             << " operationId: " << OperationId;
@@ -681,7 +681,7 @@ class TDeleteTenantSS: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TDeleteTenantSS"
             << " operationId: " << OperationId;
@@ -734,7 +734,7 @@ private:
     TTabletId TenantSchemeShardId = InvalidTabletId;
     TSet<TTabletId> DatashardsInside;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TRewriteOwner"
             << " operationId: " << OperationId;
@@ -886,7 +886,7 @@ class TPublishTenant: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TPublishTenant"
             << " operationId: " << OperationId;
@@ -948,7 +948,7 @@ private:
 
     bool IsInited = false;
 
-    TString DebugHint() const override {
+    TString DebugHint() const override { 
         return TStringBuilder()
             << "TDoneMigrateTree"
             << " operationId: " << OperationId;

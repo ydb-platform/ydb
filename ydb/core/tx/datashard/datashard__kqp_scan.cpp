@@ -295,7 +295,7 @@ private:
         return EScan::Feed; // sent by rows limit, can send one more batch
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() noexcept override { 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
             "Range " << CurrentRange << " of " << TableRanges.size() << " exhausted: try next one."
             << " table: " << TablePath

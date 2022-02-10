@@ -439,7 +439,7 @@ class TDecoderJson final: public NJson::TJsonCallbacks {
             METRICS_ARRAY,
 
             METRIC_OBJECT,
-            METRIC_NAME,
+            METRIC_NAME, 
             METRIC_LABELS,
             METRIC_TYPE,
             METRIC_MODE, // TODO: must be deleted
@@ -482,10 +482,10 @@ class TDecoderJson final: public NJson::TJsonCallbacks {
     };
 
 public:
-    TDecoderJson(TStringBuf data, IHaltableMetricConsumer* metricConsumer, TStringBuf metricNameLabel)
+    TDecoderJson(TStringBuf data, IHaltableMetricConsumer* metricConsumer, TStringBuf metricNameLabel) 
         : Data_(data)
         , MetricConsumer_(metricConsumer)
-        , MetricNameLabel_(metricNameLabel)
+        , MetricNameLabel_(metricNameLabel) 
     {
     }
 
@@ -725,12 +725,12 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 LastMetric_.Labels.Add(LastLabelName_, TString{value});
                 break;
 
-            case TState::METRIC_NAME:
-                PARSE_ENSURE(!value.empty(), "empty metric name");
-                LastMetric_.Labels.Add(MetricNameLabel_, TString{value});
-                State_.ToPrev();
-                break;
-
+            case TState::METRIC_NAME: 
+                PARSE_ENSURE(!value.empty(), "empty metric name"); 
+                LastMetric_.Labels.Add(MetricNameLabel_, TString{value}); 
+                State_.ToPrev(); 
+                break; 
+ 
             case TState::COMMON_TS:
                 MetricConsumer_->OnCommonTime(TInstant::ParseIso8601(value));
                 State_.ToPrev();
@@ -831,8 +831,8 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
             case TState::METRIC_OBJECT:
                 if (key == TStringBuf("labels")) {
                     State_.ToNext(TState::METRIC_LABELS);
-                } else if (key == TStringBuf("name")) {
-                    State_.ToNext(TState::METRIC_NAME);
+                } else if (key == TStringBuf("name")) { 
+                    State_.ToNext(TState::METRIC_NAME); 
                 } else if (key == TStringBuf("ts")) {
                     PARSE_ENSURE(!LastMetric_.SeenTimeseries,
                              "mixed timeseries and ts attributes");
@@ -1129,7 +1129,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
 private:
     TStringBuf Data_;
     IHaltableMetricConsumer* MetricConsumer_;
-    TString MetricNameLabel_;
+    TString MetricNameLabel_; 
     TState State_;
     TString LastLabelName_;
     TMetricCollector LastMetric_;
@@ -1139,11 +1139,11 @@ private:
 
 } // namespace
 
-void DecodeJson(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel) {
+void DecodeJson(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel) { 
     TCommonPartsCollector commonPartsCollector;
     {
         TMemoryInput memIn(data);
-        TDecoderJson decoder(data, &commonPartsCollector, metricNameLabel);
+        TDecoderJson decoder(data, &commonPartsCollector, metricNameLabel); 
         // no need to check a return value. If there is an error, a TJsonDecodeError is thrown
         NJson::ReadJson(&memIn, &decoder);
     }
@@ -1151,7 +1151,7 @@ void DecodeJson(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel)
     TCommonPartsProxy commonPartsProxy(std::move(commonPartsCollector.CommonParts()), c);
     {
         TMemoryInput memIn(data);
-        TDecoderJson decoder(data, &commonPartsProxy, metricNameLabel);
+        TDecoderJson decoder(data, &commonPartsProxy, metricNameLabel); 
         // no need to check a return value. If there is an error, a TJsonDecodeError is thrown
         NJson::ReadJson(&memIn, &decoder);
     }

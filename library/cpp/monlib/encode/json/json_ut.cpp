@@ -1264,27 +1264,27 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         UNIT_ASSERT_EXCEPTION(DecodeJson(input, e.Get()), yexception);
     }
 
-    Y_UNIT_TEST(DecodeNamedMetrics) {
-        NProto::TMultiSamplesList samples;
-        {
-            IMetricEncoderPtr e = EncoderProtobuf(&samples);
-
-            TString metricsJson = NResource::Find("/named_metrics.json");
-            DecodeJson(metricsJson, e.Get(), "sensor");
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 2);
-        {
-            const NProto::TMultiSample& s = samples.GetSamples(0);
-            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
-            AssertLabelEqual(s.GetLabels(0), "sensor", "Memory");
-        }
-        {
-            const NProto::TMultiSample& s = samples.GetSamples(1);
-            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
-            AssertLabelEqual(s.GetLabels(0), "sensor", "QueueSize");
-            AssertLabelEqual(s.GetLabels(1), "export", "Oxygen");
-        }
-    }
-
+    Y_UNIT_TEST(DecodeNamedMetrics) { 
+        NProto::TMultiSamplesList samples; 
+        { 
+            IMetricEncoderPtr e = EncoderProtobuf(&samples); 
+ 
+            TString metricsJson = NResource::Find("/named_metrics.json"); 
+            DecodeJson(metricsJson, e.Get(), "sensor"); 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 2); 
+        { 
+            const NProto::TMultiSample& s = samples.GetSamples(0); 
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1); 
+            AssertLabelEqual(s.GetLabels(0), "sensor", "Memory"); 
+        } 
+        { 
+            const NProto::TMultiSample& s = samples.GetSamples(1); 
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2); 
+            AssertLabelEqual(s.GetLabels(0), "sensor", "QueueSize"); 
+            AssertLabelEqual(s.GetLabels(1), "export", "Oxygen"); 
+        } 
+    } 
+ 
 }

@@ -46,8 +46,8 @@ namespace NJsonWriter {
         TValueContext WriteString(const TStringBuf& s, EHtmlEscapeMode hem);
         TValueContext WriteString(const TStringBuf& s);
         TValueContext WriteInt(int i);
-        TValueContext WriteLongLong(long long i); 
-        TValueContext WriteULongLong(unsigned long long i); 
+        TValueContext WriteLongLong(long long i);
+        TValueContext WriteULongLong(unsigned long long i);
         TValueContext WriteFloat(float f, EFloatToStringMode mode = PREC_NDIGITS, int ndigits = 6);
         TValueContext WriteDouble(double f, EFloatToStringMode mode = PREC_NDIGITS, int ndigits = 10);
         TValueContext WriteBool(bool b);

@@ -54,38 +54,38 @@ UNIT_TEST_SUITE_REGISTRATION(TStreamsTest);
 
 void TStreamsTest::TestIStreamOperators() {
     TString data("first line\r\nsecond\t\xd1\x82\xd0\xb5\xd1\x81\xd1\x82 line\r\n 1 -4 59 4320000000009999999 c\n -1.5 1e-110");
-    TStringInput si(data);
-
+    TStringInput si(data); 
+ 
     TString l1;
     TString l2;
     TString l3;
     TUtf16String w1;
     TString l4;
-    ui16 i1;
-    i16 i2;
-    i32 i3;
-    ui64 i4;
-    char c1;
-    unsigned char c2;
-    float f1;
-    double f2;
-
-    si >> l1 >> l2 >> l3 >> w1 >> l4 >> i1 >> i2 >> i3 >> i4 >> c1 >> c2 >> f1 >> f2;
-
-    UNIT_ASSERT_EQUAL(l1, "first");
-    UNIT_ASSERT_EQUAL(l2, "line");
-    UNIT_ASSERT_EQUAL(l3, "second");
-    UNIT_ASSERT_EQUAL(l4, "line");
-    UNIT_ASSERT_EQUAL(i1, 1);
-    UNIT_ASSERT_EQUAL(i2, -4);
-    UNIT_ASSERT_EQUAL(i3, 59);
-    UNIT_ASSERT_EQUAL(i4, 4320000000009999999ULL);
-    UNIT_ASSERT_EQUAL(c1, 'c');
-    UNIT_ASSERT_EQUAL(c2, '\n');
-    UNIT_ASSERT_EQUAL(f1, -1.5);
-    UNIT_ASSERT_EQUAL(f2, 1e-110);
-}
-
+    ui16 i1; 
+    i16 i2; 
+    i32 i3; 
+    ui64 i4; 
+    char c1; 
+    unsigned char c2; 
+    float f1; 
+    double f2; 
+ 
+    si >> l1 >> l2 >> l3 >> w1 >> l4 >> i1 >> i2 >> i3 >> i4 >> c1 >> c2 >> f1 >> f2; 
+ 
+    UNIT_ASSERT_EQUAL(l1, "first"); 
+    UNIT_ASSERT_EQUAL(l2, "line"); 
+    UNIT_ASSERT_EQUAL(l3, "second"); 
+    UNIT_ASSERT_EQUAL(l4, "line"); 
+    UNIT_ASSERT_EQUAL(i1, 1); 
+    UNIT_ASSERT_EQUAL(i2, -4); 
+    UNIT_ASSERT_EQUAL(i3, 59); 
+    UNIT_ASSERT_EQUAL(i4, 4320000000009999999ULL); 
+    UNIT_ASSERT_EQUAL(c1, 'c'); 
+    UNIT_ASSERT_EQUAL(c2, '\n'); 
+    UNIT_ASSERT_EQUAL(f1, -1.5); 
+    UNIT_ASSERT_EQUAL(f2, 1e-110); 
+} 
+ 
 void TStreamsTest::TestStringStream() {
     TStringStream s;
 

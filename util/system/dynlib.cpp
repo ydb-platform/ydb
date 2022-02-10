@@ -123,7 +123,7 @@ void* TDynamicLibrary::SymOptional(const char* name) noexcept {
 
 void* TDynamicLibrary::Sym(const char* name) {
     if (!IsLoaded()) {
-        ythrow yexception() << "library not loaded";
+        ythrow yexception() << "library not loaded"; 
     }
 
     return Impl_->Sym(name);

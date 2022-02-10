@@ -2,8 +2,8 @@
 
 #include "defaults.h"
 
-#include <util/generic/ptr.h>
-#include <util/generic/noncopyable.h>
+#include <util/generic/ptr.h> 
+#include <util/generic/noncopyable.h> 
 
 #include <new>
 

@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         } else if (ch >= 'N' && ch <= 'Y') {
             return -(ch - 'N' + 1) * SECONDS_PER_HOUR;
         } else {
-            ythrow yexception() << "Invalid military zone.";
+            ythrow yexception() << "Invalid military zone."; 
         }
     }
 

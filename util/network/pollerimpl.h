@@ -4,11 +4,11 @@
 
 #include <util/system/error.h>
 #include <util/system/mutex.h>
-#include <util/system/defaults.h>
-#include <util/generic/ylimits.h>
-#include <util/generic/utility.h>
+#include <util/system/defaults.h> 
+#include <util/generic/ylimits.h> 
+#include <util/generic/utility.h> 
 #include <util/generic/vector.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 #include <util/datetime/base.h>
 
 #if defined(_freebsd_) || defined(_darwin_)
@@ -164,7 +164,7 @@ public:
             return EIO;
         }
 
-        return event->fflags;
+        return event->fflags; 
     }
 
     static inline int ExtractFilterImpl(const TEvent* event) noexcept {

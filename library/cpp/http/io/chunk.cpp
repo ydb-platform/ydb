@@ -8,7 +8,7 @@
 
 static inline size_t ParseHex(const TString& s) {
     if (s.empty()) {
-        ythrow yexception() << "can not parse chunk length(empty string)";
+        ythrow yexception() << "can not parse chunk length(empty string)"; 
     }
 
     size_t ret = 0;
@@ -228,7 +228,7 @@ void TChunkedOutput::DoWrite(const void* buf, size_t len) {
     if (Impl_.Get()) {
         Impl_->Write(buf, len);
     } else {
-        ythrow yexception() << "can not write to finished stream";
+        ythrow yexception() << "can not write to finished stream"; 
     }
 }
 

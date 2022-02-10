@@ -2,7 +2,7 @@
 
 #include <util/system/compat.h>
 #include <util/system/yassert.h>
-#include <util/system/defaults.h>
+#include <util/system/defaults.h> 
 #include <util/generic/singleton.h>
 
 #include <cstdio>

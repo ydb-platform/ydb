@@ -2,8 +2,8 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
-#include <util/generic/yexception.h>
-#include <util/str_stl.h>
+#include <util/generic/yexception.h> 
+#include <util/str_stl.h> 
 
 #include <stdio.h>
 #include <errno.h>
@@ -37,7 +37,7 @@ void Opt2::EatArgv(const char* optspec, const char* long_alias) {
         optspec++;
     }
     if (*optspec == '-')
-        ythrow yexception() << "Flag '-' can not be used in Opt2's optspec";
+        ythrow yexception() << "Flag '-' can not be used in Opt2's optspec"; 
     // step 1 - parse optspec
     for (const char* s = optspec; *s; s++) {
         if (SpecsMap[(ui8)*s])
@@ -50,7 +50,7 @@ void Opt2::EatArgv(const char* optspec, const char* long_alias) {
         if (s[1] == ':') {
             Specs.back().HasArg = true;
             if (s[2] == ':')
-                ythrow yexception() << "Opt2 does not accept optional parameters (e.g. \"a::\") in optspec";
+                ythrow yexception() << "Opt2 does not accept optional parameters (e.g. \"a::\") in optspec"; 
             s++;
         }
     }

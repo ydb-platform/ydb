@@ -2,9 +2,9 @@ LIBRARY()
 
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
-
+ 
 NO_UTIL()
-
+ 
 IF (TSTRING_IS_STD_STRING)
     CFLAGS(GLOBAL -DTSTRING_IS_STD_STRING)
 ENDIF()
@@ -17,8 +17,8 @@ JOIN_SRCS(
     unidata.cpp
     utf8.cpp
     wide.cpp
-)
-
+) 
+ 
 IF (ARCH_X86_64 AND NOT DISABLE_INSTRUCTION_SETS)
     SRC_CPP_SSE41(wide_sse41.cpp)
 ELSE()
@@ -28,7 +28,7 @@ ELSE()
     )
 ENDIF()
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(
     ut

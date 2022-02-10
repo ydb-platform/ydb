@@ -1,7 +1,7 @@
 #pragma once
 
 #include "fwd.h"
-#include "hash.h"
+#include "hash.h" 
 
 #include <initializer_list>
 #include <utility>

@@ -5,7 +5,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/builder.h>
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 
 #include <ctime>
 
@@ -246,7 +246,7 @@ sockaddr_in TPollTest::GetAddress(ui32 ip, ui16 port) {
 SOCKET TPollTest::CreateSocket() {
     SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
     if (s == INVALID_SOCKET) {
-        ythrow yexception() << "Can not create socket (" << LastSystemErrorText() << ")";
+        ythrow yexception() << "Can not create socket (" << LastSystemErrorText() << ")"; 
     }
     return s;
 }
@@ -255,10 +255,10 @@ SOCKET TPollTest::StartServerSocket(ui16 port, int backlog) {
     TSocketHolder s(CreateSocket());
     sockaddr_in addr = GetAddress(ntohl(INADDR_ANY), port);
     if (bind(s, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
-        ythrow yexception() << "Can not bind server socket (" << LastSystemErrorText() << ")";
+        ythrow yexception() << "Can not bind server socket (" << LastSystemErrorText() << ")"; 
     }
     if (listen(s, backlog) == SOCKET_ERROR) {
-        ythrow yexception() << "Can not listen on server socket (" << LastSystemErrorText() << ")";
+        ythrow yexception() << "Can not listen on server socket (" << LastSystemErrorText() << ")"; 
     }
     return s.Release();
 }
@@ -267,7 +267,7 @@ SOCKET TPollTest::StartClientSocket(ui32 ip, ui16 port) {
     TSocketHolder s(CreateSocket());
     sockaddr_in addr = GetAddress(ip, port);
     if (connect(s, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
-        ythrow yexception() << "Can not connect client socket (" << LastSystemErrorText() << ")";
+        ythrow yexception() << "Can not connect client socket (" << LastSystemErrorText() << ")"; 
     }
     return s.Release();
 }
@@ -275,7 +275,7 @@ SOCKET TPollTest::StartClientSocket(ui32 ip, ui16 port) {
 SOCKET TPollTest::AcceptConnection(SOCKET serverSocket) {
     SOCKET connectedSocket = accept(serverSocket, nullptr, nullptr);
     if (connectedSocket == INVALID_SOCKET) {
-        ythrow yexception() << "Can not accept connection on server socket (" << LastSystemErrorText() << ")";
+        ythrow yexception() << "Can not accept connection on server socket (" << LastSystemErrorText() << ")"; 
     }
     return connectedSocket;
 }
@@ -300,7 +300,7 @@ void TPollTest::TestPollInOut() {
         if (i % 5 == 0 || i % 5 == 2) {
             char buffer = 'c';
             if (send(*clientSocket, &buffer, 1, 0) == -1)
-                ythrow yexception() << "Can not send (" << LastSystemErrorText() << ")";
+                ythrow yexception() << "Can not send (" << LastSystemErrorText() << ")"; 
         }
 
         TSimpleSharedPtr<TSocketHolder> connectedSocket(new TSocketHolder(AcceptConnection(serverSocket)));

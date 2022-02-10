@@ -25,7 +25,7 @@ namespace __cxxabiv1 {
 #endif
 
 #include <util/stream/output.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 
 #define FROM_CONTEXT_IMPL
 #include "context.h"
@@ -220,10 +220,10 @@ void ContextTrampoLine(void* arg) {
 TContMachineContext::TContMachineContext()
     : Fiber_(ConvertThreadToFiber(this))
     , MainFiber_(true)
-{
+{ 
     Y_ENSURE(Fiber_, TStringBuf("fiber error"));
-}
-
+} 
+ 
 TContMachineContext::TContMachineContext(const TContClosure& c)
     : Fiber_(CreateFiber(c.Stack.size(), (LPFIBER_START_ROUTINE)ContextTrampoLine, (LPVOID)c.TrampoLine))
     , MainFiber_(false)

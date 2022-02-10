@@ -43,7 +43,7 @@ public:
 
         return DoRead(buf, len);
     }
-
+ 
     /**
      * Reads one character from the stream.
      *
@@ -243,9 +243,9 @@ ui64 TransferData(IInputStream* in, IOutputStream* out);
  * @throws                              `yexception` on invalid input or end of stream.
  * @see Out(IOutputStream&, T&)
  */
-template <typename T>
+template <typename T> 
 void In(IInputStream& in, T& value);
-
+ 
 /**
  * Reads a value from the stream.
  *
@@ -255,12 +255,12 @@ void In(IInputStream& in, T& value);
  * @throws                              `yexception` on invalid input or end of stream.
  * @see operator<<(IOutputStream&, T&)
  */
-template <typename T>
+template <typename T> 
 inline IInputStream& operator>>(IInputStream& in, T& value) {
     In<T>(in, value);
-    return in;
-}
-
+    return in; 
+} 
+ 
 namespace NPrivate {
     IInputStream& StdInStream() noexcept;
 }

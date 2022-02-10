@@ -6,7 +6,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <utility>
-#include <util/str_stl.h>
+#include <util/str_stl.h> 
 #include <util/digest/multi.h>
 
 static const char star = 42;

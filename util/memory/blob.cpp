@@ -5,12 +5,12 @@
 #include <util/system/filemap.h>
 #include <util/system/mlock.h>
 #include <util/stream/buffer.h>
-#include <util/generic/ptr.h>
+#include <util/generic/ptr.h> 
 #include <util/generic/string.h>
 #include <util/generic/buffer.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/singleton.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 
 template <class TCounter>
 class TDynamicBlobBase: public TBlob::TBase,

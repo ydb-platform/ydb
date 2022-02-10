@@ -6,7 +6,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/intrlist.h>
 #include <util/generic/map.h>
-#include <util/generic/ptr.h>
+#include <util/generic/ptr.h> 
 #include <util/generic/set.h>
 #include <util/generic/typetraits.h>
 #include <util/generic/vector.h>

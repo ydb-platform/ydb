@@ -15,4 +15,4 @@ Y_UNIT_TEST_SUITE(TMappedFileTest) {
 
         NFs::Remove(FileName_);
     }
-};
+}; 

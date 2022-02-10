@@ -5,7 +5,7 @@
 #include <util/charset/wide.h>
 #include <util/memory/tempbuf.h>
 #include <util/generic/string.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 #include <util/generic/singleton.h>
 #include <util/string/cast.h>
 #include <util/system/compat.h>
@@ -103,7 +103,7 @@ TString IInputStream::ReadLine() {
     TString ret;
 
     if (!ReadLine(ret)) {
-        ythrow yexception() << "can not read line from stream";
+        ythrow yexception() << "can not read line from stream"; 
     }
 
     return ret;
@@ -113,7 +113,7 @@ TString IInputStream::ReadTo(char ch) {
     TString ret;
 
     if (!ReadTo(ret, ch)) {
-        ythrow yexception() << "can not read from stream";
+        ythrow yexception() << "can not read from stream"; 
     }
 
     return ret;
@@ -253,64 +253,64 @@ namespace {
 IInputStream& NPrivate::StdInStream() noexcept {
     return *SingletonWithPriority<TGetLine, 4>();
 }
-
-// implementation of >> operator
-
+ 
+// implementation of >> operator 
+ 
 // helper functions
-
+ 
 static inline bool IsStdDelimiter(char c) {
-    return (c == '\0') || (c == ' ') || (c == '\r') || (c == '\n') || (c == '\t');
-}
-
+    return (c == '\0') || (c == ' ') || (c == '\r') || (c == '\n') || (c == '\t'); 
+} 
+ 
 static void ReadUpToDelimiter(IInputStream& i, TString& s) {
-    char c;
-    while (i.ReadChar(c)) { // skip delimiters
+    char c; 
+    while (i.ReadChar(c)) { // skip delimiters 
         if (!IsStdDelimiter(c)) {
-            s += c;
-            break;
-        }
-    }
+            s += c; 
+            break; 
+        } 
+    } 
     while (i.ReadChar(c) && !IsStdDelimiter(c)) { // read data (with trailing delimiter)
-        s += c;
-    }
-}
-
-// specialization for string-related stuff
-
-template <>
+        s += c; 
+    } 
+} 
+ 
+// specialization for string-related stuff 
+ 
+template <> 
 void In<TString>(IInputStream& i, TString& s) {
     s.resize(0);
-    ReadUpToDelimiter(i, s);
-}
-
-template <>
+    ReadUpToDelimiter(i, s); 
+} 
+ 
+template <> 
 void In<TUtf16String>(IInputStream& i, TUtf16String& w) {
     TString s;
-    ReadUpToDelimiter(i, s);
-
-    if (s.empty()) {
-        w.erase();
-    } else {
+    ReadUpToDelimiter(i, s); 
+ 
+    if (s.empty()) { 
+        w.erase(); 
+    } else { 
         w = UTF8ToWide(s);
-    }
-}
-
+    } 
+} 
+ 
 // specialization for char types
-
+ 
 #define SPEC_FOR_CHAR(T)                  \
     template <>                           \
     void In<T>(IInputStream & i, T & t) { \
         i.ReadChar((char&)t);             \
     }
-
-SPEC_FOR_CHAR(char)
-SPEC_FOR_CHAR(unsigned char)
-SPEC_FOR_CHAR(signed char)
-
-#undef SPEC_FOR_CHAR
-
-// specialization for number types
-
+ 
+SPEC_FOR_CHAR(char) 
+SPEC_FOR_CHAR(unsigned char) 
+SPEC_FOR_CHAR(signed char) 
+ 
+#undef SPEC_FOR_CHAR 
+ 
+// specialization for number types 
+ 
 #define SPEC_FOR_NUMBER(T)                                                       \
     template <>                                                                  \
     void In<T>(IInputStream & i, T & t) {                                        \
@@ -327,18 +327,18 @@ SPEC_FOR_CHAR(signed char)
         }                                                                        \
         t = FromString<T, char>(buf, pos);                                       \
     }
-
-SPEC_FOR_NUMBER(signed short)
-SPEC_FOR_NUMBER(signed int)
-SPEC_FOR_NUMBER(signed long int)
-SPEC_FOR_NUMBER(signed long long int)
-SPEC_FOR_NUMBER(unsigned short)
-SPEC_FOR_NUMBER(unsigned int)
-SPEC_FOR_NUMBER(unsigned long int)
-SPEC_FOR_NUMBER(unsigned long long int)
-
-SPEC_FOR_NUMBER(float)
-SPEC_FOR_NUMBER(double)
-SPEC_FOR_NUMBER(long double)
-
-#undef SPEC_FOR_NUMBER
+ 
+SPEC_FOR_NUMBER(signed short) 
+SPEC_FOR_NUMBER(signed int) 
+SPEC_FOR_NUMBER(signed long int) 
+SPEC_FOR_NUMBER(signed long long int) 
+SPEC_FOR_NUMBER(unsigned short) 
+SPEC_FOR_NUMBER(unsigned int) 
+SPEC_FOR_NUMBER(unsigned long int) 
+SPEC_FOR_NUMBER(unsigned long long int) 
+ 
+SPEC_FOR_NUMBER(float) 
+SPEC_FOR_NUMBER(double) 
+SPEC_FOR_NUMBER(long double) 
+ 
+#undef SPEC_FOR_NUMBER 

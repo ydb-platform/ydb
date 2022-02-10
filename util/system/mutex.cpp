@@ -85,7 +85,7 @@ public:
         return TryEnterCriticalSection(obj);
     #endif // _WIN32_WINNT < 0x0400
     }
-#endif // _win_
+#endif // _win_ 
 
     inline bool TryAcquire() noexcept {
 #if defined(_win_)

@@ -1,20 +1,20 @@
 LIBRARY()
 
 OWNER(g:util)
-
-PEERDIR(
-    contrib/libs/pcre
+ 
+PEERDIR( 
+    contrib/libs/pcre 
     contrib/libs/pcre/pcre16
     contrib/libs/pcre/pcre32
     library/cpp/containers/stack_array
-)
-
-SRCS(
+) 
+ 
+SRCS( 
     pcre.cpp
-    regexp.cpp
-)
-
-END()
+    regexp.cpp 
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     benchmark

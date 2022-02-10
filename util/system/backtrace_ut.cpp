@@ -2,21 +2,21 @@
 
 #include <util/generic/array_ref.h>
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/stream/output.h>
 
 using PFunc = int (*)(void**, size_t);
-
-int Dbg1(void** buf, size_t len) {
+ 
+int Dbg1(void** buf, size_t len) { 
     volatile int ret = (int)BackTrace(buf, len);
-    return ret;
-}
-
-int Dbg2(void** buf, size_t len) {
+    return ret; 
+} 
+ 
+int Dbg2(void** buf, size_t len) { 
     volatile int ret = (int)BackTrace(buf, len);
-    return ret;
-}
-
+    return ret; 
+} 
+ 
 void FormatBackTraceReplacement(IOutputStream* out, void* const*, size_t) {
     *out << "WorksLikeACharm" << Endl;
 }
@@ -35,13 +35,13 @@ void SomeMethod() {
 }
 
 class TBackTraceTest: public TTestBase {
-    UNIT_TEST_SUITE(TBackTraceTest);
+    UNIT_TEST_SUITE(TBackTraceTest); 
     UNIT_TEST(TestBackTrace)
     UNIT_TEST(TestBackTraceView)
     UNIT_TEST(TestPrintBackTrace)
     UNIT_TEST(TestSetFormatBackTraceFn)
-    UNIT_TEST_SUITE_END();
-
+    UNIT_TEST_SUITE_END(); 
+ 
     void TestPrintBackTrace() {
         SomeMethod();
     }
@@ -55,21 +55,21 @@ class TBackTraceTest: public TTestBase {
         TestPrintBackTrace();
     }
 
-    void TestBackTrace() {
+    void TestBackTrace() { 
         //PrintBackTrace();
-        void* buf1[100];
-        size_t ret1;
-
-        void* buf2[100];
-        size_t ret2;
-
-        volatile PFunc func = &Dbg1;
-        ret1 = (*func)(buf1, 100);
-        func = &Dbg2;
-        ret2 = (*func)(buf2, 100);
-
-        UNIT_ASSERT_EQUAL(ret1, ret2);
-    }
+        void* buf1[100]; 
+        size_t ret1; 
+ 
+        void* buf2[100]; 
+        size_t ret2; 
+ 
+        volatile PFunc func = &Dbg1; 
+        ret1 = (*func)(buf1, 100); 
+        func = &Dbg2; 
+        ret2 = (*func)(buf2, 100); 
+ 
+        UNIT_ASSERT_EQUAL(ret1, ret2); 
+    } 
 
     void TestBackTraceView() {
         try {
@@ -80,6 +80,6 @@ class TBackTraceTest: public TTestBase {
             UNIT_ASSERT_VALUES_EQUAL(btView.size(), bt.size());
         }
     }
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TBackTraceTest);
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TBackTraceTest); 

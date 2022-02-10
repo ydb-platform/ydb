@@ -1,6 +1,6 @@
 #include "kmp.h"
 
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 
 TKMPMatcher::TKMPMatcher(const char* patternBegin, const char* patternEnd)
     : Pattern(patternBegin, patternEnd)

@@ -5,7 +5,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/charset/utf8.h>
-#include <util/system/yassert.h>
+#include <util/system/yassert.h> 
 
 #if defined(_MSC_VER)
 #pragma warning(disable : 4309) /*truncation of constant value*/

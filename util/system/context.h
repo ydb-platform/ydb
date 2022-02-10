@@ -7,7 +7,7 @@
 
 #include <util/generic/array_ref.h>
 #include <util/generic/utility.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 
 #define STACK_ALIGN (8 * PLATFORM_DATA_ALIGN)
 

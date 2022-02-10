@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/system/defaults.h>
-#include <util/generic/ptr.h>
+#include <util/system/defaults.h> 
+#include <util/generic/ptr.h> 
 
 /*
  * This is really fast buffer for temporary data.

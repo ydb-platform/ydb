@@ -10,7 +10,7 @@
 
 void TDebugOutput::DoWrite(const void* buf, size_t len) {
     if (len != fwrite(buf, 1, len, stderr)) {
-        ythrow yexception() << "write failed(" << LastSystemErrorText() << ")";
+        ythrow yexception() << "write failed(" << LastSystemErrorText() << ")"; 
     }
 }
 

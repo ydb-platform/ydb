@@ -5,9 +5,9 @@
 #include "output.h"
 #include "buffered.h"
 
-#include <util/system/defaults.h>
-#include <util/generic/ptr.h>
-#include <util/generic/yexception.h>
+#include <util/system/defaults.h> 
+#include <util/generic/ptr.h> 
+#include <util/generic/yexception.h> 
 
 /**
  * @addtogroup Streams_Archs

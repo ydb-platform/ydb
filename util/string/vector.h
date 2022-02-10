@@ -3,15 +3,15 @@
 #include "cast.h"
 #include "split.h"
 
-#include <util/generic/map.h>
+#include <util/generic/map.h> 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 #include <util/string/cast.h>
 #include <util/system/yassert.h>
 
 #define KEEP_EMPTY_TOKENS 0x01
-
+ 
 //
 // NOTE: Check StringSplitter below to get more convenient split string interface.
 
@@ -47,9 +47,9 @@ SplitString(const C* ptr, const C* delimiter,
             size_t maxFields = 0, int options = 0) {
     TVector<typename ::NPrivate::TStringDeducer<C>::type> res;
     ::NPrivate::SplitStringImpl(&res, ptr, delimiter, maxFields, options);
-    return res;
-}
-
+    return res; 
+} 
+ 
 template <typename C>
 TVector<typename ::NPrivate::TStringDeducer<C>::type>
 SplitString(const C* ptr, size_t len, const C* delimiter,

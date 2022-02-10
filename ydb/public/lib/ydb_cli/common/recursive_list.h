@@ -27,7 +27,7 @@ struct TRecursiveListResult {
 };
 
 TRecursiveListResult RecursiveList(NScheme::TSchemeClient& client, const TString& path,
-    const TRecursiveListSettings& settings = {}, bool addSelf = true); 
+    const TRecursiveListSettings& settings = {}, bool addSelf = true);
 
 }
 }

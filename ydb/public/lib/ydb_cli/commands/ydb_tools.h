@@ -40,7 +40,7 @@ private:
     TString FilePath;
     bool IsSchemeOnly;
     bool AvoidCopy = false;
-    bool SavePartialResult = false; 
+    bool SavePartialResult = false;
     TString ConsistencyLevel;
     bool PreservePoolKinds = false;
 };
@@ -58,7 +58,7 @@ private:
     bool RestoreData = true;
     bool RestoreIndexes = true;
     bool SkipDocumentTables = false;
-    bool SavePartialResult = false; 
+    bool SavePartialResult = false;
     TString UploadBandwidth;
     TString UploadRps;
     TString RowsPerRequest;

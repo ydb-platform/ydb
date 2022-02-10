@@ -65,7 +65,7 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
     FLUENT_SETTING_DEFAULT(bool, RestoreData, true);
     FLUENT_SETTING_DEFAULT(bool, RestoreIndexes, true);
     FLUENT_SETTING_DEFAULT(bool, SkipDocumentTables, false);
-    FLUENT_SETTING_DEFAULT(bool, SavePartialResult, false); 
+    FLUENT_SETTING_DEFAULT(bool, SavePartialResult, false);
 
     FLUENT_SETTING_DEFAULT(ui64, MemLimit, 16_MB);
     FLUENT_SETTING_DEFAULT(ui64, RowsPerRequest, 0);

@@ -8,7 +8,7 @@
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
 #include <util/generic/hash.h>
-#include <util/generic/hash_set.h> 
+#include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 #include <util/stream/file.h>
@@ -20,7 +20,7 @@ namespace NDump {
 
 using namespace NImport;
 using namespace NOperation;
-using namespace NScheme; 
+using namespace NScheme;
 using namespace NTable;
 
 extern const char DOC_API_TABLE_VERSION_ATTR[] = "__document_api_version";
@@ -102,85 +102,85 @@ bool HasRunningIndexBuilds(TOperationClient& client, const TString& dbPath) {
 TRestoreClient::TRestoreClient(
         TImportClient& importClient,
         TOperationClient& operationClient,
-        TSchemeClient& schemeClient, 
+        TSchemeClient& schemeClient,
         TTableClient& tableClient)
     : ImportClient(importClient)
     , OperationClient(operationClient)
-    , SchemeClient(schemeClient) 
+    , SchemeClient(schemeClient)
     , TableClient(tableClient)
 {
 }
 
 TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
     // find existing items
-    TFsPath dbBasePath = dbPath; 
- 
-    while (true) { 
+    TFsPath dbBasePath = dbPath;
+
+    while (true) {
         auto result = DescribePath(SchemeClient, dbBasePath).GetStatus();
- 
-        if (result == EStatus::SUCCESS) { 
-            break; 
-        } 
- 
-        if (result != EStatus::SCHEME_ERROR) { 
+
+        if (result == EStatus::SUCCESS) {
+            break;
+        }
+
+        if (result != EStatus::SCHEME_ERROR) {
             return Result<TRestoreResult>(EStatus::SCHEME_ERROR, "Can not find existing path");
-        } 
- 
-        dbBasePath = dbBasePath.Parent(); 
-    } 
+        }
+
+        dbBasePath = dbBasePath.Parent();
+    }
 
     auto oldDirectoryList = SchemeClient.ListDirectory(dbBasePath).GetValueSync();
     if (!oldDirectoryList.IsSuccess()) {
         return Result<TRestoreResult>(EStatus::SCHEME_ERROR, "Can not list existing directory");
-    } 
- 
-    THashSet<TString> oldEntries; 
+    }
+
+    THashSet<TString> oldEntries;
     for (const auto& entry : oldDirectoryList.GetChildren()) {
-        oldEntries.insert(entry.Name); 
-    } 
- 
+        oldEntries.insert(entry.Name);
+    }
+
     // restore
-    auto restoreResult = RestoreFolder(fsPath, dbPath, settings); 
-    if (restoreResult.IsSuccess() || settings.SavePartialResult_) { 
-        return restoreResult; 
-    } 
- 
+    auto restoreResult = RestoreFolder(fsPath, dbPath, settings);
+    if (restoreResult.IsSuccess() || settings.SavePartialResult_) {
+        return restoreResult;
+    }
+
     // cleanup
-    auto newDirectoryList = SchemeClient.ListDirectory(dbBasePath).GetValueSync(); 
-    if (!newDirectoryList.IsSuccess()) { 
-        return restoreResult; 
-    } 
- 
-    for (const auto& entry : newDirectoryList.GetChildren()) { 
+    auto newDirectoryList = SchemeClient.ListDirectory(dbBasePath).GetValueSync();
+    if (!newDirectoryList.IsSuccess()) {
+        return restoreResult;
+    }
+
+    for (const auto& entry : newDirectoryList.GetChildren()) {
         if (oldEntries.contains(entry.Name)) {
             continue;
         }
 
         auto fullPath = dbBasePath.Child(entry.Name);
- 
+
         switch (entry.Type) {
             case ESchemeEntryType::Directory: {
-                auto result = RemoveDirectoryRecursive(TableClient, SchemeClient, fullPath, {}, true); 
+                auto result = RemoveDirectoryRecursive(TableClient, SchemeClient, fullPath, {}, true);
                 if (!result.IsSuccess()) {
                     return restoreResult;
-                } 
+                }
                 break;
             }
             case ESchemeEntryType::Table: {
-                auto result = TableClient.RetryOperationSync([path = fullPath](TSession session) { 
+                auto result = TableClient.RetryOperationSync([path = fullPath](TSession session) {
                     return session.DropTable(path).GetValueSync();
                 });
                 if (!result.IsSuccess()) {
                     return restoreResult;
-                } 
+                }
                 break;
-            } 
+            }
             default:
                 return restoreResult;
-        } 
-    } 
- 
-    return restoreResult; 
+        }
+    }
+
+    return restoreResult;
 }
 
 TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings) {

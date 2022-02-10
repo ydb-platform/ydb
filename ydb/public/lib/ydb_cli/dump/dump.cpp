@@ -36,7 +36,7 @@ public:
     }
 
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
-        auto client = TRestoreClient(ImportClient, OperationClient, SchemeClient, TableClient); 
+        auto client = TRestoreClient(ImportClient, OperationClient, SchemeClient, TableClient);
         return client.Restore(fsPath, dbPath, settings);
     }
 

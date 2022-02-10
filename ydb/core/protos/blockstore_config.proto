@@ -90,9 +90,9 @@ message TVolumeConfig {
 
     // Determines index geometry for v2 partitions.
     optional uint32 ZoneBlockCount = 38;
-
-    // Encryption key hash
-    optional bytes EncryptionKeyHash = 39;
+ 
+    // Encryption key hash 
+    optional bytes EncryptionKeyHash = 39; 
 
     // Indicates that volume does not belong to user directly, but used for system needs
     optional bool IsSystem = 40;

@@ -55,8 +55,8 @@ TString MD5::File(const TString& filename) {
         buf.clear();
     }
     return buf;
-} 
- 
+}
+
 char* MD5::Data(const TArrayRef<const ui8>& data, char* buf) {
     return MD5().Update(data).End(buf);
 }

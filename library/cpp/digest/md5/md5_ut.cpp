@@ -41,12 +41,12 @@ Y_UNIT_TEST_SUITE(TMD5Test) {
 
         UNIT_ASSERT_NO_DIFF(fileHash, memoryHash);
 
-        fileHash = MD5::File(tmpFile); 
+        fileHash = MD5::File(tmpFile);
         UNIT_ASSERT_NO_DIFF(fileHash, memoryHash);
- 
+
         NFs::Remove(tmpFile);
-        fileHash = MD5::File(tmpFile); 
-        UNIT_ASSERT_EQUAL(fileHash.size(), 0); 
+        fileHash = MD5::File(tmpFile);
+        UNIT_ASSERT_EQUAL(fileHash.size(), 0);
     }
 
     Y_UNIT_TEST(TestIsMD5) {

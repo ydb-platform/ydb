@@ -153,7 +153,7 @@ private:
     TThread(TPrivateCtor, THolder<TCallableBase> callable);
 
 private:
-    class TImpl;
+    class TImpl; 
     THolder<TImpl> Impl_;
 };
 

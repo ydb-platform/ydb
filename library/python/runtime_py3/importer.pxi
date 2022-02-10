@@ -14,7 +14,7 @@ env_source_root = b'Y_PYTHON_SOURCE_ROOT'
 cfg_source_root = b'arcadia-source-root'
 env_extended_source_search = b'Y_PYTHON_EXTENDED_SOURCE_SEARCH'
 res_ya_ide_venv = b'YA_IDE_VENV'
-executable = sys.executable or 'Y_PYTHON' 
+executable = sys.executable or 'Y_PYTHON'
 sys.modules['run_import_hook'] = __resource
 
 # This is the prefix in contrib/tools/python3/src/Lib/ya.make.
@@ -180,7 +180,7 @@ class ResourceImporter(object):
         self.memory = set(iter_py_modules())  # Set of importable module names.
         self.source_map = {}                  # Map from file names to module names.
         self._source_name = {}                # Map from original to altered module names.
-        self._package_prefix = '' 
+        self._package_prefix = ''
         if Y_PYTHON_SOURCE_ROOT and Y_PYTHON_EXTENDED_SOURCE_SEARCH:
             self.arcadia_source_finder = ArcadiaSourceFinder(_s(Y_PYTHON_SOURCE_ROOT))
         else:
@@ -192,12 +192,12 @@ class ResourceImporter(object):
                 if k not in self.memory:
                     self.memory.add(k)
 
-    def for_package(self, name): 
-        import copy 
-        importer = copy.copy(self) 
-        importer._package_prefix = name + '.' 
-        return importer 
- 
+    def for_package(self, name):
+        import copy
+        importer = copy.copy(self)
+        importer._package_prefix = name + '.'
+        return importer
+
     def _find_mod_path(self, fullname):
         """Find arcadia relative path by module name"""
         relpath = resfs_src(mod_path(fullname), resfs_file=True)
@@ -222,8 +222,8 @@ class ResourceImporter(object):
 
     def exec_module(self, module):
         code = self.get_code(module.__name__)
-        module.__file__ = code.co_filename 
-        if self.is_package(module.__name__): 
+        module.__file__ = code.co_filename
+        if self.is_package(module.__name__):
             module.__path__= [executable + path_sep + module.__name__.replace('.', path_sep)]
         # exec(code, module.__dict__)
         _call_with_frames_removed(exec, code, module.__dict__)
@@ -321,14 +321,14 @@ class ResourceImporter(object):
 
         return b''
 
-    # Extension for pkgutil.iter_modules. 
-    def iter_modules(self, prefix=''): 
-        import re 
-        rx = re.compile(re.escape(self._package_prefix) + r'([^.]+)(\.__init__)?$') 
-        for p in self.memory: 
-            m = rx.match(p) 
-            if m: 
-                yield prefix + m.group(1), m.group(2) is not None 
+    # Extension for pkgutil.iter_modules.
+    def iter_modules(self, prefix=''):
+        import re
+        rx = re.compile(re.escape(self._package_prefix) + r'([^.]+)(\.__init__)?$')
+        for p in self.memory:
+            m = rx.match(p)
+            if m:
+                yield prefix + m.group(1), m.group(2) is not None
         if self.arcadia_source_finder:
             for m in self.arcadia_source_finder.iter_modules(self._package_prefix, prefix):
                 yield m
@@ -340,7 +340,7 @@ class ResourceImporter(object):
         except ImportError:
             return None
         return _ResfsResourceReader(self, fullname)
- 
+
 
 class _ResfsResourceReader:
 
@@ -540,7 +540,7 @@ def executable_path_hook(path):
 
     if path.startswith(executable + path_sep):
         return importer.for_package(path[len(executable + path_sep):].replace(path_sep, '.'))
- 
+
     raise ImportError(path)
 
 

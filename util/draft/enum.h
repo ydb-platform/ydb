@@ -1,7 +1,7 @@
 #pragma once
 
-#include <bitset> 
- 
+#include <bitset>
+
 #include <util/generic/strbuf.h>
 #include <util/stream/str.h>
 #include <util/string/cast.h>
@@ -111,10 +111,10 @@ inline void SetEnumFlags(const std::pair<const char*, E>* str2Enum, TStringBuf o
     if (optSpec.empty()) {
         SetEnumFlagsForEmptySpec(flags, allIfEmpty);
     } else {
-        flags.reset(); 
+        flags.reset();
         for (const auto& it : StringSplitter(optSpec).Split(',')) {
             E e = *EnumFromStringImpl(ToString(it.Token()).data(), str2Enum, size);
-            flags.set(e); 
+            flags.set(e);
         }
     }
 }

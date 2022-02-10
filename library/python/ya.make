@@ -28,7 +28,7 @@ RECURSE(
     certifi
     cgroups
     charset
-    charts_notes 
+    charts_notes
     charts_notes/example
     cityhash
     cityhash/test

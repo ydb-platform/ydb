@@ -238,7 +238,7 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
     }
 }
 
-void WriteYsonValue(NYson::TYsonConsumerBase& writer, const NUdf::TUnboxedValuePod& value, TType* type,
+void WriteYsonValue(NYson::TYsonConsumerBase& writer, const NUdf::TUnboxedValuePod& value, TType* type, 
     const TVector<ui32>* structPositions)
 {
     TYsonResultWriter resultWriter(writer);
@@ -246,9 +246,9 @@ void WriteYsonValue(NYson::TYsonConsumerBase& writer, const NUdf::TUnboxedValueP
 }
 
 TString WriteYsonValue(const NUdf::TUnboxedValuePod& value, TType* type, const TVector<ui32>* structPositions,
-    NYson::EYsonFormat format) {
+    NYson::EYsonFormat format) { 
     TStringStream str;
-    NYson::TYsonWriter writer(&str, format);
+    NYson::TYsonWriter writer(&str, format); 
     WriteYsonValue(writer, value, type, structPositions);
     return str.Str();
 }
@@ -882,7 +882,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
                 return NUdf::TUnboxedValue(MakeString(NUdf::TStringRef(yson)));
             }
 
-            TString decodedYson = DecodeRestrictedYson(TStringBuf(yson.data(), yson.size()), NYson::EYsonFormat::Text);
+            TString decodedYson = DecodeRestrictedYson(TStringBuf(yson.data(), yson.size()), NYson::EYsonFormat::Text); 
             return NUdf::TUnboxedValue(MakeString(NUdf::TStringRef(decodedYson)));
         }
 
@@ -1286,12 +1286,12 @@ TMaybe<NUdf::TUnboxedValue> ParseYsonValue(const THolderFactory& holderFactory,
 
 TMaybe<NUdf::TUnboxedValue> ParseYsonNode(const THolderFactory& holderFactory,
     const NYT::TNode& node, TType* type, IOutputStream* err) {
-    return ParseYsonValue(holderFactory, NYT::NodeToYsonString(node, NYson::EYsonFormat::Binary), type, err, true);
+    return ParseYsonValue(holderFactory, NYT::NodeToYsonString(node, NYson::EYsonFormat::Binary), type, err, true); 
 }
 
 TMaybe<NUdf::TUnboxedValue> ParseYsonNodeInResultFormat(const THolderFactory& holderFactory,
     const NYT::TNode& node, TType* type, IOutputStream* err) {
-    return ParseYsonValue(holderFactory, NYT::NodeToYsonString(node, NYson::EYsonFormat::Binary), type, err, false);
+    return ParseYsonValue(holderFactory, NYT::NodeToYsonString(node, NYson::EYsonFormat::Binary), type, err, false); 
 }
 
 extern "C" void ReadYsonContainerValue(TType* type, const NKikimr::NMiniKQL::THolderFactory& holderFactory,

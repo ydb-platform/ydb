@@ -12,7 +12,7 @@ void GetKikimrUnpackedRunResult(const NKikimrMiniKQL::TResult& runResult, ui32 i
 
 TVector<NKikimrMiniKQL::TResult*> UnpackKikimrRunResult(const NKikimrMiniKQL::TResult& runResult, google::protobuf::Arena* arena);
 
-void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer, const NKikimrMiniKQL::TResult& result,
+void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer, const NKikimrMiniKQL::TResult& result, 
     const TVector<TString>& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated);
 
 NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& result, const TVector<TString>& columnHints,
@@ -27,7 +27,7 @@ TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const N
 bool CheckKqpResultType(const NKikimrMiniKQL::TResult& kqpResult, const TTypeAnnotationNode& expectedType,
     TExprContext& ctx);
 
-TMaybe<TString> KqpResultToYson(const NKikimrMiniKQL::TResult& kqpResult, const NYson::EYsonFormat& ysonFormat,
+TMaybe<TString> KqpResultToYson(const NKikimrMiniKQL::TResult& kqpResult, const NYson::EYsonFormat& ysonFormat, 
     TExprContext& ctx);
 
 TMaybe<TString> GetTableListResult(const IKikimrGateway::TListPathResult& res,
@@ -42,7 +42,7 @@ void TransformerStatsToProto(const TString& name, const IGraphTransformer::TStat
 void TransformerStatsFromProto(const NKikimrKqp::TTransformProfile& proto, IGraphTransformer::TStatistics& stats,
     TString& name);
 
-void KikimrProfileToYson(const NKikimrKqp::TKqlProfile& kqlProfile, NYson::TYsonWriter& writer);
-void KikimrProfileToYson(const NKikimrKqp::TQueryProfile& profile, NYson::TYsonWriter& writer);
+void KikimrProfileToYson(const NKikimrKqp::TKqlProfile& kqlProfile, NYson::TYsonWriter& writer); 
+void KikimrProfileToYson(const NKikimrKqp::TQueryProfile& profile, NYson::TYsonWriter& writer); 
 
 } // namespace NYql

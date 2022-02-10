@@ -36,11 +36,11 @@ IGraphTransformer::TStatus TPlanOutputTransformer::operator()(
     Y_UNUSED(ctx);
     output = input;
     if (DirectOut_) {
-        NYson::TYsonWriter writer(DirectOut_, OutputFormat_);
+        NYson::TYsonWriter writer(DirectOut_, OutputFormat_); 
         Builder_.WritePlan(writer, input);
     } else {
         TNullOutput null;
-        NYson::TYsonWriter writer(&null, OutputFormat_);
+        NYson::TYsonWriter writer(&null, OutputFormat_); 
         Builder_.WritePlan(writer, input);
     }
 

@@ -125,7 +125,7 @@ bool RunPqProgram(
     factory.SetModules(moduleResolver);
 
     TProgramPtr program = factory.Create("program", code);
-    program->ConfigureYsonResultFormat(NYson::EYsonFormat::Text);
+    program->ConfigureYsonResultFormat(NYson::EYsonFormat::Text); 
 
     Cerr << "Parse SQL..." << Endl;
     NSQLTranslation::TTranslationSettings sqlSettings;

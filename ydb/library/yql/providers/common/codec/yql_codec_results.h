@@ -16,7 +16,7 @@ public:
     static constexpr TStringBuf VoidString = "Void";
 
 public:
-    explicit TYsonResultWriter(NYson::TYsonConsumerBase& writer)
+    explicit TYsonResultWriter(NYson::TYsonConsumerBase& writer) 
         : Writer(writer)
     {
     }
@@ -91,7 +91,7 @@ private:
     }
 
 private:
-    NYson::TYsonConsumerBase& Writer;
+    NYson::TYsonConsumerBase& Writer; 
 };
 }
 }

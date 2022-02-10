@@ -98,7 +98,7 @@ void FillAstAndPlan(IKqpHost::TQueryResult& queryResult, TExprNode* queryRoot, T
     queryResult.QueryAst = astStream.Str();
 
     TStringStream planStream;
-    NYson::TYsonWriter writer(&planStream, NYson::EYsonFormat::Binary);
+    NYson::TYsonWriter writer(&planStream, NYson::EYsonFormat::Binary); 
     planBuilder.Clear();
     planBuilder.WritePlan(writer, queryRoot);
     queryResult.QueryPlan = planStream.Str();
@@ -112,7 +112,7 @@ void FillAstAndPlan(IKqpHost::TQueryResult& queryResult, const NKikimrKqp::TPrep
 
     if (queryResult.QueryPlan.empty()) {
         TStringStream planStream;
-        NYson::TYsonWriter writer(&planStream, NYson::EYsonFormat::Binary);
+        NYson::TYsonWriter writer(&planStream, NYson::EYsonFormat::Binary); 
         writer.OnEntity();
         queryResult.QueryPlan = planStream.Str();
     }

@@ -233,12 +233,12 @@ public:
     }
 };
 
-void SaveStructTypeToYson(NYson::TYsonConsumerBase& writer, const TStructExprType* type, const TMaybe<TVector<TString>>& columns, const TStructMemberMapper& mapper) {
+void SaveStructTypeToYson(NYson::TYsonConsumerBase& writer, const TStructExprType* type, const TMaybe<TVector<TString>>& columns, const TStructMemberMapper& mapper) { 
     TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer);
     saver.SaveStructType(type, columns, mapper);
 }
 
-void WriteTypeToYson(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type) {
+void WriteTypeToYson(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type) { 
     TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer);
     saver.Save(type);
 }
@@ -250,9 +250,9 @@ NYT::TNode TypeToYsonNode(const TTypeAnnotationNode* type) {
     return res;
 }
 
-TString WriteTypeToYson(const TTypeAnnotationNode* type, NYson::EYsonFormat format) {
+TString WriteTypeToYson(const TTypeAnnotationNode* type, NYson::EYsonFormat format) { 
     TStringStream stream;
-    NYson::TYsonWriter writer(&stream, format);
+    NYson::TYsonWriter writer(&stream, format); 
     WriteTypeToYson(writer, type);
     return stream.Str();
 }
@@ -411,7 +411,7 @@ const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const NYT::TNode& node, T
     return DoLoadTypeFromYson(loader, node, 0).GetOrElse(nullptr);
 }
 
-void WriteResOrPullType(NYson::TYsonConsumerBase& writer,const TTypeAnnotationNode* type, const TVector<TString>& columns) {
+void WriteResOrPullType(NYson::TYsonConsumerBase& writer,const TTypeAnnotationNode* type, const TVector<TString>& columns) { 
     if (columns.empty() ||
         type->GetKind() != ETypeAnnotationKind::List ||
         type->Cast<TListExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Struct) {

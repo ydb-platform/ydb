@@ -22,15 +22,15 @@ namespace NYson {
 
             void DoParse(EYsonType ysonType) {
                 switch (ysonType) {
-                    case ::NYson::EYsonType::Node:
+                    case ::NYson::EYsonType::Node: 
                         ParseNode<true>();
                         break;
 
-                    case ::NYson::EYsonType::ListFragment:
+                    case ::NYson::EYsonType::ListFragment: 
                         ParseListFragment<true>(EndSymbol);
                         break;
 
-                    case ::NYson::EYsonType::MapFragment:
+                    case ::NYson::EYsonType::MapFragment: 
                         ParseMapFragment<true>(EndSymbol);
                         break;
 
@@ -305,7 +305,7 @@ namespace NYson {
     template <class TConsumer, class TBlockStream>
     void ParseYsonStreamImpl(
         const TBlockStream& blockStream,
-        NYT::NYson::IYsonConsumer* consumer,
+        NYT::NYson::IYsonConsumer* consumer, 
         EYsonType parsingMode,
         bool enableLinePositionInfo,
         TMaybe<ui64> memoryLimit) {
@@ -322,7 +322,7 @@ namespace NYson {
 
     class TStatelessYsonParserImplBase {
     public:
-        virtual void Parse(const TStringBuf& data, EYsonType type = ::NYson::EYsonType::Node) = 0;
+        virtual void Parse(const TStringBuf& data, EYsonType type = ::NYson::EYsonType::Node) = 0; 
 
         virtual ~TStatelessYsonParserImplBase() {
         }
@@ -341,7 +341,7 @@ namespace NYson {
         {
         }
 
-        void Parse(const TStringBuf& data, EYsonType type = ::NYson::EYsonType::Node) override {
+        void Parse(const TStringBuf& data, EYsonType type = ::NYson::EYsonType::Node) override { 
             Parser.SetBuffer(data.begin(), data.end());
             Parser.DoParse(type);
         }

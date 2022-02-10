@@ -46,7 +46,7 @@ public:
                 .Value(TString("0"))
                 .Build()
             .FormatDetails()
-                .Value(ToString((ui32)NYson::EYsonFormat::Binary))
+                .Value(ToString((ui32)NYson::EYsonFormat::Binary)) 
                 .Build()
             .Settings()
                 .Build()

@@ -103,11 +103,11 @@ Y_FORCE_INLINE void* AllignedMalloc(size_t size, size_t allignment)
 #endif
 }
 
-template <class... Args>
-Y_FORCE_INLINE void CustomInitialize(Args... args)
-{
-    Y_UNUSED(args...);
-}
+template <class... Args> 
+Y_FORCE_INLINE void CustomInitialize(Args... args) 
+{ 
+    Y_UNUSED(args...); 
+} 
 
 template <class T>
 Y_FORCE_INLINE auto CustomInitialize(T* ptr) -> decltype(&T::InitializeRefCounted, void())

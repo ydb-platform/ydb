@@ -28,8 +28,8 @@ namespace {
     class TYsonResultWriter : public IResultWriter
     {
     public:
-        TYsonResultWriter(NYson::EYsonFormat format)
-            : Writer(new NYson::TYsonWriter(&PartialStream, format, ::NYson::EYsonType::Node, true))
+        TYsonResultWriter(NYson::EYsonFormat format) 
+            : Writer(new NYson::TYsonWriter(&PartialStream, format, ::NYson::EYsonType::Node, true)) 
         {}
 
         void Init(bool discard, const TString& label, TMaybe<TPosition> pos) override {
@@ -90,7 +90,7 @@ namespace {
 
     private:
         TStringStream PartialStream;
-        TAutoPtr<NYson::TYsonWriter> Writer;
+        TAutoPtr<NYson::TYsonWriter> Writer; 
         bool Discard = false;
     };
 
@@ -286,7 +286,7 @@ namespace {
             if (input.Maybe<TResIf>()) {
                 if (input.Ref().HasResult()) {
                     auto resultYsonString = input.Ref().GetResult().Content();
-                    auto resultNode = NYT::NodeFromYsonString(TString(resultYsonString), ::NYson::EYsonType::Node);
+                    auto resultNode = NYT::NodeFromYsonString(TString(resultYsonString), ::NYson::EYsonType::Node); 
                     YQL_ENSURE(resultNode.IsMap());
                     auto resultBoolNode = resultNode.AsMap()["Data"];
                     YQL_ENSURE(resultBoolNode.IsBool());
@@ -395,7 +395,7 @@ namespace {
                 } else if (input.Ref().HasResult()) {
                     // parse list
                     auto resultYsonString = input.Ref().GetResult().Content();
-                    auto resultNode = NYT::NodeFromYsonString(TString(resultYsonString), ::NYson::EYsonType::Node);
+                    auto resultNode = NYT::NodeFromYsonString(TString(resultYsonString), ::NYson::EYsonType::Node); 
                     YQL_ENSURE(resultNode.IsMap());
                     auto resultDataNode = resultNode.AsMap()["Data"];
 
@@ -517,7 +517,7 @@ namespace {
                 fillSettings.AllResultsBytesLimit.Clear();
                 discard = fillSettings.Discard = false;
                 fillSettings.Format = IDataProvider::EResultFormat::Yson;
-                fillSettings.FormatDetails = ToString((ui32)NYson::EYsonFormat::Binary);
+                fillSettings.FormatDetails = ToString((ui32)NYson::EYsonFormat::Binary); 
                 fillSettings.RowsLimitPerWrite.Clear();
                 rowsLimit.Clear();
             }
@@ -1412,7 +1412,7 @@ namespace {
             return false;
         }
 
-        void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+        void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override { 
             if (auto resPull = TMaybeNode<TResPull>(&node)) {
                 auto dataSourceName = resPull.Cast().DelegatedSource().Value();
                 auto dataSource = Config->Types.DataSourceMap.FindPtr(dataSourceName);
@@ -1461,7 +1461,7 @@ namespace {
     };
 }
 
-TIntrusivePtr<IResultWriter> CreateYsonResultWriter(NYson::EYsonFormat format) {
+TIntrusivePtr<IResultWriter> CreateYsonResultWriter(NYson::EYsonFormat format) { 
     return MakeIntrusive<TYsonResultWriter>(format);
 }
 

@@ -286,9 +286,9 @@ public:
             auto clusters = Gateway->GetClusters();
             Sort(clusters);
 
-            auto ysonFormat = (NYson::EYsonFormat)FromString<ui32>(input->Child(0)->Content());
+            auto ysonFormat = (NYson::EYsonFormat)FromString<ui32>(input->Child(0)->Content()); 
             TStringStream out;
-            NYson::TYsonWriter writer(&out, ysonFormat);
+            NYson::TYsonWriter writer(&out, ysonFormat); 
             writer.OnBeginList();
 
             for (auto& cluster : clusters) {
@@ -337,7 +337,7 @@ private:
 
         TExprNode::TPtr resultNode;
         if (fillSettings.Format == IDataProvider::EResultFormat::Yson) {
-            NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings);
+            NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings); 
 
             auto yson = KqpResultToYson(*protoValue, ysonFormat, ctx);
             if (!yson) {

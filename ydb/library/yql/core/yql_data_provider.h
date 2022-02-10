@@ -46,16 +46,16 @@ class IPlanFormatter {
 public:
     virtual ~IPlanFormatter() {}
 
-    virtual void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
+    virtual void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0; 
     // returns visibility of node
     virtual bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) = 0;
     virtual void GetResultDependencies(const TExprNode::TPtr& node, TExprNode::TListType& children, bool compact) = 0;
     virtual void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) = 0;
     virtual void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) = 0;
     virtual TString GetProviderPath(const TExprNode& node) = 0;
-    virtual void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
-    virtual void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
-    virtual void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
+    virtual void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0; 
+    virtual void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0; 
+    virtual void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0; 
     virtual TString GetOperationDisplayName(const TExprNode& node) = 0;
 };
 
@@ -154,10 +154,10 @@ public:
 
     //-- finalizing
     virtual IGraphTransformer& GetFinalizingTransformer() = 0;
-    virtual bool CollectDiagnostics(NYson::TYsonWriter& writer) = 0;
-    virtual bool GetTasksInfo(NYson::TYsonWriter& writer) = 0;
-    virtual bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) = 0;
-    virtual bool CollectDiscoveredData(NYson::TYsonWriter& writer) = 0;
+    virtual bool CollectDiagnostics(NYson::TYsonWriter& writer) = 0; 
+    virtual bool GetTasksInfo(NYson::TYsonWriter& writer) = 0; 
+    virtual bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) = 0; 
+    virtual bool CollectDiscoveredData(NYson::TYsonWriter& writer) = 0; 
 
     //-- plan
     virtual IGraphTransformer& GetPlanInfoTransformer() = 0;
@@ -209,7 +209,7 @@ struct TDataProviderInfo {
 
     std::function<TFutureStatus(const TString& cluster,
         ESourceSyntax sourceSyntax, const TString& sourceCode,
-        const NYson::EYsonFormat& outputFormat, const NYson::EYsonFormat& resultFormat,
+        const NYson::EYsonFormat& outputFormat, const NYson::EYsonFormat& resultFormat, 
         const IPipelineConfigurator* pipelineConf,
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         TExprNode::TPtr& root, TExprContext& ctx,

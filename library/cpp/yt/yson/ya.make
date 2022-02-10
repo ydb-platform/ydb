@@ -1,11 +1,11 @@
-LIBRARY()
-
-SRCS(
-    consumer.cpp
-)
-
-PEERDIR(
-    library/cpp/yt/yson_string
-)
-
-END()
+LIBRARY() 
+ 
+SRCS( 
+    consumer.cpp 
+) 
+ 
+PEERDIR( 
+    library/cpp/yt/yson_string 
+) 
+ 
+END() 

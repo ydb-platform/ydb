@@ -19,7 +19,7 @@ public:
     virtual ui64 Size() = 0;
 };
 
-TIntrusivePtr<IResultWriter> CreateYsonResultWriter(NYson::EYsonFormat format);
+TIntrusivePtr<IResultWriter> CreateYsonResultWriter(NYson::EYsonFormat format); 
 
 struct TResultProviderConfig : TThrRefBase {
     using TResultWriterFactory = std::function<TIntrusivePtr<IResultWriter>()>;

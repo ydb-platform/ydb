@@ -34,7 +34,7 @@ public:
         const auto& cluster = TString(read.DataSource().Cluster().Value());
 
         TStringStream out;
-        NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Binary);
+        NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Binary); 
         MetaToYson(cluster, table, State_, writer);
 
         node.Ptr()->SetResult(ctx.NewAtom(node.Pos(), out.Str()));

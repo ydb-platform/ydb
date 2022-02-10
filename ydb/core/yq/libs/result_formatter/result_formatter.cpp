@@ -346,7 +346,7 @@ TString FormatSchema(const YandexQuery::Schema& schema)
         typedColumns.emplace_back(c.name(), typeAnnotation);
     }
 
-    return NYql::NCommon::WriteTypeToYson(MakeStructType(typedColumns, ctx), NYson::EYsonFormat::Text);
+    return NYql::NCommon::WriteTypeToYson(MakeStructType(typedColumns, ctx), NYson::EYsonFormat::Text); 
 }
 
 void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet)

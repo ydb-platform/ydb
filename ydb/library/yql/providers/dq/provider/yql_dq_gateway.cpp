@@ -107,7 +107,7 @@ public:
                 Yql::DqsProto::ExecuteQueryResult queryResult;
                 resp.operation().result().UnpackTo(&queryResult);
                 result.Data = queryResult.yson().empty()
-                    ? NYdb::FormatResultSetYson(queryResult.result(), NYson::EYsonFormat::Binary)
+                    ? NYdb::FormatResultSetYson(queryResult.result(), NYson::EYsonFormat::Binary) 
                     : queryResult.yson();
                 result.Issues.AddIssues(issues);
                 result.SetSuccess();

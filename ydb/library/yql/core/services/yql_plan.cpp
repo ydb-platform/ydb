@@ -112,7 +112,7 @@ struct TProviderInfo {
 
 using TProviderInfoMap = TMap<TString, TProviderInfo>;
 
-void WriteProviders(const TString& tag, const TProviderInfoMap& providers, NYson::TYsonWriter& writer) {
+void WriteProviders(const TString& tag, const TProviderInfoMap& providers, NYson::TYsonWriter& writer) { 
     writer.OnKeyedItem(tag);
     writer.OnBeginList();
     for (auto& p : providers) {
@@ -184,7 +184,7 @@ public:
         : Types_(types)
     {}
 
-    void WritePlan(NYson::TYsonWriter& writer, const TExprNode::TPtr& root) override {
+    void WritePlan(NYson::TYsonWriter& writer, const TExprNode::TPtr& root) override { 
         if (!root) {
             return;
         }
@@ -624,7 +624,7 @@ public:
         YQL_ENSURE(false, "Expected either datasource or sink");
     }
 
-    void WritePins(const TString& tag, const TVector<TPinInfo>& pins, NYson::TYsonWriter& writer,
+    void WritePins(const TString& tag, const TVector<TPinInfo>& pins, NYson::TYsonWriter& writer, 
         TVector<TPinAttrs>& pinAttrs, TProviderInfoMap& providers) {
         if (!pins.empty()) {
             UpdateProviders(providers, pins);

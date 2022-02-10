@@ -1855,7 +1855,7 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
 
         TMemoryInput stringRefStream(binPayload.Data(), binPayload.Size());
         ui64 value;
-        const size_t read = NYson::ReadVarUInt64(&stringRefStream, &value);
+        const size_t read = NYson::ReadVarUInt64(&stringRefStream, &value); 
         if (read != binPayload.Size()) {
             return NUdf::TUnboxedValuePod();
         }
@@ -1874,7 +1874,7 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
 
         TMemoryInput stringRefStream(binPayload.Data(), binPayload.Size());
         i64 value;
-        const size_t read = NYson::ReadVarInt64(&stringRefStream, &value);
+        const size_t read = NYson::ReadVarInt64(&stringRefStream, &value); 
         if (read != binPayload.Size()) {
             return NUdf::TUnboxedValuePod();
         }
@@ -1909,7 +1909,7 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
 
         TMemoryInput stringRefStream(binPayload.Data(), binPayload.Size());
         i32 value;
-        const size_t read = NYson::ReadVarInt32(&stringRefStream, &value);
+        const size_t read = NYson::ReadVarInt32(&stringRefStream, &value); 
         binPayload = binPayload.Substring(read, binPayload.Size() - read);
         const size_t strLen = value;
         if (strLen != binPayload.Size()) {

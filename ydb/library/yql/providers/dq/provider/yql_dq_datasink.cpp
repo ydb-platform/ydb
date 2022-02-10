@@ -34,7 +34,7 @@ public:
         , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); })
     { }
 
-    bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) override {
+    bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) override { 
         auto statistics = [&]() {
             TGuard<TMutex> lock(State->Mutex);
             return State->Statistics;
@@ -256,7 +256,7 @@ public:
         return TPlanFormatterBase::GetOperationDisplayName(node);
     }
 
-    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override { 
         if (auto maybeStage = TMaybeNode<TDqStageBase>(&node)) {
             writer.OnKeyedItem("Streams");
             writer.OnBeginMap();

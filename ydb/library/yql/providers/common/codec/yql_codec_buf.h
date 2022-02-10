@@ -123,19 +123,19 @@ public:
     ui64 ReadVarUI64Slow(char cmd);
 
     i64 ReadVarI64() {
-        return NYson::ZigZagDecode64(ReadVarUI64());
+        return NYson::ZigZagDecode64(ReadVarUI64()); 
     }
 
     i32 ReadVarI32() {
-        return NYson::ZigZagDecode32(ReadVarUI32());
+        return NYson::ZigZagDecode32(ReadVarUI32()); 
     }
 
     i64 CopyVarI64(TVector<char>& yson) {
-        return NYson::ZigZagDecode64(CopyVarUI64(yson));
+        return NYson::ZigZagDecode64(CopyVarUI64(yson)); 
     }
 
     i32 CopyVarI32(TVector<char>& yson) {
-        return NYson::ZigZagDecode32(CopyVarUI32(yson));
+        return NYson::ZigZagDecode32(CopyVarUI32(yson)); 
     }
 
     TStringBuf ReadYtString(ui32 lookAhead = 0);
@@ -235,11 +235,11 @@ public:
     }
 
     void WriteVarI32(i32 value) {
-        WriteVarUI32(NYson::ZigZagEncode32(value));
+        WriteVarUI32(NYson::ZigZagEncode32(value)); 
     }
 
     void WriteVarI64(i64 value) {
-        WriteVarUI64(NYson::ZigZagEncode64(value));
+        WriteVarUI64(NYson::ZigZagEncode64(value)); 
     }
 
     void WriteVarUI32(ui32 value);

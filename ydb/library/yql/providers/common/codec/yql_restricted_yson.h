@@ -18,11 +18,11 @@ void EncodeRestrictedYson(
 
 TString EncodeRestrictedYson(
     const NYT::TNode& node,
-    NYson::EYsonFormat format = NYson::EYsonFormat::Binary);
+    NYson::EYsonFormat format = NYson::EYsonFormat::Binary); 
 
 TString DecodeRestrictedYson(
     const TStringBuf& yson,
-    NYson::EYsonFormat format = NYson::EYsonFormat::Binary);
+    NYson::EYsonFormat format = NYson::EYsonFormat::Binary); 
 
 }
 }

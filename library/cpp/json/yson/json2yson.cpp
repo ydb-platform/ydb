@@ -47,13 +47,13 @@ namespace NJson2Yson {
         }
     }
 
-    void SerializeJsonValueAsYson(const NJson::TJsonValue& inputValue, NYson::TYsonWriter* ysonWriter) {
+    void SerializeJsonValueAsYson(const NJson::TJsonValue& inputValue, NYson::TYsonWriter* ysonWriter) { 
         NYT::TYson2JsonCallbacksAdapter adapter(ysonWriter);
         WriteJsonValue(inputValue, &adapter);
     }
 
     void SerializeJsonValueAsYson(const NJson::TJsonValue& inputValue, IOutputStream* outputStream) {
-        NYson::TYsonWriter ysonWriter(outputStream, NYson::EYsonFormat::Binary, ::NYson::EYsonType::Node, false);
+        NYson::TYsonWriter ysonWriter(outputStream, NYson::EYsonFormat::Binary, ::NYson::EYsonType::Node, false); 
         SerializeJsonValueAsYson(inputValue, &ysonWriter);
     }
 
@@ -71,7 +71,7 @@ namespace NJson2Yson {
     bool DeserializeYsonAsJsonValue(IInputStream* inputStream, NJson::TJsonValue* outputValue, bool throwOnError) {
         NJson::TParserCallbacks parser(*outputValue);
         NJson2Yson::TJsonBuilder consumer(&parser);
-        NYson::TYsonParser ysonParser(&consumer, inputStream, ::NYson::EYsonType::Node);
+        NYson::TYsonParser ysonParser(&consumer, inputStream, ::NYson::EYsonType::Node); 
         try {
             ysonParser.Parse();
         } catch (...) {
@@ -89,8 +89,8 @@ namespace NJson2Yson {
     }
 
     void ConvertYson2Json(IInputStream* inputStream, IOutputStream* outputStream) {
-        NYT::TJsonWriter writer(outputStream, ::NYson::EYsonType::Node, NYT::JF_TEXT, NYT::JAM_ON_DEMAND, NYT::SBF_BOOLEAN);
-        NYson::TYsonParser ysonParser(&writer, inputStream, ::NYson::EYsonType::Node);
+        NYT::TJsonWriter writer(outputStream, ::NYson::EYsonType::Node, NYT::JF_TEXT, NYT::JAM_ON_DEMAND, NYT::SBF_BOOLEAN); 
+        NYson::TYsonParser ysonParser(&writer, inputStream, ::NYson::EYsonType::Node); 
         ysonParser.Parse();
     }
 

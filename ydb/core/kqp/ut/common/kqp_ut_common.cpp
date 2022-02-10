@@ -412,7 +412,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
 TString ReformatYson(const TString& yson) {
     TStringStream ysonInput(yson);
     TStringStream output;
-    NYson::ReformatYsonStream(&ysonInput, &output, NYson::EYsonFormat::Text);
+    NYson::ReformatYsonStream(&ysonInput, &output, NYson::EYsonFormat::Text); 
     return output.Str();
 }
 
@@ -422,7 +422,7 @@ void CompareYson(const TString& expected, const TString& actual) {
 
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual) {
     TStringStream ysonStream;
-    NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Text);
+    NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Text); 
     NYql::IDataProvider::TFillSettings fillSettings;
     bool truncated;
     KikimrResultToYson(ysonStream, writer, actual, {}, fillSettings, truncated);
@@ -524,7 +524,7 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
     return result;
 }
 
-void FillProfile(NYdb::NTable::TScanQueryPart& streamPart, NYson::TYsonWriter& writer, TVector<TString>* profiles,
+void FillProfile(NYdb::NTable::TScanQueryPart& streamPart, NYson::TYsonWriter& writer, TVector<TString>* profiles, 
     ui32 profileIndex)
 {
     Y_UNUSED(streamPart);
@@ -533,7 +533,7 @@ void FillProfile(NYdb::NTable::TScanQueryPart& streamPart, NYson::TYsonWriter& w
     Y_UNUSED(profileIndex);
 }
 
-void FillProfile(NYdb::NExperimental::TStreamPart& streamPart, NYson::TYsonWriter& writer, TVector<TString>* profiles,
+void FillProfile(NYdb::NExperimental::TStreamPart& streamPart, NYson::TYsonWriter& writer, TVector<TString>* profiles, 
     ui32 profileIndex)
 {
     if (streamPart.HasProfile()) {
@@ -549,7 +549,7 @@ void FillProfile(NYdb::NExperimental::TStreamPart& streamPart, NYson::TYsonWrite
     }
 }
 
-void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) {
+void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) { 
     auto columns = resultSet.GetColumnsMeta();
 
     NYdb::TResultSetParser parser(resultSet);
@@ -567,7 +567,7 @@ void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& write
 template<typename TIterator>
 TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles) {
     TStringStream out;
-    NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
+    NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true); 
     writer.OnBeginList();
 
     ui32 profileIndex = 0;
@@ -603,7 +603,7 @@ TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it) {
 
 TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it) {
     TStringStream out;
-    NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
+    NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true); 
     writer.OnBeginList();
 
     ui32 currentIndex = 0;
@@ -643,7 +643,7 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
     TCollectedStreamResult res;
 
     TStringStream out;
-    NYson::TYsonWriter resultSetWriter(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
+    NYson::TYsonWriter resultSetWriter(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true); 
     resultSetWriter.OnBeginList();
 
     for (;;) {

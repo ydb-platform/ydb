@@ -44,7 +44,7 @@ namespace {
 
                 IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(*input);
                 YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson);
-                NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings);
+                NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings); 
 
                 auto nodeToPull = input->Child(0)->Child(0);
                 if (nodeToPull->IsCallable(ConfReadName)) {
@@ -52,7 +52,7 @@ namespace {
                     auto tag = key->Child(0)->Child(0)->Content();
                     if (tag == "data_sinks" || tag == "data_sources") {
                         TStringStream out;
-                        NYson::TYsonWriter writer(&out, ysonFormat);
+                        NYson::TYsonWriter writer(&out, ysonFormat); 
                         writer.OnBeginMap();
                         writer.OnKeyedItem("Data");
                         writer.OnBeginList();
@@ -399,7 +399,7 @@ namespace {
             return false;
         }
 
-        void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+        void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) override { 
             YQL_ENSURE(node.IsCallable(RightName));
 
             writer.OnKeyedItem("PullOperation");

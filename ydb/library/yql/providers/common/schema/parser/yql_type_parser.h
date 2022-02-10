@@ -14,7 +14,7 @@ namespace NCommon {
 
 class TYqlTypeYsonSaverBase {
 public:
-    typedef NYson::TYsonConsumerBase TConsumer;
+    typedef NYson::TYsonConsumerBase TConsumer; 
 
     TYqlTypeYsonSaverBase(TConsumer& writer)
         : Writer(writer)
@@ -35,7 +35,7 @@ protected:
     void SaveResourceType(const TStringBuf& tag);
 
 protected:
-    NYson::TYsonConsumerBase& Writer;
+    NYson::TYsonConsumerBase& Writer; 
 };
 
 

@@ -23,7 +23,7 @@ namespace {
 TString ReformatYson(const TString& yson) {
     TStringStream ysonInput(yson);
     TStringStream output;
-    NYson::ReformatYsonStream(&ysonInput, &output, NYson::EYsonFormat::Text);
+    NYson::ReformatYsonStream(&ysonInput, &output, NYson::EYsonFormat::Text); 
     return output.Str();
 }
 
@@ -160,7 +160,7 @@ private:
         SendRequest(*Server->GetRuntime(), client, MakeStreamRequest(client, Query, true));
 
         TStringStream out;
-        NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
+        NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true); 
         writer.OnBeginList();
 
         while (true) {

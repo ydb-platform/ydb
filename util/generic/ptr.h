@@ -101,7 +101,7 @@ private:
 template <class Base, class T>
 class TPointerCommon {
 public:
-    using TValueType = T;
+    using TValueType = T; 
 
     inline T* operator->() const noexcept {
         T* ptr = AsT();
@@ -269,9 +269,9 @@ public:
     {
     }
 
-    THolder(const THolder&) = delete;
-    THolder& operator=(const THolder&) = delete;
-
+    THolder(const THolder&) = delete; 
+    THolder& operator=(const THolder&) = delete; 
+ 
     inline ~THolder() {
         DoDestroy();
     }
@@ -1057,7 +1057,7 @@ private:
 // Copy-on-write pointer
 template <class TPtr, class TCopy>
 class TCowPtr: public TPointerBase<TCowPtr<TPtr, TCopy>, const typename TPtr::TValueType> {
-    using T = typename TPtr::TValueType;
+    using T = typename TPtr::TValueType; 
 
 public:
     inline TCowPtr() = default;

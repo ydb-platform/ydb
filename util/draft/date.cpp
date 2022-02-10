@@ -39,16 +39,16 @@ TDate FromStringImpl<TDate>(const char* data, size_t len) {
     return TDate(ParseDate(TString(data, len).data()));
 }
 
-TDate::TDate(const char* yyyymmdd)
-    : Timestamp(GetDateStart(ParseDate(yyyymmdd)))
-{
-}
-
+TDate::TDate(const char* yyyymmdd) 
+    : Timestamp(GetDateStart(ParseDate(yyyymmdd))) 
+{ 
+} 
+ 
 TDate::TDate(const TString& yyyymmdd)
-    : Timestamp(GetDateStart(ParseDate(yyyymmdd.c_str())))
-{
-}
-
+    : Timestamp(GetDateStart(ParseDate(yyyymmdd.c_str()))) 
+{ 
+} 
+ 
 TDate::TDate(time_t ts)
     : Timestamp(GetDateStart(ts))
 {

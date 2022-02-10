@@ -27,7 +27,7 @@ public:
         return TDate(time(nullptr));
     }
 
-    TDate(const char* yyyymmdd);
+    TDate(const char* yyyymmdd); 
     TDate(const TString& yyyymmdd);
     TDate(unsigned year, unsigned month, unsigned monthDay); // month from 01, monthDay from 01
     TDate(const TString& date, const TString& format);

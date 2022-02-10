@@ -78,11 +78,11 @@ def onresource_files(unit, *args):
     dest = None
     res = []
     first = 0
- 
-    if args and not unit.enabled('_GO_MODULE'): 
-        # GO_RESOURCE currently doesn't support DONT_PARSE 
-        res.append('DONT_PARSE') 
- 
+
+    if args and not unit.enabled('_GO_MODULE'):
+        # GO_RESOURCE currently doesn't support DONT_PARSE
+        res.append('DONT_PARSE')
+
     if args and args[0] == 'DONT_PARSE':
         first = 1
 

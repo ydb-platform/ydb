@@ -13,9 +13,9 @@ import threading
 import six
 from functools import reduce
 
-import process_command_files as pcf 
-import process_whole_archive_option as pwa 
- 
+import process_command_files as pcf
+import process_whole_archive_option as pwa
+
 arc_project_prefix = 'a.yandex-team.ru/'
 std_lib_prefix = 'contrib/go/_std/src/'
 vendor_prefix = 'vendor/'
@@ -115,9 +115,9 @@ def preprocess_args(args):
             srcs.append(f)
     args.srcs = srcs
 
-    if args.extldflags: 
-        args.extldflags = pwa.ProcessWholeArchiveOption(args.targ_os).construct_cmd(args.extldflags) 
- 
+    if args.extldflags:
+        args.extldflags = pwa.ProcessWholeArchiveOption(args.targ_os).construct_cmd(args.extldflags)
+
     classify_srcs(args.srcs, args)
 
 
@@ -780,7 +780,7 @@ def do_link_test(args):
 
 
 if __name__ == '__main__':
-    args = pcf.get_args(sys.argv[1:]) 
+    args = pcf.get_args(sys.argv[1:])
 
     parser = argparse.ArgumentParser(prefix_chars='+')
     parser.add_argument('++mode', choices=['dll', 'exe', 'lib', 'test'], required=True)
@@ -825,7 +825,7 @@ if __name__ == '__main__':
     parser.add_argument('++debug-root-map', default=None)
     parser.add_argument('++embed', action='append', nargs='*')
     parser.add_argument('++embed_xtest', action='append', nargs='*')
-    args = parser.parse_args(args) 
+    args = parser.parse_args(args)
 
     arc_project_prefix = args.arc_project_prefix
     std_lib_prefix = args.std_lib_prefix

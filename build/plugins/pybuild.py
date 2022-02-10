@@ -507,8 +507,8 @@ def onpy_srcs(unit, *args):
             for py_suf in unit.get("PY_PROTO_SUFFIXES").split()
         ])
 
-        if optimize_proto and need_gazetteer_peerdir: 
-            unit.onpeerdir(['kernel/gazetteer/proto']) 
+        if optimize_proto and need_gazetteer_peerdir:
+            unit.onpeerdir(['kernel/gazetteer/proto'])
 
     if evs:
         unit.onpeerdir([cpp_runtime_path])
@@ -621,28 +621,28 @@ def onpy_constructor(unit, arg):
     else:
         arg[arg.index(':')] = '='
     unit.onresource(['-', 'py/constructors/{}'.format(arg)])
- 
-def onpy_enums_serialization(unit, *args): 
-    ns = '' 
-    args = iter(args) 
-    for arg in args: 
-        # Namespace directives. 
-        if arg == 'NAMESPACE': 
-            ns = next(args) 
-        else: 
-            unit.on_py_enum_serialization_to_json(arg) 
-            unit.on_py_enum_serialization_to_py(arg) 
-            filename = arg.rsplit('.', 1)[0] + '.py' 
-            if len(ns) != 0: 
-                onpy_srcs(unit, 'NAMESPACE', ns, filename) 
-            else: 
-                onpy_srcs(unit, filename) 
- 
-def oncpp_enums_serialization(unit, *args): 
-    args = iter(args) 
-    for arg in args: 
-        # Namespace directives. 
-        if arg == 'NAMESPACE': 
-            next(args) 
-        else: 
-            unit.ongenerate_enum_serialization_with_header(arg) 
+
+def onpy_enums_serialization(unit, *args):
+    ns = ''
+    args = iter(args)
+    for arg in args:
+        # Namespace directives.
+        if arg == 'NAMESPACE':
+            ns = next(args)
+        else:
+            unit.on_py_enum_serialization_to_json(arg)
+            unit.on_py_enum_serialization_to_py(arg)
+            filename = arg.rsplit('.', 1)[0] + '.py'
+            if len(ns) != 0:
+                onpy_srcs(unit, 'NAMESPACE', ns, filename)
+            else:
+                onpy_srcs(unit, filename)
+
+def oncpp_enums_serialization(unit, *args):
+    args = iter(args)
+    for arg in args:
+        # Namespace directives.
+        if arg == 'NAMESPACE':
+            next(args)
+        else:
+            unit.ongenerate_enum_serialization_with_header(arg)

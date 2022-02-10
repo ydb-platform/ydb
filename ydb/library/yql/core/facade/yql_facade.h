@@ -218,7 +218,7 @@ public:
     TMaybe<TString> GetTasksInfo();
 
     TMaybe<TString> GetStatistics(bool totalOnly = false);
-
+ 
     TMaybe<TString> GetDiscoveredData();
 
     TString ResultsAsString() const;
@@ -290,8 +290,8 @@ public:
         SupportsResultPosition_ = true;
     }
 
-    IPlanBuilder& GetPlanBuilder();
-
+    IPlanBuilder& GetPlanBuilder(); 
+ 
 private:
     TProgram(
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,

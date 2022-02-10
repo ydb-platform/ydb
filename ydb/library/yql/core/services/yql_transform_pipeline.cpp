@@ -235,9 +235,9 @@ TAutoPtr<IGraphTransformer> TTransformationPipeline::BuildWithNoArgChecks(bool u
     return CreateCompositeGraphTransformerWithNoArgChecks(Transformers_, useIssueScopes);
 }
 
-TIntrusivePtr<TTypeAnnotationContext> TTransformationPipeline::GetTypeAnnotationContext() const {
-    return TypeAnnotationContext_;
-}
-
-
+TIntrusivePtr<TTypeAnnotationContext> TTransformationPipeline::GetTypeAnnotationContext() const { 
+    return TypeAnnotationContext_; 
+} 
+ 
+ 
 } // namespace NYql

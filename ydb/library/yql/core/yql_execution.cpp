@@ -508,8 +508,8 @@ public:
                     : TOperationProgress::EState::Failed;
 
             if (progIt->second.State != newState) {
-                TString stage = progIt->second.Stage.first;
-                progIt->second = TOperationProgress(TString(category), *publicId, newState, stage);
+                TString stage = progIt->second.Stage.first; 
+                progIt->second = TOperationProgress(TString(category), *publicId, newState, stage); 
                 Writer(progIt->second);
             }
         }

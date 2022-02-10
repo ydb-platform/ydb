@@ -199,7 +199,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto count = Count->GetValue(ctx).Get<ui64>();
-        const ui64 MAX_VALUE = 1ull << 32;
+        const ui64 MAX_VALUE = 1ull << 32; 
         if (count >= MAX_VALUE) {
             TStringBuilder res;
             res << Pos << " Second argument in ListReplicate = " << count << " exceeds maximum value = " << MAX_VALUE;

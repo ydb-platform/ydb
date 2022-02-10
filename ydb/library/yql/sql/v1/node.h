@@ -859,7 +859,7 @@ namespace NSQLTranslationV1 {
         virtual TNodePtr BuildCalcOverWindow(TContext& ctx, const TString& label);
         virtual TNodePtr BuildSort(TContext& ctx, const TString& label);
         virtual TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label);
-        virtual bool BuildSamplingLambda(TNodePtr& node);
+        virtual bool BuildSamplingLambda(TNodePtr& node); 
         virtual bool SetSamplingRate(TContext& ctx, TNodePtr samplingRate);
         virtual IJoin* GetJoin();
         virtual ISource* GetCompositeSource();
@@ -917,7 +917,7 @@ namespace NSQLTranslationV1 {
         bool FlattenColumns = false;
         THashMap<TString, ui32> GenIndexes;
         TVector<TString> TmpWindowColumns;
-        TNodePtr SamplingRate;
+        TNodePtr SamplingRate; 
     };
 
     template<>

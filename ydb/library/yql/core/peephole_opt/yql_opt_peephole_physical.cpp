@@ -5960,12 +5960,12 @@ THolder<IGraphTransformer> MakePeepholeOptimization(TTypeAnnotationContextPtr ty
     peepholeSettings.CommonConfig = peepholeSettings.FinalConfig = config;
     auto commonTransformer = CreatePeepHoleCommonStageTransformer<true>(*typeAnnotationContext, nullptr, peepholeSettings);
     auto finalTransformer = CreatePeepHoleFinalStageTransformer<true>(*typeAnnotationContext, nullptr, nullptr, peepholeSettings);
-    return CreateFunctorTransformer(
+    return CreateFunctorTransformer( 
             [common = std::move(commonTransformer), final = std::move(finalTransformer)](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                 return DoPeepHoleOptimizeNode(input, output, ctx, *common, *final);
-            });
+            }); 
 }
-
+ 
 template IGraphTransformer::TStatus PeepHoleOptimizeNode<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
     bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings);
@@ -5973,4 +5973,4 @@ template IGraphTransformer::TStatus PeepHoleOptimizeNode<true>(const TExprNode::
 template IGraphTransformer::TStatus PeepHoleOptimizeNode<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
     bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings);
-}
+} 

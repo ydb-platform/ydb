@@ -583,12 +583,12 @@ public:
                 return false;
             }
         }
-        TNodePtr sample;
-        if (!BuildSamplingLambda(sample)) {
-            return false;
-        } else if (sample) {
-            Node = Y("block", Q(Y(Y("let", Node, Y("OrderedFlatMap", Node, sample)), Y("return", Node))));
-        }
+        TNodePtr sample; 
+        if (!BuildSamplingLambda(sample)) { 
+            return false; 
+        } else if (sample) { 
+            Node = Y("block", Q(Y(Y("let", Node, Y("OrderedFlatMap", Node, sample)), Y("return", Node)))); 
+        } 
         return true;
     }
 
@@ -597,23 +597,23 @@ public:
         return Node;
     }
 
-    bool SetSamplingOptions(
-            TContext& ctx,
-            TPosition pos,
-            ESampleMode mode,
-            TNodePtr samplingRate,
-            TNodePtr samplingSeed) override {
-        if (mode != ESampleMode::Bernoulli) {
-            ctx.Error(pos) << "only Bernoulli sampling mode is supported for subqueries";
-            return false;
-        }
-        if (samplingSeed) {
-            ctx.Error(pos) << "'Repeatable' keyword is not supported for subqueries";
-            return false;
-        }
+    bool SetSamplingOptions( 
+            TContext& ctx, 
+            TPosition pos, 
+            ESampleMode mode, 
+            TNodePtr samplingRate, 
+            TNodePtr samplingSeed) override { 
+        if (mode != ESampleMode::Bernoulli) { 
+            ctx.Error(pos) << "only Bernoulli sampling mode is supported for subqueries"; 
+            return false; 
+        } 
+        if (samplingSeed) { 
+            ctx.Error(pos) << "'Repeatable' keyword is not supported for subqueries"; 
+            return false; 
+        } 
         return SetSamplingRate(ctx, samplingRate);
-    }
-
+    } 
+ 
     bool IsStream() const override {
         return Subquery->GetSource()->IsStream();
     }
@@ -2755,13 +2755,13 @@ public:
         if (SkipTake) {
             block = L(block, SkipTake);
         }
-
-        TNodePtr sample;
-        if (!BuildSamplingLambda(sample)) {
-            return nullptr;
-        } else if (sample) {
-            block = L(block, Y("let", "select", Y("OrderedFlatMap", "select", sample)));
-        }
+ 
+        TNodePtr sample; 
+        if (!BuildSamplingLambda(sample)) { 
+            return nullptr; 
+        } else if (sample) { 
+            block = L(block, Y("let", "select", Y("OrderedFlatMap", "select", sample))); 
+        } 
 
         if (auto removeNode = Source->BuildCleanupColumns(ctx, label)) {
             block = L(block, removeNode);
@@ -2771,23 +2771,23 @@ public:
         return Y("block", Q(block));
     }
 
-    bool SetSamplingOptions(
-            TContext& ctx,
-            TPosition pos,
-            ESampleMode mode,
-            TNodePtr samplingRate,
-            TNodePtr samplingSeed) override {
-        if (mode != ESampleMode::Bernoulli) {
-            ctx.Error(pos) << "only Bernoulli sampling mode is supported for subqueries";
-            return false;
-        }
-        if (samplingSeed) {
-            ctx.Error(pos) << "'Repeatable' keyword is not supported for subqueries";
-            return false;
-        }
+    bool SetSamplingOptions( 
+            TContext& ctx, 
+            TPosition pos, 
+            ESampleMode mode, 
+            TNodePtr samplingRate, 
+            TNodePtr samplingSeed) override { 
+        if (mode != ESampleMode::Bernoulli) { 
+            ctx.Error(pos) << "only Bernoulli sampling mode is supported for subqueries"; 
+            return false; 
+        } 
+        if (samplingSeed) { 
+            ctx.Error(pos) << "'Repeatable' keyword is not supported for subqueries"; 
+            return false; 
+        } 
         return SetSamplingRate(ctx, samplingRate);
-    }
-
+    } 
+ 
     bool IsSelect() const override {
         return Source->IsSelect();
     }

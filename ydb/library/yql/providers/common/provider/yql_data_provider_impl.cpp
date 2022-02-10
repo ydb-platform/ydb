@@ -264,11 +264,11 @@ bool TDataProviderBase::GetTasksInfo(NYson::TYsonWriter& writer) {
 }
 
 bool TDataProviderBase::CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) {
-    Y_UNUSED(writer);
+    Y_UNUSED(writer); 
     Y_UNUSED(totalOnly);
-    return false;
-}
-
+    return false; 
+} 
+ 
 bool TDataProviderBase::CollectDiscoveredData(NYson::TYsonWriter& writer) {
     Y_UNUSED(writer);
     return false;

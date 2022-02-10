@@ -278,14 +278,14 @@ namespace {
         return false;
     }
 
-    inline bool ValidateDatetime(ui32 datetime) {
-        return datetime < MAX_DATETIME;
-    }
-
-    inline bool ValidateTimestamp(ui64 timestamp) {
-        return timestamp < MAX_TIMESTAMP;
-    }
-
+    inline bool ValidateDatetime(ui32 datetime) { 
+        return datetime < MAX_DATETIME; 
+    } 
+ 
+    inline bool ValidateTimestamp(ui64 timestamp) { 
+        return timestamp < MAX_TIMESTAMP; 
+    } 
+ 
     inline bool ValidateInterval(i64 interval) {
         return interval > -i64(MAX_TIMESTAMP) && interval < i64(MAX_TIMESTAMP);
     }
@@ -676,31 +676,31 @@ namespace {
 
     // From*
 
-    SIMPLE_UDF(TFromSeconds, TOptional<TTimestamp>(TAutoMap<ui32>)) {
+    SIMPLE_UDF(TFromSeconds, TOptional<TTimestamp>(TAutoMap<ui32>)) { 
         Y_UNUSED(valueBuilder);
-        auto res = args[0].Get<ui32>();
-        if (!ValidateDatetime(res)) {
-            return TUnboxedValuePod();
-        }
-        return TUnboxedValuePod((ui64)(res * 1000000ull));
+        auto res = args[0].Get<ui32>(); 
+        if (!ValidateDatetime(res)) { 
+            return TUnboxedValuePod(); 
+        } 
+        return TUnboxedValuePod((ui64)(res * 1000000ull)); 
     }
 
-    SIMPLE_UDF(TFromMilliseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
+    SIMPLE_UDF(TFromMilliseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) { 
         Y_UNUSED(valueBuilder);
-        auto res = args[0].Get<ui64>();
-        if (res >= MAX_TIMESTAMP / 1000u) {
-            return TUnboxedValuePod();
-        }
-        return TUnboxedValuePod(res * 1000u);
+        auto res = args[0].Get<ui64>(); 
+        if (res >= MAX_TIMESTAMP / 1000u) { 
+            return TUnboxedValuePod(); 
+        } 
+        return TUnboxedValuePod(res * 1000u); 
     }
 
-    SIMPLE_UDF(TFromMicroseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
+    SIMPLE_UDF(TFromMicroseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) { 
         Y_UNUSED(valueBuilder);
-        auto res = args[0].Get<ui64>();
-        if (!ValidateTimestamp(res)) {
-            return TUnboxedValuePod();
-        }
-        return TUnboxedValuePod(res);
+        auto res = args[0].Get<ui64>(); 
+        if (!ValidateTimestamp(res)) { 
+            return TUnboxedValuePod(); 
+        } 
+        return TUnboxedValuePod(res); 
     }
 
     SIMPLE_UDF(TIntervalFromDays, TOptional<TInterval>(TAutoMap<i32>)) {
@@ -942,53 +942,53 @@ namespace {
         return TUnboxedValuePod((i64)storage.ToTimeOfDay());
     }
 
-    // Add ...
-
-    SIMPLE_UDF(TShiftYears, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
-        auto result = args[0];
-        auto& storage = TTMStorage::Reference(result);
-        storage.Year += args[1].Get<i32>();
-        if (storage.Month == 2 && storage.Day == 29) {
-            bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
-            if (!isLeap) {
-                storage.Day--;
-            }
-        }
-        auto& builder = valueBuilder->GetDateBuilder();
-        if (!storage.Validate(builder)) {
-            return TUnboxedValuePod();
-        }
-        return result;
-    }
-
-    TUnboxedValuePod DoAddMonths(const TUnboxedValuePod& date, i64 months, const IDateBuilder& builder) {
-        auto result = date;
-        auto& storage = TTMStorage::Reference(result);
-        i64 newMonth = months + storage.Month;
-        storage.Year += (newMonth - 1) / 12;
-        newMonth = 1 + (newMonth - 1) % 12;
-        if (newMonth <= 0) {
-            storage.Year--;
-            newMonth += 12;
-        }
-        storage.Month = newMonth;
-        bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
-        ui32 monthLength = NKikimr::NMiniKQL::GetMonthLength(storage.Month, isLeap);
-        storage.Day = std::min(monthLength, storage.Day);
-        if (!storage.Validate(builder)) {
-            return TUnboxedValuePod();
-        }
-        return result;
-    }
-
-    SIMPLE_UDF(TShiftQuarters, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
-        return DoAddMonths(args[0], 3ll * args[1].Get<i32>(), valueBuilder->GetDateBuilder());
-    }
-
-    SIMPLE_UDF(TShiftMonths, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
-        return DoAddMonths(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder());
-    }
-
+    // Add ... 
+ 
+    SIMPLE_UDF(TShiftYears, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) { 
+        auto result = args[0]; 
+        auto& storage = TTMStorage::Reference(result); 
+        storage.Year += args[1].Get<i32>(); 
+        if (storage.Month == 2 && storage.Day == 29) { 
+            bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year); 
+            if (!isLeap) { 
+                storage.Day--; 
+            } 
+        } 
+        auto& builder = valueBuilder->GetDateBuilder(); 
+        if (!storage.Validate(builder)) { 
+            return TUnboxedValuePod(); 
+        } 
+        return result; 
+    } 
+ 
+    TUnboxedValuePod DoAddMonths(const TUnboxedValuePod& date, i64 months, const IDateBuilder& builder) { 
+        auto result = date; 
+        auto& storage = TTMStorage::Reference(result); 
+        i64 newMonth = months + storage.Month; 
+        storage.Year += (newMonth - 1) / 12; 
+        newMonth = 1 + (newMonth - 1) % 12; 
+        if (newMonth <= 0) { 
+            storage.Year--; 
+            newMonth += 12; 
+        } 
+        storage.Month = newMonth; 
+        bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year); 
+        ui32 monthLength = NKikimr::NMiniKQL::GetMonthLength(storage.Month, isLeap); 
+        storage.Day = std::min(monthLength, storage.Day); 
+        if (!storage.Validate(builder)) { 
+            return TUnboxedValuePod(); 
+        } 
+        return result; 
+    } 
+ 
+    SIMPLE_UDF(TShiftQuarters, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) { 
+        return DoAddMonths(args[0], 3ll * args[1].Get<i32>(), valueBuilder->GetDateBuilder()); 
+    } 
+ 
+    SIMPLE_UDF(TShiftMonths, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) { 
+        return DoAddMonths(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder()); 
+    } 
+ 
     template<size_t Digits, bool Exacly = true>
     struct PrintNDigits;
 
@@ -1697,10 +1697,10 @@ namespace {
         TStartOf,
         TTimeOfDay,
 
-        TShiftYears,
-        TShiftQuarters,
-        TShiftMonths,
-
+        TShiftYears, 
+        TShiftQuarters, 
+        TShiftMonths, 
+ 
         TUserDataTypeFuncFactory<true, ToSecondsName, TToSeconds,
             TDate,
             TDatetime,

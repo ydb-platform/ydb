@@ -87,12 +87,12 @@ namespace {
         }
     }
 
-    double RawEstimate(const ui8* counts, size_t size) {
+    double RawEstimate(const ui8* counts, size_t size) { 
         double sum = {};
-        for (size_t i = 0; i < size; ++i) {
-            sum += std::pow(2.0, -counts[i]);
+        for (size_t i = 0; i < size; ++i) { 
+            sum += std::pow(2.0, -counts[i]); 
         }
-        return EmpiricAlpha(size) * size * size / sum;
+        return EmpiricAlpha(size) * size * size / sum; 
     }
 
     double LinearCounting(size_t registers, size_t zeroed) {
@@ -100,38 +100,38 @@ namespace {
     }
 }
 
-THyperLogLogBase::THyperLogLogBase(unsigned precision)
-    : Precision(precision) {
+THyperLogLogBase::THyperLogLogBase(unsigned precision) 
+    : Precision(precision) { 
     Y_ENSURE(precision >= PRECISION_MIN && precision <= PRECISION_MAX);
 }
 
-void THyperLogLogBase::Update(ui64 hash) {
+void THyperLogLogBase::Update(ui64 hash) { 
     const unsigned subHashBits = 8 * sizeof(hash) - Precision;
     const auto subHash = hash & MaskLowerBits(subHashBits);
     const auto leadingZeroes = subHash ? (subHashBits - GetValueBitCount(subHash)) : subHashBits;
     const ui8 weight = static_cast<ui8>(leadingZeroes + 1);
 
     const size_t reg = static_cast<size_t>(hash >> subHashBits);
-    RegistersRef[reg] = std::max(RegistersRef[reg], weight);
+    RegistersRef[reg] = std::max(RegistersRef[reg], weight); 
 }
 
-void THyperLogLogBase::Merge(const THyperLogLogBase& rh) {
+void THyperLogLogBase::Merge(const THyperLogLogBase& rh) { 
     Y_ENSURE(Precision == rh.Precision);
 
-    std::transform(RegistersRef.begin(), RegistersRef.end(), rh.RegistersRef.begin(), RegistersRef.begin(), [](ui8 l, ui8 r) { return std::max(l, r); });
+    std::transform(RegistersRef.begin(), RegistersRef.end(), rh.RegistersRef.begin(), RegistersRef.begin(), [](ui8 l, ui8 r) { return std::max(l, r); }); 
 }
 
-ui64 THyperLogLogBase::Estimate() const {
-    const auto m = RegistersRef.size();
-    const auto e = RawEstimate(RegistersRef.data(), m);
+ui64 THyperLogLogBase::Estimate() const { 
+    const auto m = RegistersRef.size(); 
+    const auto e = RawEstimate(RegistersRef.data(), m); 
 
     const auto e_ = e <= 5 * m ? (e - EstimateBias(e, Precision)) : e;
-    const auto v = std::count(RegistersRef.begin(), RegistersRef.end(), ui8(0));
+    const auto v = std::count(RegistersRef.begin(), RegistersRef.end(), ui8(0)); 
     const auto h = v != 0 ? LinearCounting(m, v) : e_;
     return h <= GetThreshold(Precision) ? h : e_;
 }
 
-void THyperLogLogBase::Save(IOutputStream& out) const {
+void THyperLogLogBase::Save(IOutputStream& out) const { 
     out.Write(static_cast<char>(Precision));
-    out.Write(RegistersRef.data(), RegistersRef.size() * sizeof(RegistersRef.front()));
+    out.Write(RegistersRef.data(), RegistersRef.size() * sizeof(RegistersRef.front())); 
 }

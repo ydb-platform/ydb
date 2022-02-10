@@ -18,7 +18,7 @@ template <bool EnableNewOptimizers>
 IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
     bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings = {});
-
+ 
 THolder<IGraphTransformer> MakePeepholeOptimization(TTypeAnnotationContextPtr typeAnnotationContext, const IPipelineConfigurator* config = nullptr);
-
+ 
 }

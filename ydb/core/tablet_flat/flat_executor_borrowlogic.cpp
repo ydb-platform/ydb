@@ -568,10 +568,10 @@ TString TExecutorBorrowLogic::DebugCheckBorrowConsistency(THashSet<TLogoBlobID> 
         }
 
         if (collected) {
-            if (knownBundles.contains(xpair.first)) 
+            if (knownBundles.contains(xpair.first))
                 out << xpair.first << ": collected bundle still present in database. ";
         } else {
-            if (!knownBundles.contains(xpair.first)) 
+            if (!knownBundles.contains(xpair.first))
                 out << xpair.first << ": non-collected bundle not present in database. ";
         }
     }

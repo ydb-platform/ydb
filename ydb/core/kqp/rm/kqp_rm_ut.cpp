@@ -100,7 +100,7 @@ NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfi
 class KqpRm : public TTestBase {
 public:
     void SetUp() override {
-        Runtime = MakeHolder<TTenantTestRuntime>(MakeTenantTestConfig()); 
+        Runtime = MakeHolder<TTenantTestRuntime>(MakeTenantTestConfig());
 
         NActors::NLog::EPriority priority = DETAILED_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
         Runtime->SetLogPriority(NKikimrServices::RESOURCE_BROKER, priority);

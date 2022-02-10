@@ -1185,7 +1185,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         const auto& state = static_cast<NKikimrBlobStorage::TPDiskState::E>(Mon.PDiskState->Val());
         pdiskState.SetState(state);
 
-        reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>(); 
+        reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
         i64 minSlotSize = Max<i64>();
         for (const auto& [vdiskId, owner] : VDiskOwners) {
             const TOwnerData &data = OwnerData[owner];
@@ -2294,8 +2294,8 @@ void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrPro
         << " lsn# " << logWrite->Lsn;
     LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, err.Str());
 
-    logWrite->Result.Reset(new NPDisk::TEvLogResult(status, 
-            GetStatusFlags(logWrite->Owner, logWrite->OwnerGroupType), err.Str())); 
+    logWrite->Result.Reset(new NPDisk::TEvLogResult(status,
+            GetStatusFlags(logWrite->Owner, logWrite->OwnerGroupType), err.Str()));
     logWrite->Result->Results.push_back(NPDisk::TEvLogResult::TRecord(logWrite->Lsn, logWrite->Cookie));
     WILSON_TRACE(*ActorSystem, &logWrite->TraceId, EnqueueLogWrite);
 }

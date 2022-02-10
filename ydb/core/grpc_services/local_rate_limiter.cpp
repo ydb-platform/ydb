@@ -144,7 +144,7 @@ TVector<std::pair<Actions, Ydb::RateLimiter::AcquireResourceRequest>> MakeReques
         auto f = [&](const auto& item) {
             Fill(item, rlPath.CoordinationNode, rlPath.ResourcePath, result);
         };
-        std::visit(f, action); 
+        std::visit(f, action);
     }
 
     return result;

@@ -7,7 +7,7 @@ RECURSE(
     file2c
     flame-graph
     flatc
-    flatc64 
+    flatc64
     flex
     flex-old
     flex-old/fl

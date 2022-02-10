@@ -25,25 +25,25 @@ public:
 
     template<typename U> friend class TTrackingAllocator;
 
-    TTrackingAllocator() noexcept 
+    TTrackingAllocator() noexcept
         : std::allocator<T>()
         , Allocated(new size_t(0))
     {
     }
 
-    TTrackingAllocator(const TSimpleSharedPtr<size_t>& allocated) noexcept 
+    TTrackingAllocator(const TSimpleSharedPtr<size_t>& allocated) noexcept
         : std::allocator<T>()
         , Allocated(allocated)
     {
     }
 
-    TTrackingAllocator(const TTrackingAllocator& a) noexcept 
+    TTrackingAllocator(const TTrackingAllocator& a) noexcept
         : std::allocator<T>(a)
         , Allocated(a.Allocated)
     {
     }
 
-    TTrackingAllocator(TTrackingAllocator&& a) noexcept 
+    TTrackingAllocator(TTrackingAllocator&& a) noexcept
         : std::allocator<T>(std::move(static_cast<std::allocator<T>&&>(a)))
         , Allocated(a.Allocated)
     {
@@ -51,20 +51,20 @@ public:
     }
 
     template <class U>
-    TTrackingAllocator(const TTrackingAllocator<U>& a) noexcept 
+    TTrackingAllocator(const TTrackingAllocator<U>& a) noexcept
         : std::allocator<T>(a)
         , Allocated(a.Allocated)
     {
     }
 
-    TTrackingAllocator& operator=(const TTrackingAllocator& a) noexcept 
+    TTrackingAllocator& operator=(const TTrackingAllocator& a) noexcept
     {
         Allocated = a.Allocated;
         std::allocator<T>::operator=(a);
         return *this;
     }
 
-    TTrackingAllocator& operator=(TTrackingAllocator&& a) noexcept 
+    TTrackingAllocator& operator=(TTrackingAllocator&& a) noexcept
     {
         Allocated = a.Allocated;
         a.Allocated = nullptr;
@@ -72,7 +72,7 @@ public:
         return *this;
     }
 
-    ~TTrackingAllocator() { 
+    ~TTrackingAllocator() {
     }
 
     pointer allocate(size_type n, const void* hint = nullptr) {

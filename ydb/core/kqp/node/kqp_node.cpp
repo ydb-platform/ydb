@@ -238,7 +238,7 @@ private:
                 resources.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
                 resources.Memory = memory;
 
-                if (rm->AllocateResources(std::get<ui64>(txId), taskId, resources)) { 
+                if (rm->AllocateResources(std::get<ui64>(txId), taskId, resources)) {
                     return true;
                 }
 

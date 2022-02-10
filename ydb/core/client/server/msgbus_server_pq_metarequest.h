@@ -195,7 +195,7 @@ public:
     bool ReadyToAnswer() const;
 
     // true returned from this function means that we called Die().
-    [[nodiscard]] bool WaitAllPipeEvents(const TActorContext& ctx); 
+    [[nodiscard]] bool WaitAllPipeEvents(const TActorContext& ctx);
     STFUNC(WaitAllPipeEventsStateFunc);
 
     void Handle(TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx);

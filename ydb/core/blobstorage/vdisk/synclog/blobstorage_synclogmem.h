@@ -108,7 +108,7 @@ namespace NKikimr {
             TSyncLogPageDeleter &operator=(const TSyncLogPageDeleter &) = default;
             TSyncLogPageDeleter &operator=(TSyncLogPageDeleter &&) = default;
 
-            void operator () (TSyncLogPage *page) noexcept { 
+            void operator () (TSyncLogPage *page) noexcept {
                 char *ptr = (char *)page;
                 delete [] ptr;
                 MemBytes.Subtract(PageSize);

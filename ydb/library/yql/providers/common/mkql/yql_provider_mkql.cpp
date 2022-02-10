@@ -219,7 +219,7 @@ std::pair<TLayout, ui16> CutTimezone(const std::string_view& atom) {
 } // namespace
 
 bool TMkqlCallableCompilerBase::HasCallable(const std::string_view& name) const {
-    return Callables.contains(name); 
+    return Callables.contains(name);
 }
 
 void TMkqlCallableCompilerBase::AddCallable(const std::string_view& name, TCompiler compiler) {

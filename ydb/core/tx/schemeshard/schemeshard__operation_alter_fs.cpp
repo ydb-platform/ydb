@@ -267,9 +267,9 @@ private:
         case TTxState::CreateParts:
             return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId); 
+            return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId); 
+            return MakeHolder<TPropose>(OperationId);
         default:
             return nullptr;
         }

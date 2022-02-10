@@ -26,7 +26,7 @@ public:
 
         auto dc = nodeInfo->Location.GetDataCenterId();
 
-        if (Self->NodeIdToDataCenter.contains(nodeId) 
+        if (Self->NodeIdToDataCenter.contains(nodeId)
             && Self->NodeIdToDataCenter[nodeId] == dc)
             return true;
 

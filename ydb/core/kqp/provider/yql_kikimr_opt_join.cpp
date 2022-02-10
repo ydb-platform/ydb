@@ -4,7 +4,7 @@
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 
 namespace NYql {
 namespace {
@@ -215,7 +215,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
     YQL_ENSURE(!leftLabelReps.empty());
     auto rightLabelReps = GetEquiJoinLabelReps(joinTuple.RightScope());
     YQL_ENSURE(rightLabelReps.size() == 1);
-    YQL_ENSURE(rightLabelReps.contains(joinTuple.RightScope().Cast<TCoAtom>().Value())); 
+    YQL_ENSURE(rightLabelReps.contains(joinTuple.RightScope().Cast<TCoAtom>().Value()));
 
     auto joinKeyCount = joinTuple.RightKeys().Size() / 2;
 
@@ -235,7 +235,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
         auto joinRightLabel = joinTuple.RightKeys().Item(i * 2);
         auto joinRightColumn = joinTuple.RightKeys().Item(i * 2 + 1);
 
-        if (!rightLabelReps.contains(joinRightLabel) || !leftLabelReps.contains(joinLeftLabel)) { 
+        if (!rightLabelReps.contains(joinRightLabel) || !leftLabelReps.contains(joinLeftLabel)) {
             // Join already rewritten, skip opt
             return false;
         }
@@ -253,7 +253,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
             return false;
         }
 
-        if (rightKeyColumnsSet.contains(rightColumnName)) { 
+        if (rightKeyColumnsSet.contains(rightColumnName)) {
             // Can't lookup same column twice
             return false;
         }
@@ -740,7 +740,7 @@ TExprBase GetEquiJoinTreeExpr(const TExprBase& joinScope, const TVector<TCoEquiJ
         auto index = joinLabels.FindInputIndex(label);
         YQL_ENSURE(index);
 
-        if (!usedIndices.contains(*index)) { 
+        if (!usedIndices.contains(*index)) {
             newJoinInputs.push_back(joinInputs[*index]);
             usedIndices.insert(*index);
         }

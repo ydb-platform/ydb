@@ -31,31 +31,31 @@ class opencl_error : public std::exception
 {
 public:
     /// Creates a new opencl_error exception object for \p error.
-    explicit opencl_error(cl_int error) noexcept 
+    explicit opencl_error(cl_int error) noexcept
         : m_error(error),
           m_error_string(to_string(error))
     {
     }
 
     /// Destroys the opencl_error object.
-    ~opencl_error() 
+    ~opencl_error()
     {
     }
 
     /// Returns the numeric error code.
-    cl_int error_code() const noexcept 
+    cl_int error_code() const noexcept
     {
         return m_error;
     }
 
     /// Returns a string description of the error.
-    std::string error_string() const noexcept 
+    std::string error_string() const noexcept
     {
         return m_error_string;
     }
 
     /// Returns a C-string description of the error.
-    const char* what() const noexcept 
+    const char* what() const noexcept
     {
         return m_error_string.c_str();
     }

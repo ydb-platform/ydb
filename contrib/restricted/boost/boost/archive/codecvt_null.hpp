@@ -52,7 +52,7 @@ class codecvt_null;
 template<>
 class codecvt_null<char> : public std::codecvt<char, char, std::mbstate_t>
 {
-    virtual bool do_always_noconv() const noexcept { 
+    virtual bool do_always_noconv() const noexcept {
         return true;
     }
 public:
@@ -86,10 +86,10 @@ class BOOST_WARCHIVE_DECL codecvt_null<wchar_t> :
         wchar_t * last2,
         wchar_t * & next2
     ) const;
-    virtual int do_encoding( ) const noexcept{ 
+    virtual int do_encoding( ) const noexcept{
         return sizeof(wchar_t) / sizeof(char);
     }
-    virtual int do_max_length( ) const noexcept{ 
+    virtual int do_max_length( ) const noexcept{
         return do_encoding();
     }
 public:

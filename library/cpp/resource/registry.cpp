@@ -22,7 +22,7 @@ namespace {
 
     struct TStore: public IStore, public THashMap<TStringBuf, TDescriptor*> {
         void Store(const TStringBuf key, const TStringBuf data) override {
-            if (contains(key)) { 
+            if (contains(key)) {
                 const TStringBuf value = (*this)[key]->second;
                 if (value != data) {
                     size_t vsize = GetCodec()->DecompressedLength(value);

@@ -56,7 +56,7 @@ const TSlotDescription TTenantSlotBroker::TTenant::PinnedSlotDescription = {PIN_
 void TTenantSlotBroker::TTenant::AddSlotsAllocation(const TSlotDescription &descr,
                                                     ui64 count)
 {
-    Y_VERIFY(!Allocations.contains(descr)); 
+    Y_VERIFY(!Allocations.contains(descr));
     TSlotsAllocation::TPtr allocation = new TSlotsAllocation(descr, Stats);
     Allocations[descr] = allocation;
     if (descr.CollocationGroup
@@ -73,7 +73,7 @@ void TTenantSlotBroker::TTenant::AddSlotsAllocation(const TSlotDescription &desc
 TTenantSlotBroker::TSlotsAllocation::TPtr
 TTenantSlotBroker::TTenant::GetOrCreateAllocation(const TSlotDescription &descr)
 {
-    if (!Allocations.contains(descr)) 
+    if (!Allocations.contains(descr))
         AddSlotsAllocation(descr, 0);
     return Allocations.at(descr);
 }
@@ -151,7 +151,7 @@ void TTenantSlotBroker::TTenant::AddSlotLabels(ui64 count,
     ui64 no = 1;
     while (count) {
         auto label = SlotLabelByNo(no);
-        if (!UsedSlotLabels.contains(label) && !UnusedSlotLabels.contains(label)) { 
+        if (!UsedSlotLabels.contains(label) && !UnusedSlotLabels.contains(label)) {
             db.Table<Schema::SlotLabels>().Key(Name, label).Update();
             UnusedSlotLabels.insert(label);
             --count;
@@ -177,7 +177,7 @@ TString TTenantSlotBroker::TTenant::MakePinnedSlotLabel()
     ui64 no = 1;
     while (true) {
         auto label = Sprintf("pinned-%" PRIu64, no);
-        if (!PinnedSlotLabels.contains(label)) { 
+        if (!PinnedSlotLabels.contains(label)) {
             AddPinnedSlotLabel(label);
             return label;
         }
@@ -187,20 +187,20 @@ TString TTenantSlotBroker::TTenant::MakePinnedSlotLabel()
 
 void TTenantSlotBroker::TTenant::AddPinnedSlotLabel(const TString &label)
 {
-    Y_VERIFY(!PinnedSlotLabels.contains(label)); 
+    Y_VERIFY(!PinnedSlotLabels.contains(label));
     PinnedSlotLabels.insert(label);
 }
 
 void TTenantSlotBroker::TTenant::RemovePinnedSlotLabel(const TString &label)
 {
-    Y_VERIFY(PinnedSlotLabels.contains(label)); 
+    Y_VERIFY(PinnedSlotLabels.contains(label));
     PinnedSlotLabels.erase(label);
 }
 
 void TTenantSlotBroker::TTenant::MarkSlotLabelAsUsed(const TString &label)
 {
-    Y_VERIFY(UnusedSlotLabels.contains(label)); 
-    Y_VERIFY(!UsedSlotLabels.contains(label)); 
+    Y_VERIFY(UnusedSlotLabels.contains(label));
+    Y_VERIFY(!UsedSlotLabels.contains(label));
 
     UnusedSlotLabels.erase(label);
     UsedSlotLabels.insert(label);
@@ -208,8 +208,8 @@ void TTenantSlotBroker::TTenant::MarkSlotLabelAsUsed(const TString &label)
 
 void TTenantSlotBroker::TTenant::MarkSlotLabelAsUnused(const TString &label)
 {
-    Y_VERIFY(!UnusedSlotLabels.contains(label)); 
-    Y_VERIFY(UsedSlotLabels.contains(label)); 
+    Y_VERIFY(!UnusedSlotLabels.contains(label));
+    Y_VERIFY(UsedSlotLabels.contains(label));
 
     UnusedSlotLabels.insert(label);
     UsedSlotLabels.erase(label);
@@ -668,7 +668,7 @@ TTenantSlotBroker::TTenant::TPtr TTenantSlotBroker::GetTenant(const TString &nam
 
 TTenantSlotBroker::TTenant::TPtr TTenantSlotBroker::AddTenant(const TString &name)
 {
-    Y_VERIFY(!Tenants.contains(name)); 
+    Y_VERIFY(!Tenants.contains(name));
     auto tenant = new TTenant(name, Counters);
     Tenants.emplace(name, tenant);
     *Counters->KnownTenants = Tenants.size();
@@ -955,9 +955,9 @@ void TTenantSlotBroker::DetachSlotNoConfigureNoDb(TSlot::TPtr slot,
     if (updateUnhappy)
         RemoveUnhappyTenant(tenant);
 
-    Y_VERIFY_DEBUG(!UnhappyTenants.contains(tenant)); 
-    Y_VERIFY_DEBUG(!MisplacedTenants.contains(tenant)); 
-    Y_VERIFY_DEBUG(!SplitTenants.contains(tenant)); 
+    Y_VERIFY_DEBUG(!UnhappyTenants.contains(tenant));
+    Y_VERIFY_DEBUG(!MisplacedTenants.contains(tenant));
+    Y_VERIFY_DEBUG(!SplitTenants.contains(tenant));
 
     auto allocation = tenant->GetAllocation(slot->UsedAs);
     allocation->RemoveAssignedSlot(slot);
@@ -1015,7 +1015,7 @@ void TTenantSlotBroker::AttachSlotNoConfigureNoDb(TSlot::TPtr slot,
                                                   const TString &label)
 {
     Y_VERIFY(!slot->AssignedTenant);
-    Y_VERIFY_DEBUG(!UnhappyTenants.contains(tenant)); 
+    Y_VERIFY_DEBUG(!UnhappyTenants.contains(tenant));
 
     if (slot->IsFree())
         FreeSlots.Remove(slot);
@@ -1137,7 +1137,7 @@ bool TTenantSlotBroker::AssignFreeSlots(TTenant::TPtr tenant,
         auto allocation = *cur;
 
         if (allocation->Group) {
-            if (!visitedGroups.contains(allocation->Group->Id)) { 
+            if (!visitedGroups.contains(allocation->Group->Id)) {
                 if (AssignFreeSlotsForGroup(tenant, allocation->Group, txc, ctx))
                     assigned = true;
                 visitedGroups.insert(allocation->Group->Id);
@@ -1331,12 +1331,12 @@ void TTenantSlotBroker::ApplyLayout(TTenant::TPtr tenant,
 
         for (auto it = allocation->AssignedSlots.begin(); it != allocation->AssignedSlots.end(); ) {
             auto slot = *(it++);
-            if (!allAssignedSlots.contains(slot)) 
+            if (!allAssignedSlots.contains(slot))
                 DetachSlot(slot, txc, ctx, false);
         }
 
         for (auto slot : slots) {
-            if (!allocation->AssignedSlots.contains(slot)) { 
+            if (!allocation->AssignedSlots.contains(slot)) {
                 if (slot->AssignedTenant) {
                     auto label = slot->Label;
                     // Currently we are not expected to change slot's owner.
@@ -1392,7 +1392,7 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     }
 
     // Check if it's OK to stay in current data center.
-    if (currentDC && !layouts.contains(currentDC)) { 
+    if (currentDC && !layouts.contains(currentDC)) {
         auto layout = ComputeLayoutForGroup(group, currentDC);
         layouts[currentDC] = layout;
         LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
@@ -1407,7 +1407,7 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
 
     // Compute layouts for other data centers.
     for (auto &pr : FreeSlots.FreeSlotsByDataCenter) {
-        if (!layouts.contains(pr.first)) { 
+        if (!layouts.contains(pr.first)) {
             layouts[pr.first] = ComputeLayoutForGroup(group, pr.first);
             LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                         "Computed layout for group " << group->Id << " in "
@@ -1461,7 +1461,7 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
 void TTenantSlotBroker::OnClientDisconnected(TActorId clientId,
                                              const TActorContext &ctx)
 {
-    if (KnownPoolPipes.contains(clientId)) { 
+    if (KnownPoolPipes.contains(clientId)) {
         ui32 nodeId = clientId.NodeId();
         LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                     "Pipe disconnected from pool on node " << nodeId);

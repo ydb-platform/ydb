@@ -124,15 +124,15 @@ Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& q
         CollectYdbStatuses(topIssue, statuses);
     }
 
-    if (statuses.contains(Ydb::StatusIds::UNAUTHORIZED)) { 
+    if (statuses.contains(Ydb::StatusIds::UNAUTHORIZED)) {
         return Ydb::StatusIds::UNAUTHORIZED;
     }
 
-    if (statuses.contains(Ydb::StatusIds::INTERNAL_ERROR)) { 
+    if (statuses.contains(Ydb::StatusIds::INTERNAL_ERROR)) {
         return Ydb::StatusIds::INTERNAL_ERROR;
     }
 
-    if (statuses.contains(Ydb::StatusIds::GENERIC_ERROR)) { 
+    if (statuses.contains(Ydb::StatusIds::GENERIC_ERROR)) {
         return Ydb::StatusIds::GENERIC_ERROR;
     }
 

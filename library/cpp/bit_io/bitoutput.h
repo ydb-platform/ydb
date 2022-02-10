@@ -14,10 +14,10 @@ namespace NBitIO {
     // Almost all code is hard tuned for sequential write performance.
     // Use tools/bursttrie/benchmarks/bitstreams_benchmark to check your changes.
 
-    inline constexpr ui64 BytesUp(ui64 bits) { 
-        return (bits + 7ULL) >> 3ULL; 
-    } 
- 
+    inline constexpr ui64 BytesUp(ui64 bits) {
+        return (bits + 7ULL) >> 3ULL;
+    }
+
     template <typename TStorage>
     class TBitOutputBase {
     protected:
@@ -36,7 +36,7 @@ namespace NBitIO {
         }
 
         ui64 GetOffset() const {
-            return Offset + BytesUp(64ULL - FreeBits); 
+            return Offset + BytesUp(64ULL - FreeBits);
         }
 
         ui64 GetBitOffset() const {
@@ -83,7 +83,7 @@ namespace NBitIO {
                 ui64 part = data;
 
                 data >>= bits;
-                part |= FastZeroIfFalse(data, NthBit64(bits)); 
+                part |= FastZeroIfFalse(data, NthBit64(bits));
                 Write(part, bits + 1ULL);
             } while (data);
         }

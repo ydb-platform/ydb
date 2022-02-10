@@ -103,7 +103,7 @@ struct TDSProxyEnv {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(ev->Get()->HandleClass);
         return std::unique_ptr<IActor>(CreateBlobStorageGroupPutRequest(Info, GroupQueues, ev->Sender, Mon, ev->Get(),
                 ev->Cookie, std::move(ev->TraceId), Mon->TimeStats.IsEnabled(), PerDiskStatsPtr, kind,
-                TInstant::Now(), StoragePoolCounters, false)); 
+                TInstant::Now(), StoragePoolCounters, false));
     }
 
     std::unique_ptr<IActor> CreatePutRequestActor(TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &batched,
@@ -112,7 +112,7 @@ struct TDSProxyEnv {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(handleClass);
         return std::unique_ptr<IActor>(CreateBlobStorageGroupPutRequest(Info, GroupQueues,
                 Mon, batched, Mon->TimeStats.IsEnabled(), PerDiskStatsPtr, kind,TInstant::Now(),
-                StoragePoolCounters, handleClass, tactic, false)); 
+                StoragePoolCounters, handleClass, tactic, false));
     }
 
     std::unique_ptr<IActor> CreateGetRequestActor(TEvBlobStorage::TEvGet::TPtr &ev,
@@ -121,13 +121,13 @@ struct TDSProxyEnv {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(handleClass);
         return std::unique_ptr<IActor>(CreateBlobStorageGroupGetRequest(Info, GroupQueues, ev->Sender, Mon,
                 ev->Get(), ev->Cookie, std::move(ev->TraceId), TNodeLayoutInfoPtr(NodeLayoutInfo),
-                kind, TInstant::Now(), StoragePoolCounters, withMultiPut)); 
+                kind, TInstant::Now(), StoragePoolCounters, withMultiPut));
     }
 
     std::unique_ptr<IActor> CreatePatchRequestActor(TEvBlobStorage::TEvPatch::TPtr &ev, bool useVPatch = false) {
         return std::unique_ptr<IActor>(CreateBlobStorageGroupPatchRequest(Info, GroupQueues, ev->Sender, Mon,
                 ev->Get(), ev->Cookie, std::move(ev->TraceId), TInstant::Now(), StoragePoolCounters,
-                FakeProxyActorId, useVPatch)); 
+                FakeProxyActorId, useVPatch));
     }
 };
 

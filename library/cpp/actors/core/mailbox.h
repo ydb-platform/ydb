@@ -95,7 +95,7 @@ namespace NActors {
         bool UnlockFromExecution2(bool wouldReschedule); // proceed with releasing lock
         bool UnlockAsFree(bool wouldReschedule);         // preceed with releasing lock, but mark as free one
 
-        bool IsEmpty() const noexcept { 
+        bool IsEmpty() const noexcept {
             return (ActorPack == TMailboxActorPack::Simple && ActorsInfo.Simple.ActorId == 0);
         }
 
@@ -123,7 +123,7 @@ namespace NActors {
             }
         }
 
-        IActor* FindActor(ui64 localActorId) noexcept { 
+        IActor* FindActor(ui64 localActorId) noexcept {
             switch (ActorPack) {
                 case TMailboxActorPack::Simple: {
                     if (ActorsInfo.Simple.ActorId == localActorId)
@@ -150,7 +150,7 @@ namespace NActors {
             return nullptr;
         }
 
-        void AttachActor(ui64 localActorId, IActor* actor) noexcept { 
+        void AttachActor(ui64 localActorId, IActor* actor) noexcept {
             switch (ActorPack) {
                 case TMailboxActorPack::Simple: {
                     if (ActorsInfo.Simple.ActorId == 0) {
@@ -192,7 +192,7 @@ namespace NActors {
             }
         }
 
-        IActor* DetachActor(ui64 localActorId) noexcept { 
+        IActor* DetachActor(ui64 localActorId) noexcept {
             Y_VERIFY_DEBUG(FindActor(localActorId) != nullptr);
 
             IActor* actorToDestruct = nullptr;

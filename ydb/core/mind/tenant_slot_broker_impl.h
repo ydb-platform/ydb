@@ -561,13 +561,13 @@ private:
 
         void AddAssignedSlot(TSlot::TPtr slot)
         {
-            Y_VERIFY(!AssignedSlots.contains(slot)); 
+            Y_VERIFY(!AssignedSlots.contains(slot));
             AssignedSlots.insert(slot);
         }
 
         void RemoveAssignedSlot(TSlot::TPtr slot)
         {
-            Y_VERIFY(AssignedSlots.contains(slot)); 
+            Y_VERIFY(AssignedSlots.contains(slot));
             AssignedSlots.erase(slot);
         }
 

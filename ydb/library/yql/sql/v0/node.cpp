@@ -720,10 +720,10 @@ void TColumns::Merge(const TColumns& columns) {
         SetAll();
     } else {
         for (auto& c: columns.List) {
-            if (columns.Real.contains(c)) { 
+            if (columns.Real.contains(c)) {
                 Add(&c, false, false);
             }
-            if (columns.Artificial.contains(c)) { 
+            if (columns.Artificial.contains(c)) {
                 Add(&c, false, true);
             }
         }
@@ -755,7 +755,7 @@ void TColumns::SetAll() {
 }
 
 bool TColumns::IsColumnPossible(TContext& ctx, const TString& name) {
-    if (All || Real.contains(name) || Artificial.contains(name)) { 
+    if (All || Real.contains(name) || Artificial.contains(name)) {
         return true;
     }
     if (QualifiedAll) {
@@ -1105,7 +1105,7 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
                 ctx.Error(expr->GetPos()) << "Duplicate alias found: " << alias << " in " << exprSeat << " section";
                 return false;
             }
-            if (names.contains(alias)) { 
+            if (names.contains(alias)) {
                 ctx.Error(expr->GetPos()) << "Collision between alias and column name: " << alias << " in " << exprSeat << " section";
                 return false;
             }
@@ -1120,7 +1120,7 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
                 ctx.Error(expr->GetPos()) << "Duplicate column name found: " << columnName << " in " << exprSeat << " section";
                 return false;
             }
-            if (!alias && ExprAliases.contains(columnName)) { 
+            if (!alias && ExprAliases.contains(columnName)) {
                 ctx.Error(expr->GetPos()) << "Collision between alias and column name: " << columnName << " in " << exprSeat << " section";
                 return false;
             }
@@ -1261,7 +1261,7 @@ bool ISource::IsCompositeSource() const {
 }
 
 bool ISource::IsGroupByColumn(const TString& column) const {
-    return GroupKeys.contains(column); 
+    return GroupKeys.contains(column);
 }
 
 bool ISource::IsFlattenByColumns() const {

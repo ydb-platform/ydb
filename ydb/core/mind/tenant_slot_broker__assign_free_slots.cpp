@@ -67,7 +67,7 @@ public:
                 auto allocation = *(it++);
 
                 Y_VERIFY(allocation->Group);
-                if (visitedGroups.contains(allocation->Group)) 
+                if (visitedGroups.contains(allocation->Group))
                     continue;
 
                 visitedGroups.insert(allocation->Group);
@@ -112,7 +112,7 @@ public:
                  ) {
                 auto allocation = *(it++);
 
-                if (allocation->Group && visitedGroups.contains(allocation->Group)) 
+                if (allocation->Group && visitedGroups.contains(allocation->Group))
                     continue;
 
                 Self->RemoveUnhappyTenant(tenant);

@@ -83,29 +83,29 @@ namespace NProtobufJson {
         TString Unescape(const TString& str) const;
     };
 
-    class TBase64EncodeBytesTransform: public NProtobufJson::IStringTransform { 
-    public: 
-        int GetType() const override { 
-            return 0; 
-        } 
- 
-        void Transform(TString&) const override { 
-            // Do not transform strings 
-        } 
- 
-        void TransformBytes(TString &str) const override; 
-    }; 
- 
-    class TBase64DecodeBytesTransform: public NProtobufJson::IStringTransform { 
-    public: 
-        int GetType() const override { 
-            return 0; 
-        } 
- 
-        void Transform(TString&) const override { 
-            // Do not transform strings 
-        } 
- 
-        void TransformBytes(TString &str) const override; 
-    }; 
+    class TBase64EncodeBytesTransform: public NProtobufJson::IStringTransform {
+    public:
+        int GetType() const override {
+            return 0;
+        }
+
+        void Transform(TString&) const override {
+            // Do not transform strings
+        }
+
+        void TransformBytes(TString &str) const override;
+    };
+
+    class TBase64DecodeBytesTransform: public NProtobufJson::IStringTransform {
+    public:
+        int GetType() const override {
+            return 0;
+        }
+
+        void Transform(TString&) const override {
+            // Do not transform strings
+        }
+
+        void TransformBytes(TString &str) const override;
+    };
 }

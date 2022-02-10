@@ -552,7 +552,7 @@ namespace NSc {
     }
 
     bool TValue::Has(TStringBuf s) const {
-        return GetDict().contains(s); 
+        return GetDict().contains(s);
     }
 
     TValue& TValue::GetOrAddUnsafe(size_t idx) {

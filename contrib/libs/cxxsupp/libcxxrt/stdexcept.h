@@ -35,11 +35,11 @@ namespace std
 	class exception
 	{
 	public:
-		exception() noexcept; 
-		exception(const exception&) noexcept; 
-		exception& operator=(const exception&) noexcept; 
-		virtual ~exception(); 
-		virtual const char* what() const noexcept; 
+		exception() noexcept;
+		exception(const exception&) noexcept;
+		exception& operator=(const exception&) noexcept;
+		virtual ~exception();
+		virtual const char* what() const noexcept;
 	};
 
 
@@ -49,11 +49,11 @@ namespace std
 	class bad_alloc: public exception
 	{
 	public:
-		bad_alloc() noexcept; 
-		bad_alloc(const bad_alloc&) noexcept; 
-		bad_alloc& operator=(const bad_alloc&) noexcept; 
-		~bad_alloc(); 
-		virtual const char* what() const noexcept; 
+		bad_alloc() noexcept;
+		bad_alloc(const bad_alloc&) noexcept;
+		bad_alloc& operator=(const bad_alloc&) noexcept;
+		~bad_alloc();
+		virtual const char* what() const noexcept;
 	};
 
 	/**
@@ -61,11 +61,11 @@ namespace std
 	 */
 	class bad_cast: public exception {
 	public:
-		bad_cast() noexcept; 
-		bad_cast(const bad_cast&) noexcept; 
-		bad_cast& operator=(const bad_cast&) noexcept; 
-		virtual ~bad_cast(); 
-		virtual const char* what() const noexcept; 
+		bad_cast() noexcept;
+		bad_cast(const bad_cast&) noexcept;
+		bad_cast& operator=(const bad_cast&) noexcept;
+		virtual ~bad_cast();
+		virtual const char* what() const noexcept;
 	};
 
 	/**
@@ -74,21 +74,21 @@ namespace std
 	class bad_typeid: public exception
 	{
 	public:
-		bad_typeid() noexcept; 
-		bad_typeid(const bad_typeid &__rhs) noexcept; 
-		virtual ~bad_typeid(); 
-		bad_typeid& operator=(const bad_typeid &__rhs) noexcept; 
-		virtual const char* what() const noexcept; 
+		bad_typeid() noexcept;
+		bad_typeid(const bad_typeid &__rhs) noexcept;
+		virtual ~bad_typeid();
+		bad_typeid& operator=(const bad_typeid &__rhs) noexcept;
+		virtual const char* what() const noexcept;
 	};
 
 	class bad_array_new_length: public bad_alloc
 	{
 	public:
-		bad_array_new_length() noexcept; 
-		bad_array_new_length(const bad_array_new_length&) noexcept; 
-		bad_array_new_length& operator=(const bad_array_new_length&) noexcept; 
+		bad_array_new_length() noexcept;
+		bad_array_new_length(const bad_array_new_length&) noexcept;
+		bad_array_new_length& operator=(const bad_array_new_length&) noexcept;
 		virtual ~bad_array_new_length();
-		virtual const char *what() const noexcept; 
+		virtual const char *what() const noexcept;
 	};
 
 

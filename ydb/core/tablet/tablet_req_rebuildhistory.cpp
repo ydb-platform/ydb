@@ -643,7 +643,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                             bool refsOk = true;
                             for (TVector<TLogoBlobID>::const_iterator it = entry.References.begin(), end = entry.References.end(); refsOk && it != end; ++it) {
                                 const TLogoBlobID &x = *it;
-                                refsOk = !RefsToCheck.contains(x); 
+                                refsOk = !RefsToCheck.contains(x);
                             }
 
                             const bool snapOk = entry.IsTotalSnapshot || (entry.IsSnapshot && (id.second == lastUnbrokenTailEntry + 1));

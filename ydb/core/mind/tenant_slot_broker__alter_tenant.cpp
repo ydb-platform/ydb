@@ -54,7 +54,7 @@ public:
             // Check if slot may actually be left assigned
             // by another allocation.
             for (auto allocation : tenant->GetMissing()) {
-                if (detach.contains(allocation->Description)) 
+                if (detach.contains(allocation->Description))
                     continue;
                 if (allocation->IsSlotOk(slot->Type, slot->DataCenter)) {
                     reattached = true;
@@ -106,7 +106,7 @@ public:
             if (slot.GetCount() == 0)
                 continue;
             TSlotDescription key(slot);
-            if (newSlots.contains(key)) 
+            if (newSlots.contains(key))
                 newSlots[key] += slot.GetCount();
             else
                 newSlots[key] = slot.GetCount();
@@ -172,7 +172,7 @@ public:
 
             // Handle required slots not mentioned in new tenant config.
             for (auto &key : oldSlots) {
-                if (newSlots.contains(key)) 
+                if (newSlots.contains(key))
                     continue;
 
                 auto allocation = tenant->GetAllocation(key);
@@ -186,7 +186,7 @@ public:
             }
 
             for (auto &pr : tenant->GetAllocations())
-                if (detach.contains(pr.first)) 
+                if (detach.contains(pr.first))
                     DetachSlots(tenant, detach, pr.second, txc, ctx);
 
             Y_VERIFY(detach.empty());

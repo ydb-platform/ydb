@@ -27,12 +27,12 @@ namespace NKikimr {
             TrackingFree();
         }
 
-        void ClearKeepFirstChunk() noexcept { 
+        void ClearKeepFirstChunk() noexcept {
             TrackingFree();
             MemoryPool.ClearKeepFirstChunk();
         }
 
-        void* Allocate(size_t len) noexcept { 
+        void* Allocate(size_t len) noexcept {
             i64 l = static_cast<i64>(len);
             Consumer.Add(l);
             TotalAllocated += l;

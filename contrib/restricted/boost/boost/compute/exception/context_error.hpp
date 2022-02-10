@@ -37,7 +37,7 @@ public:
     context_error(const context *context,
                   const char *errinfo,
                   const void *private_info,
-                  size_t private_info_size) noexcept 
+                  size_t private_info_size) noexcept
         : m_context(context),
           m_errinfo(errinfo),
           m_private_info(private_info),
@@ -46,31 +46,31 @@ public:
     }
 
     /// Destroys the context error object.
-    ~context_error() 
+    ~context_error()
     {
     }
 
     /// Returns a string with a description of the error.
-    const char* what() const noexcept 
+    const char* what() const noexcept
     {
         return m_errinfo;
     }
 
     /// Returns a pointer to the context object which generated the error
     /// notification.
-    const context* get_context_ptr() const noexcept 
+    const context* get_context_ptr() const noexcept
     {
         return m_context;
     }
 
     /// Returns a pointer to the private info memory block.
-    const void* get_private_info_ptr() const noexcept 
+    const void* get_private_info_ptr() const noexcept
     {
         return m_private_info;
     }
 
     /// Returns the size of the private info memory block.
-    size_t get_private_info_size() const noexcept 
+    size_t get_private_info_size() const noexcept
     {
         return m_private_info_size;
     }

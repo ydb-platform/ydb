@@ -1,6 +1,6 @@
 #include "histogram.h"
 
-#include <util/generic/cast.h> 
+#include <util/generic/cast.h>
 #include <util/generic/yexception.h>
 
 #include <contrib/libs/hdr_histogram/src/hdr_histogram.h>
@@ -24,7 +24,7 @@ namespace NHdr {
 
             IAllocator::TBlock mem = allocator->Allocate(histogramSize);
             struct hdr_histogram* histogram =
-                reinterpret_cast<struct hdr_histogram*>(mem.Data); 
+                reinterpret_cast<struct hdr_histogram*>(mem.Data);
 
             // memset will ensure that all of the function pointers are null
             memset(histogram, 0, histogramSize);

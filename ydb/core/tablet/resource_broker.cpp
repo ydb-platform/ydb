@@ -395,20 +395,20 @@ bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
     if (!task.TaskId) {
         do {
             id = std::make_pair(client, NextTaskId++);
-        } while (Tasks.contains(id)); 
+        } while (Tasks.contains(id));
         newTask->TaskId = id.second;
 
         LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
                   "Use ID %" PRIu64 " for submitted task",
                   id.second);
-    } else if (Tasks.contains(id)) { 
+    } else if (Tasks.contains(id)) {
         LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
             "SubmitTask failed for task %" PRIu64 " to %s: task with the same ID has been already submitted",
             task.TaskId, ToString(client).c_str());
         return false;
     }
 
-    if (!TaskConfigs.contains(newTask->Type)) 
+    if (!TaskConfigs.contains(newTask->Type))
         MissingTaskTypeCounter->Inc();
 
     Tasks.emplace(id, newTask);
@@ -668,7 +668,7 @@ void TScheduler::AssignTask(TTaskPtr &task, const TActorSystem &as)
     TString state = task->InFly ? "in-fly" : "waiting";
     TTaskQueuePtr queue = TaskConfig(task->Type).Queue;
 
-    if (!TaskConfigs.contains(task->Type)) { 
+    if (!TaskConfigs.contains(task->Type)) {
         LOG_ERROR(as, NKikimrServices::RESOURCE_BROKER,
                   "Assigning %s task '%s' of unknown type '%s' to default queue",
                   state.data(), task->GetIdString().data(), task->Type.data());
@@ -712,14 +712,14 @@ void TScheduler::AssignTask(TTaskPtr &task, const TActorSystem &as)
 
 const TScheduler::TTaskConfig &TScheduler::TaskConfig(const TString &type) const
 {
-    if (TaskConfigs.contains(type)) 
+    if (TaskConfigs.contains(type))
         return TaskConfigs.at(type);
     return TaskConfigs.at(NLocalDb::UnknownTaskName);
 }
 
 TScheduler::TTaskConfig &TScheduler::TaskConfig(const TString &type)
 {
-    if (TaskConfigs.contains(type)) 
+    if (TaskConfigs.contains(type))
         return TaskConfigs.at(type);
     return TaskConfigs.at(NLocalDb::UnknownTaskName);
 }
@@ -746,7 +746,7 @@ void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSyst
                                              ResourceLimit, TotalCounters);
         Queues.emplace(queue->Name, queue);
     }
-    Y_VERIFY(Queues.contains(NLocalDb::DefaultQueueName), "default queue '%s' wasn't found in config", NLocalDb::DefaultQueueName.data()); 
+    Y_VERIFY(Queues.contains(NLocalDb::DefaultQueueName), "default queue '%s' wasn't found in config", NLocalDb::DefaultQueueName.data());
 
     // Read new tasks config.
     TaskConfigs.clear();
@@ -755,12 +755,12 @@ void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSyst
         TTaskConfig taskConfig(task.GetName(),
                                TDuration::MicroSeconds(task.GetDefaultDuration()),
                                counters);
-        Y_VERIFY(Queues.contains(task.GetQueueName()), " queue '%s' wasn't found in config", task.GetQueueName().data()); 
+        Y_VERIFY(Queues.contains(task.GetQueueName()), " queue '%s' wasn't found in config", task.GetQueueName().data());
         taskConfig.Queue = Queues.at(task.GetQueueName());
 
         TaskConfigs.emplace(taskConfig.Name, taskConfig);
     }
-    Y_VERIFY(TaskConfigs.contains(NLocalDb::UnknownTaskName), "task '%s' wasn't found in config", NLocalDb::UnknownTaskName.data()); 
+    Y_VERIFY(TaskConfigs.contains(NLocalDb::UnknownTaskName), "task '%s' wasn't found in config", NLocalDb::UnknownTaskName.data());
 
     // Move all tasks to queues.
     for (auto &entry : Tasks)
@@ -1190,7 +1190,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     for (auto &queue : rec.GetQueues())
         queues.insert(queue.GetName());
     for (auto &task : rec.GetTasks()) {
-        if (!queues.contains(task.GetQueueName())) { 
+        if (!queues.contains(task.GetQueueName())) {
             error = Sprintf("task '%s' uses unknown queue '%s'", task.GetName().data(), task.GetQueueName().data());
             success = false;
             break;
@@ -1209,10 +1209,10 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     if (!success) {
         response->Record.SetSuccess(false);
         response->Record.SetMessage(error);
-    } else if (!queues.contains(NLocalDb::DefaultQueueName)) { 
+    } else if (!queues.contains(NLocalDb::DefaultQueueName)) {
         response->Record.SetSuccess(false);
         response->Record.SetMessage("no default queue in config");
-    } else if (!tasks.contains(NLocalDb::UnknownTaskName)) { 
+    } else if (!tasks.contains(NLocalDb::UnknownTaskName)) {
         response->Record.SetSuccess(false);
         response->Record.SetMessage("no unknown task in config");
     } else {

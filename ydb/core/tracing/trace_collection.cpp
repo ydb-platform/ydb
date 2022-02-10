@@ -121,7 +121,7 @@ void TTraceCollection::GetTabletIDs(TVector<ui64>& tabletIDs) const {
 
 
 bool TTraceCollection::HasTabletID(ui64 tabletID) const {
-    return Indexes.contains(tabletID); 
+    return Indexes.contains(tabletID);
 }
 
 bool TTraceCollection::GetTraces(ui64 tabletID, TVector<TTraceID>& result) {

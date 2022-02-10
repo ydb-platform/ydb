@@ -3,7 +3,7 @@
 #include "future.h"
 
 #include <util/generic/function.h>
-#include <util/thread/pool.h> 
+#include <util/thread/pool.h>
 
 namespace NThreading {
     /**
@@ -18,7 +18,7 @@ namespace NThreading {
  * unittest.
  */
     template <typename Func>
-    TFuture<TFutureType<TFunctionResult<Func>>> Async(Func&& func, IThreadPool& queue) { 
+    TFuture<TFutureType<TFunctionResult<Func>>> Async(Func&& func, IThreadPool& queue) {
         auto promise = NewPromise<TFutureType<TFunctionResult<Func>>>();
         auto lambda = [promise, func = std::forward<Func>(func)]() mutable {
             NImpl::SetValue(promise, func);

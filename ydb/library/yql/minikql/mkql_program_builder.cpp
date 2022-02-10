@@ -241,7 +241,7 @@ std::string_view ScriptTypeAsStr(EScriptType type) {
 }
 
 EScriptType ScriptTypeFromStr(std::string_view str) {
-    TString lowerStr = TString(str); 
+    TString lowerStr = TString(str);
     lowerStr.to_lower();
 #define MKQL_SCRIPT_TYPE_FROM_STR(name, value, lowerName) \
     if (lowerStr == #lowerName) return EScriptType::name;

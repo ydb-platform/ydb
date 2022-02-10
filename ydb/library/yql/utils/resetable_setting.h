@@ -37,16 +37,16 @@ public:
 
     const TSet& GetValueSet() const {
         YQL_ENSURE(IsSet());
-        return std::get<TSet>(*Value); 
+        return std::get<TSet>(*Value);
     }
 
     const TReset& GetValueReset() const {
         YQL_ENSURE(!IsSet());
-        return std::get<TReset>(*Value); 
+        return std::get<TReset>(*Value);
     }
 
 private:
-    TMaybe<std::variant<TSet, TReset>> Value; 
+    TMaybe<std::variant<TSet, TReset>> Value;
 };
 
 template <typename S, typename R>

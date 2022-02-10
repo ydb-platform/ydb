@@ -129,7 +129,7 @@ public:
     void LegacyInitSchema(TTransactionContext& txc) {
         const auto& tableScheme = Ev->Get()->Record.GetUserTableScheme();
         TString tableName = TDataShard::Schema::UserTablePrefix + tableScheme.GetName();
-        if (!txc.DB.GetScheme().TableNames.contains(tableName)) { // TODO: properly check if table has already been created 
+        if (!txc.DB.GetScheme().TableNames.contains(tableName)) { // TODO: properly check if table has already been created
             NKikimrSchemeOp::TTableDescription newTableScheme(tableScheme);
 
             // Get this shard's range boundaries from the split/merge description

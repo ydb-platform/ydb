@@ -698,5 +698,5 @@ void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(
         NKikimr::NGRpcService::TEvCoordinationSessionRequest::TPtr& ev,
         const NActors::TActorContext& ctx)
 {
-    ctx.Register(new NKikimr::NKesus::TGRpcSessionActor(std::move(ev->Release()))); 
+    ctx.Register(new NKikimr::NKesus::TGRpcSessionActor(std::move(ev->Release())));
 }

@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NDriverClient {
     struct TCliCmdConfig : TNonCopyable {
-        TMaybe<std::variant<NMsgBusProxy::TMsgBusClientConfig, NGRpcProxy::TGRpcClientConfig>> ClientConfig; 
+        TMaybe<std::variant<NMsgBusProxy::TMsgBusClientConfig, NGRpcProxy::TGRpcClientConfig>> ClientConfig;
         NMsgBusProxy::TMsgBusClientConfig MsgBusClientConfig;
         TString Address;
 
@@ -43,7 +43,7 @@ namespace NDriverClient {
                 return data.GetTransportStatus();
             };
             if (const auto& conf = ClientConfig) {
-                return std::visit(std::move(visitor), *conf); 
+                return std::visit(std::move(visitor), *conf);
             } else {
                 Y_FAIL("Client configuration is not provided");
             }

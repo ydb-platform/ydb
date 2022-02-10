@@ -33,7 +33,7 @@ namespace NBitIO {
     protected:
         template <ui32 bits>
         Y_FORCE_INLINE bool ReadKImpl(ui64& result) {
-            result = (ReadUnaligned<ui64>((const void*)(Start + (BOffset >> 3))) >> (BOffset & 7)) & Mask64(bits); 
+            result = (ReadUnaligned<ui64>((const void*)(Start + (BOffset >> 3))) >> (BOffset & 7)) & Mask64(bits);
             BOffset += bits;
             if (BOffset < FakeStart)
                 return true;
@@ -79,7 +79,7 @@ namespace NBitIO {
     protected:
         template <ui64 bits, typename T>
         Y_FORCE_INLINE static void CopyToResultK(T& result, ui64 r64, ui64 skipbits) {
-            result = (result & ~(Mask64(bits) << skipbits)) | (r64 << skipbits); 
+            result = (result & ~(Mask64(bits) << skipbits)) | (r64 << skipbits);
         }
 
         template <typename T>
@@ -92,8 +92,8 @@ namespace NBitIO {
         Y_FORCE_INLINE bool ReadWordsImpl(ui64& data) {
             data = 0;
 
-            const ui64 haveMore = NthBit64(bits); 
-            const ui64 mask = Mask64(bits); 
+            const ui64 haveMore = NthBit64(bits);
+            const ui64 mask = Mask64(bits);
             ui64 current = 0;
             ui64 byteNo = 0;
 

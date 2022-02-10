@@ -29,7 +29,7 @@ namespace {
 class TValue {
     struct TSpecialType {
         bool operator<(const TSpecialType&) const {
-            return false; // to make std::variant's comparator happy 
+            return false; // to make std::variant's comparator happy
         }
     };
 
@@ -91,14 +91,14 @@ public:
     ui64 MemSize() const {
         switch (GetType()) {
         case EType::String:
-            return sizeof(Value) + std::get<TString>(Value).size(); 
+            return sizeof(Value) + std::get<TString>(Value).size();
         default:
             return sizeof(Value);
         }
     }
 
 private:
-    std::variant< 
+    std::variant<
         TInf,
         TNull,
         TString,

@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         bool Expect100Continue = false;
     };
 
-    class TFailingMtpQueue: public TSimpleThreadPool { 
+    class TFailingMtpQueue: public TSimpleThreadPool {
     private:
         bool FailOnAdd_ = false;
 
@@ -297,16 +297,16 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         void SetFailOnAdd(bool fail = true) {
             FailOnAdd_ = fail;
         }
-        [[nodiscard]] bool Add(IObjectInQueue* pObj) override { 
+        [[nodiscard]] bool Add(IObjectInQueue* pObj) override {
             if (FailOnAdd_) {
                 return false;
             }
 
-            return TSimpleThreadPool::Add(pObj); 
+            return TSimpleThreadPool::Add(pObj);
         }
         TFailingMtpQueue() = default;
-        TFailingMtpQueue(IThreadFactory* pool) 
-            : TSimpleThreadPool(pool) 
+        TFailingMtpQueue(IThreadFactory* pool)
+            : TSimpleThreadPool(pool)
         {
         }
     };
@@ -434,9 +434,9 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         THttpServer::TOptions options(port);
         options.EnableKeepAlive(true);
         options.EnableCompression(true);
-        using TFailingServerMtpQueue = TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>; 
-        THttpServer::TMtpQueueRef mainWorkers = new TFailingServerMtpQueue(&serverImpl, SystemThreadFactory()); 
-        THttpServer::TMtpQueueRef failWorkers = new TThreadPool(SystemThreadFactory()); 
+        using TFailingServerMtpQueue = TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>;
+        THttpServer::TMtpQueueRef mainWorkers = new TFailingServerMtpQueue(&serverImpl, SystemThreadFactory());
+        THttpServer::TMtpQueueRef failWorkers = new TThreadPool(SystemThreadFactory());
         THttpServer server(&serverImpl, mainWorkers, failWorkers, options);
 
         UNIT_ASSERT(server.Start());
@@ -703,7 +703,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
 
         for (bool keepAlive : trueFalse) {
             server.ResetCounters();
-            TVector<TAutoPtr<IThreadFactory::IThread>> threads; 
+            TVector<TAutoPtr<IThreadFactory::IThread>> threads;
 
             server.Busy(3);
             server.BusyThread();
@@ -715,7 +715,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                     r->KeepAliveConnection = keepAlive;
                     r->Execute();
                 };
-                threads.push_back(SystemThreadFactory()->Run(func)); 
+                threads.push_back(SystemThreadFactory()->Run(func));
             }
 
             server.FreeThread(); // all threads get connection & go to processing

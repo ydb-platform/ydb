@@ -1171,7 +1171,7 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
         //Cerr << res.DebugString() << Endl;
         for (auto &row : res.rows()) {
             auto &val = row.items(0).text_value();
-            UNIT_ASSERT(ref.contains(val)); 
+            UNIT_ASSERT(ref.contains(val));
             ref.erase(val);
         }
 
@@ -1442,7 +1442,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
     auto captureRS = [&](TTestActorRuntimeBase&,
                          TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-            readSets.push_back(std::move(event)); 
+            readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
         }
         return TTestActorRuntime::EEventAction::PROCESS;
@@ -1578,7 +1578,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) {
     auto captureRS = [&](TTestActorRuntimeBase&,
                          TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-            readSets.push_back(std::move(event)); 
+            readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
         }
         return TTestActorRuntime::EEventAction::PROCESS;
@@ -1713,7 +1713,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) {
     auto captureRS = [&](TTestActorRuntimeBase&,
                          TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-            readSets.push_back(std::move(event)); 
+            readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
         }
         return TTestActorRuntime::EEventAction::PROCESS;
@@ -1823,7 +1823,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
     auto captureRS = [&](TTestActorRuntimeBase&,
                          TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-            readSets.push_back(std::move(event)); 
+            readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
         }
         return TTestActorRuntime::EEventAction::PROCESS;
@@ -1945,7 +1945,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     auto captureRS = [&](TTestActorRuntimeBase&,
                          TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-            readSets.push_back(std::move(event)); 
+            readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
         }
         return TTestActorRuntime::EEventAction::PROCESS;
@@ -2090,7 +2090,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     auto captureRS = [&](TTestActorRuntimeBase&,
                          TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-            readSets.push_back(std::move(event)); 
+            readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
         }
         return TTestActorRuntime::EEventAction::PROCESS;
@@ -2231,7 +2231,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
     auto captureRS = [&](TTestActorRuntimeBase&,
                          TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-            readSets.push_back(std::move(event)); 
+            readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
         }
         return TTestActorRuntime::EEventAction::PROCESS;
@@ -2390,7 +2390,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
                 break;
             }
             case TEvTxProcessing::EvReadSet: {
-                readSets.push_back(std::move(event)); 
+                readSets.push_back(std::move(event));
                 return TTestActorRuntime::EEventAction::DROP;
             }
             case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0 /* EvProgressTransaction */: {
@@ -2398,7 +2398,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
                 if (blockProgressEvents && tabletId == table1shards[0]) {
                     if (bypassProgressEvents == 0) {
                         Cerr << "... captured TEvProgressTransaction" << Endl;
-                        progressEvents.push_back(std::move(event)); 
+                        progressEvents.push_back(std::move(event));
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     Cerr << "... bypass for TEvProgressTransaction" << Endl;
@@ -2597,14 +2597,14 @@ Y_UNIT_TEST_QUAD(TestCopyTableNoDeadlock, UseMvcc, UseNewEngine) {
             case TEvTxProcessing::EvReadSet:
                 Cerr << "---- observed EvReadSet ----" << Endl;
                 if (captureReadSets) {
-                    readSets.push_back(std::move(event)); 
+                    readSets.push_back(std::move(event));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
             case TEvTxProxy::EvProposeTransaction:
                 Cerr << "---- observed EvProposeTransaction ----" << Endl;
                 if (captureTxProposes) {
-                    txProposes.push_back(std::move(event)); 
+                    txProposes.push_back(std::move(event));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
@@ -2771,21 +2771,21 @@ Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) {
             case TEvDataShard::EvProposeTransaction:
                 Cerr << "---- observed EvProposeTransaction ----" << Endl;
                 if (captureTxPropose) {
-                    txProposes.push_back(std::move(event)); 
+                    txProposes.push_back(std::move(event));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
             case TEvDataShard::EvProposeTransactionResult:
                 Cerr << "---- observed EvProposeTransactionResult ----" << Endl;
                 if (captureTxProposeResult) {
-                    txProposeResults.push_back(std::move(event)); 
+                    txProposeResults.push_back(std::move(event));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
             case TEvDataShard::EvCancelTransactionProposal:
                 Cerr << "---- observed EvCancelTransactionProposal ----" << Endl;
                 if (captureTxCancel) {
-                    txCancels.push_back(std::move(event)); 
+                    txCancels.push_back(std::move(event));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
@@ -2950,7 +2950,7 @@ Y_UNIT_TEST_QUAD(TestPlannedTimeoutSplit, UseMvcc, UseNewEngine) {
         switch (event->GetTypeRewrite()) {
             case TEvTxProxy::EvProposeTransaction: {
                 Cerr << "---- observed EvProposeTransaction ----" << Endl;
-                txProposes.push_back(std::move(event)); 
+                txProposes.push_back(std::move(event));
                 return TTestActorRuntime::EEventAction::DROP;
             }
             default:
@@ -3075,7 +3075,7 @@ Y_UNIT_TEST_QUAD(TestPlannedHalfOverloadedSplit, UseMvcc, UseNewEngine) {
                 Cerr << "---- observed EvProposeTransactionResult ----" << Endl;
                 if (txProposes.size() == 0) {
                     // Capture the first propose
-                    txProposes.push_back(std::move(event)); 
+                    txProposes.push_back(std::move(event));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
@@ -3084,7 +3084,7 @@ Y_UNIT_TEST_QUAD(TestPlannedHalfOverloadedSplit, UseMvcc, UseNewEngine) {
                 Cerr << "---- observed EvProposeTransactionResult ----" << Endl;
                 if (txProposes.size() > 0) {
                     // Capture all propose results
-                    txProposeResults.push_back(std::move(event)); 
+                    txProposeResults.push_back(std::move(event));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
@@ -3253,7 +3253,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
             case TEvTxProcessing::EvReadSet:
                 Cerr << "---- observed EvReadSet ----" << Endl;
                 if (captureReadSets) {
-                    readSets.push_back(std::move(event)); 
+                    readSets.push_back(std::move(event));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
@@ -4034,7 +4034,7 @@ Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine)
     auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
         switch (ev->GetTypeRewrite()) {
             case TEvTxProcessing::TEvReadSet::EventType: {
-                readSets.push_back(std::move(ev)); 
+                readSets.push_back(std::move(ev));
                 return TTestActorRuntime::EEventAction::DROP;
             }
             case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 2 /* EvDelayedProposeTransaction */: {
@@ -4153,7 +4153,7 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngi
         switch (ev->GetTypeRewrite()) {
             case TEvTxProcessing::TEvReadSet::EventType: {
                 Cerr << "... captured readset" << Endl;
-                readSets.push_back(std::move(ev)); 
+                readSets.push_back(std::move(ev));
                 return TTestActorRuntime::EEventAction::DROP;
             }
         }
@@ -4248,7 +4248,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) {
                 auto* msg = ev->Get<TEvTablet::TEvCommit>();
                 if (isTableShard(msg->TabletID)) {
                     Cerr << "... blocked commit for tablet " << msg->TabletID << Endl;
-                    blockedCommits.push_back(std::move(ev)); 
+                    blockedCommits.push_back(std::move(ev));
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 break;
@@ -4470,7 +4470,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLockOutOfOrder, UseNewEngine) {
         switch (ev->GetTypeRewrite()) {
             case TEvTxProcessing::TEvReadSet::EventType: {
                 Cerr << "... captured readset" << Endl;
-                readSets.push_back(std::move(ev)); 
+                readSets.push_back(std::move(ev));
                 return TTestActorRuntime::EEventAction::DROP;
             }
         }
@@ -4585,7 +4585,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterStuckRW, UseNewEngine) {
         switch (ev->GetTypeRewrite()) {
             case TEvTxProcessing::TEvReadSet::EventType: {
                 Cerr << "... captured readset" << Endl;
-                readSets.push_back(THolder(ev.Release())); 
+                readSets.push_back(THolder(ev.Release()));
                 return TTestActorRuntime::EEventAction::DROP;
             }
         }

@@ -39,7 +39,7 @@ namespace NTxMediator {
         }
 
         struct TCmpOrderId {
-            bool operator()(const TTx &left, const TTx &right) const noexcept { 
+            bool operator()(const TTx &left, const TTx &right) const noexcept {
                 return left.TxId < right.TxId;
             }
         };

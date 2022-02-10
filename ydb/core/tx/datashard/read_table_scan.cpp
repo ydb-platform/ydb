@@ -289,9 +289,9 @@ public:
         , Finished(false)
     {
         if (tx.HasApiVersion() && tx.GetApiVersion() == NKikimrTxUserProxy::TReadTableTransaction::YDB_V1) {
-            Writer = MakeHolder<TRowsToYdbResult>(tx); 
+            Writer = MakeHolder<TRowsToYdbResult>(tx);
         } else {
-            Writer = MakeHolder<TRowsToOldResult>(tx); 
+            Writer = MakeHolder<TRowsToOldResult>(tx);
         }
 
         for (auto &col : tx.GetColumns())

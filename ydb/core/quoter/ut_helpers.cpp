@@ -308,7 +308,7 @@ THolder<TEventHandle<TEvQuota::TEvProxySession>> TKesusProxyTestSetup::ProxyRequ
     TAutoPtr<IEventHandle> handle;
     TEvQuota::TEvProxySession* ret = Runtime->GrabEdgeEvent<TEvQuota::TEvProxySession>(handle);
     UNIT_ASSERT_EQUAL_C(ret->Result, expectedResult, "Actual result: " << static_cast<int>(ret->Result) << ", but expected: " << static_cast<int>(expectedResult));
-    return THolder<TEventHandle<TEvQuota::TEvProxySession>>{static_cast<TEventHandle<TEvQuota::TEvProxySession>*>(handle.Release())}; 
+    return THolder<TEventHandle<TEvQuota::TEvProxySession>>{static_cast<TEventHandle<TEvQuota::TEvProxySession>*>(handle.Release())};
 }
 
 void TKesusProxyTestSetup::SendProxyStats(TDeque<TEvQuota::TProxyStat> stats) {
@@ -319,7 +319,7 @@ void TKesusProxyTestSetup::SendProxyStats(TDeque<TEvQuota::TProxyStat> stats) {
 THolder<TEventHandle<TEvQuota::TEvProxyUpdate>> TKesusProxyTestSetup::GetProxyUpdate() {
     TAutoPtr<IEventHandle> handle;
     Runtime->GrabEdgeEvent<TEvQuota::TEvProxyUpdate>(handle);
-    return THolder<TEventHandle<TEvQuota::TEvProxyUpdate>>{static_cast<TEventHandle<TEvQuota::TEvProxyUpdate>*>(handle.Release())}; 
+    return THolder<TEventHandle<TEvQuota::TEvProxyUpdate>>{static_cast<TEventHandle<TEvQuota::TEvProxyUpdate>*>(handle.Release())};
 }
 
 void TKesusProxyTestSetup::SendCloseSession(const TString& resource, ui64 resourceId) {

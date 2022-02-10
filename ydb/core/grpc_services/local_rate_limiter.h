@@ -64,7 +64,7 @@ struct TRlConfig {
     struct TOnRespAction {
     };
 
-    using TActions = std::variant<TOnReqAction, TOnRespAction>; 
+    using TActions = std::variant<TOnReqAction, TOnRespAction>;
 
     TRlConfig(const TString& coordinationNodeKey, const TString& resourceKey, const TVector<TActions>& actions)
         : CoordinationNodeKey(coordinationNodeKey)

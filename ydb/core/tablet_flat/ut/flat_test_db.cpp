@@ -245,7 +245,7 @@ public:
         FillKey(root, fk, key, true);
 
         // Copy previous value from the commited data
-        if (!TxChanges[root].contains(fk) && Tables[root].contains(fk)) { 
+        if (!TxChanges[root].contains(fk) && Tables[root].contains(fk)) {
             TxChanges[root][fk] = Tables[root][fk];
         }
 

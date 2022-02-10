@@ -120,7 +120,7 @@ protected:
     bool ReadyToCreateChildren() const;
 
     // true returned from this function means that we called Die().
-    [[nodiscard]] bool CreateChildren(const TActorContext& ctx); 
+    [[nodiscard]] bool CreateChildren(const TActorContext& ctx);
 
     virtual bool ReadyForAnswer(const TActorContext& ctx);
     void AnswerAndDie(const TActorContext& ctx);
@@ -242,7 +242,7 @@ protected:
 
     // Wait in case TPipeEvent is not TEvTabletPipe::TEvClientConnected.
     // true returned from this function means that we called Die().
-    [[nodiscard]] bool WaitAllPipeEvents(const TActorContext& ctx) { 
+    [[nodiscard]] bool WaitAllPipeEvents(const TActorContext& ctx) {
         static_assert(TPipeEvent::EventType != TEvTabletPipe::TEvClientConnected::EventType, "Use WaitAllConnections()");
 
         if (EventsAreReady()) {
@@ -257,7 +257,7 @@ protected:
 
     // Wait in case TPipeEvent is TEvTabletPipe::TEvClientConnected.
     // true returned from this function means that we called Die().
-    [[nodiscard]] bool WaitAllConnections(const TActorContext& ctx) { 
+    [[nodiscard]] bool WaitAllConnections(const TActorContext& ctx) {
         static_assert(TPipeEvent::EventType == TEvTabletPipe::TEvClientConnected::EventType, "Use WaitAllPipeEvents()");
 
         if (EventsAreReady()) {
@@ -271,19 +271,19 @@ protected:
     }
 
     // true returned from this function means that we called Die().
-    [[nodiscard]] virtual bool OnPipeEvent(ui64 tabletId, typename TPipeEvent::TPtr& ev, const TActorContext& /*ctx*/) { 
+    [[nodiscard]] virtual bool OnPipeEvent(ui64 tabletId, typename TPipeEvent::TPtr& ev, const TActorContext& /*ctx*/) {
         Y_VERIFY(!IsIn(PipeAnswers, tabletId) || !PipeAnswers.find(tabletId)->second);
         PipeAnswers[tabletId] = ev;
         return false;
     }
 
     // true returned from this function means that we called Die().
-    [[nodiscard]] virtual bool OnClientConnected(TEvTabletPipe::TEvClientConnected::TPtr& /*ev*/, const TActorContext& /*ctx*/) { 
+    [[nodiscard]] virtual bool OnClientConnected(TEvTabletPipe::TEvClientConnected::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
         return false;
     }
 
     // true returned from this function means that we called Die().
-    [[nodiscard]] virtual bool OnPipeEventsAreReady(const TActorContext& ctx) = 0; 
+    [[nodiscard]] virtual bool OnPipeEventsAreReady(const TActorContext& ctx) = 0;
 
     void Die(const TActorContext& ctx) override {
         for (const auto& pipe : Pipes) {

@@ -213,7 +213,7 @@ namespace NKikimr {
             UpdateVPatchCtx();
             std::unique_ptr<IActor> actor{CreateSkeletonVPatchActor(SelfId(), GInfo->Type, ev, now, SkeletonFrontIDPtr,
                     IFaceMonGroup->PatchFoundPartsMsgsPtr(), IFaceMonGroup->PatchResMsgsPtr(), VPatchCtx,
-                    VCtx->VDiskLogPrefix, Db->GetVDiskIncarnationGuid())}; 
+                    VCtx->VDiskLogPrefix, Db->GetVDiskIncarnationGuid())};
             TActorId vPatchActor = Register(actor.release());
             VPatchActors.emplace(patchedBlobId, vPatchActor);
         }

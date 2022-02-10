@@ -185,7 +185,7 @@ protected:
         std::size_t max_limit
     ) const
 #if BOOST_WORKAROUND(__IBMCPP__, BOOST_TESTED_AT(600))
-    noexcept 
+    noexcept
 #endif
     ;
 
@@ -197,7 +197,7 @@ protected:
         std::size_t max_limit
     ) const
 #if BOOST_WORKAROUND(__IBMCPP__, BOOST_TESTED_AT(600))
-    noexcept 
+    noexcept
 #endif
     {
         return do_length(

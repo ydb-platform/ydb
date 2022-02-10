@@ -13,18 +13,18 @@ class TAutoLockFreeQueue;
 template <class T>
 class TLockFreeStack;
 
-class IThreadFactory; 
+class IThreadFactory;
 
 struct IObjectInQueue;
-class TThreadFactoryHolder; 
+class TThreadFactoryHolder;
 
 using TThreadFunction = std::function<void()>;
 
-class IThreadPool; 
-class TFakeThreadPool; 
-class TThreadPool; 
-class TAdaptiveThreadPool; 
-class TSimpleThreadPool; 
+class IThreadPool;
+class TFakeThreadPool;
+class TThreadPool;
+class TAdaptiveThreadPool;
+class TSimpleThreadPool;
 
 template <class TQueueType, class TSlave>
-class TThreadPoolBinder; 
+class TThreadPoolBinder;

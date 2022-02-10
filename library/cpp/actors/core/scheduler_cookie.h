@@ -10,9 +10,9 @@ namespace NActors {
         }
 
     public:
-        virtual bool Detach() noexcept = 0; 
-        virtual bool DetachEvent() noexcept = 0; 
-        virtual bool IsArmed() noexcept = 0; 
+        virtual bool Detach() noexcept = 0;
+        virtual bool DetachEvent() noexcept = 0;
+        virtual bool IsArmed() noexcept = 0;
 
         static ISchedulerCookie* Make2Way();
         static ISchedulerCookie* Make3Way();
@@ -36,7 +36,7 @@ namespace NActors {
             Detach();
         }
 
-        bool operator==(const TSchedulerCookieHolder& x) const noexcept { 
+        bool operator==(const TSchedulerCookieHolder& x) const noexcept {
             return (Cookie == x.Cookie);
         }
 
@@ -55,7 +55,7 @@ namespace NActors {
             Cookie = cookie;
         }
 
-        bool Detach() noexcept { 
+        bool Detach() noexcept {
             if (Cookie) {
                 const bool res = Cookie->Detach();
                 Cookie = nullptr;
@@ -65,7 +65,7 @@ namespace NActors {
             }
         }
 
-        bool DetachEvent() noexcept { 
+        bool DetachEvent() noexcept {
             if (Cookie) {
                 const bool res = Cookie->DetachEvent();
                 Cookie = nullptr;

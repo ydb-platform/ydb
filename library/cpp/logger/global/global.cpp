@@ -8,14 +8,14 @@ static void DoInitGlobalLog(THolder<TGlobalLog> logger, THolder<ILoggerFormatter
     TLoggerFormatterOperator::Set(formatter.Release());
 }
 
-void DoInitGlobalLog(const TString& logType, const int logLevel, const bool rotation, const bool startAsDaemon, THolder<ILoggerFormatter> formatter, bool threaded) { 
-    DoInitGlobalLog( 
-        MakeHolder<TGlobalLog>( 
-            CreateLogBackend( 
-                NLoggingImpl::PrepareToOpenLog(logType, logLevel, rotation, startAsDaemon), 
-                (ELogPriority)logLevel, 
-                threaded)), 
-        std::move(formatter)); 
+void DoInitGlobalLog(const TString& logType, const int logLevel, const bool rotation, const bool startAsDaemon, THolder<ILoggerFormatter> formatter, bool threaded) {
+    DoInitGlobalLog(
+        MakeHolder<TGlobalLog>(
+            CreateLogBackend(
+                NLoggingImpl::PrepareToOpenLog(logType, logLevel, rotation, startAsDaemon),
+                (ELogPriority)logLevel,
+                threaded)),
+        std::move(formatter));
 }
 
 void DoInitGlobalLog(THolder<TLogBackend> backend, THolder<ILoggerFormatter> formatter) {

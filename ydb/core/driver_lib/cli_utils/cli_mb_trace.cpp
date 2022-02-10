@@ -25,7 +25,7 @@ int MessageBusTrace(TCommandConfig &cmdConf, int argc, char** argv) {
     TCmdMessageBusTraceConfig messageBusTraceConfig;
     messageBusTraceConfig.Parse(argc, argv);
 
-    NMsgBusProxy::TMsgBusClient client(std::get<NMsgBusProxy::TMsgBusClientConfig>(*messageBusTraceConfig.ClientConfig)); 
+    NMsgBusProxy::TMsgBusClient client(std::get<NMsgBusProxy::TMsgBusClientConfig>(*messageBusTraceConfig.ClientConfig));
     client.Init();
 
     if (messageBusTraceConfig.Command == "play") {

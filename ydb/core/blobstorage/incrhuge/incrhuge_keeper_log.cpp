@@ -325,7 +325,7 @@ namespace NKikimr {
 
         struct TLogger::TChunkQueueItem {
             // log entry content
-            std::variant<TChunkRecordMerger::TChunkAllocation, TChunkRecordMerger::TChunkDeletion, 
+            std::variant<TChunkRecordMerger::TChunkAllocation, TChunkRecordMerger::TChunkDeletion,
                 TChunkRecordMerger::TCompleteChunk, NKikimrVDiskData::TIncrHugeChunks> Content;
 
             // commit chunks
@@ -347,7 +347,7 @@ namespace NKikimr {
         struct TLogger::TDeleteQueueItem {
             // actual record content depending on its type; for blob deletes it contains TBlobDeletes item, for
             // entrypoint -- full record that; this record will be simply merged into confirmed state upon success
-            std::variant<TDeleteRecordMerger::TBlobDeletes, TDeleteRecordMerger::TDeleteChunk, 
+            std::variant<TDeleteRecordMerger::TBlobDeletes, TDeleteRecordMerger::TDeleteChunk,
                 NKikimrVDiskData::TIncrHugeDelete> Content;
 
             // vector of callbacks that are invoked on success or failure of logging
@@ -422,7 +422,7 @@ namespace NKikimr {
             TChunkQueueItem& item = ChunkQueue.back();
 
             // serialize it into string
-            TString data = std::visit([](const auto& content) { return TChunkRecordMerger::Serialize(content); }, item.Content); 
+            TString data = std::visit([](const auto& content) { return TChunkRecordMerger::Serialize(content); }, item.Content);
 
             // generate LSN
             item.Lsn = Lsn++;
@@ -467,9 +467,9 @@ namespace NKikimr {
                     ConfirmedChunkMerger = TChunkRecordMerger();
                 }
                 // update confirmed state
-                std::visit([this](const auto& content) { ConfirmedChunkMerger(content); }, item.Content); 
+                std::visit([this](const auto& content) { ConfirmedChunkMerger(content); }, item.Content);
                 // if it was chunk deletion, propagate this information to deleter state
-                if (auto *record = std::get_if<TChunkRecordMerger::TChunkDeletion>(&item.Content)) { 
+                if (auto *record = std::get_if<TChunkRecordMerger::TChunkDeletion>(&item.Content)) {
                     IHLOG_DEBUG(ctx, "DeleteChunk ChunkIdx# %" PRIu32 " ChunkSerNum# %s",
                             record->ChunkIdx, record->ChunkSerNum.ToString().data());
 
@@ -612,7 +612,7 @@ namespace NKikimr {
                 merger = ConfirmedDeletesMerger;
             }
             for (; it != DeleteQueue.end(); ++it) {
-                std::visit([&merger](const auto& content) { merger(content); }, it->Content); 
+                std::visit([&merger](const auto& content) { merger(content); }, it->Content);
             }
 
             // create new log queue item
@@ -650,7 +650,7 @@ namespace NKikimr {
             };
 
             // serialize it into string, depending on its type
-            TString data = std::visit([](const auto& content) { return TDeleteRecordMerger::Serialize(content); }, item.Content); 
+            TString data = std::visit([](const auto& content) { return TDeleteRecordMerger::Serialize(content); }, item.Content);
 
             // format commit record
             NPDisk::TCommitRecord commit;
@@ -684,7 +684,7 @@ namespace NKikimr {
                 // update confirmed state
                 IHLOG_DEBUG(ctx, "ApplyLogDeleteItem Entrypoint# %s Lsn# %" PRIu64
                         " Virtual# %s", item.Entrypoint ? "true" : "false", item.Lsn, item.Virtual ? "true" : "false");
-                std::visit([this](const auto& content) { ConfirmedDeletesMerger(content); }, item.Content); 
+                std::visit([this](const auto& content) { ConfirmedDeletesMerger(content); }, item.Content);
             } else {
                 // set failure expected flag for all pending items -- they are already in flight and should also fail
                 for (TDeleteQueueItem& item : DeleteQueue) {

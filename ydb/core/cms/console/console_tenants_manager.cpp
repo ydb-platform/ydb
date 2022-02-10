@@ -1052,7 +1052,7 @@ bool TTenantsManager::TTenantsConfig::Parse(const NKikimrConsole::TTenantsConfig
     DefaultComputationalUnitsQuota = config.GetDefaultComputationalUnitsQuota();
 
     for (auto &kind : config.GetAvailabilityZoneKinds()) {
-        if (AvailabilityZones.contains(kind.GetKind())) { 
+        if (AvailabilityZones.contains(kind.GetKind())) {
             error = Sprintf("double definition of zone kind '%s'", kind.GetKind().data());
             return false;
         }
@@ -1087,13 +1087,13 @@ bool TTenantsManager::TTenantsConfig::Parse(const NKikimrConsole::TTenantsConfig
 
     THashMap<TString, TSet<TString>> zoneSets;
     for (auto &set : config.GetAvailabilityZoneSets()) {
-        if (zoneSets.contains(set.GetName())) { 
+        if (zoneSets.contains(set.GetName())) {
             error = Sprintf("double definition of zone set '%s'", set.GetName().data());
             return false;
         }
 
         for (auto &kind : set.GetZoneKinds()) {
-            if (!AvailabilityZones.contains(kind)) { 
+            if (!AvailabilityZones.contains(kind)) {
                 error = Sprintf("uknown zone kind '%s' in zone set '%s'", kind.data(), set.GetName().data());
                 return false;
             }
@@ -1106,7 +1106,7 @@ bool TTenantsManager::TTenantsConfig::Parse(const NKikimrConsole::TTenantsConfig
         switch (kind.GetResourceCase()) {
         case NKikimrConsole::TComputationalUnitKind::kTenantSlotType:
             {
-                if (TenantSlotKinds.contains(kind.GetKind())) { 
+                if (TenantSlotKinds.contains(kind.GetKind())) {
                     error = Sprintf("double definition of computational unit kind '%s'", kind.GetKind().data());
                     return false;
                 }
@@ -1115,7 +1115,7 @@ bool TTenantsManager::TTenantsConfig::Parse(const NKikimrConsole::TTenantsConfig
                 slotKind.Kind = kind.GetKind();
                 slotKind.TenantSlotType = kind.GetTenantSlotType();
 
-                if(!zoneSets.contains(kind.GetAvailabilityZoneSet())) { 
+                if(!zoneSets.contains(kind.GetAvailabilityZoneSet())) {
                     error = Sprintf("unknown zone set '%s' is referred from computational unit kind '%s'",
                                     kind.GetAvailabilityZoneSet().data(), kind.GetKind().data());
                     return false;
@@ -1368,7 +1368,7 @@ TTenantsManager::TTenant::TPtr TTenantsManager::FindComputationalUnitKindUsage(c
                                                                                 const TString &zone)
 {
     for (auto &pr : Tenants)
-        if (pr.second->ComputationalUnits.contains(std::make_pair(kind, zone))) 
+        if (pr.second->ComputationalUnits.contains(std::make_pair(kind, zone)))
             return pr.second;
     return nullptr;
 }
@@ -1391,7 +1391,7 @@ TTenantsManager::TTenant::TPtr TTenantsManager::GetTenant(const TDomainId &domai
 
 void TTenantsManager::AddTenant(TTenant::TPtr tenant)
 {
-    Y_VERIFY(!Tenants.contains(tenant->Path)); 
+    Y_VERIFY(!Tenants.contains(tenant->Path));
     Tenants[tenant->Path] = tenant;
     if (tenant->DomainId) {
         Y_VERIFY(!TenantIdToName.contains(tenant->DomainId));
@@ -1475,7 +1475,7 @@ bool TTenantsManager::CheckTenantSlots(TTenant::TPtr tenant, const NKikimrTenant
     for (auto &slot : state.GetRequiredSlots()) {
         TSlotDescription key(slot);
         auto count = slot.GetCount();
-        if (!tenant->Slots.contains(key) || tenant->Slots.at(key) != count) 
+        if (!tenant->Slots.contains(key) || tenant->Slots.at(key) != count)
             return false;
     }
 
@@ -1490,7 +1490,7 @@ bool TTenantsManager::MakeBasicPoolCheck(const TString &kind, ui64 size, Ydb::St
         return false;
     }
 
-    if (!Domain->StoragePoolTypes.contains(kind)) { 
+    if (!Domain->StoragePoolTypes.contains(kind)) {
         code = Ydb::StatusIds::BAD_REQUEST;
         error = Sprintf("Unsupported storage unit kind '%s'.", kind.data());
         return false;
@@ -1503,21 +1503,21 @@ bool TTenantsManager::MakeBasicComputationalUnitCheck(const TString &kind, const
                                                       Ydb::StatusIds::StatusCode &code,
                                                       TString &error)
 {
-    if (!Config.TenantSlotKinds.contains(kind)) { 
+    if (!Config.TenantSlotKinds.contains(kind)) {
         code = Ydb::StatusIds::BAD_REQUEST;
         error = Sprintf("Unknown computational unit kind '%s'", kind.data());
         return false;
     }
 
     if (zone) {
-        if (!Config.AvailabilityZones.contains(zone)) { 
+        if (!Config.AvailabilityZones.contains(zone)) {
             code = Ydb::StatusIds::BAD_REQUEST;
             error = Sprintf("Unknown availability zone '%s'", zone.data());
             return false;
         }
 
         auto &slotKind = Config.TenantSlotKinds.at(kind);
-        if (!slotKind.AllowedZones.contains(zone)) { 
+        if (!slotKind.AllowedZones.contains(zone)) {
             code = Ydb::StatusIds::BAD_REQUEST;
             error = Sprintf("Zone '%s' is unavailable for units of kind '%s'", zone.data(), kind.data());
             return false;
@@ -1652,7 +1652,7 @@ bool TTenantsManager::CheckTenantsConfig(const NKikimrConsole::TTenantsConfig &c
         // Check is some used zone within the unit kind is missing now.
         if (it->second.AllowedZones != pr.second.AllowedZones) {
             for (auto &zone : pr.second.AllowedZones) {
-                if (!it->second.AllowedZones.contains(zone)) { 
+                if (!it->second.AllowedZones.contains(zone)) {
                     auto tenant = FindComputationalUnitKindUsage(pr.first, zone);
                     if (tenant) {
                         code = Ydb::StatusIds::BAD_REQUEST;
@@ -2056,7 +2056,7 @@ TTenantsManager::TTenant::TPtr TTenantsManager::FillOperationStatus(const TStrin
                 Y_VERIFY(tenant->IsCreating() || tenant->IsConfiguring());
                 operation.set_ready(false);
             }
-        } else if (RemovedTenants.contains(path) 
+        } else if (RemovedTenants.contains(path)
                    && RemovedTenants.at(path).TxId == txId) {
             auto &removed = RemovedTenants.at(path);
             operation.set_ready(true);
@@ -2074,7 +2074,7 @@ TTenantsManager::TTenant::TPtr TTenantsManager::FillOperationStatus(const TStrin
         tenant = GetTenant(path);
         if (tenant && tenant->TxId == txId) {
             operation.set_ready(false);
-        } else if (RemovedTenants.contains(path) 
+        } else if (RemovedTenants.contains(path)
                    && RemovedTenants.at(path).TxId == txId) {
             operation.set_ready(true);
             operation.set_status(RemovedTenants.at(path).Code);

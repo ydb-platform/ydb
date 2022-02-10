@@ -64,7 +64,7 @@ namespace NActors {
     void TExecutorThread::UnregisterActor(TMailboxHeader* mailbox, ui64 localActorId) {
         IActor* actor = mailbox->DetachActor(localActorId);
         Ctx.DecrementActorsAliveByActivity(actor->GetActivityType());
-        DyingActors.push_back(THolder(actor)); 
+        DyingActors.push_back(THolder(actor));
     }
 
     void TExecutorThread::DropUnregistered() {
@@ -298,7 +298,7 @@ namespace NActors {
 #endif
 
         if (ThreadName) {
-            ::SetCurrentThreadName(ThreadName); 
+            ::SetCurrentThreadName(ThreadName);
         }
 
         ExecutorPool->SetRealTimeMode();

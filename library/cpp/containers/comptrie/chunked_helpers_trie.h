@@ -85,7 +85,7 @@ public:
     bool Get(const char* key, T* value) const {
         ui64 trieValue;
         if (Trie.Find(key, strlen(key), &trieValue)) {
-            *value = ReadUnaligned<T>(&trieValue); 
+            *value = ReadUnaligned<T>(&trieValue);
             return true;
         } else {
             return false;
@@ -95,7 +95,7 @@ public:
     T Get(const char* key, T def = T()) const {
         ui64 trieValue;
         if (Trie.Find(key, strlen(key), &trieValue)) {
-            return ReadUnaligned<T>(&trieValue); 
+            return ReadUnaligned<T>(&trieValue);
         } else {
             return def;
         }
@@ -126,9 +126,9 @@ public:
     }
 
     void Add(const char* key, const T& value) {
-        ui64 intValue = 0; 
-        memcpy(&intValue, &value, sizeof(T)); 
-        Builder.Add(key, strlen(key), intValue); 
+        ui64 intValue = 0;
+        memcpy(&intValue, &value, sizeof(T));
+        Builder.Add(key, strlen(key), intValue);
 #ifndef NDEBUG
         /*
         if (!IsSorted) {
@@ -140,15 +140,15 @@ public:
     }
 
     void Add(const TString& s, const T& value) {
-        ui64 intValue = 0; 
-        memcpy(&intValue, &value, sizeof(T)); 
-        Builder.Add(s.data(), s.size(), intValue); 
+        ui64 intValue = 0;
+        memcpy(&intValue, &value, sizeof(T));
+        Builder.Add(s.data(), s.size(), intValue);
     }
 
     bool Get(const char* key, T* value) const {
         ui64 trieValue;
         if (Builder.Find(key, strlen(key), &trieValue)) {
-            *value = ReadUnaligned<T>(&trieValue); 
+            *value = ReadUnaligned<T>(&trieValue);
             return true;
         } else {
             return false;
@@ -158,7 +158,7 @@ public:
     T Get(const char* key, T def = (T)0) const {
         ui64 trieValue;
         if (Builder.Find(key, strlen(key), &trieValue)) {
-            return ReadUnaligned<T>(&trieValue); 
+            return ReadUnaligned<T>(&trieValue);
         } else {
             return def;
         }

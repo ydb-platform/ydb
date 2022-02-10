@@ -35,14 +35,14 @@ public:
             auto &info = *response->Record.AddTasks();
 
             info.SetTaskId(task.TaskId);
-            if (State->ScheduledRequests.contains(task.RequestId)) { 
+            if (State->ScheduledRequests.contains(task.RequestId)) {
                 auto &req = State->ScheduledRequests.find(task.RequestId)->second;
                 for (auto &action : req.Request.GetActions())
                     *info.AddHosts() = action.GetHost();
                 info.SetStatus("in-process");
             } else {
                 for (auto &id : task.Permissions) {
-                    if (State->Permissions.contains(id)) 
+                    if (State->Permissions.contains(id))
                         *info.AddHosts() = State->Permissions.find(id)->second.Action.GetHost();
                 }
                 info.SetStatus("ok");

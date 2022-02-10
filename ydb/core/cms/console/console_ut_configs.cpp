@@ -208,7 +208,7 @@ void CollectItems(THashMap<ui64, TConfigItem::TPtr> &)
 void CollectItems(THashMap<ui64, TConfigItem::TPtr> &items,
                   const NKikimrConsole::TConfigItem &item)
 {
-    Y_VERIFY(!items.contains(item.GetId().GetId())); 
+    Y_VERIFY(!items.contains(item.GetId().GetId()));
     items.emplace(item.GetId().GetId(), new TConfigItem(item));
 }
 
@@ -507,7 +507,7 @@ void CheckGetConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::Sta
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetSubscription().GetOptions().GetTenant(), tenant);
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetSubscription().GetOptions().GetNodeType(), nodeType);
         for (auto &kind : reply->Record.GetSubscription().GetConfigItemKinds()) {
-            UNIT_ASSERT(k.contains(kind)); 
+            UNIT_ASSERT(k.contains(kind));
             k.erase(kind);
         }
         UNIT_ASSERT(k.empty());

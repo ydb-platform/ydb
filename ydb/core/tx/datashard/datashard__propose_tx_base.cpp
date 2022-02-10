@@ -46,8 +46,8 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
             if (status != NKikimrTxDataShard::TError::OK) {
                 auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(Kind);
-                result.Reset(new TEvDataShard::TEvProposeTransactionResult(kind, Self->TabletID(), TxId, 
-                                                                       NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)); 
+                result.Reset(new TEvDataShard::TEvProposeTransactionResult(kind, Self->TabletID(), TxId,
+                                                                       NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
                 result->AddError(status, errMessage);
             }
         }

@@ -29,7 +29,7 @@
 #include <util/generic/ylimits.h>
 #include <util/string/ascii.h>
 #include <util/string/cast.h>
-#include <util/string/reverse.h> 
+#include <util/string/reverse.h>
 #include <util/string/split.h>
 #include <util/string/hex.h>
 #include <util/string/join.h>
@@ -7001,7 +7001,7 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
 
 bool TSqlSelect::WindowDefinition(const TRule_window_definition& rule, TWinSpecs& winSpecs) {
     const TString windowName = Id(rule.GetRule_new_window_name1().GetRule_window_name1().GetRule_an_id_window1(), *this);
-    if (winSpecs.contains(windowName)) { 
+    if (winSpecs.contains(windowName)) {
         Ctx.Error() << "Unable to declare window with same name: " << windowName;
         return false;
     }
@@ -7444,7 +7444,7 @@ const TGroupByClause::TGroupingSetFeatures& TGroupByClause::Features() const {
 }
 
 bool TGroupByClause::AddAlias(const TString& label, const TNodePtr& node) {
-    if (Aliases().contains(label)) { 
+    if (Aliases().contains(label)) {
         Ctx.Error() << "Duplicated aliases not allowed";
         Ctx.IncrementMonCounter("sql_errors", "GroupByDuplicateAliases");
         return false;

@@ -1,15 +1,15 @@
 #include "ci_string.h"
 
 int TCiString::compare(const TCiString& s1, const TCiString& s2, const CodePage& cp) {
-    return cp.stricmp(s1.data(), s2.data()); 
+    return cp.stricmp(s1.data(), s2.data());
 }
 
 int TCiString::compare(const char* p, const TCiString& s2, const CodePage& cp) {
-    return cp.stricmp(p, s2.data()); 
+    return cp.stricmp(p, s2.data());
 }
 
 int TCiString::compare(const TCiString& s1, const char* p, const CodePage& cp) {
-    return cp.stricmp(s1.data(), p); 
+    return cp.stricmp(s1.data(), p);
 }
 
 int TCiString::compare(const TStringBuf& p1, const TStringBuf& p2, const CodePage& cp) {

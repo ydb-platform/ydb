@@ -63,7 +63,7 @@ public:
 
     bool Empty() const { return CurrentReadSets.empty(); }
     bool HasAcks() const { return ! ReadSetAcks.empty(); }
-    bool Has(const TReadSetKey& rsKey) const { return CurrentReadSetInfos.contains(rsKey); } 
+    bool Has(const TReadSetKey& rsKey) const { return CurrentReadSetInfos.contains(rsKey); }
 
     ui64 CountReadSets() const { return CurrentReadSets.size(); }
     ui64 CountAcks() const { return ReadSetAcks.size(); }

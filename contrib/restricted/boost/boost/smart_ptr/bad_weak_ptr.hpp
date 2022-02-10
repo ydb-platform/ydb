@@ -47,7 +47,7 @@ class bad_weak_ptr: public std::exception
 {
 public:
 
-    virtual char const * what() const noexcept 
+    virtual char const * what() const noexcept
     {
         return "tr1::bad_weak_ptr";
     }

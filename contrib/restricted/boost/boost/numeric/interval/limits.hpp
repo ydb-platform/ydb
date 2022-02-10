@@ -26,18 +26,18 @@ private:
   typedef boost::numeric::interval<T, Policies> I;
   typedef numeric_limits<T> bl;
 public:
-  static I min BOOST_PREVENT_MACRO_SUBSTITUTION () noexcept { return I((bl::min)(), (bl::min)()); } 
-  static I max BOOST_PREVENT_MACRO_SUBSTITUTION () noexcept { return I((bl::max)(), (bl::max)()); } 
-  static I epsilon() noexcept { return I(bl::epsilon(), bl::epsilon()); } 
+  static I min BOOST_PREVENT_MACRO_SUBSTITUTION () noexcept { return I((bl::min)(), (bl::min)()); }
+  static I max BOOST_PREVENT_MACRO_SUBSTITUTION () noexcept { return I((bl::max)(), (bl::max)()); }
+  static I epsilon() noexcept { return I(bl::epsilon(), bl::epsilon()); }
 
   BOOST_STATIC_CONSTANT(float_round_style, round_style = round_indeterminate);
   BOOST_STATIC_CONSTANT(bool, is_iec559 = false);
 
-  static I infinity () noexcept { return I::whole(); } 
-  static I quiet_NaN() noexcept { return I::empty(); } 
-  static I signaling_NaN() noexcept 
+  static I infinity () noexcept { return I::whole(); }
+  static I quiet_NaN() noexcept { return I::empty(); }
+  static I signaling_NaN() noexcept
   { return I(bl::signaling_NaN(), bl::signaling_Nan()); }
-  static I denorm_min() noexcept 
+  static I denorm_min() noexcept
   { return I(bl::denorm_min(), bl::denorm_min()); }
 private:
   static I round_error();    // hide this on purpose, not yet implemented

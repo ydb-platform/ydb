@@ -112,7 +112,7 @@ public:
 
         static bool IsDeriv(ECounter counter)
         {
-            return DerivSensors.contains(counter); 
+            return DerivSensors.contains(counter);
         }
 
         TCounterPtr GetCounter(ECounter counter)

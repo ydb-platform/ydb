@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/system/types.h>
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
@@ -158,9 +158,9 @@ public:
         return CombineHashes(
             CombineHashes(
                 (size_t)CombineHashes(IntHash(Position.Row), IntHash(Position.Column)),
-                ComputeHash(Position.File) 
+                ComputeHash(Position.File)
             ),
-            (size_t)CombineHashes((size_t)IntHash(static_cast<int>(IssueCode)), ComputeHash(Message))); 
+            (size_t)CombineHashes((size_t)IntHash(static_cast<int>(IssueCode)), ComputeHash(Message)));
     }
 
     TIssue& SetCode(TIssueCode id, ESeverity severity) {

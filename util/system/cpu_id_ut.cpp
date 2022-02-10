@@ -23,7 +23,7 @@ static void ExecuteAVXInstruction();
 static void ExecuteAVX2Instruction();
 static void ExecutePOPCNTInstruction();
 static void ExecuteBMI1Instruction();
-static void ExecuteBMI2Instruction(); 
+static void ExecuteBMI2Instruction();
 static void ExecutePCLMULInstruction();
 static void ExecuteAESInstruction();
 static void ExecuteAVXInstruction();
@@ -169,13 +169,13 @@ void ExecuteBMI1Instruction() {
                          : "eax");
 }
 
-void ExecuteBMI2Instruction() { 
-    __asm__ __volatile__("pdep %%rax, %%rdi, %%rax\n" 
-                         : 
-                         : 
-                         : "rax"); 
-} 
- 
+void ExecuteBMI2Instruction() {
+    __asm__ __volatile__("pdep %%rax, %%rdi, %%rax\n"
+                         :
+                         :
+                         : "rax");
+}
+
 void ExecutePCLMULInstruction() {
     __asm__ __volatile__("pclmullqlqdq %%xmm0, %%xmm0\n"
                          :
@@ -291,9 +291,9 @@ void ExecutePOPCNTInstruction() {
 void ExecuteBMI1Instruction() {
 }
 
-void ExecuteBMI2Instruction() { 
-} 
- 
+void ExecuteBMI2Instruction() {
+}
+
 void ExecutePCLMULInstruction() {
 }
 
@@ -388,9 +388,9 @@ void ExecutePOPCNTInstruction() {
 void ExecuteBMI1Instruction() {
 }
 
-void ExecuteBMI2Instruction() { 
-} 
- 
+void ExecuteBMI2Instruction() {
+}
+
 void ExecutePCLMULInstruction() {
 }
 

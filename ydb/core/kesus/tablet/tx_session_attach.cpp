@@ -101,7 +101,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
 
             SessionId = Self->NextSessionId++;
             Y_VERIFY(SessionId > 0);
-            Y_VERIFY(!Self->Sessions.contains(SessionId)); 
+            Y_VERIFY(!Self->Sessions.contains(SessionId));
             Self->PersistSysParam(db, Schema::SysParam_NextSessionId, ToString(Self->NextSessionId));
             session = &Self->Sessions[SessionId];
             session->Id = SessionId;

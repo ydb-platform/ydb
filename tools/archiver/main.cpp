@@ -58,10 +58,10 @@ namespace {
         {
         }
 
-        ~THexOutput() override { 
+        ~THexOutput() override {
         }
 
-        inline IOutputStream* Slave() const noexcept { 
+        inline IOutputStream* Slave() const noexcept {
             return Slave_;
         }
 
@@ -125,7 +125,7 @@ namespace {
             *Out_ << Base_ << ":\n";
         }
 
-        ~TYasmOutput() override { 
+        ~TYasmOutput() override {
         }
 
         void DoFinish() override {
@@ -170,7 +170,7 @@ namespace {
             *Slave() << "static_assert(sizeof(unsigned int) == 4, \"ups, unsupported platform\");\n\nextern \"C\" {\nextern const unsigned char " << B << "[] = {\n";
         }
 
-        ~TCOutput() override { 
+        ~TCOutput() override {
         }
 
         void DoFinish() override {
@@ -188,7 +188,7 @@ namespace {
             *O << "static_assert(sizeof(unsigned int) == 4, \"ups, unsupported platform\");\n\nextern \"C\" {\nextern const unsigned char " << B << "[] = \n";
         }
 
-        ~TCStringOutput() override { 
+        ~TCStringOutput() override {
         }
 
         void DoWrite(const void* data, size_t len) override {
@@ -298,7 +298,7 @@ static inline TAutoPtr<IOutputStream> OpenOutput(const TString& url) {
     }
 }
 
-static inline bool IsDelim(char ch) noexcept { 
+static inline bool IsDelim(char ch) noexcept {
     return ch == '/' || ch == '\\';
 }
 

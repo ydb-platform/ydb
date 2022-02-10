@@ -49,13 +49,13 @@ public:
 	Exception& operator = (const Exception& exc);
 		/// Assignment operator.
 
-	virtual const char* name() const noexcept; 
+	virtual const char* name() const noexcept;
 		/// Returns a static string describing the exception.
 		
-	virtual const char* className() const noexcept; 
+	virtual const char* className() const noexcept;
 		/// Returns the name of the exception class.
 		
-	virtual const char* what() const noexcept; 
+	virtual const char* what() const noexcept;
 		/// Returns a static string describing the exception.
 		///
 		/// Same as name(), but for compatibility with std::exception.
@@ -148,8 +148,8 @@ inline int Exception::code() const
 		CLS(const CLS& exc);														\
 		~CLS() noexcept;																\
 		CLS& operator = (const CLS& exc);											\
-		const char* name() const noexcept;											\ 
-		const char* className() const noexcept;										\ 
+		const char* name() const noexcept;											\
+		const char* className() const noexcept;										\
 		Poco::Exception* clone() const;												\
 		void rethrow() const;														\
 	};
@@ -181,11 +181,11 @@ inline int Exception::code() const
 		BASE::operator = (exc);																		\
 		return *this;																				\
 	}																								\
-	const char* CLS::name() const noexcept															\ 
+	const char* CLS::name() const noexcept															\
 	{																								\
 		return NAME;																				\
 	}																								\
-	const char* CLS::className() const noexcept														\ 
+	const char* CLS::className() const noexcept														\
 	{																								\
 		return typeid(*this).name();																\
 	}																								\

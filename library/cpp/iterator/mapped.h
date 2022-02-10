@@ -6,7 +6,7 @@
 #include <iterator>
 
 
-namespace NIteratorPrivate { 
+namespace NIteratorPrivate {
     template <class TIterator>
     constexpr bool HasRandomAccess() {
         return std::is_same_v<typename std::iterator_traits<TIterator>::iterator_category,
@@ -26,7 +26,7 @@ public:
     using value_type = TValue;
     using reference = TValue&;
     using pointer = std::remove_reference_t<TValue>*;
-    using iterator_category = std::conditional_t<NIteratorPrivate::HasRandomAccess<TIterator>(), 
+    using iterator_category = std::conditional_t<NIteratorPrivate::HasRandomAccess<TIterator>(),
         std::random_access_iterator_tag, std::input_iterator_tag>;
 
     TMappedIterator(TIterator it, TMapper mapper)
@@ -122,10 +122,10 @@ public:
         return {std::end(*Container.Ptr()), {*Mapper.Ptr()}};
     }
 
-    bool empty() const { 
-        return std::begin(*Container.Ptr()) == std::end(*Container.Ptr()); 
-    } 
- 
+    bool empty() const {
+        return std::begin(*Container.Ptr()) == std::end(*Container.Ptr());
+    }
+
 protected:
     mutable TContainerStorage Container;
     mutable TMapperStorage Mapper;
@@ -154,7 +154,7 @@ public:
 
     using TBase::begin;
     using TBase::end;
-    using TBase::empty; 
+    using TBase::empty;
 
     size_type size() const {
         return std::end(*this->Container.Ptr()) - std::begin(*this->Container.Ptr());
@@ -185,7 +185,7 @@ auto MakeMappedRange(TIterator begin, TIterator end, TMapper mapper) {
 
 template <class TContainer, class TMapper>
 auto MakeMappedRange(TContainer&& container, TMapper&& mapper) {
-    if constexpr (NIteratorPrivate::HasRandomAccess<decltype(std::begin(container))>()) { 
+    if constexpr (NIteratorPrivate::HasRandomAccess<decltype(std::begin(container))>()) {
         return TRandomAccessMappedRange<TContainer, TMapper>(std::forward<TContainer>(container), std::forward<TMapper>(mapper));
     } else {
         return TInputMappedRange<TContainer, TMapper>(std::forward<TContainer>(container), std::forward<TMapper>(mapper));

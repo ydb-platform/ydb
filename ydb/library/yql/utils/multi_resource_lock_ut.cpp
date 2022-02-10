@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(TMultiResourceLock) {
         TVector<TVector<int>> workersData;
         workersData.resize(workersCount);
 
-        TAdaptiveThreadPool queue; 
+        TAdaptiveThreadPool queue;
         queue.Start(0);
 
         TVector<NThreading::TFuture<void>> workers;

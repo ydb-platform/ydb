@@ -2,7 +2,7 @@
 
 #include <ydb/core/util/bits.h>
 
-#include <library/cpp/pop_count/popcount.h> 
+#include <library/cpp/pop_count/popcount.h>
 
 #include <util/stream/str.h>
 #include <util/string/cast.h>

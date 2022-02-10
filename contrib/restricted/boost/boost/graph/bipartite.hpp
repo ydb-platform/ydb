@@ -42,7 +42,7 @@ namespace boost {
 
       }
 
-      const char* what () const noexcept 
+      const char* what () const noexcept
       {
         return "Graph is not bipartite.";
       }

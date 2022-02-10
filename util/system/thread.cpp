@@ -44,7 +44,7 @@ namespace {
     inline void SetThrName(const TParams& p) {
         try {
             if (p.Name) {
-                TThread::SetCurrentThreadName(p.Name.data()); 
+                TThread::SetCurrentThreadName(p.Name.data());
             }
         } catch (...) {
             // ¯\_(ツ)_/¯
@@ -445,7 +445,7 @@ namespace {
 }
 #endif // _win_
 
-void TThread::SetCurrentThreadName(const char* name) { 
+void TThread::SetCurrentThreadName(const char* name) {
     (void)name;
 
 #if defined(_freebsd_)
@@ -469,7 +469,7 @@ void TThread::SetCurrentThreadName(const char* name) {
 #endif // OS
 }
 
-TString TThread::CurrentThreadName() { 
+TString TThread::CurrentThreadName() {
 #if defined(_freebsd_)
 // TODO: check pthread_get_name_np API availability
 #elif defined(_linux_)

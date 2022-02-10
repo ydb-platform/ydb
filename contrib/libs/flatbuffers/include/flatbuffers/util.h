@@ -22,11 +22,11 @@
 #include "base.h"
 #include "stl_emulation.h"
 
-#ifndef FLATBUFFERS_PREFER_PRINTF 
-#  include <sstream> 
+#ifndef FLATBUFFERS_PREFER_PRINTF
+#  include <sstream>
 #else  // FLATBUFFERS_PREFER_PRINTF
-#  include <float.h> 
-#  include <stdio.h> 
+#  include <float.h>
+#  include <stdio.h>
 #endif  // FLATBUFFERS_PREFER_PRINTF
 
 #include <iomanip>
@@ -86,54 +86,54 @@ inline char CharToLower(char c) {
 
 // @end-locale-independent functions for ASCII character set
 
-#ifdef FLATBUFFERS_PREFER_PRINTF 
-template<typename T> size_t IntToDigitCount(T t) { 
-  size_t digit_count = 0; 
-  // Count the sign for negative numbers 
-  if (t < 0) digit_count++; 
-  // Count a single 0 left of the dot for fractional numbers 
-  if (-1 < t && t < 1) digit_count++; 
-  // Count digits until fractional part 
-  T eps = std::numeric_limits<float>::epsilon(); 
-  while (t <= (-1 + eps) || (1 - eps) <= t) { 
-    t /= 10; 
-    digit_count++; 
-  } 
-  return digit_count; 
-} 
- 
-template<typename T> size_t NumToStringWidth(T t, int precision = 0) { 
-  size_t string_width = IntToDigitCount(t); 
-  // Count the dot for floating point numbers 
-  if (precision) string_width += (precision + 1); 
-  return string_width; 
-} 
- 
+#ifdef FLATBUFFERS_PREFER_PRINTF
+template<typename T> size_t IntToDigitCount(T t) {
+  size_t digit_count = 0;
+  // Count the sign for negative numbers
+  if (t < 0) digit_count++;
+  // Count a single 0 left of the dot for fractional numbers
+  if (-1 < t && t < 1) digit_count++;
+  // Count digits until fractional part
+  T eps = std::numeric_limits<float>::epsilon();
+  while (t <= (-1 + eps) || (1 - eps) <= t) {
+    t /= 10;
+    digit_count++;
+  }
+  return digit_count;
+}
+
+template<typename T> size_t NumToStringWidth(T t, int precision = 0) {
+  size_t string_width = IntToDigitCount(t);
+  // Count the dot for floating point numbers
+  if (precision) string_width += (precision + 1);
+  return string_width;
+}
+
 template<typename T>
 std::string NumToStringImplWrapper(T t, const char *fmt, int precision = 0) {
-  size_t string_width = NumToStringWidth(t, precision); 
-  std::string s(string_width, 0x00); 
-  // Allow snprintf to use std::string trailing null to detect buffer overflow 
+  size_t string_width = NumToStringWidth(t, precision);
+  std::string s(string_width, 0x00);
+  // Allow snprintf to use std::string trailing null to detect buffer overflow
   snprintf(const_cast<char *>(s.data()), (s.size() + 1), fmt, string_width, t);
-  return s; 
-} 
+  return s;
+}
 #endif  // FLATBUFFERS_PREFER_PRINTF
- 
+
 // Convert an integer or floating point value to a string.
 // In contrast to std::stringstream, "char" values are
 // converted to a string of digits, and we don't use scientific notation.
 template<typename T> std::string NumToString(T t) {
-  // clang-format off 
+  // clang-format off
 
-  #ifndef FLATBUFFERS_PREFER_PRINTF 
-    std::stringstream ss; 
-    ss << t; 
-    return ss.str(); 
-  #else // FLATBUFFERS_PREFER_PRINTF 
-    auto v = static_cast<long long>(t); 
-    return NumToStringImplWrapper(v, "%.*lld"); 
-  #endif // FLATBUFFERS_PREFER_PRINTF 
-  // clang-format on 
+  #ifndef FLATBUFFERS_PREFER_PRINTF
+    std::stringstream ss;
+    ss << t;
+    return ss.str();
+  #else // FLATBUFFERS_PREFER_PRINTF
+    auto v = static_cast<long long>(t);
+    return NumToStringImplWrapper(v, "%.*lld");
+  #endif // FLATBUFFERS_PREFER_PRINTF
+  // clang-format on
 }
 // Avoid char types used as character data.
 template<> inline std::string NumToString<signed char>(signed char t) {
@@ -145,54 +145,54 @@ template<> inline std::string NumToString<unsigned char>(unsigned char t) {
 template<> inline std::string NumToString<char>(char t) {
   return NumToString(static_cast<int>(t));
 }
-#if defined(FLATBUFFERS_CPP98_STL) 
-template<> inline std::string NumToString<long long>(long long t) { 
-  char buf[21];  // (log((1 << 63) - 1) / log(10)) + 2 
-  snprintf(buf, sizeof(buf), "%lld", t); 
-  return std::string(buf); 
-} 
+#if defined(FLATBUFFERS_CPP98_STL)
+template<> inline std::string NumToString<long long>(long long t) {
+  char buf[21];  // (log((1 << 63) - 1) / log(10)) + 2
+  snprintf(buf, sizeof(buf), "%lld", t);
+  return std::string(buf);
+}
 
-template<> 
-inline std::string NumToString<unsigned long long>(unsigned long long t) { 
-  char buf[22];  // (log((1 << 63) - 1) / log(10)) + 1 
-  snprintf(buf, sizeof(buf), "%llu", t); 
-  return std::string(buf); 
-} 
-#endif  // defined(FLATBUFFERS_CPP98_STL) 
- 
+template<>
+inline std::string NumToString<unsigned long long>(unsigned long long t) {
+  char buf[22];  // (log((1 << 63) - 1) / log(10)) + 1
+  snprintf(buf, sizeof(buf), "%llu", t);
+  return std::string(buf);
+}
+#endif  // defined(FLATBUFFERS_CPP98_STL)
+
 // Special versions for floats/doubles.
-template<typename T> std::string FloatToString(T t, int precision) { 
-  // clang-format off 
+template<typename T> std::string FloatToString(T t, int precision) {
+  // clang-format off
 
-  #ifndef FLATBUFFERS_PREFER_PRINTF 
-    // to_string() prints different numbers of digits for floats depending on 
-    // platform and isn't available on Android, so we use stringstream 
-    std::stringstream ss; 
-    // Use std::fixed to suppress scientific notation. 
-    ss << std::fixed; 
-    // Default precision is 6, we want that to be higher for doubles. 
-    ss << std::setprecision(precision); 
-    ss << t; 
-    auto s = ss.str(); 
-  #else // FLATBUFFERS_PREFER_PRINTF 
-    auto v = static_cast<double>(t); 
-    auto s = NumToStringImplWrapper(v, "%0.*f", precision); 
-  #endif // FLATBUFFERS_PREFER_PRINTF 
-  // clang-format on 
+  #ifndef FLATBUFFERS_PREFER_PRINTF
+    // to_string() prints different numbers of digits for floats depending on
+    // platform and isn't available on Android, so we use stringstream
+    std::stringstream ss;
+    // Use std::fixed to suppress scientific notation.
+    ss << std::fixed;
+    // Default precision is 6, we want that to be higher for doubles.
+    ss << std::setprecision(precision);
+    ss << t;
+    auto s = ss.str();
+  #else // FLATBUFFERS_PREFER_PRINTF
+    auto v = static_cast<double>(t);
+    auto s = NumToStringImplWrapper(v, "%0.*f", precision);
+  #endif // FLATBUFFERS_PREFER_PRINTF
+  // clang-format on
   // Sadly, std::fixed turns "1" into "1.00000", so here we undo that.
   auto p = s.find_last_not_of('0');
   if (p != std::string::npos) {
-    // Strip trailing zeroes. If it is a whole number, keep one zero. 
-    s.resize(p + (s[p] == '.' ? 2 : 1)); 
+    // Strip trailing zeroes. If it is a whole number, keep one zero.
+    s.resize(p + (s[p] == '.' ? 2 : 1));
   }
   return s;
 }
- 
-template<> inline std::string NumToString<double>(double t) { 
-  return FloatToString(t, 12); 
-} 
+
+template<> inline std::string NumToString<double>(double t) {
+  return FloatToString(t, 12);
+}
 template<> inline std::string NumToString<float>(float t) {
-  return FloatToString(t, 6); 
+  return FloatToString(t, 6);
 }
 
 // Convert an integer value to a hexadecimal string.
@@ -200,17 +200,17 @@ template<> inline std::string NumToString<float>(float t) {
 // For example, IntToStringHex(0x23, 8) returns the string "00000023".
 inline std::string IntToStringHex(int i, int xdigits) {
   FLATBUFFERS_ASSERT(i >= 0);
-  // clang-format off 
+  // clang-format off
 
-  #ifndef FLATBUFFERS_PREFER_PRINTF 
-    std::stringstream ss; 
-    ss << std::setw(xdigits) << std::setfill('0') << std::hex << std::uppercase 
-       << i; 
-    return ss.str(); 
-  #else // FLATBUFFERS_PREFER_PRINTF 
-    return NumToStringImplWrapper(i, "%.*X", xdigits); 
-  #endif // FLATBUFFERS_PREFER_PRINTF 
-  // clang-format on 
+  #ifndef FLATBUFFERS_PREFER_PRINTF
+    std::stringstream ss;
+    ss << std::setw(xdigits) << std::setfill('0') << std::hex << std::uppercase
+       << i;
+    return ss.str();
+  #else // FLATBUFFERS_PREFER_PRINTF
+    return NumToStringImplWrapper(i, "%.*X", xdigits);
+  #endif // FLATBUFFERS_PREFER_PRINTF
+  // clang-format on
 }
 
 // clang-format off
@@ -405,26 +405,26 @@ inline uint64_t StringToUInt(const char *s, int base = 10) {
   return StringToIntegerImpl(&val, s, base) ? val : 0;
 }
 
-typedef bool (*LoadFileFunction)(const char *filename, bool binary, 
-                                 std::string *dest); 
-typedef bool (*FileExistsFunction)(const char *filename); 
- 
-LoadFileFunction SetLoadFileFunction(LoadFileFunction load_file_function); 
- 
-FileExistsFunction SetFileExistsFunction( 
-    FileExistsFunction file_exists_function); 
- 
-// Check if file "name" exists.
-bool FileExists(const char *name); 
+typedef bool (*LoadFileFunction)(const char *filename, bool binary,
+                                 std::string *dest);
+typedef bool (*FileExistsFunction)(const char *filename);
 
-// Check if "name" exists and it is also a directory. 
-bool DirExists(const char *name); 
- 
+LoadFileFunction SetLoadFileFunction(LoadFileFunction load_file_function);
+
+FileExistsFunction SetFileExistsFunction(
+    FileExistsFunction file_exists_function);
+
+// Check if file "name" exists.
+bool FileExists(const char *name);
+
+// Check if "name" exists and it is also a directory.
+bool DirExists(const char *name);
+
 // Load file "name" into "buf" returning true if successful
 // false otherwise.  If "binary" is false data is read
 // using ifstream's text mode, otherwise data is read with
 // no transcoding.
-bool LoadFile(const char *name, bool binary, std::string *buf); 
+bool LoadFile(const char *name, bool binary, std::string *buf);
 
 // Save data "buf" of length "len" bytes into a file
 // "name" returning true if successful, false otherwise.
@@ -441,14 +441,14 @@ inline bool SaveFile(const char *name, const std::string &buf, bool binary) {
   return SaveFile(name, buf.c_str(), buf.size(), binary);
 }
 
-// Functionality for minimalistic portable path handling. 
+// Functionality for minimalistic portable path handling.
 
-// The functions below behave correctly regardless of whether posix ('/') or 
-// Windows ('/' or '\\') separators are used. 
- 
-// Any new separators inserted are always posix. 
+// The functions below behave correctly regardless of whether posix ('/') or
+// Windows ('/' or '\\') separators are used.
+
+// Any new separators inserted are always posix.
 FLATBUFFERS_CONSTEXPR char kPathSeparator = '/';
- 
+
 // Returns the path with the extension, if any, removed.
 std::string StripExtension(const std::string &filepath);
 
@@ -466,9 +466,9 @@ std::string StripFileName(const std::string &filepath);
 std::string ConCatPathFileName(const std::string &path,
                                const std::string &filename);
 
-// Replaces any '\\' separators with '/' 
+// Replaces any '\\' separators with '/'
 std::string PosixPath(const char *path);
- 
+
 // This function ensure a directory exists, by recursively
 // creating dirs for any parts of the path that don't exist yet.
 void EnsureDirExists(const std::string &filepath);
@@ -482,7 +482,7 @@ std::string AbsolutePath(const std::string &filepath);
 // Convert a unicode code point into a UTF-8 representation by appending it
 // to a string. Returns the number of bytes generated.
 inline int ToUTF8(uint32_t ucc, std::string *out) {
-  FLATBUFFERS_ASSERT(!(ucc & 0x80000000));  // Top bit can't be set. 
+  FLATBUFFERS_ASSERT(!(ucc & 0x80000000));  // Top bit can't be set.
   // 6 possible encodings: http://en.wikipedia.org/wiki/UTF-8
   for (int i = 0; i < 6; i++) {
     // Max bits this encoding can represent.
@@ -492,7 +492,7 @@ inline int ToUTF8(uint32_t ucc, std::string *out) {
       uint32_t remain_bits = i * 6;
       // Store first byte:
       (*out) += static_cast<char>((0xFE << (max_bits - remain_bits)) |
-                                  (ucc >> remain_bits)); 
+                                  (ucc >> remain_bits));
       // Store remaining bytes:
       for (int j = i - 1; j >= 0; j--) {
         (*out) += static_cast<char>(((ucc >> (j * 6)) & 0x3F) | 0x80);
@@ -500,7 +500,7 @@ inline int ToUTF8(uint32_t ucc, std::string *out) {
       return i + 1;  // Return the number of bytes added.
     }
   }
-  FLATBUFFERS_ASSERT(0);  // Impossible to arrive here. 
+  FLATBUFFERS_ASSERT(0);  // Impossible to arrive here.
   return -1;
 }
 
@@ -522,8 +522,8 @@ inline int FromUTF8(const char **in) {
   if ((static_cast<unsigned char>(**in) << len) & 0x80)
     return -1;  // Bit after leading 1's must be 0.
   if (!len) return *(*in)++;
-  // UTF-8 encoded values with a length are between 2 and 4 bytes. 
-  if (len < 2 || len > 4) { return -1; } 
+  // UTF-8 encoded values with a length are between 2 and 4 bytes.
+  if (len < 2 || len > 4) { return -1; }
   // Grab initial bits of the code.
   int ucc = *(*in)++ & ((1 << (7 - len)) - 1);
   for (int i = 0; i < len - 1; i++) {
@@ -531,28 +531,28 @@ inline int FromUTF8(const char **in) {
     ucc <<= 6;
     ucc |= *(*in)++ & 0x3F;  // Grab 6 more bits of the code.
   }
-  // UTF-8 cannot encode values between 0xD800 and 0xDFFF (reserved for 
-  // UTF-16 surrogate pairs). 
-  if (ucc >= 0xD800 && ucc <= 0xDFFF) { return -1; } 
-  // UTF-8 must represent code points in their shortest possible encoding. 
-  switch (len) { 
-    case 2: 
-      // Two bytes of UTF-8 can represent code points from U+0080 to U+07FF. 
-      if (ucc < 0x0080 || ucc > 0x07FF) { return -1; } 
-      break; 
-    case 3: 
-      // Three bytes of UTF-8 can represent code points from U+0800 to U+FFFF. 
-      if (ucc < 0x0800 || ucc > 0xFFFF) { return -1; } 
-      break; 
-    case 4: 
-      // Four bytes of UTF-8 can represent code points from U+10000 to U+10FFFF. 
-      if (ucc < 0x10000 || ucc > 0x10FFFF) { return -1; } 
-      break; 
-  } 
+  // UTF-8 cannot encode values between 0xD800 and 0xDFFF (reserved for
+  // UTF-16 surrogate pairs).
+  if (ucc >= 0xD800 && ucc <= 0xDFFF) { return -1; }
+  // UTF-8 must represent code points in their shortest possible encoding.
+  switch (len) {
+    case 2:
+      // Two bytes of UTF-8 can represent code points from U+0080 to U+07FF.
+      if (ucc < 0x0080 || ucc > 0x07FF) { return -1; }
+      break;
+    case 3:
+      // Three bytes of UTF-8 can represent code points from U+0800 to U+FFFF.
+      if (ucc < 0x0800 || ucc > 0xFFFF) { return -1; }
+      break;
+    case 4:
+      // Four bytes of UTF-8 can represent code points from U+10000 to U+10FFFF.
+      if (ucc < 0x10000 || ucc > 0x10FFFF) { return -1; }
+      break;
+  }
   return ucc;
 }
 
-#ifndef FLATBUFFERS_PREFER_PRINTF 
+#ifndef FLATBUFFERS_PREFER_PRINTF
 // Wraps a string to a maximum length, inserting new lines where necessary. Any
 // existing whitespace will be collapsed down to a single space. A prefix or
 // suffix can be provided, which will be inserted before or after a wrapped
@@ -581,76 +581,76 @@ inline std::string WordWrap(const std::string in, size_t max_length,
 }
 #endif  // !FLATBUFFERS_PREFER_PRINTF
 
-inline bool EscapeString(const char *s, size_t length, std::string *_text, 
-                         bool allow_non_utf8, bool natural_utf8) { 
-  std::string &text = *_text; 
-  text += "\""; 
-  for (uoffset_t i = 0; i < length; i++) { 
-    char c = s[i]; 
-    switch (c) { 
-      case '\n': text += "\\n"; break; 
-      case '\t': text += "\\t"; break; 
-      case '\r': text += "\\r"; break; 
-      case '\b': text += "\\b"; break; 
-      case '\f': text += "\\f"; break; 
-      case '\"': text += "\\\""; break; 
-      case '\\': text += "\\\\"; break; 
-      default: 
-        if (c >= ' ' && c <= '~') { 
-          text += c; 
-        } else { 
-          // Not printable ASCII data. Let's see if it's valid UTF-8 first: 
-          const char *utf8 = s + i; 
-          int ucc = FromUTF8(&utf8); 
-          if (ucc < 0) { 
-            if (allow_non_utf8) { 
-              text += "\\x"; 
-              text += IntToStringHex(static_cast<uint8_t>(c), 2); 
-            } else { 
-              // There are two cases here: 
-              // 
-              // 1) We reached here by parsing an IDL file. In that case, 
-              // we previously checked for non-UTF-8, so we shouldn't reach 
-              // here. 
-              // 
-              // 2) We reached here by someone calling GenerateText() 
-              // on a previously-serialized flatbuffer. The data might have 
-              // non-UTF-8 Strings, or might be corrupt. 
-              // 
-              // In both cases, we have to give up and inform the caller 
-              // they have no JSON. 
-              return false; 
-            } 
-          } else { 
-            if (natural_utf8) { 
-              // utf8 points to past all utf-8 bytes parsed 
-              text.append(s + i, static_cast<size_t>(utf8 - s - i)); 
-            } else if (ucc <= 0xFFFF) { 
-              // Parses as Unicode within JSON's \uXXXX range, so use that. 
-              text += "\\u"; 
-              text += IntToStringHex(ucc, 4); 
-            } else if (ucc <= 0x10FFFF) { 
-              // Encode Unicode SMP values to a surrogate pair using two \u 
-              // escapes. 
-              uint32_t base = ucc - 0x10000; 
-              auto high_surrogate = (base >> 10) + 0xD800; 
-              auto low_surrogate = (base & 0x03FF) + 0xDC00; 
-              text += "\\u"; 
-              text += IntToStringHex(high_surrogate, 4); 
-              text += "\\u"; 
-              text += IntToStringHex(low_surrogate, 4); 
-            } 
-            // Skip past characters recognized. 
-            i = static_cast<uoffset_t>(utf8 - s - 1); 
-          } 
-        } 
-        break; 
-    } 
-  } 
-  text += "\""; 
-  return true; 
-} 
- 
+inline bool EscapeString(const char *s, size_t length, std::string *_text,
+                         bool allow_non_utf8, bool natural_utf8) {
+  std::string &text = *_text;
+  text += "\"";
+  for (uoffset_t i = 0; i < length; i++) {
+    char c = s[i];
+    switch (c) {
+      case '\n': text += "\\n"; break;
+      case '\t': text += "\\t"; break;
+      case '\r': text += "\\r"; break;
+      case '\b': text += "\\b"; break;
+      case '\f': text += "\\f"; break;
+      case '\"': text += "\\\""; break;
+      case '\\': text += "\\\\"; break;
+      default:
+        if (c >= ' ' && c <= '~') {
+          text += c;
+        } else {
+          // Not printable ASCII data. Let's see if it's valid UTF-8 first:
+          const char *utf8 = s + i;
+          int ucc = FromUTF8(&utf8);
+          if (ucc < 0) {
+            if (allow_non_utf8) {
+              text += "\\x";
+              text += IntToStringHex(static_cast<uint8_t>(c), 2);
+            } else {
+              // There are two cases here:
+              //
+              // 1) We reached here by parsing an IDL file. In that case,
+              // we previously checked for non-UTF-8, so we shouldn't reach
+              // here.
+              //
+              // 2) We reached here by someone calling GenerateText()
+              // on a previously-serialized flatbuffer. The data might have
+              // non-UTF-8 Strings, or might be corrupt.
+              //
+              // In both cases, we have to give up and inform the caller
+              // they have no JSON.
+              return false;
+            }
+          } else {
+            if (natural_utf8) {
+              // utf8 points to past all utf-8 bytes parsed
+              text.append(s + i, static_cast<size_t>(utf8 - s - i));
+            } else if (ucc <= 0xFFFF) {
+              // Parses as Unicode within JSON's \uXXXX range, so use that.
+              text += "\\u";
+              text += IntToStringHex(ucc, 4);
+            } else if (ucc <= 0x10FFFF) {
+              // Encode Unicode SMP values to a surrogate pair using two \u
+              // escapes.
+              uint32_t base = ucc - 0x10000;
+              auto high_surrogate = (base >> 10) + 0xD800;
+              auto low_surrogate = (base & 0x03FF) + 0xDC00;
+              text += "\\u";
+              text += IntToStringHex(high_surrogate, 4);
+              text += "\\u";
+              text += IntToStringHex(low_surrogate, 4);
+            }
+            // Skip past characters recognized.
+            i = static_cast<uoffset_t>(utf8 - s - 1);
+          }
+        }
+        break;
+    }
+  }
+  text += "\"";
+  return true;
+}
+
 inline std::string BufferToHexText(const void *buffer, size_t buffer_size,
                                    size_t max_length,
                                    const std::string &wrapped_line_prefix,

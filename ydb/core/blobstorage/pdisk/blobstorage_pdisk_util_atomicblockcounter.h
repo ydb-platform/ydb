@@ -25,84 +25,84 @@ struct TAtomicBlockCounter {
         ui16 Seqno = 0;
         ui16 PrevSeqno = 0;
 
-        bool Toggled() const noexcept { 
+        bool Toggled() const noexcept {
             return WasBlocked() ^ IsBlocked();
         }
 
-        bool WasBlocked() const noexcept { 
+        bool WasBlocked() const noexcept {
             return PrevA || PrevB;
         }
 
-        bool IsBlocked() const noexcept { 
+        bool IsBlocked() const noexcept {
             return A || B;
         }
     };
 
-    TAtomicBlockCounter() noexcept {} 
+    TAtomicBlockCounter() noexcept {}
 
-    bool IsBlocked() const noexcept; 
+    bool IsBlocked() const noexcept;
 
     // Blocking
-    void Block(ui64 flag, TResult& res) noexcept; 
-    void BlockA() noexcept { 
+    void Block(ui64 flag, TResult& res) noexcept;
+    void BlockA() noexcept {
         TResult res;
         Block(BlockAFlag, res);
     }
-    void BlockB() noexcept { 
+    void BlockB() noexcept {
         TResult res;
         Block(BlockBFlag, res);
     }
-    void BlockA(TResult& res) noexcept { 
+    void BlockA(TResult& res) noexcept {
         Block(BlockAFlag, res);
     }
-    void BlockB(TResult& res) noexcept { 
+    void BlockB(TResult& res) noexcept {
         Block(BlockBFlag, res);
     }
 
     // Unblocking
-    void Unblock(ui64 flag, TResult& res) noexcept; 
-    void UnblockA() noexcept { 
+    void Unblock(ui64 flag, TResult& res) noexcept;
+    void UnblockA() noexcept {
         TResult res;
         Unblock(BlockAFlag, res);
     }
-    void UnblockB() noexcept { 
+    void UnblockB() noexcept {
         TResult res;
         Unblock(BlockBFlag, res);
     }
-    void UnblockA(TResult& res) noexcept { 
+    void UnblockA(TResult& res) noexcept {
         Unblock(BlockAFlag, res);
     }
-    void UnblockB(TResult& res) noexcept { 
+    void UnblockB(TResult& res) noexcept {
         Unblock(BlockBFlag, res);
     }
 
     // Returns counter on success, 0 iff is blocked
-    ui64 Add(ui64 value) noexcept; 
-    ui64 Increment() noexcept { 
+    ui64 Add(ui64 value) noexcept;
+    ui64 Increment() noexcept {
         return Add(1);
     }
 
-    ui64 Sub(ui64 value) noexcept; 
-    ui64 Decrement() noexcept { 
+    ui64 Sub(ui64 value) noexcept;
+    ui64 Decrement() noexcept {
         return Sub(1);
     }
 
     // Operations with BlockA attached to Counter overflow over specified threshold
-    ui64 ThresholdAdd(ui64 value, ui64 threshold, TResult& res) noexcept; 
-    ui64 ThresholdSub(ui64 value, ui64 threshold, TResult& res) noexcept; 
-    ui64 ThresholdUpdate(ui64 threshold, TResult& res) noexcept; 
+    ui64 ThresholdAdd(ui64 value, ui64 threshold, TResult& res) noexcept;
+    ui64 ThresholdSub(ui64 value, ui64 threshold, TResult& res) noexcept;
+    ui64 ThresholdUpdate(ui64 threshold, TResult& res) noexcept;
 
-    ui64 Get() const noexcept; 
+    ui64 Get() const noexcept;
 
 private:
-    inline static ui64 CheckedAddCounter(ui64 prevData, ui64 value) noexcept; 
-    inline static ui64 CheckedSubCounter(ui64 prevData, ui64 value) noexcept; 
-    inline static void FillResult(ui64 prevData, ui64 data, TResult& res) noexcept; 
-    inline static bool GetBlocked(ui64 data) noexcept; 
-    inline static ui16 GetSeqno(ui64 data) noexcept; 
-    inline static ui64 GetCounter(ui64 data) noexcept; 
-    inline static ui64 ThresholdBlock(ui64 prevData, ui64 threshold) noexcept; 
-    inline static ui64 NextSeqno(ui64 data) noexcept; 
+    inline static ui64 CheckedAddCounter(ui64 prevData, ui64 value) noexcept;
+    inline static ui64 CheckedSubCounter(ui64 prevData, ui64 value) noexcept;
+    inline static void FillResult(ui64 prevData, ui64 data, TResult& res) noexcept;
+    inline static bool GetBlocked(ui64 data) noexcept;
+    inline static ui16 GetSeqno(ui64 data) noexcept;
+    inline static ui64 GetCounter(ui64 data) noexcept;
+    inline static ui64 ThresholdBlock(ui64 prevData, ui64 threshold) noexcept;
+    inline static ui64 NextSeqno(ui64 data) noexcept;
 };
 
 } // NPDisk

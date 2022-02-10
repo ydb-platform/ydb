@@ -53,7 +53,7 @@ def _is_skynet_avaliable():
 
 def download_by_skynet(resource_info, file_name):
     def sky_get(skynet_id, target_dir, timeout=None):
-        cmd_args = [_sky_path(), 'get', "-N", "Backbone", "--user", "--wait", "--dir", target_dir, skynet_id] 
+        cmd_args = [_sky_path(), 'get', "-N", "Backbone", "--user", "--wait", "--dir", target_dir, skynet_id]
         if timeout is not None:
             cmd_args += ["--timeout", str(timeout)]
         logging.info('Call skynet with args: %s', cmd_args)

@@ -94,9 +94,9 @@ struct TSelectArithmeticBinaryWithTimezone : public TArithmeticConstraintsBinary
 
 template<NUdf::EDataSlot Slot>
 int CompareCustoms(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) {
-    const TStringBuf lhsBuf = lhs.AsStringRef(); 
-    const TStringBuf rhsBuf = rhs.AsStringRef(); 
-    return lhsBuf.compare(rhsBuf); 
+    const TStringBuf lhsBuf = lhs.AsStringRef();
+    const TStringBuf rhsBuf = rhs.AsStringRef();
+    return lhsBuf.compare(rhsBuf);
 }
 
 template<NUdf::EDataSlot Slot>

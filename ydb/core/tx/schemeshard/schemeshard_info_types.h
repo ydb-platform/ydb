@@ -2000,7 +2000,7 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
         Y_VERIFY(!AlterConfig);
         Y_VERIFY(!AlterVersion);
 
-        AlterConfig = MakeHolder<NKikimrFileStore::TConfig>(); 
+        AlterConfig = MakeHolder<NKikimrFileStore::TConfig>();
         AlterConfig->CopyFrom(alterConfig);
 
         Y_VERIFY(!AlterConfig->GetBlockSize());

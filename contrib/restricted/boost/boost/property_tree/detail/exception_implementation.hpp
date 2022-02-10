@@ -35,7 +35,7 @@ namespace boost { namespace property_tree
     {
     }
 
-    inline ptree_error::~ptree_error() 
+    inline ptree_error::~ptree_error()
     {
     }
 
@@ -48,7 +48,7 @@ namespace boost { namespace property_tree
     {
     }
 
-    inline ptree_bad_data::~ptree_bad_data() 
+    inline ptree_bad_data::~ptree_bad_data()
     {
     }
 
@@ -68,7 +68,7 @@ namespace boost { namespace property_tree
 
     }
 
-    inline ptree_bad_path::~ptree_bad_path() 
+    inline ptree_bad_path::~ptree_bad_path()
     {
     }
 

@@ -19,13 +19,13 @@ inline TString ToJsonFlot(const TTable& in, const TString& xno, const TVector<TS
     TString xn;
     THashSet<TString> xopts;
     ParseNameAndOpts(xno, xn, xopts);
-    bool xstack = xopts.contains("stack"); 
+    bool xstack = xopts.contains("stack");
 
     for (const TString& yno : ynos) {
         TString yn;
         THashSet<TString> yopts;
         ParseNameAndOpts(yno, yn, yopts);
-        bool ystackOpt = yopts.contains("stack"); 
+        bool ystackOpt = yopts.contains("stack");
 
         ss << (first? "": ",\n  ") <<  "{ " << opts << (opts? ", ": "") << "\"label\": \"" << yn << "\", \"data\": [ ";
         bool first2 = true;

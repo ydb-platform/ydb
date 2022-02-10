@@ -1,12 +1,12 @@
-#include "factory.h" 
+#include "factory.h"
 
 #include <util/system/thread.h>
 #include <util/generic/singleton.h>
 
-using IThread = IThreadFactory::IThread; 
+using IThread = IThreadFactory::IThread;
 
 namespace {
-    class TSystemThreadFactory: public IThreadFactory { 
+    class TSystemThreadFactory: public IThreadFactory {
     public:
         class TPoolThread: public IThread {
         public:
@@ -42,7 +42,7 @@ namespace {
             THolder<TThread> Thr_;
         };
 
-        inline TSystemThreadFactory() noexcept { 
+        inline TSystemThreadFactory() noexcept {
         }
 
         IThread* DoCreate() override {
@@ -50,14 +50,14 @@ namespace {
         }
     };
 
-    class TThreadFactoryFuncObj: public IThreadFactory::IThreadAble { 
+    class TThreadFactoryFuncObj: public IThreadFactory::IThreadAble {
     public:
-        TThreadFactoryFuncObj(const std::function<void()>& func) 
+        TThreadFactoryFuncObj(const std::function<void()>& func)
             : Func(func)
         {
         }
         void DoExecute() override {
-            THolder<TThreadFactoryFuncObj> self(this); 
+            THolder<TThreadFactoryFuncObj> self(this);
             Func();
         }
 
@@ -69,18 +69,18 @@ namespace {
 THolder<IThread> IThreadFactory::Run(std::function<void()> func) {
     THolder<IThread> ret(DoCreate());
 
-    ret->Run(new ::TThreadFactoryFuncObj(func)); 
+    ret->Run(new ::TThreadFactoryFuncObj(func));
 
     return ret;
 }
 
-static IThreadFactory* SystemThreadPoolImpl() { 
-    return Singleton<TSystemThreadFactory>(); 
+static IThreadFactory* SystemThreadPoolImpl() {
+    return Singleton<TSystemThreadFactory>();
 }
 
-static IThreadFactory* systemPool = nullptr; 
+static IThreadFactory* systemPool = nullptr;
 
-IThreadFactory* SystemThreadFactory() { 
+IThreadFactory* SystemThreadFactory() {
     if (systemPool) {
         return systemPool;
     }
@@ -88,6 +88,6 @@ IThreadFactory* SystemThreadFactory() {
     return SystemThreadPoolImpl();
 }
 
-void SetSystemThreadFactory(IThreadFactory* pool) { 
+void SetSystemThreadFactory(IThreadFactory* pool) {
     systemPool = pool;
 }

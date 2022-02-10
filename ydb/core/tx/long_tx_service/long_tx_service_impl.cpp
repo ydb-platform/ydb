@@ -83,7 +83,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvCommitTx::TPtr& ev) {
     }
 
     if (txId.NodeId != SelfId().NodeId()) {
-        return SendProxyRequest(txId.NodeId, ERequestType::Commit, std::move(ev)); 
+        return SendProxyRequest(txId.NodeId, ERequestType::Commit, std::move(ev));
     }
 
     auto it = Transactions.find(txId.UniqueId);
@@ -156,7 +156,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRollbackTx::TPtr& ev) {
     }
 
     if (txId.NodeId != SelfId().NodeId()) {
-        return SendProxyRequest(txId.NodeId, ERequestType::Rollback, std::move(ev)); 
+        return SendProxyRequest(txId.NodeId, ERequestType::Rollback, std::move(ev));
     }
 
     auto it = Transactions.find(txId.UniqueId);
@@ -209,7 +209,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAttachColumnShardWrites::T
     }
 
     if (txId.NodeId != SelfId().NodeId()) {
-        return SendProxyRequest(txId.NodeId, ERequestType::AttachColumnShardWrites, std::move(ev)); 
+        return SendProxyRequest(txId.NodeId, ERequestType::AttachColumnShardWrites, std::move(ev));
     }
 
     auto it = Transactions.find(txId.UniqueId);

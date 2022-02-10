@@ -12,7 +12,7 @@
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/sanitizers.h>
-#include <util/thread/factory.h> 
+#include <util/thread/factory.h>
 
 namespace NKikimr {
     using namespace NActors;

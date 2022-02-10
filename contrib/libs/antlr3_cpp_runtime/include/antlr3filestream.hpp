@@ -57,7 +57,7 @@ public:
 
 class ParseFileAbsentException : public std::exception
 {
-	virtual const char* what() const noexcept 
+	virtual const char* what() const noexcept
 	{
 		return " Parse File not Present";
 	}

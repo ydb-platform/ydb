@@ -78,7 +78,7 @@ namespace NKikimr::NPersQueueTests {
             NYdb::TDriverConfig driverCfg;
             driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
             YdbDriver.reset(new NYdb::TDriver(driverCfg));
-            PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver); 
+            PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver);
         }
 
         void EnablePQLogs(const TVector<NKikimrServices::EServiceKikimr> services,

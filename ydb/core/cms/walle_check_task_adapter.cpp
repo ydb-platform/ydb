@@ -30,7 +30,7 @@ public:
         LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s",
                   RequestEvent->Get()->Record.ShortDebugString().data());
 
-        if (!State->WalleTasks.contains(id)) { 
+        if (!State->WalleTasks.contains(id)) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unknown task", ctx);
             return;
         }
@@ -40,7 +40,7 @@ public:
         auto &task = State->WalleTasks.find(id)->second;
         info.SetTaskId(id);
 
-        if (State->ScheduledRequests.contains(task.RequestId)) { 
+        if (State->ScheduledRequests.contains(task.RequestId)) {
             auto &req = State->ScheduledRequests.find(task.RequestId)->second;
 
             for (auto &action : req.Request.GetActions())
@@ -55,7 +55,7 @@ public:
             Become(&TThis::StateWork, ctx, TDuration::Seconds(10), new TEvents::TEvWakeup());
         } else {
             for (auto &id : task.Permissions) {
-                if (State->Permissions.contains(id)) 
+                if (State->Permissions.contains(id))
                     *info.AddHosts() = State->Permissions.find(id)->second.Action.GetHost();
             }
 

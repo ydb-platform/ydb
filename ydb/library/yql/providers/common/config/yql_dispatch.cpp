@@ -97,7 +97,7 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
             if (!handler->IsRuntime()) {
                 ythrow yexception() << "Static setting " << name.Quote() << " cannot be set for specific cluster";
             }
-            if (!ValidClusters.contains(cluster)) { 
+            if (!ValidClusters.contains(cluster)) {
                 TStringBuilder nearClusterMsg;
                 for (auto& item: ValidClusters) {
                     if (NLevenshtein::Distance(cluster, item) < DefaultMistypeDistance) {

@@ -188,9 +188,9 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TThreadParkPad pad;
         TAtomic actorsAlive = 0;
         double elapsedTime = 0;
-        THolder<IActor> endActor{ 
-            new TTestEndDecorator(THolder( 
-                new TSendReceiveActor(&elapsedTime, {}, allocation, Leader)), &pad, &actorsAlive)}; 
+        THolder<IActor> endActor{
+            new TTestEndDecorator(THolder(
+                new TSendReceiveActor(&elapsedTime, {}, allocation, Leader)), &pad, &actorsAlive)};
 
         actorSystem.Register(endActor.Release(), mType);
 
@@ -213,9 +213,9 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         ui32 leaderPoolId = poolsCount == 1 ? 0 : 1;
         TActorId followerId = actorSystem.Register(
             new TSendReceiveActor(nullptr, {}, allocation, Follower), TMailboxType::HTSwap, followerPoolId);
-        THolder<IActor> leader{ 
-            new TTestEndDecorator(THolder( 
-                new TSendReceiveActor(&elapsedTime, followerId, allocation, Leader)), &pad, &actorsAlive)}; 
+        THolder<IActor> leader{
+            new TTestEndDecorator(THolder(
+                new TSendReceiveActor(&elapsedTime, followerId, allocation, Leader)), &pad, &actorsAlive)};
         actorSystem.Register(leader.Release(), TMailboxType::HTSwap, leaderPoolId);
 
         pad.Park();
@@ -235,9 +235,9 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
 
         TActorId followerId = actorSystem.Register(
             new TSendReceiveActor(nullptr, {}, false, Follower, MailboxNeighbourActors), TMailboxType::HTSwap);
-        THolder<IActor> leader{ 
-            new TTestEndDecorator(THolder( 
-                new TSendReceiveActor(&elapsedTime, followerId, false, Leader, MailboxNeighbourActors)), &pad, &actorsAlive)}; 
+        THolder<IActor> leader{
+            new TTestEndDecorator(THolder(
+                new TSendReceiveActor(&elapsedTime, followerId, false, Leader, MailboxNeighbourActors)), &pad, &actorsAlive)};
         actorSystem.Register(leader.Release(), TMailboxType::HTSwap);
 
         pad.Park();
@@ -262,9 +262,9 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             ui32 leaderPoolId = 0;
             TActorId followerId = actorSystem.Register(
                 new TSendReceiveActor(nullptr, {}, true, Follower), TMailboxType::HTSwap, followerPoolId);
-            THolder<IActor> leader{ 
-                new TTestEndDecorator(THolder( 
-                    new TSendReceiveActor(&dummy[i], followerId, true, Leader)), &pad, &actorsAlive)}; 
+            THolder<IActor> leader{
+                new TTestEndDecorator(THolder(
+                    new TSendReceiveActor(&dummy[i], followerId, true, Leader)), &pad, &actorsAlive)};
             actorSystem.Register(leader.Release(), TMailboxType::HTSwap, leaderPoolId);
         }
 
@@ -550,16 +550,16 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
-        THolder<IActor> innerActor = MakeHolder<TTestActor>(); 
+        THolder<IActor> innerActor = MakeHolder<TTestActor>();
         ui64 pongCounter = 0;
-        THolder<IActor> pongActor = MakeHolder<TPongDecorator>(std::move(innerActor), &pongCounter); 
+        THolder<IActor> pongActor = MakeHolder<TPongDecorator>(std::move(innerActor), &pongCounter);
         ui64 pingCounter = 0;
-        THolder<IActor> pingActor = MakeHolder<TPingDecorator>(std::move(pongActor), &pingCounter); 
+        THolder<IActor> pingActor = MakeHolder<TPingDecorator>(std::move(pongActor), &pingCounter);
 
         TThreadParkPad pad;
         TAtomic actorsAlive = 0;
 
-        THolder<IActor> endActor = MakeHolder<TTestEndDecorator>(std::move(pingActor), &pad, &actorsAlive); 
+        THolder<IActor> endActor = MakeHolder<TTestEndDecorator>(std::move(pingActor), &pad, &actorsAlive);
         actorSystem.Register(endActor.Release(), TMailboxType::HTSwap);
 
         pad.Park();

@@ -175,7 +175,7 @@ boost
 
     inline
     char const *
-    diagnostic_information_what( exception const & e, bool verbose=true ) noexcept 
+    diagnostic_information_what( exception const & e, bool verbose=true ) noexcept
         {
         char const * w=0;
 #ifndef BOOST_NO_EXCEPTIONS

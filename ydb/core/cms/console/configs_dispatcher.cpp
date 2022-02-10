@@ -429,7 +429,7 @@ void TConfigsDispatcher::RemoveSubscriber(TSubscriber::TPtr subscriber)
     BLOG_D("Remove subscriber " << subscriber->Subscriber);
 
     for (auto subscription : subscriber->Subscriptions) {
-        Y_VERIFY(subscription->Subscribers.contains(subscriber->Subscriber)); 
+        Y_VERIFY(subscription->Subscribers.contains(subscriber->Subscriber));
         subscription->Subscribers.erase(subscriber->Subscriber);
 
         if (subscription->UpdateInProcess) {
@@ -702,7 +702,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
         }
     }
 
-    if (ConfigsCache.contains(kinds)) { 
+    if (ConfigsCache.contains(kinds)) {
         auto resp = MakeHolder<TEvConfigsDispatcher::TEvGetConfigResponse>();
         resp->Config = ConfigsCache.at(kinds);
 
@@ -802,7 +802,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr 
         return;
     }
 
-    if (!subscription->SubscribersToUpdate.contains(ev->Sender)) { 
+    if (!subscription->SubscribersToUpdate.contains(ev->Sender)) {
         BLOG_ERROR("Notification from unexpected subscriber for subscription " << rec.GetSubscriptionId());
         return;
     }

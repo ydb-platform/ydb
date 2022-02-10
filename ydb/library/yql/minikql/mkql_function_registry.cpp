@@ -291,7 +291,7 @@ public:
     }
 
     bool IsLoadedUdfModule(const TStringBuf& moduleName) const override {
-        return UdfModules_.contains(moduleName); 
+        return UdfModules_.contains(moduleName);
     }
 
     THashSet<TString> GetAllModuleNames() const override {

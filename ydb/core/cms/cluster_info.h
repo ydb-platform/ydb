@@ -476,7 +476,7 @@ public:
 
     bool HasNode(ui32 nodeId) const
     {
-        return Nodes.contains(nodeId); 
+        return Nodes.contains(nodeId);
     }
 
     bool HasNode(const TString &hostName) const
@@ -484,7 +484,7 @@ public:
         ui32 nodeId;
         if (TryFromString(hostName, nodeId))
             return HasNode(nodeId);
-        return HostNameToNodeId.contains(hostName); 
+        return HostNameToNodeId.contains(hostName);
     }
 
     const TNodeInfo &Node(ui32 nodeId) const
@@ -549,7 +549,7 @@ public:
 
     bool HasTablet(ui64 id) const
     {
-        return Tablets.contains(id); 
+        return Tablets.contains(id);
     }
 
     const TTabletInfo &Tablet(ui64 id) const
@@ -565,7 +565,7 @@ public:
 
     bool HasPDisk(TPDiskID pdId) const
     {
-        return PDisks.contains(pdId); 
+        return PDisks.contains(pdId);
     }
 
     bool HasPDisk(const TString &name) const
@@ -573,7 +573,7 @@ public:
         if (!TPDiskInfo::IsDeviceName(name))
             return false;
         auto id = TPDiskInfo::NameToId(name);
-        return PDisks.contains(id); 
+        return PDisks.contains(id);
     }
 
     bool HasPDisk(const TString &hostName, const TString &path) const
@@ -610,7 +610,7 @@ public:
 
     bool HasVDisk(const TVDiskID &vdId) const
     {
-        return VDisks.contains(vdId); 
+        return VDisks.contains(vdId);
     }
 
     bool HasVDisk(const TString &name) const
@@ -618,7 +618,7 @@ public:
         if (!TVDiskInfo::IsDeviceName(name))
             return false;
         auto id = TVDiskInfo::NameToId(name);
-        return VDisks.contains(id); 
+        return VDisks.contains(id);
     }
 
     const TVDiskInfo &VDisk(const TVDiskID &vdId) const
@@ -645,7 +645,7 @@ public:
 
     bool HasBSGroup(ui32 groupId) const
     {
-        return BSGroups.contains(groupId); 
+        return BSGroups.contains(groupId);
     }
 
     const TBSGroupInfo &BSGroup(ui32 groupId) const

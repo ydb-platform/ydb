@@ -471,13 +471,13 @@ public:
     };
 
     template <class... TVariantTypes>
-    int Add(const chunk_id, std::variant<TVariantTypes...>* pData) { 
-        static_assert(std::variant_size_v<std::variant<TVariantTypes...>> < Max<ui32>()); 
+    int Add(const chunk_id, std::variant<TVariantTypes...>* pData) {
+        static_assert(std::variant_size_v<std::variant<TVariantTypes...>> < Max<ui32>());
 
         ui32 index;
         if (IsReading()) {
             Add(1, &index);
-            TLoadFromTypeFromListHelper<std::variant<TVariantTypes...>>::template Do<TVariantTypes...>( 
+            TLoadFromTypeFromListHelper<std::variant<TVariantTypes...>>::template Do<TVariantTypes...>(
                 *this,
                 index,
                 pData
@@ -485,7 +485,7 @@ public:
         } else {
             index = pData->index(); // type cast is safe because of static_assert check above
             Add(1, &index);
-            std::visit([&](auto& dst) -> void { Add(2, &dst); }, *pData); 
+            std::visit([&](auto& dst) -> void { Add(2, &dst); }, *pData);
         }
         return 0;
     }

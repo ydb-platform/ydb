@@ -56,7 +56,7 @@ inline double MinValue(const TString& nameAndOpts, const TTable& table)
     TString name;
     THashSet<TString> opts;
     ParseNameAndOpts(nameAndOpts, name, opts);
-    bool stack = opts.contains("stack"); 
+    bool stack = opts.contains("stack");
     if (stack) {
         return 0.0;
     } else {
@@ -73,7 +73,7 @@ inline double MaxValue(const TString& nameAndOpts, const TTable& table)
     TString name;
     THashSet<TString> opts;
     ParseNameAndOpts(nameAndOpts, name, opts);
-    bool stack = opts.contains("stack"); 
+    bool stack = opts.contains("stack");
     if (stack) {
         return AccumulateIfExist(name, table, 0.0, [] (double x, double y) {
             return x + y;

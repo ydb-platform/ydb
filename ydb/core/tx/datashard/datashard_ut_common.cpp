@@ -768,7 +768,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                 if ((prevTxId+1) != immEvent->GetTxId())
                     break;
                 //Cerr << ">>> imm to " << shard << Endl;
-                UNIT_ASSERT(ShardActors.contains(shard)); 
+                UNIT_ASSERT(ShardActors.contains(shard));
                 THolder<IEventHandle> handle(new IEventHandle(ShardActors[shard], Tester.Sender, immEvent.Release()));
                 runtime.Send(handle.Release());
                 immEvents.pop_front();

@@ -128,7 +128,7 @@ void CheckPDisk(const TPDiskInfo &pdisk, ui32 id, ui32 nodeId, NKikimrCms::EStat
 
 void CheckVDiskGroups(const TVDiskInfo &vdisk, ui32 group)
 {
-    UNIT_ASSERT(vdisk.BSGroups.contains(group)); 
+    UNIT_ASSERT(vdisk.BSGroups.contains(group));
 }
 
 template<typename... Ts>
@@ -166,7 +166,7 @@ void CheckVDisk(const TVDiskInfo &vdisk, TVDiskID id, ui32 nodeId, NKikimrCms::E
 
 void CheckBSGroupVDisks(const TBSGroupInfo &group, TVDiskID vdisk)
 {
-    UNIT_ASSERT(group.VDisks.contains(vdisk)); 
+    UNIT_ASSERT(group.VDisks.contains(vdisk));
 }
 
 template<typename... Ts>
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT(!cluster.HasPDisk(NCms::TPDiskID(1, 2)));
         UNIT_ASSERT(!cluster.HasPDisk(NCms::TPDiskID(2, 1)));
         CheckPDisk(cluster.PDisk(NCms::TPDiskID(1, 1)), 1, 1, UP, 0);
-        UNIT_ASSERT(cluster.Node(1).PDisks.contains(NCms::TPDiskID(1, 1))); 
+        UNIT_ASSERT(cluster.Node(1).PDisks.contains(NCms::TPDiskID(1, 1)));
 
         cluster.AddVDisk(MakeVSlotConfig(1, {0, 1, 0, 0, 0}, 1, 0));
         cluster.UpdateVDiskState({0, 1, 0, 0, 0}, MakeVDiskInfo({0, 1, 0, 0, 0}, 1, 0));
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT(!cluster.HasVDisk({0, 1, 0, 1, 0}));
         CheckVDisk(cluster.VDisk({0, 1, 0, 0, 0}), {0, 1, 0, 0, 0}, 1, UP, 1, 0);
         UNIT_ASSERT_VALUES_EQUAL(cluster.PDisk(NCms::TPDiskID(1, 1)).VDisks.size(), 1);
-        UNIT_ASSERT(cluster.PDisk(NCms::TPDiskID(1, 1)).VDisks.contains(TVDiskID(0, 1, 0, 0, 0))); 
+        UNIT_ASSERT(cluster.PDisk(NCms::TPDiskID(1, 1)).VDisks.contains(TVDiskID(0, 1, 0, 0, 0)));
 
         cluster.AddPDisk(MakePDiskConfig(2, 2));
         cluster.UpdatePDiskState(NCms::TPDiskID(2, 2), MakePDiskInfo(2));
@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT(cluster.HasVDisk({0, 1, 0, 1, 0}));
         UNIT_ASSERT(cluster.HasPDisk(NCms::TPDiskID(2, 2)));
         CheckPDisk(cluster.PDisk(NCms::TPDiskID(2, 2)), 2, 2, UP, 1);
-        UNIT_ASSERT(cluster.PDisk(NCms::TPDiskID(2, 2)).VDisks.contains(TVDiskID(0, 1, 0, 1, 0))); 
+        UNIT_ASSERT(cluster.PDisk(NCms::TPDiskID(2, 2)).VDisks.contains(TVDiskID(0, 1, 0, 1, 0)));
 
         cluster.AddBSGroup(MakeBSGroup(1, "none", 1, 1, 0, 2, 2, 0));
         UNIT_ASSERT(cluster.HasBSGroup(1));

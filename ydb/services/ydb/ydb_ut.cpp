@@ -3525,7 +3525,7 @@ void CheckTableSettings(const TKikimrWithGrpcAndRootSchema &server,
     auto *reflection = resp.GetReflection();
     reflection->ListFields(resp, &fields);
     for (auto field : fields)
-        if (!affectedFields.contains(field->number())) 
+        if (!affectedFields.contains(field->number()))
             reflection->ClearField(&resp, field);
 
     UNIT_ASSERT_VALUES_EQUAL(resp.DebugString(), expected.DebugString());
@@ -4520,7 +4520,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
     {
         UNIT_ASSERT_VALUES_EQUAL(array.size(), expected.size());
         for (auto &val : array) {
-            UNIT_ASSERT(expected.contains(val)); 
+            UNIT_ASSERT(expected.contains(val));
             expected.erase(val);
         }
     }
@@ -4546,7 +4546,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
     {
         UNIT_ASSERT_VALUES_EQUAL(labels.size(), expected.size());
         for (auto &pr : labels) {
-            UNIT_ASSERT(expected.contains(pr.first)); 
+            UNIT_ASSERT(expected.contains(pr.first));
             UNIT_ASSERT_VALUES_EQUAL(expected.at(pr.first), pr.second);
             expected.erase(pr.first);
         }

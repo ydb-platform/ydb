@@ -107,7 +107,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
 
             ui64 semaphoreId = Self->NextSemaphoreId++;
             Y_VERIFY(semaphoreId > 0);
-            Y_VERIFY(!Self->Semaphores.contains(semaphoreId)); 
+            Y_VERIFY(!Self->Semaphores.contains(semaphoreId));
             Self->PersistSysParam(db, Schema::SysParam_NextSemaphoreId, ToString(Self->NextSemaphoreId));
             semaphore = &Self->Semaphores[semaphoreId];
             semaphore->Id = semaphoreId;
@@ -173,7 +173,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
         auto* waiter = session->WaitingSemaphores.FindPtr(semaphoreId);
         if (waiter) {
             // This session is already waiting for the semaphore
-            Y_VERIFY(semaphore->Waiters.contains(waiter->OrderId)); 
+            Y_VERIFY(semaphore->Waiters.contains(waiter->OrderId));
             if (Record.GetCount() > waiter->Count) {
                 // Increasing count is not allowed
                 ReplyError(
@@ -250,7 +250,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
         }
 
         // Notify sender if session is now waiting for the semaphore
-        if (session->WaitingSemaphores.contains(semaphoreId)) { 
+        if (session->WaitingSemaphores.contains(semaphoreId)) {
             Y_VERIFY(Self->ScheduleWaiterTimeout(semaphoreId, waiter, ctx));
             ReplyPending();
         }

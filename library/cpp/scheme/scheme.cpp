@@ -2,7 +2,7 @@
 #include "scimpl_private.h"
 
 #include <util/generic/algorithm.h>
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 
 namespace NSc {
     TStringBufs& TValue::DictKeys(TStringBufs& vs, bool sorted) const {
@@ -251,10 +251,10 @@ namespace NSc {
         }
 
         if (coreA.IsString()) {
-            std::string_view strA = coreA.String; 
-            std::string_view strB = coreB.String; 
+            std::string_view strA = coreA.String;
+            std::string_view strB = coreB.String;
 
-            if (strA != strB) { 
+            if (strA != strB) {
                 return false;
             }
         } else if (coreA.IsArray()) {
@@ -507,7 +507,7 @@ namespace NSc {
 
     namespace NPrivate {
         int CompareStr(const NSc::TValue& a, TStringBuf b) {
-            return a.GetString().compare(b); 
+            return a.GetString().compare(b);
         }
 
         int CompareInt(const NSc::TValue& a, i64 r) {

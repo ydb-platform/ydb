@@ -255,7 +255,7 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
     }
 
     for (auto it = State->Tables.begin(), end = State->Tables.end(); it != end; ) {
-        if (scheme.Tables.contains(it->first)) { 
+        if (scheme.Tables.contains(it->first)) {
             ++it;
         } else {
             StopTable(it->second);

@@ -725,7 +725,7 @@ private:
 
                 if (name.empty()) {
                     return AddError("Empty name is not allowed");
-                } else if (members.contains(name)) { 
+                } else if (members.contains(name)) {
                     return AddError("Member name duplication");
                 }
 

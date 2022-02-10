@@ -136,7 +136,7 @@ class bad_numeric_cast : public std::bad_cast
 {
   public:
 
-    virtual const char * what() const noexcept 
+    virtual const char * what() const noexcept
       {  return "bad numeric conversion: overflow"; }
 };
 
@@ -144,20 +144,20 @@ class negative_overflow : public bad_numeric_cast
 {
   public:
 
-    virtual const char * what() const noexcept 
+    virtual const char * what() const noexcept
       {  return "bad numeric conversion: negative overflow"; }
 };
 class positive_overflow : public bad_numeric_cast
 {
   public:
 
-    virtual const char * what() const noexcept 
+    virtual const char * what() const noexcept
       { return "bad numeric conversion: positive overflow"; }
 };
 
 struct def_overflow_handler
 {
-  void operator() ( range_check_result r ) // 
+  void operator() ( range_check_result r ) //
   {
 #ifndef BOOST_NO_EXCEPTIONS
     if ( r == cNegOverflow )
@@ -175,7 +175,7 @@ struct def_overflow_handler
 
 struct silent_overflow_handler
 {
-  void operator() ( range_check_result ) {} // noexcept 
+  void operator() ( range_check_result ) {} // noexcept
 } ;
 
 template<class Traits>

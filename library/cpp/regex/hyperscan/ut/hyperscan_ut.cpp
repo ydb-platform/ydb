@@ -67,8 +67,8 @@ Y_UNIT_TEST_SUITE(HyperscanWrappers) {
             "fooBaR",
             callback);
         UNIT_ASSERT_EQUAL(foundIds.size(), 2);
-        UNIT_ASSERT(foundIds.contains(42)); 
-        UNIT_ASSERT(foundIds.contains(241)); 
+        UNIT_ASSERT(foundIds.contains(42));
+        UNIT_ASSERT(foundIds.contains(241));
     }
 
     // https://ml.yandex-team.ru/thread/2370000002965712422/

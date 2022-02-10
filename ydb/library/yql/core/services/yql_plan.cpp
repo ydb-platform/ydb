@@ -142,7 +142,7 @@ void WriteProviders(const TString& tag, const TProviderInfoMap& providers, NYson
 }
 
 ui32 FillLevels(THashMap<ui32, TLevelContext>& basicNodesMap, ui32 current, THashSet<ui32>& visited) {
-    if (visited.contains(current)) { 
+    if (visited.contains(current)) {
         return 0;
     }
 
@@ -436,7 +436,7 @@ public:
                     }
 
                     auto inputKey = TPinKey{ input.ProviderId, input.PinId, TBasicNode::EType::Input };
-                    if (allInputs.contains(inputKey)) { 
+                    if (allInputs.contains(inputKey)) {
                         continue;
                     }
 
@@ -460,7 +460,7 @@ public:
                     }
 
                     auto outputKey = TPinKey{ output.ProviderId, output.PinId, TBasicNode::EType::Output };
-                    if (allOutputs.contains(outputKey)) { 
+                    if (allOutputs.contains(outputKey)) {
                         continue;
                     }
 

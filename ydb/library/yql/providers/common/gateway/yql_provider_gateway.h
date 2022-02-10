@@ -10,7 +10,7 @@ namespace NCommon {
 
 class TOperationResult {
 public:
-    [[nodiscard]] 
+    [[nodiscard]]
     bool Success() const { return Status_ == TIssuesIds::SUCCESS; };
     const EYqlIssueCode& Status() const { return Status_; }
     const TIssues& Issues() const { return Issues_; }

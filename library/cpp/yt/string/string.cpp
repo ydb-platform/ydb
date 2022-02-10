@@ -3,7 +3,7 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 
 #include <util/string/ascii.h>
 
@@ -220,7 +220,7 @@ size_t TCaseInsensitiveStringHasher::operator()(TStringBuf arg) const
         for (size_t index = 0; index < arg.length(); ++index) {
             buffer[index] = AsciiToLower(arg[index]);
         }
-        return ComputeHash(TStringBuf(buffer, arg.length())); 
+        return ComputeHash(TStringBuf(buffer, arg.length()));
     };
     const size_t SmallSize = 256;
     if (arg.length() <= SmallSize) {

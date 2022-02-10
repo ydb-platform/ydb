@@ -19,25 +19,25 @@ namespace NActors {
         ~TImpl() {
         }
 
-        bool Park() noexcept { 
+        bool Park() noexcept {
             __atomic_fetch_sub(&Futex, 1, __ATOMIC_SEQ_CST);
             while (__atomic_load_n(&Futex, __ATOMIC_ACQUIRE) == -1)
                 SysFutex(&Futex, FUTEX_WAIT_PRIVATE, -1, nullptr, nullptr, 0);
             return IsInterrupted();
         }
 
-        void Unpark() noexcept { 
+        void Unpark() noexcept {
             const int old = __atomic_fetch_add(&Futex, 1, __ATOMIC_SEQ_CST);
             if (old == -1)
                 SysFutex(&Futex, FUTEX_WAKE_PRIVATE, -1, nullptr, nullptr, 0);
         }
 
-        void Interrupt() noexcept { 
+        void Interrupt() noexcept {
             __atomic_store_n(&Interrupted, true, __ATOMIC_SEQ_CST);
             Unpark();
         }
 
-        bool IsInterrupted() const noexcept { 
+        bool IsInterrupted() const noexcept {
             return __atomic_load_n(&Interrupted, __ATOMIC_ACQUIRE);
         }
     };
@@ -59,26 +59,26 @@ namespace NActors {
             if (!EvHandle)
                 ythrow TWithBackTrace<yexception>() << "::CreateEvent failed";
         }
-        ~TImpl() { 
+        ~TImpl() {
             if (EvHandle)
                 ::CloseHandle(EvHandle);
         }
 
-        bool Park() noexcept { 
+        bool Park() noexcept {
             ::WaitForSingleObject(EvHandle, INFINITE);
             return AtomicGet(Interrupted);
         }
 
-        void Unpark() noexcept { 
+        void Unpark() noexcept {
             ::SetEvent(EvHandle);
         }
 
-        void Interrupt() noexcept { 
+        void Interrupt() noexcept {
             AtomicSet(Interrupted, true);
             Unpark();
         }
 
-        bool IsInterrupted() const noexcept { 
+        bool IsInterrupted() const noexcept {
             return AtomicGet(Interrupted);
         }
     };
@@ -98,24 +98,24 @@ namespace NActors {
             , Ev(TSystemEvent::rAuto)
         {
         }
-        ~TImpl() { 
+        ~TImpl() {
         }
 
-        bool Park() noexcept { 
+        bool Park() noexcept {
             Ev.Wait();
             return AtomicGet(Interrupted);
         }
 
-        void Unpark() noexcept { 
+        void Unpark() noexcept {
             Ev.Signal();
         }
 
-        void Interrupt() noexcept { 
+        void Interrupt() noexcept {
             AtomicSet(Interrupted, true);
             Unpark();
         }
 
-        bool IsInterrupted() const noexcept { 
+        bool IsInterrupted() const noexcept {
             return AtomicGet(Interrupted);
         }
     };
@@ -126,22 +126,22 @@ namespace NActors {
     {
     }
 
-    TThreadParkPad::~TThreadParkPad() { 
+    TThreadParkPad::~TThreadParkPad() {
     }
 
-    bool TThreadParkPad::Park() noexcept { 
+    bool TThreadParkPad::Park() noexcept {
         return Impl->Park();
     }
 
-    void TThreadParkPad::Unpark() noexcept { 
+    void TThreadParkPad::Unpark() noexcept {
         Impl->Unpark();
     }
 
-    void TThreadParkPad::Interrupt() noexcept { 
+    void TThreadParkPad::Interrupt() noexcept {
         Impl->Interrupt();
     }
 
-    bool TThreadParkPad::Interrupted() const noexcept { 
+    bool TThreadParkPad::Interrupted() const noexcept {
         return Impl->IsInterrupted();
     }
 

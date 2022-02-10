@@ -35,12 +35,12 @@ void UnTrspChars(const char* s, char* d) {
 
 void InvertDomain(char* begin, char* end) {
     // skip schema if it is present
-    const auto dotPos = TStringBuf{begin, end}.find('.'); 
-    if (dotPos == TStringBuf::npos) 
+    const auto dotPos = TStringBuf{begin, end}.find('.');
+    if (dotPos == TStringBuf::npos)
         return; // no need to invert anything
-    const auto schemaendPos = TStringBuf{begin, end}.find("://", 3); 
-    if (schemaendPos < dotPos) 
-        begin += schemaendPos + 3; 
+    const auto schemaendPos = TStringBuf{begin, end}.find("://", 3);
+    if (schemaendPos < dotPos)
+        begin += schemaendPos + 3;
     char* sl = (char*)memchr(begin, '/', end - begin);
     char* cl = (char*)memchr(begin, ':', sl ? sl - begin : end - begin);
     end = cl ? cl : (sl ? sl : end);

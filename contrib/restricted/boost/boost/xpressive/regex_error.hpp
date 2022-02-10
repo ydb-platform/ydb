@@ -70,7 +70,7 @@ struct regex_error
 
     /// Destructor for class regex_error
     /// \throw nothrow
-    virtual ~regex_error() 
+    virtual ~regex_error()
     {}
 
 private:

@@ -19,7 +19,7 @@ public:
     {
     }
 
-    T* Get() const noexcept { 
+    T* Get() const noexcept {
         if (!Value) {
             Value = Factory();
         }

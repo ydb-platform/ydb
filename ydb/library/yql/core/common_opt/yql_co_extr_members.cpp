@@ -527,7 +527,7 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
     auto outputStructType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     TSet<TStringBuf> toDrop;
     for (const auto& out : outputStructType->GetItems()) {
-        if (!outMembers.contains(out->GetName())) { 
+        if (!outMembers.contains(out->GetName())) {
             toDrop.insert(out->GetName());
         }
     }
@@ -636,7 +636,7 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
 
     // keep input fields
     for (const auto& in : inputStructType->GetItems()) {
-        if (outMembers.contains(in->GetName()) && !payloadFields.contains(in->GetName())) { 
+        if (outMembers.contains(in->GetName()) && !payloadFields.contains(in->GetName())) {
             usedFields.insert(in->GetName());
         }
     }
@@ -697,7 +697,7 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
             // many columns
             bool hasColumns = false;
             for (const auto& col : handler.ColumnName().Ref().Children()) {
-                if (outMembers.contains(col->Content())) { 
+                if (outMembers.contains(col->Content())) {
                     hasColumns = true;
                     break;
                 }
@@ -708,7 +708,7 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
                 continue;
             }
         } else {
-            if (!outMembers.contains(handler.ColumnName().Ref().Content())) { 
+            if (!outMembers.contains(handler.ColumnName().Ref().Content())) {
                 // drop handler
                 continue;
             }

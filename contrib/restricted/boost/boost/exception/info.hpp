@@ -62,7 +62,7 @@ boost
                 {
                 }
 
-            ~error_info_container_impl() 
+            ~error_info_container_impl()
                 {
                 }
 

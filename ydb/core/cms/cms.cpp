@@ -896,7 +896,7 @@ void TCms::CleanupWalleTasks(const TActorContext &ctx)
     for (const auto &entry : State->ScheduledRequests) {
         const auto &request = entry.second;
         if (request.Owner == WALLE_CMS_USER
-            && !State->WalleRequests.contains(request.RequestId)) 
+            && !State->WalleRequests.contains(request.RequestId))
             requestsToRemove.push_back(request.RequestId);
     }
 
@@ -908,7 +908,7 @@ void TCms::CleanupWalleTasks(const TActorContext &ctx)
     for (const auto &entry : State->Permissions) {
         const auto &permission = entry.second;
         if (permission.Owner == WALLE_CMS_USER
-            && !State->WalleRequests.contains(permission.RequestId)) 
+            && !State->WalleRequests.contains(permission.RequestId))
             permissionsToRemove.push_back(permission.PermissionId);
     }
 
@@ -929,7 +929,7 @@ void TCms::RemoveEmptyWalleTasks(const TActorContext &ctx)
     TVector<TString> tasksToRemove;
     for (const auto &entry : State->WalleTasks) {
         const auto &task = entry.second;
-        if (!State->ScheduledRequests.contains(task.RequestId) && task.Permissions.empty()) { 
+        if (!State->ScheduledRequests.contains(task.RequestId) && task.Permissions.empty()) {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Found empty task %s", task.TaskId.data());
             tasksToRemove.push_back(task.TaskId);
         }
@@ -1035,7 +1035,7 @@ void TCms::GetPermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool all,
     LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
               TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
-    Reply(ev, std::move(resp), ctx); 
+    Reply(ev, std::move(resp), ctx);
 }
 
 void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool done, const TActorContext &ctx)
@@ -1073,9 +1073,9 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
-        Execute(CreateTxRemovePermissions(std::move(ids), std::move(ev->Release()), handle), ctx); 
+        Execute(CreateTxRemovePermissions(std::move(ids), std::move(ev->Release()), handle), ctx);
     } else {
-        Reply(ev, std::move(resp), ctx); 
+        Reply(ev, std::move(resp), ctx);
     }
 }
 
@@ -1114,7 +1114,7 @@ void TCms::GetRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, bool all, const
     LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
               TStatus::ECode_Name(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
-    Reply(ev, std::move(resp), ctx); 
+    Reply(ev, std::move(resp), ctx);
 }
 
 void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx)
@@ -1145,9 +1145,9 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
 
     if (!rec.GetDryRun() && resp->Record.GetStatus().GetCode() == TStatus::OK) {
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
-        Execute(CreateTxRemoveRequest(id, std::move(ev->Release()), handle), ctx); 
+        Execute(CreateTxRemoveRequest(id, std::move(ev->Release()), handle), ctx);
     } else {
-        Reply(ev, std::move(resp), ctx); 
+        Reply(ev, std::move(resp), ctx);
     }
 }
 
@@ -1188,7 +1188,7 @@ void TCms::GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool
     LOG_DEBUG(ctx, NKikimrServices::CMS, "Resulting status: %s %s",
               ToString(resp->Record.GetStatus().GetCode()).data(), resp->Record.GetStatus().GetReason().data());
 
-    Reply(ev, std::move(resp), ctx); 
+    Reply(ev, std::move(resp), ctx);
 }
 
 bool TCms::RemoveNotification(const TString &id, const TString &user, bool remove, TErrorInfo &error)
@@ -1474,7 +1474,7 @@ void TCms::Handle(TEvCms::TEvClusterStateRequest::TPtr &ev,
     resp->Record.MutableStatus()->SetCode(TStatus::OK);
     resp->Record.MutableState()->SetTimestamp(ClusterInfo->GetTimestamp().GetValue());
 
-    Reply(ev, std::move(resp), ctx); 
+    Reply(ev, std::move(resp), ctx);
 }
 
 void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
@@ -1515,7 +1515,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
 
     // Schedule request if required.
     if (rec.GetDryRun()) {
-        Reply(ev, std::move(resp), ctx); 
+        Reply(ev, std::move(resp), ctx);
     } else {
         auto reqId = user + "-r-" + ToString(State->NextRequestId++);
         resp->Record.SetRequestId(reqId);
@@ -1540,7 +1540,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
             AcceptPermissions(resp->Record, reqId, user, ctx);
 
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
-        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx); 
+        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);
     }
 }
 
@@ -1576,7 +1576,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
 
     // Schedule request if required.
     if (rec.GetDryRun()) {
-        Reply(ev, std::move(resp), ctx); 
+        Reply(ev, std::move(resp), ctx);
     } else {
         TAutoPtr<TRequestInfo> copy;
         auto order = request.Order;
@@ -1603,7 +1603,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
             AcceptPermissions(resp->Record, scheduled.RequestId, user, ctx, true);
 
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
-        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx); 
+        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);
     }
 }
 
@@ -1805,7 +1805,7 @@ void TCms::Handle(TEvCms::TEvStoreWalleTask::TPtr &ev, const TActorContext &ctx)
     State->WalleRequests.emplace(event->Task.RequestId, event->Task.TaskId);
 
     auto handle = new IEventHandle(ev->Sender, SelfId(), new TEvCms::TEvWalleTaskStored(event->Task.TaskId), 0, ev->Cookie);
-    Execute(CreateTxStoreWalleTask(event->Task, std::move(ev->Release()), handle), ctx); 
+    Execute(CreateTxStoreWalleTask(event->Task, std::move(ev->Release()), handle), ctx);
 }
 
 void TCms::Handle(TEvCms::TEvRemoveWalleTask::TPtr &ev, const TActorContext &ctx)
@@ -1813,17 +1813,17 @@ void TCms::Handle(TEvCms::TEvRemoveWalleTask::TPtr &ev, const TActorContext &ctx
     TString id = ev->Get()->TaskId;
     TAutoPtr<TEvCms::TEvWalleTaskRemoved> resp = new TEvCms::TEvWalleTaskRemoved(id);
 
-    if (State->WalleTasks.contains(id)) { 
+    if (State->WalleTasks.contains(id)) {
         auto &task = State->WalleTasks.find(id)->second;
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         if (State->ScheduledRequests.contains(task.RequestId)) {
-            Execute(CreateTxRemoveRequest(task.RequestId, std::move(ev->Release()), handle), ctx); 
+            Execute(CreateTxRemoveRequest(task.RequestId, std::move(ev->Release()), handle), ctx);
         } else {
             TVector<TString> ids(task.Permissions.begin(), task.Permissions.end());
-            Execute(CreateTxRemovePermissions(ids, std::move(ev->Release()), handle), ctx); 
+            Execute(CreateTxRemovePermissions(ids, std::move(ev->Release()), handle), ctx);
         }
     } else {
-        Reply(ev, std::move(resp), ctx); 
+        Reply(ev, std::move(resp), ctx);
     }
 }
 
@@ -1834,7 +1834,7 @@ void TCms::Handle(TEvCms::TEvGetConfigRequest::TPtr &ev, const TActorContext &ct
     State->Config.Serialize(*response->Record.MutableConfig());
     response->Record.MutableStatus()->SetCode(TStatus::OK);
 
-    Reply(ev, std::move(response), ctx); 
+    Reply(ev, std::move(response), ctx);
 }
 
 void TCms::Handle(TEvCms::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx)

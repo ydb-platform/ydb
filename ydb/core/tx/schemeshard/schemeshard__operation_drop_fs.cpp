@@ -228,9 +228,9 @@ private:
         switch(state) {
         case TTxState::Waiting:
         case TTxState::DeleteParts:
-            return MakeHolder<TDeleteParts>(OperationId); 
+            return MakeHolder<TDeleteParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId); 
+            return MakeHolder<TPropose>(OperationId);
         default:
             return nullptr;
         }

@@ -23,29 +23,29 @@ auto& Ctest = Cnull;
 //auto& Ctest = Cerr;
 
 namespace {
-    class TFailingMtpQueue: public TSimpleThreadPool { 
+    class TFailingMtpQueue: public TSimpleThreadPool {
     private:
         bool FailOnAdd_ = false;
     public:
         void SetFailOnAdd(bool fail = true) {
             FailOnAdd_ = fail;
         }
-        [[nodiscard]] bool Add(IObjectInQueue* pObj) override { 
+        [[nodiscard]] bool Add(IObjectInQueue* pObj) override {
             if (FailOnAdd_) {
                 return false;
             }
 
-            return TSimpleThreadPool::Add(pObj); 
+            return TSimpleThreadPool::Add(pObj);
         }
         TFailingMtpQueue() = default;
-        TFailingMtpQueue(IThreadFactory* pool) 
-            : TSimpleThreadPool(pool) 
+        TFailingMtpQueue(IThreadFactory* pool)
+            : TSimpleThreadPool(pool)
         {
         }
     };
 
     using TFailingServerMtpQueue =
-        TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>; 
+        TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>;
 
     class THTTP200OkServer: public THttpServer::ICallBack {
         class TRequest: public THttpClientRequestEx {
@@ -224,9 +224,9 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
         THttpServer::TOptions options(port);
         THttpServer::TMtpQueueRef mainWorkers =
-            new TFailingServerMtpQueue(&serverImpl, SystemThreadFactory()); 
+            new TFailingServerMtpQueue(&serverImpl, SystemThreadFactory());
         THttpServer::TMtpQueueRef failWorkers =
-            new TThreadPool(SystemThreadFactory()); 
+            new TThreadPool(SystemThreadFactory());
 
         THttpServer server(&serverImpl, mainWorkers, failWorkers, options);
         UNIT_ASSERT(server.Start());
@@ -353,9 +353,9 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
         THttpServer::TOptions options(port);
         THttpServer::TMtpQueueRef mainWorkers =
-            new TFailingServerMtpQueue(&serverImpl, SystemThreadFactory()); 
+            new TFailingServerMtpQueue(&serverImpl, SystemThreadFactory());
         THttpServer::TMtpQueueRef failWorkers =
-            new TThreadPool(SystemThreadFactory()); 
+            new TThreadPool(SystemThreadFactory());
 
         THttpServer server(&serverImpl, mainWorkers, failWorkers, options);
         UNIT_ASSERT(server.Start());
@@ -688,9 +688,9 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
 
         THttpServer::TOptions options(port);
         THttpServer::TMtpQueueRef mainWorkers =
-            new TFailingServerMtpQueue(&serverImpl, SystemThreadFactory()); 
+            new TFailingServerMtpQueue(&serverImpl, SystemThreadFactory());
         THttpServer::TMtpQueueRef failWorkers =
-            new TThreadPool(SystemThreadFactory()); 
+            new TThreadPool(SystemThreadFactory());
 
         THttpServer server(&serverImpl, mainWorkers, failWorkers, options);
         UNIT_ASSERT(server.Start());

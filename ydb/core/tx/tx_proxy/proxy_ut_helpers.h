@@ -104,8 +104,8 @@ public:
 
         Server = new Tests::TServer(Settings);
 
-        Client = MakeHolder<Tests::TClient>(GetSettings()); 
-        Tenants = MakeHolder<Tests::TTenants>(Server); 
+        Client = MakeHolder<Tests::TClient>(GetSettings());
+        Tenants = MakeHolder<Tests::TTenants>(Server);
 
         SetLogging();
         InitRoot();
@@ -203,8 +203,8 @@ public:
 
         Server = new Tests::TServer(Settings);
 
-        Client = MakeHolder<Tests::TClient>(GetSettings()); 
-        Tenants = MakeHolder<Tests::TTenants>(Server); 
+        Client = MakeHolder<Tests::TClient>(GetSettings());
+        Tenants = MakeHolder<Tests::TTenants>(Server);
 
         SetLogging();
         InitRoot();

@@ -53,7 +53,7 @@ namespace NActors {
 #ifdef BALLOC
         ThreadDisableBalloc();
 #endif
-        ::SetCurrentThreadName("Scheduler"); 
+        ::SetCurrentThreadName("Scheduler");
 
         ui64 currentMonotonic = RelaxedLoad(CurrentMonotonic);
         ui64 throttledMonotonic = currentMonotonic;

@@ -572,7 +572,7 @@ static constexpr ui64 NVME_ID_FIRMWARE_REVISION_SIZE = 8;
 
 static TArrayHolder<char> GetNvmeIdentifyStruct(int fd, TStringStream *outDetails)
 {
-    TArrayHolder<char> id_ctrl_buffer{new char[NVME_IDENTIFY_DATA_SIZE]}; 
+    TArrayHolder<char> id_ctrl_buffer{new char[NVME_IDENTIFY_DATA_SIZE]};
     memset(id_ctrl_buffer.Get(), 0, NVME_IDENTIFY_DATA_SIZE);
     struct nvme_admin_cmd cmd;
     memset(&cmd, 0, sizeof(struct nvme_admin_cmd));

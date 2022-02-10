@@ -448,7 +448,7 @@ void CheckLabeledCountersResponse(ui32 count, TTestContext& tc, TVector<TString>
     }
     UNIT_ASSERT(groups.size() == count);
     for (auto& g : mustHave) {
-        UNIT_ASSERT(groups.contains(g)); 
+        UNIT_ASSERT(groups.contains(g));
     }
 }
 

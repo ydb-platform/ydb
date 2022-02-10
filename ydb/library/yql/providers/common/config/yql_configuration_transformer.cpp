@@ -53,7 +53,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
             if (!EnsureAtom(*ds->Child(1), ctx)) {
                 return nullptr;
             }
-            auto clusterName = TString(ds->Child(1)->Content()); 
+            auto clusterName = TString(ds->Child(1)->Content());
 
             if (!EnsureMinArgsCount(*node, 3, ctx)) {
                 return nullptr;
@@ -76,7 +76,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
                     return nullptr;
                 }
 
-                auto name = TString(node->Child(3)->Content()); 
+                auto name = TString(node->Child(3)->Content());
                 if (name.StartsWith('_')) {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()),
                         TStringBuilder() << "Failed to override system setting: " << name));
@@ -93,7 +93,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
                         return nullptr;
                     }
 
-                    value = TString(node->Child(4)->Content()); 
+                    value = TString(node->Child(4)->Content());
                 }
 
                 if (!HandleAttr(node->Child(3)->Pos(), clusterName, name, value, ctx)) {
@@ -108,7 +108,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
                     return nullptr;
                 }
 
-                auto credAlias = TString(node->Child(3)->Content()); 
+                auto credAlias = TString(node->Child(3)->Content());
                 if (!HandleAuth(node->Child(3)->Pos(), clusterName, credAlias, ctx)) {
                     return nullptr;
                 }

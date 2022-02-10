@@ -518,8 +518,8 @@ void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &inf
         }
 
         auto &pdisk = PDiskRef(pdiskId);
-        Y_VERIFY_DEBUG(pdisk.VSlots.contains(vdisk.GetVSlotId())); 
-        if (!pdisk.VSlots.contains(vdisk.GetVSlotId())) { 
+        Y_VERIFY_DEBUG(pdisk.VSlots.contains(vdisk.GetVSlotId()));
+        if (!pdisk.VSlots.contains(vdisk.GetVSlotId())) {
             BLOG_ERROR("Group " << bsgroup.GroupId << " refers unknown slot " <<
                         vdisk.GetVSlotId() << " in disk " << pdiskId.ToString());
             return;

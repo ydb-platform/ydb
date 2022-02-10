@@ -33,7 +33,7 @@ bool TValidatorsRegistry::AddValidator(IConfigValidator::TPtr validator)
 {
     TGuard<TMutex> guard(Mutex);
 
-    if (IsLocked() || Validators.contains(validator->GetName())) 
+    if (IsLocked() || Validators.contains(validator->GetName()))
         return false;
 
     Validators.emplace(validator->GetName(), validator);
@@ -59,7 +59,7 @@ bool TValidatorsRegistry::CheckConfig(const NKikimrConfig::TAppConfig &oldConfig
                                       TVector<Ydb::Issue::IssueMessage> &issues) const
 {
     Y_VERIFY(Locked);
-    if (!ItemClasses.contains(validatorClass)) 
+    if (!ItemClasses.contains(validatorClass))
         return true;
 
     for (auto &validator : ValidatorsByItemClass.at(validatorClass))
@@ -142,7 +142,7 @@ void TValidatorsRegistry::DisableValidators()
 IConfigValidator::TPtr TValidatorsRegistry::GetValidator(const TString &name) const
 {
     Y_VERIFY(Locked);
-    if (Validators.contains(name)) 
+    if (Validators.contains(name))
         return Validators.at(name);
     return nullptr;
 }

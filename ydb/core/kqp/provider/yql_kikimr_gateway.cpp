@@ -50,7 +50,7 @@ TKikimrClusterMapping::TKikimrClusterMapping(const TKikimrGatewayConfig& config)
 
         auto name = cluster.GetName();
 
-        if (Clusters.contains(name)) { 
+        if (Clusters.contains(name)) {
             ythrow yexception() << "TKikimrGatewayConfig: Duplicate cluster name: " << name;
         }
 
@@ -103,7 +103,7 @@ TString TKikimrClusterMapping::GetDefaultClusterName() const {
 }
 
 bool TKikimrClusterMapping::HasCluster(const TString& cluster) const {
-    return Clusters.contains(cluster); 
+    return Clusters.contains(cluster);
 }
 
 TKikimrPathId TKikimrPathId::Parse(const TStringBuf& str) {

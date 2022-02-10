@@ -38,11 +38,11 @@ namespace NTld {
     }
 
     bool IsTld(const TStringBuf& s) {
-        return Default<TTLDHash>().contains(s); 
+        return Default<TTLDHash>().contains(s);
     }
 
     bool IsVeryGoodTld(const TStringBuf& s) {
-        return Default<TVeryGoodTld>().contains(s); 
+        return Default<TVeryGoodTld>().contains(s);
     }
 
 }

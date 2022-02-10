@@ -2099,7 +2099,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
         for (ui32 index = 1; index < innerVisit.ChildrenSize(); ++index) {
             if (innerVisit.Child(index)->IsAtom()) {
                 const auto itemIndex = innerVisit.Child(index)->Content();
-                defInnerIndicies.erase(TString(itemIndex)); 
+                defInnerIndicies.erase(TString(itemIndex));
                 ++index;
                 auto lambda = innerVisit.ChildPtr(index);
                 if (auto var = TMaybeNode<TCoVariant>(lambda->Child(1))) {
@@ -2120,14 +2120,14 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             }
         }
 
-        if (innerLambdas.contains(defOutIndex)) { 
+        if (innerLambdas.contains(defOutIndex)) {
             return node;
         }
 
         for (ui32 index = 1; index < node->ChildrenSize(); ++index) {
             if (node->Child(index)->IsAtom()) {
                 const auto itemIndex = node->Child(index)->Content();
-                if (!innerLambdas.contains(itemIndex) && defOutIndex != itemIndex) { 
+                if (!innerLambdas.contains(itemIndex) && defOutIndex != itemIndex) {
                     return node;
                 }
             }

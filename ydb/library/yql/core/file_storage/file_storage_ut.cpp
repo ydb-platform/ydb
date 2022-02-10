@@ -11,7 +11,7 @@
 
 #include <util/stream/file.h>
 #include <util/system/tempfile.h>
-#include <util/thread/pool.h> 
+#include <util/thread/pool.h>
 
 using namespace NYql;
 using namespace NThreading;

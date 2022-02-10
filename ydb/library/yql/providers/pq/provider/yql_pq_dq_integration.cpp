@@ -261,7 +261,7 @@ private:
 }
 
 THolder<IDqIntegration> CreatePqDqIntegration(const TPqState::TPtr& state) {
-    return MakeHolder<TPqDqIntegration>(state); 
+    return MakeHolder<TPqDqIntegration>(state);
 }
 
 }

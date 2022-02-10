@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
         Counters.Reset();
         TryCounter = 0;
 
-        struct TSender: public IThreadFactory::IThreadAble { 
+        struct TSender: public IThreadFactory::IThreadAble {
             void DoExecute() override {
                 while ((size_t)AtomicIncrement(TryCounter) <= N) {
                     if (!TryAdd()) {
@@ -108,9 +108,9 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
         {
             TQueueSetup setup;
 
-            TVector< TAutoPtr<IThreadFactory::IThread> > senders; 
+            TVector< TAutoPtr<IThreadFactory::IThread> > senders;
             for (size_t i = 0; i < ThreadCount; ++i) {
-                senders.push_back(::SystemThreadFactory()->Run(&sender)); 
+                senders.push_back(::SystemThreadFactory()->Run(&sender));
             }
 
             for (size_t i = 0; i < senders.size(); ++i) {

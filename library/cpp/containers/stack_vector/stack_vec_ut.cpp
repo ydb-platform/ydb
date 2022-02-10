@@ -2,13 +2,13 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace { 
-    struct TNotCopyAssignable { 
-        const int Value; 
-    }; 
- 
-    static_assert(std::is_copy_constructible_v<TNotCopyAssignable>); 
-    static_assert(!std::is_copy_assignable_v<TNotCopyAssignable>); 
+namespace {
+    struct TNotCopyAssignable {
+        const int Value;
+    };
+
+    static_assert(std::is_copy_constructible_v<TNotCopyAssignable>);
+    static_assert(!std::is_copy_assignable_v<TNotCopyAssignable>);
 
     template <class T, size_t JunkPayloadSize>
     struct TThickAlloc: public std::allocator<T> {
@@ -41,8 +41,8 @@ namespace {
             return TBase::allocate(n);
         }
     };
-} 
- 
+}
+
 Y_UNIT_TEST_SUITE(TStackBasedVectorTest) {
     Y_UNIT_TEST(TestCreateEmpty) {
         TStackVec<int> ints;
@@ -98,34 +98,34 @@ Y_UNIT_TEST_SUITE(TStackBasedVectorTest) {
             UNIT_ASSERT_EQUAL(ints3[i], (int)i);
         }
     }
- 
-    Y_UNIT_TEST(TestCappedSize) { 
-        TStackVec<int, 8, false> ints; 
-        ints.push_back(1); 
-        ints.push_back(2); 
- 
-        auto intsCopy = ints; 
-        UNIT_ASSERT_VALUES_EQUAL(intsCopy.capacity(), 8); 
- 
-        for (int i = 2; i != 8; ++i) { 
-            intsCopy.push_back(i); 
-        } 
-        // Just verify that the program did not crash. 
-    } 
- 
-    Y_UNIT_TEST(TestCappedSizeWithNotCopyAssignable) { 
-        TStackVec<TNotCopyAssignable, 8, false> values; 
-        values.push_back({1}); 
-        values.push_back({2}); 
- 
-        auto valuesCopy = values; 
-        UNIT_ASSERT_VALUES_EQUAL(valuesCopy.capacity(), 8); 
- 
-        for (int i = 2; i != 8; ++i) { 
-            valuesCopy.push_back({i}); 
-        } 
-        // Just verify that the program did not crash. 
-    } 
+
+    Y_UNIT_TEST(TestCappedSize) {
+        TStackVec<int, 8, false> ints;
+        ints.push_back(1);
+        ints.push_back(2);
+
+        auto intsCopy = ints;
+        UNIT_ASSERT_VALUES_EQUAL(intsCopy.capacity(), 8);
+
+        for (int i = 2; i != 8; ++i) {
+            intsCopy.push_back(i);
+        }
+        // Just verify that the program did not crash.
+    }
+
+    Y_UNIT_TEST(TestCappedSizeWithNotCopyAssignable) {
+        TStackVec<TNotCopyAssignable, 8, false> values;
+        values.push_back({1});
+        values.push_back({2});
+
+        auto valuesCopy = values;
+        UNIT_ASSERT_VALUES_EQUAL(valuesCopy.capacity(), 8);
+
+        for (int i = 2; i != 8; ++i) {
+            valuesCopy.push_back({i});
+        }
+        // Just verify that the program did not crash.
+    }
 
     Y_UNIT_TEST(TestCustomAllocSize) {
         constexpr size_t n = 16384;

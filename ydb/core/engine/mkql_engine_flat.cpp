@@ -411,7 +411,7 @@ public:
         bool hasWrites = false;
         const auto& strings = Strings;
         auto writesCheck = [&hasWrites, &strings](TInternName name) {
-            if (strings.DbWrites.contains(name)) { 
+            if (strings.DbWrites.contains(name)) {
                 hasWrites = true;
             }
 
@@ -429,9 +429,9 @@ public:
         ui64 coordinatorRequiresShardCount = 0;
         for (ui64 shard : affectedShardSet) {
             auto shardData = TShardData(shard, TString());
-            if (writeSet.contains(shard)) 
+            if (writeSet.contains(shard))
                 shardData.HasWrites = true;
-            if (onlineReadSet.contains(shard)) 
+            if (onlineReadSet.contains(shard))
                 shardData.HasOnlineReads = true;
 
             if (shardData.HasWrites || shardData.HasOnlineReads)
@@ -943,9 +943,9 @@ public:
                     TValidatedKey validKey(std::move(desc), false);
 
                     auto targetIt = readTargets.find(uniqId);
-                    if (replyIds.contains(uniqId) || targetIt != readTargets.end()) { 
+                    if (replyIds.contains(uniqId) || targetIt != readTargets.end()) {
                         // Is this read result included in the reply?
-                        if (replyIds.contains(uniqId)) { 
+                        if (replyIds.contains(uniqId)) {
                             validKey.IsResultPart = true;
                         }
                         // Is this read result included into outgoing read sets?
@@ -1605,7 +1605,7 @@ private:
                 }
             }
 
-            if (ProxyRepliesCallables.contains(callable.first)) { 
+            if (ProxyRepliesCallables.contains(callable.first)) {
                 TCallableContext* readCtx = &callable.second;
 
                 auto replyRead = ProxyRepliesReads.FindPtr(callable.first);
@@ -1741,11 +1741,11 @@ private:
                     auto callable = static_cast<TCallable*>(node);
                     auto name = callable->GetType()->GetNameStr();
 
-                    if (name == Strings.Builtins.Arg && !knownArgIds.contains(callable->GetUniqueId())) { 
+                    if (name == Strings.Builtins.Arg && !knownArgIds.contains(callable->GetUniqueId())) {
                         foundArgs.push_back(callable);
                     }
 
-                    if (Strings.All.contains(name)) { 
+                    if (Strings.All.contains(name)) {
                         return false;
                     }
                 }
@@ -1754,7 +1754,7 @@ private:
             for (TCallable* arg : foundArgs) {
                 auto& consumers = ProxyProgramExplorer.GetConsumerNodes(*arg);
                 for (auto& consumer : consumers) {
-                    if (!visitedNodes.contains(consumer)) { 
+                    if (!visitedNodes.contains(consumer)) {
                         return false;
                     }
                 }
@@ -1855,7 +1855,7 @@ private:
                 return nullptr;
             }
 
-            if (!pureCallables.contains(callable->GetUniqueId())) { 
+            if (!pureCallables.contains(callable->GetUniqueId())) {
                 return nullptr;
             }
 
@@ -1873,7 +1873,7 @@ private:
             auto tryPushdownCallable =
                 [this, callable, &pureCallables, &aggregatedCallables, getCallableForPushdown]
                 (TCallable* input, bool aggregated) {
-                    if (!pureCallables.contains(callable->GetUniqueId())) { 
+                    if (!pureCallables.contains(callable->GetUniqueId())) {
                         return;
                     }
 
@@ -1885,10 +1885,10 @@ private:
                         }
                     }
 
-                    if (ProxyRepliesCallables.contains(input->GetUniqueId()) && 
-                        !aggregatedCallables.contains(input->GetUniqueId())) 
+                    if (ProxyRepliesCallables.contains(input->GetUniqueId()) &&
+                        !aggregatedCallables.contains(input->GetUniqueId()))
                     {
-                        if (ProxyRepliesReads.contains(callable->GetUniqueId())) { 
+                        if (ProxyRepliesReads.contains(callable->GetUniqueId())) {
                             return;
                         }
 
@@ -1998,21 +1998,21 @@ private:
             if (name == Strings.CombineByKeyMerge) {
                 return TCallableVisitFunc([this](TCallable& callable, const TTypeEnvironment& env) {
                     Y_UNUSED(env);
-                    return ProxyRepliesCallables.contains(callable.GetUniqueId()) 
+                    return ProxyRepliesCallables.contains(callable.GetUniqueId())
                         ? TRuntimeNode(&callable, false)
                         : callable.GetInput(0);
                 });
             } else
             if (name == Strings.PartialSort) {
                 return TCallableVisitFunc([this](TCallable& callable, const TTypeEnvironment& env) {
-                    return ProxyRepliesCallables.contains(callable.GetUniqueId()) 
+                    return ProxyRepliesCallables.contains(callable.GetUniqueId())
                         ? TRuntimeNode(&callable, false)
                         : RenameCallable(callable, "Sort", env);
                 });
             } else
             if (name == Strings.PartialTake) {
                 return TCallableVisitFunc([this](TCallable& callable, const TTypeEnvironment& env) {
-                    return ProxyRepliesCallables.contains(callable.GetUniqueId()) 
+                    return ProxyRepliesCallables.contains(callable.GetUniqueId())
                         ? TRuntimeNode(&callable, false)
                         : RenameCallable(callable, "Take", env);
                 });

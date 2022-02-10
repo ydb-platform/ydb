@@ -1,7 +1,7 @@
 #include "thread.h"
 #include "record.h"
 
-#include <util/thread/pool.h> 
+#include <util/thread/pool.h>
 #include <util/system/event.h>
 #include <util/memory/addstorage.h>
 #include <util/generic/ptr.h>

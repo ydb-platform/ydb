@@ -128,7 +128,7 @@ namespace NKikimr {
                 }
             }
 
-            inline TPartIterator& operator++() noexcept { 
+            inline TPartIterator& operator++() noexcept {
                 if (Blob->Rope) {
                     Iter += Blob->GetPartSize(Part);
                 }
@@ -136,7 +136,7 @@ namespace NKikimr {
                 return *this;
             }
 
-            inline TPartIterator operator++(int) noexcept { 
+            inline TPartIterator operator++(int) noexcept {
                 TPartIterator res(*this);
                 ++*this;
                 return res;

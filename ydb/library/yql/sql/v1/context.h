@@ -130,7 +130,7 @@ namespace NSQLTranslationV1 {
             if (!provider) {
                 if (Settings.AssumeYdbOnClusterWithSlash && cluster.StartsWith('/')) {
                     normalizedClusterName = cluster;
-                    return TString(NYql::KikimrProviderName); 
+                    return TString(NYql::KikimrProviderName);
                 }
                 return Nothing();
             }

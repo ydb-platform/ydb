@@ -4,8 +4,8 @@
 
 #include <util/generic/array_ref.h>
 #include <util/generic/typetraits.h>
-#include <util/generic/bitops.h> 
-#include <util/string/cast.h> 
+#include <util/generic/bitops.h>
+#include <util/string/cast.h>
 
 namespace NCodecs {
     template <typename T = ui64, bool UnsignedDelta = true>

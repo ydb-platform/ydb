@@ -213,7 +213,7 @@ namespace NDatetime {
      */
     template <typename TP>
     TString Format(TStringBuf fmt, const TP& tp, const TTimeZone& tz) {
-        return TString(cctz::format(static_cast<std::string>(fmt), TTimePoint(cctz::convert(tp, tz)), tz)); 
+        return TString(cctz::format(static_cast<std::string>(fmt), TTimePoint(cctz::convert(tp, tz)), tz));
     }
 
     /** Returns the weekday by day.

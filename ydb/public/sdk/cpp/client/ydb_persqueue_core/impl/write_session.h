@@ -308,7 +308,7 @@ public:
     // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration.
     bool Close(TDuration closeTimeout = TDuration::Max()) override;
 
-    TWriterCounters::TPtr GetCounters() override {Y_FAIL("Unimplemented"); } //ToDo - unimplemented; 
+    TWriterCounters::TPtr GetCounters() override {Y_FAIL("Unimplemented"); } //ToDo - unimplemented;
 
     ~TWriteSession(); // will not call close - destroy everything without acks
 

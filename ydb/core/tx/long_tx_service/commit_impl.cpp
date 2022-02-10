@@ -80,11 +80,11 @@ namespace NLongTxService {
                 Y_VERIFY(tx.SerializeToString(&txBody));
 
                 TXLOG_DEBUG("Sending TEvProposeTransaction to ColumnShard# " << tabletId << " WriteId# " << writeId);
-                SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvProposeTransaction>( 
+                SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_COMMIT,
                     SelfId(),
                     TxId,
-                    std::move(txBody))); 
+                    std::move(txBody)));
                 WaitingShards.insert(tabletId);
             }
             Become(&TThis::StatePrepare);
@@ -310,7 +310,7 @@ namespace NLongTxService {
         void CancelProposal() {
             for (const auto& pr : Params.ColumnShardWrites) {
                 const ui64 tabletId = pr.first;
-                SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvCancelTransactionProposal>(TxId), false); 
+                SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvCancelTransactionProposal>(TxId), false);
             }
         }
 

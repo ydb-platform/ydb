@@ -124,13 +124,13 @@ void AtExit(TAtExitFunc func, void* ctx) {
 }
 
 static void TraditionalCloser(void* ctx) {
-    reinterpret_cast<TTraditionalAtExitFunc>(ctx)(); 
+    reinterpret_cast<TTraditionalAtExitFunc>(ctx)();
 }
 
 void AtExit(TTraditionalAtExitFunc func) {
-    AtExit(TraditionalCloser, reinterpret_cast<void*>(func)); 
+    AtExit(TraditionalCloser, reinterpret_cast<void*>(func));
 }
 
 void AtExit(TTraditionalAtExitFunc func, size_t priority) {
-    AtExit(TraditionalCloser, reinterpret_cast<void*>(func), priority); 
+    AtExit(TraditionalCloser, reinterpret_cast<void*>(func), priority);
 }

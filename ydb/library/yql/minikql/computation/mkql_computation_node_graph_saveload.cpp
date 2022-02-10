@@ -18,7 +18,7 @@ void TraverseGraph(const NUdf::TUnboxedValue* roots, ui32 rootCount, TVector<NUd
             continue;
         }
         auto* ptr = value.AsBoxed().Get();
-        if (dedup.contains(ptr)) { 
+        if (dedup.contains(ptr)) {
             continue;
         }
         dedup.insert(ptr);
@@ -35,7 +35,7 @@ void TraverseGraph(const NUdf::TUnboxedValue* roots, ui32 rootCount, TVector<NUd
                 continue;
             }
             auto* ptr = value.AsBoxed().Get();
-            if (dedup.contains(ptr)) { 
+            if (dedup.contains(ptr)) {
                 continue;
             }
             dedup.insert(ptr);

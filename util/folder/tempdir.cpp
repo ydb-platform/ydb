@@ -6,11 +6,11 @@
 #include <util/system/maxlen.h>
 
 TTempDir::TTempDir()
-    : TTempDir(nullptr, TCreationToken{}) 
-{ 
-} 
- 
-TTempDir::TTempDir(const char* prefix, TCreationToken) 
+    : TTempDir(nullptr, TCreationToken{})
+{
+}
+
+TTempDir::TTempDir(const char* prefix, TCreationToken)
     : TempDir()
     , Remove(true)
 {
@@ -29,10 +29,10 @@ TTempDir::TTempDir(const TString& tempDir)
     MakeDirIfNotExist(TempDir.c_str());
 }
 
-TTempDir TTempDir::NewTempDir(const TString& root) { 
-    return {root.c_str(), TCreationToken{}}; 
-} 
- 
+TTempDir TTempDir::NewTempDir(const TString& root) {
+    return {root.c_str(), TCreationToken{}};
+}
+
 void TTempDir::DoNotRemove() {
     Remove = false;
 }

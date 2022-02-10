@@ -58,7 +58,7 @@ namespace boost { namespace property_tree { namespace detail {namespace rapidxml
 
         //! Gets human readable description of error.
         //! \return Pointer to null terminated description of the error.
-        virtual const char *what() const noexcept 
+        virtual const char *what() const noexcept
         {
             return m_what;
         }

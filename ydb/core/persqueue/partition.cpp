@@ -2204,7 +2204,7 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
 
 void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx) {
     const ui64 cookie = ev->Get()->GetCookie();
-    Y_VERIFY(ReadInfo.contains(cookie)); 
+    Y_VERIFY(ReadInfo.contains(cookie));
 
     auto it = ReadInfo.find(cookie);
     Y_VERIFY(it != ReadInfo.end());
@@ -2297,7 +2297,7 @@ TReadAnswer TReadInfo::FormAnswer(
     if (HasError(blobResponse)) {
         return TReadAnswer{
             blobResponse.Error.ErrorStr.size(),
-            MakeHolder<TEvPQ::TEvError>(blobResponse.Error.ErrorCode, blobResponse.Error.ErrorStr, cookie) 
+            MakeHolder<TEvPQ::TEvError>(blobResponse.Error.ErrorCode, blobResponse.Error.ErrorStr, cookie)
         };
     }
 
@@ -2337,7 +2337,7 @@ TReadAnswer TReadInfo::FormAnswer(
                 userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC);
             }
             readResult->SetSizeLag(sizeLag - size);
-            return {answerSize, std::move(answer)}; 
+            return {answerSize, std::move(answer)};
         }
         Y_VERIFY(blobValue.size() == blobs[pos].Size, "value for offset %" PRIu64 " count %u size must be %u, but got %u",
                                                         offset, count, blobs[pos].Size, (ui32)blobValue.size());
@@ -2447,7 +2447,7 @@ TReadAnswer TReadInfo::FormAnswer(
         userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC);
     }
     readResult->SetSizeLag(sizeLag - size);
-    return {answerSize, std::move(answer)}; 
+    return {answerSize, std::move(answer)};
 }
 
 

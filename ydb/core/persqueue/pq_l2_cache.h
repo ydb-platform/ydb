@@ -7,7 +7,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/cache/cache.h>
 
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -54,7 +54,7 @@ public:
             , Offset(blob.Offset)
             , PartNo(blob.PartNo)
         {
-            KeyHash = Hash128to32(ComputeHash(topicName), (static_cast<ui64>(Partition) << 16) + PartNo); 
+            KeyHash = Hash128to32(ComputeHash(topicName), (static_cast<ui64>(Partition) << 16) + PartNo);
             KeyHash = Hash128to32(KeyHash, Offset);
         }
 

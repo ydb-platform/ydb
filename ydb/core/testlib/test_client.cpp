@@ -1735,7 +1735,7 @@ namespace Tests {
     }
 
     TString TClient::CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups) {
-        Y_VERIFY(StoragePoolTypes.contains(poolKind)); 
+        Y_VERIFY(StoragePoolTypes.contains(poolKind));
         const TString poolName = Sprintf("name_%s_kind_%s", partOfName.c_str(), poolKind.c_str());
         const ui64 poolId = THash<TString>()(poolName);
 
@@ -2298,7 +2298,7 @@ namespace Tests {
     }
 
     void TTenants::Run(const TString &name, ui32 nodes) {
-        Y_VERIFY(!Tenants.contains(name)); 
+        Y_VERIFY(!Tenants.contains(name));
         Y_VERIFY(Availabe() >= nodes);
 
         Tenants[name] = {};
@@ -2306,7 +2306,7 @@ namespace Tests {
     }
 
     void TTenants::Stop(const TString &name) {
-        Y_VERIFY(Tenants.contains(name)); 
+        Y_VERIFY(Tenants.contains(name));
 
         Free(name, Size(name));
         Tenants.erase(name);
@@ -2321,21 +2321,21 @@ namespace Tests {
     }
 
     void TTenants::Add(const TString &name, ui32 nodes) {
-        Y_VERIFY(Tenants.contains(name)); 
+        Y_VERIFY(Tenants.contains(name));
         Y_VERIFY(Availabe() >= nodes);
 
         return RunNodes(name, nodes);
     }
 
     void TTenants::Free(const TString &name, ui32 nodes) {
-        Y_VERIFY(Tenants.contains(name)); 
+        Y_VERIFY(Tenants.contains(name));
         Y_VERIFY(Size(name) >= nodes);
 
         return StopNodes(name, nodes);
     }
 
     void TTenants::FreeNode(const TString &name, ui32 nodeIdx) {
-        Y_VERIFY(Tenants.contains(name)); 
+        Y_VERIFY(Tenants.contains(name));
         Y_VERIFY(Size(name) >= 1);
 
         return StopPaticularNode(name, nodeIdx);
@@ -2358,13 +2358,13 @@ namespace Tests {
     }
 
     const TVector<ui32> &TTenants::List(const TString &name) const {
-        Y_VERIFY(Tenants.contains(name)); 
+        Y_VERIFY(Tenants.contains(name));
 
         return Tenants.at(name);
     }
 
     ui32 TTenants::Size(const TString &name) const {
-        if (!Tenants.contains(name)) 
+        if (!Tenants.contains(name))
             return 0;
         return List(name).size();
     }

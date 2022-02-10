@@ -383,7 +383,7 @@ namespace {
 
             // compare pointers due to intern
             if (left.Content().data() != right.Content().data()) {
-                if (const auto res = left.Content().compare(right.Content())) { 
+                if (const auto res = left.Content().compare(right.Content())) {
                     return res;
                 }
             }
@@ -396,7 +396,7 @@ namespace {
 
             // compare pointers due to intern
             if (left.Content().data() != right.Content().data()) {
-                if (const auto res = left.Content().compare(right.Content())) { 
+                if (const auto res = left.Content().compare(right.Content())) {
                     return res;
                 }
             }

@@ -3,13 +3,13 @@
 #include "fwd.h"
 #include "future.h"
 
-#include <util/thread/factory.h> 
+#include <util/thread/factory.h>
 
 #include <functional>
 
 namespace NThreading {
     template <typename TR, bool IgnoreException>
-    class TLegacyFuture: public IThreadFactory::IThreadAble, TNonCopyable { 
+    class TLegacyFuture: public IThreadFactory::IThreadAble, TNonCopyable {
     public:
         typedef TR(TFunctionSignature)();
         using TFunctionObjectType = std::function<TFunctionSignature>;
@@ -18,10 +18,10 @@ namespace NThreading {
     private:
         TFunctionObjectType Func_;
         TPromise<TResult> Result_;
-        THolder<IThreadFactory::IThread> Thread_; 
+        THolder<IThreadFactory::IThread> Thread_;
 
     public:
-        inline TLegacyFuture(const TFunctionObjectType func, IThreadFactory* pool = SystemThreadFactory()) 
+        inline TLegacyFuture(const TFunctionObjectType func, IThreadFactory* pool = SystemThreadFactory())
             : Func_(func)
             , Result_(NewPromise<TResult>())
             , Thread_(pool->Run(this))

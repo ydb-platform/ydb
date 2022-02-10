@@ -112,7 +112,7 @@ void TMeteringWriteActor::HandleUnexpectedEvent(STFUNC_SIG)
 ////////////////////////////////////////////////////////////////////////////////
 THolder<NActors::IActor> CreateMeteringWriter(THolder<TLogBackend> meteringFile)
 {
-    return MakeHolder<TMeteringWriteActor>(std::move(meteringFile)); 
+    return MakeHolder<TMeteringWriteActor>(std::move(meteringFile));
 }
 
 

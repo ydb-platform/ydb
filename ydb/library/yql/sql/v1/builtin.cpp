@@ -1005,7 +1005,7 @@ TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, 
     TNodePtr dataTypeNode;
     if (typeStringPtr) {
         TString typeString = NormalizeTypeString(*typeStringPtr);
-        if (!AvailableDataTypes.contains(typeString)) { 
+        if (!AvailableDataTypes.contains(typeString)) {
             ctx.Error(typeStringNode->GetPos()) << "Bad type string: '" << typeString << "'. " << errMsgFunc();
             return {};
         }
@@ -2023,7 +2023,7 @@ public:
             if (src) {
                 src->AllColumns();
             }
-        } else if (ctx.Settings.ModuleMapping.contains(Module)) { 
+        } else if (ctx.Settings.ModuleMapping.contains(Module)) {
             Node = Y("bind", Module + "_module", Q(Name));
             if (src) {
                 src->AllColumns();
@@ -2909,7 +2909,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     TString moduleResource;
-    if (ctx.Settings.ModuleMapping.contains(ns)) { 
+    if (ctx.Settings.ModuleMapping.contains(ns)) {
         moduleResource = ctx.Settings.ModuleMapping.at(ns);
     }
 
@@ -3072,7 +3072,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs());
     } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) {
         auto scriptName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
-        return new TScriptUdf(pos, TString(scriptName), name, args); 
+        return new TScriptUdf(pos, TString(scriptName), name, args);
     } else if (ns.empty()) {
         if (auto simpleType = LookupSimpleTypeBySqlAlias(normalizedName, ctx.FlexibleTypes)) {
             const auto type = ToString(*simpleType);

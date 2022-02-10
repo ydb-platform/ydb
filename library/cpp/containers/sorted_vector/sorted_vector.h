@@ -4,7 +4,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <util/generic/algorithm.h>
-#include <util/generic/mapfindptr.h> 
+#include <util/generic/mapfindptr.h>
 #include <util/ysaveload.h>
 #include <utility>
 
@@ -328,10 +328,10 @@ namespace NSorted {
     // and then inserts a new one, the existing reference can be broken (due to reallocation).
     // Please keep this in mind when using this structure.
     template <typename TKeyType, typename TValueType, class TPredicate = TLess<TKeyType>, class A = std::allocator<TValueType>>
-    class TSimpleMap: 
-        public TSortedVector<std::pair<TKeyType, TValueType>, TKeyType, TSelect1st, TPredicate, A>, 
-        public TMapOps<TSimpleMap<TKeyType, TValueType, TPredicate, A>> 
-    { 
+    class TSimpleMap:
+        public TSortedVector<std::pair<TKeyType, TValueType>, TKeyType, TSelect1st, TPredicate, A>,
+        public TMapOps<TSimpleMap<TKeyType, TValueType, TPredicate, A>>
+    {
     private:
         typedef TSortedVector<std::pair<TKeyType, TValueType>, TKeyType, TSelect1st, TPredicate, A> TBase;
 
@@ -379,22 +379,22 @@ namespace NSorted {
         Y_FORCE_INLINE TValueType& operator[](const K& key) {
             return Get(key);
         }
- 
+
         template<class K>
         const TValueType& at(const K& key) const {
-            const auto i = TBase::Find(key); 
-            if (i == TBase::end()) { 
-                throw std::out_of_range("NSorted::TSimpleMap: missing key"); 
-            } 
- 
-            return i->second; 
-        } 
- 
+            const auto i = TBase::Find(key);
+            if (i == TBase::end()) {
+                throw std::out_of_range("NSorted::TSimpleMap: missing key");
+            }
+
+            return i->second;
+        }
+
         template<class K>
         TValueType& at(const K& key) {
-            return const_cast<TValueType&>( 
-                    const_cast<const TSimpleMap<TKeyType, TValueType, TPredicate, A>*>(this)->at(key)); 
-        } 
+            return const_cast<TValueType&>(
+                    const_cast<const TSimpleMap<TKeyType, TValueType, TPredicate, A>*>(this)->at(key));
+        }
     };
 
     // The simplified set (a.k.a TFlatSet, flat_set), which is implemented by the sorted-vector.

@@ -24,7 +24,7 @@ namespace NTSAN {
 
 }
 
-void SetCurrentThreadName(const char* name); 
+void SetCurrentThreadName(const char* name);
 
 namespace NThreadExtra {
     namespace NPrivate {

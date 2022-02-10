@@ -54,40 +54,40 @@ namespace NKiwiAggr {
         TAdaptiveHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, TQualityFunction qualityFunc = nullptr);
         TAdaptiveHistogram(IHistogram* histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, TQualityFunction qualityFunc = CalcWeightQuality);
 
-        ~TAdaptiveHistogram() override { 
+        ~TAdaptiveHistogram() override {
         }
 
         TQualityFunction GetQualityFunc();
 
         void Clear() override;
 
-        void Add(double value, double weight) override; 
-        void Add(const THistoRec& histoRec) override; 
+        void Add(double value, double weight) override;
+        void Add(const THistoRec& histoRec) override;
 
-        void Merge(const THistogram& histo, double multiplier) final; 
-        void Merge(const TVector<THistogram>& histogramsToMerge) final; 
-        void Merge(TVector<IHistogramPtr> histogramsToMerge) final; 
+        void Merge(const THistogram& histo, double multiplier) final;
+        void Merge(const TVector<THistogram>& histogramsToMerge) final;
+        void Merge(TVector<IHistogramPtr> histogramsToMerge) final;
 
-        void Multiply(double factor) final; 
+        void Multiply(double factor) final;
 
-        void FromProto(const THistogram& histo) final; 
-        void ToProto(THistogram& histo) final; 
+        void FromProto(const THistogram& histo) final;
+        void ToProto(THistogram& histo) final;
 
-        void SetId(ui64 id) final; 
-        ui64 GetId() final; 
-        bool Empty() final; 
-        double GetMinValue() final; 
-        double GetMaxValue() final; 
-        double GetSum() final; 
-        double GetSumInRange(double leftBound, double rightBound) final; 
-        double GetSumAboveBound(double bound) final; 
-        double GetSumBelowBound(double bound) final; 
-        double CalcUpperBound(double sum) final; 
-        double CalcLowerBound(double sum) final; 
-        double CalcUpperBoundSafe(double sum) final; 
-        double CalcLowerBoundSafe(double sum) final; 
+        void SetId(ui64 id) final;
+        ui64 GetId() final;
+        bool Empty() final;
+        double GetMinValue() final;
+        double GetMaxValue() final;
+        double GetSum() final;
+        double GetSumInRange(double leftBound, double rightBound) final;
+        double GetSumAboveBound(double bound) final;
+        double GetSumBelowBound(double bound) final;
+        double CalcUpperBound(double sum) final;
+        double CalcLowerBound(double sum) final;
+        double CalcUpperBoundSafe(double sum) final;
+        double CalcLowerBoundSafe(double sum) final;
 
-        void PrecomputePartialSums() final; 
+        void PrecomputePartialSums() final;
 
     private:
         void FromIHistogram(IHistogram* histo);
@@ -120,7 +120,7 @@ namespace NKiwiAggr {
         {
         }
 
-        ~TDefinedAdaptiveHistogram() override { 
+        ~TDefinedAdaptiveHistogram() override {
         }
     };
 

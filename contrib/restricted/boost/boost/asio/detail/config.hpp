@@ -255,7 +255,7 @@
 #  define BOOST_ASIO_NOEXCEPT
 # endif // !defined(BOOST_ASIO_NOEXCEPT)
 # if !defined(BOOST_ASIO_NOEXCEPT_OR_NOTHROW)
-#  define BOOST_ASIO_NOEXCEPT_OR_NOTHROW noexcept 
+#  define BOOST_ASIO_NOEXCEPT_OR_NOTHROW noexcept
 # endif // !defined(BOOST_ASIO_NOEXCEPT_OR_NOTHROW)
 #endif // !defined(BOOST_ASIO_NOEXCEPT)
 

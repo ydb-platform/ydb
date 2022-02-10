@@ -197,7 +197,7 @@ struct __cxa_dependent_exception
 	_Unwind_Exception unwindHeader;
 };
 
-static_assert(sizeof(__cxa_dependent_exception) == sizeof(__cxa_exception)); 
+static_assert(sizeof(__cxa_dependent_exception) == sizeof(__cxa_exception));
 
 namespace std
 {
@@ -205,8 +205,8 @@ namespace std
 	class exception
 	{
 		public:
-			virtual ~exception(); 
-			virtual const char* what() const noexcept; 
+			virtual ~exception();
+			virtual const char* what() const noexcept;
 	};
 
 }
@@ -219,20 +219,20 @@ namespace std
  * various checks may test for equality of the class, which is incorrect.
  */
 static const uint64_t exception_class =
-#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE 
-    _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_PRIMARY_CLASS; 
-#else 
+#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE
+    _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_PRIMARY_CLASS;
+#else
 	EXCEPTION_CLASS('G', 'N', 'U', 'C', 'C', '+', '+', '\0');
-#endif 
+#endif
 /**
  * Class used for dependent exceptions.  
  */
 static const uint64_t dependent_exception_class =
-#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE 
-    _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_DEPENDENT_CLASS; 
-#else 
+#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE
+    _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_DEPENDENT_CLASS;
+#else
 	EXCEPTION_CLASS('G', 'N', 'U', 'C', 'C', '+', '+', '\x01');
-#endif 
+#endif
 /**
  * The low four bytes of the exception class, indicating that we conform to the
  * Itanium C++ ABI.  This is currently unused, but should be used in the future
@@ -660,18 +660,18 @@ static_assert(align_to(15, 16) == 16);
 static_assert(align_to(16, 16) == 16);
 static_assert(align_to(17, 16) == 32);
 
-static constexpr size_t exception_size = align_to(sizeof(__cxa_exception), 16); 
-static constexpr size_t dependent_exception_size = align_to(sizeof(__cxa_dependent_exception), 16); 
-#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE 
-static constexpr size_t backtrace_buffer_size = align_to(sizeof(_Unwind_Backtrace_Buffer), 16); 
- 
-static_assert( 
-    _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_MAGIC_OFFSET == 
-    offsetof(__cxa_exception, unwindHeader) + backtrace_buffer_size - sizeof(_Unwind_Backtrace_Buffer)); 
-#else 
-static constexpr size_t backtrace_buffer_size = 0; 
-#endif 
- 
+static constexpr size_t exception_size = align_to(sizeof(__cxa_exception), 16);
+static constexpr size_t dependent_exception_size = align_to(sizeof(__cxa_dependent_exception), 16);
+#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE
+static constexpr size_t backtrace_buffer_size = align_to(sizeof(_Unwind_Backtrace_Buffer), 16);
+
+static_assert(
+    _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_MAGIC_OFFSET ==
+    offsetof(__cxa_exception, unwindHeader) + backtrace_buffer_size - sizeof(_Unwind_Backtrace_Buffer));
+#else
+static constexpr size_t backtrace_buffer_size = 0;
+#endif
+
 /**
  * Allocates an exception structure.  Returns a pointer to the space that can
  * be used to store an object of thrown_size bytes.  This function will use an
@@ -680,19 +680,19 @@ static constexpr size_t backtrace_buffer_size = 0;
  */
 extern "C" void *__cxa_allocate_exception(size_t thrown_size)
 {
-	size_t size = thrown_size + exception_size + backtrace_buffer_size; 
+	size_t size = thrown_size + exception_size + backtrace_buffer_size;
 	char *buffer = alloc_or_die(size);
-#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE 
-	((_Unwind_Backtrace_Buffer *)buffer)->size = 0; 
-#endif 
-	return buffer + exception_size + backtrace_buffer_size; 
+#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE
+	((_Unwind_Backtrace_Buffer *)buffer)->size = 0;
+#endif
+	return buffer + exception_size + backtrace_buffer_size;
 }
 
 extern "C" void *__cxa_allocate_dependent_exception(void)
 {
-	size_t size = dependent_exception_size + backtrace_buffer_size; 
+	size_t size = dependent_exception_size + backtrace_buffer_size;
 	char *buffer = alloc_or_die(size);
-	return buffer + dependent_exception_size + backtrace_buffer_size; 
+	return buffer + dependent_exception_size + backtrace_buffer_size;
 }
 
 /**
@@ -720,8 +720,8 @@ extern "C" void __cxa_free_exception(void *thrown_exception)
 		}
 	}
 
-	free_exception( 
-		reinterpret_cast<char*>(thrown_exception) - exception_size - backtrace_buffer_size); 
+	free_exception(
+		reinterpret_cast<char*>(thrown_exception) - exception_size - backtrace_buffer_size);
 }
 
 static void releaseException(__cxa_exception *exception)
@@ -748,7 +748,7 @@ void __cxa_free_dependent_exception(void *thrown_exception)
 	{
 		releaseException(realExceptionFromException(reinterpret_cast<__cxa_exception*>(ex)));
 	}
-	free_exception(reinterpret_cast<char*>(thrown_exception) - dependent_exception_size - backtrace_buffer_size); 
+	free_exception(reinterpret_cast<char*>(thrown_exception) - dependent_exception_size - backtrace_buffer_size);
 }
 
 /**
@@ -758,7 +758,7 @@ void __cxa_free_dependent_exception(void *thrown_exception)
  * a handler, prints a back trace before aborting.
  */
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4)
-extern "C" void *__cxa_begin_catch(void *e) noexcept; 
+extern "C" void *__cxa_begin_catch(void *e) noexcept;
 #else
 extern "C" void *__cxa_begin_catch(void *e);
 #endif
@@ -910,32 +910,32 @@ extern "C" void __cxa_decrement_exception_refcount(void* thrown_exception)
 	releaseException(ex);
 }
 
-#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE 
-static size_t __cxa_collect_backtrace(__cxa_exception* ex, void** dest, size_t size) { 
-    if (!ex) { 
-        return 0; 
-    } 
-    if (!isCXXException(ex->unwindHeader.exception_class)) { 
-        return 0; 
-    } 
-    size_t i = 0; 
-    if (isDependentException(ex->unwindHeader.exception_class)) { 
-        i = __cxa_collect_backtrace( 
-                (__cxa_exception *)((__cxa_dependent_exception *)ex)->primaryException - 1, dest, size); 
-    } 
-    _Unwind_Backtrace_Buffer* backtraceBuffer = (_Unwind_Backtrace_Buffer*)( 
-            (char *)(ex + 1) - exception_size - backtrace_buffer_size); 
-    for (size_t j = 0; i != size && j != backtraceBuffer->size; ++i, ++j) { 
-        dest[i] = backtraceBuffer->backtrace[j]; 
-    } 
-    return i; 
-} 
- 
-extern "C" size_t __cxa_collect_current_exception_backtrace(void** dest, size_t size) { 
-    return __cxa_collect_backtrace(__cxa_get_globals()->caughtExceptions, dest, size); 
-} 
-#endif 
- 
+#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE
+static size_t __cxa_collect_backtrace(__cxa_exception* ex, void** dest, size_t size) {
+    if (!ex) {
+        return 0;
+    }
+    if (!isCXXException(ex->unwindHeader.exception_class)) {
+        return 0;
+    }
+    size_t i = 0;
+    if (isDependentException(ex->unwindHeader.exception_class)) {
+        i = __cxa_collect_backtrace(
+                (__cxa_exception *)((__cxa_dependent_exception *)ex)->primaryException - 1, dest, size);
+    }
+    _Unwind_Backtrace_Buffer* backtraceBuffer = (_Unwind_Backtrace_Buffer*)(
+            (char *)(ex + 1) - exception_size - backtrace_buffer_size);
+    for (size_t j = 0; i != size && j != backtraceBuffer->size; ++i, ++j) {
+        dest[i] = backtraceBuffer->backtrace[j];
+    }
+    return i;
+}
+
+extern "C" size_t __cxa_collect_current_exception_backtrace(void** dest, size_t size) {
+    return __cxa_collect_backtrace(__cxa_get_globals()->caughtExceptions, dest, size);
+}
+#endif
+
 /**
  * ABI function.  Rethrows the current exception.  Does not remove the
  * exception from the stack or decrement its handler count - the compiler is
@@ -1322,7 +1322,7 @@ BEGIN_PERSONALITY_FUNCTION(__gxx_personality_v0)
  * C++ exceptions) of the unadjusted pointer (for foreign exceptions).
  */
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4)
-extern "C" void *__cxa_begin_catch(void *e) noexcept 
+extern "C" void *__cxa_begin_catch(void *e) noexcept
 #else
 extern "C" void *__cxa_begin_catch(void *e)
 #endif
@@ -1531,14 +1531,14 @@ namespace pathscale
 	/**
 	 * Sets whether unexpected and terminate handlers should be thread-local.
 	 */
-	void set_use_thread_local_handlers(bool flag) noexcept 
+	void set_use_thread_local_handlers(bool flag) noexcept
 	{
 		thread_local_handlers = flag;
 	}
 	/**
 	 * Sets a thread-local unexpected handler.  
 	 */
-	unexpected_handler set_unexpected(unexpected_handler f) noexcept 
+	unexpected_handler set_unexpected(unexpected_handler f) noexcept
 	{
 		static __cxa_thread_info *info = thread_info();
 		unexpected_handler old = info->unexpectedHandler;
@@ -1548,7 +1548,7 @@ namespace pathscale
 	/**
 	 * Sets a thread-local terminate handler.  
 	 */
-	terminate_handler set_terminate(terminate_handler f) noexcept 
+	terminate_handler set_terminate(terminate_handler f) noexcept
 	{
 		static __cxa_thread_info *info = thread_info();
 		terminate_handler old = info->terminateHandler;
@@ -1563,7 +1563,7 @@ namespace std
 	 * Sets the function that will be called when an exception specification is
 	 * violated.
 	 */
-	unexpected_handler set_unexpected(unexpected_handler f) noexcept 
+	unexpected_handler set_unexpected(unexpected_handler f) noexcept
 	{
 		if (thread_local_handlers) { return pathscale::set_unexpected(f); }
 
@@ -1572,7 +1572,7 @@ namespace std
 	/**
 	 * Sets the function that is called to terminate the program.
 	 */
-	terminate_handler set_terminate(terminate_handler f) noexcept 
+	terminate_handler set_terminate(terminate_handler f) noexcept
 	{
 		if (thread_local_handlers) { return pathscale::set_terminate(f); }
 
@@ -1615,7 +1615,7 @@ namespace std
 	 * Returns whether there are any exceptions currently being thrown that
 	 * have not been caught.  This can occur inside a nested catch statement.
 	 */
-	bool uncaught_exception() noexcept 
+	bool uncaught_exception() noexcept
 	{
 		__cxa_thread_info *info = thread_info();
 		return info->globals.uncaughtExceptions != 0;
@@ -1624,7 +1624,7 @@ namespace std
 	 * Returns the number of exceptions currently being thrown that have not
 	 * been caught.  This can occur inside a nested catch statement.
 	 */
-	int uncaught_exceptions() noexcept 
+	int uncaught_exceptions() noexcept
 	{
 		__cxa_thread_info *info = thread_info();
 		return info->globals.uncaughtExceptions;
@@ -1632,7 +1632,7 @@ namespace std
 	/**
 	 * Returns the current unexpected handler.
 	 */
-	unexpected_handler get_unexpected() noexcept 
+	unexpected_handler get_unexpected() noexcept
 	{
 		__cxa_thread_info *info = thread_info();
 		if (info->unexpectedHandler)
@@ -1644,7 +1644,7 @@ namespace std
 	/**
 	 * Returns the current terminate handler.
 	 */
-	terminate_handler get_terminate() noexcept 
+	terminate_handler get_terminate() noexcept
 	{
 		__cxa_thread_info *info = thread_info();
 		if (info->terminateHandler)

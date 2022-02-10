@@ -10,7 +10,7 @@
 #include <util/stream/input.h>
 #include <util/stream/output.h>
 
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 #include <util/string/vector.h>
 #include <util/system/tls.h>
 #include <util/ysaveload.h>

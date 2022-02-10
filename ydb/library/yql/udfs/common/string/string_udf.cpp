@@ -3,11 +3,11 @@
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 
 #include <library/cpp/charset/codepage.h>
-#include <library/cpp/deprecated/split/split_iterator.h> 
+#include <library/cpp/deprecated/split/split_iterator.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h>
-#include <library/cpp/string_utils/quote/quote.h> 
+#include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/charset/wide.h>
 #include <util/generic/vector.h>
@@ -16,8 +16,8 @@
 #include <util/string/escape.h>
 #include <util/string/hex.h>
 #include <util/string/join.h>
-#include <util/string/reverse.h> 
-#include <util/string/split.h> 
+#include <util/string/reverse.h>
+#include <util/string/split.h>
 #include <util/string/strip.h>
 #include <util/string/subst.h>
 #include <util/string/util.h>
@@ -52,7 +52,7 @@ namespace {
         const TString input(args[0].AsStringRef());              \
         try {                                                    \
             TUtf16String wide = UTF8ToWide(input);               \
-            function(wide);                                      \ 
+            function(wide);                                      \
             return valueBuilder->NewString(WideToUTF8(wide));    \
         } catch (yexception&) {                                  \
             return TUnboxedValue();                              \
@@ -166,7 +166,7 @@ namespace {
     XX(HasSuffixIgnoreCase, AsciiHasSuffixIgnoreCase)
 
 #define STROKA_UDF_MAP(XX) \
-    XX(Reverse, ReverseInPlace) 
+    XX(Reverse, ReverseInPlace)
 
 #define IS_ASCII_UDF_MAP(XX) \
     XX(IsAscii)              \

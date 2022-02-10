@@ -156,11 +156,11 @@ void TTestContext::VerifySemaphoreOwners(ui64 proxyId, const TString& name, cons
     auto desc = DescribeSemaphore(proxyId, name);
     UNIT_ASSERT_VALUES_EQUAL(desc.Ephemeral, ephemeral);
     for (ui64 sessionId : sessionIds) {
-        UNIT_ASSERT_C(desc.Owners.contains(sessionId), "Session " << sessionId << " is not an owner of " << name); 
+        UNIT_ASSERT_C(desc.Owners.contains(sessionId), "Session " << sessionId << " is not an owner of " << name);
     }
     for (const auto& kv : desc.Owners) {
         ui64 sessionId = kv.first;
-        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected owner of " << name); 
+        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected owner of " << name);
     }
 }
 
@@ -168,11 +168,11 @@ void TTestContext::VerifySemaphoreWaiters(ui64 proxyId, const TString& name, con
     auto desc = DescribeSemaphore(proxyId, name, true);
     UNIT_ASSERT_VALUES_EQUAL(desc.Ephemeral, ephemeral);
     for (ui64 sessionId : sessionIds) {
-        UNIT_ASSERT_C(desc.Waiters.contains(sessionId), "Session " << sessionId << " is not a waiter of " << name); 
+        UNIT_ASSERT_C(desc.Waiters.contains(sessionId), "Session " << sessionId << " is not a waiter of " << name);
     }
     for (const auto& kv : desc.Waiters) {
         ui64 sessionId = kv.first;
-        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected waiter of " << name); 
+        UNIT_ASSERT_C(sessionIds.contains(sessionId), "Session " << sessionId << " is an unexpected waiter of " << name);
     }
 }
 

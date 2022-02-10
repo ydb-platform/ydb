@@ -30,11 +30,11 @@
         : std::codecvt<wchar_t, char, std::mbstate_t>(refs) {}
   protected:
 
-    virtual bool do_always_noconv() const noexcept { return false; } 
+    virtual bool do_always_noconv() const noexcept { return false; }
 
     //  seems safest to assume variable number of characters since we don't
     //  actually know what codepage is active
-    virtual int do_encoding() const noexcept { return 0; } 
+    virtual int do_encoding() const noexcept { return 0; }
 
     virtual std::codecvt_base::result do_in(std::mbstate_t& state, 
       const char* from, const char* from_end, const char*& from_next,
@@ -50,7 +50,7 @@
     virtual int do_length(std::mbstate_t&,
       const char* /*from*/, const char* /*from_end*/, std::size_t /*max*/) const  { return 0; }
 
-    virtual int do_max_length() const noexcept { return 0; } 
+    virtual int do_max_length() const noexcept { return 0; }
   };
 
 #endif  // BOOST_FILESYSTEM3_WIN_FILE_CODECVT_HPP

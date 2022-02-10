@@ -7,7 +7,7 @@
 
 #include <library/cpp/bit_io/bitinput.h>
 #include <library/cpp/bit_io/bitoutput.h>
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 
 namespace NCodecs {
     template <typename T, bool WithDelta = false>

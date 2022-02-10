@@ -183,7 +183,7 @@ static inline bool Strip(const TString& from, TString& to) {
 }
 
 /// Removes leading and trailing spaces from the string.
-inline TString& StripInPlace(TString& s) { 
+inline TString& StripInPlace(TString& s) {
     Strip(s, s);
     return s;
 }
@@ -233,14 +233,14 @@ bool CollapseImpl(const TStringType& from, TStringType& to, size_t maxLen, const
 bool Collapse(const TString& from, TString& to, size_t maxLen = 0);
 
 /// Replaces several consequtive space symbols with one (processing is limited to maxLen bytes)
-inline TString& CollapseInPlace(TString& s, size_t maxLen = 0) { 
+inline TString& CollapseInPlace(TString& s, size_t maxLen = 0) {
     Collapse(s, s, maxLen);
     return s;
 }
- 
+
 /// Replaces several consequtive space symbols with one (processing is limited to maxLen bytes)
-inline TString Collapse(const TString& s, size_t maxLen = 0) Y_WARN_UNUSED_RESULT; 
-inline TString Collapse(const TString& s, size_t maxLen) { 
+inline TString Collapse(const TString& s, size_t maxLen = 0) Y_WARN_UNUSED_RESULT;
+inline TString Collapse(const TString& s, size_t maxLen) {
     TString ret;
     Collapse(s, ret, maxLen);
     return ret;

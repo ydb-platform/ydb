@@ -23,10 +23,10 @@ namespace boost { namespace spirit { namespace iterator_policies
     class illegal_backtracking : public std::exception
     {
     public:
-        illegal_backtracking() noexcept {} 
-        ~illegal_backtracking() {} 
+        illegal_backtracking() noexcept {}
+        ~illegal_backtracking() {}
 
-        char const* what() const noexcept 
+        char const* what() const noexcept
         { 
             return "boost::spirit::multi_pass::illegal_backtracking"; 
         }

@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "blobstorage_groupinfo_iter.h"
 
-#include <library/cpp/pop_count/popcount.h> 
+#include <library/cpp/pop_count/popcount.h>
 
 namespace NKikimr {
 

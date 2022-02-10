@@ -3,14 +3,14 @@
 #include "conn.h"
 #include "options.h"
 
-#include <util/thread/pool.h> 
+#include <util/thread/pool.h>
 #include <library/cpp/http/io/stream.h>
 #include <util/memory/blob.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/system/atomic.h>
 
-class IThreadFactory; 
+class IThreadFactory;
 class TClientRequest;
 class TClientConnection;
 
@@ -62,7 +62,7 @@ public:
     };
 
     typedef THttpServerOptions TOptions;
-    typedef TSimpleSharedPtr<IThreadPool> TMtpQueueRef; 
+    typedef TSimpleSharedPtr<IThreadPool> TMtpQueueRef;
 
     THttpServer(ICallBack* cb, const TOptions& options = TOptions(), IThreadFactory* pool = nullptr);
     THttpServer(ICallBack* cb, TMtpQueueRef mainWorkers, TMtpQueueRef failWorkers, const TOptions& options = TOptions());

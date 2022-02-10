@@ -845,7 +845,7 @@ namespace {
                 for (auto& source : Config->Types.DataSources) {
                     syncList.clear();
                     if (source->CanBuildResult(node, syncList)) {
-                        foundDataSource = TString(source->GetName()); 
+                        foundDataSource = TString(source->GetName());
                         break;
                     }
                 }
@@ -892,7 +892,7 @@ namespace {
         }
 
         bool CanParse(const TExprNode& node) override {
-            return ResultProviderFunctions().contains(node.Content()) || node.Content() == ConfigureName; 
+            return ResultProviderFunctions().contains(node.Content()) || node.Content() == ConfigureName;
         }
 
         void FillModifyCallables(THashSet<TStringBuf>& callables) override {

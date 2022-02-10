@@ -169,7 +169,7 @@ namespace NTabletFlatExecutor {
                 one.State = EState::Task;
                 one.TaskId = Emitter->Do();
 
-                const auto* overrides = std::get_if<TScanOptions::TResourceBrokerOptions>(&options.ResourceBroker); 
+                const auto* overrides = std::get_if<TScanOptions::TResourceBrokerOptions>(&options.ResourceBroker);
 
                 ToBroker(new TEvResourceBroker::TEvSubmitTask(
                             one.TaskId, MakeLabelFor(one),
@@ -335,7 +335,7 @@ namespace NTabletFlatExecutor {
                     break;
             }
 
-            if (const auto* overrides = std::get_if<TScanOptions::TReadAheadOptions>(&one.Options.ReadAhead)) { 
+            if (const auto* overrides = std::get_if<TScanOptions::TReadAheadOptions>(&one.Options.ReadAhead)) {
                 conf.AheadLo = overrides->ReadAheadLo;
                 conf.AheadHi = overrides->ReadAheadHi;
             } else {
@@ -350,7 +350,7 @@ namespace NTabletFlatExecutor {
                 logl << NFmt::Do(*Ops) << " starting " << NFmt::Do(*actor);
 
             ui32 pool = AppData()->BatchPoolId;
-            if (const auto* overrides = std::get_if<TScanOptions::TActorPoolById>(&one.Options.ActorPool)) { 
+            if (const auto* overrides = std::get_if<TScanOptions::TActorPoolById>(&one.Options.ActorPool)) {
                 pool = overrides->PoolId;
             }
 

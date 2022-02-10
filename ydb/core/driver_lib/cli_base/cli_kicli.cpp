@@ -77,7 +77,7 @@ int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClie
         return handler(kikimr);
     };
     if (const auto& conf = CommandConfig.ClientConfig) {
-        return std::visit(std::move(visitor), *conf); 
+        return std::visit(std::move(visitor), *conf);
     } else {
         Cerr << "Client configuration is not provided" << Endl;
         return 1;

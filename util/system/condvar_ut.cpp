@@ -6,7 +6,7 @@
 
 #include <util/system/atomic.h>
 #include <util/system/atomic_ops.h>
-#include <util/thread/pool.h> 
+#include <util/thread/pool.h>
 
 class TCondVarTest: public TTestBase {
     UNIT_TEST_SUITE(TCondVarTest);
@@ -194,7 +194,7 @@ private:
     }
 #undef RUN_CYCLE
     TSharedData Data_;
-    TThreadPool Q_; 
+    TThreadPool Q_;
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TCondVarTest);

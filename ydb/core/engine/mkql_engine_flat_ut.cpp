@@ -244,7 +244,7 @@ namespace {
                     *RandomProvider, *TimeProvider, hosts[shardPgm.first].Get()));
                 UNIT_ASSERT(dataEngine->AddProgram(shardPgm.first, shardPgm.second) == IEngineFlat::EResult::Ok);
 
-                if (incomingReadsets.contains(shardPgm.first)) { 
+                if (incomingReadsets.contains(shardPgm.first)) {
                     for (ui64 rsOrigin : incomingReadsets[shardPgm.first]) {
                         auto it = outgoingReadsets.find(rsOrigin);
                         UNIT_ASSERT(it != outgoingReadsets.end());

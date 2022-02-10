@@ -1511,7 +1511,7 @@ private:
         }
 
         void ResendLoans(ui64 ownerTabletId, const TActorContext& ctx) {
-            if (!LoanReturns.contains(ownerTabletId)) 
+            if (!LoanReturns.contains(ownerTabletId))
                 return;
 
             THashSet<TLogoBlobID> toResend;
@@ -1523,7 +1523,7 @@ private:
         }
 
         void AutoAckLoans(ui64 deadTabletId, const TActorContext& ctx) {
-            if (!LoanReturns.contains(deadTabletId)) 
+            if (!LoanReturns.contains(deadTabletId))
                 return;
 
             TVector<TLogoBlobID> partMetaVec(LoanReturns[deadTabletId].PartMeta.begin(), LoanReturns[deadTabletId].PartMeta.end());
@@ -1532,7 +1532,7 @@ private:
         }
 
         void LoanDone(TLogoBlobID partMeta, const TActorContext& ctx) {
-            if (!LoanOwners.contains(partMeta)) 
+            if (!LoanOwners.contains(partMeta))
                 return;
 
             ui64 ownerTabletId = LoanOwners[partMeta];
@@ -1546,7 +1546,7 @@ private:
         }
 
         bool Has(ui64 ownerTabletId, TActorId pipeClientActorId) const {
-            return LoanReturns.contains(ownerTabletId) && LoanReturns.FindPtr(ownerTabletId)->PipeToOwner == pipeClientActorId; 
+            return LoanReturns.contains(ownerTabletId) && LoanReturns.FindPtr(ownerTabletId)->PipeToOwner == pipeClientActorId;
         }
 
         bool Empty() const {
@@ -1570,7 +1570,7 @@ private:
         }
 
         void SaveSnapshotForSending(ui64 dstTabletId, TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot) {
-            Y_VERIFY(Dst.contains(dstTabletId)); 
+            Y_VERIFY(Dst.contains(dstTabletId));
             DataToSend[dstTabletId] = snapshot;
         }
 
@@ -1583,7 +1583,7 @@ private:
         }
 
         void DoSend(ui64 dstTabletId, const TActorContext &ctx) {
-            Y_VERIFY(Dst.contains(dstTabletId)); 
+            Y_VERIFY(Dst.contains(dstTabletId));
             NTabletPipe::TClientConfig clientConfig;
             PipesToDstShards[dstTabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, dstTabletId, clientConfig));
 
@@ -1608,7 +1608,7 @@ private:
         }
 
         void AckSnapshot(ui64 dstTabletId, const TActorContext &ctx) {
-            if (!DataToSend.contains(dstTabletId)) 
+            if (!DataToSend.contains(dstTabletId))
                 return;
 
             NTabletPipe::CloseClient(ctx, PipesToDstShards[dstTabletId]);
@@ -1625,7 +1625,7 @@ private:
         }
 
         bool Has(ui64 dstTabletId, TActorId pipeClientActorId) const {
-            return PipesToDstShards.contains(dstTabletId) && *PipesToDstShards.FindPtr(dstTabletId) == pipeClientActorId; 
+            return PipesToDstShards.contains(dstTabletId) && *PipesToDstShards.FindPtr(dstTabletId) == pipeClientActorId;
         }
 
         void Shutdown(const TActorContext &ctx) {
@@ -2388,7 +2388,7 @@ protected:
             ev->Record.MutableTableStats()->SetSearchHeight(ti.Stats.SearchHeight);
             ev->Record.MutableTableStats()->SetLastFullCompactionTs(ti.Stats.LastFullCompaction.Seconds());
 
-            if (!ti.Stats.PartOwners.contains(TabletID())) { 
+            if (!ti.Stats.PartOwners.contains(TabletID())) {
                 ev->Record.AddUserTablePartOwners(TabletID());
             }
             for (const auto& pi : ti.Stats.PartOwners) {

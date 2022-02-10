@@ -161,10 +161,10 @@ namespace NBoot {
                         Y_Fail("Part switch has bundle without page collections");
                     }
                     const auto &bundleId = bundle.LargeGlobIds[0].Lead;
-                    if (Bundles.contains(bundleId)) { 
+                    if (Bundles.contains(bundleId)) {
                         Y_Fail("Part switch has a duplicate bundle " << bundleId);
                     }
-                    if (Leaving.contains(bundleId)) { 
+                    if (Leaving.contains(bundleId)) {
                         Y_Fail("Part switch has a removed bundle" << bundleId);
                     }
                     Bundles[bundleId] = &bundle;

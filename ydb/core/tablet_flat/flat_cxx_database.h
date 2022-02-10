@@ -258,7 +258,7 @@ public:
     }
 
     static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TStringBuf& value) {
-        return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(TString(value)); 
+        return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(TString(value));
     }
 
     static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const ::google::protobuf::Message& value) {

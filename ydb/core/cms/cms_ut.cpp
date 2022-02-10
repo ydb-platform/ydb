@@ -69,12 +69,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT_VALUES_EQUAL(node.Host, "::1");
             UNIT_ASSERT_VALUES_EQUAL(node.State, NKikimrCms::UP);
             UNIT_ASSERT_VALUES_EQUAL(node.PDisks.size(), 1);
-            UNIT_ASSERT(node.PDisks.contains(NCms::TPDiskID(nodeId, nodeId))); 
+            UNIT_ASSERT(node.PDisks.contains(NCms::TPDiskID(nodeId, nodeId)));
             UNIT_ASSERT_VALUES_EQUAL(node.VDisks.size(), 4);
-            UNIT_ASSERT(node.VDisks.contains(TVDiskID(0, 1, 0, nodeIndex, 0))); 
-            UNIT_ASSERT(node.VDisks.contains(TVDiskID(1, 1, 0, nodeIndex, 0))); 
-            UNIT_ASSERT(node.VDisks.contains(TVDiskID(2, 1, 0, nodeIndex, 0))); 
-            UNIT_ASSERT(node.VDisks.contains(TVDiskID(3, 1, 0, nodeIndex, 0))); 
+            UNIT_ASSERT(node.VDisks.contains(TVDiskID(0, 1, 0, nodeIndex, 0)));
+            UNIT_ASSERT(node.VDisks.contains(TVDiskID(1, 1, 0, nodeIndex, 0)));
+            UNIT_ASSERT(node.VDisks.contains(TVDiskID(2, 1, 0, nodeIndex, 0)));
+            UNIT_ASSERT(node.VDisks.contains(TVDiskID(3, 1, 0, nodeIndex, 0)));
 
             UNIT_ASSERT(info.HasPDisk(NCms::TPDiskID(nodeId, nodeId)));
 
@@ -88,14 +88,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT(info.HasBSGroup(groupId));
             const auto &group = info.BSGroup(groupId);
             UNIT_ASSERT_VALUES_EQUAL(group.VDisks.size(), 8);
-            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 0, 0))); 
-            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 1, 0))); 
-            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 2, 0))); 
-            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 3, 0))); 
-            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 4, 0))); 
-            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 5, 0))); 
-            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 6, 0))); 
-            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 7, 0))); 
+            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 0, 0)));
+            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 1, 0)));
+            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 2, 0)));
+            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 3, 0)));
+            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 4, 0)));
+            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 5, 0)));
+            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 6, 0)));
+            UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 7, 0)));
         }
     }
 

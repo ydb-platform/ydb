@@ -5,7 +5,7 @@
 #include "scheme_type_order.h"
 #include "scheme_types_defs.h"
 
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/system/unaligned_mem.h>
 
 #include <type_traits>
@@ -270,7 +270,7 @@ inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
     case NYql::NProto::TypeIds::Decimal:
     case NYql::NProto::TypeIds::JsonDocument:
     case NYql::NProto::TypeIds::DyNumber:
-        return ComputeHash(TStringBuf{cell.Data(), cell.Size()}); 
+        return ComputeHash(TStringBuf{cell.Data(), cell.Size()});
 
     default:
         Y_VERIFY_DEBUG(false, "Type not supported for user columns: %d", type);

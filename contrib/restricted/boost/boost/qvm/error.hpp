@@ -22,12 +22,12 @@ boost
             virtual std::exception
             {
             char const *
-            what() const noexcept 
+            what() const noexcept
                 {
                 return "Boost QVM error";
                 }
 
-            ~error() 
+            ~error()
                 {
                 }
             };

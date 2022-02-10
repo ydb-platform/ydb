@@ -222,7 +222,7 @@ namespace NKikimr {
 
     public:
         struct THash {
-            ui32 operator()(const TLogoBlobID &id) const noexcept { 
+            ui32 operator()(const TLogoBlobID &id) const noexcept {
                 return id.Hash();
             }
         };
@@ -316,7 +316,7 @@ inline void Out<TVector<NKikimr::TLogoBlobID>>(IOutputStream& out, const TVector
 
 template<>
 struct THash<NKikimr::TLogoBlobID> {
-    inline ui64 operator()(const NKikimr::TLogoBlobID& x) const noexcept { 
+    inline ui64 operator()(const NKikimr::TLogoBlobID& x) const noexcept {
         return x.Hash();
     }
 };

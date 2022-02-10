@@ -209,7 +209,7 @@ public:
     static size_t hashVal(const char* pc, size_t len, const CodePage& cp = csYandex);
 
     size_t hash() const {
-        return TCiString::hashVal(data(), length()); 
+        return TCiString::hashVal(data(), length());
     }
 };
 

@@ -380,10 +380,10 @@ struct TScanOptions {
     };
 
     EReadPrio ReadPrio = EReadPrio::Default;
-    std::variant<TReadAheadDefaults, TReadAheadOptions> ReadAhead; 
-    std::variant<TResourceBrokerDefaults, TResourceBrokerOptions, TResourceBrokerDisabled> ResourceBroker; 
-    std::variant<TSnapshotNone, TSnapshotById, TSnapshotByRowVersion> Snapshot; 
-    std::variant<TActorPoolDefault, TActorPoolById> ActorPool; 
+    std::variant<TReadAheadDefaults, TReadAheadOptions> ReadAhead;
+    std::variant<TResourceBrokerDefaults, TResourceBrokerOptions, TResourceBrokerDisabled> ResourceBroker;
+    std::variant<TSnapshotNone, TSnapshotById, TSnapshotByRowVersion> Snapshot;
+    std::variant<TActorPoolDefault, TActorPoolById> ActorPool;
 
     TScanOptions& SetReadPrio(EReadPrio prio) {
         ReadPrio = prio;
@@ -421,7 +421,7 @@ struct TScanOptions {
     }
 
     bool IsResourceBrokerDisabled() const {
-        return std::holds_alternative<TResourceBrokerDisabled>(ResourceBroker); 
+        return std::holds_alternative<TResourceBrokerDisabled>(ResourceBroker);
     }
 };
 

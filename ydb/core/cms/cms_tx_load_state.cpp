@@ -126,7 +126,7 @@ public:
 
             state->Permissions.emplace(id, permission);
 
-            if (state->WalleRequests.contains(requestId)) { 
+            if (state->WalleRequests.contains(requestId)) {
                 const auto &taskId = state->WalleRequests[requestId];
                 state->WalleTasks[taskId].Permissions.insert(id);
 

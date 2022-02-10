@@ -699,7 +699,7 @@ namespace NTabletPipe {
     }
 
     void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase *payload, ui64 seqNo, ui64 cookie) {
-        auto event = MakeHolder<TEvTabletPipe::TEvMessage>(self, THolder<IEventBase>(payload)); 
+        auto event = MakeHolder<TEvTabletPipe::TEvMessage>(self, THolder<IEventBase>(payload));
         event->SetSeqNo(seqNo);
         auto ev = MakeHolder<IEventHandle>(clientId, self, event.Release(), 0, cookie);
         TActivationContext::Send(ev.Release());

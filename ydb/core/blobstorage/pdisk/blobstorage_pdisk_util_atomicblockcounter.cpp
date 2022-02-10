@@ -6,11 +6,11 @@ namespace NPDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TAtomicBlockCounter
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool TAtomicBlockCounter::IsBlocked() const noexcept { 
+bool TAtomicBlockCounter::IsBlocked() const noexcept {
     return GetBlocked(AtomicGet(Data));
 }
 
-void TAtomicBlockCounter::Block(ui64 flag, TResult& res) noexcept { 
+void TAtomicBlockCounter::Block(ui64 flag, TResult& res) noexcept {
     while (true) {
         ui64 prevData = AtomicGet(Data);
         if (prevData & flag) {
@@ -25,7 +25,7 @@ void TAtomicBlockCounter::Block(ui64 flag, TResult& res) noexcept {
     }
 }
 
-void TAtomicBlockCounter::Unblock(ui64 flag, TResult& res) noexcept { 
+void TAtomicBlockCounter::Unblock(ui64 flag, TResult& res) noexcept {
     while (true) {
         ui64 prevData = AtomicGet(Data);
         if (!(prevData & flag)) {
@@ -40,7 +40,7 @@ void TAtomicBlockCounter::Unblock(ui64 flag, TResult& res) noexcept {
     }
 }
 
-ui64 TAtomicBlockCounter::Add(ui64 value) noexcept { 
+ui64 TAtomicBlockCounter::Add(ui64 value) noexcept {
     Y_VERIFY_S(value > 0, "zero value# " << value);
     while (true) {
         ui64 prevData = AtomicGet(Data);
@@ -54,7 +54,7 @@ ui64 TAtomicBlockCounter::Add(ui64 value) noexcept {
     }
 }
 
-ui64 TAtomicBlockCounter::Sub(ui64 value) noexcept { 
+ui64 TAtomicBlockCounter::Sub(ui64 value) noexcept {
     Y_VERIFY_S(value > 0, "zero value# " << value);
     while (true) {
         ui64 prevData = AtomicGet(Data);
@@ -65,7 +65,7 @@ ui64 TAtomicBlockCounter::Sub(ui64 value) noexcept {
     }
 }
 
-ui64 TAtomicBlockCounter::ThresholdAdd(ui64 value, ui64 threshold, TAtomicBlockCounter::TResult& res) noexcept { 
+ui64 TAtomicBlockCounter::ThresholdAdd(ui64 value, ui64 threshold, TAtomicBlockCounter::TResult& res) noexcept {
     Y_VERIFY_S(value > 0, "zero value# " << value);
     while (true) {
         ui64 prevData = AtomicGet(Data);
@@ -81,7 +81,7 @@ ui64 TAtomicBlockCounter::ThresholdAdd(ui64 value, ui64 threshold, TAtomicBlockC
     }
 }
 
-ui64 TAtomicBlockCounter::ThresholdSub(ui64 value, ui64 threshold, TAtomicBlockCounter::TResult& res) noexcept { 
+ui64 TAtomicBlockCounter::ThresholdSub(ui64 value, ui64 threshold, TAtomicBlockCounter::TResult& res) noexcept {
     Y_VERIFY_S(value > 0, "zero value# " << value);
     while (true) {
         ui64 prevData = AtomicGet(Data);
@@ -93,7 +93,7 @@ ui64 TAtomicBlockCounter::ThresholdSub(ui64 value, ui64 threshold, TAtomicBlockC
     }
 }
 
-ui64 TAtomicBlockCounter::ThresholdUpdate(ui64 threshold, TAtomicBlockCounter::TResult& res) noexcept { 
+ui64 TAtomicBlockCounter::ThresholdUpdate(ui64 threshold, TAtomicBlockCounter::TResult& res) noexcept {
     while (true) {
         ui64 prevData = AtomicGet(Data);
         ui64 data = NextSeqno(ThresholdBlock(prevData, threshold));
@@ -104,25 +104,25 @@ ui64 TAtomicBlockCounter::ThresholdUpdate(ui64 threshold, TAtomicBlockCounter::T
     }
 }
 
-ui64 TAtomicBlockCounter::Get() const noexcept { 
+ui64 TAtomicBlockCounter::Get() const noexcept {
     return GetCounter(AtomicGet(Data));
 }
 
-ui64 TAtomicBlockCounter::CheckedAddCounter(ui64 prevData, ui64 value) noexcept { 
+ui64 TAtomicBlockCounter::CheckedAddCounter(ui64 prevData, ui64 value) noexcept {
     Y_VERIFY_S(!(value & ~CounterMask), "invalid value# " << value);
     Y_VERIFY_S(!((GetCounter(prevData) + value) & ~CounterMask),
              "overflow value# " << value << " prevData# " << GetCounter(prevData));
     return prevData + value; // No overflow, so higher bits are untouched
 }
 
-ui64 TAtomicBlockCounter::CheckedSubCounter(ui64 prevData, ui64 value) noexcept { 
+ui64 TAtomicBlockCounter::CheckedSubCounter(ui64 prevData, ui64 value) noexcept {
     Y_VERIFY_S(!(value & ~CounterMask), "invalid value# " << value);
     Y_VERIFY_S(!((GetCounter(prevData) - value) & ~CounterMask),
              "underflow value# " << value << " prevData# " << GetCounter(prevData));
     return prevData - value; // No underflow, so higher bits are untouched
 }
 
-void TAtomicBlockCounter::FillResult(ui64 prevData, ui64 data, TAtomicBlockCounter::TResult& res) noexcept { 
+void TAtomicBlockCounter::FillResult(ui64 prevData, ui64 data, TAtomicBlockCounter::TResult& res) noexcept {
     res.PrevA = prevData & BlockAFlag;
     res.PrevB = prevData & BlockBFlag;
     res.A = data & BlockAFlag;
@@ -131,19 +131,19 @@ void TAtomicBlockCounter::FillResult(ui64 prevData, ui64 data, TAtomicBlockCount
     res.PrevSeqno = GetSeqno(prevData);
 }
 
-bool TAtomicBlockCounter::GetBlocked(ui64 data) noexcept { 
+bool TAtomicBlockCounter::GetBlocked(ui64 data) noexcept {
     return data & BlockMask;
 }
 
-ui16 TAtomicBlockCounter::GetSeqno(ui64 data) noexcept { 
+ui16 TAtomicBlockCounter::GetSeqno(ui64 data) noexcept {
     return (data & SeqnoMask) >> SeqnoShift;
 }
 
-ui64 TAtomicBlockCounter::GetCounter(ui64 data) noexcept { 
+ui64 TAtomicBlockCounter::GetCounter(ui64 data) noexcept {
     return data & CounterMask;
 }
 
-ui64 TAtomicBlockCounter::ThresholdBlock(ui64 data, ui64 threshold) noexcept { 
+ui64 TAtomicBlockCounter::ThresholdBlock(ui64 data, ui64 threshold) noexcept {
     if (GetCounter(data) > threshold) {
         return data | BlockAFlag;
     } else {
@@ -151,7 +151,7 @@ ui64 TAtomicBlockCounter::ThresholdBlock(ui64 data, ui64 threshold) noexcept {
     }
 }
 
-ui64 TAtomicBlockCounter::NextSeqno(ui64 data) noexcept { 
+ui64 TAtomicBlockCounter::NextSeqno(ui64 data) noexcept {
     if (GetSeqno(data) == Max<ui16>()) { // Overflow case
         return data & ~SeqnoMask;
     } else { // No overflow case

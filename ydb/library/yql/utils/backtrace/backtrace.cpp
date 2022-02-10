@@ -95,14 +95,14 @@ void KikimrBacktraceFormatImpl(IOutputStream* out) {
 
     void* array[300];
     const size_t s = BackTrace(array, Y_ARRAY_SIZE(array));
-    KikimrBacktraceFormatImpl(out, array, s); 
+    KikimrBacktraceFormatImpl(out, array, s);
 }
 
-void KikimrBacktraceFormatImpl(IOutputStream* out, void* const* stack, size_t stackSize) { 
+void KikimrBacktraceFormatImpl(IOutputStream* out, void* const* stack, size_t stackSize) {
     using namespace llvm;
     using namespace symbolize;
 
-    TRawOStreamProxy outStream(*out); 
+    TRawOStreamProxy outStream(*out);
     THashMap<TString, TDllInfo> dlls;
 #ifdef _linux_
     dl_iterate_phdr(DlIterCallback, &dlls);

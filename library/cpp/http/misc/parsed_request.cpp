@@ -2,7 +2,7 @@
 
 #include <util/string/strip.h>
 #include <util/generic/yexception.h>
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 
 static inline TStringBuf StripLeft(const TStringBuf& s) noexcept {
     const char* b = s.begin();

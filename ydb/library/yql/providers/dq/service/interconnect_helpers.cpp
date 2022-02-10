@@ -82,7 +82,7 @@ namespace NYql::NDqs {
         }
 
         setup->ExecutorsCount = threads.size();
-        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]); 
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
         for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
             setup->Executors[i] = new TBasicExecutorPool(
                 i,

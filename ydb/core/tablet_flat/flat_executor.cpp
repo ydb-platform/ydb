@@ -2769,7 +2769,7 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
     GcLogic->HoldBarrier(barrier->Step);
     CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
 
-    return THolder<TScanSnapshot>(new TScanSnapshot{table, std::move(barrier), subset, snapshot}); 
+    return THolder<TScanSnapshot>(new TScanSnapshot{table, std::move(barrier), subset, snapshot});
 }
 
 void TExecutor::StartScan(ui64 serial, ui32 table) noexcept
@@ -3062,7 +3062,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
         THashSet<TLogoBlobID> reusedBundles;
         for (auto &part: ops->Subset->Flatten) {
-            if (updatedSlices.contains(part->Label)) { 
+            if (updatedSlices.contains(part->Label)) {
                 reusedBundles.insert(part->Label);
             }
         }
@@ -3455,7 +3455,7 @@ ui64 TExecutor::QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cooki
 {
     THolder<TScanSnapshot> snapshot;
 
-    if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&options.Snapshot)) { 
+    if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&options.Snapshot)) {
         auto snapshotId = byId->SnapshotId;
         auto it = ScanSnapshots.find(snapshotId);
         Y_VERIFY_S(it != ScanSnapshots.end(),
@@ -3466,7 +3466,7 @@ ui64 TExecutor::QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cooki
         ScanSnapshots.erase(it);
     } else {
         TRowVersion rowVersion;
-        if (const auto* byVersion = std::get_if<TScanOptions::TSnapshotByRowVersion>(&options.Snapshot)) { 
+        if (const auto* byVersion = std::get_if<TScanOptions::TSnapshotByRowVersion>(&options.Snapshot)) {
             rowVersion = byVersion->RowVersion;
         } else {
             rowVersion = TRowVersion::Max();

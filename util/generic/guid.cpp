@@ -42,7 +42,7 @@ TGUID TGUID::Create() {
 }
 
 void CreateGuid(TGUID* res) {
-    ui64* dw = reinterpret_cast<ui64*>(res->dw); 
+    ui64* dw = reinterpret_cast<ui64*>(res->dw);
 
     WriteUnaligned<ui64>(&dw[0], RandomNumber<ui64>());
     WriteUnaligned<ui64>(&dw[1], RandomNumber<ui64>());

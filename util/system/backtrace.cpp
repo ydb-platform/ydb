@@ -243,7 +243,7 @@ void FormatBackTrace(IOutputStream* out, void* const* backtrace, size_t backtrac
     }
 }
 
-TFormatBackTraceFn FormatBackTraceFn = FormatBackTrace; 
+TFormatBackTraceFn FormatBackTraceFn = FormatBackTrace;
 
 TFormatBackTraceFn SetFormatBackTraceFn(TFormatBackTraceFn f) {
     TFormatBackTraceFn prevFn = FormatBackTraceFn;
@@ -251,12 +251,12 @@ TFormatBackTraceFn SetFormatBackTraceFn(TFormatBackTraceFn f) {
     return prevFn;
 }
 
-void FormatBackTrace(IOutputStream* out) { 
-    void* array[300]; 
-    const size_t s = BackTrace(array, Y_ARRAY_SIZE(array)); 
-    FormatBackTraceFn(out, array, s); 
-} 
- 
+void FormatBackTrace(IOutputStream* out) {
+    void* array[300];
+    const size_t s = BackTrace(array, Y_ARRAY_SIZE(array));
+    FormatBackTraceFn(out, array, s);
+}
+
 TFormatBackTraceFn GetFormatBackTraceFn() {
     return FormatBackTraceFn;
 }
@@ -275,7 +275,7 @@ void TBackTrace::Capture() {
 }
 
 void TBackTrace::PrintTo(IOutputStream& out) const {
-    FormatBackTraceFn(&out, Data, Size); 
+    FormatBackTraceFn(&out, Data, Size);
 }
 
 TString TBackTrace::PrintToString() const {
@@ -283,7 +283,7 @@ TString TBackTrace::PrintToString() const {
     PrintTo(ss);
     return ss.Str();
 }
- 
+
 size_t TBackTrace::size() const {
     return Size;
 }
@@ -296,12 +296,12 @@ TBackTrace::operator TBackTraceView() const {
     return TBackTraceView(Data, Size);
 }
 
-TBackTrace TBackTrace::FromCurrentException() { 
-#ifdef _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_SIZE 
-    TBackTrace result; 
-    result.Size = __cxxabiv1::__cxa_collect_current_exception_backtrace(result.Data, CAPACITY); 
-    return result; 
-#else 
-    return TBackTrace(); 
-#endif 
-} 
+TBackTrace TBackTrace::FromCurrentException() {
+#ifdef _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_SIZE
+    TBackTrace result;
+    result.Size = __cxxabiv1::__cxa_collect_current_exception_backtrace(result.Data, CAPACITY);
+    return result;
+#else
+    return TBackTrace();
+#endif
+}

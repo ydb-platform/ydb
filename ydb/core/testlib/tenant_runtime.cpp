@@ -287,7 +287,7 @@ class TFakeTenantSlotBroker : public TActor<TFakeTenantSlotBroker>, public TTabl
     {
         auto *resp = new TEvTenantSlotBroker::TEvTenantState;
         resp->Record.SetTenantName(name);
-        if (State.contains(name)) 
+        if (State.contains(name))
             resp->Record.MutableRequiredSlots()->CopyFrom(State.at(name).GetRequiredSlots());
         ctx.Send(sender, resp);
     }
@@ -532,7 +532,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
         ping->Record.SetHiveGeneration(1);
         ctx.Send(ev->Sender, ping, IEventHandle::FlagTrackDelivery);
 
-        if (!SubDomainKeys.contains(info.Key)) 
+        if (!SubDomainKeys.contains(info.Key))
             ResolveKey(info.Key, ctx);
     }
 
@@ -540,7 +540,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
     {
         auto &record = ev->Get()->Record;
 
-        UNIT_ASSERT(Clients.contains(ev->Sender)); 
+        UNIT_ASSERT(Clients.contains(ev->Sender));
         if (record.GetStatus() == TEvLocal::TEvStatus::StatusDead) {
             Clients.erase(ev->Sender);
         } else {
@@ -585,11 +585,11 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
         ui64 missing = 0;
         THashMap<TString, TClientInfo> tenants;
         for (auto &pr : Clients) {
-            if (!SubDomainKeys.contains(pr.second.Key)) { 
+            if (!SubDomainKeys.contains(pr.second.Key)) {
                 return;
             }
             auto name = SubDomainKeys.at(pr.second.Key);
-            if (tenants.contains(name)) { 
+            if (tenants.contains(name)) {
                 auto &tenant = tenants[name];
                 if (pr.second.Status != TEvLocal::TEvStatus::StatusOk)
                     tenant.Status = pr.second.Status;
@@ -604,7 +604,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
         for (auto &pr : tenants) {
             if (pr.second.Status != TEvLocal::TEvStatus::StatusOk) {
                 ++missing;
-            } else if (!ExpectedState.contains(pr.first)) { 
+            } else if (!ExpectedState.contains(pr.first)) {
                 return;
             } else if (ExpectedState[pr.first] != pr.second) {
                 return;
@@ -1170,7 +1170,7 @@ void CheckTenantPoolStatus(TTenantTestRuntime &runtime, ui32 domain,
     auto reply = runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvTenantPoolStatus>(handle);
     auto &rec = reply->Record;
     for (auto &slot : rec.GetSlots()) {
-        UNIT_ASSERT(status.contains(slot.GetId())); 
+        UNIT_ASSERT(status.contains(slot.GetId()));
         auto &entry = status[slot.GetId()];
         UNIT_ASSERT_VALUES_EQUAL(slot.GetId(), entry.GetId());
         UNIT_ASSERT_VALUES_EQUAL(slot.GetType(), entry.GetType());

@@ -128,7 +128,7 @@ public:
                 dataCenter = DataCenterToString(slotRowset.GetValue<Schema::Slots::DataCenter>());
             }
 
-            Y_VERIFY(!Self->Slots.contains(id)); 
+            Y_VERIFY(!Self->Slots.contains(id));
             TSlot::TPtr slot = new TSlot(id, slotType, dataCenter);
             slot->LastRequestId = reqId;
             Self->AddSlot(slot);

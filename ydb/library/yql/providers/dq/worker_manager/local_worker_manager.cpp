@@ -257,7 +257,7 @@ private:
                             computeActorType,
                             Options.TaskRunnerActorFactory));
                 } else {
-                    actor.Reset(CreateWorkerActor( 
+                    actor.Reset(CreateWorkerActor(
                         Options.RuntimeData,
                         traceId,
                         Options.TaskRunnerActorFactory,

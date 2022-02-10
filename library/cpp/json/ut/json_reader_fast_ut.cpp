@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <library/cpp/string_utils/relaxed_escaper/relaxed_escaper.h>
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 #include <util/string/printf.h>
 
 namespace NJson {

@@ -248,7 +248,7 @@ private:
                 auto collector = NMonitoring::ExplicitHistogram(bounds).Release();
                 auto histogram = group->GetNamedHistogram(
                     label.GetName(), label.GetValue(),
-                    THolder(collector)); 
+                    THolder(collector));
                 Histograms.insert(std::make_pair(histogram, collector));
                 Histograms[histogram]->Collect(*histSnapshot);
             } else {

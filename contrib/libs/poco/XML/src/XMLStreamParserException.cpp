@@ -55,7 +55,7 @@ void XMLStreamParserException::init()
 }
 
 
-const char* XMLStreamParserException::name() const noexcept 
+const char* XMLStreamParserException::name() const noexcept
 {
 	return _name.c_str();
 }
@@ -79,7 +79,7 @@ const std::string& XMLStreamParserException::description() const
 }
 
 
-char const* XMLStreamParserException::what() const noexcept 
+char const* XMLStreamParserException::what() const noexcept
 {
 	return _what.c_str();
 }

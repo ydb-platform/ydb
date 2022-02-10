@@ -65,7 +65,7 @@ struct TZCMemoryInput_traits {
     }
 };
 
-void Y_FORCE_INLINE PackUI32(IOutputStream& out, ui32 v) { 
+void Y_FORCE_INLINE PackUI32(IOutputStream& out, ui32 v) {
     char buf[sizeof(ui32)];
     char* bufPtr = buf;
     size_t size;

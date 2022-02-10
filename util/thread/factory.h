@@ -3,7 +3,7 @@
 #include <util/generic/ptr.h>
 #include <functional>
 
-class IThreadFactory { 
+class IThreadFactory {
 public:
     class IThreadAble {
     public:
@@ -20,7 +20,7 @@ public:
     };
 
     class IThread {
-        friend class IThreadFactory; 
+        friend class IThreadFactory;
 
     public:
         inline IThread() noexcept = default;
@@ -42,9 +42,9 @@ public:
         virtual void DoJoin() noexcept = 0;
     };
 
-    inline IThreadFactory() noexcept = default; 
+    inline IThreadFactory() noexcept = default;
 
-    virtual ~IThreadFactory() = default; 
+    virtual ~IThreadFactory() = default;
 
     // XXX: rename to Start
     inline THolder<IThread> Run(IThreadAble* func) {
@@ -61,5 +61,5 @@ private:
     virtual IThread* DoCreate() = 0;
 };
 
-IThreadFactory* SystemThreadFactory(); 
-void SetSystemThreadFactory(IThreadFactory* pool); 
+IThreadFactory* SystemThreadFactory();
+void SetSystemThreadFactory(IThreadFactory* pool);

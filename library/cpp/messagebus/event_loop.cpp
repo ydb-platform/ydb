@@ -281,7 +281,7 @@ void TEventLoop::TImpl::Run() {
     Y_VERIFY(res, "Invalid mbus event loop state");
 
     if (!!Name) {
-        SetCurrentThreadName(Name); 
+        SetCurrentThreadName(Name);
     }
 
     while (AtomicGet(StopSignal) == 0) {

@@ -327,7 +327,7 @@ namespace {
                         }
 
                         if (unescapeResult != EUnescapeResult::OK) {
-                            AddError(TString(UnescapeResultToString(unescapeResult))); 
+                            AddError(TString(UnescapeResultToString(unescapeResult)));
                             return nullptr;
                         }
 
@@ -359,7 +359,7 @@ namespace {
                         }
 
                         if (unescapeResult != EUnescapeResult::OK) {
-                            AddError(TString(UnescapeResultToString(unescapeResult))); 
+                            AddError(TString(UnescapeResultToString(unescapeResult)));
                             return nullptr;
                         }
 
@@ -436,7 +436,7 @@ namespace {
     }
 
     Y_NO_INLINE void Indent(IOutputStream& out, ui32 indentation) {
-        char* whitespaces = reinterpret_cast<char*>(alloca(indentation)); 
+        char* whitespaces = reinterpret_cast<char*>(alloca(indentation));
         memset(whitespaces, ' ', indentation);
         out.Write(whitespaces, indentation);
     }

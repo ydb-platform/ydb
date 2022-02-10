@@ -112,7 +112,7 @@ class ThreadInternalsPosix : public internal::ThreadInternalsInterface {
                           thd_arg arg = *static_cast<thd_arg*>(v);
                           free(v);
                           if (arg.name != nullptr) {
-                            TThread::SetCurrentThreadName(arg.name); 
+                            TThread::SetCurrentThreadName(arg.name);
                           }
 
                           gpr_mu_lock(&arg.thread->mu_);

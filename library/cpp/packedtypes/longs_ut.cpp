@@ -5,7 +5,7 @@
 #include <library/cpp/digest/old_crc/crc.h>
 #include <util/string/util.h>
 #include <util/stream/output.h>
-#include <util/system/hi_lo.h> 
+#include <util/system/hi_lo.h>
 
 Y_UNIT_TEST_SUITE(TLongsTest) {
     Y_UNIT_TEST(TestLongs) {
@@ -15,14 +15,14 @@ Y_UNIT_TEST_SUITE(TLongsTest) {
         TString s;
 
         s += Sprintf("x16=0x%x\n", (int)x16);
-        s += Sprintf("LO_8(x16)=0x%x HI_8(x16)=0x%x\n\n", (int)Lo8(x16), (int)Hi8(x16)); 
+        s += Sprintf("LO_8(x16)=0x%x HI_8(x16)=0x%x\n\n", (int)Lo8(x16), (int)Hi8(x16));
 
         char buf[100];
         memset(buf, 0, 100);
         char* p = buf;
         int l = out_long(x64, buf);
         s += Sprintf("x64=0x%" PRIi64 "\n", x64);
-        s += Sprintf("LO_32(x64)=0x%" PRIu32 " HI_32(x64)=0x%" PRIu32 "\n", (ui32)Lo32(x64), (ui32)Hi32(x64)); 
+        s += Sprintf("LO_32(x64)=0x%" PRIu32 " HI_32(x64)=0x%" PRIu32 "\n", (ui32)Lo32(x64), (ui32)Hi32(x64));
         s += Sprintf("buf=%s, l=%d: ", buf, l);
         for (int i = 0; i < l; i++) {
             s += Sprintf("0x%02x ", buf[i]);

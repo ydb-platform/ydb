@@ -30,7 +30,7 @@ public:
         LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s",
                   RequestEvent->Get()->Record.ShortDebugString().data());
 
-        if (!State->WalleTasks.contains(id)) { 
+        if (!State->WalleTasks.contains(id)) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unknown task", ctx);
             return;
         }

@@ -57,7 +57,7 @@ public:
         return GetMessage()->GetHeader()->Id;
     }
 
-    THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override; 
+    THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 };
 
 class TBusMessageContext::TImplGRpc
@@ -188,7 +188,7 @@ public:
         SendReply(response.Get());
     }
 
-    THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override; 
+    THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 };
 
 TBusMessageContext::TBusMessageContext()
@@ -286,10 +286,10 @@ public:
     }
 };
 
-THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplMessageBus::CreateSessionIdentHolder() { 
-    return MakeHolder<TMessageBusSessionIdentHolder::TImplMessageBus>(static_cast<NBus::TOnMessageContext&>(*this)); 
-} 
- 
+THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplMessageBus::CreateSessionIdentHolder() {
+    return MakeHolder<TMessageBusSessionIdentHolder::TImplMessageBus>(static_cast<NBus::TOnMessageContext&>(*this));
+}
+
 class TMessageBusSessionIdentHolder::TImplGRpc
     : public TMessageBusSessionIdentHolder::TImpl
 {
@@ -326,10 +326,10 @@ public:
     }
 };
 
-THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplGRpc::CreateSessionIdentHolder() { 
-    return MakeHolder<TMessageBusSessionIdentHolder::TImplGRpc>(this); 
-} 
- 
+THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplGRpc::CreateSessionIdentHolder() {
+    return MakeHolder<TMessageBusSessionIdentHolder::TImplGRpc>(this);
+}
+
 TMessageBusSessionIdentHolder::TMessageBusSessionIdentHolder()
 {}
 

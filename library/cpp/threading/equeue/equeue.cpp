@@ -71,10 +71,10 @@ void TElasticQueue::Start(size_t threadCount, size_t maxQueueSize) {
     SlaveQueue_->Start(threadCount, maxQueueSize);
 }
 
-void TElasticQueue::Stop() noexcept { 
+void TElasticQueue::Stop() noexcept {
     return SlaveQueue_->Stop();
 }
 
-size_t TElasticQueue::Size() const noexcept { 
+size_t TElasticQueue::Size() const noexcept {
     return SlaveQueue_->Size();
 }

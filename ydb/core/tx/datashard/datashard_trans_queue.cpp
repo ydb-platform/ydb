@@ -146,7 +146,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                                success, error, dataSize, rows);
             auto saved = SchemaOps.insert(std::make_pair(op.TxId, op));
             TSchemaOperation * savedOp = &saved.first->second;
-            if (schemaTxs.contains(txId)) { // is not done yet 
+            if (schemaTxs.contains(txId)) { // is not done yet
                 Self->Pipeline.SetSchemaOp(savedOp);
             } else {
                 savedOp->Done = true;

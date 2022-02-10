@@ -221,7 +221,7 @@ void CheckListConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::S
 
     for (auto &rec : reply->Record.GetSubscriptions()) {
         TSubscription subscription(rec);
-        UNIT_ASSERT(subscriptions.contains(subscription.Id)); 
+        UNIT_ASSERT(subscriptions.contains(subscription.Id));
         UNIT_ASSERT(subscriptions.at(subscription.Id).IsEqual(subscription));
         subscriptions.erase(subscription.Id);
     }
@@ -238,7 +238,7 @@ inline bool CompareState(THashMap<std::pair<TString, TString>, TSlotState> slots
     for (auto &unit : resources.computational_units()) {
         auto key = std::make_pair(unit.unit_kind(), unit.availability_zone());
         auto count = unit.count();
-        if (!slots.contains(key)) 
+        if (!slots.contains(key))
             return false;
         if (slots[key].Required != count)
             return false;
@@ -248,7 +248,7 @@ inline bool CompareState(THashMap<std::pair<TString, TString>, TSlotState> slots
     for (auto &unit : resources.storage_units()) {
         auto key = unit.unit_kind();
         auto size = unit.count();
-        if (!pools.contains(key)) 
+        if (!pools.contains(key))
             return false;
         if (pools[key].PoolSize != size)
             return false;
@@ -258,7 +258,7 @@ inline bool CompareState(THashMap<std::pair<TString, TString>, TSlotState> slots
     for (auto &unit : status.allocated_resources().computational_units()) {
         auto key = std::make_pair(unit.unit_kind(), unit.availability_zone());
         auto count = unit.count();
-        if (!slots.contains(key)) 
+        if (!slots.contains(key))
             return false;
         if (slots[key].Allocated != count)
             return false;
@@ -268,7 +268,7 @@ inline bool CompareState(THashMap<std::pair<TString, TString>, TSlotState> slots
     for (auto &unit : status.allocated_resources().storage_units()) {
         auto key = unit.unit_kind();
         auto size = unit.count();
-        if (!pools.contains(key)) 
+        if (!pools.contains(key))
             return false;
         if (pools[key].Allocated != size)
             return false;
@@ -277,7 +277,7 @@ inline bool CompareState(THashMap<std::pair<TString, TString>, TSlotState> slots
 
     for (auto &unit : status.registered_resources()) {
         auto key = std::make_pair(unit.host(), unit.port());
-        if (!registrations.contains(key)) 
+        if (!registrations.contains(key))
             return false;
         if (registrations.at(key).Kind != unit.unit_kind())
             return false;

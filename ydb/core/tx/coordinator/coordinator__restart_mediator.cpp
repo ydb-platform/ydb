@@ -34,7 +34,7 @@ struct TTxCoordinator::TTxRestartMediatorQueue : public TTransactionBase<TTxCoor
             Y_VERIFY(unconfirmedAffectedSet.size() == it.second.size(),
                      "Incosistent affected set in mem in DB for txId %" PRIu64, it.first);
             for (const TTabletId affectedTabletId : it.second) {
-                Y_VERIFY(unconfirmedAffectedSet.contains(affectedTabletId), 
+                Y_VERIFY(unconfirmedAffectedSet.contains(affectedTabletId),
                          "Incosistent affected set in mem in DB for txId %" PRIu64 " missing tabletId %" PRIu64,
                          it.first, affectedTabletId);
             }

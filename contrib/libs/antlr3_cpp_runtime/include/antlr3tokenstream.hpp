@@ -393,7 +393,7 @@ public:
 
 class TokenAccessException : public std::exception
 {
-	virtual const char* what() const noexcept 
+	virtual const char* what() const noexcept
 	{
 		return " Attempted access on Deleted Token";
 	}

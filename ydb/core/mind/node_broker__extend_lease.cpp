@@ -45,7 +45,7 @@ public:
 
         auto it = Self->Nodes.find(nodeId);
         if (it == Self->Nodes.end()) {
-            if (Self->ExpiredNodes.contains(nodeId)) 
+            if (Self->ExpiredNodes.contains(nodeId))
                 return Error(TStatus::WRONG_REQUEST, "Node has expired", ctx);
             else
                 return Error(TStatus::WRONG_REQUEST, "Unknown node", ctx);

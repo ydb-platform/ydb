@@ -72,7 +72,7 @@ private:
 
     void InputConfig(const IMonHttpRequest& request, IOutputStream& out) {
         TGuard<TMutex> guard(EmuMutex);
-        JsonConfig = TString(request.GetPostContent()); 
+        JsonConfig = TString(request.GetPostContent());
         IsRunning = false;
         out << HTTPOKHTML;
     }

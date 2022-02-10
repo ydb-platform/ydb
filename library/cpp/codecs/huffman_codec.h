@@ -3,7 +3,7 @@
 #include "codecs.h"
 
 #include <util/generic/ptr.h>
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 
 namespace NCodecs {
     // for types greater than char, pipeline with TFreqCodec.

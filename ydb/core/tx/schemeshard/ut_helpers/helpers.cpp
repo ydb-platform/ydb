@@ -2035,7 +2035,7 @@ namespace NSchemeShardUT_Private {
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime &runtime, TVector<THolder<IEventHandle> > &suppressed, ui32 type) {
         return runtime.SetObserverFunc([&suppressed, type](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == type) {
-                suppressed.push_back(std::move(ev)); 
+                suppressed.push_back(std::move(ev));
                 return TTestActorRuntime::EEventAction::DROP;
             }
             return TTestActorRuntime::EEventAction::PROCESS;

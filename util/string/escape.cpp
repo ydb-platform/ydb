@@ -283,12 +283,12 @@ static TStr& DoUnescapeC(const TChar* p, size_t sz, TStr& res) {
                 }
 
                 case 'U':
-                    if (CountHex<8>(p + 1, pe) != 8) { 
+                    if (CountHex<8>(p + 1, pe) != 8) {
                         res.append(*p);
-                    } else { 
+                    } else {
                         AppendUnicode(res, IntFromString<ui32, 16>(p + 1, 8));
-                        p += 8; 
-                    } 
+                        p += 8;
+                    }
                     break;
                 case 'x':
                     if (ui32 v = CountHex<2>(p + 1, pe)) {
@@ -319,8 +319,8 @@ static TStr& DoUnescapeC(const TChar* p, size_t sz, TStr& res) {
 
             ++p;
         } else {
-            const auto r = std::basic_string_view<TChar>(p, pe - p).find('\\'); 
-            const auto n = r != std::string::npos ? p + r : pe; 
+            const auto r = std::basic_string_view<TChar>(p, pe - p).find('\\');
+            const auto n = r != std::string::npos ? p + r : pe;
 
             res.append(p, n);
             p = n;
@@ -338,17 +338,17 @@ TBasicString<TChar>& UnescapeCImpl(const TChar* p, size_t sz, TBasicString<TChar
 template <class TChar>
 TChar* UnescapeC(const TChar* str, size_t len, TChar* buf) {
     struct TUnboundedString {
-        void append(TChar ch) noexcept { 
+        void append(TChar ch) noexcept {
             *P++ = ch;
         }
 
-        void append(const TChar* b, const TChar* e) noexcept { 
+        void append(const TChar* b, const TChar* e) noexcept {
             while (b != e) {
                 append(*b++);
             }
         }
 
-        void AppendNoAlias(const TChar* s, size_t l) noexcept { 
+        void AppendNoAlias(const TChar* s, size_t l) noexcept {
             append(s, s + l);
         }
 

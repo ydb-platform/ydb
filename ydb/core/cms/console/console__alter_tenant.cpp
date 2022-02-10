@@ -222,7 +222,7 @@ public:
         if (rec.computational_units_to_add_size() || rec.computational_units_to_remove_size()) {
             ComputationalUnitsModified = true;
             for (auto &pr : Tenant->ComputationalUnits) {
-                if (!NewComputationalUnits.contains(pr.first)) 
+                if (!NewComputationalUnits.contains(pr.first))
                     Self->DbRemoveComputationalUnit(Tenant, pr.first.first, pr.first.second, txc, ctx);
             }
             for (auto &pr : NewComputationalUnits)
@@ -234,7 +234,7 @@ public:
             TStoragePool::TPtr pool;
             auto &kind = pr.first;
             auto size = pr.second;
-            if (Tenant->StoragePools.contains(kind)) { 
+            if (Tenant->StoragePools.contains(kind)) {
                 pool = new TStoragePool(*Tenant->StoragePools.at(kind));
                 pool->AddRequiredGroups(size);
                 pool->State = TStoragePool::NOT_UPDATED;
@@ -344,7 +344,7 @@ public:
                 TStoragePool::TPtr pool;
                 auto &kind = pr.first;
                 auto size = pr.second;
-                if (Tenant->StoragePools.contains(kind)) { 
+                if (Tenant->StoragePools.contains(kind)) {
                     pool = Tenant->StoragePools.at(kind);
                     pool->AddRequiredGroups(size);
                     pool->State = TStoragePool::NOT_UPDATED;

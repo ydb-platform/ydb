@@ -247,10 +247,10 @@ TOutputOpData::TResultPtr &TExecutionUnit::BuildResult(TOperation::TPtr op,
                                                        NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status)
 {
     auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(op->GetKind());
-    op->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(kind, 
+    op->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(kind,
                                                                  DataShard.TabletID(),
                                                                  op->GetTxId(),
-                                                                 status)); 
+                                                                 status));
     if (DataShard.GetProcessingParams())
         op->Result()->SetDomainCoordinators(*DataShard.GetProcessingParams());
 

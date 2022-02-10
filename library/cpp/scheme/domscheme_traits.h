@@ -1,7 +1,7 @@
 #pragma once
 
 #include "scheme.h"
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 
 struct TSchemeTraits {
     using TValue = NSc::TValue;

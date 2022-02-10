@@ -617,8 +617,8 @@ namespace boost {
 // Graph reader exceptions
 /////////////////////////////////////////////////////////////////////////////
 struct graph_exception : public std::exception {
-  virtual ~graph_exception() {} 
-  virtual const char* what() const noexcept = 0; 
+  virtual ~graph_exception() {}
+  virtual const char* what() const noexcept = 0;
 };
 
 struct bad_parallel_edge : public graph_exception {
@@ -628,8 +628,8 @@ struct bad_parallel_edge : public graph_exception {
   bad_parallel_edge(const std::string& i, const std::string& j) :
     from(i), to(j) {}
 
-  virtual ~bad_parallel_edge() {} 
-  const char* what() const noexcept { 
+  virtual ~bad_parallel_edge() {}
+  const char* what() const noexcept {
     if(statement.empty())
       statement =
         std::string("Failed to add parallel edge: (")
@@ -640,8 +640,8 @@ struct bad_parallel_edge : public graph_exception {
 };
 
 struct directed_graph_error : public graph_exception {
-  virtual ~directed_graph_error() {} 
-  virtual const char* what() const noexcept { 
+  virtual ~directed_graph_error() {}
+  virtual const char* what() const noexcept {
     return
       "read_graphviz: "
       "Tried to read a directed graph into an undirected graph.";
@@ -649,8 +649,8 @@ struct directed_graph_error : public graph_exception {
 };
 
 struct undirected_graph_error : public graph_exception {
-  virtual ~undirected_graph_error() {} 
-  virtual const char* what() const noexcept { 
+  virtual ~undirected_graph_error() {}
+  virtual const char* what() const noexcept {
     return
       "read_graphviz: "
       "Tried to read an undirected graph into a directed graph.";
@@ -661,8 +661,8 @@ struct bad_graphviz_syntax: public graph_exception {
   std::string errmsg;
   bad_graphviz_syntax(const std::string& errmsg)
     : errmsg(errmsg) {}
-  const char* what() const noexcept {return errmsg.c_str();} 
-  ~bad_graphviz_syntax() {}; 
+  const char* what() const noexcept {return errmsg.c_str();}
+  ~bad_graphviz_syntax() {};
 };
 
 namespace detail { namespace graph {

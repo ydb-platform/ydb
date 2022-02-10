@@ -387,7 +387,7 @@ public:
             return TKiDataSource(node.ChildPtr(1)).Category() == KikimrProviderName;
         }
 
-        YQL_ENSURE(!KikimrDataSourceFunctions().contains(node.Content())); 
+        YQL_ENSURE(!KikimrDataSourceFunctions().contains(node.Content()));
         return false;
     }
 

@@ -37,7 +37,7 @@ namespace NStringPrivate {
 template <typename TDerived, typename TCharType, typename TTraitsType = std::char_traits<TCharType>>
 class TStringBase {
     using TStringView = std::basic_string_view<TCharType>;
-    using TStringViewWithTraits = std::basic_string_view<TCharType, TTraitsType>; 
+    using TStringViewWithTraits = std::basic_string_view<TCharType, TTraitsType>;
 
 public:
     using TChar = TCharType;
@@ -115,11 +115,11 @@ public:
 
     template <class TCharTraits>
     inline constexpr operator std::basic_string_view<TCharType, TCharTraits>() const {
-        return std::basic_string_view<TCharType, TCharTraits>(data(), size()); 
+        return std::basic_string_view<TCharType, TCharTraits>(data(), size());
     }
 
     template <class TCharTraits, class Allocator>
-    inline explicit operator std::basic_string<TCharType, TCharTraits, Allocator>() const { 
+    inline explicit operator std::basic_string<TCharType, TCharTraits, Allocator>() const {
         return std::basic_string<TCharType, TCharTraits, Allocator>(Ptr(), Len());
     }
 
@@ -219,17 +219,17 @@ private:
 public:
     // ~~~ Comparison ~~~ : FAMILY0(int, compare)
     static int compare(const TSelf& s1, const TSelf& s2) noexcept {
-        return s1.AsStringView().compare(s2.AsStringView()); 
+        return s1.AsStringView().compare(s2.AsStringView());
     }
 
     static int compare(const TCharType* p, const TSelf& s2) noexcept {
-        TCharType null{0}; 
-        return TStringViewWithTraits(p ? p : &null).compare(s2.AsStringView()); 
+        TCharType null{0};
+        return TStringViewWithTraits(p ? p : &null).compare(s2.AsStringView());
     }
 
     static int compare(const TSelf& s1, const TCharType* p) noexcept {
-        TCharType null{0}; 
-        return s1.AsStringView().compare(p ? p : &null); 
+        TCharType null{0};
+        return s1.AsStringView().compare(p ? p : &null);
     }
 
     static int compare(const TStringView s1, const TStringView s2) noexcept {
@@ -258,7 +258,7 @@ public:
     }
 
     static bool equal(const TSelf& s1, const TSelf& s2) noexcept {
-        return s1.AsStringView() == s2.AsStringView(); 
+        return s1.AsStringView() == s2.AsStringView();
     }
 
     static bool equal(const TSelf& s1, const TCharType* p) noexcept {
@@ -266,7 +266,7 @@ public:
             return s1.Len() == 0;
         }
 
-        return s1.AsStringView() == p; 
+        return s1.AsStringView() == p;
     }
 
     static bool equal(const TCharType* p, const TSelf& s2) noexcept {
@@ -274,7 +274,7 @@ public:
     }
 
     static bool equal(const TStringView s1, const TStringView s2) noexcept {
-        return TStringViewWithTraits{s1.data(), s1.size()} == TStringViewWithTraits{s2.data(), s2.size()}; 
+        return TStringViewWithTraits{s1.data(), s1.size()} == TStringViewWithTraits{s2.data(), s2.size()};
     }
 
     template <class T>
@@ -295,11 +295,11 @@ public:
     }
 
     static inline bool StartsWith(const TCharType* what, size_t whatLen, const TCharType* with, size_t withLen) noexcept {
-        return withLen <= whatLen && TStringViewWithTraits(what, withLen) == TStringViewWithTraits(with, withLen); 
+        return withLen <= whatLen && TStringViewWithTraits(what, withLen) == TStringViewWithTraits(with, withLen);
     }
 
     static inline bool EndsWith(const TCharType* what, size_t whatLen, const TCharType* with, size_t withLen) noexcept {
-        return withLen <= whatLen && TStringViewWithTraits(what + whatLen - withLen, withLen) == TStringViewWithTraits(with, withLen); 
+        return withLen <= whatLen && TStringViewWithTraits(what + whatLen - withLen, withLen) == TStringViewWithTraits(with, withLen);
     }
 
     inline bool StartsWith(const TCharType* s, size_t n) const noexcept {
@@ -311,7 +311,7 @@ public:
     }
 
     inline bool StartsWith(TCharType ch) const noexcept {
-        return !empty() && TTraits::eq(*Ptr(), ch); 
+        return !empty() && TTraits::eq(*Ptr(), ch);
     }
 
     inline bool EndsWith(const TCharType* s, size_t n) const noexcept {
@@ -323,7 +323,7 @@ public:
     }
 
     inline bool EndsWith(TCharType ch) const noexcept {
-        return !empty() && TTraits::eq(Ptr()[Len() - 1], ch); 
+        return !empty() && TTraits::eq(Ptr()[Len() - 1], ch);
     }
 
     template <typename TDerived2, typename TTraits2>
@@ -449,30 +449,30 @@ public:
      * @return                          Position of the substring inside this string, or `npos` if not found.
      */
     inline size_t find(const TStringView s, size_t pos = 0) const noexcept {
-        return find(s.data(), pos, s.size()); 
+        return find(s.data(), pos, s.size());
     }
 
     inline size_t find(const TCharType* s, size_t pos, size_t count) const noexcept {
-        return AsStringView().find(s, pos, count); 
+        return AsStringView().find(s, pos, count);
     }
 
     inline size_t find(TCharType c, size_t pos = 0) const noexcept {
-        return AsStringView().find(c, pos); 
+        return AsStringView().find(c, pos);
     }
 
     inline size_t rfind(TCharType c) const noexcept {
-        return AsStringView().rfind(c); 
+        return AsStringView().rfind(c);
     }
 
     inline size_t rfind(TCharType c, size_t pos) const noexcept {
-        if (pos == 0) { 
-            return npos; 
+        if (pos == 0) {
+            return npos;
         }
-        return AsStringView().rfind(c, pos - 1); 
+        return AsStringView().rfind(c, pos - 1);
     }
 
     inline size_t rfind(const TStringView str, size_t pos = npos) const {
-        return AsStringView().rfind(str.data(), pos, str.size()); 
+        return AsStringView().rfind(str.data(), pos, str.size());
     }
 
     //~~~~Contains~~~~
@@ -505,7 +505,7 @@ public:
     }
 
     inline size_t find_first_of(const TStringView set, size_t pos) const noexcept {
-        return AsStringView().find_first_of(set.data(), pos, set.size()); 
+        return AsStringView().find_first_of(set.data(), pos, set.size());
     }
 
     inline size_t find_first_not_of(TCharType c) const noexcept {
@@ -521,7 +521,7 @@ public:
     }
 
     inline size_t find_first_not_of(const TStringView set, size_t pos) const noexcept {
-        return AsStringView().find_first_not_of(set.data(), pos, set.size()); 
+        return AsStringView().find_first_not_of(set.data(), pos, set.size());
     }
 
     inline size_t find_last_of(TCharType c, size_t pos = npos) const noexcept {
@@ -533,11 +533,11 @@ public:
     }
 
     inline size_t find_last_of(const TCharType* set, size_t pos, size_t n) const noexcept {
-        return AsStringView().find_last_of(set, pos, n); 
+        return AsStringView().find_last_of(set, pos, n);
     }
 
     inline size_t find_last_not_of(TCharType c, size_t pos = npos) const noexcept {
-        return AsStringView().find_last_not_of(c, pos); 
+        return AsStringView().find_last_not_of(c, pos);
     }
 
     inline size_t find_last_not_of(const TStringView set, size_t pos = npos) const noexcept {
@@ -545,7 +545,7 @@ public:
     }
 
     inline size_t find_last_not_of(const TCharType* set, size_t pos, size_t n) const noexcept {
-        return AsStringView().find_last_not_of(set, pos, n); 
+        return AsStringView().find_last_not_of(set, pos, n);
     }
 
     inline size_t copy(TCharType* pc, size_t n, size_t pos) const {
@@ -581,8 +581,8 @@ public:
 private:
     using GenericFinder = const TCharType* (*)(const TCharType*, size_t, const TCharType*, size_t);
 
-    TStringViewWithTraits AsStringView() const { 
-        return static_cast<TStringViewWithTraits>(*this); 
+    TStringViewWithTraits AsStringView() const {
+        return static_cast<TStringViewWithTraits>(*this);
     }
 
     constexpr inline const TCharType* Ptr() const noexcept {

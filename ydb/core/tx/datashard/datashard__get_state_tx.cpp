@@ -14,7 +14,7 @@ bool TDataShard::TTxGetShardState::Execute(TTransactionContext& txc, const TActo
     Y_UNUSED(txc);
     Y_UNUSED(ctx);
 
-    Result = MakeHolder<TEvDataShard::TEvGetShardStateResult>(Self->TabletID(), Self->State); 
+    Result = MakeHolder<TEvDataShard::TEvGetShardStateResult>(Self->TabletID(), Self->State);
     if (Self->Pipeline.HasDrop())
         Result->Record.SetDropTxId(Self->Pipeline.CurrentSchemaTxId());
     return true;

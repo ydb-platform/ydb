@@ -63,7 +63,7 @@ namespace NRegExp {
                 ucs4[outWritten] = 0;
 
                 lexer.Assign(ucs4.begin(),
-                             ucs4.begin() + std::char_traits<wchar32>::length(ucs4.data())); 
+                             ucs4.begin() + std::char_traits<wchar32>::length(ucs4.data()));
             }
 
             if (opts.CaseInsensitive) {

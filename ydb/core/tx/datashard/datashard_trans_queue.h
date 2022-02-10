@@ -53,7 +53,7 @@ public:
             return it->second;
         return nullptr;
     }
-    bool Has(ui64 txId) const {return TxsInFly.contains(txId); } 
+    bool Has(ui64 txId) const {return TxsInFly.contains(txId); }
 
     ui64 TxPlanned() const { return PlannedTxs.size(); }
     const TSet<TStepOrder> &GetPlan() const { return PlannedTxs; }

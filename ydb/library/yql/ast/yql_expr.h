@@ -42,7 +42,7 @@
     #define ENSURE_NOT_FROZEN_CTX \
         YQL_ENSURE(!Frozen, "Change in frozen expr context.");
 #else
-    #define ENSURE_NOT_DELETED Y_VERIFY_DEBUG(!Dead(), "Access to dead node # %lu: %d '%s'", UniqueId_, (int)Type_, TString(ContentUnchecked()).data()); 
+    #define ENSURE_NOT_DELETED Y_VERIFY_DEBUG(!Dead(), "Access to dead node # %lu: %d '%s'", UniqueId_, (int)Type_, TString(ContentUnchecked()).data());
     #define ENSURE_NOT_FROZEN Y_VERIFY_DEBUG(!Frozen());
     #define ENSURE_NOT_FROZEN_CTX Y_VERIFY_DEBUG(!Frozen);
 #endif
@@ -1395,7 +1395,7 @@ public:
     template <class TKey>
     bool IsCallable(const THashSet<TKey>& names) const {
         ENSURE_NOT_DELETED
-        return Type() == TExprNode::Callable && names.contains(Content()); 
+        return Type() == TExprNode::Callable && names.contains(Content());
     }
 
     bool IsCallable() const {

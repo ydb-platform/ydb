@@ -33,7 +33,7 @@ namespace boost { namespace geometry
 class exception : public std::exception
 {
 public:
-    virtual char const* what() const noexcept 
+    virtual char const* what() const noexcept
     {
         return "Boost.Geometry exception";
     }
@@ -52,7 +52,7 @@ public:
 
     inline invalid_input_exception() {}
 
-    virtual char const* what() const noexcept 
+    virtual char const* what() const noexcept
     {
         return "Boost.Geometry Invalid-Input exception";
     }
@@ -77,7 +77,7 @@ public:
 
     inline empty_input_exception() {}
 
-    virtual char const* what() const noexcept 
+    virtual char const* what() const noexcept
     {
         return "Boost.Geometry Empty-Input exception";
     }
@@ -96,7 +96,7 @@ public:
 
     inline invalid_output_exception() {}
 
-    virtual char const* what() const noexcept 
+    virtual char const* what() const noexcept
     {
         return "Boost.Geometry Invalid-Output exception";
     }

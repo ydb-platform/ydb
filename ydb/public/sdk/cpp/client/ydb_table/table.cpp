@@ -4511,7 +4511,7 @@ TTtlSettings::TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, u
 }
 
 const TDateTypeColumnModeSettings& TTtlSettings::GetDateTypeColumn() const {
-    return std::get<TDateTypeColumnModeSettings>(Mode_); 
+    return std::get<TDateTypeColumnModeSettings>(Mode_);
 }
 
 TTtlSettings::TTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter)
@@ -4525,7 +4525,7 @@ TTtlSettings::TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mo
 }
 
 const TValueSinceUnixEpochModeSettings& TTtlSettings::GetValueSinceUnixEpoch() const {
-    return std::get<TValueSinceUnixEpochModeSettings>(Mode_); 
+    return std::get<TValueSinceUnixEpochModeSettings>(Mode_);
 }
 
 void TTtlSettings::SerializeTo(Ydb::Table::TtlSettings& proto) const {
@@ -4561,7 +4561,7 @@ TAlterTtlSettings::EAction TAlterTtlSettings::GetAction() const {
 }
 
 const TTtlSettings& TAlterTtlSettings::GetTtlSettings() const {
-    return std::get<TTtlSettings>(Action_); 
+    return std::get<TTtlSettings>(Action_);
 }
 
 class TAlterTtlSettingsBuilder::TImpl {

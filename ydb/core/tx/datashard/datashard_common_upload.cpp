@@ -18,7 +18,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 {
     const auto& record = Ev->Get()->Record;
 
-    Result = MakeHolder<TEvResponse>(self->TabletID()); 
+    Result = MakeHolder<TEvResponse>(self->TabletID());
 
     TInstant deadline = TInstant::MilliSeconds(record.GetCancelDeadlineMs());
     if (deadline && deadline < AppData()->TimeProvider->Now()) {

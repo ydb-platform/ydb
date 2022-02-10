@@ -97,7 +97,7 @@ void AssertSimpleMessage(const NProto::TMultiSamplesList& samples, TString pathP
         UNIT_ASSERT_EQUAL(s.PointsSize(), 1);
 
         const auto labelVal = s.GetLabels(0).GetValue();
-        UNIT_ASSERT(expectedValues.contains(labelVal)); 
+        UNIT_ASSERT(expectedValues.contains(labelVal));
 
         if (labelVal == pathPrefix + "Foo") {
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);

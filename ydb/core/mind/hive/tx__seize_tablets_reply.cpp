@@ -167,7 +167,7 @@ public:
 };
 
 ITransaction* THive::CreateSeizeTabletsReply(TEvHive::TEvSeizeTabletsReply::TPtr event) {
-    return new TTxSeizeTabletsReply(THolder(std::move(event.Release())), this); 
+    return new TTxSeizeTabletsReply(THolder(std::move(event.Release())), this);
 }
 
 } // NHive

@@ -408,7 +408,7 @@ static void SetupServices(TTestActorRuntime &runtime,
         runtime.AddLocalService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(runtime.GetNodeId(nodeIndex)),
                                 TActorSetupCmd(CreateFakeNodeWhiteboardService(), TMailboxType::Simple, 0), nodeIndex);
         TVector<TString> nodeTenants;
-        if (tenants.contains(nodeIndex)) 
+        if (tenants.contains(nodeIndex))
             nodeTenants = tenants.at(nodeIndex);
         runtime.AddLocalService(MakeTenantPoolID(runtime.GetNodeId(nodeIndex)),
                                 TActorSetupCmd(new TFakeTenantPool(nodeTenants), TMailboxType::Simple, 0), nodeIndex);
@@ -745,7 +745,7 @@ void TCmsTestEnv::CheckWalleCreateTask(TAutoPtr<NCms::TEvCms::TEvWalleCreateTask
     UNIT_ASSERT_VALUES_EQUAL(rec.GetTaskId(), id);
     UNIT_ASSERT_VALUES_EQUAL(rec.HostsSize(), hosts.size());
     for (auto &host : rec.GetHosts())
-        UNIT_ASSERT(hosts.contains(host)); 
+        UNIT_ASSERT(hosts.contains(host));
 }
 
 void TCmsTestEnv::CheckTasksEqual(const NKikimrCms::TWalleTaskInfo &l,

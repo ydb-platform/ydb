@@ -1,5 +1,5 @@
 #pragma once
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

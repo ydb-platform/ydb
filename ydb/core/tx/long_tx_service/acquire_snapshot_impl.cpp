@@ -115,7 +115,7 @@ namespace NLongTxService {
         void SendAcquireStep(ui64 coordinator) {
             if (WaitingCoordinators.insert(coordinator).second) {
                 TXLOG_DEBUG("Sending acquire step to coordinator " << coordinator);
-                SendToTablet(coordinator, MakeHolder<TEvTxProxy::TEvAcquireReadStep>(coordinator)); 
+                SendToTablet(coordinator, MakeHolder<TEvTxProxy::TEvAcquireReadStep>(coordinator));
             }
         }
 

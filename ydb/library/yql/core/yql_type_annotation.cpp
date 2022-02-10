@@ -246,7 +246,7 @@ bool TModuleResolver::AddFromFile(const TStringBuf& file, TExprContext& ctx, ui1
     }
 
     auto moduleName = TModuleResolver::NormalizeModuleName(TString(file));
-    if (GetModule(moduleName) || Libs.contains(moduleName)) { 
+    if (GetModule(moduleName) || Libs.contains(moduleName)) {
         auto it = Libs.find(moduleName);
         if (it != Libs.end() && it->second.contains(packageVersion)) {
             // TODO (YQL-7170): find better fix

@@ -153,7 +153,7 @@ private:
 }
 
 THolder<IDqIntegration> CreateS3DqIntegration(TS3State::TPtr state) {
-    return MakeHolder<TS3DqIntegration>(state); 
+    return MakeHolder<TS3DqIntegration>(state);
 }
 
 }

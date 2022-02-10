@@ -164,21 +164,21 @@ bool TConfigsManager::IsConfigItemScopeAllowed(TConfigItem::TPtr item,
                                                const TConfigsConfig &config)
 {
     if (item->UsageScope.NodeIds.size())
-        return config.AllowedNodeIdScopeKinds.contains(item->Kind); 
+        return config.AllowedNodeIdScopeKinds.contains(item->Kind);
     if (item->UsageScope.Hosts.size()) {
         for (auto &host : item->UsageScope.Hosts)
             if (host.find(' ') != TString::npos)
                 return false;
-        return config.AllowedHostScopeKinds.contains(item->Kind); 
+        return config.AllowedHostScopeKinds.contains(item->Kind);
     }
     if (item->UsageScope.Tenant && item->UsageScope.NodeType)
-        return (config.AllowedTenantScopeKinds.contains(item->Kind) 
-                && config.AllowedNodeTypeScopeKinds.contains(item->Kind)); 
+        return (config.AllowedTenantScopeKinds.contains(item->Kind)
+                && config.AllowedNodeTypeScopeKinds.contains(item->Kind));
     if (item->UsageScope.Tenant)
-        return config.AllowedTenantScopeKinds.contains(item->Kind); 
+        return config.AllowedTenantScopeKinds.contains(item->Kind);
     if (item->UsageScope.NodeType)
-        return config.AllowedNodeTypeScopeKinds.contains(item->Kind); 
-    return !config.DisallowedDomainScopeKinds.contains(item->Kind); 
+        return config.AllowedNodeTypeScopeKinds.contains(item->Kind);
+    return !config.DisallowedDomainScopeKinds.contains(item->Kind);
 }
 
 bool TConfigsManager::IsSupportedMergeStrategy(ui32 value) const

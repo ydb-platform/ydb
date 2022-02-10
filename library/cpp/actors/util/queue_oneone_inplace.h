@@ -53,7 +53,7 @@ public:
     }
 
     struct TPtrCleanDestructor {
-        static inline void Destroy(TOneOneQueueInplace<T, TSize>* x) noexcept { 
+        static inline void Destroy(TOneOneQueueInplace<T, TSize>* x) noexcept {
             while (T head = x->Pop())
                 delete head;
             delete x;
@@ -61,7 +61,7 @@ public:
     };
 
     struct TCleanDestructor {
-        static inline void Destroy(TOneOneQueueInplace<T, TSize>* x) noexcept { 
+        static inline void Destroy(TOneOneQueueInplace<T, TSize>* x) noexcept {
             while (x->Pop() != nullptr)
                 continue;
             delete x;
@@ -70,7 +70,7 @@ public:
 
     struct TPtrCleanInplaceMallocDestructor {
         template <typename TPtrVal>
-        static inline void Destroy(TOneOneQueueInplace<TPtrVal*, TSize>* x) noexcept { 
+        static inline void Destroy(TOneOneQueueInplace<TPtrVal*, TSize>* x) noexcept {
             while (TPtrVal* head = x->Pop()) {
                 head->~TPtrVal();
                 free(head);
@@ -79,7 +79,7 @@ public:
         }
     };
 
-    void Push(T x) noexcept { 
+    void Push(T x) noexcept {
         if (WritePosition != TChunk::EntriesCount) {
             AtomicStore(&WriteTo->Entries[WritePosition], x);
             ++WritePosition;

@@ -1440,7 +1440,7 @@ namespace NTypeAnnImpl {
                         "Duplicate flatten alias found: " << alias));
                     return IGraphTransformer::TStatus::Error;
                 }
-                if (flattenByColumns.contains(alias)) { 
+                if (flattenByColumns.contains(alias)) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(columnNameNode->Pos()), TStringBuilder() <<
                         "Collision between alias and column name: " << alias));
                     return IGraphTransformer::TStatus::Error;
@@ -1455,7 +1455,7 @@ namespace NTypeAnnImpl {
                     "Duplicate flatten field found: " << columnName));
                 return IGraphTransformer::TStatus::Error;
             }
-            if (aliases.contains(columnName)) { 
+            if (aliases.contains(columnName)) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(columnNameNode->Pos()), TStringBuilder() <<
                     "Collision between alias and column name: " << columnName));
                 return IGraphTransformer::TStatus::Error;
@@ -1473,7 +1473,7 @@ namespace NTypeAnnImpl {
             const auto& fieldName = field->GetName();
             auto flattenIter = flattenByColumns.find(fieldName);
             if (flattenIter == flattenByColumns.end()) {
-                if (aliases.contains(fieldName)) { 
+                if (aliases.contains(fieldName)) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
                         "Conflict flatten alias and column name: '" << fieldName << "'"));
                     return IGraphTransformer::TStatus::Error;
@@ -3340,7 +3340,7 @@ namespace NTypeAnnImpl {
 
             bool hasMissingMembers = false;
             for (auto& x : expectedMembers) {
-                if (!foundMembers.contains(x.first)) { 
+                if (!foundMembers.contains(x.first)) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Missing member: " << x.first));
                     hasMissingMembers = true;
                 }
@@ -7251,7 +7251,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         for (ui32 i = tupleSize; i < type->GetArgumentsSize() - type->GetOptionalArgumentsCount(); ++i) {
-            if (!usedIndices.contains(i)) { 
+            if (!usedIndices.contains(i)) {
                 const auto& arg = type->GetArguments()[i];
                 if (arg.Name.empty()) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Argument # " << (i + 1)
@@ -13277,10 +13277,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             AllNames.insert(func.first);
         }
 
-        AllNames.insert(TString(CommitName)); 
-        AllNames.insert(TString(ReadName)); 
-        AllNames.insert(TString(WriteName)); 
-        AllNames.insert(TString(ConfigureName)); 
+        AllNames.insert(TString(CommitName));
+        AllNames.insert(TString(ReadName));
+        AllNames.insert(TString(WriteName));
+        AllNames.insert(TString(ConfigureName));
         AllNames.insert("Apply");
     }
 

@@ -448,7 +448,7 @@ public:
             modulePassManager = std::make_unique<llvm::legacy::PassManager>();
             modulePassManager->add(llvm::createInternalizePass([&](const llvm::GlobalValue& gv) -> bool {
                 auto name = TString(gv.getName().str());
-                return ExportedSymbols->contains(name); 
+                return ExportedSymbols->contains(name);
             }));
 
             modulePassManager->add(llvm::createGlobalDCEPass());
@@ -613,7 +613,7 @@ public:
     }
 
     void LoadBitCode(TStringBuf bitcode, TStringBuf uniqId) override {
-        if (uniqId && LoadedModules_.contains(uniqId)) { 
+        if (uniqId && LoadedModules_.contains(uniqId)) {
             return;
         }
         llvm::SMDiagnostic error;

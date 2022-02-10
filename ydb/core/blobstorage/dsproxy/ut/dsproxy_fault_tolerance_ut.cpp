@@ -35,7 +35,7 @@ void RunTest(TBlobStorageGroupType groupType, bool minimum = false, ui32 testPar
     std::exception_ptr eptr;
     auto test = MakeHolder<T>(&finishEvent, &eptr, NUnitTest::NPrivate::GetCurrentTest(), runtime,
             testPartCount, testPartIdx);
-    runtime.ActorSystem->Register(new TActorCoro(std::move(test)), TMailboxType::Simple, 0, {}); 
+    runtime.ActorSystem->Register(new TActorCoro(std::move(test)), TMailboxType::Simple, 0, {});
     finishEvent.WaitI();
     runtime.Finish();
     if (eptr) {

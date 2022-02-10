@@ -26,17 +26,17 @@ class no_device_found : public std::exception
 {
 public:
     /// Creates a new no_device_found exception object.
-    no_device_found() noexcept 
+    no_device_found() noexcept
     {
     }
 
     /// Destroys the no_device_found exception object.
-    ~no_device_found() 
+    ~no_device_found()
     {
     }
 
     /// Returns a string containing a human-readable error message.
-    const char* what() const noexcept 
+    const char* what() const noexcept
     {
         return "No OpenCL device found";
     }

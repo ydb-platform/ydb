@@ -2,7 +2,7 @@
 
 #include <util/stream/output.h>
 #include <util/stream/mem.h>
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 
 THttpResponse& THttpResponse::AddMultipleHeaders(const THttpHeaders& headers) {
     for (THttpHeaders::TConstIterator i = headers.Begin(); i != headers.End(); ++i) {

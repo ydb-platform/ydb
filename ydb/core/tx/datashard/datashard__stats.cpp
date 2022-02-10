@@ -82,7 +82,7 @@ public:
 
         Result = new TEvDataShard::TEvGetTableStatsResult(Self->TabletID(), Self->PathOwnerId, tableId);
 
-        if (!Self->TableInfos.contains(tableId)) 
+        if (!Self->TableInfos.contains(tableId))
             return true;
 
         if (Ev->Get()->Record.GetCollectKeySample()) {
@@ -180,7 +180,7 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt at datashard %" PRIu64, TabletID());
 
     i64 dataSize = 0;
-    if (TableInfos.contains(tableId)) { 
+    if (TableInfos.contains(tableId)) {
         const TUserTable& tableInfo = *TableInfos[tableId];
 
         if (!tableInfo.StatsUpdateInProgress) {

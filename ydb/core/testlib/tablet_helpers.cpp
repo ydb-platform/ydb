@@ -214,7 +214,7 @@ namespace NKikimr {
         }
 
         bool IsTabletEvent(const TAutoPtr<IEventHandle>& event, ui64 tabletId) const {
-            if (DeletedTablets.contains(tabletId)) 
+            if (DeletedTablets.contains(tabletId))
                 return false;
 
             auto it = TabletLeaders.find(tabletId);
@@ -280,7 +280,7 @@ namespace NKikimr {
             TTabletTracer::OnEvent(runtime, event);
 
             TActorId actor = event->Recipient;
-            if (KillOnCommit && IsCommitResult(event) && HideCommitsFrom.contains(actor)) { 
+            if (KillOnCommit && IsCommitResult(event) && HideCommitsFrom.contains(actor)) {
                 // We dropped one of the previous TEvCommitResult coming to this Executore actor
                 // after that we must drop all TEvCommitResult until this Executor dies
                 if (ENABLE_REBOOT_DISPATCH_LOG)
@@ -330,7 +330,7 @@ namespace NKikimr {
             TDispatchOptions rebootOptions;
             rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
             rebootOptions.CustomFinalCondition = [this]() -> bool {
-                return DeletedTablets.contains(TabletId); 
+                return DeletedTablets.contains(TabletId);
             };
             runtime.DispatchEvents(rebootOptions);
 
@@ -657,7 +657,7 @@ namespace NKikimr {
     }
 
     void SetupChannelProfiles(TAppPrepare &app, ui32 domainId, ui32 nchannels) {
-        Y_VERIFY(app.Domains && app.Domains->Domains.contains(domainId)); 
+        Y_VERIFY(app.Domains && app.Domains->Domains.contains(domainId));
         auto& poolKinds = app.Domains->GetDomain(domainId).StoragePoolTypes;
         Y_VERIFY(!poolKinds.empty());
 
@@ -1370,7 +1370,7 @@ namespace NKikimr {
 
         void Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr &ev, const TActorContext &ctx) {
             ui64 tabletId = ev->Get()->Record.GetTabletID();
-            if (!State->TabletIdToOwner.contains(tabletId)) { 
+            if (!State->TabletIdToOwner.contains(tabletId)) {
                 ctx.Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
                 return;
             }

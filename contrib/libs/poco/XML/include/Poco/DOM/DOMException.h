@@ -70,10 +70,10 @@ public:
 		
 	DOMException& operator = (const DOMException& exc);
 
-	const char* name() const noexcept; 
+	const char* name() const noexcept;
 		/// Returns a static string describing the exception.
 
-	const char* className() const noexcept; 
+	const char* className() const noexcept;
 		/// Returns the name of the exception class.
 
 	Poco::Exception* clone() const;

@@ -27,7 +27,7 @@ namespace boost
         bad_ptr_container_operation( const char* what ) : what_( what )
         { }
         
-        virtual const char* what() const noexcept 
+        virtual const char* what() const noexcept
         {
             return what_;
         }

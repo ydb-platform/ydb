@@ -57,7 +57,7 @@ TExprBase RebuildMapToList(TMapNode map, TExprContext& ctx) {
 }
 
 TExprNode::TPtr NormalizeCallables(TExprBase node, TExprContext& ctx, const TKqpAnalyzeResults& analyzeResults) {
-    if (!analyzeResults.CallableToExecRootsMap.contains(node.Raw())) { 
+    if (!analyzeResults.CallableToExecRootsMap.contains(node.Raw())) {
         return node.Ptr();
     }
 
@@ -168,7 +168,7 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
             YQL_ENSURE(node->GetTypeAnn());
             bool isComputable = node->IsComputable();
 
-            if (innerNodes.contains(node.Get())) { 
+            if (innerNodes.contains(node.Get())) {
                 if (isComputable) {
                     jointsMap.insert(std::make_pair(node.Get(), TExprBase(node)));
                 }
@@ -179,11 +179,11 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
             bool hasInnerChild = false;
             if (isComputable && !node->Children().empty() && nodeInfo->IsExecutable) {
                 for (const auto& child : node->Children()) {
-                    if (jointsMap.contains(child.Get())) { 
+                    if (jointsMap.contains(child.Get())) {
                         return true;
                     }
 
-                    bool innerChild = innerNodes.contains(child.Get()); 
+                    bool innerChild = innerNodes.contains(child.Get());
                     hasInnerChild = hasInnerChild | innerChild;
 
                     YQL_ENSURE(child->GetTypeAnn());

@@ -214,7 +214,7 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
             return false;
         }
 
-        if (passthroughFields && !passthroughFields->contains(column)) { 
+        if (passthroughFields && !passthroughFields->contains(column)) {
             return false;
         }
 
@@ -810,7 +810,7 @@ bool IsKqlPureExpr(NNodes::TExprBase expr) {
             return false;
         }
 
-        if (!KikimrKqlFunctions().contains(node->Content())) { 
+        if (!KikimrKqlFunctions().contains(node->Content())) {
             return false;
         }
 

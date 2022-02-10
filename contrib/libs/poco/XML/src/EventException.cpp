@@ -44,13 +44,13 @@ EventException& EventException::operator = (const EventException& exc)
 }
 
 
-const char* EventException::name() const noexcept 
+const char* EventException::name() const noexcept
 {
 	return "EventException";
 }
 
 
-const char* EventException::className() const noexcept 
+const char* EventException::className() const noexcept
 {
 	return typeid(*this).name();
 }

@@ -19,12 +19,12 @@ namespace {
 #endif
 }
 
-void SetCurrentThreadName(const char* name) { 
+void SetCurrentThreadName(const char* name) {
 #ifdef _linux_
     TStringStream linuxName;
     linuxName << GetExecName() << "." << name;
-    TThread::SetCurrentThreadName(linuxName.Str().data()); 
+    TThread::SetCurrentThreadName(linuxName.Str().data());
 #else
-    TThread::SetCurrentThreadName(name); 
+    TThread::SetCurrentThreadName(name);
 #endif
 }

@@ -17,7 +17,7 @@
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
 
-#include <util/thread/factory.h> 
+#include <util/thread/factory.h>
 
 using namespace NYdb;
 using namespace NYdb::NTable;
@@ -398,9 +398,9 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 UNIT_ASSERT_EQUAL(sessionResponse.GetStatus(), EStatus::SUCCESS);
             }
         };
-        IThreadFactory* pool = SystemThreadFactory(); 
+        IThreadFactory* pool = SystemThreadFactory();
 
-        TVector<TAutoPtr<IThreadFactory::IThread>> threads; 
+        TVector<TAutoPtr<IThreadFactory::IThread>> threads;
         threads.resize(nThreads);
         for (int i = 0; i < nThreads; i++) {
             threads[i] = pool->Run(job);
@@ -444,9 +444,9 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 sessions[i] = sessionResponse.GetSession();
             }
         };
-        IThreadFactory* pool = SystemThreadFactory(); 
+        IThreadFactory* pool = SystemThreadFactory();
 
-        TVector<TAutoPtr<IThreadFactory::IThread>> threads; 
+        TVector<TAutoPtr<IThreadFactory::IThread>> threads;
         threads.resize(nThreads);
         for (int i = 0; i < nThreads; i++) {
             threads[i] = pool->Run(job);
@@ -515,9 +515,9 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()));
             }
         };
-        IThreadFactory* pool = SystemThreadFactory(); 
+        IThreadFactory* pool = SystemThreadFactory();
 
-        TVector<TAutoPtr<IThreadFactory::IThread>> threads; 
+        TVector<TAutoPtr<IThreadFactory::IThread>> threads;
         threads.resize(nThreads);
         for (int i = 0; i < nThreads; i++) {
             threads[i] = pool->Run(job);

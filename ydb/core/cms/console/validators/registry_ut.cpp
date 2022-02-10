@@ -104,7 +104,7 @@ void CheckValidatorClasses(Ts... args)
     UNIT_ASSERT_VALUES_EQUAL(TValidatorsRegistry::Instance()->GetValidatorClasses().size(),
                              classes.size());
     for (auto kinds : TValidatorsRegistry::Instance()->GetValidatorClasses()) {
-        UNIT_ASSERT(classes.contains(kinds)); 
+        UNIT_ASSERT(classes.contains(kinds));
     }
 }
 

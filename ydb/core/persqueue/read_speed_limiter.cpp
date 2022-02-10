@@ -62,7 +62,7 @@ void TReadSpeedLimiter::Bootstrap(const TActorContext& ctx) {
 
     auto counters = AppData()->Counters;
     if (counters && TopicName.Contains("--")) {
-        QuotaWaitCounter.Reset(new TPercentileCounter( 
+        QuotaWaitCounter.Reset(new TPercentileCounter(
             GetServiceCounters(counters, "pqproxy|consumerReadQuotaWait"),
             GetLabels(TopicName),
             {
@@ -75,7 +75,7 @@ void TReadSpeedLimiter::Bootstrap(const TActorContext& ctx) {
                 {20, "20ms"}, {50, "50ms"}, {100, "100ms"}, {500, "500ms"},
                 {1000, "1000ms"}, {2500, "2500ms"}, {5000, "5000ms"}, {10000, "10000ms"}, {9999999, "999999ms"}},
             true
-        )); 
+        ));
     }
 }
 

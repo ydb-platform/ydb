@@ -70,17 +70,17 @@ public:
 //////////////////////////////////////////////////////////////////////
 
 struct dynamic_property_exception : public std::exception {
-  virtual ~dynamic_property_exception() {} 
-  virtual const char* what() const noexcept = 0; 
+  virtual ~dynamic_property_exception() {}
+  virtual const char* what() const noexcept = 0;
 };
 
 struct property_not_found : public dynamic_property_exception {
   std::string property;
   mutable std::string statement;
   property_not_found(const std::string& property) : property(property) {}
-  virtual ~property_not_found() {} 
+  virtual ~property_not_found() {}
 
-  const char* what() const noexcept { 
+  const char* what() const noexcept {
     if(statement.empty())
       statement =
         std::string("Property not found: ") + property + ".";
@@ -93,9 +93,9 @@ struct dynamic_get_failure : public dynamic_property_exception {
   std::string property;
   mutable std::string statement;
   dynamic_get_failure(const std::string& property) : property(property) {}
-  virtual ~dynamic_get_failure() {} 
+  virtual ~dynamic_get_failure() {}
 
-  const char* what() const noexcept { 
+  const char* what() const noexcept {
     if(statement.empty())
       statement =
         std::string(
@@ -107,9 +107,9 @@ struct dynamic_get_failure : public dynamic_property_exception {
 };
 
 struct dynamic_const_put_error  : public dynamic_property_exception {
-  virtual ~dynamic_const_put_error() {} 
+  virtual ~dynamic_const_put_error() {}
 
-  const char* what() const noexcept { 
+  const char* what() const noexcept {
     return "Attempt to put a value into a const property map: ";
   }
 };

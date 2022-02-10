@@ -1116,7 +1116,7 @@ private:
 
             /*
              * TODO: disabled due to SLYDB-42. Remove (or rework) it after KIKIMR-9650 & KIKIMR-9652
-            if (!Tenants.contains(database)) { 
+            if (!Tenants.contains(database)) {
                 TString error = TStringBuilder() << "Unexpected node for database: " << database;
 
                 LOG_ERROR_S(ctx, NKikimrServices::KQP_PROXY, requestInfo << error

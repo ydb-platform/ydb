@@ -91,9 +91,9 @@ struct read_wkt_exception : public geometry::exception
         complete = message + "' in (" + wkt.substr(0, 100) + ")";
     }
 
-    virtual ~read_wkt_exception() {} 
+    virtual ~read_wkt_exception() {}
 
-    virtual const char* what() const noexcept 
+    virtual const char* what() const noexcept
     {
         return complete.c_str();
     }

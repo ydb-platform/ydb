@@ -3,7 +3,7 @@
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/thread/factory.h> 
+#include <util/thread/factory.h>
 
 namespace NKikimr {
     using namespace NActors;
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
                 auto actorSystem = ctx.ExecutorThread.ActorSystem;
                 TMutex *syncMutex = SyncMutex;
 
-                SystemThreadFactory()->Run([=](){ 
+                SystemThreadFactory()->Run([=](){
                     with_lock(*syncMutex) {
                         Sleep(TDuration::MilliSeconds(100));
                         CurrentTime = actorSystem->Timestamp();

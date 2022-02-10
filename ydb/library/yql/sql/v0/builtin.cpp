@@ -746,7 +746,7 @@ TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, 
     TNodePtr dataTypeNode;
     if (typeStringPtr) {
         TString typeString = NormalizeTypeString(*typeStringPtr);
-        if (!AvailableDataTypes.contains(typeString)) { 
+        if (!AvailableDataTypes.contains(typeString)) {
             ctx.Error(typeStringNode->GetPos()) << "Bad type string: '" << typeString << "'. " << errMsgFunc();
             return {};
         }
@@ -823,7 +823,7 @@ public:
 
 TNodePtr TryBuildDataType(TPosition pos, const TString& stringType) {
     auto normStringType = NormalizeTypeString(stringType);
-    if (!AvailableDataTypes.contains(normStringType)) { 
+    if (!AvailableDataTypes.contains(normStringType)) {
         return {};
     }
     return new TYqlDataType(pos, {BuildLiteralRawString(pos, normStringType)});
@@ -1409,7 +1409,7 @@ public:
             if (src) {
                 src->AllColumns();
             }
-        } else if (ctx.Settings.ModuleMapping.contains(Module)) { 
+        } else if (ctx.Settings.ModuleMapping.contains(Module)) {
             Node = Y("bind", Module + "_module", Q(Name));
             if (src) {
                 src->AllColumns();
@@ -2213,7 +2213,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     TString moduleResource;
-    if (ctx.Settings.ModuleMapping.contains(ns)) { 
+    if (ctx.Settings.ModuleMapping.contains(ns)) {
         moduleResource = ctx.Settings.ModuleMapping.at(ns);
     }
 
@@ -2339,10 +2339,10 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) {
         auto scriptName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
-        return new TScriptUdf(pos, TString(scriptName), name, args); 
+        return new TScriptUdf(pos, TString(scriptName), name, args);
     } else if (ns.empty()) {
         auto type = NormalizeTypeString(normalizedName);
-        if (AvailableDataTypes.contains(type)) { 
+        if (AvailableDataTypes.contains(type)) {
             return new TYqlData(pos, type, args);
         }
 

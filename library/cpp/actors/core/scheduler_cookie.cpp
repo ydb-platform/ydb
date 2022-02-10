@@ -10,11 +10,11 @@ namespace NActors {
         {
         }
 
-        bool IsArmed() noexcept override { 
+        bool IsArmed() noexcept override {
             return (AtomicGet(Value) == 2);
         }
 
-        bool Detach() noexcept override { 
+        bool Detach() noexcept override {
             const ui64 x = AtomicDecrement(Value);
             if (x == 1)
                 return true;
@@ -27,7 +27,7 @@ namespace NActors {
             Y_FAIL();
         }
 
-        bool DetachEvent() noexcept override { 
+        bool DetachEvent() noexcept override {
             Y_FAIL();
         }
     };
@@ -45,11 +45,11 @@ namespace NActors {
         {
         }
 
-        bool IsArmed() noexcept override { 
+        bool IsArmed() noexcept override {
             return (AtomicGet(Value) == 3);
         }
 
-        bool Detach() noexcept override { 
+        bool Detach() noexcept override {
             const ui64 x = AtomicDecrement(Value);
             if (x == 2)
                 return true;
@@ -63,7 +63,7 @@ namespace NActors {
             Y_FAIL();
         }
 
-        bool DetachEvent() noexcept override { 
+        bool DetachEvent() noexcept override {
             const ui64 x = AtomicDecrement(Value);
             if (x == 2)
                 return false;

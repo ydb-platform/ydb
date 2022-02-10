@@ -11,7 +11,7 @@ SRCS(
     codecs_registry.cpp
     comptable_codec.cpp
     delta_codec.cpp
-    float_huffman.cpp 
+    float_huffman.cpp
     huffman_codec.cpp
     pfor_codec.cpp
     solar_codec.cpp

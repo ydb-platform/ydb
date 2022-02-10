@@ -1,7 +1,7 @@
 #pragma once
 
 #include "fwd.h"
-#include "factory.h" 
+#include "factory.h"
 
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
@@ -20,8 +20,8 @@ struct IObjectInQueue {
      * in multiple threads.
      *
      * @param threadSpecificResource is nullptr by default. But if you override
-     * IThreadPool::CreateThreadSpecificResource, then result of 
-     * IThreadPool::CreateThreadSpecificResource is passed as threadSpecificResource 
+     * IThreadPool::CreateThreadSpecificResource, then result of
+     * IThreadPool::CreateThreadSpecificResource is passed as threadSpecificResource
      * parameter.
      */
     virtual void Process(void* threadSpecificResource) = 0;
@@ -31,26 +31,26 @@ struct IObjectInQueue {
  * Mighty class to add 'Pool' method to derived classes.
  * Useful only for creators of new queue classes.
  */
-class TThreadFactoryHolder { 
+class TThreadFactoryHolder {
 public:
-    TThreadFactoryHolder() noexcept; 
+    TThreadFactoryHolder() noexcept;
 
-    inline TThreadFactoryHolder(IThreadFactory* pool) noexcept 
+    inline TThreadFactoryHolder(IThreadFactory* pool) noexcept
         : Pool_(pool)
     {
     }
 
-    inline ~TThreadFactoryHolder() = default; 
+    inline ~TThreadFactoryHolder() = default;
 
-    inline IThreadFactory* Pool() const noexcept { 
+    inline IThreadFactory* Pool() const noexcept {
         return Pool_;
     }
 
 private:
-    IThreadFactory* Pool_; 
+    IThreadFactory* Pool_;
 };
 
-class TThreadPoolException: public yexception { 
+class TThreadPoolException: public yexception {
 };
 
 template <class T>
@@ -136,11 +136,11 @@ struct TThreadPoolParams {
 /**
  * A queue processed simultaneously by several threads
  */
-class IThreadPool: public IThreadFactory, public TNonCopyable { 
+class IThreadPool: public IThreadFactory, public TNonCopyable {
 public:
     using TParams = TThreadPoolParams;
 
-    ~IThreadPool() override = default; 
+    ~IThreadPool() override = default;
 
     /**
      * Safe versions of Add*() functions. Behave exactly like as non-safe
@@ -183,11 +183,11 @@ public:
 public:
     /**
      * RAII wrapper for Create/DestroyThreadSpecificResource.
-     * Useful only for implementers of new IThreadPool queues. 
+     * Useful only for implementers of new IThreadPool queues.
      */
     class TTsr {
     public:
-        inline TTsr(IThreadPool* q) 
+        inline TTsr(IThreadPool* q)
             : Q_(q)
             , Data_(Q_->CreateThreadSpecificResource())
         {
@@ -206,14 +206,14 @@ public:
         }
 
     private:
-        IThreadPool* Q_; 
+        IThreadPool* Q_;
         void* Data_;
     };
 
     /**
      * CreateThreadSpecificResource and DestroyThreadSpecificResource
-     * called from internals of (TAdaptiveThreadPool, TThreadPool, ...) implementation, 
-     * not by user of IThreadPool interface. 
+     * called from internals of (TAdaptiveThreadPool, TThreadPool, ...) implementation,
+     * not by user of IThreadPool interface.
      * Created resource is passed to IObjectInQueue::Proccess function.
      */
     virtual void* CreateThreadSpecificResource() {
@@ -231,11 +231,11 @@ private:
 };
 
 /**
- * Single-threaded implementation of IThreadPool, process tasks in same thread when 
+ * Single-threaded implementation of IThreadPool, process tasks in same thread when
  * added.
  * Can be used to remove multithreading.
  */
-class TFakeThreadPool: public IThreadPool { 
+class TFakeThreadPool: public IThreadPool {
 public:
     bool Add(IObjectInQueue* pObj) override Y_WARN_UNUSED_RESULT {
         TTsr tsr(this);
@@ -267,7 +267,7 @@ protected:
 class TThreadPool: public TThreadPoolBase {
 public:
     TThreadPool(const TParams& params = {});
-    ~TThreadPool() override; 
+    ~TThreadPool() override;
 
     bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT;
     /**
@@ -293,7 +293,7 @@ private:
 class TAdaptiveThreadPool: public TThreadPoolBase {
 public:
     TAdaptiveThreadPool(const TParams& params = {});
-    ~TAdaptiveThreadPool() override; 
+    ~TAdaptiveThreadPool() override;
 
     /**
      * If working thread waits task too long (more then interval parameter),
@@ -313,34 +313,34 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/** Behave like TThreadPool or TAdaptiveThreadPool, choosen by thrnum parameter of Start()  */ 
+/** Behave like TThreadPool or TAdaptiveThreadPool, choosen by thrnum parameter of Start()  */
 class TSimpleThreadPool: public TThreadPoolBase {
 public:
     TSimpleThreadPool(const TParams& params = {});
-    ~TSimpleThreadPool() override; 
+    ~TSimpleThreadPool() override;
 
     bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT;
     /**
-     * @parameter thrnum. If thrnum is 0, use TAdaptiveThreadPool with small 
-     * SetMaxIdleTime interval parameter. if thrnum is not 0, use non-blocking TThreadPool 
+     * @parameter thrnum. If thrnum is 0, use TAdaptiveThreadPool with small
+     * SetMaxIdleTime interval parameter. if thrnum is not 0, use non-blocking TThreadPool
      */
     void Start(size_t thrnum, size_t maxque = 0) override;
     void Stop() noexcept override;
     size_t Size() const noexcept override;
 
 private:
-    THolder<IThreadPool> Slave_; 
+    THolder<IThreadPool> Slave_;
 };
 
 /**
  * Helper to override virtual functions Create/DestroyThreadSpecificResource
- * from IThreadPool and implement them using functions with same name from 
+ * from IThreadPool and implement them using functions with same name from
  * pointer to TSlave.
  */
 template <class TQueueType, class TSlave>
-class TThreadPoolBinder: public TQueueType { 
+class TThreadPoolBinder: public TQueueType {
 public:
-    inline TThreadPoolBinder(TSlave* slave) 
+    inline TThreadPoolBinder(TSlave* slave)
         : Slave_(slave)
     {
     }
@@ -352,12 +352,12 @@ public:
     {
     }
 
-    inline TThreadPoolBinder(TSlave& slave) 
+    inline TThreadPoolBinder(TSlave& slave)
         : Slave_(&slave)
     {
     }
 
-    ~TThreadPoolBinder() override { 
+    ~TThreadPoolBinder() override {
         try {
             this->Stop();
         } catch (...) {
@@ -384,7 +384,7 @@ inline void Delete(THolder<IThreadPool> q) {
 }
 
 /**
- * Creates and starts TThreadPool if threadsCount > 1, or TFakeThreadPool otherwise 
- * You could specify blocking and catching modes for TThreadPool only 
+ * Creates and starts TThreadPool if threadsCount > 1, or TFakeThreadPool otherwise
+ * You could specify blocking and catching modes for TThreadPool only
  */
 THolder<IThreadPool> CreateThreadPool(size_t threadCount, size_t queueSizeLimit = 0, const IThreadPool::TParams& params = {});

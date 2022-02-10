@@ -159,20 +159,20 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
 
         UNIT_ASSERT_EQUAL(data.size(), 3);
 
-        UNIT_ASSERT(data.contains(225)); 
+        UNIT_ASSERT(data.contains(225));
         const TCountry& russia = data.at(225);
         UNIT_ASSERT_EQUAL(russia.Name, "Россия");
         UNIT_ASSERT_EQUAL(russia.Cities.size(), 2);
         UNIT_ASSERT_EQUAL(russia.Cities[0], "Москва");
         UNIT_ASSERT_EQUAL(russia.Cities[1], "Санкт-Петербург");
 
-        UNIT_ASSERT(data.contains(149)); 
+        UNIT_ASSERT(data.contains(149));
         const TCountry& belarus = data.at(149);
         UNIT_ASSERT_EQUAL(belarus.Name, "Беларусь");
         UNIT_ASSERT_EQUAL(belarus.Cities.size(), 1);
         UNIT_ASSERT_EQUAL(belarus.Cities[0], "Минск");
 
-        UNIT_ASSERT(data.contains(187)); 
+        UNIT_ASSERT(data.contains(187));
         const TCountry& ukraine = data.at(187);
         UNIT_ASSERT_EQUAL(ukraine.Name, "Украина");
         UNIT_ASSERT_EQUAL(ukraine.Cities.size(), 1);

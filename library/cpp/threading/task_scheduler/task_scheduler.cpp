@@ -21,7 +21,7 @@ public:
     TString DebugState = "?";
     TString DebugId = "";
 private:
-    void* ThreadProc() noexcept override { 
+    void* ThreadProc() noexcept override {
         Scheduler_.WorkerFunc(this);
         return nullptr;
     }

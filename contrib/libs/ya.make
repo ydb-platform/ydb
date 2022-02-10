@@ -70,9 +70,9 @@ RECURSE(
     ffmpeg-3.4.1
     fft
     flatbuffers
-    flatbuffers64 
-    flatbuffers64/flatc 
-    flatbuffers64/samples 
+    flatbuffers64
+    flatbuffers64/flatc
+    flatbuffers64/samples
     fmath
     fmt
     fontconfig

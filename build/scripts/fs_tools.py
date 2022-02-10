@@ -28,7 +28,7 @@ if __name__ == '__main__':
     args = pcf.get_args(sys.argv[2:])
 
     if mode == 'copy':
-        shutil.copy(args[0], args[1])
+        shutil.copy(args[0], args[1]) 
     elif mode == 'copy_tree_no_link':
         dst = args[1]
         shutil.copytree(args[0], dst, ignore=lambda dirname, names: [n for n in names if os.path.islink(os.path.join(dirname, n))])
@@ -45,7 +45,7 @@ if __name__ == '__main__':
                 os.makedirs(os.path.dirname(d))
             except OSError:
                 pass
-            shutil.copy(s, d)
+            shutil.copy(s, d) 
     elif mode == 'copy_all_files':
         src = args[0]
         dst = args[1]

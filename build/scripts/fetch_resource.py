@@ -30,7 +30,7 @@ def fetch_resource(id_):
         try:
             return fetch(u)
 
-        except Exception:
+        except Exception: 
             continue
 
     raise Exception('Cannot fetch resource {}'.format(id_))

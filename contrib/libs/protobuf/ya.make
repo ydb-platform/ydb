@@ -24,12 +24,12 @@ PEERDIR(
     contrib/libs/zlib
 )
 
-ADDINCL(
+ADDINCL( 
     GLOBAL contrib/libs/protobuf/src
     GLOBAL FOR
     proto
     contrib/libs/protobuf/src
-)
+) 
 
 NO_COMPILER_WARNINGS()
 

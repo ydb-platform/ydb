@@ -55,11 +55,11 @@ RECURSE(
     jdk/test
     xmllint
 )
-
-IF (NOT OS_WINDOWS)
-    RECURSE(
+ 
+IF (NOT OS_WINDOWS) 
+    RECURSE( 
         ag
         lftp
         make
-    )
-ENDIF ()
+    ) 
+ENDIF () 

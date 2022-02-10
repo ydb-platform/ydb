@@ -16,7 +16,7 @@ ADDINCL(
     GLOBAL contrib/libs/snappy/include
 )
 
-NO_COMPILER_WARNINGS()
+NO_COMPILER_WARNINGS() 
 
 CFLAGS(
     -DHAVE_CONFIG_H

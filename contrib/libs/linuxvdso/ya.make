@@ -13,11 +13,11 @@ OWNER(
     g:cpp-contrib
 )
 
-NO_UTIL()
+NO_UTIL() 
 
-NO_RUNTIME()
+NO_RUNTIME() 
 
-IF (OS_LINUX)
+IF (OS_LINUX) 
     PEERDIR(
         contrib/libs/linuxvdso/original
     )

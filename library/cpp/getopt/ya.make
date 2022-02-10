@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(pg)
+OWNER(pg) 
 
 PEERDIR(
     library/cpp/getopt/small

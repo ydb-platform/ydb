@@ -55,7 +55,7 @@ ELSEIF (OS_IOS)
     PEERDIR(
         contrib/libs/cxxsupp/builtins
     )
-ELSEIF (CLANG OR MUSL OR OS_DARWIN OR USE_LTO)
+ELSEIF (CLANG OR MUSL OR OS_DARWIN OR USE_LTO) 
     IF (ARCH_ARM7)
         # XXX: libcxxrt support for ARM is currently broken
         DEFAULT(CXX_RT "glibcxx_static")
@@ -71,7 +71,7 @@ ELSEIF (CLANG OR MUSL OR OS_DARWIN OR USE_LTO)
             contrib/libs/musl/include
         )
     ENDIF()
-ELSEIF (OS_WINDOWS)
+ELSEIF (OS_WINDOWS) 
     SRCS(
         src/support/win32/locale_win32.cpp
         src/support/win32/support.cpp
@@ -96,7 +96,7 @@ ELSE()
     )
 ENDIF()
 
-IF (OS_LINUX)
+IF (OS_LINUX) 
     EXTRALIBS(-lpthread)
 ENDIF()
 

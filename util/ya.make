@@ -5,7 +5,7 @@ SUBSCRIBER(g:util-subscribers)
 
 NEED_CHECK()
 
-NO_UTIL()
+NO_UTIL() 
 
 # stream
 # string
@@ -36,7 +36,7 @@ SRCS(
     string/cast.cpp
 )
 
-IF (OS_WINDOWS)
+IF (OS_WINDOWS) 
     SRCS(
         datetime/strptime.cpp
     )
@@ -72,7 +72,7 @@ JOIN_SRCS(
     folder/tempdir.cpp
 )
 
-IF (OS_WINDOWS)
+IF (OS_WINDOWS) 
     SRCS(
         folder/lstat_win.c
         folder/dirent_win.c
@@ -327,7 +327,7 @@ JOIN_SRCS(
 
 SRC(system/compiler.cpp -fno-lto)
 
-IF (OS_WINDOWS)
+IF (OS_WINDOWS) 
     SRCS(
         system/fs_win.cpp
         system/winint.cpp
@@ -347,7 +347,7 @@ ELSE()
     ENDIF()
 ENDIF()
 
-IF (OS_LINUX)
+IF (OS_LINUX) 
     SRCS(
         system/valgrind.cpp
     )
@@ -362,7 +362,7 @@ IF (MUSL)
         contrib/libs/linuxvdso
     )
 ELSE()
-    IF (OS_LINUX OR SUN OR CYGWIN OR OS_WINDOWS)
+    IF (OS_LINUX OR SUN OR CYGWIN OR OS_WINDOWS) 
         SRCS(
             system/mktemp_system.cpp
         )

@@ -56,9 +56,9 @@ public:
         return Path_ == that.Path_;
     }
 
-    inline bool operator!=(const TFsPath& that) const {
-        return Path_ != that.Path_;
-    }
+    inline bool operator!=(const TFsPath& that) const { 
+        return Path_ != that.Path_; 
+    } 
 
     TFsPath& operator/=(const TFsPath& that);
 

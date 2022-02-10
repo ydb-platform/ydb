@@ -550,11 +550,11 @@ class Build(object):
         return self.build_type == 'coverage'
 
     @property
-    def is_sanitized(self):
+    def is_sanitized(self): 
         sanitizer = preset('SANITIZER_TYPE')
         return bool(sanitizer) and not is_negative_str(sanitizer)
-
-    @property
+ 
+    @property 
     def with_ndebug(self):
         return self.build_type in ('release', 'minsizerel', 'valgrind-release', 'profile', 'gprof', 'debugnoasserts')
 
@@ -681,14 +681,14 @@ class Build(object):
             if isinstance(o, dict):
                 return {un_unicode(k): un_unicode(v) for k, v in six.iteritems(o)}
             return o
-
+ 
         return un_unicode(json.loads(base64.b64decode(base64str)))
-
+ 
 
 class YMake(object):
     def __init__(self, arcadia):
         self.arcadia = arcadia
-
+ 
     def print_presets(self):
         presets = opts().presets
         if presets and 'YMAKE_JAVA_MODULES' not in presets:
@@ -945,7 +945,7 @@ class ToolchainOptions(object):
 
             self.c_compiler = self.params['c_compiler']
             self.cxx_compiler = self.params['cxx_compiler']
-
+ 
             # TODO(somov): Требовать номер версии всегда.
             self.compiler_version = self.params.get('gcc_version') or self.params.get('version') or '0'
             self.compiler_version_list = list(map(int, self.compiler_version.split('.')))
@@ -1928,7 +1928,7 @@ class LD(Linker):
             self.ld_flags.append('-pg')
 
         # TODO(somov): Единое условие на coverage.
-        if self.build.is_coverage or is_positive('GCOV_COVERAGE') or is_positive('CLANG_COVERAGE') or self.build.is_sanitized:
+        if self.build.is_coverage or is_positive('GCOV_COVERAGE') or is_positive('CLANG_COVERAGE') or self.build.is_sanitized: 
             self.use_stdlib = None
 
         self.ld_sdk = select(default=None, selectors=[
@@ -2834,7 +2834,7 @@ class Ragel(object):
         if isinstance(compiler, MSVCCompiler):
             self.set_default_flags(optimized=False)
         elif isinstance(compiler, GnuCompiler):
-            self.set_default_flags(optimized=build.is_release and not build.is_sanitized)
+            self.set_default_flags(optimized=build.is_release and not build.is_sanitized) 
         else:
             raise ConfigureError('Unexpected compiler {}'.format(compiler))
 

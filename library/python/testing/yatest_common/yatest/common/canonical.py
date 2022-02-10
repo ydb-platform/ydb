@@ -63,8 +63,8 @@ def canonical_execute(
     binary, args=None, check_exit_code=True,
     shell=False, timeout=None, cwd=None,
     env=None, stdin=None, stderr=None, creationflags=0,
-    file_name=None, save_locally=False, close_fds=False,
-    diff_tool=None, diff_file_name=None, diff_tool_timeout=None,
+    file_name=None, save_locally=False, close_fds=False, 
+    diff_tool=None, diff_file_name=None, diff_tool_timeout=None, 
 ):
     """
     Shortcut to execute a binary and canonize its stdout
@@ -81,7 +81,7 @@ def canonical_execute(
     :param file_name: output file name. if not specified program name will be used
     :param diff_tool: path to custome diff tool
     :param diff_file_name: custom diff file name to create when diff is found
-    :param diff_tool_timeout: timeout for running diff tool
+    :param diff_tool_timeout: timeout for running diff tool 
     :return: object that can be canonized
     """
     if type(binary) == list:
@@ -98,10 +98,10 @@ def canonical_execute(
     del execute_args["save_locally"]
     del execute_args["diff_tool"]
     del execute_args["diff_file_name"]
-    del execute_args["diff_tool_timeout"]
+    del execute_args["diff_tool_timeout"] 
     if not file_name and stdin:
         file_name = os.path.basename(stdin.name)
-    return _canonical_execute(process.execute, execute_args, file_name, save_locally, diff_tool, diff_file_name, diff_tool_timeout)
+    return _canonical_execute(process.execute, execute_args, file_name, save_locally, diff_tool, diff_file_name, diff_tool_timeout) 
 
 
 def canonical_py_execute(
@@ -109,7 +109,7 @@ def canonical_py_execute(
     shell=False, timeout=None, cwd=None, env=None,
     stdin=None, stderr=None, creationflags=0,
     file_name=None, save_locally=False, close_fds=False,
-    diff_tool=None, diff_file_name=None, diff_tool_timeout=None,
+    diff_tool=None, diff_file_name=None, diff_tool_timeout=None, 
 ):
     """
     Shortcut to execute a python script and canonize its stdout
@@ -126,7 +126,7 @@ def canonical_py_execute(
     :param file_name: output file name. if not specified program name will be used
     :param diff_tool: path to custome diff tool
     :param diff_file_name: custom diff file name to create when diff is found
-    :param diff_tool_timeout: timeout for running diff tool
+    :param diff_tool_timeout: timeout for running diff tool 
     :return: object that can be canonized
     """
     command = [runtime.source_path(script_path)] + _prepare_args(args)
@@ -139,8 +139,8 @@ def canonical_py_execute(
     del execute_args["save_locally"]
     del execute_args["diff_tool"]
     del execute_args["diff_file_name"]
-    del execute_args["diff_tool_timeout"]
-    return _canonical_execute(process.py_execute, execute_args, file_name, save_locally, diff_tool, diff_file_name, diff_tool_timeout)
+    del execute_args["diff_tool_timeout"] 
+    return _canonical_execute(process.py_execute, execute_args, file_name, save_locally, diff_tool, diff_file_name, diff_tool_timeout) 
 
 
 def _prepare_args(args):
@@ -151,7 +151,7 @@ def _prepare_args(args):
     return args
 
 
-def _canonical_execute(excutor, kwargs, file_name, save_locally, diff_tool, diff_file_name, diff_tool_timeout):
+def _canonical_execute(excutor, kwargs, file_name, save_locally, diff_tool, diff_file_name, diff_tool_timeout): 
     res = excutor(**kwargs)
     command = kwargs["command"]
     file_name = file_name or process.get_command_name(command)
@@ -173,4 +173,4 @@ def _canonical_execute(excutor, kwargs, file_name, save_locally, diff_tool, diff
         with open(err_file_path, "wb") as err_file:
             err_file.write(res.std_err)
 
-    return canonical_file(out_file_path, local=save_locally, diff_tool=diff_tool, diff_file_name=diff_file_name, diff_tool_timeout=diff_tool_timeout)
+    return canonical_file(out_file_path, local=save_locally, diff_tool=diff_tool, diff_file_name=diff_file_name, diff_tool_timeout=diff_tool_timeout) 

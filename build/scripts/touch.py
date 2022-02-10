@@ -5,14 +5,14 @@ import os
 import sys
 import time
 
-
+ 
 def main(argv):
-    parser = optparse.OptionParser(add_help_option=False)
+    parser = optparse.OptionParser(add_help_option=False) 
     parser.disable_interspersed_args()
 
-    parser.add_option('-?', '--help', dest='help',
-                      action='store_true', default=None, help='print help')
-    parser.add_option('-t', dest='t', action='store', default=None)
+    parser.add_option('-?', '--help', dest='help', 
+                      action='store_true', default=None, help='print help') 
+    parser.add_option('-t', dest='t', action='store', default=None) 
 
     opts, argv_rest = parser.parse_args(argv)
     if getattr(opts, 'help', False):

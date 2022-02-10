@@ -21,7 +21,7 @@ ADDINCL(
     GLOBAL contrib/libs/zlib/include
 )
 
-NO_COMPILER_WARNINGS()
+NO_COMPILER_WARNINGS() 
 
 NO_RUNTIME()
 

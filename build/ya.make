@@ -19,7 +19,7 @@ PEERDIR(
 
 END()
 
-RECURSE(
+RECURSE( 
     conf_fatal_error
     config
     docs/empty
@@ -29,10 +29,10 @@ RECURSE(
     platform/perl
     platform/python
     platform/python/ldflags
-    plugins
+    plugins 
     prebuilt
-    scripts
+    scripts 
     tests
     tests_slow
     yandex_specific/config
-)
+) 

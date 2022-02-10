@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(velavokr)
+OWNER(velavokr) 
 
 SRCS(
     packers.cpp

@@ -2,13 +2,13 @@ import os
 import re
 import sys
 import json
-import copy
+import copy 
 import base64
 import shlex
 import _common
 import lib._metric_resolvers as mr
-import _test_const as consts
-import _requirements as reqs
+import _test_const as consts 
+import _requirements as reqs 
 import StringIO
 import subprocess
 import collections
@@ -25,7 +25,7 @@ CANON_MDS_RESOURCE_REGEX = re.compile(re.escape(MDS_URI_PREFIX) + r'(.*?)($|#)')
 CANON_SB_VAULT_REGEX = re.compile(r"\w+=(value|file):[-\w]+:\w+")
 CANON_SBR_RESOURCE_REGEX = re.compile(r'(sbr:/?/?(\d+))')
 
-VALID_NETWORK_REQUIREMENTS = ("full", "restricted")
+VALID_NETWORK_REQUIREMENTS = ("full", "restricted") 
 VALID_DNS_REQUIREMENTS = ("default", "local", "dns64")
 BLOCK_SEPARATOR = '============================================================='
 SPLIT_FACTOR_MAX_VALUE = 1000
@@ -92,10 +92,10 @@ def validate_force_sandbox_requirement(name, value, test_size, is_force_sandbox,
     error_msg = validate_numerical_requirement(name, value)
     if error_msg:
         return error_msg
-    return check_func(mr.resolve_value(value), test_size, is_kvm)
+    return check_func(mr.resolve_value(value), test_size, is_kvm) 
 
 
-# TODO: Remove is_kvm param when there will be guarantees on RAM
+# TODO: Remove is_kvm param when there will be guarantees on RAM 
 def validate_requirement(req_name, value, test_size, is_force_sandbox, in_autocheck, is_fuzzing, is_kvm, is_ytexec_run):
     req_checks = {
         'container': validate_numerical_requirement,
@@ -125,26 +125,26 @@ def validate_test(unit, kw):
     def get_list(key):
         return deserialize_list(kw.get(key, ""))
 
-    valid_kw = copy.deepcopy(kw)
+    valid_kw = copy.deepcopy(kw) 
     errors = []
     warnings = []
 
-    if valid_kw.get('SCRIPT-REL-PATH') == 'boost.test':
-        project_path = valid_kw.get('BUILD-FOLDER-PATH', "")
+    if valid_kw.get('SCRIPT-REL-PATH') == 'boost.test': 
+        project_path = valid_kw.get('BUILD-FOLDER-PATH', "") 
         if not project_path.startswith(("contrib", "mail", "maps", "tools/idl", "metrika", "devtools", "mds", "yandex_io", "smart_devices")):
             errors.append("BOOSTTEST is not allowed here")
-    elif valid_kw.get('SCRIPT-REL-PATH') == 'gtest':
-        project_path = valid_kw.get('BUILD-FOLDER-PATH', "")
+    elif valid_kw.get('SCRIPT-REL-PATH') == 'gtest': 
+        project_path = valid_kw.get('BUILD-FOLDER-PATH', "") 
         if not project_path.startswith(("contrib", "devtools", "mail", "mds", "taxi")):
             errors.append("GTEST_UGLY is not allowed here, use GTEST instead")
 
-    size_timeout = collections.OrderedDict(sorted(consts.TestSize.DefaultTimeouts.items(), key=lambda t: t[1]))
+    size_timeout = collections.OrderedDict(sorted(consts.TestSize.DefaultTimeouts.items(), key=lambda t: t[1])) 
 
-    size = valid_kw.get('SIZE', consts.TestSize.Small).lower()
-    # TODO: use set instead list
+    size = valid_kw.get('SIZE', consts.TestSize.Small).lower() 
+    # TODO: use set instead list 
     tags = get_list("TAG")
     requirements_orig = get_list("REQUIREMENTS")
-    in_autocheck = "ya:not_autocheck" not in tags and 'ya:manual' not in tags
+    in_autocheck = "ya:not_autocheck" not in tags and 'ya:manual' not in tags 
     is_fat = 'ya:fat' in tags
     is_force_sandbox = 'ya:force_distbuild' not in tags and is_fat
     is_ytexec_run = 'ya:yt' in tags
@@ -153,10 +153,10 @@ def validate_test(unit, kw):
     requirements = {}
     list_requirements = ('sb_vault')
     for req in requirements_orig:
-        if req in ('kvm', ):
-            requirements[req] = str(True)
-            continue
-
+        if req in ('kvm', ): 
+            requirements[req] = str(True) 
+            continue 
+ 
         if ":" in req:
             req_name, req_value = req.split(":", 1)
             if req_name in list_requirements:
@@ -169,7 +169,7 @@ def validate_test(unit, kw):
                     elif requirements[req_name] != req_value:
                         warnings.append("Requirement [[imp]]{}[[rst]] is redefined [[imp]]{}[[rst]] -> [[imp]]{}[[rst]]".format(req_name, requirements[req_name], req_value))
                         requirements[req_name] = req_value
-                else:
+                else: 
                     requirements[req_name] = req_value
         else:
             errors.append("Invalid requirement syntax [[imp]]{}[[rst]]: expect <requirement>:<value>".format(req))
@@ -180,14 +180,14 @@ def validate_test(unit, kw):
             if error_msg:
                 errors += [error_msg]
 
-    invalid_requirements_for_distbuild = [requirement for requirement in requirements.keys() if requirement not in ('ram', 'ram_disk', 'cpu', 'network')]
+    invalid_requirements_for_distbuild = [requirement for requirement in requirements.keys() if requirement not in ('ram', 'ram_disk', 'cpu', 'network')] 
     sb_tags = [tag for tag in tags if tag.startswith('sb:')]
-
-    if is_fat:
+ 
+    if is_fat: 
         if size != consts.TestSize.Large:
             errors.append("Only LARGE test may have ya:fat tag")
 
-        if in_autocheck and not is_force_sandbox:
+        if in_autocheck and not is_force_sandbox: 
             if invalid_requirements_for_distbuild:
                 errors.append("'{}' REQUIREMENTS options can be used only for FAT tests without ya:force_distbuild tag. Remove TAG(ya:force_distbuild) or an option.".format(invalid_requirements_for_distbuild))
             if sb_tags:
@@ -195,7 +195,7 @@ def validate_test(unit, kw):
             if 'ya:sandbox_coverage' in tags:
                 errors.append("You can set 'ya:sandbox_coverage' tag only for FAT tests without ya:force_distbuild.")
     else:
-        if is_force_sandbox:
+        if is_force_sandbox: 
             errors.append('ya:force_sandbox can be used with LARGE tests only')
         if 'ya:nofuse' in tags:
             errors.append('ya:nofuse can be used with LARGE tests only')
@@ -203,15 +203,15 @@ def validate_test(unit, kw):
             errors.append("ya:privileged can be used with LARGE tests only")
         if in_autocheck and size == consts.TestSize.Large:
             errors.append("LARGE test must have ya:fat tag")
-
-    if 'ya:privileged' in tags and 'container' not in requirements:
-        errors.append("Only tests with 'container' requirement can have 'ya:privileged' tag")
-
+ 
+    if 'ya:privileged' in tags and 'container' not in requirements: 
+        errors.append("Only tests with 'container' requirement can have 'ya:privileged' tag") 
+ 
     if size not in size_timeout:
-        errors.append("Unknown test size: [[imp]]{}[[rst]], choose from [[imp]]{}[[rst]]".format(size.upper(), ", ".join([sz.upper() for sz in size_timeout.keys()])))
+        errors.append("Unknown test size: [[imp]]{}[[rst]], choose from [[imp]]{}[[rst]]".format(size.upper(), ", ".join([sz.upper() for sz in size_timeout.keys()]))) 
     else:
         try:
-            timeout = int(valid_kw.get('TEST-TIMEOUT', size_timeout[size]) or size_timeout[size])
+            timeout = int(valid_kw.get('TEST-TIMEOUT', size_timeout[size]) or size_timeout[size]) 
             script_rel_path = valid_kw.get('SCRIPT-REL-PATH')
             if timeout < 0:
                 raise Exception("Timeout must be > 0")
@@ -223,19 +223,19 @@ def validate_test(unit, kw):
                         break
 
                 if suggested_size:
-                    suggested_size = ", suggested size: [[imp]]{}[[rst]]".format(suggested_size.upper())
+                    suggested_size = ", suggested size: [[imp]]{}[[rst]]".format(suggested_size.upper()) 
                 else:
                     suggested_size = ""
-                errors.append("Max allowed timeout for test size [[imp]]{}[[rst]] is [[imp]]{} sec[[rst]]{}".format(size.upper(), size_timeout[size], suggested_size))
+                errors.append("Max allowed timeout for test size [[imp]]{}[[rst]] is [[imp]]{} sec[[rst]]{}".format(size.upper(), size_timeout[size], suggested_size)) 
         except Exception as e:
             errors.append("Error when parsing test timeout: [[bad]]{}[[rst]]".format(e))
 
-        requiremtens_list = []
-        for req_name, req_value in requirements.iteritems():
-            requiremtens_list.append(req_name + ":" + req_value)
-        valid_kw['REQUIREMENTS'] = serialize_list(requiremtens_list)
-
-    if valid_kw.get("FUZZ-OPTS"):
+        requiremtens_list = [] 
+        for req_name, req_value in requirements.iteritems(): 
+            requiremtens_list.append(req_name + ":" + req_value) 
+        valid_kw['REQUIREMENTS'] = serialize_list(requiremtens_list) 
+ 
+    if valid_kw.get("FUZZ-OPTS"): 
         for option in get_list("FUZZ-OPTS"):
             if not option.startswith("-"):
                 errors.append("Unrecognized fuzzer option '[[imp]]{}[[rst]]'. All fuzzer options should start with '-'".format(option))
@@ -264,20 +264,20 @@ def validate_test(unit, kw):
                     tags.append("ya:external")
                     tags.append("ya:yt_research_pool")
 
-    if valid_kw.get("USE_ARCADIA_PYTHON") == "yes" and valid_kw.get("SCRIPT-REL-PATH") == "py.test":
+    if valid_kw.get("USE_ARCADIA_PYTHON") == "yes" and valid_kw.get("SCRIPT-REL-PATH") == "py.test": 
         errors.append("PYTEST_SCRIPT is deprecated")
 
     partition = valid_kw.get('TEST_PARTITION', 'SEQUENTIAL')
     if partition not in PARTITION_MODS:
         raise ValueError('partition mode should be one of {}, detected: {}'.format(PARTITION_MODS, partition))
 
-    if valid_kw.get('SPLIT-FACTOR'):
-        if valid_kw.get('FORK-MODE') == 'none':
+    if valid_kw.get('SPLIT-FACTOR'): 
+        if valid_kw.get('FORK-MODE') == 'none': 
             errors.append('SPLIT_FACTOR must be use with FORK_TESTS() or FORK_SUBTESTS() macro')
 
         value = 1
         try:
-            value = int(valid_kw.get('SPLIT-FACTOR'))
+            value = int(valid_kw.get('SPLIT-FACTOR')) 
             if value <= 0:
                 raise ValueError("must be > 0")
             if value > SPLIT_FACTOR_MAX_VALUE:
@@ -305,7 +305,7 @@ def validate_test(unit, kw):
 
     return valid_kw, warnings, errors
 
-
+ 
 def get_norm_unit_path(unit, extra=None):
     path = _common.strip_roots(unit.path())
     if extra:
@@ -319,10 +319,10 @@ def dump_test(unit, kw):
         unit.message(['warn', w])
     for e in errors:
         ymake.report_configure_error(e)
-    if valid_kw is None:
+    if valid_kw is None: 
         return None
     string_handler = StringIO.StringIO()
-    for k, v in valid_kw.iteritems():
+    for k, v in valid_kw.iteritems(): 
         print >>string_handler, k + ': ' + v
     print >>string_handler, BLOCK_SEPARATOR
     data = string_handler.getvalue()
@@ -515,8 +515,8 @@ def onadd_ytest(unit, *args):
 
     if flat_args[1] == 'fuzz.test' and unit.get('FUZZING') == 'yes':
         test_record['FUZZING'] = '1'
-        # use all cores if fuzzing requested
-        test_record['REQUIREMENTS'] = serialize_list(filter(None, deserialize_list(test_record['REQUIREMENTS']) + ["cpu:all", "ram:all"]))
+        # use all cores if fuzzing requested 
+        test_record['REQUIREMENTS'] = serialize_list(filter(None, deserialize_list(test_record['REQUIREMENTS']) + ["cpu:all", "ram:all"])) 
 
     data = dump_test(unit, test_record)
     if data:
@@ -548,7 +548,7 @@ def onadd_check(unit, *args):
         # graph changed for clang_tidy tests
         return
     flat_args, spec_args = _common.sort_by_keywords({"DEPENDS": -1, "TIMEOUT": 1, "DATA": -1, "TAG": -1, "REQUIREMENTS": -1, "FORK_MODE": 1,
-                                                     "SPLIT_FACTOR": 1, "FORK_SUBTESTS": 0, "FORK_TESTS": 0, "SIZE": 1}, args)
+                                                     "SPLIT_FACTOR": 1, "FORK_SUBTESTS": 0, "FORK_TESTS": 0, "SIZE": 1}, args) 
     check_type = flat_args[0]
     test_dir = get_norm_unit_path(unit)
 

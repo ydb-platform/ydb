@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/getopt)
 
-OWNER(pg)
+OWNER(pg) 
 
 SRCS(
     last_getopt_ut.cpp

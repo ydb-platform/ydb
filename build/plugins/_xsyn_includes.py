@@ -48,7 +48,7 @@ def process_xsyn(filepath, on_element):
 
     # keep a stack of filepathes if on_element calls process_xsyn recursively
     with open(filepath) as xsyn_file:
-        from xml.dom.minidom import parse
+        from xml.dom.minidom import parse 
         tree = parse(xsyn_file)
         tree.normalize()
         res = traverse_xsyn(tree, on_element)

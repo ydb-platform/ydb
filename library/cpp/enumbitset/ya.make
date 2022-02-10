@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(alzobnin)
+OWNER(alzobnin) 
 
 SRCS(
     enumbitset.cpp

@@ -16,7 +16,7 @@ def parse_args():
     parser.add_argument('-P', '--path-list', action='store_true', default=False)
     return parser.parse_args(args)
 
-
+ 
 def smart_shell_quote(v):
     if v is None:
         return None

@@ -24,6 +24,6 @@ def on_build_mns_files(unit, *args):
 
     for filename in files:
         file_basename, _ = splitext(basename(filename))
-        asmdataname = "staticMn{0}{1}Ptr".format(ranking_suffix, file_basename)
+        asmdataname = "staticMn{0}{1}Ptr".format(ranking_suffix, file_basename) 
         output_name = 'mn.staticMn{0}{1}Ptr.cpp'.format(ranking_suffix, file_basename)
         unit.on_build_mns_file([filename, name, output_name, ranking_suffix, check, fml_unused_tool, asmdataname])

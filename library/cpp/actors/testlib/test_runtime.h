@@ -94,7 +94,7 @@ namespace NActors {
         TVector<TEventMailboxId> NonEmptyMailboxes;
         TVector<TEventMailboxId> OnlyMailboxes;
         std::function<bool()> CustomFinalCondition;
-        bool Quiet = false;
+        bool Quiet = false; 
     };
 
     struct TScheduledEventQueueItem {

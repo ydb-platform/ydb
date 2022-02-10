@@ -275,22 +275,22 @@ Y_UNIT_TEST_SUITE(TUnitTestMacroTest) {
             }
         }
 
-        std::string ThrowStr() {
-            if (ThrowMe) {
-                throw *this;
-            }
-
-            return {};
-        }
-
+        std::string ThrowStr() { 
+            if (ThrowMe) { 
+                throw *this; 
+            } 
+ 
+            return {}; 
+        } 
+ 
         void AssertNoException() {
             UNIT_ASSERT_NO_EXCEPTION(Throw());
         }
 
-        void AssertNoExceptionRet() {
-            const TString res = UNIT_ASSERT_NO_EXCEPTION_RESULT(ThrowStr()); 
-        }
-
+        void AssertNoExceptionRet() { 
+            const TString res = UNIT_ASSERT_NO_EXCEPTION_RESULT(ThrowStr());  
+        } 
+ 
         template <class TExpectedException>
         void AssertException() {
             UNIT_ASSERT_EXCEPTION(Throw(), TExpectedException);
@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(TUnitTestMacroTest) {
 
     Y_UNIT_TEST(NoException) {
         UNIT_ASSERT_TEST_FAILS(TTestException().AssertNoException());
-        UNIT_ASSERT_TEST_FAILS(TTestException().AssertNoExceptionRet());
+        UNIT_ASSERT_TEST_FAILS(TTestException().AssertNoExceptionRet()); 
 
         UNIT_ASSERT_NO_EXCEPTION(TTestException("", false).Throw());
     }

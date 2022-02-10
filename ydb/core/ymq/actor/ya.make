@@ -7,7 +7,7 @@ LIBRARY()
 
 SRCS(
     actor.cpp
-    auth_factory.cpp
+    auth_factory.cpp 
     attributes_md5.cpp
     cfg.cpp
     change_visibility.cpp

@@ -54,7 +54,7 @@ namespace NDataShard {
 
 namespace NSQS {
     class IEventsWriterFactory;
-    class IAuthFactory;
+    class IAuthFactory; 
 }
 
 namespace NPQ {
@@ -78,11 +78,11 @@ struct TAppData {
     const NDataShard::IExportFactory *DataShardExportFactory = nullptr;
     const TFormatFactory* FormatFactory = nullptr;
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
-
-    NSQS::IAuthFactory* SqsAuthFactory = nullptr;
-
-    IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
-
+ 
+    NSQS::IAuthFactory* SqsAuthFactory = nullptr; 
+ 
+    IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&); 
+ 
     const NPQ::IPersQueueMirrorReaderFactory* PersQueueMirrorReaderFactory = nullptr;
     NYdb::TDriver* YdbDriver = nullptr;
     const NPDisk::IIoContextFactory* IoContextFactory = nullptr;

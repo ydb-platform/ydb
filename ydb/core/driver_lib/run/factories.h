@@ -8,7 +8,7 @@
 #include <ydb/core/base/grpc_service_factory.h>
 
 #include <ydb/core/ymq/actor/auth_factory.h>
-
+ 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
@@ -41,10 +41,10 @@ struct TModuleFactories {
     std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
     // Factory for Simple queue services implementation details
     std::shared_ptr<NSQS::IEventsWriterFactory> SqsEventsWriterFactory;
-
-    IActor*(*CreateTicketParser)(const NKikimrProto::TAuthConfig&);
-    IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
-
+ 
+    IActor*(*CreateTicketParser)(const NKikimrProto::TAuthConfig&); 
+    IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&); 
+ 
     std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)> YqAuditServiceFactory;
     NKikimr::TYdbCredentialsProviderFactory YdbCredentialProviderFactory;
     // Factory for grpc services
@@ -55,7 +55,7 @@ struct TModuleFactories {
     std::shared_ptr<NPDisk::IIoContextFactory> IoContextFactory;
 
     std::function<NActors::TMon* (NActors::TMon::TConfig)> MonitoringFactory;
-    std::shared_ptr<NSQS::IAuthFactory> SqsAuthFactory;
+    std::shared_ptr<NSQS::IAuthFactory> SqsAuthFactory; 
 
     ~TModuleFactories();
 };

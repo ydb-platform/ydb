@@ -371,7 +371,7 @@ namespace NKikimr {
         void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie = 0);
         void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0);
         void SendData(TActorId self, TActorId clientId, IEventBase* payload, ui64 cookie = 0);
-        void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie = 0);
+        void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie = 0); 
         void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase* payload, ui64 seqNo, ui64 cookie = 0);
         void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0);
 

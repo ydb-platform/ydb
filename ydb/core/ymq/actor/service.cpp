@@ -1,6 +1,6 @@
 #include "service.h"
 
-#include "auth_factory.h"
+#include "auth_factory.h" 
 #include "cfg.h"
 #include "executor.h"
 #include "garbage_collector.h"
@@ -328,8 +328,8 @@ void TSqsService::Bootstrap() {
             driverConfig.SetDatabase(Cfg().GetRoot());
             YcSearchEventsConfig.TenantMode = true;
         }
-
-        auto factory = AppData()->SqsAuthFactory;
+ 
+        auto factory = AppData()->SqsAuthFactory; 
         Y_VERIFY(factory);
 
         driverConfig.SetCredentialsProviderFactory(factory->CreateCredentialsProviderFactory(Cfg()));

@@ -548,29 +548,29 @@ bool THttpRequest::SetupRequest() {
 
     RLOG_SQS_BASE_DEBUG(*Parent_->ActorSystem_, "Create proxy action actor for request " << SecureShortUtf8DebugString(*requestHolder));
 
-    const bool enableQueueLeader = Parent_->Config.HasEnableQueueMaster()
-        ? Parent_->Config.GetEnableQueueMaster()
-        : Parent_->Config.GetEnableQueueLeader();
+    const bool enableQueueLeader = Parent_->Config.HasEnableQueueMaster() 
+        ? Parent_->Config.GetEnableQueueMaster() 
+        : Parent_->Config.GetEnableQueueLeader(); 
 
     auto httpCallback = MakeHolder<THttpCallback>(this, *requestHolder);
-
-    TAuthActorData data {
-        .SQSRequest = std::move(requestHolder),
-        .HTTPCallback = std::move(httpCallback),
-        .EnableQueueLeader = enableQueueLeader,
-        .Action = Action_,
-        .ExecutorPoolID = Parent_->PoolId_,
-        .CloudID = AccountName_,
-        .ResourceID = QueueName_,
-        .Counters = Parent_->CloudAuthCounters_.Get(),
-        .AWSSignature = std::move(AwsSignature_),
-        .IAMToken = IamToken_,
-        .FolderID = FolderId_
-    };
-
-    AppData(Parent_->ActorSystem_)->SqsAuthFactory->RegisterAuthActor(
-        *Parent_->ActorSystem_,
-        std::move(data));
+ 
+    TAuthActorData data { 
+        .SQSRequest = std::move(requestHolder), 
+        .HTTPCallback = std::move(httpCallback), 
+        .EnableQueueLeader = enableQueueLeader, 
+        .Action = Action_, 
+        .ExecutorPoolID = Parent_->PoolId_, 
+        .CloudID = AccountName_, 
+        .ResourceID = QueueName_, 
+        .Counters = Parent_->CloudAuthCounters_.Get(), 
+        .AWSSignature = std::move(AwsSignature_), 
+        .IAMToken = IamToken_, 
+        .FolderID = FolderId_ 
+    }; 
+ 
+    AppData(Parent_->ActorSystem_)->SqsAuthFactory->RegisterAuthActor( 
+        *Parent_->ActorSystem_, 
+        std::move(data)); 
 
     return true;
 }

@@ -34,7 +34,7 @@ RECURSE(
     python3/src/Lib/lib2to3
     ragel5
     ragel6
-    sancov 
+    sancov
     sqlite3
     swig
     tf

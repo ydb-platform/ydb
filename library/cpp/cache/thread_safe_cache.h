@@ -135,7 +135,7 @@ namespace NPrivate {
         }
 
     private:
-        using TInternalCache = TCache<Key, TPtr, List<Key, TPtr>, TNoopDelete>; 
+        using TInternalCache = TCache<Key, TPtr, List<Key, TPtr>, TNoopDelete>;
 
         template <class TCallbacks>
         class TThreadSafeCacheSingleton {
@@ -165,7 +165,7 @@ namespace NPrivate {
     private:
         TRWMutex Mutex;
         const ICallbacks& Callbacks;
-        mutable TInternalCache Cache; 
+        mutable TInternalCache Cache;
     };
 
     struct TLWHelper {

@@ -55,31 +55,31 @@ class TThreadPoolException: public yexception {
 
 template <class T>
 class TThrFuncObj: public IObjectInQueue {
-public: 
-    TThrFuncObj(const T& func) 
+public:
+    TThrFuncObj(const T& func)
         : Func(func)
     {
-    } 
- 
-    TThrFuncObj(T&& func) 
+    }
+
+    TThrFuncObj(T&& func)
         : Func(std::move(func))
     {
-    } 
- 
-    void Process(void*) override { 
-        THolder<TThrFuncObj> self(this); 
-        Func(); 
-    } 
- 
-private: 
-    T Func; 
-}; 
- 
+    }
+
+    void Process(void*) override {
+        THolder<TThrFuncObj> self(this);
+        Func();
+    }
+
+private:
+    T Func;
+};
+
 template <class T>
-IObjectInQueue* MakeThrFuncObj(T&& func) { 
-    return new TThrFuncObj<std::remove_cv_t<std::remove_reference_t<T>>>(std::forward<T>(func)); 
-} 
- 
+IObjectInQueue* MakeThrFuncObj(T&& func) {
+    return new TThrFuncObj<std::remove_cv_t<std::remove_reference_t<T>>>(std::forward<T>(func));
+}
+
 struct TThreadPoolParams {
     bool Catching_ = true;
     bool Blocking_ = false;
@@ -147,12 +147,12 @@ public:
      * version of Add*(), but use exceptions instead returning false
      */
     void SafeAdd(IObjectInQueue* obj);
- 
+
     template <class T>
-    void SafeAddFunc(T&& func) { 
+    void SafeAddFunc(T&& func) {
         Y_ENSURE_EX(AddFunc(std::forward<T>(func)), TThreadPoolException() << TStringBuf("can not add function to queue"));
-    } 
- 
+    }
+
     void SafeAddAndOwn(THolder<IObjectInQueue> obj);
 
     /**
@@ -162,17 +162,17 @@ public:
      * @return false if queue is full or shutting down
      */
     virtual bool Add(IObjectInQueue* obj) Y_WARN_UNUSED_RESULT = 0;
- 
+
     template <class T>
-    Y_WARN_UNUSED_RESULT bool AddFunc(T&& func) { 
-        THolder<IObjectInQueue> wrapper(MakeThrFuncObj(std::forward<T>(func))); 
-        bool added = Add(wrapper.Get()); 
-        if (added) { 
-            Y_UNUSED(wrapper.Release()); 
-        } 
-        return added; 
-    } 
- 
+    Y_WARN_UNUSED_RESULT bool AddFunc(T&& func) {
+        THolder<IObjectInQueue> wrapper(MakeThrFuncObj(std::forward<T>(func)));
+        bool added = Add(wrapper.Get());
+        if (added) {
+            Y_UNUSED(wrapper.Release());
+        }
+        return added;
+    }
+
     bool AddAndOwn(THolder<IObjectInQueue> obj) Y_WARN_UNUSED_RESULT;
     virtual void Start(size_t threadCount, size_t queueSizeLimit = 0) = 0;
     /** Wait for completion of all scheduled objects, and then exit */

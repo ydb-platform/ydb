@@ -20,8 +20,8 @@ SRCS(
     tablet_helpers.h
     tenant_runtime.cpp
     tenant_runtime.h
-    test_client.cpp
-    test_client.h
+    test_client.cpp 
+    test_client.h 
     service_mocks/access_service_mock.h
     service_mocks/datastreams_service_mock.h
     service_mocks/iam_token_service_mock.h

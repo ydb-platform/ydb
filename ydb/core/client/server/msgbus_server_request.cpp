@@ -294,7 +294,7 @@ void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatu
         return ReplyWithResult(MSTATUS_INPROGRESS, msg->Record, ctx);
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyNotReady:
         return HandleError(MSTATUS_NOTREADY, status, ctx);
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted:
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted: 
         return HandleError(MSTATUS_ABORTED, status, ctx);
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::EmptyAffectedSet:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError:

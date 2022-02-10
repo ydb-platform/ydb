@@ -18,25 +18,25 @@ message TWalkTest {
     repeated TWalkTest RepSub = 6;
 }
 
-message TWalkTestCyclic {
-   optional TNested OptNested = 1;
-   repeated uint64 OptInt64 = 2;
-   optional TWalkTestCyclic OptSub = 3;
-   optional TEnum OptEnum = 4;
+message TWalkTestCyclic { 
+   optional TNested OptNested = 1; 
+   repeated uint64 OptInt64 = 2; 
+   optional TWalkTestCyclic OptSub = 3; 
+   optional TEnum OptEnum = 4; 
 
-   message TNested {
-      optional uint32 OptInt32 = 1;
-      optional TWalkTestCyclic OptSubNested = 2;
-      repeated string RepStr = 3;
-      optional TNested OptNested = 4;
-   }
-   enum TEnum {
-      A = 0;
-      B = 1;
-      C = 2;
-    }
-}
-
+   message TNested { 
+      optional uint32 OptInt32 = 1; 
+      optional TWalkTestCyclic OptSubNested = 2; 
+      repeated string RepStr = 3; 
+      optional TNested OptNested = 4; 
+   } 
+   enum TEnum { 
+      A = 0; 
+      B = 1; 
+      C = 2; 
+    } 
+} 
+ 
 message TMergeTestNoMerge {
    option (DontMerge) = true;
 

@@ -18,9 +18,9 @@ SRCS(
     pb_utils.h
     repeated_field_utils.h
     simple_reflection.cpp
-    walk.cpp
+    walk.cpp 
 )
 
 END()
-
-RECURSE_FOR_TESTS(ut)
+ 
+RECURSE_FOR_TESTS(ut) 

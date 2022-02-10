@@ -28,7 +28,7 @@ ENDIF()
 #
 # NB: nested IF's are needed due to the lack of lazy evaluation of logical statements: DEVTOOLS-7837
 IF (OS_ANDROID)
-    SRCS( 
+    SRCS(
         strlcat.c
         strlcpy.c
     )
@@ -51,8 +51,8 @@ IF (OS_ANDROID)
             stpcpy.c
         )
     ENDIF()
-ENDIF() 
- 
+ENDIF()
+
 IF (OS_WINDOWS OR OS_DARWIN OR OS_IOS)
     SRCS(
         memrchr.c

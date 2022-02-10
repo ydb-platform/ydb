@@ -277,7 +277,7 @@ namespace NTls {
             return val;
         }
 
-    private:
+    private: 
         static void Dtor(void* ptr) {
             THolder<void> mem(ptr);
 

@@ -1,8 +1,8 @@
-#pragma once
+#pragma once 
 
 #include <util/system/yassert.h>
 #include <util/generic/algorithm.h>
-
+ 
 #ifdef _DEBUG
 template <class T>
 struct TBoundCheck {
@@ -16,10 +16,10 @@ struct TBoundCheck {
         Y_ASSERT(i >= 0 && i < Size);
         return Data[i];
     }
-};
+}; 
 #endif
-
-template <class T>
+ 
+template <class T> 
 class TArray2D {
 private:
     typedef T* PT;
@@ -47,7 +47,7 @@ private:
             PData[i] = Data + i * XSize;
     }
 
-public:
+public: 
     TArray2D(size_t xsize = 1, size_t ysize = 1) {
         XSize = xsize;
         YSize = ysize;
@@ -75,17 +75,17 @@ public:
     void Clear() {
         SetSizes(1, 1);
     }
-#ifdef _DEBUG
+#ifdef _DEBUG 
     TBoundCheck<T> operator[](size_t i) const {
         Y_ASSERT(i < YSize);
         return TBoundCheck<T>(PData[i], XSize);
     }
-#else
+#else 
     T* operator[](size_t i) const {
         Y_ASSERT(i < YSize);
         return PData[i];
     }
-#endif
+#endif 
     size_t GetXSize() const {
         return XSize;
     }
@@ -105,20 +105,20 @@ public:
         std::swap(XSize, a.XSize);
         std::swap(YSize, a.YSize);
     }
-};
-
+}; 
+ 
 template <class T>
 inline bool operator==(const TArray2D<T>& a, const TArray2D<T>& b) {
-    if (a.GetXSize() != b.GetXSize() || a.GetYSize() != b.GetYSize())
-        return false;
+    if (a.GetXSize() != b.GetXSize() || a.GetYSize() != b.GetYSize()) 
+        return false; 
     for (size_t y = 0; y < a.GetYSize(); ++y) {
         for (size_t x = 0; x < a.GetXSize(); ++x)
-            if (a[y][x] != b[y][x])
-                return false;
-    }
-    return true;
-}
-
+            if (a[y][x] != b[y][x]) 
+                return false; 
+    } 
+    return true; 
+} 
+ 
 template <class T>
 inline bool operator!=(const TArray2D<T>& a, const TArray2D<T>& b) {
     return !(a == b);

@@ -2,7 +2,7 @@
 
 #include <library/cpp/json/json_value.h>
 
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 #include <util/string/strspn.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/ymath.h>
@@ -263,7 +263,7 @@ namespace NJsonWriter {
         UnsafeWriteValue(buf, len);
         return TValueContext(*this);
     }
-
+ 
     TValueContext TBuf::WriteFloat(float f, EFloatToStringMode mode, int ndigits) {
         return WriteFloatImpl(f, mode, ndigits);
     }

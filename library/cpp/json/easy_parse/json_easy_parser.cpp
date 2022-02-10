@@ -1,14 +1,14 @@
-#include "json_easy_parser.h"
+#include "json_easy_parser.h" 
 #include <library/cpp/json/json_reader.h>
 #include <util/string/cast.h>
-#include <util/string/split.h>
-#include <util/string/strip.h>
-
-namespace NJson {
+#include <util/string/split.h> 
+#include <util/string/strip.h> 
+ 
+namespace NJson { 
     static TString MAP_IDENTIFIER = "{}";
     static TString ARRAY_IDENTIFIER = "[]";
     static TString ANY_IDENTIFIER = "*";
-
+ 
     static void ParsePath(TString path, TVector<TPathElem>* res) {
         TVector<const char*> parts;
         Split(path.begin(), '/', &parts);
@@ -26,24 +26,24 @@ namespace NJson {
                         arrayCounter = -1;
                     }
                     res->push_back(TPathElem(arrayCounter));
-                }
-            }
-        }
-    }
-
+                } 
+            } 
+        } 
+    } 
+ 
     void TJsonParser::AddField(const TString& path, bool nonEmpty) {
         Fields.emplace_back();
         Fields.back().NonEmpty = nonEmpty;
         ParsePath(path, &Fields.back().Path);
     }
-
+ 
     TString TJsonParser::ConvertToTabDelimited(const TString& json) const {
         TStringInput in(json);
         TStringStream out;
         ConvertToTabDelimited(in, out);
         return out.Str();
     }
-
+ 
     class TRewriteJsonImpl: public NJson::TJsonCallbacks {
         const TJsonParser& Parent;
         TVector<TString> FieldValues;
@@ -51,7 +51,7 @@ namespace NJson {
         bool ShouldUpdateOnArrayChange;
         int CurrentFieldIdx;
         bool HasFormatError;
-
+ 
     private:
         static bool PathElementMatch(const TPathElem& templ, const TPathElem& real) {
             if (templ.Type != real.Type)
@@ -62,31 +62,31 @@ namespace NJson {
                 return templ.Key == ANY_IDENTIFIER || templ.Key == real.Key;
             return true;
         }
-
+ 
         bool CheckFilter(const TVector<TPathElem>& path) const {
             if (Stack.size() < path.size())
-                return false;
+                return false; 
             for (size_t n = 0; n < path.size(); ++n) {
                 if (!PathElementMatch(path[n], Stack[n]))
                     return false;
             }
             return true;
-        }
-
+        } 
+ 
         void UpdateRule() {
             for (size_t n = 0; n < Parent.Fields.size(); ++n) {
                 if (FieldValues[n].empty() && CheckFilter(Parent.Fields[n].Path)) {
                     CurrentFieldIdx = n;
                     return;
                 }
-            }
+            } 
             CurrentFieldIdx = -1;
-        }
-
+        } 
+ 
         void Pop() {
             Stack.pop_back();
         }
-
+ 
         void IncreaseArrayCounter() {
             if (!Stack.empty() && Stack.back().Type == NImpl::ARRAY) {
                 ++Stack.back().ArrayCounter;
@@ -100,11 +100,11 @@ namespace NJson {
             IncreaseArrayCounter();
             if (CurrentFieldIdx >= 0) {
                 FieldValues[CurrentFieldIdx] = ToString(val);
-                UpdateRule();
+                UpdateRule(); 
             }
             return true;
-        }
-
+        } 
+ 
     public:
         TRewriteJsonImpl(const TJsonParser& parent)
             : Parent(parent)
@@ -117,8 +117,8 @@ namespace NJson {
                 if (!Parent.Fields[n].Path.empty() && Parent.Fields[n].Path.back().Type == NImpl::ARRAY)
                     ShouldUpdateOnArrayChange = true;
             }
-        }
-
+        } 
+ 
         bool OnOpenMap() override {
             IncreaseArrayCounter();
             Stack.push_back(TPathElem(NImpl::MAP));
@@ -127,8 +127,8 @@ namespace NJson {
             else
                 UpdateRule();
             return true;
-        }
-
+        } 
+ 
         bool OnOpenArray() override {
             IncreaseArrayCounter();
             Stack.push_back(TPathElem(-1));
@@ -144,17 +144,17 @@ namespace NJson {
                 Pop();
             if (!Stack.empty())
                 Pop();
-            UpdateRule();
+            UpdateRule(); 
             return true;
         }
-
+ 
         bool OnCloseArray() override {
             if (!Stack.empty())
                 Pop();
-            UpdateRule();
+            UpdateRule(); 
             return true;
         }
-
+ 
         bool OnMapKey(const TStringBuf& key) override {
             if (!Stack.empty() && Stack.back().Type == NImpl::MAP_KEY) {
                 Pop();
@@ -167,23 +167,23 @@ namespace NJson {
                 UpdateRule();
             return true;
         }
-
+ 
         bool OnBoolean(bool b) override {
             return OnValue(b);
         }
-
+ 
         bool OnInteger(long long i) override {
             return OnValue(i);
-        }
-
+        } 
+ 
         bool OnDouble(double f) override {
             return OnValue(f);
         }
-
+ 
         bool OnString(const TStringBuf& str) override {
             return OnValue(str);
         }
-
+ 
         bool IsOK() const {
             if (HasFormatError)
                 return false;
@@ -192,17 +192,17 @@ namespace NJson {
                     return false;
             return true;
         }
-
+ 
         void WriteTo(IOutputStream& out) const {
             for (size_t n = 0; n < FieldValues.size(); ++n)
                 out << "\t" << FieldValues[n];
         }
-
+ 
         void WriteTo(TVector<TString>* res) const {
             *res = FieldValues;
         }
     };
-
+ 
     void TJsonParser::ConvertToTabDelimited(IInputStream& in, IOutputStream& out) const {
         TRewriteJsonImpl impl(*this);
         ReadJson(&in, &impl);
@@ -211,8 +211,8 @@ namespace NJson {
             impl.WriteTo(out);
             out.Flush();
         }
-    }
-
+    } 
+ 
     bool TJsonParser::Parse(const TString& json, TVector<TString>* res) const {
         TRewriteJsonImpl impl(*this);
         TStringInput in(json);
@@ -222,8 +222,8 @@ namespace NJson {
             return true;
         } else
             return false;
-    }
-
+    } 
+ 
     //struct TTestMe {
     //    TTestMe() {
     //        TJsonParser worker;
@@ -232,5 +232,5 @@ namespace NJson {
     //        TString ret2 = worker.ConvertToTabDelimited(" [1, 2, 3, 4, 5] ");
     //    }
     //} testMe;
-
-}
+ 
+} 

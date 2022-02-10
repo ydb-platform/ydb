@@ -93,7 +93,7 @@ void TClassFactory<T>::RegisterTypeBase(int nTypeID, newFunc func, VFT vft) {
     CTypeIndexHash::iterator typeIndexIt = typeIndex.find(vft);
     if (typeIndexIt != typeIndex.end() && nTypeID != typeIndexIt->second) {
         fprintf(stderr, "IBinSaver: class (Type ID 0x%08X) has been already registered (Type ID 0x%08X)\n", nTypeID, typeIndexIt->second);
-        abort();
+        abort(); 
     }
     typeIndex[vft] = nTypeID;
     typeInfo[nTypeID] = func;

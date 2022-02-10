@@ -13,7 +13,7 @@
 #include <util/generic/variant.h>
 #include <util/generic/ylimits.h>
 #include <util/memory/blob.h>
-#include <util/digest/murmur.h>
+#include <util/digest/murmur.h> 
 
 #include <array>
 #include <bitset>
@@ -186,25 +186,25 @@ private:
 
     template <class T>
     void DoAnySet(T& data) {
-        if (IsReading()) {
-            data.clear();
+        if (IsReading()) { 
+            data.clear(); 
             TStoredSize nSize;
             Add(2, &nSize);
             for (TStoredSize i = 0; i < nSize; ++i) {
                 typename T::value_type member;
-                Add(1, &member);
-                data.insert(member);
-            }
-        } else {
+                Add(1, &member); 
+                data.insert(member); 
+            } 
+        } else { 
             TStoredSize nSize = data.size();
             CheckOverflow(nSize, data.size());
             Add(2, &nSize);
             for (const auto& elem : data) {
                 auto member = elem;
-                Add(1, &member);
-            }
-        }
-    }
+                Add(1, &member); 
+            } 
+        } 
+    } 
 
     // 2D array
     template <class T>
@@ -240,19 +240,19 @@ private:
             TStoredSize nCount = data.size();
             CheckOverflow(nCount, data.size());
             File.Write(&nCount, sizeof(TStoredSize));
-            File.Write(data.c_str(), nCount * elemSize);
+            File.Write(data.c_str(), nCount * elemSize); 
         }
     }
     void DataChunkString(std::string& data) {
-        DataChunkStr(data, sizeof(char));
-    }
+        DataChunkStr(data, sizeof(char)); 
+    } 
     void DataChunkStroka(TString& data) {
         DataChunkStr(data, sizeof(TString::char_type));
-    }
+    } 
     void DataChunkWtroka(TUtf16String& data) {
         DataChunkStr(data, sizeof(wchar16));
-    }
-
+    } 
+ 
     void DataChunk(void* pData, i64 nSize) {
         i64 chunkSize = 1 << 30;
         for (i64 offset = 0; offset < nSize; offset += chunkSize) {
@@ -302,13 +302,13 @@ public:
         return 0;
     }
     int Add(const chunk_id, TString* pStr) {
-        DataChunkStroka(*pStr);
+        DataChunkStroka(*pStr); 
         return 0;
-    }
+    } 
     int Add(const chunk_id, TUtf16String* pStr) {
-        DataChunkWtroka(*pStr);
+        DataChunkWtroka(*pStr); 
         return 0;
-    }
+    } 
     int Add(const chunk_id, TBlob* blob) {
         if (bRead) {
             ui64 size = 0;
@@ -367,7 +367,7 @@ public:
     int Add(const chunk_id, THashSet<T1, T2, T3, T4>* pHash) {
         DoAnySet(*pHash);
         return 0;
-    }
+    } 
 
     template <class T1>
     int Add(const chunk_id, TArray2D<T1>* pArr) {
@@ -524,17 +524,17 @@ public:
         return 0;
     }
 
-    template <typename TOne>
+    template <typename TOne> 
     void AddMulti(TOne& one) {
-        Add(0, &one);
-    }
-
+        Add(0, &one); 
+    } 
+ 
     template <typename THead, typename... TTail>
     void AddMulti(THead& head, TTail&... tail) {
-        Add(0, &head);
+        Add(0, &head); 
         AddMulti(tail...);
-    }
-
+    } 
+ 
     template <class T, typename = decltype(std::declval<T&>() & std::declval<IBinSaver&>())>
     static bool HasNonTrivialSerializer(ui32) {
         return true;
@@ -580,8 +580,8 @@ struct TRegisterSaveLoadType {
 
 #define Y_BINSAVER_REGISTER(name) \
     BASIC_REGISTER_CLASS(name)    \
-    static TRegisterSaveLoadType<name> init##name(MurmurHash<int>(#name, sizeof(#name)));
-
+    static TRegisterSaveLoadType<name> init##name(MurmurHash<int>(#name, sizeof(#name))); 
+ 
 #define REGISTER_SAVELOAD_CLASS(N, name) \
     BASIC_REGISTER_CLASS(name)           \
     static TRegisterSaveLoadType<name> init##name##N(N);
@@ -618,7 +618,7 @@ struct TRegisterSaveLoadType {
 
 #define REGISTER_SAVELOAD_CLASS_NS_PREF(N, cls, ns, pref) \
     REGISTER_SAVELOAD_CLASS_NAME(N, ns ::cls, _##pref##_##cls)
-
+ 
 #define SAVELOAD(...)             \
     int operator&(IBinSaver& f) { \
         f.AddMulti(__VA_ARGS__);  \

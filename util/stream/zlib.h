@@ -159,15 +159,15 @@ public:
  * Supports efficient `ReadLine` calls and similar "reading in small pieces"
  * usage patterns.
  */
-class TBufferedZLibDecompress: public TBuffered<TZLibDecompress> {
+class TBufferedZLibDecompress: public TBuffered<TZLibDecompress> { 
 public:
     template <class T>
     inline TBufferedZLibDecompress(T* in, ZLib::StreamType type = ZLib::Auto, size_t buf = 1 << 13)
         : TBuffered<TZLibDecompress>(buf, in, type)
     {
     }
-
+ 
     ~TBufferedZLibDecompress() override;
-};
-
+}; 
+ 
 /** @} */

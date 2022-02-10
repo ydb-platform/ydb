@@ -1,12 +1,12 @@
-#pragma once
+#pragma once 
 
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
-#include <util/stream/input.h>
-#include <util/stream/output.h>
-#include "json_easy_parser_impl.h"
-
-namespace NJson {
+#include <util/generic/vector.h> 
+#include <util/stream/input.h> 
+#include <util/stream/output.h> 
+#include "json_easy_parser_impl.h" 
+ 
+namespace NJson { 
     /* This class filters out nodes from a source JSON by a xpath-style description. It represent these nodes as a tab-delimited string (or a vector).
      * It is useful if you need to parse a data which comes into JSON in a known and fixed format.
      * Fields are set as a list of keys separated by slash, for example:
@@ -21,26 +21,26 @@ namespace NJson {
      * NB! Library can not extract values of not a simple type (namely it doesn't support the case when a result is a vocabulary or an array) from JSON.
      * If you expect such a case, please check json_value.h.
      */
-
-    class TJsonParser {
+ 
+    class TJsonParser { 
         TString Prefix;
-
-        struct TField {
+ 
+        struct TField { 
             TVector<TPathElem> Path;
-            bool NonEmpty;
-        };
+            bool NonEmpty; 
+        }; 
         TVector<TField> Fields;
-
-        friend class TRewriteJsonImpl;
-
+ 
+        friend class TRewriteJsonImpl; 
+ 
         void ConvertToTabDelimited(IInputStream& in, IOutputStream& out) const;
 
-    public:
+    public: 
         void SetPrefix(const TString& prefix) {
-            Prefix = prefix;
-        }
+            Prefix = prefix; 
+        } 
         void AddField(const TString& path, bool mustExist);
         TString ConvertToTabDelimited(const TString& json) const;
         bool Parse(const TString& json, TVector<TString>* res) const;
-    };
-}
+    }; 
+} 

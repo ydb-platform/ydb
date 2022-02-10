@@ -245,7 +245,7 @@ public:
         ScanRunQueryTransformer = TTransformationPipeline(typesCtx)
             .Add(CreateKqpCreateSnapshotTransformer(Gateway, TransformCtx, TxState), "CreateSnapshot")
             .Add(CreateKqpExecuteScanTransformer(Gateway, Cluster, TxState, TransformCtx), "ExecuteScan")
-            .Add(CreateKqpReleaseSnapshotTransformer(Gateway, TxState), "ReleaseSnapshot") 
+            .Add(CreateKqpReleaseSnapshotTransformer(Gateway, TxState), "ReleaseSnapshot")
             .Build(false);
     }
 
@@ -553,15 +553,15 @@ private:
 
         auto& preparedQuery = *TransformCtx->QueryCtx->PreparingQuery;
         TKqpPhysicalQuery physicalQuery(transformedQuery);
-        auto compiler = CreateKqpQueryCompiler(Cluster, OptimizeCtx->Tables, FuncRegistry); 
+        auto compiler = CreateKqpQueryCompiler(Cluster, OptimizeCtx->Tables, FuncRegistry);
         auto ret = compiler->CompilePhysicalQuery(physicalQuery, dataQuery.Operations(),
             *preparedQuery.MutablePhysicalQuery(), ctx);
-        if (!ret) { 
-            ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed to compile physical query.")); 
+        if (!ret) {
+            ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed to compile physical query."));
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
-        preparedQuery.SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1); 
-        // TODO(sk): only on stats mode or if explain-only 
+        preparedQuery.SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
+        // TODO(sk): only on stats mode or if explain-only
         PreparedExplainTransformer->Rewind();
         return MakeIntrusive<TPhysicalAsyncRunResult>(builtQuery, ctx, *PreparedExplainTransformer, *TransformCtx);
     }
@@ -599,7 +599,7 @@ private:
         TransformCtx->ReplyTarget = target;
 
         Y_ASSERT(!TxState->Tx().GetSnapshot().IsValid());
- 
+
         return MakeIntrusive<TScanAsyncRunResult>(world, ctx, *ScanRunQueryTransformer);
     }
 

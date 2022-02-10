@@ -1,61 +1,61 @@
-#include "datashard_impl.h" 
+#include "datashard_impl.h"
 #include "range_ops.h"
-#include <util/string/vector.h> 
- 
+#include <util/string/vector.h>
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/formats/arrow_batch_builder.h>
 #include <ydb/core/kqp/kqp_compute.h>
 #include <ydb/core/tablet_flat/flat_row_celled.h>
- 
+
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NDataShard {
- 
-// using namespace NTabletFlatExecutor; 
-using namespace NKqp; 
-using namespace NMiniKQL; 
- 
-constexpr ui64 MAX_BATCH_ROWS = 10'000; 
-constexpr ui64 INIT_BATCH_ROWS = 1'000; 
-constexpr ui64 MIN_BATCH_ROWS_ON_PAGEFAULT = 1'000; 
-constexpr ui64 MIN_BATCH_SIZE_ON_PAGEFAULT = 256_KB; 
-constexpr ui64 READAHEAD_LO = 32_KB; 
-constexpr ui64 READAHEAD_HI = 512_KB; 
-constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10); 
-constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5); 
- 
+
+// using namespace NTabletFlatExecutor;
+using namespace NKqp;
+using namespace NMiniKQL;
+
+constexpr ui64 MAX_BATCH_ROWS = 10'000;
+constexpr ui64 INIT_BATCH_ROWS = 1'000;
+constexpr ui64 MIN_BATCH_ROWS_ON_PAGEFAULT = 1'000;
+constexpr ui64 MIN_BATCH_SIZE_ON_PAGEFAULT = 256_KB;
+constexpr ui64 READAHEAD_LO = 32_KB;
+constexpr ui64 READAHEAD_HI = 512_KB;
+constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
+constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
+
 class TKqpScanResult : public IDestructable {};
- 
-class TKqpScan : public TActor<TKqpScan>, public NTable::IScan { 
-public: 
+
+class TKqpScan : public TActor<TKqpScan>, public NTable::IScan {
+public:
     static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_TABLE_SCAN; 
-    } 
- 
-public: 
-    TKqpScan(const TActorId& computeActorId, const TActorId& datashardActorId, ui32 scanId, 
+        return NKikimrServices::TActivity::KQP_TABLE_SCAN;
+    }
+
+public:
+    TKqpScan(const TActorId& computeActorId, const TActorId& datashardActorId, ui32 scanId,
         NDataShard::TUserTable::TCPtr tableInfo, const TSmallVec<TSerializedTableRange>&& tableRanges,
         const TSmallVec<NTable::TTag>&& columnTags, const TSmallVec<bool>&& skipNullKeys,
         const NYql::NDqProto::EDqStatsMode& statsMode, ui64 timeoutMs, ui32 generation,
         NKikimrTxDataShard::EScanDataFormat dataFormat)
-        : TActor(&TKqpScan::StateScan) 
-        , ComputeActorId(computeActorId) 
-        , DatashardActorId(datashardActorId) 
-        , ScanId(scanId) 
-        , TableInfo(tableInfo) 
+        : TActor(&TKqpScan::StateScan)
+        , ComputeActorId(computeActorId)
+        , DatashardActorId(datashardActorId)
+        , ScanId(scanId)
+        , TableInfo(tableInfo)
         , TablePath(TableInfo->Path)
         , TableRanges(std::move(tableRanges))
         , CurrentRange(0)
         , Tags(std::move(columnTags))
         , SkipNullKeys(std::move(skipNullKeys))
-        , StatsMode(statsMode) 
-        , Deadline(TInstant::Now() + (timeoutMs ? TDuration::MilliSeconds(timeoutMs) + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT)) 
+        , StatsMode(statsMode)
+        , Deadline(TInstant::Now() + (timeoutMs ? TDuration::MilliSeconds(timeoutMs) + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
         , Generation(generation)
         , DataFormat(dataFormat)
-        , PeerFreeSpace(0) 
-        , Sleep(true) 
-        , IsLocal(computeActorId.NodeId() == datashardActorId.NodeId()) 
+        , PeerFreeSpace(0)
+        , Sleep(true)
+        , IsLocal(computeActorId.NodeId() == datashardActorId.NodeId())
     {
         if (DataFormat == NKikimrTxDataShard::EScanDataFormat::ARROW) {
             BatchBuilder = MakeHolder<NArrow::TArrowBatchBuilder>();
@@ -79,141 +79,141 @@ public:
                 << DebugPrintRange(TableInfo->KeyColumnTypes, range.ToTableRange(), *AppData()->TypeRegistry));
         }
     }
- 
-private: 
-    STATEFN(StateScan) { 
-        switch (ev->GetTypeRewrite()) { 
-            hFunc(TEvKqpCompute::TEvScanDataAck, HandleScan); 
+
+private:
+    STATEFN(StateScan) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(TEvKqpCompute::TEvKillScanTablet, HandleScan);
-            hFunc(TEvKqp::TEvAbortExecution, HandleScan); 
-            hFunc(TEvents::TEvUndelivered, HandleScan); 
-            hFunc(TEvents::TEvWakeup, HandleScan); 
-            default: 
-                Y_FAIL("TKqpScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite()); 
-        } 
-    } 
- 
-    void HandleScan(TEvKqpCompute::TEvScanDataAck::TPtr& ev) { 
-        if (!Driver) { 
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got ScanDataAck while driver not set"); 
-            PassAway(); 
-            return; 
-        } 
- 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got ScanDataAck" 
+            hFunc(TEvKqp::TEvAbortExecution, HandleScan);
+            hFunc(TEvents::TEvUndelivered, HandleScan);
+            hFunc(TEvents::TEvWakeup, HandleScan);
+            default:
+                Y_FAIL("TKqpScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+        }
+    }
+
+    void HandleScan(TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
+        if (!Driver) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got ScanDataAck while driver not set");
+            PassAway();
+            return;
+        }
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got ScanDataAck"
             << ", at: " << ScanActorId << ", scanId: " << ScanId << ", table: " << TablePath
             << ", gen: " << ev->Get()->Generation << ", tablet: " << DatashardActorId
-            << ", freeSpace: " << ev->Get()->FreeSpace << ", prevFreeSpace: " << PeerFreeSpace); 
- 
+            << ", freeSpace: " << ev->Get()->FreeSpace << ", prevFreeSpace: " << PeerFreeSpace);
+
         YQL_ENSURE(ev->Get()->Generation == Generation, "expected: " << Generation << ", got: " << ev->Get()->Generation);
 
-        if (!ComputeActorId) { 
-            ComputeActorId = ev->Sender; 
-        } 
- 
-        PeerFreeSpace = ev->Get()->FreeSpace; 
-        if (PeerFreeSpace > 0) { 
-            if (Y_UNLIKELY(IsProfile())) { 
+        if (!ComputeActorId) {
+            ComputeActorId = ev->Sender;
+        }
+
+        PeerFreeSpace = ev->Get()->FreeSpace;
+        if (PeerFreeSpace > 0) {
+            if (Y_UNLIKELY(IsProfile())) {
                 StartWaitTime = TInstant::Now();
-            } 
-            if (Sleep) { 
-                Sleep = false; 
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Wakeup driver at: " << ScanActorId); 
-                Driver->Touch(EScan::Feed); 
-            } 
-        } 
-    } 
- 
+            }
+            if (Sleep) {
+                Sleep = false;
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Wakeup driver at: " << ScanActorId);
+                Driver->Touch(EScan::Feed);
+            }
+        }
+    }
+
     void HandleScan(TEvKqpCompute::TEvKillScanTablet::TPtr&) {
         LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Kill self tablet " << DatashardActorId);
         Send(DatashardActorId, new TEvents::TEvPoison);
     }
 
-    void HandleScan(TEvKqp::TEvAbortExecution::TPtr& ev) { 
-        if (!Driver) { 
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got AbortExecution while driver not set"); 
-            PassAway(); 
-            return; 
-        } 
- 
-        auto& msg = ev->Get()->Record; 
- 
-        auto prio = msg.GetStatusCode() == Ydb::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN; 
-        LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Got AbortExecution" 
+    void HandleScan(TEvKqp::TEvAbortExecution::TPtr& ev) {
+        if (!Driver) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got AbortExecution while driver not set");
+            PassAway();
+            return;
+        }
+
+        auto& msg = ev->Get()->Record;
+
+        auto prio = msg.GetStatusCode() == Ydb::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
+        LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Got AbortExecution"
             << ", at: " << ScanActorId << ", tablet: " << DatashardActorId
-            << ", scanId: " << ScanId << ", table: " << TablePath 
-            << ", code: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode()) 
-            << ", reason: " << msg.GetMessage()); 
- 
+            << ", scanId: " << ScanId << ", table: " << TablePath
+            << ", code: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode())
+            << ", reason: " << msg.GetMessage());
+
         AbortEvent = ev->Release();
-        Driver->Touch(EScan::Final); 
-    } 
- 
-    void HandleScan(TEvents::TEvUndelivered::TPtr& ev) { 
-        if (!Driver) { 
-            PassAway(); 
-            return; 
-        } 
- 
+        Driver->Touch(EScan::Final);
+    }
+
+    void HandleScan(TEvents::TEvUndelivered::TPtr& ev) {
+        if (!Driver) {
+            PassAway();
+            return;
+        }
+
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Undelivered event: " << ev->GetTypeRewrite()
             << ", at: " << ScanActorId << ", tablet: " << DatashardActorId
-            << ", scanId: " << ScanId << ", table: " << TablePath); 
- 
-        switch (ev->GetTypeRewrite()) { 
+            << ", scanId: " << ScanId << ", table: " << TablePath);
+
+        switch (ev->GetTypeRewrite()) {
             case TEvKqpCompute::TEvScanInitActor::EventType:
             case TEvKqpCompute::TEvScanData::EventType:
-                Driver->Touch(EScan::Final); 
-        } 
-    } 
- 
-    void HandleScan(TEvents::TEvWakeup::TPtr&) { 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Guard execution timeout at: " << ScanActorId 
-            << ", scanId: " << ScanId << ", table: " << TablePath); 
- 
-        TimeoutActorId = {}; 
- 
-        if (Driver) { 
-            Driver->Touch(EScan::Final); 
-        } else { 
-            PassAway(); 
-        } 
-    } 
- 
-private: 
+                Driver->Touch(EScan::Final);
+        }
+    }
+
+    void HandleScan(TEvents::TEvWakeup::TPtr&) {
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Guard execution timeout at: " << ScanActorId
+            << ", scanId: " << ScanId << ", table: " << TablePath);
+
+        TimeoutActorId = {};
+
+        if (Driver) {
+            Driver->Touch(EScan::Final);
+        } else {
+            PassAway();
+        }
+    }
+
+private:
     THello Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept final {
-        Y_VERIFY(scheme); 
-        Y_VERIFY(driver); 
- 
-        Driver = driver; 
-        ScanActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(this); 
- 
-        // propagate self actor id 
+        Y_VERIFY(scheme);
+        Y_VERIFY(driver);
+
+        Driver = driver;
+        ScanActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
+
+        // propagate self actor id
         Send(ComputeActorId, new TEvKqpCompute::TEvScanInitActor(ScanId, ScanActorId, Generation),
              IEventHandle::FlagTrackDelivery);
- 
-        Sleep = true; 
- 
-        THello startConfig; 
-        startConfig.Scan = EScan::Sleep; 
-        startConfig.Conf.ReadAheadLo = READAHEAD_LO; 
-        startConfig.Conf.ReadAheadHi = READAHEAD_HI; 
- 
-        TimeoutActorId = CreateLongTimer(TlsActivationContext->AsActorContext(), Deadline - TInstant::Now(), 
-            new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup)); 
- 
-        if (Y_UNLIKELY(IsProfile())) { 
+
+        Sleep = true;
+
+        THello startConfig;
+        startConfig.Scan = EScan::Sleep;
+        startConfig.Conf.ReadAheadLo = READAHEAD_LO;
+        startConfig.Conf.ReadAheadHi = READAHEAD_HI;
+
+        TimeoutActorId = CreateLongTimer(TlsActivationContext->AsActorContext(), Deadline - TInstant::Now(),
+            new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup));
+
+        if (Y_UNLIKELY(IsProfile())) {
             StartWaitTime = TInstant::Now();
-        } 
- 
+        }
+
         LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Start scan"
             << ", at: " << ScanActorId << ", tablet: " << DatashardActorId
             << ", scanId: " << ScanId << ", table: " << TablePath << ", gen: " << Generation
-            << ", deadline: " << Deadline); 
- 
-        return startConfig; 
-    } 
- 
-    EScan Seek(TLead& lead, ui64 seq) noexcept final { 
+            << ", deadline: " << Deadline);
+
+        return startConfig;
+    }
+
+    EScan Seek(TLead& lead, ui64 seq) noexcept final {
         YQL_ENSURE(seq == CurrentRange);
 
         if (CurrentRange == TableRanges.size()) {
@@ -221,80 +221,80 @@ private:
                 "TableRanges is over"
                 << ", at: " << ScanActorId << ", scanId: " << ScanId
                 << ", table: " << TablePath);
-            return EScan::Final; 
-        } 
- 
+            return EScan::Final;
+        }
+
         auto& range = TableRanges[CurrentRange];
 
-        int cmpFrom; 
-        int cmpTo; 
-        cmpFrom = CompareBorders<false, false>( 
+        int cmpFrom;
+        int cmpTo;
+        cmpFrom = CompareBorders<false, false>(
             range.From.GetCells(),
             TableInfo->Range.From.GetCells(),
             range.FromInclusive,
             TableInfo->Range.FromInclusive,
             TableInfo->KeyColumnTypes);
- 
-        cmpTo = CompareBorders<true, true>( 
+
+        cmpTo = CompareBorders<true, true>(
             range.To.GetCells(),
             TableInfo->Range.To.GetCells(),
             range.ToInclusive,
             TableInfo->Range.ToInclusive,
             TableInfo->KeyColumnTypes);
- 
-        if (cmpFrom > 0) { 
+
+        if (cmpFrom > 0) {
             auto seek = range.FromInclusive ? NTable::ESeek::Lower : NTable::ESeek::Upper;
             lead.To(Tags, range.From.GetCells(), seek);
-        } else { 
-            lead.To(Tags, {}, NTable::ESeek::Lower); 
-        } 
- 
+        } else {
+            lead.To(Tags, {}, NTable::ESeek::Lower);
+        }
+
         if (cmpTo < 0) {
             lead.Until(range.To.GetCells(), range.ToInclusive);
         }
 
-        return EScan::Feed; 
-    } 
- 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final { 
-        LastKey = TOwnedCellVec(key); 
- 
-        Y_VERIFY(SkipNullKeys.size() <= key.size()); 
-        for (ui32 i = 0; i < SkipNullKeys.size(); ++i) { 
-            if (SkipNullKeys[i] && key[i].IsNull()) { 
-                return EScan::Feed; 
-            } 
-        } 
- 
+        return EScan::Feed;
+    }
+
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+        LastKey = TOwnedCellVec(key);
+
+        Y_VERIFY(SkipNullKeys.size() <= key.size());
+        for (ui32 i = 0; i < SkipNullKeys.size(); ++i) {
+            if (SkipNullKeys[i] && key[i].IsNull()) {
+                return EScan::Feed;
+            }
+        }
+
         MakeResult();
- 
-        if (Y_UNLIKELY(IsProfile())) { 
-            Result->WaitTime += TInstant::Now() - StartWaitTime; 
-        } 
- 
-        Y_DEFER { 
-            if (Y_UNLIKELY(IsProfile())) { 
-                StartWaitTime = TInstant::Now(); 
-            } 
-        }; 
- 
+
+        if (Y_UNLIKELY(IsProfile())) {
+            Result->WaitTime += TInstant::Now() - StartWaitTime;
+        }
+
+        Y_DEFER {
+            if (Y_UNLIKELY(IsProfile())) {
+                StartWaitTime = TInstant::Now();
+            }
+        };
+
         AddRow(row);
- 
-        auto sent = SendResult(/* pageFault */ false); 
- 
+
+        auto sent = SendResult(/* pageFault */ false);
+
         if (!sent) {
             // There is free space in memory and results are not sent to caller
             return EScan::Feed;
         }
- 
+
         if (PeerFreeSpace <= 0) {
-            Sleep = true; 
-            return EScan::Sleep; 
-        } 
- 
+            Sleep = true;
+            return EScan::Sleep;
+        }
+
         return EScan::Feed; // sent by rows limit, can send one more batch
-    } 
- 
+    }
+
     EScan Exhausted() noexcept override {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
             "Range " << CurrentRange << " of " << TableRanges.size() << " exhausted: try next one."
@@ -311,34 +311,34 @@ private:
         return EScan::Reset;
     }
 
-    EScan PageFault() noexcept override final { 
-        ++PageFaults; 
-        if (Result && !Result->Rows.empty()) { 
-            bool sent = SendResult(/* pageFault */ true); 
- 
-            if (sent && PeerFreeSpace == 0) { 
-                Sleep = true; 
-                return EScan::Sleep; 
-            } 
- 
-            if (sent && PeerFreeSpace > 0 && Y_UNLIKELY(IsProfile())) { 
+    EScan PageFault() noexcept override final {
+        ++PageFaults;
+        if (Result && !Result->Rows.empty()) {
+            bool sent = SendResult(/* pageFault */ true);
+
+            if (sent && PeerFreeSpace == 0) {
+                Sleep = true;
+                return EScan::Sleep;
+            }
+
+            if (sent && PeerFreeSpace > 0 && Y_UNLIKELY(IsProfile())) {
                 StartWaitTime = TInstant::Now();
-            } 
-        } 
-        return EScan::Feed; 
-    } 
- 
-private: 
+            }
+        }
+        return EScan::Feed;
+    }
+
+private:
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
-        auto prio = abort == EAbort::None ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR; 
-        LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Finish scan" 
-            << ", at: " << ScanActorId << ", scanId: " << ScanId 
+        auto prio = abort == EAbort::None ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
+        LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Finish scan"
+            << ", at: " << ScanActorId << ", scanId: " << ScanId
             << ", table: " << TablePath << ", reason: " << (int) abort
             << ", abortEvent: " << (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>")));
- 
+
         if (abort != EAbort::None || AbortEvent) {
             auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(Generation);
- 
+
             if (AbortEvent) {
                 ev->Record.SetStatus(AbortEvent->Record.GetStatusCode());
                 auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED, TStringBuilder()
@@ -352,30 +352,30 @@ private:
             }
 
             Send(ComputeActorId, ev.Release());
-        } else { 
-            if (Result) { 
+        } else {
+            if (Result) {
                 // TODO:
                 // Result->CpuTime = CpuTime;
-            } else { 
+            } else {
                 Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, Generation);
-            } 
+            }
             auto send = SendResult(Result->PageFault, true);
             Y_VERIFY_DEBUG(send);
-        } 
- 
-        Driver = nullptr; 
-        if (TimeoutActorId) { 
-            Send(TimeoutActorId, new TEvents::TEvPoison); 
-        } 
-        PassAway(); 
- 
-        return new TKqpScanResult(); 
-    } 
- 
-    void Describe(IOutputStream& out) const noexcept final { 
-        out << "TExecuteKqpScanTxUnit, TKqpScan"; 
-    } 
- 
+        }
+
+        Driver = nullptr;
+        if (TimeoutActorId) {
+            Send(TimeoutActorId, new TEvents::TEvPoison);
+        }
+        PassAway();
+
+        return new TKqpScanResult();
+    }
+
+    void Describe(IOutputStream& out) const noexcept final {
+        out << "TExecuteKqpScanTxUnit, TKqpScan";
+    }
+
     void MakeResult() {
         if (!Result) {
             Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, Generation);
@@ -419,16 +419,16 @@ private:
     bool SendResult(bool pageFault, bool finish = false) noexcept {
         if (Rows >= MAX_BATCH_ROWS || CellvecBytes >= PeerFreeSpace ||
             (pageFault && (Rows >= MIN_BATCH_ROWS_ON_PAGEFAULT || CellvecBytes >= MIN_BATCH_SIZE_ON_PAGEFAULT)) || finish)
-        { 
-            Result->PageFault = pageFault; 
-            Result->PageFaults = PageFaults; 
+        {
+            Result->PageFault = pageFault;
+            Result->PageFaults = PageFaults;
             if (finish) {
                 Result->Finished = true;
             } else {
                 Result->LastKey = LastKey;
             }
             auto sendBytes = CellvecBytes;
- 
+
             if (DataFormat == NKikimrTxDataShard::EScanDataFormat::ARROW) {
                 FlushBatchToResult();
                 sendBytes = NArrow::GetBatchDataSize(Result->ArrowBatch);
@@ -438,20 +438,20 @@ private:
                 YQL_ENSURE(Result->Rows.size() == Rows);
             }
 
-            PageFaults = 0; 
- 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send ScanData" 
-                << ", from: " << ScanActorId << ", to: " << ComputeActorId 
-                << ", scanId: " << ScanId << ", table: " << TablePath 
+            PageFaults = 0;
+
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send ScanData"
+                << ", from: " << ScanActorId << ", to: " << ComputeActorId
+                << ", scanId: " << ScanId << ", table: " << TablePath
                 << ", bytes: " << sendBytes << ", rows: " << Rows << ", page faults: " << Result->PageFaults
-                << ", finished: " << Result->Finished << ", pageFault: " << Result->PageFault); 
- 
+                << ", finished: " << Result->Finished << ", pageFault: " << Result->PageFault);
+
             if (PeerFreeSpace < sendBytes) {
-                PeerFreeSpace = 0; 
-            } else { 
+                PeerFreeSpace = 0;
+            } else {
                 PeerFreeSpace -= sendBytes;
-            } 
- 
+            }
+
             if (sendBytes >= 48_MB) {
                 LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Query size limit exceeded.");
                 if (finish) {
@@ -471,14 +471,14 @@ private:
                 }
             }
 
-            Send(ComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery); 
-            ReportDatashardStats(); 
- 
-            return true; 
-        } 
-        return false; 
-    } 
- 
+            Send(ComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);
+            ReportDatashardStats();
+
+            return true;
+        }
+        return false;
+    }
+
     // Call only after MakeResult method.
     void FlushBatchToResult() {
         // FlushBatch reset Batch pointer in BatchBuilder only if some rows were added after. So we if we have already
@@ -489,107 +489,107 @@ private:
         }
     }
 
-    void ReportDatashardStats() { 
+    void ReportDatashardStats() {
         Send(DatashardActorId, new TDataShard::TEvPrivate::TEvScanStats(Rows, CellvecBytes));
-        Rows = 0; 
+        Rows = 0;
         CellvecBytes = 0;
-    } 
- 
-    bool IsProfile() const { 
+    }
+
+    bool IsProfile() const {
         return StatsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
-    } 
- 
-private: 
-    TActorId ComputeActorId; 
-    const TActorId DatashardActorId; 
-    const ui32 ScanId; 
+    }
+
+private:
+    TActorId ComputeActorId;
+    const TActorId DatashardActorId;
+    const ui32 ScanId;
     const NDataShard::TUserTable::TCPtr TableInfo;
-    const TString TablePath; 
+    const TString TablePath;
     const TSmallVec<TSerializedTableRange> TableRanges;
     ui32 CurrentRange;
-    const TSmallVec<NTable::TTag> Tags; 
+    const TSmallVec<NTable::TTag> Tags;
     TSmallVec<NScheme::TTypeId> Types;
-    const TSmallVec<bool> SkipNullKeys; 
+    const TSmallVec<bool> SkipNullKeys;
     const NYql::NDqProto::EDqStatsMode StatsMode;
-    const TInstant Deadline; 
+    const TInstant Deadline;
     const ui32 Generation;
     const NKikimrTxDataShard::EScanDataFormat DataFormat;
-    ui64 PeerFreeSpace = 0; 
-    bool Sleep; 
-    const bool IsLocal; 
- 
-    IDriver* Driver = nullptr; 
-    TActorId ScanActorId; 
-    TActorId TimeoutActorId; 
+    ui64 PeerFreeSpace = 0;
+    bool Sleep;
+    const bool IsLocal;
+
+    IDriver* Driver = nullptr;
+    TActorId ScanActorId;
+    TActorId TimeoutActorId;
     TAutoPtr<TEvKqp::TEvAbortExecution> AbortEvent;
- 
+
     THolder<NArrow::TArrowBatchBuilder> BatchBuilder;
-    THolder<TEvKqpCompute::TEvScanData> Result; 
-    ui64 Rows = 0; 
+    THolder<TEvKqpCompute::TEvScanData> Result;
+    ui64 Rows = 0;
     ui64 CellvecBytes = 0;
-    ui32 PageFaults = 0; 
-    TInstant StartWaitTime; 
- 
-    // Key corresponding to the latest row added to RowsBuffer. Used to avoid row duplication on 
-    // scan restarts. 
-    TOwnedCellVec LastKey; 
-}; 
- 
+    ui32 PageFaults = 0;
+    TInstant StartWaitTime;
+
+    // Key corresponding to the latest row added to RowsBuffer. Used to avoid row duplication on
+    // scan restarts.
+    TOwnedCellVec LastKey;
+};
+
 void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&) {
-    auto& request = ev->Get()->Record; 
-    auto scanComputeActor = ev->Sender; 
+    auto& request = ev->Get()->Record;
+    auto scanComputeActor = ev->Sender;
     auto generation = request.GetGeneration();
- 
-    auto infoIt = TableInfos.find(request.GetLocalPathId()); 
- 
+
+    auto infoIt = TableInfos.find(request.GetLocalPathId());
+
     auto reportError = [this, scanComputeActor, generation] (const TString& table, const TString& detailedReason) {
         auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation);
-        ev->Record.SetStatus(Ydb::StatusIds::ABORTED); 
+        ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() <<
             "Table '" << table << "' scheme changed.");
-        IssueToMessage(issue, ev->Record.MutableIssues()->Add()); 
-        Send(scanComputeActor, ev.Release(), IEventHandle::FlagTrackDelivery); 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, detailedReason); 
-    }; 
- 
-    if (infoIt == TableInfos.end()) { 
-        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "." 
-            << " Can not find table '" << request.GetTablePath() << "'" 
-            << " by LocalPathId " << request.GetLocalPathId() << " at " << TabletID()); 
-        return; 
-    } 
- 
+        IssueToMessage(issue, ev->Record.MutableIssues()->Add());
+        Send(scanComputeActor, ev.Release(), IEventHandle::FlagTrackDelivery);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, detailedReason);
+    };
+
+    if (infoIt == TableInfos.end()) {
+        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+            << " Can not find table '" << request.GetTablePath() << "'"
+            << " by LocalPathId " << request.GetLocalPathId() << " at " << TabletID());
+        return;
+    }
+
     auto tableInfo = infoIt->second; // copy table info ptr here
     auto& tableColumns = tableInfo->Columns;
-    Y_VERIFY(request.GetColumnTags().size() == request.GetColumnTypes().size()); 
- 
+    Y_VERIFY(request.GetColumnTags().size() == request.GetColumnTypes().size());
+
     if (tableInfo->GetTableSchemaVersion() != 0 &&
         request.GetSchemaVersion() != tableInfo->GetTableSchemaVersion())
-    { 
-        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "." 
-            << " Table '" << request.GetTablePath() << "'" 
-            << " schema version changed at " << TabletID()); 
-        return; 
-    } 
- 
- 
-    for (int i = 0; i < request.GetColumnTags().size(); ++i) { 
-        auto* column = tableColumns.FindPtr(request.GetColumnTags(i)); 
-        if (!column) { 
-            reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "." 
-                << " Cant find table '" << request.GetTablePath() << "'" 
-                << " column " << request.GetColumnTags(i)  << " at " << TabletID()); 
-            return; 
-        } 
- 
-        if (column->Type != request.GetColumnTypes(i)) { 
-            reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "." 
-                << " Table '" << request.GetTablePath() << "'" 
-                << " column " << request.GetColumnTags(i)  << " type mismatch at " << TabletID()); 
-            return; 
-        } 
-    } 
- 
+    {
+        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+            << " Table '" << request.GetTablePath() << "'"
+            << " schema version changed at " << TabletID());
+        return;
+    }
+
+
+    for (int i = 0; i < request.GetColumnTags().size(); ++i) {
+        auto* column = tableColumns.FindPtr(request.GetColumnTags(i));
+        if (!column) {
+            reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+                << " Cant find table '" << request.GetTablePath() << "'"
+                << " column " << request.GetColumnTags(i)  << " at " << TabletID());
+            return;
+        }
+
+        if (column->Type != request.GetColumnTypes(i)) {
+            reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+                << " Table '" << request.GetTablePath() << "'"
+                << " column " << request.GetColumnTags(i)  << " type mismatch at " << TabletID());
+            return;
+        }
+    }
+
     if (request.HasOlapProgram()) {
         auto msg = TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Unexpected process program in datashard scan at " << TabletID();
@@ -603,8 +603,8 @@ void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&
         return;
     }
 
-    auto& snapshot = request.GetSnapshot(); 
- 
+    auto& snapshot = request.GetSnapshot();
+
     auto snapshotKey = TSnapshotKey(PathOwnerId, request.GetLocalPathId(), snapshot.GetStep(), snapshot.GetTxId());
     if (!SnapshotManager.FindAvailable(snapshotKey)) {
         reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
@@ -612,8 +612,8 @@ void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&
         return;
     }
 
-    Pipeline.StartStreamingTx(snapshot.GetTxId(), 1); 
- 
+    Pipeline.StartStreamingTx(snapshot.GetTxId(), 1);
+
     TSmallVec<TSerializedTableRange> ranges;
     ranges.reserve(request.RangesSize());
 
@@ -621,28 +621,28 @@ void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&
         ranges.emplace_back(std::move(TSerializedTableRange(range)));
     }
 
-    auto* tableScan = new TKqpScan( 
-        scanComputeActor, 
-        SelfId(), 
-        request.GetScanId(), 
-        tableInfo, 
+    auto* tableScan = new TKqpScan(
+        scanComputeActor,
+        SelfId(),
+        request.GetScanId(),
+        tableInfo,
         std::move(ranges),
         std::move(TSmallVec<NTable::TTag>(request.GetColumnTags().begin(), request.GetColumnTags().end())),
         std::move(TSmallVec<bool>(request.GetSkipNullKeys().begin(), request.GetSkipNullKeys().end())),
-        request.GetStatsMode(), 
+        request.GetStatsMode(),
         request.GetTimeoutMs(),
         generation,
         request.GetDataFormat()
-    ); 
- 
-    auto scanOptions = TScanOptions() 
-        .DisableResourceBroker() 
-        .SetReadPrio(TScanOptions::EReadPrio::Low) 
-        .SetReadAhead(READAHEAD_LO, READAHEAD_HI) 
-        .SetSnapshotRowVersion(TRowVersion(snapshot.GetStep(), snapshot.GetTxId())); 
- 
+    );
+
+    auto scanOptions = TScanOptions()
+        .DisableResourceBroker()
+        .SetReadPrio(TScanOptions::EReadPrio::Low)
+        .SetReadAhead(READAHEAD_LO, READAHEAD_HI)
+        .SetSnapshotRowVersion(TRowVersion(snapshot.GetStep(), snapshot.GetTxId()));
+
     Executor()->QueueScan(tableInfo->LocalTid, tableScan, snapshot.GetTxId(), scanOptions);
-} 
- 
-} 
-} 
+}
+
+}
+}

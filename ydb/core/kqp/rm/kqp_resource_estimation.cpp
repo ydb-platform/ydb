@@ -5,8 +5,8 @@ namespace NKikimr::NKqp {
 using namespace NYql::NDqProto;
 using namespace NKikimrConfig;
 
-TTaskResourceEstimation EstimateTaskResources(const TDqTask& task, int nScans, ui32 dsOnNodeCount, 
-    const TTableServiceConfig::TResourceManager& config) 
+TTaskResourceEstimation EstimateTaskResources(const TDqTask& task, int nScans, ui32 dsOnNodeCount,
+    const TTableServiceConfig::TResourceManager& config)
 {
     TTaskResourceEstimation ret;
     EstimateTaskResources(task, nScans, dsOnNodeCount, config, ret);
@@ -18,8 +18,8 @@ void EstimateTaskResources(const TDqTask& task, int nScans, ui32 dsOnNodeCount,
 {
     ret.TaskId = task.GetId();
 
-    if (nScans > 0) { 
-        ret.ScanBuffersCount = nScans; 
+    if (nScans > 0) {
+        ret.ScanBuffersCount = nScans;
         ret.ScanBufferMemoryLimit = config.GetScanBufferSize();
 
         if (dsOnNodeCount && ret.ScanBufferMemoryLimit * dsOnNodeCount > config.GetMaxTotalScanBuffersSize()) {

@@ -27,7 +27,7 @@ typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable,
 
 struct TKqpDatashardComputationMap {
     TKqpDatashardComputationMap() {
-        Map["KqpWideReadTable"] = &WrapKqpWideReadTable; 
+        Map["KqpWideReadTable"] = &WrapKqpWideReadTable;
         Map["KqpWideReadTableRanges"] = &WrapKqpWideReadTableRanges;
         Map["KqpLookupTable"] = &WrapKqpLookupTable;
         Map["KqpUpsertRows"] = &WrapKqpUpsertRows;
@@ -65,7 +65,7 @@ typedef IComputationNode* (*TCallableScanBuilderFunc)(TCallable& callable,
 
 struct TKqpScanComputationMap {
     TKqpScanComputationMap() {
-        Map["KqpWideReadTable"] = &WrapKqpScanWideReadTable; 
+        Map["KqpWideReadTable"] = &WrapKqpScanWideReadTable;
         Map["KqpWideReadTableRanges"] = &WrapKqpScanWideReadTableRanges;
     }
 

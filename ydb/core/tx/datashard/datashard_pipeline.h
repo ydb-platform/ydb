@@ -305,8 +305,8 @@ public:
     void HoldExecutionProfile(TOperation::TPtr op);
     void FillStoredExecutionProfiles(NKikimrTxDataShard::TEvGetSlowOpProfilesResponse &rec) const;
 
-    void StartStreamingTx(ui64 txId, ui32 count) { 
-        ActiveStreamingTxs[txId] += count; 
+    void StartStreamingTx(ui64 txId, ui32 count) {
+        ActiveStreamingTxs[txId] += count;
     }
 
     bool FinishStreamingTx(ui64 txId) {

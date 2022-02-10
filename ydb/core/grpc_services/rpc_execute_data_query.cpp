@@ -171,8 +171,8 @@ public:
 
     static void ConvertQueryStats(const NKikimrKqp::TQueryResponse& from, Ydb::Table::ExecuteQueryResult* to) {
         if (from.HasQueryStats()) {
-            FillQueryStats(*to->mutable_query_stats(), from); 
-            to->mutable_query_stats()->set_query_ast(from.GetQueryAst()); 
+            FillQueryStats(*to->mutable_query_stats(), from);
+            to->mutable_query_stats()->set_query_ast(from.GetQueryAst());
             return;
         }
 

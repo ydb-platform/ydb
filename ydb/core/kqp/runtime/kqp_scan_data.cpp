@@ -445,7 +445,7 @@ TIntrusivePtr<IKqpTableReader> TKqpScanComputeContext::ReadTable(ui32) const {
 
 class TKqpTableReader : public IKqpTableReader {
 public:
-    TKqpTableReader(TKqpScanComputeContext::TScanData& scanData) 
+    TKqpTableReader(TKqpScanComputeContext::TScanData& scanData)
         : ScanData(scanData)
     {}
 
@@ -461,30 +461,30 @@ public:
         return NUdf::EFetchStatus::Ok;
     }
 
-    EFetchResult Next(NUdf::TUnboxedValue* const* result) override { 
+    EFetchResult Next(NUdf::TUnboxedValue* const* result) override {
         if (ScanData.IsEmpty()) {
             if (ScanData.IsFinished()) {
-                return EFetchResult::Finish; 
-            } 
+                return EFetchResult::Finish;
+            }
             return EFetchResult::Yield;
-        } 
- 
+        }
+
         auto row = ScanData.TakeRow();
         for (ui32 i = 0; i < ScanData.GetColumns().size() + ScanData.GetSystemColumns().size(); ++i) {
-            if (result[i]) { 
+            if (result[i]) {
                 *result[i] = std::move(row.GetElement(i));
-            } 
-        } 
- 
-        return EFetchResult::One; 
-    } 
- 
+            }
+        }
+
+        return EFetchResult::One;
+    }
+
 private:
     TKqpScanComputeContext::TScanData& ScanData;
 };
 
-TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData) { 
-    return MakeIntrusive<TKqpTableReader>(scanData); 
+TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData) {
+    return MakeIntrusive<TKqpTableReader>(scanData);
 }
 
 } // namespace NMiniKQL

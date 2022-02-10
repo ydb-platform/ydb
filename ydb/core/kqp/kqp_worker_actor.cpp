@@ -185,8 +185,8 @@ public:
         Gateway = CreateKikimrIcGateway(Settings.Cluster, Settings.Database, std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters, MakeMiniKQLCompileServiceID());
 
-        Config->FeatureFlags = AppData(ctx)->FeatureFlags; 
- 
+        Config->FeatureFlags = AppData(ctx)->FeatureFlags;
+
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver,
             AppData(ctx)->FunctionRegistry, !Settings.LongSession);
 
@@ -284,9 +284,9 @@ public:
         QueryState->RequestActorId = ActorIdFromProto(event.GetRequestActorId());
 
         if (GetStatsMode(queryRequest, EKikimrStatsMode::None) > EKikimrStatsMode::Basic) {
-            QueryState->ReplyFlags |= NKikimrKqp::QUERY_REPLY_FLAG_AST; 
-        } 
- 
+            QueryState->ReplyFlags |= NKikimrKqp::QUERY_REPLY_FLAG_AST;
+        }
+
         if (event.HasRlPath()) {
             QueryState->RlPath = event.GetRlPath();
         }
@@ -342,7 +342,7 @@ public:
 
         switch (queryRequest.GetAction()) {
             case NKikimrKqp::QUERY_ACTION_EXPLAIN:
-            case NKikimrKqp::QUERY_ACTION_PARSE: 
+            case NKikimrKqp::QUERY_ACTION_PARSE:
             case NKikimrKqp::QUERY_ACTION_VALIDATE:
             case NKikimrKqp::QUERY_ACTION_PREPARE:
                 if (QueryState->KeepSession && !Settings.LongSession) {
@@ -773,7 +773,7 @@ private:
                 switch (queryRequest.GetAction()) {
                     case NKikimrKqp::QUERY_ACTION_EXECUTE:
                     case NKikimrKqp::QUERY_ACTION_EXPLAIN:
-                    case NKikimrKqp::QUERY_ACTION_PARSE: 
+                    case NKikimrKqp::QUERY_ACTION_PARSE:
                     case NKikimrKqp::QUERY_ACTION_VALIDATE:
                     case NKikimrKqp::QUERY_ACTION_PREPARE:
                     case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
@@ -1352,19 +1352,19 @@ private:
                 break;
             }
 
-            case NKikimrKqp::QUERY_TYPE_SQL_SCAN: 
-            case NKikimrKqp::QUERY_TYPE_AST_SCAN: { 
-                bool isSql = (type == NKikimrKqp::QUERY_TYPE_SQL_SCAN); 
-                QueryState->AsyncQueryResult = KqpHost->ExplainScanQuery(query, isSql); 
-                break; 
-            } 
- 
+            case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
+            case NKikimrKqp::QUERY_TYPE_AST_SCAN: {
+                bool isSql = (type == NKikimrKqp::QUERY_TYPE_SQL_SCAN);
+                QueryState->AsyncQueryResult = KqpHost->ExplainScanQuery(query, isSql);
+                break;
+            }
+
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
-                QueryState->AsyncQueryResult = KqpHost->ExplainYqlScript(query); 
-                break; 
-            } 
- 
+                QueryState->AsyncQueryResult = KqpHost->ExplainYqlScript(query);
+                break;
+            }
+
             default:
                 QueryState->Error = "Unexpected query type.";
                 return false;
@@ -1729,7 +1729,7 @@ private:
             FillQueryProfile(stats, *record.MutableResponse());
 
             record.MutableResponse()->MutableQueryStats()->Swap(&stats);
-            record.MutableResponse()->SetQueryPlan(queryResult.QueryPlan); 
+            record.MutableResponse()->SetQueryPlan(queryResult.QueryPlan);
         }
 
         AddTrailingInfo(responseEv->Record.GetRef());

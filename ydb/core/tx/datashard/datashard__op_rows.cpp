@@ -92,8 +92,8 @@ static void WrongShardState(NKikimrTxDataShard::TEvEraseRowsResponse& response) 
 template <typename TEvResponse, typename TEvRequest>
 static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, bool isWrite) {
     NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
-    TString rejectReason; 
-    bool reject = self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReason); 
+    TString rejectReason;
+    bool reject = self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReason);
     bool outOfSpace = false;
 
     if (!reject && isWrite) {
@@ -116,7 +116,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
 
     LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Rejecting " << txDesc << " request on datashard"
         << ": tablet# " << self->TabletID()
-        << ", error# " << rejectReason); 
+        << ", error# " << rejectReason);
 
     auto response = MakeHolder<TEvResponse>();
     response->Record.SetTabletID(self->TabletID());
@@ -125,7 +125,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     } else {
         WrongShardState(response->Record);
     }
-    response->Record.SetErrorDescription(rejectReason); 
+    response->Record.SetErrorDescription(rejectReason);
     ctx.Send(ev->Sender, std::move(response));
 
     return true;

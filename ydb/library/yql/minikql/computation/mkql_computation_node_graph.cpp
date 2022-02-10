@@ -714,10 +714,10 @@ public:
                     Cerr << "MaxFunctionInstructions: " << codegenStats.MaxFunctionInstructions << Endl;
                 }
 
-                if (opts.OptLLVM.Contains("--dump-perf-map")) { 
-                    Codegen->TogglePerfJITEventListener(); 
-                } 
- 
+                if (opts.OptLLVM.Contains("--dump-perf-map")) {
+                    Codegen->TogglePerfJITEventListener();
+                }
+
                 if (codegenStats.TotalFunctions >= TotalFunctionsLimit ||
                     codegenStats.TotalInstructions >= TotalInstructionsLimit ||
                     codegenStats.MaxFunctionInstructions >= MaxFunctionInstructionsLimit) {
@@ -782,19 +782,19 @@ public:
         TypeEnv = typeEnv;
     }
 
-    TStringBuf GetCompileOptions(const TString& s) { 
-        const TString flag = "--compile-options"; 
-        auto lpos = s.rfind(flag); 
-        if (lpos == TString::npos) 
-            return TStringBuf(); 
-        lpos += flag.Size(); 
-        auto rpos = s.find(" --", lpos); 
-        if (rpos == TString::npos) 
-            return TStringBuf(s, lpos); 
-        else 
-            return TStringBuf(s, lpos, rpos - lpos); 
-    }; 
- 
+    TStringBuf GetCompileOptions(const TString& s) {
+        const TString flag = "--compile-options";
+        auto lpos = s.rfind(flag);
+        if (lpos == TString::npos)
+            return TStringBuf();
+        lpos += flag.Size();
+        auto rpos = s.find(" --", lpos);
+        if (rpos == TString::npos)
+            return TStringBuf(s, lpos);
+        else
+            return TStringBuf(s, lpos, rpos - lpos);
+    };
+
     THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) final {
         return MakeHolder<TComputationGraph>(PatternNodes, compOpts);
     }

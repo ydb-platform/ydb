@@ -213,7 +213,7 @@ public:
 
         DeferredEffects.Clear();
         ParamsState = MakeIntrusive<TParamsState>();
-        SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot; 
+        SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         ForceNewEngineSettings = {};
     }
 
@@ -255,7 +255,7 @@ public:
     TDeferredEffects DeferredEffects;
     TIntrusivePtr<TParamsState> ParamsState;
 
-    IKqpGateway::TKqpSnapshotHandle SnapshotHandle; 
+    IKqpGateway::TKqpSnapshotHandle SnapshotHandle;
 
     TKqpForceNewEngineState ForceNewEngineSettings;
 };

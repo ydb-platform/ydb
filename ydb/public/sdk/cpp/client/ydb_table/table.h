@@ -891,14 +891,14 @@ struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSetting
     FLUENT_SETTING_DEFAULT(TString, FormatSettings, "");
 };
 
-struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQuerySettings> { 
-    // Return query plan without actual query execution 
-    FLUENT_SETTING_DEFAULT(bool, Explain, false); 
+struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQuerySettings> {
+    // Return query plan without actual query execution
+    FLUENT_SETTING_DEFAULT(bool, Explain, false);
 
-    // Collect runtime statistics with a given detalization mode 
-    FLUENT_SETTING_DEFAULT(ECollectQueryStatsMode, CollectQueryStats, ECollectQueryStatsMode::None); 
-}; 
- 
+    // Collect runtime statistics with a given detalization mode
+    FLUENT_SETTING_DEFAULT(ECollectQueryStatsMode, CollectQueryStats, ECollectQueryStatsMode::None);
+};
+
 class TSession;
 struct TRetryState;
 
@@ -1728,8 +1728,8 @@ public:
 
     const TMaybe<TQueryStats>& GetStats() const;
 
-    const TString GetQueryPlan() const; 
- 
+    const TString GetQueryPlan() const;
+
 private:
     TMaybe<TTransaction> Transaction_;
     TVector<TResultSet> ResultSets_;
@@ -1778,28 +1778,28 @@ public:
     const TResultSet& GetResultSet() const { return *ResultSet_; }
     TResultSet ExtractResultSet() { return std::move(*ResultSet_); }
 
-    bool HasQueryStats() const { return QueryStats_.Defined(); } 
-    const TQueryStats& GetQueryStats() const { return *QueryStats_; } 
-    TQueryStats ExtractQueryStats() { return std::move(*QueryStats_); } 
- 
+    bool HasQueryStats() const { return QueryStats_.Defined(); }
+    const TQueryStats& GetQueryStats() const { return *QueryStats_; }
+    TQueryStats ExtractQueryStats() { return std::move(*QueryStats_); }
+
     TScanQueryPart(TStatus&& status)
         : TStreamPartStatus(std::move(status))
     {}
 
-    TScanQueryPart(TStatus&& status, const TMaybe<TQueryStats> &queryStats) 
+    TScanQueryPart(TStatus&& status, const TMaybe<TQueryStats> &queryStats)
         : TStreamPartStatus(std::move(status))
-        , QueryStats_(queryStats) 
-    {} 
- 
-    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const TMaybe<TQueryStats> &queryStats) 
-        : TStreamPartStatus(std::move(status)) 
+        , QueryStats_(queryStats)
+    {}
+
+    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const TMaybe<TQueryStats> &queryStats)
+        : TStreamPartStatus(std::move(status))
         , ResultSet_(std::move(resultSet))
-        , QueryStats_(queryStats) 
+        , QueryStats_(queryStats)
     {}
 
 private:
     TMaybe<TResultSet> ResultSet_;
-    TMaybe<TQueryStats> QueryStats_; 
+    TMaybe<TQueryStats> QueryStats_;
 };
 
 using TAsyncScanQueryPart = NThreading::TFuture<TScanQueryPart>;

@@ -429,10 +429,10 @@ private:
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev, const TActorContext& ctx) {
-        NYql::TIssues issues; 
-        Ydb::StatusIds::StatusCode status = ev->Get()->Record.GetStatus(); 
-        NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues); 
- 
+        NYql::TIssues issues;
+        Ydb::StatusIds::StatusCode status = ev->Get()->Record.GetStatus();
+        NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+
         ReplyWithError(status, issues, ctx);
     }
 

@@ -31,8 +31,8 @@ class TKqpPlanner : public TActorBootstrapped<TKqpPlanner> {
     };
 
 public:
-    TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NYql::NDqProto::TDqTask>&& tasks, 
-        THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot, 
+    TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NYql::NDqProto::TDqTask>&& tasks,
+        THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& database, const TMaybe<TString>& userToken, TInstant deadline, const NYql::NDqProto::EDqStatsMode& statsMode,
         bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath);
 
@@ -58,8 +58,8 @@ private:
     const ui64 TxId;
     const TActorId ExecuterId;
     TVector<NYql::NDqProto::TDqTask> Tasks;
-    THashMap<ui64, TVector<NYql::NDqProto::TDqTask>> ScanTasks; 
-    const IKqpGateway::TKqpSnapshot Snapshot; 
+    THashMap<ui64, TVector<NYql::NDqProto::TDqTask>> ScanTasks;
+    const IKqpGateway::TKqpSnapshot Snapshot;
     TString Database;
     const TMaybe<TString> UserToken;
     const TInstant Deadline;
@@ -72,7 +72,7 @@ private:
 };
 
 IActor* CreateKqpPlanner(ui64 txId, const TActorId& executer, TVector<NYql::NDqProto::TDqTask>&& tasks,
-    THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot, 
+    THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TMaybe<TString>& userToken, TInstant deadline, const NYql::NDqProto::EDqStatsMode& statsMode,
     bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath);
 

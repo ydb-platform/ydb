@@ -59,16 +59,16 @@ public:
                 EStatus clientStatus = static_cast<EStatus>(self->Response_.status());
                 TPlainStatus plainStatus{clientStatus, std::move(issues), self->Endpoint_, {}};
                 TStatus status{std::move(plainStatus)};
- 
+
                 if (self->Response_.result().has_result_set()) {
                     promise.SetValue({TResultSet(std::move(*self->Response_.mutable_result()->mutable_result_set())),
                                       std::move(status)});
                 } else if (!self->Response_.result().profile().empty()) {
                     promise.SetValue({std::move(*self->Response_.mutable_result()->mutable_profile()),
                                       std::move(status)});
-                } else if (!self->Response_.result().query_plan().Empty()) { 
-                    TMaybe<TString> queryPlan = self->Response_.result().query_plan(); 
-                    promise.SetValue({queryPlan, std::move(status)}); 
+                } else if (!self->Response_.result().query_plan().Empty()) {
+                    TMaybe<TString> queryPlan = self->Response_.result().query_plan();
+                    promise.SetValue({queryPlan, std::move(status)});
                 } else if (self->Response_.result().has_progress()) {
                     // skip, not supported yet
                 } else {
@@ -127,8 +127,8 @@ public:
                 break;
         }
 
-        request.set_explain(settings.Explain_); 
- 
+        request.set_explain(settings.Explain_);
+
         auto promise = NewPromise<std::pair<TPlainStatus, TStreamProcessorPtr>>();
 
         Connections_->StartReadStream<

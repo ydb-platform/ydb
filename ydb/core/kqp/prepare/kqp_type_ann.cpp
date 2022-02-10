@@ -230,7 +230,7 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
     } else {
         YQL_ENSURE(false, "Unexpected ReadTable callable: " << node->Content());
     }
- 
+
     return TStatus::Ok;
 }
 
@@ -1056,8 +1056,8 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqlLookupTableBase::Match(input.Get())) {
                 return AnnotateLookupTable(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
-            } 
- 
+            }
+
             if (TKqlKeyInc::Match(input.Get()) || TKqlKeyExc::Match(input.Get())) {
                 return AnnotateKeyTuple(input, ctx);
             }

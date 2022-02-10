@@ -2074,9 +2074,9 @@ using TNodeSet = std::unordered_set<const TExprNode*>;
 using TNodeOnNodeOwnedMap = TNodeMap<TExprNode::TPtr>;
 using TParentsMap = TNodeMap<TNodeSet>;
 
-using TNodeMultiSet = std::unordered_multiset<const TExprNode*>; 
-using TParentsMultiMap = TNodeMap<TNodeMultiSet>; 
- 
+using TNodeMultiSet = std::unordered_multiset<const TExprNode*>;
+using TParentsMultiMap = TNodeMap<TNodeMultiSet>;
+
 template <>
 struct TMakeTypeImpl<TVoidExprType> {
     static const TVoidExprType* Make(TExprContext& ctx);
@@ -2549,7 +2549,7 @@ bool CompareExprTrees(const TExprNode*& one, const TExprNode*& two);
 bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNodeMap<ui32>& argsMap);
 
 void GatherParents(const TExprNode& node, TParentsMap& parentsMap, bool withLeaves = false);
-void GatherParentsMulti(const TExprNode& node, TParentsMultiMap& parentsMap, bool withLeaves = false); 
+void GatherParentsMulti(const TExprNode& node, TParentsMultiMap& parentsMap, bool withLeaves = false);
 
 struct TConvertToAstSettings {
     ui32 AnnotationFlags = 0;

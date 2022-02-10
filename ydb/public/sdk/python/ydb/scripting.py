@@ -1,6 +1,6 @@
 from ydb.public.api.protos import ydb_scripting_pb2
 from ydb.public.api.grpc import ydb_scripting_v1_pb2_grpc
-from . import issues, convert, settings 
+from . import issues, convert, settings
 
 
 class TypedParameters(object):
@@ -23,21 +23,21 @@ class ScriptingClientSettings(object):
         return self
 
 
-class ExplainYqlScriptSettings(settings.BaseRequestSettings): 
+class ExplainYqlScriptSettings(settings.BaseRequestSettings):
     MODE_UNSPECIFIED = 0
     MODE_PARSE = 1
     MODE_VALIDATE = 2
     MODE_EXPLAIN = 3
- 
-    def __init__(self): 
-        super(ExplainYqlScriptSettings, self).__init__() 
-        self.mode = False 
- 
-    def with_mode(self, val): 
-        self.mode = val 
-        return self 
- 
- 
+
+    def __init__(self):
+        super(ExplainYqlScriptSettings, self).__init__()
+        self.mode = False
+
+    def with_mode(self, val):
+        self.mode = val
+        return self
+
+
 def _execute_yql_query_request_factory(script, tp=None, settings=None):
     params = (
         None
@@ -54,11 +54,11 @@ class YqlQueryResult(object):
         )
 
 
-class YqlExplainResult(object): 
-    def __init__(self, result): 
-        self.plan = result.plan 
- 
- 
+class YqlExplainResult(object):
+    def __init__(self, result):
+        self.plan = result.plan
+
+
 def _wrap_response(rpc_state, response, scripting_client_settings):
     issues._process_response(response.operation)
     message = ydb_scripting_pb2.ExecuteYqlResult()
@@ -66,13 +66,13 @@ def _wrap_response(rpc_state, response, scripting_client_settings):
     return YqlQueryResult(message)
 
 
-def _wrap_explain_response(rpc_state, response): 
-    issues._process_response(response.operation) 
-    message = ydb_scripting_pb2.ExplainYqlResult() 
-    response.operation.result.Unpack(message) 
-    return YqlExplainResult(message) 
- 
- 
+def _wrap_explain_response(rpc_state, response):
+    issues._process_response(response.operation)
+    message = ydb_scripting_pb2.ExplainYqlResult()
+    response.operation.result.Unpack(message)
+    return YqlExplainResult(message)
+
+
 class ScriptingClient(object):
     def __init__(self, driver, scripting_client_settings=None):
         self.driver = driver
@@ -92,12 +92,12 @@ class ScriptingClient(object):
             settings=settings,
             wrap_args=(self.scripting_client_settings,),
         )
- 
-    def explain_yql(self, script, settings=None): 
-        return self.driver( 
-            ydb_scripting_pb2.ExplainYqlRequest(script=script, mode=settings.mode), 
-            ydb_scripting_v1_pb2_grpc.ScriptingServiceStub, 
+
+    def explain_yql(self, script, settings=None):
+        return self.driver(
+            ydb_scripting_pb2.ExplainYqlRequest(script=script, mode=settings.mode),
+            ydb_scripting_v1_pb2_grpc.ScriptingServiceStub,
             "ExplainYql",
-            _wrap_explain_response, 
+            _wrap_explain_response,
             settings=settings,
-        ) 
+        )

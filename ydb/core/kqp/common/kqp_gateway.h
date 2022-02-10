@@ -68,42 +68,42 @@ public:
             , Params(std::move(params)) {}
     };
 
-    struct TKqpSnapshot { 
-        ui64 Step; 
-        ui64 TxId; 
- 
-        constexpr TKqpSnapshot() 
-            : Step(0) 
-            , TxId(0) 
-        {} 
- 
-        TKqpSnapshot(ui64 step, ui64 txId) 
-            : Step(step) 
-            , TxId(txId) 
-        {} 
- 
-        bool IsValid() const { 
-            return Step != 0 || TxId != 0; 
-        } 
- 
-        bool operator ==(const TKqpSnapshot &snapshot) const { 
-            return snapshot.Step == Step && snapshot.TxId == TxId; 
-        } 
- 
-        size_t GetHash() const noexcept { 
-            auto tuple = std::make_tuple(Step, TxId); 
-            return THash<decltype(tuple)>()(tuple); 
-        } 
- 
-        static const TKqpSnapshot InvalidSnapshot; 
-    }; 
- 
-    struct TKqpSnapshotHandle : public IKqpGateway::TGenericResult { 
-        TKqpSnapshot Snapshot; 
-        NActors::TActorId ManagingActor; 
+    struct TKqpSnapshot {
+        ui64 Step;
+        ui64 TxId;
+
+        constexpr TKqpSnapshot()
+            : Step(0)
+            , TxId(0)
+        {}
+
+        TKqpSnapshot(ui64 step, ui64 txId)
+            : Step(step)
+            , TxId(txId)
+        {}
+
+        bool IsValid() const {
+            return Step != 0 || TxId != 0;
+        }
+
+        bool operator ==(const TKqpSnapshot &snapshot) const {
+            return snapshot.Step == Step && snapshot.TxId == TxId;
+        }
+
+        size_t GetHash() const noexcept {
+            auto tuple = std::make_tuple(Step, TxId);
+            return THash<decltype(tuple)>()(tuple);
+        }
+
+        static const TKqpSnapshot InvalidSnapshot;
+    };
+
+    struct TKqpSnapshotHandle : public IKqpGateway::TGenericResult {
+        TKqpSnapshot Snapshot;
+        NActors::TActorId ManagingActor;
         NKikimrIssues::TStatusIds::EStatusCode Status =  NKikimrIssues::TStatusIds::UNKNOWN;
-    }; 
- 
+    };
+
     struct TExecPhysicalRequest : private TMoveOnly {
         TVector<TPhysicalTxData> Transactions;
         TVector<NYql::NDq::TMkqlValueRef> Locks;
@@ -143,12 +143,12 @@ public:
 
     virtual NThreading::TFuture<TMkqlResult> PrepareMkql(const TString& cluster, const TString& program) = 0;
 
-    /* Snapshots */ 
-    virtual NThreading::TFuture<TKqpSnapshotHandle> CreatePersistentSnapshot(const TVector<TString>& tablePaths, 
-        TDuration queryTimeout) = 0; 
- 
-    virtual void DiscardPersistentSnapshot(const TKqpSnapshotHandle& handle) = 0; 
- 
+    /* Snapshots */
+    virtual NThreading::TFuture<TKqpSnapshotHandle> CreatePersistentSnapshot(const TVector<TString>& tablePaths,
+        TDuration queryTimeout) = 0;
+
+    virtual void DiscardPersistentSnapshot(const TKqpSnapshotHandle& handle) = 0;
+
     virtual NThreading::TFuture<TKqpSnapshotHandle> AcquireMvccSnapshot(TDuration queryTimeout) = 0;
 
     /* Physical */
@@ -168,8 +168,8 @@ public:
         TKqpParamsMap&& params, const TAstQuerySettings& settings,
         const Ydb::Table::TransactionSettings& txSettings) = 0;
 
-    virtual NThreading::TFuture<TQueryResult> ExplainScanQueryAst(const TString& cluster, const TString& query) = 0; 
- 
+    virtual NThreading::TFuture<TQueryResult> ExplainScanQueryAst(const TString& cluster, const TString& query) = 0;
+
     virtual NThreading::TFuture<TQueryResult> ExecScanQueryAst(const TString& cluster, const TString& query,
         TKqpParamsMap&& params, const TAstQuerySettings& settings, ui64 rowsLimit) = 0;
 
@@ -186,10 +186,10 @@ public:
 
 } // namespace NKqp
 } // namespace NKikimr
- 
-template<> 
-struct THash<NKikimr::NKqp::IKqpGateway::TKqpSnapshot> { 
-    inline size_t operator()(const NKikimr::NKqp::IKqpGateway::TKqpSnapshot& snapshot) const { 
-        return snapshot.GetHash(); 
-    } 
-}; 
+
+template<>
+struct THash<NKikimr::NKqp::IKqpGateway::TKqpSnapshot> {
+    inline size_t operator()(const NKikimr::NKqp::IKqpGateway::TKqpSnapshot& snapshot) const {
+        return snapshot.GetHash();
+    }
+};

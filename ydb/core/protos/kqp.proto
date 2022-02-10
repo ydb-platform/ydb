@@ -46,7 +46,7 @@ enum EQueryAction {
     QUERY_ACTION_BEGIN_TX = 6;
     QUERY_ACTION_COMMIT_TX = 7;
     QUERY_ACTION_ROLLBACK_TX = 8;
-    QUERY_ACTION_PARSE = 9; 
+    QUERY_ACTION_PARSE = 9;
 };
 
 enum EIsolationLevel {
@@ -386,7 +386,7 @@ message TEvExecuterStreamData {
 message TEvExecuterStreamDataAck {
     optional uint64 SeqNo = 1;
     optional int64 FreeSpace = 2;
-    optional bool Enough = 3 [default = false]; 
+    optional bool Enough = 3 [default = false];
 };
 
 message TEvExecuterStreamProfile {
@@ -525,28 +525,28 @@ message TKqpNodeResources {
     repeated TMemory Memory = 8;
     optional uint32 ExecutionUnits = 9;
 }
- 
+
 /// Scans
-message TEvScanInitActor { 
-    optional uint64 ScanId = 1; 
-    optional NActorsProto.TActorId ScanActorId = 2; 
+message TEvScanInitActor {
+    optional uint64 ScanId = 1;
+    optional NActorsProto.TActorId ScanActorId = 2;
     optional uint32 Generation = 3;
-}; 
- 
-message TEvScanError { 
-    optional Ydb.StatusIds.StatusCode Status = 1; 
-    repeated Ydb.Issue.IssueMessage Issues = 2; 
+};
+
+message TEvScanError {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
     optional uint32 Generation = 3;
-} 
- 
-message TEvRemoteScanData { 
-    optional uint32 ScanId = 1; 
+}
+
+message TEvRemoteScanData {
+    optional uint32 ScanId = 1;
     optional uint64 CpuTimeUs = 2;
-    optional uint64 WaitTimeMs = 3; 
-    optional uint32 PageFaults = 4; 
-    optional bool PageFault = 5; 
-    optional bool Finished = 6; 
-    optional bytes LastKey = 7; 
+    optional uint64 WaitTimeMs = 3;
+    optional uint32 PageFaults = 4;
+    optional bool PageFault = 5;
+    optional bool Finished = 6;
+    optional bytes LastKey = 7;
     optional uint32 Generation = 9;
 
     message TArrowBatch {
@@ -557,14 +557,14 @@ message TEvRemoteScanData {
     // Only one of the fields Rows and ArrowBatch must be filled. However, we can not use oneof feature because Rows
     // field is repeated. Moving it into oneof is impossible. We may wrap it into a message but this would break
     // backwards comparability.
-    repeated bytes Rows = 8; 
+    repeated bytes Rows = 8;
     optional TArrowBatch ArrowBatch = 10;
-} 
- 
-message TEvRemoteScanDataAck { 
-    optional uint64 FreeSpace = 1; 
+}
+
+message TEvRemoteScanDataAck {
+    optional uint64 FreeSpace = 1;
     optional uint32 Generation = 2;
-} 
+}
 
 message TEvKillScanTablet {
 }

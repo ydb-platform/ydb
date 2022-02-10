@@ -1338,94 +1338,94 @@ TExprBase DqRewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptim
         .Done();
 }
 
-TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) { 
-    if (!IsDqPureExpr(node)) { 
-        return node; 
-    } 
- 
-    auto stage = Build<TDqStage>(ctx, node.Pos()) 
-        .Inputs() 
-            .Build() 
-        .Program() 
-            .Args({}) 
-            .Body<TCoToStream>() 
-                .Input(node) 
-                .Build() 
-            .Build() 
+TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
+    if (!IsDqPureExpr(node)) {
+        return node;
+    }
+
+    auto stage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs()
+            .Build()
+        .Program()
+            .Args({})
+            .Body<TCoToStream>()
+                .Input(node)
+                .Build()
+            .Build()
         .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-        .Done(); 
- 
-    return Build<TDqCnUnionAll>(ctx, node.Pos()) 
-        .Output() 
-            .Stage(stage) 
-            .Index().Build("0") 
-            .Build() 
-        .Done(); 
-} 
- 
-/* 
- * Move (Extend ...) into a separate stage. 
- * 
- * If overConnsOnly=true stage will be built only if all arguments have TDqConnection type. 
- * 
- * With overConnsOnly=false non-TDqConnection arguments are left in the same stage. This 
- * is needed for handling UNION ALL case, which generates top-level Extend where some arguments 
- * can be pure expressions not wrapped in DqStage (e.g. ... UNION ALL SELECT 1). 
- */ 
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(stage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
+/*
+ * Move (Extend ...) into a separate stage.
+ *
+ * If overConnsOnly=true stage will be built only if all arguments have TDqConnection type.
+ *
+ * With overConnsOnly=false non-TDqConnection arguments are left in the same stage. This
+ * is needed for handling UNION ALL case, which generates top-level Extend where some arguments
+ * can be pure expressions not wrapped in DqStage (e.g. ... UNION ALL SELECT 1).
+ */
 TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
     if (!node.Maybe<TCoExtendBase>()) {
-        return node; 
-    } 
- 
+        return node;
+    }
+
     auto extend = node.Cast<TCoExtendBase>();
-    TVector<TCoArgument> inputArgs; 
-    TVector<TExprBase> inputConns; 
-    TVector<TExprBase> extendArgs; 
- 
-    for (const auto& arg: extend) { 
-        if (arg.Maybe<TDqConnection>()) { 
-            auto conn = arg.Cast<TDqConnection>(); 
-            TCoArgument programArg = Build<TCoArgument>(ctx, conn.Pos()) 
-                .Name("arg") 
-                .Done(); 
-            inputConns.push_back(conn); 
-            inputArgs.push_back(programArg); 
-            extendArgs.push_back(programArg); 
-        } else if (IsDqPureExpr(arg)) { 
-            // arg is deemed to be a pure expression so leave it inside (Extend ...) 
-            extendArgs.push_back(Build<TCoToFlow>(ctx, arg.Pos()) 
-                .Input(arg) 
-                .Done()); 
-        } else { 
-            return node; 
-        } 
-    } 
- 
-    if (inputConns.empty()) { 
-        return node; 
-    } 
- 
-    auto stage = Build<TDqStage>(ctx, node.Pos()) 
-        .Inputs() 
-            .Add(inputConns) 
-            .Build() 
-        .Program() 
-            .Args(inputArgs) 
-            .Body<TCoExtend>() // TODO: check Extend effectiveness 
-                .Add(extendArgs) 
-                .Build() 
-            .Build() 
+    TVector<TCoArgument> inputArgs;
+    TVector<TExprBase> inputConns;
+    TVector<TExprBase> extendArgs;
+
+    for (const auto& arg: extend) {
+        if (arg.Maybe<TDqConnection>()) {
+            auto conn = arg.Cast<TDqConnection>();
+            TCoArgument programArg = Build<TCoArgument>(ctx, conn.Pos())
+                .Name("arg")
+                .Done();
+            inputConns.push_back(conn);
+            inputArgs.push_back(programArg);
+            extendArgs.push_back(programArg);
+        } else if (IsDqPureExpr(arg)) {
+            // arg is deemed to be a pure expression so leave it inside (Extend ...)
+            extendArgs.push_back(Build<TCoToFlow>(ctx, arg.Pos())
+                .Input(arg)
+                .Done());
+        } else {
+            return node;
+        }
+    }
+
+    if (inputConns.empty()) {
+        return node;
+    }
+
+    auto stage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs()
+            .Add(inputConns)
+            .Build()
+        .Program()
+            .Args(inputArgs)
+            .Body<TCoExtend>() // TODO: check Extend effectiveness
+                .Add(extendArgs)
+                .Build()
+            .Build()
         .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-        .Done(); 
- 
-    return Build<TDqCnUnionAll>(ctx, node.Pos()) 
-        .Output() 
-            .Stage(stage) 
-            .Index().Build("0") 
-            .Build() 
-        .Done(); 
-} 
- 
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(stage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
 /*
  * Precompute input value in a separate stage.
  */

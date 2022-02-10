@@ -46,8 +46,8 @@ public:
         auto tabletResolver = MakeTabletResolverID();
         auto resolveFlags = GetResolveFlags();
 
-        Y_ASSERT(ShardIds.size() > 0); 
- 
+        Y_ASSERT(ShardIds.size() > 0);
+
         for (ui64 tabletId : ShardIds) {
             LOG_T("Send request about tabletId: " << tabletId);
             bool sent = Send(tabletResolver, new TEvTabletResolver::TEvForward(tabletId, nullptr, resolveFlags));

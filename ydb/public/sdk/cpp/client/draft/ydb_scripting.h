@@ -82,21 +82,21 @@ private:
     std::shared_ptr<TReaderImpl> ReaderImpl_;
 };
 
-class TExplainYqlResult : public TStatus { 
-public: 
+class TExplainYqlResult : public TStatus {
+public:
     TExplainYqlResult(TStatus&& status, const ::google::protobuf::Map<TString, Ydb::Type>&& types, TString&& plan);
- 
+
     std::map<TString, TType> GetParameterTypes() const;
-    const TString& GetPlan() const; 
- 
-private: 
+    const TString& GetPlan() const;
+
+private:
     ::google::protobuf::Map<TString, Ydb::Type> ParameterTypes_;
-    TString Plan_; 
-}; 
- 
+    TString Plan_;
+};
+
 using TAsyncExecuteYqlResult = NThreading::TFuture<TExecuteYqlResult>;
 using TAsyncYqlResultPartIterator = NThreading::TFuture<TYqlResultPartIterator>;
-using TAsyncExplainYqlResult = NThreading::TFuture<TExplainYqlResult>; 
+using TAsyncExplainYqlResult = NThreading::TFuture<TExplainYqlResult>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -104,18 +104,18 @@ struct TExecuteYqlRequestSettings : public TOperationRequestSettings<TExecuteYql
     FLUENT_SETTING_DEFAULT(NTable::ECollectQueryStatsMode, CollectQueryStats, NTable::ECollectQueryStatsMode::None);
 };
 
-enum class ExplainYqlRequestMode { 
+enum class ExplainYqlRequestMode {
     // Parse = 1,
-    Validate = 2, 
-    Plan = 3, 
-}; 
- 
-struct TExplainYqlRequestSettings : public TOperationRequestSettings<TExplainYqlRequestSettings> { 
+    Validate = 2,
+    Plan = 3,
+};
+
+struct TExplainYqlRequestSettings : public TOperationRequestSettings<TExplainYqlRequestSettings> {
     FLUENT_SETTING_DEFAULT(ExplainYqlRequestMode, Mode, ExplainYqlRequestMode::Validate);
-}; 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TScriptingClient {
     class TImpl;
 
@@ -143,9 +143,9 @@ public:
     TAsyncYqlResultPartIterator StreamExecuteYqlScript(const TString& script, TParams&& params,
         const TExecuteYqlRequestSettings& settings = TExecuteYqlRequestSettings());
 
-    TAsyncExplainYqlResult ExplainYqlScript(const TString& script, 
-        const TExplainYqlRequestSettings& settings = TExplainYqlRequestSettings()); 
- 
+    TAsyncExplainYqlResult ExplainYqlScript(const TString& script,
+        const TExplainYqlRequestSettings& settings = TExplainYqlRequestSettings());
+
 private:
     std::shared_ptr<TImpl> Impl_;
 };

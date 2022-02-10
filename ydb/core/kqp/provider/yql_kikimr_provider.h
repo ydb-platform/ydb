@@ -81,12 +81,12 @@ struct TKikimrQueryContext : TThrRefBase {
     TKikimrQueryContext& operator=(const TKikimrQueryContext&) = delete;
 
     bool PrepareOnly = false;
- 
-    /* 
-     * Defuse DDL-prohibiting checks when PrepareOnly = true. Used in scripting query explain. 
-     */ 
+
+    /*
+     * Defuse DDL-prohibiting checks when PrepareOnly = true. Used in scripting query explain.
+     */
     bool SuppressDdlChecks = false;
- 
+
     EKikimrStatsMode StatsMode = EKikimrStatsMode::None;
     EKikimrQueryType Type = EKikimrQueryType::Unspecified;
     TKikimrQueryDeadlines Deadlines;

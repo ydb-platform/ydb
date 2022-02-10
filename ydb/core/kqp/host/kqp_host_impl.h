@@ -292,11 +292,11 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpExecuteScanTransformer(TIntrusivePtr<
     const TString& cluster, TIntrusivePtr<TKqpTransactionState> txState,
     TIntrusivePtr<TKqlTransformContext> transformCtx);
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, 
+TAutoPtr<NYql::IGraphTransformer> CreateKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
     TIntrusivePtr<TKqlTransformContext> transformCtx, TIntrusivePtr<TKqpTransactionState> txState);
- 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpReleaseSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, 
-    TIntrusivePtr<TKqpTransactionState> txState); 
- 
+
+TAutoPtr<NYql::IGraphTransformer> CreateKqpReleaseSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
+    TIntrusivePtr<TKqpTransactionState> txState);
+
 } // namespace NKqp
 } // namespace NKikimr

@@ -230,7 +230,7 @@ message TKqpPhyStage {
     uint32 OutputsCount = 5;
     repeated TKqpPhyTableOperation TableOps = 6;
     bool IsEffectsStage = 7;
-    string StageGuid = 8; 
+    string StageGuid = 8;
 }
 
 message TKqpPhyResult {
@@ -252,7 +252,7 @@ message TKqpPhyTx {
     repeated TKqpPhyStage Stages = 2;
     repeated TKqpPhyResult Results = 3;
     repeated TKqpPhyParamBinding ParamBindings = 4;
-    string Plan = 5; 
+    string Plan = 5;
     bool HasEffects = 6; // at least one stage has flag TKqpPhyStage::IsEffectStage set
 }
 
@@ -290,8 +290,8 @@ message TKqpPhyQuery {
     repeated TKqpPhyTx Transactions = 2;
     reserved 3; // Deprecated, (repeated TKqpPhyTx Effects = 3);
     repeated TKqpPhyResultBinding ResultBindings = 4;
-    string QueryPlan = 5; 
-    string QueryAst = 6; 
+    string QueryPlan = 5;
+    string QueryAst = 6;
 
     // StrictDml constraints info
     repeated TKqpTableOp TableOps = 7;

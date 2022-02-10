@@ -337,18 +337,18 @@ public:
     }
 
     void TogglePerfJITEventListener() override {
-#ifdef __linux__ 
-        PerfListener_ = llvm::JITEventListener::createPerfJITEventListener(); 
-        Engine_->RegisterJITEventListener(PerfListener_); 
-#endif 
-    } 
- 
+#ifdef __linux__
+        PerfListener_ = llvm::JITEventListener::createPerfJITEventListener();
+        Engine_->RegisterJITEventListener(PerfListener_);
+#endif
+    }
+
     ~TCodegen() {
-#ifdef __linux__ 
-        if (PerfListener_) { 
-            Engine_->UnregisterJITEventListener(PerfListener_); 
-        } 
-#endif 
+#ifdef __linux__
+        if (PerfListener_) {
+            Engine_->UnregisterJITEventListener(PerfListener_);
+        }
+#endif
         Engine_->UnregisterJITEventListener(this);
     }
 
@@ -404,9 +404,9 @@ public:
 
     void Compile(const TStringBuf compileOpts, TCompileStats* compileStats) override {
 
-        bool dumpTimers = compileOpts.Contains("time-passes"); 
-        bool disableOpt = compileOpts.Contains("disable-opt"); 
- 
+        bool dumpTimers = compileOpts.Contains("time-passes");
+        bool disableOpt = compileOpts.Contains("disable-opt");
+
 #if defined(_msan_enabled_)
         ReverseGlobalMapping_[(const void*)&__emutls_get_address] = "__emutls_get_address";
 #endif
@@ -500,9 +500,9 @@ public:
         if (compileStats) {
             compileStats->ModulePassTime = (Now() - modulePassStart).MilliSeconds();
         }
- 
+
         AllocateTls();
- 
+
         auto finalizeStart = Now();
         Engine_->finalizeObject();
         if (compileStats) {
@@ -729,7 +729,7 @@ private:
     std::string Diagnostic_;
     std::string Triple_;
     llvm::Module* Module_;
-    llvm::JITEventListener* PerfListener_ = nullptr; 
+    llvm::JITEventListener* PerfListener_ = nullptr;
     std::unique_ptr<llvm::ExecutionEngine> Engine_;
     std::vector<std::pair<llvm::object::SectionRef, ui64>> CodeSections_;
     std::vector<std::pair<ui64, llvm::Function*>> SortedFuncs_;

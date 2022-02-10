@@ -11,5 +11,5 @@ service ScriptingService {
     // Executes yql request with streaming result.
     rpc StreamExecuteYql(Scripting.ExecuteYqlRequest) returns (stream Scripting.ExecuteYqlPartialResponse);
 
-    rpc ExplainYql(Scripting.ExplainYqlRequest) returns (Scripting.ExplainYqlResponse); 
+    rpc ExplainYql(Scripting.ExplainYqlRequest) returns (Scripting.ExplainYqlResponse);
 }

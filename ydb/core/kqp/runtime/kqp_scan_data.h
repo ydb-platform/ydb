@@ -10,7 +10,7 @@
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
- 
+
 #include <library/cpp/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -31,7 +31,7 @@ public:
     virtual NUdf::EFetchStatus Next(NUdf::TUnboxedValue& result) = 0;
     virtual EFetchResult Next(NUdf::TUnboxedValue* const* output) = 0;
 };
- 
+
 class TKqpScanComputeContext : public TKqpComputeContextBase {
 public:
     class TScanData {
@@ -54,17 +54,17 @@ public:
         const TSmallVec<TColumn>& GetColumns() const {
             return Columns;
         }
- 
+
         const TSmallVec<TColumn>& GetSystemColumns() const {
             return SystemColumns;
-        } 
+        }
 
         ui64 AddRows(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
 
         ui64 AddRows(const arrow::RecordBatch& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
 
         NUdf::TUnboxedValue TakeRow();
- 
+
         bool IsEmpty() const {
             return RowBatches.empty();
         }
@@ -84,7 +84,7 @@ public:
         void Clear() {
             RowBatches.clear();
         }
- 
+
     public:
         ui64 TaskId = 0;
         TTableId TableId;
@@ -98,7 +98,7 @@ public:
         struct TBasicStats {
             size_t Rows = 0;
             size_t Bytes = 0;
-            ui32 AffectedShards = 0; 
+            ui32 AffectedShards = 0;
         };
 
         struct TProfileStats {
@@ -156,7 +156,7 @@ private:
     TMap<ui32, TScanData> Scans;
 };
 
-TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData); 
+TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

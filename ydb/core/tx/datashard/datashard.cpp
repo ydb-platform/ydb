@@ -1360,11 +1360,11 @@ void TDataShard::Handle(TEvDataShard::TEvStateChangedResult::TPtr& ev, const TAc
 bool TDataShard::CheckDataTxReject(const TString& opDescr,
                                           const TActorContext &ctx,
                                           NKikimrTxDataShard::TEvProposeTransactionResult::EStatus &rejectStatus,
-                                          TString &reason) 
+                                          TString &reason)
 {
     bool reject = false;
     rejectStatus = NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED;
-    TVector<TString> rejectReasons; 
+    TVector<TString> rejectReasons;
 
     // In v0.5 reject all transactions on split Src after receiving EvSplit
     if (State == TShardState::SplitSrcWaitForNoTxInFlight ||
@@ -1372,19 +1372,19 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
         State == TShardState::SplitSrcSendingSnapshot ||
         State == TShardState::SplitSrcWaitForPartitioningChanged) {
         reject = true;
-        rejectReasons.push_back(TStringBuilder() 
-            << "is in process of split opId " << SrcSplitOpId 
-            << " state " << DatashardStateName(State) 
-            << " (wrong shard state)"); 
+        rejectReasons.push_back(TStringBuilder()
+            << "is in process of split opId " << SrcSplitOpId
+            << " state " << DatashardStateName(State)
+            << " (wrong shard state)");
     } else if (State == TShardState::SplitDstReceivingSnapshot) {
         reject = true;
-        rejectReasons.push_back(TStringBuilder() 
-            << "is in process of split opId " << DstSplitOpId 
-            << " state " << DatashardStateName(State)); 
+        rejectReasons.push_back(TStringBuilder()
+            << "is in process of split opId " << DstSplitOpId
+            << " state " << DatashardStateName(State));
     } else if (State == TShardState::PreOffline || State == TShardState::Offline) {
         reject = true;
         rejectStatus = NKikimrTxDataShard::TEvProposeTransactionResult::ERROR;
-        rejectReasons.push_back("is in a pre/offline state assuming this is due to a finished split (wrong shard state)"); 
+        rejectReasons.push_back("is in a pre/offline state assuming this is due to a finished split (wrong shard state)");
     } else if (MvccSwitchState == TSwitchState::SWITCHING) {
         reject = true;
         rejectReasons.push_back(TStringBuilder()
@@ -1394,7 +1394,7 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
 
     if (Pipeline.HasDrop()) {
         reject = true;
-        rejectReasons.push_back("is in process of drop"); 
+        rejectReasons.push_back("is in process of drop");
         rejectStatus = NKikimrTxDataShard::TEvProposeTransactionResult::ERROR;
     }
 
@@ -1402,24 +1402,24 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
     TDuration lag = GetDataTxCompleteLag();
     if (txInfly > 1 && lag > TDuration::MilliSeconds(MaxTxLagMilliseconds)) {
         reject = true;
-        rejectReasons.push_back(TStringBuilder() 
-            << "lags behind, lag: " << lag 
-            << " in-flight tx count: " << txInfly); 
+        rejectReasons.push_back(TStringBuilder()
+            << "lags behind, lag: " << lag
+            << " in-flight tx count: " << txInfly);
     }
 
     const float rejectProbabilty = Executor()->GetRejectProbability();
     if (!reject && rejectProbabilty > 0) {
         float rnd = AppData(ctx)->RandomProvider->GenRandReal2();
         reject |= (rnd < rejectProbabilty);
-        if (reject) 
-            rejectReasons.push_back("decided to reject due to given RejectProbability"); 
+        if (reject)
+            rejectReasons.push_back("decided to reject due to given RejectProbability");
     }
 
     size_t totalInFly = (TxInFly() + ImmediateInFly() + ProposeQueue.Size() + TxWaiting());
     if (totalInFly > GetMaxTxInFly()) {
-        reject = true; 
-        rejectReasons.push_back("MaxTxInFly was exceeded"); 
-    } 
+        reject = true;
+        rejectReasons.push_back("MaxTxInFly was exceeded");
+    }
 
     if (!reject && Stopping) {
         reject = true;
@@ -1437,13 +1437,13 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
         }
     }
 
-    if (reject) { 
-        reason = TStringBuilder() 
-            << "Rejecting " << opDescr 
-            << " because datashard " << TabletID() << ": " 
-            << JoinSeq("; ", rejectReasons); 
-    } 
- 
+    if (reject) {
+        reason = TStringBuilder()
+            << "Rejecting " << opDescr
+            << " because datashard " << TabletID() << ": "
+            << JoinSeq("; ", rejectReasons);
+    }
+
     return reject;
 }
 
@@ -1463,8 +1463,8 @@ bool TDataShard::CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* 
     TString txDescr = TStringBuilder() << "data TxId " << msg->GetTxId();
 
     NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
-    TString rejectReason; 
-    bool reject = CheckDataTxReject(txDescr, ctx, rejectStatus, rejectReason); 
+    TString rejectReason;
+    bool reject = CheckDataTxReject(txDescr, ctx, rejectStatus, rejectReason);
 
     if (reject) {
         THolder<TEvDataShard::TEvProposeTransactionResult> result =
@@ -1473,8 +1473,8 @@ bool TDataShard::CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* 
                                                             msg->GetTxId(),
                                                             rejectStatus));
 
-        result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason); 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectReason); 
+        result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason);
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectReason);
 
         ctx.Send(msg->GetSource(), result.Release());
         IncCounter(COUNTER_PREPARE_OVERLOADED);

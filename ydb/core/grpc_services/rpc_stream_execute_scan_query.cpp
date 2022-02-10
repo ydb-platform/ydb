@@ -139,12 +139,12 @@ bool FillKqpRequest(const Ydb::Experimental::ExecuteStreamQueryRequest& req, NKi
         return false;
     }
 
-    if (req.explain()) { 
-        kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN); 
-    } else { 
-        kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE); 
-    } 
- 
+    if (req.explain()) {
+        kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+    } else {
+        kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    }
+
     kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
     kqpRequest.MutableRequest()->SetQuery(query);
     kqpRequest.MutableRequest()->SetKeepSession(false);
@@ -174,21 +174,21 @@ bool FillKqpRequest(const Ydb::Table::ExecuteScanQueryRequest& req, NKikimrKqp::
         return false;
     }
 
-    switch (req.mode()) { 
-        case Ydb::Table::ExecuteScanQueryRequest::MODE_EXEC: 
-            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE); 
-            kqpRequest.MutableRequest()->SetStatsMode(GetKqpStatsMode(req.collect_stats())); 
-            break; 
-        case Ydb::Table::ExecuteScanQueryRequest::MODE_EXPLAIN: 
-            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN); 
-            break; 
-        default: { 
-            NYql::TIssues issues; 
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected query mode")); 
-            error = TParseRequestError(Ydb::StatusIds::BAD_REQUEST, issues); 
-            return false; 
-        } 
-    } 
+    switch (req.mode()) {
+        case Ydb::Table::ExecuteScanQueryRequest::MODE_EXEC:
+            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            kqpRequest.MutableRequest()->SetStatsMode(GetKqpStatsMode(req.collect_stats()));
+            break;
+        case Ydb::Table::ExecuteScanQueryRequest::MODE_EXPLAIN:
+            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            break;
+        default: {
+            NYql::TIssues issues;
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected query mode"));
+            error = TParseRequestError(Ydb::StatusIds::BAD_REQUEST, issues);
+            return false;
+        }
+    }
     kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
     kqpRequest.MutableRequest()->SetKeepSession(false);
 
@@ -371,19 +371,19 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record.GetRef(); 
+        auto& record = ev->Get()->Record.GetRef();
 
         NYql::TIssues issues;
-        const auto& issueMessage = record.GetResponse().GetQueryIssues(); 
+        const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::IssuesFromMessage(issueMessage, issues);
- 
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) { 
-            TResponse response; 
-            TString out; 
-            auto& kqpResponse = record.GetResponse(); 
-            response.set_status(Ydb::StatusIds::SUCCESS); 
- 
-            if constexpr (std::is_same_v<TResponse, Ydb::Table::ExecuteScanQueryPartialResponse>) { 
+
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            TResponse response;
+            TString out;
+            auto& kqpResponse = record.GetResponse();
+            response.set_status(Ydb::StatusIds::SUCCESS);
+
+            if constexpr (std::is_same_v<TResponse, Ydb::Table::ExecuteScanQueryPartialResponse>) {
                 bool reportStats = NeedReportStats(*Request_->GetProtoRequest());
                 bool reportPlan = reportStats && NeedReportPlan(*Request_->GetProtoRequest());
 
@@ -401,33 +401,33 @@ private:
                         ExecutionProfiles_.clear();
                     } else if (reportPlan) {
                         response.mutable_result()->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan());
-                    } 
- 
+                    }
+
                     if (reportPlan) {
                         response.mutable_result()->mutable_query_stats()->set_query_ast(kqpResponse.GetQueryAst());
                     }
 
                     Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
                     Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
-                } 
-            } else { 
-                if (kqpResponse.HasQueryStats()) { 
-                    NKqpProto::TKqpStatsQuery queryStats; 
-                    for (const auto& execStats: ExecutionProfiles_) { 
-                        /* copy as ExecutionProfiles_ vector will be used and cleared later */ 
-                        queryStats.AddExecutions()->CopyFrom(*execStats); 
-                    } 
-                    response.mutable_result()->set_query_plan(SerializeAnalyzePlan(queryStats)); 
-                } else { 
-                    response.mutable_result()->set_query_plan(kqpResponse.GetQueryPlan()); 
-                } 
+                }
+            } else {
+                if (kqpResponse.HasQueryStats()) {
+                    NKqpProto::TKqpStatsQuery queryStats;
+                    for (const auto& execStats: ExecutionProfiles_) {
+                        /* copy as ExecutionProfiles_ vector will be used and cleared later */
+                        queryStats.AddExecutions()->CopyFrom(*execStats);
+                    }
+                    response.mutable_result()->set_query_plan(SerializeAnalyzePlan(queryStats));
+                } else {
+                    response.mutable_result()->set_query_plan(kqpResponse.GetQueryPlan());
+                }
 
                 Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
                 Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
-            } 
-        } 
- 
-        ReplyFinishStream(record.GetYdbStatus(), issues, ctx); 
+            }
+        }
+
+        ReplyFinishStream(record.GetYdbStatus(), issues, ctx);
     }
 
     void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {

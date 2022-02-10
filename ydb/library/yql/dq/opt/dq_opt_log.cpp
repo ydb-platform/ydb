@@ -84,69 +84,69 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
         .Done();
 }
 
-/* 
- * Enforce PARTITION COMPACT BY as it avoids generating join in favour of Fold1Map. 
- */ 
-TExprBase DqEnforceCompactPartition(TExprBase node, TExprList frames, TExprContext& ctx) { 
- 
-    for (const auto &frameNode : frames.Ref().Children()) { 
-        YQL_ENSURE(frameNode->IsCallable("WinOnRows")); 
- 
-        auto frameSpec = frameNode->Child(0); 
-        if (frameSpec->Type() == TExprNode::List) { 
-            TVector<TExprBase> values; 
-            bool compact = false; 
- 
-            for (const auto& setting : frameSpec->Children()) { 
-                const auto settingName = setting->Head().Content(); 
-                if (settingName == "compact") { 
-                    compact = true; 
-                    break; 
-                } 
-                values.push_back(TExprBase(setting)); 
-            } 
- 
-            if (!compact) { 
-                auto newFrameSpec = Build<TExprList>(ctx, frameNode->Pos()) 
-                    .Add(values) 
-                    .Add<TExprList>() 
-                        .Add<TCoAtom>() 
-                        .Value("compact") 
-                        .Build() 
-                    .Build() 
-                .Done(); 
- 
-                TNodeOnNodeOwnedMap replaces; 
-                replaces[frameNode->Child(0)] = newFrameSpec.Ptr(); 
-                node = TExprBase(ctx.ReplaceNodes(node.Ptr(), replaces)); 
-            } 
-        } 
-    } 
- 
-    return node; 
+/*
+ * Enforce PARTITION COMPACT BY as it avoids generating join in favour of Fold1Map.
+ */
+TExprBase DqEnforceCompactPartition(TExprBase node, TExprList frames, TExprContext& ctx) {
+
+    for (const auto &frameNode : frames.Ref().Children()) {
+        YQL_ENSURE(frameNode->IsCallable("WinOnRows"));
+
+        auto frameSpec = frameNode->Child(0);
+        if (frameSpec->Type() == TExprNode::List) {
+            TVector<TExprBase> values;
+            bool compact = false;
+
+            for (const auto& setting : frameSpec->Children()) {
+                const auto settingName = setting->Head().Content();
+                if (settingName == "compact") {
+                    compact = true;
+                    break;
+                }
+                values.push_back(TExprBase(setting));
+            }
+
+            if (!compact) {
+                auto newFrameSpec = Build<TExprList>(ctx, frameNode->Pos())
+                    .Add(values)
+                    .Add<TExprList>()
+                        .Add<TCoAtom>()
+                        .Value("compact")
+                        .Build()
+                    .Build()
+                .Done();
+
+                TNodeOnNodeOwnedMap replaces;
+                replaces[frameNode->Child(0)] = newFrameSpec.Ptr();
+                node = TExprBase(ctx.ReplaceNodes(node.Ptr(), replaces));
+            }
+        }
+    }
+
+    return node;
 }
- 
-TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, bool enforceCompact) { 
+
+TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, bool enforceCompact) {
     if (node.Maybe<TCoCalcOverWindowBase>() || node.Maybe<TCoCalcOverWindowGroup>()) {
-        if (enforceCompact) { 
+        if (enforceCompact) {
             auto calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);
             for (auto& c : calcs) {
                 TCoCalcOverWindowTuple win(c);
-                node = DqEnforceCompactPartition(node, win.Frames(), ctx); 
-            } 
-        } 
+                node = DqEnforceCompactPartition(node, win.Frames(), ctx);
+            }
+        }
 
         return TExprBase(ExpandCalcOverWindow(node.Ptr(), ctx));
-    } else { 
-        return node; 
-    } 
-} 
- 
+    } else {
+        return node;
+    }
+}
+
 static void CollectSinkStages(const NNodes::TDqQuery& dqQuery, THashSet<TExprNode::TPtr, TExprNode::TPtrHash>& sinkStages) {
     for (const auto& stage : dqQuery.SinkStages()) {
         sinkStages.insert(stage.Ptr());
     }
-} 
+}
 
 NNodes::TExprBase DqMergeQueriesWithSinks(NNodes::TExprBase dqQueryNode, TExprContext& ctx) {
     NNodes::TDqQuery dqQuery = dqQueryNode.Cast<NNodes::TDqQuery>();

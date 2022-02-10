@@ -209,23 +209,23 @@ const TKikimrTableMetadata& TKqlCompileContext::GetTableMeta(const TKqpTable& ta
 TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext& ctx) {
     auto compiler = MakeIntrusive<NCommon::TMkqlCommonCallableCompiler>();
 
-    compiler->AddCallable(TKqpWideReadTable::CallableName(), 
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) { 
-            TKqpWideReadTable readTable(&node); 
- 
-            const auto& tableMeta = ctx.GetTableMeta(readTable.Table()); 
+    compiler->AddCallable(TKqpWideReadTable::CallableName(),
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            TKqpWideReadTable readTable(&node);
+
+            const auto& tableMeta = ctx.GetTableMeta(readTable.Table());
             auto keyRange = MakeKeyRange(readTable, ctx, buildCtx);
- 
+
             auto result = ctx.PgmBuilder().KqpWideReadTable(MakeTableId(readTable.Table()), keyRange,
                 GetKqpColumns(tableMeta, readTable.Columns(), true));
- 
+
             return result;
         });
- 
+
     compiler->AddCallable(TKqpWideReadTableRanges::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             TKqpWideReadTableRanges readTableRanges(&node);
- 
+
             const auto& tableMeta = ctx.GetTableMeta(readTableRanges.Table());
             ValidateRangesType(readTableRanges.Ranges().Ref().GetTypeAnn(), tableMeta);
 
@@ -247,12 +247,12 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             ValidateRangesType(readTable.Ranges().Ref().GetTypeAnn(), tableMeta);
 
             TKqpKeyRanges ranges = MakeComputedKeyRanges(readTable, ctx, buildCtx);
- 
+
             // Return type depends on the process program, so it is built explicitly.
             TStringStream errorStream;
             auto returnType = NCommon::BuildType(*readTable.Ref().GetTypeAnn(), ctx.PgmBuilder(), errorStream);
             YQL_ENSURE(returnType, "Failed to build type: " << errorStream.Str());
- 
+
             // Process program for OLAP read is not present in MKQL, it is passed in range description
             // in physical plan directly to executer. Read callables in MKQL only used to associate
             // input stream of the graph with the external scans, so it doesn't make much sense to pass
@@ -265,10 +265,10 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 GetKqpColumns(tableMeta, readTable.Columns(), true),
                 returnType
             );
- 
-            return result; 
-        }); 
- 
+
+            return result;
+        });
+
     compiler->AddCallable(TKqpLookupTable::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             TKqpLookupTable lookupTable(&node);

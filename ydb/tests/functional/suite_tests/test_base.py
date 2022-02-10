@@ -45,7 +45,7 @@ class StatementTypes(enum.Enum):
     Ok = 'statement ok'
     Error = 'statement error'
     Query = 'statement query'
-    StreamQuery = 'statement stream query' 
+    StreamQuery = 'statement stream query'
     ImportTableData = 'statement import table data'
 
 
@@ -101,7 +101,7 @@ def get_single_statement(lines):
             statement = "\n".join(statement_lines)
             return statement
         statement_lines.append(line)
-    return "\n".join(statement_lines) 
+    return "\n".join(statement_lines)
 
 
 class ParsedStatement(collections.namedtuple('ParsedStatement', ["at_line", "s_type", "suite_name", "text"])):
@@ -206,36 +206,36 @@ def write_canonical_response(response, file):
     )
 
 
-def format_as_table(data): 
-    nrows = len(data) 
- 
-    if nrows == 0: 
-        return "(0 rows)\n" 
- 
-    keys = data[0].keys() 
-    widths = [len(k) + 2 for k in keys] 
-    for row in data: 
-        for i, val in enumerate(row.values()): 
-            widths[i] = max(widths[i], len(str(val)) + 2) 
- 
-    col_names = ['{: ^{w}}'.format(str(k), w=widths[i]) for i, k in enumerate(keys)] 
- 
-    table = "" 
-    table += "|".join(col_names) 
-    table += "\n" 
-    table += "+".join(['-'*w for w in widths]) 
-    table += "\n" 
- 
-    for row in data: 
-        vals = ['{: >{w}}'.format(str(val) + ' ', w=widths[i]) for i, val in enumerate(row.values())] 
-        table += "|".join(vals) 
-        table += "\n" 
- 
-    table += "(%d row%s)\n" % (nrows, 's' if nrows != 1 else 0) 
- 
-    return table 
- 
- 
+def format_as_table(data):
+    nrows = len(data)
+
+    if nrows == 0:
+        return "(0 rows)\n"
+
+    keys = data[0].keys()
+    widths = [len(k) + 2 for k in keys]
+    for row in data:
+        for i, val in enumerate(row.values()):
+            widths[i] = max(widths[i], len(str(val)) + 2)
+
+    col_names = ['{: ^{w}}'.format(str(k), w=widths[i]) for i, k in enumerate(keys)]
+
+    table = ""
+    table += "|".join(col_names)
+    table += "\n"
+    table += "+".join(['-'*w for w in widths])
+    table += "\n"
+
+    for row in data:
+        vals = ['{: >{w}}'.format(str(val) + ' ', w=widths[i]) for i, val in enumerate(row.values())]
+        table += "|".join(vals)
+        table += "\n"
+
+    table += "(%d row%s)\n" % (nrows, 's' if nrows != 1 else 0)
+
+    return table
+
+
 @six.add_metaclass(abc.ABCMeta)
 class BaseSuiteRunner(object):
     check_new_engine_plan = True
@@ -317,7 +317,7 @@ class BaseSuiteRunner(object):
         from_type = {
             StatementTypes.Ok: self.assert_statement_ok,
             StatementTypes.Query: self.assert_statement_query,
-            StatementTypes.StreamQuery: self.assert_statement_stream_query, 
+            StatementTypes.StreamQuery: self.assert_statement_stream_query,
             StatementTypes.Error: (lambda x: x),
             StatementTypes.ImportTableData: self.assert_statement_import_table_data,
             StatementTypes.Skipped: lambda x: x
@@ -458,26 +458,26 @@ class BaseSuiteRunner(object):
                     if retries == 0:
                         raise
 
-    def assert_statement_stream_query(self, statement): 
-        if self.plan: 
-            return 
- 
-        yql_text = format_yql_statement(statement.text, self.table_path_prefix) 
-        yql_text = "--!syntax_v1\n" + yql_text + "\n\n" 
+    def assert_statement_stream_query(self, statement):
+        if self.plan:
+            return
+
+        yql_text = format_yql_statement(statement.text, self.table_path_prefix)
+        yql_text = "--!syntax_v1\n" + yql_text + "\n\n"
         result = self.execute_scan_query(yql_text)
-        file_name = statement.suite_name.split('/')[1] + '.out' 
-        output_path = os.path.join(yatest_common.output_path(), file_name) 
-        with open(output_path, 'a+') as w: 
-            w.write(yql_text) 
+        file_name = statement.suite_name.split('/')[1] + '.out'
+        output_path = os.path.join(yatest_common.output_path(), file_name)
+        with open(output_path, 'a+') as w:
+            w.write(yql_text)
             w.write(format_as_table(result))
-            w.write("\n\n") 
- 
+            w.write("\n\n")
+
         self.files[file_name] = yatest_common.canonical_file(
             path=output_path,
             local=True,
             universal_lines=True,
         )
- 
+
     def is_probably_scheme(self, yql_text):
         lwr = yql_text.lower()
         return 'create table' in lwr or 'drop table' in lwr

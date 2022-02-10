@@ -40,8 +40,8 @@ const TMaybe<NTable::TQueryStats>& TExecuteYqlResult::GetStats() const {
     return QueryStats_;
 }
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+////////////////////////////////////////////////////////////////////////////////
+
 class TYqlResultPartIterator::TReaderImpl {
 public:
     using TSelf = TYqlResultPartIterator::TReaderImpl;
@@ -124,10 +124,10 @@ TAsyncYqlResultPart TYqlResultPartIterator::ReadNext() {
 ////////////////////////////////////////////////////////////////////////////////
 
 TExplainYqlResult::TExplainYqlResult(TStatus&& status, const ::google::protobuf::Map<TString, Ydb::Type>&& types, TString&& plan)
-    : TStatus(std::move(status)) 
+    : TStatus(std::move(status))
     , ParameterTypes_(std::move(types))
-    , Plan_(plan) {} 
- 
+    , Plan_(plan) {}
+
 std::map<TString, TType> TExplainYqlResult::GetParameterTypes() const {
     std::map<TString, TType> typesMap;
     for (const auto& param : ParameterTypes_) {
@@ -136,12 +136,12 @@ std::map<TString, TType> TExplainYqlResult::GetParameterTypes() const {
     return typesMap;
 }
 
-const TString& TExplainYqlResult::GetPlan() const { 
-    return Plan_; 
-} 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+const TString& TExplainYqlResult::GetPlan() const {
+    return Plan_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TScriptingClient::TImpl : public TClientImplCommon<TScriptingClient::TImpl> {
 public:
     using TYqlScriptProcessorPtr = TYqlResultPartIterator::TReaderImpl::TStreamProcessorPtr;
@@ -245,57 +245,57 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncExplainYqlResult ExplainYqlScript(const TString& script, 
-        const TExplainYqlRequestSettings& settings) 
-    { 
-            auto request = MakeOperationRequest<Ydb::Scripting::ExplainYqlRequest>(settings); 
-            request.set_script(script); 
- 
-            switch (settings.Mode_) { 
+    TAsyncExplainYqlResult ExplainYqlScript(const TString& script,
+        const TExplainYqlRequestSettings& settings)
+    {
+            auto request = MakeOperationRequest<Ydb::Scripting::ExplainYqlRequest>(settings);
+            request.set_script(script);
+
+            switch (settings.Mode_) {
                 // KIKIMR-10990
                 //case ExplainYqlRequestMode::Parse:
                 //    request.set_mode(::Ydb::Scripting::ExplainYqlRequest_Mode::ExplainYqlRequest_Mode_PARSE);
                 //    break;
-                case ExplainYqlRequestMode::Validate: 
-                    request.set_mode(::Ydb::Scripting::ExplainYqlRequest_Mode::ExplainYqlRequest_Mode_VALIDATE); 
-                    break; 
-                case ExplainYqlRequestMode::Plan: 
-                    request.set_mode(::Ydb::Scripting::ExplainYqlRequest_Mode::ExplainYqlRequest_Mode_PLAN); 
-                    break; 
-            } 
- 
-            auto promise = NewPromise<TExplainYqlResult>(); 
- 
+                case ExplainYqlRequestMode::Validate:
+                    request.set_mode(::Ydb::Scripting::ExplainYqlRequest_Mode::ExplainYqlRequest_Mode_VALIDATE);
+                    break;
+                case ExplainYqlRequestMode::Plan:
+                    request.set_mode(::Ydb::Scripting::ExplainYqlRequest_Mode::ExplainYqlRequest_Mode_PLAN);
+                    break;
+            }
+
+            auto promise = NewPromise<TExplainYqlResult>();
+
             auto extractor = [promise]
-                (google::protobuf::Any* any, TPlainStatus status) mutable { 
-                    TString plan; 
+                (google::protobuf::Any* any, TPlainStatus status) mutable {
+                    TString plan;
                     ::google::protobuf::Map<TString, Ydb::Type> types;
-                    if (any) { 
-                        Ydb::Scripting::ExplainYqlResult result; 
-                        any->UnpackTo(&result); 
- 
-                        plan = result.plan(); 
+                    if (any) {
+                        Ydb::Scripting::ExplainYqlResult result;
+                        any->UnpackTo(&result);
+
+                        plan = result.plan();
                         types = result.parameters_types();
-                    } 
- 
+                    }
+
                     TExplainYqlResult explainResult(TStatus(std::move(status)),
                         std::move(types), std::move(plan));
-                    promise.SetValue(std::move(explainResult)); 
-                }; 
- 
-            Connections_->RunDeferred<Ydb::Scripting::V1::ScriptingService, Ydb::Scripting::ExplainYqlRequest, 
-                Ydb::Scripting::ExplainYqlResponse>( 
-                    std::move(request), 
-                    extractor, 
-                    &Ydb::Scripting::V1::ScriptingService::Stub::AsyncExplainYql, 
-                    DbDriverState_, 
-                    INITIAL_DEFERRED_CALL_DELAY, 
-                    TRpcRequestSettings::Make(settings), 
-                    settings.ClientTimeout_); 
- 
-            return promise.GetFuture(); 
-    } 
- 
+                    promise.SetValue(std::move(explainResult));
+                };
+
+            Connections_->RunDeferred<Ydb::Scripting::V1::ScriptingService, Ydb::Scripting::ExplainYqlRequest,
+                Ydb::Scripting::ExplainYqlResponse>(
+                    std::move(request),
+                    extractor,
+                    &Ydb::Scripting::V1::ScriptingService::Stub::AsyncExplainYql,
+                    DbDriverState_,
+                    INITIAL_DEFERRED_CALL_DELAY,
+                    TRpcRequestSettings::Make(settings),
+                    settings.ClientTimeout_);
+
+            return promise.GetFuture();
+    }
+
 private:
     template<typename TRequest>
     static void SetParams(::google::protobuf::Map<TString, Ydb::TypedValue>* params, TRequest* request) {
@@ -373,11 +373,11 @@ TAsyncYqlResultPartIterator TScriptingClient::StreamExecuteYqlScript(const TStri
     return Impl_->StreamExecuteYqlScript(script, paramsPtr, settings);
 }
 
-TAsyncExplainYqlResult TScriptingClient::ExplainYqlScript(const TString& script, 
-    const TExplainYqlRequestSettings& settings) 
-{ 
-    return Impl_->ExplainYqlScript(script, settings); 
-} 
- 
+TAsyncExplainYqlResult TScriptingClient::ExplainYqlScript(const TString& script,
+    const TExplainYqlRequestSettings& settings)
+{
+    return Impl_->ExplainYqlScript(script, settings);
+}
+
 } // namespace NScheme
 } // namespace NYdb

@@ -277,8 +277,8 @@ struct TEvDataShard {
         EvUnsafeUploadRowsRequest,
         EvUnsafeUploadRowsResponse,
 
-        EvKqpScan, 
- 
+        EvKqpScan,
+
         EvChangeS3UploadStatus,
 
         EvGetRemovedRowVersions, /* for tests */
@@ -1346,13 +1346,13 @@ struct TEvDataShard {
                           TEvDataShard::EvBuildIndexProgressResponse>
     {
     };
- 
-    struct TEvKqpScan 
-        : public TEventPB<TEvKqpScan, 
-                          NKikimrTxDataShard::TEvKqpScan, 
-                          TEvDataShard::EvKqpScan> 
-    { 
-    }; 
+
+    struct TEvKqpScan
+        : public TEventPB<TEvKqpScan,
+                          NKikimrTxDataShard::TEvKqpScan,
+                          TEvDataShard::EvKqpScan>
+    {
+    };
 
     struct TEvGetRemovedRowVersions : public TEventLocal<TEvGetRemovedRowVersions, EvGetRemovedRowVersions> {
         TPathId PathId;

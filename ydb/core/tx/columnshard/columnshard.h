@@ -235,7 +235,7 @@ struct TEvColumnShard {
         }
     };
 
-    using TEvScan = TEvDataShard::TEvKqpScan; 
+    using TEvScan = TEvDataShard::TEvKqpScan;
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

@@ -29,7 +29,7 @@ message ExecuteYqlResult {
     repeated Ydb.ResultSet result_sets = 1;
     Ydb.TableStats.QueryStats query_stats = 2;
 }
- 
+
 // Response for StreamExecuteYql is a stream of ExecuteYqlPartialResponse messages.
 // These responses can contain ExecuteYqlPartialResult messages with
 // results (or result parts) for data or scan queries in the script.
@@ -52,24 +52,24 @@ message ExecuteYqlPartialResult {
     Ydb.TableStats.QueryStats query_stats = 3;
 }
 
-message ExplainYqlRequest { 
-    enum Mode { 
+message ExplainYqlRequest {
+    enum Mode {
         MODE_UNSPECIFIED = 0;
         // PARSE = 1;
         VALIDATE = 2;
         PLAN = 3;
-    } 
- 
-    Ydb.Operations.OperationParams operation_params = 1; 
-    string script = 2; 
-    Mode mode = 3; 
-} 
- 
-message ExplainYqlResponse { 
-    Ydb.Operations.Operation operation = 1; 
-} 
- 
-message ExplainYqlResult { 
-    map<string, Type> parameters_types = 1; 
-    string plan = 2; 
-} 
+    }
+
+    Ydb.Operations.OperationParams operation_params = 1;
+    string script = 2;
+    Mode mode = 3;
+}
+
+message ExplainYqlResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ExplainYqlResult {
+    map<string, Type> parameters_types = 1;
+    string plan = 2;
+}

@@ -71,11 +71,11 @@
             "Match": {"Type": "Callable", "Name": "KqpReadTable"}
         },
         {
-            "Name": "TKqpWideReadTable", 
-            "Base": "TKqlReadTableBase", 
-            "Match": {"Type": "Callable", "Name": "KqpWideReadTable"} 
-        }, 
-        { 
+            "Name": "TKqpWideReadTable",
+            "Base": "TKqlReadTableBase",
+            "Match": {"Type": "Callable", "Name": "KqpWideReadTable"}
+        },
+        {
             "Name": "TKqlReadTableRangesBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},

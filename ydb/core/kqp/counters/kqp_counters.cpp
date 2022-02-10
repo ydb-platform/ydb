@@ -66,8 +66,8 @@ void TKqpCountersBase::Init() {
         KqpGroup->GetCounter("Requests/QueryCommitTx", true);
     QueryActionRequests[NKikimrKqp::QUERY_ACTION_ROLLBACK_TX] =
         KqpGroup->GetCounter("Requests/QueryRollbackTx", true);
-    QueryActionRequests[NKikimrKqp::QUERY_ACTION_PARSE] = 
-        KqpGroup->GetCounter("Requests/QueryParse", true); 
+    QueryActionRequests[NKikimrKqp::QUERY_ACTION_PARSE] =
+        KqpGroup->GetCounter("Requests/QueryParse", true);
     OtherQueryRequests = KqpGroup->GetCounter("Requests/QueryOther", true);
 
     CloseSessionRequests = KqpGroup->GetCounter("Requests/CloseSession", true);
@@ -84,26 +84,26 @@ void TKqpCountersBase::Init() {
     SqlV1Translations = KqpGroup->GetCounter("Requests/Sql/V1", true);
     SqlUnknownTranslations = KqpGroup->GetCounter("Requests/Sql/Unknown", true);
 
-    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED] = 
-        KqpGroup->GetCounter("Request/QueryTypeUndefined", true); 
-    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML] = 
-        KqpGroup->GetCounter("Request/QueryTypeDml", true); 
-    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DDL] = 
-        KqpGroup->GetCounter("Request/QueryTypeDdl", true); 
-    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_PREPARED_DML] = 
-        KqpGroup->GetCounter("Request/QueryTypePreparedDml", true); 
-    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_AST_DML] = 
-        KqpGroup->GetCounter("Request/QueryTypeAstDml", true); 
-    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_SCRIPT] = 
-        KqpGroup->GetCounter("Request/QueryTypeSqlScript", true); 
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED] =
+        KqpGroup->GetCounter("Request/QueryTypeUndefined", true);
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DML] =
+        KqpGroup->GetCounter("Request/QueryTypeDml", true);
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_DDL] =
+        KqpGroup->GetCounter("Request/QueryTypeDdl", true);
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_PREPARED_DML] =
+        KqpGroup->GetCounter("Request/QueryTypePreparedDml", true);
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_AST_DML] =
+        KqpGroup->GetCounter("Request/QueryTypeAstDml", true);
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_SCRIPT] =
+        KqpGroup->GetCounter("Request/QueryTypeSqlScript", true);
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_SCRIPT_STREAMING] =
         KqpGroup->GetCounter("Request/QueryTypeSqlScriptStreaming", true);
-    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_SCAN] = 
-        KqpGroup->GetCounter("Request/QueryTypeSqlScan", true); 
-    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_AST_SCAN] = 
-        KqpGroup->GetCounter("Request/QueryTypeAstScan", true); 
-    OtherQueryTypes = KqpGroup->GetCounter("Requests/QueryTypeOther", true); 
- 
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_SCAN] =
+        KqpGroup->GetCounter("Request/QueryTypeSqlScan", true);
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_AST_SCAN] =
+        KqpGroup->GetCounter("Request/QueryTypeAstScan", true);
+    OtherQueryTypes = KqpGroup->GetCounter("Requests/QueryTypeOther", true);
+
     QueriesWithRangeScan = KqpGroup->GetCounter("Query/WithRangeScan", true);
     QueriesWithFullScan = KqpGroup->GetCounter("Query/WithFullScan", true);
 
@@ -242,15 +242,15 @@ void TKqpCountersBase::ReportQueryAction(NKikimrKqp::EQueryAction action) {
 }
 
 void TKqpCountersBase::ReportQueryType(NKikimrKqp::EQueryType type) {
-    auto counter = QueryTypes.FindPtr(type); 
-    if (counter) { 
-        (*counter)->Inc(); 
-        return; 
-    } 
- 
-    OtherQueryTypes->Inc(); 
-} 
- 
+    auto counter = QueryTypes.FindPtr(type);
+    if (counter) {
+        (*counter)->Inc();
+        return;
+    }
+
+    OtherQueryTypes->Inc();
+}
+
 void TKqpCountersBase::ReportSessionShutdownRequest() {
     SessionBalancerShutdowns->Inc();
 }

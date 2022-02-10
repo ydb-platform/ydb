@@ -567,7 +567,7 @@ private:
         THROW yexception() << "Failed to get representation kind.";
     }
 
-    NUdf::TUnboxedValue GetValue(TComputationContext&) const { 
+    NUdf::TUnboxedValue GetValue(TComputationContext&) const {
         THROW yexception() << "Failed to get value from wide flow node.";
     }
 };

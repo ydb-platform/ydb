@@ -33,12 +33,12 @@ PEERDIR(
     contrib/libs/llvm12/lib/Transforms/ObjCARC
 )
 
-IF (OS_LINUX) 
+IF (OS_LINUX)
     PEERDIR(
         contrib/libs/llvm12/lib/ExecutionEngine/PerfJITEvents
     )
-ENDIF() 
- 
+ENDIF()
+
 END()
 
 RECURSE_FOR_TESTS(

@@ -77,7 +77,7 @@ struct TDqTaskRunnerStats {
     // profile stats
     TDuration WaitTime; // wall time of waiting for input, scans & output
     TDuration WaitOutputTime;
- 
+
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
 
     THashMap<ui64, const TDqInputChannelStats*> InputChannels; // Channel id -> Channel stats

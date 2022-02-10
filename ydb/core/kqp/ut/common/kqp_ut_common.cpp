@@ -638,61 +638,61 @@ TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it) {
     return out.Str();
 }
 
-template<typename TIterator> 
-TCollectedStreamResult CollectStreamResultImpl(TIterator& it) { 
-    TCollectedStreamResult res; 
- 
-    TStringStream out; 
+template<typename TIterator>
+TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
+    TCollectedStreamResult res;
+
+    TStringStream out;
     NYson::TYsonWriter resultSetWriter(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
-    resultSetWriter.OnBeginList(); 
- 
-    for (;;) { 
-        auto streamPart = it.ReadNext().GetValueSync(); 
-        if (!streamPart.IsSuccess()) { 
-            UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString()); 
-            break; 
-        } 
- 
+    resultSetWriter.OnBeginList();
+
+    for (;;) {
+        auto streamPart = it.ReadNext().GetValueSync();
+        if (!streamPart.IsSuccess()) {
+            UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+            break;
+        }
+
         if constexpr (std::is_same_v<TIterator, NYdb::NTable::TScanQueryPartIterator>) {
             UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(),
                 "Unexpected empty scan query response.");
         }
 
-        if (streamPart.HasResultSet()) { 
+        if (streamPart.HasResultSet()) {
             auto resultSet = streamPart.ExtractResultSet();
             PrintResultSet(resultSet, resultSetWriter);
-        } 
- 
-        if constexpr (std::is_same_v<TIterator, NYdb::NTable::TScanQueryPartIterator>) { 
-            if (streamPart.HasQueryStats() ) { 
-                res.QueryStats = NYdb::TProtoAccessor::GetProto(streamPart.GetQueryStats()); 
+        }
+
+        if constexpr (std::is_same_v<TIterator, NYdb::NTable::TScanQueryPartIterator>) {
+            if (streamPart.HasQueryStats() ) {
+                res.QueryStats = NYdb::TProtoAccessor::GetProto(streamPart.GetQueryStats());
 
                 auto plan = res.QueryStats->query_plan();
                 if (!plan.empty()) {
                     res.PlanJson = plan;
                 }
-            } 
-        } else { 
-            if (streamPart.HasPlan()) { 
-                res.PlanJson = streamPart.ExtractPlan(); 
-            } 
-        } 
-    } 
- 
-    resultSetWriter.OnEndList(); 
- 
-    res.ResultSetYson = out.Str(); 
-    return res; 
-} 
- 
-TCollectedStreamResult CollectStreamResult(NYdb::NExperimental::TStreamPartIterator& it) { 
-    return CollectStreamResultImpl(it); 
-} 
- 
-TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it) { 
-    return CollectStreamResultImpl(it); 
-} 
- 
+            }
+        } else {
+            if (streamPart.HasPlan()) {
+                res.PlanJson = streamPart.ExtractPlan();
+            }
+        }
+    }
+
+    resultSetWriter.OnEndList();
+
+    res.ResultSetYson = out.Str();
+    return res;
+}
+
+TCollectedStreamResult CollectStreamResult(NYdb::NExperimental::TStreamPartIterator& it) {
+    return CollectStreamResultImpl(it);
+}
+
+TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it) {
+    return CollectStreamResultImpl(it);
+}
+
 TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table) {
     auto it = session.ReadTable(table).GetValueSync();
     UNIT_ASSERT(it.IsSuccess());
@@ -710,9 +710,9 @@ TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table
 
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value) {
     ui32 result = 0;
- 
-    if (plan.IsArray()) { 
-        for (const auto &node: plan.GetArray()) { 
+
+    if (plan.IsArray()) {
+        for (const auto &node: plan.GetArray()) {
             result += CountPlanNodesByKv(node, key, value);
         }
         return result;
@@ -747,29 +747,29 @@ ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const
 NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value) {
     if (plan.IsArray()) {
         for (const auto &node: plan.GetArray()) {
-            auto stage = FindPlanNodeByKv(node, key, value); 
-            if (stage.IsDefined()) { 
-                return stage; 
-            } 
-        } 
-    } else if (plan.IsMap()) { 
-        auto map = plan.GetMap(); 
+            auto stage = FindPlanNodeByKv(node, key, value);
+            if (stage.IsDefined()) {
+                return stage;
+            }
+        }
+    } else if (plan.IsMap()) {
+        auto map = plan.GetMap();
         if (map.contains(key) && map.at(key).GetStringRobust() == value) {
-            return plan; 
-        } 
-        if (map.contains("Plans")) { 
-            for (const auto &node: map["Plans"].GetArraySafe()) { 
-                auto stage = FindPlanNodeByKv(node, key, value); 
-                if (stage.IsDefined()) { 
-                    return stage; 
-                } 
-            } 
-        } else if (map.contains("Plan")) { 
-            auto stage = FindPlanNodeByKv(map.at("Plan"), key, value); 
-            if (stage.IsDefined()) { 
-                return stage; 
-            } 
-        } 
+            return plan;
+        }
+        if (map.contains("Plans")) {
+            for (const auto &node: map["Plans"].GetArraySafe()) {
+                auto stage = FindPlanNodeByKv(node, key, value);
+                if (stage.IsDefined()) {
+                    return stage;
+                }
+            }
+        } else if (map.contains("Plan")) {
+            auto stage = FindPlanNodeByKv(map.at("Plan"), key, value);
+            if (stage.IsDefined()) {
+                return stage;
+            }
+        }
 
         if (map.contains("Operators")) {
             for (const auto &node : map["Operators"].GetArraySafe()) {
@@ -779,13 +779,13 @@ NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString&
                 }
             }
         }
-    } else { 
-        Y_ASSERT(false); 
-    } 
- 
-    return NJson::TJsonValue(); 
-} 
- 
+    } else {
+        Y_ASSERT(false);
+    }
+
+    return NJson::TJsonValue();
+}
+
 void CreateSampleTablesWithIndex(TSession& session) {
     auto res = session.ExecuteSchemeQuery(R"(
         --!syntax_v1

@@ -30,7 +30,7 @@ struct TTaskResourceEstimation {
     }
 };
 
-TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, int nScans, ui32 dsOnNodeCount, 
+TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, int nScans, ui32 dsOnNodeCount,
     const NKikimrConfig::TTableServiceConfig::TResourceManager& config);
 
 void EstimateTaskResources(const NYql::NDqProto::TDqTask& task, int nScans, ui32 dsOnNodeCount,

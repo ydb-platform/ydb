@@ -710,68 +710,68 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 #endif
 
-    Y_UNIT_TEST(PureExpr) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
+    Y_UNIT_TEST(PureExpr) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-        auto result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UseNewEngine = "true"; 
-            SELECT '42', 42, 5*5; 
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+            SELECT '42', 42, 5*5;
         )", TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx(), execSettings).ExtractValueSync();
- 
-        CompareYson(R"([["42";42;25]])", FormatResultSetYson(result.GetResultSet(0))); 
+
+        CompareYson(R"([["42";42;25]])", FormatResultSetYson(result.GetResultSet(0)));
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_EQUAL(stats.query_phases().size(), 1);
         UNIT_ASSERT(stats.query_phases(0).table_access().size() == 0);
-    } 
- 
-    Y_UNIT_TEST(MultiStatement) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
+    }
+
+    Y_UNIT_TEST(MultiStatement) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-        auto result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UseNewEngine = "true"; 
-            SELECT 1; 
-            SELECT 2; 
-            SELECT 3; 
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+            SELECT 1;
+            SELECT 2;
+            SELECT 3;
         )", TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx(), execSettings).ExtractValueSync();
- 
-        CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0))); 
-        CompareYson(R"([[2]])", FormatResultSetYson(result.GetResultSet(1))); 
-        CompareYson(R"([[3]])", FormatResultSetYson(result.GetResultSet(2))); 
+
+        CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[2]])", FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(R"([[3]])", FormatResultSetYson(result.GetResultSet(2)));
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_EQUAL(stats.query_phases().size(), 1);
         UNIT_ASSERT(stats.query_phases(0).table_access().size() == 0);
-    } 
- 
-    Y_UNIT_TEST(MultiStatementMixPure) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
-        auto result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UseNewEngine = "true"; 
-            SELECT 1; 
+    }
+
+    Y_UNIT_TEST(MultiStatementMixPure) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+            SELECT 1;
             SELECT Key FROM [/Root/TwoShard] ORDER BY Key DESC LIMIT 1;
-            SELECT 2; 
+            SELECT 2;
             SELECT Key FROM [/Root/EightShard] ORDER BY Key ASC LIMIT 1;
-        )", TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync(); 
- 
-        CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0))); 
-        CompareYson(R"([[[4000000003u]]])", FormatResultSetYson(result.GetResultSet(1))); 
-        CompareYson(R"([[2]])", FormatResultSetYson(result.GetResultSet(2))); 
-        CompareYson(R"([[[101u]]])", FormatResultSetYson(result.GetResultSet(3))); 
-    } 
- 
+        )", TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
+
+        CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[4000000003u]]])", FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(R"([[2]])", FormatResultSetYson(result.GetResultSet(2)));
+        CompareYson(R"([[[101u]]])", FormatResultSetYson(result.GetResultSet(3)));
+    }
+
     Y_UNIT_TEST(LocksSingleShard) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

@@ -22,7 +22,7 @@ message ExecuteStreamQueryRequest {
     }
 
     ProfileMode profile_mode = 3;
-    bool explain = 4; 
+    bool explain = 4;
 }
 
 message ExecuteStreamQueryResponse {
@@ -39,6 +39,6 @@ message ExecuteStreamQueryResult {
         Ydb.ResultSet result_set = 1;
         string profile = 2;
         StreamQueryProgress progress = 3;
-        string query_plan = 4; 
+        string query_plan = 4;
     }
 }

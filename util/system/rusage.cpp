@@ -99,7 +99,7 @@ void TRusage::Fill() {
     }
 
     MaxRss = pmc.PeakWorkingSetSize;
-    MajorPageFaults = pmc.PageFaultCount; 
+    MajorPageFaults = pmc.PageFaultCount;
 
 #else
     struct rusage ru;
@@ -114,7 +114,7 @@ void TRusage::Fill() {
     #else
     MaxRss = ru.ru_maxrss * 1024LL;
     #endif
-    MajorPageFaults = ru.ru_majflt; 
+    MajorPageFaults = ru.ru_majflt;
     Utime = ru.ru_utime;
     Stime = ru.ru_stime;
 #endif

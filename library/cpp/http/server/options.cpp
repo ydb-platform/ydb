@@ -38,6 +38,6 @@ void THttpServerOptions::BindAddresses(TBindAddresses& ret) const {
     }
 
     if (ret.empty()) {
-        ret.push_back(Host ? TNetworkAddress(Host, Port) : TNetworkAddress(Port)); 
+        ret.push_back(Host ? TNetworkAddress(Host, Port) : TNetworkAddress(Port));
     }
 }

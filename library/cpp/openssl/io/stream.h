@@ -14,14 +14,14 @@ public:
             // It can be expanded with ENV: SSL_CERT_DIR.
             TString Hostname_;
         };
-        struct TClientCert { 
-            TString CertificateFile_; 
-            TString PrivateKeyFile_; 
-            TString PrivateKeyPassword_; 
-        }; 
+        struct TClientCert {
+            TString CertificateFile_;
+            TString PrivateKeyFile_;
+            TString PrivateKeyPassword_;
+        };
 
         TMaybe<TVerifyCert> VerifyCert_;
-        TMaybe<TClientCert> ClientCert_; 
+        TMaybe<TClientCert> ClientCert_;
         // TODO - keys, cyphers, etc
     };
 

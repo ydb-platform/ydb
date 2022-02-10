@@ -137,12 +137,12 @@ public:
         Init(t);
     }
 
-    inline TTryGuard(TTryGuard&& g) noexcept 
-        : T_(g.T_) 
-    { 
-        g.T_ = nullptr; 
-    } 
- 
+    inline TTryGuard(TTryGuard&& g) noexcept
+        : T_(g.T_)
+    {
+        g.T_ = nullptr;
+    }
+
     inline ~TTryGuard() {
         Release();
     }

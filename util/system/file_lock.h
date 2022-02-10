@@ -14,7 +14,7 @@ public:
     TFileLock(const TString& filename, const EFileLockType type = EFileLockType::Exclusive);
 
     void Acquire();
-    bool TryAcquire(); 
+    bool TryAcquire();
     void Release();
 
     inline void lock() {

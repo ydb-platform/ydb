@@ -235,9 +235,9 @@ namespace NUri {
 
         // now set all fields prior to validating
 
-        Alloc(buflen); 
+        Alloc(buflen);
 
-        TMemoryWriteBuffer out(Buffer.data(), Buffer.size()); 
+        TMemoryWriteBuffer out(Buffer.data(), Buffer.size());
         for (int idx = 0; idx < FieldUrlMAX; ++idx) {
             const EField fld = EField(idx);
 
@@ -310,8 +310,8 @@ namespace NUri {
                 if (checkChars != allowChars)
                     ret = ParsedBadFormat;
             }
- 
-            out << '\0'; 
+
+            out << '\0';
         }
 
         if (hostConverted) {
@@ -323,7 +323,7 @@ namespace NUri {
             out << '\0';
         }
 
-        Buffer.Resize(out.Len()); 
+        Buffer.Resize(out.Len());
 
         if (GetScheme() == SchemeEmpty && SchemeEmpty != defscheme) {
             if (SchemeUnknown == defscheme)

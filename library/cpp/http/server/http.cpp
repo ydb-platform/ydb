@@ -212,7 +212,7 @@ public:
 
     void Wait() {
         Cb_->OnWait();
-        TGuard<TMutex> g(StopMutex); 
+        TGuard<TMutex> g(StopMutex);
         if (ListenThread) {
             ListenThread->Join();
             ListenThread.Reset(nullptr);
@@ -222,7 +222,7 @@ public:
     void Stop() {
         Shutdown();
 
-        TGuard<TMutex> g(StopMutex); 
+        TGuard<TMutex> g(StopMutex);
         if (ListenThread) {
             ListenThread->Join();
             ListenThread.Reset(nullptr);
@@ -457,7 +457,7 @@ public:
     ICallBack* Cb_ = nullptr;
     THttpServer* Parent_ = nullptr;
     TWakeupPollAble WakeupPollAble;
-    TMutex StopMutex; 
+    TMutex StopMutex;
 
 private:
     template <class TThreadPool_>
@@ -629,7 +629,7 @@ bool TClientRequest::Reply(void* /*ThreadSpecificResource*/) {
     return true;
 }
 
-bool TClientRequest::IsLocal() const { 
+bool TClientRequest::IsLocal() const {
     return HasLocalAddress(Socket());
 }
 

@@ -23,10 +23,10 @@ Y_UNIT_TEST_SUITE(TFileLockTest) {
         {
             TGuard<TFileLock> guard(fileLockExclusive1);
         }
-        { 
+        {
             TTryGuard<TFileLock> tryGuard(fileLockExclusive1);
-            UNIT_ASSERT(tryGuard.WasAcquired()); 
-        } 
+            UNIT_ASSERT(tryGuard.WasAcquired());
+        }
         {
             TGuard<TFileLock> guard1(fileLockExclusive1);
             TTryGuard<TFileLock> guard2(fileLockExclusive2);

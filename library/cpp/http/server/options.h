@@ -68,14 +68,14 @@ public:
         return *this;
     }
 
-    /// Default interface name to bind the server. Used when none of BindAddress are provided. 
+    /// Default interface name to bind the server. Used when none of BindAddress are provided.
     inline THttpServerOptions& SetHost(const TString& host) noexcept {
         Host = host;
 
         return *this;
     }
 
-    /// Default port to bind the server. Used when none of BindAddress are provided. 
+    /// Default port to bind the server. Used when none of BindAddress are provided.
     inline THttpServerOptions& SetPort(ui16 port) noexcept {
         Port = port;
 

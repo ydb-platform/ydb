@@ -84,11 +84,11 @@ inline TStringBuf HttpCodeStr(int code) noexcept {
 inline bool IsHttpCode(int code) noexcept {
     return HttpCodeStrEx(code).data() != HttpCodeStrEx(0).data();
 }
- 
+
 inline bool IsUserError(int code) noexcept {
-    return code >= 400 && code < 500; 
-} 
- 
+    return code >= 400 && code < 500;
+}
+
 inline bool IsServerError(int code) noexcept {
-    return code >= 500; 
-} 
+    return code >= 500;
+}

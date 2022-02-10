@@ -11,12 +11,12 @@ TLogElement::TLogElement(const TLog* parent)
 }
 
 TLogElement::TLogElement(const TLog* parent, ELogPriority priority)
-    : Parent_(parent) 
-    , Priority_(priority) 
-{ 
-    Reset(); 
-} 
- 
+    : Parent_(parent)
+    , Priority_(priority)
+{
+    Reset();
+}
+
 TLogElement::~TLogElement() {
     try {
         Finish();

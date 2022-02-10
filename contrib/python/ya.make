@@ -288,7 +288,7 @@ RECURSE(
     django-replicated
     django-rest-framework-docs
     django-rest-multiple-models
-    django-reversion 
+    django-reversion
     django-select2-forms
     django-sentinel
     django-simple-history
@@ -304,7 +304,7 @@ RECURSE(
     django-waffle
     django-webpack-loader
     django-webtest
-    django-whatever 
+    django-whatever
     django-widget-tweaks
     djangorestframework
     djangorestframework-camel-case
@@ -394,7 +394,7 @@ RECURSE(
     Flask-Log-Request-ID
     Flask-Login
     Flask-Mail
-    flask-marshmallow 
+    flask-marshmallow
     Flask-Menu
     flask_migrate
     flask-mongoengine

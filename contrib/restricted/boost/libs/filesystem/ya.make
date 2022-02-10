@@ -10,7 +10,7 @@ OWNER(
     g:cpp-contrib
 )
 
-INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc) 
+INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
 
 IF (DYNAMIC_BOOST)
     CFLAGS(
@@ -22,9 +22,9 @@ ELSE()
     )
 ENDIF()
 
-PEERDIR( 
-    ${BOOST_ROOT}/libs/system 
-) 
+PEERDIR(
+    ${BOOST_ROOT}/libs/system
+)
 
 SRCS(
     src/codecvt_error_category.cpp

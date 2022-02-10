@@ -4,19 +4,19 @@ NO_UTIL()
 
 LICENSE(BSL-1.0)
 
-SET(BOOST_ROOT contrib/restricted/boost) 
- 
-PEERDIR( 
-    ${BOOST_ROOT} 
-) 
- 
-ADDINCL( 
-    ${BOOST_ROOT}/boost/predef 
-) 
- 
-# XXX: fix selective checkout 
-SRCDIR(${BOOST_ROOT}/boost) 
- 
+SET(BOOST_ROOT contrib/restricted/boost)
+
+PEERDIR(
+    ${BOOST_ROOT}
+)
+
+ADDINCL(
+    ${BOOST_ROOT}/boost/predef
+)
+
+# XXX: fix selective checkout
+SRCDIR(${BOOST_ROOT}/boost)
+
 IF (DYNAMIC_BOOST)
     CFLAGS(
         -DBOOST_ATOMIC_DYN_LINK=1

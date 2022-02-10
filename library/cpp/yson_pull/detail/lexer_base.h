@@ -1,27 +1,27 @@
-#pragma once 
- 
-#include "byte_reader.h" 
-#include "cescape.h" 
-#include "macros.h" 
-#include "number.h" 
+#pragma once
+
+#include "byte_reader.h"
+#include "cescape.h"
+#include "macros.h"
+#include "number.h"
 #include "percent_scalar.h"
-#include "stream_counter.h" 
-#include "varint.h" 
- 
-#include <util/generic/maybe.h> 
-#include <util/generic/vector.h> 
-#include <util/string/cast.h> 
- 
+#include "stream_counter.h"
+#include "varint.h"
+
+#include <util/generic/maybe.h>
+#include <util/generic/vector.h>
+#include <util/string/cast.h>
+
 namespace NYsonPull {
     namespace NDetail {
         template <bool EnableLinePositionInfo>
         class lexer_base: public byte_reader<stream_counter<EnableLinePositionInfo>> {
             using Base = byte_reader<
                 stream_counter<EnableLinePositionInfo>>;
- 
+
             TVector<ui8> token_buffer_;
             TMaybe<size_t> memory_limit_;
- 
+
         public:
             lexer_base(
                 NYsonPull::NInput::IStream& buffer,
@@ -29,28 +29,28 @@ namespace NYsonPull {
                 : Base(buffer)
                 , memory_limit_{memory_limit} {
             }
- 
+
             ATTRIBUTE(noinline, hot)
             ui8 skip_space_and_get_byte() {
                 auto& buf = Base::stream().buffer();
-                if (Y_LIKELY(!buf.is_empty())) { 
+                if (Y_LIKELY(!buf.is_empty())) {
                     auto ch = *buf.pos();
-                    if (Y_LIKELY(!is_space(ch))) { 
+                    if (Y_LIKELY(!is_space(ch))) {
                         return ch;
                     }
                 }
                 return skip_space_and_get_byte_fallback();
             }
- 
+
             ATTRIBUTE(hot)
             ui8 get_byte() {
                 auto& buf = Base::stream().buffer();
-                if (Y_LIKELY(!buf.is_empty())) { 
+                if (Y_LIKELY(!buf.is_empty())) {
                     return *buf.pos();
                 }
                 return Base::get_byte();
-            } 
- 
+            }
+
             number read_numeric() {
                 token_buffer_.clear();
                 auto type = number_type::int64;
@@ -64,7 +64,7 @@ namespace NYsonPull {
                     } else if (ch == 'u') {
                         token_buffer_.push_back(ch);
                         type = number_type::uint64;
-                    } else if (Y_UNLIKELY(isalpha(ch))) { 
+                    } else if (Y_UNLIKELY(isalpha(ch))) {
                         COLD_BLOCK_BYVALUE
                         Base::fail("Unexpected ", NCEscape::quote(ch), " in numeric literal");
                         COLD_BLOCK_END
@@ -74,7 +74,7 @@ namespace NYsonPull {
                     check_memory_limit();
                     Base::advance(1);
                 }
- 
+
                 auto str = token_buffer();
                 try {
                     switch (type) {
@@ -86,12 +86,12 @@ namespace NYsonPull {
                             str.Chop(1); // 'u' suffix
                             return FromString<ui64>(str);
                     }
-                    Y_UNREACHABLE(); 
+                    Y_UNREACHABLE();
                 } catch (const std::exception& err) {
                     Base::fail(err.what());
                 }
-            } 
- 
+            }
+
             TStringBuf read_quoted_string() {
                 auto count_trailing_slashes = [](ui8* begin, ui8* end) {
                     auto count = size_t{0};
@@ -102,7 +102,7 @@ namespace NYsonPull {
                     }
                     return count;
                 };
- 
+
                 token_buffer_.clear();
                 auto& buf = Base::stream().buffer();
                 while (true) {
@@ -135,12 +135,12 @@ namespace NYsonPull {
                         token_buffer_.push_back('"');
                     }
                     check_memory_limit();
-                } 
+                }
 
                 NCEscape::decode_inplace(token_buffer_);
                 return token_buffer();
-            } 
- 
+            }
+
             TStringBuf read_unquoted_string() {
                 token_buffer_.clear();
                 while (true) {
@@ -155,20 +155,20 @@ namespace NYsonPull {
                     Base::advance(1);
                 }
                 return token_buffer();
-            } 
- 
+            }
+
             ATTRIBUTE(noinline, hot)
             TStringBuf read_binary_string() {
                 auto slength = NVarInt::read<i32>(*this);
-                if (Y_UNLIKELY(slength < 0)) { 
+                if (Y_UNLIKELY(slength < 0)) {
                     COLD_BLOCK_BYVALUE
                     Base::fail("Negative binary string literal length ", slength);
                     COLD_BLOCK_END
                 }
                 auto length = static_cast<ui32>(slength);
- 
+
                 auto& buf = Base::stream().buffer();
-                if (Y_LIKELY(buf.available() >= length)) { 
+                if (Y_LIKELY(buf.available() >= length)) {
                     auto result = TStringBuf{
                         reinterpret_cast<const char*>(buf.pos()),
                         length};
@@ -177,8 +177,8 @@ namespace NYsonPull {
                 } else { // reading in Buffer
                     return read_binary_string_fallback(length);
                 }
-            } 
- 
+            }
+
             ATTRIBUTE(noinline)
             TStringBuf read_binary_string_fallback(size_t length) {
                 auto& buf = Base::stream().buffer();
@@ -187,7 +187,7 @@ namespace NYsonPull {
                 while (needToRead) {
                     this->Base::template fill_buffer<false>();
                     auto chunk_size = std::min(needToRead, buf.available());
- 
+
                     token_buffer_.insert(
                         token_buffer_.end(),
                         buf.pos(),
@@ -197,26 +197,26 @@ namespace NYsonPull {
                     Base::advance(chunk_size);
                 }
                 return token_buffer();
-            } 
- 
+            }
+
             percent_scalar read_percent_scalar() {
                 auto throw_incorrect_percent_scalar = [&]() {
                     Base::fail("Incorrect %-literal prefix ", NCEscape::quote(token_buffer()));
                 };
- 
+
                 auto assert_literal = [&](TStringBuf literal) -> void {
                     for (size_t i = 2; i < literal.size(); ++i) {
                         token_buffer_.push_back(this->Base::template get_byte<false>());
                         Base::advance(1);
-                        if (Y_UNLIKELY(token_buffer_.back() != literal[i])) { 
+                        if (Y_UNLIKELY(token_buffer_.back() != literal[i])) {
                             throw_incorrect_percent_scalar();
                         }
                     }
                 };
- 
+
                 token_buffer_.clear();
                 token_buffer_.push_back(this->Base::template get_byte<false>());
-                Base::advance(1); 
+                Base::advance(1);
 
                 switch (token_buffer_[0]) {
                     case 't':
@@ -236,32 +236,32 @@ namespace NYsonPull {
                         return percent_scalar(-std::numeric_limits<double>::infinity());
                     default:
                         throw_incorrect_percent_scalar();
-                } 
+                }
 
-                Y_UNREACHABLE(); 
-            } 
- 
+                Y_UNREACHABLE();
+            }
+
             i64 read_binary_int64() {
                 return NVarInt::read<i64>(*this);
             }
- 
+
             ui64 read_binary_uint64() {
                 return NVarInt::read<ui64>(*this);
             }
- 
+
             double read_binary_double() {
                 union {
                     double as_double;
                     ui8 as_bytes[sizeof(double)];
                 } data;
                 static_assert(sizeof(data) == sizeof(double), "bad union size");
- 
+
                 auto needToRead = sizeof(double);
- 
+
                 auto& buf = Base::stream().buffer();
                 while (needToRead != 0) {
                     Base::fill_buffer();
- 
+
                     auto chunk_size = std::min(needToRead, buf.available());
                     if (chunk_size == 0) {
                         Base::fail("Error parsing binary double literal");
@@ -274,8 +274,8 @@ namespace NYsonPull {
                     Base::advance(chunk_size);
                 }
                 return data.as_double;
-            } 
- 
+            }
+
         private:
             static bool is_space(ui8 ch) {
                 static const ui8 lookupTable[] =
@@ -284,24 +284,24 @@ namespace NYsonPull {
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 
+
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 
+
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 
+
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
                 return lookupTable[ch];
             }
- 
+
             ATTRIBUTE(noinline, cold)
             ui8 skip_space_and_get_byte_fallback() {
                 auto& buf = Base::stream().buffer();
@@ -318,12 +318,12 @@ namespace NYsonPull {
                         }
                         Base::advance(1);
                     }
-                } 
+                }
                 return Base::get_byte();
             }
 
             void check_memory_limit() {
-                if (Y_UNLIKELY(memory_limit_ && token_buffer_.capacity() > *memory_limit_)) { 
+                if (Y_UNLIKELY(memory_limit_ && token_buffer_.capacity() > *memory_limit_)) {
                     COLD_BLOCK_BYVALUE
                     Base::fail(
                         "Memory limit exceeded while parsing YSON stream: "
@@ -331,13 +331,13 @@ namespace NYsonPull {
                         token_buffer_.capacity(),
                         ", limit ", *memory_limit_);
                     COLD_BLOCK_END
-                } 
-            } 
- 
+                }
+            }
+
             TStringBuf token_buffer() const {
                 auto* begin = reinterpret_cast<const char*>(token_buffer_.data());
                 return {begin, token_buffer_.size()};
             }
         };
-    } 
+    }
 }

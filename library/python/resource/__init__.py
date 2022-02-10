@@ -1,8 +1,8 @@
 from __res import find as __find, count, key_by_index, resfs_files as __resfs_files
 from __res import resfs_read, resfs_resolve, resfs_src  # noqa
- 
+
 import six
- 
+
 
 def iterkeys(prefix='', strip_prefix=False):
     decode = lambda s: s
@@ -11,12 +11,12 @@ def iterkeys(prefix='', strip_prefix=False):
         decode = lambda s: s.decode('utf-8')
 
     for i in six.moves.range(count()):
-        key = key_by_index(i) 
+        key = key_by_index(i)
         if key.startswith(prefix):
             if strip_prefix:
                 key = key[len(prefix):]
             yield decode(key)
- 
+
 
 def itervalues(prefix=b''):
     for key in iterkeys(prefix=prefix):

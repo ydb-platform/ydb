@@ -418,8 +418,8 @@
          (defined(__ENVIRONMENT_TV_OS_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_TV_OS_VERSION_MIN_REQUIRED__ >= 130000) || \
          (defined(__ENVIRONMENT_WATCH_OS_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_WATCH_OS_VERSION_MIN_REQUIRED__ >= 60000))
 #      define _LIBCPP_HAS_ALIGNED_ALLOC
-#      define _LIBCPP_HAS_TIMESPEC_GET 
-#    endif 
+#      define _LIBCPP_HAS_TIMESPEC_GET
+#    endif
 #  endif // __APPLE__
 #endif
 #endif // __has_attribute(using_if_exists)
@@ -441,7 +441,7 @@
 #endif
 #if defined(__APPLE__) && !defined(__i386__) && !defined(__x86_64__) &&       \
     (!defined(__arm__) || __ARM_ARCH_7K__ >= 2)
-#  define _LIBCPP_ABI_ALTERNATE_STRING_LAYOUT 
+#  define _LIBCPP_ABI_ALTERNATE_STRING_LAYOUT
 #endif
 
 #if __has_feature(cxx_alignas)
@@ -458,7 +458,7 @@ typedef __char32_t char32_t;
 #endif
 
 #if !__has_feature(cxx_exceptions)
-#  define _LIBCPP_NO_EXCEPTIONS 
+#  define _LIBCPP_NO_EXCEPTIONS
 #endif
 
 #if !(__has_feature(cxx_strong_enums))
@@ -521,7 +521,7 @@ typedef __char32_t char32_t;
 #define _LIBCPP_NORETURN __attribute__((noreturn))
 
 #if !defined(__EXCEPTIONS)
-#  define _LIBCPP_NO_EXCEPTIONS 
+#  define _LIBCPP_NO_EXCEPTIONS
 #endif
 
 #if !defined(__SANITIZE_ADDRESS__)
@@ -633,8 +633,8 @@ typedef __char32_t char32_t;
 #    define _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS _LIBCPP_DLL_VIS
 #    define _LIBCPP_CLASS_TEMPLATE_INSTANTIATION_VIS
 #  else
-#    define _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS 
-#    define _LIBCPP_CLASS_TEMPLATE_INSTANTIATION_VIS _LIBCPP_DLL_VIS 
+#    define _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS
+#    define _LIBCPP_CLASS_TEMPLATE_INSTANTIATION_VIS _LIBCPP_DLL_VIS
 #  endif
 #  define _LIBCPP_OVERRIDABLE_FUNC_VIS _LIBCPP_DLL_VIS
 #  define _LIBCPP_EXPORTED_FROM_ABI __declspec(dllexport)
@@ -901,12 +901,12 @@ typedef unsigned int   char32_t;
 #if !defined(_LIBCPP_DEBUG)
 # define _LIBCPP_DEBUG_LEVEL 0
 #elif _LIBCPP_DEBUG == 0
-# define _LIBCPP_DEBUG_LEVEL 1 
-#elif _LIBCPP_DEBUG == 1 
-# define _LIBCPP_DEBUG_LEVEL 2 
-#else 
-# error Supported values for _LIBCPP_DEBUG are 0 and 1 
-#endif 
+# define _LIBCPP_DEBUG_LEVEL 1
+#elif _LIBCPP_DEBUG == 1
+# define _LIBCPP_DEBUG_LEVEL 2
+#else
+# error Supported values for _LIBCPP_DEBUG are 0 and 1
+#endif
 
 // Libc++ allows disabling extern template instantiation declarations by
 // means of users defining _LIBCPP_DISABLE_EXTERN_TEMPLATE.
@@ -1096,10 +1096,10 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
 #if defined(_LIBCPP_COMPILER_CLANG_BASED) && !__has_feature(cxx_rtti)
 #  define _LIBCPP_NO_RTTI
 #elif defined(__GNUC__) && !defined(__GXX_RTTI)
-#  define _LIBCPP_NO_RTTI 
-#elif defined(_LIBCPP_COMPILER_MSVC) && !defined(_CPPRTTI) 
-#  define _LIBCPP_NO_RTTI 
-#endif 
+#  define _LIBCPP_NO_RTTI
+#elif defined(_LIBCPP_COMPILER_MSVC) && !defined(_CPPRTTI)
+#  define _LIBCPP_NO_RTTI
+#endif
 
 #ifndef _LIBCPP_WEAK
 #define _LIBCPP_WEAK __attribute__((__weak__))

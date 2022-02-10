@@ -1,5 +1,5 @@
 PY23_LIBRARY()
- 
+
 LICENSE(MIT)
 
 OWNER(g:python-contrib)
@@ -13,7 +13,7 @@ ELSE()
         contrib/python/PyYAML/py3
     )
 ENDIF()
- 
+
 NO_LINT()
 
 END()

@@ -130,11 +130,11 @@ namespace {
 
         void DoFinish() override {
             *Out_ << Base_ << "Size:\ndd " << Count_ << '\n';
- 
-            *Out_ << "%ifidn __OUTPUT_FORMAT__,elf64\n"; 
-            *Out_ << "size " << Base_ << " " << Count_ << "\n"; 
-            *Out_ << "size " << Base_ << "Size 4\n"; 
-            *Out_ << "%endif\n"; 
+
+            *Out_ << "%ifidn __OUTPUT_FORMAT__,elf64\n";
+            *Out_ << "size " << Base_ << " " << Count_ << "\n";
+            *Out_ << "size " << Base_ << "Size 4\n";
+            *Out_ << "%endif\n";
         }
 
         void DoWrite(const void* data, size_t len) override {

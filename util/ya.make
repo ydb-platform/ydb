@@ -115,7 +115,7 @@ JOIN_SRCS(
     generic/mem_copy.cpp
     generic/noncopyable.cpp
     generic/object_counter.cpp
-    generic/overloaded.cpp 
+    generic/overloaded.cpp
     generic/ptr.cpp
     generic/queue.cpp
     generic/refcount.cpp

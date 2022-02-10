@@ -33,7 +33,7 @@ RECURSE(
     cityhash
     cityhash/test
     clickhouse_client
-    cmain 
+    cmain
     codecs
     codecs/gen_corpus
     codecs/test
@@ -47,9 +47,9 @@ RECURSE(
     cppdemangle
     cqueue
     crowd-kit
-    cyson 
-    cyson/pymodule 
-    cyson/ut 
+    cyson
+    cyson/pymodule
+    cyson/ut
     deploy_formatter
     deprecated
     dir-sync
@@ -73,7 +73,7 @@ RECURSE(
     filesys
     filesys/ut
     find_root
-    flask 
+    flask
     flask_passport
     fnvhash
     fnvhash/test
@@ -105,15 +105,15 @@ RECURSE(
     json/compare
     json/perf
     json/test
-    json/test/py2 
-    json/test/py3 
+    json/test/py2
+    json/test/py3
     langdetect
     langmask
     langs
-    luigi 
-    luigi/data 
+    luigi
+    luigi/data
     luigi/example
-    luigi/luigid_static 
+    luigi/luigid_static
     maths
     messagebus
     metrics_framework
@@ -128,7 +128,7 @@ RECURSE(
     nirvana_api/test_lib
     nirvana_test
     nstools
-    nyt 
+    nyt
     oauth
     oauth/example
     ok_client
@@ -158,7 +158,7 @@ RECURSE(
     retry/tests
     runtime
     runtime/main
-    runtime/test 
+    runtime/test
     runtime_py3
     runtime_py3/main
     runtime_py3/test
@@ -209,7 +209,7 @@ RECURSE(
     yandex_tracker_client
     yenv
     yt
-    yt/test 
+    yt/test
     ylock
     ylock/tests
     zipatch

@@ -6,11 +6,11 @@ OWNER(
 RECURSE(
     abseil-cpp
     abseil-cpp-tstring
-    alsa-lib 
-    avahi 
+    alsa-lib
+    avahi
     aws
     blis
-    boost 
+    boost
     cityhash-1.0.2
     cmph
     cpuinfo
@@ -19,33 +19,33 @@ RECURSE(
     fast_float
     dragonbox
     gemmlowp
-    glib 
-    glib-networking 
-    glibmm 
+    glib
+    glib-networking
+    glibmm
     google
     googletest
-    gst-plugins-bad 
-    gst-plugins-base 
-    gst-plugins-good 
-    gstreamer 
+    gst-plugins-bad
+    gst-plugins-base
+    gst-plugins-good
+    gstreamer
     http-parser
     keyutils
     libelf
-    libffi 
+    libffi
     libiscsi
     libntirpc
     librseq
-    libsigcxx 
-    libsoup 
+    libsigcxx
+    libsoup
     libtorrent
     liburcu
     libxsmm
     llhttp
-    mpg123 
+    mpg123
     murmurhash
     nfs_ganesha
     noc
-    openal-soft 
+    openal-soft
     patched
     protobuf-c
     protoc-c
@@ -59,13 +59,13 @@ RECURSE(
     turbo_base64
     uriparser
 )
- 
-IF(OS_LINUX OR OS_DARWIN) 
-    RECURSE( 
-        boost/libs/python 
-        boost/libs/python/arcadia_test 
-    ) 
-ENDIF() 
+
+IF(OS_LINUX OR OS_DARWIN)
+    RECURSE(
+        boost/libs/python
+        boost/libs/python/arcadia_test
+    )
+ENDIF()
 
 IF(OS_ANDROID)
     RECURSE(ashmem)

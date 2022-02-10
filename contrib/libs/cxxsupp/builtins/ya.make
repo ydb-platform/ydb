@@ -116,11 +116,11 @@ IF (OS_DARWIN OR OS_IOS)
     )
 ENDIF()
 
-IF (ARCH_ARM) 
-    SRCS( 
-        clear_cache.c 
-        multc3.c 
-    ) 
-ENDIF() 
- 
+IF (ARCH_ARM)
+    SRCS(
+        clear_cache.c
+        multc3.c
+    )
+ENDIF()
+
 END()

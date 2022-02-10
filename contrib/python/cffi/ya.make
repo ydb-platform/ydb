@@ -7,12 +7,12 @@ OWNER(g:python-contrib)
 VERSION(1.15.0)
 
 PEERDIR(
-    contrib/restricted/libffi 
+    contrib/restricted/libffi
     contrib/python/pycparser
 )
 
 ADDINCL(
-    contrib/restricted/libffi/include 
+    contrib/restricted/libffi/include
 )
 
 NO_COMPILER_WARNINGS()

@@ -1,13 +1,13 @@
-OWNER( 
-    g:contrib 
-    g:cpp-contrib 
-) 
- 
+OWNER(
+    g:contrib
+    g:cpp-contrib
+)
+
 LIBRARY()
 
 LICENSE(Service-Dll-Harness)
 
-WITHOUT_LICENSE_TEXTS() 
+WITHOUT_LICENSE_TEXTS()
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
@@ -17,19 +17,19 @@ NO_RUNTIME()
 
 NO_COMPILER_WARNINGS()
 
-IF (USE_DYNAMIC_IDN) 
+IF (USE_DYNAMIC_IDN)
     PEERDIR(
         contrib/libs/libidn/dynamic
     )
 ELSE()
-    PEERDIR( 
-        contrib/libs/libidn/static 
+    PEERDIR(
+        contrib/libs/libidn/static
     )
 ENDIF()
 
 END()
 
-RECURSE( 
-    dynamic 
-    static 
-) 
+RECURSE(
+    dynamic
+    static
+)

@@ -18,7 +18,7 @@ PEERDIR(
     contrib/restricted/googletest/googletest
 )
 
-ADDINCL( 
+ADDINCL(
     GLOBAL contrib/restricted/googletest/googlemock/include
     GLOBAL contrib/restricted/googletest/googletest/include
     contrib/restricted/googletest/googlemock

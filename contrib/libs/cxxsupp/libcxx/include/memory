@@ -122,7 +122,7 @@ public:
     typedef typename add_lvalue_reference<const T>::type
                       const_reference;                   // deprecated in C++17, removed in C++20
 
-    typedef T         value_type; 
+    typedef T         value_type;
 
     template <class U> struct rebind {typedef allocator<U> other;}; // deprecated in C++17, removed in C++20
 
@@ -342,7 +342,7 @@ public:
     pointer release() noexcept;
     void reset(pointer p = pointer()) noexcept;
     void reset(nullptr_t) noexcept;
-  template <class U> void reset(U) = delete; 
+  template <class U> void reset(U) = delete;
     void swap(unique_ptr& u) noexcept;
 };
 
@@ -567,7 +567,7 @@ template<class T> void swap(weak_ptr<T>& a, weak_ptr<T>& b) noexcept;
 template<class T> struct owner_less;
 
 template<class T>
-struct owner_less<shared_ptr<T> > 
+struct owner_less<shared_ptr<T> >
     : binary_function<shared_ptr<T>, shared_ptr<T>, bool>
 {
     typedef bool result_type;
@@ -577,7 +577,7 @@ struct owner_less<shared_ptr<T> >
 };
 
 template<class T>
-struct owner_less<weak_ptr<T> > 
+struct owner_less<weak_ptr<T> >
     : binary_function<weak_ptr<T>, weak_ptr<T>, bool>
 {
     typedef bool result_type;

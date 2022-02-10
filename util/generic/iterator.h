@@ -1,8 +1,8 @@
 #pragma once
 
 #include <iterator>
-#include <utility> 
- 
+#include <utility>
+
 namespace NStlIterator {
     template <class T>
     class TProxy {
@@ -68,31 +68,31 @@ class TInputRangeAdaptor {
 public: // TODO: private
     class TIterator {
     public:
-        static constexpr bool IsNoexceptNext = noexcept(std::declval<TSlave>().Next()); 
- 
+        static constexpr bool IsNoexceptNext = noexcept(std::declval<TSlave>().Next());
+
         using difference_type = std::ptrdiff_t;
         using pointer = decltype(std::declval<TSlave>().Next());
         using reference = decltype(*std::declval<TSlave>().Next());
         using value_type = std::remove_cv_t<std::remove_reference_t<reference>>;
         using iterator_category = std::input_iterator_tag;
 
-        inline TIterator() noexcept 
+        inline TIterator() noexcept
             : Slave_(nullptr)
             , Cur_()
         {
         }
 
-        inline TIterator(TSlave* slave) noexcept(IsNoexceptNext) 
+        inline TIterator(TSlave* slave) noexcept(IsNoexceptNext)
             : Slave_(slave)
             , Cur_(Slave_->Next())
         {
         }
 
-        inline bool operator==(const TIterator& it) const noexcept { 
+        inline bool operator==(const TIterator& it) const noexcept {
             return Cur_ == it.Cur_;
         }
 
-        inline bool operator!=(const TIterator& it) const noexcept { 
+        inline bool operator!=(const TIterator& it) const noexcept {
             return !(*this == it);
         }
 
@@ -104,7 +104,7 @@ public: // TODO: private
             return *Cur_;
         }
 
-        inline TIterator& operator++() noexcept(IsNoexceptNext) { 
+        inline TIterator& operator++() noexcept(IsNoexceptNext) {
             Cur_ = Slave_->Next();
 
             return *this;

@@ -111,125 +111,125 @@
 DEMANGLE_NAMESPACE_BEGIN
 
 template <class T, size_t N> class PODSmallVector {
-  static_assert(std::is_pod<T>::value, 
-                "T is required to be a plain old data type"); 
- 
+  static_assert(std::is_pod<T>::value,
+                "T is required to be a plain old data type");
+
   T *First = nullptr;
   T *Last = nullptr;
   T *Cap = nullptr;
-  T Inline[N] = {0}; 
- 
-  bool isInline() const { return First == Inline; } 
- 
-  void clearInline() { 
-    First = Inline; 
-    Last = Inline; 
-    Cap = Inline + N; 
-  } 
- 
-  void reserve(size_t NewCap) { 
-    size_t S = size(); 
-    if (isInline()) { 
+  T Inline[N] = {0};
+
+  bool isInline() const { return First == Inline; }
+
+  void clearInline() {
+    First = Inline;
+    Last = Inline;
+    Cap = Inline + N;
+  }
+
+  void reserve(size_t NewCap) {
+    size_t S = size();
+    if (isInline()) {
       auto *Tmp = static_cast<T *>(std::malloc(NewCap * sizeof(T)));
-      if (Tmp == nullptr) 
-        std::terminate(); 
-      std::copy(First, Last, Tmp); 
-      First = Tmp; 
-    } else { 
+      if (Tmp == nullptr)
+        std::terminate();
+      std::copy(First, Last, Tmp);
+      First = Tmp;
+    } else {
       First = static_cast<T *>(std::realloc(First, NewCap * sizeof(T)));
-      if (First == nullptr) 
-        std::terminate(); 
-    } 
-    Last = First + S; 
-    Cap = First + NewCap; 
-  } 
- 
-public: 
-  PODSmallVector() : First(Inline), Last(First), Cap(Inline + N) {} 
- 
+      if (First == nullptr)
+        std::terminate();
+    }
+    Last = First + S;
+    Cap = First + NewCap;
+  }
+
+public:
+  PODSmallVector() : First(Inline), Last(First), Cap(Inline + N) {}
+
   PODSmallVector(const PODSmallVector &) = delete;
   PODSmallVector &operator=(const PODSmallVector &) = delete;
- 
+
   PODSmallVector(PODSmallVector &&Other) : PODSmallVector() {
-    if (Other.isInline()) { 
-      std::copy(Other.begin(), Other.end(), First); 
-      Last = First + Other.size(); 
-      Other.clear(); 
-      return; 
-    } 
- 
-    First = Other.First; 
-    Last = Other.Last; 
-    Cap = Other.Cap; 
-    Other.clearInline(); 
-  } 
- 
+    if (Other.isInline()) {
+      std::copy(Other.begin(), Other.end(), First);
+      Last = First + Other.size();
+      Other.clear();
+      return;
+    }
+
+    First = Other.First;
+    Last = Other.Last;
+    Cap = Other.Cap;
+    Other.clearInline();
+  }
+
   PODSmallVector &operator=(PODSmallVector &&Other) {
-    if (Other.isInline()) { 
-      if (!isInline()) { 
-        std::free(First); 
-        clearInline(); 
-      } 
-      std::copy(Other.begin(), Other.end(), First); 
-      Last = First + Other.size(); 
-      Other.clear(); 
-      return *this; 
-    } 
- 
-    if (isInline()) { 
-      First = Other.First; 
-      Last = Other.Last; 
-      Cap = Other.Cap; 
-      Other.clearInline(); 
-      return *this; 
-    } 
- 
-    std::swap(First, Other.First); 
-    std::swap(Last, Other.Last); 
-    std::swap(Cap, Other.Cap); 
-    Other.clear(); 
-    return *this; 
-  } 
- 
+    if (Other.isInline()) {
+      if (!isInline()) {
+        std::free(First);
+        clearInline();
+      }
+      std::copy(Other.begin(), Other.end(), First);
+      Last = First + Other.size();
+      Other.clear();
+      return *this;
+    }
+
+    if (isInline()) {
+      First = Other.First;
+      Last = Other.Last;
+      Cap = Other.Cap;
+      Other.clearInline();
+      return *this;
+    }
+
+    std::swap(First, Other.First);
+    std::swap(Last, Other.Last);
+    std::swap(Cap, Other.Cap);
+    Other.clear();
+    return *this;
+  }
+
   // NOLINTNEXTLINE(readability-identifier-naming)
   void push_back(const T &Elem) {
-    if (Last == Cap) 
-      reserve(size() * 2); 
-    *Last++ = Elem; 
-  } 
- 
+    if (Last == Cap)
+      reserve(size() * 2);
+    *Last++ = Elem;
+  }
+
   // NOLINTNEXTLINE(readability-identifier-naming)
-  void pop_back() { 
-    assert(Last != First && "Popping empty vector!"); 
-    --Last; 
-  } 
- 
-  void dropBack(size_t Index) { 
-    assert(Index <= size() && "dropBack() can't expand!"); 
-    Last = First + Index; 
-  } 
- 
+  void pop_back() {
+    assert(Last != First && "Popping empty vector!");
+    --Last;
+  }
+
+  void dropBack(size_t Index) {
+    assert(Index <= size() && "dropBack() can't expand!");
+    Last = First + Index;
+  }
+
   T *begin() { return First; }
   T *end() { return Last; }
- 
-  bool empty() const { return First == Last; } 
-  size_t size() const { return static_cast<size_t>(Last - First); } 
+
+  bool empty() const { return First == Last; }
+  size_t size() const { return static_cast<size_t>(Last - First); }
   T &back() {
-    assert(Last != First && "Calling back() on empty vector!"); 
-    return *(Last - 1); 
-  } 
+    assert(Last != First && "Calling back() on empty vector!");
+    return *(Last - 1);
+  }
   T &operator[](size_t Index) {
-    assert(Index < size() && "Invalid access!"); 
-    return *(begin() + Index); 
-  } 
-  void clear() { Last = First; } 
- 
-  ~PODSmallVector() { 
-    if (!isInline()) 
-      std::free(First); 
-  } 
-}; 
- 
+    assert(Index < size() && "Invalid access!");
+    return *(begin() + Index);
+  }
+  void clear() { Last = First; }
+
+  ~PODSmallVector() {
+    if (!isInline())
+      std::free(First);
+  }
+};
+
 // Base class of all AST nodes. The AST is built by the parser, then is
 // traversed by the printLeft/Right functions to produce a demangled string.
 class Node {
@@ -648,14 +648,14 @@ class ReferenceType : public Node {
   // Dig through any refs to refs, collapsing the ReferenceTypes as we go. The
   // rule here is rvalue ref to rvalue ref collapses to a rvalue ref, and any
   // other combination collapses to a lvalue ref.
-  // 
+  //
   // A combination of a TemplateForwardReference and a back-ref Substitution
-  // from an ill-formed string may have created a cycle; use cycle detection to 
-  // avoid looping forever. 
+  // from an ill-formed string may have created a cycle; use cycle detection to
+  // avoid looping forever.
   std::pair<ReferenceKind, const Node *> collapse(OutputBuffer &OB) const {
     auto SoFar = std::make_pair(RK, Pointee);
-    // Track the chain of nodes for the Floyd's 'tortoise and hare' 
-    // cycle-detection algorithm, since getSyntaxNode(S) is impure 
+    // Track the chain of nodes for the Floyd's 'tortoise and hare'
+    // cycle-detection algorithm, since getSyntaxNode(S) is impure
     PODSmallVector<const Node *, 8> Prev;
     for (;;) {
       const Node *SN = SoFar.second->getSyntaxNode(OB);
@@ -664,14 +664,14 @@ class ReferenceType : public Node {
       auto *RT = static_cast<const ReferenceType *>(SN);
       SoFar.second = RT->Pointee;
       SoFar.first = std::min(SoFar.first, RT->RK);
- 
-      // The middle of Prev is the 'slow' pointer moving at half speed 
-      Prev.push_back(SoFar.second); 
-      if (Prev.size() > 1 && SoFar.second == Prev[(Prev.size() - 1) / 2]) { 
-        // Cycle detected 
-        SoFar.second = nullptr; 
-        break; 
-      } 
+
+      // The middle of Prev is the 'slow' pointer moving at half speed
+      Prev.push_back(SoFar.second);
+      if (Prev.size() > 1 && SoFar.second == Prev[(Prev.size() - 1) / 2]) {
+        // Cycle detected
+        SoFar.second = nullptr;
+        break;
+      }
     }
     return SoFar;
   }
@@ -692,8 +692,8 @@ public:
       return;
     SwapAndRestore<bool> SavePrinting(Printing, true);
     std::pair<ReferenceKind, const Node *> Collapsed = collapse(OB);
-    if (!Collapsed.second) 
-      return; 
+    if (!Collapsed.second)
+      return;
     Collapsed.second->printLeft(OB);
     if (Collapsed.second->hasArray(OB))
       OB += " ";
@@ -707,8 +707,8 @@ public:
       return;
     SwapAndRestore<bool> SavePrinting(Printing, true);
     std::pair<ReferenceKind, const Node *> Collapsed = collapse(OB);
-    if (!Collapsed.second) 
-      return; 
+    if (!Collapsed.second)
+      return;
     if (Collapsed.second->hasArray(OB) || Collapsed.second->hasFunction(OB))
       OB += ")";
     Collapsed.second->printRight(OB);

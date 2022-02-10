@@ -1,52 +1,52 @@
 from jedi.parser_utils import get_flow_branch_keyword, is_scope, get_parent_scope
 from jedi.evaluate.recursion import execution_allowed
- 
- 
-class Status(object): 
-    lookup_table = {} 
- 
-    def __init__(self, value, name): 
-        self._value = value 
-        self._name = name 
-        Status.lookup_table[value] = self 
- 
-    def invert(self): 
-        if self is REACHABLE: 
-            return UNREACHABLE 
-        elif self is UNREACHABLE: 
-            return REACHABLE 
-        else: 
-            return UNSURE 
- 
-    def __and__(self, other): 
-        if UNSURE in (self, other): 
-            return UNSURE 
-        else: 
-            return REACHABLE if self._value and other._value else UNREACHABLE 
- 
-    def __repr__(self): 
-        return '<%s: %s>' % (type(self).__name__, self._name) 
- 
- 
-REACHABLE = Status(True, 'reachable') 
-UNREACHABLE = Status(False, 'unreachable') 
-UNSURE = Status(None, 'unsure') 
- 
- 
+
+
+class Status(object):
+    lookup_table = {}
+
+    def __init__(self, value, name):
+        self._value = value
+        self._name = name
+        Status.lookup_table[value] = self
+
+    def invert(self):
+        if self is REACHABLE:
+            return UNREACHABLE
+        elif self is UNREACHABLE:
+            return REACHABLE
+        else:
+            return UNSURE
+
+    def __and__(self, other):
+        if UNSURE in (self, other):
+            return UNSURE
+        else:
+            return REACHABLE if self._value and other._value else UNREACHABLE
+
+    def __repr__(self):
+        return '<%s: %s>' % (type(self).__name__, self._name)
+
+
+REACHABLE = Status(True, 'reachable')
+UNREACHABLE = Status(False, 'unreachable')
+UNSURE = Status(None, 'unsure')
+
+
 def _get_flow_scopes(node):
     while True:
         node = get_parent_scope(node, include_flows=True)
         if node is None or is_scope(node):
             return
         yield node
- 
- 
+
+
 def reachability_check(context, context_scope, node, origin_scope=None):
     first_flow_scope = get_parent_scope(node, include_flows=True)
     if origin_scope is not None:
         origin_flow_scopes = list(_get_flow_scopes(origin_scope))
         node_flow_scopes = list(_get_flow_scopes(node))
- 
+
         branch_matches = True
         for flow_scope in origin_flow_scopes:
             if flow_scope in node_flow_scopes:
@@ -79,32 +79,32 @@ def reachability_check(context, context_scope, node, origin_scope=None):
 
 
 def _break_check(context, context_scope, flow_scope, node):
-    reachable = REACHABLE 
+    reachable = REACHABLE
     if flow_scope.type == 'if_stmt':
         if flow_scope.is_node_after_else(node):
             for check_node in flow_scope.get_test_nodes():
                 reachable = _check_if(context, check_node)
-                if reachable in (REACHABLE, UNSURE): 
-                    break 
-            reachable = reachable.invert() 
-        else: 
+                if reachable in (REACHABLE, UNSURE):
+                    break
+            reachable = reachable.invert()
+        else:
             flow_node = flow_scope.get_corresponding_test_node(node)
             if flow_node is not None:
                 reachable = _check_if(context, flow_node)
     elif flow_scope.type in ('try_stmt', 'while_stmt'):
-        return UNSURE 
- 
-    # Only reachable branches need to be examined further. 
-    if reachable in (UNREACHABLE, UNSURE): 
-        return reachable 
- 
+        return UNSURE
+
+    # Only reachable branches need to be examined further.
+    if reachable in (UNREACHABLE, UNSURE):
+        return reachable
+
     if context_scope != flow_scope and context_scope != flow_scope.parent:
         flow_scope = get_parent_scope(flow_scope, include_flows=True)
         return reachable & _break_check(context, context_scope, flow_scope, node)
     else:
         return reachable
- 
- 
+
+
 def _check_if(context, node):
     with execution_allowed(context.evaluator, node) as allowed:
         if not allowed:

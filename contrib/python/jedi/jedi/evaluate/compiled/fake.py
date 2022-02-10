@@ -1,19 +1,19 @@
-""" 
-Loads functions that are mixed in to the standard library. E.g. builtins are 
-written in C (binaries), but my autocompletion only understands Python code. By 
-mixing in Python code, the autocompletion should work much better for builtins. 
-""" 
+"""
+Loads functions that are mixed in to the standard library. E.g. builtins are
+written in C (binaries), but my autocompletion only understands Python code. By
+mixing in Python code, the autocompletion should work much better for builtins.
+"""
 import sys
-import os 
+import os
 from itertools import chain
- 
+
 import __res
- 
+
 from jedi._compatibility import unicode
- 
+
 fake_modules = {}
- 
- 
+
+
 def _get_path_dict():
     path = os.path.dirname(__file__)
     base_path = os.path.join(path, 'fake')
@@ -24,37 +24,37 @@ def _get_path_dict():
         if file_name.startswith(base_path) and file_name.endswith('.pym'):
             dct[file_name[len(base_path) + 1:-4]] = file_name
     return dct
- 
- 
+
+
 _path_dict = _get_path_dict()
- 
- 
+
+
 class FakeDoesNotExist(Exception):
     pass
- 
+
 
 def _load_faked_module(evaluator, module_name):
-    try: 
+    try:
         return fake_modules[module_name]
     except KeyError:
-        pass 
- 
+        pass
+
     check_module_name = module_name
     if module_name == '__builtin__' and evaluator.environment.version_info.major == 2:
         check_module_name = 'builtins'
 
-    try: 
+    try:
         path = _path_dict[check_module_name]
     except KeyError:
         fake_modules[module_name] = None
         return
- 
+
     if sys.version_info[0] == 3:
         path = bytes(path, 'ascii')
     source = __res.resfs_read(path)
- 
+
     fake_modules[module_name] = m = evaluator.latest_grammar.parse(unicode(source))
- 
+
     if check_module_name != module_name:
         # There are two implementations of `open` for either python 2/3.
         # -> Rename the python2 version (`look at fake/builtins.pym`).
@@ -63,14 +63,14 @@ def _load_faked_module(evaluator, module_name):
         open_func = _search_scope(m, 'open_python2')
         open_func.children[1].value = 'open'
     return m
- 
- 
+
+
 def _search_scope(scope, obj_name):
     for s in chain(scope.iter_classdefs(), scope.iter_funcdefs()):
         if s.name.value == obj_name:
             return s
- 
- 
+
+
 def get_faked_with_parent_context(parent_context, name):
     if parent_context.tree_node is not None:
         # Try to search in already clearly defined stuff.
@@ -78,7 +78,7 @@ def get_faked_with_parent_context(parent_context, name):
         if found is not None:
             return found
     raise FakeDoesNotExist
- 
+
 
 def get_faked_module(evaluator, string_name):
     module = _load_faked_module(evaluator, string_name)

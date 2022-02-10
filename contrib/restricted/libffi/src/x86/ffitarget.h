@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------*-C-*-
-   ffitarget.h - Copyright (c) 2012, 2014, 2018  Anthony Green 
+   ffitarget.h - Copyright (c) 2012, 2014, 2018  Anthony Green
                  Copyright (c) 1996-2003, 2010  Red Hat, Inc.
                  Copyright (C) 2008  Free Software Foundation, Inc.
 
@@ -49,11 +49,11 @@
 #define USE_BUILTIN_FFS 0 /* not yet implemented in mingw-64 */
 #endif
 
-#define FFI_TARGET_SPECIFIC_STACK_SPACE_ALLOCATION 
-#ifndef _MSC_VER 
-#define FFI_TARGET_HAS_COMPLEX_TYPE 
-#endif 
- 
+#define FFI_TARGET_SPECIFIC_STACK_SPACE_ALLOCATION
+#ifndef _MSC_VER
+#define FFI_TARGET_HAS_COMPLEX_TYPE
+#endif
+
 /* ---- Generic type definitions ----------------------------------------- */
 
 #ifndef LIBFFI_ASM
@@ -78,46 +78,46 @@ typedef signed long            ffi_sarg;
 #endif
 
 typedef enum ffi_abi {
-#if defined(X86_WIN64) 
+#if defined(X86_WIN64)
   FFI_FIRST_ABI = 0,
-  FFI_WIN64,            /* sizeof(long double) == 8  - microsoft compilers */ 
-  FFI_GNUW64,           /* sizeof(long double) == 16 - GNU compilers */ 
+  FFI_WIN64,            /* sizeof(long double) == 8  - microsoft compilers */
+  FFI_GNUW64,           /* sizeof(long double) == 16 - GNU compilers */
   FFI_LAST_ABI,
-#ifdef __GNUC__ 
-  FFI_DEFAULT_ABI = FFI_GNUW64 
-#else   
-  FFI_DEFAULT_ABI = FFI_WIN64 
-#endif   
+#ifdef __GNUC__
+  FFI_DEFAULT_ABI = FFI_GNUW64
+#else  
+  FFI_DEFAULT_ABI = FFI_WIN64
+#endif  
 
-#elif defined(X86_64) || (defined (__x86_64__) && defined (X86_DARWIN)) 
-  FFI_FIRST_ABI = 1, 
-  FFI_UNIX64, 
+#elif defined(X86_64) || (defined (__x86_64__) && defined (X86_DARWIN))
+  FFI_FIRST_ABI = 1,
+  FFI_UNIX64,
   FFI_WIN64,
-  FFI_EFI64 = FFI_WIN64, 
-  FFI_GNUW64, 
+  FFI_EFI64 = FFI_WIN64,
+  FFI_GNUW64,
   FFI_LAST_ABI,
-  FFI_DEFAULT_ABI = FFI_UNIX64 
+  FFI_DEFAULT_ABI = FFI_UNIX64
 
-#elif defined(X86_WIN32) 
-  FFI_FIRST_ABI = 0, 
-  FFI_SYSV      = 1, 
-  FFI_STDCALL   = 2, 
-  FFI_THISCALL  = 3, 
-  FFI_FASTCALL  = 4, 
-  FFI_MS_CDECL  = 5, 
-  FFI_PASCAL    = 6, 
-  FFI_REGISTER  = 7, 
-  FFI_LAST_ABI, 
-  FFI_DEFAULT_ABI = FFI_MS_CDECL 
+#elif defined(X86_WIN32)
+  FFI_FIRST_ABI = 0,
+  FFI_SYSV      = 1,
+  FFI_STDCALL   = 2,
+  FFI_THISCALL  = 3,
+  FFI_FASTCALL  = 4,
+  FFI_MS_CDECL  = 5,
+  FFI_PASCAL    = 6,
+  FFI_REGISTER  = 7,
+  FFI_LAST_ABI,
+  FFI_DEFAULT_ABI = FFI_MS_CDECL
 #else
-  FFI_FIRST_ABI = 0, 
-  FFI_SYSV      = 1, 
-  FFI_THISCALL  = 3, 
-  FFI_FASTCALL  = 4, 
-  FFI_STDCALL   = 5, 
-  FFI_PASCAL    = 6, 
-  FFI_REGISTER  = 7, 
-  FFI_MS_CDECL  = 8, 
+  FFI_FIRST_ABI = 0,
+  FFI_SYSV      = 1,
+  FFI_THISCALL  = 3,
+  FFI_FASTCALL  = 4,
+  FFI_STDCALL   = 5,
+  FFI_PASCAL    = 6,
+  FFI_REGISTER  = 7,
+  FFI_MS_CDECL  = 8,
   FFI_LAST_ABI,
   FFI_DEFAULT_ABI = FFI_SYSV
 #endif
@@ -127,20 +127,20 @@ typedef enum ffi_abi {
 /* ---- Definitions for closures ----------------------------------------- */
 
 #define FFI_CLOSURES 1
-#define FFI_GO_CLOSURES 1 
- 
+#define FFI_GO_CLOSURES 1
+
 #define FFI_TYPE_SMALL_STRUCT_1B (FFI_TYPE_LAST + 1)
 #define FFI_TYPE_SMALL_STRUCT_2B (FFI_TYPE_LAST + 2)
 #define FFI_TYPE_SMALL_STRUCT_4B (FFI_TYPE_LAST + 3)
 #define FFI_TYPE_MS_STRUCT       (FFI_TYPE_LAST + 4)
 
-#if defined (X86_64) || defined(X86_WIN64) \ 
-    || (defined (__x86_64__) && defined (X86_DARWIN)) 
-# define FFI_TRAMPOLINE_SIZE 24 
-# define FFI_NATIVE_RAW_API 0 
+#if defined (X86_64) || defined(X86_WIN64) \
+    || (defined (__x86_64__) && defined (X86_DARWIN))
+# define FFI_TRAMPOLINE_SIZE 24
+# define FFI_NATIVE_RAW_API 0
 #else
-# define FFI_TRAMPOLINE_SIZE 12 
-# define FFI_NATIVE_RAW_API 1  /* x86 has native raw api support */ 
+# define FFI_TRAMPOLINE_SIZE 12
+# define FFI_NATIVE_RAW_API 1  /* x86 has native raw api support */
 #endif
 
 #endif

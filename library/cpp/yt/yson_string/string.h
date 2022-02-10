@@ -76,9 +76,9 @@ public:
         EYsonType type = EYsonType::Node);
 
     //! Constructs an instance from TString.
-    //! Zero-copy for CoW TString: retains the reference to TString in payload. 
+    //! Zero-copy for CoW TString: retains the reference to TString in payload.
     explicit TYsonString(
-        const TString& data, 
+        const TString& data,
         EYsonType type = EYsonType::Node);
 
     //! Constructs an instance from TSharedRef.

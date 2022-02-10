@@ -1,56 +1,56 @@
 #include <library/cpp/yson_pull/scalar.h>
 #include <library/cpp/yson_pull/detail/writer.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/generic/string.h>
- 
-#include <climits> 
-#include <limits> 
- 
+
+#include <climits>
+#include <limits>
+
 using namespace std::string_view_literals;
 
-namespace { 
+namespace {
     template <typename Writer, typename Function>
     TString with_writer(Function&& function) {
         TString result;
         auto writer = NYsonPull::NDetail::make_writer<Writer>(
-            NYsonPull::NOutput::FromString(&result), 
+            NYsonPull::NOutput::FromString(&result),
             NYsonPull::EStreamType::Node);
- 
+
         function(writer);
- 
-        return result; 
+
+        return result;
     }
- 
+
     template <typename Writer>
     TString to_yson_string(const NYsonPull::TScalar& value) {
         return with_writer<Writer>([&](NYsonPull::TWriter& writer) {
-            writer.BeginStream().Scalar(value).EndStream(); 
+            writer.BeginStream().Scalar(value).EndStream();
         });
     }
- 
+
     template <typename T>
     TString to_yson_binary_string(T&& value) {
-        return to_yson_string<NYsonPull::NDetail::TBinaryWriterImpl>(std::forward<T>(value)); 
+        return to_yson_string<NYsonPull::NDetail::TBinaryWriterImpl>(std::forward<T>(value));
     }
- 
+
     template <typename T>
     TString to_yson_text_string(T&& value) {
-        return to_yson_string<NYsonPull::NDetail::TTextWriterImpl>(std::forward<T>(value)); 
+        return to_yson_string<NYsonPull::NDetail::TTextWriterImpl>(std::forward<T>(value));
     }
- 
-} // anonymous namespace 
- 
-// =================== Text format ===================== 
- 
+
+} // anonymous namespace
+
+// =================== Text format =====================
+
 Y_UNIT_TEST_SUITE(Writer) {
     Y_UNIT_TEST(TextEntity) {
         UNIT_ASSERT_VALUES_EQUAL(
             "#",
             to_yson_text_string(NYsonPull::TScalar{}));
     }
- 
+
     Y_UNIT_TEST(TextBoolean) {
         UNIT_ASSERT_VALUES_EQUAL(
             "%false",
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(Writer) {
             "%true",
             to_yson_text_string(NYsonPull::TScalar{true}));
     }
- 
+
     Y_UNIT_TEST(TextInt64) {
         UNIT_ASSERT_VALUES_EQUAL(
             "0",
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(Writer) {
         UNIT_ASSERT_VALUES_EQUAL(
             "9223372036854775807",
             to_yson_text_string(NYsonPull::TScalar{i64{INT64_MAX}}));
- 
+
         UNIT_ASSERT_VALUES_EQUAL(
             "-200",
             to_yson_text_string(NYsonPull::TScalar{i64{-200}}));
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(Writer) {
             "-9223372036854775808",
             to_yson_text_string(NYsonPull::TScalar{i64{INT64_MIN}}));
     }
- 
+
     Y_UNIT_TEST(TextUInt64) {
         UNIT_ASSERT_VALUES_EQUAL(
             "0u",
@@ -120,19 +120,19 @@ Y_UNIT_TEST_SUITE(Writer) {
             "18446744073709551615u",
             to_yson_text_string(NYsonPull::TScalar{ui64{UINT64_MAX}}));
     }
- 
+
     Y_UNIT_TEST(TextFloat64) {
-        UNIT_ASSERT_VALUES_EQUAL( 
+        UNIT_ASSERT_VALUES_EQUAL(
             "%inf",
-            to_yson_text_string(NYsonPull::TScalar{std::numeric_limits<double>::infinity()})); 
-        UNIT_ASSERT_VALUES_EQUAL( 
+            to_yson_text_string(NYsonPull::TScalar{std::numeric_limits<double>::infinity()}));
+        UNIT_ASSERT_VALUES_EQUAL(
             "%-inf",
-            to_yson_text_string(NYsonPull::TScalar{-std::numeric_limits<double>::infinity()})); 
+            to_yson_text_string(NYsonPull::TScalar{-std::numeric_limits<double>::infinity()}));
         UNIT_ASSERT_VALUES_EQUAL(
             "%nan",
             to_yson_text_string(NYsonPull::TScalar{std::numeric_limits<double>::quiet_NaN()}));
     }
- 
+
     Y_UNIT_TEST(TextString) {
         UNIT_ASSERT_VALUES_EQUAL(
             R"("")",
@@ -144,15 +144,15 @@ Y_UNIT_TEST_SUITE(Writer) {
             R"("hello\nworld")",
             to_yson_text_string(NYsonPull::TScalar{"hello\nworld"}));
     }
- 
+
     // =================== Binary format =====================
- 
+
     Y_UNIT_TEST(BinaryEntity) {
         UNIT_ASSERT_VALUES_EQUAL(
             "#",
             to_yson_binary_string(NYsonPull::TScalar{}));
     }
- 
+
     Y_UNIT_TEST(BinaryBoolean) {
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x4"),
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(Writer) {
             TStringBuf("\x5"),
             to_yson_binary_string(NYsonPull::TScalar{true}));
     }
- 
+
     Y_UNIT_TEST(BinaryInt64) {
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x2\0"sv),
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(Writer) {
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x2\xFE\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x1"),
             to_yson_binary_string(NYsonPull::TScalar{i64{INT64_MAX}}));
- 
+
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x2\x8F\x3"),
             to_yson_binary_string(NYsonPull::TScalar{i64{-200}}));
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(Writer) {
             TStringBuf("\x2\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x1"),
             to_yson_binary_string(NYsonPull::TScalar{i64{INT64_MIN}}));
     }
- 
+
     Y_UNIT_TEST(BinaryUInt64) {
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x6\0"sv),
@@ -222,14 +222,14 @@ Y_UNIT_TEST_SUITE(Writer) {
             TStringBuf("\x6\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x1"),
             to_yson_binary_string(NYsonPull::TScalar{ui64{UINT64_MAX}}));
     }
- 
+
     Y_UNIT_TEST(BinaryFloat64) {
-        UNIT_ASSERT_VALUES_EQUAL( 
+        UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\x7f"sv),
-            to_yson_binary_string(NYsonPull::TScalar{std::numeric_limits<double>::infinity()})); 
-        UNIT_ASSERT_VALUES_EQUAL( 
+            to_yson_binary_string(NYsonPull::TScalar{std::numeric_limits<double>::infinity()}));
+        UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\xff"sv),
-            to_yson_binary_string(NYsonPull::TScalar{-std::numeric_limits<double>::infinity()})); 
+            to_yson_binary_string(NYsonPull::TScalar{-std::numeric_limits<double>::infinity()}));
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf8\x7f"sv),
             to_yson_binary_string(NYsonPull::TScalar{std::numeric_limits<double>::quiet_NaN()}));
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(Writer) {
             TStringBuf("\x03\x9a\x99\x99\x99\x99\x99\xf1\xbf"),
             to_yson_binary_string(NYsonPull::TScalar{double{-1.1}}));
     }
- 
+
     Y_UNIT_TEST(BinaryString) {
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x1\0"sv),
@@ -252,5 +252,5 @@ Y_UNIT_TEST_SUITE(Writer) {
             TStringBuf("\x1\x16hello\nworld"),
             to_yson_binary_string(NYsonPull::TScalar{"hello\nworld"}));
     }
- 
+
 } // Y_UNIT_TEST_SUITE(Writer)

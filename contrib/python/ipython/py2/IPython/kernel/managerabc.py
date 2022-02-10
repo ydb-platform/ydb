@@ -1,1 +1,1 @@
-from jupyter_client.managerabc import * 
+from jupyter_client.managerabc import *

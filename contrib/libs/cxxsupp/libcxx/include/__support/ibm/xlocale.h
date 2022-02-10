@@ -125,7 +125,7 @@ int vasprintf(char **strp, const char *fmt, va_list ap) {
     str_size = vsnprintf(*strp, str_size + 1, fmt,  ap);
   }
   return str_size;
-} 
+}
 
 #ifdef __cplusplus
 }

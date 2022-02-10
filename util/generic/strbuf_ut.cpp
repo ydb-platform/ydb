@@ -28,15 +28,15 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
     }
 
     Y_UNIT_TEST(TestConstExpr) {
-        static constexpr TStringBuf str1("qwe\0rty", 7); 
+        static constexpr TStringBuf str1("qwe\0rty", 7);
         static constexpr TStringBuf str2(str1.data(), str1.size());
         static constexpr TStringBuf str3 = "qwe\0rty"sv;
- 
+
         UNIT_ASSERT_VALUES_EQUAL(str1.size(), 7);
- 
-        UNIT_ASSERT_VALUES_EQUAL(str1, str2); 
-        UNIT_ASSERT_VALUES_EQUAL(str2, str3); 
-        UNIT_ASSERT_VALUES_EQUAL(str1, str3); 
+
+        UNIT_ASSERT_VALUES_EQUAL(str1, str2);
+        UNIT_ASSERT_VALUES_EQUAL(str2, str3);
+        UNIT_ASSERT_VALUES_EQUAL(str1, str3);
 
         static constexpr std::string_view view1(str1);
         UNIT_ASSERT_VALUES_EQUAL(str1, view1);
@@ -47,8 +47,8 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT_VALUES_EQUAL(str1, str4);
         static_assert(str1.data() == str4.data());
         static_assert(str1.size() == str4.size());
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestAfter) {
         TStringBuf str("qwerty");
 

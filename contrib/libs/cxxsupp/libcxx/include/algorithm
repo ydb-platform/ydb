@@ -563,10 +563,10 @@ template<class T, class Compare>
     min(initializer_list<T> t, Compare comp);
 
 template<class T>
-    constexpr const T& clamp(const T& v, const T& lo, const T& hi);               // C++17 
+    constexpr const T& clamp(const T& v, const T& lo, const T& hi);               // C++17
 
 template<class T, class Compare>
-    constexpr const T& clamp(const T& v, const T& lo, const T& hi, Compare comp); // C++17 
+    constexpr const T& clamp(const T& v, const T& lo, const T& hi, Compare comp); // C++17
 
 template <class ForwardIterator>
     constexpr ForwardIterator        // constexpr in C++14

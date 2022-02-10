@@ -1,11 +1,11 @@
 from warnings import warn
 
 from . import traitlets
-from .traitlets import * 
-from .utils.importstring import import_item 
+from .traitlets import *
+from .utils.importstring import import_item
 from .utils.decorators import signature_has_traits
 from .utils.bunch import Bunch
-from ._version import version_info, __version__ 
+from ._version import version_info, __version__
 
 
 class Sentinel(traitlets.Sentinel):

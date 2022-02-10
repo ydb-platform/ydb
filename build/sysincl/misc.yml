@@ -21,8 +21,8 @@
 # Btw: seems that this ADDINCL should be made global and removed from projects
 # that use this header
 - includes:
-    - iconv.h:       contrib/libs/libiconv/include/iconv.h 
- 
+    - iconv.h:       contrib/libs/libiconv/include/iconv.h
+
 - includes:
   - cudnn.h:         contrib/libs/nvidia/cudnn/cudnn.h
 
@@ -229,11 +229,11 @@
     - cuda.h:        contrib/libs/tf/tensorflow/core/platform/cuda.h
 
 # unused legacy include in boost
-- source_filter: "^contrib/restricted/boost" 
+- source_filter: "^contrib/restricted/boost"
   includes:
-    - atomic.h 
+    - atomic.h
     - fstream.h
-    - ../include/fenv.h 
+    - ../include/fenv.h
 
 - source_filter: "^contrib/restricted/boost/boost/stacktrace/detail"
   includes:
@@ -255,10 +255,10 @@
     - sasl/sasl.h
     - sasl/saslutil.h
 
-- source_filter: "^contrib/libs/apr" 
-  includes: 
-    - atomic.h 
- 
+- source_filter: "^contrib/libs/apr"
+  includes:
+    - atomic.h
+
 - source_filter: "^contrib/libs/(apr|httpd|llvm)"
   includes:
     - uuid.h
@@ -393,17 +393,17 @@
   includes:
     - mpi.h
 
-- source_filter: "^contrib/libs/libf2c" 
-  includes: 
-    - local.h 
- 
-- source_filter: "^contrib/libs/libpq" 
-  includes: 
-    - local.h 
- 
-- source_filter: "^contrib/libs/breakpad" 
-  includes: 
-    - stab.h 
+- source_filter: "^contrib/libs/libf2c"
+  includes:
+    - local.h
+
+- source_filter: "^contrib/libs/libpq"
+  includes:
+    - local.h
+
+- source_filter: "^contrib/libs/breakpad"
+  includes:
+    - stab.h
 
 - source_filter: "^contrib/tools/fluent-bit"
   includes:

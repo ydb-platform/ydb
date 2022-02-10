@@ -36,8 +36,8 @@ namespace {
                                  Decompress(data).Quote().c_str());
                     } else {
                         Y_VERIFY(false, "Redefinition of key %s,"
-                                 " old size: %zu," 
-                                 " new size: %zu.", 
+                                 " old size: %zu,"
+                                 " new size: %zu.",
                                  TString{key}.Quote().c_str(), vsize, dsize);
                     }
                 }

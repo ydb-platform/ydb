@@ -1,1 +1,1 @@
-from jupyter_client.multikernelmanager import * 
+from jupyter_client.multikernelmanager import *

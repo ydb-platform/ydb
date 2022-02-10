@@ -3482,7 +3482,7 @@ class CStructOrUnionType(CType):
             return expr_code
         return super(CStructOrUnionType, self).cast_code(expr_code)
 
-cpp_string_conversions = ("std::string", "TString", "TStringBuf") 
+cpp_string_conversions = ("std::string", "TString", "TStringBuf")
 
 builtin_cpp_conversions = {
     # type                element template params
@@ -3574,10 +3574,10 @@ class CppClassType(CType):
             if self.cname in cpp_string_conversions:
                 cls = 'string'
                 tags = type_identifier(self),
-            elif self.cname.startswith('std::'): 
-                cls = self.cname[5:] 
+            elif self.cname.startswith('std::'):
+                cls = self.cname[5:]
             else:
-                cls = 'arcadia_' + self.cname 
+                cls = 'arcadia_' + self.cname
             cname = '__pyx_convert_%s_from_py_%s' % (cls, '__and_'.join(tags))
             context.update({
                 'cname': cname,
@@ -3619,12 +3619,12 @@ class CppClassType(CType):
                 cls = 'string'
                 prefix = 'PyObject_'  # gets specialised by explicit type casts in CoerceToPyTypeNode
                 tags = type_identifier(self),
-            elif self.cname.startswith('std::'): 
+            elif self.cname.startswith('std::'):
                 cls = self.cname[5:]
                 prefix = ''
-            else: 
-                cls = 'arcadia_' + self.cname 
-                prefix = '' 
+            else:
+                cls = 'arcadia_' + self.cname
+                prefix = ''
             cname = "__pyx_convert_%s%s_to_py_%s" % (prefix, cls, "____".join(tags))
             context.update({
                 'cname': cname,

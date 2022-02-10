@@ -2,7 +2,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/str.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <util/generic/map.h>
 
@@ -94,13 +94,13 @@ Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
             "\\x1B[44m\\x1B[1;31m\\x1B[1;32m{\\x1B[1;31m\\x1B[1;31m2\\x1B[22;39m\\x1B[1;32m -> "
             "\\x1B[1;31m'6'\\x1B[22;39m\\x1B[1;32m}\\x1B[22;39m\\x1B[22;39m\\x1B[49m\\x1B[1;32m}\\x1B[22;39m");
     }
- 
+
     Y_UNIT_TEST(SmallIntOrChar) {
-        char c = 'e'; 
-        i8 i = -100; 
-        ui8 u = 10; 
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuilder() << DbgDump(c), "'e'"); 
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuilder() << DbgDump(i), "-100"); 
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuilder() << DbgDump(u), "10"); 
-    } 
+        char c = 'e';
+        i8 i = -100;
+        ui8 u = 10;
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuilder() << DbgDump(c), "'e'");
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuilder() << DbgDump(i), "-100");
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuilder() << DbgDump(u), "10");
+    }
 }

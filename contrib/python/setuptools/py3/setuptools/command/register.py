@@ -1,13 +1,13 @@
 from distutils import log
-import distutils.command.register as orig 
- 
-from setuptools.errors import RemovedCommandError
- 
+import distutils.command.register as orig
 
-class register(orig.register): 
+from setuptools.errors import RemovedCommandError
+
+
+class register(orig.register):
     """Formerly used to register packages on PyPI."""
- 
-    def run(self): 
+
+    def run(self):
         msg = (
             "The register command has been removed, use twine to upload "
             + "instead (https://pypi.org/p/twine)"

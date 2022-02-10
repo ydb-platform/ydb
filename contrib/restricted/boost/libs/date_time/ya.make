@@ -10,7 +10,7 @@ OWNER(
     g:cpp-contrib
 )
 
-INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc) 
+INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
 
 SRCS(
     src/gregorian/date_generators.cpp

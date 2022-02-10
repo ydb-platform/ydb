@@ -132,7 +132,7 @@ namespace {
             Unused_.ForEach(deleter);
         }
 
-        inline TPerThreadedBuf* Acquire() { 
+        inline TPerThreadedBuf* Acquire() {
             if (!Unused_.Empty()) {
                 return Unused_.PopFront();
             }
@@ -154,15 +154,15 @@ static inline TTempBufManager* TempBufManager() {
     return FastTlsSingletonWithPriority<TTempBufManager, 2>();
 }
 
-static inline TTempBuf::TImpl* AcquireSmallBuffer(size_t size) { 
-#if defined(_asan_enabled_) 
-    return new (size) TAllocedBuf(); 
-#else 
-    Y_UNUSED(size); 
-    return TempBufManager()->Acquire(); 
-#endif 
-} 
- 
+static inline TTempBuf::TImpl* AcquireSmallBuffer(size_t size) {
+#if defined(_asan_enabled_)
+    return new (size) TAllocedBuf();
+#else
+    Y_UNUSED(size);
+    return TempBufManager()->Acquire();
+#endif
+}
+
 void TPerThreadedBuf::Dispose() noexcept {
     if (Manager_ == TempBufManager()) {
         Manager_->Return(this);
@@ -172,7 +172,7 @@ void TPerThreadedBuf::Dispose() noexcept {
 }
 
 TTempBuf::TTempBuf()
-    : Impl_(AcquireSmallBuffer(TMP_BUF_LEN)) 
+    : Impl_(AcquireSmallBuffer(TMP_BUF_LEN))
 {
 }
 
@@ -183,7 +183,7 @@ TTempBuf::TTempBuf()
  */
 static inline TTempBuf::TImpl* ConstructImpl(size_t len) {
     if (len <= TMP_BUF_LEN) {
-        return AcquireSmallBuffer(len); 
+        return AcquireSmallBuffer(len);
     }
 
     return new (len) TAllocedBuf();

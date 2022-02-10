@@ -4,7 +4,7 @@
 
 #include <util/generic/string.h>
 #include <util/stream/str.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 
 namespace cctz_extension {
     namespace {
@@ -21,7 +21,7 @@ namespace cctz_extension {
             static std::unique_ptr<cctz::ZoneInfoSource> LoadZone(const std::string& zoneName) {
                 TString resourceName = TStringBuilder() << "/cctz/tzdata/"sv << zoneName;
                 TString tzData;
-                if (!NResource::FindExact(resourceName, &tzData)) { 
+                if (!NResource::FindExact(resourceName, &tzData)) {
                     return nullptr;
                 }
                 return std::unique_ptr<cctz::ZoneInfoSource>(new TZoneInfoSource(std::move(tzData)));

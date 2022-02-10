@@ -70,8 +70,8 @@ public:
 
 template<class Container>
   queue(Container) -> queue<typename Container::value_type, Container>; // C++17
- 
-template<class Container, class Allocator> 
+
+template<class Container, class Allocator>
   queue(Container, Allocator) -> queue<typename Container::value_type, Container>; // C++17
 
 template <class T, class Container>
@@ -170,13 +170,13 @@ public:
 template <class Compare, class Container>
 priority_queue(Compare, Container)
     -> priority_queue<typename Container::value_type, Container, Compare>; // C++17
- 
-template<class InputIterator, 
+
+template<class InputIterator,
          class Compare = less<iter-value-type<InputIterator>>,
          class Container = vector<iter-value-type<InputIterator>>>
 priority_queue(InputIterator, InputIterator, Compare = Compare(), Container = Container())
     -> priority_queue<iter-value-type<InputIterator>, Container, Compare>; // C++17
- 
+
 template<class Compare, class Container, class Allocator>
 priority_queue(Compare, Container, Allocator)
     -> priority_queue<typename Container::value_type, Container, Compare>; // C++17
@@ -364,7 +364,7 @@ template<class _Container,
 >
 queue(_Container)
     -> queue<typename _Container::value_type, _Container>;
- 
+
 template<class _Container,
          class _Alloc,
          class = enable_if_t<!__is_allocator<_Container>::value>,
@@ -592,8 +592,8 @@ template <class _Compare,
 >
 priority_queue(_Compare, _Container)
     -> priority_queue<typename _Container::value_type, _Container, _Compare>;
- 
-template<class _InputIterator, 
+
+template<class _InputIterator,
          class _Compare = less<__iter_value_type<_InputIterator>>,
          class _Container = vector<__iter_value_type<_InputIterator>>,
          class = enable_if_t<__is_cpp17_input_iterator<_InputIterator>::value>,
@@ -602,8 +602,8 @@ template<class _InputIterator,
 >
 priority_queue(_InputIterator, _InputIterator, _Compare = _Compare(), _Container = _Container())
     -> priority_queue<__iter_value_type<_InputIterator>, _Container, _Compare>;
- 
-template<class _Compare, 
+
+template<class _Compare,
          class _Container,
          class _Alloc,
          class = enable_if_t<!__is_allocator<_Compare>::value>,

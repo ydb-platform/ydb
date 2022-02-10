@@ -4,19 +4,19 @@ import subprocess
 import tempfile
 import collections
 import optparse
-import pipes 
+import pipes
 
 from process_whole_archive_option import ProcessWholeArchiveOption
 
 
-def shlex_join(cmd): 
-    # equivalent to shlex.join() in python 3 
-    return ' '.join( 
-        pipes.quote(part) 
-        for part in cmd 
-    ) 
- 
- 
+def shlex_join(cmd):
+    # equivalent to shlex.join() in python 3
+    return ' '.join(
+        pipes.quote(part)
+        for part in cmd
+    )
+
+
 def parse_export_file(p):
     with open(p, 'r') as f:
         for l in f:
@@ -165,7 +165,7 @@ def parse_args():
     parser.add_option('--target')
     parser.add_option('--soname')
     parser.add_option('--fix-elf')
-    parser.add_option('--linker-output') 
+    parser.add_option('--linker-output')
     parser.add_option('--musl', action='store_true')
     parser.add_option('--whole-archive-peers', action='append')
     parser.add_option('--whole-archive-libs', action='append')
@@ -180,18 +180,18 @@ if __name__ == '__main__':
 
     cmd = fix_cmd(opts.arch, opts.musl, args)
     cmd = ProcessWholeArchiveOption(opts.arch, opts.whole_archive_peers, opts.whole_archive_libs).construct_cmd(cmd)
- 
-    if opts.linker_output: 
-        stdout = open(opts.linker_output, 'w') 
-    else: 
-        stdout = sys.stdout 
- 
-    proc = subprocess.Popen(cmd, shell=False, stderr=sys.stderr, stdout=stdout) 
+
+    if opts.linker_output:
+        stdout = open(opts.linker_output, 'w')
+    else:
+        stdout = sys.stdout
+
+    proc = subprocess.Popen(cmd, shell=False, stderr=sys.stderr, stdout=stdout)
     proc.communicate()
 
     if proc.returncode:
-        print >>sys.stderr, 'linker has failed with retcode:', proc.returncode 
-        print >>sys.stderr, 'linker command:', shlex_join(cmd) 
+        print >>sys.stderr, 'linker has failed with retcode:', proc.returncode
+        print >>sys.stderr, 'linker command:', shlex_join(cmd)
         sys.exit(proc.returncode)
 
     if opts.fix_elf:
@@ -200,8 +200,8 @@ if __name__ == '__main__':
         proc.communicate()
 
         if proc.returncode:
-            print >>sys.stderr, 'fix_elf has failed with retcode:', proc.returncode 
-            print >>sys.stderr, 'fix_elf command:', shlex_join(cmd) 
+            print >>sys.stderr, 'fix_elf has failed with retcode:', proc.returncode
+            print >>sys.stderr, 'fix_elf command:', shlex_join(cmd)
             sys.exit(proc.returncode)
 
     if opts.soname and opts.soname != opts.target:

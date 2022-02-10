@@ -207,8 +207,8 @@ cdef object {{cname}}(const map[X,Y]& s):
         o[key_value.first] = key_value.second
         cython.operator.preincrement(iter)
     return o
- 
- 
+
+
 #################### complex.from_py ####################
 
 cdef extern from *:
@@ -237,105 +237,105 @@ cdef object {{cname}}(const std_complex[X]& z):
     return tmp
 
 
-#################### arcadia_TMaybe.from_py #################### 
- 
-cdef extern from *: 
-    cdef cppclass TMaybe [T]: 
-        TMaybe() 
-        TMaybe(T&) 
-        TMaybe& operator =(T&) 
- 
-@cname("{{cname}}") 
-cdef TMaybe[X] {{cname}}(object o) except *: 
-    cdef TMaybe[X] result 
-    if o is not None: 
+#################### arcadia_TMaybe.from_py ####################
+
+cdef extern from *:
+    cdef cppclass TMaybe [T]:
+        TMaybe()
+        TMaybe(T&)
+        TMaybe& operator =(T&)
+
+@cname("{{cname}}")
+cdef TMaybe[X] {{cname}}(object o) except *:
+    cdef TMaybe[X] result
+    if o is not None:
         result = <X>o
-    return result 
- 
-#################### arcadia_TMaybe.to_py #################### 
- 
-cdef extern from *: 
-    cdef cppclass TMaybe [T]: 
-        bint Defined() 
-        T& GetRef() 
- 
-@cname("{{cname}}") 
-cdef object {{cname}}(const TMaybe[X]& s): 
-    if s.Defined(): 
+    return result
+
+#################### arcadia_TMaybe.to_py ####################
+
+cdef extern from *:
+    cdef cppclass TMaybe [T]:
+        bint Defined()
+        T& GetRef()
+
+@cname("{{cname}}")
+cdef object {{cname}}(const TMaybe[X]& s):
+    if s.Defined():
         return s.GetRef()
-    return None 
- 
- 
+    return None
+
+
 #################### arcadia_TVector.from_py ####################
- 
-cdef extern from *: 
+
+cdef extern from *:
     cdef cppclass TVector [T]:
-        void push_back(T&) 
- 
-@cname("{{cname}}") 
+        void push_back(T&)
+
+@cname("{{cname}}")
 cdef TVector[X] {{cname}}(object o) except *:
     cdef TVector[X] v
-    for item in o: 
+    for item in o:
         v.push_back(<X>item)
-    return v 
- 
- 
+    return v
+
+
 #################### arcadia_TVector.to_py ####################
- 
-cdef extern from *: 
+
+cdef extern from *:
     cdef cppclass TVector [T]:
-        size_t size() 
-        T& operator[](size_t) 
- 
-@cname("{{cname}}") 
+        size_t size()
+        T& operator[](size_t)
+
+@cname("{{cname}}")
 cdef object {{cname}}(const TVector[X]& v):
     return [v[i] for i in range(v.size())]
- 
- 
+
+
 #################### arcadia_THashMap.from_py ####################
- 
-cdef extern from *: 
-    cdef cppclass pair "std::pair" [T, U]: 
-        pair(T&, U&) 
+
+cdef extern from *:
+    cdef cppclass pair "std::pair" [T, U]:
+        pair(T&, U&)
     cdef cppclass THashMap [T, U]:
-        void insert(pair[T, U]&) 
- 
- 
-@cname("{{cname}}") 
+        void insert(pair[T, U]&)
+
+
+@cname("{{cname}}")
 cdef THashMap[X,Y] {{cname}}(object o) except *:
-    cdef dict d = o 
+    cdef dict d = o
     cdef THashMap[X,Y] m
-    for key, value in d.iteritems(): 
+    for key, value in d.iteritems():
         m.insert(pair[X,Y](<X>key, <Y>value))
-    return m 
- 
- 
+    return m
+
+
 #################### arcadia_THashMap.to_py ####################
- 
-cimport cython 
- 
-cdef extern from *: 
+
+cimport cython
+
+cdef extern from *:
     cdef cppclass THashMap [T, U]:
-        cppclass value_type: 
-            T first 
-            U second 
-        cppclass const_iterator: 
-            value_type& operator*() 
-            const_iterator operator++() 
-            bint operator!=(const_iterator) 
-        const_iterator begin() 
-        const_iterator end() 
- 
-@cname("{{cname}}") 
+        cppclass value_type:
+            T first
+            U second
+        cppclass const_iterator:
+            value_type& operator*()
+            const_iterator operator++()
+            bint operator!=(const_iterator)
+        const_iterator begin()
+        const_iterator end()
+
+@cname("{{cname}}")
 cdef dict {{cname}}(const THashMap[X,Y]& s):
-    cdef dict result = {} 
+    cdef dict result = {}
     cdef const THashMap[X,Y].value_type *key_value
     cdef THashMap[X,Y].const_iterator iter = s.begin()
-    while iter != s.end(): 
-        key_value = &cython.operator.dereference(iter) 
+    while iter != s.end():
+        key_value = &cython.operator.dereference(iter)
         result[key_value.first] = key_value.second
-        cython.operator.preincrement(iter) 
-    return result 
+        cython.operator.preincrement(iter)
+    return result
 
 
 #################### arcadia_TMap.from_py ####################

@@ -1,13 +1,13 @@
-"""A base class for objects that are configurable.""" 
- 
-# Copyright (c) IPython Development Team. 
-# Distributed under the terms of the Modified BSD License. 
- 
- 
-from copy import deepcopy 
+"""A base class for objects that are configurable."""
+
+# Copyright (c) IPython Development Team.
+# Distributed under the terms of the Modified BSD License.
+
+
+from copy import deepcopy
 import logging
 import warnings
- 
+
 from .loader import Config, LazyConfigValue, DeferredConfig, _is_section_key
 from traitlets.traitlets import (
     Any,
@@ -22,67 +22,67 @@ from traitlets.traitlets import (
 )
 from traitlets.utils.text import indent, wrap_paragraphs
 from textwrap import dedent
- 
- 
 
 
-#----------------------------------------------------------------------------- 
-# Helper classes for Configurables 
-#----------------------------------------------------------------------------- 
- 
- 
-class ConfigurableError(Exception): 
-    pass 
- 
- 
-class MultipleInstanceError(ConfigurableError): 
-    pass 
- 
-#----------------------------------------------------------------------------- 
-# Configurable implementation 
-#----------------------------------------------------------------------------- 
- 
-class Configurable(HasTraits): 
- 
-    config = Instance(Config, (), {}) 
-    parent = Instance('traitlets.config.configurable.Configurable', allow_none=True) 
- 
-    def __init__(self, **kwargs): 
-        """Create a configurable given a config config. 
- 
-        Parameters 
-        ---------- 
-        config : Config 
-            If this is empty, default values are used. If config is a 
-            :class:`Config` instance, it will be used to configure the 
-            instance. 
-        parent : Configurable instance, optional 
-            The parent Configurable instance of this object. 
- 
-        Notes 
-        ----- 
-        Subclasses of Configurable must call the :meth:`__init__` method of 
-        :class:`Configurable` *before* doing anything else and using 
-        :func:`super`:: 
- 
-            class MyConfigurable(Configurable): 
-                def __init__(self, config=None): 
-                    super(MyConfigurable, self).__init__(config=config) 
-                    # Then any other code you need to finish initialization. 
- 
-        This ensures that instances will be configured properly. 
-        """ 
-        parent = kwargs.pop('parent', None) 
-        if parent is not None: 
-            # config is implied from parent 
-            if kwargs.get('config', None) is None: 
-                kwargs['config'] = parent.config 
-            self.parent = parent 
 
-        config = kwargs.pop('config', None) 
 
-        # load kwarg traits, other than config 
-        super(Configurable, self).__init__(**kwargs) 
+#-----------------------------------------------------------------------------
+# Helper classes for Configurables
+#-----------------------------------------------------------------------------
+
+
+class ConfigurableError(Exception):
+    pass
+
+
+class MultipleInstanceError(ConfigurableError):
+    pass
+
+#-----------------------------------------------------------------------------
+# Configurable implementation
+#-----------------------------------------------------------------------------
+
+class Configurable(HasTraits):
+
+    config = Instance(Config, (), {})
+    parent = Instance('traitlets.config.configurable.Configurable', allow_none=True)
+
+    def __init__(self, **kwargs):
+        """Create a configurable given a config config.
+
+        Parameters
+        ----------
+        config : Config
+            If this is empty, default values are used. If config is a
+            :class:`Config` instance, it will be used to configure the
+            instance.
+        parent : Configurable instance, optional
+            The parent Configurable instance of this object.
+
+        Notes
+        -----
+        Subclasses of Configurable must call the :meth:`__init__` method of
+        :class:`Configurable` *before* doing anything else and using
+        :func:`super`::
+
+            class MyConfigurable(Configurable):
+                def __init__(self, config=None):
+                    super(MyConfigurable, self).__init__(config=config)
+                    # Then any other code you need to finish initialization.
+
+        This ensures that instances will be configured properly.
+        """
+        parent = kwargs.pop('parent', None)
+        if parent is not None:
+            # config is implied from parent
+            if kwargs.get('config', None) is None:
+                kwargs['config'] = parent.config
+            self.parent = parent
+
+        config = kwargs.pop('config', None)
+
+        # load kwarg traits, other than config
+        super(Configurable, self).__init__(**kwargs)
 
         # record traits set by config
         config_override_names = set()
@@ -95,122 +95,122 @@ class Configurable(HasTraits):
                 config_override_names.add(change.name)
         self.observe(notice_config_override)
 
-        # load config 
-        if config is not None: 
-            # We used to deepcopy, but for now we are trying to just save 
-            # by reference.  This *could* have side effects as all components 
-            # will share config. In fact, I did find such a side effect in 
-            # _config_changed below. If a config attribute value was a mutable type 
-            # all instances of a component were getting the same copy, effectively 
-            # making that a class attribute. 
-            # self.config = deepcopy(config) 
-            self.config = config 
-        else: 
-            # allow _config_default to return something 
-            self._load_config(self.config) 
+        # load config
+        if config is not None:
+            # We used to deepcopy, but for now we are trying to just save
+            # by reference.  This *could* have side effects as all components
+            # will share config. In fact, I did find such a side effect in
+            # _config_changed below. If a config attribute value was a mutable type
+            # all instances of a component were getting the same copy, effectively
+            # making that a class attribute.
+            # self.config = deepcopy(config)
+            self.config = config
+        else:
+            # allow _config_default to return something
+            self._load_config(self.config)
         self.unobserve(notice_config_override)
 
         for name in config_override_names:
             setattr(self, name, kwargs[name])
- 
 
-    #------------------------------------------------------------------------- 
-    # Static trait notifiations 
-    #------------------------------------------------------------------------- 
 
-    @classmethod 
-    def section_names(cls): 
-        """return section names as a list""" 
-        return  [c.__name__ for c in reversed(cls.__mro__) if 
-            issubclass(c, Configurable) and issubclass(cls, c) 
-        ] 
+    #-------------------------------------------------------------------------
+    # Static trait notifiations
+    #-------------------------------------------------------------------------
 
-    def _find_my_config(self, cfg): 
-        """extract my config from a global Config object 
+    @classmethod
+    def section_names(cls):
+        """return section names as a list"""
+        return  [c.__name__ for c in reversed(cls.__mro__) if
+            issubclass(c, Configurable) and issubclass(cls, c)
+        ]
 
-        will construct a Config object of only the config values that apply to me 
-        based on my mro(), as well as those of my parent(s) if they exist. 
+    def _find_my_config(self, cfg):
+        """extract my config from a global Config object
 
-        If I am Bar and my parent is Foo, and their parent is Tim, 
-        this will return merge following config sections, in this order:: 
+        will construct a Config object of only the config values that apply to me
+        based on my mro(), as well as those of my parent(s) if they exist.
+
+        If I am Bar and my parent is Foo, and their parent is Tim,
+        this will return merge following config sections, in this order::
 
             [Bar, Foo.Bar, Tim.Foo.Bar]
 
-        With the last item being the highest priority. 
-        """ 
-        cfgs = [cfg] 
-        if self.parent: 
-            cfgs.append(self.parent._find_my_config(cfg)) 
-        my_config = Config() 
-        for c in cfgs: 
-            for sname in self.section_names(): 
-                # Don't do a blind getattr as that would cause the config to 
-                # dynamically create the section with name Class.__name__. 
-                if c._has_section(sname): 
-                    my_config.merge(c[sname]) 
-        return my_config 
+        With the last item being the highest priority.
+        """
+        cfgs = [cfg]
+        if self.parent:
+            cfgs.append(self.parent._find_my_config(cfg))
+        my_config = Config()
+        for c in cfgs:
+            for sname in self.section_names():
+                # Don't do a blind getattr as that would cause the config to
+                # dynamically create the section with name Class.__name__.
+                if c._has_section(sname):
+                    my_config.merge(c[sname])
+        return my_config
 
-    def _load_config(self, cfg, section_names=None, traits=None): 
-        """load traits from a Config object""" 
+    def _load_config(self, cfg, section_names=None, traits=None):
+        """load traits from a Config object"""
 
-        if traits is None: 
-            traits = self.traits(config=True) 
-        if section_names is None: 
-            section_names = self.section_names() 
+        if traits is None:
+            traits = self.traits(config=True)
+        if section_names is None:
+            section_names = self.section_names()
 
-        my_config = self._find_my_config(cfg) 
+        my_config = self._find_my_config(cfg)
 
-        # hold trait notifications until after all config has been loaded 
-        with self.hold_trait_notifications(): 
+        # hold trait notifications until after all config has been loaded
+        with self.hold_trait_notifications():
             for name, config_value in my_config.items():
-                if name in traits: 
-                    if isinstance(config_value, LazyConfigValue): 
-                        # ConfigValue is a wrapper for using append / update on containers 
-                        # without having to copy the initial value 
-                        initial = getattr(self, name) 
-                        config_value = config_value.get_value(initial) 
+                if name in traits:
+                    if isinstance(config_value, LazyConfigValue):
+                        # ConfigValue is a wrapper for using append / update on containers
+                        # without having to copy the initial value
+                        initial = getattr(self, name)
+                        config_value = config_value.get_value(initial)
                     elif isinstance(config_value, DeferredConfig):
                         # DeferredConfig tends to come from CLI/environment variables
                         config_value = config_value.get_value(traits[name])
-                    # We have to do a deepcopy here if we don't deepcopy the entire 
-                    # config object. If we don't, a mutable config_value will be 
-                    # shared by all instances, effectively making it a class attribute. 
-                    setattr(self, name, deepcopy(config_value)) 
+                    # We have to do a deepcopy here if we don't deepcopy the entire
+                    # config object. If we don't, a mutable config_value will be
+                    # shared by all instances, effectively making it a class attribute.
+                    setattr(self, name, deepcopy(config_value))
                 elif not _is_section_key(name) and not isinstance(config_value, Config):
-                    from difflib import get_close_matches 
+                    from difflib import get_close_matches
                     if isinstance(self, LoggingConfigurable):
                         warn = self.log.warning
                     else:
                         warn = lambda msg: warnings.warn(msg, stacklevel=9)
-                    matches = get_close_matches(name, traits) 
+                    matches = get_close_matches(name, traits)
                     msg = "Config option `{option}` not recognized by `{klass}`.".format(
                         option=name, klass=self.__class__.__name__)
 
-                    if len(matches) == 1: 
+                    if len(matches) == 1:
                         msg += "  Did you mean `{matches}`?".format(matches=matches[0])
-                    elif len(matches) >= 1: 
+                    elif len(matches) >= 1:
                         msg +="  Did you mean one of: `{matches}`?".format(matches=', '.join(sorted(matches)))
                     warn(msg)
- 
-    @observe('config') 
-    @observe_compat 
-    def _config_changed(self, change): 
-        """Update all the class traits having ``config=True`` in metadata. 
- 
-        For any class trait with a ``config`` metadata attribute that is 
-        ``True``, we update the trait with the value of the corresponding 
-        config entry. 
-        """ 
-        # Get all traits with a config metadata entry that is True 
-        traits = self.traits(config=True) 
- 
-        # We auto-load config section for this class as well as any parent 
-        # classes that are Configurable subclasses.  This starts with Configurable 
-        # and works down the mro loading the config for each section. 
-        section_names = self.section_names() 
+
+    @observe('config')
+    @observe_compat
+    def _config_changed(self, change):
+        """Update all the class traits having ``config=True`` in metadata.
+
+        For any class trait with a ``config`` metadata attribute that is
+        ``True``, we update the trait with the value of the corresponding
+        config entry.
+        """
+        # Get all traits with a config metadata entry that is True
+        traits = self.traits(config=True)
+
+        # We auto-load config section for this class as well as any parent
+        # classes that are Configurable subclasses.  This starts with Configurable
+        # and works down the mro loading the config for each section.
+        section_names = self.section_names()
         self._load_config(change.new, traits=traits, section_names=section_names)
- 
-    def update_config(self, config): 
+
+    def update_config(self, config):
         """Update config and load the new values"""
         # traitlets prior to 4.2 created a copy of self.config in order to trigger change events.
         # Some projects (IPython < 5) relied upon one side effect of this,
@@ -222,28 +222,28 @@ class Configurable(HasTraits):
         # load config
         self._load_config(config)
         # merge it into self.config
-        self.config.merge(config) 
+        self.config.merge(config)
         # TODO: trigger change event if/when dict-update change events take place
         # DO NOT trigger full trait-change
- 
-    @classmethod 
-    def class_get_help(cls, inst=None): 
-        """Get the help string for this class in ReST format. 
- 
-        If `inst` is given, it's current trait values will be used in place of 
-        class defaults. 
-        """ 
-        assert inst is None or isinstance(inst, cls) 
-        final_help = [] 
+
+    @classmethod
+    def class_get_help(cls, inst=None):
+        """Get the help string for this class in ReST format.
+
+        If `inst` is given, it's current trait values will be used in place of
+        class defaults.
+        """
+        assert inst is None or isinstance(inst, cls)
+        final_help = []
         base_classes = ', '.join(p.__name__ for p in cls.__bases__)
         final_help.append('%s(%s) options' % (cls.__name__, base_classes))
         final_help.append(len(final_help[0])*'-')
-        for k, v in sorted(cls.class_traits(config=True).items()): 
-            help = cls.class_get_trait_help(v, inst) 
-            final_help.append(help) 
-        return '\n'.join(final_help) 
- 
-    @classmethod 
+        for k, v in sorted(cls.class_traits(config=True).items()):
+            help = cls.class_get_trait_help(v, inst)
+            final_help.append(help)
+        return '\n'.join(final_help)
+
+    @classmethod
     def class_get_trait_help(cls, trait, inst=None, helptext=None):
         """Get the helptext string for a single trait.
 
@@ -252,9 +252,9 @@ class Configurable(HasTraits):
             the class default.
         :param helptext:
             If not given, uses the `help` attribute of the current trait.
-        """ 
-        assert inst is None or isinstance(inst, cls) 
-        lines = [] 
+        """
+        assert inst is None or isinstance(inst, cls)
+        lines = []
         header = "--%s.%s" % (cls.__name__, trait.name)
         if isinstance(trait, (Container, Dict)):
             multiplicity = trait.metadata.get('multiplicity', 'append')
@@ -269,7 +269,7 @@ class Configurable(HasTraits):
         else:
             header = '%s=<%s>' % (header, trait.__class__.__name__)
         #header = "--%s.%s=<%s>" % (cls.__name__, trait.name, trait.__class__.__name__)
-        lines.append(header) 
+        lines.append(header)
 
         if helptext is None:
             helptext = trait.help
@@ -281,26 +281,26 @@ class Configurable(HasTraits):
             # include Enum choices
             lines.append(indent('Choices: %s' % trait.info()))
 
-        if inst is not None: 
+        if inst is not None:
             lines.append(indent("Current: %r" % (getattr(inst, trait.name),)))
-        else: 
-            try: 
-                dvr = trait.default_value_repr() 
-            except Exception: 
-                dvr = None # ignore defaults we can't construct 
-            if dvr is not None: 
-                if len(dvr) > 64: 
+        else:
+            try:
+                dvr = trait.default_value_repr()
+            except Exception:
+                dvr = None # ignore defaults we can't construct
+            if dvr is not None:
+                if len(dvr) > 64:
                     dvr = dvr[:61] + "..."
                 lines.append(indent("Default: %s" % dvr))
- 
-        return '\n'.join(lines) 
- 
-    @classmethod 
-    def class_print_help(cls, inst=None): 
-        """Get the help string for a single trait and print it.""" 
-        print(cls.class_get_help(inst)) 
- 
-    @classmethod 
+
+        return '\n'.join(lines)
+
+    @classmethod
+    def class_print_help(cls, inst=None):
+        """Get the help string for a single trait and print it."""
+        print(cls.class_get_help(inst))
+
+    @classmethod
     def _defining_class(cls, trait, classes):
         """Get the class that defines a trait
 
@@ -336,13 +336,13 @@ class Configurable(HasTraits):
             The list of other classes in the config file.
             Used to reduce redundant information.
         """
-        def c(s): 
-            """return a commented, wrapped block.""" 
-            s = '\n\n'.join(wrap_paragraphs(s, 78)) 
- 
+        def c(s):
+            """return a commented, wrapped block."""
+            s = '\n\n'.join(wrap_paragraphs(s, 78))
+
             return '## ' + s.replace('\n', '\n#  ')
- 
-        # section header 
+
+        # section header
         breaker = '#' + '-' * 78
         parent_classes = ', '.join(
             p.__name__ for p in cls.__bases__
@@ -351,17 +351,17 @@ class Configurable(HasTraits):
 
         s = "# %s(%s) configuration" % (cls.__name__, parent_classes)
         lines = [breaker, s, breaker]
-        # get the description trait 
-        desc = cls.class_traits().get('description') 
-        if desc: 
-            desc = desc.default_value 
+        # get the description trait
+        desc = cls.class_traits().get('description')
+        if desc:
+            desc = desc.default_value
         if not desc:
             # no description from trait, use __doc__
-            desc = getattr(cls, '__doc__', '') 
-        if desc: 
-            lines.append(c(desc)) 
-            lines.append('') 
- 
+            desc = getattr(cls, '__doc__', '')
+        if desc:
+            lines.append(c(desc))
+            lines.append('')
+
         for name, trait in sorted(cls.class_traits(config=True).items()):
             default_repr = trait.default_value_repr()
 
@@ -385,60 +385,60 @@ class Configurable(HasTraits):
                 lines.append('#  See also: %s.%s' % (defining_class.__name__, name))
 
             lines.append('# c.%s.%s = %s' % (cls.__name__, name, default_repr))
-            lines.append('') 
-        return '\n'.join(lines) 
- 
-    @classmethod 
-    def class_config_rst_doc(cls): 
-        """Generate rST documentation for this class' config options. 
- 
-        Excludes traits defined on parent classes. 
-        """ 
-        lines = [] 
-        classname = cls.__name__ 
+            lines.append('')
+        return '\n'.join(lines)
+
+    @classmethod
+    def class_config_rst_doc(cls):
+        """Generate rST documentation for this class' config options.
+
+        Excludes traits defined on parent classes.
+        """
+        lines = []
+        classname = cls.__name__
         for k, trait in sorted(cls.class_traits(config=True).items()):
-            ttype = trait.__class__.__name__ 
- 
-            termline = classname + '.' + trait.name 
- 
-            # Choices or type 
-            if 'Enum' in ttype: 
-                # include Enum choices 
+            ttype = trait.__class__.__name__
+
+            termline = classname + '.' + trait.name
+
+            # Choices or type
+            if 'Enum' in ttype:
+                # include Enum choices
                 termline += ' : ' + trait.info_rst()
-            else: 
-                termline += ' : ' + ttype 
-            lines.append(termline) 
- 
-            # Default value 
-            try: 
-                dvr = trait.default_value_repr() 
-            except Exception: 
-                dvr = None # ignore defaults we can't construct 
-            if dvr is not None: 
-                if len(dvr) > 64: 
-                    dvr = dvr[:61]+'...' 
-                # Double up backslashes, so they get to the rendered docs 
+            else:
+                termline += ' : ' + ttype
+            lines.append(termline)
+
+            # Default value
+            try:
+                dvr = trait.default_value_repr()
+            except Exception:
+                dvr = None # ignore defaults we can't construct
+            if dvr is not None:
+                if len(dvr) > 64:
+                    dvr = dvr[:61]+'...'
+                # Double up backslashes, so they get to the rendered docs
                 dvr = dvr.replace("\\n", "\\\\n")
                 lines.append(indent("Default: ``%s``" % dvr))
                 lines.append("")
- 
-            help = trait.help or 'No description' 
+
+            help = trait.help or 'No description'
             lines.append(indent(dedent(help)))
- 
-            # Blank line 
-            lines.append('') 
- 
-        return '\n'.join(lines) 
- 
- 
- 
-class LoggingConfigurable(Configurable): 
-    """A parent class for Configurables that log. 
- 
-    Subclasses have a log trait, and the default behavior 
-    is to get the logger from the currently running Application. 
-    """ 
- 
+
+            # Blank line
+            lines.append('')
+
+        return '\n'.join(lines)
+
+
+
+class LoggingConfigurable(Configurable):
+    """A parent class for Configurables that log.
+
+    Subclasses have a log trait, and the default behavior
+    is to get the logger from the currently running Application.
+    """
+
     log = Any(help="Logger or LoggerAdapter instance")
 
     @validate("log")
@@ -452,15 +452,15 @@ class LoggingConfigurable(Configurable):
         return proposal.value
 
     @default("log")
-    def _log_default(self): 
+    def _log_default(self):
         if isinstance(self.parent, LoggingConfigurable):
             return self.parent.log
-        from traitlets import log 
-        return log.get_logger() 
- 
+        from traitlets import log
+        return log.get_logger()
+
     def _get_log_handler(self):
         """Return the default Handler
- 
+
         Returns None if none can be found
         """
         logger = self.log
@@ -472,89 +472,89 @@ class LoggingConfigurable(Configurable):
         return logger.handlers[0]
 
 
-class SingletonConfigurable(LoggingConfigurable): 
-    """A configurable that only allows one instance. 
- 
-    This class is for classes that should only have one instance of itself 
-    or *any* subclass. To create and retrieve such a class use the 
-    :meth:`SingletonConfigurable.instance` method. 
-    """ 
- 
-    _instance = None 
- 
-    @classmethod 
-    def _walk_mro(cls): 
-        """Walk the cls.mro() for parent classes that are also singletons 
- 
-        For use in instance() 
-        """ 
- 
-        for subclass in cls.mro(): 
-            if issubclass(cls, subclass) and \ 
-                    issubclass(subclass, SingletonConfigurable) and \ 
-                    subclass != SingletonConfigurable: 
-                yield subclass 
- 
-    @classmethod 
-    def clear_instance(cls): 
-        """unset _instance for this class and singleton parents. 
-        """ 
-        if not cls.initialized(): 
-            return 
-        for subclass in cls._walk_mro(): 
-            if isinstance(subclass._instance, cls): 
-                # only clear instances that are instances 
-                # of the calling class 
-                subclass._instance = None 
- 
-    @classmethod 
-    def instance(cls, *args, **kwargs): 
-        """Returns a global instance of this class. 
- 
-        This method create a new instance if none have previously been created 
-        and returns a previously created instance is one already exists. 
- 
-        The arguments and keyword arguments passed to this method are passed 
-        on to the :meth:`__init__` method of the class upon instantiation. 
- 
-        Examples 
-        -------- 
-        Create a singleton class using instance, and retrieve it:: 
- 
-            >>> from traitlets.config.configurable import SingletonConfigurable 
-            >>> class Foo(SingletonConfigurable): pass 
-            >>> foo = Foo.instance() 
-            >>> foo == Foo.instance() 
-            True 
- 
-        Create a subclass that is retrived using the base class instance:: 
- 
-            >>> class Bar(SingletonConfigurable): pass 
-            >>> class Bam(Bar): pass 
-            >>> bam = Bam.instance() 
-            >>> bam == Bar.instance() 
-            True 
-        """ 
-        # Create and save the instance 
-        if cls._instance is None: 
-            inst = cls(*args, **kwargs) 
-            # Now make sure that the instance will also be returned by 
-            # parent classes' _instance attribute. 
-            for subclass in cls._walk_mro(): 
-                subclass._instance = inst 
- 
-        if isinstance(cls._instance, cls): 
-            return cls._instance 
-        else: 
-            raise MultipleInstanceError( 
+class SingletonConfigurable(LoggingConfigurable):
+    """A configurable that only allows one instance.
+
+    This class is for classes that should only have one instance of itself
+    or *any* subclass. To create and retrieve such a class use the
+    :meth:`SingletonConfigurable.instance` method.
+    """
+
+    _instance = None
+
+    @classmethod
+    def _walk_mro(cls):
+        """Walk the cls.mro() for parent classes that are also singletons
+
+        For use in instance()
+        """
+
+        for subclass in cls.mro():
+            if issubclass(cls, subclass) and \
+                    issubclass(subclass, SingletonConfigurable) and \
+                    subclass != SingletonConfigurable:
+                yield subclass
+
+    @classmethod
+    def clear_instance(cls):
+        """unset _instance for this class and singleton parents.
+        """
+        if not cls.initialized():
+            return
+        for subclass in cls._walk_mro():
+            if isinstance(subclass._instance, cls):
+                # only clear instances that are instances
+                # of the calling class
+                subclass._instance = None
+
+    @classmethod
+    def instance(cls, *args, **kwargs):
+        """Returns a global instance of this class.
+
+        This method create a new instance if none have previously been created
+        and returns a previously created instance is one already exists.
+
+        The arguments and keyword arguments passed to this method are passed
+        on to the :meth:`__init__` method of the class upon instantiation.
+
+        Examples
+        --------
+        Create a singleton class using instance, and retrieve it::
+
+            >>> from traitlets.config.configurable import SingletonConfigurable
+            >>> class Foo(SingletonConfigurable): pass
+            >>> foo = Foo.instance()
+            >>> foo == Foo.instance()
+            True
+
+        Create a subclass that is retrived using the base class instance::
+
+            >>> class Bar(SingletonConfigurable): pass
+            >>> class Bam(Bar): pass
+            >>> bam = Bam.instance()
+            >>> bam == Bar.instance()
+            True
+        """
+        # Create and save the instance
+        if cls._instance is None:
+            inst = cls(*args, **kwargs)
+            # Now make sure that the instance will also be returned by
+            # parent classes' _instance attribute.
+            for subclass in cls._walk_mro():
+                subclass._instance = inst
+
+        if isinstance(cls._instance, cls):
+            return cls._instance
+        else:
+            raise MultipleInstanceError(
                 "An incompatible sibling of '%s' is already instanciated"
                 " as singleton: %s" % (cls.__name__, type(cls._instance).__name__)
-            ) 
- 
-    @classmethod 
-    def initialized(cls): 
-        """Has an instance been created?""" 
-        return hasattr(cls, "_instance") and cls._instance is not None 
- 
- 
- 
+            )
+
+    @classmethod
+    def initialized(cls):
+        """Has an instance been created?"""
+        return hasattr(cls, "_instance") and cls._instance is not None
+
+
+

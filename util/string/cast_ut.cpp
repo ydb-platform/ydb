@@ -24,22 +24,22 @@
 #define OK_HEX_CHECK(type, val, base) UNIT_ASSERT_EQUAL((IntFromStringForCheck<base>(IntToString<base>(val))), val);
 #define EXC_HEX_CHECK(type, val, base) UNIT_ASSERT_EXCEPTION((IntFromString<type, base>(IntToString<base>(val))), yexception);
 
-#define TRY_HEX_MACROS_MAP(mac, type, val, result, def) \ 
+#define TRY_HEX_MACROS_MAP(mac, type, val, result, def) \
     mac(type, val, result, def, 2)                      \
         mac(type, val, result, def, 8)                  \
             mac(type, val, result, def, 10)             \
                 mac(type, val, result, def, 16)
- 
+
 #define TRY_OK_HEX_CHECK(type, val, result, def, base)                                       \
     result = def;                                                                            \
-    UNIT_ASSERT_EQUAL(TryIntFromStringForCheck<base>(IntToString<base>(val), result), true); \ 
-    UNIT_ASSERT_EQUAL(result, val); 
- 
+    UNIT_ASSERT_EQUAL(TryIntFromStringForCheck<base>(IntToString<base>(val), result), true); \
+    UNIT_ASSERT_EQUAL(result, val);
+
 #define TRY_FAIL_HEX_CHECK(type, val, result, def, base)                                             \
     result = def;                                                                                    \
     UNIT_ASSERT_VALUES_EQUAL(TryIntFromStringForCheck<base>(IntToString<base>(val), result), false); \
     UNIT_ASSERT_VALUES_EQUAL(result, def);
- 
+
 template <class A>
 struct TRet {
     template <int base>
@@ -47,11 +47,11 @@ struct TRet {
         return IntFromString<A, base>(str);
     }
 
-    template <int base> 
+    template <int base>
     inline bool TryIntFromStringForCheck(const TString& str, A& result) {
-        return TryIntFromString<base>(str, result); 
-    } 
- 
+        return TryIntFromString<base>(str, result);
+    }
+
     template <class B>
     inline void CheckOK(B v) {
         UNIT_ASSERT_VALUES_EQUAL(FromString<A>(ToString(v)), v); // char
@@ -68,14 +68,14 @@ struct TRet {
 
     template <class B>
     inline void CheckTryOK(B v) {
-        static const A defaultV = 42; 
+        static const A defaultV = 42;
         A convV;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<A>(ToString(v), convV), true); // char
         UNIT_ASSERT_VALUES_EQUAL(v, convV);
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<A>(ToWtring(v), convV), true); // wide char
         UNIT_ASSERT_VALUES_EQUAL(v, convV);
 
-        TRY_HEX_MACROS_MAP(TRY_OK_HEX_CHECK, A, v, convV, defaultV); 
+        TRY_HEX_MACROS_MAP(TRY_OK_HEX_CHECK, A, v, convV, defaultV);
     }
 
     template <class B>
@@ -86,8 +86,8 @@ struct TRet {
         UNIT_ASSERT_VALUES_EQUAL(defaultV, convV);
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<A>(ToWtring(v), convV), false); // wide char
         UNIT_ASSERT_VALUES_EQUAL(defaultV, convV);
- 
-        TRY_HEX_MACROS_MAP(TRY_FAIL_HEX_CHECK, A, v, convV, defaultV); 
+
+        TRY_HEX_MACROS_MAP(TRY_FAIL_HEX_CHECK, A, v, convV, defaultV);
     }
 };
 

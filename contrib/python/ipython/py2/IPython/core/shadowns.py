@@ -1,1 +1,1 @@
-""" Shadow namespace """ 
+""" Shadow namespace """

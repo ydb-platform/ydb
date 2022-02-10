@@ -45,7 +45,7 @@
     - cxxabi.h: contrib/libs/cxxsupp/libcxxabi/include/cxxabi.h
 
 - includes:
-  - __config:                  contrib/libs/cxxsupp/libcxx/include/__config 
+  - __config:                  contrib/libs/cxxsupp/libcxx/include/__config
   - __undef_macros:            contrib/libs/cxxsupp/libcxx/include/__undef_macros
   - algorithm:                 contrib/libs/cxxsupp/libcxx/include/algorithm
   - any:                       contrib/libs/cxxsupp/libcxx/include/any

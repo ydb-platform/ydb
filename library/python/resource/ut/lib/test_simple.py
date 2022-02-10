@@ -7,8 +7,8 @@ text = b'na gorshke sidel korol\n'
 
 def test_find():
     assert rs.find('/qw.txt') == text
- 
- 
+
+
 def test_iter():
     assert set(rs.iterkeys()).issuperset({'/qw.txt', '/prefix/1.txt', '/prefix/2.txt'})
     assert set(rs.iterkeys(prefix='/prefix/')) == {'/prefix/1.txt', '/prefix/2.txt'}

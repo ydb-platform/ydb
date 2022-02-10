@@ -1,11 +1,11 @@
-#pragma once 
- 
-#include "format_string.h" 
-#include "macros.h" 
- 
+#pragma once
+
+#include "format_string.h"
+#include "macros.h"
+
 #include <library/cpp/yson_pull/exceptions.h>
 #include <library/cpp/yson_pull/position_info.h>
- 
+
 namespace NYsonPull {
     namespace NDetail {
         template <typename... Args>

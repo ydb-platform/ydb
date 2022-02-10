@@ -28,7 +28,7 @@
   - wctype.h
 
 - includes:
-  - __config 
+  - __config
   - __undef_macros
   - algorithm
   - any

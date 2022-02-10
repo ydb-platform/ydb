@@ -26,7 +26,7 @@ ENDIF()
 END()
 
 RECURSE(
-    libcxx 
+    libcxx
     libcxxabi
     libcxxrt
 )

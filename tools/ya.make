@@ -11,13 +11,13 @@ RECURSE(
     bstr
     c++filt
     calendar_extractor
-    check_formula_md5 
+    check_formula_md5
     check_json
     check_yaml
     checktrigrams
     clustermaster
     coldiff
-    compress 
+    compress
     convert2html
     cproxy
     crc32
@@ -34,7 +34,7 @@ RECURSE(
     drawrichtree
     dsindexer
     easyparser
-    enforce_fsync 
+    enforce_fsync
     enum_parser
     event2cpp
     fast_diff
@@ -163,7 +163,7 @@ RECURSE(
     trie_ops/lib
     trie_ops/tests
     trigram_index_print
-    uc 
+    uc
     unpackrichtree
     unpackrrr
     unpack_staff_cert
@@ -177,7 +177,7 @@ RECURSE(
     wizard_yt
     ygetparam
     ylzocat
-    yson_pp 
+    yson_pp
     zk_client
     idx_print
 )

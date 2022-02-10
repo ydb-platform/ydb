@@ -3,23 +3,23 @@ PY23_LIBRARY()
 LICENSE(BSD-3-Clause)
 
 OWNER(g:python-contrib borman)
- 
+
 VERSION(4.4.2)
 
 NO_LINT()
 
-PY_SRCS( 
-    TOP_LEVEL 
-    decorator.py 
-) 
- 
+PY_SRCS(
+    TOP_LEVEL
+    decorator.py
+)
+
 RESOURCE_FILES(
     PREFIX contrib/python/decorator/
     .dist-info/METADATA
     .dist-info/top_level.txt
 )
 
-END() 
+END()
 
 RECURSE_FOR_TESTS(
     tests

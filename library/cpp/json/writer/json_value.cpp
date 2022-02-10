@@ -504,7 +504,7 @@ namespace NJson {
     TJsonValue::TMapType& TJsonValue::GetMapSafe() {
         return const_cast<TJsonValue::TMapType&>(const_cast<const TJsonValue*>(this)->GetMapSafe());
     }
- 
+
     const TJsonValue::TArray& TJsonValue::GetArraySafe() const {
         if (Type != JSON_ARRAY)
             ythrow TJsonException() << "Not an array";

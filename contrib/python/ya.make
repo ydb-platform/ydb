@@ -1,4 +1,4 @@
-OWNER(g:contrib g:python-contrib) 
+OWNER(g:contrib g:python-contrib)
 
 RECURSE(
     absl-py
@@ -37,7 +37,7 @@ RECURSE(
     aiosmtplib
     aiosocksy
     aiosqlite
-    aiotg 
+    aiotg
     aiounittest
     aiozipkin
     aiozk
@@ -149,7 +149,7 @@ RECURSE(
     cherrypy-cors
     ciso8601
     clang
-    clang/example 
+    clang/example
     cli-helpers
     click
     click-didyoumean
@@ -161,12 +161,12 @@ RECURSE(
     cloudpickle
     color
     colorama
-    coloredlogs 
+    coloredlogs
     colorhash
     colorlog
     commoncode
     commonmark
-    ConfigArgParse 
+    ConfigArgParse
     configobj
     configparser
     confluent-kafka
@@ -356,7 +356,7 @@ RECURSE(
     fakeredis
     falcon
     falcon-cors
-    falcon-multipart 
+    falcon-multipart
     fallocate
     fancycompleter
     fastapi
@@ -551,7 +551,7 @@ RECURSE(
     jmespath
     json-rpc
     json2html
-    jsondiff 
+    jsondiff
     jsonfield
     jsonobject
     jsonpath-rw
@@ -640,7 +640,7 @@ RECURSE(
     mpi4py
     mpmath
     msal
-    msgpack 
+    msgpack
     mujson
     multidict
     multitasking
@@ -736,7 +736,7 @@ RECURSE(
     pexpect
     pgcli
     PGPy
-    pgspecial 
+    pgspecial
     phonenumbers
     pickleshare
     pika
@@ -801,8 +801,8 @@ RECURSE(
     pycparser
     pycrypto
     pycryptodome
-    pycurl 
-    pycurl/example 
+    pycurl
+    pycurl/example
     pydantic
     pydash
     PyDispatcher
@@ -824,7 +824,7 @@ RECURSE(
     pyjavaproperties
     PyJWT
     pykdtree
-    pyketama 
+    pyketama
     pylev
     pylint
     pylxd
@@ -840,7 +840,7 @@ RECURSE(
     pynetbox
     pyodbc
     pyOpenSSL
-    pyparsing 
+    pyparsing
     PyPDF2
     pyperclip
     PyPika
@@ -987,7 +987,7 @@ RECURSE(
     semver
     Send2Trash
     sentinels
-    sentry-sdk 
+    sentry-sdk
     service-identity
     setproctitle
     setuptools
@@ -1097,7 +1097,7 @@ RECURSE(
     typed-ast
     typeguard
     typer
-    typing 
+    typing
     typing-extensions
     typing-inspect
     tzlocal
@@ -1119,31 +1119,31 @@ RECURSE(
     user-agents
     uvicorn
     uvloop
-    uwsgi 
-    uwsgi/bin 
-    uwsgi/examples 
+    uwsgi
+    uwsgi/bin
+    uwsgi/examples
     uwsgiconf
-    validators 
+    validators
     validr
-    vcrpy 
+    vcrpy
     viberbot
-    vine 
+    vine
     visitor
-    voluptuous 
+    voluptuous
     w3lib
     waitress
     walrus
     Wand
     wasabi
-    watchdog 
+    watchdog
     watchgod
-    wcwidth 
+    wcwidth
     webargs
     webauthn
     webcolors
     webencodings
     WebOb
-    websocket-client 
+    websocket-client
     websockets
     webstruct
     WebTest
@@ -1154,31 +1154,31 @@ RECURSE(
     whitenoise
     whodap
     wmctrl
-    wrapt 
-    ws4py 
+    wrapt
+    ws4py
     wsgi-intercept
-    wsgi-profiler 
+    wsgi-profiler
     wsproto
     wtf-peewee
-    WTForms 
-    WTForms-JSON 
-    wurlitzer 
+    WTForms
+    WTForms-JSON
+    wurlitzer
     xhtml2pdf
     xlrd
-    XlsxWriter 
+    XlsxWriter
     xlutils
-    xlwt 
+    xlwt
     xmlsec
-    xmltodict 
+    xmltodict
     xxhash
     yandex-pgmigrate
-    yappi 
-    yarl 
+    yappi
+    yarl
     yfinance
     youtube-dl
     yoyo-migrations
     yt-dlp
-    zake 
+    zake
     zeep
     zero-downtime-migrations
     zope.event
@@ -1186,27 +1186,27 @@ RECURSE(
     zope.schema
     zstandard
 )
- 
+
 IF (OS_WINDOWS)
     RECURSE(
         win_unicode_console
     )
 ENDIF()
 
-IF (OS_DARWIN) 
-    RECURSE( 
-        appnope 
-    ) 
-ENDIF () 
- 
-IF (OS_LINUX) 
-    RECURSE( 
-        pyroute2 
-    ) 
- 
+IF (OS_DARWIN)
+    RECURSE(
+        appnope
+    )
+ENDIF ()
+
+IF (OS_LINUX)
+    RECURSE(
+        pyroute2
+    )
+
     IF (OS_SDK != "ubuntu-12")
-        RECURSE( 
-            cysystemd 
-        ) 
-    ENDIF() 
-ENDIF () 
+        RECURSE(
+            cysystemd
+        )
+    ENDIF()
+ENDIF ()

@@ -465,7 +465,7 @@
         },
         "wall-e": {
             "description": "Client for Wall-E"
-        },
+        }, 
         "rtcdiag": {
             "description": "RTC hosts diag tool"
         },

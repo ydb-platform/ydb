@@ -13,7 +13,7 @@
 #include <util/system/defaults.h>
 #include <util/system/error.h>
 #include <util/system/src_location.h>
-#include <util/system/platform.h>
+#include <util/system/platform.h> 
 
 #include <exception>
 
@@ -171,7 +171,7 @@ TString CurrentExceptionMessage();
  */
 bool UncaughtException() noexcept;
 
-std::string CurrentExceptionTypeName();
+std::string CurrentExceptionTypeName(); 
 
 TString FormatExc(const std::exception& exception);
 

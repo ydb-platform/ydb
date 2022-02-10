@@ -1,6 +1,6 @@
 RESOURCES_LIBRARY()
 OWNER(heretic)
-
+ 
 IF(USE_SYSTEM_UBERJAR)
     MESSAGE(WARNING System uberjar $USE_SYSTEM_UBERJAR will be used)
 ELSEIF(JDK_VERSION == "17")
@@ -24,16 +24,16 @@ ELSEIF(JDK_VERSION == "8")
 ELSE()
     MESSAGE(FATAL_ERROR Uberjar is not supported for selected JDK version)
 ENDIF()
-
+ 
 END()
-
-RECURSE(
-    uberjar8
-    uberjar10
-    uberjar11
-    uberjar12
-    uberjar13
-    uberjar14
-    uberjar15
-    uberjar16
-)
+ 
+RECURSE( 
+    uberjar8 
+    uberjar10 
+    uberjar11 
+    uberjar12 
+    uberjar13 
+    uberjar14 
+    uberjar15 
+    uberjar16 
+) 

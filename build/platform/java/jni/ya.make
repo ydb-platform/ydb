@@ -1,10 +1,10 @@
 LIBRARY()
 OWNER(heretic)
 
-PEERDIR(
-    build/platform/java/jdk
-    ${JDK_RESOURCE_PEERDIR}
-)
+PEERDIR( 
+    build/platform/java/jdk 
+    ${JDK_RESOURCE_PEERDIR} 
+) 
 
 IF(OS_DARWIN)
     SET(PLATFORM_NAME darwin)
@@ -17,7 +17,7 @@ ENDIF()
 IF (USE_SYSTEM_JDK)
     SET(JDK_ROOT ${USE_SYSTEM_JDK})
 ELSE()
-    SET(JDK_ROOT ${JDK_DEFAULT_RESOURCE_GLOBAL})
+    SET(JDK_ROOT ${JDK_DEFAULT_RESOURCE_GLOBAL}) 
 ENDIF()
 IF (PLATFORM_NAME)
     CFLAGS(GLOBAL -I${JDK_ROOT}/include)

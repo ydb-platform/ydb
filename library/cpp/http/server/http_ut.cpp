@@ -8,7 +8,7 @@
 #include <util/stream/output.h>
 #include <util/stream/zlib.h>
 #include <util/system/datetime.h>
-#include <util/system/sem.h> 
+#include <util/system/sem.h>
 
 Y_UNIT_TEST_SUITE(THttpServerTest) {
     class TEchoServer: public THttpServer::ICallBack {
@@ -53,89 +53,89 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         TString Res_;
     };
 
-    class TSleepingServer: public THttpServer::ICallBack { 
-        class TReplier: public TRequestReplier { 
-        public: 
-            inline TReplier(TSleepingServer* server) 
-                : Server(server) 
-            { 
-            } 
- 
-            bool DoReply(const TReplyParams& params) override { 
-                Server->FreeThread(); 
-                Server->Busy(1); 
-                params.Output.Write("HTTP/1.0 201 Created\nX-Server: sleeping server\n\nZoooo"); 
-                params.Output.Finish(); 
-                Server->Replies->Inc(); 
-                return true; 
-            } 
- 
-        private: 
-            TSleepingServer* Server = nullptr; 
-        }; 
- 
-    public: 
-        inline TSleepingServer(unsigned int size) 
-            : Semaphore("conns", size) 
-            , Semaphore2("threads", 1) 
-            , Replies(new TAtomicCounter()) 
-            , MaxConns(new TAtomicCounter()) 
-        { 
-        } 
- 
-        void ResetCounters() { 
-            Replies.Reset(new TAtomicCounter()); 
-            MaxConns.Reset(new TAtomicCounter()); 
-        } 
- 
-        long RepliesCount() const { 
-            return Replies->Val(); 
-        } 
- 
-        long MaxConnsCount() const { 
-            return MaxConns->Val(); 
-        } 
- 
-        TClientRequest* CreateClient() override { 
-            return new TReplier(this); 
-        } 
- 
-        void OnMaxConn() override { 
-            MaxConns->Inc(); 
-        } 
- 
-        void OnFailRequest(int) override { 
-            FreeThread(); 
-            Busy(1); 
-        } 
- 
-        void Busy(int count) { 
-            while (count-- > 0) { 
-                Semaphore.Acquire(); 
-            } 
-        } 
- 
-        void BusyThread() { 
-            Semaphore2.Acquire(); 
-        } 
- 
-        void Free(int count) { 
-            while (count-- > 0) { 
-                Semaphore.Release(); 
-            } 
-        } 
- 
-        void FreeThread() { 
-            Semaphore2.Release(); 
-        } 
- 
-    private: 
-        TSemaphore Semaphore; 
-        TSemaphore Semaphore2; 
-        THolder<TAtomicCounter> Replies; 
-        THolder<TAtomicCounter> MaxConns; 
-    }; 
- 
+    class TSleepingServer: public THttpServer::ICallBack {
+        class TReplier: public TRequestReplier {
+        public:
+            inline TReplier(TSleepingServer* server)
+                : Server(server)
+            {
+            }
+
+            bool DoReply(const TReplyParams& params) override {
+                Server->FreeThread();
+                Server->Busy(1);
+                params.Output.Write("HTTP/1.0 201 Created\nX-Server: sleeping server\n\nZoooo");
+                params.Output.Finish();
+                Server->Replies->Inc();
+                return true;
+            }
+
+        private:
+            TSleepingServer* Server = nullptr;
+        };
+
+    public:
+        inline TSleepingServer(unsigned int size)
+            : Semaphore("conns", size)
+            , Semaphore2("threads", 1)
+            , Replies(new TAtomicCounter())
+            , MaxConns(new TAtomicCounter())
+        {
+        }
+
+        void ResetCounters() {
+            Replies.Reset(new TAtomicCounter());
+            MaxConns.Reset(new TAtomicCounter());
+        }
+
+        long RepliesCount() const {
+            return Replies->Val();
+        }
+
+        long MaxConnsCount() const {
+            return MaxConns->Val();
+        }
+
+        TClientRequest* CreateClient() override {
+            return new TReplier(this);
+        }
+
+        void OnMaxConn() override {
+            MaxConns->Inc();
+        }
+
+        void OnFailRequest(int) override {
+            FreeThread();
+            Busy(1);
+        }
+
+        void Busy(int count) {
+            while (count-- > 0) {
+                Semaphore.Acquire();
+            }
+        }
+
+        void BusyThread() {
+            Semaphore2.Acquire();
+        }
+
+        void Free(int count) {
+            while (count-- > 0) {
+                Semaphore.Release();
+            }
+        }
+
+        void FreeThread() {
+            Semaphore2.Release();
+        }
+
+    private:
+        TSemaphore Semaphore;
+        TSemaphore Semaphore2;
+        THolder<TAtomicCounter> Replies;
+        THolder<TAtomicCounter> MaxConns;
+    };
+
     static const TString CrLf = "\r\n";
 
     struct TTestRequest {
@@ -166,10 +166,10 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             TSocket* s = nullptr;
             THolder<TSocket> singleReqSocket;
             if (KeepAliveConnection) {
-                if (!KeepAlivedSocket) { 
+                if (!KeepAlivedSocket) {
                     KeepAlivedSocket = MakeHolder<TSocket>(TNetworkAddress("localhost", Port), TDuration::Seconds(10));
-                } 
-                s = KeepAlivedSocket.Get(); 
+                }
+                s = KeepAlivedSocket.Get();
             } else {
                 TNetworkAddress addr("localhost", Port);
                 singleReqSocket.Reset(new TSocket(addr, TDuration::Seconds(10)));
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         TString ContentEncoding;
         TString Content;
         bool KeepAliveConnection = false;
-        THolder<TSocket> KeepAlivedSocket; 
+        THolder<TSocket> KeepAlivedSocket;
         bool EnableResponseEncoding = false;
         TString Hdr;
         bool Expect100Continue = false;
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         }
         server.Stop();
     }
- 
+
     class TReleaseConnectionServer: public THttpServer::ICallBack {
         class TRequest: public THttpClientRequestEx {
         public:
@@ -686,54 +686,54 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
 
 #if 0
     Y_UNIT_TEST(TestSocketsLeak) {
-        const bool trueFalse[] = {true, false}; 
-        TPortManager portManager; 
-        const ui16 port = portManager.GetPort(); 
-        TString res = TestData(25); 
-        TSleepingServer server(3); 
-        THttpServer::TOptions options(port); 
-        options.MaxConnections = 1; 
-        options.MaxQueueSize = 1; 
-        options.MaxFQueueSize = 2; 
-        options.nFThreads = 2; 
-        options.KeepAliveEnabled = true; 
-        options.RejectExcessConnections = true; 
-        THttpServer srv(&server, options); 
-        UNIT_ASSERT(srv.Start()); 
- 
-        for (bool keepAlive : trueFalse) { 
-            server.ResetCounters(); 
+        const bool trueFalse[] = {true, false};
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TString res = TestData(25);
+        TSleepingServer server(3);
+        THttpServer::TOptions options(port);
+        options.MaxConnections = 1;
+        options.MaxQueueSize = 1;
+        options.MaxFQueueSize = 2;
+        options.nFThreads = 2;
+        options.KeepAliveEnabled = true;
+        options.RejectExcessConnections = true;
+        THttpServer srv(&server, options);
+        UNIT_ASSERT(srv.Start());
+
+        for (bool keepAlive : trueFalse) {
+            server.ResetCounters();
             TVector<TAutoPtr<IThreadFactory::IThread>> threads;
- 
-            server.Busy(3); 
-            server.BusyThread(); 
- 
-            for (size_t i = 0; i < 3; ++i) { 
+
+            server.Busy(3);
+            server.BusyThread();
+
+            for (size_t i = 0; i < 3; ++i) {
                 auto func = [&server, port, keepAlive]() {
-                    server.BusyThread(); 
+                    server.BusyThread();
                     THolder<TTestRequest> r = MakeHolder<TTestRequest>(port);
-                    r->KeepAliveConnection = keepAlive; 
-                    r->Execute(); 
-                }; 
+                    r->KeepAliveConnection = keepAlive;
+                    r->Execute();
+                };
                 threads.push_back(SystemThreadFactory()->Run(func));
-            } 
- 
-            server.FreeThread(); // all threads get connection & go to processing 
-            Sleep(TDuration::MilliSeconds(100)); 
-            server.BusyThread(); // we wait while connections are established by the 
-                                 // system and accepted by the server 
+            }
+
+            server.FreeThread(); // all threads get connection & go to processing
+            Sleep(TDuration::MilliSeconds(100));
+            server.BusyThread(); // we wait while connections are established by the
+                                 // system and accepted by the server
             server.Free(3);      // we release all connections processing
- 
-            for (auto&& thread : threads) { 
-                thread->Join(); 
-            } 
- 
-            server.Free(3); 
-            server.FreeThread(); 
- 
-            UNIT_ASSERT_EQUAL_C(server.MaxConnsCount(), 2, "we should get MaxConn notification 2 times, got " + ToString(server.MaxConnsCount())); 
-            UNIT_ASSERT_EQUAL_C(server.RepliesCount(), 1, "only one request should have been processed, got " + ToString(server.RepliesCount())); 
-        } 
-    } 
+
+            for (auto&& thread : threads) {
+                thread->Join();
+            }
+
+            server.Free(3);
+            server.FreeThread();
+
+            UNIT_ASSERT_EQUAL_C(server.MaxConnsCount(), 2, "we should get MaxConn notification 2 times, got " + ToString(server.MaxConnsCount()));
+            UNIT_ASSERT_EQUAL_C(server.RepliesCount(), 1, "only one request should have been processed, got " + ToString(server.RepliesCount()));
+        }
+    }
 #endif
 }

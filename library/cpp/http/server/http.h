@@ -93,9 +93,9 @@ public:
     static TAtomicBase AcceptReturnsInvalidSocketCounter();
 
 private:
-    bool MaxRequestsReached() const; 
- 
-private: 
+    bool MaxRequestsReached() const;
+
+private:
     THolder<TImpl> Impl_;
 };
 

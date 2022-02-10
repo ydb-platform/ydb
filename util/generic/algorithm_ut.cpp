@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         TVector<int> empty;
         UNIT_ASSERT_EQUAL(NPOS, FindIndex(empty, 0));
     }
-
+ 
     Y_UNIT_TEST(FindIndexIfTest) {
         TVectorNoCopy v;
         v.push_back(1);
@@ -248,23 +248,23 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
     }
 
     Y_UNIT_TEST(SortUniqueTest) {
-        {
+        { 
             TVector<TString> v;
-            SortUnique(v);
+            SortUnique(v); 
             UNIT_ASSERT_EQUAL(v, TVector<TString>());
-        }
-
-        {
-            const char* ar[] = {"345", "3", "123", "2", "23", "3", "2"};
+        } 
+ 
+        { 
+            const char* ar[] = {"345", "3", "123", "2", "23", "3", "2"}; 
             TVector<TString> v(ar, ar + Y_ARRAY_SIZE(ar));
-            SortUnique(v);
-
-            const char* suAr[] = {"123", "2", "23", "3", "345"};
+            SortUnique(v); 
+ 
+            const char* suAr[] = {"123", "2", "23", "3", "345"}; 
             TVector<TString> suV(suAr, suAr + Y_ARRAY_SIZE(suAr));
-
-            UNIT_ASSERT_EQUAL(v, suV);
-        }
-    }
+ 
+            UNIT_ASSERT_EQUAL(v, suV); 
+        } 
+    } 
 
     Y_UNIT_TEST(EraseTest) {
         TVector<int> data = {5, 4, 3, 2, 1, 0};

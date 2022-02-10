@@ -7,7 +7,7 @@
 #include <util/system/defaults.h>
 #include <util/string/cast.h>
 #include <library/cpp/cgiparam/cgiparam.h>
-#include <util/network/address.h> 
+#include <util/network/address.h>
 #include <util/network/socket.h>
 #include <util/generic/hash.h>
 #include <util/system/yassert.h>
@@ -31,10 +31,10 @@ public:
         return Host;
     }
 
-    NAddr::IRemoteAddrPtr ServerAddress() const { 
-        return NAddr::GetSockAddr(Socket); 
-    } 
- 
+    NAddr::IRemoteAddrPtr ServerAddress() const {
+        return NAddr::GetSockAddr(Socket);
+    }
+
     const TString& ServerPort() const {
         return Port;
     }

@@ -79,7 +79,7 @@ namespace {
         return GetRndGen<TToRealType<TY>::TResult>()->Uniform(n); \
     }
 
-DEF_RND(char) 
+DEF_RND(char)
 DEF_RND(unsigned char)
 DEF_RND(unsigned int)
 DEF_RND(unsigned long)
@@ -89,11 +89,11 @@ DEF_RND(unsigned long long)
 #undef DEF_RND
 
 template <>
-bool RandomNumber<bool>() { 
-    return RandomNumber<ui8>() % 2 == 0; 
-} 
- 
-template <> 
+bool RandomNumber<bool>() {
+    return RandomNumber<ui8>() % 2 == 0;
+}
+
+template <>
 float RandomNumber<float>() {
     float ret;
 

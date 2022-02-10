@@ -1,7 +1,7 @@
 #include "md5.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/system/fs.h>
 #include <util/stream/file.h>
 
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TMD5Test) {
         TString memoryHash = MD5::Data((const unsigned char*)s.data(), s.size(), memBuf);
 
         UNIT_ASSERT_NO_DIFF(fileHash, memoryHash);
- 
+
         fileHash = MD5::File(tmpFile);
         UNIT_ASSERT_NO_DIFF(fileHash, memoryHash);
 

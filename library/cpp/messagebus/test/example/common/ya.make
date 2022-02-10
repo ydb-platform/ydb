@@ -1,15 +1,15 @@
-LIBRARY(messagebus_test_example_common) 
- 
+LIBRARY(messagebus_test_example_common)
+
 OWNER(g:messagebus)
- 
-PEERDIR( 
+
+PEERDIR(
     library/cpp/messagebus
     library/cpp/messagebus/protobuf
-) 
- 
-SRCS( 
-    proto.cpp 
-    messages.proto 
-) 
- 
-END() 
+)
+
+SRCS(
+    proto.cpp
+    messages.proto
+)
+
+END()

@@ -7,7 +7,7 @@
 
 #include <ctime>
 #include <cerrno>
- 
+
 #ifdef _darwin_
     #include <AvailabilityMacros.h>
     #if defined(MAC_OS_X_VERSION_10_12) && MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_12
@@ -19,8 +19,8 @@
 
 static ui64 ToMicroSeconds(const struct timeval& tv) {
     return (ui64)tv.tv_sec * 1000000 + (ui64)tv.tv_usec;
-} 
- 
+}
+
 #if defined(_win_)
 static ui64 ToMicroSeconds(const FILETIME& ft) {
     return (((ui64)ft.dwHighDateTime << 32) + (ui64)ft.dwLowDateTime) / (ui64)10;
@@ -32,12 +32,12 @@ static ui64 ToMicroSeconds(const struct timespec& ts) {
 #endif
 
 ui64 MicroSeconds() noexcept {
-    struct timeval tv; 
+    struct timeval tv;
     gettimeofday(&tv, nullptr);
- 
+
     return ToMicroSeconds(tv);
-} 
- 
+}
+
 ui64 ThreadCPUUserTime() noexcept {
 #if defined(_win_)
     FILETIME creationTime, exitTime, kernelTime, userTime;
@@ -73,26 +73,26 @@ ui64 ThreadCPUTime() noexcept {
 }
 
 ui32 Seconds() noexcept {
-    struct timeval tv; 
+    struct timeval tv;
     gettimeofday(&tv, nullptr);
-    return tv.tv_sec; 
-} 
- 
+    return tv.tv_sec;
+}
+
 void NanoSleep(ui64 ns) noexcept {
 #if defined(_win_)
-    Sleep(ns / 1000000); 
-#else 
-    const ui64 NS = 1000 * 1000 * 1000; 
-    struct timespec req; 
-    req.tv_sec = ns / NS; 
-    req.tv_nsec = ns % NS; 
-    struct timespec left; 
-    while (nanosleep(&req, &left) < 0) { 
+    Sleep(ns / 1000000);
+#else
+    const ui64 NS = 1000 * 1000 * 1000;
+    struct timespec req;
+    req.tv_sec = ns / NS;
+    req.tv_nsec = ns % NS;
+    struct timespec left;
+    while (nanosleep(&req, &left) < 0) {
         Y_ASSERT(errno == EINTR);
-        req = left; 
-    } 
-#endif 
-} 
+        req = left;
+    }
+#endif
+}
 
 #if defined(_x86_)
 extern const bool HaveRdtscp = NX86::HaveRDTSCP();

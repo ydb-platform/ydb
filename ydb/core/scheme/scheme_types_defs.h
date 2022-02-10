@@ -9,7 +9,7 @@
 
 
 #define KIKIMR_FOREACH_TYPE(xx, ...) \
-    KIKIMR_FOREACH_MINIKQL_TYPE(xx, __VA_ARGS__) \ 
+    KIKIMR_FOREACH_MINIKQL_TYPE(xx, __VA_ARGS__) \
     xx(ActorId, TActorId, __VA_ARGS__) \
     xx(StepOrderId, TStepOrderId, __VA_ARGS__) \
     /**/

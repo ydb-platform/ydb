@@ -1,7 +1,7 @@
 #include "netaddr.h"
 
-#include <util/network/address.h> 
- 
+#include <util/network/address.h>
+
 #include <cstdlib>
 
 namespace NBus {
@@ -15,8 +15,8 @@ namespace NBus {
                 return "EIP_VERSION_6";
         }
         Y_FAIL();
-    } 
- 
+    }
+
     int ToAddrFamily(EIpVersion ipVersion) {
         switch (ipVersion) {
             case EIP_VERSION_ANY:
@@ -83,8 +83,8 @@ namespace NBus {
                 default:
                     Y_FAIL("unreachable");
             }
-        } 
- 
+        }
+
         TAutoPtr<IRemoteAddr> MakeAddress(const TNetworkAddress& na, EIpVersion requireVersion, EIpVersion preferVersion) {
             TAutoPtr<IRemoteAddr> addr;
             for (TNetworkAddress::TIterator it = na.Begin(); it != na.End(); ++it) {
@@ -95,9 +95,9 @@ namespace NBus {
                         addr.Reset(new TNetworkAddressRef(na, &*it));
                     }
                 }
-            } 
+            }
             return addr;
-        } 
+        }
         TAutoPtr<IRemoteAddr> MakeAddress(TStringBuf host, int port, EIpVersion requireVersion, EIpVersion preferVersion) {
             TString hostString(host);
             TNetworkAddress na(hostString, port);
@@ -136,17 +136,17 @@ namespace NBus {
         if (!Ptr) {
             ythrow TNetAddr::TError() << "cannot resolve into " << Describe(requireVersion);
         }
-    } 
- 
+    }
+
     TNetAddr::TNetAddr(const TNetworkAddress& na, const TAddrInfo& ai)
         : Ptr(new TNetworkAddressRef(na, ai))
     {
     }
- 
+
     const sockaddr* TNetAddr::Addr() const {
         return Ptr->Addr();
     }
- 
+
     socklen_t TNetAddr::Len() const {
         return Ptr->Len();
     }
@@ -169,14 +169,14 @@ namespace NBus {
 
     bool TNetAddr::IsIpv6() const {
         return Ptr->Addr()->sa_family == AF_INET6;
-    } 
- 
+    }
+
     bool TNetAddr::operator==(const TNetAddr& rhs) const {
         return Ptr == rhs.Ptr || Compare(*Ptr, *rhs.Ptr);
     }
- 
-} 
- 
+
+}
+
 template <>
 void Out<NBus::TNetAddr>(IOutputStream& out, const NBus::TNetAddr& addr) {
     Out<NAddr::IRemoteAddr>(out, addr);

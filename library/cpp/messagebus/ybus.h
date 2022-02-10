@@ -1,20 +1,20 @@
 #pragma once
 
 /// Asynchronous Messaging Library implements framework for sending and
-/// receiving messages between loosely connected processes. 
+/// receiving messages between loosely connected processes.
 
 #include "coreconn.h"
-#include "defs.h" 
-#include "handler.h" 
-#include "handler_impl.h" 
-#include "local_flags.h" 
+#include "defs.h"
+#include "handler.h"
+#include "handler_impl.h"
+#include "local_flags.h"
 #include "locator.h"
-#include "message.h" 
+#include "message.h"
 #include "message_status.h"
 #include "network.h"
 #include "queue_config.h"
 #include "remote_connection_status.h"
-#include "session.h" 
+#include "session.h"
 #include "session_config.h"
 #include "socket_addr.h"
 
@@ -24,8 +24,8 @@
 #include <library/cpp/codecs/codecs.h>
 
 #include <util/generic/array_ref.h>
-#include <util/generic/buffer.h> 
-#include <util/generic/noncopyable.h> 
+#include <util/generic/buffer.h>
+#include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/stream/input.h>
 #include <util/system/atomic.h>
@@ -49,7 +49,7 @@ namespace NBus {
     /// and destination server. Protocol object is reponsible for serializing in-memory
     /// message and reply into the wire, retuning name of the service and resource
     /// distribution key for given protocol.
- 
+
     /// Protocol object should transparently handle messages and replies.
     /// This is interface only class, actuall instances of the protocols
     /// should be created using templates inhereted from this base class.
@@ -105,24 +105,24 @@ namespace NBus {
     public:
         TBusSyncSourceSession(TIntrusivePtr< ::NBus::NPrivate::TBusSyncSourceSessionImpl> session);
         ~TBusSyncSourceSession();
- 
+
         void Shutdown();
- 
+
         TBusMessage* SendSyncMessage(TBusMessage* pMessage, EMessageStatus& status, const TNetAddr* addr = nullptr);
- 
+
         int RegisterService(const char* hostname, TBusKey start = YBUS_KEYMIN, TBusKey end = YBUS_KEYMAX, EIpVersion ipVersion = EIP_VERSION_4);
- 
+
         int GetInFlight();
- 
+
         const TBusProtocol* GetProto() const;
 
         const TBusClientSession* GetBusClientSessionWorkaroundDoNotUse() const; // It's for TLoadBalancedProtocol::GetDestination() function that really needs TBusClientSession* unlike all other protocols. Look at review 32425 (http://rb.yandex-team.ru/arc/r/32425/) for more information.
     private:
         TIntrusivePtr< ::NBus::NPrivate::TBusSyncSourceSessionImpl> Session;
     };
- 
+
     using TBusSyncClientSessionPtr = TIntrusivePtr<TBusSyncSourceSession>;
- 
+
     ///////////////////////////////////////////////////////////////////
     /// \brief Main message queue object, need one per application
     class TBusMessageQueue: public TAtomicRefCount<TBusMessageQueue> {
@@ -132,7 +132,7 @@ namespace NBus {
         friend struct ::NBus::NPrivate::TBusSessionImpl;
         friend class ::NBus::NPrivate::TAcceptor;
         friend struct ::NBus::TBusServerSession;
- 
+
     private:
         const TBusQueueConfig Config;
         TMutex Lock;
@@ -144,16 +144,16 @@ namespace NBus {
 
         TAtomic Running;
         TSystemEvent ShutdownComplete;
- 
+
     private:
         /// constructor is protected, used NBus::CreateMessageQueue() to create a instance
         TBusMessageQueue(const TBusQueueConfig& config, NActor::TExecutorPtr executor, TBusLocator* locator, const char* name);
- 
+
     public:
         TString GetNameInternal() const;
 
         ~TBusMessageQueue();
- 
+
         void Stop();
         bool IsRunning();
 
@@ -161,17 +161,17 @@ namespace NBus {
         void EnqueueWork(TArrayRef< ::NActor::IWorkItem* const> w) {
             WorkQueue->EnqueueWork(w);
         }
- 
+
         ::NActor::TExecutor* GetExecutor() {
             return WorkQueue.Get();
         }
- 
+
         TString GetStatus(ui16 flags = YBUS_STATUS_CONNS) const;
         // without sessions
         NPrivate::TBusMessageQueueStatus GetStatusRecordInternal() const;
         TString GetStatusSelf() const;
         TString GetStatusSingleLine() const;
- 
+
         TBusLocator* GetLocator() const {
             return Locator.Get();
         }

@@ -1,14 +1,14 @@
 #include "remote_server_connection.h"
 #include "ybus.h"
- 
+
 #include <util/random/random.h>
 #include <util/string/printf.h>
 #include <util/system/atomic.h>
 
 #include <string.h>
 
-using namespace NBus; 
- 
+using namespace NBus;
+
 namespace NBus {
     using namespace NBus::NPrivate;
 
@@ -19,40 +19,40 @@ namespace NBus {
         , LocalFlags(0)
     {
     }
- 
+
     TBusIdentity::~TBusIdentity() {
-    // TODO: print local flags 
-#ifndef NDEBUG 
+    // TODO: print local flags
+#ifndef NDEBUG
         Y_VERIFY(LocalFlags == 0, "local flags must be zero at this point; message type is %s",
                  MessageType.value_or("unknown").c_str());
-#else 
+#else
         Y_VERIFY(LocalFlags == 0, "local flags must be zero at this point");
-#endif 
+#endif
     }
- 
+
     TNetAddr TBusIdentity::GetNetAddr() const {
         if (!!Connection) {
             return Connection->GetAddr();
         } else {
             Y_FAIL();
         }
-    } 
- 
+    }
+
     void TBusIdentity::Pack(char* dest) {
         memcpy(dest, this, sizeof(TBusIdentity));
         LocalFlags = 0;
- 
+
         // prevent decref
         new (&Connection) TIntrusivePtr<TRemoteServerConnection>;
     }
- 
+
     void TBusIdentity::Unpack(const char* src) {
         Y_VERIFY(LocalFlags == 0);
         Y_VERIFY(!Connection);
- 
+
         memcpy(this, src, sizeof(TBusIdentity));
     }
- 
+
     void TBusHeader::GenerateId() {
         for (;;) {
             Id = RandomNumber<TBusKey>();
@@ -61,7 +61,7 @@ namespace NBus {
                 return;
         }
     }
- 
+
     TBusMessage::TBusMessage(ui16 type, int approxsize)
         //: TCtr("BusMessage")
         : TRefCounted<TBusMessage, TAtomicCounter, TDelete>(1)
@@ -72,7 +72,7 @@ namespace NBus {
         Y_UNUSED(approxsize);
         GetHeader()->Type = type;
         DoReset();
-    } 
+    }
 
     TBusMessage::TBusMessage(ECreateUninitialized)
         //: TCtr("BusMessage")
@@ -87,12 +87,12 @@ namespace NBus {
     }
 
     TBusMessage::~TBusMessage() {
-#ifndef NDEBUG 
+#ifndef NDEBUG
         Y_VERIFY(GetHeader()->Id != YBUS_KEYINVALID, "must not be invalid key, message type: %d, ", int(Type));
         GetHeader()->Id = YBUS_KEYINVALID;
         Data = (void*)17;
         CheckClean();
-#endif 
+#endif
     }
 
     void TBusMessage::DoReset() {
@@ -102,20 +102,20 @@ namespace NBus {
         GetHeader()->GenerateId();
         GetHeader()->SetVersionInternal();
     }
- 
+
     void TBusMessage::Reset() {
         CheckClean();
         DoReset();
     }
- 
+
     void TBusMessage::CheckClean() const {
         if (Y_UNLIKELY(LocalFlags != 0)) {
             TString describe = Describe();
             TString localFlags = LocalFlagSetToString(LocalFlags);
             Y_FAIL("message local flags must be zero, got: %s, message: %s", localFlags.data(), describe.data());
         }
-    } 
- 
+    }
+
     ///////////////////////////////////////////////////////
     /// \brief Unpacks header from network order
 
@@ -181,18 +181,18 @@ namespace NBus {
             ss << " conn=" << Connection->GetAddr();
         }
         ss
-            << " flags=" << Flags 
-            << " local-flags=" << LocalFlags 
-#ifndef NDEBUG 
+            << " flags=" << Flags
+            << " local-flags=" << LocalFlags
+#ifndef NDEBUG
             << " msg-type= " << MessageType.value_or("unknown").c_str()
-#endif 
-            ; 
+#endif
+            ;
         return ss.Str();
     }
- 
-} 
- 
-template <> 
+
+}
+
+template <>
 void Out<TBusIdentity>(IOutputStream& os, TTypeTraits<TBusIdentity>::TFuncParam ident) {
-    os << ident.ToString(); 
-} 
+    os << ident.ToString();
+}

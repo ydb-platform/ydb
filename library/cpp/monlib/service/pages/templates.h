@@ -19,7 +19,7 @@
 #define TAG_CLASS_ID(name, cls, id) WITH_SCOPED(tmp, NMonitoring::name(__stream, cls, "", id))
 #define TAG_CLASS_FOR(name, cls, for0) WITH_SCOPED(tmp, NMonitoring::name(__stream, cls, for0))
 #define TAG_ATTRS(name, ...) WITH_SCOPED(tmp, NMonitoring::name(__stream, ##__VA_ARGS__))
- 
+
 #define HTML(str) WITH_SCOPED(__stream, NMonitoring::TOutputStreamRef(str))
 
 #define HEAD() TAG(THead)
@@ -54,7 +54,7 @@
 
 #define PARA() TAG(TPara)
 #define PARA_CLASS(cls) TAG_CLASS(TPara, cls)
- 
+
 #define H1() TAG(TH1)
 #define H1_CLASS(cls) TAG_CLASS(TH1, cls)
 #define H2() TAG(TH2)
@@ -235,9 +235,9 @@ namespace NMonitoring {
     extern const char DTermTag[3];
     extern const char DDescTag[3];
 
-    typedef TTag<HtmlTag> THtml; 
-    typedef TTag<HeadTag> THead; 
-    typedef TTag<BodyTag> TBody; 
+    typedef TTag<HtmlTag> THtml;
+    typedef TTag<HeadTag> THead;
+    typedef TTag<BodyTag> TBody;
     typedef TTag<DivTag> TDiv;
     typedef TTag<TableTag> TTable;
     typedef TTag<TableHeadTag> TTableHead;
@@ -249,14 +249,14 @@ namespace NMonitoring {
     typedef TTag<LabelTag> TLabelC;
     typedef TTag<SpanTag> TSpanC;
     typedef TTag<CaptionTag> TCaption;
-    typedef TTag<PreTag> TPre; 
+    typedef TTag<PreTag> TPre;
     typedef TTag<ParaTag> TPara;
-    typedef TTag<H1Tag> TH1; 
-    typedef TTag<H2Tag> TH2; 
-    typedef TTag<H3Tag> TH3; 
-    typedef TTag<H4Tag> TH4; 
-    typedef TTag<H5Tag> TH5; 
-    typedef TTag<H6Tag> TH6; 
+    typedef TTag<H1Tag> TH1;
+    typedef TTag<H2Tag> TH2;
+    typedef TTag<H3Tag> TH3;
+    typedef TTag<H4Tag> TH4;
+    typedef TTag<H5Tag> TH5;
+    typedef TTag<H6Tag> TH6;
     typedef TTag<SmallTag> TSMALL;
     typedef TTag<StrongTag> TSTRONG;
     typedef TTag<ListTag> TLIST;

@@ -12,9 +12,9 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
         UNIT_ASSERT(C.Has("ag0", ""));
         UNIT_ASSERT(!C.Has("a", "bbb"));
         UNIT_ASSERT(!C.Has("aaa", "bb"));
- 
-        UNIT_ASSERT(C.Has("ccc")); 
-        UNIT_ASSERT(!C.Has("zzzzzz")); 
+
+        UNIT_ASSERT(C.Has("ccc"));
+        UNIT_ASSERT(!C.Has("zzzzzz"));
     }
 
     Y_UNIT_TEST(TestQuick) {

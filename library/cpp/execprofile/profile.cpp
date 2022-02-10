@@ -1,5 +1,5 @@
-#include <util/system/defaults.h> 
- 
+#include <util/system/defaults.h>
+
 #include "profile.h"
 
 #if defined(_unix_) && !defined(_bionic_) && !defined(_cygwin_)
@@ -293,7 +293,7 @@ private:
 };
 
 void TSampleAnalyser::Analyze(FILE* out) const {
-    fprintf(out, "samples: %" PRIu64 "    unique: %" PRIu64 "   dropped:  %" PRIu64 "   searchskips:   %" PRIu64 "\n", 
+    fprintf(out, "samples: %" PRIu64 "    unique: %" PRIu64 "   dropped:  %" PRIu64 "   searchskips:   %" PRIu64 "\n",
             (ui64)Stats.SavedSamples, (ui64)Samples.size(),
             (ui64)Stats.DroppedSamples, (ui64)Stats.SearchSkipCount);
 
@@ -306,13 +306,13 @@ void TSampleAnalyser::Analyze(FILE* out) const {
         // dumping the samples
         if (PutTimestamps && (i % 1000 == 0)) {
             ui64 tm = GetCycleCount();
-            fprintf(out, "TM: %" PRIu64 "\n", tm); 
+            fprintf(out, "TM: %" PRIu64 "\n", tm);
         }
 
         Dl_info addrInfo;
         if (dladdr(Samples[i].first, &addrInfo)) {
             if (addrInfo.dli_fbase != prevModBase || addrInfo.dli_saddr != prevFunc) {
-                fprintf(out, "Func\t%" PRISZT "\t%p\t%p\t%s\t%s\n", 
+                fprintf(out, "Func\t%" PRISZT "\t%p\t%p\t%s\t%s\n",
                         funcCnt,
                         addrInfo.dli_fbase,
                         addrInfo.dli_saddr,
@@ -325,7 +325,7 @@ void TSampleAnalyser::Analyze(FILE* out) const {
         } else {
             fprintf(out, "[dladdr failed]\n");
         }
-        fprintf(out, "%" PRISZT "\t%p\t%lu\n", i, Samples[i].first, Samples[i].second); 
+        fprintf(out, "%" PRISZT "\t%p\t%lu\n", i, Samples[i].first, Samples[i].second);
     }
 }
 

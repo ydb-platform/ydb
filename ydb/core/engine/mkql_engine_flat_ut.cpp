@@ -347,7 +347,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &EmptyShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -363,15 +363,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &EmptyShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Data 
+            Kind: Data
             Data {
               Scheme: 2
             }
@@ -401,7 +401,7 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &EmptyShardResolver), IEngineFlat::EStatus::Aborted);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -423,18 +423,18 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Optional 
+            Kind: Optional
             Optional {
               Item {
-                Kind: Struct 
+                Kind: Struct
               }
             }
           }
@@ -480,18 +480,18 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Optional 
+            Kind: Optional
             Optional {
               Item {
-                Kind: Struct 
+                Kind: Struct
               }
             }
           }
@@ -540,26 +540,26 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Optional 
+            Kind: Optional
             Optional {
               Item {
-                Kind: Struct 
+                Kind: Struct
                 Struct {
                   Member {
                     Name: "2"
                     Type {
-                      Kind: Optional 
+                      Kind: Optional
                       Optional {
                         Item {
-                          Kind: Data 
+                          Kind: Data
                           Data {
                             Scheme: 4608
                           }
@@ -688,7 +688,7 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -805,7 +805,7 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -847,7 +847,7 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -917,7 +917,7 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -969,7 +969,7 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -1020,7 +1020,7 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -1057,23 +1057,23 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                     }
                   }
                 }
@@ -1081,7 +1081,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -1217,31 +1217,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -1257,7 +1257,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -1334,31 +1334,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -1374,7 +1374,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -1558,31 +1558,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -1598,7 +1598,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -1679,31 +1679,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -1719,7 +1719,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -1802,31 +1802,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -1842,7 +1842,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -1919,31 +1919,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -1959,7 +1959,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -2153,31 +2153,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -2193,7 +2193,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -2275,31 +2275,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -2315,7 +2315,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -2404,31 +2404,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -2444,7 +2444,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -2526,31 +2526,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -2566,7 +2566,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -2648,31 +2648,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -2688,7 +2688,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -2769,26 +2769,26 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes1"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Optional 
+            Kind: Optional
             Optional {
               Item {
-                Kind: Struct 
+                Kind: Struct
                 Struct {
                   Member {
                     Name: "2"
                     Type {
-                      Kind: Optional 
+                      Kind: Optional
                       Optional {
                         Item {
-                          Kind: Data 
+                          Kind: Data
                           Data {
                             Scheme: 4608
                           }
@@ -2806,21 +2806,21 @@ Value {
     Member {
       Name: "myRes2"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Optional 
+            Kind: Optional
             Optional {
               Item {
-                Kind: Struct 
+                Kind: Struct
                 Struct {
                   Member {
                     Name: "4"
                     Type {
-                      Kind: Optional 
+                      Kind: Optional
                       Optional {
                         Item {
-                          Kind: Data 
+                          Kind: Data
                           Data {
                             Scheme: 2
                           }
@@ -2913,7 +2913,7 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -2981,7 +2981,7 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -3097,7 +3097,7 @@ Value {
             (simulateFail1 || simulateFail2) ? IEngineFlat::EStatus::Aborted : IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -3175,26 +3175,26 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &NullShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Optional 
+            Kind: Optional
             Optional {
               Item {
-                Kind: Struct 
+                Kind: Struct
                 Struct {
                   Member {
                     Name: "2"
                     Type {
-                      Kind: Optional 
+                      Kind: Optional
                       Optional {
                         Item {
-                          Kind: Data 
+                          Kind: Data
                           Data {
                             Scheme: 4608
                           }
@@ -3256,31 +3256,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &NullShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -3296,7 +3296,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -3348,7 +3348,7 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &NullShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -3393,7 +3393,7 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &NullShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
@@ -3453,31 +3453,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -3493,7 +3493,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -3579,31 +3579,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -3619,7 +3619,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -3709,31 +3709,31 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Struct 
+            Kind: Struct
             Struct {
               Member {
                 Name: "List"
                 Type {
-                  Kind: List 
+                  Kind: List
                   List {
                     Item {
-                      Kind: Struct 
+                      Kind: Struct
                       Struct {
                         Member {
                           Name: "2"
                           Type {
-                            Kind: Optional 
+                            Kind: Optional
                             Optional {
                               Item {
-                                Kind: Data 
+                                Kind: Data
                                 Data {
                                   Scheme: 4608
                                 }
@@ -3749,7 +3749,7 @@ Value {
               Member {
                 Name: "Truncated"
                 Type {
-                  Kind: Data 
+                  Kind: Data
                   Data {
                     Scheme: 6
                   }
@@ -4348,15 +4348,15 @@ Value {
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &EmptyShardResolver), IEngineFlat::EStatus::Complete);
         auto resStr = res.DebugString();
         auto expectedStr = R"___(Type {
-  Kind: Struct 
+  Kind: Struct
   Struct {
     Member {
       Name: "myRes"
       Type {
-        Kind: Optional 
+        Kind: Optional
         Optional {
           Item {
-            Kind: Data 
+            Kind: Data
             Data {
               Scheme: 2
             }

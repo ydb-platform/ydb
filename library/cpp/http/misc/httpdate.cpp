@@ -36,9 +36,9 @@
 #include <ctime>
 
 #include <util/system/compat.h>   /* stricmp */
-#include <util/system/yassert.h> 
+#include <util/system/yassert.h>
 #include "httpdate.h"
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 
 static const char *wkdays[] = {
     "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"

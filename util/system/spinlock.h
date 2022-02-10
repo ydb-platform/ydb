@@ -3,29 +3,29 @@
 #include "atomic.h"
 #include "spin_wait.h"
 
-class TSpinLockBase { 
+class TSpinLockBase {
 protected:
     inline TSpinLockBase() noexcept {
         AtomicSet(Val_, 0);
     }
- 
+
 public:
     inline bool IsLocked() const noexcept {
         return AtomicGet(Val_);
     }
- 
+
     inline bool TryAcquire() noexcept {
         return AtomicTryLock(&Val_);
     }
- 
+
     inline bool try_lock() noexcept {
         return TryAcquire();
     }
 
 protected:
     TAtomic Val_;
-}; 
- 
+};
+
 static inline void SpinLockPause() {
 #if defined(__GNUC__)
     #if defined(_i386_) || defined(_x86_64_)

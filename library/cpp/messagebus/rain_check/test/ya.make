@@ -1,6 +1,6 @@
 OWNER(g:messagebus)
 
-RECURSE( 
+RECURSE(
     perftest
     ut
-) 
+)

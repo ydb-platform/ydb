@@ -8,7 +8,7 @@ namespace google {
         class FieldDescriptor;
     }
 }
- 
+
 namespace NProtoBuf {
     using ::google::protobuf::FieldDescriptor;
     using ::google::protobuf::Message;
@@ -23,7 +23,7 @@ namespace NProtoBuf {
     bool IsEqual(const Message& m1, const Message& m2, TString* differentPath);
 
     bool IsEqualField(const Message& m1, const Message& m2, const FieldDescriptor& field);
- 
+
     // Non-strict version: optional field without explicit value is compared
     // using its default value.
     bool IsEqualDefault(const Message& m1, const Message& m2);

@@ -318,7 +318,7 @@ TVector<THolder<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, con
     }
     return descList;
 }
- 
+
 TTableId ExtractTableId(const TRuntimeNode& node) {
     if (node.GetStaticType()->IsTuple()) {
         const TTupleLiteral* tupleNode = AS_VALUE(TTupleLiteral, node);

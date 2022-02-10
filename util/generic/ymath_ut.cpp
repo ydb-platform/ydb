@@ -12,13 +12,13 @@ template <class T>
 static inline T SlowClp2(T t) noexcept {
     Y_ASSERT(t > 0);
 
-    T ret = 1; 
+    T ret = 1;
 
-    while (ret < t) { 
-        ret *= 2; 
+    while (ret < t) {
+        ret *= 2;
     }
 
-    return ret; 
+    return ret;
 }
 
 class TMathTest: public TTestBase {
@@ -50,7 +50,7 @@ private:
     inline void TestIsValidFloat() {
         UNIT_ASSERT(IsValidFloat(-Max<double>() / 2.));
     }
- 
+
     inline void TestClpSimple() {
         UNIT_ASSERT_EQUAL(FastClp2<ui32>(12), 16);
         UNIT_ASSERT_EQUAL(FastClp2<ui16>(11), 16);
@@ -83,19 +83,19 @@ void TMathTest::TestSqr() {
 }
 
 void TMathTest::TestClp2() {
-    for (ui8 i = 1; i < 127; ++i) { 
+    for (ui8 i = 1; i < 127; ++i) {
         UNIT_ASSERT_EQUAL(SlowClp2(i), FastClp2(i));
     }
 
-    for (ui16 i = 1; i < 255; ++i) { 
+    for (ui16 i = 1; i < 255; ++i) {
         UNIT_ASSERT_EQUAL(SlowClp2(i), FastClp2(i));
     }
 
-    for (ui32 i = 1; i < 255; ++i) { 
+    for (ui32 i = 1; i < 255; ++i) {
         UNIT_ASSERT_EQUAL(SlowClp2(i), FastClp2(i));
     }
 
-    for (ui64 i = 1; i < 255; ++i) { 
+    for (ui64 i = 1; i < 255; ++i) {
         UNIT_ASSERT_EQUAL(SlowClp2(i), FastClp2(i));
     }
 

@@ -1133,7 +1133,7 @@ public:
         extern TBasicString EscapeC(const TBasicString&);
 
         return TBasicString() + '"' + EscapeC(*this) + '"';
-    } 
+    }
 
     /**
      * Modifies the case of the string, depending on the operation.

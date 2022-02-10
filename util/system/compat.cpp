@@ -16,7 +16,7 @@
     #include <io.h>
 #endif
 
-#ifndef HAVE_NATIVE_GETPROGNAME 
+#ifndef HAVE_NATIVE_GETPROGNAME
 const char* getprogname() {
     return GetProgramName().data();
 }

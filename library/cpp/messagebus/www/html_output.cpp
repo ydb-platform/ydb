@@ -1,4 +1,4 @@
-#include "html_output.h" 
- 
+#include "html_output.h"
+
 Y_POD_THREAD(IOutputStream*)
 HtmlOutputStreamPtr;

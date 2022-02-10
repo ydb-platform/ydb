@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "malloc.h" 
- 
+#include "malloc.h"
+
 namespace {
     bool SetEmptyParam(const char*, const char*) {
         return false;

@@ -15,7 +15,7 @@ namespace NBus {
         bool Exiting;
         TCondVar ExitSignal;
         TMutex ExitLock;
- 
+
         static void* _starter(void* data);
 
         void Starter();

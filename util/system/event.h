@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/ptr.h>
-#include <util/datetime/base.h> 
+#include <util/datetime/base.h>
 
 struct TEventResetType {
     enum ResetMode {

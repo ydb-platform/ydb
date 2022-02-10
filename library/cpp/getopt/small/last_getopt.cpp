@@ -6,4 +6,4 @@ namespace NLastGetopt {
         exit(0);
     }
 
-} 
+}

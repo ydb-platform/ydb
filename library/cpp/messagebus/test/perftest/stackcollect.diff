@@ -1,13 +1,13 @@
-Index: test/perftest/CMakeLists.txt 
-=================================================================== 
---- test/perftest/CMakeLists.txt	(revision 1088840) 
-+++ test/perftest/CMakeLists.txt	(working copy) 
-@@ -3,7 +3,7 @@ PROGRAM(messagebus_perftest) 
- OWNER(nga) 
-  
- PEERDIR( 
+Index: test/perftest/CMakeLists.txt
+===================================================================
+--- test/perftest/CMakeLists.txt	(revision 1088840)
++++ test/perftest/CMakeLists.txt	(working copy)
+@@ -3,7 +3,7 @@ PROGRAM(messagebus_perftest)
+ OWNER(nga)
+ 
+ PEERDIR(
 -    library/cpp/execprofile
-+    junk/davenger/stackcollect 
++    junk/davenger/stackcollect
      library/cpp/messagebus
      library/cpp/messagebus/protobuf
      library/cpp/sighandler

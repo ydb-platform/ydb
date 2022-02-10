@@ -3,18 +3,18 @@
 #include <util/string/cast.h>
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 Y_UNIT_TEST_SUITE(TUtilUrlTest) {
     Y_UNIT_TEST(TestGetHostAndGetHostAndPort) {
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru/bebe")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru/bebe"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHostAndPort("ya.ru/bebe"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHostAndPort("ya.ru"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru:8080")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru:8080"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru:8080", GetHostAndPort("ya.ru:8080"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru/bebe:8080")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru/bebe:8080"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHostAndPort("ya.ru/bebe:8080"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru:8080/bebe")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru:8080/bebe"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("https://ya.ru:8080/bebe"));
         UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetHost("www.ya.ru:8080/bebe"));
         UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetHost("https://www.ya.ru:8080/bebe"));
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
         // check simple string
         UNIT_ASSERT_VALUES_EQUAL("some_blender_url", GetHost("some_blender_url"));
         UNIT_ASSERT_VALUES_EQUAL("", GetHost(""));
-    } 
+    }
 
     Y_UNIT_TEST(TestGetPathAndQuery) {
         UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("ru.wikipedia.org"));
@@ -278,4 +278,4 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
         UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("http://bebe", "bebe"));
         UNIT_ASSERT_VALUES_EQUAL(false, DoesUrlPathStartWithToken("https://bebe/", "bebe"));
     }
-} 
+}

@@ -28,7 +28,7 @@ import "ydb/core/protos/node_limits.proto";
 import "ydb/core/yq/libs/config/protos/yq_config.proto";
 
 package NKikimrConfig;
-option java_package = "ru.yandex.kikimr.proto"; 
+option java_package = "ru.yandex.kikimr.proto";
 
 message TAffinity {
     repeated uint32 X = 1; // DEPRECATED: Use `CpuList` instead

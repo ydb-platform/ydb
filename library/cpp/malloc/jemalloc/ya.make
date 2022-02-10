@@ -1,9 +1,9 @@
-LIBRARY() 
- 
+LIBRARY()
+
 NO_UTIL()
- 
-OWNER(nga) 
- 
+
+OWNER(nga)
+
 IF (OS_ANDROID)
     PEERDIR(
         library/cpp/malloc/system
@@ -17,5 +17,5 @@ ELSE()
         malloc-info.cpp
     )
 ENDIF()
- 
-END() 
+
+END()

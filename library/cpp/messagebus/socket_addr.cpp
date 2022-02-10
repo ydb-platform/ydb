@@ -1,23 +1,23 @@
 #include "socket_addr.h"
- 
-#include "netaddr.h" 
- 
+
+#include "netaddr.h"
+
 #include <util/network/address.h>
 #include <util/network/init.h>
 #include <util/system/yassert.h>
- 
-using namespace NAddr; 
- 
-using namespace NBus; 
-using namespace NBus::NPrivate; 
- 
+
+using namespace NAddr;
+
+using namespace NBus;
+using namespace NBus::NPrivate;
+
 static_assert(ADDR_UNSPEC == 0, "expect ADDR_UNSPEC == 0");
- 
-NBus::NPrivate::TBusSocketAddr::TBusSocketAddr(const NAddr::IRemoteAddr* addr) 
+
+NBus::NPrivate::TBusSocketAddr::TBusSocketAddr(const NAddr::IRemoteAddr* addr)
     : IPv6ScopeID(0)
-{ 
-    const sockaddr* sa = addr->Addr(); 
- 
+{
+    const sockaddr* sa = addr->Addr();
+
     switch ((EAddrFamily)sa->sa_family) {
         case AF_UNSPEC: {
             IpAddr.Clear();
@@ -37,24 +37,24 @@ NBus::NPrivate::TBusSocketAddr::TBusSocketAddr(const NAddr::IRemoteAddr* addr)
         }
         default:
             Y_FAIL("unknown address family");
-    } 
-} 
- 
+    }
+}
+
 NBus::NPrivate::TBusSocketAddr::TBusSocketAddr(TStringBuf host, unsigned port) {
-    *this = TNetAddr(host, port); 
-} 
- 
+    *this = TNetAddr(host, port);
+}
+
 NBus::NPrivate::TBusSocketAddr::TBusSocketAddr(const TNetAddr& addr) {
-    *this = TBusSocketAddr(&addr); 
-} 
- 
+    *this = TBusSocketAddr(&addr);
+}
+
 TNetAddr NBus::NPrivate::TBusSocketAddr::ToNetAddr() const {
-    sockaddr_storage storage; 
-    Zero(storage); 
- 
+    sockaddr_storage storage;
+    Zero(storage);
+
     storage.ss_family = (ui16)IpAddr.GetAddrFamily();
- 
-    switch (IpAddr.GetAddrFamily()) { 
+
+    switch (IpAddr.GetAddrFamily()) {
         case ADDR_UNSPEC:
             return TNetAddr();
         case ADDR_IPV4: {
@@ -68,12 +68,12 @@ TNetAddr NBus::NPrivate::TBusSocketAddr::ToNetAddr() const {
             ((sockaddr_in6*)&storage)->sin6_scope_id = HostToInet(IPv6ScopeID);
             break;
         }
-    } 
- 
+    }
+
     return TNetAddr(new TOpaqueAddr((sockaddr*)&storage));
-} 
- 
-template <> 
+}
+
+template <>
 void Out<TBusSocketAddr>(IOutputStream& out, const TBusSocketAddr& addr) {
-    out << addr.ToNetAddr(); 
-} 
+    out << addr.ToNetAddr();
+}

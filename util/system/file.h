@@ -53,7 +53,7 @@ Y_DECLARE_FLAGS(EOpenMode, EOpenModeFlag)
 Y_DECLARE_OPERATORS_FOR_FLAGS(EOpenMode)
 
 TString DecodeOpenMode(ui32 openMode);
- 
+
 enum SeekDir {
     sSet = 0,
     sCur = 1,
@@ -64,7 +64,7 @@ class TFileHandle: public TNonCopyable {
 public:
     constexpr TFileHandle() = default;
 
-    /// Warning: takes ownership of fd, so closes it in destructor. 
+    /// Warning: takes ownership of fd, so closes it in destructor.
     inline TFileHandle(FHANDLE fd) noexcept
         : Fd_(fd)
     {
@@ -147,7 +147,7 @@ private:
 class TFile {
 public:
     TFile();
-    /// Takes ownership of handle, so closes it when the last holder of descriptor dies. 
+    /// Takes ownership of handle, so closes it when the last holder of descriptor dies.
     explicit TFile(FHANDLE fd);
     TFile(FHANDLE fd, const TString& fname);
     TFile(const TString& fName, EOpenMode oMode);

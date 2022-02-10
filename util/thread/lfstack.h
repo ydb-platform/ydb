@@ -43,12 +43,12 @@ class TLockFreeStack: TNonCopyable {
         }
     }
     void EnqueueImpl(TNode* volatile head, TNode* volatile tail) {
-        for (;;) { 
+        for (;;) {
             tail->Next = AtomicGet(Head);
-            if (AtomicCas(&Head, head, tail->Next)) 
-                break; 
-        } 
-    } 
+            if (AtomicCas(&Head, head, tail->Next))
+                break;
+        }
+    }
     template <class U>
     void EnqueueImpl(U&& u) {
         TNode* volatile node = new TNode(std::forward<U>(u));
@@ -69,31 +69,31 @@ public:
 
     void Enqueue(const T& t) {
         EnqueueImpl(t);
-    } 
+    }
 
     void Enqueue(T&& t) {
         EnqueueImpl(std::move(t));
     }
 
-    template <typename TCollection> 
+    template <typename TCollection>
     void EnqueueAll(const TCollection& data) {
-        EnqueueAll(data.begin(), data.end()); 
-    } 
-    template <typename TIter> 
+        EnqueueAll(data.begin(), data.end());
+    }
+    template <typename TIter>
     void EnqueueAll(TIter dataBegin, TIter dataEnd) {
-        if (dataBegin == dataEnd) { 
-            return; 
+        if (dataBegin == dataEnd) {
+            return;
         }
-        TIter i = dataBegin; 
+        TIter i = dataBegin;
         TNode* volatile node = new TNode(*i);
         TNode* volatile tail = node;
- 
-        for (++i; i != dataEnd; ++i) { 
-            TNode* nextNode = node; 
-            node = new TNode(*i); 
-            node->Next = nextNode; 
-        } 
-        EnqueueImpl(node, tail); 
+
+        for (++i; i != dataEnd; ++i) {
+            TNode* nextNode = node;
+            node = new TNode(*i);
+            node->Next = nextNode;
+        }
+        EnqueueImpl(node, tail);
     }
     bool Dequeue(T* res) {
         AtomicAdd(DequeueCount, 1);
@@ -122,8 +122,8 @@ public:
         return false;
     }
     // add all elements to *res
-    // elements are returned in order of dequeue (top to bottom; see example in unittest) 
-    template <typename TCollection> 
+    // elements are returned in order of dequeue (top to bottom; see example in unittest)
+    template <typename TCollection>
     void DequeueAll(TCollection* res) {
         AtomicAdd(DequeueCount, 1);
         for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
@@ -168,7 +168,7 @@ public:
     }
     // add all elements to *res
     // elements are returned in order of dequeue (top to bottom; see example in unittest)
-    template <typename TCollection> 
+    template <typename TCollection>
     void DequeueAllSingleConsumer(TCollection* res) {
         for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
             if (AtomicCas(&Head, (TNode*)nullptr, current)) {

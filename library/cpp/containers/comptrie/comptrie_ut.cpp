@@ -12,8 +12,8 @@
 #include <util/generic/ptr.h>
 #include <util/generic/ylimits.h>
 
-#include <util/folder/dirut.h> 
- 
+#include <util/folder/dirut.h>
+
 #include <util/random/random.h>
 #include <util/random/fast.h>
 
@@ -369,31 +369,31 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
         size_t prefixLen = 0;
 
         typename TCompactTrie<T>::TKey key = MakeWideKey<T>(i, len);
-        UNIT_ASSERT(trie.Find(key, &value)); 
+        UNIT_ASSERT(trie.Find(key, &value));
         UNIT_ASSERT_EQUAL(len * 2, value);
-        UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value)); 
+        UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value));
         UNIT_ASSERT_EQUAL(len, prefixLen);
         UNIT_ASSERT_EQUAL(len * 2, value);
 
         TString badkey("bb");
         badkey += i;
         key = MakeWideKey<T>(badkey);
-        UNIT_ASSERT(!trie.Find(key)); 
+        UNIT_ASSERT(!trie.Find(key));
         value = 123;
-        UNIT_ASSERT(!trie.Find(key, &value)); 
+        UNIT_ASSERT(!trie.Find(key, &value));
         UNIT_ASSERT_EQUAL(123, value);
-        UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value)); 
+        UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value));
         UNIT_ASSERT_EQUAL(1, prefixLen);
         UNIT_ASSERT_EQUAL(2, value);
 
         badkey = i;
         badkey += "x";
         key = MakeWideKey<T>(badkey);
-        UNIT_ASSERT(!trie.Find(key)); 
+        UNIT_ASSERT(!trie.Find(key));
         value = 1234;
-        UNIT_ASSERT(!trie.Find(key, &value)); 
+        UNIT_ASSERT(!trie.Find(key, &value));
         UNIT_ASSERT_EQUAL(1234, value);
-        UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value)); 
+        UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value));
         UNIT_ASSERT_EQUAL(len, prefixLen);
         UNIT_ASSERT_EQUAL(len * 2, value);
         UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, nullptr));
@@ -410,12 +410,12 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
 
     testkey = "fbbax";
     key = MakeWideKey<T>(testkey);
-    UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value)); 
+    UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value));
     UNIT_ASSERT_EQUAL(prefixLen, 3);
     UNIT_ASSERT_EQUAL(6, value);
 
     value = 12345678;
-    UNIT_ASSERT(!trie.Find(key, &value)); 
+    UNIT_ASSERT(!trie.Find(key, &value));
     UNIT_ASSERT_EQUAL(12345678, value); //Failed Find() should not change value
 }
 
@@ -689,7 +689,7 @@ void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
     TCompactTrie<char, typename T::TData, T> trieMin(buftmp.Buffer().Data(), buftmp.Buffer().Size());
 
     TCompactTrieBuilder<char, typename T::TData, T> prefixGroupedBuilder(CTBF_PREFIX_GROUPED);
- 
+
     for (typename TKeys::const_iterator i = keys.begin(), mi = keys.end(); i != mi; ++i) {
         UNIT_ASSERT(!prefixGroupedBuilder.Find(i->first.c_str(), i->first.size(), &dummy));
         UNIT_ASSERT(trie.Find(i->first.c_str(), i->first.size(), &dummy));
@@ -698,7 +698,7 @@ void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
             UNIT_ASSERT(trieMin.Find(i->first.c_str(), i->first.size(), &dummy));
             UNIT_ASSERT(dummy == i->second);
         }
- 
+
         prefixGroupedBuilder.Add(i->first.c_str(), i->first.size(), dummy);
         UNIT_ASSERT(prefixGroupedBuilder.Find(i->first.c_str(), i->first.size(), &dummy));
 
@@ -712,10 +712,10 @@ void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
             }
         }
     }
- 
+
     TBufferStream prefixGroupedBuffer;
     prefixGroupedBuilder.Save(prefixGroupedBuffer);
- 
+
     UNIT_ASSERT_VALUES_EQUAL(stream.Buffer().Size(), prefixGroupedBuffer.Buffer().Size());
     UNIT_ASSERT(0 == memcmp(stream.Buffer().Data(), prefixGroupedBuffer.Buffer().Data(), stream.Buffer().Size()));
 }
@@ -776,9 +776,9 @@ void TCompactTrieTest::TestFindTailsImpl(const TString& prefix) {
 }
 
 void TCompactTrieTest::TestPrefixGrouped() {
-    TBuffer b1b; 
+    TBuffer b1b;
     TCompactTrieBuilder<char, ui32> b1(CTBF_PREFIX_GROUPED);
-    const char* data[] = { 
+    const char* data[] = {
         "Kazan",
         "Moscow",
         "Monino",
@@ -787,8 +787,8 @@ void TCompactTrieTest::TestPrefixGrouped() {
         "Fryazino",
         "Fryazevo",
         "Tumen",
-    }; 
- 
+    };
+
     for (size_t i = 0; i < Y_ARRAY_SIZE(data); ++i) {
         ui32 val = strlen(data[i]) + 1;
         b1.Add(data[i], strlen(data[i]), val);
@@ -802,24 +802,24 @@ void TCompactTrieTest::TestPrefixGrouped() {
                 UNIT_ASSERT(!b1.Find(data[j], strlen(data[j]), &found));
             }
         }
-    } 
- 
-    { 
-        TBufferOutput b1bo(b1b); 
-        b1.Save(b1bo); 
-    } 
- 
-    TCompactTrie<char, ui32> t1(TBlob::FromBuffer(b1b)); 
- 
-    //t1.Print(Cerr); 
- 
+    }
+
+    {
+        TBufferOutput b1bo(b1b);
+        b1.Save(b1bo);
+    }
+
+    TCompactTrie<char, ui32> t1(TBlob::FromBuffer(b1b));
+
+    //t1.Print(Cerr);
+
     for (auto& i : data) {
-        ui32 v; 
+        ui32 v;
         UNIT_ASSERT(t1.Find(i, strlen(i), &v));
         UNIT_ASSERT_VALUES_EQUAL(strlen(i) + 1, v);
-    } 
-} 
- 
+    }
+}
+
 void TCompactTrieTest::CrashTestPrefixGrouped() {
     TCompactTrieBuilder<char, ui32> builder(CTBF_PREFIX_GROUPED);
     const char* data[] = {
@@ -842,33 +842,33 @@ void TCompactTrieTest::CrashTestPrefixGrouped() {
 }
 
 void TCompactTrieTest::TestMergeFromFile() {
-    { 
-        TCompactTrieBuilder<> b; 
-        b.Add("yandex", 12); 
-        b.Add("google", 13); 
-        b.Add("mail", 14); 
+    {
+        TCompactTrieBuilder<> b;
+        b.Add("yandex", 12);
+        b.Add("google", 13);
+        b.Add("mail", 14);
         TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru");
-        b.Save(out); 
-    } 
- 
-    { 
-        TCompactTrieBuilder<> b; 
-        b.Add("yandex", 112); 
-        b.Add("google", 113); 
-        b.Add("yahoo", 114); 
+        b.Save(out);
+    }
+
+    {
+        TCompactTrieBuilder<> b;
+        b.Add("yandex", 112);
+        b.Add("google", 113);
+        b.Add("yahoo", 114);
         TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com");
-        b.Save(out); 
-    } 
- 
-    { 
-        TCompactTrieBuilder<> b; 
+        b.Save(out);
+    }
+
+    {
+        TCompactTrieBuilder<> b;
         UNIT_ASSERT(b.AddSubtreeInFile("com.", GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com"));
         UNIT_ASSERT(b.Add("org.kernel", 22));
         UNIT_ASSERT(b.AddSubtreeInFile("ru.", GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru"));
         TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res");
-        b.Save(out); 
-    } 
- 
+        b.Save(out);
+    }
+
     TCompactTrie<> trie(TBlob::FromFileSingleThreaded(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res"));
     UNIT_ASSERT_VALUES_EQUAL(12u, trie.Get("ru.yandex"));
     UNIT_ASSERT_VALUES_EQUAL(13u, trie.Get("ru.google"));
@@ -877,12 +877,12 @@ void TCompactTrieTest::TestMergeFromFile() {
     UNIT_ASSERT_VALUES_EQUAL(112u, trie.Get("com.yandex"));
     UNIT_ASSERT_VALUES_EQUAL(113u, trie.Get("com.google"));
     UNIT_ASSERT_VALUES_EQUAL(114u, trie.Get("com.yahoo"));
- 
+
     unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res").data());
     unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com").data());
     unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru").data());
-} 
- 
+}
+
 void TCompactTrieTest::TestMergeFromBuffer() {
     TArrayWithSizeHolder<char> buffer1;
     {

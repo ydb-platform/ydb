@@ -1,10 +1,10 @@
-#pragma once 
- 
-/// see enum_codegen_ut.cpp for examples 
- 
-#define ENUM_VALUE_GEN(name, value, ...) name = value, 
-#define ENUM_VALUE_GEN_NO_VALUE(name, ...) name, 
- 
+#pragma once
+
+/// see enum_codegen_ut.cpp for examples
+
+#define ENUM_VALUE_GEN(name, value, ...) name = value,
+#define ENUM_VALUE_GEN_NO_VALUE(name, ...) name,
+
 #define ENUM_TO_STRING_IMPL_ITEM(name, ...) \
     case name:                              \
         return #name;
@@ -12,7 +12,7 @@
     case name:                         \
         os << #name;                   \
         break;
- 
+
 #define ENUM_TO_STRING(type, MAP)                                            \
     static inline const char* ToCString(type value) {                        \
         switch (value) {                                                     \

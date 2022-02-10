@@ -616,7 +616,7 @@ namespace NUri {
     const char* LinkTypeToString(const TUri::TLinkType& t);
 
 }
- 
+
 Y_DECLARE_OUT_SPEC(inline, NUri::TUri, out, url) {
     url.Print(out);
 }

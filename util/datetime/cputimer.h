@@ -2,13 +2,13 @@
 
 #include "base.h"
 
-#include <util/system/rusage.h> 
+#include <util/system/rusage.h>
 #include <util/generic/string.h>
 #include <util/stream/str.h>
 
 class TTimer {
 private:
-    TInstant Start_; 
+    TInstant Start_;
     TStringStream Message_;
 
 public:
@@ -17,51 +17,51 @@ public:
 };
 
 class TSimpleTimer {
-    TInstant T; 
+    TInstant T;
 
 public:
     TSimpleTimer() {
         Reset();
     }
     TDuration Get() const {
-        return TInstant::Now() - T; 
+        return TInstant::Now() - T;
     }
     void Reset() {
-        T = TInstant::Now(); 
+        T = TInstant::Now();
     }
 };
 
 class TProfileTimer {
-    TDuration T; 
+    TDuration T;
 
 public:
     TProfileTimer() {
         Reset();
     }
     TDuration Get() const {
-        return TRusage::Get().Utime - T; 
+        return TRusage::Get().Utime - T;
     }
     TDuration Step() {
-        TRusage r; 
-        r.Fill(); 
-        TDuration d = r.Utime - T; 
-        T = r.Utime; 
+        TRusage r;
+        r.Fill();
+        TDuration d = r.Utime - T;
+        T = r.Utime;
         return d;
     }
     void Reset() {
-        T = TRusage::Get().Utime; 
+        T = TRusage::Get().Utime;
     }
 };
 
-/// Return cached processor cycle count per second. Method takes 1 second at first invocation. 
-/// Note, on older systems cycle rate may change during program lifetime, 
-/// so returned value may be incorrect. Modern Intel and AMD processors keep constant TSC rate. 
+/// Return cached processor cycle count per second. Method takes 1 second at first invocation.
+/// Note, on older systems cycle rate may change during program lifetime,
+/// so returned value may be incorrect. Modern Intel and AMD processors keep constant TSC rate.
 ui64 GetCyclesPerMillisecond();
-void SetCyclesPerSecond(ui64 cycles); 
+void SetCyclesPerSecond(ui64 cycles);
 
-TDuration CyclesToDuration(ui64 cycles); 
-ui64 DurationToCycles(TDuration duration); 
- 
+TDuration CyclesToDuration(ui64 cycles);
+ui64 DurationToCycles(TDuration duration);
+
 class TPrecisionTimer {
 private:
     ui64 Start = 0;
@@ -91,7 +91,7 @@ public:
     ~TFuncTimer();
 
 private:
-    const TInstant Start_; 
+    const TInstant Start_;
     const char* Func_;
 };
 

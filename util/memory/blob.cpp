@@ -159,7 +159,7 @@ TBlob TBlob::SubBlob(size_t len) const {
 
 TBlob TBlob::SubBlob(size_t begin, size_t end) const {
     if (begin > Length() || end > Length() || begin > end) {
-        ythrow yexception() << "incorrect subblob (" << begin << ", " << end << ", outer length = " << Length() << ")"; 
+        ythrow yexception() << "incorrect subblob (" << begin << ", " << end << ", outer length = " << Length() << ")";
     }
 
     return TBlob(Begin() + begin, end - begin, S_.Base);

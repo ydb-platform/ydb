@@ -1,34 +1,34 @@
-#pragma once 
- 
+#pragma once
+
 #include "thread_extra.h"
 
 #include <util/generic/vector.h>
-#include <util/system/yassert.h> 
- 
+#include <util/system/yassert.h>
+
 template <typename T, typename TTag = void, template <typename, class> class TVectorType = TVector>
-class TTempTlsVector { 
-private: 
-    struct TTagForTls {}; 
- 
+class TTempTlsVector {
+private:
+    struct TTagForTls {};
+
     TVectorType<T, std::allocator<T>>* Vector;
 
-public: 
+public:
     TVectorType<T, std::allocator<T>>* GetVector() {
-        return Vector; 
-    } 
- 
-    TTempTlsVector() { 
+        return Vector;
+    }
+
+    TTempTlsVector() {
         Vector = FastTlsSingletonWithTag<TVectorType<T, std::allocator<T>>, TTagForTls>();
         Y_ASSERT(Vector->empty());
-    } 
- 
-    ~TTempTlsVector() { 
+    }
+
+    ~TTempTlsVector() {
         Clear();
     }
 
     void Clear() {
-        Vector->clear(); 
-    } 
+        Vector->clear();
+    }
 
     size_t Capacity() const noexcept {
         return Vector->capacity();
@@ -37,4 +37,4 @@ public:
     void Shrink() {
         Vector->shrink_to_fit();
     }
-}; 
+};

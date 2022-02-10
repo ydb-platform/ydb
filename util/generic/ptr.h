@@ -370,7 +370,7 @@ public:
         Y_ASSERT(resultCount >= d);
         (void)resultCount;
     }
- 
+
     inline void Ref() noexcept {
         auto resultCount = Counter_.Inc();
         Y_ASSERT(resultCount != 0);
@@ -388,7 +388,7 @@ public:
     inline void UnRef() noexcept {
         UnRef(1);
     }
- 
+
     inline TAtomicBase RefCount() const noexcept {
         return Counter_.Val();
     }
@@ -876,7 +876,7 @@ public:
     inline void Drop() noexcept {
         TSharedPtr().Swap(*this);
     }
- 
+
     inline T* Get() const noexcept {
         return T_;
     }

@@ -47,7 +47,7 @@ enum {
     MTYPE_CLIENT_FLAT_TX_REQUEST = 10432,
     MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST = 10434,
     MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST = 10435, // deprecated
-    MTYPE_CLIENT_OLD_FLAT_DESCRIBE_RESPONSE = 10436, // deprecated 
+    MTYPE_CLIENT_OLD_FLAT_DESCRIBE_RESPONSE = 10436, // deprecated
     MTYPE_CLIENT_CREATE_TABLET = 10437,
     MTYPE_CLIENT_LOAD_REQUEST = 10438,
     MTYPE_CLIENT_LOAD_RESPONSE = 10439,
@@ -157,9 +157,9 @@ public:
     TBusResponseStatus(EResponseStatus status, const TString& text = TString())
     {
         Record.SetStatus(status);
-        if (text) { 
+        if (text) {
             Record.SetErrorReason(text);
-        } 
+        }
     }
 };
 
@@ -201,9 +201,9 @@ public:
         RegisterType(new TBusTypesResponse);
         RegisterType(new TBusMessageBusTraceRequest);
         RegisterType(new TBusMessageBusTraceStatus);
-        RegisterType(new TBusHiveCreateTablet); 
+        RegisterType(new TBusHiveCreateTablet);
         RegisterType(new TBusOldHiveCreateTablet);
-        RegisterType(new TBusHiveCreateTabletResult); 
+        RegisterType(new TBusHiveCreateTabletResult);
         RegisterType(new TBusLocalEnumerateTablets);
         RegisterType(new TBusOldLocalEnumerateTablets);
         RegisterType(new TBusLocalEnumerateTabletsResult);
@@ -220,7 +220,7 @@ public:
         RegisterType(new TBusSchemeOperationStatus);
         RegisterType(new TBusSchemeDescribe);
         RegisterType(new TBusOldFlatDescribeRequest);
-        RegisterType(new TBusOldFlatDescribeResponse); 
+        RegisterType(new TBusOldFlatDescribeResponse);
         RegisterType(new TBusBsTestLoadRequest);
         RegisterType(new TBusBsTestLoadResponse);
         RegisterType(new TBusBsGetRequest);

@@ -20,7 +20,7 @@ SRCS(
     httpheader.cpp
     httpload.cpp
     exthttpcodes.cpp
-    httpfsm.rl6 
+    httpfsm.rl6
     httpagent.h
     httpfetcher.h
     httpheader.h

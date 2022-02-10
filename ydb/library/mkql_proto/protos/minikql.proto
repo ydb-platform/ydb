@@ -5,7 +5,7 @@ option cc_enable_arenas = true;
 import "google/protobuf/struct.proto";
 
 enum ETypeKind {
-    Unknown = 0; 
+    Unknown = 0;
     Void = 1;
     Data = 2;
     Optional = 3;
@@ -15,9 +15,9 @@ enum ETypeKind {
     Dict = 7;
     Variant = 8;
     Null = 9;
-    Reserved_10 = 10; 
-    Reserved_11 = 11; 
-    Reserved_12 = 12; 
+    Reserved_10 = 10;
+    Reserved_11 = 11;
+    Reserved_12 = 12;
     Reserved_13 = 13;
     Reserved_14 = 14;
 }
@@ -45,7 +45,7 @@ message TTupleType {
 }
 
 message TMember {
-    required string Name = 1; 
+    required string Name = 1;
     required TType Type = 2;
 }
 
@@ -66,16 +66,16 @@ message TDictType {
 }
 
 message TType {
-    required ETypeKind Kind = 1; 
-    oneof type_type { 
-        TDataType Data = 2; 
-        TOptionalType Optional = 3; 
-        TListType List = 4; 
-        TTupleType Tuple = 5; 
-        TStructType Struct = 6; 
-        TDictType Dict = 7; 
+    required ETypeKind Kind = 1;
+    oneof type_type {
+        TDataType Data = 2;
+        TOptionalType Optional = 3;
+        TListType List = 4;
+        TTupleType Tuple = 5;
+        TStructType Struct = 6;
+        TDictType Dict = 7;
         TVariantType Variant = 8;
-    } 
+    }
 }
 
 message TValuePair {
@@ -84,23 +84,23 @@ message TValuePair {
 }
 
 message TValue {
-    oneof value_value { 
-        bool Bool = 1; 
-        int32 Int32 = 2; 
-        uint32 Uint32 = 3; 
-        int64 Int64 = 4; 
-        uint64 Uint64 = 5; 
-        float Float = 6; 
-        double Double = 7; 
-        bytes Bytes = 8; 
-        string Text = 9; 
-        TValue Optional = 10; 
+    oneof value_value {
+        bool Bool = 1;
+        int32 Int32 = 2;
+        uint32 Uint32 = 3;
+        int64 Int64 = 4;
+        uint64 Uint64 = 5;
+        float Float = 6;
+        double Double = 7;
+        bytes Bytes = 8;
+        string Text = 9;
+        TValue Optional = 10;
         fixed64 Low128 = 15;
         google.protobuf.NullValue NullFlagValue = 18; // Set if current TValue is terminal Null
-    } 
-    // Logically part of oneof, 
-    // but protobuf does not allow repeated fields in oneof. 
-    // Maybe these fields should have own messages with repeated inside. 
+    }
+    // Logically part of oneof,
+    // but protobuf does not allow repeated fields in oneof.
+    // Maybe these fields should have own messages with repeated inside.
     repeated TValue List = 11;
     repeated TValue Tuple = 12;
     repeated TValue Struct = 13;

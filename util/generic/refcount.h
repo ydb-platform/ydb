@@ -23,11 +23,11 @@ public:
         Check();
         return Counter_ += d;
     }
- 
+
     inline TAtomicBase Inc() noexcept {
         return Add(1);
     }
- 
+
     inline TAtomicBase Sub(TAtomicBase d) noexcept {
         Check();
         return Counter_ -= d;
@@ -112,7 +112,7 @@ public:
     inline TAtomicBase Add(TAtomicBase d) noexcept {
         return AtomicAdd(Counter_, d);
     }
- 
+
     inline TAtomicBase Inc() noexcept {
         return Add(1);
     }
@@ -120,7 +120,7 @@ public:
     inline TAtomicBase Sub(TAtomicBase d) noexcept {
         return AtomicSub(Counter_, d);
     }
- 
+
     inline TAtomicBase Dec() noexcept {
         return Sub(1);
     }

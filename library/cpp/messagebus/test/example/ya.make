@@ -1,7 +1,7 @@
 OWNER(g:messagebus)
- 
-RECURSE( 
+
+RECURSE(
     client
     common
     server
-) 
+)

@@ -408,9 +408,9 @@ UNIT_ASSERT_VALUES_EQUAL(file.CountCache(0, 12345), -1);
 Y_UNIT_TEST_SUITE(TTestDecodeOpenMode) {
     Y_UNIT_TEST(It) {
         UNIT_ASSERT_VALUES_EQUAL("0", DecodeOpenMode(0));
-        UNIT_ASSERT_VALUES_EQUAL("RdOnly", DecodeOpenMode(RdOnly)); 
-        UNIT_ASSERT_VALUES_EQUAL("RdWr", DecodeOpenMode(RdWr)); 
-        UNIT_ASSERT_VALUES_EQUAL("WrOnly|ForAppend", DecodeOpenMode(WrOnly | ForAppend)); 
+        UNIT_ASSERT_VALUES_EQUAL("RdOnly", DecodeOpenMode(RdOnly));
+        UNIT_ASSERT_VALUES_EQUAL("RdWr", DecodeOpenMode(RdWr));
+        UNIT_ASSERT_VALUES_EQUAL("WrOnly|ForAppend", DecodeOpenMode(WrOnly | ForAppend));
         UNIT_ASSERT_VALUES_EQUAL("RdWr|CreateAlways|CreateNew|ForAppend|Transient|CloseOnExec|Temp|Sync|Direct|DirectAligned|Seq|NoReuse|NoReadAhead|AX|AR|AW|AWOther|0xF8888000", DecodeOpenMode(0xFFFFFFFF));
-    } 
-} 
+    }
+}

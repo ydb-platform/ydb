@@ -143,8 +143,8 @@ public:
     virtual void Execute() = 0;
 };
 
-/// Central coroutine class. 
-/// Note, coroutines are single-threaded, and all methods must be called from the single thread 
+/// Central coroutine class.
+/// Note, coroutines are single-threaded, and all methods must be called from the single thread
 class TContExecutor {
     friend class TCont;
     using TContList = TIntrusiveList<TCont>;

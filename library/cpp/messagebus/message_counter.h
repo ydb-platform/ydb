@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/generic/string.h>
 
 #include <cstddef>
@@ -12,7 +12,7 @@ namespace NBus {
             size_t Count;
             size_t CountCompressed;
             size_t CountCompressionRequests; // reader only
- 
+
             void AddMessage(size_t bytesData, size_t bytesCompressed, bool Compressed, bool compressionRequested) {
                 BytesData += bytesData;
                 BytesNetwork += bytesCompressed;
@@ -24,13 +24,13 @@ namespace NBus {
                     CountCompressionRequests += 1;
                 }
             }
- 
+
             TMessageCounter& operator+=(const TMessageCounter& that);
- 
+
             TString ToString(bool reader) const;
- 
+
             TMessageCounter();
         };
 
-    } 
+    }
 }

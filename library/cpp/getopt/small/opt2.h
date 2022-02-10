@@ -111,11 +111,11 @@ public:
     void AddError(const char* message = nullptr);
 
 public:
-    // non-option args 
+    // non-option args
     TVector<char*> Pos;
     bool HasErrors;
- 
-private: 
+
+private:
     bool BadPosCount;
     char UnknownOption;
     char* UnknownLongOption;

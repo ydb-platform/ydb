@@ -1,14 +1,14 @@
 #include "pool.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/stream/output.h>
 #include <util/random/fast.h>
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
 #include <util/system/mutex.h>
 #include <util/system/condvar.h>
- 
+
 struct TThreadPoolTest {
     TSpinLock Lock;
     long R = -1;
@@ -65,7 +65,7 @@ struct TThreadPoolTest {
 
         for (size_t i = 0; i < cnt; ++i) {
             UNIT_ASSERT(queue->Add(new TTask(this, (long)rand.GenRand())));
-        } 
+        }
 
         queue->Stop();
 
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
         UNIT_ASSERT_C(processed, "Not processed");
         UNIT_ASSERT_C(destructed, "Not destructed");
     }
- 
+
     Y_UNIT_TEST(TestAddFunc) {
         TFailAddQueue queue;
         bool added = queue.AddFunc(

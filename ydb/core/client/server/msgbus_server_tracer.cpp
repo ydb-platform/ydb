@@ -173,19 +173,19 @@ public:
 
     NBus::TBusMessage* CreateErrorReply(NMsgBusProxy::EResponseStatus status, const TActorContext &ctx) {
         Y_UNUSED(ctx);
-        TAutoPtr<NMsgBusProxy::TBusResponse> response(new NMsgBusProxy::TBusResponseStatus(status, "Service not found")); 
+        TAutoPtr<NMsgBusProxy::TBusResponse> response(new NMsgBusProxy::TBusResponseStatus(status, "Service not found"));
         return response.Release();
     }
 
     void HandleTimeout(const TActorContext &ctx) {
         Y_UNUSED(ctx);
-        TAutoPtr<NMsgBusProxy::TBusResponse> response(new NMsgBusProxy::TBusResponseStatus(NMsgBusProxy::MSTATUS_TIMEOUT, "")); 
+        TAutoPtr<NMsgBusProxy::TBusResponse> response(new NMsgBusProxy::TBusResponseStatus(NMsgBusProxy::MSTATUS_TIMEOUT, ""));
         this->SendReplyAndDie(response.Release(), ctx);
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        TAutoPtr<NMsgBusProxy::TBusResponse> response(new NMsgBusProxy::TBusResponseStatus(NMsgBusProxy::MSTATUS_ERROR, "HandleUndelivered")); 
+        TAutoPtr<NMsgBusProxy::TBusResponse> response(new NMsgBusProxy::TBusResponseStatus(NMsgBusProxy::MSTATUS_ERROR, "HandleUndelivered"));
         response->Record.SetErrorReason("Cannot deliver request to the service");
         this->SendReplyAndDie(response.Release(), ctx);
     }

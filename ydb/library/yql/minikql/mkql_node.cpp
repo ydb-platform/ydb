@@ -592,12 +592,12 @@ ui32 TStructType::GetMemberIndex(const TStringBuf& name) const {
         return *index;
     }
 
-    TStringStream ss; 
-    for (ui32 i = 0; i < MembersCount; ++i) { 
+    TStringStream ss;
+    for (ui32 i = 0; i < MembersCount; ++i) {
         ss << " " << Members[i].first.Str();
-    } 
+    }
     THROW yexception() << "Member with name '" << name << "' not found; "
-            << " known members: " << ss.Str() << "."; 
+            << " known members: " << ss.Str() << ".";
 }
 
 TMaybe<ui32> TStructType::FindMemberIndex(const TStringBuf& name) const {

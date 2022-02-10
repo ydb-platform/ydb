@@ -62,7 +62,7 @@ namespace NBitOps {
             Y_ASSERT(value); // because __builtin_clz* have undefined result for zero.
             return std::numeric_limits<unsigned int>::digits - __builtin_clz(value);
         }
- 
+
         inline unsigned GetValueBitCountImpl(unsigned long value) noexcept {
             Y_ASSERT(value); // because __builtin_clz* have undefined result for zero.
             return std::numeric_limits<unsigned long>::digits - __builtin_clzl(value);

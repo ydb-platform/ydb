@@ -3,7 +3,7 @@
 #include "defaults.h"
 #include "src_root.h"
 #include "backtrace.h"
- 
+
 #if defined(_MSC_VER)
     #include <new>
     #if defined(_DEBUG)
@@ -89,12 +89,12 @@ inline void YaDebugBreak() {
         } while (false)
 #endif
 
-namespace NPrivate { 
-    /// method should not be used directly 
+namespace NPrivate {
+    /// method should not be used directly
     [[noreturn]] void Panic(const TStaticBuf& file, int line, const char* function, const char* expr, const char* format, ...) noexcept Y_PRINTF_FORMAT(5, 6);
-} 
- 
-/// Assert that does not depend on NDEBUG macro and outputs message like printf 
+}
+
+/// Assert that does not depend on NDEBUG macro and outputs message like printf
 #define Y_VERIFY(expr, ...)                                                                          \
     do {                                                                                             \
         if (Y_UNLIKELY(!(expr))) {                                                                   \
@@ -106,7 +106,7 @@ namespace NPrivate {
     do {                                                                                           \
         ::NPrivate::Panic(__SOURCE_FILE_IMPL__, __LINE__, __FUNCTION__, nullptr, " " __VA_ARGS__); \
     } while (false)
- 
+
 #ifndef NDEBUG
     /// Assert that depend on NDEBUG macro and outputs message like printf
     #define Y_VERIFY_DEBUG(expr, ...)                                                                    \

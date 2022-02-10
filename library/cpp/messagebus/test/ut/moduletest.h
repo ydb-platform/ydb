@@ -7,10 +7,10 @@
 #include <library/cpp/messagebus/test/helper/alloc_counter.h>
 #include <library/cpp/messagebus/test/helper/example.h>
 #include <library/cpp/messagebus/test/helper/message_handler_error.h>
- 
+
 #include <library/cpp/messagebus/ybus.h>
 #include <library/cpp/messagebus/oldmodule/module.h>
- 
+
 namespace NBus {
     namespace NTest {
         using namespace std;
@@ -71,7 +71,7 @@ namespace NBus {
             /// deserialized TBusData into new instance of the message
             TAutoPtr<TBusMessage> Deserialize(ui16 messageType, TArrayRef<const char> payload) override {
                 Y_UNUSED(payload);
- 
+
                 if (messageType == TYPE_HOSTINFOREQUEST) {
                     return new THostInfoMessage(MESSAGE_CREATE_UNINITIALIZED);
                 } else if (messageType == TYPE_HOSTINFORESPONSE) {
@@ -100,7 +100,7 @@ namespace NBus {
 
                 mess.SendReplyMove(reply);
             }
- 
+
             TNetAddr GetActualListenAddr() {
                 return TNetAddr("localhost", Session->GetActualListenPort());
             }
@@ -110,7 +110,7 @@ namespace NBus {
         /// \brief DupDetect handler (should convert it to module too)
         struct TDupDetectHandler: public TBusClientHandlerError {
             TNetAddr ServerAddr;
- 
+
             TBusClientSessionPtr DupDetect;
             TBusClientSessionConfig DupDetectConfig;
             TExampleProtocol DupDetectProto;
@@ -147,7 +147,7 @@ namespace NBus {
 
         struct TDupDetectModule: public TBusModule {
             TNetAddr HostInfoAddr;
- 
+
             TBusClientSessionPtr HostInfoClientSession;
             TBusClientSessionConfig HostInfoConfig;
             THostInfoProtocol HostInfoProto;
@@ -162,7 +162,7 @@ namespace NBus {
                 , HostInfoAddr(hostInfoAddr)
             {
             }
- 
+
             bool Init(TBusMessageQueue* queue) {
                 HostInfoClientSession = CreateDefaultSource(*queue, &HostInfoProto, HostInfoConfig);
                 HostInfoClientSession->RegisterService("localhost");
@@ -174,7 +174,7 @@ namespace NBus {
                 TBusServerSessionPtr session = CreateDefaultDestination(queue, &DupDetectProto, DupDetectConfig);
 
                 ListenAddr = TNetAddr("localhost", session->GetActualListenPort());
- 
+
                 return session;
             }
 

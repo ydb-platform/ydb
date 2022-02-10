@@ -7,7 +7,7 @@
 #include <util/thread/singleton.h>
 #include <util/stream/format.h>
 #include <util/stream/output.h>
-#include <util/system/yassert.h> 
+#include <util/system/yassert.h>
 
 
 TCont::TJoinWait::TJoinWait(TCont& c) noexcept

@@ -7,7 +7,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/singleton.h>
 #include <util/generic/vector.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 
 
 namespace NKikimr {
@@ -51,13 +51,13 @@ public:
     }
 
     ::TString GetTypeName(TTypeId typeId) const {
-        if (!typeId) { 
-            return "Null"; 
-        } 
-        auto type = GetType(typeId); 
+        if (!typeId) {
+            return "Null";
+        }
+        auto type = GetType(typeId);
         return type.IsKnownType() ? ::TString(type->GetName()) : (TStringBuilder() << "Unknown(" << typeId << ")");
-    } 
- 
+    }
+
     ITypeSP GetKnownType(TTypeId typeId) const {
         if (!typeId)
             ythrow yexception() << "Type id must be non zero";

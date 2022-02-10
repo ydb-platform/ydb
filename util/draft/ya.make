@@ -10,7 +10,7 @@ IF (TSTRING_IS_STD_STRING)
 ENDIF()
 
 SRCS(
-    date.cpp 
+    date.cpp
     datetime.cpp
     enum.cpp
     holder_vector.cpp

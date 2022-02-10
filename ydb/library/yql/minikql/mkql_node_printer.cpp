@@ -32,15 +32,15 @@ namespace {
         void Visit(TTypeType& node) override {
             Y_UNUSED(node);
             WriteIndentation();
-            Out << "Type (Type)"; 
-            WriteNewline(); 
+            Out << "Type (Type)";
+            WriteNewline();
         }
 
         void Visit(TVoidType& node) override {
             Y_UNUSED(node);
             WriteIndentation();
-            Out << "Type (Void) "; 
-            WriteNewline(); 
+            Out << "Type (Void) ";
+            WriteNewline();
         }
 
         void Visit(TNullType& node) override {
@@ -80,20 +80,20 @@ namespace {
 
             Out << ", schemeTypeId: ";
             Out << node.GetSchemeType();
-            WriteNewline(); 
+            WriteNewline();
         }
 
         void Visit(TStructType& node) override {
             WriteIndentation();
             Out << "Type (Struct) with " << node.GetMembersCount() << " members {";
-            WriteNewline(); 
+            WriteNewline();
 
             {
                 TIndentScope scope(this);
                 for (ui32 index = 0; index < node.GetMembersCount(); ++index) {
                     WriteIndentation();
-                    Out << "Member [" << node.GetMemberName(index) << "] : {"; 
-                    WriteNewline(); 
+                    Out << "Member [" << node.GetMemberName(index) << "] : {";
+                    WriteNewline();
 
                     {
                         TIndentScope scope2(this);
@@ -101,26 +101,26 @@ namespace {
                     }
 
                     WriteIndentation();
-                    Out << "}"; 
-                    WriteNewline(); 
+                    Out << "}";
+                    WriteNewline();
                 }
             }
 
             WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
+            Out << "}";
+            WriteNewline();
         }
 
         void Visit(TListType& node) override {
             WriteIndentation();
             Out << "Type (List) {";
-            WriteNewline(); 
+            WriteNewline();
 
             {
                 TIndentScope scope(this);
                 WriteIndentation();
-                Out << "List item type: {"; 
-                WriteNewline(); 
+                Out << "List item type: {";
+                WriteNewline();
 
                 {
                     TIndentScope scope2(this);
@@ -128,13 +128,13 @@ namespace {
                 }
 
                 WriteIndentation();
-                Out << "}"; 
-                WriteNewline(); 
+                Out << "}";
+                WriteNewline();
             }
 
             WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
+            Out << "}";
+            WriteNewline();
         }
 
         void Visit(TStreamType& node) override {
@@ -222,13 +222,13 @@ namespace {
         void Visit(TOptionalType& node) override {
             WriteIndentation();
             Out << "Type (Optional) {";
-            WriteNewline(); 
+            WriteNewline();
 
             {
                 TIndentScope scope(this);
                 WriteIndentation();
-                Out << "Optional item type: {"; 
-                WriteNewline(); 
+                Out << "Optional item type: {";
+                WriteNewline();
 
                 {
                     TIndentScope scope2(this);
@@ -236,25 +236,25 @@ namespace {
                 }
 
                 WriteIndentation();
-                Out << "}"; 
-                WriteNewline(); 
+                Out << "}";
+                WriteNewline();
             }
 
             WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
+            Out << "}";
+            WriteNewline();
         }
 
         void Visit(TDictType& node) override {
             WriteIndentation();
             Out << "Type (Dict) {";
-            WriteNewline(); 
+            WriteNewline();
 
             {
                 TIndentScope scope(this);
                 WriteIndentation();
-                Out << "Key type: {"; 
-                WriteNewline(); 
+                Out << "Key type: {";
+                WriteNewline();
 
                 {
                     TIndentScope scope2(this);
@@ -262,12 +262,12 @@ namespace {
                 }
 
                 WriteIndentation();
-                Out << "}"; 
-                WriteNewline(); 
+                Out << "}";
+                WriteNewline();
 
                 WriteIndentation();
-                Out << "Payload type: {"; 
-                WriteNewline(); 
+                Out << "Payload type: {";
+                WriteNewline();
 
                 {
                     TIndentScope scope2(this);
@@ -275,19 +275,19 @@ namespace {
                 }
 
                 WriteIndentation();
-                Out << "}"; 
-                WriteNewline(); 
+                Out << "}";
+                WriteNewline();
             }
 
             WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
+            Out << "}";
+            WriteNewline();
         }
 
         void Visit(TCallableType& node) override {
             WriteIndentation();
-            Out << "Type (Callable), name: [" << node.GetName() << "] with " << node.GetArgumentsCount() << " args {"; 
-            WriteNewline(); 
+            Out << "Type (Callable), name: [" << node.GetName() << "] with " << node.GetArgumentsCount() << " args {";
+            WriteNewline();
 
             {
                 TIndentScope scope(this);
@@ -297,8 +297,8 @@ namespace {
                     Out << ", merge disabled";
                 if (node.GetOptionalArgumentsCount() != 0)
                     Out << ", optional args: " << node.GetOptionalArgumentsCount();
-                Out << " : {"; 
-                WriteNewline(); 
+                Out << " : {";
+                WriteNewline();
 
                 {
                     TIndentScope scope2(this);
@@ -306,13 +306,13 @@ namespace {
                 }
 
                 WriteIndentation();
-                Out << "}"; 
-                WriteNewline(); 
+                Out << "}";
+                WriteNewline();
                 for (ui32 index = 0; index < node.GetArgumentsCount(); ++index) {
                     WriteIndentation();
                     const auto& type = node.GetArgumentType(index);
                     Out << "Argument #" << index << " : {";
-                    WriteNewline(); 
+                    WriteNewline();
 
                     {
                         TIndentScope scope2(this);
@@ -320,14 +320,14 @@ namespace {
                     }
 
                     WriteIndentation();
-                    Out << "}"; 
-                    WriteNewline(); 
+                    Out << "}";
+                    WriteNewline();
                 }
 
                 if (node.GetPayload()) {
                     WriteIndentation();
-                    Out << "Payload: {"; 
-                    WriteNewline(); 
+                    Out << "Payload: {";
+                    WriteNewline();
 
                     {
                         TIndentScope scope2(this);
@@ -335,21 +335,21 @@ namespace {
                     }
 
                     WriteIndentation();
-                    Out << "}"; 
-                    WriteNewline(); 
+                    Out << "}";
+                    WriteNewline();
                 }
             }
 
             WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
+            Out << "}";
+            WriteNewline();
         }
 
         void Visit(TAnyType& node) override {
             Y_UNUSED(node);
             WriteIndentation();
             Out << "Type (Any) ";
-            WriteNewline(); 
+            WriteNewline();
         }
 
         void Visit(TTupleType& node) override {
@@ -415,8 +415,8 @@ namespace {
 
         void Visit(TVoid& node) override {
             WriteIndentation();
-            Out << "Void {"; 
-            WriteNewline(); 
+            Out << "Void {";
+            WriteNewline();
 
             {
                 TIndentScope scope(this);
@@ -424,8 +424,8 @@ namespace {
             }
 
             WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
+            Out << "}";
+            WriteNewline();
         }
 
         void Visit(TNull& node) override {
@@ -475,8 +475,8 @@ namespace {
 
         void Visit(TDataLiteral& node) override {
             WriteIndentation();
-            Out << "Data {"; 
-            WriteNewline(); 
+            Out << "Data {";
+            WriteNewline();
 
             {
                 TIndentScope scope(this);
@@ -484,23 +484,23 @@ namespace {
 
                 WriteIndentation();
                 if (node.GetType()->GetSchemeType() == 0) {
-                    Out << "null"; 
-                    WriteNewline(); 
+                    Out << "null";
+                    WriteNewline();
                 } else {
                     Out << TString(node.AsValue().AsStringRef()).Quote();
-                    WriteNewline(); 
+                    WriteNewline();
                 }
             }
 
             WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
+            Out << "}";
+            WriteNewline();
         }
 
         void Visit(TStructLiteral& node) override {
             WriteIndentation();
             Out << "Struct {";
-            WriteNewline(); 
+            WriteNewline();
 
             {
                 TIndentScope scope(this);
@@ -508,8 +508,8 @@ namespace {
                     WriteIndentation();
                     const auto& value = node.GetValue(index);
                     Out << "Member [" << node.GetType()->GetMemberName(index) << "], "
-                        << (value.IsImmediate() ? "immediate" : "not immediate") << " {"; 
-                    WriteNewline(); 
+                        << (value.IsImmediate() ? "immediate" : "not immediate") << " {";
+                    WriteNewline();
 
                     {
                         TIndentScope scope2(this);
@@ -517,20 +517,20 @@ namespace {
                     }
 
                     WriteIndentation();
-                    Out << "}"; 
-                    WriteNewline(); 
+                    Out << "}";
+                    WriteNewline();
                 }
             }
 
             WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
+            Out << "}";
+            WriteNewline();
         }
 
         void Visit(TListLiteral& node) override {
             WriteIndentation();
-            Out << "List with " << node.GetItemsCount() << " items {"; 
-            WriteNewline(); 
+            Out << "List with " << node.GetItemsCount() << " items {";
+            WriteNewline();
 
             {
                 TIndentScope scope(this);
@@ -539,8 +539,8 @@ namespace {
                 for (ui32 i = 0; i < node.GetItemsCount(); ++i) {
                     WriteIndentation();
                     const auto& item = node.GetItems()[i];
-                    Out << "Item #" << index << ", " << (item.IsImmediate() ? "immediate" : "not immediate") << " {"; 
-                    WriteNewline(); 
+                    Out << "Item #" << index << ", " << (item.IsImmediate() ? "immediate" : "not immediate") << " {";
+                    WriteNewline();
 
                     {
                         TIndentScope scope2(this);
@@ -548,142 +548,20 @@ namespace {
                     }
 
                     WriteIndentation();
-                    Out << "}"; 
-                    WriteNewline(); 
+                    Out << "}";
+                    WriteNewline();
                 }
             }
 
             WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
+            Out << "}";
+            WriteNewline();
         }
 
         void Visit(TOptionalLiteral& node) override {
             WriteIndentation();
-            Out << "Optional " << (node.HasItem() ? "with data" : "empty") << " {"; 
-            WriteNewline(); 
-
-            {
-                TIndentScope scope(this);
-                node.GetType()->Accept(*this);
-                if (node.HasItem()) {
-                    WriteIndentation();
-                    const auto& item = node.GetItem();
-                    Out << "Item " << (item.IsImmediate() ? "immediate" : "not immediate") << " {"; 
-                    WriteNewline(); 
-
-                    {
-                        TIndentScope scope2(this);
-                        item.GetNode()->Accept(*this);
-                    }
-
-                    WriteIndentation();
-                    Out << "}"; 
-                    WriteNewline(); 
-                }
-            }
-
-            WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
-        }
-
-        void Visit(TDictLiteral& node) override {
-            WriteIndentation();
-            Out << "Dict with " << node.GetItemsCount() << " items {"; 
-            WriteNewline(); 
-
-            {
-                TIndentScope scope(this);
-                node.GetType()->Accept(*this);
-                for (ui32 index = 0; index < node.GetItemsCount(); ++index) {
-                    WriteIndentation();
-                    const auto& item = node.GetItem(index);
-                    Out << "Key of item #" << index << ", " << (item.first.IsImmediate() ? "immediate" : "not immediate") << " {";
-                    WriteNewline(); 
-
-                    {
-                        TIndentScope scope2(this);
-                        item.first.GetNode()->Accept(*this);
-                    }
-
-                    WriteIndentation();
-                    Out << "}"; 
-                    WriteNewline(); 
-
-                    WriteIndentation();
-                    Out << "Payload of item #" << index << ", " << (item.second.IsImmediate() ? "immediate" : "not immediate") << " {";
-                    WriteNewline(); 
-
-                    {
-                        TIndentScope scope2(this);
-                        item.second.GetNode()->Accept(*this);
-                    }
-
-                    WriteIndentation();
-                    Out << "}"; 
-                    WriteNewline(); 
-                }
-            }
-
-            WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
-        }
-
-        void Visit(TCallable& node) override {
-            WriteIndentation();
-            Out << "Callable";
-            if (node.GetUniqueId() != 0)
-                Out << ", uniqueId: " << node.GetUniqueId();
-            Out << " {"; 
-            WriteNewline(); 
-
-            {
-                TIndentScope scope(this);
-                node.GetType()->Accept(*this);
-
-                for (ui32 index = 0; index < node.GetInputsCount(); ++index) {
-                    WriteIndentation();
-                    const auto& input = node.GetInput(index);
-                    Out << "Input #" << index << ", " << (input.IsImmediate() ? "immediate" : "not immediate") << " {"; 
-                    WriteNewline(); 
-
-                    {
-                        TIndentScope scope3(this);
-                        input.GetNode()->Accept(*this);
-                    }
-
-                    WriteIndentation();
-                    Out << "}"; 
-                    WriteNewline(); 
-                }
-
-                if (node.HasResult()) {
-                    WriteIndentation();
-                    Out << "Result, " << (node.GetResult().IsImmediate() ? "immediate" : "not immediate") << " {"; 
-                    WriteNewline(); 
-
-                    {
-                        TIndentScope scope3(this);
-                        node.GetResult().GetNode()->Accept(*this);
-                    }
-
-                    WriteIndentation();
-                    Out << "}"; 
-                    WriteNewline(); 
-                }
-            }
-
-            WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
-        }
-
-        void Visit(TAny& node) override {
-            WriteIndentation();
-            Out << "Any " << (node.HasItem() ? "with data" : "empty") << " {";
-            WriteNewline(); 
+            Out << "Optional " << (node.HasItem() ? "with data" : "empty") << " {";
+            WriteNewline();
 
             {
                 TIndentScope scope(this);
@@ -706,8 +584,130 @@ namespace {
             }
 
             WriteIndentation();
-            Out << "}"; 
-            WriteNewline(); 
+            Out << "}";
+            WriteNewline();
+        }
+
+        void Visit(TDictLiteral& node) override {
+            WriteIndentation();
+            Out << "Dict with " << node.GetItemsCount() << " items {";
+            WriteNewline();
+
+            {
+                TIndentScope scope(this);
+                node.GetType()->Accept(*this);
+                for (ui32 index = 0; index < node.GetItemsCount(); ++index) {
+                    WriteIndentation();
+                    const auto& item = node.GetItem(index);
+                    Out << "Key of item #" << index << ", " << (item.first.IsImmediate() ? "immediate" : "not immediate") << " {";
+                    WriteNewline();
+
+                    {
+                        TIndentScope scope2(this);
+                        item.first.GetNode()->Accept(*this);
+                    }
+
+                    WriteIndentation();
+                    Out << "}";
+                    WriteNewline();
+
+                    WriteIndentation();
+                    Out << "Payload of item #" << index << ", " << (item.second.IsImmediate() ? "immediate" : "not immediate") << " {";
+                    WriteNewline();
+
+                    {
+                        TIndentScope scope2(this);
+                        item.second.GetNode()->Accept(*this);
+                    }
+
+                    WriteIndentation();
+                    Out << "}";
+                    WriteNewline();
+                }
+            }
+
+            WriteIndentation();
+            Out << "}";
+            WriteNewline();
+        }
+
+        void Visit(TCallable& node) override {
+            WriteIndentation();
+            Out << "Callable";
+            if (node.GetUniqueId() != 0)
+                Out << ", uniqueId: " << node.GetUniqueId();
+            Out << " {";
+            WriteNewline();
+
+            {
+                TIndentScope scope(this);
+                node.GetType()->Accept(*this);
+
+                for (ui32 index = 0; index < node.GetInputsCount(); ++index) {
+                    WriteIndentation();
+                    const auto& input = node.GetInput(index);
+                    Out << "Input #" << index << ", " << (input.IsImmediate() ? "immediate" : "not immediate") << " {";
+                    WriteNewline();
+
+                    {
+                        TIndentScope scope3(this);
+                        input.GetNode()->Accept(*this);
+                    }
+
+                    WriteIndentation();
+                    Out << "}";
+                    WriteNewline();
+                }
+
+                if (node.HasResult()) {
+                    WriteIndentation();
+                    Out << "Result, " << (node.GetResult().IsImmediate() ? "immediate" : "not immediate") << " {";
+                    WriteNewline();
+
+                    {
+                        TIndentScope scope3(this);
+                        node.GetResult().GetNode()->Accept(*this);
+                    }
+
+                    WriteIndentation();
+                    Out << "}";
+                    WriteNewline();
+                }
+            }
+
+            WriteIndentation();
+            Out << "}";
+            WriteNewline();
+        }
+
+        void Visit(TAny& node) override {
+            WriteIndentation();
+            Out << "Any " << (node.HasItem() ? "with data" : "empty") << " {";
+            WriteNewline();
+
+            {
+                TIndentScope scope(this);
+                node.GetType()->Accept(*this);
+                if (node.HasItem()) {
+                    WriteIndentation();
+                    const auto& item = node.GetItem();
+                    Out << "Item " << (item.IsImmediate() ? "immediate" : "not immediate") << " {";
+                    WriteNewline();
+
+                    {
+                        TIndentScope scope2(this);
+                        item.GetNode()->Accept(*this);
+                    }
+
+                    WriteIndentation();
+                    Out << "}";
+                    WriteNewline();
+                }
+            }
+
+            WriteIndentation();
+            Out << "}";
+            WriteNewline();
         }
 
         void Visit(TTupleLiteral& node) override {
@@ -799,24 +799,24 @@ namespace {
 
     private:
         void WriteIndentation() {
-            if (SingleLine) { 
-            } else { 
-                for (ui32 i = 0; i < 2 * Indent; ++i) { 
-                    Out << ' '; 
-                } 
-            } 
-        } 
- 
-        void WriteNewline() { 
-            if (SingleLine) { 
+            if (SingleLine) {
+            } else {
+                for (ui32 i = 0; i < 2 * Indent; ++i) {
+                    Out << ' ';
+                }
+            }
+        }
+
+        void WriteNewline() {
+            if (SingleLine) {
                 Out << ' ';
-            } else { 
-                Out << '\n'; 
+            } else {
+                Out << '\n';
             }
         }
 
     private:
-        const bool SingleLine; 
+        const bool SingleLine;
         TStringStream Out;
         ui32 Indent;
     };
@@ -824,18 +824,18 @@ namespace {
 
 TString PrintNode(const TNode* node, bool singleLine) {
     TPrintVisitor visitor(singleLine);
-    const_cast<TNode*>(node)->Accept(visitor); 
+    const_cast<TNode*>(node)->Accept(visitor);
     return visitor.ToString();
 }
 
 }
 }
- 
-template <> 
-void Out<NKikimr::NMiniKQL::TType>( 
+
+template <>
+void Out<NKikimr::NMiniKQL::TType>(
     IOutputStream& os,
-    TTypeTraits<NKikimr::NMiniKQL::TType>::TFuncParam t 
-) 
-{ 
+    TTypeTraits<NKikimr::NMiniKQL::TType>::TFuncParam t
+)
+{
     os << PrintNode(&t, true);
-} 
+}

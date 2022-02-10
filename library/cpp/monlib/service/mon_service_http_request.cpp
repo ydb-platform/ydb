@@ -1,8 +1,8 @@
 #include "mon_service_http_request.h"
-#include "monservice.h" 
- 
-using namespace NMonitoring; 
- 
+#include "monservice.h"
+
+using namespace NMonitoring;
+
 IMonHttpRequest::~IMonHttpRequest() {
 }
 
@@ -10,9 +10,9 @@ TMonService2HttpRequest::~TMonService2HttpRequest() {
 }
 
 TString TMonService2HttpRequest::GetServiceTitle() const {
-    return MonService->GetTitle(); 
-} 
- 
+    return MonService->GetTitle();
+}
+
 IOutputStream& TMonService2HttpRequest::Output() {
     return *Out;
 }

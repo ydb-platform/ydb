@@ -1,13 +1,13 @@
 UNITTEST()
- 
-OWNER(nga) 
- 
+
+OWNER(nga)
+
 PEERDIR(
     library/cpp/malloc/api/helpers
 )
 
-SRCS( 
-    ut.cpp 
-) 
- 
-END() 
+SRCS(
+    ut.cpp
+)
+
+END()

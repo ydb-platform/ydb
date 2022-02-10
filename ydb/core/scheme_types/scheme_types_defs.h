@@ -230,18 +230,18 @@ class TDatetime : public IIntegerTypeWithKeyString<ui32, NTypeIds::Datetime, NNa
 class TTimestamp : public IIntegerTypeWithKeyString<ui64, NTypeIds::Timestamp, NNames::Timestamp> {};
 class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNames::Interval> {};
 
-#define KIKIMR_FOREACH_MINIKQL_TYPE_I(name, size, macro, ...) macro(name, T##name, __VA_ARGS__) 
- 
-#define KIKIMR_FOREACH_MINIKQL_TYPE(xx, ...) \ 
-    xx(Int32, TInt32, __VA_ARGS__) \ 
-    xx(Uint32, TUint32, __VA_ARGS__) \ 
-    xx(Int64, TInt64, __VA_ARGS__) \ 
-    xx(Uint64, TUint64, __VA_ARGS__) \ 
+#define KIKIMR_FOREACH_MINIKQL_TYPE_I(name, size, macro, ...) macro(name, T##name, __VA_ARGS__)
+
+#define KIKIMR_FOREACH_MINIKQL_TYPE(xx, ...) \
+    xx(Int32, TInt32, __VA_ARGS__) \
+    xx(Uint32, TUint32, __VA_ARGS__) \
+    xx(Int64, TInt64, __VA_ARGS__) \
+    xx(Uint64, TUint64, __VA_ARGS__) \
     xx(Uint8, TUint8, __VA_ARGS__) \
-    xx(Bool, TBool, __VA_ARGS__) \ 
-    xx(Double, TDouble, __VA_ARGS__) \ 
-    xx(Float, TFloat, __VA_ARGS__) \ 
-    xx(PairUi64Ui64, TPairUi64Ui64, __VA_ARGS__) \ 
+    xx(Bool, TBool, __VA_ARGS__) \
+    xx(Double, TDouble, __VA_ARGS__) \
+    xx(Float, TFloat, __VA_ARGS__) \
+    xx(PairUi64Ui64, TPairUi64Ui64, __VA_ARGS__) \
     xx(String, TString, __VA_ARGS__) \
     xx(String4k, TSmallBoundedString, __VA_ARGS__) \
     xx(String2m, TLargeBoundedString, __VA_ARGS__) \
@@ -255,23 +255,23 @@ class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNam
     xx(Timestamp, TTimestamp, __VA_ARGS__) \
     xx(Interval, TInterval, __VA_ARGS__) \
     xx(DyNumber, TDyNumber, __VA_ARGS__) \
-    /**/ 
- 
- 
-static inline bool IsValidMinikqlTypeId(TTypeId typeId) { 
-    #define check_valid(v, t, ...) if (NTypeIds::v == typeId) return true; 
-    KIKIMR_FOREACH_MINIKQL_TYPE(check_valid) 
-    #undef check_valid 
-    return false; 
-} 
- 
+    /**/
+
+
+static inline bool IsValidMinikqlTypeId(TTypeId typeId) {
+    #define check_valid(v, t, ...) if (NTypeIds::v == typeId) return true;
+    KIKIMR_FOREACH_MINIKQL_TYPE(check_valid)
+    #undef check_valid
+    return false;
+}
+
 static inline ::TString GetTypeName(TTypeId typeId) {
     #define getTypeName(v, t, ...) if (NTypeIds::v == typeId) return t::TypeName();
     KIKIMR_FOREACH_MINIKQL_TYPE(getTypeName)
     #undef getTypeName
     return ::TString("UnknownType(" + ToString(typeId) + ")");
 }
- 
+
 static inline bool TryGetTypeName(TTypeId typeId, ::TString& typeName) {
     #define getTypeName(v, t, ...) if (NTypeIds::v == typeId) { typeName = t::TypeName(); return true; }
     KIKIMR_FOREACH_MINIKQL_TYPE(getTypeName)

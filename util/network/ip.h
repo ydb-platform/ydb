@@ -8,10 +8,10 @@
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
-/// IPv4 address in network format 
+/// IPv4 address in network format
 using TIpHost = ui32;
- 
-/// Port number in host format 
+
+/// Port number in host format
 using TIpPort = ui16;
 
 /*
@@ -53,7 +53,7 @@ static inline TIpHost ResolveHost(const char* data, size_t len) {
     return HostToInet(ret);
 }
 
-/// socket address 
+/// socket address
 struct TIpAddress: public sockaddr_in {
     inline TIpAddress() noexcept {
         Clear();

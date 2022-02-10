@@ -2,10 +2,10 @@
 
 #include <limits>
 
-#if defined(max) || defined(min) 
+#if defined(max) || defined(min)
     #error "stop defining 'min' and 'max' macros, evil people"
-#endif 
- 
+#endif
+
 template <class T>
 static constexpr T Max() noexcept {
     return std::numeric_limits<T>::max();

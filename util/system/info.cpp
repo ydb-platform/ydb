@@ -12,7 +12,7 @@
 #if defined(_win_)
     #include "winint.h"
     #include <stdio.h>
-#else 
+#else
     #include <unistd.h>
 #endif
 
@@ -175,17 +175,17 @@ size_t NSystemInfo::CachedNumberOfCpus() {
 
     return NCpus;
 }
- 
+
 size_t NSystemInfo::GetPageSize() noexcept {
 #if defined(_win_)
     SYSTEM_INFO sysInfo;
     GetSystemInfo(&sysInfo);
- 
+
     return sysInfo.dwPageSize;
 #else
     return sysconf(_SC_PAGESIZE);
 #endif
-} 
+}
 
 size_t NSystemInfo::TotalMemorySize() {
 #if defined(_linux_) && defined(_64_)

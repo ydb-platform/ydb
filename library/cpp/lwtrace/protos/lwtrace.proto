@@ -44,9 +44,9 @@ message TLogAction {
     uint32 MaxRecords = 4; // Do not write more than MaxRecords records to the log (count from the trace beginning, not start)
 }
 
-message TPrintToStderrAction { 
-} 
- 
+message TPrintToStderrAction {
+}
+
 message TKillAction {
 }
 

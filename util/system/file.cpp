@@ -22,7 +22,7 @@
 #include <util/generic/yexception.h>
 
 #include <util/datetime/base.h>
- 
+
 #include <errno.h>
 
 #if defined(_unix_)
@@ -140,7 +140,7 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
         ::SetFilePointer(Fd_, 0, 0, FILE_END);
     }
 
-#elif defined(_unix_) 
+#elif defined(_unix_)
 
     switch (createMode) {
         case OpenExisting:
@@ -262,7 +262,7 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     if (Fd_ >= 0 && (oMode & Transient)) {
         unlink(fName.data());
     }
-#else 
+#else
     #error unsupported platform
 #endif
 }
@@ -277,9 +277,9 @@ bool TFileHandle::Close() noexcept {
         Y_VERIFY(GetLastError() != ERROR_INVALID_HANDLE,
                  "must not quietly close invalid handle");
     }
-#elif defined(_unix_) 
+#elif defined(_unix_)
     if (Fd_ != INVALID_FHANDLE) {
-        isOk = (::close(Fd_) == 0 || errno == EINTR); 
+        isOk = (::close(Fd_) == 0 || errno == EINTR);
     }
     if (!isOk) {
         // Do not quietly close bad descriptor,
@@ -307,7 +307,7 @@ static inline i64 DoSeek(FHANDLE h, i64 offset, SeekDir origin) noexcept {
         pos.QuadPart = -1;
     }
     return pos.QuadPart;
-#elif defined(_unix_) 
+#elif defined(_unix_)
     static int dir[] = {SEEK_SET, SEEK_CUR, SEEK_END};
     #if defined(_sun_)
     return ::llseek(h, (offset_t)offset, dir[origin]);
@@ -328,9 +328,9 @@ i64 TFileHandle::Seek(i64 offset, SeekDir origin) noexcept {
 }
 
 i64 TFileHandle::GetLength() const noexcept {
-    // XXX: returns error code, but does not set errno 
+    // XXX: returns error code, but does not set errno
     if (!IsOpen()) {
-        return -1L; 
+        return -1L;
     }
     return GetFileLength(Fd_);
 }
@@ -424,7 +424,7 @@ bool TFileHandle::Flush() noexcept {
      * The function returns FALSE, and GetLastError returns ERROR_INVALID_HANDLE.
      */
     return ok || GetLastError() == ERROR_INVALID_HANDLE;
-#elif defined(_unix_) 
+#elif defined(_unix_)
     int ret = ::fsync(Fd_);
 
     /*
@@ -469,13 +469,13 @@ i32 TFileHandle::Read(void* buffer, ui32 byteCount) noexcept {
         return bytesRead;
     }
     return -1;
-#elif defined(_unix_) 
+#elif defined(_unix_)
     i32 ret;
     do {
         ret = ::read(Fd_, buffer, byteCount);
     } while (ret == -1 && errno == EINTR);
     return ret;
-#else 
+#else
     #error unsupported platform
 #endif
 }
@@ -490,13 +490,13 @@ i32 TFileHandle::Write(const void* buffer, ui32 byteCount) noexcept {
         return bytesWritten;
     }
     return -1;
-#elif defined(_unix_) 
+#elif defined(_unix_)
     i32 ret;
     do {
         ret = ::write(Fd_, buffer, byteCount);
     } while (ret == -1 && errno == EINTR);
     return ret;
-#else 
+#else
     #error unsupported platform
 #endif
 }
@@ -515,13 +515,13 @@ i32 TFileHandle::Pread(void* buffer, ui32 byteCount, i64 offset) const noexcept 
         return 0;
     }
     return -1;
-#elif defined(_unix_) 
+#elif defined(_unix_)
     i32 ret;
     do {
         ret = ::pread(Fd_, buffer, byteCount, offset);
     } while (ret == -1 && errno == EINTR);
     return ret;
-#else 
+#else
     #error unsupported platform
 #endif
 }
@@ -537,13 +537,13 @@ i32 TFileHandle::Pwrite(const void* buffer, ui32 byteCount, i64 offset) const no
         return bytesWritten;
     }
     return -1;
-#elif defined(_unix_) 
+#elif defined(_unix_)
     i32 ret;
     do {
         ret = ::pwrite(Fd_, buffer, byteCount, offset);
     } while (ret == -1 && errno == EINTR);
     return ret;
-#else 
+#else
     #error unsupported platform
 #endif
 }
@@ -558,9 +558,9 @@ FHANDLE TFileHandle::Duplicate() const noexcept {
         return INVALID_FHANDLE;
     }
     return dupHandle;
-#elif defined(_unix_) 
+#elif defined(_unix_)
     return ::dup(Fd_);
-#else 
+#else
     #error unsupported platform
 #endif
 }
@@ -776,10 +776,10 @@ bool TFileHandle::FlushCache(i64 offset, i64 length, bool wait) noexcept {
 }
 
 TString DecodeOpenMode(ui32 mode0) {
-    ui32 mode = mode0; 
- 
+    ui32 mode = mode0;
+
     TStringBuilder r;
- 
+
 #define F(flag)                   \
     if ((mode & flag) == flag) {  \
         mode &= ~flag;            \
@@ -787,14 +787,14 @@ TString DecodeOpenMode(ui32 mode0) {
             r << TStringBuf("|"); \
         }                         \
         r << TStringBuf(#flag);   \
-    } 
- 
-    F(RdWr) 
+    }
+
+    F(RdWr)
     F(RdOnly)
     F(WrOnly)
 
     F(CreateAlways)
-    F(CreateNew) 
+    F(CreateNew)
     F(OpenAlways)
     F(TruncExisting)
     F(ForAppend)
@@ -809,38 +809,38 @@ TString DecodeOpenMode(ui32 mode0) {
     F(NoReuse)
     F(NoReadAhead)
 
-    F(AX) 
-    F(AR) 
-    F(AW) 
-    F(ARW) 
- 
-    F(AXOther) 
-    F(AWOther) 
-    F(AROther) 
-    F(AXGroup) 
-    F(AWGroup) 
-    F(ARGroup) 
-    F(AXUser) 
-    F(AWUser) 
-    F(ARUser) 
- 
-#undef F 
- 
-    if (mode != 0) { 
+    F(AX)
+    F(AR)
+    F(AW)
+    F(ARW)
+
+    F(AXOther)
+    F(AWOther)
+    F(AROther)
+    F(AXGroup)
+    F(AWGroup)
+    F(ARGroup)
+    F(AXUser)
+    F(AWUser)
+    F(ARUser)
+
+#undef F
+
+    if (mode != 0) {
         if (r) {
             r << TStringBuf("|");
         }
 
         r << Hex(mode);
-    } 
- 
+    }
+
     if (!r) {
         return "0";
     }
- 
-    return r; 
+
+    return r;
 }
- 
+
 class TFile::TImpl: public TAtomicRefCount<TImpl> {
 public:
     inline TImpl(FHANDLE fd, const TString& fname = TString())
@@ -1277,7 +1277,7 @@ TFile Duplicate(int fd) {
 
     return TFile(dupHandle);
 #elif defined(_unix_)
-    return TFile(::dup(fd)); 
+    return TFile(::dup(fd));
 #else
     #error unsupported platform
 #endif

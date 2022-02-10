@@ -1,7 +1,7 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/lwtrace/all.h>
- 
+
 #include <util/generic/string.h>
 
 #define LWTRACE_MESSAGEBUS_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)                                          \
@@ -10,10 +10,10 @@
     PROBE(Accepted, GROUPS("MessagebusRare"), TYPES(TString), NAMES("address"))                                  \
     PROBE(Disconnected, GROUPS("MessagebusRare"), TYPES(TString), NAMES("address"))                              \
     PROBE(Read, GROUPS(), TYPES(ui32), NAMES("size"))                                                            \
-    /**/ 
- 
-LWTRACE_DECLARE_PROVIDER(LWTRACE_MESSAGEBUS_PROVIDER) 
- 
-namespace NBus { 
-    void InitBusLwtrace(); 
-} 
+    /**/
+
+LWTRACE_DECLARE_PROVIDER(LWTRACE_MESSAGEBUS_PROVIDER)
+
+namespace NBus {
+    void InitBusLwtrace();
+}

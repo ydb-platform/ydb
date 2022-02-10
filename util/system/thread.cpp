@@ -5,7 +5,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/ymath.h>
 #include <util/generic/ylimits.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include "yassert.h"
 #include <utility>
 
@@ -289,7 +289,7 @@ TThread::~TThread() {
     Join();
 }
 
-void TThread::Start() { 
+void TThread::Start() {
     Impl(Impl_, "start", false)->Start();
 }
 

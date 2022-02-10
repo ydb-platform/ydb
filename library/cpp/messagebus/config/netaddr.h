@@ -29,7 +29,7 @@ namespace NBus {
 
     const char* ToCString(EIpVersion);
     int ToAddrFamily(EIpVersion);
- 
+
     /// Hold referenced pointer to address description structure (ex. sockaddr_storage)
     /// It's make possible to work with IPv4 / IPv6 addresses simultaneously
     class TNetAddr: public IRemoteAddr {
@@ -62,7 +62,7 @@ namespace NBus {
     private:
         TAtomicSharedPtr<IRemoteAddr> Ptr;
     };
- 
+
     using TSockAddrInVector = TVector<TNetAddr>;
 
     struct TNetAddrHostPortHash {

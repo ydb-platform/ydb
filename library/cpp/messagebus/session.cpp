@@ -1,16 +1,16 @@
 #include "ybus.h"
 
-#include <util/generic/cast.h> 
- 
-using namespace NBus; 
- 
+#include <util/generic/cast.h>
+
+using namespace NBus;
+
 namespace NBus {
     TBusSession::TBusSession() {
     }
 
     ////////////////////////////////////////////////////////////////////
     /// \brief Adds peer of connection into connection list
- 
+
     int CompareByHost(const IRemoteAddr& l, const IRemoteAddr& r) noexcept {
         if (l.Addr()->sa_family != r.Addr()->sa_family) {
             return l.Addr()->sa_family < r.Addr()->sa_family ? -1 : +1;
@@ -50,7 +50,7 @@ namespace NBus {
     bool SplitHost(const TString& host, TString* hostName, TString* portNum) {
         hostName->clear();
         portNum->clear();
- 
+
         // Simple check that we have to deal with ipv6 address specification or
         // just host name or ipv4 address.
         if (!host.empty() && (host[0] == '[')) {
@@ -97,7 +97,7 @@ namespace NBus {
         if (!SplitHost(host, &hostName, &port)) {
             hostName = host;
         }
- 
+
         if (port.empty()) {
             portNum = GetProto()->GetPort();
         } else {
@@ -118,12 +118,12 @@ namespace NBus {
 }
 
 TBusClientSessionPtr TBusClientSession::Create(TBusProtocol* proto, IBusClientHandler* handler, const TBusClientSessionConfig& config, TBusMessageQueuePtr queue) {
-    return queue->CreateSource(proto, handler, config); 
-} 
- 
+    return queue->CreateSource(proto, handler, config);
+}
+
 TBusServerSessionPtr TBusServerSession::Create(TBusProtocol* proto, IBusServerHandler* handler, const TBusServerSessionConfig& config, TBusMessageQueuePtr queue) {
-    return queue->CreateDestination(proto, handler, config); 
-} 
+    return queue->CreateDestination(proto, handler, config);
+}
 
 TBusServerSessionPtr TBusServerSession::Create(TBusProtocol* proto, IBusServerHandler* handler, const TBusServerSessionConfig& config, TBusMessageQueuePtr queue, const TVector<TBindResult>& bindTo) {
     return queue->CreateDestination(proto, handler, config, bindTo);

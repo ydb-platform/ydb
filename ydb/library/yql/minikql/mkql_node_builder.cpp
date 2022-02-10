@@ -1,5 +1,5 @@
 #include "mkql_node_builder.h"
-#include "mkql_node_printer.h" 
+#include "mkql_node_printer.h"
 
 #include <util/generic/algorithm.h>
 
@@ -88,7 +88,7 @@ TDataType* UnpackOptionalData(TRuntimeNode data, bool& isOptional) {
 
 TDataType* UnpackOptionalData(TType* type, bool& isOptional) {
     auto unpackedType = UnpackOptional(type, isOptional);
-    MKQL_ENSURE(unpackedType->IsData(), 
+    MKQL_ENSURE(unpackedType->IsData(),
         "Expected data or optional of data, actual: " << PrintNode(type, true));
 
     return static_cast<TDataType*>(unpackedType);

@@ -24,9 +24,9 @@
 #include <util/system/thread.h>
 #include <util/thread/lfqueue.h>
 
-#include <deque> 
+#include <deque>
 #include <utility>
- 
+
 #ifdef NO_ERROR
 #undef NO_ERROR
 #endif

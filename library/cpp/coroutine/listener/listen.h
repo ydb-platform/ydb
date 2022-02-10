@@ -74,7 +74,7 @@ public:
             const NAddr::IRemoteAddr* Remote;
             const NAddr::IRemoteAddr* Local;
         };
- 
+
         virtual void OnAccept(const TAccept&) {
         }
 

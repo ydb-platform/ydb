@@ -1,14 +1,14 @@
-#pragma once 
- 
+#pragma once
+
 #include "codegen.h"
 #include "defs.h"
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
- 
-namespace NBus { 
-//////////////////////////////////////////////////////////////// 
-/// \brief Status of message communication 
- 
+
+namespace NBus {
+////////////////////////////////////////////////////////////////
+/// \brief Status of message communication
+
 #define MESSAGE_STATUS_MAP(XX)                                                                 \
     XX(MESSAGE_OK, "OK")                                                                       \
     XX(MESSAGE_CONNECT_FAILED, "Connect failed")                                               \
@@ -26,20 +26,20 @@ namespace NBus {
     XX(MESSAGE_SERVICE_TOOMANY, "Locator failed to resolve address")                           \
     XX(MESSAGE_SHUTDOWN, "Failure because of either session or connection shutdown")           \
     XX(MESSAGE_DONT_ASK, "Internal error code used by modules")
- 
+
     enum EMessageStatus {
         MESSAGE_STATUS_MAP(ENUM_VALUE_GEN_NO_VALUE)
             MESSAGE_STATUS_COUNT
     };
- 
+
     ENUM_TO_STRING(EMessageStatus, MESSAGE_STATUS_MAP)
- 
+
     const char* MessageStatusDescription(EMessageStatus);
- 
+
     static inline const char* GetMessageStatus(EMessageStatus status) {
         return ToCString(status);
     }
- 
+
     // For lwtrace
     struct TMessageStatusField {
         typedef int TStoreType;
@@ -53,5 +53,5 @@ namespace NBus {
             return value;
         }
     };
- 
-} // ns 
+
+} // ns

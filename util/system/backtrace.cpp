@@ -236,15 +236,15 @@ TResolvedSymbol ResolveSymbol(void* sym, char*, size_t) {
 void FormatBackTrace(IOutputStream* out, void* const* backtrace, size_t backtraceSize) {
     char tmpBuf[1024];
 
-    for (size_t i = 0; i < backtraceSize; ++i) { 
-        TResolvedSymbol rs = ResolveSymbol(backtrace[i], tmpBuf, sizeof(tmpBuf)); 
+    for (size_t i = 0; i < backtraceSize; ++i) {
+        TResolvedSymbol rs = ResolveSymbol(backtrace[i], tmpBuf, sizeof(tmpBuf));
 
         *out << rs.Name << "+" << ((ptrdiff_t)backtrace[i] - (ptrdiff_t)rs.NearestSymbol) << " (" << Hex((ptrdiff_t)backtrace[i], HF_ADDX) << ')' << '\n';
     }
 }
 
 TFormatBackTraceFn FormatBackTraceFn = FormatBackTrace;
- 
+
 TFormatBackTraceFn SetFormatBackTraceFn(TFormatBackTraceFn f) {
     TFormatBackTraceFn prevFn = FormatBackTraceFn;
     FormatBackTraceFn = f;
@@ -264,25 +264,25 @@ TFormatBackTraceFn GetFormatBackTraceFn() {
 void PrintBackTrace() {
     FormatBackTrace(&Cerr);
 }
- 
-TBackTrace::TBackTrace() 
-    : Size(0) 
+
+TBackTrace::TBackTrace()
+    : Size(0)
 {
 }
- 
-void TBackTrace::Capture() { 
-    Size = BackTrace(Data, CAPACITY); 
-} 
- 
+
+void TBackTrace::Capture() {
+    Size = BackTrace(Data, CAPACITY);
+}
+
 void TBackTrace::PrintTo(IOutputStream& out) const {
     FormatBackTraceFn(&out, Data, Size);
-} 
- 
+}
+
 TString TBackTrace::PrintToString() const {
-    TStringStream ss; 
-    PrintTo(ss); 
+    TStringStream ss;
+    PrintTo(ss);
     return ss.Str();
-} 
+}
 
 size_t TBackTrace::size() const {
     return Size;

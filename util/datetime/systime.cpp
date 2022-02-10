@@ -1,10 +1,10 @@
 #include "systime.h"
- 
+
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
 
-#ifdef _win_ 
- 
+#ifdef _win_
+
 void FileTimeToTimeval(const FILETIME* ft, timeval* tv) {
     const i64 NANOINTERVAL = LL(116444736000000000); // Number of 100 nanosecond units from 1/1/1601 to 1/1/1970
     union {
@@ -34,7 +34,7 @@ tm* localtime_r(const time_t* clock, tm* result) {
 }
 
 tm* gmtime_r(const time_t* clock, tm* result) {
-    return gmtime_s(result, clock) == 0 ? result : 0; 
+    return gmtime_s(result, clock) == 0 ? result : 0;
 }
 
 char* ctime_r(const time_t* clock, char* buf) {

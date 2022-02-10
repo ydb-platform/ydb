@@ -1,14 +1,14 @@
-#include "mon_page.h" 
- 
-using namespace NMonitoring; 
- 
+#include "mon_page.h"
+
+using namespace NMonitoring;
+
 IMonPage::IMonPage(const TString& path, const TString& title)
-    : Path(path) 
-    , Title(title) 
-{ 
+    : Path(path)
+    , Title(title)
+{
     Y_VERIFY(!Path.StartsWith('/'));
     Y_VERIFY(!Path.EndsWith('/'));
-} 
+}
 
 void IMonPage::OutputNavBar(IOutputStream& out) {
     TVector<const IMonPage*> parents;

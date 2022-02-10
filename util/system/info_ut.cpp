@@ -7,7 +7,7 @@ class TSysInfoTest: public TTestBase {
     UNIT_TEST(TestNumberOfCpus)
     UNIT_TEST(TestGetPageSize)
     UNIT_TEST_SUITE_END();
- 
+
 private:
     inline void TestNumberOfCpus() {
         UNIT_ASSERT(NSystemInfo::NumberOfCpus() > 0);

@@ -1,14 +1,14 @@
 #include "page.h"
 #include "encode.h"
- 
+
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/string/split.h>
 #include <util/system/tls.h>
- 
-using namespace NMonitoring; 
- 
+
+using namespace NMonitoring;
+
 namespace {
     Y_POD_STATIC_THREAD(TDynamicCounters*)
     currentCounters(nullptr);
@@ -74,10 +74,10 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
 
     if (!format) {
         currentCounters = counters.Get();
-        THtmlMonPage::Output(request); 
+        THtmlMonPage::Output(request);
         currentCounters = nullptr;
         return;
-    } 
+    }
 
     IOutputStream& out = request.Output();
     if (*format == EFormat::JSON) {
@@ -93,7 +93,7 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     auto encoder = CreateEncoder(&out, *format, visibility);
     counters->Accept(TString(), TString(), *encoder);
     out.Flush();
-} 
+}
 
 void TDynamicCountersPage::HandleAbsentSubgroup(IMonHttpRequest& request) {
     if (UnknownGroupPolicy == EUnknownGroupPolicy::Error) {
@@ -110,7 +110,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
     HTML(out) {
         DIV() {
             out << "<a href='" << request.GetPath() << "/json'>Counters as JSON</a>";
-            out << " for <a href='https://wiki.yandex-team.ru/solomon/'>Solomon</a>"; 
+            out << " for <a href='https://wiki.yandex-team.ru/solomon/'>Solomon</a>";
         }
 
         H5() {
@@ -131,10 +131,10 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
         }
     }
 }
- 
+
 void TDynamicCountersPage::OutputText(IOutputStream& out, IMonHttpRequest&) {
     currentCounters->OutputPlainText(out);
-} 
+}
 
 void TDynamicCountersPage::SetUnknownGroupPolicy(EUnknownGroupPolicy value) {
     UnknownGroupPolicy = value;

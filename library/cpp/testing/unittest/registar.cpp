@@ -5,10 +5,10 @@
 
 #include <util/generic/bt_exception.h>
 #include <util/random/fast.h>
-#include <util/string/printf.h> 
+#include <util/string/printf.h>
 #include <util/system/backtrace.h>
 #include <util/system/guard.h>
-#include <util/system/tls.h> 
+#include <util/system/tls.h>
 #include <util/system/error.h>
 #include <util/string/cast.h>
 
@@ -27,13 +27,13 @@ TString NUnitTest::RandomString(size_t len, ui32 seed) {
 
     return ret;
 }
- 
+
 Y_POD_STATIC_THREAD(bool)
 UnittestThread;
 Y_POD_STATIC_THREAD(NUnitTest::TTestBase*)
 currentTest;
 ::NUnitTest::TRaiseErrorHandler RaiseErrorHandler;
- 
+
 void ::NUnitTest::NPrivate::RaiseError(const char* what, const TString& msg, bool fatalFailure) {
     Y_VERIFY(UnittestThread, "%s in non-unittest thread with message:\n%s", what, msg.data());
     Y_VERIFY(GetCurrentTest());
@@ -51,17 +51,17 @@ void ::NUnitTest::NPrivate::RaiseError(const char* what, const TString& msg, boo
         return;
     }
     throw TAssertException();
-} 
- 
+}
+
 void ::NUnitTest::SetRaiseErrorHandler(::NUnitTest::TRaiseErrorHandler handler) {
     Y_VERIFY(UnittestThread);
     RaiseErrorHandler = std::move(handler);
 }
 
-void ::NUnitTest::NPrivate::SetUnittestThread(bool unittestThread) { 
+void ::NUnitTest::NPrivate::SetUnittestThread(bool unittestThread) {
     Y_VERIFY(UnittestThread != unittestThread, "state check");
-    UnittestThread = unittestThread; 
-} 
+    UnittestThread = unittestThread;
+}
 
 void ::NUnitTest::NPrivate::SetCurrentTest(TTestBase* test) {
     Y_VERIFY(!test || !currentTest, "state check");

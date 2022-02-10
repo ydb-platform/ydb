@@ -30,32 +30,32 @@ TTimer::~TTimer() {
     Cerr << Message_.Str();
 }
 
-static ui64 ManuallySetCyclesPerSecond = 0; 
- 
-static ui64 GetCyclesPerSecond() { 
+static ui64 ManuallySetCyclesPerSecond = 0;
+
+static ui64 GetCyclesPerSecond() {
     if (ManuallySetCyclesPerSecond != 0) {
-        return ManuallySetCyclesPerSecond; 
+        return ManuallySetCyclesPerSecond;
     } else {
         return NHPTimer::GetCyclesPerSecond();
     }
 }
 
-void SetCyclesPerSecond(ui64 cycles) { 
-    ManuallySetCyclesPerSecond = cycles; 
-} 
- 
-ui64 GetCyclesPerMillisecond() { 
-    return GetCyclesPerSecond() / 1000; 
-} 
- 
-TDuration CyclesToDuration(ui64 cycles) { 
-    return TDuration::MicroSeconds(cycles * 1000000 / GetCyclesPerSecond()); 
-} 
- 
-ui64 DurationToCycles(TDuration duration) { 
-    return duration.MicroSeconds() * GetCyclesPerSecond() / 1000000; 
-} 
- 
+void SetCyclesPerSecond(ui64 cycles) {
+    ManuallySetCyclesPerSecond = cycles;
+}
+
+ui64 GetCyclesPerMillisecond() {
+    return GetCyclesPerSecond() / 1000;
+}
+
+TDuration CyclesToDuration(ui64 cycles) {
+    return TDuration::MicroSeconds(cycles * 1000000 / GetCyclesPerSecond());
+}
+
+ui64 DurationToCycles(TDuration duration) {
+    return duration.MicroSeconds() * GetCyclesPerSecond() / 1000000;
+}
+
 TPrecisionTimer::TPrecisionTimer()
     : Start(::GetCycleCount())
 {

@@ -37,8 +37,8 @@ static inline void PrintAddr(IOutputStream& out, const IRemoteAddr& addr) {
             if (printPort) {
                 out << "[" << buf << "]"
                     << ":" << InetToHost(sa->sin6_port);
-            } else { 
-                out << buf; 
+            } else {
+                out << buf;
             }
 
             break;
@@ -55,33 +55,33 @@ static inline void PrintAddr(IOutputStream& out, const IRemoteAddr& addr) {
 #endif
 
         default: {
-            size_t len = addr.Len(); 
- 
+            size_t len = addr.Len();
+
             const char* b = (const char*)a;
-            const char* e = b + len; 
+            const char* e = b + len;
 
-            bool allZeros = true; 
-            for (size_t i = 0; i < len; ++i) { 
-                if (b[i] != 0) { 
-                    allZeros = false; 
-                    break; 
-                } 
-            } 
+            bool allZeros = true;
+            for (size_t i = 0; i < len; ++i) {
+                if (b[i] != 0) {
+                    allZeros = false;
+                    break;
+                }
+            }
 
-            if (allZeros) { 
-                out << "(raw all zeros)"; 
-            } else { 
+            if (allZeros) {
+                out << "(raw all zeros)";
+            } else {
                 out << "(raw " << (int)a->sa_family << " ";
- 
-                while (b != e) { 
-                    //just print raw bytes 
-                    out << (int)*b++; 
-                    if (b != e) { 
-                        out << " "; 
-                    } 
-                } 
- 
-                out << ")"; 
+
+                while (b != e) {
+                    //just print raw bytes
+                    out << (int)*b++;
+                    if (b != e) {
+                        out << " ";
+                    }
+                }
+
+                out << ")";
             }
 
             break;

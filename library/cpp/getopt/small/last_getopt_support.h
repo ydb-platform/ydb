@@ -1,36 +1,36 @@
 #pragma once
- 
+
 #include <util/string/cast.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/generic/utility.h> 
+#include <util/generic/utility.h>
 #include <util/generic/yexception.h>
- 
-namespace NLastGetopt { 
+
+namespace NLastGetopt {
     class TOpt;
     class TOpts;
     class TOptsParser;
     class TOptsParseResult;
- 
+
     /// base of all getopt exceptions
     class TException: public yexception {
     };
- 
+
     /// TOpts configuration is incorrect
     class TConfException: public TException {
     };
- 
+
     /// User passed incorrect arguments, parsing failed
     /// Note: use `throw TUsageException()` instead of `ythrow TUsageException()` to prevent appearence of stacktrace
     /// and location of the `ythrow` statment in error messages.
     class TUsageException: public TException {
     };
- 
+
     struct IOptHandler {
         virtual void HandleOpt(const TOptsParser* parser) = 0;
         virtual ~IOptHandler() = default;
     };
- 
+
     namespace NPrivate {
         template <typename TpFunc>
         class THandlerFunctor0
@@ -94,7 +94,7 @@ namespace NLastGetopt {
         class TStoreResultFunctor {
         private:
             T* Target_;
- 
+
         public:
             TStoreResultFunctor(T* target)
                 : Target_(target)
@@ -128,7 +128,7 @@ namespace NLastGetopt {
         class TStoreValueFunctor {
             T* Target;
             const TpVal Value;
- 
+
         public:
             template <typename TpArg>
             TStoreValueFunctor(T* target, const TpArg& value)
@@ -155,7 +155,7 @@ namespace NLastGetopt {
         inline TStringBuf OptFromStringImpl<TStringBuf>(const TStringBuf& value) {
             return value;
         }
- 
+
         template <>
         inline const char* OptFromStringImpl<const char*>(const TStringBuf& value) {
             return value.data();

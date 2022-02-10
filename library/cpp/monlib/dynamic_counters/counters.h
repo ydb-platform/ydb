@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/monlib/counters/counters.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
@@ -7,14 +7,14 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/cast.h>
-#include <util/generic/map.h> 
-#include <util/generic/ptr.h> 
+#include <util/generic/map.h>
+#include <util/generic/ptr.h>
 #include <util/string/cast.h>
 #include <util/system/rwlock.h>
 
 #include <functional>
- 
-namespace NMonitoring { 
+
+namespace NMonitoring {
     struct TCounterForPtr;
     struct TDynamicCounters;
     struct ICountableConsumer;
@@ -44,8 +44,8 @@ namespace NMonitoring {
 
     protected:
         EVisibility Visibility_{EVisibility::Unspecified};
-    }; 
- 
+    };
+
     inline bool IsVisible(TCountableBase::EVisibility myLevel, TCountableBase::EVisibility consumerLevel) {
         if (myLevel == TCountableBase::EVisibility::Private
             && consumerLevel != TCountableBase::EVisibility::Private) {
@@ -114,8 +114,8 @@ namespace NMonitoring {
         using TDeprecatedCounter::operator-=;
         using TDeprecatedCounter::operator=;
         using TDeprecatedCounter::operator!;
-    }; 
- 
+    };
+
     struct TExpiringCounter: public TCounterForPtr {
         explicit TExpiringCounter(bool derivative = false, EVisibility vis = EVisibility::Public)
             : TCounterForPtr{derivative}
@@ -185,34 +185,34 @@ namespace NMonitoring {
 #pragma warning(pop)
 #endif
 
-    struct TDynamicCounters; 
- 
-    typedef TIntrusivePtr<TDynamicCounters> TDynamicCounterPtr; 
-    struct TDynamicCounters: public TCountableBase { 
-    public: 
+    struct TDynamicCounters;
+
+    typedef TIntrusivePtr<TDynamicCounters> TDynamicCounterPtr;
+    struct TDynamicCounters: public TCountableBase {
+    public:
         using TCounterPtr = TIntrusivePtr<TCounterForPtr>;
         using TOnLookupPtr = void (*)(const char *methodName, const TString &name, const TString &value);
- 
-    private: 
+
+    private:
         TRWMutex Lock;
         TCounterPtr LookupCounter; // Counts lookups by name
         TOnLookupPtr OnLookup = nullptr; // Called on each lookup if not nullptr, intended for lightweight tracing.
- 
-        typedef TIntrusivePtr<TCountableBase> TCountablePtr; 
- 
-        struct TChildId { 
+
+        typedef TIntrusivePtr<TCountableBase> TCountablePtr;
+
+        struct TChildId {
             TString LabelName;
             TString LabelValue;
             TChildId() {
             }
             TChildId(const TString& labelName, const TString& labelValue)
-                : LabelName(labelName) 
-                , LabelValue(labelValue) 
-            { 
-            } 
+                : LabelName(labelName)
+                , LabelValue(labelValue)
+            {
+            }
             auto AsTuple() const {
                 return std::make_tuple(std::cref(LabelName), std::cref(LabelValue));
-            } 
+            }
             friend bool operator <(const TChildId& x, const TChildId& y) {
                 return x.AsTuple() < y.AsTuple();
             }
@@ -222,8 +222,8 @@ namespace NMonitoring {
             friend bool operator !=(const TChildId& x, const TChildId& y) {
                 return x.AsTuple() != y.AsTuple();
             }
-        }; 
- 
+        };
+
         using TCounters = TMap<TChildId, TCountablePtr>;
         using TLabels = TVector<TChildId>;
 
@@ -231,7 +231,7 @@ namespace NMonitoring {
         mutable TCounters Counters;
         mutable TAtomic ExpiringCount = 0;
 
-    public: 
+    public:
         TDynamicCounters(TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public);
 
         TDynamicCounters(const TDynamicCounters *origin)
@@ -240,7 +240,7 @@ namespace NMonitoring {
         {}
 
         ~TDynamicCounters() override;
- 
+
         // This counter allows to track lookups by name within the whole subtree
         void SetLookupCounter(TCounterPtr lookupCounter) {
             TWriteGuard g(Lock);
@@ -328,7 +328,7 @@ namespace NMonitoring {
 
         void RemoveCounter(const TString &value);
         void RemoveNamedCounter(const TString& name, const TString &value);
- 
+
         TIntrusivePtr<TDynamicCounters> GetSubgroup(const TString& name, const TString& value);
         TIntrusivePtr<TDynamicCounters> FindSubgroup(const TString& name, const TString& value) const;
         void RemoveSubgroup(const TString& name, const TString& value);
@@ -348,12 +348,12 @@ namespace NMonitoring {
 
         // mostly for debugging purposes -- use accept with encoder instead
         void OutputPlainText(IOutputStream& os, const TString& indent = "") const;
- 
+
         void Accept(
             const TString& labelName, const TString& labelValue,
             ICountableConsumer& consumer) const override;
 
-    private: 
+    private:
         TCounters Resign() {
             TCounters counters;
             TWriteGuard g(Lock);
@@ -369,6 +369,6 @@ namespace NMonitoring {
 
         template <class TCounterType>
         TCountablePtr FindNamedCounterImpl(const TString& name, const TString& value) const;
-    }; 
- 
-} 
+    };
+
+}

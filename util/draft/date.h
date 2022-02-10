@@ -11,9 +11,9 @@
 
 time_t GetDateStart(time_t ts);
 
-// Local date (without time zone) 
+// Local date (without time zone)
 class TDate {
-    // XXX: wrong: must store number of days since epoch 
+    // XXX: wrong: must store number of days since epoch
     time_t Timestamp;
 
 public:
@@ -22,7 +22,7 @@ public:
     {
     }
 
-    // XXX: wrong. Should be replace with two methods: TodayGmt() and TodayLocal() 
+    // XXX: wrong. Should be replace with two methods: TodayGmt() and TodayLocal()
     static TDate Today() {
         return TDate(time(nullptr));
     }

@@ -24,7 +24,7 @@ namespace __cxxabiv1 {
     #endif
 #endif
 
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/generic/yexception.h>
 
 #define FROM_CONTEXT_IMPL
@@ -37,7 +37,7 @@ void ITrampoLine::DoRunNaked() {
     try {
         DoRun();
     } catch (...) {
-        Cerr << "Uncaught exception in coroutine: " << CurrentExceptionMessage() << "\n"; 
+        Cerr << "Uncaught exception in coroutine: " << CurrentExceptionMessage() << "\n";
     }
 
     abort();

@@ -53,19 +53,19 @@ public:
     bool Add(const TSymbol* key, size_t keylen, const TData& value);
     bool Add(const TKeyBuf& key, const TData& value) {
         return Add(key.data(), key.size(), value);
-    } 
+    }
 
-    // add already serialized data 
+    // add already serialized data
     bool AddPtr(const TSymbol* key, size_t keylen, const char* data);
     bool AddPtr(const TKeyBuf& key, const char* data) {
         return AddPtr(key.data(), key.size(), data);
-    } 
- 
+    }
+
     bool AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& filename);
     bool AddSubtreeInFile(const TKeyBuf& key, const TString& filename) {
         return AddSubtreeInFile(key.data(), key.size(), filename);
-    } 
- 
+    }
+
     bool AddSubtreeInBuffer(const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer);
     bool AddSubtreeInBuffer(const TKeyBuf& key, TArrayWithSizeHolder<char>&& buffer) {
         return AddSubtreeInBuffer(key.data(), key.size(), std::move(buffer));
@@ -74,8 +74,8 @@ public:
     bool Find(const TSymbol* key, size_t keylen, TData* value) const;
     bool Find(const TKeyBuf& key, TData* value = nullptr) const {
         return Find(key.data(), key.size(), value);
-    } 
- 
+    }
+
     bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixLen, TData* value = nullptr) const;
     bool FindLongestPrefix(const TKeyBuf& key, size_t* prefixLen, TData* value = nullptr) const {
         return FindLongestPrefix(key.data(), key.size(), prefixLen, value);
@@ -85,8 +85,8 @@ public:
     size_t SaveAndDestroy(IOutputStream& os);
     size_t SaveToFile(const TString& fileName) const {
         TFixedBufferFileOutput out(fileName);
-        return Save(out); 
-    } 
+        return Save(out);
+    }
 
     void Clear(); // Returns all memory to the system and resets the builder state.
 

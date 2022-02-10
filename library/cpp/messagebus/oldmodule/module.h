@@ -40,7 +40,7 @@
 /// error (not MESSAGE_OK)
 
 #include "startsession.h"
- 
+
 #include <library/cpp/messagebus/ybus.h>
 
 #include <util/generic/noncopyable.h>
@@ -62,7 +62,7 @@ namespace NBus {
     protected:
         typedef TJobHandler (TBusModule::*TBusHandlerPtr)(TBusJob* job, TBusMessage* mess);
         TBusHandlerPtr MyPtr;
- 
+
     public:
         template <class B>
         TJobHandler(TJobHandler (B::*fptr)(TBusJob* job, TBusMessage* mess)) {
@@ -107,7 +107,7 @@ namespace NBus {
         TNetAddr Addr;
         bool UseAddr;
         bool OneWay;
- 
+
     private:
         TJobState(TReplyHandler handler,
                   EMessageStatus status,
@@ -126,7 +126,7 @@ namespace NBus {
                 Addr = *addr;
             }
             UseAddr = !!addr;
-        } 
+        }
 
     public:
         TString GetStatus(unsigned flags);
@@ -140,10 +140,10 @@ namespace NBus {
     /// Maintains internal state of document in computation
     class TBusJob {
         TObjectCounter<TBusJob> ObjectCounter;
- 
+
     private:
         void CheckThreadCurrentJob();
- 
+
     public:
         /// given a module and starter message
         TBusJob(TBusModule* module, TBusMessage* message);
@@ -154,9 +154,9 @@ namespace NBus {
         TBusMessage* GetMessage() const {
             return Message;
         }
- 
+
         TNetAddr GetPeerAddrNetAddr() const;
- 
+
         /// send message to any other session or application
         /// If addr is set then use it as destination.
         void Send(TBusMessageAutoPtr mess, TBusClientSession* session, TReplyHandler rhandler, size_t maxRetries, const TNetAddr& addr);
@@ -164,7 +164,7 @@ namespace NBus {
 
         void SendOneWayTo(TBusMessageAutoPtr req, TBusClientSession* session, const TNetAddr& addr);
         void SendOneWayWithLocator(TBusMessageAutoPtr req, TBusClientSession* session);
- 
+
         /// send reply to the starter message
         virtual void SendReply(TBusMessageAutoPtr reply);
 
@@ -186,7 +186,7 @@ namespace NBus {
             Y_ASSERT(stateVec);
             *stateVec = Pending;
         }
- 
+
         /// helper function to find state of previously sent messages
         template <class MessageType>
         TJobState* GetState(int* startFrom = nullptr) {
@@ -275,18 +275,18 @@ namespace NBus {
         void Sleep(int milliSeconds);
 
         void CallJobHandlerOnly();
- 
+
     private:
         bool CallJobHandler();
         void DoCallReplyHandler(TJobState&);
         /// send out all Pending jobs, failed sends will be migrated to Finished
         bool SendPending();
         bool AnyPendingToSend();
- 
+
     public:
         /// helper to call from OnReply() and OnError()
         int CallReplyHandler(EMessageStatus status, TBusMessage* mess, TBusMessage* reply);
- 
+
     public:
         TJobHandler Handler;   ///< job handler to be executed within next CallJobHandler()
         EMessageStatus Status; ///< set != MESSAGE_OK if job should terminate asap
@@ -315,48 +315,48 @@ namespace NBus {
 
     ////////////////////////////////////////////////////////////////////
     /// \brief Classes to implement basic module functionality
- 
+
     class IJobFactory {
     protected:
         virtual ~IJobFactory() {
         }
- 
+
     public:
         /// job factory method, override to create custom jobs
         virtual TBusJob* CreateJobInstance(TBusMessage* message) = 0;
-    }; 
- 
+    };
+
     struct TBusModuleConfig {
         unsigned StarterMaxInFlight;
- 
+
         struct TSecret {
             TDuration SchedulePeriod;
- 
+
             TSecret();
         };
         TSecret Secret;
- 
+
         TBusModuleConfig();
     };
- 
+
     namespace NPrivate {
         struct TBusModuleInternal: public TAtomicRefCount<TBusModuleInternal> {
             virtual TVector<TBusClientSessionPtr> GetClientSessionsInternal() = 0;
             virtual TVector<TBusServerSessionPtr> GetServerSessionsInternal() = 0;
             virtual TBusMessageQueue* GetQueue() = 0;
- 
+
             virtual TString GetNameInternal() = 0;
- 
+
             virtual TString GetStatusSingleLine() = 0;
- 
+
             virtual ~TBusModuleInternal() {
             }
         };
     }
- 
+
     class TBusModule: public IJobFactory, TNonCopyable {
         friend class TBusJob;
- 
+
         TObjectCounter<TBusModule> ObjectCounter;
 
         TIntrusivePtr<NPrivate::TBusModuleImpl> Impl;
@@ -365,7 +365,7 @@ namespace NBus {
         /// Each module should have a name which is used as protocol service
         TBusModule(const char* name);
         ~TBusModule() override;
- 
+
         const char* GetName() const;
 
         void SetConfig(const TBusModuleConfig& config);
@@ -377,17 +377,17 @@ namespace NBus {
         virtual bool StartInput();
         /// called when application is about to exit
         virtual bool Shutdown();
- 
+
         // this default implementation just creates TBusJob object
         TBusJob* CreateJobInstance(TBusMessage* message) override;
 
         EMessageStatus StartJob(TAutoPtr<TBusMessage> message);
- 
+
         /// creates private sessions, calls CreateExtSession(), should be called before StartInput()
         bool CreatePrivateSessions(TBusMessageQueue* queue);
- 
+
         virtual void OnClientConnectionEvent(const TClientConnectionEvent& event);
- 
+
     public:
         /// entry point into module, first function to call
         virtual TJobHandler Start(TBusJob* job, TBusMessage* mess) = 0;

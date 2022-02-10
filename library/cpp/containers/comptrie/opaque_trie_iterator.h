@@ -10,7 +10,7 @@
 
 namespace NCompactTrie {
     class ILeafSkipper;
- 
+
     class TFork { // Auxiliary class for a branching point in the iterator
     public:
         TNode Node;

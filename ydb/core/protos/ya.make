@@ -1,4 +1,4 @@
-PROTO_LIBRARY() 
+PROTO_LIBRARY()
 
 GRPC()
 
@@ -76,7 +76,7 @@ SRCS(
     minikql_engine.proto
     msgbus.proto
     msgbus_health.proto
-    msgbus_kv.proto 
+    msgbus_kv.proto
     msgbus_pq.proto
     netclassifier.proto
     node_broker.proto

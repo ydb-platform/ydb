@@ -8,7 +8,7 @@ TActorId MakeTxProxyID() {
 
 }
 
- 
+
 TString NKikimr::TEvTxUserProxy::TEvProposeTransactionStatus::ToString() const {
     TStringStream str;
     str << "{TEvProposeTransactionStatus";

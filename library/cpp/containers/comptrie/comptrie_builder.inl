@@ -28,54 +28,54 @@ template <class T, class D, class S>
 class TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl {
 protected:
     TMemoryPool Pool;
-    size_t PayloadSize; 
-    THolder<TFixedSizeAllocator> NodeAllocator; 
+    size_t PayloadSize;
+    THolder<TFixedSizeAllocator> NodeAllocator;
     class TNode;
-    class TArc; 
+    class TArc;
     TNode* Root;
     TCompactTrieBuilderFlags Flags;
     size_t EntryCount;
     size_t NodeCount;
-    TPacker Packer; 
+    TPacker Packer;
 
-    enum EPayload { 
-        DATA_ABSENT, 
-        DATA_INSIDE, 
-        DATA_MALLOCED, 
-        DATA_IN_MEMPOOL, 
-    }; 
- 
+    enum EPayload {
+        DATA_ABSENT,
+        DATA_INSIDE,
+        DATA_MALLOCED,
+        DATA_IN_MEMPOOL,
+    };
+
 protected:
     void ConvertSymbolArrayToChar(const TSymbol* key, size_t keylen, TTempBuf& buf, size_t ckeylen) const;
-    void NodeLinkTo(TNode* thiz, const TBlob& label, TNode* node); 
+    void NodeLinkTo(TNode* thiz, const TBlob& label, TNode* node);
     TNode* NodeForwardAdd(TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount);
     bool FindEntryImpl(const char* key, size_t keylen, TData* value) const;
     bool FindLongestPrefixImpl(const char* keyptr, size_t keylen, size_t* prefixLen, TData* value) const;
 
-    size_t NodeMeasureSubtree(TNode* thiz) const; 
+    size_t NodeMeasureSubtree(TNode* thiz) const;
     ui64 NodeSaveSubtree(TNode* thiz, IOutputStream& os) const;
     ui64 NodeSaveSubtreeAndDestroy(TNode* thiz, IOutputStream& osy);
-    void NodeBufferSubtree(TNode* thiz); 
- 
-    size_t NodeMeasureLeafValue(TNode* thiz) const; 
+    void NodeBufferSubtree(TNode* thiz);
+
+    size_t NodeMeasureLeafValue(TNode* thiz) const;
     ui64 NodeSaveLeafValue(TNode* thiz, IOutputStream& os) const;
- 
+
     virtual ui64 ArcMeasure(const TArc* thiz, size_t leftsize, size_t rightsize) const;
- 
+
     virtual ui64 ArcSaveSelf(const TArc* thiz, IOutputStream& os) const;
     ui64 ArcSave(const TArc* thiz, IOutputStream& os) const;
     ui64 ArcSaveAndDestroy(const TArc* thiz, IOutputStream& os);
- 
+
 public:
     TCompactTrieBuilderImpl(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc);
     virtual ~TCompactTrieBuilderImpl();
 
-    void DestroyNode(TNode* node); 
-    void NodeReleasePayload(TNode* thiz); 
- 
+    void DestroyNode(TNode* node);
+    void NodeReleasePayload(TNode* thiz);
+
     char* AddEntryForData(const TSymbol* key, size_t keylen, size_t dataLen, bool& isNewAddition);
     TNode* AddEntryForSomething(const TSymbol* key, size_t keylen, bool& isNewAddition);
- 
+
     bool AddEntry(const TSymbol* key, size_t keylen, const TData& value);
     bool AddEntryPtr(const TSymbol* key, size_t keylen, const char* value);
     bool AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& fileName);
@@ -98,38 +98,38 @@ public:
 };
 
 template <class T, class D, class S>
-class TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TArc { 
+class TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TArc {
 public:
-    TBlob Label; 
-    TNode* Node; 
-    mutable size_t LeftOffset; 
-    mutable size_t RightOffset; 
+    TBlob Label;
+    TNode* Node;
+    mutable size_t LeftOffset;
+    mutable size_t RightOffset;
 
-    TArc(const TBlob& lbl, TNode* nd); 
-}; 
+    TArc(const TBlob& lbl, TNode* nd);
+};
 
-template <class T, class D, class S> 
-class TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode { 
-public: 
-    typedef typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl TBuilderImpl; 
-    typedef typename TBuilderImpl::TArc TArc; 
+template <class T, class D, class S>
+class TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode {
+public:
+    typedef typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl TBuilderImpl;
+    typedef typename TBuilderImpl::TArc TArc;
 
-    struct ISubtree { 
+    struct ISubtree {
         virtual ~ISubtree() = default;
-        virtual bool IsLast() const = 0; 
-        virtual ui64 Measure(const TBuilderImpl* builder) const = 0; 
+        virtual bool IsLast() const = 0;
+        virtual ui64 Measure(const TBuilderImpl* builder) const = 0;
         virtual ui64 Save(const TBuilderImpl* builder, IOutputStream& os) const = 0;
         virtual ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) = 0;
-        virtual void Destroy(TBuilderImpl*) { } 
+        virtual void Destroy(TBuilderImpl*) { }
 
         // Tries to find key in subtree.
         // Returns next node to find the key in (to avoid recursive calls)
         // If it has end result, writes it to @value and @result arguments and returns nullptr
         virtual const TNode* Find(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const = 0;
         virtual const TNode* FindLongestPrefix(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const = 0;
-    }; 
- 
-    class TArcSet: public ISubtree, public TCompactVector<TArc> { 
+    };
+
+    class TArcSet: public ISubtree, public TCompactVector<TArc> {
     public:
         typedef typename TCompactVector<TArc>::iterator iterator;
         typedef typename TCompactVector<TArc>::const_iterator const_iterator;
@@ -141,35 +141,35 @@ public:
         iterator Find(char ch);
         const_iterator Find(char ch) const;
         void Add(const TBlob& s, TNode* node);
- 
+
         bool IsLast() const override {
-            return this->Empty(); 
-        } 
- 
+            return this->Empty();
+        }
+
         const TNode* Find(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override;
         const TNode* FindLongestPrefix(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override {
             return Find(key, value, result, packer);
         }
 
         ui64 Measure(const TBuilderImpl* builder) const override {
-            return MeasureRange(builder, 0, this->size()); 
-        } 
- 
-        ui64 MeasureRange(const TBuilderImpl* builder, size_t from, size_t to) const { 
-            if (from >= to) 
-                return 0; 
- 
-            size_t median = (from + to) / 2; 
+            return MeasureRange(builder, 0, this->size());
+        }
+
+        ui64 MeasureRange(const TBuilderImpl* builder, size_t from, size_t to) const {
+            if (from >= to)
+                return 0;
+
+            size_t median = (from + to) / 2;
             size_t leftsize = (size_t)MeasureRange(builder, from, median);
             size_t rightsize = (size_t)MeasureRange(builder, median + 1, to);
- 
-            return builder->ArcMeasure(&(*this)[median], leftsize, rightsize); 
-        } 
- 
+
+            return builder->ArcMeasure(&(*this)[median], leftsize, rightsize);
+        }
+
         ui64 Save(const TBuilderImpl* builder, IOutputStream& os) const override {
-            return SaveRange(builder, 0, this->size(), os); 
-        } 
- 
+            return SaveRange(builder, 0, this->size(), os);
+        }
+
         ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override {
             ui64 result = SaveRangeAndDestroy(builder, 0, this->size(), os);
             Destroy(builder);
@@ -177,17 +177,17 @@ public:
         }
 
         ui64 SaveRange(const TBuilderImpl* builder, size_t from, size_t to, IOutputStream& os) const {
-            if (from >= to) 
-                return 0; 
- 
-            size_t median = (from + to) / 2; 
- 
-            ui64 written = builder->ArcSave(&(*this)[median], os); 
-            written += SaveRange(builder, from, median, os); 
-            written += SaveRange(builder, median + 1, to, os); 
-            return written; 
-        } 
- 
+            if (from >= to)
+                return 0;
+
+            size_t median = (from + to) / 2;
+
+            ui64 written = builder->ArcSave(&(*this)[median], os);
+            written += SaveRange(builder, from, median, os);
+            written += SaveRange(builder, median + 1, to, os);
+            return written;
+        }
+
         ui64 SaveRangeAndDestroy(TBuilderImpl* builder, size_t from, size_t to, IOutputStream& os) {
             if (from >= to)
                 return 0;
@@ -201,30 +201,30 @@ public:
         }
 
         void Destroy(TBuilderImpl* builder) override {
-            // Delete all nodes down the stream. 
-            for (iterator it = this->begin(); it != this->end(); ++it) { 
-                builder->DestroyNode(it->Node); 
-            } 
-            this->clear(); 
-        } 
- 
+            // Delete all nodes down the stream.
+            for (iterator it = this->begin(); it != this->end(); ++it) {
+                builder->DestroyNode(it->Node);
+            }
+            this->clear();
+        }
+
         ~TArcSet() override {
             Y_ASSERT(this->empty());
-        } 
- 
+        }
+
     };
 
-    struct TBufferedSubtree: public ISubtree { 
-        TArrayWithSizeHolder<char> Buffer; 
- 
+    struct TBufferedSubtree: public ISubtree {
+        TArrayWithSizeHolder<char> Buffer;
+
         TBufferedSubtree() {
             Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
         }
 
         bool IsLast() const override {
-            return Buffer.Empty(); 
-        } 
- 
+            return Buffer.Empty();
+        }
+
         const TNode* Find(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override {
             if (Buffer.Empty()) {
                 result = false;
@@ -252,45 +252,45 @@ public:
         }
 
         ui64 Measure(const TBuilderImpl*) const override {
-            return Buffer.Size(); 
-        } 
- 
+            return Buffer.Size();
+        }
+
         ui64 Save(const TBuilderImpl*, IOutputStream& os) const override {
-            os.Write(Buffer.Get(), Buffer.Size()); 
-            return Buffer.Size(); 
-        } 
+            os.Write(Buffer.Get(), Buffer.Size());
+            return Buffer.Size();
+        }
 
         ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override {
             ui64 result = Save(builder, os);
             TArrayWithSizeHolder<char>().Swap(Buffer);
             return result;
         }
-    }; 
- 
-    struct TSubtreeInFile: public ISubtree { 
-        struct TData { 
+    };
+
+    struct TSubtreeInFile: public ISubtree {
+        struct TData {
             TString FileName;
-            ui64 Size; 
-        }; 
-        THolder<TData> Data; 
- 
+            ui64 Size;
+        };
+        THolder<TData> Data;
+
         TSubtreeInFile(const TString& fileName) {
-            // stupid API 
-            TFile file(fileName, RdOnly); 
-            i64 size = file.GetLength(); 
-            if (size < 0) 
-                ythrow yexception() << "unable to get file " << fileName.Quote() << " size for unknown reason"; 
-            Data.Reset(new TData); 
-            Data->FileName = fileName; 
-            Data->Size = size; 
+            // stupid API
+            TFile file(fileName, RdOnly);
+            i64 size = file.GetLength();
+            if (size < 0)
+                ythrow yexception() << "unable to get file " << fileName.Quote() << " size for unknown reason";
+            Data.Reset(new TData);
+            Data->FileName = fileName;
+            Data->Size = size;
 
             Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
-        } 
- 
+        }
+
         bool IsLast() const override {
-            return Data->Size == 0; 
-        } 
- 
+            return Data->Size == 0;
+        }
+
         const TNode* Find(TStringBuf& key, typename TCompactTrieBuilder::TData* value, bool& result, const TPacker& packer) const override {
             if (!Data) {
                 result = false;
@@ -317,104 +317,104 @@ public:
         }
 
         ui64 Measure(const TBuilderImpl*) const override {
-            return Data->Size; 
-        } 
- 
+            return Data->Size;
+        }
+
         ui64 Save(const TBuilderImpl*, IOutputStream& os) const override {
             TUnbufferedFileInput is(Data->FileName);
-            ui64 written = TransferData(&is, &os); 
-            if (written != Data->Size) 
-                ythrow yexception() << "file " << Data->FileName.Quote() << " size changed"; 
-            return written; 
-        } 
+            ui64 written = TransferData(&is, &os);
+            if (written != Data->Size)
+                ythrow yexception() << "file " << Data->FileName.Quote() << " size changed";
+            return written;
+        }
 
         ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override {
             return Save(builder, os);
         }
-    }; 
- 
-    union { 
+    };
+
+    union {
         char ArcsData[CONSTEXPR_MAX3(sizeof(TArcSet), sizeof(TBufferedSubtree), sizeof(TSubtreeInFile))];
         union {
             void* Data1;
             long long int Data2;
         } Aligner;
-    }; 
- 
-    inline ISubtree* Subtree() { 
-        return reinterpret_cast<ISubtree*>(ArcsData); 
-    } 
- 
-    inline const ISubtree* Subtree() const { 
-        return reinterpret_cast<const ISubtree*>(ArcsData); 
-    } 
- 
-    EPayload PayloadType; 
+    };
+
+    inline ISubtree* Subtree() {
+        return reinterpret_cast<ISubtree*>(ArcsData);
+    }
+
+    inline const ISubtree* Subtree() const {
+        return reinterpret_cast<const ISubtree*>(ArcsData);
+    }
+
+    EPayload PayloadType;
 
     inline const char* PayloadPtr() const {
         return ((const char*) this) + sizeof(TNode);
     }
 
-    inline char* PayloadPtr() { 
-        return ((char*) this) + sizeof(TNode); 
-    } 
- 
-    // *Payload() 
+    inline char* PayloadPtr() {
+        return ((char*) this) + sizeof(TNode);
+    }
+
+    // *Payload()
     inline const char*& PayloadAsPtr() const {
         const char** payload = (const char**) PayloadPtr();
         return *payload;
     }
 
-    inline char*& PayloadAsPtr() { 
-        char** payload = (char**) PayloadPtr(); 
-        return *payload; 
-    } 
- 
+    inline char*& PayloadAsPtr() {
+        char** payload = (char**) PayloadPtr();
+        return *payload;
+    }
+
     inline const char* GetPayload() const {
-        switch (PayloadType) { 
-        case DATA_INSIDE: 
-            return PayloadPtr(); 
-        case DATA_MALLOCED: 
-        case DATA_IN_MEMPOOL: 
-            return PayloadAsPtr(); 
+        switch (PayloadType) {
+        case DATA_INSIDE:
+            return PayloadPtr();
+        case DATA_MALLOCED:
+        case DATA_IN_MEMPOOL:
+            return PayloadAsPtr();
         case DATA_ABSENT:
-        default: 
-            abort(); 
-        } 
-    } 
- 
+        default:
+            abort();
+        }
+    }
+
     inline char* GetPayload() {
         const TNode* thiz = this;
         return const_cast<char*>(thiz->GetPayload()); // const_cast is to avoid copy-paste style
     }
 
-    bool IsFinal() const { 
-        return PayloadType != DATA_ABSENT; 
-    } 
- 
-    bool IsLast() const { 
-        return Subtree()->IsLast(); 
-    } 
- 
-    inline void* operator new(size_t, TFixedSizeAllocator& pool) { 
-        return pool.Allocate(); 
-    } 
- 
-    inline void operator delete(void* ptr, TFixedSizeAllocator& pool) noexcept {
-        pool.Release(ptr); 
-    } 
- 
-    TNode() 
-        : PayloadType(DATA_ABSENT) 
-    { 
-        new (Subtree()) TArcSet; 
-    } 
+    bool IsFinal() const {
+        return PayloadType != DATA_ABSENT;
+    }
 
-    ~TNode() { 
-        Subtree()->~ISubtree(); 
+    bool IsLast() const {
+        return Subtree()->IsLast();
+    }
+
+    inline void* operator new(size_t, TFixedSizeAllocator& pool) {
+        return pool.Allocate();
+    }
+
+    inline void operator delete(void* ptr, TFixedSizeAllocator& pool) noexcept {
+        pool.Release(ptr);
+    }
+
+    TNode()
+        : PayloadType(DATA_ABSENT)
+    {
+        new (Subtree()) TArcSet;
+    }
+
+    ~TNode() {
+        Subtree()->~ISubtree();
         Y_ASSERT(PayloadType == DATA_ABSENT);
-    } 
- 
+    }
+
 };
 
 // TCompactTrieBuilder
@@ -433,14 +433,14 @@ bool TCompactTrieBuilder<T, D, S>::Add(const TSymbol* key, size_t keylen, const 
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::AddPtr(const TSymbol* key, size_t keylen, const char* value) {
     return Impl->AddEntryPtr(key, keylen, value);
-} 
- 
-template <class T, class D, class S> 
+}
+
+template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& fileName) {
     return Impl->AddSubtreeInFile(key, keylen, fileName);
-} 
- 
-template <class T, class D, class S> 
+}
+
+template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::AddSubtreeInBuffer(const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer) {
     return Impl->AddSubtreeInBuffer(key, keylen, std::move(buffer));
 }
@@ -486,19 +486,19 @@ size_t TCompactTrieBuilder<T, D, S>::GetNodeCount() const {
 template <class T, class D, class S>
 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TCompactTrieBuilderImpl(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc)
     : Pool(1000000, TMemoryPool::TLinearGrow::Instance(), alloc)
-    , PayloadSize(sizeof(void*)) // XXX: find better value 
+    , PayloadSize(sizeof(void*)) // XXX: find better value
     , NodeAllocator(new TFixedSizeAllocator(sizeof(TNode) + PayloadSize, alloc))
     , Flags(flags)
     , EntryCount(0)
     , NodeCount(1)
-    , Packer(packer) 
+    , Packer(packer)
 {
-    Root = new (*NodeAllocator) TNode; 
+    Root = new (*NodeAllocator) TNode;
 }
 
 template <class T, class D, class S>
 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::~TCompactTrieBuilderImpl() {
-    DestroyNode(Root); 
+    DestroyNode(Root);
 }
 
 template <class T, class D, class S>
@@ -519,67 +519,67 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ConvertSymbolArrayTo
 }
 
 template <class T, class D, class S>
-void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::DestroyNode(TNode* thiz) { 
-    thiz->Subtree()->Destroy(this); 
-    NodeReleasePayload(thiz); 
-    thiz->~TNode(); 
-    NodeAllocator->Release(thiz); 
-} 
- 
-template <class T, class D, class S> 
-void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeReleasePayload(TNode* thiz) { 
-    switch (thiz->PayloadType) { 
-    case DATA_ABSENT: 
-    case DATA_INSIDE: 
-    case DATA_IN_MEMPOOL: 
-        break; 
-    case DATA_MALLOCED: 
-        delete[] thiz->PayloadAsPtr(); 
-        break; 
-    default: 
-        abort(); 
-    } 
-    thiz->PayloadType = DATA_ABSENT; 
-} 
- 
-template <class T, class D, class S> 
+void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::DestroyNode(TNode* thiz) {
+    thiz->Subtree()->Destroy(this);
+    NodeReleasePayload(thiz);
+    thiz->~TNode();
+    NodeAllocator->Release(thiz);
+}
+
+template <class T, class D, class S>
+void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeReleasePayload(TNode* thiz) {
+    switch (thiz->PayloadType) {
+    case DATA_ABSENT:
+    case DATA_INSIDE:
+    case DATA_IN_MEMPOOL:
+        break;
+    case DATA_MALLOCED:
+        delete[] thiz->PayloadAsPtr();
+        break;
+    default:
+        abort();
+    }
+    thiz->PayloadType = DATA_ABSENT;
+}
+
+template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntry(
                 const TSymbol* key, size_t keylen, const TData& value) {
-    size_t datalen = Packer.MeasureLeaf(value); 
- 
+    size_t datalen = Packer.MeasureLeaf(value);
+
     bool isNewAddition = false;
     char* place = AddEntryForData(key, keylen, datalen, isNewAddition);
-    Packer.PackLeaf(place, value, datalen); 
+    Packer.PackLeaf(place, value, datalen);
     return isNewAddition;
-} 
- 
-template <class T, class D, class S> 
+}
+
+template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryPtr(
                 const TSymbol* key, size_t keylen, const char* value) {
-    size_t datalen = Packer.SkipLeaf(value); 
- 
+    size_t datalen = Packer.SkipLeaf(value);
+
     bool isNewAddition = false;
     char* place = AddEntryForData(key, keylen, datalen, isNewAddition);
-    memcpy(place, value, datalen); 
+    memcpy(place, value, datalen);
     return isNewAddition;
-} 
- 
-template <class T, class D, class S> 
+}
+
+template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddSubtreeInFile(
                 const TSymbol* key, size_t keylen, const TString& fileName) {
-    typedef typename TNode::ISubtree ISubtree; 
-    typedef typename TNode::TSubtreeInFile TSubtreeInFile; 
- 
+    typedef typename TNode::ISubtree ISubtree;
+    typedef typename TNode::TSubtreeInFile TSubtreeInFile;
+
     bool isNewAddition = false;
     TNode* node = AddEntryForSomething(key, keylen, isNewAddition);
-    node->Subtree()->Destroy(this); 
-    node->Subtree()->~ISubtree(); 
- 
-    new (node->Subtree()) TSubtreeInFile(fileName); 
+    node->Subtree()->Destroy(this);
+    node->Subtree()->~ISubtree();
+
+    new (node->Subtree()) TSubtreeInFile(fileName);
     return isNewAddition;
-} 
- 
-template <class T, class D, class S> 
+}
+
+template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddSubtreeInBuffer(
         const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer) {
 
@@ -613,10 +613,10 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
     // Special case of empty key: replace it by 1-byte "\0" key.
     size_t ckeylen = keylen ? keylen * sizeof(TSymbol) : 1;
     TTempBuf ckeybuf(ckeylen);
-    if (keylen == 0) { 
+    if (keylen == 0) {
         ckeybuf.Append("\0", 1);
-    } else { 
-        ConvertSymbolArrayToChar(key, keylen, ckeybuf, ckeylen); 
+    } else {
+        ConvertSymbolArrayToChar(key, keylen, ckeybuf, ckeylen);
     }
 
     char* ckey = ckeybuf.Data();
@@ -638,24 +638,24 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
     isNewAddition = (current->PayloadType == DATA_ABSENT);
     if ((Flags & CTBF_UNIQUE) && !isNewAddition)
         ythrow yexception() << "Duplicate key";
-    return current; 
-} 
+    return current;
+}
 
-template <class T, class D, class S> 
+template <class T, class D, class S>
 char* TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::AddEntryForData(const TSymbol* key, size_t keylen,
         size_t datalen, bool& isNewAddition) {
     TNode* current = AddEntryForSomething(key, keylen, isNewAddition);
-    NodeReleasePayload(current); 
-    if (datalen <= PayloadSize) { 
-        current->PayloadType = DATA_INSIDE; 
+    NodeReleasePayload(current);
+    if (datalen <= PayloadSize) {
+        current->PayloadType = DATA_INSIDE;
     } else if (Flags & CTBF_PREFIX_GROUPED) {
-        current->PayloadType = DATA_MALLOCED; 
-        current->PayloadAsPtr() = new char[datalen]; 
-    } else { 
-        current->PayloadType = DATA_IN_MEMPOOL; 
-        current->PayloadAsPtr() = (char*) Pool.Allocate(datalen); // XXX: allocate unaligned 
-    } 
-    return current->GetPayload(); 
+        current->PayloadType = DATA_MALLOCED;
+        current->PayloadAsPtr() = new char[datalen];
+    } else {
+        current->PayloadType = DATA_IN_MEMPOOL;
+        current->PayloadAsPtr() = (char*) Pool.Allocate(datalen); // XXX: allocate unaligned
+    }
+    return current->GetPayload();
 }
 
 template <class T, class D, class S>
@@ -741,19 +741,19 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefixImp
 
 template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Clear() {
-    DestroyNode(Root); 
+    DestroyNode(Root);
     Pool.Clear();
-    NodeAllocator.Reset(new TFixedSizeAllocator(sizeof(TNode) + PayloadSize, TDefaultAllocator::Instance())); 
-    Root = new (*NodeAllocator) TNode; 
+    NodeAllocator.Reset(new TFixedSizeAllocator(sizeof(TNode) + PayloadSize, TDefaultAllocator::Instance()));
+    Root = new (*NodeAllocator) TNode;
     EntryCount = 0;
     NodeCount = 1;
 }
 
 template <class T, class D, class S>
 size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Save(IOutputStream& os) const {
-    const size_t len = NodeMeasureSubtree(Root); 
-    if (len != NodeSaveSubtree(Root, os)) 
-        ythrow yexception() << "something wrong"; 
+    const size_t len = NodeMeasureSubtree(Root);
+    if (len != NodeSaveSubtree(Root, os))
+        ythrow yexception() << "something wrong";
 
     return len;
 }
@@ -781,13 +781,13 @@ template <class T, class D, class S>
 typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
                 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeForwardAdd(
                                 TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount) {
-    typename TNode::TArcSet* arcSet = dynamic_cast<typename TNode::TArcSet*>(thiz->Subtree()); 
+    typename TNode::TArcSet* arcSet = dynamic_cast<typename TNode::TArcSet*>(thiz->Subtree());
     if (!arcSet)
         ythrow yexception() << "Bad input order - expected input strings to be prefix-grouped.";
 
-    typename TNode::TArcSet::iterator it = arcSet->Find(*label); 
+    typename TNode::TArcSet::iterator it = arcSet->Find(*label);
 
-    if (it != arcSet->end()) { 
+    if (it != arcSet->end()) {
         const char* arcLabel = it->Label.AsCharPtr();
         size_t arcLabelLen = it->Label.Length();
 
@@ -797,8 +797,8 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
 
         if (passed < arcLabelLen) {
             (*nodeCount)++;
-            TNode* node = new (*NodeAllocator) TNode(); 
-            NodeLinkTo(node, it->Label.SubBlob(passed, arcLabelLen), it->Node); 
+            TNode* node = new (*NodeAllocator) TNode();
+            NodeLinkTo(node, it->Label.SubBlob(passed, arcLabelLen), it->Node);
 
             it->Node = node;
             it->Label = it->Label.SubBlob(passed);
@@ -811,26 +811,26 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
 }
 
 template <class T, class D, class S>
-void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeLinkTo(TNode* thiz, const TBlob& label, TNode* node) { 
-    typename TNode::TArcSet* arcSet = dynamic_cast<typename TNode::TArcSet*>(thiz->Subtree()); 
-    if (!arcSet) 
+void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeLinkTo(TNode* thiz, const TBlob& label, TNode* node) {
+    typename TNode::TArcSet* arcSet = dynamic_cast<typename TNode::TArcSet*>(thiz->Subtree());
+    if (!arcSet)
         ythrow yexception() << "Bad input order - expected input strings to be prefix-grouped.";
 
     // Buffer the node at the last arc
     if ((Flags & CTBF_PREFIX_GROUPED) && !arcSet->empty())
-        NodeBufferSubtree(arcSet->back().Node); 
+        NodeBufferSubtree(arcSet->back().Node);
 
-    arcSet->Add(label, node); 
+    arcSet->Add(label, node);
 }
 
 template <class T, class D, class S>
-size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeMeasureSubtree(TNode* thiz) const { 
+size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeMeasureSubtree(TNode* thiz) const {
     return (size_t)thiz->Subtree()->Measure(this);
 }
 
 template <class T, class D, class S>
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveSubtree(TNode* thiz, IOutputStream& os) const {
-    return thiz->Subtree()->Save(this, os); 
+    return thiz->Subtree()->Save(this, os);
 }
 
 template <class T, class D, class S>
@@ -839,52 +839,52 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveSubtreeAndDe
 }
 
 template <class T, class D, class S>
-void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeBufferSubtree(TNode* thiz) { 
-    typedef typename TNode::TArcSet TArcSet; 
- 
-    TArcSet* arcSet = dynamic_cast<TArcSet*>(thiz->Subtree()); 
-    if (!arcSet) 
+void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeBufferSubtree(TNode* thiz) {
+    typedef typename TNode::TArcSet TArcSet;
+
+    TArcSet* arcSet = dynamic_cast<TArcSet*>(thiz->Subtree());
+    if (!arcSet)
         return;
 
     size_t bufferLength = (size_t)arcSet->Measure(this);
-    TArrayWithSizeHolder<char> buffer; 
-    buffer.Resize(bufferLength); 
+    TArrayWithSizeHolder<char> buffer;
+    buffer.Resize(bufferLength);
 
-    TMemoryOutput bufout(buffer.Get(), buffer.Size()); 
- 
-    ui64 written = arcSet->Save(this, bufout); 
+    TMemoryOutput bufout(buffer.Get(), buffer.Size());
+
+    ui64 written = arcSet->Save(this, bufout);
     Y_ASSERT(written == bufferLength);
- 
-    arcSet->Destroy(this); 
-    arcSet->~TArcSet(); 
 
-    typename TNode::TBufferedSubtree* bufferedArcSet = new (thiz->Subtree()) typename TNode::TBufferedSubtree; 
- 
-    bufferedArcSet->Buffer.Swap(buffer); 
+    arcSet->Destroy(this);
+    arcSet->~TArcSet();
+
+    typename TNode::TBufferedSubtree* bufferedArcSet = new (thiz->Subtree()) typename TNode::TBufferedSubtree;
+
+    bufferedArcSet->Buffer.Swap(buffer);
 }
 
 template <class T, class D, class S>
-size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeMeasureLeafValue(TNode* thiz) const { 
-    if (!thiz->IsFinal()) 
+size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeMeasureLeafValue(TNode* thiz) const {
+    if (!thiz->IsFinal())
         return 0;
 
-    return Packer.SkipLeaf(thiz->GetPayload()); 
+    return Packer.SkipLeaf(thiz->GetPayload());
 }
 
 template <class T, class D, class S>
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveLeafValue(TNode* thiz, IOutputStream& os) const {
-    if (!thiz->IsFinal()) 
-        return 0; 
+    if (!thiz->IsFinal())
+        return 0;
 
-    size_t len = Packer.SkipLeaf(thiz->GetPayload()); 
-    os.Write(thiz->GetPayload(), len); 
-    return len; 
+    size_t len = Packer.SkipLeaf(thiz->GetPayload());
+    os.Write(thiz->GetPayload(), len);
+    return len;
 }
 
 // TCompactTrieBuilder::TCompactTrieBuilderImpl::TNode::TArc
 
 template <class T, class D, class S>
-TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TArc::TArc(const TBlob& lbl, TNode* nd) 
+TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TArc::TArc(const TBlob& lbl, TNode* nd)
     : Label(lbl)
     , Node(nd)
     , LeftOffset(0)
@@ -896,11 +896,11 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcMeasure(
                 const TArc* thiz, size_t leftsize, size_t rightsize) const {
     using namespace NCompactTrie;
 
-    size_t coresize = 2 + NodeMeasureLeafValue(thiz->Node); // 2 == (char + flags) 
-    size_t treesize = NodeMeasureSubtree(thiz->Node); 
+    size_t coresize = 2 + NodeMeasureLeafValue(thiz->Node); // 2 == (char + flags)
+    size_t treesize = NodeMeasureSubtree(thiz->Node);
 
-    if (thiz->Label.Length() > 0) 
-        treesize += 2 * (thiz->Label.Length() - 1); 
+    if (thiz->Label.Length() > 0)
+        treesize += 2 * (thiz->Label.Length() - 1);
 
     // Triple measurements are needed because the space needed to store the offset
     // shall be added to the offset itself. Hence three iterations.
@@ -912,8 +912,8 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcMeasure(
     rightoffsetsize = rightsize ? MeasureOffset(coresize + treesize + leftsize + leftoffsetsize + rightoffsetsize) : 0;
 
     coresize += leftoffsetsize + rightoffsetsize;
-    thiz->LeftOffset = leftsize ? coresize + treesize : 0; 
-    thiz->RightOffset = rightsize ? coresize + treesize + leftsize : 0; 
+    thiz->LeftOffset = leftsize ? coresize + treesize : 0;
+    thiz->RightOffset = rightsize ? coresize + treesize + leftsize : 0;
 
     return coresize + treesize + leftsize + rightsize;
 }
@@ -922,12 +922,12 @@ template <class T, class D, class S>
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveSelf(const TArc* thiz, IOutputStream& os) const {
     using namespace NCompactTrie;
 
-    ui64 written = 0; 
- 
-    size_t leftoffsetsize = MeasureOffset(thiz->LeftOffset); 
-    size_t rightoffsetsize = MeasureOffset(thiz->RightOffset); 
+    ui64 written = 0;
 
-    size_t labelLen = thiz->Label.Length(); 
+    size_t leftoffsetsize = MeasureOffset(thiz->LeftOffset);
+    size_t rightoffsetsize = MeasureOffset(thiz->RightOffset);
+
+    size_t labelLen = thiz->Label.Length();
 
     for (size_t i = 0; i < labelLen; ++i) {
         char flags = 0;
@@ -938,34 +938,34 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveSelf(const TA
         }
 
         if (i == labelLen-1) {
-            if (thiz->Node->IsFinal()) 
+            if (thiz->Node->IsFinal())
                flags |= MT_FINAL;
 
-            if (!thiz->Node->IsLast()) 
+            if (!thiz->Node->IsLast())
                 flags |= MT_NEXT;
         } else {
             flags |= MT_NEXT;
         }
 
         os.Write(&flags, 1);
-        os.Write(&thiz->Label.AsCharPtr()[i], 1); 
-        written += 2; 
+        os.Write(&thiz->Label.AsCharPtr()[i], 1);
+        written += 2;
 
         if (i == 0) {
-            written += ArcSaveOffset(thiz->LeftOffset, os); 
-            written += ArcSaveOffset(thiz->RightOffset, os); 
+            written += ArcSaveOffset(thiz->LeftOffset, os);
+            written += ArcSaveOffset(thiz->RightOffset, os);
         }
     }
 
-    written += NodeSaveLeafValue(thiz->Node, os); 
+    written += NodeSaveLeafValue(thiz->Node, os);
     return written;
 }
 
 template <class T, class D, class S>
 ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSave(const TArc* thiz, IOutputStream& os) const {
     ui64 written =  ArcSaveSelf(thiz, os);
-    written += NodeSaveSubtree(thiz->Node, os); 
-    return written; 
+    written += NodeSaveSubtree(thiz->Node, os);
+    return written;
 }
 
 template <class T, class D, class S>

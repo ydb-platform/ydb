@@ -1,19 +1,19 @@
 #include "start.h"
- 
+
 #include "all.h"
 
 #include <google/protobuf/text_format.h>
- 
-#include <util/generic/singleton.h> 
-#include <util/stream/file.h> 
+
+#include <util/generic/singleton.h>
+#include <util/stream/file.h>
 #include <util/stream/output.h>
 #include <util/system/env.h>
- 
+
 #include <stdlib.h>
- 
-using namespace NLWTrace; 
- 
-namespace { 
+
+using namespace NLWTrace;
+
+namespace {
     struct TTraceManagerHolder {
         TManager TraceManager;
         TTraceManagerHolder()
@@ -42,16 +42,16 @@ void NLWTrace::StartLwtraceFromEnv() {
 
     TString path = GetEnv("LWTRACE");
     if (!path) {
-        return; 
-    } 
- 
-    try { 
+        return;
+    }
+
+    try {
         TraceFromEnv(path);
-    } catch (...) { 
-        Cerr << "failed to load lwtrace script: " << CurrentExceptionMessage() << "\n"; 
-        abort(); 
-    } 
-} 
+    } catch (...) {
+        Cerr << "failed to load lwtrace script: " << CurrentExceptionMessage() << "\n";
+        abort();
+    }
+}
 
 void NLWTrace::StartLwtraceFromEnv(std::function<void(TManager&)> prepare) {
     TString path = GetEnv("LWTRACE");

@@ -1,19 +1,19 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(g:messagebus)
- 
-SRCS( 
-    html_output.cpp 
-    www.cpp 
-) 
- 
-ARCHIVE( 
-    NAME www_static.inc 
-    messagebus.js 
-    bus-ico.png 
-) 
- 
-PEERDIR( 
+
+SRCS(
+    html_output.cpp
+    www.cpp
+)
+
+ARCHIVE(
+    NAME www_static.inc
+    messagebus.js
+    bus-ico.png
+)
+
+PEERDIR(
     library/cpp/archive
     library/cpp/cgiparam
     library/cpp/html/pcdata
@@ -24,6 +24,6 @@ PEERDIR(
     library/cpp/messagebus/oldmodule
     library/cpp/monlib/deprecated/json
     library/cpp/uri
-) 
- 
-END() 
+)
+
+END()

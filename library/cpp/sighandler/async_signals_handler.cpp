@@ -4,11 +4,11 @@
 
 #if !defined(_win_)
 
-#include <errno.h> 
+#include <errno.h>
 #include <fcntl.h>
-#include <signal.h> 
+#include <signal.h>
 #include <string.h>
- 
+
 #include <unistd.h>
 
 #if defined(_linux_)
@@ -191,7 +191,7 @@ namespace {
     TAsyncSignalsHandler* SIGNALS_HANDLER = nullptr;
 }
 
-void SetAsyncSignalHandler(int signum, TAutoPtr<TEventHandler> handler) { 
+void SetAsyncSignalHandler(int signum, TAutoPtr<TEventHandler> handler) {
     static TAtomic lock;
 
     if (Y_UNLIKELY(SIGNALS_HANDLER == nullptr)) {
@@ -214,12 +214,12 @@ void SetAsyncSignalHandler(int, TAutoPtr<TEventHandler>) {
 
 #endif
 
-namespace { 
+namespace {
     template <typename TFunc>
     class TFunctionEventHandler: public TEventHandler {
         TFunc Func;
 
-    public: 
+    public:
         TFunctionEventHandler(TFunc func) {
             if (func)
                 Func = func;
@@ -230,14 +230,14 @@ namespace {
                 Func(signum);
             }
 
-            return 0; 
-        } 
-    }; 
-} 
- 
-void SetAsyncSignalHandler(int signum, void (*handler)(int)) { 
+            return 0;
+        }
+    };
+}
+
+void SetAsyncSignalHandler(int signum, void (*handler)(int)) {
     SetAsyncSignalHandler(signum, new TFunctionEventHandler<void (*)(int)>(handler));
-} 
+}
 
 void SetAsyncSignalFunction(int signum, std::function<void(int)> func) {
     typedef std::function<void(int)> TFunc;

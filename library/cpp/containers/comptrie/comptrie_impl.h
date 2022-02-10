@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 
 #ifndef COMPTRIE_DATA_CHECK
 #define COMPTRIE_DATA_CHECK 1
@@ -11,10 +11,10 @@
 namespace NCompactTrie {
     const char MT_FINAL = '\x80';
     const char MT_NEXT = '\x40';
-    const char MT_SIZEMASK = '\x07'; 
+    const char MT_SIZEMASK = '\x07';
     const size_t MT_LEFTSHIFT = 3;
-    const size_t MT_RIGHTSHIFT = 0; 
- 
+    const size_t MT_RIGHTSHIFT = 0;
+
     Y_FORCE_INLINE size_t UnpackOffset(const char* p, size_t len);
     size_t MeasureOffset(size_t offset);
     size_t PackOffset(char* buffer, size_t offset);
@@ -52,20 +52,20 @@ namespace NCompactTrie {
     void ShowProgress(size_t n); // just print dots
 }
 
-namespace NCompTriePrivate { 
-    template <typename TChar> 
-    struct TStringForChar { 
-    }; 
- 
-    template <> 
-    struct TStringForChar<char> { 
+namespace NCompTriePrivate {
+    template <typename TChar>
+    struct TStringForChar {
+    };
+
+    template <>
+    struct TStringForChar<char> {
         typedef TString TResult;
-    }; 
- 
-    template <> 
-    struct TStringForChar<wchar16> { 
+    };
+
+    template <>
+    struct TStringForChar<wchar16> {
         typedef TUtf16String TResult;
-    }; 
+    };
 
     template <>
     struct TStringForChar<wchar32> {
@@ -73,7 +73,7 @@ namespace NCompTriePrivate {
     };
 
 }
- 
+
 namespace NCompTriePrivate {
     struct TCmp {
         template <class T>
@@ -88,18 +88,18 @@ namespace NCompTriePrivate {
     };
 }
 
-namespace NCompactTrie { 
+namespace NCompactTrie {
     static inline ui64 ArcSaveOffset(size_t offset, IOutputStream& os) {
-        using namespace NCompactTrie; 
- 
-        if (!offset) 
-            return 0; 
- 
-        char buf[16]; 
-        size_t len = PackOffset(buf, offset); 
-        os.Write(buf, len); 
-        return len; 
-    } 
+        using namespace NCompactTrie;
+
+        if (!offset)
+            return 0;
+
+        char buf[16];
+        size_t len = PackOffset(buf, offset);
+        os.Write(buf, len);
+        return len;
+    }
 
     // Unpack the offset to the next node. The encoding scheme can store offsets
     // up to 7 bytes; whether they fit into size_t is another issue.
@@ -218,4 +218,4 @@ namespace NCompactTrie {
         return false;
     }
 
-} 
+}

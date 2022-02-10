@@ -1400,12 +1400,12 @@ ConvertToMiniKQL(TExprContainer::TPtr expr,
             promise.SetValue(convRes);
         }
     } catch (const TNodeException& ex) {
-        // TODO: pass backtrace 
+        // TODO: pass backtrace
         TConvertResult convRes;
         convRes.Errors.AddIssue(expr->Context.GetPosition(ex.Pos()), ex.what());
         promise.SetValue(convRes);
     } catch (const yexception& ex) { // Catch TProgramBuilder exceptions.
-        // TODO: pass backtrace 
+        // TODO: pass backtrace
         TConvertResult convRes;
         convRes.Errors.AddIssue(NYql::ExceptionToIssue(ex));
         promise.SetValue(convRes);

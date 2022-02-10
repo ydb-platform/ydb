@@ -32,33 +32,33 @@
 #include <library/cpp/messagebus/test/helper/wait_for.h>
 
 #include <library/cpp/messagebus/ybus.h>
- 
+
 using namespace std;
-using namespace NBus; 
-using namespace NBus::NPrivate; 
-using namespace NBus::NTest; 
+using namespace NBus;
+using namespace NBus::NPrivate;
+using namespace NBus::NTest;
 
 ////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////
 /// \brief Reply-less client and handler
 struct NullClient : TBusClientHandlerError {
-    TNetAddr ServerAddr; 
- 
-    TBusMessageQueuePtr Queue; 
-    TBusClientSessionPtr Session; 
-    TExampleProtocol Proto; 
+    TNetAddr ServerAddr;
+
+    TBusMessageQueuePtr Queue;
+    TBusClientSessionPtr Session;
+    TExampleProtocol Proto;
 
     /// constructor creates instances of protocol and session
-    NullClient(const TNetAddr& serverAddr, const TBusClientSessionConfig& sessionConfig = TBusClientSessionConfig()) 
-        : ServerAddr(serverAddr) 
-    { 
-        UNIT_ASSERT(serverAddr.GetPort() > 0); 
+    NullClient(const TNetAddr& serverAddr, const TBusClientSessionConfig& sessionConfig = TBusClientSessionConfig())
+        : ServerAddr(serverAddr)
+    {
+        UNIT_ASSERT(serverAddr.GetPort() > 0);
 
         /// create or get instance of message queue, need one per application
         Queue = CreateMessageQueue();
 
         /// register source/client session
-        Session = TBusClientSession::Create(&Proto, this, sessionConfig, Queue); 
+        Session = TBusClientSession::Create(&Proto, this, sessionConfig, Queue);
 
         /// register service, announce to clients via LocatorService
         Session->RegisterService("localhost");
@@ -74,8 +74,8 @@ struct NullClient : TBusClientHandlerError {
 
         for (int i = 0; i < batch; i++) {
             TExampleRequest* mess = new TExampleRequest(&Proto.RequestCount);
-            mess->Data = "TADA"; 
-            Session->SendMessageOneWay(mess, &ServerAddr); 
+            mess->Data = "TADA";
+            Session->SendMessageOneWay(mess, &ServerAddr);
         }
     }
 
@@ -85,12 +85,12 @@ struct NullClient : TBusClientHandlerError {
 
 /////////////////////////////////////////////////////////////////////
 /// \brief Reply-less server and handler
-class NullServer: public TBusServerHandlerError { 
+class NullServer: public TBusServerHandlerError {
 public:
     /// session object to maintian
-    TBusMessageQueuePtr Queue; 
-    TBusServerSessionPtr Session; 
-    TExampleProtocol Proto; 
+    TBusMessageQueuePtr Queue;
+    TBusServerSessionPtr Session;
+    TExampleProtocol Proto;
 
 public:
     TAtomic NumMessages;
@@ -102,8 +102,8 @@ public:
         Queue = CreateMessageQueue();
 
         /// register destination session
-        TBusServerSessionConfig sessionConfig; 
-        Session = TBusServerSession::Create(&Proto, this, sessionConfig, Queue); 
+        TBusServerSessionConfig sessionConfig;
+        Session = TBusServerSession::Create(&Proto, this, sessionConfig, Queue);
     }
 
     ~NullServer() override {
@@ -117,7 +117,7 @@ public:
         Y_ASSERT(fmess->Data == "TADA");
 
         /// tell session to forget this message and never expect any reply
-        mess.ForgetRequest(); 
+        mess.ForgetRequest();
 
         AtomicIncrement(NumMessages);
     }
@@ -131,125 +131,125 @@ public:
 
 Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
     Y_UNIT_TEST(Simple) {
-        TObjectCountCheck objectCountCheck; 
- 
-        NullServer server; 
-        NullClient client(TNetAddr("localhost", server.Session->GetActualListenPort())); 
- 
-        client.Work(); 
- 
-        // wait until all client message are delivered 
+        TObjectCountCheck objectCountCheck;
+
+        NullServer server;
+        NullClient client(TNetAddr("localhost", server.Session->GetActualListenPort()));
+
+        client.Work();
+
+        // wait until all client message are delivered
         UNIT_WAIT_FOR(AtomicGet(server.NumMessages) == 10);
- 
-        // assert correct number of messages 
+
+        // assert correct number of messages
         UNIT_ASSERT_VALUES_EQUAL(AtomicGet(server.NumMessages), 10);
-        UNIT_ASSERT_VALUES_EQUAL(server.Session->GetInFlight(), 0); 
-        UNIT_ASSERT_VALUES_EQUAL(client.Session->GetInFlight(), 0); 
-    } 
- 
-    struct TMessageTooLargeClient: public NullClient { 
+        UNIT_ASSERT_VALUES_EQUAL(server.Session->GetInFlight(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(client.Session->GetInFlight(), 0);
+    }
+
+    struct TMessageTooLargeClient: public NullClient {
         TSystemEvent GotTooLarge;
- 
-        TBusClientSessionConfig Config() { 
-            TBusClientSessionConfig r; 
-            r.MaxMessageSize = 1; 
-            return r; 
-        } 
- 
-        TMessageTooLargeClient(unsigned port) 
-            : NullClient(TNetAddr("localhost", port), Config()) 
+
+        TBusClientSessionConfig Config() {
+            TBusClientSessionConfig r;
+            r.MaxMessageSize = 1;
+            return r;
+        }
+
+        TMessageTooLargeClient(unsigned port)
+            : NullClient(TNetAddr("localhost", port), Config())
         {
         }
- 
+
         ~TMessageTooLargeClient() override {
-            Session->Shutdown(); 
-        } 
- 
+            Session->Shutdown();
+        }
+
         void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
             Y_UNUSED(mess);
- 
+
             Y_VERIFY(status == MESSAGE_MESSAGE_TOO_LARGE, "wrong status: %s", ToCString(status));
- 
-            GotTooLarge.Signal(); 
-        } 
-    }; 
- 
+
+            GotTooLarge.Signal();
+        }
+    };
+
     Y_UNIT_TEST(MessageTooLargeOnClient) {
-        TObjectCountCheck objectCountCheck; 
- 
-        NullServer server; 
- 
-        TMessageTooLargeClient client(server.Session->GetActualListenPort()); 
- 
-        EMessageStatus ok = client.Session->SendMessageOneWayMove(new TExampleRequest(&client.Proto.RequestCount), &client.ServerAddr); 
-        UNIT_ASSERT_VALUES_EQUAL(MESSAGE_OK, ok); 
- 
-        client.GotTooLarge.WaitI(); 
-    } 
- 
+        TObjectCountCheck objectCountCheck;
+
+        NullServer server;
+
+        TMessageTooLargeClient client(server.Session->GetActualListenPort());
+
+        EMessageStatus ok = client.Session->SendMessageOneWayMove(new TExampleRequest(&client.Proto.RequestCount), &client.ServerAddr);
+        UNIT_ASSERT_VALUES_EQUAL(MESSAGE_OK, ok);
+
+        client.GotTooLarge.WaitI();
+    }
+
     struct TCheckTimeoutClient: public NullClient {
         ~TCheckTimeoutClient() override {
-            Session->Shutdown(); 
-        } 
- 
-        static TBusClientSessionConfig SessionConfig() { 
-            TBusClientSessionConfig sessionConfig; 
-            sessionConfig.SendTimeout = 1; 
-            sessionConfig.ConnectTimeout = 1; 
+            Session->Shutdown();
+        }
+
+        static TBusClientSessionConfig SessionConfig() {
+            TBusClientSessionConfig sessionConfig;
+            sessionConfig.SendTimeout = 1;
+            sessionConfig.ConnectTimeout = 1;
             sessionConfig.Secret.TimeoutPeriod = TDuration::MilliSeconds(10);
-            return sessionConfig; 
-        } 
- 
+            return sessionConfig;
+        }
+
         TCheckTimeoutClient(const TNetAddr& serverAddr)
             : NullClient(serverAddr, SessionConfig())
         {
         }
- 
+
         TSystemEvent GotError;
- 
-        /// message that could not be delivered 
+
+        /// message that could not be delivered
         void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
             Y_UNUSED(mess);
             Y_UNUSED(status); // TODO: check status
- 
-            GotError.Signal(); 
-        } 
-    }; 
- 
+
+            GotError.Signal();
+        }
+    };
+
     Y_UNIT_TEST(SendTimeout_Callback_NoServer) {
-        TObjectCountCheck objectCountCheck; 
- 
-        TCheckTimeoutClient client(TNetAddr("localhost", 17)); 
- 
-        EMessageStatus ok = client.Session->SendMessageOneWay(new TExampleRequest(&client.Proto.RequestCount), &client.ServerAddr); 
-        UNIT_ASSERT_EQUAL(ok, MESSAGE_OK); 
- 
-        client.GotError.WaitI(); 
-    } 
- 
+        TObjectCountCheck objectCountCheck;
+
+        TCheckTimeoutClient client(TNetAddr("localhost", 17));
+
+        EMessageStatus ok = client.Session->SendMessageOneWay(new TExampleRequest(&client.Proto.RequestCount), &client.ServerAddr);
+        UNIT_ASSERT_EQUAL(ok, MESSAGE_OK);
+
+        client.GotError.WaitI();
+    }
+
     Y_UNIT_TEST(SendTimeout_Callback_HangingServer) {
-        THangingServer server; 
- 
-        TObjectCountCheck objectCountCheck; 
- 
-        TCheckTimeoutClient client(TNetAddr("localhost", server.GetPort())); 
- 
-        bool first = true; 
-        for (;;) { 
-            EMessageStatus ok = client.Session->SendMessageOneWayMove(new TExampleRequest(&client.Proto.RequestCount), &client.ServerAddr); 
-            if (ok == MESSAGE_BUSY) { 
-                UNIT_ASSERT(!first); 
-                break; 
-            } 
-            UNIT_ASSERT_VALUES_EQUAL(ok, MESSAGE_OK); 
-            first = false; 
-        } 
- 
+        THangingServer server;
+
+        TObjectCountCheck objectCountCheck;
+
+        TCheckTimeoutClient client(TNetAddr("localhost", server.GetPort()));
+
+        bool first = true;
+        for (;;) {
+            EMessageStatus ok = client.Session->SendMessageOneWayMove(new TExampleRequest(&client.Proto.RequestCount), &client.ServerAddr);
+            if (ok == MESSAGE_BUSY) {
+                UNIT_ASSERT(!first);
+                break;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ok, MESSAGE_OK);
+            first = false;
+        }
+
         // BUGBUG: The test is buggy: the client might not get any error when sending one-way messages.
         // All the messages that the client has sent before he gets first MESSAGE_BUSY error might get
         // serailized and written to the socket buffer, so the write queue gets drained and there are
         // no messages to timeout when periodic timeout check happens.
 
-        client.GotError.WaitI(); 
-    } 
-} 
+        client.GotError.WaitI();
+    }
+}

@@ -5,17 +5,17 @@
 #include <vector>
 #include <tuple>
 
-namespace { 
-    enum ETestEnum { 
-    }; 
- 
+namespace {
+    enum ETestEnum {
+    };
+
     class TPodClass {
-    }; 
- 
+    };
+
     class TNonPodClass {
         TNonPodClass() {
         }
-    }; 
+    };
 
     class TEmptyClass {
         void operator()() const {
@@ -70,8 +70,8 @@ namespace {
     public:
         TEmptyClass Base;
     };
-} 
- 
+}
+
 #define ASSERT_SAME_TYPE(x, y)                     \
     {                                              \
         const bool x_ = std::is_same<x, y>::value; \
@@ -259,82 +259,82 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
     }
 };
 
-namespace { 
-    template <typename T> 
-    struct TTypeTraitsExpected; 
- 
-    template <> 
-    struct TTypeTraitsExpected<void> { 
-        enum { IsIntegral = false }; 
-        enum { IsArithmetic = false }; 
-        enum { IsPod = true }; 
-        enum { IsVolatile = false }; 
-        enum { IsConstant = false }; 
-        enum { IsPointer = false }; 
-        enum { IsReference = false }; 
+namespace {
+    template <typename T>
+    struct TTypeTraitsExpected;
+
+    template <>
+    struct TTypeTraitsExpected<void> {
+        enum { IsIntegral = false };
+        enum { IsArithmetic = false };
+        enum { IsPod = true };
+        enum { IsVolatile = false };
+        enum { IsConstant = false };
+        enum { IsPointer = false };
+        enum { IsReference = false };
         enum { IsLvalueReference = false };
         enum { IsRvalueReference = false };
-        enum { IsArray = false }; 
-        enum { IsClassType = false }; 
-        enum { IsVoid = true }; 
-        enum { IsEnum = false }; 
-    }; 
- 
-    template <> 
-    struct TTypeTraitsExpected<int>: public TTypeTraitsExpected<void> { 
-        enum { IsIntegral = true }; 
-        enum { IsArithmetic = true }; 
-        enum { IsVoid = false }; 
-    }; 
- 
-    template <> 
+        enum { IsArray = false };
+        enum { IsClassType = false };
+        enum { IsVoid = true };
+        enum { IsEnum = false };
+    };
+
+    template <>
+    struct TTypeTraitsExpected<int>: public TTypeTraitsExpected<void> {
+        enum { IsIntegral = true };
+        enum { IsArithmetic = true };
+        enum { IsVoid = false };
+    };
+
+    template <>
     struct TTypeTraitsExpected<size_t>: public TTypeTraitsExpected<int> {
-    }; 
- 
-    template <> 
+    };
+
+    template <>
     struct TTypeTraitsExpected<float>: public TTypeTraitsExpected<int> {
-        enum { IsIntegral = false }; 
-    }; 
- 
-    template <> 
+        enum { IsIntegral = false };
+    };
+
+    template <>
     struct TTypeTraitsExpected<long double>: public TTypeTraitsExpected<float> {
-    }; 
- 
-    template <> 
+    };
+
+    template <>
     struct TTypeTraitsExpected<const int>: public TTypeTraitsExpected<int> {
-        enum { IsConstant = true }; 
-    }; 
- 
-    template <> 
+        enum { IsConstant = true };
+    };
+
+    template <>
     struct TTypeTraitsExpected<volatile int>: public TTypeTraitsExpected<int> {
-        enum { IsVolatile = true }; 
-    }; 
- 
-    template <> 
+        enum { IsVolatile = true };
+    };
+
+    template <>
     struct TTypeTraitsExpected<ETestEnum>: public TTypeTraitsExpected<int> {
-        enum { IsIntegral = false }; 
-        enum { IsArithmetic = false }; 
-        enum { IsEnum = true }; 
-    }; 
- 
-    template <> 
+        enum { IsIntegral = false };
+        enum { IsArithmetic = false };
+        enum { IsEnum = true };
+    };
+
+    template <>
     struct TTypeTraitsExpected<TPodClass>: public TTypeTraitsExpected<void> {
-        enum { IsClassType = true }; 
-        enum { IsVoid = false }; 
-    }; 
- 
-    template <> 
+        enum { IsClassType = true };
+        enum { IsVoid = false };
+    };
+
+    template <>
     struct TTypeTraitsExpected<TNonPodClass>: public TTypeTraitsExpected<TPodClass> {
-        enum { IsPod = false }; 
-    }; 
- 
-    template <> 
+        enum { IsPod = false };
+    };
+
+    template <>
     struct TTypeTraitsExpected<TNonPodClass&>: public TTypeTraitsExpected<TNonPodClass> {
-        enum { IsClassType = false }; 
-        enum { IsReference = true }; 
+        enum { IsClassType = false };
+        enum { IsReference = true };
         enum { IsLvalueReference = true };
-    }; 
- 
+    };
+
     template <>
     struct TTypeTraitsExpected<TNonPodClass&&>: public TTypeTraitsExpected<TNonPodClass> {
         enum { IsClassType = false };
@@ -342,25 +342,25 @@ namespace {
         enum { IsRvalueReference = true };
     };
 
-    template <> 
+    template <>
     struct TTypeTraitsExpected<const TNonPodClass&>: public TTypeTraitsExpected<TNonPodClass&> {
-    }; 
- 
-    template <> 
+    };
+
+    template <>
     struct TTypeTraitsExpected<float*>: public TTypeTraitsExpected<int> {
-        enum { IsIntegral = false }; 
-        enum { IsArithmetic = false }; 
-        enum { IsPointer = true }; 
-    }; 
- 
-    template <> 
+        enum { IsIntegral = false };
+        enum { IsArithmetic = false };
+        enum { IsPointer = true };
+    };
+
+    template <>
     struct TTypeTraitsExpected<float&>: public TTypeTraitsExpected<float*> {
-        enum { IsPointer = false }; 
-        enum { IsReference = true }; 
+        enum { IsPointer = false };
+        enum { IsReference = true };
         enum { IsLvalueReference = true };
-    }; 
- 
-    template <> 
+    };
+
+    template <>
     struct TTypeTraitsExpected<float&&>: public TTypeTraitsExpected<float*> {
         enum { IsPointer = false };
         enum { IsReference = true };
@@ -369,22 +369,22 @@ namespace {
 
     template <>
     struct TTypeTraitsExpected<const float&>: public TTypeTraitsExpected<float&> {
-    }; 
- 
-    template <> 
+    };
+
+    template <>
     struct TTypeTraitsExpected<float[17]>: public TTypeTraitsExpected<int> {
-        enum { IsIntegral = false }; 
-        enum { IsArithmetic = false }; 
-        enum { IsArray = true }; 
-    }; 
-} 
- 
+        enum { IsIntegral = false };
+        enum { IsArithmetic = false };
+        enum { IsArray = true };
+    };
+}
+
 #define UNIT_ASSERT_EQUAL_ENUM(expected, actual) UNIT_ASSERT_VALUES_EQUAL((bool)(expected), (bool)(actual))
- 
+
 Y_UNIT_TEST_SUITE(TTypeTraitsTestNg) {
-    template <typename T> 
-    void TestImpl() { 
-        //UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsPod, TTypeTraits<T>::IsPod); 
+    template <typename T>
+    void TestImpl() {
+        //UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsPod, TTypeTraits<T>::IsPod);
         UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsVoid, std::is_void<T>::value);
         UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsEnum, std::is_enum<T>::value);
         UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsIntegral, std::is_integral<T>::value);
@@ -397,30 +397,30 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTestNg) {
         UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsRvalueReference, std::is_rvalue_reference<T>::value);
         UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsArray, std::is_array<T>::value);
         UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsClassType, std::is_class<T>::value);
-    } 
- 
+    }
+
 #define TYPE_TEST(name, type) \
     Y_UNIT_TEST(name) {       \
         TestImpl<type>();     \
     }
- 
-    TYPE_TEST(Void, void) 
-    TYPE_TEST(Int, int) 
-    TYPE_TEST(Float, float) 
-    TYPE_TEST(LongDouble, long double) 
-    TYPE_TEST(SizeT, size_t) 
-    TYPE_TEST(VolatileInt, volatile int) 
-    TYPE_TEST(ConstInt, const int) 
-    TYPE_TEST(Enum, ETestEnum) 
-    TYPE_TEST(FloatPointer, float*) 
-    TYPE_TEST(FloatReference, float&) 
-    TYPE_TEST(FloatConstReference, const float&) 
-    TYPE_TEST(FloatArray, float[17]) 
+
+    TYPE_TEST(Void, void)
+    TYPE_TEST(Int, int)
+    TYPE_TEST(Float, float)
+    TYPE_TEST(LongDouble, long double)
+    TYPE_TEST(SizeT, size_t)
+    TYPE_TEST(VolatileInt, volatile int)
+    TYPE_TEST(ConstInt, const int)
+    TYPE_TEST(Enum, ETestEnum)
+    TYPE_TEST(FloatPointer, float*)
+    TYPE_TEST(FloatReference, float&)
+    TYPE_TEST(FloatConstReference, const float&)
+    TYPE_TEST(FloatArray, float[17])
     TYPE_TEST(PodClass, TPodClass)
     TYPE_TEST(NonPodClass, TNonPodClass)
     TYPE_TEST(NonPodClassReference, TNonPodClass&)
     TYPE_TEST(NonPodClassConstReference, const TNonPodClass&)
-} 
+}
 
 enum E4 {
     X

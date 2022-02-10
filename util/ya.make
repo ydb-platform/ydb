@@ -10,7 +10,7 @@ NO_UTIL()
 # stream
 # string
 PEERDIR(
-    util/charset 
+    util/charset
     contrib/libs/zlib
     contrib/libs/double-conversion
 )
@@ -54,8 +54,8 @@ JOIN_SRCS(
 
 JOIN_SRCS(
     all_util.cpp
-    ysafeptr.cpp 
-    ysaveload.cpp 
+    ysafeptr.cpp
+    ysaveload.cpp
     str_stl.cpp
 )
 

@@ -1,13 +1,13 @@
 #include "vector.h"
- 
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <utility>
 #include "yexception.h"
- 
+
 #include <stdexcept>
 
-class TYVectorTest: public TTestBase { 
+class TYVectorTest: public TTestBase {
     UNIT_TEST_SUITE(TYVectorTest);
     UNIT_TEST(TestConstructorsAndAssignments)
     UNIT_TEST(TestTildeEmptyToNull)
@@ -92,23 +92,23 @@ private:
     }
 
     // Copy-paste of STLPort tests
- 
+
     void Test1() {
         TVector<int> v1; // Empty vector of integers.
- 
+
         UNIT_ASSERT(v1.empty() == true);
         UNIT_ASSERT(v1.size() == 0);
         UNIT_ASSERT(!v1);
- 
+
         // UNIT_ASSERT(v1.max_size() == INT_MAX / sizeof(int));
         // cout << "max_size = " << v1.max_size() << endl;
         v1.push_back(42); // Add an integer to the vector.
- 
+
         UNIT_ASSERT(v1.size() == 1);
         UNIT_ASSERT(v1);
- 
+
         UNIT_ASSERT(v1[0] == 42);
- 
+
         {
             TVector<TVector<int>> vect(10);
             TVector<TVector<int>>::iterator it(vect.begin()), end(vect.end());
@@ -117,102 +117,102 @@ private:
                 UNIT_ASSERT((*it).size() == 0);
                 UNIT_ASSERT((*it).capacity() == 0);
                 UNIT_ASSERT((*it).begin() == (*it).end());
-            } 
-        } 
+            }
+        }
     }
- 
+
     void Test2() {
         TVector<double> v1; // Empty vector of doubles.
         v1.push_back(32.1);
         v1.push_back(40.5);
         TVector<double> v2; // Another empty vector of doubles.
         v2.push_back(3.56);
- 
+
         UNIT_ASSERT(v1.size() == 2);
         UNIT_ASSERT(v1[0] == 32.1);
         UNIT_ASSERT(v1[1] == 40.5);
- 
+
         UNIT_ASSERT(v2.size() == 1);
         UNIT_ASSERT(v2[0] == 3.56);
         v1.swap(v2); // Swap the vector's contents.
- 
+
         UNIT_ASSERT(v1.size() == 1);
         UNIT_ASSERT(v1[0] == 3.56);
- 
+
         UNIT_ASSERT(v2.size() == 2);
         UNIT_ASSERT(v2[0] == 32.1);
         UNIT_ASSERT(v2[1] == 40.5);
- 
+
         v2 = v1; // Assign one vector to another.
- 
+
         UNIT_ASSERT(v2.size() == 1);
         UNIT_ASSERT(v2[0] == 3.56);
     }
- 
+
     void Test3() {
         using vec_type = TVector<char>;
- 
+
         vec_type v1; // Empty vector of characters.
         v1.push_back('h');
         v1.push_back('i');
- 
+
         UNIT_ASSERT(v1.size() == 2);
         UNIT_ASSERT(v1[0] == 'h');
         UNIT_ASSERT(v1[1] == 'i');
- 
+
         vec_type v2(v1.begin(), v1.end());
         v2[1] = 'o'; // Replace second character.
- 
+
         UNIT_ASSERT(v2.size() == 2);
         UNIT_ASSERT(v2[0] == 'h');
         UNIT_ASSERT(v2[1] == 'o');
- 
+
         UNIT_ASSERT((v1 == v2) == false);
- 
+
         UNIT_ASSERT((v1 < v2) == true);
     }
- 
+
     void Test4() {
         TVector<int> v(4);
- 
+
         v[0] = 1;
         v[1] = 4;
         v[2] = 9;
         v[3] = 16;
- 
+
         UNIT_ASSERT(v.front() == 1);
         UNIT_ASSERT(v.back() == 16);
- 
+
         v.push_back(25);
- 
+
         UNIT_ASSERT(v.back() == 25);
         UNIT_ASSERT(v.size() == 5);
- 
+
         v.pop_back();
- 
+
         UNIT_ASSERT(v.back() == 16);
         UNIT_ASSERT(v.size() == 4);
     }
- 
+
     void Test5() {
         int array[] = {1, 4, 9, 16};
- 
+
         TVector<int> v(array, array + 4);
- 
+
         UNIT_ASSERT(v.size() == 4);
- 
+
         UNIT_ASSERT(v[0] == 1);
         UNIT_ASSERT(v[1] == 4);
         UNIT_ASSERT(v[2] == 9);
         UNIT_ASSERT(v[3] == 16);
     }
- 
+
     void Test6() {
         int array[] = {1, 4, 9, 16, 25, 36};
- 
+
         TVector<int> v(array, array + 6);
         TVector<int>::iterator vit;
- 
+
         UNIT_ASSERT(v.size() == 6);
         UNIT_ASSERT(v[0] == 1);
         UNIT_ASSERT(v[1] == 4);
@@ -220,57 +220,57 @@ private:
         UNIT_ASSERT(v[3] == 16);
         UNIT_ASSERT(v[4] == 25);
         UNIT_ASSERT(v[5] == 36);
- 
+
         vit = v.erase(v.begin()); // Erase first element.
         UNIT_ASSERT(*vit == 4);
- 
+
         UNIT_ASSERT(v.size() == 5);
         UNIT_ASSERT(v[0] == 4);
         UNIT_ASSERT(v[1] == 9);
         UNIT_ASSERT(v[2] == 16);
         UNIT_ASSERT(v[3] == 25);
         UNIT_ASSERT(v[4] == 36);
- 
+
         vit = v.erase(v.end() - 1); // Erase last element.
         UNIT_ASSERT(vit == v.end());
- 
+
         UNIT_ASSERT(v.size() == 4);
         UNIT_ASSERT(v[0] == 4);
         UNIT_ASSERT(v[1] == 9);
         UNIT_ASSERT(v[2] == 16);
         UNIT_ASSERT(v[3] == 25);
- 
+
         v.erase(v.begin() + 1, v.end() - 1); // Erase all but first and last.
- 
+
         UNIT_ASSERT(v.size() == 2);
         UNIT_ASSERT(v[0] == 4);
         UNIT_ASSERT(v[1] == 25);
     }
- 
+
     void Test7() {
         int array1[] = {1, 4, 25};
         int array2[] = {9, 16};
- 
+
         TVector<int> v(array1, array1 + 3);
         TVector<int>::iterator vit;
         vit = v.insert(v.begin(), 0); // Insert before first element.
         UNIT_ASSERT(*vit == 0);
- 
+
         vit = v.insert(v.end(), 36); // Insert after last element.
         UNIT_ASSERT(*vit == 36);
- 
+
         UNIT_ASSERT(v.size() == 5);
         UNIT_ASSERT(v[0] == 0);
         UNIT_ASSERT(v[1] == 1);
         UNIT_ASSERT(v[2] == 4);
         UNIT_ASSERT(v[3] == 25);
         UNIT_ASSERT(v[4] == 36);
- 
+
         // Insert contents of array2 before fourth element.
         v.insert(v.begin() + 3, array2, array2 + 2);
- 
+
         UNIT_ASSERT(v.size() == 7);
- 
+
         UNIT_ASSERT(v[0] == 0);
         UNIT_ASSERT(v[1] == 1);
         UNIT_ASSERT(v[2] == 4);
@@ -278,11 +278,11 @@ private:
         UNIT_ASSERT(v[4] == 16);
         UNIT_ASSERT(v[5] == 25);
         UNIT_ASSERT(v[6] == 36);
- 
+
         size_t curCapacity = v.capacity();
         v.clear();
         UNIT_ASSERT(v.empty());
- 
+
         //check that clear save reserved data
         UNIT_ASSERT_EQUAL(curCapacity, v.capacity());
 
@@ -294,22 +294,22 @@ private:
         UNIT_ASSERT(v[3] == 10);
         UNIT_ASSERT(v[4] == 10);
     }
- 
+
     struct TestStruct {
         unsigned int a[3];
     };
- 
+
     void TestCapacity() {
         {
             TVector<int> v;
- 
+
             UNIT_ASSERT(v.capacity() == 0);
             v.push_back(42);
             UNIT_ASSERT(v.capacity() >= 1);
             v.reserve(5000);
             UNIT_ASSERT(v.capacity() >= 5000);
         }
- 
+
         {
             TVector<int> v(Reserve(100));
 
@@ -322,18 +322,18 @@ private:
             TVector<TestStruct> va;
             va.reserve(1);
             va.reserve(2);
-        } 
+        }
     }
- 
+
     void TestAt() {
         TVector<int> v;
         TVector<int> const& cv = v;
- 
+
         v.push_back(10);
         UNIT_ASSERT(v.at(0) == 10);
         v.at(0) = 20;
         UNIT_ASSERT(cv.at(0) == 20);
- 
+
         for (;;) {
             try {
                 v.at(1) = 20;
@@ -342,15 +342,15 @@ private:
                 return;
             } catch (...) {
                 UNIT_ASSERT(false);
-            } 
-        } 
+            }
+        }
     }
- 
+
     void TestPointer() {
         TVector<int*> v1;
         TVector<int*> v2 = v1;
         TVector<int*> v3;
- 
+
         v3.insert(v3.end(), v1.begin(), v1.end());
     }
 
@@ -358,25 +358,25 @@ private:
         TVector<int> ref;
         for (int i = 0; i < 5; ++i) {
             ref.push_back(i);
-        } 
- 
+        }
+
         TVector<TVector<int>> v_v_int(1, ref);
         v_v_int.push_back(v_v_int[0]);
         v_v_int.push_back(ref);
         v_v_int.push_back(v_v_int[0]);
         v_v_int.push_back(v_v_int[0]);
         v_v_int.push_back(ref);
- 
+
         TVector<TVector<int>>::iterator vvit(v_v_int.begin()), vvitEnd(v_v_int.end());
         for (; vvit != vvitEnd; ++vvit) {
             UNIT_ASSERT(*vvit == ref);
-        } 
+        }
     }
- 
+
     struct Point {
         int x, y;
     };
- 
+
     struct PointEx: public Point {
         PointEx()
             : builtFromBase(false)
@@ -386,37 +386,37 @@ private:
             : builtFromBase(true)
         {
         }
- 
+
         bool builtFromBase;
     };
- 
+
     void TestIterators() {
         TVector<int> vint(10, 0);
         TVector<int> const& crvint = vint;
- 
+
         UNIT_ASSERT(vint.begin() == vint.begin());
         UNIT_ASSERT(crvint.begin() == vint.begin());
         UNIT_ASSERT(vint.begin() == crvint.begin());
         UNIT_ASSERT(crvint.begin() == crvint.begin());
- 
+
         UNIT_ASSERT(vint.begin() != vint.end());
         UNIT_ASSERT(crvint.begin() != vint.end());
         UNIT_ASSERT(vint.begin() != crvint.end());
         UNIT_ASSERT(crvint.begin() != crvint.end());
- 
+
         UNIT_ASSERT(vint.rbegin() == vint.rbegin());
         // Not Standard:
         //UNIT_ASSERT(vint.rbegin() == crvint.rbegin());
         //UNIT_ASSERT(crvint.rbegin() == vint.rbegin());
         UNIT_ASSERT(crvint.rbegin() == crvint.rbegin());
- 
+
         UNIT_ASSERT(vint.rbegin() != vint.rend());
         // Not Standard:
         //UNIT_ASSERT(vint.rbegin() != crvint.rend());
         //UNIT_ASSERT(crvint.rbegin() != vint.rend());
         UNIT_ASSERT(crvint.rbegin() != crvint.rend());
     }
- 
+
     void TestShrink() {
         TVector<int> v;
         v.resize(1000);
@@ -429,8 +429,8 @@ private:
     }
 
     /* This test check a potential issue with empty base class
-         * optimization. Some compilers (VC6) do not implement it 
-         * correctly resulting ina wrong behavior. */ 
+         * optimization. Some compilers (VC6) do not implement it
+         * correctly resulting ina wrong behavior. */
     void TestEbo() {
         // We use heap memory as test failure can corrupt vector internal
         // representation making executable crash on vector destructor invocation.
@@ -439,36 +439,36 @@ private:
         using V = TVector<int>;
         V* pv1 = new V(1, 1);
         V* pv2 = new V(10, 2);
- 
+
         size_t v1Capacity = pv1->capacity();
         size_t v2Capacity = pv2->capacity();
- 
+
         pv1->swap(*pv2);
- 
+
         UNIT_ASSERT(pv1->size() == 10);
         UNIT_ASSERT(pv1->capacity() == v2Capacity);
         UNIT_ASSERT((*pv1)[5] == 2);
- 
+
         UNIT_ASSERT(pv2->size() == 1);
         UNIT_ASSERT(pv2->capacity() == v1Capacity);
         UNIT_ASSERT((*pv2)[0] == 1);
- 
+
         delete pv2;
         delete pv1;
     }
- 
+
     void TestFillInConstructor() {
         for (int k = 0; k < 3; ++k) {
             TVector<int> v(100);
             UNIT_ASSERT_VALUES_EQUAL(100u, v.size());
             for (size_t i = 0; i < v.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(0, v[i]);
-            } 
+            }
             // fill with garbage for the next iteration
             for (size_t i = 0; i < v.size(); ++i) {
                 v[i] = 10;
             }
-        } 
+        }
     }
 
     struct TPod {
@@ -591,6 +591,6 @@ private:
             CheckInitializeList(v);
         }
     }
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(TYVectorTest); 
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TYVectorTest);

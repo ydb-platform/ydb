@@ -5,7 +5,7 @@
 #include <util/generic/yexception.h>
 #include <utility>
 
-#include <util/thread/singleton.h> 
+#include <util/thread/singleton.h>
 
 #if defined(_win_) || defined(_arm32_) || defined(_cygwin_)
 ui64 InterpolatedMicroSeconds() {
@@ -236,7 +236,7 @@ namespace {
 }
 
 ui64 InterpolatedMicroSeconds() {
-    return FastTlsSingleton<TTimePredictor>()->Get(); 
+    return FastTlsSingleton<TTimePredictor>()->Get();
 }
 
 #endif

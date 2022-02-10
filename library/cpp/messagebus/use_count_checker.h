@@ -1,27 +1,27 @@
-#pragma once 
- 
-#include <util/generic/refcount.h> 
- 
-class TUseCountChecker { 
-private: 
-    TAtomicCounter Counter; 
+#pragma once
 
-public: 
-    TUseCountChecker(); 
-    ~TUseCountChecker(); 
-    void Inc(); 
-    void Dec(); 
-}; 
- 
-class TUseCountHolder { 
-private: 
-    TUseCountChecker* CurrentChecker; 
+#include <util/generic/refcount.h>
 
-public: 
-    TUseCountHolder(); 
-    explicit TUseCountHolder(TUseCountChecker* currentChecker); 
-    TUseCountHolder& operator=(TUseCountHolder that); 
-    ~TUseCountHolder(); 
-    void Swap(TUseCountHolder&); 
-    void Reset(); 
-}; 
+class TUseCountChecker {
+private:
+    TAtomicCounter Counter;
+
+public:
+    TUseCountChecker();
+    ~TUseCountChecker();
+    void Inc();
+    void Dec();
+};
+
+class TUseCountHolder {
+private:
+    TUseCountChecker* CurrentChecker;
+
+public:
+    TUseCountHolder();
+    explicit TUseCountHolder(TUseCountChecker* currentChecker);
+    TUseCountHolder& operator=(TUseCountHolder that);
+    ~TUseCountHolder();
+    void Swap(TUseCountHolder&);
+    void Reset();
+};

@@ -56,13 +56,13 @@ ui64 DurationToCycles(TDuration duration) {
     return duration.MicroSeconds() * GetCyclesPerSecond() / 1000000;
 }
 
-TPrecisionTimer::TPrecisionTimer() 
-    : Start(::GetCycleCount()) 
+TPrecisionTimer::TPrecisionTimer()
+    : Start(::GetCycleCount())
 {
 }
 
-ui64 TPrecisionTimer::GetCycleCount() const { 
-    return ::GetCycleCount() - Start; 
+ui64 TPrecisionTimer::GetCycleCount() const {
+    return ::GetCycleCount() - Start;
 }
 
 TString FormatCycles(ui64 cycles) {

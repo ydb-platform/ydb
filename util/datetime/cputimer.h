@@ -64,12 +64,12 @@ ui64 DurationToCycles(TDuration duration);
 
 class TPrecisionTimer {
 private:
-    ui64 Start = 0; 
+    ui64 Start = 0;
 
 public:
-    TPrecisionTimer(); 
- 
-    ui64 GetCycleCount() const; 
+    TPrecisionTimer();
+
+    ui64 GetCycleCount() const;
 };
 
 TString FormatCycles(ui64 cycles);

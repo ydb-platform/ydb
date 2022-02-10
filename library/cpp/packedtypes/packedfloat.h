@@ -161,7 +161,7 @@ using uf8d = NPackedFloat::float8<0, 1>;
 using frac8 = ui8;
 
 using frac16 = ui16;
-
+ 
 template <class T>
 inline constexpr T Float2Frac(float fac) {
     return T(fac * float(Max<T>()));

@@ -13,7 +13,7 @@ namespace NYT {
 TString DecodeEnumValue(TStringBuf value);
 TString EncodeEnumValue(TStringBuf value);
 
-template <class T> 
+template <class T>
 T ParseEnum(TStringBuf value);
 
 template <class T>

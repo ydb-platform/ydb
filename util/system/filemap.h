@@ -129,15 +129,15 @@ public:
     void Flush() {
         Flush(Ptr(), MappedSize());
     }
- 
+
     void FlushAsync(void* ptr, size_t size) {
         Flush(ptr, size, false);
     }
- 
+
     void FlushAsync() {
         FlushAsync(Ptr(), MappedSize());
     }
- 
+
     inline i64 Length() const noexcept {
         return Map_.Length();
     }
@@ -178,7 +178,7 @@ public:
 
 private:
     void Flush(void* ptr, size_t size, bool sync);
- 
+
     TMemoryMap Map_;
     TMapResult Region_;
 };

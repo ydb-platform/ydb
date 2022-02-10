@@ -884,21 +884,21 @@ namespace NUri {
                 URL_TEST(url, test);
             }
         }
-        Y_UNIT_TEST(test_scheme_related_url) { 
-            TUri url; 
-            UNIT_ASSERT_VALUES_EQUAL(url.Parse("//www.hostname.ru/path", TFeature::FeaturesRobot), TState::ParsedOK); 
-            UNIT_ASSERT_EQUAL(url.GetScheme(), TScheme::SchemeEmpty); 
-            UNIT_ASSERT_VALUES_EQUAL(url.GetHost(), "www.hostname.ru"); 
-            UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::FieldPath), "/path"); 
- 
-           TUri baseUrl; 
-           UNIT_ASSERT_VALUES_EQUAL(baseUrl.Parse("https://trololo.com", TFeature::FeaturesRobot), TState::ParsedOK); 
-           UNIT_ASSERT_EQUAL(baseUrl.GetScheme(), TScheme::SchemeHTTPS); 
-           url.Merge(baseUrl); 
-           UNIT_ASSERT_EQUAL(url.GetScheme(), TScheme::SchemeHTTPS); 
-           UNIT_ASSERT_VALUES_EQUAL(url.GetHost(), "www.hostname.ru"); 
-           UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::FieldPath), "/path"); 
-        } 
+        Y_UNIT_TEST(test_scheme_related_url) {
+            TUri url;
+            UNIT_ASSERT_VALUES_EQUAL(url.Parse("//www.hostname.ru/path", TFeature::FeaturesRobot), TState::ParsedOK);
+            UNIT_ASSERT_EQUAL(url.GetScheme(), TScheme::SchemeEmpty);
+            UNIT_ASSERT_VALUES_EQUAL(url.GetHost(), "www.hostname.ru");
+            UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::FieldPath), "/path");
+
+           TUri baseUrl;
+           UNIT_ASSERT_VALUES_EQUAL(baseUrl.Parse("https://trololo.com", TFeature::FeaturesRobot), TState::ParsedOK);
+           UNIT_ASSERT_EQUAL(baseUrl.GetScheme(), TScheme::SchemeHTTPS);
+           url.Merge(baseUrl);
+           UNIT_ASSERT_EQUAL(url.GetScheme(), TScheme::SchemeHTTPS);
+           UNIT_ASSERT_VALUES_EQUAL(url.GetHost(), "www.hostname.ru");
+           UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::FieldPath), "/path");
+        }
     }
 
     Y_UNIT_TEST_SUITE(TInvertDomainTest) {

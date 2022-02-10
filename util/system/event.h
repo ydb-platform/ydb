@@ -26,7 +26,7 @@ public:
 
     void Reset() noexcept;
     void Signal() noexcept;
-
+ 
     /*
      * return true if signaled, false if timed out.
      */

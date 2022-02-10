@@ -323,7 +323,7 @@ private:
     void* Ptr_ = nullptr;
     size_t Size_ = 0;
     bool Shared_ = false;
-#ifdef _win_
+#ifdef _win_ 
     void* Mapping_ = nullptr;
 #endif
 };

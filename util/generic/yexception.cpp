@@ -71,7 +71,7 @@ void TSystemError::Init() {
     yexception& exc = *this;
 
     exc << TStringBuf("(");
-    exc << TStringBuf(LastSystemErrorText(Status_)); 
+    exc << TStringBuf(LastSystemErrorText(Status_));
     exc << TStringBuf(") ");
 }
 

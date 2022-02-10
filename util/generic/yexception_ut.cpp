@@ -51,7 +51,7 @@ class TExceptionTest: public TTestBase {
     UNIT_TEST(TestRethrowAppend)
     UNIT_TEST(TestMacroOverload)
     UNIT_TEST(TestMessageCrop)
-    UNIT_TEST(TestTIoSystemErrorSpecialMethods) 
+    UNIT_TEST(TestTIoSystemErrorSpecialMethods)
     UNIT_TEST(TestCurrentExceptionTypeNameMethod)
     UNIT_TEST_SUITE_END();
 
@@ -296,29 +296,29 @@ private:
             UNIT_ASSERT_EQUAL(e.AsStrBuf(), s.substr(0, tmp.Size() - 1));
         }
     }
- 
-    void TestTIoSystemErrorSpecialMethods() { 
-        TString testStr{"systemError"}; 
-        TIoSystemError err; 
-        err << testStr; 
-        UNIT_ASSERT(err.AsStrBuf().Contains(testStr)); 
- 
-        TIoSystemError errCopy{err}; 
-        UNIT_ASSERT(err.AsStrBuf().Contains(testStr)); 
-        UNIT_ASSERT(errCopy.AsStrBuf().Contains(testStr)); 
- 
-        TIoSystemError errAssign; 
-        errAssign = err; 
-        UNIT_ASSERT(err.AsStrBuf().Contains(testStr)); 
-        UNIT_ASSERT(errAssign.AsStrBuf().Contains(testStr)); 
- 
-        TIoSystemError errMove{std::move(errCopy)}; 
-        UNIT_ASSERT(errMove.AsStrBuf().Contains(testStr)); 
- 
-        TIoSystemError errMoveAssign; 
-        errMoveAssign = std::move(errMove); 
-        UNIT_ASSERT(errMoveAssign.AsStrBuf().Contains(testStr)); 
-    } 
+
+    void TestTIoSystemErrorSpecialMethods() {
+        TString testStr{"systemError"};
+        TIoSystemError err;
+        err << testStr;
+        UNIT_ASSERT(err.AsStrBuf().Contains(testStr));
+
+        TIoSystemError errCopy{err};
+        UNIT_ASSERT(err.AsStrBuf().Contains(testStr));
+        UNIT_ASSERT(errCopy.AsStrBuf().Contains(testStr));
+
+        TIoSystemError errAssign;
+        errAssign = err;
+        UNIT_ASSERT(err.AsStrBuf().Contains(testStr));
+        UNIT_ASSERT(errAssign.AsStrBuf().Contains(testStr));
+
+        TIoSystemError errMove{std::move(errCopy)};
+        UNIT_ASSERT(errMove.AsStrBuf().Contains(testStr));
+
+        TIoSystemError errMoveAssign;
+        errMoveAssign = std::move(errMove);
+        UNIT_ASSERT(errMoveAssign.AsStrBuf().Contains(testStr));
+    }
     inline void TestCurrentExceptionTypeNameMethod() {
         //Basic test of getting the correct exception type name.
         try {

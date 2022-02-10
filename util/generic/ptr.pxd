@@ -37,6 +37,6 @@ cdef extern from "<util/generic/ptr.h>" nogil:
         T& operator*()
         T* Get()
         void Reset(T*)
-
-
-    cdef TAtomicSharedPtr[T] MakeAtomicShared[T](...)
+ 
+ 
+    cdef TAtomicSharedPtr[T] MakeAtomicShared[T](...) 

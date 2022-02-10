@@ -17,31 +17,31 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
 
         TLazyValue<int> value2 = []() { return 5; };
 
-        TLazyValue<int> notInitialized{}; 
- 
-        TLazyValue<int> copy1(value1); 
- 
-        copy1 = value2; 
-    } 
- 
+        TLazyValue<int> notInitialized{};
+
+        TLazyValue<int> copy1(value1);
+
+        copy1 = value2;
+    }
+
     Y_UNIT_TEST(TestLazyValueCopy) {
         TLazyValue<int> value([]() { return 5; });
-        UNIT_ASSERT(!value); 
- 
-        TLazyValue<int> emptyCopy = value; 
-        UNIT_ASSERT(!emptyCopy); 
- 
-        UNIT_ASSERT_EQUAL(*emptyCopy, 5); 
-        UNIT_ASSERT(emptyCopy); 
-        UNIT_ASSERT(!value); 
- 
-        UNIT_ASSERT_EQUAL(*value, 5); 
- 
-        TLazyValue<int> notEmptyCopy = value; 
-        UNIT_ASSERT(notEmptyCopy); 
+        UNIT_ASSERT(!value);
+
+        TLazyValue<int> emptyCopy = value;
+        UNIT_ASSERT(!emptyCopy);
+
+        UNIT_ASSERT_EQUAL(*emptyCopy, 5);
+        UNIT_ASSERT(emptyCopy);
+        UNIT_ASSERT(!value);
+
+        UNIT_ASSERT_EQUAL(*value, 5);
+
+        TLazyValue<int> notEmptyCopy = value;
+        UNIT_ASSERT(notEmptyCopy);
         UNIT_ASSERT_EQUAL(*notEmptyCopy, 5);
-    } 
- 
+    }
+
     struct TCopyCounter {
         TCopyCounter(size_t& numCopies)
             : NumCopies(&numCopies)
@@ -89,10 +89,10 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
         UNIT_ASSERT_EQUAL(numCopies, 1);
     }
 
-    class TValueProvider { 
+    class TValueProvider {
     public:
-        static size_t CountParseDataCalled; 
- 
+        static size_t CountParseDataCalled;
+
         TValueProvider()
             : Data_([&] { return this->ParseData(); })
         {
@@ -101,18 +101,18 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
         const TString& GetData() const {
             return *Data_;
         }
- 
-    private: 
+
+    private:
         TLazyValue<TString> Data_;
- 
-        TString ParseData() { 
-            CountParseDataCalled++; 
-            return "hi"; 
-        } 
+
+        TString ParseData() {
+            CountParseDataCalled++;
+            return "hi";
+        }
     };
 
-    size_t TValueProvider::CountParseDataCalled = 0; 
- 
+    size_t TValueProvider::CountParseDataCalled = 0;
+
     Y_UNIT_TEST(TestValueProvider) {
         TValueProvider provider;
 
@@ -120,32 +120,32 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
     }
 
     Y_UNIT_TEST(TestValueProviderCopy) {
-        TValueProvider provider; 
-        provider.GetData(); 
-        const auto countParsed = TValueProvider::CountParseDataCalled; 
-        provider.GetData(); 
-        UNIT_ASSERT_EQUAL(countParsed, TValueProvider::CountParseDataCalled); 
- 
-        TValueProvider providerCopy; 
-        providerCopy = provider; 
-        providerCopy.GetData(); 
-        UNIT_ASSERT_EQUAL(countParsed, TValueProvider::CountParseDataCalled); 
-    } 
- 
+        TValueProvider provider;
+        provider.GetData();
+        const auto countParsed = TValueProvider::CountParseDataCalled;
+        provider.GetData();
+        UNIT_ASSERT_EQUAL(countParsed, TValueProvider::CountParseDataCalled);
+
+        TValueProvider providerCopy;
+        providerCopy = provider;
+        providerCopy.GetData();
+        UNIT_ASSERT_EQUAL(countParsed, TValueProvider::CountParseDataCalled);
+    }
+
     Y_UNIT_TEST(TestEmptyProviderCopy) {
-        TValueProvider provider; 
-        TValueProvider copy(provider); 
- 
-        const auto countParsed = TValueProvider::CountParseDataCalled; 
-        provider.GetData(); 
-        UNIT_ASSERT_EQUAL(countParsed + 1, TValueProvider::CountParseDataCalled); 
-        copy.GetData(); 
-        UNIT_ASSERT_EQUAL(countParsed + 2, TValueProvider::CountParseDataCalled); 
-        const TValueProvider notEmptyCopy(copy); 
-        notEmptyCopy.GetData(); 
-        UNIT_ASSERT_EQUAL(countParsed + 2, TValueProvider::CountParseDataCalled); 
-    } 
- 
+        TValueProvider provider;
+        TValueProvider copy(provider);
+
+        const auto countParsed = TValueProvider::CountParseDataCalled;
+        provider.GetData();
+        UNIT_ASSERT_EQUAL(countParsed + 1, TValueProvider::CountParseDataCalled);
+        copy.GetData();
+        UNIT_ASSERT_EQUAL(countParsed + 2, TValueProvider::CountParseDataCalled);
+        const TValueProvider notEmptyCopy(copy);
+        notEmptyCopy.GetData();
+        UNIT_ASSERT_EQUAL(countParsed + 2, TValueProvider::CountParseDataCalled);
+    }
+
     Y_UNIT_TEST(TestMakeLazy) {
         auto lv = MakeLazy([] {
             return 100500;

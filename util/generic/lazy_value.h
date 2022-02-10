@@ -4,11 +4,11 @@
 #include "function.h"
 
 template <class T>
-class TLazyValueBase { 
+class TLazyValueBase {
 public:
     using TInitializer = std::function<T()>;
 
-    TLazyValueBase() = default; 
+    TLazyValueBase() = default;
 
     TLazyValueBase(TInitializer initializer)
         : Initializer(std::move(initializer))
@@ -48,18 +48,18 @@ private:
     TInitializer Initializer;
 };
 
-// we need this to get implicit construction TLazyValue from lambda 
-// and save default copy constructor and operator= for type TLazyValue 
-template <class T> 
+// we need this to get implicit construction TLazyValue from lambda
+// and save default copy constructor and operator= for type TLazyValue
+template <class T>
 class TLazyValue: public TLazyValueBase<T> {
-public: 
-    template <typename... TArgs> 
-    TLazyValue(TArgs&&... args) 
-        : TLazyValueBase<T>(std::forward<TArgs>(args)...) 
+public:
+    template <typename... TArgs>
+    TLazyValue(TArgs&&... args)
+        : TLazyValueBase<T>(std::forward<TArgs>(args)...)
     {
     }
-}; 
- 
+};
+
 template <typename F>
 TLazyValue<TFunctionResult<F>> MakeLazy(F&& f) {
     return {std::forward<F>(f)};

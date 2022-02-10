@@ -138,11 +138,11 @@ public:
         CPP_LOG_T("Request actor. Actor id: " << SelfId());
         Become(&TRequestActor::StateFunc, GetDuration(Config.GetRequestTimeout(), TDuration::Seconds(30)), new NActors::TEvents::TEvWakeup());
         if constexpr (ResolveFolder) {
-            auto request = std::make_unique<NKikimr::NFolderService::TEvFolderService::TEvGetFolderRequest>(); 
-            request->Request.set_folder_id(FolderId); 
-            request->Token = Token; 
+            auto request = std::make_unique<NKikimr::NFolderService::TEvFolderService::TEvGetFolderRequest>();
+            request->Request.set_folder_id(FolderId);
+            request->Token = Token;
             ResolveFolderCounters->InFly->Inc();
-            Send(NKikimr::NFolderService::FolderServiceActorId(), request.release(), 0, 0); 
+            Send(NKikimr::NFolderService::FolderServiceActorId(), request.release(), 0, 0);
         } else {
             Send(ServiceId, new TRequest(Scope, RequestProto, User, Token, Permissions), 0, Cookie);
         }
@@ -151,7 +151,7 @@ public:
     STRICT_STFUNC(StateFunc,
         cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
         hFunc(TResponse, Handle);
-        hFunc(NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse, Handle); 
+        hFunc(NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse, Handle);
     )
 
     void HandleTimeout() {
@@ -171,20 +171,20 @@ public:
         PassAway();
     }
 
-    void Handle(NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse::TPtr& ev) { 
+    void Handle(NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse::TPtr& ev) {
         ResolveFolderCounters->InFly->Dec();
         ResolveFolderCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
 
-        const auto& response = ev->Get()->Response; 
-        TString errorMessage; 
+        const auto& response = ev->Get()->Response;
+        TString errorMessage;
 
-        const auto& status = ev->Get()->Status; 
-        if (!status.Ok() || !ev->Get()->Response.has_folder()) { 
+        const auto& status = ev->Get()->Status;
+        if (!status.Ok() || !ev->Get()->Response.has_folder()) {
             ResolveFolderCounters->Error->Inc();
-            errorMessage = "Msg: " + status.Msg + " Details: " + status.Details + " Code: " + ToString(status.GRpcStatusCode) + " InternalError: " + ToString(status.InternalError); 
-            CPP_LOG_E(errorMessage); 
+            errorMessage = "Msg: " + status.Msg + " Details: " + status.Details + " Code: " + ToString(status.GRpcStatusCode) + " InternalError: " + ToString(status.InternalError);
+            CPP_LOG_E(errorMessage);
             NYql::TIssues issues;
-            NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Resolve folder error"); 
+            NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Resolve folder error");
             issues.AddIssue(issue);
             Counters->Error->Inc();
             Counters->Timeout->Inc();
@@ -196,7 +196,7 @@ public:
         }
 
         ResolveFolderCounters->Ok->Inc();
-        CloudId = response.folder().cloud_id(); 
+        CloudId = response.folder().cloud_id();
         CPP_LOG_T("Cloud id: " << CloudId << " Folder id: " << FolderId);
         if constexpr (ResolveFolder) {
             Send(ServiceId, new TRequest(Scope, RequestProto, User, Token, CloudId, Permissions), 0, Cookie);

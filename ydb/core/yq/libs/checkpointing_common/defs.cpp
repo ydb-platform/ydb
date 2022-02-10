@@ -14,12 +14,12 @@ TString TCoordinatorId::ToString() const {
 
 void TCoordinatorId::PrintTo(IOutputStream& out) const
 {
-    out << GraphId << "." << Generation; 
+    out << GraphId << "." << Generation;
 }
 
 size_t TCheckpointIdHash::operator ()(const TCheckpointId& checkpointId)
 {
-    return MultiHash(checkpointId.CoordinatorGeneration, checkpointId.SeqNo); 
+    return MultiHash(checkpointId.CoordinatorGeneration, checkpointId.SeqNo);
 }
 
 } // namespace NYq
@@ -39,5 +39,5 @@ void Out<NYq::TCheckpointId>(
     IOutputStream& out,
     const NYq::TCheckpointId& checkpointId)
 {
-    out << checkpointId.CoordinatorGeneration << ":" << checkpointId.SeqNo; 
+    out << checkpointId.CoordinatorGeneration << ":" << checkpointId.SeqNo;
 }

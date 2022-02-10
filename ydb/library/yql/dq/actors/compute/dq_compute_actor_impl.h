@@ -2,7 +2,7 @@
 
 #include "dq_compute_actor.h"
 #include "dq_compute_actor_channels.h"
-#include "dq_compute_actor_checkpoints.h" 
+#include "dq_compute_actor_checkpoints.h"
 #include "dq_compute_actor_sinks.h"
 #include "dq_compute_actor_sources.h"
 #include "dq_compute_issues_buffer.h"
@@ -59,7 +59,7 @@ constexpr ui32 IssuesBufferSize = 16;
 template<typename TDerived>
 class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived>
                           , public TDqComputeActorChannels::ICallbacks
-                          , public TDqComputeActorCheckpoints::ICallbacks 
+                          , public TDqComputeActorCheckpoints::ICallbacks
                           , public IDqSourceActor::ICallbacks
                           , public IDqSinkActor::ICallbacks
 {
@@ -267,9 +267,9 @@ protected:
         }
 
         if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
-            Checkpoints->DoCheckpoint(); 
-        } 
- 
+            Checkpoints->DoCheckpoint();
+        }
+
         ProcessOutputsImpl(status);
     }
 
@@ -400,12 +400,12 @@ protected:
             Channels->Receive(handle, NActors::TActivationContext::AsActorContext());
         }
 
-        if (Checkpoints) { 
+        if (Checkpoints) {
             TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), this->SelfId(),
                 new NActors::TEvents::TEvPoison);
             Checkpoints->Receive(handle, NActors::TActivationContext::AsActorContext());
-        } 
- 
+        }
+
         for (auto& [_, source] : SourcesMap) {
             if (source.Actor) {
                 source.SourceActor->PassAway();
@@ -497,7 +497,7 @@ protected:
     }
 
     void ContinueExecute() {
-        if (!ResumeEventScheduled && Running) { 
+        if (!ResumeEventScheduled && Running) {
             ResumeEventScheduled = true;
             this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution());
         }
@@ -522,14 +522,14 @@ public:
             channel->Push(std::move(*channelData.MutableData()));
         }
 
-        if (channelData.HasCheckpoint()) { 
+        if (channelData.HasCheckpoint()) {
             Y_VERIFY(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             Y_VERIFY(Checkpoints);
-            const auto& checkpoint = channelData.GetCheckpoint(); 
-            inputChannel->Pause(checkpoint); 
-            Checkpoints->RegisterCheckpoint(checkpoint, channelData.GetChannelId()); 
-        } 
- 
+            const auto& checkpoint = channelData.GetCheckpoint();
+            inputChannel->Pause(checkpoint);
+            Checkpoints->RegisterCheckpoint(checkpoint, channelData.GetChannelId());
+        }
+
         if (channelData.GetFinished()) {
             channel->Finish();
         }
@@ -572,22 +572,22 @@ public:
     }
 
 protected:
-    bool ReadyToCheckpoint() const override { 
-        for (auto& [id, channelInfo] : InputChannelsMap) { 
+    bool ReadyToCheckpoint() const override {
+        for (auto& [id, channelInfo] : InputChannelsMap) {
             if (channelInfo.CheckpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED) {
                 continue;
             }
 
-            if (!channelInfo.IsPaused()) { 
-                return false; 
-            } 
-            if (!channelInfo.Channel->Empty()) { 
-                return false; 
-            } 
-        } 
-        return true; 
-    } 
- 
+            if (!channelInfo.IsPaused()) {
+                return false;
+            }
+            if (!channelInfo.Channel->Empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override {
         CA_LOG_D("Save state");
         NDqProto::TMiniKqlProgramState& mkqlProgramState = *state.MutableMiniKqlProgram();
@@ -602,8 +602,8 @@ protected:
             source.SourceActor->SaveState(checkpoint, sourceState);
             sourceState.SetInputIndex(inputIndex);
         }
-    } 
- 
+    }
+
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
         CA_LOG_D("Commit state");
         for (auto& [inputIndex, source] : SourcesMap) {
@@ -614,20 +614,20 @@ protected:
 
     void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) override {
         Y_VERIFY(CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
-        for (const auto& [id, channelInfo] : OutputChannelsMap) { 
+        for (const auto& [id, channelInfo] : OutputChannelsMap) {
             channelInfo.Channel->Push(NDqProto::TCheckpoint(checkpoint));
-        } 
+        }
         for (const auto& [outputIndex, sink] : SinksMap) {
             sink.Sink->Push(NDqProto::TCheckpoint(checkpoint));
         }
-    } 
- 
-    void ResumeInputs() override { 
-        for (auto& [id, channelInfo] : InputChannelsMap) { 
-            channelInfo.Resume(); 
-        } 
-    } 
- 
+    }
+
+    void ResumeInputs() override {
+        for (auto& [id, channelInfo] : InputChannelsMap) {
+            channelInfo.Resume();
+        }
+    }
+
     void LoadState(const NDqProto::TComputeActorState& state) override {
         CA_LOG_D("Load state");
         auto guard = BindAllocator();
@@ -653,19 +653,19 @@ protected:
             return;
         }
         ythrow yexception() << "Invalid state version " << version;
-    } 
- 
-    void Start() override { 
-        Running = true; 
+    }
+
+    void Start() override {
+        Running = true;
         State = NDqProto::COMPUTE_STATE_EXECUTING;
-        ContinueExecute(); 
-    } 
- 
-    void Stop() override { 
-        Running = false; 
+        ContinueExecute();
+    }
+
+    void Stop() override {
+        Running = false;
         State = NDqProto::COMPUTE_STATE_UNKNOWN;
-    } 
- 
+    }
+
 protected:
     struct TInputChannelInfo {
         ui64 ChannelId;
@@ -674,28 +674,28 @@ protected:
         std::optional<NDqProto::TCheckpoint> PendingCheckpoint;
         const NDqProto::ECheckpointingMode CheckpointingMode;
         ui64 FreeSpace = 0;
- 
+
         explicit TInputChannelInfo(ui64 channelId, NDqProto::ECheckpointingMode checkpointingMode)
             : ChannelId(channelId)
             , CheckpointingMode(checkpointingMode)
         {
         }
 
-        bool IsPaused() const { 
+        bool IsPaused() const {
             return PendingCheckpoint.has_value();
-        } 
- 
+        }
+
         void Pause(const NDqProto::TCheckpoint& checkpoint) {
-            YQL_ENSURE(!IsPaused()); 
+            YQL_ENSURE(!IsPaused());
             YQL_ENSURE(CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
-            PendingCheckpoint = checkpoint; 
+            PendingCheckpoint = checkpoint;
             Channel->Pause();
-        } 
- 
-        void Resume() { 
+        }
+
+        void Resume() {
             PendingCheckpoint.reset();
             Channel->Resume();
-        } 
+        }
     };
 
     struct TSourceInfo {
@@ -785,9 +785,9 @@ protected:
 protected:
     void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) {
         ResumeEventScheduled = false;
-        if (Running) { 
+        if (Running) {
             DoExecute();
-        } 
+        }
     }
 
     void HandleExecuteBase(TEvDqCompute::TEvChannelsInfo::TPtr& ev) {
@@ -876,15 +876,15 @@ protected:
 
     void HandleExecuteBase(TEvDqCompute::TEvRun::TPtr& ev) {
         CA_LOG_D("Got TEvRun from actor " << ev->Sender);
-        Start(); 
+        Start();
 
         // Event from coordinator should be processed to confirm seq no.
         TAutoPtr<NActors::IEventHandle> iev(ev.Release());
         if (Checkpoints) {
             Checkpoints->Receive(iev, NActors::TActivationContext::AsActorContext());
         }
-    } 
- 
+    }
+
     void HandleExecuteBase(TEvDqCompute::TEvStateRequest::TPtr& ev) {
         CA_LOG_D("Got TEvStateRequest from actor " << ev->Sender << " TaskId: " << Task.GetId() << " PingCookie: " << ev->Cookie);
         auto evState = MakeHolder<TEvDqCompute::TEvState>();
@@ -896,15 +896,15 @@ protected:
     }
 
     void HandleExecuteBase(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr& ev) {
-        if (!Checkpoints) { 
+        if (!Checkpoints) {
             Checkpoints = new TDqComputeActorCheckpoints(TxId, Task, this);
             Checkpoints->Init(this->SelfId(), this->RegisterWithSameMailbox(Checkpoints));
             Channels->SetCheckpointsSupport();
-        } 
-        TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), ev->Sender, ev->Release().Release()); 
+        }
+        TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), ev->Sender, ev->Release().Release());
         Checkpoints->Receive(handle, NActors::TActivationContext::AsActorContext());
-    } 
- 
+    }
+
     void HandleExecuteBase(TEvDq::TEvAbortExecution::TPtr& ev) {
         TString message = ev->Get()->Record.GetMessage();
         CA_LOG_E("Handle abort execution event from: " << ev->Sender
@@ -992,10 +992,10 @@ private:
 
         NDqProto::TData data;
         NDqProto::TCheckpoint checkpoint;
- 
-        bool hasData = channel->Pop(data, bytes); 
-        bool hasCheckpoint = channel->Pop(checkpoint); 
-        if (!hasData && !hasCheckpoint) { 
+
+        bool hasData = channel->Pop(data, bytes);
+        bool hasCheckpoint = channel->Pop(checkpoint);
+        if (!hasData && !hasCheckpoint) {
             if (!channel->IsFinished()) {
                 CA_LOG_D("output channelId: " << channel->GetChannelId() << ", nothing to send and is not finished");
                 return 0; // channel is empty and not finished yet
@@ -1006,19 +1006,19 @@ private:
         const bool becameFinished = !wasFinished && outputChannel.Finished;
 
         ui32 dataSize = data.GetRaw().size();
-        ui32 checkpointSize = checkpoint.ByteSize(); 
+        ui32 checkpointSize = checkpoint.ByteSize();
 
         NDqProto::TChannelData channelData;
         channelData.SetChannelId(channel->GetChannelId());
         channelData.SetFinished(outputChannel.Finished);
-        if (hasData) { 
-            channelData.MutableData()->Swap(&data); 
-        } 
-        if (hasCheckpoint) { 
-            channelData.MutableCheckpoint()->Swap(&checkpoint); 
-            CA_LOG_I("Resume inputs"); 
-            ResumeInputs(); 
-        } 
+        if (hasData) {
+            channelData.MutableData()->Swap(&data);
+        }
+        if (hasCheckpoint) {
+            channelData.MutableCheckpoint()->Swap(&checkpoint);
+            CA_LOG_I("Resume inputs");
+            ResumeInputs();
+        }
 
         if (hasData || hasCheckpoint || becameFinished) {
             Channels->SendChannelData(std::move(channelData));
@@ -1467,7 +1467,7 @@ protected:
     const NDqProto::ECheckpointingMode CheckpointingMode;
     TIntrusivePtr<IDqTaskRunner> TaskRunner;
     TDqComputeActorChannels* Channels = nullptr;
-    TDqComputeActorCheckpoints* Checkpoints = nullptr; 
+    TDqComputeActorCheckpoints* Checkpoints = nullptr;
     THashMap<ui64, TInputChannelInfo> InputChannelsMap; // Channel id -> Channel info
     THashMap<ui64, TSourceInfo> SourcesMap; // Input index -> Source info
     THashMap<ui64, TOutputChannelInfo> OutputChannelsMap; // Channel id -> Channel info
@@ -1498,7 +1498,7 @@ protected:
     TProcessOutputsState ProcessOutputsState;
 
 private:
-    bool Running = true; 
+    bool Running = true;
     TInstant LastSendStatsTime;
 };
 

@@ -1277,7 +1277,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableSqs) {
-        sil->AddServiceInitializer(new TSqsServiceInitializer(runConfig, ModuleFactories)); 
+        sil->AddServiceInitializer(new TSqsServiceInitializer(runConfig, ModuleFactories));
     }
 
     if (serviceMask.EnableConfigsDispatcher) {

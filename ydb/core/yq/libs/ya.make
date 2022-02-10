@@ -4,8 +4,8 @@ RECURSE(
     actors
     audit
     checkpoint_storage
-    checkpointing 
-    checkpointing_common 
+    checkpointing
+    checkpointing_common
     common
     config
     control_plane_proxy

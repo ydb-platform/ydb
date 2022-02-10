@@ -40,7 +40,7 @@ public:
     [[nodiscard]]
     virtual bool Pop(NDqProto::TData& data, ui64 bytes) = 0;
     // Pop chechpoint. Checkpoints may be taken from channel even after it is finished.
-    [[nodiscard]] 
+    [[nodiscard]]
     virtual bool Pop(NDqProto::TCheckpoint& checkpoint) = 0;
     // Only for data-queries
     // TODO: remove this method and create independent Data- and Stream-query implementations.

@@ -138,7 +138,7 @@
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
- 
+
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 
 #include <library/cpp/actors/protos/services_common.pb.h>
@@ -2084,9 +2084,9 @@ void TLeaseHolderInitializer::InitializeServices(NActors::TActorSystemSetup* set
     }
 }
 
-TSqsServiceInitializer::TSqsServiceInitializer(const TKikimrRunConfig& runConfig, const std::shared_ptr<TModuleFactories>& factories) 
+TSqsServiceInitializer::TSqsServiceInitializer(const TKikimrRunConfig& runConfig, const std::shared_ptr<TModuleFactories>& factories)
     : IKikimrServicesInitializer(runConfig)
-    , Factories(factories) 
+    , Factories(factories)
 {
 }
 

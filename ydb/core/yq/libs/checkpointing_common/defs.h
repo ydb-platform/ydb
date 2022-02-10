@@ -27,22 +27,22 @@ using TCoordinators = TVector<TCoordinatorId>;
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TCheckpointId {
-    ui64 CoordinatorGeneration = 0; 
-    ui64 SeqNo = 0; 
+    ui64 CoordinatorGeneration = 0;
+    ui64 SeqNo = 0;
 
-    TCheckpointId(ui64 gen, ui64 SeqNo) 
-        : CoordinatorGeneration(gen) 
-        , SeqNo(SeqNo) 
+    TCheckpointId(ui64 gen, ui64 SeqNo)
+        : CoordinatorGeneration(gen)
+        , SeqNo(SeqNo)
     {
     }
 
     bool operator ==(const TCheckpointId& rhs) const {
-        return CoordinatorGeneration == rhs.CoordinatorGeneration && SeqNo == rhs.SeqNo; 
+        return CoordinatorGeneration == rhs.CoordinatorGeneration && SeqNo == rhs.SeqNo;
     }
 
     bool operator <(const TCheckpointId& rhs) const {
-        return CoordinatorGeneration < rhs.CoordinatorGeneration || 
-            (CoordinatorGeneration == rhs.CoordinatorGeneration && SeqNo < rhs.SeqNo); 
+        return CoordinatorGeneration < rhs.CoordinatorGeneration ||
+            (CoordinatorGeneration == rhs.CoordinatorGeneration && SeqNo < rhs.SeqNo);
     }
 };
 
@@ -55,7 +55,7 @@ struct TCheckpointIdHash {
 ////////////////////////////////////////////////////////////////////////////////
 
 enum class ECheckpointStatus {
-    Unspecified, 
+    Unspecified,
     Pending,
     PendingCommit,
     Completed,

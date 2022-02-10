@@ -54,20 +54,20 @@ struct TEvDqCompute {
         const ui64 FromSeqNo;
         const ui64 ToSeqNo;
     };
- 
+
     struct TEvRun : public NActors::TEventPB<TEvRun, NDqProto::TEvRun, TDqComputeEvents::EvRun> {};
- 
+
     struct TEvNewCheckpointCoordinator : public NActors::TEventPB<TEvNewCheckpointCoordinator,
-        NDqProto::TEvNewCheckpointCoordinator, TDqComputeEvents::EvNewCheckpointCoordinator> { 
- 
-        TEvNewCheckpointCoordinator() = default; 
- 
-        TEvNewCheckpointCoordinator(ui64 generation, TString graphId) { 
-            Record.SetGeneration(generation); 
-            Record.SetGraphId(std::move(graphId)); 
-        } 
-    }; 
- 
+        NDqProto::TEvNewCheckpointCoordinator, TDqComputeEvents::EvNewCheckpointCoordinator> {
+
+        TEvNewCheckpointCoordinator() = default;
+
+        TEvNewCheckpointCoordinator(ui64 generation, TString graphId) {
+            Record.SetGeneration(generation);
+            Record.SetGraphId(std::move(graphId));
+        }
+    };
+
     struct TEvNewCheckpointCoordinatorAck : public NActors::TEventPB<TEvNewCheckpointCoordinatorAck,
         NDqProto::TEvNewCheckpointCoordinatorAck, TDqComputeEvents::EvNewCheckpointCoordinatorAck> {
 
@@ -75,63 +75,63 @@ struct TEvDqCompute {
     };
 
     struct TEvInjectCheckpoint : public NActors::TEventPB<TEvInjectCheckpoint,
-        NDqProto::TEvInjectCheckpoint, TDqComputeEvents::EvInjectCheckpoint> { 
- 
-        TEvInjectCheckpoint() = default; 
- 
-        TEvInjectCheckpoint(ui64 id, ui64 generation) { 
-            Record.MutableCheckpoint()->SetId(id); 
-            Record.MutableCheckpoint()->SetGeneration(generation); 
-            Record.SetGeneration(generation); 
-        } 
-    }; 
- 
+        NDqProto::TEvInjectCheckpoint, TDqComputeEvents::EvInjectCheckpoint> {
+
+        TEvInjectCheckpoint() = default;
+
+        TEvInjectCheckpoint(ui64 id, ui64 generation) {
+            Record.MutableCheckpoint()->SetId(id);
+            Record.MutableCheckpoint()->SetGeneration(generation);
+            Record.SetGeneration(generation);
+        }
+    };
+
     struct TEvSaveTaskState : public NActors::TEventLocal<TEvSaveTaskState, TDqComputeEvents::EvSaveTaskState> {
         TEvSaveTaskState(TString graphId, ui64 taskId, NDqProto::TCheckpoint checkpoint)
-            : GraphId(std::move(graphId)) 
-            , TaskId(taskId) 
-            , Checkpoint(std::move(checkpoint)) 
+            : GraphId(std::move(graphId))
+            , TaskId(taskId)
+            , Checkpoint(std::move(checkpoint))
         {}
- 
-        const TString GraphId; 
-        const ui64 TaskId; 
+
+        const TString GraphId;
+        const ui64 TaskId;
         const NDqProto::TCheckpoint Checkpoint;
         NDqProto::TComputeActorState State;
-    }; 
- 
+    };
+
     struct TEvSaveTaskStateResult : public NActors::TEventPB<TEvSaveTaskStateResult,
         NDqProto::TEvSaveTaskStateResult, TDqComputeEvents::EvSaveTaskStateResult> {};
- 
+
     struct TEvCommitState : public NActors::TEventPB<TEvCommitState,
-        NDqProto::TEvCommitState, TDqComputeEvents::EvCommitState> { 
- 
-        TEvCommitState() = default; 
- 
-        TEvCommitState(ui64 checkpointId, ui64 checkpointGeneration, ui64 coordinatorGeneration) { 
-            Record.MutableCheckpoint()->SetId(checkpointId); 
-            Record.MutableCheckpoint()->SetGeneration(checkpointGeneration); 
-            Record.SetGeneration(coordinatorGeneration); 
-        } 
-    }; 
- 
+        NDqProto::TEvCommitState, TDqComputeEvents::EvCommitState> {
+
+        TEvCommitState() = default;
+
+        TEvCommitState(ui64 checkpointId, ui64 checkpointGeneration, ui64 coordinatorGeneration) {
+            Record.MutableCheckpoint()->SetId(checkpointId);
+            Record.MutableCheckpoint()->SetGeneration(checkpointGeneration);
+            Record.SetGeneration(coordinatorGeneration);
+        }
+    };
+
     struct TEvStateCommitted : public NActors::TEventPB<TEvStateCommitted,
-        NDqProto::TEvStateCommitted, TDqComputeEvents::EvStateCommitted> { 
- 
-        TEvStateCommitted() = default; 
- 
-        TEvStateCommitted(ui64 id, ui64 generation, ui64 taskId) { 
-            Record.MutableCheckpoint()->SetId(id); 
-            Record.MutableCheckpoint()->SetGeneration(generation); 
-            Record.SetTaskId(taskId); 
-        } 
-    }; 
- 
+        NDqProto::TEvStateCommitted, TDqComputeEvents::EvStateCommitted> {
+
+        TEvStateCommitted() = default;
+
+        TEvStateCommitted(ui64 id, ui64 generation, ui64 taskId) {
+            Record.MutableCheckpoint()->SetId(id);
+            Record.MutableCheckpoint()->SetGeneration(generation);
+            Record.SetTaskId(taskId);
+        }
+    };
+
     struct TEvRestoreFromCheckpoint : public NActors::TEventPB<TEvRestoreFromCheckpoint,
-        NDqProto::TEvRestoreFromCheckpoint, TDqComputeEvents::EvRestoreFromCheckpoint> { 
- 
-        TEvRestoreFromCheckpoint() = default; 
- 
-        TEvRestoreFromCheckpoint(ui64 checkpointId, ui64 checkpointGeneration, ui64 coordinatorGeneration) { 
+        NDqProto::TEvRestoreFromCheckpoint, TDqComputeEvents::EvRestoreFromCheckpoint> {
+
+        TEvRestoreFromCheckpoint() = default;
+
+        TEvRestoreFromCheckpoint(ui64 checkpointId, ui64 checkpointGeneration, ui64 coordinatorGeneration) {
             Init(checkpointId, checkpointGeneration, coordinatorGeneration);
             Record.MutableStateLoadPlan()->SetStateType(NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN); // default
         }
@@ -143,16 +143,16 @@ struct TEvDqCompute {
 
     private:
         void Init(ui64 checkpointId, ui64 checkpointGeneration, ui64 coordinatorGeneration) {
-            Record.MutableCheckpoint()->SetId(checkpointId); 
-            Record.MutableCheckpoint()->SetGeneration(checkpointGeneration); 
-            Record.SetGeneration(coordinatorGeneration); 
-        } 
-    }; 
- 
+            Record.MutableCheckpoint()->SetId(checkpointId);
+            Record.MutableCheckpoint()->SetGeneration(checkpointGeneration);
+            Record.SetGeneration(coordinatorGeneration);
+        }
+    };
+
     struct TEvRestoreFromCheckpointResult : public NActors::TEventPB<TEvRestoreFromCheckpointResult,
         NDqProto::TEvRestoreFromCheckpointResult, TDqComputeEvents::EvRestoreFromCheckpointResult> {
         using TBaseEventPB = NActors::TEventPB<TEvRestoreFromCheckpointResult, NDqProto::TEvRestoreFromCheckpointResult, TDqComputeEvents::EvRestoreFromCheckpointResult>;
- 
+
         using TBaseEventPB::TBaseEventPB;
 
         TEvRestoreFromCheckpointResult(const NDqProto::TCheckpoint& checkpoint, ui64 taskId, NDqProto::TEvRestoreFromCheckpointResult::ERestoreStatus status) {
@@ -164,28 +164,28 @@ struct TEvDqCompute {
 
     struct TEvGetTaskState : public NActors::TEventLocal<TEvGetTaskState, TDqComputeEvents::EvGetTaskState> {
         TEvGetTaskState(TString graphId, const std::vector<ui64>& taskIds, NDqProto::TCheckpoint checkpoint, ui64 generation)
-            : GraphId(std::move(graphId)) 
+            : GraphId(std::move(graphId))
             , TaskIds(taskIds)
-            , Checkpoint(std::move(checkpoint)) 
+            , Checkpoint(std::move(checkpoint))
             , Generation(generation) {}
- 
-        const TString GraphId; 
+
+        const TString GraphId;
         const std::vector<ui64> TaskIds;
         const NDqProto::TCheckpoint Checkpoint;
-        const ui64 Generation; 
-    }; 
- 
+        const ui64 Generation;
+    };
+
     struct TEvGetTaskStateResult : public NActors::TEventLocal<TEvGetTaskStateResult, TDqComputeEvents::EvGetTaskStateResult> {
         TEvGetTaskStateResult(NDqProto::TCheckpoint checkpoint, TIssues issues, ui64 generation)
-            : Checkpoint(std::move(checkpoint)) 
-            , Issues(std::move(issues)) 
+            : Checkpoint(std::move(checkpoint))
+            , Issues(std::move(issues))
             , Generation(generation) {}
- 
+
         const NDqProto::TCheckpoint Checkpoint;
         std::vector<NDqProto::TComputeActorState> States;
         const TIssues Issues;
-        const ui64 Generation; 
-    }; 
+        const ui64 Generation;
+    };
 };
 
 struct TDqExecutionSettings {

@@ -8,12 +8,12 @@
 
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
 #include <ydb/core/yq/libs/checkpoint_storage/events/events.h>
- 
+
 #include <ydb/core/yq/libs/actors/logging/log.h>
 #include <ydb/core/yq/libs/ydb/util.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
- 
+
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -24,7 +24,7 @@
 #define LOG_STORAGE_ASYNC_DEBUG(actorContext, stream) LOG_LOG_S(actorContext, ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::STREAMS_STORAGE_SERVICE, stream);
 #define LOG_STORAGE_ASYNC_INFO(actorContext, stream) LOG_LOG_S(actorContext, ::NActors::NLog::PRI_INFO, ::NKikimrServices::STREAMS_STORAGE_SERVICE, stream);
 #define LOG_STORAGE_ASYNC_WARN(actorContext, stream) LOG_LOG_S(actorContext, ::NActors::NLog::PRI_WARN, ::NKikimrServices::STREAMS_STORAGE_SERVICE, stream);
- 
+
 namespace NYq {
 
 using namespace NActors;
@@ -61,8 +61,8 @@ private:
         hFunc(TEvCheckpointStorage::TEvAbortCheckpointRequest, Handle);
         hFunc(TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest, Handle);
 
-        hFunc(NYql::NDq::TEvDqCompute::TEvSaveTaskState, Handle); 
-        hFunc(NYql::NDq::TEvDqCompute::TEvGetTaskState, Handle); 
+        hFunc(NYql::NDq::TEvDqCompute::TEvSaveTaskState, Handle);
+        hFunc(NYql::NDq::TEvDqCompute::TEvGetTaskState, Handle);
     )
 
     void Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev);
@@ -74,8 +74,8 @@ private:
 
     void Handle(TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest::TPtr& ev);
 
-    void Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev); 
-    void Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev); 
+    void Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev);
+    void Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev);
 };
 
 static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig, NConfig::TYdbStorageConfig& ydbStorageConfig) {
@@ -135,255 +135,255 @@ void TStorageProxy::Bootstrap() {
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev) {
     const auto* event = ev->Get();
-    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] Got TEvRegisterCoordinatorRequest") 
+    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] Got TEvRegisterCoordinatorRequest")
 
-    CheckpointStorage->RegisterGraphCoordinator(event->CoordinatorId) 
-        .Apply([coordinatorId = event->CoordinatorId, 
-                cookie = ev->Cookie, 
-                sender = ev->Sender, 
-                context = TActivationContext::AsActorContext()] (const NThreading::TFuture<NYql::TIssues>& issuesFuture) { 
-            auto response = std::make_unique<TEvCheckpointStorage::TEvRegisterCoordinatorResponse>(); 
-            response->Issues = issuesFuture.GetValue(); 
-            if (response->Issues) { 
-                LOG_STORAGE_ASYNC_WARN(context, "[" << coordinatorId << "] Failed to register graph: " << response->Issues.ToString()) 
-            } else { 
-                LOG_STORAGE_ASYNC_INFO(context, "[" << coordinatorId << "] Graph registered") 
-            } 
-            LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] Send TEvRegisterCoordinatorResponse") 
-            context.Send(sender, response.release(), 0, cookie); 
-        }); 
+    CheckpointStorage->RegisterGraphCoordinator(event->CoordinatorId)
+        .Apply([coordinatorId = event->CoordinatorId,
+                cookie = ev->Cookie,
+                sender = ev->Sender,
+                context = TActivationContext::AsActorContext()] (const NThreading::TFuture<NYql::TIssues>& issuesFuture) {
+            auto response = std::make_unique<TEvCheckpointStorage::TEvRegisterCoordinatorResponse>();
+            response->Issues = issuesFuture.GetValue();
+            if (response->Issues) {
+                LOG_STORAGE_ASYNC_WARN(context, "[" << coordinatorId << "] Failed to register graph: " << response->Issues.ToString())
+            } else {
+                LOG_STORAGE_ASYNC_INFO(context, "[" << coordinatorId << "] Graph registered")
+            }
+            LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] Send TEvRegisterCoordinatorResponse")
+            context.Send(sender, response.release(), 0, cookie);
+        });
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPtr& ev) {
     const auto* event = ev->Get();
-    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvCreateCheckpointRequest") 
+    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvCreateCheckpointRequest")
 
-    CheckpointStorage->GetTotalCheckpointsStateSize(event->CoordinatorId.GraphId) 
-        .Apply([checkpointId = event->CheckpointId, 
-                coordinatorId = event->CoordinatorId, 
-                cookie = ev->Cookie, 
-                sender = ev->Sender, 
+    CheckpointStorage->GetTotalCheckpointsStateSize(event->CoordinatorId.GraphId)
+        .Apply([checkpointId = event->CheckpointId,
+                coordinatorId = event->CoordinatorId,
+                cookie = ev->Cookie,
+                sender = ev->Sender,
                 totalGraphCheckpointsSizeLimit = Config.GetStateStorageLimits().GetMaxGraphCheckpointsSizeBytes(),
-                context = TActivationContext::AsActorContext()] 
-               (const NThreading::TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult>& resultFuture) { 
-            auto result = resultFuture.GetValue(); 
-            auto issues = result.second; 
- 
-            if (issues) { 
+                context = TActivationContext::AsActorContext()]
+               (const NThreading::TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult>& resultFuture) {
+            auto result = resultFuture.GetValue();
+            auto issues = result.second;
+
+            if (issues) {
                 LOG_STORAGE_ASYNC_WARN(context, "[" << coordinatorId << "] [" << checkpointId << "] Failed to fetch total graph checkpoints size: " << issues.ToString());
                 context.Send(sender, new TEvCheckpointStorage::TEvCreateCheckpointResponse(checkpointId, std::move(issues), TString()), 0, cookie);
-                return false; 
-            } 
- 
-            auto totalGraphCheckpointsSize = result.first; 
- 
-            if (totalGraphCheckpointsSize > totalGraphCheckpointsSizeLimit) { 
-                TStringStream ss; 
-                ss << "[" << coordinatorId << "] [" << checkpointId << "] Graph checkpoints size limit exceeded: limit " << totalGraphCheckpointsSizeLimit << ", current checkpoints size: " << totalGraphCheckpointsSize; 
-                auto message = ss.Str(); 
-                LOG_STORAGE_ASYNC_WARN(context, message) 
-                issues.AddIssue(message); 
+                return false;
+            }
+
+            auto totalGraphCheckpointsSize = result.first;
+
+            if (totalGraphCheckpointsSize > totalGraphCheckpointsSizeLimit) {
+                TStringStream ss;
+                ss << "[" << coordinatorId << "] [" << checkpointId << "] Graph checkpoints size limit exceeded: limit " << totalGraphCheckpointsSizeLimit << ", current checkpoints size: " << totalGraphCheckpointsSize;
+                auto message = ss.Str();
+                LOG_STORAGE_ASYNC_WARN(context, message)
+                issues.AddIssue(message);
                 LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvCreateCheckpointResponse");
                 context.Send(sender, new TEvCheckpointStorage::TEvCreateCheckpointResponse(checkpointId, std::move(issues), TString()), 0, cookie);
-                return false; 
-            } 
-            return true; 
-        }) 
+                return false;
+            }
+            return true;
+        })
         .Apply([checkpointId = event->CheckpointId,
                 coordinatorId = event->CoordinatorId,
                 cookie = ev->Cookie,
                 sender = ev->Sender,
                 graphDesc = event->GraphDescription,
                 storage = CheckpointStorage]
-                   (const NThreading::TFuture<bool>& passedSizeLimitCheckFuture) { 
-            if (!passedSizeLimitCheckFuture.GetValue()) { 
+                   (const NThreading::TFuture<bool>& passedSizeLimitCheckFuture) {
+            if (!passedSizeLimitCheckFuture.GetValue()) {
                 return NThreading::TFuture<ICheckpointStorage::TCreateCheckpointResult>();
-            } 
+            }
             if (std::holds_alternative<TString>(graphDesc)) {
                 return storage->CreateCheckpoint(coordinatorId, checkpointId, std::get<TString>(graphDesc), ECheckpointStatus::Pending);
             } else {
                 return storage->CreateCheckpoint(coordinatorId, checkpointId, std::get<NProto::TCheckpointGraphDescription>(graphDesc), ECheckpointStatus::Pending);
             }
-        }) 
-        .Apply([checkpointId = event->CheckpointId, 
-                coordinatorId = event->CoordinatorId, 
-                cookie = ev->Cookie, 
-                sender = ev->Sender, 
-                context = TActivationContext::AsActorContext()] 
+        })
+        .Apply([checkpointId = event->CheckpointId,
+                coordinatorId = event->CoordinatorId,
+                cookie = ev->Cookie,
+                sender = ev->Sender,
+                context = TActivationContext::AsActorContext()]
                (const NThreading::TFuture<ICheckpointStorage::TCreateCheckpointResult>& resultFuture) {
             if (!resultFuture.Initialized()) { // didn't pass the size limit check
-                return; 
-            } 
+                return;
+            }
             auto result = resultFuture.GetValue();
             auto issues = result.second;
             auto response = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointResponse>(checkpointId, std::move(issues), result.first);
-            if (response->Issues) { 
+            if (response->Issues) {
                 LOG_STORAGE_ASYNC_WARN(context, "[" << coordinatorId << "] [" << checkpointId << "] Failed to create checkpoint: " << response->Issues.ToString());
-            } else { 
+            } else {
                 LOG_STORAGE_ASYNC_INFO(context, "[" << coordinatorId << "] [" << checkpointId << "] Checkpoint created");
-            } 
+            }
             LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvCreateCheckpointResponse");
-            context.Send(sender, response.release(), 0, cookie); 
-        }); 
+            context.Send(sender, response.release(), 0, cookie);
+        });
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest::TPtr& ev) {
     const auto* event = ev->Get();
-    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvSetCheckpointPendingCommitStatusRequest") 
-    CheckpointStorage->UpdateCheckpointStatus(event->CoordinatorId, event->CheckpointId, ECheckpointStatus::PendingCommit, ECheckpointStatus::Pending) 
-        .Apply([checkpointId = event->CheckpointId, 
-                coordinatorId = event->CoordinatorId, 
-                cookie = ev->Cookie, 
-                sender = ev->Sender, 
-                context = TActivationContext::AsActorContext()] 
-               (const NThreading::TFuture<NYql::TIssues>& issuesFuture) { 
-            auto issues = issuesFuture.GetValue(); 
-            auto response = std::make_unique<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse>(checkpointId, std::move(issues)); 
-            if (response->Issues) { 
-                LOG_STORAGE_ASYNC_WARN(context, "[" << coordinatorId << "] [" << checkpointId << "] Failed to set 'PendingCommit' status: " << response->Issues.ToString()) 
-            } else { 
-                LOG_STORAGE_ASYNC_INFO(context, "[" << coordinatorId << "] [" << checkpointId << "] Status updated to 'PendingCommit'") 
-            } 
-            LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvSetCheckpointPendingCommitStatusResponse") 
-            context.Send(sender, response.release(), 0, cookie); 
-        }); 
+    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvSetCheckpointPendingCommitStatusRequest")
+    CheckpointStorage->UpdateCheckpointStatus(event->CoordinatorId, event->CheckpointId, ECheckpointStatus::PendingCommit, ECheckpointStatus::Pending)
+        .Apply([checkpointId = event->CheckpointId,
+                coordinatorId = event->CoordinatorId,
+                cookie = ev->Cookie,
+                sender = ev->Sender,
+                context = TActivationContext::AsActorContext()]
+               (const NThreading::TFuture<NYql::TIssues>& issuesFuture) {
+            auto issues = issuesFuture.GetValue();
+            auto response = std::make_unique<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse>(checkpointId, std::move(issues));
+            if (response->Issues) {
+                LOG_STORAGE_ASYNC_WARN(context, "[" << coordinatorId << "] [" << checkpointId << "] Failed to set 'PendingCommit' status: " << response->Issues.ToString())
+            } else {
+                LOG_STORAGE_ASYNC_INFO(context, "[" << coordinatorId << "] [" << checkpointId << "] Status updated to 'PendingCommit'")
+            }
+            LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvSetCheckpointPendingCommitStatusResponse")
+            context.Send(sender, response.release(), 0, cookie);
+        });
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::TPtr& ev) {
     const auto* event = ev->Get();
-    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvCompleteCheckpointRequest") 
-    CheckpointStorage->UpdateCheckpointStatus(event->CoordinatorId, event->CheckpointId, ECheckpointStatus::Completed, ECheckpointStatus::PendingCommit) 
-        .Apply([checkpointId = event->CheckpointId, 
-                coordinatorId = event->CoordinatorId, 
-                cookie = ev->Cookie, 
-                sender = ev->Sender, 
+    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvCompleteCheckpointRequest")
+    CheckpointStorage->UpdateCheckpointStatus(event->CoordinatorId, event->CheckpointId, ECheckpointStatus::Completed, ECheckpointStatus::PendingCommit)
+        .Apply([checkpointId = event->CheckpointId,
+                coordinatorId = event->CoordinatorId,
+                cookie = ev->Cookie,
+                sender = ev->Sender,
                 gcEnabled = Config.GetCheckpointGarbageConfig().GetEnabled(),
-                actorGC = ActorGC, 
-                context = TActivationContext::AsActorContext()] 
-               (const NThreading::TFuture<NYql::TIssues>& issuesFuture) { 
-            auto issues = issuesFuture.GetValue(); 
-            auto response = std::make_unique<TEvCheckpointStorage::TEvCompleteCheckpointResponse>(checkpointId, std::move(issues)); 
-            if (response->Issues) { 
-                LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Failed to set 'Completed' status: " << response->Issues.ToString()) 
-            } else { 
-                LOG_STORAGE_ASYNC_INFO(context, "[" << coordinatorId << "] [" << checkpointId << "] Status updated to 'Completed'") 
-                if (gcEnabled) { 
-                    auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(coordinatorId, checkpointId); 
-                    LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvNewCheckpointSucceeded") 
-                    context.Send(actorGC, request.release(), 0); 
-                } 
-            } 
-            LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvCompleteCheckpointResponse") 
-            context.Send(sender, response.release(), 0, cookie); 
-        }); 
+                actorGC = ActorGC,
+                context = TActivationContext::AsActorContext()]
+               (const NThreading::TFuture<NYql::TIssues>& issuesFuture) {
+            auto issues = issuesFuture.GetValue();
+            auto response = std::make_unique<TEvCheckpointStorage::TEvCompleteCheckpointResponse>(checkpointId, std::move(issues));
+            if (response->Issues) {
+                LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Failed to set 'Completed' status: " << response->Issues.ToString())
+            } else {
+                LOG_STORAGE_ASYNC_INFO(context, "[" << coordinatorId << "] [" << checkpointId << "] Status updated to 'Completed'")
+                if (gcEnabled) {
+                    auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(coordinatorId, checkpointId);
+                    LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvNewCheckpointSucceeded")
+                    context.Send(actorGC, request.release(), 0);
+                }
+            }
+            LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvCompleteCheckpointResponse")
+            context.Send(sender, response.release(), 0, cookie);
+        });
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvAbortCheckpointRequest::TPtr& ev) {
     const auto* event = ev->Get();
-    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvAbortCheckpointRequest") 
-    CheckpointStorage->AbortCheckpoint(event->CoordinatorId,event->CheckpointId) 
-        .Apply([checkpointId = event->CheckpointId, 
-                coordinatorId = event->CoordinatorId, 
-                cookie = ev->Cookie, 
-                sender = ev->Sender, 
-                context = TActivationContext::AsActorContext()] (const NThreading::TFuture<NYql::TIssues>& issuesFuture) { 
-            auto issues = issuesFuture.GetValue(); 
-            auto response = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointResponse>(checkpointId, std::move(issues)); 
-            if (response->Issues) { 
-                LOG_STORAGE_ASYNC_WARN(context, "[" << coordinatorId << "] [" << checkpointId << "] Failed to abort checkpoint: " << response->Issues.ToString()) 
-            } else { 
-                LOG_STORAGE_ASYNC_INFO(context, "[" << coordinatorId << "] [" << checkpointId << "] Checkpoint aborted") 
-            } 
-            LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvAbortCheckpointResponse") 
-            context.Send(sender, response.release(), 0, cookie); 
-        }); 
+    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->CoordinatorId << "] [" << event->CheckpointId << "] Got TEvAbortCheckpointRequest")
+    CheckpointStorage->AbortCheckpoint(event->CoordinatorId,event->CheckpointId)
+        .Apply([checkpointId = event->CheckpointId,
+                coordinatorId = event->CoordinatorId,
+                cookie = ev->Cookie,
+                sender = ev->Sender,
+                context = TActivationContext::AsActorContext()] (const NThreading::TFuture<NYql::TIssues>& issuesFuture) {
+            auto issues = issuesFuture.GetValue();
+            auto response = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointResponse>(checkpointId, std::move(issues));
+            if (response->Issues) {
+                LOG_STORAGE_ASYNC_WARN(context, "[" << coordinatorId << "] [" << checkpointId << "] Failed to abort checkpoint: " << response->Issues.ToString())
+            } else {
+                LOG_STORAGE_ASYNC_INFO(context, "[" << coordinatorId << "] [" << checkpointId << "] Checkpoint aborted")
+            }
+            LOG_STORAGE_ASYNC_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvAbortCheckpointResponse")
+            context.Send(sender, response.release(), 0, cookie);
+        });
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest::TPtr& ev) {
     const auto* event = ev->Get();
-    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->GraphId << "] Got TEvGetCheckpointsMetadataRequest") 
+    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->GraphId << "] Got TEvGetCheckpointsMetadataRequest")
         CheckpointStorage->GetCheckpoints(event->GraphId, event->Statuses, event->Limit, event->LoadGraphDescription)
-        .Apply([graphId = event->GraphId, 
-                cookie = ev->Cookie, 
-                sender = ev->Sender, 
-                context = TActivationContext::AsActorContext()] (const NThreading::TFuture<ICheckpointStorage::TGetCheckpointsResult>& futureResult) { 
-            auto result = futureResult.GetValue(); 
-            auto response = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(result.first, result.second); 
-            if (response->Issues) { 
-                LOG_STORAGE_ASYNC_WARN(context, "[" << graphId << "] Failed to get checkpoints: " << response->Issues.ToString()) 
-            } 
-            LOG_STORAGE_ASYNC_DEBUG(context, "[" << graphId << "] Send TEvGetCheckpointsMetadataResponse") 
-            context.Send(sender, response.release(), 0, cookie); 
-        }); 
+        .Apply([graphId = event->GraphId,
+                cookie = ev->Cookie,
+                sender = ev->Sender,
+                context = TActivationContext::AsActorContext()] (const NThreading::TFuture<ICheckpointStorage::TGetCheckpointsResult>& futureResult) {
+            auto result = futureResult.GetValue();
+            auto response = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(result.first, result.second);
+            if (response->Issues) {
+                LOG_STORAGE_ASYNC_WARN(context, "[" << graphId << "] Failed to get checkpoints: " << response->Issues.ToString())
+            }
+            LOG_STORAGE_ASYNC_DEBUG(context, "[" << graphId << "] Send TEvGetCheckpointsMetadataResponse")
+            context.Send(sender, response.release(), 0, cookie);
+        });
 }
 
-void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) { 
+void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) {
     auto* event = ev->Get();
-    const auto checkpointId = TCheckpointId(event->Checkpoint.GetGeneration(), event->Checkpoint.GetId()); 
+    const auto checkpointId = TCheckpointId(event->Checkpoint.GetGeneration(), event->Checkpoint.GetId());
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << checkpointId << "] Got TEvSaveTaskState: task " << event->TaskId);
- 
+
     const size_t stateSize = event->State.ByteSizeLong();
     if (stateSize > Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes()) {
         LOG_STREAMS_STORAGE_SERVICE_WARN("[" << checkpointId << "] Won't save task state because it's too big: task: " << event->TaskId
             << ", state size: " << stateSize << "/" << Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes());
-        auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>(); 
-        response->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration); 
-        response->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo); 
-        response->Record.SetStateSizeBytes(0); 
+        auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>();
+        response->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
+        response->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
+        response->Record.SetStateSizeBytes(0);
         response->Record.SetTaskId(event->TaskId);
-        response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::STATE_TOO_BIG); 
-        Send(ev->Sender, response.release()); 
-        return; 
-    } 
- 
-    StateStorage->SaveState(event->TaskId, event->GraphId, checkpointId, event->State) 
-        .Apply([graphId = event->GraphId, 
-                checkpointId, 
-                taskId = event->TaskId, 
-                cookie = ev->Cookie, 
-                sender = ev->Sender, 
+        response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::STATE_TOO_BIG);
+        Send(ev->Sender, response.release());
+        return;
+    }
+
+    StateStorage->SaveState(event->TaskId, event->GraphId, checkpointId, event->State)
+        .Apply([graphId = event->GraphId,
+                checkpointId,
+                taskId = event->TaskId,
+                cookie = ev->Cookie,
+                sender = ev->Sender,
                 stateSize = stateSize,
-                context = TActivationContext::AsActorContext()](const NThreading::TFuture<NYql::TIssues>& futureResult) { 
-            const auto& issues = futureResult.GetValue(); 
-            auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>(); 
-            response->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration); 
-            response->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo); 
-            response->Record.SetStateSizeBytes(stateSize); 
+                context = TActivationContext::AsActorContext()](const NThreading::TFuture<NYql::TIssues>& futureResult) {
+            const auto& issues = futureResult.GetValue();
+            auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>();
+            response->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
+            response->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
+            response->Record.SetStateSizeBytes(stateSize);
             response->Record.SetTaskId(taskId);
- 
-            if (issues) { 
-                LOG_STORAGE_ASYNC_WARN(context, "[" << checkpointId << "] Failed to save task state: task: " << taskId << ", issues: " << issues.ToString()) 
-                response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::STORAGE_ERROR); 
-            } else { 
-                response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::OK); 
-            } 
-            LOG_STORAGE_ASYNC_DEBUG(context, "[" << checkpointId << "] Send TEvSaveTaskStateResult") 
-            context.Send(sender, response.release(), 0, cookie); 
-        }); 
+
+            if (issues) {
+                LOG_STORAGE_ASYNC_WARN(context, "[" << checkpointId << "] Failed to save task state: task: " << taskId << ", issues: " << issues.ToString())
+                response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::STORAGE_ERROR);
+            } else {
+                response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::OK);
+            }
+            LOG_STORAGE_ASYNC_DEBUG(context, "[" << checkpointId << "] Send TEvSaveTaskStateResult")
+            context.Send(sender, response.release(), 0, cookie);
+        });
 }
 
-void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) { 
+void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
     const auto* event = ev->Get();
-    const auto checkpointId = TCheckpointId(event->Checkpoint.GetGeneration(), event->Checkpoint.GetId()); 
+    const auto checkpointId = TCheckpointId(event->Checkpoint.GetGeneration(), event->Checkpoint.GetId());
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << checkpointId << "] Got TEvGetTaskState: tasks {" << JoinSeq(", ", event->TaskIds) << "}");
- 
+
     StateStorage->GetState(event->TaskIds, event->GraphId, checkpointId)
-        .Apply([checkpointId = event->Checkpoint, 
-                generation = event->Generation, 
+        .Apply([checkpointId = event->Checkpoint,
+                generation = event->Generation,
                 taskIds = event->TaskIds,
-                cookie = ev->Cookie, 
-                sender = ev->Sender, 
-                context = TActivationContext::AsActorContext()](const NThreading::TFuture<IStateStorage::TGetStateResult>& resultFuture) { 
-            auto result = resultFuture.GetValue(); 
+                cookie = ev->Cookie,
+                sender = ev->Sender,
+                context = TActivationContext::AsActorContext()](const NThreading::TFuture<IStateStorage::TGetStateResult>& resultFuture) {
+            auto result = resultFuture.GetValue();
 
             auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvGetTaskStateResult>(checkpointId, result.second, generation);
             std::swap(response->States, result.first);
-            if (response->Issues) { 
+            if (response->Issues) {
                 LOG_STORAGE_ASYNC_WARN(context, "[" << checkpointId << "] Failed to get task state: taskIds: {" << JoinSeq(", ", taskIds) << "}, issues: " << response->Issues.ToString());
-            } 
+            }
             LOG_STORAGE_ASYNC_DEBUG(context, "[" << checkpointId << "] Send TEvGetTaskStateResult");
-            context.Send(sender, response.release(), 0, cookie); 
-        }); 
+            context.Send(sender, response.release(), 0, cookie);
+        });
 }
 
 } // namespace

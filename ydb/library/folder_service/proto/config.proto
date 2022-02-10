@@ -1,9 +1,9 @@
-syntax = "proto3"; 
- 
-package NKikimrProto.NFolderService; 
- 
-message TFolderServiceConfig { 
-  bool Enable = 1; 
-  string Endpoint = 2; 
-  string PathToRootCA = 3; 
-} 
+syntax = "proto3";
+
+package NKikimrProto.NFolderService;
+
+message TFolderServiceConfig {
+  bool Enable = 1;
+  string Endpoint = 2;
+  string PathToRootCA = 3;
+}

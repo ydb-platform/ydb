@@ -1127,7 +1127,7 @@ private:
             // out params:
             gatewaysConfig,
             clusters);
- 
+
         TVector<TDataProviderInitializer> dataProvidersInit;
         const auto dbResolver = std::make_shared<TDatabaseAsyncResolverWithMeta>(TDatabaseAsyncResolverWithMeta(NActors::TActivationContext::ActorSystem(), Params.DatabaseResolver,
             Params.CommonConfig.GetYdbMvpCloudEndpoint(), Params.CommonConfig.GetMdbGateway(), Params.CommonConfig.GetMdbTransformHost(), Params.QueryId, Params.AuthToken, Params.AccountIdSignatures, Connections));
@@ -1151,7 +1151,7 @@ private:
             dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory));
         }
 
-        { 
+        {
             NYql::TPqGatewayServices pqServices(
                 Params.Driver,
                 Params.PqCmConnections,
@@ -1159,10 +1159,10 @@ private:
                 std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()),
                 Params.FunctionRegistry
             );
-            const auto pqGateway = NYql::CreatePqNativeGateway(pqServices); 
+            const auto pqGateway = NYql::CreatePqNativeGateway(pqServices);
             dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
-        } 
- 
+        }
+
         {
             auto solomonConfig = gatewaysConfig.GetSolomon();
             auto solomonGateway = NYql::CreateSolomonGateway(solomonConfig);

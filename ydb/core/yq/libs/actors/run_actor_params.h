@@ -43,7 +43,7 @@ struct TRunActorParams { // TODO2 : Change name
         TVector<YandexQuery::Connection> connections,
         TVector<YandexQuery::Binding> bindings,
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-        THashMap<TString, TString> accountIdSignatures, 
+        THashMap<TString, TString> accountIdSignatures,
         YandexQuery::QueryContent::QueryType queryType,
         YandexQuery::ExecuteMode executeMode,
         const TString& resultId,
@@ -90,7 +90,7 @@ struct TRunActorParams { // TODO2 : Change name
     const TVector<YandexQuery::Binding> Bindings;
     const NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     const THashMap<TString, TString> AccountIdSignatures;
-    const YandexQuery::QueryContent::QueryType QueryType; 
+    const YandexQuery::QueryContent::QueryType QueryType;
     const YandexQuery::ExecuteMode ExecuteMode;
     const TString ResultId;
     const YandexQuery::StateLoadMode StateLoadMode;

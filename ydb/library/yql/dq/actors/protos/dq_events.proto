@@ -11,7 +11,7 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 
 message TCheckpoint {
     optional uint64 Id = 1;
-    optional uint64 Generation = 2; 
+    optional uint64 Generation = 2;
 };
 
 /*
@@ -19,7 +19,7 @@ message TCheckpoint {
     1) Data
     2) Checkpoint
     3) Finished
-*/ 
+*/
 message TChannelData {
     optional uint64 ChannelId = 1;
     optional NYql.NDqProto.TData Data = 2;
@@ -27,10 +27,10 @@ message TChannelData {
     optional TCheckpoint Checkpoint = 4;
 };
 
-message TEvRun { 
+message TEvRun {
     optional TMessageTransportMeta TransportMeta = 100;
-} 
- 
+}
+
 message TEvChannelsInfo {
     repeated NYql.NDqProto.TChannel Update = 1;
 };
@@ -102,76 +102,76 @@ message TComputeRuntimeSettings {
     optional uint32 TasksOnNodeCount = 5; // approx
     optional TRlPath RlPath = 7;
 }
- 
-message TEvNewCheckpointCoordinator { 
-    optional uint64 Generation = 1; 
-    optional string GraphId = 2; 
+
+message TEvNewCheckpointCoordinator {
+    optional uint64 Generation = 1;
+    optional string GraphId = 2;
 
     optional TMessageTransportMeta TransportMeta = 100;
-} 
- 
+}
+
 message TEvNewCheckpointCoordinatorAck {
     optional TMessageTransportMeta TransportMeta = 100;
 }
 
-message TEvInjectCheckpoint { 
-    optional TCheckpoint Checkpoint = 1; 
-    optional uint64 Generation = 2; 
+message TEvInjectCheckpoint {
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 Generation = 2;
 
     optional TMessageTransportMeta TransportMeta = 100;
-} 
- 
-message TEvSaveTaskStateResult { 
-    enum EStatus { 
-        UNSPECIFIED = 0; 
-        OK = 1; 
-        STORAGE_ERROR = 2; 
-        INTERNAL_ERROR = 3; 
-        STATE_TOO_BIG = 4; 
-    } 
-    optional TCheckpoint Checkpoint = 1; 
-    optional uint64 TaskId = 2; 
-    optional EStatus Status = 3; 
-    optional uint64 StateSizeBytes = 4; 
+}
+
+message TEvSaveTaskStateResult {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        OK = 1;
+        STORAGE_ERROR = 2;
+        INTERNAL_ERROR = 3;
+        STATE_TOO_BIG = 4;
+    }
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 TaskId = 2;
+    optional EStatus Status = 3;
+    optional uint64 StateSizeBytes = 4;
 
     optional TMessageTransportMeta TransportMeta = 100;
-} 
- 
-message TEvCommitState { 
-    optional TCheckpoint Checkpoint = 1; 
-    optional uint64 Generation = 2; 
+}
+
+message TEvCommitState {
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 Generation = 2;
 
     optional TMessageTransportMeta TransportMeta = 100;
-} 
- 
-message TEvStateCommitted { 
-    optional TCheckpoint Checkpoint = 1; 
-    optional uint64 TaskId = 2; 
+}
+
+message TEvStateCommitted {
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 TaskId = 2;
 
     optional TMessageTransportMeta TransportMeta = 100;
-} 
- 
-message TEvRestoreFromCheckpoint { 
-    optional TCheckpoint Checkpoint = 1; 
-    optional uint64 Generation = 2; 
+}
+
+message TEvRestoreFromCheckpoint {
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 Generation = 2;
     optional NDqStateLoadPlan.TTaskPlan StateLoadPlan = 3;
 
     optional TMessageTransportMeta TransportMeta = 100;
-} 
+}
 
-message TEvRestoreFromCheckpointResult { 
-    enum ERestoreStatus { 
-        UNSPECIFIED = 0; 
-        OK = 1; 
-        STORAGE_ERROR = 2; 
-        INTERNAL_ERROR = 3; 
-    } 
-    optional TCheckpoint Checkpoint = 1; 
-    optional uint64 TaskId = 2; 
-    optional ERestoreStatus Status = 3; 
+message TEvRestoreFromCheckpointResult {
+    enum ERestoreStatus {
+        UNSPECIFIED = 0;
+        OK = 1;
+        STORAGE_ERROR = 2;
+        INTERNAL_ERROR = 3;
+    }
+    optional TCheckpoint Checkpoint = 1;
+    optional uint64 TaskId = 2;
+    optional ERestoreStatus Status = 3;
 
     optional TMessageTransportMeta TransportMeta = 100;
-} 
+}
 
 message TMessageTransportMeta {
     optional uint64 SeqNo = 1; // SeqNo of message

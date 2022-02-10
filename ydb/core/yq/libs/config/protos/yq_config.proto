@@ -29,7 +29,7 @@ message TConfig {
     TCommonConfig Common = 2;
     TControlPlaneStorageConfig ControlPlaneStorage = 3;
     TControlPlaneProxyConfig ControlPlaneProxy = 4;
-    NKikimrProto.NFolderService.TFolderServiceConfig FolderService = 5; 
+    NKikimrProto.NFolderService.TFolderServiceConfig FolderService = 5;
     TPrivateApiConfig PrivateApi = 6;
     TTokenAccessorConfig TokenAccessor = 7;
     TDbPoolConfig DbPool = 8;

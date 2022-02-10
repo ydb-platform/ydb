@@ -17,8 +17,8 @@ class ICheckpointStorage : public virtual TThrRefBase {
 public:
     using TGetCheckpointsResult = std::pair<TCheckpoints, NYql::TIssues>;
     using TGetCoordinatorsResult = std::pair<TCoordinators, NYql::TIssues>;
-    using TAddToStateSizeResult = std::pair<ui64, NYql::TIssues>; 
-    using TGetTotalCheckpointsStateSizeResult = std::pair<ui64, NYql::TIssues>; 
+    using TAddToStateSizeResult = std::pair<ui64, NYql::TIssues>;
+    using TGetTotalCheckpointsStateSizeResult = std::pair<ui64, NYql::TIssues>;
     using TCreateCheckpointResult = std::pair<TString, NYql::TIssues>; // graphDescId for subsequent usage.
 
     virtual NThreading::TFuture<NYql::TIssues> Init() = 0;
@@ -50,7 +50,7 @@ public:
         const TCoordinatorId& coordinator,
         const TCheckpointId& checkpointId) = 0;
 
-    virtual NThreading::TFuture<TGetCheckpointsResult> GetCheckpoints(const TString& graph) = 0; 
+    virtual NThreading::TFuture<TGetCheckpointsResult> GetCheckpoints(const TString& graph) = 0;
     virtual NThreading::TFuture<TGetCheckpointsResult> GetCheckpoints(
         const TString& graph, const TVector<ECheckpointStatus>& statuses, ui64 limit, bool loadGraphDescription = false) = 0;
 
@@ -71,12 +71,12 @@ public:
         const TString& graphId,
         const TCheckpointId& checkpointUpperBound) = 0;
 
-    virtual NThreading::TFuture<ICheckpointStorage::TAddToStateSizeResult> AddToStateSize( 
-        const TString& graphId, 
-        const TCheckpointId& checkpoint, 
-        ui64 size) = 0; 
- 
-    virtual NThreading::TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> GetTotalCheckpointsStateSize(const TString& graphId) = 0; 
+    virtual NThreading::TFuture<ICheckpointStorage::TAddToStateSizeResult> AddToStateSize(
+        const TString& graphId,
+        const TCheckpointId& checkpoint,
+        ui64 size) = 0;
+
+    virtual NThreading::TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> GetTotalCheckpointsStateSize(const TString& graphId) = 0;
 };
 
 using TCheckpointStoragePtr = TIntrusivePtr<ICheckpointStorage>;

@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:mt) 
+OWNER(g:mt)
 
 SRCS(
     levenshtein_diff.cpp

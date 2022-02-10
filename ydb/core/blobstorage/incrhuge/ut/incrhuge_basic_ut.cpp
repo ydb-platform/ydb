@@ -85,7 +85,7 @@ public:
         settings.UnalignedBlockSize = 4096;
         settings.MinHugeBlobInBytes = 512 << 10;
         settings.MaxInFlightWrites = 5;
-        settings.InitOwnerRound = 2;
+        settings.InitOwnerRound = 2; 
 
         KeeperId = MakeIncrHugeKeeperId(1);
         TActorSetupCmd keeperSetup(CreateIncrHugeKeeper(settings), TMailboxType::Revolving, 0);

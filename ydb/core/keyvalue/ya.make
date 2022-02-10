@@ -1,52 +1,52 @@
-LIBRARY()
-
-OWNER(
+LIBRARY() 
+ 
+OWNER( 
     alexvru
-    cthulhu
+    cthulhu 
     g:kikimr
-)
-
-SRCS(
-    defs.h
-    keyvalue_collect_operation.cpp
-    keyvalue_collect_operation.h
-    keyvalue_collector.cpp
-    keyvalue_collector.h
-    keyvalue_const.h
-    keyvalue.cpp
-    keyvalue_data.cpp
-    keyvalue_data.h
-    keyvalue_data_header.h
-    keyvalue_events.h
-    keyvalue_flat_impl.h
-    keyvalue.h
-    keyvalue_helpers.cpp
-    keyvalue_helpers.h
-    keyvalue_index_record.cpp
-    keyvalue_index_record.h
-    keyvalue_intermediate.cpp
-    keyvalue_intermediate.h
-    keyvalue_item_type.h
-    keyvalue_key_header.h
-    keyvalue_key_range.h
-    keyvalue_request_stat.h
-    keyvalue_request_type.h
-    keyvalue_scheme_flat.h
-    keyvalue_simple_db_flat.cpp
-    keyvalue_simple_db_flat.h
-    keyvalue_simple_db.h
-    keyvalue_state.cpp
-    keyvalue_state.h
+) 
+ 
+SRCS( 
+    defs.h 
+    keyvalue_collect_operation.cpp 
+    keyvalue_collect_operation.h 
+    keyvalue_collector.cpp 
+    keyvalue_collector.h 
+    keyvalue_const.h 
+    keyvalue.cpp 
+    keyvalue_data.cpp 
+    keyvalue_data.h 
+    keyvalue_data_header.h 
+    keyvalue_events.h 
+    keyvalue_flat_impl.h 
+    keyvalue.h 
+    keyvalue_helpers.cpp 
+    keyvalue_helpers.h 
+    keyvalue_index_record.cpp 
+    keyvalue_index_record.h 
+    keyvalue_intermediate.cpp 
+    keyvalue_intermediate.h 
+    keyvalue_item_type.h 
+    keyvalue_key_header.h 
+    keyvalue_key_range.h 
+    keyvalue_request_stat.h 
+    keyvalue_request_type.h 
+    keyvalue_scheme_flat.h 
+    keyvalue_simple_db_flat.cpp 
+    keyvalue_simple_db_flat.h 
+    keyvalue_simple_db.h 
+    keyvalue_state.cpp 
+    keyvalue_state.h 
     keyvalue_state_collect.cpp
     keyvalue_storage_read_request.cpp
-    keyvalue_storage_request.cpp
-    keyvalue_storage_request.h
-    keyvalue_stored_state_data.cpp
-    keyvalue_stored_state_data.h
-    keyvalue_trash_key_arbitrary.h
-)
-
-PEERDIR(
+    keyvalue_storage_request.cpp 
+    keyvalue_storage_request.h 
+    keyvalue_stored_state_data.cpp 
+    keyvalue_stored_state_data.h 
+    keyvalue_trash_key_arbitrary.h 
+) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     library/cpp/actors/protos
     ydb/core/base
@@ -58,9 +58,9 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/public/lib/base
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE(
     protos

@@ -473,7 +473,7 @@ namespace NKikimr {
             }
         }
 
-        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) { 
             ctx.Send(ev->Forward(CommitterId));
         }
 

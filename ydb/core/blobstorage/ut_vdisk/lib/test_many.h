@@ -57,28 +57,28 @@ struct TManyPutGet {
 };
 
 ///////////////////////////////////////////////////////////////////////////
-struct TManyMultiPutGet {
-    const bool WaitForCompaction;
-    const ui32 MsgNum;
-    const ui32 MsgSize;
-    const ui32 BatchSize;
-    const NKikimrBlobStorage::EPutHandleClass HandleClass;
-    const ui64 TabletId;
-
-    TManyMultiPutGet(bool waitForCompaction, ui32 msgNum, ui32 msgSize, ui32 batchSize,
-            NKikimrBlobStorage::EPutHandleClass cls, ui64 tabletId = 0)
-        : WaitForCompaction(waitForCompaction)
-        , MsgNum(msgNum)
-        , MsgSize(msgSize)
-        , BatchSize(batchSize)
-        , HandleClass(cls)
-        , TabletId(tabletId)
-    {}
-
-    void operator ()(TConfiguration *conf);
-};
-
-///////////////////////////////////////////////////////////////////////////
+struct TManyMultiPutGet { 
+    const bool WaitForCompaction; 
+    const ui32 MsgNum; 
+    const ui32 MsgSize; 
+    const ui32 BatchSize; 
+    const NKikimrBlobStorage::EPutHandleClass HandleClass; 
+    const ui64 TabletId; 
+ 
+    TManyMultiPutGet(bool waitForCompaction, ui32 msgNum, ui32 msgSize, ui32 batchSize, 
+            NKikimrBlobStorage::EPutHandleClass cls, ui64 tabletId = 0) 
+        : WaitForCompaction(waitForCompaction) 
+        , MsgNum(msgNum) 
+        , MsgSize(msgSize) 
+        , BatchSize(batchSize) 
+        , HandleClass(cls) 
+        , TabletId(tabletId) 
+    {} 
+ 
+    void operator ()(TConfiguration *conf); 
+}; 
+ 
+/////////////////////////////////////////////////////////////////////////// 
 struct TManyPutRangeGet {
     const bool WaitForCompaction;
     const bool IndexOnly;

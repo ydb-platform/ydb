@@ -8,7 +8,7 @@
 #include <util/stream/str.h>
 #include <util/generic/string.h>
 #include <util/generic/bt_exception.h>
-#include <util/string/builder.h>
+#include <util/string/builder.h> 
 
 #include <util/generic/list.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -55,115 +55,115 @@ struct TPartDiffSet {
     TVector<TPartDiff> PartDiffs;
 };
 
-// Part fragment, contains only some data
-struct TPartFragment {
-    TString OwnedString; // Used for ownership only
-    char *Bytes = nullptr;
-    ui64 Offset = 0; // Relative to part beginning
-    ui64 Size = 0;
-    ui64 PartSize = 0; // Full size of the part
-
-    ui64 size() const {
-        return PartSize;
-    }
-
-    void clear() {
-        OwnedString.clear();
-        Bytes = nullptr;
-        Offset = 0;
-        Size = 0;
-        PartSize = 0;
-    }
-
-    void UninitializedOwnedWhole(ui64 size) {
-        OwnedString = TString::Uninitialized(size);
-        Bytes = OwnedString.Detach();
-        Offset = 0;
-        Size = size;
-        PartSize = size;
-    }
-
-    void ResetToWhole(const TString &whole) {
-        OwnedString = whole;
-        Bytes = OwnedString.Detach();
-        Offset = 0;
+// Part fragment, contains only some data 
+struct TPartFragment { 
+    TString OwnedString; // Used for ownership only 
+    char *Bytes = nullptr; 
+    ui64 Offset = 0; // Relative to part beginning 
+    ui64 Size = 0; 
+    ui64 PartSize = 0; // Full size of the part 
+ 
+    ui64 size() const { 
+        return PartSize; 
+    } 
+ 
+    void clear() { 
+        OwnedString.clear(); 
+        Bytes = nullptr; 
+        Offset = 0; 
+        Size = 0; 
+        PartSize = 0; 
+    } 
+ 
+    void UninitializedOwnedWhole(ui64 size) { 
+        OwnedString = TString::Uninitialized(size); 
+        Bytes = OwnedString.Detach(); 
+        Offset = 0; 
+        Size = size; 
+        PartSize = size; 
+    } 
+ 
+    void ResetToWhole(const TString &whole) { 
+        OwnedString = whole; 
+        Bytes = OwnedString.Detach(); 
+        Offset = 0; 
         Size = whole.size();
-        PartSize = Size;
-    }
-
-    void ReferenceTo(const TString &whole) {
-        OwnedString = whole;
-        Bytes = const_cast<char*>(whole.data());
-        Offset = 0;
-        Size = whole.size();
-        PartSize = Size;
-    }
-
-    void ReferenceTo(const TString &piece, ui64 offset, ui64 size, ui64 partSize) {
-        OwnedString = piece;
-        Bytes = const_cast<char*>(piece.data());
-        Offset = offset;
-        Y_VERIFY(size <= piece.size());
-        Size = size;
-        Y_VERIFY(offset + size <= partSize);
-        PartSize = partSize;
-    }
-
-    char *GetDataAt(ui64 get_offset) const {
-        Y_VERIFY_DEBUG(Size);
-        Y_VERIFY_DEBUG(get_offset >= Offset, "%s", (TStringBuilder() << "get_offset# " << get_offset
-                    << " Offset# " << Offset << " Size# " << Size << " capacity# " << OwnedString.capacity()).c_str());
-        Y_VERIFY_DEBUG(get_offset < Offset + Size, "%s", (TStringBuilder() << "get_offset# " << get_offset
-                    << " Offset# " << Offset << " Size# " << Size << " capacity# " << OwnedString.capacity()).c_str());
-        return Bytes + get_offset - Offset;
-    }
-
-    char *GetDataAtSafe(ui64 get_offset) const {
-        if (get_offset < Offset || get_offset >= Offset + Size) {
-            return nullptr;
-        }
-        return Bytes + get_offset - Offset;
-    }
-
-    ui64 MemoryConsumed() const {
-        return OwnedString.capacity();
-    }
-
-    void Detach() {
-        char *newBytes = nullptr;
-        if (Bytes) {
-            char *oldBytes = Bytes;
+        PartSize = Size; 
+    } 
+ 
+    void ReferenceTo(const TString &whole) { 
+        OwnedString = whole; 
+        Bytes = const_cast<char*>(whole.data()); 
+        Offset = 0; 
+        Size = whole.size(); 
+        PartSize = Size; 
+    } 
+ 
+    void ReferenceTo(const TString &piece, ui64 offset, ui64 size, ui64 partSize) { 
+        OwnedString = piece; 
+        Bytes = const_cast<char*>(piece.data()); 
+        Offset = offset; 
+        Y_VERIFY(size <= piece.size()); 
+        Size = size; 
+        Y_VERIFY(offset + size <= partSize); 
+        PartSize = partSize; 
+    } 
+ 
+    char *GetDataAt(ui64 get_offset) const { 
+        Y_VERIFY_DEBUG(Size); 
+        Y_VERIFY_DEBUG(get_offset >= Offset, "%s", (TStringBuilder() << "get_offset# " << get_offset 
+                    << " Offset# " << Offset << " Size# " << Size << " capacity# " << OwnedString.capacity()).c_str()); 
+        Y_VERIFY_DEBUG(get_offset < Offset + Size, "%s", (TStringBuilder() << "get_offset# " << get_offset 
+                    << " Offset# " << Offset << " Size# " << Size << " capacity# " << OwnedString.capacity()).c_str()); 
+        return Bytes + get_offset - Offset; 
+    } 
+ 
+    char *GetDataAtSafe(ui64 get_offset) const { 
+        if (get_offset < Offset || get_offset >= Offset + Size) { 
+            return nullptr; 
+        } 
+        return Bytes + get_offset - Offset; 
+    } 
+ 
+    ui64 MemoryConsumed() const { 
+        return OwnedString.capacity(); 
+    } 
+ 
+    void Detach() { 
+        char *newBytes = nullptr; 
+        if (Bytes) { 
+            char *oldBytes = Bytes; 
             char *oldData = const_cast<char*>(OwnedString.data());
-            intptr_t bytesOffset = oldBytes - oldData;
-            OwnedString.Detach();
+            intptr_t bytesOffset = oldBytes - oldData; 
+            OwnedString.Detach(); 
             if (OwnedString.data() != oldData) {
                 newBytes = const_cast<char*>(OwnedString.data()) + bytesOffset;
-            } else {
-                newBytes = oldBytes;
-            }
-        }
-        Bytes = newBytes;
-    }
-};
-
+            } else { 
+                newBytes = oldBytes; 
+            } 
+        } 
+        Bytes = newBytes; 
+    } 
+}; 
+ 
 struct TDataPartSet {
     ui64 FullDataSize = 0;
     ui32 PartsMask = 0;
-    TStackVec<TPartFragment, 8> Parts;
-    TPartFragment FullDataFragment;
+    TStackVec<TPartFragment, 8> Parts; 
+    TPartFragment FullDataFragment; 
     ui64 MemoryConsumed = 0;
     bool IsFragment = false;
 
     // Incremental split KIKIMR-10794
     ui64 WholeBlocks = 0; // Blocks to be split (not including tail)
     ui64 CurBlockIdx = 0; // Blocks have been already split
-
-    void Detach() {
-        for (size_t i = 0; i < Parts.size(); ++i) {
-            Parts[i].Detach();
-        }
-        FullDataFragment.Detach();
-    }
+ 
+    void Detach() { 
+        for (size_t i = 0; i < Parts.size(); ++i) { 
+            Parts[i].Detach(); 
+        } 
+        FullDataFragment.Detach(); 
+    } 
 
     void StartSplit(ui64 wholeBlocks) {
         WholeBlocks = wholeBlocks;
@@ -186,43 +186,43 @@ struct TDataPartSet {
     }
 };
 
-struct TPartOffsetRange {  // [Begin, End)
-    ui64 Begin = 0;
-    ui64 End = 0;
-
-    ui64 WholeBegin = 0;
-    ui64 WholeEnd = 0;
-
-    ui64 AlignedBegin = 0;
-    ui64 AlignedEnd = 0;
-
-    // AlignedWholeEnd does not always exist because part are zero-padded
-    ui64 AlignedWholeBegin = 0;
-
-    bool IsEmpty() {
-        return (End == 0);
-    }
-
-    void Reset() {
-        Begin = 0;
-        End = 0;
-
-        WholeBegin = 0;
-        WholeEnd = 0;
-
-        AlignedBegin = 0;
-        AlignedEnd = 0;
-
-        AlignedWholeBegin = 0;
-    }
-};
-
-struct TBlockSplitRange {
-    ui64 BeginPartIdx = 0;
-    ui64 EndPartIdx = 0;
-    TStackVec<TPartOffsetRange, 8> PartRanges;
-};
-
+struct TPartOffsetRange {  // [Begin, End) 
+    ui64 Begin = 0; 
+    ui64 End = 0; 
+ 
+    ui64 WholeBegin = 0; 
+    ui64 WholeEnd = 0; 
+ 
+    ui64 AlignedBegin = 0; 
+    ui64 AlignedEnd = 0; 
+ 
+    // AlignedWholeEnd does not always exist because part are zero-padded 
+    ui64 AlignedWholeBegin = 0; 
+ 
+    bool IsEmpty() { 
+        return (End == 0); 
+    } 
+ 
+    void Reset() { 
+        Begin = 0; 
+        End = 0; 
+ 
+        WholeBegin = 0; 
+        WholeEnd = 0; 
+ 
+        AlignedBegin = 0; 
+        AlignedEnd = 0; 
+ 
+        AlignedWholeBegin = 0; 
+    } 
+}; 
+ 
+struct TBlockSplitRange { 
+    ui64 BeginPartIdx = 0; 
+    ui64 EndPartIdx = 0; 
+    TStackVec<TPartOffsetRange, 8> PartRanges; 
+}; 
+ 
 struct TErasureParameters;
 
 struct TErasureType {
@@ -258,17 +258,17 @@ struct TErasureType {
 
     static const char *ErasureSpeciesToStr(EErasureSpecies es);
 
-    enum EErasureFamily {
-        ErasureMirror,
-        ErasureParityStripe,
-        ErasureParityBlock
-    };
-
-    enum ECrcMode {
-        CrcModeNone = 0,
-        CrcModeWholePart = 1
-    };
-
+    enum EErasureFamily { 
+        ErasureMirror, 
+        ErasureParityStripe, 
+        ErasureParityBlock 
+    }; 
+ 
+    enum ECrcMode { 
+        CrcModeNone = 0, 
+        CrcModeWholePart = 1 
+    }; 
+ 
     TErasureType(EErasureSpecies s = ErasureNone)
         : ErasureSpecies(s)
     {}
@@ -304,20 +304,20 @@ struct TErasureType {
         return TErasureType::ErasureSpeciesCount;
     }
 
-    TErasureType::EErasureFamily ErasureFamily() const;
+    TErasureType::EErasureFamily ErasureFamily() const; 
     ui32 ParityParts() const; // 4 + _2_
     ui32 DataParts() const; // _4_ + 2
     ui32 TotalPartCount() const; // _4_+_2_
     ui32 MinimalRestorablePartCount() const; // ? _4_ + 2
     ui32 MinimalBlockSize() const;
-    // Size of user data contained in the part.
-    ui64 PartUserSize(ui64 dataSize) const;
-    // Size of the part including user data and crcs
-    ui64 PartSize(ECrcMode crcMode, ui64 dataSize) const;
-    ui64 SuggestDataSize(ECrcMode crcMode, ui64 partSize, bool roundDown) const;
+    // Size of user data contained in the part. 
+    ui64 PartUserSize(ui64 dataSize) const; 
+    // Size of the part including user data and crcs 
+    ui64 PartSize(ECrcMode crcMode, ui64 dataSize) const; 
+    ui64 SuggestDataSize(ECrcMode crcMode, ui64 partSize, bool roundDown) const; 
     ui32 Prime() const;
 
-    void SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const;
+    void SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const; 
     void IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const;
 
     void SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) const;
@@ -327,20 +327,20 @@ struct TErasureType {
     void ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst,
             const TVector<TDiff> &diffs, ui8 fromPart, ui8 toPart) const;
 
-    void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, TString& outBuffer, bool restoreParts,
-            bool restoreFullData, bool restoreParityParts) const;
-    void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool restoreParts, bool restoreFullData,
-            bool restoreParityParts) const;
+    void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, TString& outBuffer, bool restoreParts, 
+            bool restoreFullData, bool restoreParityParts) const; 
+    void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool restoreParts, bool restoreFullData, 
+            bool restoreParityParts) const; 
 
-    bool IsSinglePartRequest(ui32 fullDataSize, ui32 shift, ui32 size, ui32 &outPartIdx) const;
-    bool IsPartialDataRequestPossible() const;
+    bool IsSinglePartRequest(ui32 fullDataSize, ui32 shift, ui32 size, ui32 &outPartIdx) const; 
+    bool IsPartialDataRequestPossible() const; 
     bool IsUnknownFullDataSizePartialDataRequestPossible() const;
     void AlignPartialDataRequest(ui64 shift, ui64 size, ui64 fullDataSize, ui64 &outShift, ui64 &outSize) const;
-    void BlockSplitRange(ECrcMode crcMode, ui64 blobSize, ui64 wholeBegin, ui64 wholeEnd,
-            TBlockSplitRange *outRange) const;
-    ui64 BlockSplitPartUsedSize(ui64 dataSize, ui32 partIdx) const;
+    void BlockSplitRange(ECrcMode crcMode, ui64 blobSize, ui64 wholeBegin, ui64 wholeEnd, 
+            TBlockSplitRange *outRange) const; 
+    ui64 BlockSplitPartUsedSize(ui64 dataSize, ui32 partIdx) const; 
     ui32 BlockSplitPartIndex(ui64 offset, ui64 dataSize, ui64 &outPartOffset) const;
-    ui64 BlockSplitWholeOffset(ui64 dataSize, ui64 partIdx, ui64 offset) const;
+    ui64 BlockSplitWholeOffset(ui64 dataSize, ui64 partIdx, ui64 offset) const; 
 
     static const std::array<TString, ErasureSpeciesCount> ErasureName;
 protected:

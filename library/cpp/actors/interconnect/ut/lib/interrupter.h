@@ -119,7 +119,7 @@ private:
     bool DelayTraffic;
 
     void UpdateRejectingState() {
-        if (TDuration::Seconds(std::abs(RejectingStateTimer.Passed())) > CurrentRejectingTimeout) {
+        if (TDuration::Seconds(std::abs(RejectingStateTimer.Passed())) > CurrentRejectingTimeout) { 
             RejectingStateTimer.Reset();
             CurrentRejectingTimeout = (RandomNumber<ui32>(1) ? RejectingTrafficTimeout + TDuration::Seconds(1.0) : RejectingTrafficTimeout - TDuration::Seconds(0.2));
             RejectingTraffic = !RejectingTraffic;
@@ -127,7 +127,7 @@ private:
     }
 
     void RandomlyDisconnect() {
-        if (TDuration::Seconds(std::abs(DisconnectTimer.Passed())) > DisconnectTimeout) {
+        if (TDuration::Seconds(std::abs(DisconnectTimer.Passed())) > DisconnectTimeout) { 
             DisconnectTimer.Reset();
             if (RandomNumber<ui32>(100) > 90) {
                 if (!Connections.empty()) {

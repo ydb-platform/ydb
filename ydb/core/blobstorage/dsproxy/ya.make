@@ -31,32 +31,32 @@ SRCS(
     dsproxy_monactor.h
     dsproxy_multicollect.cpp
     dsproxy_multiget.cpp
-    dsproxy_nodemon.cpp
-    dsproxy_nodemon.h
-    dsproxy_nodemonactor.cpp
-    dsproxy_nodemonactor.h
+    dsproxy_nodemon.cpp 
+    dsproxy_nodemon.h 
+    dsproxy_nodemonactor.cpp 
+    dsproxy_nodemonactor.h 
     dsproxy_patch.cpp
     dsproxy_put.cpp
-    dsproxy_put_impl.cpp
-    dsproxy_put_impl.h
+    dsproxy_put_impl.cpp 
+    dsproxy_put_impl.h 
     dsproxy_quorum_tracker.h
     dsproxy_range.cpp
     dsproxy_responsiveness.h
     dsproxy_status.cpp
-    dsproxy_strategy_accelerate_put.h
+    dsproxy_strategy_accelerate_put.h 
     dsproxy_strategy_accelerate_put_m3dc.h
-    dsproxy_strategy_base.cpp
-    dsproxy_strategy_base.h
-    dsproxy_strategy_get_bold.h
-    dsproxy_strategy_get_m3dc_basic.h
-    dsproxy_strategy_get_m3dc_restore.h
+    dsproxy_strategy_base.cpp 
+    dsproxy_strategy_base.h 
+    dsproxy_strategy_get_bold.h 
+    dsproxy_strategy_get_m3dc_basic.h 
+    dsproxy_strategy_get_m3dc_restore.h 
     dsproxy_strategy_get_m3of4.h
-    dsproxy_strategy_get_min_iops_block.h
-    dsproxy_strategy_get_min_iops_mirror.h
+    dsproxy_strategy_get_min_iops_block.h 
+    dsproxy_strategy_get_min_iops_mirror.h 
     dsproxy_strategy_m3of4_base.h
     dsproxy_strategy_put_m3dc.h
     dsproxy_strategy_put_m3of4.h
-    dsproxy_strategy_restore.h
+    dsproxy_strategy_restore.h 
     group_sessions.cpp
     group_sessions.h
     log_acc.h

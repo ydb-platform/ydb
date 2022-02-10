@@ -1,5 +1,5 @@
-#include "blobstorage_pdisk_driveestimator.h"
-#include "blobstorage_pdisk_util_wcache.h"
+#include "blobstorage_pdisk_driveestimator.h" 
+#include "blobstorage_pdisk_util_wcache.h" 
 
 #include <ydb/library/pdisk_io/aio.h>
 
@@ -54,7 +54,7 @@ void TDriveEstimator::TSeekCompl::Exec(TActorSystem *actorSystem) {
         }
         Estimator->Device->PwriteAsync(Estimator->Buffer->Data(), TDriveEstimator::SeekBufferSize,
                 TDriveEstimator::SeekBufferSize * (Counter + 1), new TSeekCompl(Estimator, Counter + 1, now),
-                TReqId(TReqId::EstimatorSeekCompl, 0), nullptr);
+                TReqId(TReqId::EstimatorSeekCompl, 0), nullptr); 
     }
     delete this;
 }
@@ -73,8 +73,8 @@ ui64 TDriveEstimator::EstimateSeekTimeNs() {
     Counter = 0;
 
     NHPTimer::STime start = HPNow();
-    Device->PwriteAsync(Buffer->Data(), SeekBufferSize, 0, new TSeekCompl(this, 0, start),
-            TReqId(TReqId::EstimatorSeekTimeNs, 0), nullptr);
+    Device->PwriteAsync(Buffer->Data(), SeekBufferSize, 0, new TSeekCompl(this, 0, start), 
+            TReqId(TReqId::EstimatorSeekTimeNs, 0), nullptr); 
     CondVar.WaitI(Mtx);
     grd.Release();
 
@@ -102,8 +102,8 @@ void TDriveEstimator::EstimateSpeed(const bool isAtDriveBegin, ui64 outSpeed[TDr
             offset = DriveSize - (Repeats - i) * operationSize;
             offset = AlignDown<ui64>(offset, SectorSize);
         }
-        Device->PwriteAsync(Buffer->Data(), operationSize, offset, new TLoadCompl(this),
-                TReqId(TReqId::EstimatorSpeed1, 0), nullptr);
+        Device->PwriteAsync(Buffer->Data(), operationSize, offset, new TLoadCompl(this), 
+                TReqId(TReqId::EstimatorSpeed1, 0), nullptr); 
     }
 
     CondVar.WaitI(Mtx);
@@ -122,8 +122,8 @@ void TDriveEstimator::EstimateSpeed(const bool isAtDriveBegin, ui64 outSpeed[TDr
             offset = DriveSize - (Repeats - i) * operationSize;
             offset = AlignDown<ui64>(offset, SectorSize);
         }
-        Device->PreadAsync(Buffer->Data(), operationSize, offset, new TLoadCompl(this),
-                TReqId(TReqId::EstimatorSpeed2, 0), nullptr);
+        Device->PreadAsync(Buffer->Data(), operationSize, offset, new TLoadCompl(this), 
+                TReqId(TReqId::EstimatorSpeed2, 0), nullptr); 
     }
 
     CondVar.WaitI(Mtx);
@@ -141,7 +141,7 @@ ui64 TDriveEstimator::EstimateTrimSpeed() {
 
     for (ui32 i = 0; i < Repeats; ++i) {
         Device->PwriteAsync(Buffer->Data(), trimSize, i * trimSize,
-                new TLoadCompl(this), TReqId(TReqId::EstimatorTrimSpeed1, 0), nullptr);
+                new TLoadCompl(this), TReqId(TReqId::EstimatorTrimSpeed1, 0), nullptr); 
     }
     CondVar.WaitI(Mtx);
     Counter = 0;
@@ -174,11 +174,11 @@ ui64 TDriveEstimator::MeasureOperationDuration(const ui32 type, const ui64 size)
         switch (type) {
             case TDriveModel::OP_TYPE_READ:
                 Device->PreadAsync(Buffer->Data(), size, repeat * size, completions[repeat],
-                        TReqId(TReqId::EstimatorDurationRead, 0), nullptr);
+                        TReqId(TReqId::EstimatorDurationRead, 0), nullptr); 
                 break;
             case TDriveModel::OP_TYPE_WRITE:
                 Device->PwriteAsync(Buffer->Data(), size, repeat * size, completions[repeat],
-                        TReqId(TReqId::EstimatorDurationWrite, 0), nullptr);
+                        TReqId(TReqId::EstimatorDurationWrite, 0), nullptr); 
                 break;
             default:
                 Y_FAIL();
@@ -230,9 +230,9 @@ void TDriveEstimator::EstimateGlueingDeadline(ui32 outGlueingDeadline[TDriveMode
 }
 
 TDriveEstimator::TDriveEstimator(const TString filename)
-    : Filename(filename)
-    , Counters(new NMonitoring::TDynamicCounters())
-    , PDiskMon(Counters, 0, nullptr)
+    : Filename(filename) 
+    , Counters(new NMonitoring::TDynamicCounters()) 
+    , PDiskMon(Counters, 0, nullptr) 
     , ActorSystemCreator(new TActorSystemCreator)
     , ActorSystem(ActorSystemCreator->GetActorSystem())
     , QueueDepth(4)
@@ -240,7 +240,7 @@ TDriveEstimator::TDriveEstimator(const TString filename)
     , BufferPool(CreateBufferPool(BufferSize, 1, false, {}))
     , Buffer(BufferPool->Pop())
 {
-    memset(Buffer->Data(), 7, Buffer->Size()); // Initialize the buffer so that Valgrind does not complain
+    memset(Buffer->Data(), 7, Buffer->Size()); // Initialize the buffer so that Valgrind does not complain 
     bool isBlockDevice = false;
     ActorSystem->AppData<TAppData>()->IoContextFactory->DetectFileParameters(filename, DriveSize, isBlockDevice);
     Y_VERIFY(Buffer->Size() * Repeats < DriveSize);
@@ -266,8 +266,8 @@ TDriveModel TDriveEstimator::EstimateDriveModel() {
     }
     model.TrimSpeedBps = EstimateTrimSpeed();
     EstimateGlueingDeadline(model.GlueingDeadline);
-
-    // Get the metadata
+ 
+    // Get the metadata 
     TDriveData driveData = Device->GetDriveData();
     model.ModelSource = NKikimrBlobStorage::TDriveModel::SourceLocalMeasure;
     model.SourceSerialNumber = driveData.SerialNumber;

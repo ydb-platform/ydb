@@ -33,11 +33,11 @@
 static constexpr TDuration DISK_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(TDuration::Seconds(10), TDuration::Seconds(20));
 
 namespace NKikimr {
-
-namespace NPDisk {
-    extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
-}
-
+ 
+namespace NPDisk { 
+    extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000; 
+} 
+ 
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig)
     {
         runtime.AddLocalService(MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)),

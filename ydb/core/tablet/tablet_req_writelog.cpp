@@ -23,8 +23,8 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     ui64 ResponseCookies = 0;
 
     ui32 RepliesToWait;
-    TVector<ui32> YellowMoveChannels;
-    TVector<ui32> YellowStopChannels;
+    TVector<ui32> YellowMoveChannels; 
+    TVector<ui32> YellowStopChannels; 
 
     void Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext &ctx) {
         return ReplyAndDie(NKikimrProto::ERROR, "BlobStorage proxy unavailable", ctx);
@@ -33,16 +33,16 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev, const TActorContext &ctx) {
         TEvBlobStorage::TEvPutResult *msg = ev->Get();
 
-        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
-            YellowMoveChannels.push_back(msg->Id.Channel());
+        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) { 
+            YellowMoveChannels.push_back(msg->Id.Channel()); 
         }
-        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
-            YellowStopChannels.push_back(msg->Id.Channel());
-        }
+        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) { 
+            YellowStopChannels.push_back(msg->Id.Channel()); 
+        } 
 
         switch (msg->Status) {
         case NKikimrProto::OK:
-            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_MAIN, "Put Result: " << msg->Print(false));
+            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_MAIN, "Put Result: " << msg->Print(false)); 
 
             GroupWrittenBytes[std::make_pair(msg->Id.Channel(), msg->GroupId)] += msg->Id.BlobSize();
             GroupWrittenOps[std::make_pair(msg->Id.Channel(), msg->GroupId)] += 1;
@@ -67,18 +67,18 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason, const TActorContext &ctx) {
-        if (YellowMoveChannels) {
-            SortUnique(YellowMoveChannels);
+        if (YellowMoveChannels) { 
+            SortUnique(YellowMoveChannels); 
         }
-        if (YellowStopChannels) {
-            SortUnique(YellowStopChannels);
-        }
+        if (YellowStopChannels) { 
+            SortUnique(YellowStopChannels); 
+        } 
 
         ctx.Send(Owner, new TEvTabletBase::TEvWriteLogResult(
             status,
             LogEntryID,
-            std::move(YellowMoveChannels),
-            std::move(YellowStopChannels),
+            std::move(YellowMoveChannels), 
+            std::move(YellowStopChannels), 
             std::move(GroupWrittenBytes),
             std::move(GroupWrittenOps),
             reason));

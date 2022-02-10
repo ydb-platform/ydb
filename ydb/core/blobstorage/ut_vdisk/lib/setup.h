@@ -42,7 +42,7 @@ struct TFastVDiskSetupSmallVDiskQueues : public TFastVDiskSetup {
             cfg->SkeletonFrontExtGetAsync_TotalCost = 3000000;             // 3ms
             cfg->SkeletonFrontExtGetFast_TotalCost = 3000000;              // 3ms
             cfg->SkeletonFrontExtGetDiscover_TotalCost = 3000000;          // 3ms
-            cfg->SkeletonFrontExtGetLow_TotalCost = 3000000;              // 3ms
+            cfg->SkeletonFrontExtGetLow_TotalCost = 3000000;              // 3ms 
         };
         AddConfigModifier(modifier);
     }
@@ -103,12 +103,12 @@ struct TFastCompactionGCNoSyncVDiskSetup : public TFastVDiskSetup {
 };
 
 struct TFastVDiskSetupWODisk2 : public TFastVDiskSetup {
-    bool SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j, ui32 pDiskID,
-            ui32 slotId, bool runRepl, ui64 initOwnerRound) {
+    bool SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j, ui32 pDiskID, 
+            ui32 slotId, bool runRepl, ui64 initOwnerRound) { 
         if (id == 2)
             return false;
 
-        return TFastVDiskSetup::SetUp(vdisk, pdisks, id, d, j, pDiskID, slotId, runRepl, initOwnerRound);
+        return TFastVDiskSetup::SetUp(vdisk, pdisks, id, d, j, pDiskID, slotId, runRepl, initOwnerRound); 
     }
 };
 
@@ -126,19 +126,19 @@ struct TFastVDiskSetupWODisk2Compacted : public TFastVDiskSetup {
 };
 
 struct TFastVDiskSetupWODisk4 : public TFastVDiskSetup {
-    bool SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j, ui32 pDiskID,
-            ui32 slotId, bool runRepl, ui64 initOwnerRound) {
+    bool SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j, ui32 pDiskID, 
+            ui32 slotId, bool runRepl, ui64 initOwnerRound) { 
         if (id == 4)
             return false;
 
-        return TFastVDiskSetup::SetUp(vdisk, pdisks, id, d, j, pDiskID, slotId, runRepl, initOwnerRound);
+        return TFastVDiskSetup::SetUp(vdisk, pdisks, id, d, j, pDiskID, slotId, runRepl, initOwnerRound); 
     }
 };
 
 struct TNoVDiskSetup : public TFastVDiskSetup {
-    bool SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j, ui32 pDiskID,
-            ui32 slotId, bool runRepl, ui64 initOwnerRound) {
-        TFastVDiskSetup::SetUp(vdisk, pdisks, id, d, j, pDiskID, slotId, runRepl, initOwnerRound);
+    bool SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j, ui32 pDiskID, 
+            ui32 slotId, bool runRepl, ui64 initOwnerRound) { 
+        TFastVDiskSetup::SetUp(vdisk, pdisks, id, d, j, pDiskID, slotId, runRepl, initOwnerRound); 
         return false;
     }
 };

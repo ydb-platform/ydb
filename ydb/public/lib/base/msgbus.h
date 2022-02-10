@@ -204,12 +204,12 @@ public:
         RegisterType(new TBusHiveCreateTablet);
         RegisterType(new TBusOldHiveCreateTablet);
         RegisterType(new TBusHiveCreateTabletResult);
-        RegisterType(new TBusLocalEnumerateTablets);
+        RegisterType(new TBusLocalEnumerateTablets); 
         RegisterType(new TBusOldLocalEnumerateTablets);
-        RegisterType(new TBusLocalEnumerateTabletsResult);
-        RegisterType(new TBusKeyValue);
+        RegisterType(new TBusLocalEnumerateTabletsResult); 
+        RegisterType(new TBusKeyValue); 
         RegisterType(new TBusOldKeyValue);
-        RegisterType(new TBusKeyValueResponse);
+        RegisterType(new TBusKeyValueResponse); 
         RegisterType(new TBusPersQueue);
         RegisterType(new TBusTabletKillRequest);
         RegisterType(new TBusTabletStateRequest);

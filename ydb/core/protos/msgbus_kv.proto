@@ -7,24 +7,24 @@ message TKeyValueRequest {
         MAIN = 0;
         EXTRA = 1;
         EXTRA2 = 2;
-        EXTRA3 = 3;
-        EXTRA4 = 4;
-        EXTRA5 = 5;
+        EXTRA3 = 3; 
+        EXTRA4 = 4; 
+        EXTRA5 = 5; 
         EXTRA6 = 6;
         EXTRA7 = 7;
         EXTRA8 = 8;
         EXTRA9 = 9;
-
-        INLINE = 65535;
+ 
+        INLINE = 65535; 
     }
     enum EPriority {
         REALTIME = 0;
         BACKGROUND = 1;
     }
-    enum ETactic {
-        MAX_THROUGHPUT = 0;
-        MIN_LATENCY = 1;
-    }
+    enum ETactic { 
+        MAX_THROUGHPUT = 0; 
+        MIN_LATENCY = 1; 
+    } 
 
     message TKeyRange {
         optional bytes From = 1; // optional
@@ -55,8 +55,8 @@ message TKeyValueRequest {
         optional bytes Value = 2; // mandatory
         optional EStorageChannel StorageChannel = 3; // (default = MAIN)
         optional EPriority Priority = 4; // (default = REALTIME)
-        optional bytes KeyToCache = 5; // used in PQ
-        optional ETactic Tactic = 6 [default = MAX_THROUGHPUT]; // mandatory, used for non-inline puts only
+        optional bytes KeyToCache = 5; // used in PQ 
+        optional ETactic Tactic = 6 [default = MAX_THROUGHPUT]; // mandatory, used for non-inline puts only 
         repeated EStorageChannel AutoselectChannel = 7; // when filled, channel is selected automatically from this set
     }
     message TCmdRename {
@@ -73,15 +73,15 @@ message TKeyValueRequest {
         optional bytes OutputKey = 2; // mandatory
         optional bool KeepInputs = 3; // optional (default = false)
     }
-    message TCmdGetStatus {
-        optional EStorageChannel StorageChannel = 1; // (default = MAIN)
-    }
+    message TCmdGetStatus { 
+        optional EStorageChannel StorageChannel = 1; // (default = MAIN) 
+    } 
     message TCmdTrimLeakedBlobs {
         optional uint32 MaxItemsToTrim = 1;
     }
-    message TCmdSetExecutorFastLogPolicy {
-        optional bool IsAllowed = 1 [default = false]; // mandatory
-    }
+    message TCmdSetExecutorFastLogPolicy { 
+        optional bool IsAllowed = 1 [default = false]; // mandatory 
+    } 
 
     optional uint64 TabletId = 1; // mandatory
     optional uint64 Generation = 2; // optional, no generation check is done if missing
@@ -94,9 +94,9 @@ message TKeyValueRequest {
     repeated TCmdRename CmdRename = 9;
     repeated TCmdCopyRange CmdCopyRange = 11;
     repeated TCmdConcat CmdConcat = 12;
-    repeated TCmdGetStatus CmdGetStatus = 13;
+    repeated TCmdGetStatus CmdGetStatus = 13; 
     optional TCmdTrimLeakedBlobs CmdTrimLeakedBlobs = 14;
-    optional TCmdSetExecutorFastLogPolicy CmdSetExecutorFastLogPolicy = 15;
+    optional TCmdSetExecutorFastLogPolicy CmdSetExecutorFastLogPolicy = 15; 
 
     optional uint64 DeadlineInstantMs = 10;
 }
@@ -111,7 +111,7 @@ message TKeyValueResponse {
         optional bytes Value = 2;
         optional uint32 ValueSize = 3;
         optional uint64 CreationUnixTime = 4;
-        optional TKeyValueRequest.EStorageChannel StorageChannel = 5; // Returns the _actual_ storage channel
+        optional TKeyValueRequest.EStorageChannel StorageChannel = 5; // Returns the _actual_ storage channel 
         optional uint32 Status = 6; // EReplyStatus from ydb/core/protos/base.proto
     }
 
@@ -145,19 +145,19 @@ message TKeyValueResponse {
     message TConcatResult {
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
     }
-    message TGetStatusResult {
+    message TGetStatusResult { 
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
-        optional TKeyValueRequest.EStorageChannel StorageChannel = 2;
+        optional TKeyValueRequest.EStorageChannel StorageChannel = 2; 
         optional uint32 StatusFlags = 3; // A set of flags from EStatusFlags ydb/core/protos/blobstorage.proto
-    }
+    } 
     message TTrimLeakedBlobsResult {
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
         optional uint32 NumItemsTrimmed = 2;
         optional uint32 NumItemsLeft = 3;
     }
-    message TSetExecutorFastLogPolicyResult {
+    message TSetExecutorFastLogPolicyResult { 
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
-    }
+    } 
 
     optional uint64 Cookie = 2;
     repeated TDeleteRangeResult DeleteRangeResult = 3;
@@ -168,9 +168,9 @@ message TKeyValueResponse {
     repeated TRenameResult RenameResult = 8;
     repeated TCopyRangeResult CopyRangeResult = 10;
     repeated TConcatResult ConcatResult = 11;
-    repeated TGetStatusResult GetStatusResult = 12;
+    repeated TGetStatusResult GetStatusResult = 12; 
     optional TTrimLeakedBlobsResult TrimLeakedBlobsResult = 13;
-    optional TSetExecutorFastLogPolicyResult SetExecutorFastLogPolicyResult = 14;
+    optional TSetExecutorFastLogPolicyResult SetExecutorFastLogPolicyResult = 14; 
     optional string ErrorReason = 9; // When present contains human-readable error description
 }
 

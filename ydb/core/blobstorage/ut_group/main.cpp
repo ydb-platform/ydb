@@ -12,12 +12,12 @@
 #include <util/system/env.h>
 #include <random>
 
-namespace NKikimr {
-namespace NPDisk {
-    extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
-}
-}
-
+namespace NKikimr { 
+namespace NPDisk { 
+    extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000; 
+} 
+} 
+ 
 template<typename TTransformItem, typename TBaseContainer>
 class TFilteredContainer {
     TBaseContainer& Base;
@@ -33,11 +33,11 @@ class TFilteredContainer {
             : TBaseIterator(std::forward<TArgs>(args)...)
             , Callback(callback)
         {}
-
+ 
         std::invoke_result_t<TTransformItem, decltype(*std::declval<TBaseIterator>())> operator *() {
             return std::invoke(Callback, *static_cast<TBaseIterator&>(*this));
         }
-
+ 
         std::invoke_result_t<TTransformItem, decltype(*std::declval<const TBaseIterator>())> operator *() const {
             return std::invoke(Callback, *static_cast<const TBaseIterator&>(*this));
         }
@@ -161,7 +161,7 @@ public:
     };
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    const NPDisk::TKey MainKey = NPDisk::YdbDefaultPDiskSequence;
+    const NPDisk::TKey MainKey = NPDisk::YdbDefaultPDiskSequence; 
     const ui32 NodeCount;
     const ui32 GroupId = 0;
     std::vector<TDiskRecord> Disks;

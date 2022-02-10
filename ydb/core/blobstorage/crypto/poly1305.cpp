@@ -129,7 +129,7 @@ poly1305_donna_atmost15bytes:
     goto poly1305_donna_mul;
 }
 
-#if (!defined(_win_) && !defined(_arm64_))
+#if (!defined(_win_) && !defined(_arm64_)) 
 constexpr size_t Poly1305::KEY_SIZE;
 constexpr size_t Poly1305::MAC_SIZE;
 #endif

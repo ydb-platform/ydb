@@ -248,8 +248,8 @@ namespace NKikimr {
         }
 
         ////////////////////////////////////////////////////////////////////////
-        // MULTIPUT SECTOR
-        ////////////////////////////////////////////////////////////////////////
+        // MULTIPUT SECTOR 
+        //////////////////////////////////////////////////////////////////////// 
         void ReplyError(NKikimrProto::EReplyStatus status, const TString& errorReason, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
                         const TActorContext &ctx, TInstant now) {
             using namespace NErrBuilder;
@@ -266,13 +266,13 @@ namespace NKikimr {
             SendReply(ctx, std::move(res), ev, BS_VDISK_PUT);
         }
 
-        void Handle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) {
-            const bool postpone = OverloadHandler->PostponeEvent(ev, ctx, this);
-            if (!postpone) {
-                PrivateHandle(ev, ctx);
-            }
-        }
-
+        void Handle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) { 
+            const bool postpone = OverloadHandler->PostponeEvent(ev, ctx, this); 
+            if (!postpone) { 
+                PrivateHandle(ev, ctx); 
+            } 
+        } 
+ 
         struct TVPutInfo {
             TRope Buffer = {};
             TLogoBlobID BlobId = {};
@@ -416,7 +416,7 @@ namespace NKikimr {
             return hugeBlobs;
         }
 
-        void PrivateHandle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) {
+        void PrivateHandle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) { 
             WILSON_TRACE_FROM_ACTOR(ctx, *this, &ev->TraceId, EvVPutReceived, VDiskId = SelfVDiskId,
                     PDiskId = Config->BaseInfo.PDiskId, VDiskSlotId = Config->BaseInfo.VDiskSlotId);
             IFaceMonGroup->MultiPutMsgs()++;
@@ -591,9 +591,9 @@ namespace NKikimr {
             if (lsnCount) {
                 ctx.Send(Db->LoggerID, evLogs.release());
             }
-        }
-
-        ////////////////////////////////////////////////////////////////////////
+        } 
+ 
+        //////////////////////////////////////////////////////////////////////// 
         // PUT SECTOR
         ////////////////////////////////////////////////////////////////////////
         void ReplyError(THullCheckStatus status, TEvBlobStorage::TEvVPut::TPtr &ev,
@@ -663,8 +663,8 @@ namespace NKikimr {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << "TEvVPut: ingress mismatch; id# " << id
                         << " Marker# BSVS11");
                 ReplyError({NKikimrProto::ERROR, "ingress mismatch", 0, false}, ev, ctx, now);
-                return;
-            }
+                return; 
+            } 
             info.Ingress = *ingressOpt;
 
             LOG_DEBUG_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix <<"TEvVPut: " << " result# " << ev->Get()->ToString()
@@ -848,14 +848,14 @@ namespace NKikimr {
                     ev->Get()->GetCachedByteSize(), &record, ev->Get()->GetIsLocalMon() ? nullptr : SkeletonFrontIDPtr,
                     IFaceMonGroup->GetResMsgsPtr(), VCtx->Histograms.GetHistogram(handleClass), std::move(ev->TraceId),
                     cookie, ev->GetChannel(), Db->GetVDiskIncarnationGuid());
-                if (record.GetAcquireBlockedGeneration()) {
-                    ui64 tabletId = record.GetTabletId();
-                    if (tabletId) {
-                        ui32 blockedGen = 0;
-                        Hull->GetBlocked(tabletId, &blockedGen);
-                        result->Record.SetBlockedGeneration(blockedGen);
-                    }
-                }
+                if (record.GetAcquireBlockedGeneration()) { 
+                    ui64 tabletId = record.GetTabletId(); 
+                    if (tabletId) { 
+                        ui32 blockedGen = 0; 
+                        Hull->GetBlocked(tabletId, &blockedGen); 
+                        result->Record.SetBlockedGeneration(blockedGen); 
+                    } 
+                } 
 
                 // fast keep checker, implemented by Hull
                 auto keepChecker = [&hull=Hull] (const TLogoBlobID& id, bool keepByIngress, TString *explanation) {
@@ -950,45 +950,45 @@ namespace NKikimr {
         }
 
         ////////////////////////////////////////////////////////////////////////
-        // GET BLOCK SECTOR
-        ////////////////////////////////////////////////////////////////////////
-        void Handle(TEvBlobStorage::TEvVGetBlock::TPtr &ev, const TActorContext &ctx) {
+        // GET BLOCK SECTOR 
+        //////////////////////////////////////////////////////////////////////// 
+        void Handle(TEvBlobStorage::TEvVGetBlock::TPtr &ev, const TActorContext &ctx) { 
             using namespace NErrBuilder;
             IFaceMonGroup->GetBlockMsgs()++;
             TInstant now = TAppData::TimeProvider->Now();
-            const NKikimrBlobStorage::TEvVGetBlock &record = ev->Get()->Record;
-            const ui64 tabletId = record.GetTabletId();
-
+            const NKikimrBlobStorage::TEvVGetBlock &record = ev->Get()->Record; 
+            const ui64 tabletId = record.GetTabletId(); 
+ 
             LOG_DEBUG_S(ctx, BS_VDISK_BLOCK, VCtx->VDiskLogPrefix
                     << "TEvVGetBlock: tabletId# " << tabletId
                     << " Marker# BSVS16");
-
+ 
             std::unique_ptr<TEvBlobStorage::TEvVGetBlockResult> result;
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 result = std::make_unique<TEvBlobStorage::TEvVGetBlockResult>(NKikimrProto::RACE, tabletId,
                     SelfVDiskId, now, ev->Get()->GetCachedByteSize(), &ev->Get()->Record, SkeletonFrontIDPtr,
                     IFaceMonGroup->GetBlockResMsgsPtr(), nullptr, std::move(ev->TraceId));
-            } else {
-                ui32 blockedGen = 0;
-                bool isBlocked = Hull->GetBlocked(tabletId, &blockedGen);
-                if (isBlocked) {
+            } else { 
+                ui32 blockedGen = 0; 
+                bool isBlocked = Hull->GetBlocked(tabletId, &blockedGen); 
+                if (isBlocked) { 
                     result = std::make_unique<TEvBlobStorage::TEvVGetBlockResult>(NKikimrProto::OK, tabletId, blockedGen,
                         SelfVDiskId, now, ev->Get()->GetCachedByteSize(), &ev->Get()->Record, SkeletonFrontIDPtr,
                         IFaceMonGroup->GetBlockResMsgsPtr(), nullptr, std::move(ev->TraceId));
-                } else {
+                } else { 
                     result = std::make_unique<TEvBlobStorage::TEvVGetBlockResult>(NKikimrProto::NODATA, tabletId,
                         SelfVDiskId, now, ev->Get()->GetCachedByteSize(), &ev->Get()->Record, SkeletonFrontIDPtr,
                         IFaceMonGroup->GetBlockResMsgsPtr(), nullptr, std::move(ev->TraceId));
-                }
-            }
-
+                } 
+            } 
+ 
             LOG_DEBUG_S(ctx, BS_VDISK_BLOCK, VCtx->VDiskLogPrefix
                     << "TEvVGetBlockResult: " << result->ToString()
                     << " Marker# BSVS17");
             SendVDiskResponse(ctx, ev->Sender, result.release(), *this, ev->Cookie);
-        }
-
-        ////////////////////////////////////////////////////////////////////////
+        } 
+ 
+        //////////////////////////////////////////////////////////////////////// 
         // GARBAGE COLLECTION SECTOR
         ////////////////////////////////////////////////////////////////////////
         void ReplyError(THullCheckStatus status, TEvBlobStorage::TEvVCollectGarbage::TPtr &ev,
@@ -1740,9 +1740,9 @@ namespace NKikimr {
                 auto vput = [this] (const TActorContext &ctx, TEvBlobStorage::TEvVPut::TPtr ev) {
                     this->PrivateHandle(ev, ctx);
                 };
-                auto vMultiPutHandler = [this] (const TActorContext &ctx, TEvBlobStorage::TEvVMultiPut::TPtr ev) {
-                    this->PrivateHandle(ev, ctx);
-                };
+                auto vMultiPutHandler = [this] (const TActorContext &ctx, TEvBlobStorage::TEvVMultiPut::TPtr ev) { 
+                    this->PrivateHandle(ev, ctx); 
+                }; 
                 auto loc = [this] (const TActorContext &ctx, TEvLocalSyncData::TPtr ev) {
                     this->PrivateHandle(ev, ctx);
                 };
@@ -2036,7 +2036,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // CUT LOG FORWARDER SECTOR
         ////////////////////////////////////////////////////////////////////////
-        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) { 
             std::unique_ptr<NPDisk::TEvCutLog> msg(ev->Release().Release());
 
             if (LocalDbInitialized) {
@@ -2330,7 +2330,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVPatchXorDiff, HandleVPatchDiffResending)
             hFunc(TEvVPatchDyingRequest, Handle)
             HFunc(TEvBlobStorage::TEvVPut, Handle)
-            HFunc(TEvBlobStorage::TEvVMultiPut, Handle)
+            HFunc(TEvBlobStorage::TEvVMultiPut, Handle) 
             HFunc(TEvHullLogHugeBlob, Handle)
             HFunc(TEvDelLogoBlobDataSyncLog, Handle)
             HFunc(TEvAddBulkSst, Handle)
@@ -2435,9 +2435,9 @@ namespace NKikimr {
             , EnableVPatch(cfg->EnableVPatch)
         {}
 
-        virtual ~TSkeleton() {
-        }
-
+        virtual ~TSkeleton() { 
+        } 
+ 
     private:
         TIntrusivePtr<TVDiskConfig> Config;
         TIntrusivePtr<TVDiskContext> VCtx;

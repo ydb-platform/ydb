@@ -97,7 +97,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     bool outOfSpace = false;
 
     if (!reject && isWrite) {
-        if (self->IsAnyChannelYellowStop()) {
+        if (self->IsAnyChannelYellowStop()) { 
             reject = true;
             outOfSpace = true;
             rejectReason = TStringBuilder() << "Cannot perform writes: out of disk space at tablet " << self->TabletID();

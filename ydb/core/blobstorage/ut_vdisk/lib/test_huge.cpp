@@ -179,11 +179,11 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         return true;
     }
 
-    void Handle(NPDisk::TEvYardInitResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NPDisk::TEvYardInitResult::TPtr &ev, const TActorContext &ctx) { 
         const auto &m = ev->Get();
-        NKikimrProto::EReplyStatus status = m->Status;
-        Y_VERIFY(status == NKikimrProto::OK, "Status# %s ErrorReason# %s",
-                NKikimrProto::EReplyStatus_Name(status).c_str(), m->ErrorReason.c_str());
+        NKikimrProto::EReplyStatus status = m->Status; 
+        Y_VERIFY(status == NKikimrProto::OK, "Status# %s ErrorReason# %s", 
+                NKikimrProto::EReplyStatus_Name(status).c_str(), m->ErrorReason.c_str()); 
         HmCtx->PDiskCtx = std::make_shared<TPDiskCtx>(m->PDiskParams, HmCtx->Config->BaseInfo.PDiskActorID);
 
         // prepare starting points
@@ -198,9 +198,9 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
 
     void Handle(NPDisk::TEvReadLogResult::TPtr &ev, const TActorContext &ctx) {
         const auto &m = ev->Get();
-        NKikimrProto::EReplyStatus status = m->Status;
-        Y_VERIFY(status == NKikimrProto::OK, "Status# %s ErrorReason# %s",
-                NKikimrProto::EReplyStatus_Name(status).c_str(), m->ErrorReason.c_str());
+        NKikimrProto::EReplyStatus status = m->Status; 
+        Y_VERIFY(status == NKikimrProto::OK, "Status# %s ErrorReason# %s", 
+                NKikimrProto::EReplyStatus_Name(status).c_str(), m->ErrorReason.c_str()); 
         if (m->Results) {
             const ui64 lsn = m->Results.back().Lsn;
             Y_VERIFY(lsn > Lsn);

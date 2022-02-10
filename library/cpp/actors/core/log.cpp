@@ -1,5 +1,5 @@
 #include "log.h"
-#include "log_settings.h"
+#include "log_settings.h" 
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -211,7 +211,7 @@ namespace NActors {
 
     void TLoggerActor::Log(TInstant time, NLog::EPriority priority, NLog::EComponent component, const char* c, ...) {
         Metrics->IncDirectMsgs();
-        if (Settings && Settings->Satisfies(priority, component, 0ull)) {
+        if (Settings && Settings->Satisfies(priority, component, 0ull)) { 
             va_list params;
             va_start(params, c);
             TString formatted;
@@ -233,14 +233,14 @@ namespace NActors {
         if (!OutputRecord(now, NActors::NLog::EPrio::Error, Settings->LoggerComponent, message)) {
             BecomeDefunct();
         }
-    }
-
+    } 
+ 
     void TLoggerActor::HandleIgnoredEvent(TLogIgnored::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ev);
         LogIgnoredCount(ctx.Now());
-        IgnoredCount = 0;
-        PassedCount = 0;
-    }
+        IgnoredCount = 0; 
+        PassedCount = 0; 
+    } 
 
     void TLoggerActor::HandleIgnoredEventDrop() {
         // logger backend is unavailable, just ignore
@@ -248,7 +248,7 @@ namespace NActors {
 
     void TLoggerActor::WriteMessageStat(const NLog::TEvLog& ev) {
         Metrics->IncActorMsgs();
-
+ 
         const auto prio = ev.Level.ToPrio();
 
         switch (prio) {
@@ -281,7 +281,7 @@ namespace NActors {
                 ++IgnoredCount;
                 PassedCount = 0;
                 return;
-            }
+            } 
             PassedCount++;
         } else {
             // Enable of disable throttling depending on the load
@@ -289,8 +289,8 @@ namespace NActors {
                 AtomicSet(IsOverflow, 1);
             else if (delayMillisec <= (i64)Settings->TimeThresholdMs && AtomicGet(IsOverflow))
                 AtomicSet(IsOverflow, 0);
-        }
-
+        } 
+ 
         const auto prio = ev->Get()->Level.ToPrio();
         if (!OutputRecord(ev->Get()->Stamp, prio, ev->Get()->Component, ev->Get()->Line)) {
             BecomeDefunct();
@@ -337,7 +337,7 @@ namespace NActors {
                         auto name = Settings->ComponentName(i);
                         if (!*name)
                             continue;
-                        NLog::TComponentSettings componentSettings = Settings->GetComponentSettings(i);
+                        NLog::TComponentSettings componentSettings = Settings->GetComponentSettings(i); 
 
                         TABLER() {
                             TABLED() {
@@ -410,8 +410,8 @@ namespace NActors {
 
         TStringStream str;
         if (hasComponent && !hasPriority && !hasSamplingPriority && !hasSamplingRate) {
-            NLog::TComponentSettings componentSettings = Settings->GetComponentSettings(component);
-            ui32 samplingRate = componentSettings.Raw.X.SamplingRate;
+            NLog::TComponentSettings componentSettings = Settings->GetComponentSettings(component); 
+            ui32 samplingRate = componentSettings.Raw.X.SamplingRate; 
             HTML(str) {
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-12") {
@@ -682,17 +682,17 @@ namespace NActors {
                 OutputDebugString(x.c_str());
             }
 #endif
-            bool isOk = false;
-            do {
-                try {
+            bool isOk = false; 
+            do { 
+                try { 
                     TRecordWithNewline r(rec);
                     Cerr.Write(r.Buf.Data(), r.Buf.Filled());
-                    isOk = true;
-                } catch (TSystemError err) {
-                    // Interrupted system call
+                    isOk = true; 
+                } catch (TSystemError err) { 
+                    // Interrupted system call 
                     Y_UNUSED(err);
-                }
-            } while (!isOk);
+                } 
+            } while (!isOk); 
         }
 
         void ReopenLog() override {
@@ -743,10 +743,10 @@ namespace NActors {
         return new TLineFileLogBackend(fileName);
     }
 
-    TAutoPtr<TLogBackend> CreateNullBackend() {
-        return new TNullLogBackend();
-    }
-
+    TAutoPtr<TLogBackend> CreateNullBackend() { 
+        return new TNullLogBackend(); 
+    } 
+ 
     TAutoPtr<TLogBackend> CreateCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends) {
         return new TCompositeLogBackend(std::move(underlyingBackends));
     }

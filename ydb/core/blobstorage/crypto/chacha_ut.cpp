@@ -109,30 +109,30 @@ Y_UNIT_TEST_SUITE(TChaCha)
 
         UNIT_ASSERT_EQUAL(buf.AsStringBuf(), lorem);
     }
-
-    Y_UNIT_TEST(SecondBlock) {
+ 
+    Y_UNIT_TEST(SecondBlock) { 
         TStringBuf plaintext =
-                "1111111122222222333333334444444455555555666666667777777788888888"
+                "1111111122222222333333334444444455555555666666667777777788888888" 
                 "qqqqqqqqwwwwwwwweeeeeeeerrrrrrrrttttttttyyyyyyyyuuuuuuuuiiiiiiii";
-
+ 
         TSecuredBlock<> buf(plaintext.data(), plaintext.size());
-
-        ChaCha cipher;
-        ui64 offset = 0;
-        cipher.SetIV(tc8_iv, (ui8*)&offset);
-        cipher.SetKey(tc8_key, KEY_SIZE);
-
-        UNIT_ASSERT_EQUAL(ChaCha::BLOCK_SIZE, 64);
-        cipher.Encipher(buf.Data(), buf.Data(), ChaCha::BLOCK_SIZE * 2);
-
-        UNIT_ASSERT_UNEQUAL(buf.AsStringBuf(), plaintext);
-
-        offset = 1;
-        cipher.SetIV(tc8_iv, (ui8*)&offset);
-        cipher.Decipher((ui8*)buf + 64, (ui8*)buf + 64, 64);
-
-        for (size_t i = 64; i < 64 * 2; ++i) {
+ 
+        ChaCha cipher; 
+        ui64 offset = 0; 
+        cipher.SetIV(tc8_iv, (ui8*)&offset); 
+        cipher.SetKey(tc8_key, KEY_SIZE); 
+ 
+        UNIT_ASSERT_EQUAL(ChaCha::BLOCK_SIZE, 64); 
+        cipher.Encipher(buf.Data(), buf.Data(), ChaCha::BLOCK_SIZE * 2); 
+ 
+        UNIT_ASSERT_UNEQUAL(buf.AsStringBuf(), plaintext); 
+ 
+        offset = 1; 
+        cipher.SetIV(tc8_iv, (ui8*)&offset); 
+        cipher.Decipher((ui8*)buf + 64, (ui8*)buf + 64, 64); 
+ 
+        for (size_t i = 64; i < 64 * 2; ++i) { 
             UNIT_ASSERT_EQUAL(((ui8*)buf)[i], plaintext.data()[i]);
-        }
-    }
+        } 
+    } 
 }

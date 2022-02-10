@@ -56,7 +56,7 @@ public:
                             ReverseCvar.notify_one();
                         }
                     }
-
+ 
                     // count effective replicas
                     THPTimer timer;
                     ui32 count = layout.CountEffectiveReplicas(gtype);
@@ -96,65 +96,65 @@ public:
     }
 };
 
-void TestErasureSet(ui32 firstIdx, ui32 step) {
-    for (ui32 erasure = firstIdx; erasure < TBlobStorageGroupType::ErasureSpeciesCount; erasure += step) {
-        if (erasure == TBlobStorageGroupType::ErasureMirror3dc || erasure == TBlobStorageGroupType::ErasureMirror3of4) {
-            continue;
-        }
-        TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(erasure));
-        if (gtype.BlobSubgroupSize() > 8) {
-            continue;
-        }
-        Cerr << "testing erasure " << TBlobStorageGroupType::ErasureSpeciesName(erasure) << Endl;
-        const ui32 totalPartCount = gtype.TotalPartCount();
-        const ui32 blobSubgroupSize = gtype.BlobSubgroupSize();
-        TCheckQueue checker(gtype);
-        for (ui32 main = 0; main < 1 << totalPartCount; ++main) {
-            Cerr << "  main# " << main << Endl;
-            std::vector<ui32> handoffs(gtype.Handoff(), 0);
-            for (;;) {
-                // generate subgroup layout
-                TSubgroupPartLayout layout;
-                for (ui32 nodeId = 0; nodeId < blobSubgroupSize; ++nodeId) {
-                    if (nodeId < totalPartCount) {
-                        if (main & 1 << nodeId) {
-                            layout.AddItem(nodeId, nodeId, gtype);
-                        }
-                    } else {
-                        for (ui32 i = 0; i < totalPartCount; ++i) {
-                            if (handoffs[nodeId - totalPartCount] & 1 << i) {
-                                layout.AddItem(nodeId, i, gtype);
+void TestErasureSet(ui32 firstIdx, ui32 step) { 
+    for (ui32 erasure = firstIdx; erasure < TBlobStorageGroupType::ErasureSpeciesCount; erasure += step) { 
+        if (erasure == TBlobStorageGroupType::ErasureMirror3dc || erasure == TBlobStorageGroupType::ErasureMirror3of4) { 
+            continue; 
+        } 
+        TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(erasure)); 
+        if (gtype.BlobSubgroupSize() > 8) { 
+            continue; 
+        } 
+        Cerr << "testing erasure " << TBlobStorageGroupType::ErasureSpeciesName(erasure) << Endl; 
+        const ui32 totalPartCount = gtype.TotalPartCount(); 
+        const ui32 blobSubgroupSize = gtype.BlobSubgroupSize(); 
+        TCheckQueue checker(gtype); 
+        for (ui32 main = 0; main < 1 << totalPartCount; ++main) { 
+            Cerr << "  main# " << main << Endl; 
+            std::vector<ui32> handoffs(gtype.Handoff(), 0); 
+            for (;;) { 
+                // generate subgroup layout 
+                TSubgroupPartLayout layout; 
+                for (ui32 nodeId = 0; nodeId < blobSubgroupSize; ++nodeId) { 
+                    if (nodeId < totalPartCount) { 
+                        if (main & 1 << nodeId) { 
+                            layout.AddItem(nodeId, nodeId, gtype); 
+                        } 
+                    } else { 
+                        for (ui32 i = 0; i < totalPartCount; ++i) { 
+                            if (handoffs[nodeId - totalPartCount] & 1 << i) { 
+                                layout.AddItem(nodeId, i, gtype); 
                             }
                         }
                     }
-                }
+                } 
 
-                checker(layout);
+                checker(layout); 
 
-                // increment handoffs
-                ui32 carry = 1;
-                for (size_t i = 0; carry && i < handoffs.size(); ++i) {
-                    carry = !(++handoffs[i] & (1 << totalPartCount) - 1);
+                // increment handoffs 
+                ui32 carry = 1; 
+                for (size_t i = 0; carry && i < handoffs.size(); ++i) { 
+                    carry = !(++handoffs[i] & (1 << totalPartCount) - 1); 
                 }
-                if (carry) {
-                    break;
-                }
+                if (carry) { 
+                    break; 
+                } 
             }
         }
     }
 }
-
-Y_UNIT_TEST_SUITE(TSubgroupPartLayoutTest) {
-    Y_UNIT_TEST(CountEffectiveReplicas1of4) {
-        TestErasureSet(0, 4);
-    }
-    Y_UNIT_TEST(CountEffectiveReplicas2of4) {
-        TestErasureSet(1, 4);
-    }
-    Y_UNIT_TEST(CountEffectiveReplicas3of4) {
-        TestErasureSet(2, 4);
-    }
-    Y_UNIT_TEST(CountEffectiveReplicas4of4) {
-        TestErasureSet(3, 4);
-    }
-}
+ 
+Y_UNIT_TEST_SUITE(TSubgroupPartLayoutTest) { 
+    Y_UNIT_TEST(CountEffectiveReplicas1of4) { 
+        TestErasureSet(0, 4); 
+    } 
+    Y_UNIT_TEST(CountEffectiveReplicas2of4) { 
+        TestErasureSet(1, 4); 
+    } 
+    Y_UNIT_TEST(CountEffectiveReplicas3of4) { 
+        TestErasureSet(2, 4); 
+    } 
+    Y_UNIT_TEST(CountEffectiveReplicas4of4) { 
+        TestErasureSet(3, 4); 
+    } 
+} 

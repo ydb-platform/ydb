@@ -1,16 +1,16 @@
-#pragma once
-
-#include "probe.h"
+#pragma once 
+ 
+#include "probe.h" 
 
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
-
+ 
 #include <util/generic/hash.h>
 
 #include <functional>
 
 namespace NLWTrace {
     class TSession;
-
+ 
     // Custom action can save any stuff (derived from IResource) in TSession object
     // IMPORTANT: Derived class will be used from multiple threads! (see example3)
     class IResource: public TAtomicRefCount<IResource> {
@@ -60,7 +60,7 @@ namespace NLWTrace {
             return Destructive;
         }
     };
-
+ 
     // Factory to produce custom action executors
     class TCustomActionFactory {
     public:

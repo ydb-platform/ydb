@@ -1313,7 +1313,7 @@ void TPartition::FailBadClient(const TActorContext& ctx)
 
 bool CheckDiskStatus(const TStorageStatusFlags status)
 {
-    return !status.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove);
+    return !status.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove); 
 }
 
 void TPartition::HandleGetDiskStatus(const NKikimrClient::TResponse& response, const TActorContext& ctx)
@@ -1562,12 +1562,12 @@ void TPartition::HandleDataRead(const NKikimrClient::TResponse& response, const 
                 return;
             case NKikimrProto::ERROR:
                 LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "tablet " << TabletID << " HandleOnInit topic '" << TopicName << "' partition " << Partition
-                            << " ReadResult " << i << " status NKikimrProto::ERROR result message: \"" << read.GetMessage()
-                            << " \" errorReason: \"" << response.GetErrorReason() << "\"");
+                            << " ReadResult " << i << " status NKikimrProto::ERROR result message: \"" << read.GetMessage() 
+                            << " \" errorReason: \"" << response.GetErrorReason() << "\""); 
                 ctx.Send(Tablet, new TEvents::TEvPoisonPill());
                 return;
             default:
-                Cerr << "ERROR " << read.GetStatus() << " message: \"" << read.GetMessage() << "\"\n";
+                Cerr << "ERROR " << read.GetStatus() << " message: \"" << read.GetMessage() << "\"\n"; 
                 Y_FAIL("bad status");
 
         };

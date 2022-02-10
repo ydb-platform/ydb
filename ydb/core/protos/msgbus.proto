@@ -47,10 +47,10 @@ extend google.protobuf.FieldOptions {
     optional string CommonDescription = 70002;
 }
 
-message TMsgBusRequestBase {
-    optional uint32 ServerTimeoutMs = 1;
-}
-
+message TMsgBusRequestBase { 
+    optional uint32 ServerTimeoutMs = 1; 
+} 
+ 
 message TRequest {
     optional NKikimrTxUserProxy.TTransaction Transaction = 1;
     optional uint64 ProxyFlags = 2;
@@ -203,9 +203,9 @@ message TResponse {
     repeated TKeyValueResponse.TRenameResult RenameResult = 906;
     repeated TKeyValueResponse.TCopyRangeResult CopyRangeResult = 907;
     repeated TKeyValueResponse.TConcatResult ConcatResult = 908;
-    repeated TKeyValueResponse.TGetStatusResult GetStatusResult = 909;
+    repeated TKeyValueResponse.TGetStatusResult GetStatusResult = 909; 
     optional TKeyValueResponse.TTrimLeakedBlobsResult TrimLeakedBlobsResult = 910;
-    optional TKeyValueResponse.TSetExecutorFastLogPolicyResult SetExecutorFastLogPolicyResult = 911;
+    optional TKeyValueResponse.TSetExecutorFastLogPolicyResult SetExecutorFastLogPolicyResult = 911; 
 
     // THiveCreateTablet
     message TCreateTabletResult {
@@ -309,83 +309,83 @@ message TSchemeInitRoot {
 }
 
 message TBSAdm {
-    message TVDiskLocation {
-        optional uint32 NodeId = 1;
-        optional uint32 PDiskId = 2;
-        optional uint32 VSlotId = 3;
-    }
-
-    message TGroupReconfigureWipe {
-        optional TVDiskLocation Location = 1;
-    }
-
+    message TVDiskLocation { 
+        optional uint32 NodeId = 1; 
+        optional uint32 PDiskId = 2; 
+        optional uint32 VSlotId = 3; 
+    } 
+ 
+    message TGroupReconfigureWipe { 
+        optional TVDiskLocation Location = 1; 
+    } 
+ 
     optional uint32 Domain = 1;
 
-    optional TGroupReconfigureWipe GroupReconfigureWipe = 6;
+    optional TGroupReconfigureWipe GroupReconfigureWipe = 6; 
     optional string SecurityToken = 7;
 }
 
-message THiveCreateTablet {
-    message TCmdCreateTablet {
-        optional uint64 OwnerId = 1; // mandatory, senders TabletId (use 0 for human/external system)
-        optional uint64 OwnerIdx = 2; // mandatory, per-sender unique request id for duplicate request detection
+message THiveCreateTablet { 
+    message TCmdCreateTablet { 
+        optional uint64 OwnerId = 1; // mandatory, senders TabletId (use 0 for human/external system) 
+        optional uint64 OwnerIdx = 2; // mandatory, per-sender unique request id for duplicate request detection 
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3; // mandatory, tablet type, see ydb/core/base/tablet_types.h
-        optional uint32 ChannelsProfile = 4; // mandatory, channels profile index (use 0 for default profile)
+        optional uint32 ChannelsProfile = 4; // mandatory, channels profile index (use 0 for default profile) 
         repeated uint32 AllowedNodeIDs = 5;
         repeated NKikimrSubDomains.TDomainKey AllowedDomains = 6;
         repeated NKikimrStoragePool.TChannelBind BindedChannels = 7;
-    }
-
+    } 
+ 
     message TCmdLookupTablet {
         optional uint64 OwnerId = 1; // mandatory, senders TabletId (use 0 for human/external system)
         optional uint64 OwnerIdx = 2; // mandatory, per-sender unique request id for duplicate request detection
     }
 
-    repeated TCmdCreateTablet CmdCreateTablet = 1;
+    repeated TCmdCreateTablet CmdCreateTablet = 1; 
     repeated TCmdLookupTablet CmdLookupTablet = 3;
-    optional uint32 DomainUid = 2; // mandatory, Domain unique id, in most cases 1
-}
-
-message THiveCreateTabletResult {
+    optional uint32 DomainUid = 2; // mandatory, Domain unique id, in most cases 1 
+} 
+ 
+message THiveCreateTabletResult { 
     optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
-    optional bytes ProtobufError = 400;
-
-    message TCreateTabletResult {
-        // Should be NKikimrProto::OK or NKikimrProto::ALREADY in case of success or repeated call
+    optional bytes ProtobufError = 400; 
+ 
+    message TCreateTabletResult { 
+        // Should be NKikimrProto::OK or NKikimrProto::ALREADY in case of success or repeated call 
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
-        optional uint64 TabletId = 2;
-    }
-
+        optional uint64 TabletId = 2; 
+    } 
+ 
     message TLookupTabletResult {
         // Should be NKikimrProto::OK or NKikimrProto::NODATA in case of non existing tablet
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
         optional uint64 TabletId = 2;
     }
 
-    repeated TCreateTabletResult CreateTabletResult = 2;
+    repeated TCreateTabletResult CreateTabletResult = 2; 
     repeated TLookupTabletResult LookupTabletResult = 4;
-    optional string ErrorReason = 3; // When present contains human-readable error description
-}
-
-message TLocalEnumerateTablets {
-    optional uint64 DomainUid = 1; // mandatory
-    optional uint32 NodeId = 2; // optional, msgbus proxy will contact it's own node if not set
+    optional string ErrorReason = 3; // When present contains human-readable error description 
+} 
+ 
+message TLocalEnumerateTablets { 
+    optional uint64 DomainUid = 1; // mandatory 
+    optional uint32 NodeId = 2; // optional, msgbus proxy will contact it's own node if not set 
     optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3; // optional, local will enumerate all tablets if not set
-}
-
-message TLocalEnumerateTabletsResult {
+} 
+ 
+message TLocalEnumerateTabletsResult { 
     optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
-    optional bytes ProtobufError = 400;
-
-    message TTabletInfo {
-        optional uint64 TabletId = 1;
+    optional bytes ProtobufError = 400; 
+ 
+    message TTabletInfo { 
+        optional uint64 TabletId = 1; 
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 2;
-    }
-
-    repeated TTabletInfo TabletInfo = 2;
-    optional string ErrorReason = 3; // When present contains human-readable error description
-}
-
+    } 
+ 
+    repeated TTabletInfo TabletInfo = 2; 
+    optional string ErrorReason = 3; // When present contains human-readable error description 
+} 
+ 
 message TTypeMetadataRequest {
     optional uint64 ETag = 1;
 }
@@ -393,7 +393,7 @@ message TTypeMetadataRequest {
 // must start from TResponseBase
 message TTypeMetadataResponse {
     optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
-    optional bytes ProtobufError = 400;
+    optional bytes ProtobufError = 400; 
 
     optional uint64 ETag = 2;
     optional bytes TypeMetadata = 3;

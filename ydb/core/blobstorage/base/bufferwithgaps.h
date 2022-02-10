@@ -152,27 +152,27 @@ namespace NKikimr {
         bool Empty() const {
             return Data.empty();
         }
-
-        void Sanitize() const {
+ 
+        void Sanitize() const { 
             if (Data.size()) {
-                ui64 a = 0;
+                ui64 a = 0; 
                 for (const auto &gap : Gaps) {
                     ui64 b = gap.first - Offset;
-                    if (a < b) {
+                    if (a < b) { 
                         ui64 size = gap.second;
-                        Y_UNUSED(size);
-                        REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(DataPtr<const char>(a, size), size);
-                    }
+                        Y_UNUSED(size); 
+                        REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(DataPtr<const char>(a, size), size); 
+                    } 
                     a = b + gap.second;
-                }
+                } 
                 ui64 b = Data.size();
-                if (a < b) {
-                    ui64 size = b - a;
-                    Y_UNUSED(size);
-                    REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(DataPtr<const char>(a, size), size);
-                }
-            }
-        }
+                if (a < b) { 
+                    ui64 size = b - a; 
+                    Y_UNUSED(size); 
+                    REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(DataPtr<const char>(a, size), size); 
+                } 
+            } 
+        } 
     };
 
 } // NKikimr

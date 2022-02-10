@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    fomichev
+OWNER( 
+    fomichev 
     g:kikimr
-)
+) 
 
 SRCS(
     astest.h

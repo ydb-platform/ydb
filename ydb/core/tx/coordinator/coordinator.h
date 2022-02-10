@@ -110,11 +110,11 @@ struct TEvTxCoordinator {
 };
 
 }
-
-template<>
+ 
+template<> 
 inline void Out<NKikimrTx::TEvCoordinatorStepResult::EStatus>(IOutputStream& o, NKikimrTx::TEvCoordinatorStepResult::EStatus x) {
     o << NKikimrTx::TEvCoordinatorStepResult::EStatus_Name(x).data();
-    return;
-}
-
-
+    return; 
+} 
+ 
+ 

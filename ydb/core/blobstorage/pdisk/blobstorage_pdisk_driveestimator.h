@@ -17,7 +17,7 @@ namespace NKikimr {
 namespace NPDisk {
 
 class TDriveEstimator {
-    TString Filename;
+    TString Filename; 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     TPDiskMon PDiskMon;
     std::unique_ptr<TActorSystemCreator> ActorSystemCreator;
@@ -27,7 +27,7 @@ class TDriveEstimator {
     ui64 DriveSize;
     THolder<TBufferPool> BufferPool;
     TBuffer::TPtr Buffer;
-    TAtomic Counter = 0;
+    TAtomic Counter = 0; 
     TMutex Mtx;
     TCondVar CondVar;
     static constexpr ui32 Repeats = 128;

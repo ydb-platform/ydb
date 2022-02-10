@@ -1,9 +1,9 @@
-#pragma once
-#include "defs.h"
-
+#pragma once 
+#include "defs.h" 
+ 
 #include "blobstorage_pdisk_completion.h"
-#include "blobstorage_pdisk_drivedata.h"
-#include "blobstorage_pdisk_request_id.h"
+#include "blobstorage_pdisk_drivedata.h" 
+#include "blobstorage_pdisk_request_id.h" 
 #include "blobstorage_pdisk_util_devicemode.h"
 
 #include <ydb/core/base/blobstorage.h>
@@ -12,27 +12,27 @@
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/wilson/wilson_event.h>
 
-namespace NActors {
-class TActorSystem;
-}
-
-namespace NKikimr {
-
-struct TPDiskMon;
-
-namespace NPDisk {
-
-////////////////////////////////////////////////////////////////////////////
-// IBlockDevice - PDisk Hardware abstraction layer
-////////////////////////////////////////////////////////////////////////////
-
-class IBlockDevice {
-public:
-    virtual ~IBlockDevice()
-    {};
+namespace NActors { 
+class TActorSystem; 
+} 
+ 
+namespace NKikimr { 
+ 
+struct TPDiskMon; 
+ 
+namespace NPDisk { 
+ 
+//////////////////////////////////////////////////////////////////////////// 
+// IBlockDevice - PDisk Hardware abstraction layer 
+//////////////////////////////////////////////////////////////////////////// 
+ 
+class IBlockDevice { 
+public: 
+    virtual ~IBlockDevice() 
+    {}; 
     // Initialization methods
     virtual void Initialize(TActorSystem *actorSystem, const TActorId &pdiskActor) = 0;
-    virtual bool IsGood() = 0;
+    virtual bool IsGood() = 0; 
     virtual int GetLastErrno() = 0;
 
     // Synchronous intefrace
@@ -42,31 +42,31 @@ public:
 
     // Asynchronous intefrace
     virtual void PwriteAsync(const void *data, ui64 size, ui64 offset, TCompletionAction *completionAction,
-            TReqId reqId, NWilson::TTraceId *traceId) = 0;
+            TReqId reqId, NWilson::TTraceId *traceId) = 0; 
     virtual void PreadAsync(void *data, ui32 size, ui64 offset, TCompletionAction *completionAction,
-            TReqId reqId, NWilson::TTraceId *traceId) = 0;
+            TReqId reqId, NWilson::TTraceId *traceId) = 0; 
     virtual void CachedPreadAsync(void *data, ui32 size, ui64 offset, TCompletionAction *completionAction,
             TReqId reqId, NWilson::TTraceId *traceId) = 0;
     virtual void ClearCache() = 0;
-    virtual void FlushAsync(TCompletionAction *completionAction, TReqId reqId) = 0;
-    virtual void NoopAsync(TCompletionAction *completionAction, TReqId reqId) = 0;
+    virtual void FlushAsync(TCompletionAction *completionAction, TReqId reqId) = 0; 
+    virtual void NoopAsync(TCompletionAction *completionAction, TReqId reqId) = 0; 
     virtual void NoopAsyncHackForLogReader(TCompletionAction *completionAction, TReqId reqId) = 0;
     virtual void TrimAsync(ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) = 0;
 
     // Control methods
     virtual bool GetIsTrimEnabled() = 0;
     virtual TDriveData GetDriveData() = 0;
-    virtual ui32 GetPDiskId() = 0;
-    virtual void SetWriteCache(bool isEnable) = 0;
-    virtual void Stop() = 0;
+    virtual ui32 GetPDiskId() = 0; 
+    virtual void SetWriteCache(bool isEnable) = 0; 
+    virtual void Stop() = 0; 
     virtual TString DebugInfo() = 0;
-};
-
+}; 
+ 
 IBlockDevice* CreateRealBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon,
         ui64 reorderingCycles, ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags,
-        ui32 maxQueuedCompletionActions, TIntrusivePtr<TSectorMap> sectorMap);
+        ui32 maxQueuedCompletionActions, TIntrusivePtr<TSectorMap> sectorMap); 
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
         TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem);
-
-} // NPDisk
-} // NKikimr
+ 
+} // NPDisk 
+} // NKikimr 

@@ -160,9 +160,9 @@ message TDefineStoragePool {
 
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;
-
-    // encryption mode: 0 for none, 1 for the current mode (chacha8)
-    uint32 EncryptionMode = 101;
+ 
+    // encryption mode: 0 for none, 1 for the current mode (chacha8) 
+    uint32 EncryptionMode = 101; 
 }
 
 message TReadStoragePool {

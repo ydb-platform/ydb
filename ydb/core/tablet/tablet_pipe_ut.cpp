@@ -414,7 +414,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -525,7 +525,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -552,7 +552,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -579,8 +579,8 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
-        auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
-
+        auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender); 
+ 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
@@ -590,7 +590,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -635,7 +635,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -669,7 +669,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -696,7 +696,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -720,12 +720,12 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-
+ 
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
-        auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
-
+        auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender); 
+ 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
@@ -735,7 +735,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -780,7 +780,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -807,7 +807,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -840,7 +840,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -889,7 +889,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1)); 
             runtime.DispatchEvents(options);
         }
 
@@ -945,7 +945,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 
@@ -983,16 +983,16 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
     Y_UNIT_TEST(TestTwoNodesAndRebootOfConsumer) {
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
-        runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG); 
 
         TActorId sender1 = runtime.AllocateEdgeActor(0);
         TActorId sender2 = runtime.AllocateEdgeActor(1);
-
+ 
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
-        auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender1);
-
+        auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender1); 
+ 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         }, 0);
@@ -1002,7 +1002,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2)); 
             runtime.DispatchEvents(options);
         }
 

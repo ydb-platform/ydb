@@ -1,65 +1,65 @@
-#include "cli.h"
+#include "cli.h" 
 #include <google/protobuf/text_format.h>
-#include <util/stream/file.h>
+#include <util/stream/file.h> 
 #include <util/string/printf.h>
-
-namespace NKikimr {
-namespace NDriverClient {
-
-
-struct TCmdKeyValueConfig : public TCliCmdConfig {
-    bool IsReadToFile;
-    bool IsWriteFromFile;
+ 
+namespace NKikimr { 
+namespace NDriverClient { 
+ 
+ 
+struct TCmdKeyValueConfig : public TCliCmdConfig { 
+    bool IsReadToFile; 
+    bool IsWriteFromFile; 
     TString ReadToPath;
     TString WriteFromPath;
     TString Proto;
-
-    TCmdKeyValueConfig();
-
-    void Parse(int argc, char **argv);
-};
-
-template<typename TSuccessOp>
-int ClientSyncCall(TAutoPtr<NBus::TBusMessage> request, const TCliCmdConfig &cliConfig, TSuccessOp successOp) {
-    TAutoPtr<NBus::TBusMessage> reply;
+ 
+    TCmdKeyValueConfig(); 
+ 
+    void Parse(int argc, char **argv); 
+}; 
+ 
+template<typename TSuccessOp> 
+int ClientSyncCall(TAutoPtr<NBus::TBusMessage> request, const TCliCmdConfig &cliConfig, TSuccessOp successOp) { 
+    TAutoPtr<NBus::TBusMessage> reply; 
     NBus::EMessageStatus status = cliConfig.SyncCall(request, reply);
-
-    switch (status) {
-    case NBus::MESSAGE_OK:
-        {
+ 
+    switch (status) { 
+    case NBus::MESSAGE_OK: 
+        { 
             const NKikimrClient::TResponse &response = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-            successOp(response);
-            return response.GetStatus() == NMsgBusProxy::MSTATUS_OK ? 0 : 1;
-        }
-    default:
-        {
-            const char *description = NBus::MessageStatusDescription(status);
-            Cerr << description << Endl;
-        }
-        return 1;
-    }
-}
-
-
-int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
+            successOp(response); 
+            return response.GetStatus() == NMsgBusProxy::MSTATUS_OK ? 0 : 1; 
+        } 
+    default: 
+        { 
+            const char *description = NBus::MessageStatusDescription(status); 
+            Cerr << description << Endl; 
+        } 
+        return 1; 
+    } 
+} 
+ 
+ 
+int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) { 
     Y_UNUSED(cmdConf);
-
-#ifdef _win32_
-    WSADATA dummy;
-    WSAStartup(MAKEWORD(2, 2), &dummy);
-#endif
-
-    TCmdKeyValueConfig requestConfig;
-    requestConfig.Parse(argc, argv);
-
+ 
+#ifdef _win32_ 
+    WSADATA dummy; 
+    WSAStartup(MAKEWORD(2, 2), &dummy); 
+#endif 
+ 
+    TCmdKeyValueConfig requestConfig; 
+    requestConfig.Parse(argc, argv); 
+ 
     TVector<NKikimrClient::TKeyValueRequest> records;
     NKikimrClient::TKeyValueRequest& record = *records.emplace(records.end());
 
     const bool isOk = ::google::protobuf::TextFormat::ParseFromString(requestConfig.Proto, &record);
-    if (!isOk) {
-        ythrow TWithBackTrace<yexception>() << "Error parsing protobuf: \'" << requestConfig.Proto << "\'";
-    }
-
+    if (!isOk) { 
+        ythrow TWithBackTrace<yexception>() << "Error parsing protobuf: \'" << requestConfig.Proto << "\'"; 
+    } 
+ 
     const ui32 maxReadBlockSize = 20 << 20;
     const ui32 maxWriteBlockSize = 16 << 20;
 
@@ -70,7 +70,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
         cmdRead.SetSize(maxReadBlockSize);
     }
 
-    if (requestConfig.IsWriteFromFile) {
+    if (requestConfig.IsWriteFromFile) { 
         Y_VERIFY(record.CmdWriteSize() == 1);
         Y_VERIFY(record.GetCmdWrite(0).HasKey());
         Y_VERIFY(!record.GetCmdWrite(0).HasValue());
@@ -123,17 +123,17 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
             cmdConcat.SetOutputKey(key);
             cmdConcat.SetKeepInputs(false);
         }
-    }
-
+    } 
+ 
     auto successOp = [&](const NKikimrClient::TResponse &response) {
-        const ui32 status = response.GetStatus();
-        Cout << "status: " << status << Endl;
-        Cout << "status transcript: " << static_cast<NMsgBusProxy::EResponseStatus>(response.GetStatus()) << Endl;
+        const ui32 status = response.GetStatus(); 
+        Cout << "status: " << status << Endl; 
+        Cout << "status transcript: " << static_cast<NMsgBusProxy::EResponseStatus>(response.GetStatus()) << Endl; 
         if (status != NMsgBusProxy::MSTATUS_OK) {
             Cout << "error reason: " << response.GetErrorReason() << Endl;
         }
-
-        if (requestConfig.IsReadToFile) {
+ 
+        if (requestConfig.IsReadToFile) { 
             Y_VERIFY(status == NMsgBusProxy::MSTATUS_OK);
             Y_VERIFY(response.ReadResultSize() == 1);
             Y_VERIFY(response.GetReadResult(0).HasStatus());
@@ -147,7 +147,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
                 last = records[0];
                 last.MutableCmdRead(0)->SetOffset(readBuffer.size());
             }
-        } else if (requestConfig.IsWriteFromFile) {
+        } else if (requestConfig.IsWriteFromFile) { 
             Y_VERIFY(status == NMsgBusProxy::MSTATUS_OK);
             if (response.WriteResultSize() == 1) {
                 Y_VERIFY(response.GetWriteResult(0).HasStatus());
@@ -158,17 +158,17 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
             } else {
                 Y_FAIL("unexpected case");
             }
-        } else {
+        } else { 
             TString str;
-            const bool isOk = ::google::protobuf::TextFormat::PrintToString(response, &str);
-            if (!isOk) {
-                ythrow TWithBackTrace<yexception>() << "Error printing response to string!";
-            }
-            Cout << "response: " << str << Endl;
-        }
+            const bool isOk = ::google::protobuf::TextFormat::PrintToString(response, &str); 
+            if (!isOk) { 
+                ythrow TWithBackTrace<yexception>() << "Error printing response to string!"; 
+            } 
+            Cout << "response: " << str << Endl; 
+        } 
     };
 
-    int status = 0;
+    int status = 0; 
     for (size_t i = 0; i < records.size(); ++i) {
         auto request = MakeHolder<NMsgBusProxy::TBusKeyValue>();
         request->Record = records[i];
@@ -185,41 +185,41 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
     }
 
     return status;
-}
-
-
-TCmdKeyValueConfig::TCmdKeyValueConfig()
-    : IsReadToFile(false)
-    , IsWriteFromFile(false)
-{}
-
-
-void TCmdKeyValueConfig::Parse(int argc, char **argv) {
-    using namespace NLastGetopt;
-
-    TOpts opts = TOpts::Default();
-    opts.AddLongOption("protobuf", "string representation of the keyvalue request protobuf").Required()
-        .RequiredArgument("PROTOBUF").StoreResult(&Proto);
-    opts.AddLongOption("read-to-file", "output file path, protobuf must contain single read command!").Optional()
-        .RequiredArgument("PATH").StoreResult(&ReadToPath);
-    opts.AddLongOption("write-from-file", "input file path, protobuf must contain single write command!").Optional()
-        .RequiredArgument("PATH").StoreResult(&WriteFromPath);
-
-    ConfigureBaseLastGetopt(opts);
-    TOptsParseResult res(&opts, argc, argv);
-    ConfigureMsgBusLastGetopt(res, argc, argv);
-
-    if (ReadToPath.size() != 0) {
-        IsReadToFile = true;
-    }
-    if (WriteFromPath.size() != 0) {
-        IsWriteFromFile = true;
-    }
-    if (IsReadToFile && IsWriteFromFile) {
-        ythrow TWithBackTrace<yexception>() << "Use either --read-to-file or --write-from-file!";
-    }
-}
-
-
-}
-}
+} 
+ 
+ 
+TCmdKeyValueConfig::TCmdKeyValueConfig() 
+    : IsReadToFile(false) 
+    , IsWriteFromFile(false) 
+{} 
+ 
+ 
+void TCmdKeyValueConfig::Parse(int argc, char **argv) { 
+    using namespace NLastGetopt; 
+ 
+    TOpts opts = TOpts::Default(); 
+    opts.AddLongOption("protobuf", "string representation of the keyvalue request protobuf").Required() 
+        .RequiredArgument("PROTOBUF").StoreResult(&Proto); 
+    opts.AddLongOption("read-to-file", "output file path, protobuf must contain single read command!").Optional() 
+        .RequiredArgument("PATH").StoreResult(&ReadToPath); 
+    opts.AddLongOption("write-from-file", "input file path, protobuf must contain single write command!").Optional() 
+        .RequiredArgument("PATH").StoreResult(&WriteFromPath); 
+ 
+    ConfigureBaseLastGetopt(opts); 
+    TOptsParseResult res(&opts, argc, argv); 
+    ConfigureMsgBusLastGetopt(res, argc, argv); 
+ 
+    if (ReadToPath.size() != 0) { 
+        IsReadToFile = true; 
+    } 
+    if (WriteFromPath.size() != 0) { 
+        IsWriteFromFile = true; 
+    } 
+    if (IsReadToFile && IsWriteFromFile) { 
+        ythrow TWithBackTrace<yexception>() << "Use either --read-to-file or --write-from-file!"; 
+    } 
+} 
+ 
+ 
+} 
+} 

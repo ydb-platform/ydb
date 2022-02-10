@@ -811,7 +811,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     }
 
     TVector<ui32> groups;
-    groups.reserve(record.GroupsSize());
+    groups.reserve(record.GroupsSize()); 
     for (auto& group : record.GetGroups()) {
         groups.push_back(group);
         if (groups.back() == 0 || groups.back() > TotalGroups) {
@@ -842,7 +842,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     }
 
     if (it->second.SessionsWithGroup > 0 && groups.empty()) {
-        groups.reserve(TotalGroups);
+        groups.reserve(TotalGroups); 
         for (ui32 i = 1; i <= TotalGroups; ++i) {
             groups.push_back(i);
         }

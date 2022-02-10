@@ -58,7 +58,7 @@ namespace NKikimr {
     DECLARE_ACTOR_EVENT(EvVPutReceived, (TVDiskID, VDiskId), (ui32, PDiskId), (ui32, VDiskSlotId));
     DECLARE_ACTOR_EVENT(EvPutIntoEmergQueue);
     DECLARE_ACTOR_EVENT(EvVPutResultSent);
-    DECLARE_ACTOR_EVENT(EvVMultiPutResultSent);
+    DECLARE_ACTOR_EVENT(EvVMultiPutResultSent); 
 
     DECLARE_ACTOR_EVENT(EvChunkReadSent, (ui32, ChunkIdx), (ui32, Offset), (ui32, Size), (void*, YardCookie));
 

@@ -1,12 +1,12 @@
 #pragma once
 #include "defs.h"
-
+ 
 #include "blobstorage_pdisk_category.h"
 #include "events.h"
 #include "tablet_types.h"
 #include "logoblob.h"
 #include "pathid.h"
-
+ 
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/base.pb.h>
@@ -18,72 +18,72 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 
-#include <util/stream/str.h>
+#include <util/stream/str.h> 
 #include <util/generic/xrange.h>
-
+ 
 namespace NKikimr {
 
 static constexpr ui32 MaxProtobufSize = 67108000;
 static constexpr ui32 MaxVDiskBlobSize = 10 << 20; // 10 megabytes
-static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000;
+static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000; 
 
 static constexpr TDuration VDiskCooldownTimeout = TDuration::Seconds(15);
 static constexpr TDuration VDiskCooldownTimeoutOnProxy = TDuration::Seconds(12);
 
-struct TStorageStatusFlags {
-    ui32 Raw = 0;
-
-    TStorageStatusFlags()
-    {}
-
-    TStorageStatusFlags(ui32 raw)
-        : Raw(raw)
-    {}
-
+struct TStorageStatusFlags { 
+    ui32 Raw = 0; 
+ 
+    TStorageStatusFlags() 
+    {} 
+ 
+    TStorageStatusFlags(ui32 raw) 
+        : Raw(raw) 
+    {} 
+ 
     TStorageStatusFlags(const TStorageStatusFlags&) = default;
     TStorageStatusFlags& operator =(const TStorageStatusFlags&) = default;
-
+ 
     friend bool operator ==(const TStorageStatusFlags& x, const TStorageStatusFlags& y) { return x.Raw == y.Raw; }
     friend bool operator !=(const TStorageStatusFlags& x, const TStorageStatusFlags& y) { return x.Raw != y.Raw; }
 
-    void Merge(ui32 raw) {
-        if (raw & ui32(NKikimrBlobStorage::StatusIsValid)) {
-            Raw |= (raw & (
-                ui32(NKikimrBlobStorage::StatusIsValid)
-                | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)
-                | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop)
-                | ui32(NKikimrBlobStorage::StatusDiskSpaceOrange)
+    void Merge(ui32 raw) { 
+        if (raw & ui32(NKikimrBlobStorage::StatusIsValid)) { 
+            Raw |= (raw & ( 
+                ui32(NKikimrBlobStorage::StatusIsValid) 
+                | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) 
+                | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop) 
+                | ui32(NKikimrBlobStorage::StatusDiskSpaceOrange) 
                 | ui32(NKikimrBlobStorage::StatusDiskSpaceRed)
                 | ui32(NKikimrBlobStorage::StatusDiskSpaceBlack)
                 | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
                 | ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange)));
-        }
-    }
-
-    bool Check(NKikimrBlobStorage::EStatusFlags statusToCheck) const {
-        return (Raw & ui32(NKikimrBlobStorage::StatusIsValid)) && (Raw & ui32(statusToCheck));
+        } 
+    } 
+ 
+    bool Check(NKikimrBlobStorage::EStatusFlags statusToCheck) const { 
+        return (Raw & ui32(NKikimrBlobStorage::StatusIsValid)) && (Raw & ui32(statusToCheck)); 
     }
 
     TString ToString() const {
-        TStringStream str;
-        Output(str);
-        return str.Str();
-    }
-
+        TStringStream str; 
+        Output(str); 
+        return str.Str(); 
+    } 
+ 
     void Output(IOutputStream &out) const {
         out << "{"
             << ((Raw & NKikimrBlobStorage::StatusIsValid) ? " Valid" : "")
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceCyan) ? " Cyan" : "")
-            << ((Raw & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) ? " LightYellow" : "")
-            << ((Raw & NKikimrBlobStorage::StatusDiskSpaceYellowStop) ? " Yellow" : "")
+            << ((Raw & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) ? " LightYellow" : "") 
+            << ((Raw & NKikimrBlobStorage::StatusDiskSpaceYellowStop) ? " Yellow" : "") 
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceLightOrange) ? " LightOrange" : "")
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceOrange) ? " Orange" : "")
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceRed) ? " Red" : "")
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceBlack) ? " Black" : "")
             << " }";
-    }
-};
-
+    } 
+}; 
+ 
 NKikimrBlobStorage::EPDiskType PDiskTypeToPDiskType(const TPDiskCategory::EDeviceType type);
 
 TPDiskCategory::EDeviceType PDiskTypeToPDiskType(const NKikimrBlobStorage::EPDiskType type);
@@ -195,31 +195,31 @@ struct TTabletChannelInfo {
         ui32 GroupID;
         TInstant Timestamp; // for diagnostics usage only
 
-        THistoryEntry()
-            : FromGeneration(0)
-            , GroupID(0)
-        {}
-
+        THistoryEntry() 
+            : FromGeneration(0) 
+            , GroupID(0) 
+        {} 
+ 
         THistoryEntry(ui32 fromGeneration, ui32 groupId, TInstant timestamp = TInstant()) // groupId could be zero
-            : FromGeneration(fromGeneration)
-            , GroupID(groupId)
+            : FromGeneration(fromGeneration) 
+            , GroupID(groupId) 
             , Timestamp(timestamp)
-        {}
-
+        {} 
+ 
         struct TCmp {
             bool operator()(ui32 gen, const THistoryEntry &x) const {
                 return gen < x.FromGeneration;
             }
         };
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{FromGeneration# " << FromGeneration;
-            str << " GroupID# " << GroupID;
+            TStringStream str; 
+            str << "{FromGeneration# " << FromGeneration; 
+            str << " GroupID# " << GroupID; 
             str << " Timestamp# " << Timestamp.ToString();
-            str << "}";
-            return str.Str();
-        }
+            str << "}"; 
+            return str.Str(); 
+        } 
 
         bool operator ==(const THistoryEntry& other) const {
             return FromGeneration == other.FromGeneration
@@ -262,7 +262,7 @@ struct TTabletChannelInfo {
             if (first->FromGeneration <= gen)
                 return first->GroupID;
             return Max<ui32>();
-        }
+        } 
 
         const THistoryEntry * const end = first + historySize;
         const THistoryEntry * const last = end - 1;
@@ -284,7 +284,7 @@ struct TTabletChannelInfo {
         else
             return nullptr;
     }
-
+ 
     const THistoryEntry* PreviousEntry() const {
         if (History.size() > 1)
             return &*(History.rbegin() + 1);
@@ -293,21 +293,21 @@ struct TTabletChannelInfo {
     }
 
     TString ToString() const {
-        TStringStream str;
-        str << "{Channel# " << Channel;
-        str << " Type# " << Type.ToString();
+        TStringStream str; 
+        str << "{Channel# " << Channel; 
+        str << " Type# " << Type.ToString(); 
         str << " StoragePool# " << StoragePool;
-        str << " History# {";
-        const size_t historySize = History.size();
-        for (size_t historyIdx = 0; historyIdx < historySize; ++historyIdx) {
+        str << " History# {"; 
+        const size_t historySize = History.size(); 
+        for (size_t historyIdx = 0; historyIdx < historySize; ++historyIdx) { 
             if (historyIdx != 0) {
-                str <<", ";
-            }
-            str << historyIdx << ":" << History[historyIdx].ToString();
-        }
-        str << "}";
-        return str.Str();
-    }
+                str <<", "; 
+            } 
+            str << historyIdx << ":" << History[historyIdx].ToString(); 
+        } 
+        str << "}"; 
+        return str.Str(); 
+    } 
 };
 
 class TTabletStorageInfo : public TThrRefBase {
@@ -326,13 +326,13 @@ public:
     virtual ~TTabletStorageInfo() {}
 
     const TTabletChannelInfo* ChannelInfo(ui32 channel) const {
-        if (Channels.size() <= channel) {
-            return nullptr;
-        }
-        const TTabletChannelInfo &info = Channels[channel];
+        if (Channels.size() <= channel) { 
+            return nullptr; 
+        } 
+        const TTabletChannelInfo &info = Channels[channel]; 
         if (info.History.empty()) {
-            return nullptr;
-        }
+            return nullptr; 
+        } 
         return &info;
     }
 
@@ -344,24 +344,24 @@ public:
     }
 
     TString ToString() const {
-        TStringStream str;
+        TStringStream str; 
         str << "{Version# " << Version;
         str << " TabletID# " << TabletID;
-        str << " TabletType# " << TabletType;
-        str << " Channels# {";
-        const size_t channelsSize = Channels.size();
-        for (size_t channelIdx = 0; channelIdx < channelsSize; ++channelIdx) {
+        str << " TabletType# " << TabletType; 
+        str << " Channels# {"; 
+        const size_t channelsSize = Channels.size(); 
+        for (size_t channelIdx = 0; channelIdx < channelsSize; ++channelIdx) { 
             if (channelIdx != 0) {
-                str <<", ";
-            }
-            str << channelIdx << ":" << Channels[channelIdx].ToString();
-        }
-        str << "}";
+                str <<", "; 
+            } 
+            str << channelIdx << ":" << Channels[channelIdx].ToString(); 
+        } 
+        str << "}"; 
         if (TenantPathId)
             str << " Tenant: " << TenantPathId;
-        return str.Str();
-    }
-
+        return str.Str(); 
+    } 
+ 
     TActorId BSProxyIDForChannel(ui32 channel, ui32 generation) const;
 
     bool operator<(const TTabletStorageInfo &other) const noexcept {
@@ -400,15 +400,15 @@ inline TActorId TTabletStorageInfo::BSProxyIDForChannel(ui32 channel, ui32 gener
 }
 
 inline ui32 GroupIDFromBlobStorageProxyID(TActorId actorId) {
-    ui32 blobStorageGroup = ui32(
-        ((actorId.RawX1() >> (7 * 8)) & 0xff) |
-        (((actorId.RawX2() >> (0 * 8)) & 0xff) << 8) |
-        (((actorId.RawX2() >> (1 * 8)) & 0xff) << 16) |
-        (((actorId.RawX2() >> (2 * 8)) & 0xff) << 24));
+    ui32 blobStorageGroup = ui32( 
+        ((actorId.RawX1() >> (7 * 8)) & 0xff) | 
+        (((actorId.RawX2() >> (0 * 8)) & 0xff) << 8) | 
+        (((actorId.RawX2() >> (1 * 8)) & 0xff) << 16) | 
+        (((actorId.RawX2() >> (2 * 8)) & 0xff) << 24)); 
     Y_VERIFY(MakeBlobStorageProxyID(blobStorageGroup) == actorId);
-    return blobStorageGroup;
-}
-
+    return blobStorageGroup; 
+} 
+ 
 inline IEventHandle *CreateEventForBSProxy(TActorId sender, TActorId recipient, IEventBase *ev, ui64 cookie,
         NWilson::TTraceId traceId = {}) {
     std::unique_ptr<IEventBase> ptr(ev);
@@ -450,8 +450,8 @@ struct TEvBlobStorage {
         EvDiscover,
         EvRange,
         EvProbe,
-        EvCollectGarbage,
-        EvStatus,
+        EvCollectGarbage, 
+        EvStatus, 
         EvVBaldSyncLog,
         EvPatch,
         EvInplacePatch,
@@ -463,8 +463,8 @@ struct TEvBlobStorage {
         EvDiscoverResult,
         EvRangeResult,
         EvProbeResult,
-        EvCollectGarbageResult,
-        EvStatusResult,
+        EvCollectGarbageResult, 
+        EvStatusResult, 
         EvVBaldSyncLogResult,
         EvPatchResult,
         EvInplacePatchResult,
@@ -473,8 +473,8 @@ struct TEvBlobStorage {
         EvVPut = EvPut + 2 * 512,                               /// 268 633 088
         EvVGet,
         EvVBlock,
-        EvVGetBlock,
-        EvVCollectGarbage,
+        EvVGetBlock, 
+        EvVCollectGarbage, 
         EvVGetBarrier,
         EvVReadyNotify,
         EvVStatus,
@@ -492,8 +492,8 @@ struct TEvBlobStorage {
         EvVPutResult = EvPut + 3 * 512,                         /// 268 633 600
         EvVGetResult,
         EvVBlockResult,
-        EvVGetBlockResult,
-        EvVCollectGarbageResult,
+        EvVGetBlockResult, 
+        EvVCollectGarbageResult, 
         EvVGetBarrierResult,
         EvVStatusResult,
         EvVDbStatResult,
@@ -521,13 +521,13 @@ struct TEvBlobStorage {
 
         // vdisk <-> controller interface,
         EvCnt = EvPut + 6 * 512,                                /// 268 635 136
-        EvVGenerationChange,
+        EvVGenerationChange, 
         EvRegisterPDiskLoadActor,
         EvStatusUpdate,
         EvDropDonor,
 
         EvCntReply = EvPut + 7 * 512,                           /// 268 635 648
-        EvVGenerationChangeResult,
+        EvVGenerationChangeResult, 
         EvRegisterPDiskLoadActorResult,
 
         // internal vdisk interface
@@ -536,11 +536,11 @@ struct TEvBlobStorage {
         EvReadLog,
         EvChunkRead,
         EvChunkWrite,
-        EvHarakiri,
+        EvHarakiri, 
         EvCheckSpace,
         EvConfigureScheduler,
-        EvYardControl,
-        EvCutLog,
+        EvYardControl, 
+        EvCutLog, 
         EvIPDiskGet,                                            /// 268 636 170
         EvSyncLogPut,
         EvSyncLogRead,
@@ -573,7 +573,7 @@ struct TEvBlobStorage {
         EvHullReleaseSnapshot,
         EvSyncJobDone,                                          /// 268 636 200
         EvLocalSyncData,
-        EvVDiskCutLog,
+        EvVDiskCutLog, 
         EvRunRepl,
         EvRecoveredHugeBlob,
         EvDetectedPhantomBlob,
@@ -616,7 +616,7 @@ struct TEvBlobStorage {
         EvSyncerGuidFirstRunDone,
         EvSyncerFullSyncedWithPeer,
         EvSyncerRLDWakeup,
-        EvSlay,
+        EvSlay, 
         EvCallOsiris,
         EvAnubisOsirisPut,
         EvAnubisOsirisPutResult,
@@ -637,7 +637,7 @@ struct TEvBlobStorage {
         EvReadLogContinue,
         EvLogSectorRestore,
         EvLogInitResult,
-        EvAskForCutLog,
+        EvAskForCutLog, 
         EvDelLogoBlobDataSyncLog,
         EvPDiskFormattingFinished,
         EvRecoveryLogReplayDone,
@@ -678,16 +678,16 @@ struct TEvBlobStorage {
         EvReadLogResult,
         EvChunkReadResult,
         EvChunkWriteResult,
-        EvHarakiriResult,
+        EvHarakiriResult, 
         EvCheckSpaceResult,
         EvConfigureSchedulerResult,
-        EvYardControlResult,
-        EvIPDiskGetResult,
+        EvYardControlResult, 
+        EvIPDiskGetResult, 
         EvSyncLogSnapshotResult,                                /// 268 636 682
         EvLocalRecoveryDone,
         EvChunkReserveResult,
         EvLocalSyncDataResult,
-        EvReadFormatResult,
+        EvReadFormatResult, 
         EvReplStarted,
         EvReplFinished,
         EvReplPlanFinished,
@@ -696,7 +696,7 @@ struct TEvBlobStorage {
         EvLocalStatusResult,                                    /// 268 636 692
         EvHandoffProxyMonResult,
         EvSyncGuidRecoveryDone,
-        EvSlayResult,
+        EvSlayResult, 
         EvOsirisDone,
         EvSyncLogWriteDone,
         EvAnubisVGetResult,
@@ -706,8 +706,8 @@ struct TEvBlobStorage {
         EvAddBulkSstResult,                                     /// 268 636 702
         EvAddBulkSstCommitted,
         EvBulkSstEssenceLoaded,
-        EvCommitLogChunks,
-        EvLogCommitDone,
+        EvCommitLogChunks, 
+        EvLogCommitDone, 
         EvSyncLogLocalStatus,
         EvSyncLogLocalStatusResult,
         EvReplResume,
@@ -717,42 +717,42 @@ struct TEvBlobStorage {
         EvHugeLockChunksResult,
         EvHugeStatResult,
 
-        // internal proxy interface
-        EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184
-        EvUnusedLocal2,                    // Not used.
-        EvUnusedLocal3,                    // Not used.
-        EvNotReadyRetryTimeout,
+        // internal proxy interface 
+        EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184 
+        EvUnusedLocal2,                    // Not used. 
+        EvUnusedLocal3,                    // Not used. 
+        EvNotReadyRetryTimeout, 
         EvConfigureQueryTimeout,
         EvEstablishingSessionTimeout,
         EvDeathNote,                       /// 268 637 191
-        EvVDiskStateChanged,
-        EvAccelerate,
+        EvVDiskStateChanged, 
+        EvAccelerate, 
         EvUnusedLocal4,                    /// 268 637 194
-        EvProxyQueueState,
+        EvProxyQueueState, 
         EvAbortOperation,
-        EvResume,
+        EvResume, 
         EvTimeStats,
         EvOverseerRequest,                 // Not used
         EvOverseerLogLastLsn,              // Not used
         EvOverseerConfirm,                 // Not used
         EvLatencyReport,
         EvGroupStatReport,
-        EvAccelerateGet,
-        EvAcceleratePut,
+        EvAccelerateGet, 
+        EvAcceleratePut, 
         EvRequestProxyQueueState,
         EvRequestProxySessionsState,
         EvProxySessionsState,
         EvBunchOfEvents,
-
-        // blobstorage controller interface
+ 
+        // blobstorage controller interface 
         // EvControllerReadSchemeString = EvPut + 11 * 512,
         // EvControllerReadDataString,
         EvControllerRegisterNode = EvPut + 11 * 512 + 2,
-        EvControllerCreatePDisk,
-        EvControllerCreateVDiskSlots,
-        EvControllerCreateGroup,
-        EvControllerSelectGroups,
-        EvControllerGetGroup,
+        EvControllerCreatePDisk, 
+        EvControllerCreateVDiskSlots, 
+        EvControllerCreateGroup, 
+        EvControllerSelectGroups, 
+        EvControllerGetGroup, 
         EvControllerUpdateDiskStatus,
         EvControllerUpdateGroupsUsage, // Not used.
         EvControllerConfigRequest,
@@ -765,7 +765,7 @@ struct TEvBlobStorage {
         EvControllerGroupStatusResponse,
         EvControllerUpdateGroup,
         EvControllerUpdateFaultyDisks,
-        EvControllerProposeGroupKey,
+        EvControllerProposeGroupKey, 
         EvControllerUpdateGroupLatencies, // Not used.
         EvControllerUpdateGroupStat,
         EvControllerNotifyGroupChange,
@@ -775,23 +775,23 @@ struct TEvBlobStorage {
         EvControllerScrubQuantumFinished,
         EvControllerScrubReportQuantumInProgress,
         EvControllerUpdateNodeDrives,
-
+ 
         // EvControllerReadSchemeStringResult = EvPut + 12 * 512,
         // EvControllerReadDataStringResult,
         EvControllerNodeServiceSetUpdate = EvPut + 12 * 512 + 2,
-        EvControllerCreatePDiskResult,
-        EvControllerCreateVDiskSlotsResult,
-        EvControllerCreateGroupResult,
-        EvControllerSelectGroupsResult,
+        EvControllerCreatePDiskResult, 
+        EvControllerCreateVDiskSlotsResult, 
+        EvControllerCreateGroupResult, 
+        EvControllerSelectGroupsResult, 
         EvRequestControllerInfo,
         EvResponseControllerInfo,
         EvControllerGroupReconfigureReplace, // Not used.
         EvControllerGroupReconfigureReplaceResult, // Not used.
-        EvControllerGroupReconfigureWipe,
-        EvControllerGroupReconfigureWipeResult,
-        EvControllerNodeReport,
+        EvControllerGroupReconfigureWipe, 
+        EvControllerGroupReconfigureWipeResult, 
+        EvControllerNodeReport, 
         EvControllerScrubStartQuantum,
-
+ 
         EvControllerMigrationPause,
         EvControllerMigrationContinue,
         EvControllerMigrationFinished,
@@ -801,20 +801,20 @@ struct TEvBlobStorage {
 
         EvControllerUpdateSystemViews,
 
-        // proxy - node controller interface
-        EvConfigureProxy = EvPut + 13 * 512,
+        // proxy - node controller interface 
+        EvConfigureProxy = EvPut + 13 * 512, 
         EvProxyConfigurationRequest, // DEPRECATED
         EvUpdateGroupInfo,
         EvNotifyVDiskGenerationChange, // DEPRECATED
-
-        // node controller internal messages
-        EvRegisterNodeRetry = EvPut + 14 * 512,
+ 
+        // node controller internal messages 
+        EvRegisterNodeRetry = EvPut + 14 * 512, 
         EvAskRestartPDisk,
         EvRestartPDisk,
         EvRestartPDiskResult,
         EvNodeWardenQueryGroupInfo,
         EvNodeWardenGroupInfo,
-
+ 
         // Other
         EvRunActor = EvPut + 15 * 512,
         EvVMockCtlRequest,
@@ -845,8 +845,8 @@ struct TEvBlobStorage {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE),
-        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE)");
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE), 
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE)"); 
 
     struct TEvPutResult;
     struct TEvGetResult;
@@ -859,73 +859,73 @@ struct TEvBlobStorage {
     struct TEvInplacePatchResult;
 
     struct TEvPut : public TEventLocal<TEvPut, EvPut> {
-        enum ETactic {
+        enum ETactic { 
             TacticMaxThroughput = 0,
-            TacticMinLatency,
+            TacticMinLatency, 
             TacticDefault, // Default depends on the erasure type
             TacticCount // This is not a tactic, but a number of tactics. Add new tactics before this line.
-        };
-        static const char* TacticName(ETactic tactic) {
-            switch (tactic) {
-                case TacticMaxThroughput:
-                    return "MaxThroughput";
-                case TacticMinLatency:
-                    return "MinLatency";
-                case TacticDefault:
-                    return "Default";
+        }; 
+        static const char* TacticName(ETactic tactic) { 
+            switch (tactic) { 
+                case TacticMaxThroughput: 
+                    return "MaxThroughput"; 
+                case TacticMinLatency: 
+                    return "MinLatency"; 
+                case TacticDefault: 
+                    return "Default"; 
                 default:
                     return "unknown";
-            }
-        };
+            } 
+        }; 
 
         const TLogoBlobID Id;
         const TString Buffer;
-        const TInstant Deadline;
+        const TInstant Deadline; 
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
-        const ETactic Tactic;
+        const ETactic Tactic; 
         mutable NLWTrace::TOrbit Orbit;
         ui32 RestartCounter = 0;
 
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
-               NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault)
+               NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog, 
+               ETactic tactic = TacticDefault) 
             : Id(id)
             , Buffer(buffer)
-            , Deadline(deadline)
+            , Deadline(deadline) 
             , HandleClass(handleClass)
-            , Tactic(tactic)
-        {
-            Y_VERIFY(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
+            , Tactic(tactic) 
+        { 
+            Y_VERIFY(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str()); 
             Y_VERIFY(buffer.size() < (40 * 1024 * 1024),
                    "EvPut invalid: LogoBlobId# %s buffer.Size# %zu",
                    id.ToString().data(), buffer.size());
             Y_VERIFY(buffer.size() == id.BlobSize(),
-                   "EvPut invalid: LogoBlobId# %s buffer.Size# %zu",
+                   "EvPut invalid: LogoBlobId# %s buffer.Size# %zu", 
                    id.ToString().data(), buffer.size());
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&id, sizeof(id));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Data(), buffer.size());
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&deadline, sizeof(deadline));
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&id, sizeof(id)); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Data(), buffer.size()); 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&deadline, sizeof(deadline)); 
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&handleClass, sizeof(handleClass));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&tactic, sizeof(tactic));
-        }
-
+        } 
+ 
         TString Print(bool isFull) const {
-            TStringStream str;
-            str << "TEvPut {Id# " << Id.ToString();
-            str << " Size# " << Buffer.size();
-            if (isFull) {
-                str << " Buffer# " << Buffer.Quote();
-            }
-            str << " Deadline# " << Deadline.MilliSeconds();
+            TStringStream str; 
+            str << "TEvPut {Id# " << Id.ToString(); 
+            str << " Size# " << Buffer.size(); 
+            if (isFull) { 
+                str << " Buffer# " << Buffer.Quote(); 
+            } 
+            str << " Deadline# " << Deadline.MilliSeconds(); 
             str << " HandleClass# " << HandleClass;
-            str << " Tactic# " << TacticName(Tactic);
-            str << "}";
-            return str.Str();
-        }
-
+            str << " Tactic# " << TacticName(Tactic); 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
+            return Print(false); 
+        } 
 
         ui32 CalculateSize() const {
             return sizeof(*this) + Buffer.capacity();
@@ -938,38 +938,38 @@ struct TEvBlobStorage {
     struct TEvPutResult : public TEventLocal<TEvPutResult, EvPutResult> {
         NKikimrProto::EReplyStatus Status;
         const TLogoBlobID Id;
-        const TStorageStatusFlags StatusFlags;
+        const TStorageStatusFlags StatusFlags; 
         const ui32 GroupId;
-        const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
-        TString ErrorReason;
-        mutable NLWTrace::TOrbit Orbit;
+        const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained' 
+        TString ErrorReason; 
+        mutable NLWTrace::TOrbit Orbit; 
 
-        TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags,
-                ui32 groupId, float approximateFreeSpaceShare)
+        TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags, 
+                ui32 groupId, float approximateFreeSpaceShare) 
             : Status(status)
             , Id(id)
-            , StatusFlags(statusFlags)
+            , StatusFlags(statusFlags) 
             , GroupId(groupId)
-            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare) 
         {}
-
+ 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
-            TStringStream str;
-            str << "TEvPutResult {Id# " << Id.ToString();
+            TStringStream str; 
+            str << "TEvPutResult {Id# " << Id.ToString(); 
             str << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
-            str << " StatusFlags# " << StatusFlags;
-            if (ErrorReason.size()) {
-                str << " ErrorReason# \"" << ErrorReason << "\"";
-            }
-            str << " ApproximateFreeSpaceShare# " << ApproximateFreeSpaceShare;
-            str << "}";
-            return str.Str();
-        }
-
+            str << " StatusFlags# " << StatusFlags; 
+            if (ErrorReason.size()) { 
+                str << " ErrorReason# \"" << ErrorReason << "\""; 
+            } 
+            str << " ApproximateFreeSpaceShare# " << ApproximateFreeSpaceShare; 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
+            return Print(false); 
+        } 
     };
 
     struct TEvGet : public TEventLocal<TEvGet, EvGet> {
@@ -987,34 +987,34 @@ struct TEvBlobStorage {
                 Id = id;
                 Shift = sh;
                 Size = sz;
-
-                Y_VERIFY(id.BlobSize() > 0, "Please, don't read/write 0-byte blobs!");
-                Y_VERIFY(sh < id.BlobSize(),
-                    "Please, don't read behind the end of the blob! BlobSize# %" PRIu32 " sh# %" PRIu32,
-                    (ui32)id.BlobSize(), (ui32)sh);
+ 
+                Y_VERIFY(id.BlobSize() > 0, "Please, don't read/write 0-byte blobs!"); 
+                Y_VERIFY(sh < id.BlobSize(), 
+                    "Please, don't read behind the end of the blob! BlobSize# %" PRIu32 " sh# %" PRIu32, 
+                    (ui32)id.BlobSize(), (ui32)sh); 
             }
-
+ 
             TString ToString() const {
-                TStringStream str;
-                str << "TQuery {Id# " << Id.ToString();
-                str << " Shift# " << Shift;
-                str << " Size# " << Size;
-                str << "}";
-                return str.Str();
-            }
+                TStringStream str; 
+                str << "TQuery {Id# " << Id.ToString(); 
+                str << " Shift# " << Shift; 
+                str << " Size# " << Size; 
+                str << "}"; 
+                return str.Str(); 
+            } 
         };
 
         // todo: replace with queue-like thing
         const ui32 QuerySize;
         TArrayHolder<TQuery> Queries;
-        TInstant Deadline;
-        bool MustRestoreFirst;
-        NKikimrBlobStorage::EGetHandleClass GetHandleClass;
-        mutable NLWTrace::TOrbit Orbit;
-        ui64 TabletId = 0; // set to non-zero tablet id to get the blocked generation
-        bool AcquireBlockedGeneration = false; // get the blocked generation along with the blobs
-        bool IsIndexOnly;
-        bool IsVerboseNoDataEnabled; // Debug use only
+        TInstant Deadline; 
+        bool MustRestoreFirst; 
+        NKikimrBlobStorage::EGetHandleClass GetHandleClass; 
+        mutable NLWTrace::TOrbit Orbit; 
+        ui64 TabletId = 0; // set to non-zero tablet id to get the blocked generation 
+        bool AcquireBlockedGeneration = false; // get the blocked generation along with the blobs 
+        bool IsIndexOnly; 
+        bool IsVerboseNoDataEnabled; // Debug use only 
         bool IsInternal = false; // set to true if generated by ds proxy
         bool CollectDebugInfo = false; // collect query debug info and return in response
         ui32 ForceBlockedGeneration = 0;
@@ -1022,18 +1022,18 @@ struct TEvBlobStorage {
         ui32 RestartCounter = 0;
         bool PhantomCheck = false;
 
-        // NKikimrBlobStorage::EGetHandleClass::FastRead
-
+        // NKikimrBlobStorage::EGetHandleClass::FastRead 
+ 
         TEvGet(TArrayHolder<TQuery> &q, ui32 sz, TInstant deadline, NKikimrBlobStorage::EGetHandleClass getHandleClass,
                 bool mustRestoreFirst = false, bool isIndexOnly = false, ui32 forceBlockedGeneration = 0,
                 bool isInternal = false, bool isVerboseNoDataEnabled = false, bool collectDebugInfo = false,
                 bool reportDetailedPartMap = false)
             : QuerySize(sz)
             , Queries(q.Release())
-            , Deadline(deadline)
-            , MustRestoreFirst(mustRestoreFirst)
-            , GetHandleClass(getHandleClass)
-            , IsIndexOnly(isIndexOnly)
+            , Deadline(deadline) 
+            , MustRestoreFirst(mustRestoreFirst) 
+            , GetHandleClass(getHandleClass) 
+            , IsIndexOnly(isIndexOnly) 
             , IsVerboseNoDataEnabled(isVerboseNoDataEnabled)
             , IsInternal(isInternal)
             , CollectDebugInfo(collectDebugInfo)
@@ -1044,56 +1044,56 @@ struct TEvBlobStorage {
             VerifySameTabletId();
         }
 
-        TEvGet(const TLogoBlobID &id, ui32 shift, ui32 size, TInstant deadline,
-                NKikimrBlobStorage::EGetHandleClass getHandleClass,
+        TEvGet(const TLogoBlobID &id, ui32 shift, ui32 size, TInstant deadline, 
+                NKikimrBlobStorage::EGetHandleClass getHandleClass, 
                 bool mustRestoreFirst = false, bool isIndexOnly = false,
                 ui32 forceBlockedGeneration = 0)
             : QuerySize(1)
             , Queries(new TQuery[1])
-            , Deadline(deadline)
-            , MustRestoreFirst(mustRestoreFirst)
-            , GetHandleClass(getHandleClass)
-            , IsIndexOnly(isIndexOnly)
-            , IsVerboseNoDataEnabled(false)
+            , Deadline(deadline) 
+            , MustRestoreFirst(mustRestoreFirst) 
+            , GetHandleClass(getHandleClass) 
+            , IsIndexOnly(isIndexOnly) 
+            , IsVerboseNoDataEnabled(false) 
             , ForceBlockedGeneration(forceBlockedGeneration)
         {
             Queries[0].Id = id;
-            Queries[0].Shift = shift;
-            Queries[0].Size = size;
-            Y_VERIFY(id.BlobSize() > 0, "Please, don't read/write 0-byte blobs!");
-            Y_VERIFY(shift < id.BlobSize(),
-                    "Please, don't read behind the end of the blob! Id# %s BlobSize# %" PRIu32 " shift# %" PRIu32,
-                    id.ToString().c_str(), (ui32)id.BlobSize(), (ui32)shift);
+            Queries[0].Shift = shift; 
+            Queries[0].Size = size; 
+            Y_VERIFY(id.BlobSize() > 0, "Please, don't read/write 0-byte blobs!"); 
+            Y_VERIFY(shift < id.BlobSize(), 
+                    "Please, don't read behind the end of the blob! Id# %s BlobSize# %" PRIu32 " shift# %" PRIu32, 
+                    id.ToString().c_str(), (ui32)id.BlobSize(), (ui32)shift); 
         }
-
+ 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
-            TStringStream str;
-            str << "TEvGet {MustRestoreFirst# " << (MustRestoreFirst ? "true" : "false");
-            str << " GetHandleClass# " << NKikimrBlobStorage::EGetHandleClass_Name(GetHandleClass);
-            str << " IsVerboseNoDataEnabled# " << (IsVerboseNoDataEnabled ? "true" : "false");
-            str << " Deadline# " << Deadline.MilliSeconds();
-            str << " QuerySize# " << QuerySize;
+            TStringStream str; 
+            str << "TEvGet {MustRestoreFirst# " << (MustRestoreFirst ? "true" : "false"); 
+            str << " GetHandleClass# " << NKikimrBlobStorage::EGetHandleClass_Name(GetHandleClass); 
+            str << " IsVerboseNoDataEnabled# " << (IsVerboseNoDataEnabled ? "true" : "false"); 
+            str << " Deadline# " << Deadline.MilliSeconds(); 
+            str << " QuerySize# " << QuerySize; 
             if (ForceBlockedGeneration)
                 str << " ForceBlock: " << ForceBlockedGeneration;
-            for (ui32 i = 0; i < QuerySize; ++i) {
-                TQuery &query = Queries[i];
-                str << " {Id# " << query.Id.ToString();
-                if (query.Shift) {
-                    str << " Shift# " << query.Shift;
-                }
-                if (query.Size) {
-                    str << " Size# " << query.Size;
-                }
-                str << "}";
-            }
-            str << "}";
-            return str.Str();
-        }
-
+            for (ui32 i = 0; i < QuerySize; ++i) { 
+                TQuery &query = Queries[i]; 
+                str << " {Id# " << query.Id.ToString(); 
+                if (query.Shift) { 
+                    str << " Shift# " << query.Shift; 
+                } 
+                if (query.Size) { 
+                    str << " Size# " << query.Size; 
+                } 
+                str << "}"; 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
+            return Print(false); 
+        } 
 
         ui32 CalculateSize() const {
             return sizeof(*this) + QuerySize * sizeof(TQuery);
@@ -1125,14 +1125,14 @@ struct TEvBlobStorage {
 
             TLogoBlobID Id;
             ui32 Shift;
-            ui32 RequestedSize;
+            ui32 RequestedSize; 
             TString Buffer;
             TVector<TPartMapItem> PartMap;
 
             TResponse()
                 : Status(NKikimrProto::UNKNOWN)
                 , Shift(0)
-                , RequestedSize(0)
+                , RequestedSize(0) 
             {}
         };
 
@@ -1142,10 +1142,10 @@ struct TEvBlobStorage {
         ui32 ResponseSz;
         TArrayHolder<TResponse> Responses;
         const ui32 GroupId;
-        ui32 BlockedGeneration = 0; // valid only for requests with non-zero TabletId and true AcquireBlockedGeneration.
+        ui32 BlockedGeneration = 0; // valid only for requests with non-zero TabletId and true AcquireBlockedGeneration. 
         TString DebugInfo;
-        TString ErrorReason;
-        mutable NLWTrace::TOrbit Orbit;
+        TString ErrorReason; 
+        mutable NLWTrace::TOrbit Orbit; 
 
         // to measure blobstorage->client hop
         TInstant Sent;
@@ -1156,64 +1156,64 @@ struct TEvBlobStorage {
             , Responses(sz == 0 ? nullptr : new TResponse[sz])
             , GroupId(groupId)
         {}
-
+ 
         TString Print(bool isFull) const {
-            TStringStream str;
+            TStringStream str; 
             str << "TEvGetResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
-            str << " ResponseSz# " << ResponseSz;
-            for (ui32 i = 0; i < ResponseSz; ++i) {
-                TResponse &response = Responses[i];
+            str << " ResponseSz# " << ResponseSz; 
+            for (ui32 i = 0; i < ResponseSz; ++i) { 
+                TResponse &response = Responses[i]; 
                 str << " {" << response.Id.ToString();
                 str << " " << NKikimrProto::EReplyStatus_Name(response.Status).data();
-                if (response.Shift) {
-                    str << " Shift# " << response.Shift;
-                }
-                str << " Size# " << response.Buffer.size();
-                if (response.RequestedSize) {
-                    str << " RequestedSize# " << response.RequestedSize;
-                }
-                if (isFull) {
-                    str << " Buffer# " << response.Buffer.Quote();
-                }
-                str << "}";
-                if (ErrorReason.size()) {
-                    str << " ErrorReason# \"" << ErrorReason << "\"";
-                }
-            }
-            if (BlockedGeneration) {
-                str << " BlockedGeneration# " << BlockedGeneration;
-            }
-            str << "}";
-            return str.Str();
-        }
-
+                if (response.Shift) { 
+                    str << " Shift# " << response.Shift; 
+                } 
+                str << " Size# " << response.Buffer.size(); 
+                if (response.RequestedSize) { 
+                    str << " RequestedSize# " << response.RequestedSize; 
+                } 
+                if (isFull) { 
+                    str << " Buffer# " << response.Buffer.Quote(); 
+                } 
+                str << "}"; 
+                if (ErrorReason.size()) { 
+                    str << " ErrorReason# \"" << ErrorReason << "\""; 
+                } 
+            } 
+            if (BlockedGeneration) { 
+                str << " BlockedGeneration# " << BlockedGeneration; 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
-
-        ui32 PayloadSizeBytes() const {
-            ui32 size = 0;
-            for (ui32 i = 0; i < ResponseSz; ++i) {
+            return Print(false); 
+        } 
+ 
+        ui32 PayloadSizeBytes() const { 
+            ui32 size = 0; 
+            for (ui32 i = 0; i < ResponseSz; ++i) { 
                 size += Responses[i].Buffer.size();
-            }
-            return size;
-        }
+            } 
+            return size; 
+        } 
     };
 
     struct TEvBlock : public TEventLocal<TEvBlock, EvBlock> {
         const ui64 TabletId;
         const ui32 Generation;
-        const TInstant Deadline;
+        const TInstant Deadline; 
         const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
         bool IsMonitored = true;
         ui32 RestartCounter = 0;
 
-        TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline)
+        TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline) 
             : TabletId(tabletId)
             , Generation(generation)
-            , Deadline(deadline)
+            , Deadline(deadline) 
         {}
-
+ 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline, ui64 issuerGuid)
             : TabletId(tabletId)
             , Generation(generation)
@@ -1223,18 +1223,18 @@ struct TEvBlobStorage {
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
-            TStringStream str;
-            str << "TEvBlock {TabletId# " << TabletId
-                << " Generation# " << Generation
-                << " Deadline# " << Deadline.MilliSeconds()
+            TStringStream str; 
+            str << "TEvBlock {TabletId# " << TabletId 
+                << " Generation# " << Generation 
+                << " Deadline# " << Deadline.MilliSeconds() 
                 << " IsMonitored# " << IsMonitored
-                << "}";
-            return str.Str();
-        }
-
+                << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
+            return Print(false); 
+        } 
 
         ui32 CalculateSize() const {
             return sizeof(*this);
@@ -1246,26 +1246,26 @@ struct TEvBlobStorage {
 
     struct TEvBlockResult : public TEventLocal<TEvBlockResult, EvBlockResult> {
         NKikimrProto::EReplyStatus Status;
-        TString ErrorReason;
+        TString ErrorReason; 
 
         TEvBlockResult(NKikimrProto::EReplyStatus status)
             : Status(status)
         {}
-
+ 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
-            TStringStream str;
+            TStringStream str; 
             str << "TEvBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
-            if (ErrorReason.size()) {
-                str << " ErrorReason# \"" << ErrorReason << "\"";
-            }
-            str << "}";
-            return str.Str();
-        }
-
+            if (ErrorReason.size()) { 
+                str << " ErrorReason# \"" << ErrorReason << "\""; 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
+            return Print(false); 
+        } 
     };
 
     struct TEvPatch : public TEventLocal<TEvPatch, EvPatch> {
@@ -1559,37 +1559,37 @@ struct TEvBlobStorage {
     // returns logoblobid of last known control-channel (zero) entry.
     struct TEvDiscover : public TEventLocal<TEvDiscover, EvDiscover> {
         const ui64 TabletId;
-        const ui32 MinGeneration;
-        const TInstant Deadline;
+        const ui32 MinGeneration; 
+        const TInstant Deadline; 
         const bool ReadBody;
-        const bool DiscoverBlockedGeneration;
+        const bool DiscoverBlockedGeneration; 
         const ui32 ForceBlockedGeneration;
         ui32 RestartCounter = 0;
 
         TEvDiscover(ui64 tabletId, ui32 minGeneration, bool readBody, bool discoverBlockedGeneration, TInstant deadline, ui32 forceBlockedGeneration)
             : TabletId(tabletId)
-            , MinGeneration(minGeneration)
-            , Deadline(deadline)
+            , MinGeneration(minGeneration) 
+            , Deadline(deadline) 
             , ReadBody(readBody)
-            , DiscoverBlockedGeneration(discoverBlockedGeneration)
+            , DiscoverBlockedGeneration(discoverBlockedGeneration) 
             , ForceBlockedGeneration(forceBlockedGeneration)
         {}
-
+ 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
-            TStringStream str;
-            str << "TEvDiscover {TabletId# " << TabletId;
-            str << " MinGeneration# " << MinGeneration;
-            str << " ReadBody# " << (ReadBody ? "true" : "false");
-            str << " DiscoverBlockedGeneration# " << (DiscoverBlockedGeneration ? "true" : "false");
-            str << " Deadline# " << Deadline.MilliSeconds();
-            str << "}";
-            return str.Str();
-        }
-
+            TStringStream str; 
+            str << "TEvDiscover {TabletId# " << TabletId; 
+            str << " MinGeneration# " << MinGeneration; 
+            str << " ReadBody# " << (ReadBody ? "true" : "false"); 
+            str << " DiscoverBlockedGeneration# " << (DiscoverBlockedGeneration ? "true" : "false"); 
+            str << " Deadline# " << Deadline.MilliSeconds(); 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
+            return Print(false); 
+        } 
 
         ui32 CalculateSize() const {
             return sizeof(*this);
@@ -1603,15 +1603,15 @@ struct TEvBlobStorage {
         NKikimrProto::EReplyStatus Status;
 
         TLogoBlobID Id;
-        ui32 MinGeneration;
+        ui32 MinGeneration; 
         TString Buffer;
-        ui32 BlockedGeneration;
-        TString ErrorReason;
+        ui32 BlockedGeneration; 
+        TString ErrorReason; 
 
-        TEvDiscoverResult(NKikimrProto::EReplyStatus status, ui32 minGeneration, ui32 blockedGeneration)
+        TEvDiscoverResult(NKikimrProto::EReplyStatus status, ui32 minGeneration, ui32 blockedGeneration) 
             : Status(status)
-            , MinGeneration(minGeneration)
-            , BlockedGeneration(blockedGeneration)
+            , MinGeneration(minGeneration) 
+            , BlockedGeneration(blockedGeneration) 
         {
             Y_VERIFY_DEBUG(status != NKikimrProto::OK);
         }
@@ -1619,79 +1619,79 @@ struct TEvBlobStorage {
         TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer)
             : Status(NKikimrProto::OK)
             , Id(id)
-            , MinGeneration(minGeneration)
+            , MinGeneration(minGeneration) 
             , Buffer(buffer)
-            , BlockedGeneration(0)
+            , BlockedGeneration(0) 
         {}
-
+ 
         TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer, ui32 blockedGeneration)
-            : Status(NKikimrProto::OK)
-            , Id(id)
-            , MinGeneration(minGeneration)
-            , Buffer(buffer)
-            , BlockedGeneration(blockedGeneration)
-        {}
-
+            : Status(NKikimrProto::OK) 
+            , Id(id) 
+            , MinGeneration(minGeneration) 
+            , Buffer(buffer) 
+            , BlockedGeneration(blockedGeneration) 
+        {} 
+ 
         TString Print(bool isFull) const {
-            TStringStream str;
+            TStringStream str; 
             str << "TEvDiscoverResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
-            str << " BlockedGeneration# " << BlockedGeneration;
-            str << " Id# " << Id.ToString();
-            str << " Size# " << Buffer.size();
-            str << " MinGeneration# " << MinGeneration;
-            if (isFull) {
-                str << " Buffer# " << Buffer.Quote();
-            }
-            if (ErrorReason.size()) {
-                str << " ErrorReason# \"" << ErrorReason << "\"";
-            }
-            str << "}";
-            return str.Str();
-        }
-
+            str << " BlockedGeneration# " << BlockedGeneration; 
+            str << " Id# " << Id.ToString(); 
+            str << " Size# " << Buffer.size(); 
+            str << " MinGeneration# " << MinGeneration; 
+            if (isFull) { 
+                str << " Buffer# " << Buffer.Quote(); 
+            } 
+            if (ErrorReason.size()) { 
+                str << " ErrorReason# \"" << ErrorReason << "\""; 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
+            return Print(false); 
+        } 
     };
 
     struct TEvRange : public TEventLocal<TEvRange, EvRange> {
         ui64 TabletId;
         TLogoBlobID From;
         TLogoBlobID To;
-        const TInstant Deadline;
-        bool MustRestoreFirst;
+        const TInstant Deadline; 
+        bool MustRestoreFirst; 
         bool IsIndexOnly;
         ui32 ForceBlockedGeneration;
         ui32 RestartCounter = 0;
 
-        TEvRange(ui64 tabletId, const TLogoBlobID &from, const TLogoBlobID &to, const bool mustRestoreFirst,
+        TEvRange(ui64 tabletId, const TLogoBlobID &from, const TLogoBlobID &to, const bool mustRestoreFirst, 
                 TInstant deadline, bool isIndexOnly = false, ui32 forceBlockedGeneration = 0)
             : TabletId(tabletId)
             , From(from)
             , To(to)
-            , Deadline(deadline)
-            , MustRestoreFirst(mustRestoreFirst)
+            , Deadline(deadline) 
+            , MustRestoreFirst(mustRestoreFirst) 
             , IsIndexOnly(isIndexOnly)
             , ForceBlockedGeneration(forceBlockedGeneration)
         {}
-
+ 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
-            TStringStream str;
-            str << "TEvRange {TabletId# " << TabletId;
-            str << " From# " << From.ToString();
-            str << " To# " << To.ToString();
-            str << " Deadline# " << Deadline.MilliSeconds();
-            str << " MustRestoreFirst# " << (MustRestoreFirst ? "true" : "false");
+            TStringStream str; 
+            str << "TEvRange {TabletId# " << TabletId; 
+            str << " From# " << From.ToString(); 
+            str << " To# " << To.ToString(); 
+            str << " Deadline# " << Deadline.MilliSeconds(); 
+            str << " MustRestoreFirst# " << (MustRestoreFirst ? "true" : "false"); 
             if (ForceBlockedGeneration)
                 str << " ForceBlock: " << ForceBlockedGeneration;
-            str << "}";
-            return str.Str();
-        }
-
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
+            return Print(false); 
+        } 
 
         ui32 CalculateSize() const {
             return sizeof(*this);
@@ -1721,7 +1721,7 @@ struct TEvBlobStorage {
 
         TVector<TResponse> Responses;
         const ui32 GroupId;
-        TString ErrorReason;
+        TString ErrorReason; 
 
         TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, ui32 groupId)
             : Status(status)
@@ -1729,92 +1729,92 @@ struct TEvBlobStorage {
             , To(to)
             , GroupId(groupId)
         {}
-
+ 
         TString Print(bool isFull) const {
-            TStringStream str;
+            TStringStream str; 
             str << "TEvRangeResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
-            str << " From# " << From.ToString();
-            str << " To# " << To.ToString();
-            str << " Size# " << Responses.size();
-            for (ui32 i = 0; i < Responses.size(); ++i) {
-                const TResponse &response = Responses[i];
+            str << " From# " << From.ToString(); 
+            str << " To# " << To.ToString(); 
+            str << " Size# " << Responses.size(); 
+            for (ui32 i = 0; i < Responses.size(); ++i) { 
+                const TResponse &response = Responses[i]; 
                 str << " {" << response.Id.ToString();
-                str << " Size# " << response.Buffer.size();
-                if (isFull) {
-                    str << " Buffer# " << response.Buffer.Quote();
-                }
-                str << "}";
-            }
-            if (ErrorReason.size()) {
-                str << " ErrorReason# \"" << ErrorReason << "\"";
-            }
-            str << "}";
-            return str.Str();
-        }
-
+                str << " Size# " << response.Buffer.size(); 
+                if (isFull) { 
+                    str << " Buffer# " << response.Buffer.Quote(); 
+                } 
+                str << "}"; 
+            } 
+            if (ErrorReason.size()) { 
+                str << " ErrorReason# \"" << ErrorReason << "\""; 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
+            return Print(false); 
+        } 
     };
 
-    struct TEvCollectGarbage : public TEventLocal<TEvCollectGarbage, EvCollectGarbage> {
-        ui64 TabletId;
-        ui32 RecordGeneration;
-        ui32 PerGenerationCounter; // monotone increasing cmd counter for RecordGeneration
-        ui32 Channel;
-
+    struct TEvCollectGarbage : public TEventLocal<TEvCollectGarbage, EvCollectGarbage> { 
+        ui64 TabletId; 
+        ui32 RecordGeneration; 
+        ui32 PerGenerationCounter; // monotone increasing cmd counter for RecordGeneration 
+        ui32 Channel; 
+ 
         THolder<TVector<TLogoBlobID> > Keep;
         THolder<TVector<TLogoBlobID> > DoNotKeep;
-        TInstant Deadline;
-
-        ui32 CollectGeneration;
-        ui32 CollectStep;
+        TInstant Deadline; 
+ 
+        ui32 CollectGeneration; 
+        ui32 CollectStep; 
 
         // if set to true, this barrier does not take keep flags into account and is treated separately from soft barriers;
         // this means that all data before the hard barrier is destroyed without taking keep flags into account
         bool Hard;
 
-        bool Collect;
-
-        bool IsMultiCollectAllowed;
+        bool Collect; 
+ 
+        bool IsMultiCollectAllowed; 
         bool IsMonitored = true;
-
+ 
         ui32 RestartCounter = 0;
 
-        TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
-                bool collect, ui32 collectGeneration,
+        TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel, 
+                bool collect, ui32 collectGeneration, 
                 ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline,
                 bool isMultiCollectAllowed, bool hard = false)
-            : TabletId(tabletId)
-            , RecordGeneration(recordGeneration)
-            , PerGenerationCounter(perGenerationCounter)
-            , Channel(channel)
-            , Keep(keep)
-            , DoNotKeep(doNotKeep)
-            , Deadline(deadline)
-            , CollectGeneration(collectGeneration)
-            , CollectStep(collectStep)
+            : TabletId(tabletId) 
+            , RecordGeneration(recordGeneration) 
+            , PerGenerationCounter(perGenerationCounter) 
+            , Channel(channel) 
+            , Keep(keep) 
+            , DoNotKeep(doNotKeep) 
+            , Deadline(deadline) 
+            , CollectGeneration(collectGeneration) 
+            , CollectStep(collectStep) 
             , Hard(hard)
-            , Collect(collect)
-            , IsMultiCollectAllowed(isMultiCollectAllowed)
-        {}
-
-        TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 channel, bool collect, ui32 collectGeneration,
+            , Collect(collect) 
+            , IsMultiCollectAllowed(isMultiCollectAllowed) 
+        {} 
+ 
+        TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 channel, bool collect, ui32 collectGeneration, 
                 ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline)
-            : TabletId(tabletId)
-            , RecordGeneration(recordGeneration)
-            , PerGenerationCounter(0)
-            , Channel(channel)
-            , Keep(keep)
-            , DoNotKeep(doNotKeep)
-            , Deadline(deadline)
-            , CollectGeneration(collectGeneration)
-            , CollectStep(collectStep)
+            : TabletId(tabletId) 
+            , RecordGeneration(recordGeneration) 
+            , PerGenerationCounter(0) 
+            , Channel(channel) 
+            , Keep(keep) 
+            , DoNotKeep(doNotKeep) 
+            , Deadline(deadline) 
+            , CollectGeneration(collectGeneration) 
+            , CollectStep(collectStep) 
             , Hard(false)
-            , Collect(collect)
-            , IsMultiCollectAllowed(true)
-        {}
-
+            , Collect(collect) 
+            , IsMultiCollectAllowed(true) 
+        {} 
+ 
         static THolder<TEvCollectGarbage> CreateHardBarrier(ui64 tabletId, ui32 recordGeneration,
                 ui32 perGenerationCounter, ui32 channel, ui32 collectGeneration, ui32 collectStep, TInstant deadline) {
             return MakeHolder<TEvCollectGarbage>(tabletId, recordGeneration, perGenerationCounter, channel,
@@ -1824,54 +1824,54 @@ struct TEvBlobStorage {
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
-            TStringStream str;
-            str << "TEvCollectGarbage {TabletId# " << TabletId;
-            str << " RecordGeneration# " << RecordGeneration;
-            str << " PerGenerationCounter# " << PerGenerationCounter;
-            str << " Channel# " << Channel;
-            str << " Deadline# " << Deadline.MilliSeconds();
-            str << " Collect# " << (Collect ? "true" : "false");
-            if (Collect) {
-                str << " CollectGeneration# " << CollectGeneration;
-                str << " CollectStep# " << CollectStep;
-            }
+            TStringStream str; 
+            str << "TEvCollectGarbage {TabletId# " << TabletId; 
+            str << " RecordGeneration# " << RecordGeneration; 
+            str << " PerGenerationCounter# " << PerGenerationCounter; 
+            str << " Channel# " << Channel; 
+            str << " Deadline# " << Deadline.MilliSeconds(); 
+            str << " Collect# " << (Collect ? "true" : "false"); 
+            if (Collect) { 
+                str << " CollectGeneration# " << CollectGeneration; 
+                str << " CollectStep# " << CollectStep; 
+            } 
             str << " Hard# " << (Hard ? "true" : "false");
-            str << " IsMultiCollectAllowed# " << IsMultiCollectAllowed;
+            str << " IsMultiCollectAllowed# " << IsMultiCollectAllowed; 
             str << " IsMonitored# " << IsMonitored;
-            if (Keep.Get()) {
-                str << " KeepSize# " << Keep->size() << " {";
-                for (ui32 i = 0; i < Keep->size(); ++i) {
-                    str << "Id# " << (*Keep)[i].ToString();
-                }
-                str << "}";
-            }
-            if (DoNotKeep.Get()) {
-                str << " DoNotKeepSize# " << DoNotKeep->size() << " {";
-                for (ui32 i = 0; i < DoNotKeep->size(); ++i) {
-                    str << "Id# " << (*DoNotKeep)[i].ToString();
-                }
-                str << "}";
-            }
-            str << "}";
-            return str.Str();
-        }
-
+            if (Keep.Get()) { 
+                str << " KeepSize# " << Keep->size() << " {"; 
+                for (ui32 i = 0; i < Keep->size(); ++i) { 
+                    str << "Id# " << (*Keep)[i].ToString(); 
+                } 
+                str << "}"; 
+            } 
+            if (DoNotKeep.Get()) { 
+                str << " DoNotKeepSize# " << DoNotKeep->size() << " {"; 
+                for (ui32 i = 0; i < DoNotKeep->size(); ++i) { 
+                    str << "Id# " << (*DoNotKeep)[i].ToString(); 
+                } 
+                str << "}"; 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
-
+            return Print(false); 
+        } 
+ 
         static ui64 PerGenerationCounterStepSize(TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep) {
-            ui64 keepCount = keep ? keep->size() : 0;
-            ui64 doNotKeepCount = doNotKeep ? doNotKeep->size() : 0;
-            ui64 totalFlags = keepCount + doNotKeepCount;
-            ui64 extraSteps = (totalFlags + MaxCollectGarbageFlagsPerMessage - 1) / MaxCollectGarbageFlagsPerMessage;
-            ui64 stepSize = Max(ui64(1ull), extraSteps);
-            return stepSize;
-        }
-
-        ui64 PerGenerationCounterStepSize() const {
-            return PerGenerationCounterStepSize(Keep.Get(), DoNotKeep.Get());
-        }
+            ui64 keepCount = keep ? keep->size() : 0; 
+            ui64 doNotKeepCount = doNotKeep ? doNotKeep->size() : 0; 
+            ui64 totalFlags = keepCount + doNotKeepCount; 
+            ui64 extraSteps = (totalFlags + MaxCollectGarbageFlagsPerMessage - 1) / MaxCollectGarbageFlagsPerMessage; 
+            ui64 stepSize = Max(ui64(1ull), extraSteps); 
+            return stepSize; 
+        } 
+ 
+        ui64 PerGenerationCounterStepSize() const { 
+            return PerGenerationCounterStepSize(Keep.Get(), DoNotKeep.Get()); 
+        } 
 
         ui32 CalculateSize() const {
             return sizeof(*this) + ((Keep ? Keep->size() : 0) + (DoNotKeep ? DoNotKeep->size() : 0)) * sizeof(TLogoBlobID);
@@ -1879,65 +1879,65 @@ struct TEvBlobStorage {
 
         std::unique_ptr<TEvCollectGarbageResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             ui32 groupId);
-    };
-
-    struct TEvCollectGarbageResult : public TEventLocal<TEvCollectGarbageResult, EvCollectGarbageResult> {
-        NKikimrProto::EReplyStatus Status;
-
-        ui64 TabletId;
-        ui32 RecordGeneration;
-        ui32 PerGenerationCounter;
-        ui32 Channel;
-        TString ErrorReason;
-
-        TEvCollectGarbageResult(NKikimrProto::EReplyStatus status, ui64 tabletId,
-                ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel)
-            : Status(status)
-            , TabletId(tabletId)
-            , RecordGeneration(recordGeneration)
-            , PerGenerationCounter(perGenerationCounter)
-            , Channel(channel)
-        {}
-
+    }; 
+ 
+    struct TEvCollectGarbageResult : public TEventLocal<TEvCollectGarbageResult, EvCollectGarbageResult> { 
+        NKikimrProto::EReplyStatus Status; 
+ 
+        ui64 TabletId; 
+        ui32 RecordGeneration; 
+        ui32 PerGenerationCounter; 
+        ui32 Channel; 
+        TString ErrorReason; 
+ 
+        TEvCollectGarbageResult(NKikimrProto::EReplyStatus status, ui64 tabletId, 
+                ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel) 
+            : Status(status) 
+            , TabletId(tabletId) 
+            , RecordGeneration(recordGeneration) 
+            , PerGenerationCounter(perGenerationCounter) 
+            , Channel(channel) 
+        {} 
+ 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
-            TStringStream str;
-            str << "TEvCollectGarbageResult {TabletId# " << TabletId;
-            str << " RecordGeneration# " << RecordGeneration;
-            str << " PerGenerationCounter# " << PerGenerationCounter;
-            str << " Channel# " << Channel;
+            TStringStream str; 
+            str << "TEvCollectGarbageResult {TabletId# " << TabletId; 
+            str << " RecordGeneration# " << RecordGeneration; 
+            str << " PerGenerationCounter# " << PerGenerationCounter; 
+            str << " Channel# " << Channel; 
             str << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
-            if (ErrorReason.size()) {
-                str << " ErrorReason# \"" << ErrorReason << "\"";
-            }
-            str << "}";
-            return str.Str();
-        }
-
+            if (ErrorReason.size()) { 
+                str << " ErrorReason# \"" << ErrorReason << "\""; 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
-    };
-
-    struct TEvStatus : public TEventLocal<TEvStatus, EvStatus> {
-        const TInstant Deadline;
+            return Print(false); 
+        } 
+    }; 
+ 
+    struct TEvStatus : public TEventLocal<TEvStatus, EvStatus> { 
+        const TInstant Deadline; 
         ui32 RestartCounter = 0;
-
-        TEvStatus(TInstant deadline)
-            : Deadline(deadline)
-        {}
-
+ 
+        TEvStatus(TInstant deadline) 
+            : Deadline(deadline) 
+        {} 
+ 
         TString Print(bool isFull) const {
-            Y_UNUSED(isFull);
-            TStringStream str;
-            str << "TEvStatus {Deadline# " << Deadline.MilliSeconds()
-                << "}";
-            return str.Str();
-        }
-
+            Y_UNUSED(isFull); 
+            TStringStream str; 
+            str << "TEvStatus {Deadline# " << Deadline.MilliSeconds() 
+                << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
+            return Print(false); 
+        } 
 
         ui32 CalculateSize() const {
             return sizeof(*this);
@@ -1945,39 +1945,39 @@ struct TEvBlobStorage {
 
         std::unique_ptr<TEvStatusResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
             ui32 groupId);
-    };
-
-    struct TEvStatusResult : public TEventLocal<TEvStatusResult, EvStatusResult> {
-        NKikimrProto::EReplyStatus Status;
-        TStorageStatusFlags StatusFlags;
-        TString ErrorReason;
-
-        TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags)
-            : Status(status)
-            , StatusFlags(statusFlags)
-        {}
-
+    }; 
+ 
+    struct TEvStatusResult : public TEventLocal<TEvStatusResult, EvStatusResult> { 
+        NKikimrProto::EReplyStatus Status; 
+        TStorageStatusFlags StatusFlags; 
+        TString ErrorReason; 
+ 
+        TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags) 
+            : Status(status) 
+            , StatusFlags(statusFlags) 
+        {} 
+ 
         TString Print(bool isFull) const {
-            Y_UNUSED(isFull);
-            TStringStream str;
+            Y_UNUSED(isFull); 
+            TStringStream str; 
             str << "TEvStatusResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
-            str << " StatusFlags# ";
-            StatusFlags.Output(str);
-            if (ErrorReason.size()) {
-                str << " ErrorReason# \"" << ErrorReason << "\"";
-            }
-            str << "}";
-            return str.Str();
-        }
-
+            str << " StatusFlags# "; 
+            StatusFlags.Output(str); 
+            if (ErrorReason.size()) { 
+                str << " ErrorReason# \"" << ErrorReason << "\""; 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
+ 
         TString ToString() const {
-            return Print(false);
-        }
-    };
-
-    struct TEvConfigureProxy;
+            return Print(false); 
+        } 
+    }; 
+ 
+    struct TEvConfigureProxy; 
     struct TEvUpdateGroupInfo;
-
+ 
     struct TEvVMovedPatch;
     struct TEvVMovedPatchResult;
     struct TEvVInplacePatch;
@@ -1996,10 +1996,10 @@ struct TEvBlobStorage {
     struct TEvVPatchXorDiffResult;
     struct TEvVBlock;
     struct TEvVBlockResult;
-    struct TEvVGetBlock;
-    struct TEvVGetBlockResult;
-    struct TEvVCollectGarbage;
-    struct TEvVCollectGarbageResult;
+    struct TEvVGetBlock; 
+    struct TEvVGetBlockResult; 
+    struct TEvVCollectGarbage; 
+    struct TEvVCollectGarbageResult; 
     struct TEvVGetBarrier;
     struct TEvVGetBarrierResult;
     struct TEvVSyncGuid;
@@ -2029,20 +2029,20 @@ struct TEvBlobStorage {
     struct TEvCaptureVDiskLayoutResult;
     struct TEvVDefrag;
     struct TEvVDefragResult;
+ 
 
-
-    struct TEvControllerRegisterNode;
-    struct TEvControllerSelectGroups;
-    struct TEvControllerGetGroup;
+    struct TEvControllerRegisterNode; 
+    struct TEvControllerSelectGroups; 
+    struct TEvControllerGetGroup; 
     struct TEvControllerUpdateDiskStatus;
     struct TEvControllerUpdateGroupStat;
     struct TEvControllerUpdateNodeDrives;
     struct TEvControllerNodeServiceSetUpdate;
-    struct TEvControllerProposeGroupKey;
-    struct TEvControllerSelectGroupsResult;
-    struct TEvControllerGroupReconfigureWipe;
-    struct TEvControllerGroupReconfigureWipeResult;
-    struct TEvControllerNodeReport;
+    struct TEvControllerProposeGroupKey; 
+    struct TEvControllerSelectGroupsResult; 
+    struct TEvControllerGroupReconfigureWipe; 
+    struct TEvControllerGroupReconfigureWipeResult; 
+    struct TEvControllerNodeReport; 
     struct TEvControllerConfigRequest;
     struct TEvControllerConfigResponse;
     struct TEvControllerScrubQueryStartQuantum;
@@ -2088,14 +2088,14 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
                 return NKikimrBlobStorage::EVDiskQueueId::GetFastRead;
             case NKikimrBlobStorage::EGetHandleClass::Discover:
                 return NKikimrBlobStorage::EVDiskQueueId::GetDiscover;
-            case NKikimrBlobStorage::EGetHandleClass::LowRead:
-                return NKikimrBlobStorage::EVDiskQueueId::GetLowRead;
+            case NKikimrBlobStorage::EGetHandleClass::LowRead: 
+                return NKikimrBlobStorage::EVDiskQueueId::GetLowRead; 
             default:
                 Y_FAIL("Unexpected case");
         }
     }
 
-
+ 
 inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorageInfo *storage,
         THolder<TEvBlobStorage::TEvPut> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
     auto checkGroupId = [&] {

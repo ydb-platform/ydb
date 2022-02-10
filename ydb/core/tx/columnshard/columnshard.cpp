@@ -104,7 +104,7 @@ void TColumnShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorCo
 
 // EvWrite -> WriteActor (attach BlobId without proto changes) -> EvWrite
 void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
-    OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
+    OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels)); 
 
     auto& data = Proto(ev->Get()).GetData();
     const ui64 tableId = ev->Get()->Record.GetTableId();
@@ -126,7 +126,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 
         Execute(new TTxWrite(this, ev), ctx);
     } else {
-        if (IsAnyChannelYellowStop()) {
+        if (IsAnyChannelYellowStop()) { 
             LOG_S_ERROR("Write (out of disk space) at tablet " << TabletID());
 
             IncCounter(COUNTER_OUT_OF_SPACE);
@@ -166,7 +166,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
     }
 
     if (ev->Get()->PutStatus == NKikimrProto::UNKNOWN) {
-        if (IsAnyChannelYellowStop()) {
+        if (IsAnyChannelYellowStop()) { 
             LOG_S_ERROR("WriteIndex (out of disk space) at tablet " << TabletID());
 
             IncCounter(COUNTER_OUT_OF_SPACE);
@@ -186,7 +186,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             LOG_S_INFO("WriteIndex error at tablet " << TabletID());
         }
 
-        OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
+        OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels)); 
         Execute(new TTxWriteIndex(this, ev), ctx);
     }
 }

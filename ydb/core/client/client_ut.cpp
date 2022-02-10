@@ -329,8 +329,8 @@ void ExtractResultInfo(const NKikimrMiniKQL::TResult& result, TVector<TTxInfo>& 
 
 Y_UNIT_TEST_SUITE(TClientTest) {
     Y_UNIT_TEST(TestInspectProxy) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
         auto settings = TServerSettings(port);
         settings.SetSupportsRedirect(false);
 
@@ -352,8 +352,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     Y_UNIT_TEST(NoAffectedProgram) {
         using namespace NScheme;
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
 
         const auto settings = TServerSettings(port);
         TServer server(settings);
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 (return (AsList result1 result2))
             )
             )___";
-
+ 
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
 
         NKikimrMiniKQL::TResult readRes;
@@ -487,8 +487,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     Y_UNIT_TEST(ReadWriteViaMiniKQL) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
 
         const auto settings = TServerSettings(port);
         TServer server(settings);
@@ -676,8 +676,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     Y_UNIT_TEST(ReadWriteViaMiniKQLShardedHead) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
 
         const auto settings = TServerSettings(port);
         TServer server(settings);
@@ -775,8 +775,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     Y_UNIT_TEST(GetStepTxId) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
 
         const auto settings = TServerSettings(port);
         TServer server(settings);
@@ -789,8 +789,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     Y_UNIT_TEST(GetStepTxIdHead) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
 
         const auto settings = TServerSettings(port);
         TServer server(settings);
@@ -878,8 +878,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     Y_UNIT_TEST(CASViaMiniKQL) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
 
         const auto settings = TServerSettings(port);
         TServer server(settings);
@@ -941,7 +941,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 )
             )
             )___";
-
+ 
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
 
         NKikimrMiniKQL::TResult updateRes;
@@ -986,8 +986,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     Y_UNIT_TEST(RowEraseViaMiniKQL) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
 
         const auto settings = TServerSettings(port);
         TServer server(settings);
@@ -1082,8 +1082,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     Y_UNIT_TEST(ReadRangeViaMiniKQL) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
 
         const auto settings = TServerSettings(port);
         TServer server(settings);
@@ -1169,7 +1169,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                     ))
                 )
             )___";
-
+ 
             const TString readParams = R"___(
                 (
                     (let params (Parameters))
@@ -1299,8 +1299,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     Y_UNIT_TEST(SelectRangeOptions) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);

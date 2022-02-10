@@ -1,67 +1,67 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/core/util/yverify_stream.h>
 #include <library/cpp/actors/util/ticket_lock.h>
-
+ 
 #include <util/generic/guid.h>
 #include <util/generic/hash.h>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/stream/file.h>
 #include <util/stream/format.h>
-#include <util/system/mutex.h>
-
+#include <util/system/mutex.h> 
+ 
 #include <contrib/libs/lz4/lz4.h>
-
+ 
 #include <atomic>
 #include <optional>
 
-namespace NKikimr {
-namespace NPDisk {
-
+namespace NKikimr { 
+namespace NPDisk { 
+ 
 
 constexpr ui64 SectorMapSectorSize = 4096;
 
-class TSectorMap : public TThrRefBase {
+class TSectorMap : public TThrRefBase { 
     THashMap<ui64, TString> Map;
 
-public:
+public: 
     TString Serial = CreateGuidAsString();
-    ui64 DeviceSize;
-
-    TTicketLock MapLock;
+    ui64 DeviceSize; 
+ 
+    TTicketLock MapLock; 
     std::atomic<bool> IsLocked;
     std::optional<std::pair<TDuration, TDuration>> ImitateRandomWait;
     std::atomic<double> ImitateIoErrorProbability;
     std::atomic<double> ImitateReadIoErrorProbability;
-
+ 
     std::atomic<ui64> AllocatedBytes;
 
-    TSectorMap(ui64 deviceSize = 0)
-      : DeviceSize(deviceSize)
-      , IsLocked(false)
+    TSectorMap(ui64 deviceSize = 0) 
+      : DeviceSize(deviceSize) 
+      , IsLocked(false) 
       , ImitateIoErrorProbability(0.0)
       , ImitateReadIoErrorProbability(0.0)
       , AllocatedBytes(0)
     {}
-
-    bool Lock() {
+ 
+    bool Lock() { 
         return !IsLocked.exchange(true);
-    }
-
-    bool Unlock() {
+    } 
+ 
+    bool Unlock() { 
         return IsLocked.exchange(false);
-    }
-
-    void ForceSize(ui64 size) {
-        DeviceSize = size;
+    } 
+ 
+    void ForceSize(ui64 size) { 
+        DeviceSize = size; 
         if (DeviceSize < size) {
             for (const auto& [offset, data] : Map) {
                 Y_VERIFY_S(offset + 4096 <= DeviceSize, "It is not possible to shrink TSectorMap with data");
-            }
-        }
-    }
-
-    void ZeroInit(ui64 sectors) {
+            } 
+        } 
+    } 
+ 
+    void ZeroInit(ui64 sectors) { 
         ui64 bytes = sectors * SectorMapSectorSize;
         TString str = TString::Uninitialized(bytes);
         memset(str.Detach(), 0, bytes);
@@ -84,8 +84,8 @@ public:
             }
             offset += SectorMapSectorSize;
             data += SectorMapSectorSize;
-        }
-    }
+        } 
+    } 
 
     void Write(const ui8 *data, i64 size, ui64 offset) {
         Y_VERIFY(size % SectorMapSectorSize == 0);
@@ -146,7 +146,7 @@ public:
     // Requires proto information, so should be defined in cpp
     void LoadFromFile(const TString& path);
     void StoreToFile(const TString& path);
-};
-
-} // NPDisk
-} // NKikimr
+}; 
+ 
+} // NPDisk 
+} // NKikimr 

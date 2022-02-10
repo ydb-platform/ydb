@@ -41,17 +41,17 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, Mediator));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " << Coordinator << " SEND EvCoordinatorSync to# " << Mediator << " Mediator");
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " tablet# " << Coordinator << " SEND EvCoordinatorSync to# " << Mediator << " Mediator"); 
         NTabletPipe::SendData(ctx, PipeClient, new TEvTxCoordinator::TEvCoordinatorSync(++GenCookie, Mediator, Coordinator));
         Become(&TThis::StateSync);
     }
 
     void Handle(TEvTxCoordinator::TEvCoordinatorSyncResult::TPtr &ev, const TActorContext &ctx) {
         TEvTxCoordinator::TEvCoordinatorSyncResult *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " << Coordinator << " HANDLE EvCoordinatorSyncResult Status# "
-            << NKikimrProto::EReplyStatus_Name(msg->Record.GetStatus()));
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " tablet# " << Coordinator << " HANDLE EvCoordinatorSyncResult Status# " 
+            << NKikimrProto::EReplyStatus_Name(msg->Record.GetStatus())); 
 
         if (msg->Record.GetCookie() != GenCookie)
             return;
@@ -60,8 +60,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
             return Sync(ctx);
 
         PrevStep = 0;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " << Coordinator << " SEND EvMediatorQueueRestart to# " << Owner.ToString() << " Owner");
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " tablet# " << Coordinator << " SEND EvMediatorQueueRestart to# " << Owner.ToString() << " Owner"); 
         ctx.Send(Owner, new TEvTxCoordinator::TEvMediatorQueueRestart(Mediator, 0, ++GenCookie));
 
         Become(&TThis::StateWork);
@@ -69,7 +69,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
     void Handle(TEvTxCoordinator::TEvMediatorQueueStep::TPtr &ev, const TActorContext &ctx) {
         TEvTxCoordinator::TEvMediatorQueueStep *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString() 
             << " HANDLE EvMediatorQueueStep step# " << msg->Step->Step);
 
         if (msg->GenCookie == GenCookie && PipeClient) {
@@ -77,26 +77,26 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
             LOG_DEBUG(ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "[%" PRIu64 "] to [%" PRIu64 "], step [%" PRIu64 "]", Coordinator, Mediator, step.Step);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-                << " tablet# " << Coordinator << " SEND to# " << Mediator << " Mediator TEvCoordinatorStep");
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString() 
+                << " tablet# " << Coordinator << " SEND to# " << Mediator << " Mediator TEvCoordinatorStep"); 
             NTabletPipe::SendData(ctx, PipeClient, new TEvTxCoordinator::TEvCoordinatorStep(
                 step, PrevStep, Mediator, Coordinator, CoordinatorGeneration));
             PrevStep = step.Step;
         }
 
-        if (Confirmations) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-                << " tablet# " << Coordinator << " SEND EvMediatorQueueConfirmations to# " << Owner.ToString()
-                << " Owner");
+        if (Confirmations) { 
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString() 
+                << " tablet# " << Coordinator << " SEND EvMediatorQueueConfirmations to# " << Owner.ToString() 
+                << " Owner"); 
             ctx.Send(Owner, new TEvTxCoordinator::TEvMediatorQueueConfirmations(Confirmations));
-        }
+        } 
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " HANDLE EvClientConnected Status# " << NKikimrProto::EReplyStatus_Name(msg->Status));
-
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " HANDLE EvClientConnected Status# " << NKikimrProto::EReplyStatus_Name(msg->Status)); 
+ 
         if (msg->ClientId != PipeClient)
             return;
 
@@ -108,21 +108,21 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " HANDLE EvClientDestroyed");
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " HANDLE EvClientDestroyed"); 
         if (msg->ClientId != PipeClient)
             return;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " <<  Coordinator << " SEND EvMediatorQueueStop to# " << Owner.ToString()
-            << " Owner Mediator# " << Mediator);
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " tablet# " <<  Coordinator << " SEND EvMediatorQueueStop to# " << Owner.ToString() 
+            << " Owner Mediator# " << Mediator); 
         ctx.Send(Owner, new TEvTxCoordinator::TEvMediatorQueueStop(Mediator));
         Sync(ctx);
     }
 
     void Handle(TEvTxProcessing::TEvPlanStepAck::TPtr &ev, const TActorContext &ctx) {
         const NKikimrTx::TEvPlanStepAck &record = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " HANDLE EvPlanStepAck");
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " HANDLE EvPlanStepAck"); 
 
         if (!Confirmations)
             Confirmations.Reset(new TMediatorConfirmations(Mediator));

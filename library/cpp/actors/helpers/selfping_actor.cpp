@@ -18,54 +18,54 @@ struct TEvPing: public TEventLocal<TEvPing, TEvents::THelloWorld::Ping> {
     const double TimeStart;
 };
 
-template <class TValueType_>
-struct TAvgOperation {
-    struct TValueType {
-        ui64 Count = 0;
-        TValueType_ Sum = TValueType_();
-    };
-    using TValueVector = TVector<TValueType>;
-
-    static constexpr TValueType InitialValue() {
-        return TValueType(); // zero
-    }
-
-    // Updates value in current bucket and returns window value
-    static TValueType UpdateBucket(TValueType windowValue, TValueVector& buckets, size_t index, TValueType newVal) {
-        Y_ASSERT(index < buckets.size());
-        buckets[index].Sum += newVal.Sum;
-        buckets[index].Count += newVal.Count;
-        windowValue.Sum += newVal.Sum;
-        windowValue.Count += newVal.Count;
-        return windowValue;
-    }
-
-    static TValueType ClearBuckets(TValueType windowValue, TValueVector& buckets, size_t firstElemIndex, size_t bucketsToClear) {
-        Y_ASSERT(!buckets.empty());
-        Y_ASSERT(firstElemIndex < buckets.size());
-        Y_ASSERT(bucketsToClear <= buckets.size());
-
-        const size_t arraySize = buckets.size();
-        for (size_t i = 0; i < bucketsToClear; ++i) {
-            TValueType& curVal = buckets[firstElemIndex];
-            windowValue.Sum -= curVal.Sum;
-            windowValue.Count -= curVal.Count;
-            curVal = InitialValue();
-            firstElemIndex = (firstElemIndex + 1) % arraySize;
-        }
-        return windowValue;
-    }
-
-};
-
+template <class TValueType_> 
+struct TAvgOperation { 
+    struct TValueType { 
+        ui64 Count = 0; 
+        TValueType_ Sum = TValueType_(); 
+    }; 
+    using TValueVector = TVector<TValueType>; 
+ 
+    static constexpr TValueType InitialValue() { 
+        return TValueType(); // zero 
+    } 
+ 
+    // Updates value in current bucket and returns window value 
+    static TValueType UpdateBucket(TValueType windowValue, TValueVector& buckets, size_t index, TValueType newVal) { 
+        Y_ASSERT(index < buckets.size()); 
+        buckets[index].Sum += newVal.Sum; 
+        buckets[index].Count += newVal.Count; 
+        windowValue.Sum += newVal.Sum; 
+        windowValue.Count += newVal.Count; 
+        return windowValue; 
+    } 
+ 
+    static TValueType ClearBuckets(TValueType windowValue, TValueVector& buckets, size_t firstElemIndex, size_t bucketsToClear) { 
+        Y_ASSERT(!buckets.empty()); 
+        Y_ASSERT(firstElemIndex < buckets.size()); 
+        Y_ASSERT(bucketsToClear <= buckets.size()); 
+ 
+        const size_t arraySize = buckets.size(); 
+        for (size_t i = 0; i < bucketsToClear; ++i) { 
+            TValueType& curVal = buckets[firstElemIndex]; 
+            windowValue.Sum -= curVal.Sum; 
+            windowValue.Count -= curVal.Count; 
+            curVal = InitialValue(); 
+            firstElemIndex = (firstElemIndex + 1) % arraySize; 
+        } 
+        return windowValue; 
+    } 
+ 
+}; 
+ 
 class TSelfPingActor : public TActorBootstrapped<TSelfPingActor> {
 private:
     const TDuration SendInterval;
     const NMonitoring::TDynamicCounters::TCounterPtr Counter;
-    const NMonitoring::TDynamicCounters::TCounterPtr CalculationTimeCounter;
+    const NMonitoring::TDynamicCounters::TCounterPtr CalculationTimeCounter; 
 
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> SlidingWindow;
-    NSlidingWindow::TSlidingWindow<TAvgOperation<ui64>> CalculationSlidingWindow;
+    NSlidingWindow::TSlidingWindow<TAvgOperation<ui64>> CalculationSlidingWindow; 
 
     THPTimer Timer;
 
@@ -74,13 +74,13 @@ public:
         return SELF_PING_ACTOR;
     }
 
-    TSelfPingActor(TDuration sendInterval, const NMonitoring::TDynamicCounters::TCounterPtr& counter,
-            const NMonitoring::TDynamicCounters::TCounterPtr& calculationTimeCounter)
+    TSelfPingActor(TDuration sendInterval, const NMonitoring::TDynamicCounters::TCounterPtr& counter, 
+            const NMonitoring::TDynamicCounters::TCounterPtr& calculationTimeCounter) 
         : SendInterval(sendInterval)
         , Counter(counter)
-        , CalculationTimeCounter(calculationTimeCounter)
+        , CalculationTimeCounter(calculationTimeCounter) 
         , SlidingWindow(TDuration::Seconds(15), 100)
-        , CalculationSlidingWindow(TDuration::Seconds(15), 100)
+        , CalculationSlidingWindow(TDuration::Seconds(15), 100) 
     {
     }
 
@@ -99,53 +99,53 @@ public:
         }
     }
 
-    ui64 MeasureTaskDurationNs() {
-        // Prepare worm test data
-        // 11 * 11 * 3 * 8 = 2904 bytes, fits in L1 cache
-        constexpr ui64 Size = 11;
-        // Align the data to reduce random alignment effects
-        alignas(64) TStackVec<ui64, Size * Size * 3> data;
-        ui64 s = 0;
-        NHPTimer::STime beginTime;
-        NHPTimer::STime endTime;
-        // Prepare the data
-        data.resize(Size * Size * 3);
-        for (ui64 matrixIdx = 0; matrixIdx < 3; ++matrixIdx) {
-            for (ui64 y = 0; y < Size; ++y) {
-                for (ui64 x = 0; x < Size; ++x) {
-                    data[matrixIdx * (Size * Size) + y * Size + x] = y * Size + x;
-                }
-            }
-        }
-        // Warm-up the cache
-        NHPTimer::GetTime(&beginTime);
-        for (ui64 idx = 0; idx < data.size(); ++idx) {
-            s += data[idx];
-        }
-        NHPTimer::GetTime(&endTime);
-        s += (ui64)(1000000.0 * NHPTimer::GetSeconds(endTime - beginTime));
-
-        // Measure the CPU performance
-        // C = A * B  with injected dependency to s
-        NHPTimer::GetTime(&beginTime);
-        for (ui64 y = 0; y < Size; ++y) {
-            for (ui64 x = 0; x < Size; ++x) {
-                for (ui64 i = 0; i < Size; ++i) {
-                    s += data[y * Size + i] * data[Size * Size + i * Size + x];
-                }
-                data[2 * Size * Size + y * Size + x] = s;
-                s = 0;
-            }
-        }
-        for (ui64 idx = 0; idx < data.size(); ++idx) {
-            s += data[idx];
-        }
-        NHPTimer::GetTime(&endTime);
-        // Prepare the result
-        double d = 1000000000.0 * (NHPTimer::GetSeconds(endTime - beginTime) + 0.000000001 * (s & 1));
-        return (ui64)d;
-    }
-
+    ui64 MeasureTaskDurationNs() { 
+        // Prepare worm test data 
+        // 11 * 11 * 3 * 8 = 2904 bytes, fits in L1 cache 
+        constexpr ui64 Size = 11; 
+        // Align the data to reduce random alignment effects 
+        alignas(64) TStackVec<ui64, Size * Size * 3> data; 
+        ui64 s = 0; 
+        NHPTimer::STime beginTime; 
+        NHPTimer::STime endTime; 
+        // Prepare the data 
+        data.resize(Size * Size * 3); 
+        for (ui64 matrixIdx = 0; matrixIdx < 3; ++matrixIdx) { 
+            for (ui64 y = 0; y < Size; ++y) { 
+                for (ui64 x = 0; x < Size; ++x) { 
+                    data[matrixIdx * (Size * Size) + y * Size + x] = y * Size + x; 
+                } 
+            } 
+        } 
+        // Warm-up the cache 
+        NHPTimer::GetTime(&beginTime); 
+        for (ui64 idx = 0; idx < data.size(); ++idx) { 
+            s += data[idx]; 
+        } 
+        NHPTimer::GetTime(&endTime); 
+        s += (ui64)(1000000.0 * NHPTimer::GetSeconds(endTime - beginTime)); 
+ 
+        // Measure the CPU performance 
+        // C = A * B  with injected dependency to s 
+        NHPTimer::GetTime(&beginTime); 
+        for (ui64 y = 0; y < Size; ++y) { 
+            for (ui64 x = 0; x < Size; ++x) { 
+                for (ui64 i = 0; i < Size; ++i) { 
+                    s += data[y * Size + i] * data[Size * Size + i * Size + x]; 
+                } 
+                data[2 * Size * Size + y * Size + x] = s; 
+                s = 0; 
+            } 
+        } 
+        for (ui64 idx = 0; idx < data.size(); ++idx) { 
+            s += data[idx]; 
+        } 
+        NHPTimer::GetTime(&endTime); 
+        // Prepare the result 
+        double d = 1000000000.0 * (NHPTimer::GetSeconds(endTime - beginTime) + 0.000000001 * (s & 1)); 
+        return (ui64)d; 
+    } 
+ 
     void HandlePing(TEvPing::TPtr &ev, const TActorContext &ctx)
     {
         const auto now = ctx.Now();
@@ -156,10 +156,10 @@ public:
 
         *Counter = SlidingWindow.Update(delayUs, now);
 
-        ui64 d = MeasureTaskDurationNs();
+        ui64 d = MeasureTaskDurationNs(); 
         auto res = CalculationSlidingWindow.Update({1, d}, now);
-        *CalculationTimeCounter = double(res.Sum) / double(res.Count + 1);
-
+        *CalculationTimeCounter = double(res.Sum) / double(res.Count + 1); 
+ 
         SchedulePing(ctx, hpNow);
     }
 
@@ -174,10 +174,10 @@ private:
 
 IActor* CreateSelfPingActor(
     TDuration sendInterval,
-    const NMonitoring::TDynamicCounters::TCounterPtr& counter,
-    const NMonitoring::TDynamicCounters::TCounterPtr& calculationTimeCounter)
+    const NMonitoring::TDynamicCounters::TCounterPtr& counter, 
+    const NMonitoring::TDynamicCounters::TCounterPtr& calculationTimeCounter) 
 {
-    return new TSelfPingActor(sendInterval, counter, calculationTimeCounter);
+    return new TSelfPingActor(sendInterval, counter, calculationTimeCounter); 
 }
 
 } // NActors

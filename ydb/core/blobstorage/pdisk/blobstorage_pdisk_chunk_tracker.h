@@ -1,20 +1,20 @@
-#pragma once
-#include "defs.h"
-
+#pragma once 
+#include "defs.h" 
+ 
 #include "blobstorage_pdisk_color_limits.h"
-#include "blobstorage_pdisk_data.h"
+#include "blobstorage_pdisk_data.h" 
 #include "blobstorage_pdisk_defs.h"
-#include "blobstorage_pdisk_keeper_params.h"
+#include "blobstorage_pdisk_keeper_params.h" 
 #include "blobstorage_pdisk_quota_record.h"
 #include "blobstorage_pdisk_util_space_color.h"
-
+ 
 #include <util/generic/algorithm.h>
 #include <util/generic/queue.h>
-
-namespace NKikimr {
-namespace NPDisk {
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ 
+namespace NKikimr { 
+namespace NPDisk { 
+ 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
 // Chunk quota tracker.
 // Part of the in-memory state.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -199,11 +199,11 @@ public:
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Chunk tracker.
-// Part of the in-memory state.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-class TChunkTracker {
+// Chunk tracker. 
+// Part of the in-memory state. 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+ 
+class TChunkTracker { 
 
 using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
@@ -214,132 +214,132 @@ using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
     TColor::E ColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
-public:
-
-    // OwnerSystem - common log quota
-    // OwnerSystemLog - syslog quota
-    // OwnerSystemReserve - system reseve quota
-    // OwnerCommonStaticLog - common static log bonus
-    //
-    // OwnerBeginUser - per-VDisk qouta
-
-    const i64 SysReserveSize = 5;
-    const i64 CommonStaticLogSize = 70;
-    const i64 MinCommonLogSize = 200;
-
+public: 
+ 
+    // OwnerSystem - common log quota 
+    // OwnerSystemLog - syslog quota 
+    // OwnerSystemReserve - system reseve quota 
+    // OwnerCommonStaticLog - common static log bonus 
+    // 
+    // OwnerBeginUser - per-VDisk qouta 
+ 
+    const i64 SysReserveSize = 5; 
+    const i64 CommonStaticLogSize = 70; 
+    const i64 MinCommonLogSize = 200; 
+ 
     TChunkTracker()
         : GlobalQuota(new TPerOwnerQuotaTracker())
         , SharedQuota(new TQuotaRecord())
         , OwnerQuota(new TPerOwnerQuotaTracker())
     {}
-
-    bool Reset(const TKeeperParams &params, TString &outErrorReason) {
+ 
+    bool Reset(const TKeeperParams &params, TString &outErrorReason) { 
         Params = params;
 
-        GlobalQuota->Reset(params.TotalChunks, TColorLimits::MakeLogLimits());
+        GlobalQuota->Reset(params.TotalChunks, TColorLimits::MakeLogLimits()); 
         i64 unappropriated = params.TotalChunks;
 
         unappropriated += GlobalQuota->AddSystemOwner(OwnerSystemLog, params.SysLogSize, "SysLog");
         if (unappropriated < 0) {
-            outErrorReason = (TStringBuilder() << "Error adding OwnerSystemLog quota, size# " << params.SysLogSize
-                    << " TotalChunks# " << params.TotalChunks);
-            return false;
-        }
+            outErrorReason = (TStringBuilder() << "Error adding OwnerSystemLog quota, size# " << params.SysLogSize 
+                    << " TotalChunks# " << params.TotalChunks); 
+            return false; 
+        } 
 
         unappropriated += GlobalQuota->AddSystemOwner(OwnerSystemReserve, SysReserveSize, "System Reserve");
         if (unappropriated < 0) {
-            outErrorReason = (TStringBuilder() << "Error adding OwnerSystemReserve quota, size# " << SysReserveSize
-                    << " TotalChunks# " << params.TotalChunks);
-            return false;
-        }
-
-        i64 staticLog = params.HasStaticGroups ? CommonStaticLogSize : 0;
+            outErrorReason = (TStringBuilder() << "Error adding OwnerSystemReserve quota, size# " << SysReserveSize 
+                    << " TotalChunks# " << params.TotalChunks); 
+            return false; 
+        } 
+ 
+        i64 staticLog = params.HasStaticGroups ? CommonStaticLogSize : 0; 
         unappropriated += GlobalQuota->AddSystemOwner(OwnerCommonStaticLog, staticLog, "Common Log Static Group Bonus");
         if (unappropriated < 0) {
-            outErrorReason = (TStringBuilder() << "Error adding OwnerCommonStaticLog quota, size# " << staticLog
-                    << " TotalChunks# " << params.TotalChunks);
-            return false;
-        }
-
+            outErrorReason = (TStringBuilder() << "Error adding OwnerCommonStaticLog quota, size# " << staticLog 
+                    << " TotalChunks# " << params.TotalChunks); 
+            return false; 
+        } 
+ 
         i64 commonLog = MinCommonLogSize;
-        if (commonLog + staticLog < params.CommonLogSize) {
-            commonLog = params.CommonLogSize - staticLog;
-        }
+        if (commonLog + staticLog < params.CommonLogSize) { 
+            commonLog = params.CommonLogSize - staticLog; 
+        } 
         unappropriated += GlobalQuota->AddSystemOwner(OwnerSystem, commonLog, "Common Log");
         if (unappropriated < 0) {
-            outErrorReason = (TStringBuilder() << "Error adding OwnerSystem (common log) quota, size# " << commonLog
-                    << " TotalChunks# " << params.TotalChunks);
-            return false;
-        }
-
-        i64 chunksOwned = 0;
+            outErrorReason = (TStringBuilder() << "Error adding OwnerSystem (common log) quota, size# " << commonLog 
+                    << " TotalChunks# " << params.TotalChunks); 
+            return false; 
+        } 
+ 
+        i64 chunksOwned = 0; 
         for (auto& [ownerId, ownerInfo] : params.OwnersInfo) {
             chunksOwned += ownerInfo.ChunksOwned;
-        }
+        } 
         if (chunksOwned > unappropriated) {
-            outErrorReason = (TStringBuilder() << "Error adding OwnerBeginUser quota, chunksOwned#" << chunksOwned
+            outErrorReason = (TStringBuilder() << "Error adding OwnerBeginUser quota, chunksOwned#" << chunksOwned 
                     << " unappropriated# " << unappropriated << " TotalChunks# " << params.TotalChunks);
-            return false;
-        }
+            return false; 
+        } 
         unappropriated += GlobalQuota->AddSystemOwner(OwnerBeginUser, unappropriated, "Per Owner Chunk Pool");
         if (unappropriated < 0) {
             outErrorReason = (TStringBuilder() << "Error adding OwnerBeginUser quota, size# " << unappropriated
-                    << " TotalChunks# " << params.TotalChunks);
-            return false;
-        }
-
+                    << " TotalChunks# " << params.TotalChunks); 
+            return false; 
+        } 
+ 
         SharedQuota->SetName("SharedQuota");
-        TColorLimits chunkLimits = TColorLimits::MakeChunkLimits();
+        TColorLimits chunkLimits = TColorLimits::MakeChunkLimits(); 
         SharedQuota->ForceHardLimit(GlobalQuota->GetHardLimit(OwnerBeginUser), chunkLimits);
-        OwnerQuota->Reset(GlobalQuota->GetHardLimit(OwnerBeginUser), chunkLimits);
-        OwnerQuota->SetExpectedOwnerCount(params.ExpectedOwnerCount);
-
+        OwnerQuota->Reset(GlobalQuota->GetHardLimit(OwnerBeginUser), chunkLimits); 
+        OwnerQuota->SetExpectedOwnerCount(params.ExpectedOwnerCount); 
+ 
         for (auto& [ownerId, ownerInfo] : params.OwnersInfo) {
             i64 chunks = ownerInfo.ChunksOwned;
             AddOwner(ownerId, ownerInfo.VDiskId);
             if (chunks) {
                 OwnerQuota->InitialAllocate(ownerId, chunks);
                 bool isOk = SharedQuota->InitialAllocate(chunks);
-                if (!isOk) {
-                    return false;
-                }
-            }
-        }
-
-        if (params.CommonLogSize) {
+                if (!isOk) { 
+                    return false; 
+                } 
+            } 
+        } 
+ 
+        if (params.CommonLogSize) { 
             bool isOk = GlobalQuota->InitialAllocate(OwnerSystem, params.CommonLogSize);
-            if (!isOk) {
-                return false;
-            }
-        }
-
+            if (!isOk) { 
+                return false; 
+            } 
+        } 
+ 
         ColorBorder = params.SpaceColorBorder;
         return true;
-    }
-
+    } 
+ 
     void AddOwner(TOwner owner, TVDiskID vdiskId) {
-        Y_VERIFY(IsOwnerUser(owner));
+        Y_VERIFY(IsOwnerUser(owner)); 
         OwnerQuota->AddOwner(owner, vdiskId);
-    }
-
-    void RemoveOwner(TOwner owner) {
-        Y_VERIFY(IsOwnerUser(owner));
-        OwnerQuota->RemoveOwner(owner);
-    }
-
+    } 
+ 
+    void RemoveOwner(TOwner owner) { 
+        Y_VERIFY(IsOwnerUser(owner)); 
+        OwnerQuota->RemoveOwner(owner); 
+    } 
+ 
     i64 GetOwnerHardLimit(TOwner owner) const {
-        if (IsOwnerUser(owner)) {
-            return OwnerQuota->GetHardLimit(owner);
-        } else {
-            if (owner == OwnerCommonStaticLog) {
-                // Static groups use both common and bonus pools
-                return GlobalQuota->GetHardLimit(OwnerCommonStaticLog) + GlobalQuota->GetHardLimit(OwnerSystem);
-            } else {
-                return GlobalQuota->GetHardLimit(owner);
-            }
-        }
-    }
-
+        if (IsOwnerUser(owner)) { 
+            return OwnerQuota->GetHardLimit(owner); 
+        } else { 
+            if (owner == OwnerCommonStaticLog) { 
+                // Static groups use both common and bonus pools 
+                return GlobalQuota->GetHardLimit(OwnerCommonStaticLog) + GlobalQuota->GetHardLimit(OwnerSystem); 
+            } else { 
+                return GlobalQuota->GetHardLimit(owner); 
+            } 
+        } 
+    } 
+ 
     i64 GetOwnerUsed(TOwner owner) const {
         return OwnerQuota->GetUsed(owner);
     }
@@ -356,95 +356,95 @@ public:
     /////////////////////////////////////////////////////
 
     i64 GetOwnerFree(TOwner owner) const {
-        if (IsOwnerUser(owner)) {
+        if (IsOwnerUser(owner)) { 
             // fix for CLOUDINC-1822: remove OwnerQuota->GetFree(owner) since it broke group balancing in Hive
             return SharedQuota->GetFree();
-        } else {
-            if (owner == OwnerCommonStaticLog) {
-                // Static groups use both common and bonus pools
-                return GlobalQuota->GetFree(OwnerCommonStaticLog) + GlobalQuota->GetFree(OwnerSystem);
-            } else {
-                return GlobalQuota->GetFree(owner);
-            }
-        }
-    }
-
+        } else { 
+            if (owner == OwnerCommonStaticLog) { 
+                // Static groups use both common and bonus pools 
+                return GlobalQuota->GetFree(OwnerCommonStaticLog) + GlobalQuota->GetFree(OwnerSystem); 
+            } else { 
+                return GlobalQuota->GetFree(owner); 
+            } 
+        } 
+    } 
+ 
     TStatusFlags GetSpaceStatusFlags(TOwner owner) const {
         return SpaceColorToStatusFlag(GetSpaceColor(owner));
-    }
-
+    } 
+ 
     TColor::E GetSpaceColor(TOwner owner) const {
         return EstimateSpaceColor(owner, 0);
     }
 
-    // Estimate status flags after allocation of allocatinoSize
+    // Estimate status flags after allocation of allocatinoSize 
     TColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize) const {
-        if (IsOwnerUser(owner)) {
+        if (IsOwnerUser(owner)) { 
             TColor::E ret = Min(ColorBorder, OwnerQuota->EstimateSpaceColor(owner, allocationSize));
             ret = Max(ret, SharedQuota->EstimateSpaceColor(allocationSize));
             return ret;
-        } else {
-            if (owner == OwnerCommonStaticLog) {
-                if (GlobalQuota->GetHardLimit(OwnerCommonStaticLog) == 0) {
-                    // No static group bonus, use common quota for the request
-                    owner = OwnerSystem;
-                }
-            }
+        } else { 
+            if (owner == OwnerCommonStaticLog) { 
+                if (GlobalQuota->GetHardLimit(OwnerCommonStaticLog) == 0) { 
+                    // No static group bonus, use common quota for the request 
+                    owner = OwnerSystem; 
+                } 
+            } 
             return GlobalQuota->EstimateSpaceColor(owner, allocationSize);
-        }
-    }
-
-    bool TryAllocate(TOwner owner, i64 count, TString &outErrorReason) {
-        if (IsOwnerUser(owner)) {
+        } 
+    } 
+ 
+    bool TryAllocate(TOwner owner, i64 count, TString &outErrorReason) { 
+        if (IsOwnerUser(owner)) { 
             OwnerQuota->ForceAllocate(owner, count);
             return SharedQuota->TryAllocate(count, outErrorReason);
-        } else {
-            if (owner == OwnerCommonStaticLog) {
-                // Chunk allocation for static log (can use both common and bonus pools)
-                // Try common pool first
-                bool isOk = GlobalQuota->TryAllocate(OwnerSystem, count, outErrorReason);
-                if (isOk) {
-                    return true;
-                }
-                // Try bonus pool
-                return GlobalQuota->TryAllocate(OwnerCommonStaticLog, count, outErrorReason);
-            } else {
-                // Chunk allocation for any other owner
-                return GlobalQuota->TryAllocate(owner, count, outErrorReason);
-            }
-        }
-    }
-
-    void Release(TOwner owner, i64 count) {
-        if (IsOwnerUser(owner)) {
-            OwnerQuota->Release(owner, count);
+        } else { 
+            if (owner == OwnerCommonStaticLog) { 
+                // Chunk allocation for static log (can use both common and bonus pools) 
+                // Try common pool first 
+                bool isOk = GlobalQuota->TryAllocate(OwnerSystem, count, outErrorReason); 
+                if (isOk) { 
+                    return true; 
+                } 
+                // Try bonus pool 
+                return GlobalQuota->TryAllocate(OwnerCommonStaticLog, count, outErrorReason); 
+            } else { 
+                // Chunk allocation for any other owner 
+                return GlobalQuota->TryAllocate(owner, count, outErrorReason); 
+            } 
+        } 
+    } 
+ 
+    void Release(TOwner owner, i64 count) { 
+        if (IsOwnerUser(owner)) { 
+            OwnerQuota->Release(owner, count); 
             SharedQuota->Release(count);
-        } else {
-            if (owner == OwnerCommonStaticLog || owner == OwnerSystem) {
-                // Chunk release for common log (fill bonus pool first, then fill the common pool)
-                i64 usedBonus = GlobalQuota->GetUsed(OwnerCommonStaticLog);
-                i64 releaseBonus = Min(usedBonus, count);
-                if (releaseBonus) {
-                    GlobalQuota->Release(OwnerCommonStaticLog, releaseBonus);
-                }
-                i64 releaseCommon = count - releaseBonus;
-                if (releaseCommon) {
-                    GlobalQuota->Release(OwnerSystem, releaseCommon);
-                }
-            } else {
-                // Chunk release for any other owner
-                GlobalQuota->Release(owner, count);
-            }
-        }
-    }
-
+        } else { 
+            if (owner == OwnerCommonStaticLog || owner == OwnerSystem) { 
+                // Chunk release for common log (fill bonus pool first, then fill the common pool) 
+                i64 usedBonus = GlobalQuota->GetUsed(OwnerCommonStaticLog); 
+                i64 releaseBonus = Min(usedBonus, count); 
+                if (releaseBonus) { 
+                    GlobalQuota->Release(OwnerCommonStaticLog, releaseBonus); 
+                } 
+                i64 releaseCommon = count - releaseBonus; 
+                if (releaseCommon) { 
+                    GlobalQuota->Release(OwnerSystem, releaseCommon); 
+                } 
+            } else { 
+                // Chunk release for any other owner 
+                GlobalQuota->Release(owner, count); 
+            } 
+        } 
+    } 
+ 
     void PrintHTML(IOutputStream &str) {
         str << "<h4>GlobalQuota</h4>";
         GlobalQuota->PrintHTML(str, nullptr, nullptr);
         str << "<h4>OwnerQuota</h4>";
         OwnerQuota->PrintHTML(str, SharedQuota.Get(), &ColorBorder);
-    }
-};
-
-} // NPDisk
-} // NKikimr
+    } 
+}; 
+ 
+} // NPDisk 
+} // NKikimr 

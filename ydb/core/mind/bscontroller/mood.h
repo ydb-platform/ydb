@@ -11,20 +11,20 @@ struct TMood {
         Delete = 2,
         Donor = 3,
     };
-
-    static TString Name(const EValue value) {
-        switch (value) {
-            case Normal:
-                return "Normal";
-            case Wipe:
-                return "Wipe";
+ 
+    static TString Name(const EValue value) { 
+        switch (value) { 
+            case Normal: 
+                return "Normal"; 
+            case Wipe: 
+                return "Wipe"; 
             case Delete:
                 return "Delete";
             case Donor:
                 return "Donor";
-        }
-        return Sprintf("Unknown%" PRIu64, (ui64)value);
-    }
+        } 
+        return Sprintf("Unknown%" PRIu64, (ui64)value); 
+    } 
 };
 
 }  // NBsController

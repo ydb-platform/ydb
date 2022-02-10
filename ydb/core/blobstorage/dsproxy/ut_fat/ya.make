@@ -1,12 +1,12 @@
-UNITTEST()
-
+UNITTEST() 
+ 
 OWNER(
     alexvru
     cthulhu
     g:kikimr
 )
 
-FORK_SUBTESTS()
+FORK_SUBTESTS() 
 
 SPLIT_FACTOR(30)
 
@@ -18,8 +18,8 @@ ELSE()
     SIZE(MEDIUM)
     TIMEOUT(600)
 ENDIF()
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/actors/protos
     library/cpp/actors/util
     library/cpp/getopt
@@ -32,12 +32,12 @@ PEERDIR(
     ydb/core/blobstorage/vdisk
     ydb/core/blobstorage/vdisk/common
     ydb/core/testlib
-)
-
-SRCS(
-    dsproxy_ut.cpp
-)
-
+) 
+ 
+SRCS( 
+    dsproxy_ut.cpp 
+) 
+ 
 REQUIREMENTS(ram:10)
 
-END()
+END() 

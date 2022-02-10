@@ -3,7 +3,7 @@
 
 #include <util/string/builder.h>
 #include <util/string/escape.h>
-#include <util/system/unaligned_mem.h>
+#include <util/system/unaligned_mem.h> 
 
 namespace NKikimr {
 namespace NPQ {
@@ -115,11 +115,11 @@ void TClientBlob::Serialize(TBuffer& res) const
 TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
 {
     Y_VERIFY(size > OVERHEAD);
-    ui32 totalSize = ReadUnaligned<ui32>(data);
+    ui32 totalSize = ReadUnaligned<ui32>(data); 
     Y_VERIFY(size >= totalSize);
     const char *end = data + totalSize;
     data += sizeof(ui32);
-    ui64 seqNo = ReadUnaligned<ui64>(data);
+    ui64 seqNo = ReadUnaligned<ui64>(data); 
     data += sizeof(ui64);
     TMaybe<TPartData> partData;
     bool hasPartData = (data[0] & HAS_PARTDATA);//data[0] is mask
@@ -133,11 +133,11 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     TString explicitHashKey;
 
     if (hasPartData) {
-        ui16 partNo = ReadUnaligned<ui16>(data);
+        ui16 partNo = ReadUnaligned<ui16>(data); 
         data += sizeof(ui16);
-        ui16 totalParts = ReadUnaligned<ui16>(data);
+        ui16 totalParts = ReadUnaligned<ui16>(data); 
         data += sizeof(ui16);
-        ui32 totalSize = ReadUnaligned<ui32>(data);
+        ui32 totalSize = ReadUnaligned<ui32>(data); 
         data += sizeof(ui32);
         partData = TPartData{partNo, totalParts, totalSize};
     }
@@ -170,7 +170,7 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     }
 
     Y_VERIFY(data < end);
-    ui16 sz = ReadUnaligned<ui16>(data);
+    ui16 sz = ReadUnaligned<ui16>(data); 
     data += sizeof(ui16);
     Y_VERIFY(data + sz < end);
     TString sourceId(data, sz);
@@ -412,7 +412,7 @@ void TBatch::UnpackTo(TVector<TClientBlob> *blobs)
 
 NScheme::TDataRef GetChunk(const char*& data, const char *end)
 {
-    ui32 size = ReadUnaligned<ui32>(data);
+    ui32 size = ReadUnaligned<ui32>(data); 
     data += sizeof(ui32) + size;
     Y_VERIFY(data <= end);
     return NScheme::TDataRef(data - size, size);

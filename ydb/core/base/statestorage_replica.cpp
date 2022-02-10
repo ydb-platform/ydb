@@ -181,8 +181,8 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         BLOG_D("Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
         Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup,
-            "tabletId# %" PRIu64 " SSGFTID# %" PRIu64 " SSG# %" PRIu64,
-            (ui64)tabletId, (ui64)StateStorageGroupFromTabletID(tabletId), (ui64)Info->StateStorageGroup);
+            "tabletId# %" PRIu64 " SSGFTID# %" PRIu64 " SSG# %" PRIu64, 
+            (ui64)tabletId, (ui64)StateStorageGroupFromTabletID(tabletId), (ui64)Info->StateStorageGroup); 
         TTablets::const_iterator it = Tablets.find(msg->Record.GetTabletID());
         if (it != Tablets.end())
             NotifyWithTabletInfo(ev->Sender, it->first, msg->Record.GetCookie(), &it->second);
@@ -421,7 +421,7 @@ public:
         return NKikimrServices::TActivity::SS_REPLICA;
     }
 
-    TStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex)
+    TStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex) 
         : TActor(&TThis::StateInit)
         , Info(info)
         , ReplicaIndex(replicaIndex)
@@ -445,15 +445,15 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
 
-            default:
+            default: 
                 BLOG_W("Replica::StateInit unexpected event type# " << ev->GetTypeRewrite()
                     << " event: " << ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
-                break;
+                break; 
         }
     }
 };
 
-IActor* CreateStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex) {
+IActor* CreateStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex) { 
     return new TStateStorageReplica(info, replicaIndex);
 }
 

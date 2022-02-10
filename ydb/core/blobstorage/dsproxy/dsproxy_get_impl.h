@@ -1,45 +1,45 @@
-#pragma once
-
-#include "dsproxy.h"
-#include "dsproxy_blackboard.h"
-#include "dsproxy_cookies.h"
-#include "dsproxy_mon.h"
+#pragma once 
+ 
+#include "dsproxy.h" 
+#include "dsproxy_blackboard.h" 
+#include "dsproxy_cookies.h" 
+#include "dsproxy_mon.h" 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/base/wilson_events.h>
-#include <util/generic/set.h>
-
-namespace NKikimr {
-
-class TStrategyBase;
-
-class TGetImpl {
-    const TInstant Deadline;
-    const TIntrusivePtr<TBlobStorageGroupInfo> Info;
+#include <util/generic/set.h> 
+ 
+namespace NKikimr { 
+ 
+class TStrategyBase; 
+ 
+class TGetImpl { 
+    const TInstant Deadline; 
+    const TIntrusivePtr<TBlobStorageGroupInfo> Info; 
     TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries;
-    const TNodeLayoutInfoPtr NodeLayout;
-    const ui32 QuerySize;
+    const TNodeLayoutInfoPtr NodeLayout; 
+    const ui32 QuerySize; 
     const bool IsInternal;
-    const bool IsVerboseNoDataEnabled;
+    const bool IsVerboseNoDataEnabled; 
     const bool CollectDebugInfo;
-    const bool MustRestoreFirst;
+    const bool MustRestoreFirst; 
     const bool ReportDetailedPartMap;
-    const ui32 ForceBlockedGeneration;
-
-    ui64 ReplyBytes = 0;
-    i64 BytesToReport = 0;
-    ui64 TabletId = 0;
-
-    ui32 BlockedGeneration = 0;
-    ui32 VPutRequests = 0;
-    ui32 VPutResponses = 0;
+    const ui32 ForceBlockedGeneration; 
+ 
+    ui64 ReplyBytes = 0; 
+    i64 BytesToReport = 0; 
+    ui64 TabletId = 0; 
+ 
+    ui32 BlockedGeneration = 0; 
+    ui32 VPutRequests = 0; 
+    ui32 VPutResponses = 0; 
     ui32 VMultiPutRequests = 0;
     ui32 VMultiPutResponses = 0;
-
-    bool IsNoData = false;
-    bool IsReplied = false;
-    bool AcquireBlockedGeneration = false;
-
-    TBlackboard Blackboard;
+ 
+    bool IsNoData = false; 
+    bool IsReplied = false; 
+    bool AcquireBlockedGeneration = false; 
+ 
+    TBlackboard Blackboard; 
 
     ui32 RequestIndex = 0;
     ui32 ResponseIndex = 0;
@@ -51,27 +51,27 @@ class TGetImpl {
 
     const bool PhantomCheck;
 
-public:
+public: 
     TGetImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
             TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout, const TString& requestPrefix = {})
-        : Deadline(ev->Deadline)
-        , Info(info)
-        , Queries(ev->Queries.Release())
-        , NodeLayout(std::move(nodeLayout))
-        , QuerySize(ev->QuerySize)
+        : Deadline(ev->Deadline) 
+        , Info(info) 
+        , Queries(ev->Queries.Release()) 
+        , NodeLayout(std::move(nodeLayout)) 
+        , QuerySize(ev->QuerySize) 
         , IsInternal(ev->IsInternal)
-        , IsVerboseNoDataEnabled(ev->IsVerboseNoDataEnabled)
+        , IsVerboseNoDataEnabled(ev->IsVerboseNoDataEnabled) 
         , CollectDebugInfo(ev->CollectDebugInfo)
-        , MustRestoreFirst(ev->MustRestoreFirst)
+        , MustRestoreFirst(ev->MustRestoreFirst) 
         , ReportDetailedPartMap(ev->ReportDetailedPartMap)
-        , ForceBlockedGeneration(ev->ForceBlockedGeneration)
+        , ForceBlockedGeneration(ev->ForceBlockedGeneration) 
         , Blackboard(info, groupQueues, NKikimrBlobStorage::AsyncBlob, ev->GetHandleClass)
         , RequestPrefix(requestPrefix)
         , PhantomCheck(ev->PhantomCheck)
-    {
-        Y_VERIFY(QuerySize > 0);
-    }
-
+    { 
+        Y_VERIFY(QuerySize > 0); 
+    } 
+ 
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, QuerySize, Deadline, GetHandleClass(), MustRestoreFirst,
             false /*isIndexOnly*/, ForceBlockedGeneration, IsInternal, IsVerboseNoDataEnabled, CollectDebugInfo,
@@ -93,28 +93,28 @@ public:
         return res;
     }
 
-    ui64 GetReplyBytes() {
-        return ReplyBytes;
-    }
-
+    ui64 GetReplyBytes() { 
+        return ReplyBytes; 
+    } 
+ 
     NKikimrBlobStorage::EGetHandleClass GetHandleClass() const {
-        return Blackboard.GetHandleClass;
+        return Blackboard.GetHandleClass; 
     }
 
     NKikimrBlobStorage::EPutHandleClass GetPutHandleClass() const {
-        return Blackboard.PutHandleClass;
+        return Blackboard.PutHandleClass; 
     }
 
-    void ReportBytes(i64 bytes) {
-        BytesToReport += bytes;
-    }
-
-    i64 GrabBytesToReport() {
-        i64 bytesToReport = BytesToReport;
-        BytesToReport = 0;
-        return bytesToReport;
-    }
-
+    void ReportBytes(i64 bytes) { 
+        BytesToReport += bytes; 
+    } 
+ 
+    i64 GrabBytesToReport() { 
+        i64 bytesToReport = BytesToReport; 
+        BytesToReport = 0; 
+        return bytesToReport; 
+    } 
+ 
     TString DumpQuery() const {
         TStringStream str;
         str << "{";
@@ -154,7 +154,7 @@ public:
 
 
     void GenerateInitialRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets);
-
+ 
     template <typename TVPutEvent>
     void OnVGetResult(TLogContext &logCtx, TEvBlobStorage::TEvVGetResult &ev,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets, TDeque<std::unique_ptr<TVPutEvent>> &outVPuts,
@@ -164,7 +164,7 @@ public:
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         Y_VERIFY(status != NKikimrProto::RACE && status != NKikimrProto::BLOCKED && status != NKikimrProto::DEADLINE);
         R_LOG_DEBUG_SX(logCtx, "BPG57", "handle result# " << ev.ToString());
-
+ 
         Y_VERIFY(record.HasVDiskID());
         TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
         TVDiskIdShort shortId(vdisk);
@@ -226,7 +226,7 @@ public:
                     << " orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
                 Blackboard.AddErrorResponse(blobId, orderNumber);
             } else if (replyStatus == NKikimrProto::NOT_YET) {
-                R_LOG_DEBUG_SX(logCtx, "BPG67", "Got# NOT_YET orderNumber# " << orderNumber
+                R_LOG_DEBUG_SX(logCtx, "BPG67", "Got# NOT_YET orderNumber# " << orderNumber 
                         << " vDiskId# " << vdisk.ToString());
                 Blackboard.AddNotYetResponse(blobId, orderNumber);
             } else {
@@ -242,18 +242,18 @@ public:
     void OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &ev,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts,
-            TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult);
-
+            TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult); 
+ 
     void OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVMultiPutResult &ev,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> &outVMultiPuts,
             TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult);
 
     void PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx,
-            TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult);
-
+            TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult); 
+ 
     template <typename TVPutEvent>
-    void AccelerateGet(TLogContext &logCtx, i32 slowDiskOrderNumber,
+    void AccelerateGet(TLogContext &logCtx, i32 slowDiskOrderNumber, 
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets, TDeque<std::unique_ptr<TVPutEvent>> &outVPuts) {
         TAutoPtr<TEvBlobStorage::TEvGetResult> outGetResult;
         TBlackboard::EAccelerationMode prevMode = Blackboard.AccelerationMode;
@@ -265,30 +265,30 @@ public:
                 disk.IsSlow = ((i32)disk.OrderNumber == slowDiskOrderNumber);
             }
         }
-        Blackboard.ChangeAll();
+        Blackboard.ChangeAll(); 
         Step(logCtx, outVGets, outVPuts, outGetResult);
         Blackboard.AccelerationMode = prevMode;
         Y_VERIFY(!outGetResult, "%s Unexpected get result in AccelerateGet, outGetResult# %s, DumpFullState# %s",
             RequestPrefix.data(), outGetResult->Print(false).c_str(), DumpFullState().c_str());
     }
-
+ 
     template <typename TVPutEvent>
-    void AcceleratePut(TLogContext &logCtx, i32 slowDiskOrderNumber,
+    void AcceleratePut(TLogContext &logCtx, i32 slowDiskOrderNumber, 
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets, TDeque<std::unique_ptr<TVPutEvent>> &outVPuts) {
         AccelerateGet(logCtx, slowDiskOrderNumber, outVGets, outVPuts);
     }
-
-    ui64 GetTimeToAccelerateGetNs(TLogContext &logCtx);
-    ui64 GetTimeToAcceleratePutNs(TLogContext &logCtx);
-
-    TString DumpFullState() const;
-
-protected:
+ 
+    ui64 GetTimeToAccelerateGetNs(TLogContext &logCtx); 
+    ui64 GetTimeToAcceleratePutNs(TLogContext &logCtx); 
+ 
+    TString DumpFullState() const; 
+ 
+protected: 
     EStrategyOutcome RunBoldStrategy(TLogContext &logCtx);
     EStrategyOutcome RunMirror3dcStrategy(TLogContext &logCtx);
     EStrategyOutcome RunMirror3of4Strategy(TLogContext &logCtx);
     EStrategyOutcome RunStrategies(TLogContext &logCtx);
-
+ 
     // Returns true if there are additional requests to send
     template <typename TVPutEvent>
     bool Step(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &outVGets,
@@ -318,8 +318,8 @@ protected:
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &outVPuts);
     void PrepareVPuts(TLogContext &logCtx,
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> &outVMultiPuts);
-
-    ui64 GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId);
-}; //TGetImpl
-
-}//NKikimr
+ 
+    ui64 GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EVDiskQueueId queueId); 
+}; //TGetImpl 
+ 
+}//NKikimr 

@@ -23,7 +23,7 @@ namespace NKikimr {
             case TSpaceColor::GREEN:
             case TSpaceColor::CYAN:
                 return NKikimrWhiteboard::EFlag::Green;
-            case TSpaceColor::LIGHT_YELLOW:
+            case TSpaceColor::LIGHT_YELLOW: 
             case TSpaceColor::YELLOW:
             case TSpaceColor::LIGHT_ORANGE:
                 return NKikimrWhiteboard::EFlag::Yellow;

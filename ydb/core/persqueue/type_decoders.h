@@ -10,12 +10,12 @@
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
-#include <util/system/unaligned_mem.h>
+#include <util/system/unaligned_mem.h> 
 
 namespace NKikimr {
 namespace NScheme {
 
-using TMaskIterator = TBitIterator<ui8>;
+using TMaskIterator = TBitIterator<ui8>; 
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -110,8 +110,8 @@ template <>
 class TDecoderMask<true> {
 public:
     TDecoderMask(const TDataRef& data)
-        : MaskSize(ReadUnaligned<ui32>(data.End() - sizeof(ui32)))
-        , Bits((const ui8*)(data.End() - Size()))
+        : MaskSize(ReadUnaligned<ui32>(data.End() - sizeof(ui32))) 
+        , Bits((const ui8*)(data.End() - Size())) 
     { }
 
     inline size_t Size() const { return MaskSize + sizeof(ui32); }
@@ -124,7 +124,7 @@ public:
 
 private:
     size_t MaskSize;
-    const ui8* Bits;
+    const ui8* Bits; 
 };
 
 template <>
@@ -132,7 +132,7 @@ class TDecoderMaskIterator<true> {
 public:
     TDecoderMaskIterator(const TDataRef& data) {
         const char* sizePtr = data.Data() + data.Size() - sizeof(ui32);
-        BitIter.Reset((const ui8*)(sizePtr - ReadUnaligned<ui32>(sizePtr)));
+        BitIter.Reset((const ui8*)(sizePtr - ReadUnaligned<ui32>(sizePtr))); 
     }
     inline bool IsNotNull() const { return BitIter.Peek(); }
     inline bool Next() { return BitIter.Next(); }
@@ -228,7 +228,7 @@ public:
         TVarLenDecoder::VerifySignature(data);
         const char* sizesEnd = data.End() - Mask.Size();
         if ((const char*)(Sizes + 1) <= sizesEnd) {
-            auto dataSize = ReadUnaligned<ui32>((const ui32*)sizesEnd - 1);
+            auto dataSize = ReadUnaligned<ui32>((const ui32*)sizesEnd - 1); 
             Sizes = (const ui32*)((const char*)Sizes + dataSize);
         }
     }
@@ -239,9 +239,9 @@ public:
 
     TDataRef GetValue(size_t index) const override {
         if (Mask.IsNotNull(index)) {
-            Y_VERIFY(ReadUnaligned<ui32>(Sizes + index) + sizeof(TCodecSig) <= Data.Size() - Mask.Size());
-            ui32 begin = index ? ReadUnaligned<ui32>(Sizes + index - 1) : 0;
-            return TDataRef(Data.Data() + sizeof(TCodecSig) + begin, ReadUnaligned<ui32>(Sizes + index) - begin);
+            Y_VERIFY(ReadUnaligned<ui32>(Sizes + index) + sizeof(TCodecSig) <= Data.Size() - Mask.Size()); 
+            ui32 begin = index ? ReadUnaligned<ui32>(Sizes + index - 1) : 0; 
+            return TDataRef(Data.Data() + sizeof(TCodecSig) + begin, ReadUnaligned<ui32>(Sizes + index) - begin); 
         }
         return TDataRef();
     }
@@ -259,8 +259,8 @@ private:
 
         TDataRef Next() override {
             if (MaskIter.Next()) {
-                ui32 endOffset = ReadUnaligned<ui32>(CurrentOffset);
-                CurrentOffset++;
+                ui32 endOffset = ReadUnaligned<ui32>(CurrentOffset); 
+                CurrentOffset++; 
                 ui32 size = endOffset - LastOffset;
                 LastOffset = endOffset;
 
@@ -275,8 +275,8 @@ private:
 
         TDataRef Peek() const override {
             if (MaskIter.IsNotNull()) {
-                Y_VERIFY(Current + ReadUnaligned<ui32>(CurrentOffset) - LastOffset <= End);
-                return TDataRef(Current, ReadUnaligned<ui32>(CurrentOffset) - LastOffset);
+                Y_VERIFY(Current + ReadUnaligned<ui32>(CurrentOffset) - LastOffset <= End); 
+                return TDataRef(Current, ReadUnaligned<ui32>(CurrentOffset) - LastOffset); 
             }
             return TDataRef();
         }
@@ -513,7 +513,7 @@ public:
     }
 
     TDataRef GetValue(size_t index) const override {
-        TMaskIterator iter((const ui8*)(Data.Data() + sizeof(TCodecSig)));
+        TMaskIterator iter((const ui8*)(Data.Data() + sizeof(TCodecSig))); 
         iter.Forward(IsNullable ? index * 2 : index);
         if (IsNullable && !iter.Next())
             return TDataRef();
@@ -524,7 +524,7 @@ private:
     class TChunkIterator : public IChunkIterator {
     public:
         TChunkIterator(const char* data)
-            : BitIter((const ui8*)data)
+            : BitIter((const ui8*)data) 
         { }
 
         TDataRef Next() override {

@@ -157,7 +157,7 @@ namespace NKikimr {
 
         friend class TActorBootstrapped<THullHugeBlobWriter>;
 
-        ui8 GetWritePriority() const {
+        ui8 GetWritePriority() const { 
             switch (Item->HandleClass) {
                 // if we got HandleClass=TabletLog, it means that a tablet writes huge record to the log,
                 // we treat this blos with high priority, i.e. HullHugeUserData
@@ -196,7 +196,7 @@ namespace NKikimr {
             TThis::Become(&TThis::StateFunc);
         }
 
-        void Handle(NPDisk::TEvChunkWriteResult::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvChunkWriteResult::TPtr &ev, const TActorContext &ctx) { 
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             ctx.Send(NotifyID, new TEvHullHugeWritten(HugeSlot));
             ctx.Send(HugeKeeperCtx->SkeletonId,
@@ -262,7 +262,7 @@ namespace NKikimr {
             TThis::Become(&TThis::StateFunc);
         }
 
-        void Handle(NPDisk::TEvChunkReserveResult::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvChunkReserveResult::TPtr &ev, const TActorContext &ctx) { 
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             Y_VERIFY(ev->Get()->ChunkIds.size() == 1);
             ChunkId = ev->Get()->ChunkIds.front();
@@ -272,7 +272,7 @@ namespace NKikimr {
                 " chunkId# %" PRIu32 " Lsn# %" PRIu64, ChunkId, Lsn));
 
             // prepare commit record, i.e. commit reserved chunk
-            NPDisk::TCommitRecord commitRecord;
+            NPDisk::TCommitRecord commitRecord; 
             commitRecord.FirstLsnToKeep = 0;
             commitRecord.CommitChunks.push_back(ChunkId);
             commitRecord.IsStartingPoint = false;
@@ -298,7 +298,7 @@ namespace NKikimr {
             Pers->Heap->AddChunk(ChunkId);
         }
 
-        void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) { 
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             Y_VERIFY(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == Lsn);
 
@@ -352,7 +352,7 @@ namespace NKikimr {
                 " chunks# %s Lsn# %" PRIu64, FormatList(ChunksToFree).data(), Lsn));
 
             // prepare commit record, i.e. commit reserved chunk
-            NPDisk::TCommitRecord commitRecord;
+            NPDisk::TCommitRecord commitRecord; 
             commitRecord.FirstLsnToKeep = 0;
             Y_VERIFY_DEBUG(!ChunksToFree.empty());
             commitRecord.DeleteChunks = ChunksToFree;
@@ -372,7 +372,7 @@ namespace NKikimr {
             TThis::Become(&TThis::StateFunc);
         }
 
-        void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) { 
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             Y_VERIFY(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == Lsn);
 
@@ -422,7 +422,7 @@ namespace NKikimr {
                             "EntryPointSaver: bootstrap: lsn# %" PRIu64, EntryPointLsn));
 
             // prepare commit record
-            NPDisk::TCommitRecord commitRecord;
+            NPDisk::TCommitRecord commitRecord; 
             commitRecord.FirstLsnToKeep = 0;
             commitRecord.IsStartingPoint = true; // yes, this is entry point
 
@@ -434,7 +434,7 @@ namespace NKikimr {
             TThis::Become(&TThis::StateFunc);
         }
 
-        void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) { 
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             Y_VERIFY(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == EntryPointLsn);
 
@@ -882,7 +882,7 @@ namespace NKikimr {
             ctx.Send(ev->Sender, res.release());
         }
 
-        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) { 
             LOG_DEBUG(ctx, BS_LOGCUTTER,
                 VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                         "THullHugeKeeper: TEvCutLog: %s", ev->Get()->ToString().data()));

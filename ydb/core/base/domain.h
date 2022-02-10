@@ -77,7 +77,7 @@ struct TDomainsInfo : public TThrRefBase {
         using TVectorUi32 = TVector<ui32>;
         using TStoragePoolKinds = THashMap<TString, NKikimrBlobStorage::TDefineStoragePool>;
 
-        const ui32 DomainUid;
+        const ui32 DomainUid; 
         const ui32 DefaultStateStorageGroup;
         const ui32 DefaultSchemeBoardGroup;
         const ui64 SchemeRoot;
@@ -101,8 +101,8 @@ struct TDomainsInfo : public TThrRefBase {
                 TVectorUi64 coordinators, TVectorUi64 mediators, TVectorUi64 allocators,
                 ui32 defaultHiveUid, TVectorUi32 hivesUids,
                 ui64 domainPlanResolution, const TStoragePoolKinds &poolTypes)
-            : DomainUid(domainUid)
-            , DefaultStateStorageGroup(defaultStateStorageGroup)
+            : DomainUid(domainUid) 
+            , DefaultStateStorageGroup(defaultStateStorageGroup) 
             , DefaultSchemeBoardGroup(defaultSchemeBoardGroup)
             , SchemeRoot(schemeRootId)
             , Name(name)
@@ -178,7 +178,7 @@ struct TDomainsInfo : public TThrRefBase {
         }
 
         ui32 DomainRootTag() const {
-            return DomainUid + FirstUserTag;
+            return DomainUid + FirstUserTag; 
         }
 
         static TVector<ui64> TransformUids(TVector<ui64> &&uids, std::function<ui64 (ui32)> func) {
@@ -237,7 +237,7 @@ struct TDomainsInfo : public TThrRefBase {
     TMap<ui32, TIntrusivePtr<TDomain>> DomainByHiveUid;
     TMap<ui32, ui64> HivesByHiveUid;
     TNamedCompactionPolicies NamedCompactionPolicies;
-
+ 
     TDomainsInfo() {
         // Add default configs. They can be overriden by user
         NamedCompactionPolicies[SystemTableDefaultPoicyName()] = NLocalDb::CreateDefaultTablePolicy();
@@ -256,20 +256,20 @@ struct TDomainsInfo : public TThrRefBase {
         NamedCompactionPolicies[name] = policy;
     }
 
-    void AddDomain(TDomain *domain) {
+    void AddDomain(TDomain *domain) { 
         Y_VERIFY(domain->DomainUid <= MaxDomainId);
-        Domains[domain->DomainUid] = domain;
+        Domains[domain->DomainUid] = domain; 
         DomainByName[domain->Name] = domain;
         Y_VERIFY(Domains.size() == DomainByName.size());
-        for (auto group: domain->StateStorageGroups) {
-            DomainByStateStorageGroup[group] = domain;
-        }
+        for (auto group: domain->StateStorageGroups) { 
+            DomainByStateStorageGroup[group] = domain; 
+        } 
 
         for (auto hiveUid : domain->HiveUids) {
             DomainByHiveUid[hiveUid] = domain;
         }
-    }
-
+    } 
+ 
     void AddHive(ui32 hiveUid, ui64 hive) {
         HivesByHiveUid[hiveUid] = hive;
     }
@@ -282,24 +282,24 @@ struct TDomainsInfo : public TThrRefBase {
         HivesByHiveUid.clear();
     }
 
-    ui32 GetDefaultStateStorageGroup(ui32 domainUid) const {
-        auto it = Domains.find(domainUid);
+    ui32 GetDefaultStateStorageGroup(ui32 domainUid) const { 
+        auto it = Domains.find(domainUid); 
         Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid);
-        return it->second->DefaultStateStorageGroup;
+        return it->second->DefaultStateStorageGroup; 
+    } 
+ 
+    ui32 GetDefaultHiveUid(ui32 domainUid) const { 
+        auto it = Domains.find(domainUid); 
+        Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid);
+        return it->second->DefaultHiveUid; 
     }
 
-    ui32 GetDefaultHiveUid(ui32 domainUid) const {
-        auto it = Domains.find(domainUid);
-        Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid);
-        return it->second->DefaultHiveUid;
-    }
-
-    ui32 GetStateStorageGroupDomainUid(ui32 stateStorageGroup) const {
-        auto it = DomainByStateStorageGroup.find(stateStorageGroup);
+    ui32 GetStateStorageGroupDomainUid(ui32 stateStorageGroup) const { 
+        auto it = DomainByStateStorageGroup.find(stateStorageGroup); 
         Y_VERIFY(it != DomainByStateStorageGroup.end(), "stateStorageGroup = %" PRIu32, stateStorageGroup);
-        return it->second->DomainUid;
-    }
-
+        return it->second->DomainUid; 
+    } 
+ 
     ui32 GetDomainUidByTabletId(ui64 tabletId) const {
         const ui32 ssid = StateStorageGroupFromTabletID(tabletId);
         if (const auto *x = DomainByStateStorageGroup.FindPtr(ssid))
@@ -308,11 +308,11 @@ struct TDomainsInfo : public TThrRefBase {
             return BadDomainId;
     }
 
-    const TDomain& GetDomain(ui32 domainUid) const {
-        auto it = Domains.find(domainUid);
+    const TDomain& GetDomain(ui32 domainUid) const { 
+        auto it = Domains.find(domainUid); 
         Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid);
-        return *(it->second);
-    }
+        return *(it->second); 
+    } 
 
     const TDomain* GetDomainByName(TStringBuf name) const {
         auto it = DomainByName.find(name);
@@ -321,16 +321,16 @@ struct TDomainsInfo : public TThrRefBase {
         return nullptr;
     }
 
-    ui64 GetHive(ui32 hiveUid) const {
-        auto it = HivesByHiveUid.find(hiveUid);
+    ui64 GetHive(ui32 hiveUid) const { 
+        auto it = HivesByHiveUid.find(hiveUid); 
         if (it != HivesByHiveUid.end())
             return it->second;
         else
             return BadTabletId;
     }
 
-    ui32 GetHiveDomainUid(ui32 hiveUid) const {
-        auto it = DomainByHiveUid.find(hiveUid);
+    ui32 GetHiveDomainUid(ui32 hiveUid) const { 
+        auto it = DomainByHiveUid.find(hiveUid); 
         if (it != DomainByHiveUid.end())
             return it->second->DomainUid;
         else

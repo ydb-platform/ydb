@@ -6,7 +6,7 @@
 #include <util/generic/buffer.h>
 #include <util/stream/output.h>
 #include <util/string/printf.h>
-#include <util/system/unaligned_mem.h>
+#include <util/system/unaligned_mem.h> 
 #include <util/ysaveload.h>
 
 // FIXME: only for TIngressCache (put it to vdisk/common)
@@ -119,11 +119,11 @@ namespace NKikimr {
             if (e < b || size_t(e - b) != sizeof(ui32) + sizeof(ui32) + sizeof(ui32))
                 return false;
 
-            ChunkIdx = ReadUnaligned<ui32>(b);
+            ChunkIdx = ReadUnaligned<ui32>(b); 
             b += sizeof(ui32);
-            Offset = ReadUnaligned<ui32>(b);
+            Offset = ReadUnaligned<ui32>(b); 
             b += sizeof(ui32);
-            Size = ReadUnaligned<ui32>(b);
+            Size = ReadUnaligned<ui32>(b); 
             return true;
         }
 

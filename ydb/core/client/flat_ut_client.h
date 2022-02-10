@@ -17,7 +17,7 @@ public:
         : TClient(settings)
     {}
 
-    TFlatMsgBusClient(ui16 port)
+    TFlatMsgBusClient(ui16 port) 
         : TFlatMsgBusClient(Tests::TServerSettings(port))
     {}
 

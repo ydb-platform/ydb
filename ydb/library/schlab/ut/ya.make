@@ -1,16 +1,16 @@
-UNITTEST()
-
+UNITTEST() 
+ 
 OWNER(
     cthulhu
     g:kikimr
 )
-
-PEERDIR(
+ 
+PEERDIR( 
     ydb/library/schlab/schoot
-)
-
-SRCS(
-    schlab_ut.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    schlab_ut.cpp 
+) 
+ 
+END() 

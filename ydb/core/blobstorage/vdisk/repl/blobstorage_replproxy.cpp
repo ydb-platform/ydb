@@ -172,7 +172,7 @@ namespace NKikimr {
                 for (ui32 i = 0; i < numIDsRemain; ++i) {
                     const TLogoBlobID& id = Ids[SendIdx].Id;
                     // calculate worst case response data size for this kind of request
-                    responseSize += GType.GetExpectedVGetReplyProtobufSize(id);
+                    responseSize += GType.GetExpectedVGetReplyProtobufSize(id); 
                     if (responseSize > maxResponseSize && i != 0) {
                         // break only if we have sent at least one request
                         break;

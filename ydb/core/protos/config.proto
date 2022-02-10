@@ -45,7 +45,7 @@ message TActorSystemConfig {
             IO = 2;
             UNITED = 3;
         };
-
+ 
         optional EType Type = 1;
         optional uint32 Threads = 2;
         optional uint64 SpinThreshold = 3;
@@ -129,9 +129,9 @@ message TStaticNameserviceConfig {
 
         optional string Address = 2;
         optional uint32 Port = 3;
-
-        optional string Host = 4;
-        optional string InterconnectHost = 5;
+ 
+        optional string Host = 4; 
+        optional string InterconnectHost = 5; 
 
         optional NActorsInterconnect.TNodeLocation Location = 6;
 
@@ -159,7 +159,7 @@ message TDomainsConfig {
         message TRing {
             optional uint32 NToSelect = 1;
             repeated TRing Ring = 2;
-            repeated uint32 Node = 3;
+            repeated uint32 Node = 3; 
             optional bool UseSingleNodeActorId = 4;
             optional bool UseRingSpecificNodeSelection = 5;
         }
@@ -185,7 +185,7 @@ message TDomainsConfig {
         repeated uint64 Coordinator = 3;
         repeated uint64 Mediator = 4;
         repeated uint64 Proxy = 5;
-        repeated uint32 SSId = 6;
+        repeated uint32 SSId = 6; 
         repeated uint32 HiveUid = 7;
         optional uint64 PlanResolution = 8;
         optional string Name = 9;
@@ -229,31 +229,31 @@ message TDomainsConfig {
 }
 
 message TBlobStorageConfig {
-    optional NKikimrBlobStorage.TNodeWardenServiceSet ServiceSet = 1;
+    optional NKikimrBlobStorage.TNodeWardenServiceSet ServiceSet = 1; 
     optional bool EnableOverseerLsnReporting = 2 [default = false]; // deprecated
     optional string CacheFilePath = 3;
     optional bool CachePDisks = 4 [default = true];
     optional bool CacheVDisks = 5 [default = true];
 }
 
-message TBlobStorageFormatConfig {
-    message TDrive {
-        optional uint64 RackId = 1;
-        optional uint32 NodeId = 2;
-        optional string Hostname = 3;
-        optional string Type = 4;
-        optional string Path = 5;
-        optional uint64 Guid = 6;
-        optional uint64 PDiskId = 7;
+message TBlobStorageFormatConfig { 
+    message TDrive { 
+        optional uint64 RackId = 1; 
+        optional uint32 NodeId = 2; 
+        optional string Hostname = 3; 
+        optional string Type = 4; 
+        optional string Path = 5; 
+        optional uint64 Guid = 6; 
+        optional uint64 PDiskId = 7; 
         optional uint64 DataCenterId = 8;
         optional uint64 RoomId = 9;
         optional uint64 BodyId = 10;
         optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 11;
-    }
-
-    repeated TDrive Drive = 1;
-}
-
+    } 
+ 
+    repeated TDrive Drive = 1; 
+} 
+ 
 message TUAClientConfig {
     optional string Uri = 1;
     optional string SharedSecretKey = 2;
@@ -296,9 +296,9 @@ message TCompileServiceConfig {
 
 message TBootstrap {
     enum ETabletType {
-        TX_DUMMY = 0;
-
-        HIVE = 1;
+        TX_DUMMY = 0; 
+ 
+        HIVE = 1; 
 
         TX_COORDINATOR = 10;
         TX_MEDIATOR = 11;
@@ -349,7 +349,7 @@ message TBootstrap {
     repeated NKikimrSchemeOp.TResourceProfile ResourceProfiles = 8;
     optional TCompileServiceConfig CompileServiceConfig = 9; //may be need special file with resource limits?
     optional bool EnableIntrospection = 10;
-}
+} 
 
 message TInterconnectConfig {
     message TChannel {
@@ -415,25 +415,25 @@ message TInterconnectConfig {
     optional NKikimrConfigUnits.TDuration LostConnectionDuration = 28;
     optional NKikimrConfigUnits.TDuration BatchPeriodDuration = 29;
 }
-
-message TChannelProfileConfig {
-    message TProfile {
-        message TChannel {
-            optional string ErasureSpecies = 1;
-            optional uint64 PDiskCategory = 2;
+ 
+message TChannelProfileConfig { 
+    message TProfile { 
+        message TChannel { 
+            optional string ErasureSpecies = 1; 
+            optional uint64 PDiskCategory = 2; 
             optional NKikimrBlobStorage.TVDiskKind.EVDiskKind VDiskCategory = 3 [default = Default];
 
             // this option uses new BS configuration interface to obtain matching groups, and it must not be provided
             // with any of the above fields
             optional string StoragePoolKind = 5;
-        }
-
-        optional uint32 ProfileId = 1;
-        repeated TChannel Channel = 2;
-    }
-
-    repeated TProfile Profile = 1;
-}
+        } 
+ 
+        optional uint32 ProfileId = 1; 
+        repeated TChannel Channel = 2; 
+    } 
+ 
+    repeated TProfile Profile = 1; 
+} 
 
 message TMonitoringConfig {
     message TDatabaseLabels {
@@ -614,18 +614,18 @@ message TFeatureFlags {
     }
 
     optional bool EnableSeparateSolomonShardForPDisk = 1 [default = true];
-    optional bool UseForsetiSchedulerByDefaultForPDisk = 2 [default = true];
-    optional bool EnableSeparateTrimThreadForPDisk = 3 [default = true];
-    optional bool EnableSeparateSubmitThreadForPDisk = 4 [default = true];
-    optional bool EnablePerOwnerChunkLimitForPDisk = 5 [default = false];
+    optional bool UseForsetiSchedulerByDefaultForPDisk = 2 [default = true]; 
+    optional bool EnableSeparateTrimThreadForPDisk = 3 [default = true]; 
+    optional bool EnableSeparateSubmitThreadForPDisk = 4 [default = true]; 
+    optional bool EnablePerOwnerChunkLimitForPDisk = 5 [default = false]; 
     optional bool TrimEntireDeviceOnStartup = 6 [default = false];
-    optional bool EnableChunkGraceForPDisk = 7 [default = true];
+    optional bool EnableChunkGraceForPDisk = 7 [default = true]; 
     optional bool AllowConsistentOperationsForSchemeShard = 8 [default = true];
     optional bool EnableSchemeBoard = 9 [default = true]; // deprecated: always true
     optional bool AllowYdbRequestsWithoutDatabase = 10 [default = true];
     optional bool EnableExternalSubdomains = 11 [default = true];
     optional bool AllowRecursiveMkDir = 12 [default = true]; // deprecated: always true
-    optional bool AllowHugeKeyValueDeletes = 13 [default = true]; // delete when all clients limit deletes per request
+    optional bool AllowHugeKeyValueDeletes = 13 [default = true]; // delete when all clients limit deletes per request 
     optional bool SendSchemaVersionToDatashard = 14 [default = true]; // deprecated: always true
     optional bool EnableSchemeBoardCache = 15 [default = true]; // deprecated: always true
     optional bool EnableSystemViews = 16 [default = true];
@@ -1344,7 +1344,7 @@ message TAppConfig {
     optional TMessageBusConfig MessageBusConfig = 12;
     optional TTabletsConfig TabletsConfig = 13; // alternative bootstrapper configuration
     optional NKikimrBlobStorage.TAllVDiskKinds VDiskConfig = 14;
-    optional NKikimrBlobStorage.TDriveModelList DriveModelConfig = 31;
+    optional NKikimrBlobStorage.TDriveModelList DriveModelConfig = 31; 
     optional NKikimrBlobStorage.TIncrHugeConfig IncrHugeConfig = 18;
     optional string UDFsDir = 15;
     repeated string UDFsPaths = 16;
@@ -1363,7 +1363,7 @@ message TAppConfig {
     optional NKikimrTenantSlotBroker.TConfig TenantSlotBrokerConfig = 32;
     optional TConfigsDispatcherConfig ConfigsDispatcherConfig = 33;
     optional TTableProfilesConfig TableProfilesConfig = 34;
-    optional NKikimrProto.TKeyConfig KeyConfig = 35;
+    optional NKikimrProto.TKeyConfig KeyConfig = 35; 
     optional NKikimrProto.TKeyConfig PDiskKeyConfig = 51;
     optional NKikimrNodeBroker.TConfig NodeBrokerConfig = 36;
     optional TTableServiceConfig TableServiceConfig = 37;

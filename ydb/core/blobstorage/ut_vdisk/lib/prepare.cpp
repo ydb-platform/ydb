@@ -80,7 +80,7 @@ void TOnePDisk::FormatDisk(bool force) {
                     chunkKey,       // chunkKey
                     logKey,         // logKey
                     sysLogKey,      // sysLogKey
-                    NPDisk::YdbDefaultPDiskSequence,          // mainKey
+                    NPDisk::YdbDefaultPDiskSequence,          // mainKey 
                     "",             // textMessage
                     false           // isErasureEncode
                     );
@@ -154,10 +154,10 @@ void TAllPDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
         TPDiskCategory::EDeviceType deviceType = TPDiskCategory::DeviceTypeFromStr(Cfg.DeviceType);
         pDiskConfig.Reset(new TPDiskConfig(inst.Filename, inst.PDiskGuid, inst.PDiskID,
                                            TPDiskCategory(deviceType, 0).GetRaw()));
-        pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
-        pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
-        TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
-                    NPDisk::YdbDefaultPDiskSequence, counters), TMailboxType::Revolving, 0);
+        pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch; 
+        pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch; 
+        TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(), 
+                    NPDisk::YdbDefaultPDiskSequence, counters), TMailboxType::Revolving, 0); 
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(inst.PDiskActorID, pDiskSetup));
     }
 }
@@ -179,8 +179,8 @@ void TAllPDisks::EraseDisk(ui32 diskNum, ui64 newGuid) {
 //////////////////////////////////////////////////////////////////////////////////////
 // TAllVDisks
 //////////////////////////////////////////////////////////////////////////////////////
-TAllVDisks::TAllVDisks(TAllPDisks *pdisks, ui32 domainsNum, ui32 disksInDomain, IVDiskSetup *vdiskSetup, bool onePDisk,
-        bool runRepl, ui64 *inOutInitOwnerRound)
+TAllVDisks::TAllVDisks(TAllPDisks *pdisks, ui32 domainsNum, ui32 disksInDomain, IVDiskSetup *vdiskSetup, bool onePDisk, 
+        bool runRepl, ui64 *inOutInitOwnerRound) 
     : DomainsNum(domainsNum)
     , DisksInDomain(disksInDomain)
 {
@@ -193,9 +193,9 @@ TAllVDisks::TAllVDisks(TAllPDisks *pdisks, ui32 domainsNum, ui32 disksInDomain, 
             TAllVDisks::TVDiskInstance &vdisk = VDisks.at(id);
             ui32 pDiskID = onePDisk ? 1 : id + 1;
             ui32 vdiskSlotId = onePDisk ? id : 0;
-            vdisk.Initialized = vdiskSetup->SetUp(vdisk, pdisks, id, d, j, pDiskID, vdiskSlotId, runRepl,
-                    *inOutInitOwnerRound);
-            (*inOutInitOwnerRound)++;
+            vdisk.Initialized = vdiskSetup->SetUp(vdisk, pdisks, id, d, j, pDiskID, vdiskSlotId, runRepl, 
+                    *inOutInitOwnerRound); 
+            (*inOutInitOwnerRound)++; 
         }
     }
 }
@@ -236,7 +236,7 @@ TDefaultVDiskSetup::TDefaultVDiskSetup() {
 }
 
 bool TDefaultVDiskSetup::SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pdisks, ui32 id, ui32 d, ui32 j,
-                               ui32 pDiskID, ui32 slotId, bool runRepl, ui64 initOwnerRound) {
+                               ui32 pDiskID, ui32 slotId, bool runRepl, ui64 initOwnerRound) { 
     TOnePDisk &pdisk = pdisks->Get(pDiskID);
     vdisk.ActorID = MakeBlobStorageVDiskID(1, id + 1, 0);
     vdisk.VDiskID = TVDiskID(0, 1, 0, d, j);
@@ -298,7 +298,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
     setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup));
 
-    ui64 initOwnerRound = 1;
+    ui64 initOwnerRound = 1; 
     // setup pdisks
     if (newPDisks) {
         PDisks.reset(new TAllPDisks(PCfg));
@@ -309,9 +309,9 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     GroupInfo = new TBlobStorageGroupInfo(Erasure, DisksInDomain, DomainsNum);
 
     // create vdisks
-    initOwnerRound += 100;
+    initOwnerRound += 100; 
     VDisks.reset(new TAllVDisks(PDisks.get(), DomainsNum, DisksInDomain, vdiskSetup,
-                                (PCfg.PDisksNum == 1), runRepl, &initOwnerRound));
+                                (PCfg.PDisksNum == 1), runRepl, &initOwnerRound)); 
     VDisks->ActorSetupCmd(setup1.Get(), GroupInfo.Get(), Counters);
 
     ///////////////////////// LOGGER ///////////////////////////////////////////////

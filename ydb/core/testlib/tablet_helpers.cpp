@@ -28,7 +28,7 @@
 #include <ydb/core/util/console.h>
 
 #include <google/protobuf/text_format.h>
-
+ 
 #include <util/folder/dirut.h>
 #include <util/random/mersenne.h>
 #include <library/cpp/regex/pcre/regexp.h>
@@ -599,7 +599,7 @@ namespace NKikimr {
     void RebootTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex, bool sysTablet) {
         ForwardToTablet(runtime, tabletId, sender, new TEvents::TEvPoisonPill(), nodeIndex, sysTablet);
         TDispatchOptions rebootOptions;
-        rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
+        rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1)); 
         runtime.DispatchEvents(rebootOptions);
 
         InvalidateTabletResolverCache(runtime, tabletId, nodeIndex);
@@ -1070,10 +1070,10 @@ namespace NKikimr {
     }
 
     void WaitScheduledEvents(TTestActorRuntime &runtime, TDuration delay, const TActorId &sender, ui32 nodeIndex) {
-        runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), delay, nodeIndex);
-        TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
-    }
+        runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), delay, nodeIndex); 
+        TAutoPtr<IEventHandle> handle; 
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle); 
+    } 
 
     class TFakeHive : public TActor<TFakeHive>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
@@ -1162,7 +1162,7 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, x, DataGroupErasure);
                 } else if (type == defaultTabletTypes.DataShard) {
                     bootstrapperActorId = Boot(ctx, type, &CreateDataShard, DataGroupErasure);
-                } else if (type == defaultTabletTypes.KeyValue) {
+                } else if (type == defaultTabletTypes.KeyValue) { 
                     bootstrapperActorId = Boot(ctx, type, &CreateKeyValueFlat, DataGroupErasure);
                 } else if (type == defaultTabletTypes.ColumnShard) {
                     bootstrapperActorId = Boot(ctx, type, &CreateColumnShard, DataGroupErasure);

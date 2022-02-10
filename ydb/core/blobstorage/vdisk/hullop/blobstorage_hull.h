@@ -151,9 +151,9 @@ namespace NKikimr {
                 ui64 lsn,
                 const TReplySender &replySender);
 
-        bool GetBlocked(ui64 tabletID, ui32 *outGen) {
+        bool GetBlocked(ui64 tabletID, ui32 *outGen) { 
             return BlocksCache.Find(tabletID, outGen);
-        }
+        } 
 
         ////////////////////////////////////////////////////////////////////////
         // GC

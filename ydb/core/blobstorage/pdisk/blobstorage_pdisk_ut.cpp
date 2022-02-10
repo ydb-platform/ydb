@@ -6,8 +6,8 @@
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 
-namespace NKikimr {
-
+namespace NKikimr { 
+ 
 Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(TestAbstractPDiskInterface) {
         TString path = "/tmp/asdqwe";
@@ -49,7 +49,7 @@ private:
 
 public:
     TActorId Sender;
-    NPDisk::TKey MainKey = NPDisk::YdbDefaultPDiskSequence;
+    NPDisk::TKey MainKey = NPDisk::YdbDefaultPDiskSequence; 
     TTestContext TestCtx{false, /*use sector map*/ true};
 
     TIntrusivePtr<TPDiskConfig> DefaultPDiskConfig(bool isBad) {
@@ -244,7 +244,7 @@ public:
                 new NPDisk::TEvYardControl(NPDisk::TEvYardControl::GetPDiskPointer, nullptr),
                 NKikimrProto::OK);
         auto *pDisk = reinterpret_cast<NPDisk::TPDisk*>(evControlRes->Cookie);
-        pDisk->PDiskThread.StopSync();
+        pDisk->PDiskThread.StopSync(); 
 
         {
             NPDisk::TCommitRecord commitRecord;
@@ -954,7 +954,7 @@ std::atomic<ui64> TVDiskMock::OwnerRound = 2;
         for (auto color : {
                     TColor::GREEN,
                     TColor::CYAN,
-                    TColor::LIGHT_YELLOW,
+                    TColor::LIGHT_YELLOW, 
                     TColor::YELLOW,
                     TColor::LIGHT_ORANGE,
                     TColor::ORANGE,
@@ -1022,4 +1022,4 @@ std::atomic<ui64> TVDiskMock::OwnerRound = 2;
                 NKikimrProto::CORRUPTED);
     }
 }
-} // namespace NKikimr
+} // namespace NKikimr 

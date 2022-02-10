@@ -99,17 +99,17 @@ void SetupServices(TTestActorRuntime &runtime,
 
         if (nodeIndex == 0) {
             TString pDiskPath;
-            TIntrusivePtr<NPDisk::TSectorMap> sectorMap;
-            ui64 pDiskSize = 32ull << 30ull;
+            TIntrusivePtr<NPDisk::TSectorMap> sectorMap; 
+            ui64 pDiskSize = 32ull << 30ull; 
             ui64 pDiskChunkSize = 32u << 20u;
             if (true /*in memory*/) {
                 pDiskPath = "/TString/pdisk0.dat";
-                auto& existing = nodeWardenConfig->SectorMaps[pDiskPath];
-                if (existing && existing->DeviceSize == pDiskSize) {
-                    sectorMap = existing;
+                auto& existing = nodeWardenConfig->SectorMaps[pDiskPath]; 
+                if (existing && existing->DeviceSize == pDiskSize) { 
+                    sectorMap = existing; 
                 } else {
-                    sectorMap.Reset(new NPDisk::TSectorMap(pDiskSize));
-                    nodeWardenConfig->SectorMaps[pDiskPath] = sectorMap;
+                    sectorMap.Reset(new NPDisk::TSectorMap(pDiskSize)); 
+                    nodeWardenConfig->SectorMaps[pDiskPath] = sectorMap; 
                 }
             } else {
                 static TTempDir tempDir;
@@ -124,14 +124,14 @@ void SetupServices(TTestActorRuntime &runtime,
                         4 << 10,
                         pDiskChunkSize,
                         pDiskGuid,
-                        0x1234567890 + iteration,
-                        0x4567890123 + iteration,
-                        0x7890123456 + iteration,
-                        NPDisk::YdbDefaultPDiskSequence,
+                        0x1234567890 + iteration, 
+                        0x4567890123 + iteration, 
+                        0x7890123456 + iteration, 
+                        NPDisk::YdbDefaultPDiskSequence, 
                         TString(""),
                         false,
-                        false,
-                        sectorMap);
+                        false, 
+                        sectorMap); 
         }
 
         NodeWardenConfigs[nodeIndex] = nodeWardenConfig;

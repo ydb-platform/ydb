@@ -107,8 +107,8 @@ struct TEvTabletBase {
     struct TEvWriteLogResult : public TEventLocal<TEvWriteLogResult, EvWriteLogResult> {
         const NKikimrProto::EReplyStatus Status;
         const TLogoBlobID EntryId;
-        TVector<ui32> YellowMoveChannels;
-        TVector<ui32> YellowStopChannels;
+        TVector<ui32> YellowMoveChannels; 
+        TVector<ui32> YellowStopChannels; 
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
         const TString ErrorReason;
@@ -120,15 +120,15 @@ struct TEvTabletBase {
         TEvWriteLogResult(
                 NKikimrProto::EReplyStatus status,
                 const TLogoBlobID &entryId,
-                TVector<ui32>&& yellowMoveChannels,
-                TVector<ui32>&& yellowStopChannels,
+                TVector<ui32>&& yellowMoveChannels, 
+                TVector<ui32>&& yellowStopChannels, 
                 NMetrics::TTabletThroughputRawValue&& written,
                 NMetrics::TTabletIopsRawValue&& writtenOps,
                 const TString &reason = TString())
             : Status(status)
             , EntryId(entryId)
-            , YellowMoveChannels(std::move(yellowMoveChannels))
-            , YellowStopChannels(std::move(yellowStopChannels))
+            , YellowMoveChannels(std::move(yellowMoveChannels)) 
+            , YellowStopChannels(std::move(yellowStopChannels)) 
             , GroupWrittenBytes(std::move(written))
             , GroupWrittenOps(std::move(writtenOps))
             , ErrorReason(reason)

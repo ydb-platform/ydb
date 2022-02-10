@@ -181,7 +181,7 @@ namespace NKikimr {
         ui64 SkeletonFrontExtGetAsync_TotalCost;
         ui64 SkeletonFrontExtGetFast_TotalCost;
         ui64 SkeletonFrontExtGetDiscover_TotalCost;
-        ui64 SkeletonFrontExtGetLow_TotalCost;
+        ui64 SkeletonFrontExtGetLow_TotalCost; 
         TDuration SkeletonFrontWakeupPeriod;
         TDuration SkeletonFrontRequestTimeout;
         bool SkeletonFrontQueueBackpressureCheckMsgId;

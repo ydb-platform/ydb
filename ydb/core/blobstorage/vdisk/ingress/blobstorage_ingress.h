@@ -63,7 +63,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // FIXME: make sure, we never copy local vector, even for full recovery
     // FIXME: we have to use different Ingress structures for different storage types
-#pragma pack(push, 4)
+#pragma pack(push, 4) 
     class TIngress {
     public:
         typedef std::pair<NMatrix::TVectorType, NMatrix::TVectorType> TPairOfVectors;
@@ -158,7 +158,7 @@ namespace NKikimr {
                                     const TLogoBlobID &id,      // LogoBlobID
                                     const bool setUpLocalBits); // Setup data also
     };
-#pragma pack(pop)
+#pragma pack(pop) 
 
 
     ////////////////////////////////////////////////////////////////////////////

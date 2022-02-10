@@ -35,8 +35,8 @@ class TDiscoverVDiskWorker {
     TLogoBlobID FirstBlob;
     const TLogoBlobID LastBlob;
 
-    const ui32 ForceBlockedGeneration;
-
+    const ui32 ForceBlockedGeneration; 
+ 
     struct TBlobQueueItem {
         TLogoBlobID                Id;      // identifier of this blob
         TIngress                   Ingress; // returned ingress
@@ -57,11 +57,11 @@ class TDiscoverVDiskWorker {
     TDeque<TBlobQueueItem> BlobQueue;
 
 public:
-    TDiscoverVDiskWorker(const TVDiskID& vdiskId, ui64 tabletId, ui32 minGeneration, ui32 forceBlockedGeneration)
+    TDiscoverVDiskWorker(const TVDiskID& vdiskId, ui64 tabletId, ui32 minGeneration, ui32 forceBlockedGeneration) 
         : VDiskId(vdiskId)
         , FirstBlob(tabletId, Max<ui32>(), Max<ui32>(), 0, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie)
         , LastBlob(tabletId, minGeneration, 0, 0, 0, 0)
-        , ForceBlockedGeneration(forceBlockedGeneration)
+        , ForceBlockedGeneration(forceBlockedGeneration) 
     {}
 
     // this function creates TEvVGet query to VDisk to be sent or returns nullptr if there is no query to send right now
@@ -76,11 +76,11 @@ public:
                 {},                                     // requestCookie
                 FirstBlob,                              // fromId
                 LastBlob,                               // toId
-                BlobsAtOnce,                            // maxResults
-                nullptr,                                // cookie
-                ForceBlockedGeneration);                // forceBlockedGeneration
+                BlobsAtOnce,                            // maxResults 
+                nullptr,                                // cookie 
+                ForceBlockedGeneration);                // forceBlockedGeneration 
 
-
+ 
             // disable barrier checking
             query->Record.SetSuppressBarrierCheck(true);
 
@@ -95,12 +95,12 @@ public:
     // processor for received TEvVGetResult message
     bool Apply(TEvBlobStorage::TEvVGetResult *ev) {
         // the disk worker can't be ready while request is in processing
-        Y_VERIFY(!IsReady(), "Unexpected Finished# %s BlobQueue# %s Erroneous# %s MoreBlobs# %s GetQueryInFlight# %s",
-                Finished ? "true" : "false",
-                BlobQueue ? "true" : "false",
-                Erroneous ? "true" : "false",
-                MoreBlobs ? "true" : "false",
-                GetQueryInFlight ? "true" : "false");
+        Y_VERIFY(!IsReady(), "Unexpected Finished# %s BlobQueue# %s Erroneous# %s MoreBlobs# %s GetQueryInFlight# %s", 
+                Finished ? "true" : "false", 
+                BlobQueue ? "true" : "false", 
+                Erroneous ? "true" : "false", 
+                MoreBlobs ? "true" : "false", 
+                GetQueryInFlight ? "true" : "false"); 
 
         // ensure we have in flight query
         Y_VERIFY(GetQueryInFlight);
@@ -117,14 +117,14 @@ public:
         switch (NKikimrProto::EReplyStatus status = record.GetStatus()) {
             case NKikimrProto::OK:
                 // request has been successfully processed and we should put items into queue
-                if (record.GetIsRangeOverflow() && !record.ResultSize()) {
+                if (record.GetIsRangeOverflow() && !record.ResultSize()) { 
                     LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PROXY_DISCOVER,
-                            "Don't know how to process RangeOverflow with ResultSize# 0. Marker# DSPDM10");
-                    Finished = true;
-                    Erroneous = true;
-                } else {
-                    ApplySuccessfulResult(record);
-                }
+                            "Don't know how to process RangeOverflow with ResultSize# 0. Marker# DSPDM10"); 
+                    Finished = true; 
+                    Erroneous = true; 
+                } else { 
+                    ApplySuccessfulResult(record); 
+                } 
                 break;
 
             case NKikimrProto::ERROR:
@@ -202,7 +202,7 @@ private:
             Y_VERIFY(newItem.Id.PartId() == 0);
             BlobQueue.emplace_back(newItem);
         }
-        if (record.ResultSize() < BlobsAtOnce && !record.GetIsRangeOverflow()) {
+        if (record.ResultSize() < BlobsAtOnce && !record.GetIsRangeOverflow()) { 
             MoreBlobs = false;
         }
 
@@ -260,14 +260,14 @@ private:
     TQueue<TDiscoveryState> StateQ;
 
 public:
-    TDiscoverWorker(TIntrusivePtr<TBlobStorageGroupInfo> info, ui64 tabletId, ui32 minGeneration,
-            ui32 forceBlockedGeneration)
+    TDiscoverWorker(TIntrusivePtr<TBlobStorageGroupInfo> info, ui64 tabletId, ui32 minGeneration, 
+            ui32 forceBlockedGeneration) 
         : Info(std::move(info))
     {
         const ui32 numDisks = Info->GetTotalVDisksNum();
         VDiskWorkers.reserve(numDisks);
         for (ui32 i = 0; i < numDisks; ++i) {
-            VDiskWorkers.emplace_back(Info->GetVDiskId(i), tabletId, minGeneration, forceBlockedGeneration);
+            VDiskWorkers.emplace_back(Info->GetVDiskId(i), tabletId, minGeneration, forceBlockedGeneration); 
         }
     }
 
@@ -284,8 +284,8 @@ public:
         const auto& record = ev->Record;
         Y_VERIFY(record.HasVDiskID());
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-        const TVDiskIdShort shortId(vdiskId);
-        ui32 index = Info->GetOrderNumber(shortId);
+        const TVDiskIdShort shortId(vdiskId); 
+        ui32 index = Info->GetOrderNumber(shortId); 
         Y_VERIFY(index < VDiskWorkers.size());
 
         // apply event
@@ -362,8 +362,8 @@ private:
             TStackVec<NKikimrProto::EReplyStatus, 16> perDiskStatus;
             for (const TVDiskID& vdisk : vdisks) {
                 // get order number for this vdisk and find matching worker
-                const TVDiskIdShort shortId(vdisk);
-                ui32 orderNumber = Info->GetOrderNumber(shortId);
+                const TVDiskIdShort shortId(vdisk); 
+                ui32 orderNumber = Info->GetOrderNumber(shortId); 
                 Y_VERIFY(orderNumber < VDiskWorkers.size());
                 TDiscoverVDiskWorker& worker = VDiskWorkers[orderNumber];
 
@@ -426,7 +426,7 @@ class TBlobStorageGroupMirror3dcDiscoverRequest : public TBlobStorageGroupReques
     const TInstant Deadline;
     const bool ReadBody;
     const bool DiscoverBlockedGeneration;
-    const ui32 ForceBlockedGeneration;
+    const ui32 ForceBlockedGeneration; 
 
     std::unique_ptr<TDiscoverWorker> Worker;
     TVector<std::unique_ptr<TEvBlobStorage::TEvVGet>> Msgs;
@@ -457,18 +457,18 @@ public:
     TBlobStorageGroupMirror3dcDiscoverRequest(TIntrusivePtr<TBlobStorageGroupInfo> info,
             TIntrusivePtr<TGroupQueues> state, const TActorId& source,
             TIntrusivePtr<TBlobStorageGroupProxyMon> mon, TEvBlobStorage::TEvDiscover *ev,
-            ui64 cookie, NWilson::TTraceId traceId, TInstant now,
-            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
+            ui64 cookie, NWilson::TTraceId traceId, TInstant now, 
+            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) 
         : TBlobStorageGroupRequestActor(std::move(info), std::move(state), std::move(mon), source, cookie,
                 std::move(traceId), NKikimrServices::BS_PROXY_DISCOVER, false, {}, now, storagePoolCounters,
                 ev->RestartCounter)
         , TabletId(ev->TabletId)
         , MinGeneration(ev->MinGeneration)
-        , StartTime(now)
+        , StartTime(now) 
         , Deadline(ev->Deadline)
         , ReadBody(ev->ReadBody)
         , DiscoverBlockedGeneration(ev->DiscoverBlockedGeneration)
-        , ForceBlockedGeneration(ev->ForceBlockedGeneration)
+        , ForceBlockedGeneration(ev->ForceBlockedGeneration) 
         , GetBlockTracker(Info.Get())
     {}
 
@@ -488,7 +488,7 @@ public:
             << " MinGeneration# " << MinGeneration
             << " Deadline# " << Deadline
             << " ReadBody# " << (ReadBody ? "true" : "false")
-            << " DiscoverBlockedGeneration# " << (DiscoverBlockedGeneration ? "true" : "false")
+            << " DiscoverBlockedGeneration# " << (DiscoverBlockedGeneration ? "true" : "false") 
             << " ForceBlockedGeneration# " << ForceBlockedGeneration
             << " RestartCounter# " << RestartCounter);
 
@@ -565,7 +565,7 @@ public:
                         NKikimrBlobStorage::Discover, true, !ReadBody);
                 query->IsInternal = true;
 
-                A_LOG_DEBUG_S("DSPDM17", "sending TEvGet# " << query->ToString());
+                A_LOG_DEBUG_S("DSPDM17", "sending TEvGet# " << query->ToString()); 
 
                 SendToBSProxy(SelfId(), Info->GroupID, query.release());
                 ++RequestsInFlight;
@@ -618,8 +618,8 @@ public:
             case NKikimrProto::NODATA:
                 if (state.MustExist) {
                     // we have just lost the blob
-                    R_LOG_ALERT_S("DSPDM09", "!!! LOST THE BLOB !!! BlobId# " << ResultBlobId.ToString()
-                            << " Group# " << Info->GroupID);
+                    R_LOG_ALERT_S("DSPDM09", "!!! LOST THE BLOB !!! BlobId# " << ResultBlobId.ToString() 
+                            << " Group# " << Info->GroupID); 
                     return ReplyAndDie(NKikimrProto::ERROR);
                 } else if (Worker->IsReady()) {
                     // try to process another probe in queue (if available) as this blob is not restorable, but this was
@@ -648,7 +648,7 @@ public:
                         ReadBody ? Buffer : TString(), BlockedGeneration));
             } else {
                 response.reset(new TEvBlobStorage::TEvDiscoverResult(NKikimrProto::NODATA, MinGeneration,
-                            BlockedGeneration));
+                            BlockedGeneration)); 
             }
 
             R_LOG_DEBUG_S("DSPDM03", "Response# " << response->ToString());
@@ -671,8 +671,8 @@ public:
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
                 TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", false);
         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> response(new TEvBlobStorage::TEvDiscoverResult(
-                    status, MinGeneration, 0U));
-        response->ErrorReason = ErrorReason;
+                    status, MinGeneration, 0U)); 
+        response->ErrorReason = ErrorReason; 
         SendResponseAndDie(std::move(response));
         Responded = true;
     }
@@ -735,10 +735,10 @@ public:
 IActor* CreateBlobStorageGroupMirror3dcDiscoverRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
         const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvDiscover *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now,
-        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupMirror3dcDiscoverRequest(info, state, source, mon, ev, cookie, std::move(traceId), now,
-            storagePoolCounters);
+        ui64 cookie, NWilson::TTraceId traceId, TInstant now, 
+        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) { 
+    return new TBlobStorageGroupMirror3dcDiscoverRequest(info, state, source, mon, ev, cookie, std::move(traceId), now, 
+            storagePoolCounters); 
 }
 
 }//NKikimr

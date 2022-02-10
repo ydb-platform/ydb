@@ -91,8 +91,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             LOG_DEBUG(ctx, NKikimrServices::TX_MEDIATOR_PRIVATE, "Send from %" PRIu64 " to tablet %" PRIu64 ", step# %"
                 PRIu64 ", txid# %" PRIu64 ", marker M5" PRIu64, Mediator, tablet, tabletStep->StepRef->Step, tx.TxId);
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " SEND to# " << tablet << " " << evx->ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " Mediator# " << Mediator << " SEND to# " << tablet << " " << evx->ToString()); 
         Pipes->Send(ctx, tablet, evx);
     }
 
@@ -126,8 +126,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             // todo: we must throttle delivery
             const ui32 sendFlags = IEventHandle::FlagTrackDelivery;
             for (const TActorId &x : TimecastWatches) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-                    << " Mediator# " << Mediator << " SEND to# " << x.ToString() << " " << evx.ToString());
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
+                    << " Mediator# " << Mediator << " SEND to# " << x.ToString() << " " << evx.ToString()); 
                 ctx.ExecutorThread.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, x, ctx.SelfID, data, 0));
             }
         }
@@ -138,9 +138,9 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         const TStepId step = msg->Step;
         const TTabletId tablet = msg->TabletId;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
             << " Mediator# " << Mediator << " HANDLE " << msg->ToString() << " marker# M4");
-
+ 
         TTabletEntry &tabletEntry = PerTabletPlanQueue[tablet];
         if (!ActiveStep) {
             ActiveStep = new TStepEntry(step);
@@ -171,8 +171,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         TEvTxMediator::TEvOoOTabletStep *msg = ev->Get();
         const TStepId step = msg->Step;
         const TTabletId tablet = msg->TabletId;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " Mediator# " << Mediator << " HANDLE " << msg->ToString()); 
 
         TTabletEntry &tabletEntry = PerTabletPlanQueue[tablet];
         TTabletEntry::TStep *headStep = tabletEntry.Queue->Head();
@@ -186,8 +186,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         const TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         const TTabletId tablet = msg->TabletId;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " Mediator# " << Mediator << " HANDLE " << msg->ToString()); 
 
         TTabletEntry &tabletEntry = PerTabletPlanQueue[tablet];
         Y_VERIFY(tabletEntry.State == TTabletEntry::StateConnect);
@@ -222,8 +222,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         const TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
         const TTabletId tablet = msg->TabletId;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " Mediator# " << Mediator << " HANDLE " << msg->ToString()); 
 
         Pipes->OnDisconnect(ev);
 
@@ -242,8 +242,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     void Handle(TEvTxMediator::TEvStepPlanComplete::TPtr &ev, const TActorContext &ctx) {
         const TEvTxMediator::TEvStepPlanComplete *msg = ev->Get();
         const TStepId step = msg->Step;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " Mediator# " << Mediator << " HANDLE " << msg->ToString()); 
 
         if (ActiveStep)
             ActiveStep = nullptr;
@@ -258,8 +258,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         const NKikimrTx::TEvPlanStepAccepted &record = ev->Get()->Record;
         const TTabletId tablet = record.GetTabletId();
         const TStepId step = record.GetStep();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << ev->Get()->ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " Mediator# " << Mediator << " HANDLE " << ev->Get()->ToString()); 
 
         TTabletEntry *tabletEntry = PerTabletPlanQueue.FindPtr(tablet);
         if (!tabletEntry)
@@ -287,15 +287,15 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     }
 
     void Handle(TEvTxMediator::TEvWatchBucket::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << ev->Get()->ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " Mediator# " << Mediator << " HANDLE " << ev->Get()->ToString()); 
         const TActorId &source = ev->Get()->Source;
         TimecastWatches.insert(source);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE TEvUndelivered");
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
+            << " Mediator# " << Mediator << " HANDLE TEvUndelivered"); 
         // for now every non-delivery is reason to drop watch
         TimecastWatches.erase(ev->Sender);
     }
@@ -309,11 +309,11 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             ack->Record.AddTxId(tx.TxId);
         }
 
-        for (const auto &x : acks) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-                << " Mediator# " << Mediator << " SEND to# " << x.first.ToString() << " " << x.second->ToString());
+        for (const auto &x : acks) { 
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
+                << " Mediator# " << Mediator << " SEND to# " << x.first.ToString() << " " << x.second->ToString()); 
             ctx.Send(x.first, x.second.Release());
-        }
+        } 
     }
 
     void Die(const TActorContext &ctx) override {
@@ -351,9 +351,9 @@ public:
         , AcceptedStep(0)
         , CommitedStep(0)
         , ActiveStep(nullptr)
-    {
+    { 
        Y_UNUSED(HashRange);
-    }
+    } 
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {

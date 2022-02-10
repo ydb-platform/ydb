@@ -29,7 +29,7 @@ struct TKikimrEvents : TEvents {
         ES_TX_PROXY, // generic proxy commands 4106
         ES_TX_COORDINATOR,
         ES_TX_MEDIATOR,
-        ES_TX_PROCESSING, // 4109
+        ES_TX_PROCESSING, // 4109 
         ES_DEPRECATED_4110,
         ES_DEPRECATED_4111,
         ES_DEPRECATED_4112,
@@ -60,7 +60,7 @@ struct TKikimrEvents : TEvents {
         ES_FLAT_TX_SCHEMESHARD, // 4137
         ES_PQ,
         ES_YQL_KIKIMR_PROXY,
-        ES_PQ_META_CACHE,
+        ES_PQ_META_CACHE, 
         ES_DEPRECATED_4141,
         ES_PQ_L2_CACHE, //4142
         ES_TOKEN_BUILDER,

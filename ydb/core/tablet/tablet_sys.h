@@ -90,8 +90,8 @@ class TTablet : public TActor<TTablet> {
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
 
-        TVector<ui32> YellowMoveChannels;
-        TVector<ui32> YellowStopChannels;
+        TVector<ui32> YellowMoveChannels; 
+        TVector<ui32> YellowStopChannels; 
 
         size_t ByteSize;
 

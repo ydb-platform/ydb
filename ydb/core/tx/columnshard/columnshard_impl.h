@@ -108,17 +108,17 @@ class TColumnShard
     void BecomeBroken(const TActorContext& ctx);
     void SwitchToWork(const TActorContext& ctx);
 
-    bool IsAnyChannelYellowStop() const {
-        return Executor()->GetStats().IsAnyChannelYellowStop;
+    bool IsAnyChannelYellowStop() const { 
+        return Executor()->GetStats().IsAnyChannelYellowStop; 
     }
 
-    bool IsAnyChannelYellowMove() const {
-        return Executor()->GetStats().IsAnyChannelYellowMove;
-    }
-
-    void OnYellowChannels(TVector<ui32>&& yellowMove, TVector<ui32>&& yellowStop) {
-        if (yellowMove.size() || yellowStop.size()) {
-            Executor()->OnYellowChannels(std::move(yellowMove), std::move(yellowStop));
+    bool IsAnyChannelYellowMove() const { 
+        return Executor()->GetStats().IsAnyChannelYellowMove; 
+    } 
+ 
+    void OnYellowChannels(TVector<ui32>&& yellowMove, TVector<ui32>&& yellowStop) { 
+        if (yellowMove.size() || yellowStop.size()) { 
+            Executor()->OnYellowChannels(std::move(yellowMove), std::move(yellowStop)); 
         }
     }
 

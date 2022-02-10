@@ -41,7 +41,7 @@ namespace NKikimr {
         HullCompFreeSpaceThreshold = 2.0;
         FreshCompMaxInFlightWrites = 10;
         HullCompMaxInFlightWrites = 10;
-        HullCompMaxInFlightReads = 20;
+        HullCompMaxInFlightReads = 20; 
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
 
@@ -94,7 +94,7 @@ namespace NKikimr {
         SkeletonFrontExtGetAsync_TotalCost = 300000000;             // 300ms
         SkeletonFrontExtGetFast_TotalCost = 300000000;              // 300ms
         SkeletonFrontExtGetDiscover_TotalCost = 300000000;          // 300ms
-        SkeletonFrontExtGetLow_TotalCost = 300000000;              // 300ms
+        SkeletonFrontExtGetLow_TotalCost = 300000000;              // 300ms 
 
         SkeletonFrontWakeupPeriod = TDuration::Seconds(1);
         SkeletonFrontRequestTimeout = TDuration::Seconds(10);

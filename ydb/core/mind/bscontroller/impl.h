@@ -60,7 +60,7 @@ public:
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
     class TTxConfigCmd;
-    class TTxProposeGroupKey;
+    class TTxProposeGroupKey; 
     class TTxRegisterNode;
     class TTxGetGroup;
     class TTxRequestControllerInfo;
@@ -460,11 +460,11 @@ public:
         Table::ErasureSpecies::Type ErasureSpecies = Schema::Group::ErasureSpecies::Type();
         Table::DesiredPDiskCategory::Type DesiredPDiskCategory = 0;
         Table::DesiredVDiskCategory::Type DesiredVDiskCategory = NKikimrBlobStorage::TVDiskKind::Default;
-        TMaybe<Table::EncryptionMode::Type> EncryptionMode; // null on old versions
-        TMaybe<Table::LifeCyclePhase::Type> LifeCyclePhase; // null on old versions
+        TMaybe<Table::EncryptionMode::Type> EncryptionMode; // null on old versions 
+        TMaybe<Table::LifeCyclePhase::Type> LifeCyclePhase; // null on old versions 
         TMaybe<Table::MainKeyId::Type> MainKeyId; // null on old versions
-        TMaybe<Table::EncryptedGroupKey::Type> EncryptedGroupKey; // null on old versions
-        TMaybe<Table::GroupKeyNonce::Type> GroupKeyNonce; // null on old versions
+        TMaybe<Table::EncryptedGroupKey::Type> EncryptedGroupKey; // null on old versions 
+        TMaybe<Table::GroupKeyNonce::Type> GroupKeyNonce; // null on old versions 
         TMaybe<Table::MainKeyVersion::Type> MainKeyVersion; // null on old verstions
         bool PersistedDown = false; // the value stored in the database
         bool SeenOperational = false;
@@ -509,12 +509,12 @@ public:
                     Table::Owner,
                     Table::ErasureSpecies,
                     Table::DesiredPDiskCategory,
-                    Table::DesiredVDiskCategory,
-                    Table::EncryptionMode,
-                    Table::LifeCyclePhase,
+                    Table::DesiredVDiskCategory, 
+                    Table::EncryptionMode, 
+                    Table::LifeCyclePhase, 
                     Table::MainKeyId,
-                    Table::EncryptedGroupKey,
-                    Table::GroupKeyNonce,
+                    Table::EncryptedGroupKey, 
+                    Table::GroupKeyNonce, 
                     Table::MainKeyVersion,
                     Table::SeenOperational
                 > adapter(
@@ -522,12 +522,12 @@ public:
                     &TGroupInfo::Owner,
                     &TGroupInfo::ErasureSpecies,
                     &TGroupInfo::DesiredPDiskCategory,
-                    &TGroupInfo::DesiredVDiskCategory,
-                    &TGroupInfo::EncryptionMode,
-                    &TGroupInfo::LifeCyclePhase,
+                    &TGroupInfo::DesiredVDiskCategory, 
+                    &TGroupInfo::EncryptionMode, 
+                    &TGroupInfo::LifeCyclePhase, 
                     &TGroupInfo::MainKeyId,
-                    &TGroupInfo::EncryptedGroupKey,
-                    &TGroupInfo::GroupKeyNonce,
+                    &TGroupInfo::EncryptedGroupKey, 
+                    &TGroupInfo::GroupKeyNonce, 
                     &TGroupInfo::MainKeyVersion,
                     &TGroupInfo::SeenOperational
                 );
@@ -539,12 +539,12 @@ public:
                    Schema::Group::Owner::Type owner,
                    Schema::Group::ErasureSpecies::Type erasureSpecies,
                    Schema::Group::DesiredPDiskCategory::Type desiredPDiskCategory,
-                   Schema::Group::DesiredVDiskCategory::Type desiredVDiskCategory,
-                   Schema::Group::EncryptionMode::Type encryptionMode,
-                   Schema::Group::LifeCyclePhase::Type lifeCyclePhase,
+                   Schema::Group::DesiredVDiskCategory::Type desiredVDiskCategory, 
+                   Schema::Group::EncryptionMode::Type encryptionMode, 
+                   Schema::Group::LifeCyclePhase::Type lifeCyclePhase, 
                    Schema::Group::MainKeyId::Type mainKeyId,
-                   Schema::Group::EncryptedGroupKey::Type encryptedGroupKey,
-                   Schema::Group::GroupKeyNonce::Type groupKeyNonce,
+                   Schema::Group::EncryptedGroupKey::Type encryptedGroupKey, 
+                   Schema::Group::GroupKeyNonce::Type groupKeyNonce, 
                    Schema::Group::MainKeyVersion::Type mainKeyVersion,
                    Schema::Group::Down::Type down,
                    Schema::Group::SeenOperational::Type seenOperational,
@@ -558,11 +558,11 @@ public:
             , ErasureSpecies(erasureSpecies)
             , DesiredPDiskCategory(desiredPDiskCategory)
             , DesiredVDiskCategory(desiredVDiskCategory)
-            , EncryptionMode(encryptionMode)
-            , LifeCyclePhase(lifeCyclePhase)
+            , EncryptionMode(encryptionMode) 
+            , LifeCyclePhase(lifeCyclePhase) 
             , MainKeyId(mainKeyId)
-            , EncryptedGroupKey(encryptedGroupKey)
-            , GroupKeyNonce(groupKeyNonce)
+            , EncryptedGroupKey(encryptedGroupKey) 
+            , GroupKeyNonce(groupKeyNonce) 
             , MainKeyVersion(mainKeyVersion)
             , PersistedDown(down)
             , SeenOperational(seenOperational)
@@ -756,8 +756,8 @@ public:
     };
 
     std::map<TString, TNodeId> NodeForSerial;
-    TMap<ui32, TSet<ui32>> NodesAwaitingKeysForGroup;
-
+    TMap<ui32, TSet<ui32>> NodesAwaitingKeysForGroup; 
+ 
     struct THostConfigInfo {
         struct TDriveKey {
             Schema::HostConfigDrive::HostConfigId::Type HostConfigId;
@@ -1010,7 +1010,7 @@ public:
         Table::Kind::Type Kind;
         Table::NumGroups::Type NumGroups;
         TMaybe<Table::Generation::Type> Generation;
-        TMaybe<Table::EncryptionMode::Type> EncryptionMode; // null on old versions
+        TMaybe<Table::EncryptionMode::Type> EncryptionMode; // null on old versions 
         TMaybe<ui64> SchemeshardId;
         TMaybe<ui64> PathItemId;
         bool RandomizeGroupMapping;
@@ -1112,7 +1112,7 @@ public:
                     Table::Kind,
                     Table::NumGroups,
                     Table::Generation,
-                    Table::EncryptionMode,
+                    Table::EncryptionMode, 
                     Table::SchemeshardId,
                     Table::PathItemId,
                     Table::RandomizeGroupMapping,
@@ -1138,7 +1138,7 @@ public:
                     &TStoragePoolInfo::Kind,
                     &TStoragePoolInfo::NumGroups,
                     &TStoragePoolInfo::Generation,
-                    &TStoragePoolInfo::EncryptionMode,
+                    &TStoragePoolInfo::EncryptionMode, 
                     &TStoragePoolInfo::SchemeshardId,
                     &TStoragePoolInfo::PathItemId,
                     &TStoragePoolInfo::RandomizeGroupMapping,

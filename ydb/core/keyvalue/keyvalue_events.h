@@ -1,50 +1,50 @@
-#pragma once
-#include "defs.h"
-#include "keyvalue_intermediate.h"
-#include "keyvalue_request_stat.h"
+#pragma once 
+#include "defs.h" 
+#include "keyvalue_intermediate.h" 
+#include "keyvalue_request_stat.h" 
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/keyvalue/protos/events.pb.h>
+ 
 
-
-namespace NKikimr {
-
-namespace NKeyValue {
-    struct TIntermediate;
-};
-
-struct TEvKeyValue {
-    enum EEv {
-        EvRequest = EventSpaceBegin(TKikimrEvents::ES_KEYVALUE),
-        EvIntermediate,
-        EvNotify,
-        EvStoreCollect,
-        EvCollect,
-        EvEraseCollect,
-        EvPeriodicRefresh,
+namespace NKikimr { 
+ 
+namespace NKeyValue { 
+    struct TIntermediate; 
+}; 
+ 
+struct TEvKeyValue { 
+    enum EEv { 
+        EvRequest = EventSpaceBegin(TKikimrEvents::ES_KEYVALUE), 
+        EvIntermediate, 
+        EvNotify, 
+        EvStoreCollect, 
+        EvCollect, 
+        EvEraseCollect, 
+        EvPeriodicRefresh, 
         EvReportWriteLatency,
         EvUpdateWeights,
-
+ 
         EvRead = EvRequest + 16,
         EvReadRange,
         EvExecuteTransaction,
         EvGetStatus,
         EvObtainLock,
 
-        EvResponse = EvRequest + 512,
-
+        EvResponse = EvRequest + 512, 
+ 
         EvReadResponse = EvResponse + 16,
         EvReadRangeResponse,
         EvExecuteTransactionResponse,
         EvGetStatusResponse,
         EvObtainLockResponse,
 
-        EvEnd
-    };
-
-    static_assert(
-        EvEnd < EventSpaceEnd(TKikimrEvents::ES_KEYVALUE),
-        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_KEYVALUE)");
-
+        EvEnd 
+    }; 
+ 
+    static_assert( 
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_KEYVALUE), 
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_KEYVALUE)"); 
+ 
     struct TEvReadResponse;
 
     struct TEvRead : public TEventPB<TEvRead,
@@ -117,41 +117,41 @@ struct TEvKeyValue {
 
     struct TEvRequest : public TEventPB<TEvRequest,
             NKikimrClient::TKeyValueRequest, EvRequest> {
-        TEvRequest() { }
-    };
-
+        TEvRequest() { } 
+    }; 
+ 
     struct TEvResponse : public TEventPB<TEvResponse,
             NKikimrClient::TResponse, EvResponse> {
-        TEvResponse() { }
-    };
-
+        TEvResponse() { } 
+    }; 
+ 
     struct TEvIntermediate : public TEventLocal<TEvIntermediate, EvIntermediate> {
-        THolder<NKeyValue::TIntermediate> Intermediate;
-
-        TEvIntermediate() { }
-
-        TEvIntermediate(THolder<NKeyValue::TIntermediate>&& intermediate)
-            : Intermediate(std::move(intermediate))
-        {}
-    };
-
+        THolder<NKeyValue::TIntermediate> Intermediate; 
+ 
+        TEvIntermediate() { } 
+ 
+        TEvIntermediate(THolder<NKeyValue::TIntermediate>&& intermediate) 
+            : Intermediate(std::move(intermediate)) 
+        {} 
+    }; 
+ 
     struct TEvNotify : public TEventLocal<TEvNotify, EvNotify> {
-        ui64 RequestUid;
-        ui64 Generation;
-        ui64 Step;
-        NKeyValue::TRequestStat Stat;
-        NMsgBusProxy::EResponseStatus Status;
-
-        TEvNotify() { }
-
-        TEvNotify(ui64 requestUid, ui64 generation, ui64 step, const NKeyValue::TRequestStat &stat,
-                NMsgBusProxy::EResponseStatus status)
-            : RequestUid(requestUid)
-            , Generation(generation)
-            , Step(step)
-            , Stat(stat)
-            , Status(status)
-        {}
+        ui64 RequestUid; 
+        ui64 Generation; 
+        ui64 Step; 
+        NKeyValue::TRequestStat Stat; 
+        NMsgBusProxy::EResponseStatus Status; 
+ 
+        TEvNotify() { } 
+ 
+        TEvNotify(ui64 requestUid, ui64 generation, ui64 step, const NKeyValue::TRequestStat &stat, 
+                NMsgBusProxy::EResponseStatus status) 
+            : RequestUid(requestUid) 
+            , Generation(generation) 
+            , Step(step) 
+            , Stat(stat) 
+            , Status(status) 
+        {} 
 
         TEvNotify(ui64 requestUid, ui64 generation, ui64 step, const NKeyValue::TRequestStat &stat,
                 NKikimrKeyValue::Statuses::ReplyStatus status)
@@ -176,23 +176,23 @@ struct TEvKeyValue {
                 return NMsgBusProxy::MSTATUS_INTERNALERROR;
             }
         }
-    };
-
+    }; 
+ 
     struct TEvStoreCollect : public TEventLocal<TEvStoreCollect, EvStoreCollect> {
-        TEvStoreCollect() { }
-    };
-
+        TEvStoreCollect() { } 
+    }; 
+ 
     struct TEvCollect : public TEventLocal<TEvCollect, EvCollect> {
-        TEvCollect() { }
-    };
-
+        TEvCollect() { } 
+    }; 
+ 
     struct TEvEraseCollect : public TEventLocal<TEvEraseCollect, EvEraseCollect> {
-        TEvEraseCollect() { }
-    };
-
+        TEvEraseCollect() { } 
+    }; 
+ 
     struct TEvPeriodicRefresh : public TEventLocal<TEvPeriodicRefresh, EvPeriodicRefresh> {
-        TEvPeriodicRefresh() { }
-    };
-};
-
-} // NKikimr
+        TEvPeriodicRefresh() { } 
+    }; 
+}; 
+ 
+} // NKikimr 

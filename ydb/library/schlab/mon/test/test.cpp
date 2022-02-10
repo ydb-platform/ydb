@@ -39,13 +39,13 @@ int main(int argc, char** argv)
         NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
         // Init monservice
-        TString schArmJson;
-
+        TString schArmJson; 
+ 
         MonSrvc.Reset(new TMonSrvc(g_MonPort));
         SCHLAB_STATIC_FILE(MonSrvc.Get(), "schlab/schviz-test0.json", JSON);
         NKikimr::CreateSchLabCommonPages(MonSrvc.Get());
         NKikimr::CreateSchArmPages(MonSrvc.Get(), "schlab/scharm", "/schlab/schviz");
-        NKikimr::CreateSchVizPages(MonSrvc.Get(), "schlab/schviz", "/schlab/scharm?mode=getschedule");
+        NKikimr::CreateSchVizPages(MonSrvc.Get(), "schlab/schviz", "/schlab/scharm?mode=getschedule"); 
 
         // Start monservice
         MonSrvc->Start();

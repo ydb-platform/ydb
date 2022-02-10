@@ -26,7 +26,7 @@ void TLogoBlobID::Out(IOutputStream &o) const {
         Channel(),
         Cookie(),
         BlobSize(),
-        PartId()
+        PartId() 
     );
 
     o << buf;

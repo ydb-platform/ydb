@@ -28,12 +28,12 @@ namespace NKikimr {
                 TQueue GetAsyncRead;
                 TQueue GetFastRead;
                 TQueue GetDiscover;
-                TQueue GetLowRead;
+                TQueue GetLowRead; 
 
                 template<typename T>
                 void ForEachQueue(T&& callback) const {
                     for (const TQueue *q : {&PutTabletLog, &PutAsyncBlob, &PutUserData, &GetAsyncRead, &GetFastRead,
-                            &GetDiscover, &GetLowRead}) {
+                            &GetDiscover, &GetLowRead}) { 
                         callback(*q);
                     }
                 }
@@ -60,7 +60,7 @@ namespace NKikimr {
                         case NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead: return GetAsyncRead;
                         case NKikimrBlobStorage::EVDiskQueueId::GetFastRead:  return GetFastRead;
                         case NKikimrBlobStorage::EVDiskQueueId::GetDiscover:  return GetDiscover;
-                        case NKikimrBlobStorage::EVDiskQueueId::GetLowRead:   return GetLowRead;
+                        case NKikimrBlobStorage::EVDiskQueueId::GetLowRead:   return GetLowRead; 
                         default:                                              Y_FAIL("unexpected EVDiskQueueId");
                     }
                 }
@@ -91,7 +91,7 @@ namespace NKikimr {
                       << " GetAsyncRead# " << GetAsyncRead.ActorId
                       << " GetFastRead# " << GetAsyncRead.ActorId
                       << " GetDiscover# " << GetDiscover.ActorId
-                      << " GetLowRead# " << GetLowRead.ActorId
+                      << " GetLowRead# " << GetLowRead.ActorId 
 
                       << " PutTabletLog_PredictedDelayNs# "
                       << (PutTabletLog.FlowRecord ? PutTabletLog.FlowRecord->GetPredictedDelayNs() : 0)
@@ -105,8 +105,8 @@ namespace NKikimr {
                       << (GetAsyncRead.FlowRecord ? GetAsyncRead.FlowRecord->GetPredictedDelayNs() : 0)
                       << " GetDiscover_PredictedDelayNs# "
                       << (GetDiscover.FlowRecord ? GetDiscover.FlowRecord->GetPredictedDelayNs() : 0)
-                      << " GetLowRead_PredictedDelayNs# "
-                      << (GetLowRead.FlowRecord ? GetLowRead.FlowRecord->GetPredictedDelayNs() : 0)
+                      << " GetLowRead_PredictedDelayNs# " 
+                      << (GetLowRead.FlowRecord ? GetLowRead.FlowRecord->GetPredictedDelayNs() : 0) 
 
                       << "}";
                     return s.Str();
@@ -208,8 +208,8 @@ namespace NKikimr {
             1 << NKikimrBlobStorage::EVDiskQueueId::PutUserData |
             1 << NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead |
             1 << NKikimrBlobStorage::EVDiskQueueId::GetFastRead |
-            1 << NKikimrBlobStorage::EVDiskQueueId::GetDiscover |
-            1 << NKikimrBlobStorage::EVDiskQueueId::GetLowRead;
+            1 << NKikimrBlobStorage::EVDiskQueueId::GetDiscover | 
+            1 << NKikimrBlobStorage::EVDiskQueueId::GetLowRead; 
 
         TIntrusivePtr<TGroupQueues> GroupQueues;
         TStackVec<ui8, TypicalDisksInGroup> ConnectedQueuesMask;

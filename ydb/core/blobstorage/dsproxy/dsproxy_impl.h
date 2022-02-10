@@ -399,7 +399,7 @@ public:
     STFUNC(StateEjected) {
         switch (ev->GetTypeRewrite()) {
             HANDLE_EVENTS(HandleError);
-            default: return StateCommon(ev, ctx);
+            default: return StateCommon(ev, ctx); 
         }
     }
 };

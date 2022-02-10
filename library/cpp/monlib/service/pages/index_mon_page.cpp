@@ -84,14 +84,14 @@ void TIndexMonPage::Register(TMonPagePtr page) {
 }
 
 TIndexMonPage* TIndexMonPage::RegisterIndexPage(const TString& path, const TString& title) {
-    TGuard<TMutex> g(Mtx);
-    TIndexMonPage* page = VerifyDynamicCast<TIndexMonPage*>(FindPage(path));
-    if (page) {
-        return page;
-    }
-    page = new TIndexMonPage(path, title);
+    TGuard<TMutex> g(Mtx); 
+    TIndexMonPage* page = VerifyDynamicCast<TIndexMonPage*>(FindPage(path)); 
+    if (page) { 
+        return page; 
+    } 
+    page = new TIndexMonPage(path, title); 
     Register(page);
-    return VerifyDynamicCast<TIndexMonPage*>(page);
+    return VerifyDynamicCast<TIndexMonPage*>(page); 
 }
 
 IMonPage* TIndexMonPage::FindPage(const TString& relativePath) {

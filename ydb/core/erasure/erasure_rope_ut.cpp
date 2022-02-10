@@ -640,12 +640,12 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         } // while !isComplete
     }
 
-    void TestErasure(TRopeErasureType::ECrcMode crcMode, ui32 species, ui32 dataSizeOffset = 0, ui32 dataSizeStep = 1) {
+    void TestErasure(TRopeErasureType::ECrcMode crcMode, ui32 species, ui32 dataSizeOffset = 0, ui32 dataSizeStep = 1) { 
         ui32 startingDataSize = 0;
         TRopeErasureType groupType((TRopeErasureType::EErasureSpecies)species);
         ui32 maxDataSize = groupType.MinimalBlockSize() * 8;
 
-        for (ui32 dataSize = startingDataSize + dataSizeOffset; dataSize < maxDataSize; dataSize += dataSizeStep) {
+        for (ui32 dataSize = startingDataSize + dataSizeOffset; dataSize < maxDataSize; dataSize += dataSizeStep) { 
             TestErasureMain(dataSize, crcMode, species);
         }
     }
@@ -657,63 +657,63 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     }
 
     ui32 SpeciesForTest[] {
-        TRopeErasureType::Erasure4Plus2Block,  // 1
-        TRopeErasureType::Erasure2Plus2Block,  // 2
-        TRopeErasureType::Erasure3Plus2Block,  // 3
-        TRopeErasureType::Erasure4Plus3Block,  // 4
-        TRopeErasureType::Erasure3Plus1Block,  // 1
-        TRopeErasureType::Erasure2Plus3Block,  // 2
-        TRopeErasureType::Erasure3Plus3Block,  // 3
-        TRopeErasureType::ErasureNone,         // 4
-        TRopeErasureType::ErasureMirror3,      // 1
-        TRopeErasureType::ErasureMirror3Plus2, // 2
-        TRopeErasureType::ErasureMirror3dc     // 3
+        TRopeErasureType::Erasure4Plus2Block,  // 1 
+        TRopeErasureType::Erasure2Plus2Block,  // 2 
+        TRopeErasureType::Erasure3Plus2Block,  // 3 
+        TRopeErasureType::Erasure4Plus3Block,  // 4 
+        TRopeErasureType::Erasure3Plus1Block,  // 1 
+        TRopeErasureType::Erasure2Plus3Block,  // 2 
+        TRopeErasureType::Erasure3Plus3Block,  // 3 
+        TRopeErasureType::ErasureNone,         // 4 
+        TRopeErasureType::ErasureMirror3,      // 1 
+        TRopeErasureType::ErasureMirror3Plus2, // 2 
+        TRopeErasureType::ErasureMirror3dc     // 3 
     };
 
     ui32 NumberOfTestSpecies = sizeof(SpeciesForTest) / sizeof(ui32);
 
-    Y_UNIT_TEST(TestAllSpeciesCrcWhole1of4) {
-        for (ui32 species = 0; species < NumberOfTestSpecies; species += 4) {
+    Y_UNIT_TEST(TestAllSpeciesCrcWhole1of4) { 
+        for (ui32 species = 0; species < NumberOfTestSpecies; species += 4) { 
             TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species]);
         }
     }
 
-    Y_UNIT_TEST(TestAllSpeciesCrcWhole2of4) {
-        for (ui32 species = 1; species < NumberOfTestSpecies; species += 4) {
-            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species]);
-        }
-    }
-
-    Y_UNIT_TEST(TestAllSpeciesCrcWhole3of4) {
-        for (ui32 species = 2; species < NumberOfTestSpecies; species += 4) {
-            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species]);
-        }
-    }
-
-    Y_UNIT_TEST(TestAllSpeciesCrcWhole4of4_p1of4) {
-        for (ui32 species = 3; species < NumberOfTestSpecies; species += 4) {
-            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species], 0, 4);
-        }
-    }
-
-    Y_UNIT_TEST(TestAllSpeciesCrcWhole4of4_p2of4) {
-        for (ui32 species = 3; species < NumberOfTestSpecies; species += 4) {
-            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species], 1, 4);
-        }
-    }
-
-    Y_UNIT_TEST(TestAllSpeciesCrcWhole4of4_p3of4) {
-        for (ui32 species = 3; species < NumberOfTestSpecies; species += 4) {
-            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species], 2, 4);
-        }
-    }
-
-    Y_UNIT_TEST(TestAllSpeciesCrcWhole4of4_p4of4) {
-        for (ui32 species = 3; species < NumberOfTestSpecies; species += 4) {
-            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species], 3, 4);
-        }
-    }
-
+    Y_UNIT_TEST(TestAllSpeciesCrcWhole2of4) { 
+        for (ui32 species = 1; species < NumberOfTestSpecies; species += 4) { 
+            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species]); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(TestAllSpeciesCrcWhole3of4) { 
+        for (ui32 species = 2; species < NumberOfTestSpecies; species += 4) { 
+            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species]); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(TestAllSpeciesCrcWhole4of4_p1of4) { 
+        for (ui32 species = 3; species < NumberOfTestSpecies; species += 4) { 
+            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species], 0, 4); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(TestAllSpeciesCrcWhole4of4_p2of4) { 
+        for (ui32 species = 3; species < NumberOfTestSpecies; species += 4) { 
+            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species], 1, 4); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(TestAllSpeciesCrcWhole4of4_p3of4) { 
+        for (ui32 species = 3; species < NumberOfTestSpecies; species += 4) { 
+            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species], 2, 4); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(TestAllSpeciesCrcWhole4of4_p4of4) { 
+        for (ui32 species = 3; species < NumberOfTestSpecies; species += 4) { 
+            TestErasure(TRopeErasureType::CrcModeWholePart, SpeciesForTest[species], 3, 4); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestBigSizes) {
         TVector<ui32> sizes{1234567};
         for (ui32 species = 0; species < NumberOfTestSpecies; ++species) {
@@ -721,32 +721,32 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestAllSpecies1of2) {
-        for (ui32 species = 0; species < NumberOfTestSpecies; species += 4) {
+    Y_UNIT_TEST(TestAllSpecies1of2) { 
+        for (ui32 species = 0; species < NumberOfTestSpecies; species += 4) { 
             TestErasure(TRopeErasureType::CrcModeNone, SpeciesForTest[species]);
         }
     }
 
-    Y_UNIT_TEST(TestAllSpecies2of4) {
-        for (ui32 species = 1; species < NumberOfTestSpecies; species += 4) {
-            TestErasure(TRopeErasureType::CrcModeNone, SpeciesForTest[species]);
-        }
-    }
-
-    Y_UNIT_TEST(TestAllSpecies3of4) {
-        for (ui32 species = 2; species < NumberOfTestSpecies; species += 4) {
-            TestErasure(TRopeErasureType::CrcModeNone, SpeciesForTest[species]);
-        }
-    }
-
-    Y_UNIT_TEST(TestAllSpecies4of4) {
-        for (ui32 species = 3; species < NumberOfTestSpecies; species += 4) {
-            TestErasure(TRopeErasureType::CrcModeNone, SpeciesForTest[species]);
-        }
-    }
-
-
-
+    Y_UNIT_TEST(TestAllSpecies2of4) { 
+        for (ui32 species = 1; species < NumberOfTestSpecies; species += 4) { 
+            TestErasure(TRopeErasureType::CrcModeNone, SpeciesForTest[species]); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(TestAllSpecies3of4) { 
+        for (ui32 species = 2; species < NumberOfTestSpecies; species += 4) { 
+            TestErasure(TRopeErasureType::CrcModeNone, SpeciesForTest[species]); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(TestAllSpecies4of4) { 
+        for (ui32 species = 3; species < NumberOfTestSpecies; species += 4) { 
+            TestErasure(TRopeErasureType::CrcModeNone, SpeciesForTest[species]); 
+        } 
+    } 
+ 
+ 
+ 
     Y_UNIT_TEST(TestBlockByteOrder) {
         ui32 species = (ui32)TRopeErasureType::Erasure4Plus2Block;
         TRopeErasureType groupType((TRopeErasureType::EErasureSpecies)species);
@@ -795,160 +795,160 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     }
 
 
-    void TestBlock42PartialRestore(ui32 missingVariant) {
+    void TestBlock42PartialRestore(ui32 missingVariant) { 
         // Set up the erasure
         TRopeErasureType groupType(TRopeErasureType::Erasure4Plus2Block);
 
         // Specify the missing part indexes
         const ui32 maxMissingParts = 2;
         ui32 missingPartsToTest[] = {0, 1, 2, 4, 3, 5, 4, 5};
-        ui32 missingPartIdx[maxMissingParts];
-        missingPartIdx[0] = missingPartsToTest[missingVariant * 2];
-        missingPartIdx[1] = missingPartsToTest[missingVariant * 2 + 1];
-        ui32 partMask = ~(ui32) 0;
-        partMask &= ~(ui32) (1 << missingPartIdx[0]);
-        partMask &= ~(ui32) (1 << missingPartIdx[1]);
+        ui32 missingPartIdx[maxMissingParts]; 
+        missingPartIdx[0] = missingPartsToTest[missingVariant * 2]; 
+        missingPartIdx[1] = missingPartsToTest[missingVariant * 2 + 1]; 
+        ui32 partMask = ~(ui32) 0; 
+        partMask &= ~(ui32) (1 << missingPartIdx[0]); 
+        partMask &= ~(ui32) (1 << missingPartIdx[1]); 
 
-        // Prepare the test data
-        TString testString;
-        for (ui32 dataSize = 1; dataSize < 600; ++dataSize) {
-            if (dataSize > 128) {
-                dataSize += 6;
-            }
-            VERBOSE_COUT( "variant# " << missingVariant << " dataSize# " << dataSize << Endl);
-            testString.resize(dataSize);
-            for (ui32 i = 0; i < testString.size(); ++i) {
-                ((char *) testString.data())[i] = (char) (i % 10) + '0';
-            }
+        // Prepare the test data 
+        TString testString; 
+        for (ui32 dataSize = 1; dataSize < 600; ++dataSize) { 
+            if (dataSize > 128) { 
+                dataSize += 6; 
+            } 
+            VERBOSE_COUT( "variant# " << missingVariant << " dataSize# " << dataSize << Endl); 
+            testString.resize(dataSize); 
+            for (ui32 i = 0; i < testString.size(); ++i) { 
+                ((char *) testString.data())[i] = (char) (i % 10) + '0'; 
+            } 
 
-            // Split the data into parts
-            TDataPartSet partSet;
+            // Split the data into parts 
+            TDataPartSet partSet; 
             groupType.SplitData(TRopeErasureType::CrcModeNone, TRopeHelpers::RopeFromStringMemcpy(testString), partSet);
-            ui64 partSize = groupType.PartSize(TRopeErasureType::CrcModeNone, dataSize);
-            for (ui32 part = 0; part < groupType.TotalPartCount(); ++part) {
-                UNIT_ASSERT_EQUAL(partSize, partSet.Parts[part].size());
-            }
+            ui64 partSize = groupType.PartSize(TRopeErasureType::CrcModeNone, dataSize); 
+            for (ui32 part = 0; part < groupType.TotalPartCount(); ++part) { 
+                UNIT_ASSERT_EQUAL(partSize, partSet.Parts[part].size()); 
+            } 
 
-            // Save the original parts for the future checks
-            TDataPartSet originalPartSet = partSet;
-            originalPartSet.ResetWithFullCopy();
+            // Save the original parts for the future checks 
+            TDataPartSet originalPartSet = partSet; 
+            originalPartSet.ResetWithFullCopy(); 
 
 
-            // TODO: Test different offsets and sizes
-            for (ui64 partialSize = 1; partialSize < Min((ui32) dataSize, (ui32) 512); ++partialSize) {
-                VERBOSE_COUT( "partialSize# " << partialSize << Endl);
-                ui64 partialShiftSpecials[] = {95, 96, 97, 127, 128, 129, 159, 160, 161, 191, 192, 193,
-                                                223, 224, 225, 254, 255, 256, 257,
-                                                510, 511, 512, 513, 514, 333, 364, 173,
-                                                dataSize - 4, dataSize - 3, dataSize - 2, dataSize - 1, dataSize};
-                ui64 specialCount = sizeof(partialShiftSpecials) / sizeof(partialShiftSpecials[0]);
-                ui64 normalCount = 70;
-                ui64 totalCount = normalCount + specialCount;
+            // TODO: Test different offsets and sizes 
+            for (ui64 partialSize = 1; partialSize < Min((ui32) dataSize, (ui32) 512); ++partialSize) { 
+                VERBOSE_COUT( "partialSize# " << partialSize << Endl); 
+                ui64 partialShiftSpecials[] = {95, 96, 97, 127, 128, 129, 159, 160, 161, 191, 192, 193, 
+                                                223, 224, 225, 254, 255, 256, 257, 
+                                                510, 511, 512, 513, 514, 333, 364, 173, 
+                                                dataSize - 4, dataSize - 3, dataSize - 2, dataSize - 1, dataSize}; 
+                ui64 specialCount = sizeof(partialShiftSpecials) / sizeof(partialShiftSpecials[0]); 
+                ui64 normalCount = 70; 
+                ui64 totalCount = normalCount + specialCount; 
 
-                for (ui64 caseIdx = 0; caseIdx < totalCount; ++caseIdx) {
-                    ui64 partialShift = caseIdx < normalCount ?
-                        caseIdx : partialShiftSpecials[caseIdx - normalCount];
-                    if (partialShift + partialSize >= dataSize) {
-                        continue;
-                    }
-                    VERBOSE_COUT( "partialShift# " << partialShift << Endl);
-                    partSet = originalPartSet;
+                for (ui64 caseIdx = 0; caseIdx < totalCount; ++caseIdx) { 
+                    ui64 partialShift = caseIdx < normalCount ? 
+                        caseIdx : partialShiftSpecials[caseIdx - normalCount]; 
+                    if (partialShift + partialSize >= dataSize) { 
+                        continue; 
+                    } 
+                    VERBOSE_COUT( "partialShift# " << partialShift << Endl); 
+                    partSet = originalPartSet; 
 
-                    ui64 shift = Max<ui64>();
-                    ui64 size = Max<ui64>();
+                    ui64 shift = Max<ui64>(); 
+                    ui64 size = Max<ui64>(); 
 
-                    ui64 needBegin = Max<ui64>();
-                    ui64 needEnd = Max<ui64>();
+                    ui64 needBegin = Max<ui64>(); 
+                    ui64 needEnd = Max<ui64>(); 
 
-                    TBlockSplitRange range1;
-                    groupType.BlockSplitRange(TRopeErasureType::CrcModeNone, dataSize, partialShift,
-                            partialShift + partialSize, &range1);
-                    for (ui32 partIdx = range1.BeginPartIdx; partIdx < range1.EndPartIdx; ++partIdx) {
-                        TPartOffsetRange &r = range1.PartRanges[partIdx];
-                        if (shift == Max<ui64>() || shift > r.AlignedWholeBegin) {
-                            shift = r.AlignedWholeBegin;
+                    TBlockSplitRange range1; 
+                    groupType.BlockSplitRange(TRopeErasureType::CrcModeNone, dataSize, partialShift, 
+                            partialShift + partialSize, &range1); 
+                    for (ui32 partIdx = range1.BeginPartIdx; partIdx < range1.EndPartIdx; ++partIdx) { 
+                        TPartOffsetRange &r = range1.PartRanges[partIdx]; 
+                        if (shift == Max<ui64>() || shift > r.AlignedWholeBegin) { 
+                            shift = r.AlignedWholeBegin; 
                         }
-                        if (size == Max<ui64>() || size < r.AlignedWholeBegin + r.AlignedEnd - r.AlignedBegin) {
-                            size = r.AlignedWholeBegin + r.AlignedEnd - r.AlignedBegin;
+                        if (size == Max<ui64>() || size < r.AlignedWholeBegin + r.AlignedEnd - r.AlignedBegin) { 
+                            size = r.AlignedWholeBegin + r.AlignedEnd - r.AlignedBegin; 
                         }
-                        if (needBegin == Max<ui64>() || needBegin > r.AlignedBegin) {
-                            needBegin = r.AlignedBegin;
+                        if (needBegin == Max<ui64>() || needBegin > r.AlignedBegin) { 
+                            needBegin = r.AlignedBegin; 
                         }
-                        if (needEnd == Max<ui64>() || needEnd < r.AlignedEnd) {
-                            needEnd = r.AlignedEnd;
+                        if (needEnd == Max<ui64>() || needEnd < r.AlignedEnd) { 
+                            needEnd = r.AlignedEnd; 
                         }
-                    }
-                    if (size > dataSize) {
-                        size = dataSize;
-                    }
-                    size -= shift;
+                    } 
+                    if (size > dataSize) { 
+                        size = dataSize; 
+                    } 
+                    size -= shift; 
 
-                    ui64 partSize = groupType.PartSize(TRopeErasureType::CrcModeNone, dataSize);
-                    for (ui32 idx = 0; idx < partSet.Parts.size(); ++idx) {
-                        ui32 cutBegin = Min(partSize, needBegin);
-                        ui32 cutSize = Min(partSize, needEnd) - cutBegin;
+                    ui64 partSize = groupType.PartSize(TRopeErasureType::CrcModeNone, dataSize); 
+                    for (ui32 idx = 0; idx < partSet.Parts.size(); ++idx) { 
+                        ui32 cutBegin = Min(partSize, needBegin); 
+                        ui32 cutSize = Min(partSize, needEnd) - cutBegin; 
                         partSet.Parts[idx].ReferenceTo(TRopeHelpers::RopeFromStringMemcpy(
-                                partSet.Parts[idx].OwnedRope.ConvertToString().substr(
-                                        cutBegin, cutSize)), cutBegin, cutSize, partSize);
-                    }
+                                partSet.Parts[idx].OwnedRope.ConvertToString().substr( 
+                                        cutBegin, cutSize)), cutBegin, cutSize, partSize); 
+                    } 
 
-                    // Remove the 'missing' parts
-                    partSet.PartsMask &= partMask;
-                    for (ui32 i = 0; i < 2; ++i) {
-                        ui32 idx = missingPartIdx[i];
-                        ui32 cutBegin = Min(partSize, needBegin);
-                        ui32 cutSize = Min(partSize, needEnd) - cutBegin;
-                        partSet.Parts[idx].clear();
-                        TString tmp = TString::Uninitialized(cutSize);
+                    // Remove the 'missing' parts 
+                    partSet.PartsMask &= partMask; 
+                    for (ui32 i = 0; i < 2; ++i) { 
+                        ui32 idx = missingPartIdx[i]; 
+                        ui32 cutBegin = Min(partSize, needBegin); 
+                        ui32 cutSize = Min(partSize, needEnd) - cutBegin; 
+                        partSet.Parts[idx].clear(); 
+                        TString tmp = TString::Uninitialized(cutSize); 
                         partSet.Parts[idx].ReferenceTo(TRopeHelpers::RopeFromStringMemcpy(tmp), cutBegin, cutSize, partSize);
-                    }
-
-                    // Restore the data
-                    TString restoredString;
-                    groupType.RestoreData(TRopeErasureType::CrcModeNone, partSet, true, false, true);
-
-                    TBlockSplitRange range;
-                    groupType.BlockSplitRange(TRopeErasureType::CrcModeNone, dataSize, shift, shift + size, &range);
-                    for (ui32 partIdx = range.BeginPartIdx; partIdx < range.EndPartIdx; ++partIdx) {
-                        TPartOffsetRange &partRange = range.PartRanges[partIdx];
-                        if (partRange.Begin != partRange.End) {
-                            // Make sure the restored data matches the original
-                            ui64 checkSize = partRange.End - partRange.AlignedBegin;
-                            UNIT_ASSERT(testString.size() >= partRange.AlignedWholeBegin + checkSize);
-                            UNIT_ASSERT_C(partSet.Parts[partIdx].Offset <= partRange.AlignedBegin,
-                                    "missingVariant# " << missingVariant
-                                    << " dataSize# " << dataSize
-                                    << " partialSize# " << partialSize
-                                    << " partialShift# " << partialShift
-                                    << " Offset# " << partSet.Parts[partIdx].Offset
-                                    << " alignedBegin# " << partRange.AlignedBegin);
-                            const char *expected = testString.data() + partRange.AlignedWholeBegin;
-                            TString string = partSet.Parts[partIdx].OwnedRope.ConvertToString();
-                            const char* actual = string.data() + partRange.AlignedBegin - partSet.Parts[partIdx].Offset;
-                            UNIT_ASSERT(memcmp(expected, actual, checkSize) == 0);
+                    } 
+ 
+                    // Restore the data 
+                    TString restoredString; 
+                    groupType.RestoreData(TRopeErasureType::CrcModeNone, partSet, true, false, true); 
+ 
+                    TBlockSplitRange range; 
+                    groupType.BlockSplitRange(TRopeErasureType::CrcModeNone, dataSize, shift, shift + size, &range); 
+                    for (ui32 partIdx = range.BeginPartIdx; partIdx < range.EndPartIdx; ++partIdx) { 
+                        TPartOffsetRange &partRange = range.PartRanges[partIdx]; 
+                        if (partRange.Begin != partRange.End) { 
+                            // Make sure the restored data matches the original 
+                            ui64 checkSize = partRange.End - partRange.AlignedBegin; 
+                            UNIT_ASSERT(testString.size() >= partRange.AlignedWholeBegin + checkSize); 
+                            UNIT_ASSERT_C(partSet.Parts[partIdx].Offset <= partRange.AlignedBegin, 
+                                    "missingVariant# " << missingVariant 
+                                    << " dataSize# " << dataSize 
+                                    << " partialSize# " << partialSize 
+                                    << " partialShift# " << partialShift 
+                                    << " Offset# " << partSet.Parts[partIdx].Offset 
+                                    << " alignedBegin# " << partRange.AlignedBegin); 
+                            const char *expected = testString.data() + partRange.AlignedWholeBegin; 
+                            TString string = partSet.Parts[partIdx].OwnedRope.ConvertToString(); 
+                            const char* actual = string.data() + partRange.AlignedBegin - partSet.Parts[partIdx].Offset; 
+                            UNIT_ASSERT(memcmp(expected, actual, checkSize) == 0); 
                         }
-                    }
+                    } 
 
-                } // partialShift
-            } // partialSize
-        } // dataSize
+                } // partialShift 
+            } // partialSize 
+        } // dataSize 
     }
-
-    Y_UNIT_TEST(TestBlock42PartialRestore0) {
-        TestBlock42PartialRestore(0);
-    }
-
-    Y_UNIT_TEST(TestBlock42PartialRestore1) {
-        TestBlock42PartialRestore(1);
-    }
-
-    Y_UNIT_TEST(TestBlock42PartialRestore2) {
-        TestBlock42PartialRestore(2);
-    }
-
-    Y_UNIT_TEST(TestBlock42PartialRestore3) {
-        TestBlock42PartialRestore(3);
-    }
+ 
+    Y_UNIT_TEST(TestBlock42PartialRestore0) { 
+        TestBlock42PartialRestore(0); 
+    } 
+ 
+    Y_UNIT_TEST(TestBlock42PartialRestore1) { 
+        TestBlock42PartialRestore(1); 
+    } 
+ 
+    Y_UNIT_TEST(TestBlock42PartialRestore2) { 
+        TestBlock42PartialRestore(2); 
+    } 
+ 
+    Y_UNIT_TEST(TestBlock42PartialRestore3) { 
+        TestBlock42PartialRestore(3); 
+    } 
 }
 
 } // namespace NKikimr

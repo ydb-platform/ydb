@@ -1,23 +1,23 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     ddoarn
     fomichev
     vvvv
     g:kikimr
 )
-
-SRCS(
-    actor_helpers.cpp
-    actor_helpers.h
+ 
+SRCS( 
+    actor_helpers.cpp 
+    actor_helpers.h 
     fake_coordinator.cpp
     fake_coordinator.h
     fake_scheme_shard.h
     minikql_compile.h
     mock_pq_metacache.h
-    tablet_flat_dummy.cpp
-    tablet_helpers.cpp
-    tablet_helpers.h
+    tablet_flat_dummy.cpp 
+    tablet_helpers.cpp 
+    tablet_helpers.h 
     tenant_runtime.cpp
     tenant_runtime.h
     test_client.cpp
@@ -29,9 +29,9 @@ SRCS(
     service_mocks/database_service_mock.h
     service_mocks/folder_service_mock.h
     service_mocks/service_account_service_mock.h
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     library/cpp/actors/interconnect
     library/cpp/grpc/client
@@ -102,8 +102,8 @@ PEERDIR(
     ydb/services/rate_limiter
     ydb/services/ydb
     ydb/services/yq
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
 IF (GCC)
@@ -112,7 +112,7 @@ IF (GCC)
     )
 ENDIF()
 
-END()
+END() 
 
 RECURSE(
     actors

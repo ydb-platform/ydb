@@ -110,7 +110,7 @@
 #include <library/cpp/malloc/api/malloc.h>
 
 #include <ydb/core/util/sig.h>
-
+ 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
 
@@ -202,7 +202,7 @@ public:
         appData->AllAuthenticatedUsers = securityConfig.GetAllAuthenticatedUsers();
 
         appData->FeatureFlags = Config.GetFeatureFlags();
-        appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
+        appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes(); 
         appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
 
         appData->CompactionConfig = Config.GetCompactionConfig();
@@ -895,9 +895,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasKeyConfig()) {
-        AppData->KeyConfig.CopyFrom(runConfig.AppConfig.GetKeyConfig());
+        AppData->KeyConfig.CopyFrom(runConfig.AppConfig.GetKeyConfig()); 
     }
-
+ 
     if (runConfig.AppConfig.HasPDiskKeyConfig()) {
         AppData->PDiskKeyConfig.CopyFrom(runConfig.AppConfig.GetPDiskKeyConfig());
     }
@@ -1381,8 +1381,8 @@ void TKikimrRunner::KikimrStart() {
         SqsHttp->Start();
     }
 
-    EnableActorCallstack();
-    ThreadSigmask(SIG_UNBLOCK);
+    EnableActorCallstack(); 
+    ThreadSigmask(SIG_UNBLOCK); 
 }
 
 void TKikimrRunner::KikimrStop(bool graceful) {

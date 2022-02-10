@@ -9,7 +9,7 @@
 
 namespace NKikimr {
 
-    namespace NPDisk {
+    namespace NPDisk { 
         struct TPrintable_ui8 {
             ui8 Val;
 
@@ -34,21 +34,21 @@ namespace NKikimr {
         };
 
         typedef TPrintable_ui8 TOwner;
-        typedef ui64 TOwnerRound;
-        typedef ui32 TStatusFlags;
+        typedef ui64 TOwnerRound; 
+        typedef ui32 TStatusFlags; 
         typedef ui64 TKey;
-        typedef ui64 THash;
+        typedef ui64 THash; 
 
-        struct TOwnerToken {
-            TOwner Owner = 0;
-            TOwnerRound OwnerRound = 0;
-
-            TOwnerToken(TOwner owner, TOwnerRound ownerRound)
-                : Owner(owner)
-                , OwnerRound(ownerRound)
-            {}
-        };
-
+        struct TOwnerToken { 
+            TOwner Owner = 0; 
+            TOwnerRound OwnerRound = 0; 
+ 
+            TOwnerToken(TOwner owner, TOwnerRound ownerRound) 
+                : Owner(owner) 
+                , OwnerRound(ownerRound) 
+            {} 
+        }; 
+ 
         // using TLogPosition = std::pair<TChunkIdx, ui32>;
         struct TLogPosition {
             TChunkIdx ChunkIdx = 0;
@@ -74,10 +74,10 @@ namespace NKikimr {
             isFirst = NText::OutFlag(isFirst, flags == 0, "None", str);
             isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusIsValid), "IsValid", str);
             isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceCyan), "DiskSpaceCyan", str);
-            isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove),
-                    "DiskSpaceLightYellowMove", str);
-            isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop),
-                    "DiskSpaceYellowStop", str);
+            isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove), 
+                    "DiskSpaceLightYellowMove", str); 
+            isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop), 
+                    "DiskSpaceYellowStop", str); 
             isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange), "DiskSpaceLightOrange", str);
             isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceOrange), "DiskSpaceOrange", str);
             isFirst = NText::OutFlag(isFirst, flags & ui32(NKikimrBlobStorage::StatusDiskSpaceRed), "DiskSpaceRed", str);
@@ -87,7 +87,7 @@ namespace NKikimr {
             NText::OutFlag(isFirst, isFirst, "Unknown", str);
             return str.Str();
         }
-    } // NPDisk
+    } // NPDisk 
 } // NKikimr
 
 template<>

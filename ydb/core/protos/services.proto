@@ -41,20 +41,20 @@ enum EServiceKikimr {
     BS_PROXY_GET = 284;
     BS_PROXY_PUT = 285;
     BS_PROXY_RANGE = 286;
-    BS_QUEUE = 287;
-    BS_PROXY_MULTIGET = 288;
-    BS_PROXY_MULTICOLLECT = 289;
+    BS_QUEUE = 287; 
+    BS_PROXY_MULTIGET = 288; 
+    BS_PROXY_MULTICOLLECT = 289; 
     BS_CONTROLLER_AUDIT = 304;
     BS_SELFHEAL = 342;
     BS_PROXY_PATCH = 343;
     BS_VDISK_SCRUB = 344;
     BS_VDISK_PATCH = 345;
 
-    // DATASHARD section //
-    TX_DATASHARD = 290;  //
-    ///////////////////////
-    BS_PROXY_INDEXRESTOREGET = 291;
-    BS_PROXY_STATUS = 292;
+    // DATASHARD section // 
+    TX_DATASHARD = 290;  // 
+    /////////////////////// 
+    BS_PROXY_INDEXRESTOREGET = 291; 
+    BS_PROXY_STATUS = 292; 
     BS_LOAD_TEST = 293;
     BS_INCRHUGE = 294;
     BS_LOGCUTTER = 297;
@@ -98,7 +98,7 @@ enum EServiceKikimr {
 
     // PIPE section
     PIPE_CLIENT = 320;
-    PIPE_SERVER = 321;
+    PIPE_SERVER = 321; 
 
     // DUMMY section
     TX_DUMMY = 330;
@@ -154,8 +154,8 @@ enum EServiceKikimr {
     GRPC_PROXY_NO_CONNECT_ACCESS = 417;
     READ_TABLE_API = 414; // deprecated, use RPC_REQUEST
     RPC_REQUEST = 416;
-    // KEY VALUE section
-    KEYVALUE = 420;
+    // KEY VALUE section 
+    KEYVALUE = 420; 
 
     WILSON = 430;
 
@@ -187,8 +187,8 @@ enum EServiceKikimr {
     QUOTER_SERVICE = 490;
     QUOTER_PROXY = 491;
 
-    // HEALTH section
-    HEALTH = 500;
+    // HEALTH section 
+    HEALTH = 500; 
 
     MEMORY_PROFILER = 510;
 
@@ -227,7 +227,7 @@ enum EServiceKikimr {
     KESUS_PROXY_SERVICE = 551;
     KESYS_PROXY_REQUEST = 552;
     KESUS_TABLET = 553;
-
+ 
     CONFIGS_DISPATCHER = 560;
     CONFIGS_CACHE = 561;
 
@@ -236,8 +236,8 @@ enum EServiceKikimr {
     SCHEME_BOARD_SUBSCRIBER = 571;
     SCHEME_BOARD_POPULATOR = 572;
 
-    // Distributed Storage
-    DS_PROXY_NODE_MON = 600;
+    // Distributed Storage 
+    DS_PROXY_NODE_MON = 600; 
 
     TEST_SHARD = 601;
 

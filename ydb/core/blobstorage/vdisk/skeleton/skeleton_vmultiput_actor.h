@@ -1,13 +1,13 @@
-#pragma once
-
-#include "defs.h"
-
+#pragma once 
+ 
+#include "defs.h" 
+ 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/blobstorage/base/utility.h>
-
-namespace NKikimr {
-
+ 
+namespace NKikimr { 
+ 
 struct TEvVMultiPutItemResult : TEventLocal<TEvVMultiPutItemResult, TEvBlobStorage::EvVMultiPutItemResult> {
     TLogoBlobID BlobId;
     ui64 ItemIdx;
@@ -27,5 +27,5 @@ IActor* CreateSkeletonVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikim
         TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
         TActorIDPtr skeletonFrontIDPtr, NMonitoring::TDynamicCounters::TCounterPtr multiPutResMsgsPtr,
         ui64 incarnationGuid);
-
-} // NKikimr
+ 
+} // NKikimr 

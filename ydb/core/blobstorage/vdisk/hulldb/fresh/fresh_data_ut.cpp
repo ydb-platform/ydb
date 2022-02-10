@@ -58,7 +58,7 @@ namespace NKikimr {
                 LogoBlob1 = TLogoBlobID(0, 1, 1, 0, sizeof(Data), 0, 1);
                 LogoBlob2 = TLogoBlobID(0, 1, 2, 0, sizeof(Data), 0, 1);
                 LogoBlob3 = TLogoBlobID(0, 2, 1, 0, sizeof(Data), 0, 1);
-
+ 
                 Fresh = std::make_shared<TFreshData>(GetLevelIndexSetting(), CreateDefaultTimeProvider(), Arena);
 
                 // several puts
@@ -123,8 +123,8 @@ namespace NKikimr {
             THullCtxPtr hullCtx = TestCtx.GetHullCtx();
             TFreshData::TFreshDataSnapshot::TBackwardIterator it(hullCtx, &snapshot);
 
-            TLogoBlobID last(0, 4294967295, 4294967295, 0,
-                TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId);
+            TLogoBlobID last(0, 4294967295, 4294967295, 0, 
+                TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId); 
             /*
             it.Seek(last);
             while (!it.Empty()) {
@@ -152,8 +152,8 @@ namespace NKikimr {
             THullCtxPtr hullCtx = TestCtx.GetHullCtx();
             TFreshData::TFreshDataSnapshot::TBackwardIterator it(hullCtx, &snapshot);
 
-            TLogoBlobID last(0, 1, 2, 0,
-                TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId);
+            TLogoBlobID last(0, 1, 2, 0, 
+                TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId); 
 /*
             it.Seek(last);
             while (!it.Empty()) {

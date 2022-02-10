@@ -212,7 +212,7 @@ private:
                 std::make_shared<std::atomic_uint64_t>());
 
         TBSProxyContextPtr bspctx = new TBSProxyContext(counters);
-        TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord);
+        TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord); 
         QueueId = ctx.Register(CreateVDiskBackpressureClient(Conf->GroupInfo, VDiskInfo.VDiskID,
             NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, counters, bspctx, NBackpressure::TQueueClientId(),
             "PutTabletLog", 0, false, TDuration::Minutes(10), flowRecord,

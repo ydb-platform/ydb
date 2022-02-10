@@ -1,12 +1,12 @@
 #include "node_warden_mock.h"
 #include "node_warden_mock_state.h"
 
-namespace NKikimr {
-namespace NPDisk {
-extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
-}
-}
-
+namespace NKikimr { 
+namespace NPDisk { 
+extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000; 
+} 
+} 
+ 
 TNodeWardenMockActor::TNodeWardenMockActor(TSetup::TPtr setup)
     : Setup(std::move(setup))
 {}

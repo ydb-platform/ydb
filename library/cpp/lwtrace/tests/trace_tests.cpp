@@ -4,7 +4,7 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <util/system/pipe.h>
+#include <util/system/pipe.h> 
 #include <util/generic/ymath.h>
 #include <util/string/printf.h>
 #include <util/string/vector.h>
@@ -461,7 +461,7 @@ namespace NLWTrace {
             ui64 duration = (t1.NanoSeconds() - t0.NanoSeconds());
             Cout << "multiple sleep tested, expected 100000000 ns, measured " << duration << " ns" << Endl;
         }
-
+ 
         void SleepCheck(const TConfig& cfg) {
             TProbes p(cfg.UnsafeLWTrace);
             p.Mngr.New("test-sleep", MakeQuery(
@@ -484,7 +484,7 @@ namespace NLWTrace {
             ui64 duration = (t1.NanoSeconds() - t0.NanoSeconds()) / (ui64)10;
             Cout << "sleep tested, expected 100000000 ns, measured " << duration << " ns" << Endl;
         }
-
+ 
         void KillCheckChild(const TConfig& cfg, TPipeHandle& writer) {
             TProbes p(cfg.UnsafeLWTrace);
             p.Mngr.New("test-kill", MakeQuery(
@@ -506,7 +506,7 @@ namespace NLWTrace {
             buffer = 1;
             writer.Write(&buffer, 1);
         }
-
+ 
         void KillCheckParent(TPipeHandle& reader) {
             char buffer = -1;
             reader.Read(&buffer, 1);
@@ -518,9 +518,9 @@ namespace NLWTrace {
             else
                 Cout << "\t\tkill executor tested OK." << Endl;
         }
-
+ 
         void KillCheck(const TConfig& cfg) {
-#ifdef _unix_
+#ifdef _unix_ 
             TPipeHandle reader;
             TPipeHandle writer;
             TPipeHandle::Pipe(reader, writer);
@@ -538,11 +538,11 @@ namespace NLWTrace {
                 KillCheckParent(reader);
                 reader.Close();
             }
-#else
+#else 
             Cout << "kill action test for windows is not implemented." << Endl;
-#endif
+#endif 
         }
-
+ 
         void LogIntModFilter(const TConfig& cfg) {
             TProbes p(cfg.UnsafeLWTrace);
             p.Mngr.New("test-trace", MakeQuery(
@@ -635,7 +635,7 @@ namespace NLWTrace {
                                          "}"));
             Cout << "call to probe with int mod filter (always true, mod 10) and log executors: " << p.IntParamTime(cfg) << Endl;
         }
-
+ 
 #define FOR_EACH_TEST()                                \
     FOR_EACH_TEST_MACRO(LogIntModFilter)               \
     FOR_EACH_TEST_MACRO(SleepCheck)                    \

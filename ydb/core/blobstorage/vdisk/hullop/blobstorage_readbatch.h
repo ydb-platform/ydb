@@ -130,7 +130,7 @@ namespace NKikimr {
         // generate new message to send to yard; batcher may generate as much messages as requested, it's job of caller
         // to control maximum number of in flight messages; return nullptr if there is nothing to read more
         std::unique_ptr<NPDisk::TEvChunkRead> GetPendingMessage(NPDisk::TOwner owner, NPDisk::TOwnerRound ownerRound,
-                ui8 priorityClass) {
+                ui8 priorityClass) { 
             if (!Started || Iterator == ReadQueue.end()) {
                 return nullptr;
             }
@@ -215,7 +215,7 @@ namespace NKikimr {
         }
 
         // apply read result
-        void Apply(NPDisk::TEvChunkReadResult *msg) {
+        void Apply(NPDisk::TEvChunkReadResult *msg) { 
             auto& data = msg->Data;
 
             auto it = ActiveRequests.find(msg->Cookie);

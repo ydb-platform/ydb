@@ -185,10 +185,10 @@ void TBlobStorageController::NotifyNodesAwaitingKeysForGroups(ui32 groupId) {
         NodesAwaitingKeysForGroup.erase(it);
         for (const TNodeId nodeId : nodes) {
             Send(SelfId(), new TEvBlobStorage::TEvControllerGetGroup(nodeId, groupId));
-        }
-    }
-}
-
+        } 
+    } 
+} 
+ 
 void TBlobStorageController::ValidateInternalState() {
     // here we compare different structures to ensure that the memory state is sane
 #ifndef NDEBUG

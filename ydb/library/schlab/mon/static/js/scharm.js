@@ -438,10 +438,10 @@ d3.scharm = function() {
         scharm(dataToCfg());
         d3.json(applyUrl, callback).post(JSON.stringify(cfg));
     }
-    // should be called to apply the current config
-    scharm.applyCfg = function() {
-        scharm(dataToCfg());
-    }
+    // should be called to apply the current config 
+    scharm.applyCfg = function() { 
+        scharm(dataToCfg()); 
+    } 
 
     // constructor
     var attributes = [

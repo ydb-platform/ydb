@@ -199,7 +199,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             const ui32 step = record.GetCurrentStep();
             const TActorId leader = ActorIdFromProto(record.GetCurrentLeader());
 
-            if (gen < ReplyGeneration || (gen == ReplyGeneration && step < ReplyStep)) {
+            if (gen < ReplyGeneration || (gen == ReplyGeneration && step < ReplyStep)) { 
                 ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusOutdated, &ReplyStatus, cookie, false);
             } else {
                 const bool reset = gen > ReplyGeneration || step > ReplyStep || leader != ReplyLeader;
@@ -520,7 +520,7 @@ public:
         , Cookie(0)
         , SuggestedGeneration(0)
         , SuggestedStep(0)
-        , Replicas(0)
+        , Replicas(0) 
         , ReplyStatus(TStateStorageInfo::TSelection::StatusUnknown)
         , RepliesMerged(0)
         , RepliesAfterReply(0)
@@ -536,12 +536,12 @@ public:
             hFunc(TEvStateStorage::TEvLookup, HandleInit);
             hFunc(TEvStateStorage::TEvUpdate, HandleInit);
             hFunc(TEvStateStorage::TEvLock, HandleInit);
-            default:
+            default: 
                 BLOG_W("ProxyRequest::StateInit unexpected event type# "
                     << ev->GetTypeRewrite()
                     << " event: "
                     << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
-                break;
+                break; 
         }
     }
 
@@ -554,12 +554,12 @@ public:
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleLookup);
             cFunc(TEvents::TSystem::Wakeup, HandleLookupTimeout);
-            default:
+            default: 
                 BLOG_W("ProxyRequest::StateLookup unexpected event type# "
                     << ev->GetTypeRewrite()
                     << " event: "
                     << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
-                break;
+                break; 
         }
     }
 
@@ -571,12 +571,12 @@ public:
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleUpdate);
             cFunc(TEvents::TSystem::Wakeup, HandleUpdateTimeout);
-            default:
+            default: 
                 BLOG_W("ProxyRequest::StateUpdate unexpected event type# "
                     << ev->GetTypeRewrite()
                     << " event: "
                     << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
-                break;
+                break; 
         }
     }
 
@@ -588,12 +588,12 @@ public:
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleUpdateSig);
             cFunc(TEvents::TSystem::Wakeup, HandleUpdateSigTimeout);
-            default:
+            default: 
                 BLOG_W("ProxyRequest::StateUpdateSig unexpected event type# "
-                    << ev->GetTypeRewrite()
+                    << ev->GetTypeRewrite() 
                     << " event: "
                     << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
-                break;
+                break; 
         }
     }
 };
@@ -963,7 +963,7 @@ public:
     STATEFN(StateInit) {
         BLOG_TRACE("Proxy::StateInit ev type# " << ev->GetTypeRewrite() << " event: "
             << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
-
+ 
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvRequestReplicasDumps, Handle);
             hFunc(TEvStateStorage::TEvDelete, Handle);
@@ -1007,12 +1007,12 @@ public:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvLookup, Handle);
-            default:
+            default: 
                 BLOG_W("ProxyStub::StateFunc unexpected event type# "
-                    << ev->GetTypeRewrite()
+                    << ev->GetTypeRewrite() 
                     << " event: "
                     << TString(ev->HasEvent() ? ev->GetBase()->ToString() : "serialized?"));
-                break;
+                break; 
         }
     }
 };

@@ -2,9 +2,9 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-
+ 
 #include <ydb/core/base/hive.h>
-
+ 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -16,100 +16,100 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_http_request.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/local.h>
-
+ 
 #include <ydb/library/pdisk_io/sector_map.h>
-#include <util/random/entropy.h>
-#include <util/string/printf.h>
+#include <util/random/entropy.h> 
+#include <util/string/printf.h> 
 #include <util/string/subst.h>
 #include <util/stream/file.h>
-
+ 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
-
-const bool STRAND_PDISK = true;
+ 
+const bool STRAND_PDISK = true; 
 #ifndef NDEBUG
 const bool ENABLE_DETAILED_HIVE_LOG = true;
 #else
-const bool ENABLE_DETAILED_HIVE_LOG = false;
+const bool ENABLE_DETAILED_HIVE_LOG = false; 
 #endif
-
-
-namespace NKikimr {
-namespace NBlobStorageNodeWardenTest{
-
-#define ENABLE_FORKED_TESTS 0
-#if ENABLE_FORKED_TESTS
-#    define CUSTOM_UNIT_TEST(a) SIMPLE_UNIT_FORKED_TEST(a)
-#else
+ 
+ 
+namespace NKikimr { 
+namespace NBlobStorageNodeWardenTest{ 
+ 
+#define ENABLE_FORKED_TESTS 0 
+#if ENABLE_FORKED_TESTS 
+#    define CUSTOM_UNIT_TEST(a) SIMPLE_UNIT_FORKED_TEST(a) 
+#else 
 #define CUSTOM_UNIT_TEST(a) Y_UNIT_TEST(a)
-#endif //ENABLE_FORKED_TESTS
-
-#define VERBOSE_COUT(str) \
-do { \
-    if (IsVerbose) { \
-        Cerr << str << Endl; \
-    } \
-} while(false)
-
-#define LOW_VERBOSE_COUT(str) \
-do { \
-    if (IsLowVerbose) { \
-        Cerr << str << Endl; \
-    } \
-} while(false)
-
-
+#endif //ENABLE_FORKED_TESTS 
+ 
+#define VERBOSE_COUT(str) \ 
+do { \ 
+    if (IsVerbose) { \ 
+        Cerr << str << Endl; \ 
+    } \ 
+} while(false) 
+ 
+#define LOW_VERBOSE_COUT(str) \ 
+do { \ 
+    if (IsLowVerbose) { \ 
+        Cerr << str << Endl; \ 
+    } \ 
+} while(false) 
+ 
+ 
 static bool IsVerbose = true;
-
-static yexception LastException;
-
+ 
+static yexception LastException; 
+ 
 constexpr ui32 DOMAIN_ID = 1;
-
-using namespace NActors;
-
-void FormatPDiskRandomKeys(TString path, ui32 diskSize, ui32 chunkSize, ui64 guid, bool isGuidValid,
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap) {
-    NPDisk::TKey chunkKey;
-    NPDisk::TKey logKey;
-    NPDisk::TKey sysLogKey;
+ 
+using namespace NActors; 
+ 
+void FormatPDiskRandomKeys(TString path, ui32 diskSize, ui32 chunkSize, ui64 guid, bool isGuidValid, 
+        TIntrusivePtr<NPDisk::TSectorMap> sectorMap) { 
+    NPDisk::TKey chunkKey; 
+    NPDisk::TKey logKey; 
+    NPDisk::TKey sysLogKey; 
     EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
     EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
     EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
-
-    if (!isGuidValid) {
+ 
+    if (!isGuidValid) { 
         EntropyPool().Read(&guid, sizeof(guid));
-    }
-
-    NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize,
-            guid, chunkKey, logKey,
-            sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Test",
+    } 
+ 
+    NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize, 
+            guid, chunkKey, logKey, 
+            sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Test", 
             false, false, sectorMap);
-}
-
-void SetupLogging(TTestActorRuntime& runtime) {
-    NActors::NLog::EPriority priority = ENABLE_DETAILED_HIVE_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
-    NActors::NLog::EPriority otherPriority = NLog::PRI_ERROR;
-
-    runtime.SetLogPriority(NKikimrServices::BS_NODE, priority);
-    runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, priority);
-    runtime.SetLogPriority(NKikimrServices::BS_PDISK, otherPriority);
-    runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, otherPriority);
-    runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, otherPriority);
-    runtime.SetLogPriority(NKikimrServices::BS_PROXY, otherPriority);
+} 
+ 
+void SetupLogging(TTestActorRuntime& runtime) { 
+    NActors::NLog::EPriority priority = ENABLE_DETAILED_HIVE_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR; 
+    NActors::NLog::EPriority otherPriority = NLog::PRI_ERROR; 
+ 
+    runtime.SetLogPriority(NKikimrServices::BS_NODE, priority); 
+    runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, priority); 
+    runtime.SetLogPriority(NKikimrServices::BS_PDISK, otherPriority); 
+    runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, otherPriority); 
+    runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, otherPriority); 
+    runtime.SetLogPriority(NKikimrServices::BS_PROXY, otherPriority); 
     runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, otherPriority);
     runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, otherPriority);
-
+ 
     runtime.SetLogPriority(NKikimrServices::BS_SKELETON, otherPriority);
     runtime.SetLogPriority(NKikimrServices::BS_SYNCJOB, otherPriority);
     runtime.SetLogPriority(NKikimrServices::BS_SYNCER, otherPriority);
-}
-
-void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap) {
-    const ui32 domainsNum = 1;
-    const ui32 disksInDomain = 1;
-
-    const ui32 domainId = DOMAIN_ID;
-    const ui32 stateStorageGroup = domainId;
+} 
+ 
+void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap) { 
+    const ui32 domainsNum = 1; 
+    const ui32 disksInDomain = 1; 
+ 
+    const ui32 domainId = DOMAIN_ID; 
+    const ui32 stateStorageGroup = domainId; 
 
     TAppPrepare app;
 
@@ -122,7 +122,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
         app.SetKeyForNode(keyfile, 0);
     }
 
-    { // setup domain info
+    { // setup domain info 
         app.ClearDomainsAndHive();
         auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds("dc-1", domainId, 0,
                                                                                   domainId, domainId, TVector<ui32>{domainId},
@@ -134,158 +134,158 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
                                                                                   DefaultPoolKinds(2));
         app.AddDomain(domain.Release());
         app.AddHive(domainId, MakeDefaultHiveID(stateStorageGroup));
-    }
+    } 
 
     SetupChannelProfiles(app, domainId);
 
     if (false) { // setup channel profiles
-        TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
+        TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles; 
         channelProfiles->Profiles.emplace_back();
         TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back();
-        for (ui32 channelIdx = 0; channelIdx < 3; ++channelIdx) {
-            profile.Channels.push_back(
-                TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureMirror3, 0,
-                    NKikimrBlobStorage::TVDiskKind::Default));
-        }
+        for (ui32 channelIdx = 0; channelIdx < 3; ++channelIdx) { 
+            profile.Channels.push_back( 
+                TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureMirror3, 0, 
+                    NKikimrBlobStorage::TVDiskKind::Default)); 
+        } 
         app.SetChannels(std::move(channelProfiles));
-    }
-
-    ui32 groupId = TGroupID(GroupConfigurationTypeStatic, DOMAIN_ID, 0).GetRaw();
-    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+    } 
+ 
+    ui32 groupId = TGroupID(GroupConfigurationTypeStatic, DOMAIN_ID, 0).GetRaw(); 
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) { 
         SetupStateStorage(runtime, nodeIndex, stateStorageGroup);
-
-        TStringStream str;
-        str << "AvailabilityDomains: " << DOMAIN_ID << Endl;
-        str << "PDisks { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 Path: \"pdisk0.dat\"}" << Endl;
-        str << "" << Endl;
-        str << "VDisks {" << Endl;
-        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 0 VDisk: 0 }" << Endl;
-        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 0 }" << Endl;
-        str << "}" << Endl;
-        str << "VDisks {" << Endl;
-        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 1 VDisk: 0 }" << Endl;
-        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 1 }" << Endl;
-        str << "}" << Endl;
-        str << "VDisks {" << Endl;
-        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 2 VDisk: 0 }" << Endl;
-        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 2 }" << Endl;
-        str << "}" << Endl;
-        str << "VDisks {" << Endl;
-        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 3 VDisk: 0 }" << Endl;
-        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 3 }" << Endl;
-        str << "}" << Endl;
-        str << "" << Endl;
-        str << "Groups {" << Endl;
-        str << "    GroupID: " << groupId << Endl;
-        str << "    GroupGeneration: 1 " << Endl;
-        str << "    ErasureSpecies: 1 " << Endl;// Mirror3
-        str << "    Rings {" << Endl;
-        str << "        FailDomains {" << Endl;
-        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 0 PDiskGuid: 1 }" << Endl;
-        str << "        }" << Endl;
-        str << "        FailDomains {" << Endl;
-        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 1 PDiskGuid: 1 }" << Endl;
-        str << "        }" << Endl;
-        str << "        FailDomains {" << Endl;
-        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 2 PDiskGuid: 1 }" << Endl;
-        str << "        }" << Endl;
-        str << "        FailDomains {" << Endl;
-        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 3 PDiskGuid: 1 }" << Endl;
-        str << "        }" << Endl;
-        str << "    }" << Endl;
-        str << "}";
+ 
+        TStringStream str; 
+        str << "AvailabilityDomains: " << DOMAIN_ID << Endl; 
+        str << "PDisks { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 Path: \"pdisk0.dat\"}" << Endl; 
+        str << "" << Endl; 
+        str << "VDisks {" << Endl; 
+        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 0 VDisk: 0 }" << Endl; 
+        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 0 }" << Endl; 
+        str << "}" << Endl; 
+        str << "VDisks {" << Endl; 
+        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 1 VDisk: 0 }" << Endl; 
+        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 1 }" << Endl; 
+        str << "}" << Endl; 
+        str << "VDisks {" << Endl; 
+        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 2 VDisk: 0 }" << Endl; 
+        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 2 }" << Endl; 
+        str << "}" << Endl; 
+        str << "VDisks {" << Endl; 
+        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 3 VDisk: 0 }" << Endl; 
+        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 3 }" << Endl; 
+        str << "}" << Endl; 
+        str << "" << Endl; 
+        str << "Groups {" << Endl; 
+        str << "    GroupID: " << groupId << Endl; 
+        str << "    GroupGeneration: 1 " << Endl; 
+        str << "    ErasureSpecies: 1 " << Endl;// Mirror3 
+        str << "    Rings {" << Endl; 
+        str << "        FailDomains {" << Endl; 
+        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 0 PDiskGuid: 1 }" << Endl; 
+        str << "        }" << Endl; 
+        str << "        FailDomains {" << Endl; 
+        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 1 PDiskGuid: 1 }" << Endl; 
+        str << "        }" << Endl; 
+        str << "        FailDomains {" << Endl; 
+        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 2 PDiskGuid: 1 }" << Endl; 
+        str << "        }" << Endl; 
+        str << "        FailDomains {" << Endl; 
+        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 3 PDiskGuid: 1 }" << Endl; 
+        str << "        }" << Endl; 
+        str << "    }" << Endl; 
+        str << "}"; 
         TString staticConfig(str.Str());
-
-        SubstGlobal(staticConfig, "$Node1", Sprintf("%" PRIu32, runtime.GetNodeId(0)));
-
-        TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(
-            STRAND_PDISK && !runtime.IsRealThreads() ?
-            static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime)) :
-            static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
-//            nodeWardenConfig->Monitoring = monitoring;
-        google::protobuf::TextFormat::ParseFromString(staticConfig, &nodeWardenConfig->ServiceSet);
-
-        if (nodeIndex == 0) {
-            nodeWardenConfig->SectorMaps[extraPath] = extraSectorMap;
+ 
+        SubstGlobal(staticConfig, "$Node1", Sprintf("%" PRIu32, runtime.GetNodeId(0))); 
+ 
+        TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig( 
+            STRAND_PDISK && !runtime.IsRealThreads() ? 
+            static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime)) : 
+            static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory()))); 
+//            nodeWardenConfig->Monitoring = monitoring; 
+        google::protobuf::TextFormat::ParseFromString(staticConfig, &nodeWardenConfig->ServiceSet); 
+ 
+        if (nodeIndex == 0) { 
+            nodeWardenConfig->SectorMaps[extraPath] = extraSectorMap; 
             ObtainTenantKey(&nodeWardenConfig->TenantKey, app.Keys[0]);
             ObtainStaticKey(&nodeWardenConfig->StaticKey);
-
+ 
             TString baseDir = runtime.GetTempDir();
-
-            TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap());
-            sectorMap->ForceSize(64ull << 30ull);
-
-
+ 
+            TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap()); 
+            sectorMap->ForceSize(64ull << 30ull); 
+ 
+ 
             TString pDiskPath0 = TStringBuilder() << "SectorMap:" << baseDir << "pdisk_map";
             nodeWardenConfig->ServiceSet.MutablePDisks(0)->SetPath(pDiskPath0);
-            nodeWardenConfig->SectorMaps[pDiskPath0] = sectorMap;
+            nodeWardenConfig->SectorMaps[pDiskPath0] = sectorMap; 
 
-            ui64 pDiskGuid = 1;
-            static ui64 iteration = 0;
-            ++iteration;
-            ::NKikimr::FormatPDisk(pDiskPath0, 0, 4 << 10, 32u << 20u, pDiskGuid,
-                0x1234567890 + iteration, 0x4567890123 + iteration, 0x7890123456 + iteration,
-                NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap);
+            ui64 pDiskGuid = 1; 
+            static ui64 iteration = 0; 
+            ++iteration; 
+            ::NKikimr::FormatPDisk(pDiskPath0, 0, 4 << 10, 32u << 20u, pDiskGuid, 
+                0x1234567890 + iteration, 0x4567890123 + iteration, 0x7890123456 + iteration, 
+                NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap); 
 
 
             // Magic path from testlib, do not change it
             TString pDiskPath1 = TStringBuilder() << baseDir << "pdisk_1.dat";
-            TIntrusivePtr<NPDisk::TSectorMap> sectorMap1(new NPDisk::TSectorMap());
-            sectorMap1->ForceSize(64ull << 30ull);
-            sectorMap1->ZeroInit(32);
-            nodeWardenConfig->SectorMaps[pDiskPath1] = sectorMap1;
-        }
-
+            TIntrusivePtr<NPDisk::TSectorMap> sectorMap1(new NPDisk::TSectorMap()); 
+            sectorMap1->ForceSize(64ull << 30ull); 
+            sectorMap1->ZeroInit(32); 
+            nodeWardenConfig->SectorMaps[pDiskPath1] = sectorMap1; 
+        } 
+ 
         SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig.Release());
         SetupTabletResolver(runtime, nodeIndex);
-    }
-
+    } 
+ 
     runtime.Initialize(app.Unwrap());
-
-    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+ 
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) { 
         TActorId localActor = runtime.GetLocalServiceId(
-            MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)), nodeIndex);
-        runtime.EnableScheduleForActor(localActor, true);
-    }
-
-    if (!runtime.IsRealThreads()) {
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(
-            TEvBlobStorage::EvLocalRecoveryDone, domainsNum * disksInDomain));
-        runtime.DispatchEvents(options);
-    }
-
-    ui64 defaultStateStorageGroup = runtime.GetAppData(0).DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
+            MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)), nodeIndex); 
+        runtime.EnableScheduleForActor(localActor, true); 
+    } 
+ 
+    if (!runtime.IsRealThreads()) { 
+        TDispatchOptions options; 
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition( 
+            TEvBlobStorage::EvLocalRecoveryDone, domainsNum * disksInDomain)); 
+        runtime.DispatchEvents(options); 
+    } 
+ 
+    ui64 defaultStateStorageGroup = runtime.GetAppData(0).DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID); 
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(defaultStateStorageGroup),
         TTabletTypes::FLAT_BS_CONTROLLER, TBlobStorageGroupType::ErasureMirror3, groupId),
         &CreateFlatBsController);
 
     SetupBoxAndStoragePool(runtime, runtime.AllocateEdgeActor(), domainId);
-}
-
-void Setup(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap) {
-    SetupLogging(runtime);
-    SetupServices(runtime, extraPath, extraSectorMap);
+} 
+ 
+void Setup(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap) { 
+    SetupLogging(runtime); 
+    SetupServices(runtime, extraPath, extraSectorMap); 
 //    runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG);
-//    runtime.SetLogPriority(NKikimrServices::BS_NODE, NLog::PRI_DEBUG);
+//    runtime.SetLogPriority(NKikimrServices::BS_NODE, NLog::PRI_DEBUG); 
     runtime.SetLogPriority(NKikimrServices::BS_PROXY, NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::BS_PROXY_PUT, NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::BS_PROXY_BLOCK, NLog::PRI_DEBUG);
-//    runtime.SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_DEBUG);
-//    runtime.SetLogPriority(NKikimrServices::BS_QUEUE, NLog::PRI_DEBUG);
-}
-
+//    runtime.SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_DEBUG); 
+//    runtime.SetLogPriority(NKikimrServices::BS_QUEUE, NLog::PRI_DEBUG); 
+} 
+ 
 Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
-    ui64 GetBsc(TTestActorRuntime &runtime) {
-        ui64 defaultStateStorageGroup = runtime.GetAppData(0).DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
-        ui64 bsController = MakeBSControllerID(defaultStateStorageGroup);
-        return bsController;
-    }
-
+    ui64 GetBsc(TTestActorRuntime &runtime) { 
+        ui64 defaultStateStorageGroup = runtime.GetAppData(0).DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID); 
+        ui64 bsController = MakeBSControllerID(defaultStateStorageGroup); 
+        return bsController; 
+    } 
+ 
     ui32 CreatePDisk(TTestActorRuntime &runtime, ui32 nodeIdx, TString path, ui64 guid, ui32 pdiskId, ui64 pDiskCategory) {
         VERBOSE_COUT(" Creating pdisk");
 
-        ui32 nodeId = runtime.GetNodeId(nodeIdx);
+        ui32 nodeId = runtime.GetNodeId(nodeIdx); 
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
         auto& record = ev->Record;
         auto *pdisk = record.MutableServiceSet()->AddPDisks();
@@ -296,28 +296,28 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         pdisk->SetPDiskCategory(pDiskCategory);
         pdisk->SetEntityStatus(NKikimrBlobStorage::CREATE);
         runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), TActorId(), ev.release()));
-
+ 
         return pdiskId;
-    }
-
+    } 
+ 
     void Put(TTestActorRuntime &runtime, TActorId &sender, ui32 groupId, TLogoBlobID logoBlobId, TString data, NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::OK) {
-        VERBOSE_COUT(" Sending TEvPut");
+        VERBOSE_COUT(" Sending TEvPut"); 
         TActorId proxy = MakeBlobStorageProxyID(groupId);
-        ui32 nodeId = sender.NodeId();
+        ui32 nodeId = sender.NodeId(); 
         TActorId nodeWarden = MakeBlobStorageNodeWardenID(nodeId);
-        ui64 cookie = 6543210;
-        runtime.Send(new IEventHandle(proxy, sender,
-            new TEvBlobStorage::TEvPut(logoBlobId, data, TInstant::Max()),
-            IEventHandle::FlagForwardOnNondelivery, cookie, &nodeWarden), sender.NodeId() - runtime.GetNodeId(0));
-
-        TAutoPtr<IEventHandle> handle;
-        auto putResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(handle);
-        UNIT_ASSERT(putResult);
+        ui64 cookie = 6543210; 
+        runtime.Send(new IEventHandle(proxy, sender, 
+            new TEvBlobStorage::TEvPut(logoBlobId, data, TInstant::Max()), 
+            IEventHandle::FlagForwardOnNondelivery, cookie, &nodeWarden), sender.NodeId() - runtime.GetNodeId(0)); 
+ 
+        TAutoPtr<IEventHandle> handle; 
+        auto putResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(handle); 
+        UNIT_ASSERT(putResult); 
         UNIT_ASSERT_C(putResult->Status == expectAnsver,
-                "Status# " << NKikimrProto::EReplyStatus_Name(putResult->Status));
-        UNIT_ASSERT_EQUAL(handle->Cookie, cookie);
-    }
-
+                "Status# " << NKikimrProto::EReplyStatus_Name(putResult->Status)); 
+        UNIT_ASSERT_EQUAL(handle->Cookie, cookie); 
+    } 
+ 
     void CreateStoragePool(TTestBasicRuntime& runtime, ui32 domainId, TString name, TString kind) {
         auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId);
         NKikimrBlobStorage::TDefineStoragePool storagePool = runtime.GetAppData().DomainsInfo->GetDomain(domainId).StoragePoolTypes.at(kind);
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     CUSTOM_UNIT_TEST(TestDeleteStoragePool) {
         TTestBasicRuntime runtime(1, false);
-        Setup(runtime, "", nullptr);
+        Setup(runtime, "", nullptr); 
 
         auto sender0 = runtime.AllocateEdgeActor(0);
 
@@ -502,7 +502,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     CUSTOM_UNIT_TEST(TestBlockEncriptedGroup) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, "", nullptr);
+        Setup(runtime, "", nullptr); 
 
         auto sender0 = runtime.AllocateEdgeActor(0);
         auto sender1 = runtime.AllocateEdgeActor(1);
@@ -641,32 +641,32 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         AssertMonitoringExists(runtime, 0, name);
     }
 
-    CUSTOM_UNIT_TEST(TestGivenPDiskFormatedWithGuid1AndCreatedWithGuid2WhenYardInitThenError) {
-        TTempDir tempDir;
+    CUSTOM_UNIT_TEST(TestGivenPDiskFormatedWithGuid1AndCreatedWithGuid2WhenYardInitThenError) { 
+        TTempDir tempDir; 
         TTestBasicRuntime runtime(2, false);
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap(32ull << 30ull));
+        TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap(32ull << 30ull)); 
         Setup(runtime, "SectorMap:new_pdisk", sectorMap);
         TActorId sender0 = runtime.AllocateEdgeActor(0);
 //        TActorId sender1 = runtime.AllocateEdgeActor(1);
-
-        VERBOSE_COUT(" Formatting pdisk");
-        FormatPDiskRandomKeys(tempDir() + "/new_pdisk.dat", sectorMap->DeviceSize, 32 << 20, 1, false, sectorMap);
-
+ 
+        VERBOSE_COUT(" Formatting pdisk"); 
+        FormatPDiskRandomKeys(tempDir() + "/new_pdisk.dat", sectorMap->DeviceSize, 32 << 20, 1, false, sectorMap); 
+ 
         VERBOSE_COUT(" Creating PDisk");
-        ui64 guid = 1;
-        ui64 pDiskCategory = 0;
+        ui64 guid = 1; 
+        ui64 pDiskCategory = 0; 
         EntropyPool().Read(&guid, sizeof(guid));
-//        TODO: look why doesn't sernder 1 work
+//        TODO: look why doesn't sernder 1 work 
         ui32 pDiskId = CreatePDisk(runtime, 0, tempDir() + "/new_pdisk.dat", guid, 1001, pDiskCategory);
-
-        VERBOSE_COUT(" Verify that PDisk returns ERROR");
-
-        TVDiskID vDiskId;
-        ui64 guid2 = guid;
-        while (guid2 == guid) {
+ 
+        VERBOSE_COUT(" Verify that PDisk returns ERROR"); 
+ 
+        TVDiskID vDiskId; 
+        ui64 guid2 = guid; 
+        while (guid2 == guid) { 
             EntropyPool().Read(&guid2, sizeof(guid2));
-        }
-        ui32 nodeId = runtime.GetNodeId(0);
+        } 
+        ui32 nodeId = runtime.GetNodeId(0); 
         TActorId pDiskActorId = MakeBlobStoragePDiskID(nodeId, pDiskId);
         for (;;) {
             runtime.Send(new IEventHandle(pDiskActorId, sender0, new NPDisk::TEvYardInit(1, vDiskId, guid)), 0);
@@ -677,8 +677,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 break;
             }
         }
-    }
-
+    } 
+ 
     void TestHttpMonForPath(const TString& path) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, "", nullptr);
@@ -699,7 +699,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TestHttpMonForPath("");
         TestHttpMonForPath("/json/groups");
     }
-}
-
-} // namespace NBlobStorageNodeWardenTest
-} // namespace NKikimr
+} 
+ 
+} // namespace NBlobStorageNodeWardenTest 
+} // namespace NKikimr 

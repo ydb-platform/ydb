@@ -20,7 +20,7 @@ SRCS(
     blobstorage_controller.proto
     blobstorage_disk.proto
     blobstorage_disk_color.proto
-    blobstorage_pdisk_config.proto
+    blobstorage_pdisk_config.proto 
     blobstorage_vdisk_config.proto
     blobstorage_vdisk_internal.proto
     blobstorage_config.proto
@@ -55,11 +55,11 @@ SRCS(
     counters_mediator.proto
     counters.proto
     database_basic_sausage_metainfo.proto
-    drivemodel.proto
+    drivemodel.proto 
     export.proto
     flat_tx_scheme.proto
     flat_scheme_op.proto
-    health.proto
+    health.proto 
     hive.proto
     http_config.proto
     import.proto
@@ -75,7 +75,7 @@ SRCS(
     metrics.proto
     minikql_engine.proto
     msgbus.proto
-    msgbus_health.proto
+    msgbus_health.proto 
     msgbus_kv.proto
     msgbus_pq.proto
     netclassifier.proto
@@ -120,7 +120,7 @@ SRCS(
     pdiskfit.proto
     pqconfig.proto
     auth.proto
-    key.proto
+    key.proto 
     grpc.proto
     grpc_pq_old.proto
     grpc_status_proxy.proto

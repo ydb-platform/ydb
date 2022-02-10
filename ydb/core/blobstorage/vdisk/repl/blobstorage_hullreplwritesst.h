@@ -120,7 +120,7 @@ namespace NKikimr {
             return msg;
         }
 
-        void Apply(NPDisk::TEvChunkReserveResult* ev) {
+        void Apply(NPDisk::TEvChunkReserveResult* ev) { 
             Y_VERIFY(State == EState::NOT_READY);
 
             if (ev->Status != NKikimrProto::OK) {
@@ -176,7 +176,7 @@ namespace NKikimr {
             return success;
         }
 
-        void Apply(NPDisk::TEvChunkWriteResult* ev) {
+        void Apply(NPDisk::TEvChunkWriteResult* ev) { 
             if (ev->Status != NKikimrProto::OK) {
                 State = EState::ERROR;
                 return;

@@ -119,11 +119,11 @@ namespace NSlidingWindow {
     class TSlidingWindow {
     public:
         using TValueType = typename TOperation::TValueType;
-        using TValueVector = TVector<TValueType>;
-        using TSizeType = typename TValueVector::size_type;
+        using TValueVector = TVector<TValueType>; 
+        using TSizeType = typename TValueVector::size_type; 
 
     public:
-        TSlidingWindow(const TDuration& length, TSizeType partsNum)
+        TSlidingWindow(const TDuration& length, TSizeType partsNum) 
             : Mutex()
             , Buckets(partsNum, TOperation::InitialValue()) // vector of size partsNum initialized with initial value
             , WindowValue(TOperation::InitialValue())

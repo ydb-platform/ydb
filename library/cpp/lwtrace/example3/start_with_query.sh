@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash 
 echo "Executing program with following trace query:"
 cat example_query.tr
 echo -n "Press any key to start program"

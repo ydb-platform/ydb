@@ -37,8 +37,8 @@ struct TEvPrivate {
         bool GranuleCompaction{false};
         TBlobBatch BlobBatch;
         TUsage ResourceUsage;
-        TVector<ui32> YellowMoveChannels;
-        TVector<ui32> YellowStopChannels;
+        TVector<ui32> YellowMoveChannels; 
+        TVector<ui32> YellowStopChannels; 
         bool CacheData{false};
 
         TEvWriteIndex(const NOlap::TIndexInfo& indexInfo,

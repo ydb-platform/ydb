@@ -78,23 +78,23 @@ message TEvTabletStatus {
     optional uint32 FollowerId = 4;
     optional uint32 Reason = 5 [default = 34]; // ReasonError
 }
-
-message TEvEnumerateTablets {
+ 
+message TEvEnumerateTablets { 
     optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
-}
-
-message TEvEnumerateTabletsResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-
-    message TTabletInfo {
-        optional uint64 TabletId = 1;
+} 
+ 
+message TEvEnumerateTabletsResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
+ 
+    message TTabletInfo { 
+        optional uint64 TabletId = 1; 
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 2;
         optional EBootMode BootMode = 3 [default = BOOT_MODE_LEADER];
         optional uint32 FollowerId = 4;
-    }
-
-    repeated TTabletInfo TabletInfo = 2;
-}
+    } 
+ 
+    repeated TTabletInfo TabletInfo = 2; 
+} 
 
 message TEvSyncTablets {
     message TTabletInfo {

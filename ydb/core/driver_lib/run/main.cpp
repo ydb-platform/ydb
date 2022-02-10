@@ -120,20 +120,20 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         case EDM_DISCOVERY:
         case EDM_WHOAMI:
             return NDriverClient::NewClient(argc + freeArgsPos, argv - freeArgsPos, factories);
-        case EDM_FORMAT_INFO:
-            return MainFormatInfo(cmdConf, argc, argv);
-        case EDM_FORMAT_UTIL:
-            return MainFormatUtil(cmdConf, argc, argv);
-        case EDM_NODE_BY_HOST:
-            return MainNodeByHost(cmdConf, argc, argv);
+        case EDM_FORMAT_INFO: 
+            return MainFormatInfo(cmdConf, argc, argv); 
+        case EDM_FORMAT_UTIL: 
+            return MainFormatUtil(cmdConf, argc, argv); 
+        case EDM_NODE_BY_HOST: 
+            return MainNodeByHost(cmdConf, argc, argv); 
         case EDM_SCHEME_INITROOT:
             return NDriverClient::SchemeInitRoot(cmdConf, argc, argv);
         case EDM_COMPILE_AND_EXEC_MINIKQL:
             return NDriverClient::CompileAndExecMiniKQL(cmdConf, argc, argv);
         case EDM_TRACE:
             return NDriverClient::MessageBusTrace(cmdConf, argc, argv);
-        case EDM_KEYVALUE_REQUEST:
-            return NDriverClient::KeyValueRequest(cmdConf, argc, argv);
+        case EDM_KEYVALUE_REQUEST: 
+            return NDriverClient::KeyValueRequest(cmdConf, argc, argv); 
         case EDM_PERSQUEUE_REQUEST:
             return NDriverClient::PersQueueRequest(cmdConf, argc, argv);
         case EDM_PERSQUEUE_STRESS:

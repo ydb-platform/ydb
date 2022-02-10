@@ -78,11 +78,11 @@ namespace NKikimr {
     TAutoPtr<ITabletScheduledEventsGuard> CreateTabletScheduledEventsGuard(const TVector<ui64>& tabletIds, TTestActorRuntime& runtime, const TActorId& sender);
     ui64 GetFreePDiskSize(TTestActorRuntime& runtime, const TActorId& sender);
     void PrintTabletDb(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender);
-
+ 
     NTabletPipe::TClientConfig GetPipeConfigWithRetriesAndFollowers();
-
+ 
     IActor* CreateFlatDummyTablet(const TActorId &tablet, TTabletStorageInfo *info);
-
+ 
     void WaitScheduledEvents(TTestActorRuntime &runtime, TDuration delay, const TActorId &sender, ui32 nodeIndex = 0);
 
 

@@ -1,40 +1,40 @@
-#include "dsproxy_nodemon.h"
-
+#include "dsproxy_nodemon.h" 
+ 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
 TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, bool initForAllDeviceTypes)
         : Group(GetServiceCounters(counters, "dsproxynode"))
 {
-    TVector<float> percentiles4;
-    percentiles4.push_back(0.50f);
-    percentiles4.push_back(0.90f);
-    percentiles4.push_back(0.95f);
-    percentiles4.push_back(1.0f);
-
-    TVector<float> percentiles1;
-    percentiles1.push_back(1.0f);
-
+    TVector<float> percentiles4; 
+    percentiles4.push_back(0.50f); 
+    percentiles4.push_back(0.90f); 
+    percentiles4.push_back(0.95f); 
+    percentiles4.push_back(1.0f); 
+ 
+    TVector<float> percentiles1; 
+    percentiles1.push_back(1.0f); 
+ 
     PutResponseTime.Initialize(Group, "event", "put", "latency", percentiles4);
     PutTabletLogResponseTime.Initialize(Group, "event", "putTabletLogAll", "latency", percentiles1);
     PutTabletLogResponseTime256.Initialize(Group, "event", "putTabletLog256", "latency", percentiles1);
     PutTabletLogResponseTime512.Initialize(Group, "event", "putTabletLog512", "latency", percentiles1);
     PutAsyncBlobResponseTime.Initialize(Group, "event", "putAsyncBlob", "latency", percentiles1);
     PutUserDataResponseTime.Initialize(Group, "event", "putUserData", "latency", percentiles1);
-
+ 
     GetResponseTime.Initialize(Group, "event", "get", "latency", percentiles1);
     GetAsyncReadResponseTime.Initialize(Group, "event", "getAsyncRead", "latency", percentiles1);
     GetFastReadResponseTime256Ki.Initialize(Group, "event", "getFastRead256Ki", "latency", percentiles1);
     GetFastReadResponseTimeInf.Initialize(Group, "event", "getFastReadInf", "latency", percentiles1);
     GetDiscoverResponseTime.Initialize(Group, "event", "getDiscover", "latency", percentiles1);
-    GetLowReadResponseTime.Initialize(Group, "event", "getLowRead", "latency", percentiles1);
-
+    GetLowReadResponseTime.Initialize(Group, "event", "getLowRead", "latency", percentiles1); 
+ 
     BlockResponseTime.Initialize(Group, "event", "block", "latency", percentiles1);
     DiscoverResponseTime.Initialize(Group, "event", "discover", "latency", percentiles1);
     IndexRestoreGetResponseTime.Initialize(Group, "event", "indexRestoreGet", "latency",
-            percentiles1);
+            percentiles1); 
     RangeResponseTime.Initialize(Group, "event", "range", "latency", percentiles1);
     PatchResponseTime.Initialize(Group, "event", "patch", "latency", percentiles4);
 
@@ -67,13 +67,13 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
             RestartHisto[i] = histoGroup->GetNamedCounter("restartCount", ToString(i), true);
         }
     }
-    // Accelerate counters
-    {
-        auto group = Group->GetSubgroup("subsystem", "accelerate");
-        AccelerateEvVPutCount = group->GetCounter("EvVPutCount", true);
-        AccelerateEvVMultiPutCount = group->GetCounter("EvVMultiPutCount", true);
-        AccelerateEvVGetCount = group->GetCounter("EvVGetCount", true);
-    }
+    // Accelerate counters 
+    { 
+        auto group = Group->GetSubgroup("subsystem", "accelerate"); 
+        AccelerateEvVPutCount = group->GetCounter("EvVPutCount", true); 
+        AccelerateEvVMultiPutCount = group->GetCounter("EvVMultiPutCount", true); 
+        AccelerateEvVGetCount = group->GetCounter("EvVGetCount", true); 
+    } 
     // malfunction counters
     {
         auto group = Group->GetSubgroup("subsystem", "malfunction");
@@ -82,8 +82,8 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
         UnconfiguredTimeout = group->GetCounter("UnconfiguredTimeout", false);
         UnconfiguredTimeout5min = group->GetCounter("UnconfiguredTimeout5min", false);
     }
-}
-
+} 
+ 
 ui32 IdxForType(TPDiskCategory::EDeviceType type) {
     switch (type) {
         case TPDiskCategory::DEVICE_TYPE_ROT: return 0;
@@ -160,11 +160,11 @@ void TDsProxyNodeMon::CountGetResponseTime(TPDiskCategory::EDeviceType type, NKi
             Y_VERIFY_DEBUG(GetDiscoverResponseTimeHist[idx]);
             GetDiscoverResponseTimeHist[idx]->Collect(durationMsFloat);
             break;
-        case NKikimrBlobStorage::EGetHandleClass::LowRead:
-            GetLowReadResponseTime.Increment(durationMs);
-            Y_VERIFY_DEBUG(GetLowReadResponseTimeHist[idx]);
-            GetLowReadResponseTimeHist[idx]->Collect(durationMsFloat);
-            break;
+        case NKikimrBlobStorage::EGetHandleClass::LowRead: 
+            GetLowReadResponseTime.Increment(durationMs); 
+            Y_VERIFY_DEBUG(GetLowReadResponseTimeHist[idx]); 
+            GetLowReadResponseTimeHist[idx]->Collect(durationMsFloat); 
+            break; 
         default:
             Y_FAIL("Unexpected case, HandleClass# %" PRIu64, (ui64)cls);
     }
@@ -200,8 +200,8 @@ void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceT
         GetFastReadResponseTimeHist256Ki[idx] = getNamedHisto("getFastRead256KiMs");
         GetFastReadResponseTimeHistInf[idx] = getNamedHisto("getFastReadInfMs");
         GetDiscoverResponseTimeHist[idx] = getNamedHisto("getDiscoverMs");
-        GetLowReadResponseTimeHist[idx] = getNamedHisto("getLowReadMs");
+        GetLowReadResponseTimeHist[idx] = getNamedHisto("getLowReadMs"); 
         PatchResponseTimeHist[idx] = getNamedHisto("patchMs");
     }
 }
-} // NKikimr
+} // NKikimr 

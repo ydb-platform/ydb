@@ -66,7 +66,7 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) { 
             TString message;
             const NKikimrProto::EReplyStatus status = ev->Get()->Status;
             if (status != NKikimrProto::OK) {
@@ -86,7 +86,7 @@ namespace NKikimr {
                 CHECK_PDISK_RESPONSE_MSG(Ctx->VCtx, ev, ctx, message);
             }
 
-            NPDisk::TEvChunkReadResult *msg = ev->Get();
+            NPDisk::TEvChunkReadResult *msg = ev->Get(); 
             WILSON_TRACE_FROM_ACTOR(ctx, *this, &TraceId, EvChunkReadResultReceived, YardCookie = msg->Cookie,
                     MergedNode = std::move(ev->TraceId));
 

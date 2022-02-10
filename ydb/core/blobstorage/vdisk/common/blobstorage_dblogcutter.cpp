@@ -48,15 +48,15 @@ namespace NKikimr {
             ctx.Schedule(timeout, new TEvents::TEvWakeup(), nullptr);
         }
 
-        void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) { 
             CHECK_PDISK_RESPONSE(LogCutterCtx.VCtx, ev, ctx);
 
             WriteInProgress = false;
             Process(ctx);
         }
 
-        void Handle(TEvVDiskCutLog::TPtr &ev, const TActorContext &ctx) {
-            TEvVDiskCutLog *msg = ev->Get();
+        void Handle(TEvVDiskCutLog::TPtr &ev, const TActorContext &ctx) { 
+            TEvVDiskCutLog *msg = ev->Get(); 
 
             auto update = [&](ui64 &target, TInstant &time, const char *name) {
                 if (msg->LastKeepLsn < target) {
@@ -77,16 +77,16 @@ namespace NKikimr {
             };
 
             switch (msg->Component) {
-                case TEvVDiskCutLog::Hull:
+                case TEvVDiskCutLog::Hull: 
                     update(HullLsnToKeep, HullLastTime, "Hull");
                     break;
-                case TEvVDiskCutLog::SyncLog:
+                case TEvVDiskCutLog::SyncLog: 
                     update(SyncLogLsnToKeep, SyncLogLastTime, "SyncLog");
                     break;
-                case TEvVDiskCutLog::Syncer:
+                case TEvVDiskCutLog::Syncer: 
                     update(SyncerLsnToKeep, SyncerLastTime, "Syncer");
                     break;
-                case TEvVDiskCutLog::HugeKeeper:
+                case TEvVDiskCutLog::HugeKeeper: 
                     update(HugeKeeperLsnToKeep, HugeKeeperLastTime, "HugeKeeper");
                     break;
                 case TEvVDiskCutLog::Scrub:
@@ -123,10 +123,10 @@ namespace NKikimr {
             }
 
             if (freeUpToLsn) {
-                LastCutTime = TAppData::TimeProvider->Now();
+                LastCutTime = TAppData::TimeProvider->Now(); 
 
                 // generate clear log message
-                NPDisk::TCommitRecord commitRec;
+                NPDisk::TCommitRecord commitRec; 
                 commitRec.FirstLsnToKeep = *freeUpToLsn;
                 commitRec.IsStartingPoint = false;
                 TLsnSeg seg = LogCutterCtx.LsnMngr->AllocLsnForLocalUse();
@@ -188,7 +188,7 @@ namespace NKikimr {
         STRICT_STFUNC(StateFunc,
             HFunc(NPDisk::TEvLogResult, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
-            HFunc(TEvVDiskCutLog, Handle)
+            HFunc(TEvVDiskCutLog, Handle) 
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             CFunc(TEvents::TSystem::Wakeup, Timeout)

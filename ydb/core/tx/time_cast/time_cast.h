@@ -5,9 +5,9 @@
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/tx_mediator_timecast.pb.h>
 
-#include <util/stream/str.h>
+#include <util/stream/str.h> 
 #include <util/string/builder.h>
-
+ 
 namespace NKikimr {
 
 class TMediatorTimecastEntry : public TThrRefBase {
@@ -50,17 +50,17 @@ struct TEvMediatorTimecast {
             : TabletId(tabletId)
             , ProcessingParams(processing)
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{TEvRegisterTablet";
-            str << " TabletId# " << TabletId;
+            TStringStream str; 
+            str << "{TEvRegisterTablet"; 
+            str << " TabletId# " << TabletId; 
             if (ProcessingParams.HasVersion()) {
                 str << " ProcessingParams { " <<  ProcessingParams.ShortDebugString() << " }";
             }
-            str << "}";
-            return str.Str();
-        }
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 
     struct TEvRegisterTabletResult : public TEventLocal<TEvRegisterTabletResult, EvRegisterTabletResult> {
@@ -71,19 +71,19 @@ struct TEvMediatorTimecast {
             : TabletId(tabletId)
             , Entry(entry)
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{TEvRegisterTabletResult";
-            str << " TabletId# " << TabletId;
-            if (Entry) {
-                str << " Entry# " << Entry->Get(TabletId);
-            } else {
-                str << " Entry# nullptr";
-            }
-            str << "}";
-            return str.Str();
-        }
+            TStringStream str; 
+            str << "{TEvRegisterTabletResult"; 
+            str << " TabletId# " << TabletId; 
+            if (Entry) { 
+                str << " Entry# " << Entry->Get(TabletId); 
+            } else { 
+                str << " Entry# nullptr"; 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 
     struct TEvUnregisterTablet : public TEventLocal<TEvUnregisterTablet, EvUnregisterTablet> {
@@ -92,14 +92,14 @@ struct TEvMediatorTimecast {
         TEvUnregisterTablet(ui64 tabletId)
             : TabletId(tabletId)
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
+            TStringStream str; 
             str << "{TEvUnregisterTablet";
-            str << " TabletId# " << TabletId;
-            str << "}";
-            return str.Str();
-        }
+            str << " TabletId# " << TabletId; 
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 
     struct TEvWaitPlanStep : public TEventLocal<TEvWaitPlanStep, EvWaitPlanStep> {
@@ -146,37 +146,37 @@ struct TEvMediatorTimecast {
         {
             Record.AddBucket(bucket);
         }
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{TEvWatch";
-            for (size_t i = 0; i < Record.BucketSize(); ++i) {
-                str << " Bucket# " << Record.GetBucket(i);
-            }
-            str << "}";
-            return str.Str();
-        }
+            TStringStream str; 
+            str << "{TEvWatch"; 
+            for (size_t i = 0; i < Record.BucketSize(); ++i) { 
+                str << " Bucket# " << Record.GetBucket(i); 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 
     struct TEvUpdate : public TEventPB<TEvUpdate, NKikimrTxMediatorTimecast::TEvUpdate, EvUpdate> {
         TString ToString() const {
-            TStringStream str;
-            str << "{TEvUpdate ";
-            if (Record.HasMediator()) {
-                str << " Mediator# " << Record.GetMediator();
-            }
-            if (Record.HasBucket()) {
-                str << " Bucket# " << Record.GetBucket();
-            }
-            if (Record.HasTimeBarrier()) {
-                str << " TimeBarrier# " << Record.GetTimeBarrier();
-            }
-            for (size_t i = 0; i < Record.ExemptionSize(); ++i) {
-                str << " Exemption# " << Record.GetExemption(i);
-            }
-            str << "}";
-            return str.Str();
-        }
+            TStringStream str; 
+            str << "{TEvUpdate "; 
+            if (Record.HasMediator()) { 
+                str << " Mediator# " << Record.GetMediator(); 
+            } 
+            if (Record.HasBucket()) { 
+                str << " Bucket# " << Record.GetBucket(); 
+            } 
+            if (Record.HasTimeBarrier()) { 
+                str << " TimeBarrier# " << Record.GetTimeBarrier(); 
+            } 
+            for (size_t i = 0; i < Record.ExemptionSize(); ++i) { 
+                str << " Exemption# " << Record.GetExemption(i); 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 };
 

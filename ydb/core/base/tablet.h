@@ -318,8 +318,8 @@ struct TEvTablet {
         const ui32 Generation;
         const ui32 Step;
         const ui32 ConfirmedOnSend;
-        TVector<ui32> YellowMoveChannels;
-        TVector<ui32> YellowStopChannels;
+        TVector<ui32> YellowMoveChannels; 
+        TVector<ui32> YellowStopChannels; 
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
 
@@ -329,8 +329,8 @@ struct TEvTablet {
                 ui32 gen,
                 ui32 step,
                 ui32 confirmedOnSend,
-                TVector<ui32>&& yellowMoveChannels,
-                TVector<ui32>&& yellowStopChannels,
+                TVector<ui32>&& yellowMoveChannels, 
+                TVector<ui32>&& yellowStopChannels, 
                 NMetrics::TTabletThroughputRawValue&& written,
                 NMetrics::TTabletIopsRawValue&& writtenOps)
             : Status(status)
@@ -338,8 +338,8 @@ struct TEvTablet {
             , Generation(gen)
             , Step(step)
             , ConfirmedOnSend(confirmedOnSend)
-            , YellowMoveChannels(std::move(yellowMoveChannels))
-            , YellowStopChannels(std::move(yellowStopChannels))
+            , YellowMoveChannels(std::move(yellowMoveChannels)) 
+            , YellowStopChannels(std::move(yellowStopChannels)) 
             , GroupWrittenBytes(std::move(written))
             , GroupWrittenOps(std::move(writtenOps))
         {}
@@ -705,13 +705,13 @@ struct TEvTablet {
     };
 
     struct TEvCheckBlobstorageStatusResult : public TEventLocal<TEvCheckBlobstorageStatusResult, EvCheckBlobstorageStatusResult> {
-        TVector<ui32> LightYellowMoveGroups;
-        TVector<ui32> YellowStopGroups;
+        TVector<ui32> LightYellowMoveGroups; 
+        TVector<ui32> YellowStopGroups; 
 
-        TEvCheckBlobstorageStatusResult(TVector<ui32> &&lightYellowMoveGroups, TVector<ui32> &&yellowStopGroups)
-            : LightYellowMoveGroups(std::move(lightYellowMoveGroups))
-            , YellowStopGroups(std::move(yellowStopGroups))
-
+        TEvCheckBlobstorageStatusResult(TVector<ui32> &&lightYellowMoveGroups, TVector<ui32> &&yellowStopGroups) 
+            : LightYellowMoveGroups(std::move(lightYellowMoveGroups)) 
+            , YellowStopGroups(std::move(yellowStopGroups)) 
+ 
         {}
     };
 

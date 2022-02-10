@@ -116,56 +116,56 @@ void TManyPutGet::operator ()(TConfiguration *conf) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class TManyMultiPutGetActor : public TSyncTestBase {
-protected:
-    const bool WaitForCompaction;
-    const ui32 MsgNum;
-    const ui32 MsgSize;
-    const ui32 BatchSize;
-    const ui64 TabletId;
+class TManyMultiPutGetActor : public TSyncTestBase { 
+protected: 
+    const bool WaitForCompaction; 
+    const ui32 MsgNum; 
+    const ui32 MsgSize; 
+    const ui32 BatchSize; 
+    const ui64 TabletId; 
     std::shared_ptr<IPutHandleClassGenerator> HandleClassGen;
     std::shared_ptr<TSet<ui32>> BadSteps;
-
-    virtual void Scenario(const TActorContext &ctx) {
-        // load data
-        SyncRunner->Run(ctx, CreateManyMultiPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0),
-                                            MsgSize, MsgNum, BatchSize, TabletId, 0, 1, HandleClassGen,
-                                            BadSteps, TDuration::Seconds(0)));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
-
-        // wait for compaction
-        if (WaitForCompaction) {
-            SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-        }
-
-        // read
-        SyncRunner->Run(ctx, CreateManyGets(SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum,
-                                            TabletId, 0, 1, BadSteps));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  GET done");
-    }
-
-
-public:
-    TManyMultiPutGetActor(TConfiguration *conf, bool waitForCompaction, ui32 msgNum, ui32 msgSize, ui32 batchSize,
-                     ui64 tabletId, NKikimrBlobStorage::EPutHandleClass cls)
-        : TSyncTestBase(conf)
-        , WaitForCompaction(waitForCompaction)
-        , MsgNum(msgNum)
-        , MsgSize(msgSize)
-        , BatchSize(batchSize)
-        , TabletId(tabletId)
+ 
+    virtual void Scenario(const TActorContext &ctx) { 
+        // load data 
+        SyncRunner->Run(ctx, CreateManyMultiPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), 
+                                            MsgSize, MsgNum, BatchSize, TabletId, 0, 1, HandleClassGen, 
+                                            BadSteps, TDuration::Seconds(0))); 
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded"); 
+ 
+        // wait for compaction 
+        if (WaitForCompaction) { 
+            SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf)); 
+            LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done"); 
+        } 
+ 
+        // read 
+        SyncRunner->Run(ctx, CreateManyGets(SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum, 
+                                            TabletId, 0, 1, BadSteps)); 
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  GET done"); 
+    } 
+ 
+ 
+public: 
+    TManyMultiPutGetActor(TConfiguration *conf, bool waitForCompaction, ui32 msgNum, ui32 msgSize, ui32 batchSize, 
+                     ui64 tabletId, NKikimrBlobStorage::EPutHandleClass cls) 
+        : TSyncTestBase(conf) 
+        , WaitForCompaction(waitForCompaction) 
+        , MsgNum(msgNum) 
+        , MsgSize(msgSize) 
+        , BatchSize(batchSize) 
+        , TabletId(tabletId) 
         , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
         , BadSteps(std::make_shared<TSet<ui32>>())
-    {}
-};
-
-void TManyMultiPutGet::operator ()(TConfiguration *conf) {
-    conf->ActorSystem1->Register(
-        new TManyMultiPutGetActor(conf, WaitForCompaction, MsgNum, MsgSize, BatchSize, TabletId, HandleClass));
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    {} 
+}; 
+ 
+void TManyMultiPutGet::operator ()(TConfiguration *conf) { 
+    conf->ActorSystem1->Register( 
+        new TManyMultiPutGetActor(conf, WaitForCompaction, MsgNum, MsgSize, BatchSize, TabletId, HandleClass)); 
+} 
+ 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
 class TManyPutRangeGetActor : public TSyncTestBase {
 protected:
     const bool WaitForCompaction;

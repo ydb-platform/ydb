@@ -77,7 +77,7 @@ static const TVector<TColumn> SentTimestampIdxColumns = {
 
 TVector<TTable> GetFifoTables() {
     TVector<TTable> list;
-    list.reserve(8);
+    list.reserve(8); 
 
     list.push_back(TTable("Attributes")
                     .SetColumns(AttributesColumns)

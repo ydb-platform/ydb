@@ -191,12 +191,12 @@ namespace NMonitoring {
     struct TDynamicCounters: public TCountableBase {
     public:
         using TCounterPtr = TIntrusivePtr<TCounterForPtr>;
-        using TOnLookupPtr = void (*)(const char *methodName, const TString &name, const TString &value);
+        using TOnLookupPtr = void (*)(const char *methodName, const TString &name, const TString &value); 
 
     private:
         TRWMutex Lock;
         TCounterPtr LookupCounter; // Counts lookups by name
-        TOnLookupPtr OnLookup = nullptr; // Called on each lookup if not nullptr, intended for lightweight tracing.
+        TOnLookupPtr OnLookup = nullptr; // Called on each lookup if not nullptr, intended for lightweight tracing. 
 
         typedef TIntrusivePtr<TCountableBase> TCountablePtr;
 
@@ -247,11 +247,11 @@ namespace NMonitoring {
             LookupCounter = lookupCounter;
         }
 
-        void SetOnLookup(TOnLookupPtr onLookup) {
+        void SetOnLookup(TOnLookupPtr onLookup) { 
             TWriteGuard g(Lock);
-            OnLookup = onLookup;
-        }
-
+            OnLookup = onLookup; 
+        } 
+ 
         TWriteGuard LockForUpdate(const char *method, const TString& name, const TString& value) {
             auto res = TWriteGuard(Lock);
             if (LookupCounter) {

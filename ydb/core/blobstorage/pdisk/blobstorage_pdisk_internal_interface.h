@@ -11,52 +11,52 @@
 
 namespace NKikimr {
 namespace NPDisk {
-////////////////////////////////////////////////////////////////////////////
-// Whiteboard report
-//
-////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////// 
+// Whiteboard report 
+// 
+//////////////////////////////////////////////////////////////////////////// 
 
-struct TEvWhiteboardReportResult :
-                public TEventLocal<TEvWhiteboardReportResult, TEvBlobStorage::EvWhiteboardReportResult> {
+struct TEvWhiteboardReportResult : 
+                public TEventLocal<TEvWhiteboardReportResult, TEvBlobStorage::EvWhiteboardReportResult> { 
     THolder<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate> PDiskState;
     TVector<std::tuple<TActorId, NKikimrWhiteboard::TVDiskStateInfo>> VDiskStateVect;
     THolder<TEvBlobStorage::TEvControllerUpdateDiskStatus> DiskMetrics;
 
     ~TEvWhiteboardReportResult();
 
-    TString ToString() const {
-        return ToString(*this);
-    }
+    TString ToString() const { 
+        return ToString(*this); 
+    } 
 
-    static TString ToString(const TEvWhiteboardReportResult &record);
-};
+    static TString ToString(const TEvWhiteboardReportResult &record); 
+}; 
 
-////////////////////////////////////////////////////////////////////////////
-// Http result
-//
-////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////// 
+// Http result 
+// 
+//////////////////////////////////////////////////////////////////////////// 
 
-struct TEvHttpInfoResult : public TEventLocal<TEvHttpInfoResult, TEvBlobStorage::EvHttpInfoResult> {
-    TAutoPtr<NMon::TEvHttpInfoRes> HttpInfoRes;
+struct TEvHttpInfoResult : public TEventLocal<TEvHttpInfoResult, TEvBlobStorage::EvHttpInfoResult> { 
+    TAutoPtr<NMon::TEvHttpInfoRes> HttpInfoRes; 
     const TActorId EndCustomer;
 
     TEvHttpInfoResult(const TActorId &endCustomer)
-        : HttpInfoRes(nullptr)
-        , EndCustomer(endCustomer)
-    {}
+        : HttpInfoRes(nullptr) 
+        , EndCustomer(endCustomer) 
+    {} 
 
-    TString ToString() const {
-        return ToString(*this);
-    }
+    TString ToString() const { 
+        return ToString(*this); 
+    } 
 
-    static TString ToString(const TEvHttpInfoResult &record) {
-        TStringStream str;
-        str << "{";
-        record.HttpInfoRes->Output(str);
-        str << "}";
-        return str.Str();
-    }
-};
+    static TString ToString(const TEvHttpInfoResult &record) { 
+        TStringStream str; 
+        str << "{"; 
+        record.HttpInfoRes->Output(str); 
+        str << "}"; 
+        return str.Str(); 
+    } 
+}; 
 
 struct TEvPDiskFormattingFinished : public TEventLocal<TEvPDiskFormattingFinished, TEvBlobStorage::EvPDiskFormattingFinished> {
     bool IsSucceed;
@@ -92,9 +92,9 @@ struct TEvReadLogContinue : public TEventLocal<TEvReadLogContinue, TEvBlobStorag
     ui32 Size;
     ui64 Offset;
     TCompletionAction *CompletionAction;
-    TReqId ReqId;
+    TReqId ReqId; 
 
-    TEvReadLogContinue(void *data, ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId)
+    TEvReadLogContinue(void *data, ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) 
         : Data(data)
         , Size(size)
         , Offset(offset)

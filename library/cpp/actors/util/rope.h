@@ -53,11 +53,11 @@ public:
         free(ptr);
     }
 
-    void operator delete(void* p, void* ptr) {
-        Y_UNUSED(p);
-        Y_UNUSED(ptr);
-    }
-
+    void operator delete(void* p, void* ptr) { 
+        Y_UNUSED(p); 
+        Y_UNUSED(ptr); 
+    } 
+ 
     TData GetData() const override {
         return {Data + Offset, Size};
     }
@@ -237,7 +237,7 @@ class TRope {
                     case EType::STRING:             return wrapper(reinterpret_cast<TString&>(value));
                     case EType::ROPE_CHUNK_BACKEND: return wrapper(reinterpret_cast<IRopeChunkBackend::TPtr&>(value));
                 }
-                Y_FAIL("Unexpected type# %" PRIu64, static_cast<ui64>(type));
+                Y_FAIL("Unexpected type# %" PRIu64, static_cast<ui64>(type)); 
             }
 
             template<typename TCallback>

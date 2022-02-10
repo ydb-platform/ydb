@@ -218,7 +218,7 @@ namespace NKikimr {
             }
         }
 
-        void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) { 
             auto *msg = ev->Get();
             TString message;
             if (msg->Status != NKikimrProto::OK) {

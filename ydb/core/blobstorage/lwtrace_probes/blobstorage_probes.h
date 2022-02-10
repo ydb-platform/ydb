@@ -1,9 +1,9 @@
-#pragma once
-
+#pragma once 
+ 
 //#include <ydb/core/protos/base.pb.h>
 
 #include <library/cpp/lwtrace/all.h>
-
+ 
 // Helper class for printing pdisk id in the same was as it done for counters
 struct TPDiskIdField {
     typedef ui32 TStoreType;
@@ -55,7 +55,7 @@ struct TEventTypeField {
 
 }
 
-#define BLOBSTORAGE_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES) \
+#define BLOBSTORAGE_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES) \ 
     PROBE(DSProxyBatchedPutRequest, GROUPS("DSProxy"), \
         TYPES(ui64, ui32), \
         NAMES("count" , "groupId")) \
@@ -87,9 +87,9 @@ struct TEventTypeField {
     PROBE(VDiskSkeletonFrontVPutRecieved, GROUPS("VDisk", "DSProxy"), \
       TYPES(ui32, ui32, ui32, ui64, ui64), \
       NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \
-    PROBE(VDiskSkeletonFrontVMultiPutRecieved, GROUPS("VDisk", "DSProxy"), \
-      TYPES(ui32, ui32, ui32, ui64, ui64), \
-      NAMES("nodeId", "groupId", "vdiskOrderNum", "count", "size")) \
+    PROBE(VDiskSkeletonFrontVMultiPutRecieved, GROUPS("VDisk", "DSProxy"), \ 
+      TYPES(ui32, ui32, ui32, ui64, ui64), \ 
+      NAMES("nodeId", "groupId", "vdiskOrderNum", "count", "size")) \ 
     PROBE(VDiskSkeletonVPutRecieved, GROUPS("VDisk", "DSProxy"), \
       TYPES(ui32, ui32, ui32, ui64, ui64), \
       NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \
@@ -108,11 +108,11 @@ struct TEventTypeField {
     PROBE(DSProxyBlobPutTactics, GROUPS("DSProxyRequest", "DSProxy"), \
       TYPES(ui64, ui32, TString, NKikimr::TBlobPutTactics, TString), \
       NAMES("tabletId", "groupId", "blob", "tactics", "handleClass")) \
-    PROBE(DSProxyPutVPut, GROUPS("DSProxyRequest", "DSProxy"), \
-      TYPES(ui64, ui32, ui32, ui32, TString, NKikimr::TBlobPutTactics, TString, ui32, ui32, \
-          ui32, TString, double), \
-      NAMES("tabletId", "groupId", "channel", "partId", "blob", "tactics", "handleClass", "blobSize", "partSize", \
-          "vdiskOrderNum", "queueId", "predictedMs")) \
+    PROBE(DSProxyPutVPut, GROUPS("DSProxyRequest", "DSProxy"), \ 
+      TYPES(ui64, ui32, ui32, ui32, TString, NKikimr::TBlobPutTactics, TString, ui32, ui32, \ 
+          ui32, TString, double), \ 
+      NAMES("tabletId", "groupId", "channel", "partId", "blob", "tactics", "handleClass", "blobSize", "partSize", \ 
+          "vdiskOrderNum", "queueId", "predictedMs")) \ 
     PROBE(DSProxyPutVPutIsSent, GROUPS("DSProxyRequest", "DSProxy", "LWTrackStart"), \
       TYPES(ui64, ui32, ui32, ui32, TString, ui32), \
       NAMES("vdiskOrderNum", "groupId", "channel", "partId", "blob", "blobSize")) \
@@ -235,39 +235,39 @@ struct TEventTypeField {
     PROBE(PDiskHandleWakeup, GROUPS("PDisk"), \
       TYPES(TPDiskIdField, double, double, double), \
       NAMES("pdisk", "updatePercentileTrackersMs", "whiteboardReportMs", "updateSchedulerMs")) \
-    PROBE(PDiskForsetiCycle, GROUPS("PDisk"), \
-      TYPES(TPDiskIdField, ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64), \
-      NAMES("pdisk", "realTimeNs", "uncorrectedForsetiTimeNs", "correctedForsetiTimeNs", "timeCorrectionNs", \
-            "realDurationNs", "virtualDurationNs", "newForsetiTimeNs", "totalCostNs", "virtualDeadlineNs")) \
+    PROBE(PDiskForsetiCycle, GROUPS("PDisk"), \ 
+      TYPES(TPDiskIdField, ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64), \ 
+      NAMES("pdisk", "realTimeNs", "uncorrectedForsetiTimeNs", "correctedForsetiTimeNs", "timeCorrectionNs", \ 
+            "realDurationNs", "virtualDurationNs", "newForsetiTimeNs", "totalCostNs", "virtualDeadlineNs")) \ 
     PROBE(LoadActorEvChunkReadCreated, GROUPS("LoadActor", "PDiskEvent"), \
       TYPES(ui32, ui64, ui64), \
       NAMES("chunkIdx", "size", "offset")) \
     PROBE(PDiskUpdateCycleDetails, GROUPS("PDisk"), \
       TYPES(float, float, float, float, float), \
-      NAMES("entireUpdateMs", "inputQueueMs", "schedulingMs", "processingMs", "waitingMs")) \
-    PROBE(DSProxyGetEnqueue, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
-    PROBE(DSProxyGetBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(DSProxyGetHandle, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
-    PROBE(DSProxyGetReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(DSProxyPutEnqueue, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
-    PROBE(DSProxyPutHandle, GROUPS("DSProxyRequest", "DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
+      NAMES("entireUpdateMs", "inputQueueMs", "schedulingMs", "processingMs", "waitingMs")) \ 
+    PROBE(DSProxyGetEnqueue, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \ 
+    PROBE(DSProxyGetBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \ 
+    PROBE(DSProxyGetHandle, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \ 
+    PROBE(DSProxyGetReply, GROUPS("DSProxy"), TYPES(), NAMES()) \ 
+    PROBE(DSProxyPutEnqueue, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \ 
+    PROBE(DSProxyPutHandle, GROUPS("DSProxyRequest", "DSProxy", "LWTrackStart"), TYPES(), NAMES()) \ 
     PROBE(DSProxyPutBootstrapStart, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyPutBootstrapDone, GROUPS("DSProxy","Durations"), \
       TYPES(ui64, double, double, double, double, ui64, ui64), \
       NAMES("size", "wilsonMs", "allocateMs", "waitTotalMs", "splitTotalMs", "splitTotalCount", "blobIdx")) \
-    PROBE(DSProxyPutReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(DSProxyPutResumeBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(DSProxyPutPauseBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(DSProxyScheduleAccelerate, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(DSProxyStartTransfer, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(VDiskStartProcessing, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(VDiskReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
-/**/
+    PROBE(DSProxyPutReply, GROUPS("DSProxy"), TYPES(), NAMES()) \ 
+    PROBE(DSProxyPutResumeBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \ 
+    PROBE(DSProxyPutPauseBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \ 
+    PROBE(DSProxyScheduleAccelerate, GROUPS("DSProxy"), TYPES(), NAMES()) \ 
+    PROBE(DSProxyStartTransfer, GROUPS("DSProxy"), TYPES(), NAMES()) \ 
+    PROBE(VDiskStartProcessing, GROUPS("DSProxy"), TYPES(), NAMES()) \ 
+    PROBE(VDiskReply, GROUPS("DSProxy"), TYPES(), NAMES()) \ 
+/**/ 
 LWTRACE_DECLARE_PROVIDER(BLOBSTORAGE_PROVIDER)
-
+ 
 #define FAIL_INJECTION_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES) \
-    PROBE(PDiskFailInjection, GROUPS("PDisk"), TYPES(ui64), NAMES("cookie")) \
+    PROBE(PDiskFailInjection, GROUPS("PDisk"), TYPES(ui64), NAMES("cookie")) \ 
 /**/
 LWTRACE_DECLARE_PROVIDER(FAIL_INJECTION_PROVIDER)
 
-#define PDISK_FAIL_INJECTION(COOKIE) GLOBAL_LWPROBE(FAIL_INJECTION_PROVIDER, PDiskFailInjection, COOKIE)
+#define PDISK_FAIL_INJECTION(COOKIE) GLOBAL_LWPROBE(FAIL_INJECTION_PROVIDER, PDiskFailInjection, COOKIE) 

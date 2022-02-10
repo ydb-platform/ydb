@@ -45,36 +45,36 @@ namespace NActors {
         ;
 
         // Log settings
-        struct TComponentSettings {
-            union {
-                struct {
-                    ui32 SamplingRate;
-                    ui8 SamplingLevel;
-                    ui8 Level;
-                } X;
-
-                ui64 Data;
-            } Raw;
-
-            TComponentSettings(TAtomicBase data) {
-                Raw.Data = (ui64)data;
-            }
-
-            TComponentSettings(ui8 level, ui8 samplingLevel, ui32 samplingRate) {
-                Raw.X.Level = level;
-                Raw.X.SamplingLevel = samplingLevel;
-                Raw.X.SamplingRate = samplingRate;
-            }
-        };
-
+        struct TComponentSettings { 
+            union { 
+                struct { 
+                    ui32 SamplingRate; 
+                    ui8 SamplingLevel; 
+                    ui8 Level; 
+                } X; 
+ 
+                ui64 Data; 
+            } Raw; 
+ 
+            TComponentSettings(TAtomicBase data) { 
+                Raw.Data = (ui64)data; 
+            } 
+ 
+            TComponentSettings(ui8 level, ui8 samplingLevel, ui32 samplingRate) { 
+                Raw.X.Level = level; 
+                Raw.X.SamplingLevel = samplingLevel; 
+                Raw.X.SamplingRate = samplingRate; 
+            } 
+        }; 
+ 
         struct TSettings: public TThrRefBase {
         public:
             TActorId LoggerActorId;
-            EComponent LoggerComponent;
-            ui64 TimeThresholdMs;
+            EComponent LoggerComponent; 
+            ui64 TimeThresholdMs; 
             bool AllowDrop;
             TDuration ThrottleDelay;
-            TArrayHolder<TAtomic> ComponentInfo;
+            TArrayHolder<TAtomic> ComponentInfo; 
             TVector<TString> ComponentNames;
             EComponent MinVal;
             EComponent MaxVal;
@@ -120,33 +120,33 @@ namespace NActors {
                 );
             }
 
-            inline bool Satisfies(EPriority priority, EComponent component, ui64 sampleBy = 0) const {
+            inline bool Satisfies(EPriority priority, EComponent component, ui64 sampleBy = 0) const { 
                 // by using Mask we don't get outside of array boundaries
-                TComponentSettings settings = GetComponentSettings(component);
-                if (priority > settings.Raw.X.Level) {
-                    if (priority > settings.Raw.X.SamplingLevel) {
-                        return false; // priority > both levels ==> do not log
-                    }
-                    // priority <= sampling level ==> apply sampling
-                    ui32 samplingRate = settings.Raw.X.SamplingRate;
-                    if (samplingRate) {
+                TComponentSettings settings = GetComponentSettings(component); 
+                if (priority > settings.Raw.X.Level) { 
+                    if (priority > settings.Raw.X.SamplingLevel) { 
+                        return false; // priority > both levels ==> do not log 
+                    } 
+                    // priority <= sampling level ==> apply sampling 
+                    ui32 samplingRate = settings.Raw.X.SamplingRate; 
+                    if (samplingRate) { 
                         ui32 samplingValue = sampleBy ? MurmurHash<ui32>((const char*)&sampleBy, sizeof(sampleBy))
                             : samplingRate != 1 ? RandomNumber<ui32>() : 0;
-                        return (samplingValue % samplingRate == 0);
-                    } else {
-                        // sampling rate not set ==> do not log
-                        return false;
-                    }
-                } else {
-                    // priority <= log level ==> log
-                    return true;
-                }
+                        return (samplingValue % samplingRate == 0); 
+                    } else { 
+                        // sampling rate not set ==> do not log 
+                        return false; 
+                    } 
+                } else { 
+                    // priority <= log level ==> log 
+                    return true; 
+                } 
             }
 
-            inline TComponentSettings GetComponentSettings(EComponent component) const {
+            inline TComponentSettings GetComponentSettings(EComponent component) const { 
                 Y_VERIFY_DEBUG((component & Mask) == component);
                 // by using Mask we don't get outside of array boundaries
-                return TComponentSettings(AtomicGet(ComponentInfo[component & Mask]));
+                return TComponentSettings(AtomicGet(ComponentInfo[component & Mask])); 
             }
 
             const char* ComponentName(EComponent component) const {

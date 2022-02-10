@@ -1,30 +1,30 @@
-#pragma once
-#include "defs.h"
-
+#pragma once 
+#include "defs.h" 
+ 
 #include <variant>
 #include <utility>
-#include <util/generic/map.h>
+#include <util/generic/map.h> 
 #include <util/stream/str.h>
 #include <util/system/yassert.h>
 #include <ydb/core/util/yverify_stream.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-
-namespace NKikimr {
-
-//
+ 
+namespace NKikimr { 
+ 
+// 
 // A set of non-intersecting non-adjoint non-empty intervals in form [begin, end) (end > begin)
-//
+// 
 template <class T> struct TIntervalMap; // implemented as TMap
 template <class T> struct TIntervalVec; // implemented as sorted TStackVec
 template <class T, size_t ThresholdSize = 8> struct TIntervalSet; // implement as either of the above
-
+ 
 template <class T>
 struct TIntervalMap {
     TMap<T, T> EndForBegin;
-
+ 
     using iterator = typename decltype(EndForBegin)::iterator;
     using const_iterator = typename decltype(EndForBegin)::const_iterator;
-
+ 
     TIntervalMap() = default;
     TIntervalMap(const TIntervalMap<T>&) = default;
     TIntervalMap(TIntervalMap<T>&&) = default;
@@ -144,10 +144,10 @@ struct TIntervalMap {
         }
     }
 
-    size_t Size() const {
-        return EndForBegin.size();
-    }
-
+    size_t Size() const { 
+        return EndForBegin.size(); 
+    } 
+ 
     template <class Y>
     friend bool operator ==(const TIntervalMap<T>& x, const Y& y) {
         if (x.EndForBegin.size() != y.EndForBegin.size()) {
@@ -348,8 +348,8 @@ struct TIntervalMap {
         }
         return *this;
     }
-};
-
+}; 
+ 
 template <class T>
 struct TIntervalVec {
     static constexpr size_t StackSize = 1;
@@ -967,4 +967,4 @@ private:
 
 };
 
-} // NKikimr
+} // NKikimr 

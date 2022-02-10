@@ -4,7 +4,7 @@
 
 #include <ydb/core/protos/base.pb.h>
 #include <library/cpp/actors/core/event_local.h>
-#include <util/stream/str.h>
+#include <util/stream/str.h> 
 #include <util/string/builder.h>
 
 namespace NKikimr {
@@ -115,15 +115,15 @@ struct TEvTabletResolver {
             , ResolveFlags(flags)
             , Actor(actor)
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{EvForward TabletID: " << TabletID;
+            TStringStream str; 
+            str << "{EvForward TabletID: " << TabletID; 
             str << " Ev: " << (Ev ? Ev->GetBase()->ToString().data() : "nullptr");
             str << " Flags: " << ResolveFlags.ToString();
-            str << "}";
-            return str.Str();
-        }
+            str << "}"; 
+            return str.Str(); 
+        } 
 
         TActorId SelectActor(const TActorId& tablet, const TActorId& sysTablet) const {
             switch (Actor) {
@@ -143,14 +143,14 @@ struct TEvTabletResolver {
             : TabletID(tabletId)
             , TabletActor(tabletActor)
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{EvTabletProblem TabletID: " << TabletID;
-            str << " TabletActor: " << TabletActor.ToString();
-            str << "}";
-            return str.Str();
-        }
+            TStringStream str; 
+            str << "{EvTabletProblem TabletID: " << TabletID; 
+            str << " TabletActor: " << TabletActor.ToString(); 
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 
     struct TEvNodeProblem : public TEventLocal<TEvNodeProblem, EvNodeProblem> {
@@ -191,17 +191,17 @@ struct TEvTabletResolver {
             , Tablet(tablet)
             , CacheEpoch(cacheEpoch)
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{EvForwardResult Status: " << (ui32)Status;
-            str << " TabletID: " << TabletID;
-            str << " TabletActor: " << TabletActor.ToString();
-            str << " Tablet: " << Tablet.ToString();
+            TStringStream str; 
+            str << "{EvForwardResult Status: " << (ui32)Status; 
+            str << " TabletID: " << TabletID; 
+            str << " TabletActor: " << TabletActor.ToString(); 
+            str << " Tablet: " << Tablet.ToString(); 
             str << " CacheEpoch: " << CacheEpoch;
-            str << "}";
-            return str.Str();
-        }
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 };
 
@@ -213,7 +213,7 @@ struct TTabletResolverConfig : public TThrRefBase {
     {}
 };
 
-IActor* CreateTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config);
+IActor* CreateTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config); 
 TActorId MakeTabletResolverID();
 
 }

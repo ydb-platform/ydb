@@ -257,18 +257,18 @@ namespace NKikimr {
             cur += THullHugeRecoveryLogPos::SerializedSize; // log pos
 
             // heap
-            ui32 heapSize = ReadUnaligned<ui32>(cur);
+            ui32 heapSize = ReadUnaligned<ui32>(cur); 
             cur += sizeof(ui32); // heap size
             Heap->ParseFromString(TString(cur, cur + heapSize));
             cur += heapSize;
 
             // chunks to free
-            ui32 chunksSize = ReadUnaligned<ui32>(cur);
+            ui32 chunksSize = ReadUnaligned<ui32>(cur); 
             cur += sizeof(ui32); // chunks size
             Y_VERIFY(!chunksSize);
 
             // allocated slots
-            ui32 slotsSize = ReadUnaligned<ui32>(cur);
+            ui32 slotsSize = ReadUnaligned<ui32>(cur); 
             cur += sizeof(ui32); // slots size
             for (ui32 i = 0; i < slotsSize; i++) {
                 NHuge::THugeSlot hugeSlot;
@@ -294,7 +294,7 @@ namespace NKikimr {
                 return false;
 
             // signature
-            ui32 signature = ReadUnaligned<ui32>(cur);
+            ui32 signature = ReadUnaligned<ui32>(cur); 
             cur += sizeof(ui32); // signature
             if (signature != Signature)
                 return false;
@@ -305,7 +305,7 @@ namespace NKikimr {
             cur += THullHugeRecoveryLogPos::SerializedSize; // log pos
 
             // heap
-            ui32 heapSize = ReadUnaligned<ui32>(cur);
+            ui32 heapSize = ReadUnaligned<ui32>(cur); 
             cur += sizeof(ui32); // heap size
             if (size_t(end - cur) < heapSize)
                 return false;
@@ -316,7 +316,7 @@ namespace NKikimr {
             // chunks to free
             if (size_t(end - cur) < sizeof(ui32))
                 return false;
-            ui32 chunksSize = ReadUnaligned<ui32>(cur);
+            ui32 chunksSize = ReadUnaligned<ui32>(cur); 
             cur += sizeof(ui32); // chunks size
             if (size_t(end - cur) < chunksSize * sizeof(ui32))
                 return false;
@@ -325,7 +325,7 @@ namespace NKikimr {
             // allocated slots
             if (size_t(end - cur) < sizeof(ui32))
                 return false;
-            ui32 slotsSize = ReadUnaligned<ui32>(cur);
+            ui32 slotsSize = ReadUnaligned<ui32>(cur); 
             cur += sizeof(ui32); // slots size
             if (size_t(end - cur) != slotsSize * (NHuge::THugeSlot::SerializedSize + sizeof(ui64)))
                 return false;

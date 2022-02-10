@@ -92,7 +92,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         }
 
         void UpdateReferences(const NKikimrTabletBase::TTabletLogEntry &x) {
-            if (const ui32 referencesSz = (ui32)x.ReferencesSize()) {
+            if (const ui32 referencesSz = (ui32)x.ReferencesSize()) { 
                 References.resize(referencesSz);
                 for (ui32 i = 0; i != referencesSz; ++i)
                     References[i] = LogoBlobIDFromLogoBlobID(x.GetReferences(i));
@@ -393,13 +393,13 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
     void ProcessKeyEntry(const TLogoBlobID &id, const TString &logBody) {
         NKikimrTabletBase::TTabletLogEntry logEntry;
-        if (!logEntry.ParseFromString(logBody)) {
+        if (!logEntry.ParseFromString(logBody)) { 
             BLOG_ERROR("TTabletReqRebuildHistoryGraph::ProcessKeyEntry logBody ParseFromString error, id# " << id);
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorParsingFromString>(id));
             }
             return ReplyAndDie(NKikimrProto::ERROR, "Log entry parse failed");
-        }
+        } 
 
         LatestKnownStep = std::pair<ui32, ui32>(id.Generation(), id.Step());
         Snapshot = ExpandGenStepPair(logEntry.GetSnapshot());
@@ -457,10 +457,10 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             GroupReadOps[std::make_pair(id.Channel(), msg->GroupId)] += 1;
 
             NKikimrTabletBase::TTabletLogEntry logEntry;
-            if (!logEntry.ParseFromString(it->Buffer)) {
+            if (!logEntry.ParseFromString(it->Buffer)) { 
                 BLOG_ERROR("TTabletReqRebuildHistoryGraph::ApplyDiscoveryRange it->Buffer ParseFromString error, id# " << id);
                 return ReplyAndDie(NKikimrProto::ERROR, "Log entry parse failed");
-            }
+            } 
 
             const bool isZeroStep = (id.Step() == 0);
             if (isZeroStep) {
@@ -490,7 +490,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                     IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorSendRefsCheck>());
                 }
                 return ReplyAndDie(NKikimrProto::ERROR, "SendRefsCheck failed");
-            }
+            } 
         }
 
         RefsToCheckByGroup.clear();
@@ -501,36 +501,36 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         if (refs.empty())
             return true;
 
-        ui64 endIdx = refs.size();
-        ui64 firstRequestIdx = 0;
-        while(firstRequestIdx < endIdx) {
-            ui64 endRequestIdx = endIdx;
-            ui64 totalSize = 0;
-            for (ui64 i = firstRequestIdx; i != endIdx; ++i) {
-                ui64 size = refs[i].BlobSize();
+        ui64 endIdx = refs.size(); 
+        ui64 firstRequestIdx = 0; 
+        while(firstRequestIdx < endIdx) { 
+            ui64 endRequestIdx = endIdx; 
+            ui64 totalSize = 0; 
+            for (ui64 i = firstRequestIdx; i != endIdx; ++i) { 
+                ui64 size = refs[i].BlobSize(); 
                 Y_VERIFY(size != 0);
 
                 const ui64 replyDataSize = totalSize + size + NKikimr::BlobProtobufHeaderMaxSize;
                 if (replyDataSize <= NKikimr::MaxProtobufSize) {
                     totalSize += size + NKikimr::BlobProtobufHeaderMaxSize;
-                } else {
-                    endRequestIdx = i;
-                    break;
-                }
-            }
-
-            ui64 count = endRequestIdx - firstRequestIdx;
+                } else { 
+                    endRequestIdx = i; 
+                    break; 
+                } 
+            } 
+ 
+            ui64 count = endRequestIdx - firstRequestIdx; 
             Y_VERIFY(count > 0);
-
-            TArrayHolder<TEvBlobStorage::TEvGet::TQuery> q(new TEvBlobStorage::TEvGet::TQuery[count]);
-            for (ui64 i = 0; i < count; ++i) {
-                q[i].Set(refs[i + firstRequestIdx] /*must be index read*/);
-            }
+ 
+            TArrayHolder<TEvBlobStorage::TEvGet::TQuery> q(new TEvBlobStorage::TEvGet::TQuery[count]); 
+            for (ui64 i = 0; i < count; ++i) { 
+                q[i].Set(refs[i + firstRequestIdx] /*must be index read*/); 
+            } 
             SendToBSProxy(SelfId(), group, new TEvBlobStorage::TEvGet(q, (ui32)count, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::FastRead, true, true, BlockedGen));
-            ++RequestsLeft;
-
-            firstRequestIdx = endRequestIdx;
+            ++RequestsLeft; 
+ 
+            firstRequestIdx = endRequestIdx; 
         }
 
         return true;
@@ -612,7 +612,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             BLOG_D("TTabletReqRebuildHistoryGraph::BuildHistory - Process generation " << generation
                 << " from " << (ui32)gx.Base << " with " << gx.Body.size() << " steps");
 
-            for (ui32 i = 0, e = (ui32)gx.Body.size(); i != e; ++i) {
+            for (ui32 i = 0, e = (ui32)gx.Body.size(); i != e; ++i) { 
                 const ui32 step = gx.Base + i;
                 const bool isTail = isTailGeneration && step > Confirmed.second;
                 ui32 generationSnapshotStep = 0;
@@ -829,7 +829,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         default:
             BLOG_ERROR("TTabletReqRebuildHistoryGraph::HandleDiscover TEvRangeResult"
                 << " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status)
-                << " Result# " << msg->Print(false));
+                << " Result# " << msg->Print(false)); 
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
             }
@@ -853,7 +853,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         default:
             BLOG_ERROR("TTabletReqRebuildHistoryGraph::Handle TEvGetResult"
                 << " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status)
-                << " Result# " << msg->Print(false));
+                << " Result# " << msg->Print(false)); 
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
             }

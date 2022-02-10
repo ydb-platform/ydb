@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include "channel_profiles.h"
+#include "channel_profiles.h" 
 #include "domain.h"
 #include "feature_flags.h"
 #include "nameservice.h"
@@ -112,7 +112,7 @@ struct TAppData {
     static TIntrusivePtr<IRandomProvider> RandomProvider;
     static TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<TDomainsInfo> DomainsInfo;
-    TIntrusivePtr<TChannelProfiles> ChannelProfiles;
+    TIntrusivePtr<TChannelProfiles> ChannelProfiles; 
     TIntrusivePtr<TDynamicNameserviceConfig> DynamicNameserviceConfig;
 
     ui64 ProxySchemeCacheNodes;
@@ -139,7 +139,7 @@ struct TAppData {
     NKikimrNetClassifier::TNetClassifierDistributableConfig NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig SqsConfig;
     NKikimrProto::TAuthConfig AuthConfig;
-    NKikimrProto::TKeyConfig KeyConfig;
+    NKikimrProto::TKeyConfig KeyConfig; 
     NKikimrProto::TKeyConfig PDiskKeyConfig;
     TFeatureFlags FeatureFlags;
     NKikimrConfig::THiveConfig HiveConfig;
@@ -147,7 +147,7 @@ struct TAppData {
     NKikimrConfig::TMeteringConfig MeteringConfig;
     NKikimrConfig::TCompactionConfig CompactionConfig;
     bool EnforceUserTokenRequirement = false;
-    bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
+    bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request 
     bool EnableKqpSpilling = false;
     bool AllowShadowDataInSchemeShardForTests = false;
     bool EnableMvccSnapshotWithLegacyDomainRoot = false;

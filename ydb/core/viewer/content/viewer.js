@@ -176,7 +176,7 @@ function getVDiskId(nodeId, vDiskId, pDiskId, vSlotId) {
 
 function getErasureInfo(erasure) {
     switch (erasure) {
-    case 0:            // min, total
+    case 0:            // min, total 
     case 'none':
         return {Name: "None", Min: 1, Total: 1};
     case 1:

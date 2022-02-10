@@ -148,7 +148,7 @@ bool TPDisk::LogNonceJump(ui64 previousNonce) {
     OnNonceChange(NonceLog, TReqId(TReqId::NonceChangeForNonceJump, 0), {});
     auto write = MakeHolder<TCompletionLogWrite>(this, TVector<TLogWrite*>(), TVector<TLogWrite*>(),
             std::move(logChunksToCommit));
-    CommonLogger->Flush(TReqId(TReqId::LogNonceJumpFlush, 0), {}, write.Release());
+    CommonLogger->Flush(TReqId(TReqId::LogNonceJumpFlush, 0), {}, write.Release()); 
 
     return true;
 }
@@ -553,7 +553,7 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
     SysLogger->LogDataPart(&chunkIsTrimmed[0], chunkIsTrimmedSize, reqId, traceId);
     SysLogger->LogDataPart(&FirstLogChunkToParseCommits, sizeof(FirstLogChunkToParseCommits), reqId, traceId);
     SysLogger->TerminateLog(reqId, traceId);
-    SysLogger->Flush(reqId, traceId, action);
+    SysLogger->Flush(reqId, traceId, action); 
 
     ui64 endSectorIdx = SysLogger->SectorIdx;
     if (ActorSystem) {
@@ -637,10 +637,10 @@ bool TPDisk::PreallocateLogChunks(ui64 headedRecordSize, TOwner owner, ui64 lsn,
         ui64 logPayloadPerSector = Format.SectorPayloadSize() - sizeof(TLogPageHeader);
         ui64 additionalPayloadSectors = (additionalDataSize + logPayloadPerSector - 1) / logPayloadPerSector;
         ui64 usableSectorsPerLogChunk = UsableSectorsPerLogChunk();
-        ui64 sectorsUnusedPayload = usableSectorsPerLogChunk - CommonLogger->SectorIdx - 1;
+        ui64 sectorsUnusedPayload = usableSectorsPerLogChunk - CommonLogger->SectorIdx - 1; 
         if (sectorsUnusedPayload <= additionalPayloadSectors) {
             ui64 extrachunkSectors = additionalPayloadSectors - sectorsUnusedPayload;
-            ui64 chunkPayloadSectors = usableSectorsPerLogChunk;
+            ui64 chunkPayloadSectors = usableSectorsPerLogChunk; 
             additionalChunksContainingPayload = (ui32)((extrachunkSectors + chunkPayloadSectors - 1) /
                 chunkPayloadSectors);
             additionalChunksNeeded = (ui32)((extrachunkSectors + chunkPayloadSectors - 1) / chunkPayloadSectors);
@@ -832,7 +832,7 @@ void TPDisk::LogFlush(TCompletionAction *action, TVector<ui32> *logChunksToCommi
     }
 
     CommonLogger->TerminateLog(reqId, traceId);
-    CommonLogger->Flush(reqId, traceId, action);
+    CommonLogger->Flush(reqId, traceId, action); 
 
     OnNonceChange(NonceLog, reqId, traceId);
 }

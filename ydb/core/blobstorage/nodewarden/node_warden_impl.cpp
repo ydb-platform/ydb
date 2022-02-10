@@ -1,10 +1,10 @@
 #include "node_warden_impl.h"
-
+ 
 #include <ydb/library/pdisk_io/file_params.h>
 
 using namespace NKikimr;
 using namespace NStorage;
-
+ 
 TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
     TVector<NPDisk::TDriveData> drives = ListDevicesWithPartlabel();
 
@@ -48,7 +48,7 @@ void TNodeWarden::PassAway() {
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
     return TActorBootstrapped::PassAway();
 }
-
+ 
 void TNodeWarden::Bootstrap() {
     STLOG(PRI_DEBUG, BS_NODE, NW26, "Bootstrap");
 
@@ -57,9 +57,9 @@ void TNodeWarden::Bootstrap() {
 
     Become(&TThis::StateOnline, TDuration::Seconds(10), new TEvPrivate::TEvSendDiskMetrics());
     Schedule(TDuration::Seconds(10), new TEvPrivate::TEvUpdateNodeDrives());
-
+ 
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(BLOBSTORAGE_PROVIDER));
-
+ 
     TActorSystem *actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
     if (auto mon = AppData()->Mon) {
 
@@ -98,7 +98,7 @@ void TNodeWarden::Bootstrap() {
 
     const ui64 maxBytes = replBrokerConfig.GetMaxInFlightReadBytes();
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));
-
+ 
     // determine if we are running in 'mock' mode
     EnableProxyMock = Cfg->ServiceSet.GetEnableProxyMock();
 
@@ -166,9 +166,9 @@ void TNodeWarden::HandleReadCache() {
 void TNodeWarden::Handle(TEvInterconnect::TEvNodeInfo::TPtr ev) {
     if (const auto& node = ev->Get()->Node) {
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(node->Location));
-    }
+    } 
 }
-
+ 
 void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
     const NPDisk::TEvSlayResult &msg = *ev->Get();
     const TVSlotId vslotId(LocalNodeId, msg.PDiskId, msg.VSlotId);
@@ -178,22 +178,22 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
             TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(MakeBlobStoragePDiskID(LocalNodeId,
                 msg.PDiskId), SelfId(), new NPDisk::TEvSlay(msg.VDiskId, msg.SlayOwnerRound, msg.PDiskId, msg.VSlotId)));
             break;
-
+ 
         case NKikimrProto::OK:
         case NKikimrProto::ALREADY: {
             if (const auto vdiskIt = LocalVDisks.find(vslotId); vdiskIt == LocalVDisks.end()) {
                 SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED);
             } else {
                 SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
-
+ 
                 TVDiskRecord& vdisk = vdiskIt->second;
                 Y_VERIFY(vdisk.SlayInFlight);
                 vdisk.SlayInFlight = false;
                 StartLocalVDiskActor(vdisk, TDuration::Zero()); // restart actor after successful wiping
                 SendDiskMetrics(false);
-            }
+            } 
             break;
-        }
+        } 
 
         case NKikimrProto::CORRUPTED:
         case NKikimrProto::ERROR:
@@ -311,7 +311,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
                 VDisksWithUnreportedMetrics.PushBack(&vdisk);
             }
         }
-    }
+    } 
 
     for (const NKikimrBlobStorage::TPDiskMetrics& m : record.GetPDisksMetrics()) {
         Y_VERIFY(m.HasPDiskId());
@@ -328,16 +328,16 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
                 PDisksWithUnreportedMetrics.PushBack(&pdisk);
             }
         }
-    }
+    } 
 }
-
+ 
 void TNodeWarden::Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&) {
     STLOG(PRI_TRACE, BS_NODE, NW39, "Handle(TEvPrivate::TEvSendDiskMetrics)");
     SendDiskMetrics(true);
     ReportLatencies();
     Schedule(TDuration::Seconds(10), new TEvPrivate::TEvSendDiskMetrics());
 }
-
+ 
 void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) {
     STLOG(PRI_TRACE, BS_NODE, NW88, "Handle(TEvPrivate::UpdateNodeDrives)");
     EnqueueSyncOp([this] (const TActorContext&) {
@@ -489,4 +489,4 @@ bool NKikimr::ObtainStaticKey(TEncryptionKey *key) {
 
 IActor* NKikimr::CreateBSNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg) {
     return new NStorage::TNodeWarden(cfg);
-}
+} 

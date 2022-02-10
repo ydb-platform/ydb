@@ -22,15 +22,15 @@ enum EOperatorType {
     OT_GE = 5;
 }
 
-message TArgument {
+message TArgument { 
     string Param = 1;
     bytes Value = 2;
     string Variable = 3;
-}
-
+} 
+ 
 message TOperator {
     EOperatorType Type = 1;
-    repeated TArgument Argument = 8;
+    repeated TArgument Argument = 8; 
 }
 
 message TPredicate {
@@ -47,10 +47,10 @@ message TLogAction {
 message TPrintToStderrAction {
 }
 
-message TKillAction {
+message TKillAction { 
 }
 
-message TSleepAction {
+message TSleepAction { 
     uint64 NanoSeconds = 1;
 }
 
@@ -59,7 +59,7 @@ message TCustomAction {
     repeated string Opts = 2;
 }
 
-enum EStatementType {
+enum EStatementType { 
     ST_MOV = 0;
     ST_ADD = 1;
     ST_SUB = 2;
@@ -70,13 +70,13 @@ enum EStatementType {
     ST_SUB_EQ = 7;
     ST_INC = 8;
     ST_DEC = 9;
-}
-
-message TStatementAction {
+} 
+ 
+message TStatementAction { 
     EStatementType Type = 1;
-    repeated TArgument Argument = 2;
-}
-
+    repeated TArgument Argument = 2; 
+} 
+ 
 message TRunLogShuttleAction {
     bool Ignore = 1;
     uint64 ShuttlesCount = 2;
@@ -106,7 +106,7 @@ message TAction {
 message TBlock {
     TProbeDesc ProbeDesc = 1;
     TPredicate Predicate = 2;
-    repeated TAction Action = 3;
+    repeated TAction Action = 3; 
 }
 
 message TQuery {

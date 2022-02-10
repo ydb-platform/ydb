@@ -1,14 +1,14 @@
-PROTO_LIBRARY()
-
+PROTO_LIBRARY() 
+ 
 OWNER(
     cthulhu
     g:kikimr
 )
-
-SRCS(
-    schlab.proto
-)
-
+ 
+SRCS( 
+    schlab.proto 
+) 
+ 
 EXCLUDE_TAGS(GO_PROTO)
 
-END()
+END() 

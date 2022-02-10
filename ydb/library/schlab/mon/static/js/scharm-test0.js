@@ -1,21 +1,21 @@
 var cfg = [{
     "label": "mygen1",
     "startTime": 0,
-    "period": 50,
+    "period": 50, 
     "periodCount": 0,
-    "reqSizeBytes": 1000000,
-    "reqCount": 1,
-    "reqInterval": 1,
+    "reqSizeBytes": 1000000, 
+    "reqCount": 1, 
+    "reqInterval": 1, 
     "user": "vdisk0",
     "desc": "write-log"
 },{
     "label": "mygen2",
-    "startTime": 0,
-    "period": 50,
-    "periodCount": 0,
-    "reqSizeBytes": 1000000,
+    "startTime": 0, 
+    "period": 50, 
+    "periodCount": 0, 
+    "reqSizeBytes": 1000000, 
     "reqCount": 5,
-    "reqInterval": 1,
+    "reqInterval": 1, 
     "user": "vdisk1",
     "desc": "write-chunk"
 }];

@@ -1,17 +1,17 @@
-#include "blobstorage_groupinfo.h"
+#include "blobstorage_groupinfo.h" 
 #include "blobstorage_groupinfo_iter.h"
 #include "blobstorage_groupinfo_sets.h"
 #include "blobstorage_groupinfo_partlayout.h"
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <library/cpp/testing/unittest/registar.h>
-
-namespace NKikimr {
-
+ 
+namespace NKikimr { 
+ 
 Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
-
+ 
     Y_UNIT_TEST(TestBelongsToSubgroup) {
-        for (ui32 disks = 1; disks < 4; ++disks) {
-            for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {
+        for (ui32 disks = 1; disks < 4; ++disks) { 
+            for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) { 
                 if (species == TBlobStorageGroupType::ErasureMirror3dc) {
                     continue;
                 }
@@ -19,9 +19,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 const auto erasureType = TErasureType::EErasureSpecies(species);
                 const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize();
                 TBlobStorageGroupInfo info(erasureType, disks, numFailDomains);
-
-                for (ui32 hashIdx = 0; hashIdx < 1000; ++hashIdx) {
-                    ui32 hash = 640480 + 13 * hashIdx;
+ 
+                for (ui32 hashIdx = 0; hashIdx < 1000; ++hashIdx) { 
+                    ui32 hash = 640480 + 13 * hashIdx; 
                     TBlobStorageGroupInfo::TVDiskIds vdiskIds;
                     info.PickSubgroup(hash, &vdiskIds, nullptr);
                     TVector<bool> isMissingDomain;
@@ -29,22 +29,22 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                     isMissingDomain.resize(realm0.GetNumFailDomainsPerFailRealm());
                     for (const auto& domain : realm0.GetFailRealmFailDomains()) {
                         isMissingDomain[domain.FailDomainOrderNumber] = true;
-                    }
-                    for (ui32 i = 0; i < vdiskIds.size(); ++i) {
+                    } 
+                    for (ui32 i = 0; i < vdiskIds.size(); ++i) { 
                         isMissingDomain[vdiskIds[i].FailDomain] = false;
-                    }
+                    } 
                     for (auto it = realm0.FailRealmFailDomainsBegin(); it != realm0.FailRealmFailDomainsEnd(); ++it) {
                         if (isMissingDomain[it.GetFailDomainIdx()]) {
                             ui32 vDisksSz = it.GetNumVDisksPerFailDomain();
-                            for (ui32 vdiskIdx = 0; vdiskIdx < vDisksSz; ++vdiskIdx) {
+                            for (ui32 vdiskIdx = 0; vdiskIdx < vDisksSz; ++vdiskIdx) { 
                                 TVDiskID id(0, 1, 0, it.GetFailDomainIdx(), vdiskIdx);
                                 bool isReplica = info.BelongsToSubgroup(id, hash);
-                                UNIT_ASSERT(!isReplica);
-                            }
-                        }
-                    }
-
-                    for (ui32 i = 0; i < vdiskIds.size(); ++i) {
+                                UNIT_ASSERT(!isReplica); 
+                            } 
+                        } 
+                    } 
+ 
+                    for (ui32 i = 0; i < vdiskIds.size(); ++i) { 
                         ui32 realmIdx = vdiskIds[i].FailRealm;
                         ui32 domainIdx = vdiskIds[i].FailDomain;
                         for (auto vdiskIt = realm0.FailRealmVDisksBegin(); vdiskIt != realm0.FailRealmVDisksEnd(); ++vdiskIt) {
@@ -54,14 +54,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                             ui32 vdiskIdx = vdiskIt.GetVDiskIdx();
                             TVDiskID id(0, 1, realmIdx, domainIdx, vdiskIdx);
                             bool isReplica = info.BelongsToSubgroup(id, hash);
-                            UNIT_ASSERT(isReplica == (vdiskIdx == vdiskIds[i].VDisk));
-                        }
-                    }
-                }
-            }
-        }
+                            UNIT_ASSERT(isReplica == (vdiskIdx == vdiskIds[i].VDisk)); 
+                        } 
+                    } 
+                } 
+            } 
+        } 
     }
-
+ 
     Y_UNIT_TEST(SubgroupPartLayout) {
         TLogoBlobID id(1, 1, 1, 0, 100, 0);
 
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 }
             }
         }
-    }
+    } 
 
     Y_UNIT_TEST(GroupQuorumCheckerOrdinary) {
         for (ui32 i = 0; i < TBlobStorageGroupType::ErasureSpeciesCount; ++i) {
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             UNIT_ASSERT(!checker.CheckQuorumForGroup(~createGroupVDisks(domainMask)));
         }
     }
-}
-
-} // namespace NKikimr
-
+} 
+ 
+} // namespace NKikimr 
+ 

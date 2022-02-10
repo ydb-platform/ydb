@@ -15,10 +15,10 @@ using namespace NMonitoring;
 class TSchArmMonPage : public IMonPage {
 private:
     TString SchVizUrl;
-    TString JsonConfig;
-    bool IsRunning = false;
-    TMutex EmuMutex;
-    THolder<NSchLab::TSchEmu> SchEmu;
+    TString JsonConfig; 
+    bool IsRunning = false; 
+    TMutex EmuMutex; 
+    THolder<NSchLab::TSchEmu> SchEmu; 
 public:
     TSchArmMonPage(const TString& path, const TString& schVizUrl)
         : IMonPage(path, "SchArm")
@@ -26,26 +26,26 @@ public:
     {}
 
     virtual void Output(IMonHttpRequest& request) {
-        TGuard<TMutex> guard(EmuMutex);
+        TGuard<TMutex> guard(EmuMutex); 
 
         TStringStream out;
         try {
-            if (request.GetMethod() == HTTP_METHOD_GET) {
-                if (request.GetParams().Get("mode") == "") {
-                    OutputIndex(request, out);
-                } else if (request.GetParams().Get("mode") == "getschedule") {
-                    GetJson(request, out);
-                } else {
-                    ythrow yexception() << "Bad request, expected empty mode argument";
-                }
-            } else if (request.GetMethod() == HTTP_METHOD_POST) {
-                if (strcmp(request.GetParams().Get("mode").c_str(), "setconfig") == 0) {
-                    InputConfig(request, out);
-                } else {
-                    ythrow yexception() << "Bad request, expected mode=setconfig";
-                }
+            if (request.GetMethod() == HTTP_METHOD_GET) { 
+                if (request.GetParams().Get("mode") == "") { 
+                    OutputIndex(request, out); 
+                } else if (request.GetParams().Get("mode") == "getschedule") { 
+                    GetJson(request, out); 
+                } else { 
+                    ythrow yexception() << "Bad request, expected empty mode argument"; 
+                } 
+            } else if (request.GetMethod() == HTTP_METHOD_POST) { 
+                if (strcmp(request.GetParams().Get("mode").c_str(), "setconfig") == 0) { 
+                    InputConfig(request, out); 
+                } else { 
+                    ythrow yexception() << "Bad request, expected mode=setconfig"; 
+                } 
             } else {
-                ythrow yexception() << "Unexpected request method# " << (i32)request.GetMethod();
+                ythrow yexception() << "Unexpected request method# " << (i32)request.GetMethod(); 
             }
         } catch (...) {
             out.Clear();
@@ -58,38 +58,38 @@ public:
 
 private:
     void OutputIndex(const IMonHttpRequest& request, IOutputStream& out) {
-        TGuard<TMutex> guard(EmuMutex);
+        TGuard<TMutex> guard(EmuMutex); 
         Y_UNUSED(request);
         out << HTTPOKHTML;
         HTML(out) {
             out << NResource::Find("schlab/scharm.html")
                 << "<script type=\"text/javascript\">\n"
-                << "  $('#btnArm').click(function(){scharm.sendCfg(function(){window.open('"
-                << SchVizUrl << "','_blank');});});\n"
+                << "  $('#btnArm').click(function(){scharm.sendCfg(function(){window.open('" 
+                << SchVizUrl << "','_blank');});});\n" 
                 << "</script>\n";
         }
     }
-
+ 
     void InputConfig(const IMonHttpRequest& request, IOutputStream& out) {
-        TGuard<TMutex> guard(EmuMutex);
+        TGuard<TMutex> guard(EmuMutex); 
         JsonConfig = TString(request.GetPostContent());
-        IsRunning = false;
-        out << HTTPOKHTML;
-    }
-
+        IsRunning = false; 
+        out << HTTPOKHTML; 
+    } 
+ 
     void GetJson(const IMonHttpRequest& request, IOutputStream& out) {
-        TGuard<TMutex> guard(EmuMutex);
-        Y_UNUSED(request);
-        out << HTTPOKHTML;
-        if (!IsRunning) {
-            SchEmu.Reset(new NSchLab::TSchEmu(JsonConfig));
-            SchEmu->Emulate(2000.0);
-            SchEmu->OutputLogJson(out);
-            IsRunning = true;
-        } else {
-            SchEmu->OutputLogJson(out);
-        }
-    }
+        TGuard<TMutex> guard(EmuMutex); 
+        Y_UNUSED(request); 
+        out << HTTPOKHTML; 
+        if (!IsRunning) { 
+            SchEmu.Reset(new NSchLab::TSchEmu(JsonConfig)); 
+            SchEmu->Emulate(2000.0); 
+            SchEmu->OutputLogJson(out); 
+            IsRunning = true; 
+        } else { 
+            SchEmu->OutputLogJson(out); 
+        } 
+    } 
 };
 
 class TSchVizMonPage : public IMonPage {
@@ -175,7 +175,7 @@ void CreateSchArmPages(TMonService2* mon, const TString& path, const TString& sc
     // scharm static files
     SCHLAB_STATIC_FILE("schlab/css/scharm.css", CSS);
     SCHLAB_STATIC_FILE("schlab/js/scharm.js", JAVASCRIPT);
-    SCHLAB_STATIC_FILE("schlab/js/scharm-test0.js", JAVASCRIPT);
+    SCHLAB_STATIC_FILE("schlab/js/scharm-test0.js", JAVASCRIPT); 
 
     // scharm page itself
     mon->Register(new TSchArmMonPage(path, schVizUrl));

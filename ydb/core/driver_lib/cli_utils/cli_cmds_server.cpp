@@ -194,7 +194,7 @@ protected:
         config.Opts->AddLongOption("ic-file", "interconnect config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("channels-file", "tablet channel profile config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH"); 
         config.Opts->AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("tenant-pool-file", "Tenant Pool service config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
@@ -456,7 +456,7 @@ protected:
             ythrow yexception() << "DomainsConfig is not provided";
         if (!AppConfig.HasChannelProfileConfig())
             ythrow yexception() << "ChannelProfileConfig is not provided";
-
+ 
         if ((!config.ParseResult->Has("tenant") || TenantName == "no") && RunConfig.ScopeId.IsEmpty()) {
             const TString myDomain = DeduceNodeDomain();
             for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) {

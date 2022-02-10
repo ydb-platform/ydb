@@ -127,7 +127,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
         TDeque<std::pair<ui64, ui64>> WritesInFlightTimestamps;
         TIntrusivePtr<NMonitoring::TCounterForPtr> MaxInFlightLatency;
         ui64 WriteQueryId = 0;
-        const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
+        const NKikimrBlobStorage::EGetHandleClass GetHandleClass; 
         TSizeGenerator ReadSizeGen;
         TIntervalGenerator ReadIntervalGen;
         const ui32 MaxReadsInFlight;
@@ -167,9 +167,9 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
                 TMaybe<ui32> generation, ui32 groupId, NKikimrBlobStorage::EPutHandleClass putHandleClass,
                 const TSizeGenerator& writeSizeGen, const TIntervalGenerator& writeIntervalGen,
                 const TIntervalGenerator& garbageCollectIntervalGen, ui32 maxWritesInFlight, ui64 maxWriteBytesInFlight,
-                ui64 maxTotalBytesWritten, bool soft,
-                NKikimrBlobStorage::EGetHandleClass getHandleClass,
-                const TSizeGenerator& readSizeGen,
+                ui64 maxTotalBytesWritten, bool soft, 
+                NKikimrBlobStorage::EGetHandleClass getHandleClass, 
+                const TSizeGenerator& readSizeGen, 
                 const TIntervalGenerator& readIntervalGen, ui32 maxReadsInFlight, ui64 maxReadBytesInFlight,
                 TDuration scriptedRoundDuration, TVector<TReqInfo>&& scriptedRequests)
             : TagCounters(counters->GetSubgroup("tag", Sprintf("%" PRIu64, tag)))
@@ -196,7 +196,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
             , MegabytesPerSecondQT(ExposePeriod, Counters->GetSubgroup("metric", "writeSpeed"),
                     "bytesPerSecond", Percentiles)
             , ResponseQT()
-            , GetHandleClass(getHandleClass)
+            , GetHandleClass(getHandleClass) 
             , ReadSizeGen(readSizeGen)
             , ReadIntervalGen(readIntervalGen)
             , MaxReadsInFlight(maxReadsInFlight)
@@ -432,7 +432,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
                 DUMP_PARAM(Cookie)
                 DUMP_PARAM(GroupId)
                 DUMP_PARAM(PutHandleClass)
-                DUMP_PARAM(GetHandleClass)
+                DUMP_PARAM(GetHandleClass) 
                 if (EarliestTimestamp != TDuration::Zero()) {
                     DUMP_PARAM(EarliestTimestamp)
                 }
@@ -697,7 +697,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
 
             const ui32 offset = RandomNumber<ui32>(id.BlobSize() - size + 1);
             auto ev = std::make_unique<TEvBlobStorage::TEvGet>(id, offset, size, TInstant::Max(),
-                GetHandleClass);
+                GetHandleClass); 
             const ui64 readQueryId = ++ReadQueryId;
 
             auto readCallback = [this, size, readQueryId](IEventBase *event, const TActorContext& ctx) {
@@ -796,7 +796,7 @@ public:
             }
             NKikimrBlobStorage::EPutHandleClass putHandleClass = profile.GetPutHandleClass();
 
-
+ 
             TSizeGenerator writeSizeGen(profile.GetSizes());
             TIntervalGenerator writeIntervalGen(profile.GetWriteIntervals());
             TIntervalGenerator garbageCollectIntervalGen(profile.GetFlushIntervals());
@@ -809,10 +809,10 @@ public:
             }
             const bool soft = profile.GetSoft();
 
-            NKikimrBlobStorage::EGetHandleClass getHandleClass = NKikimrBlobStorage::EGetHandleClass::FastRead;
-            if (profile.HasGetHandleClass()) {
-                getHandleClass = profile.GetGetHandleClass();
-            }
+            NKikimrBlobStorage::EGetHandleClass getHandleClass = NKikimrBlobStorage::EGetHandleClass::FastRead; 
+            if (profile.HasGetHandleClass()) { 
+                getHandleClass = profile.GetGetHandleClass(); 
+            } 
             TSizeGenerator readSizeGen(profile.GetReadSizes());
             TIntervalGenerator readIntervalGen(profile.GetReadIntervals());
             const ui32 maxReadsInFlight = profile.GetMaxInFlightReadRequests();
@@ -836,8 +836,8 @@ public:
                 TabletWriters.emplace_back(Tag, counters, WakeupQueue, QueryDispatcher, tablet.GetTabletId(),
                     tablet.GetChannel(), tablet.HasGeneration() ?  TMaybe<ui32>(tablet.GetGeneration()) : TMaybe<ui32>(),
                     tablet.GetGroupId(), putHandleClass, writeSizeGen, writeIntervalGen, garbageCollectIntervalGen,
-                    maxWritesInFlight, maxWriteBytesInFlight, maxTotalBytesWritten, soft,
-                    getHandleClass, readSizeGen, readIntervalGen,
+                    maxWritesInFlight, maxWriteBytesInFlight, maxTotalBytesWritten, soft, 
+                    getHandleClass, readSizeGen, readIntervalGen, 
                     maxReadsInFlight, maxReadBytesInFlight, scriptedRoundDuration, std::move(scriptedRequests));
             }
         }

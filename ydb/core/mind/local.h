@@ -75,14 +75,14 @@ struct TEvLocal {
         EvBootTablet,
         EvStopTablet, // must be here
         EvDeadTabletAck,
-        EvEnumerateTablets,
+        EvEnumerateTablets, 
         EvSyncTablets,
         EvTabletMetrics,
         EvReconnect,
 
         EvStatus = EvRegisterNode + 512,
         EvTabletStatus,
-        EvEnumerateTabletsResult,
+        EvEnumerateTabletsResult, 
         EvTabletMetricsAck,
 
         EvAddTenant = EvRegisterNode + 1024,
@@ -95,15 +95,15 @@ struct TEvLocal {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_LOCAL),
-        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_LOCAL)");
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_LOCAL), 
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_LOCAL)"); 
 
     struct TEvRegisterNode : public TEventPB<TEvRegisterNode, NKikimrLocal::TEvRegisterNode, EvRegisterNode> {
         TEvRegisterNode()
         {}
 
-        TEvRegisterNode(ui64 hiveId) {
-            Record.SetHiveId(hiveId);
+        TEvRegisterNode(ui64 hiveId) { 
+            Record.SetHiveId(hiveId); 
         }
     };
 
@@ -112,8 +112,8 @@ struct TEvLocal {
         {}
 
         TEvPing(ui64 hiveId, ui32 hiveGeneration, bool purge, const NKikimrLocal::TLocalConfig &config) {
-            Record.SetHiveId(hiveId);
-            Record.SetHiveGeneration(hiveGeneration);
+            Record.SetHiveId(hiveId); 
+            Record.SetHiveGeneration(hiveGeneration); 
             Record.SetPurge(purge);
             Record.MutableConfig()->CopyFrom(config);
         }
@@ -135,14 +135,14 @@ struct TEvLocal {
             StatusDead,
         };
 
-        TEvStatus() {
+        TEvStatus() { 
             Record.SetStatus(StatusOk);
         }
 
-        TEvStatus(EStatus status) {
+        TEvStatus(EStatus status) { 
             Record.SetStatus(status);
         }
-
+ 
         TEvStatus(EStatus status, ui64 inbootTablets, ui64 onlineTablets, ui64 deadTablets) {
             Record.SetStatus(status);
             Record.SetInbootTablets(inbootTablets);
@@ -161,7 +161,7 @@ struct TEvLocal {
             Record.SetBootMode(NKikimrLocal::BOOT_MODE_LEADER);
             Record.SetFollowerId(followerId);
         }
-
+ 
         TEvBootTablet(const TTabletStorageInfo &info, ui32 followerId) {
             TabletStorageInfoToProto(info, Record.MutableInfo());
             Record.SetBootMode(NKikimrLocal::BOOT_MODE_FOLLOWER);
@@ -222,25 +222,25 @@ struct TEvLocal {
             Record.SetGeneration(generation);
         }
     };
-
-
+ 
+ 
     struct TEvEnumerateTablets : public TEventPB<TEvEnumerateTablets, NKikimrLocal::TEvEnumerateTablets, EvEnumerateTablets> {
-        TEvEnumerateTablets()
-        {}
-
+        TEvEnumerateTablets() 
+        {} 
+ 
         TEvEnumerateTablets(TTabletTypes::EType tabletType) {
             Record.SetTabletType(tabletType);
-        }
-    };
-
+        } 
+    }; 
+ 
     struct TEvEnumerateTabletsResult : public TEventPB<TEvEnumerateTabletsResult, NKikimrLocal::TEvEnumerateTabletsResult, EvEnumerateTabletsResult> {
-        TEvEnumerateTabletsResult()
-        {}
-
-        TEvEnumerateTabletsResult(NKikimrProto::EReplyStatus status) {
-            Record.SetStatus(status);
-        }
-    };
+        TEvEnumerateTabletsResult() 
+        {} 
+ 
+        TEvEnumerateTabletsResult(NKikimrProto::EReplyStatus status) { 
+            Record.SetStatus(status); 
+        } 
+    }; 
 
     struct TEvSyncTablets : public TEventPB<TEvSyncTablets, NKikimrLocal::TEvSyncTablets, EvSyncTablets> {
         TEvSyncTablets()
@@ -370,29 +370,29 @@ struct TLocalConfig : public TThrRefBase {
 IActor* CreateLocal(TLocalConfig *config);
 
 inline TActorId MakeLocalID(ui32 node) {
-    char x[12] = { 'l', 'o', 'c', 'l'};
-    x[4] = (char)(node & 0xFF);
-    x[5] = (char)((node >> 8) & 0xFF);
-    x[6] = (char)((node >> 16) & 0xFF);
-    x[7] = (char)((node >> 24) & 0xFF);
-    x[8] = 0;
-    x[9] = 0;
-    x[10] = 0;
-    x[11] = 0;
+    char x[12] = { 'l', 'o', 'c', 'l'}; 
+    x[4] = (char)(node & 0xFF); 
+    x[5] = (char)((node >> 8) & 0xFF); 
+    x[6] = (char)((node >> 16) & 0xFF); 
+    x[7] = (char)((node >> 24) & 0xFF); 
+    x[8] = 0; 
+    x[9] = 0; 
+    x[10] = 0; 
+    x[11] = 0; 
     return TActorId(node, TStringBuf(x, 12));
 }
 
 inline TActorId MakeLocalRegistrarID(ui32 node, ui64 hiveId) {
-    char x[12] = { 'l', 'o', 'c', 'l'};
-    x[4] = (char)(node & 0xFF);
-    x[5] = (char)((node >> 8) & 0xFF);
-    x[6] = (char)((node >> 16) & 0xFF);
-    x[7] = (char)((node >> 24) & 0xFF);
+    char x[12] = { 'l', 'o', 'c', 'l'}; 
+    x[4] = (char)(node & 0xFF); 
+    x[5] = (char)((node >> 8) & 0xFF); 
+    x[6] = (char)((node >> 16) & 0xFF); 
+    x[7] = (char)((node >> 24) & 0xFF); 
     x[8] = (char)((hiveId & 0xFF) ^ ((hiveId >> 32) & 0xFF));
     x[9] = (char)(((hiveId >> 8) & 0xFF) ^ ((hiveId >> 40) & 0xFF));
     x[10] = (char)(((hiveId >> 16) & 0xFF) ^ ((hiveId >> 48) & 0xFF));
     x[11] = (char)(((hiveId >> 24) & 0xFF) ^ ((hiveId >> 56) & 0xFF));
     return TActorId(node, TStringBuf(x, 12));
 }
-
-}
+ 
+} 

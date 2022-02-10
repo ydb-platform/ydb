@@ -255,17 +255,17 @@ namespace NKikimr {
 
         static inline std::unique_ptr<IEventBase>
         ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
-                        TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TInstant &now,
+                        TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TInstant &now, 
                         const TActorIDPtr &skeletonFrontIDPtr, const TVDiskID &vdiskID,
                         const TBatchedVec<NKikimrProto::EReplyStatus> &statuses, ui64 vdiskIncarnationGuid,
                         const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo)
-        {
-            NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record;
-            LWTRACK(VDiskSkeletonFrontVMultiPutRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId,
-                   vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), ev->Get()->Record.ItemsSize(),
-                   ev->Get()->GetBufferBytes());
-            const ui64 vcookie = record.GetCookie();
-            const ui64 *cookie = record.HasCookie() ? &vcookie : nullptr;
+        { 
+            NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record; 
+            LWTRACK(VDiskSkeletonFrontVMultiPutRecieved, ev->Get()->Orbit, vctx->NodeId, vctx->GroupId, 
+                   vctx->Top->GetFailDomainOrderNumber(vctx->ShortSelfVDisk), ev->Get()->Record.ItemsSize(), 
+                   ev->Get()->GetBufferBytes()); 
+            const ui64 vcookie = record.GetCookie(); 
+            const ui64 *cookie = record.HasCookie() ? &vcookie : nullptr; 
             const ui64 bufferSizeBytes = ev->Get()->GetBufferBytes();
             const auto handleClass = record.GetHandleClass();
             const NVDiskMon::TLtcHistoPtr &histoPtr = vctx->Histograms.GetHistogram(handleClass);
@@ -276,19 +276,19 @@ namespace NKikimr {
             Y_VERIFY(record.ItemsSize() == statuses.size());
             for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
                 auto &item = record.GetItems(itemIdx);
-                ui64 cookieValue = 0;
-                ui64 *cookiePtr = nullptr;
-                if (item.HasCookie()) {
-                    cookieValue = item.GetCookie();
-                    cookiePtr = &cookieValue;
-                }
-                TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
+                ui64 cookieValue = 0; 
+                ui64 *cookiePtr = nullptr; 
+                if (item.HasCookie()) { 
+                    cookieValue = item.GetCookie(); 
+                    cookiePtr = &cookieValue; 
+                } 
+                TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID()); 
                 result->AddVPutResult(statuses[itemIdx], errorReason, blobId, cookiePtr);
-            }
+            } 
             SetRacingGroupInfo(ev->Get()->Record, result->Record, groupInfo);
             return result;
-        }
-
+        } 
+ 
         static inline std::unique_ptr<IEventBase>
         ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
                         TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TInstant &now,

@@ -103,10 +103,10 @@ public:
 
     void Deallocate(ui8* ptr, size_t n) {
         Y_UNUSED(n);
-        Y_UNUSED(ptr);
+        Y_UNUSED(ptr); 
 
-        ui8 *p = GetAlignedArray();
-        SecureWipeBuffer(p, nbytes);
+        ui8 *p = GetAlignedArray(); 
+        SecureWipeBuffer(p, nbytes); 
     }
 
     ui8* Reallocate(ui8* ptr, size_t oldSize, size_t newSize, bool preserve) {
@@ -122,7 +122,7 @@ private:
         return (ui8*)(Array_ + (0 - (size_t)Array_) % 16);
     }
 
-    alignas(alignment) ui8 Array_[nbytes + alignment];
+    alignas(alignment) ui8 Array_[nbytes + alignment]; 
 };
 
 

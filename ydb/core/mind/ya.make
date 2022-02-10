@@ -9,7 +9,7 @@ OWNER(
 SRCS(
     configured_tablet_bootstrapper.cpp
     configured_tablet_bootstrapper.h
-    defs.h
+    defs.h 
     dynamic_nameserver.cpp
     dynamic_nameserver.h
     dynamic_nameserver_impl.h

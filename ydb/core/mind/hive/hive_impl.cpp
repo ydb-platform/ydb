@@ -53,8 +53,8 @@ void THive::Handle(TEvHive::TEvAdoptTablet::TPtr& ev) {
 void THive::Handle(TEvents::TEvPoisonPill::TPtr&) {
     BLOG_D("Handle TEvents::TEvPoisonPill");
     Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
+} 
+ 
 void THive::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     if (msg->ClientId == BSControllerPipeClient && msg->Status != NKikimrProto::OK) {
@@ -65,14 +65,14 @@ void THive::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         RestartRootHivePipe();
         return;
     }
-    if (!PipeClientCache->OnConnect(ev)) {
+    if (!PipeClientCache->OnConnect(ev)) { 
         BLOG_ERROR("Failed to connect to tablet " << ev->Get()->TabletId << " from tablet " << TabletID());
         RestartPipeTx(ev->Get()->TabletId);
-    } else {
+    } else { 
         BLOG_D("Connected to tablet " << ev->Get()->TabletId << " from tablet " << TabletID());
-    }
-}
-
+    } 
+} 
+ 
 void THive::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
     TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
     if (msg->ClientId == BSControllerPipeClient) {
@@ -84,17 +84,17 @@ void THive::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         return;
     }
     BLOG_D("Client pipe to tablet " << ev->Get()->TabletId << " from " << TabletID() << " is reset");
-    PipeClientCache->OnDisconnect(ev);
+    PipeClientCache->OnDisconnect(ev); 
     RestartPipeTx(ev->Get()->TabletId);
-}
-
+} 
+ 
 void THive::RestartPipeTx(ui64 tabletId) {
-    for (auto txid : PipeTracker.FindTx(tabletId)) {
+    for (auto txid : PipeTracker.FindTx(tabletId)) { 
         BLOG_D("Pipe reset to tablet " << tabletId << " caused restart of txid# " << txid << " at tablet " << TabletID());
-        // TODO: restart all the dependent transactions
-    }
-}
-
+        // TODO: restart all the dependent transactions 
+    } 
+} 
+ 
 void THive::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
     if (ev->Get()->TabletId == TabletID()) {
         BLOG_TRACE("Handle TEvTabletPipe::TEvServerConnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
@@ -102,7 +102,7 @@ void THive::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
         node.PipeServers.emplace_back(ev->Get()->ServerId);
     }
 }
-
+ 
 void THive::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
     if (ev->Get()->TabletId == TabletID()) {
         BLOG_TRACE("Handle TEvTabletPipe::TEvServerDisconnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
@@ -126,8 +126,8 @@ void THive::Handle(TEvLocal::TEvRegisterNode::TPtr& ev) {
     } else {
         BLOG_W("Handle incorrect TEvLocal::TEvRegisterNode from " << ev->Sender << " " << record.ShortDebugString());
     }
-}
-
+} 
+ 
 bool THive::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
     if (!Executor() || !Executor()->GetStats().IsActive)
         return false;
@@ -150,7 +150,7 @@ void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
         Send(actorToNotify, new TEvHive::TEvStopTabletResult(NKikimrProto::ERROR, 0), 0, ev->Cookie);
     }
 }
-
+ 
 void THive::Handle(TEvHive::TEvDeleteTablet::TPtr& ev) {
     Execute(CreateDeleteTablet(ev));
 }
@@ -209,7 +209,7 @@ void THive::RunProcessBootQueue() {
                     BootQueue.AddToWaitQueue(record); // waiting for new node
                     continue;
                 }
-            }
+            } 
         } else {
             TInstant tabletPostponedStart = tablet->PostponedStart;
             if (tabletPostponedStart > now) {
@@ -219,7 +219,7 @@ void THive::RunProcessBootQueue() {
                     postponedStart = tabletPostponedStart;
                 }
             }
-        }
+        } 
         if (tablet->IsBooting()) {
             delayedTablets.push_back(record);
         }
@@ -250,7 +250,7 @@ void THive::RunProcessBootQueue() {
         }
     }
 }
-
+ 
 void THive::Handle(TEvPrivate::TEvProcessBootQueue::TPtr&) {
     BLOG_TRACE("ProcessBootQueue - executing");
     Execute(CreateProcessBootQueue());
@@ -267,9 +267,9 @@ void THive::ProcessBootQueue() {
         BLOG_TRACE("ProcessBootQueue - sending");
         ProcessBootQueueScheduled = true;
         Send(SelfId(), new TEvPrivate::TEvProcessBootQueue());
-    }
+    } 
 }
-
+ 
 void THive::PostponeProcessBootQueue(TDuration after) {
     if (!ProcessBootQueuePostponed) {
         BLOG_D("PostponeProcessBootQueue (" << after << ")");
@@ -301,9 +301,9 @@ void THive::Handle(TEvHive::TEvBootTablet::TPtr& ev) {
     Y_VERIFY(tablet != nullptr);
     if (tablet->IsReadyToBoot()) {
         tablet->InitiateBoot();
-    }
-}
-
+    } 
+} 
+ 
 TVector<TTabletId> THive::UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters>& groups) {
     TVector<TTabletId> tabletsToUpdate;
     std::unordered_map<TString, std::vector<const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters*>> poolToGroup;
@@ -399,7 +399,7 @@ void THive::Handle(TEvLocal::TEvTabletStatus::TPtr& ev) {
         BLOG_W("Handle TEvLocal::TEvTabletStatus from node " << nodeId << ", TabletId: " << record.GetTabletID() << " not found");
     }
 }
-
+ 
 void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     BLOG_D("Handle BootTablets");
     RequestPoolsInformation();
@@ -444,7 +444,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         if (tablet.ObjectDomain) {
             SeenDomain(tablet.ObjectDomain);
         }
-    }
+    } 
     SignalTabletActive(DEPRECATED_CTX);
     ReadyForConnections = true;
     if (AreWeRootHive()) {
@@ -461,8 +461,8 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         SendToRootHivePipe(request.Release());
     }
     ProcessPendingOperations();
-}
-
+} 
+ 
 void THive::Handle(TEvHive::TEvInitMigration::TPtr& ev) {
     BLOG_D("Handle InitMigration " << ev->Get()->Record);
     if (MigrationState == NKikimrHive::EMigrationState::MIGRATION_READY || MigrationState == NKikimrHive::EMigrationState::MIGRATION_COMPLETE) {
@@ -562,12 +562,12 @@ void THive::Handle(TEvLocal::TEvStatus::TPtr& ev) {
     BLOG_D("Handle TEvLocal::TEvStatus for Node " << ev->Sender.NodeId() << ": " << ev->Get()->Record.ShortDebugString());
     Execute(CreateStatus(ev->Sender, ev->Get()->Record));
 }
-
+ 
 void THive::Handle(TEvLocal::TEvSyncTablets::TPtr& ev) {
     BLOG_D("THive::Handle::TEvSyncTablets");
     Execute(CreateSyncTablets(ev->Sender, ev->Get()->Record));
 }
-
+ 
 void THive::Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr& ev) {
     TAutoPtr<TEvPrivate::TEvProcessDisconnectNode> event = ev->Release();
     TNodeInfo& node = GetNode(event->NodeId);
@@ -588,7 +588,7 @@ void THive::Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr& ev) {
         ScheduleDisconnectNode(event);
     }
 }
-
+ 
 void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
     TNodeId nodeId = ev->Sender.NodeId();
     BLOG_TRACE("THive::Handle::TEvTabletMetrics, NodeId " << nodeId << " " << ev->Get()->Record.ShortDebugString());
@@ -614,7 +614,7 @@ void THive::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     BLOG_W("Handle TEvInterconnect::TEvNodeDisconnected, NodeId " << ev->Get()->NodeId);
     Execute(CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected>(ev->Release().Release())));
 }
-
+ 
 void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
     THolder<TEvInterconnect::TNodeInfo>& node = ev->Get()->Node;
     if (node) {
@@ -658,7 +658,7 @@ void THive::ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode>
             Schedule(disconnectTimeout - spentTime, event.Release());
         } else {
             Send(SelfId(), event.Release());
-        }
+        } 
     } else {
         KillNode(event->NodeId, event->Local);
     }
@@ -784,8 +784,8 @@ void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
         break;
     }
     };
-}
-
+} 
+ 
 void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
     BLOG_D("THive::TEvReassignTablet " << ev->Get()->Record.ShortUtf8DebugString());
     TLeaderTabletInfo* tablet = FindTablet(ev->Get()->Record.GetTabletID());

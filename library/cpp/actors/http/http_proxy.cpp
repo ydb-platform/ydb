@@ -226,7 +226,7 @@ TEvHttpProxy::TEvReportSensors* BuildOutgoingRequestSensors(const THttpOutgoingR
             request->Host,
             request->URL.Before('?'),
             response ? response->Status : "504",
-            TDuration::Seconds(std::abs(request->Timer.Passed()))
+            TDuration::Seconds(std::abs(request->Timer.Passed())) 
     );
 }
 
@@ -236,7 +236,7 @@ TEvHttpProxy::TEvReportSensors* BuildIncomingRequestSensors(const THttpIncomingR
             request->Host,
             request->URL.Before('?'),
             response->Status,
-            TDuration::Seconds(std::abs(request->Timer.Passed()))
+            TDuration::Seconds(std::abs(request->Timer.Passed())) 
     );
 }
 

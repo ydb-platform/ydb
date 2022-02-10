@@ -50,30 +50,30 @@ struct TManyPutsTest {
 
 
 ///////////////////////////////////////////////////////////////////////////
-struct TManyMultiPutsTest {
-    const bool WaitForCompaction;
-    const ui32 MsgNum;
-    const ui32 BatchSize;
-    const ui32 MsgSize;
-    const NKikimrBlobStorage::EPutHandleClass HandleClass;
+struct TManyMultiPutsTest { 
+    const bool WaitForCompaction; 
+    const ui32 MsgNum; 
+    const ui32 BatchSize; 
+    const ui32 MsgSize; 
+    const NKikimrBlobStorage::EPutHandleClass HandleClass; 
     std::shared_ptr<TSet<ui32>> BadSteps;
-
-    TManyMultiPutsTest(bool waitForCompaction, ui32 msgNum, ui32 batchSize, ui32 msgSize,
-                  NKikimrBlobStorage::EPutHandleClass cls,
+ 
+    TManyMultiPutsTest(bool waitForCompaction, ui32 msgNum, ui32 batchSize, ui32 msgSize, 
+                  NKikimrBlobStorage::EPutHandleClass cls, 
                   std::shared_ptr<TSet<ui32>> badSteps)
-        : WaitForCompaction(waitForCompaction)
-        , MsgNum(msgNum)
-        , BatchSize(batchSize)
-        , MsgSize(msgSize)
-        , HandleClass(cls)
-        , BadSteps(badSteps)
-    {}
-
-    void operator ()(TConfiguration *conf);
-};
-
-
-///////////////////////////////////////////////////////////////////////////
+        : WaitForCompaction(waitForCompaction) 
+        , MsgNum(msgNum) 
+        , BatchSize(batchSize) 
+        , MsgSize(msgSize) 
+        , HandleClass(cls) 
+        , BadSteps(badSteps) 
+    {} 
+ 
+    void operator ()(TConfiguration *conf); 
+}; 
+ 
+ 
+/////////////////////////////////////////////////////////////////////////// 
 struct TManyGetsTest {
     const bool WaitForCompaction;
     const ui32 MsgNum;

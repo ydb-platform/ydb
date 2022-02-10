@@ -1,8 +1,8 @@
-#pragma once
+#pragma once 
 
-#include "defs.h"
-
-#include "dsproxy_nodemon.h"
+#include "defs.h" 
+ 
+#include "dsproxy_nodemon.h" 
 #include "dsproxy_timestats.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
@@ -12,14 +12,14 @@
 #include <ydb/core/util/throughput_meter.h>
 #include <ydb/core/mon/mon.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
-#include <util/generic/ptr.h>
-
-namespace NKikimr {
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// BlobStorageProxy monitoring counters
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+#include <util/generic/ptr.h> 
+ 
+namespace NKikimr { 
+ 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+// BlobStorageProxy monitoring counters 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+ 
 enum class ERequestType {
     Get,
     Put,
@@ -133,103 +133,103 @@ struct TResponseStatusGroup : TThrRefBase {
 #undef ENUM_STATUS
 };
 
-class TBlobStorageGroupProxyMon : public TThrRefBase {
+class TBlobStorageGroupProxyMon : public TThrRefBase { 
 public:
     TIntrusivePtr<TDsProxyNodeMon> NodeMon;
 
-protected:
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+protected: 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters; 
     TIntrusivePtr<NMonitoring::TDynamicCounters> PercentileCounters;
     TIntrusivePtr<NMonitoring::TDynamicCounters> ResponseGroup;
     ui64 GroupIdGen = Max<ui64>(); // group id:group gen
-    std::atomic<bool> IsLimitedMon = ATOMIC_VAR_INIT(true);
-
+    std::atomic<bool> IsLimitedMon = ATOMIC_VAR_INIT(true); 
+ 
     TIntrusivePtr<NMonitoring::TDynamicCounters> ThroughputGroup;
     std::unique_ptr<TThroughputMeter> PutTabletLogThroughput;
     std::unique_ptr<TThroughputMeter> PutAsyncBlobThroughput;
     std::unique_ptr<TThroughputMeter> PutUserDataThroughput;
     std::unique_ptr<TThroughputMeter> PutThroughput;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> LatencyOverviewGroup;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> LatencyOverviewGroup; 
 
-
-    // log response time
+ 
+    // log response time 
     NMonitoring::TPercentileTrackerLg<3, 4, 3> PutResponseTime; // Used by whiteboard
-
+ 
     NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime256;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime512;
-
+ 
     NMonitoring::TPercentileTrackerLg<3, 4, 3> PutAsyncBlobResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> PutUserDataResponseTime;
-
+ 
     NMonitoring::TPercentileTrackerLg<3, 4, 3> GetResponseTime; // Used by witheboard
-
+ 
     NMonitoring::TPercentileTrackerLg<3, 4, 3> BlockResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> DiscoverResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> IndexRestoreGetResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> RangeResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> PatchResponseTime;
-
-    // event counters
-    TIntrusivePtr<NMonitoring::TDynamicCounters> EventGroup;
-    NMonitoring::TDynamicCounters::TCounterPtr EventPut;
+ 
+    // event counters 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> EventGroup; 
+    NMonitoring::TDynamicCounters::TCounterPtr EventPut; 
     NMonitoring::TDynamicCounters::TCounterPtr EventPutBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr EventGetResBytes;
-    TMap<ui32, NMonitoring::TDynamicCounters::TCounterPtr> EventPutBytesBuckets;
-
-
-    // handoff use reason
-    TIntrusivePtr<NMonitoring::TDynamicCounters> HandoffGroup;
-
-    // subevent counters
-    TRequestMonGroup GetGroup;
-    TRequestMonGroup PutGroup;
-    TRequestMonGroup DiscoverGroup;
-    TRequestMonGroup RangeGroup;
+    NMonitoring::TDynamicCounters::TCounterPtr EventGetResBytes; 
+    TMap<ui32, NMonitoring::TDynamicCounters::TCounterPtr> EventPutBytesBuckets; 
+ 
+ 
+    // handoff use reason 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> HandoffGroup; 
+ 
+    // subevent counters 
+    TRequestMonGroup GetGroup; 
+    TRequestMonGroup PutGroup; 
+    TRequestMonGroup DiscoverGroup; 
+    TRequestMonGroup RangeGroup; 
     TRequestMonGroup PatchGroup;
-
-public:
-    TBlobStorageGroupProxyTimeStats TimeStats;
-
-    // handoff use reason
-    std::array<NMonitoring::TDynamicCounters::TCounterPtr, 8> HandoffPartsSent;
-
-    TAtomic PutSamplePPM = 0;
-    TAtomic GetSamplePPM = 0;
-    TAtomic DiscoverSamplePPM = 0;
-
-    // event counters
-    NMonitoring::TDynamicCounters::TCounterPtr EventGet;
-    NMonitoring::TDynamicCounters::TCounterPtr EventBlock;
-    NMonitoring::TDynamicCounters::TCounterPtr EventDiscover;
-    NMonitoring::TDynamicCounters::TCounterPtr EventRange;
-    NMonitoring::TDynamicCounters::TCounterPtr EventCollectGarbage;
-    NMonitoring::TDynamicCounters::TCounterPtr EventMultiGet;
-    NMonitoring::TDynamicCounters::TCounterPtr EventIndexRestoreGet;
-    NMonitoring::TDynamicCounters::TCounterPtr EventMultiCollect;
-    NMonitoring::TDynamicCounters::TCounterPtr EventStatus;
+ 
+public: 
+    TBlobStorageGroupProxyTimeStats TimeStats; 
+ 
+    // handoff use reason 
+    std::array<NMonitoring::TDynamicCounters::TCounterPtr, 8> HandoffPartsSent; 
+ 
+    TAtomic PutSamplePPM = 0; 
+    TAtomic GetSamplePPM = 0; 
+    TAtomic DiscoverSamplePPM = 0; 
+ 
+    // event counters 
+    NMonitoring::TDynamicCounters::TCounterPtr EventGet; 
+    NMonitoring::TDynamicCounters::TCounterPtr EventBlock; 
+    NMonitoring::TDynamicCounters::TCounterPtr EventDiscover; 
+    NMonitoring::TDynamicCounters::TCounterPtr EventRange; 
+    NMonitoring::TDynamicCounters::TCounterPtr EventCollectGarbage; 
+    NMonitoring::TDynamicCounters::TCounterPtr EventMultiGet; 
+    NMonitoring::TDynamicCounters::TCounterPtr EventIndexRestoreGet; 
+    NMonitoring::TDynamicCounters::TCounterPtr EventMultiCollect; 
+    NMonitoring::TDynamicCounters::TCounterPtr EventStatus; 
     NMonitoring::TDynamicCounters::TCounterPtr EventStopPutBatching;
     NMonitoring::TDynamicCounters::TCounterPtr EventStopGetBatching;
     NMonitoring::TDynamicCounters::TCounterPtr EventPatch;
-
+ 
     NMonitoring::TDynamicCounters::TCounterPtr PutsSentViaPutBatching;
     NMonitoring::TDynamicCounters::TCounterPtr PutBatchesSent;
 
     // active event counters
     TIntrusivePtr<NMonitoring::TDynamicCounters> ActiveRequestsGroup;
     NMonitoring::TDynamicCounters::TCounterPtr ActivePut;
-    NMonitoring::TDynamicCounters::TCounterPtr ActivePutCapacity;
+    NMonitoring::TDynamicCounters::TCounterPtr ActivePutCapacity; 
     NMonitoring::TDynamicCounters::TCounterPtr ActiveGet;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveGetCapacity;
+    NMonitoring::TDynamicCounters::TCounterPtr ActiveGetCapacity; 
     NMonitoring::TDynamicCounters::TCounterPtr ActiveBlock;
     NMonitoring::TDynamicCounters::TCounterPtr ActiveDiscover;
     NMonitoring::TDynamicCounters::TCounterPtr ActiveRange;
     NMonitoring::TDynamicCounters::TCounterPtr ActiveCollectGarbage;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveMultiGet;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveIndexRestoreGet;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveMultiCollect;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveStatus;
+    NMonitoring::TDynamicCounters::TCounterPtr ActiveMultiGet; 
+    NMonitoring::TDynamicCounters::TCounterPtr ActiveIndexRestoreGet; 
+    NMonitoring::TDynamicCounters::TCounterPtr ActiveMultiCollect; 
+    NMonitoring::TDynamicCounters::TCounterPtr ActiveStatus; 
     NMonitoring::TDynamicCounters::TCounterPtr ActivePatch;
 
     std::optional<TResponseStatusGroup> RespStatPut;
@@ -265,8 +265,8 @@ public:
 
     TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
             const TIntrusivePtr<NMonitoring::TDynamicCounters>& percentileCounters,
-            const TIntrusivePtr<NMonitoring::TDynamicCounters>& overviewCounters,
-            const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+            const TIntrusivePtr<NMonitoring::TDynamicCounters>& overviewCounters, 
+            const TIntrusivePtr<TBlobStorageGroupInfo>& info, 
             const TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
             bool isLimitedMon);
 
@@ -284,28 +284,28 @@ public:
         ++*std::prev(bucketIt)->second;
     }
 
-    void CountThroughput(NKikimrBlobStorage::EPutHandleClass cls, ui32 size) {
-        switch (cls) {
-            case NKikimrBlobStorage::EPutHandleClass::TabletLog:
+    void CountThroughput(NKikimrBlobStorage::EPutHandleClass cls, ui32 size) { 
+        switch (cls) { 
+            case NKikimrBlobStorage::EPutHandleClass::TabletLog: 
                 PutTabletLogThroughput->Count(size);
-                break;
-            case NKikimrBlobStorage::EPutHandleClass::AsyncBlob:
+                break; 
+            case NKikimrBlobStorage::EPutHandleClass::AsyncBlob: 
                 PutAsyncBlobThroughput->Count(size);
-                break;
-            case NKikimrBlobStorage::EPutHandleClass::UserData:
+                break; 
+            case NKikimrBlobStorage::EPutHandleClass::UserData: 
                 PutUserDataThroughput->Count(size);
-                break;
-        }
+                break; 
+        } 
         PutThroughput->Count(size);
-    }
-
+    } 
+ 
     void CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size,
             TDuration duration) {
         const ui32 durationMs = duration.MilliSeconds();
         PutResponseTime.Increment(durationMs);
         switch (cls) {
             case NKikimrBlobStorage::EPutHandleClass::TabletLog:
-                PutTabletLogResponseTime.Increment(durationMs);
+                PutTabletLogResponseTime.Increment(durationMs); 
                 if (size < (256 << 10)) {
                     PutTabletLogResponseTime256.Increment(durationMs);
                 } else if (size < (512 << 10)) {
@@ -323,42 +323,42 @@ public:
         }
         NodeMon->CountPutPesponseTime(type, cls, size, duration);
     }
-
+ 
     void CountGetResponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, ui32 size,
             TDuration duration) {
-        *EventGetResBytes += size;
-        GetResponseTime.Increment(duration.MilliSeconds());
+        *EventGetResBytes += size; 
+        GetResponseTime.Increment(duration.MilliSeconds()); 
         NodeMon->CountGetResponseTime(type, cls, size, duration);
-    }
-
-    void CountBlockResponseTime(TDuration duration) {
-        BlockResponseTime.Increment(duration.MilliSeconds());
-        NodeMon->BlockResponseTime.Increment(duration.MilliSeconds());
-    }
-
-    void CountDiscoverResponseTime(TDuration duration) {
-        DiscoverResponseTime.Increment(duration.MilliSeconds());
-        NodeMon->DiscoverResponseTime.Increment(duration.MilliSeconds());
-    }
-
-    void CountIndexRestoreGetResponseTime(TDuration duration) {
-        IndexRestoreGetResponseTime.Increment(duration.MilliSeconds());
-        NodeMon->IndexRestoreGetResponseTime.Increment(duration.MilliSeconds());
-    }
-
-    void CountRangeResponseTime(TDuration duration) {
-        RangeResponseTime.Increment(duration.MilliSeconds());
-        NodeMon->RangeResponseTime.Increment(duration.MilliSeconds());
-    }
-
+    } 
+ 
+    void CountBlockResponseTime(TDuration duration) { 
+        BlockResponseTime.Increment(duration.MilliSeconds()); 
+        NodeMon->BlockResponseTime.Increment(duration.MilliSeconds()); 
+    } 
+ 
+    void CountDiscoverResponseTime(TDuration duration) { 
+        DiscoverResponseTime.Increment(duration.MilliSeconds()); 
+        NodeMon->DiscoverResponseTime.Increment(duration.MilliSeconds()); 
+    } 
+ 
+    void CountIndexRestoreGetResponseTime(TDuration duration) { 
+        IndexRestoreGetResponseTime.Increment(duration.MilliSeconds()); 
+        NodeMon->IndexRestoreGetResponseTime.Increment(duration.MilliSeconds()); 
+    } 
+ 
+    void CountRangeResponseTime(TDuration duration) { 
+        RangeResponseTime.Increment(duration.MilliSeconds()); 
+        NodeMon->RangeResponseTime.Increment(duration.MilliSeconds()); 
+    } 
+ 
     void CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration) {
         PatchResponseTime.Increment(duration.MilliSeconds());
         NodeMon->CountPatchResponseTime(type, duration);
     }
 
-    void Update();
-    void ThroughputUpdate();
-};
-
-} // NKikimr
-
+    void Update(); 
+    void ThroughputUpdate(); 
+}; 
+ 
+} // NKikimr 
+ 

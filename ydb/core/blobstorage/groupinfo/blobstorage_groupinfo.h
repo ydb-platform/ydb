@@ -20,7 +20,7 @@ namespace NActors {
 
 namespace NKikimr {
 
-struct TDsProxyNodeMon;
+struct TDsProxyNodeMon; 
 class TSubgroupPartLayout;
 
 namespace NBlobMapper {
@@ -56,8 +56,8 @@ struct TEncryptionKey {
 };
 
 // current state of storage group
-class TBlobStorageGroupInfo : public TThrRefBase {
-public:
+class TBlobStorageGroupInfo : public TThrRefBase { 
+public: 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // ITERATORS
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -78,44 +78,44 @@ public:
     using TVDiskIds = TStackVec<TVDiskID, 16>;
     using TServiceIds = TStackVec<TActorId, 16>;
     using TOrderNums = TStackVec<ui32, 16>;
-
-    enum EBlobStateFlags {
-        EBSF_DISINTEGRATED = 1, // Group is disintegrated.
-        EBSF_UNRECOVERABLE = 1 << 1, // Recoverability: Blob can not be recovered. Ever.
-        EBSF_RECOVERABLE = 1 << 2, // Recoverability: Blob can be recovered.
-        EBSF_FULL = 1 << 3, // Integrity: All parts are present.
-        EBSF_FRAGMENTARY = 1 << 4, // Integrity: There is at least one part missing FOR SURE.
-        EBSF_DOUBTED = 1 << 5 // Integrity: We can't be sure, but we have seen only some parts.
-    };
-
-    enum EBlobState {
-        EBS_DISINTEGRATED = EBSF_DISINTEGRATED,
-        EBS_UNRECOVERABLE_FRAGMENTARY = EBSF_UNRECOVERABLE | EBSF_FRAGMENTARY,
-        EBS_RECOVERABLE_FRAGMENTARY = EBSF_RECOVERABLE | EBSF_FRAGMENTARY,
-        EBS_RECOVERABLE_DOUBTED = EBSF_RECOVERABLE | EBSF_DOUBTED,
-        EBS_FULL = EBSF_FULL
-    };
-
-    enum EEncryptionMode {
-        EEM_NONE = 0, // The plain data mode, no encryption, no MAC, no CRC at proxy level
-        EEM_ENC_V1 = 1 // Encryption at proxy level, no MAC, no CRC
-    };
-
-    // INITIAL upon group creation in base and in memory
-    // PROPOSE comes from the node warden when it proposes after getting INITIAL
-    // INITIAL -> IN_TRANSITION in memory state from transaction start to transaction end
-    // IN_TRANSITION -> IN_USE in base and in memory at transaction completion
-    enum ELifeCyclePhase {
-        ELCP_INITIAL = 0,
-        ELCP_PROPOSE = 1,
-        ELCP_IN_TRANSITION = 2,
-        ELCP_IN_USE = 3,
-        ELCP_KEY_CRC_ERROR = 700,
-        ELCP_KEY_VERSION_ERROR = 701,
+ 
+    enum EBlobStateFlags { 
+        EBSF_DISINTEGRATED = 1, // Group is disintegrated. 
+        EBSF_UNRECOVERABLE = 1 << 1, // Recoverability: Blob can not be recovered. Ever. 
+        EBSF_RECOVERABLE = 1 << 2, // Recoverability: Blob can be recovered. 
+        EBSF_FULL = 1 << 3, // Integrity: All parts are present. 
+        EBSF_FRAGMENTARY = 1 << 4, // Integrity: There is at least one part missing FOR SURE. 
+        EBSF_DOUBTED = 1 << 5 // Integrity: We can't be sure, but we have seen only some parts. 
+    }; 
+ 
+    enum EBlobState { 
+        EBS_DISINTEGRATED = EBSF_DISINTEGRATED, 
+        EBS_UNRECOVERABLE_FRAGMENTARY = EBSF_UNRECOVERABLE | EBSF_FRAGMENTARY, 
+        EBS_RECOVERABLE_FRAGMENTARY = EBSF_RECOVERABLE | EBSF_FRAGMENTARY, 
+        EBS_RECOVERABLE_DOUBTED = EBSF_RECOVERABLE | EBSF_DOUBTED, 
+        EBS_FULL = EBSF_FULL 
+    }; 
+ 
+    enum EEncryptionMode { 
+        EEM_NONE = 0, // The plain data mode, no encryption, no MAC, no CRC at proxy level 
+        EEM_ENC_V1 = 1 // Encryption at proxy level, no MAC, no CRC 
+    }; 
+ 
+    // INITIAL upon group creation in base and in memory 
+    // PROPOSE comes from the node warden when it proposes after getting INITIAL 
+    // INITIAL -> IN_TRANSITION in memory state from transaction start to transaction end 
+    // IN_TRANSITION -> IN_USE in base and in memory at transaction completion 
+    enum ELifeCyclePhase { 
+        ELCP_INITIAL = 0, 
+        ELCP_PROPOSE = 1, 
+        ELCP_IN_TRANSITION = 2, 
+        ELCP_IN_USE = 3, 
+        ELCP_KEY_CRC_ERROR = 700, 
+        ELCP_KEY_VERSION_ERROR = 701, 
         ELCP_KEY_ID_ERROR = 702,
         ELCP_KEY_NOT_LOADED = 703,
-    };
-
+    }; 
+ 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // SUBSET HELPER CLASSES
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -149,18 +149,18 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TOPOLOGY
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    struct TVDiskInfo {
+    struct TVDiskInfo { 
         // short VDisk identifier
         TVDiskIdShort VDiskIdShort;
 
         // order number inside this group; starting from 0 up to, but not including GetNumTotalVDisks()
-        ui32 OrderNumber = 0;
+        ui32 OrderNumber = 0; 
 
         // order number of fail domain this VDisk resides in; fail domains are numbered continuously through all fail
         // realms
         ui32 FailDomainOrderNumber = 0;
-    };
-
+    }; 
+ 
     struct TFailDomain {
         // VDisks composing this fail domain
         TVector<TVDiskInfo> VDisks;
@@ -208,10 +208,10 @@ public:
         // Get fail domain
         const TFailDomain& GetFailDomain(const TVDiskIdShort& vdisk) const;
         const TFailDomain& GetFailDomain(ui32 failDomainOrderNumber) const;
-
-        // check if vdisk id is a valid id for the group
-        bool IsValidId(const TVDiskID &vdisk) const;
-        bool IsValidId(const TVDiskIdShort &vdisk) const;
+ 
+        // check if vdisk id is a valid id for the group 
+        bool IsValidId(const TVDiskID &vdisk) const; 
+        bool IsValidId(const TVDiskIdShort &vdisk) const; 
         // vdisk order number in the blobstorage group
         ui32 GetOrderNumber(const TVDiskIdShort &vdisk) const;
         // get total number of fail realms in the blobstorage group
@@ -290,10 +290,10 @@ public:
     const IQuorumChecker& GetQuorumChecker() const;
     const TTopology &GetTopology() const { return *Topology; }
     const TDynamicInfo &GetDynamicInfo() const { return Dynamic; }
-    EEncryptionMode GetEncryptionMode() const { return EncryptionMode; }
-    ELifeCyclePhase GetLifeCyclePhase() const { return LifeCyclePhase; }
-    ui64 GetGroupKeyNonce() const { return GroupKeyNonce; }
-    const TCypherKey* GetCypherKey() const { return &Key; }
+    EEncryptionMode GetEncryptionMode() const { return EncryptionMode; } 
+    ELifeCyclePhase GetLifeCyclePhase() const { return LifeCyclePhase; } 
+    ui64 GetGroupKeyNonce() const { return GroupKeyNonce; } 
+    const TCypherKey* GetCypherKey() const { return &Key; } 
     std::shared_ptr<TTopology> PickTopology() const { return Topology; }
 
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
@@ -301,7 +301,7 @@ public:
     explicit TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain = 1,
             ui32 numFailDomains = 0, ui32 numFailRealms = 1, const TVector<TActorId> *vdiskIds = nullptr,
             EEncryptionMode encryptionMode = EEM_ENC_V1, ELifeCyclePhase lifeCyclePhase = ELCP_IN_USE,
-            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8));
+            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8)); 
 
     TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology, TDynamicInfo&& rti, TString storagePoolName,
         TMaybe<TKikimrScopeId> acceptedScope, TPDiskCategory::EDeviceType deviceType);
@@ -331,21 +331,21 @@ public:
     TVDiskID CreateVDiskID(const TVDiskIdShort &id) const;
 
     static TString BlobStateToString(EBlobState);
-    EBlobState BlobState(ui32 effectiveReplicas, ui32 errorDomains) const;
+    EBlobState BlobState(ui32 effectiveReplicas, ui32 errorDomains) const; 
     void PickSubgroup(ui32 hash, TVDiskIds *outVDisk, TServiceIds *outServiceIds) const;
     bool BelongsToSubgroup(const TVDiskID &vdisk, ui32 hash) const;
     ui32 GetIdxInSubgroup(const TVDiskID &vdisk, ui32 hash) const;
     TVDiskID GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) const;
-
-    bool IsValidId(const TVDiskID &vdisk) const;
-    bool IsValidId(const TVDiskIdShort &vdisk) const;
+ 
+    bool IsValidId(const TVDiskID &vdisk) const; 
+    bool IsValidId(const TVDiskIdShort &vdisk) const; 
     ui32 GetOrderNumber(const TVDiskID &vdisk) const;
-    ui32 GetOrderNumber(const TVDiskIdShort &vdisk) const;
+    ui32 GetOrderNumber(const TVDiskIdShort &vdisk) const; 
 
     // obtain logical fail domain index -- through number for mirror-3-dc and per-ring for other erasures
     ui32 GetFailDomainOrderNumber(const TVDiskID& vdisk) const;
-    // obtain logical fail domain index -- through number for mirror-3-dc and per-ring for other erasures
-    ui32 GetFailDomainOrderNumber(const TVDiskIdShort& vdisk) const;
+    // obtain logical fail domain index -- through number for mirror-3-dc and per-ring for other erasures 
+    ui32 GetFailDomainOrderNumber(const TVDiskIdShort& vdisk) const; 
     // get VDisk by specified orderNumber (in range 0...TotalVDisks)
     TVDiskID GetVDiskId(ui32 orderNumber) const;
     // obtain full vdisk id having just short vdisk id
@@ -420,47 +420,47 @@ private:
     std::shared_ptr<TTopology> Topology;
     // run type info about group (i.e. actor ids)
     TDynamicInfo Dynamic;
-    // encryption mode
-    EEncryptionMode EncryptionMode = EEM_NONE;
-    ELifeCyclePhase LifeCyclePhase = ELCP_INITIAL;
-    ui64 GroupKeyNonce = 0;
-    TCypherKey Key;
+    // encryption mode 
+    EEncryptionMode EncryptionMode = EEM_NONE; 
+    ELifeCyclePhase LifeCyclePhase = ELCP_INITIAL; 
+    ui64 GroupKeyNonce = 0; 
+    TCypherKey Key; 
     // access control
     TMaybe<TKikimrScopeId> AcceptedScope;
     TString StoragePoolName;
     TPDiskCategory::EDeviceType DeviceType = TPDiskCategory::DEVICE_TYPE_UNKNOWN;
 };
 
-// physical fail domain description
+// physical fail domain description 
 struct TFailDomain {
-    struct TLevelIds {
+    struct TLevelIds { 
         TVector<ui8> Ids;
-
-        TLevelIds();
-        bool IsEmpty() const;
-        bool operator==(const TLevelIds& other) const;
-        bool operator<(const TLevelIds& other) const;
-    };
-
-    static constexpr size_t RecordSize = sizeof(ui32) + sizeof(ui8);
-
+ 
+        TLevelIds(); 
+        bool IsEmpty() const; 
+        bool operator==(const TLevelIds& other) const; 
+        bool operator<(const TLevelIds& other) const; 
+    }; 
+ 
+    static constexpr size_t RecordSize = sizeof(ui32) + sizeof(ui8); 
+ 
     typedef TMap<ui8, ui32> TLevels;
-    TLevels Levels;
-
-    TFailDomain();
+    TLevels Levels; 
+ 
+    TFailDomain(); 
     TFailDomain(const TString &data);
     TString SerializeFailDomain() const;
-    TLevelIds MakeIds() const;
-    TLevelIds Intersect(const TLevelIds &id) const;
-    bool IsColliding(const TFailDomain &other) const;
-    bool IsSubdomainOf(const TFailDomain &other) const;
-    bool IsEqual(const TFailDomain &other) const;
-    bool IsDifferentAt(const TLevelIds &id, const TFailDomain &other) const;
-    bool operator<(const TFailDomain &other) const;
+    TLevelIds MakeIds() const; 
+    TLevelIds Intersect(const TLevelIds &id) const; 
+    bool IsColliding(const TFailDomain &other) const; 
+    bool IsSubdomainOf(const TFailDomain &other) const; 
+    bool IsEqual(const TFailDomain &other) const; 
+    bool IsDifferentAt(const TLevelIds &id, const TFailDomain &other) const; 
+    bool operator<(const TFailDomain &other) const; 
     TString ToString() const;
     TFailDomain Slice(ui32 level) const;
-};
-
+}; 
+ 
 } // NKikimr
 
 template<>

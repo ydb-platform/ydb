@@ -37,19 +37,19 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 : TabletID(tabletId)
                 , Cookie(cookie)
             {}
-
+ 
             TString ToString() const {
-                TStringStream str;
-                str << "{EvPingTimeout TabletID: " << TabletID;
-                if (Cookie.Get()) {
-                    str << " Cookie: present";
+                TStringStream str; 
+                str << "{EvPingTimeout TabletID: " << TabletID; 
+                if (Cookie.Get()) { 
+                    str << " Cookie: present"; 
                 }
                 else {
-                    str << " Cookie: nullptr";
-                }
-                str << "}";
-                return str.Str();
-            }
+                    str << " Cookie: nullptr"; 
+                } 
+                str << "}"; 
+                return str.Str(); 
+            } 
         };
 
         struct TEvStopListRemoval : public TEventLocal<TEvStopListRemoval, EvStopListRemoval> {
@@ -76,18 +76,18 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             StFollowerUpdate,
         };
 
-        static const char* StateToString(EState state) {
-            switch (state) {
-            case StInit: return "StInit";
-            case StInitResolve: return "StInitResolve";
-            case StNormal: return "StNormal";
-            case StProblemResolve: return "StProblemResolve";
-            case StProblemPing: return "StProblemPing";
+        static const char* StateToString(EState state) { 
+            switch (state) { 
+            case StInit: return "StInit"; 
+            case StInitResolve: return "StInitResolve"; 
+            case StNormal: return "StNormal"; 
+            case StProblemResolve: return "StProblemResolve"; 
+            case StProblemPing: return "StProblemPing"; 
             case StFollowerUpdate: return "StFollowerUpdate";
-            default: return "Unknown";
-            }
-        }
-
+            default: return "Unknown"; 
+            } 
+        } 
+ 
         struct TQueueEntry {
             TInstant AddInstant;
             TEvTabletResolver::TEvForward::TPtr Ev;
@@ -475,11 +475,11 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         TAutoPtr<TEntry> &entryHolder = GetEntry(tabletId, ctx);
         TEntry& entry = *entryHolder.Get();
-
+ 
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
                   "Handle TEvForward tabletId: %" PRIu64 " entry.State: %s ev: %s",
                   tabletId, TEntry::StateToString(entry.State), msg->ToString().data());
-
+ 
         switch (entry.State) {
         case TEntry::StInit:
             {
@@ -522,16 +522,16 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         const ui64 tabletId = msg->TabletID;
 
         TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId);
-        if (!entryHolder) {
-            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvTabletProblem tabletId: %" PRIu64
-                " no entyHolder", tabletId);
+        if (!entryHolder) { 
+            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvTabletProblem tabletId: %" PRIu64 
+                " no entyHolder", tabletId); 
             return;
-        }
+        } 
         TEntry &entry = *entryHolder->Get();
 
-        LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvTabletProblem tabletId: %" PRIu64
-            " entry.State: %s", tabletId, TEntry::StateToString(entry.State));
-
+        LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvTabletProblem tabletId: %" PRIu64 
+            " entry.State: %s", tabletId, TEntry::StateToString(entry.State)); 
+ 
         switch (entry.State) {
         case TEntry::StInit:
         case TEntry::StInitResolve:
@@ -595,32 +595,32 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         const bool success = (msg->Status == NKikimrProto::OK); // todo: handle 'locked' state
 
         TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId);
-        if (!entryHolder) {
-            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvInfo tabletId: %" PRIu64 " no entryHolder",
-                tabletId);
+        if (!entryHolder) { 
+            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvInfo tabletId: %" PRIu64 " no entryHolder", 
+                tabletId); 
             return;
-        }
+        } 
         TEntry &entry = *entryHolder->Get();
 
-        LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvInfo tabletId: %" PRIu64
-            " entry.State: %s success: %s ev: %s", tabletId, TEntry::StateToString(entry.State),
+        LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvInfo tabletId: %" PRIu64 
+            " entry.State: %s success: %s ev: %s", tabletId, TEntry::StateToString(entry.State), 
             (success ? "true" : "false"), ev->GetBase()->ToString().data());
-
+ 
         switch (entry.State) {
         case TEntry::StInit:
             Y_FAIL("must not happens");
         case TEntry::StInitResolve:
             if (success) {
                 if (msg->CurrentLeaderTablet) {
-                    entry.State = TEntry::StNormal;
+                    entry.State = TEntry::StNormal; 
                     ApplyEntryInfo(*msg, entry, ctx);
                     MoveEntryToResolved(tabletId, *entryHolder);
-                } else {
+                } else { 
                     // HACK: Don't cache invalid CurrentLeaderTablet
-                    // FIXME: Use subscription + cache here to reduce the workload
+                    // FIXME: Use subscription + cache here to reduce the workload 
                     ApplyEntryInfo(*msg, entry, ctx);
                     DropEntry(tabletId, entry, ctx);
-                }
+                } 
             } else {
                 DropEntry(tabletId, entry, ctx);
             }
@@ -677,16 +677,16 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         const ui64 tabletId = record.GetTabletID();
 
         TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId);
-        if (!entryHolder) {
-            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPong tabletId: %" PRIu64 " no entryHolder",
-                tabletId);
+        if (!entryHolder) { 
+            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPong tabletId: %" PRIu64 " no entryHolder", 
+                tabletId); 
             return;
-        }
+        } 
         TEntry &entry = *entryHolder->Get();
 
-        LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPong tabletId: %" PRIu64 " entry.State: %s",
-            tabletId, TEntry::StateToString(entry.State));
-
+        LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPong tabletId: %" PRIu64 " entry.State: %s", 
+            tabletId, TEntry::StateToString(entry.State)); 
+ 
         switch (entry.State) {
         case TEntry::StInit:
         case TEntry::StInitResolve:
@@ -742,16 +742,16 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         const ui64 tabletId = msg->TabletID;
 
         TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId);
-        if (!entryHolder) {
-            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPingTimeout tabletId: %" PRIu64
-                " no entryHolder", tabletId);
+        if (!entryHolder) { 
+            LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPingTimeout tabletId: %" PRIu64 
+                " no entryHolder", tabletId); 
             return;
-        }
+        } 
         TEntry &entry = *entryHolder->Get();
-
-        LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPingTimeout tabletId: %" PRIu64 " entry.State: %s",
-            tabletId, TEntry::StateToString(entry.State));
-
+ 
+        LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPingTimeout tabletId: %" PRIu64 " entry.State: %s", 
+            tabletId, TEntry::StateToString(entry.State)); 
+ 
         switch (entry.State) {
         case TEntry::StInit:
         case TEntry::StInitResolve:
@@ -804,7 +804,7 @@ public:
         return NKikimrServices::TActivity::TABLET_RESOLVER_ACTOR;
     }
 
-    TTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config)
+    TTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config) 
         : Config(config)
         , ActorSystem(nullptr)
         , ResolvedTablets(new NCache::T2QCacheConfig())
@@ -860,15 +860,15 @@ public:
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
             HFunc(TEvPrivate::TEvRefreshNodes, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
-            default:
-                LOG_WARN(ctx, NKikimrServices::TABLET_RESOLVER, "TTabletResolver::StateWork unexpected event type: %" PRIx32
+            default: 
+                LOG_WARN(ctx, NKikimrServices::TABLET_RESOLVER, "TTabletResolver::StateWork unexpected event type: %" PRIx32 
                     " event: %s", ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
-                break;
+                break; 
         }
     }
 };
 
-IActor* CreateTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config) {
+IActor* CreateTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config) { 
     return new TTabletResolver(config);
 }
 

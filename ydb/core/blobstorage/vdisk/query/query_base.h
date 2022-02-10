@@ -57,9 +57,9 @@ namespace NKikimr {
                 case NKikimrBlobStorage::EGetHandleClass::Discover:
                     priority = NPriRead::HullOnlineRt;
                     break;
-                case NKikimrBlobStorage::EGetHandleClass::LowRead:
-                    priority = NPriRead::HullLow;
-                    break;
+                case NKikimrBlobStorage::EGetHandleClass::LowRead: 
+                    priority = NPriRead::HullLow; 
+                    break; 
                 default:
                     Y_FAIL("Unexpected case");
             }

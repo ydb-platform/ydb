@@ -21,13 +21,13 @@ public:
     ChaCha(ui8 rounds = CHACHA_ROUNDS): rounds_(rounds) {}
 
     void SetKey(const ui8* key, size_t size);
-    void SetIV(const ui8* iv, const ui8* blockIdx);
+    void SetIV(const ui8* iv, const ui8* blockIdx); 
     void SetIV(const ui8* iv);
     void Encipher(const ui8* plaintext, ui8* ciphertext, size_t size);
     void Decipher(const ui8* ciphertext, ui8* plaintext, size_t size);
 
-    ~ChaCha();
-
+    ~ChaCha(); 
+ 
 private:
     ui32 state_[16];
     ui8 rounds_;

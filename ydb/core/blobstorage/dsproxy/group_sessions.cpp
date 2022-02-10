@@ -11,7 +11,7 @@ static NKikimrBlobStorage::EVDiskQueueId VDiskQueues[] = {
     NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead,
     NKikimrBlobStorage::EVDiskQueueId::GetFastRead,
     NKikimrBlobStorage::EVDiskQueueId::GetDiscover,
-    NKikimrBlobStorage::EVDiskQueueId::GetLowRead,
+    NKikimrBlobStorage::EVDiskQueueId::GetLowRead, 
 };
 
 TString QueueIdName(NKikimrBlobStorage::EVDiskQueueId queueId) {
@@ -22,7 +22,7 @@ TString QueueIdName(NKikimrBlobStorage::EVDiskQueueId queueId) {
         case NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead: return "GetAsyncRead";
         case NKikimrBlobStorage::EVDiskQueueId::GetFastRead:  return "GetFastRead";
         case NKikimrBlobStorage::EVDiskQueueId::GetDiscover:  return "GetDiscover";
-        case NKikimrBlobStorage::EVDiskQueueId::GetLowRead:   return "GetLowRead";
+        case NKikimrBlobStorage::EVDiskQueueId::GetLowRead:   return "GetLowRead"; 
         default:                                              Y_FAIL("unexpected EVDiskQueueId");
     }
 }
@@ -58,7 +58,7 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
 
                 case NKikimrBlobStorage::PutAsyncBlob:
                 case NKikimrBlobStorage::GetAsyncRead:
-                case NKikimrBlobStorage::GetLowRead:
+                case NKikimrBlobStorage::GetLowRead: 
                     interconnectChannel = TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA;
                     break;
 

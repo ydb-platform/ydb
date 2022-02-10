@@ -20,46 +20,46 @@ namespace NKikimr {
             , PhantomCheck(phantomCheck)
         {}
 
-        bool DoRequestDisk(TBlobState& state, TGroupDiskRequests& groupDiskRequests, ui32 diskIdx) {
-            TBlobState::TDisk& disk = state.Disks[diskIdx];
-            // calculate part number from disk; ring always matches PartIdx
-            const ui32 partIdx = diskIdx % NumRings;
-            TBlobState::TDiskPart& diskPart = disk.DiskParts[partIdx];
-            switch (diskPart.Situation) {
+        bool DoRequestDisk(TBlobState& state, TGroupDiskRequests& groupDiskRequests, ui32 diskIdx) { 
+            TBlobState::TDisk& disk = state.Disks[diskIdx]; 
+            // calculate part number from disk; ring always matches PartIdx 
+            const ui32 partIdx = diskIdx % NumRings; 
+            TBlobState::TDiskPart& diskPart = disk.DiskParts[partIdx]; 
+            switch (diskPart.Situation) { 
                 case TBlobState::ESituation::Unknown: {
-                    // get the request -- all the needed parts except already got and already requested
+                    // get the request -- all the needed parts except already got and already requested 
                     TIntervalSet<i32> request(state.Whole.Needed);
-                    request.Subtract(state.Whole.Here);
-                    // remove parts that were already requested, but not yet answered
-                    request.Subtract(diskPart.Requested);
-                    if (!request.IsEmpty()) {
-                        TLogoBlobID id(state.Id, partIdx + 1);
-                        groupDiskRequests.AddGet(disk.OrderNumber, id, request);
-                        diskPart.Requested.Add(request);
-                    } else {
-                        // ensure that we are waiting for some data to come
-                        Y_VERIFY(!diskPart.Requested.IsEmpty());
-                    }
-                    // return true indicating that we have a request that is not yet satisfied
-                    return true;
-                }
+                    request.Subtract(state.Whole.Here); 
+                    // remove parts that were already requested, but not yet answered 
+                    request.Subtract(diskPart.Requested); 
+                    if (!request.IsEmpty()) { 
+                        TLogoBlobID id(state.Id, partIdx + 1); 
+                        groupDiskRequests.AddGet(disk.OrderNumber, id, request); 
+                        diskPart.Requested.Add(request); 
+                    } else { 
+                        // ensure that we are waiting for some data to come 
+                        Y_VERIFY(!diskPart.Requested.IsEmpty()); 
+                    } 
+                    // return true indicating that we have a request that is not yet satisfied 
+                    return true; 
+                } 
                 case TBlobState::ESituation::Present:
-                    break;
+                    break; 
                 case TBlobState::ESituation::Error:
-                    break;
+                    break; 
                 case TBlobState::ESituation::Absent:
-                    break;
+                    break; 
                 case TBlobState::ESituation::Lost:
-                    break;
+                    break; 
                 case TBlobState::ESituation::Sent:
-                    Y_FAIL("unexpected state");
-            }
-
-            return false;
-        }
-
+                    Y_FAIL("unexpected state"); 
+            } 
+ 
+            return false; 
+        } 
+ 
         EStrategyOutcome Process(TLogContext& logCtx, TBlobState& state, const TBlobStorageGroupInfo& info,
-                TBlackboard &blackboard, TGroupDiskRequests& groupDiskRequests) override {
+                TBlackboard &blackboard, TGroupDiskRequests& groupDiskRequests) override { 
             if (state.WholeSituation == TBlobState::ESituation::Present) {
                 return EStrategyOutcome::DONE;
             }
@@ -109,27 +109,27 @@ namespace NKikimr {
                     state.GetWorstPredictedDelaysNs(info, *blackboard.GroupQueues,
                             HandleClassToQueueId(blackboard.GetHandleClass),
                             &worstPredictedNs, &nextToWorstPredictedNs, &worstSubgroupIdx);
-
+ 
                     // Check if the slowest disk exceptionally slow, or just not very fast
                     i32 slowDiskSubgroupIdx = -1;
                     if (nextToWorstPredictedNs > 0 && worstPredictedNs > nextToWorstPredictedNs * 2) {
                         slowDiskSubgroupIdx = worstSubgroupIdx;
                     }
-
+ 
                     // Mark single slow disk
                     for (size_t diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
                         state.Disks[diskIdx].IsSlow = false;
-                    }
+                    } 
                     if (slowDiskSubgroupIdx >= 0) {
                         state.Disks[slowDiskSubgroupIdx].IsSlow = true;
                     }
                     break;
-                }
+                } 
                 case TBlackboard::AccelerationModeSkipMarked:
                     // The slowest disk is already marked!
                     break;
             }
-
+ 
             // create an array defining order in which we traverse the disks
             TStackVec<ui32, 32> diskIdxList;
             for (ui32 i = 0; i < state.Disks.size(); ++i) {
@@ -167,7 +167,7 @@ namespace NKikimr {
             };
             std::sort(diskIdxList.begin(), diskIdxList.end(), compare);
 
-
+ 
             // scan all disks and try to generate new request
             bool requested = false; // was the new request generated or not
             for (ui32 diskIdx : diskIdxList) {
@@ -191,10 +191,10 @@ namespace NKikimr {
                         break;
                     default:
                         break;
-                }
+                } 
                 situations.push_back(diskPart.Situation);
             }
-
+ 
             if (!info.GetQuorumChecker().CheckFailModelForSubgroup(failed)) {
                 return EStrategyOutcome::Error("TMirror3dcBasicGetStrategy failed the Fail Model check");
             } else if (requested) {

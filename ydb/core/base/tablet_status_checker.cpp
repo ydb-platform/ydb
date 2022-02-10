@@ -12,23 +12,23 @@ private:
     const TActorId ReplyTo;
     TIntrusiveConstPtr<TTabletStorageInfo> Info;
     ui32 RequestsLeft;
-    TVector<ui32> LightYellowMoveGroups;
-    TVector<ui32> YellowStopGroups;
+    TVector<ui32> LightYellowMoveGroups; 
+    TVector<ui32> YellowStopGroups; 
 
     void Handle(TEvBlobStorage::TEvStatusResult::TPtr &ev, const TActorContext &ctx) {
         const TEvBlobStorage::TEvStatusResult *msg = ev->Get();
         --RequestsLeft;
 
-        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
-            LightYellowMoveGroups.push_back(ev->Cookie);
-        }
-        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
-            YellowStopGroups.push_back(ev->Cookie);
-        }
+        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) { 
+            LightYellowMoveGroups.push_back(ev->Cookie); 
+        } 
+        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) { 
+            YellowStopGroups.push_back(ev->Cookie); 
+        } 
 
         if (RequestsLeft == 0) {
-            ctx.Send(ReplyTo, new TEvTablet::TEvCheckBlobstorageStatusResult(std::move(LightYellowMoveGroups),
-                        std::move(YellowStopGroups)));
+            ctx.Send(ReplyTo, new TEvTablet::TEvCheckBlobstorageStatusResult(std::move(LightYellowMoveGroups), 
+                        std::move(YellowStopGroups))); 
             return Die(ctx);
         }
     }

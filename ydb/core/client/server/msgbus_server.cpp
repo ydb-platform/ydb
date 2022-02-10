@@ -490,13 +490,13 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientProxyRequest<TEvBusProxy::TEvNavigate>(msg);
     case MTYPE_CLIENT_TYPES_REQUEST:
         return GetTypes(msg);
-    case MTYPE_CLIENT_HIVE_CREATE_TABLET:
+    case MTYPE_CLIENT_HIVE_CREATE_TABLET: 
     case MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET:
         return ClientActorRequest(CreateMessageBusHiveCreateTablet, msg);
-    case MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS:
+    case MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS: 
     case MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS:
         return ClientActorRequest(CreateMessageBusLocalEnumerateTablets, msg);
-    case MTYPE_CLIENT_KEYVALUE:
+    case MTYPE_CLIENT_KEYVALUE: 
     case MTYPE_CLIENT_OLD_KEYVALUE:
         return ClientActorRequest(CreateMessageBusKeyValue, msg);
     case MTYPE_CLIENT_PERSQUEUE:

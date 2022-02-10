@@ -1,20 +1,20 @@
-#pragma once
-#include "defs.h"
+#pragma once 
+#include "defs.h" 
 
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
-
-namespace NKikimr {
-namespace NPDisk {
-
-////////////////////////////////////////////////////////////////////////////
-// PDiskHashCalculator
-////////////////////////////////////////////////////////////////////////////
-
+ 
+namespace NKikimr { 
+namespace NPDisk { 
+ 
+//////////////////////////////////////////////////////////////////////////// 
+// PDiskHashCalculator 
+//////////////////////////////////////////////////////////////////////////// 
+ 
 class TPDiskHashCalculator : public THashCalculator {
     bool UseT1ha0Hasher;
 
-public:
+public: 
     TPDiskHashCalculator(bool useT1ha0Hasher)
         : UseT1ha0Hasher(useT1ha0Hasher)
     {}
@@ -70,16 +70,16 @@ public:
                 || sectorHash == T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sector, sectorSize);
         }
     }
-};
-
-////////////////////////////////////////////////////////////////////////////
-// PDiskStreamCypher
-////////////////////////////////////////////////////////////////////////////
-
-class TPDiskStreamCypher {
-    TStreamCypher Impl;
+}; 
+ 
+//////////////////////////////////////////////////////////////////////////// 
+// PDiskStreamCypher 
+//////////////////////////////////////////////////////////////////////////// 
+ 
+class TPDiskStreamCypher { 
+    TStreamCypher Impl; 
     const bool EnableEncryption = true;
-public:
+public: 
 
     TPDiskStreamCypher(bool encryption)
         : Impl()
@@ -119,7 +119,7 @@ public:
             Impl.InplaceEncrypt(source, size);
         }
     }
-};
-
-} // NPDisk
-} // NKikimr
+}; 
+ 
+} // NPDisk 
+} // NKikimr 

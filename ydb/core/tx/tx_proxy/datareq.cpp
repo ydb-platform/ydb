@@ -183,7 +183,7 @@ struct TReadTableRequest : public TThrRefBase {
 };
 
 class TDataReq : public TActor<TDataReq> {
-public:
+public: 
     enum class EParseRangeKeyExp {
         NONE,
         TO_NULL
@@ -245,15 +245,15 @@ public:
             AffectedWrite = 1 << 1,
         };
 
-#define DATA_REQ_PER_TABLET_STATUS_MAP(XX) \
+#define DATA_REQ_PER_TABLET_STATUS_MAP(XX) \ 
             XX(StatusUnknown, 128) \
-            XX(StatusWait, 0) \
-            XX(StatusPrepared, 1) \
+            XX(StatusWait, 0) \ 
+            XX(StatusPrepared, 1) \ 
             XX(StatusError, 2) \
             XX(StatusFinished, 3)
-
-        enum class ETabletStatus {
-            DATA_REQ_PER_TABLET_STATUS_MAP(ENUM_VALUE_GEN)
+ 
+        enum class ETabletStatus { 
+            DATA_REQ_PER_TABLET_STATUS_MAP(ENUM_VALUE_GEN) 
         };
 
         ui64 MinStep = 0;
@@ -272,7 +272,7 @@ public:
         THolder<NKikimrQueryStats::TTxStats> Stats;
         TReattachState ReattachState;
     };
-private:
+private: 
 
     struct TEvPrivate {
         enum EEv {
@@ -1177,24 +1177,24 @@ void TDataReq::TryToInvalidateTable(TTableId tableId, const TActorContext &ctx) 
 }
 
 void TDataReq::MarkShardError(ui64 shardId, TDataReq::TPerTablet &perTablet, bool invalidateDistCache, const TActorContext &ctx) {
-    if (perTablet.TabletStatus == TDataReq::TPerTablet::ETabletStatus::StatusError)
+    if (perTablet.TabletStatus == TDataReq::TPerTablet::ETabletStatus::StatusError) 
         return;
 
-    perTablet.TabletStatus = TDataReq::TPerTablet::ETabletStatus::StatusError;
+    perTablet.TabletStatus = TDataReq::TPerTablet::ETabletStatus::StatusError; 
 
     if (invalidateDistCache)
         TryToInvalidateTable(perTablet.TableId, ctx);
 
     Y_UNUSED(shardId);
 
-    if (++TabletErrors == TabletsLeft) {
+    if (++TabletErrors == TabletsLeft) { 
         LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " invalidateDistCache: " << invalidateDistCache
-            << " DIE TDataReq MarkShardError TabletsLeft# " << TabletsLeft);
+            << " DIE TDataReq MarkShardError TabletsLeft# " << TabletsLeft); 
         TxProxyMon->MarkShardError->Inc();
         return Die(ctx);
-    }
+    } 
 }
 
 void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorContext &ctx) {
@@ -1248,7 +1248,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
     LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " Cookie# " << (ui64)ev->Cookie
         << " txid# " << TxId << " HANDLE TDataReq marker# P1");
-
+ 
     if (!record.GetUserToken().empty()) {
         UserToken = new NACLib::TUserToken(record.GetUserToken());
     }
@@ -1530,7 +1530,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
         NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
         << " HANDLE EvResolveKeySetResult TDataReq marker# P3 ErrorCount# " << request->ErrorCount);
-
+ 
     TxProxyMon->CacheRequestLatency->Collect((Now() - WallClockAccepted).MilliSeconds());
     WallClockResolved = Now();
 
@@ -1776,8 +1776,8 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
     LOG_LOG_S_SAMPLED_BY(ctx, (msg->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::ERROR ?
         NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
         NKikimrServices::TX_PROXY, TxId,
-        "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-        << " HANDLE Prepare TEvProposeTransactionResult TDataReq TabletStatus# " << perTablet->TabletStatus
+        "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
+        << " HANDLE Prepare TEvProposeTransactionResult TDataReq TabletStatus# " << perTablet->TabletStatus 
         << " GetStatus# " << msg->GetStatus()
         << " shard id " << tabletId
         << " read size " << record.GetReadSize()
@@ -1795,15 +1795,15 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
     if (WallClockFirstPrepareReply.GetValue() == 0)
         WallClockFirstPrepareReply = WallClockLastPrepareReply;
 
-    if (perTablet->TabletStatus == TPerTablet::ETabletStatus::StatusPrepared) { // do nothing
+    if (perTablet->TabletStatus == TPerTablet::ETabletStatus::StatusPrepared) { // do nothing 
         TxProxyMon->TxResultTabletPrepared->Inc();
         return;
-    }
+    } 
 
     switch (msg->GetStatus()) {
     case NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED:
     {
-        perTablet->TabletStatus = TPerTablet::ETabletStatus::StatusPrepared;
+        perTablet->TabletStatus = TPerTablet::ETabletStatus::StatusPrepared; 
         perTablet->MinStep = record.GetMinStep();
         perTablet->MaxStep = record.GetMaxStep();
         perTablet->ReadSize = record.GetReadSize();
@@ -1978,11 +1978,11 @@ void TDataReq::HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TP
     LOG_LOG_S_SAMPLED_BY(ctx, (msg->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::ERROR ?
         NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
         NKikimrServices::TX_PROXY, TxId,
-        "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+        "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
         << " HANDLE PrepareErrors TEvProposeTransactionResult TDataReq TabletStatus# " << perTablet->TabletStatus
         << " shard id " << tabletId);
-
-    if (perTablet->TabletStatus != TPerTablet::ETabletStatus::StatusWait) // do nothing for already processed cases
+ 
+    if (perTablet->TabletStatus != TPerTablet::ETabletStatus::StatusWait) // do nothing for already processed cases 
         return;
 
     switch (msg->GetStatus()) {
@@ -2192,11 +2192,11 @@ void TDataReq::HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, c
         msg->GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA)
         ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
         NKikimrServices::TX_PROXY, TxId,
-        "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+        "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
         << " HANDLE Plan TEvProposeTransactionResult TDataReq GetStatus# " << msg->GetStatus()
         << " shard id " << tabletId
         << " marker# P12");
-
+ 
     if (record.HasExecLatency())
         ElapsedExecExec = Max<TDuration>(ElapsedExecExec, TDuration::MilliSeconds(record.GetExecLatency()));
     if (record.HasProposeLatency())
@@ -2491,7 +2491,7 @@ void TDataReq::HandleExecTimeoutResolve(const TActorContext &ctx) {
 void TDataReq::HandleExecTimeout(const TActorContext &ctx) {
     LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-        << " HANDLE ExecTimeout TDataReq");
+        << " HANDLE ExecTimeout TDataReq"); 
     ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx);
     TxProxyMon->ExecTimeout->Inc();
     return Die(ctx);
@@ -2982,22 +2982,22 @@ IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, 
 }
 
 }}
-
-
-#define STATUS_TO_STRING_IMPL_ITEM(name, ...) \
-    case NKikimr::NTxProxy::TDataReq::TPerTablet::ETabletStatus::name: \
-        o << #name; \
-        return;
-
-template<>
+ 
+ 
+#define STATUS_TO_STRING_IMPL_ITEM(name, ...) \ 
+    case NKikimr::NTxProxy::TDataReq::TPerTablet::ETabletStatus::name: \ 
+        o << #name; \ 
+        return; 
+ 
+template<> 
 inline void Out<NKikimr::NTxProxy::TDataReq::TPerTablet::ETabletStatus>(IOutputStream& o,
-        NKikimr::NTxProxy::TDataReq::TPerTablet::ETabletStatus x) {
-    switch (x) {
-        DATA_REQ_PER_TABLET_STATUS_MAP(STATUS_TO_STRING_IMPL_ITEM)
-    default:
-        o << static_cast<int>(x);
-        return;
-    }
-}
-
-#undef STATUS_TO_STRING_IMPL_ITEM
+        NKikimr::NTxProxy::TDataReq::TPerTablet::ETabletStatus x) { 
+    switch (x) { 
+        DATA_REQ_PER_TABLET_STATUS_MAP(STATUS_TO_STRING_IMPL_ITEM) 
+    default: 
+        o << static_cast<int>(x); 
+        return; 
+    } 
+} 
+ 
+#undef STATUS_TO_STRING_IMPL_ITEM 

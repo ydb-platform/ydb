@@ -223,9 +223,9 @@ public:
         , IsNull_(0)
     {
         Y_VERIFY_DEBUG(size <= INTRUSIVE_SIZE);
-        if (size) {
-            ::memcpy(IntrusiveData_, data, size);
-        }
+        if (size) { 
+            ::memcpy(IntrusiveData_, data, size); 
+        } 
     }
 
     /// Ownership of the TString is taken with zero-copy.

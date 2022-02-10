@@ -100,13 +100,13 @@ namespace NActors {
     struct TScheduledEventQueueItem {
         TInstant Deadline;
         TAutoPtr<IEventHandle> Event;
-        TAutoPtr<TSchedulerCookieHolder> Cookie;
+        TAutoPtr<TSchedulerCookieHolder> Cookie; 
         ui64 UniqueId;
 
         TScheduledEventQueueItem(TInstant deadline, TAutoPtr<IEventHandle> event, ISchedulerCookie* cookie)
             : Deadline(deadline)
             , Event(event)
-            , Cookie(new TSchedulerCookieHolder(cookie))
+            , Cookie(new TSchedulerCookieHolder(cookie)) 
             , UniqueId(++NextUniqueId)
         {}
 
@@ -151,7 +151,7 @@ namespace NActors {
         void Schedule(const TScheduledEventQueueItem& item);
         bool IsScheduledEmpty() const;
         TInstant GetFirstScheduleDeadline() const;
-        ui64 GetSentEventCount() const;
+        ui64 GetSentEventCount() const; 
 
     private:
         TScheduledEventsList Scheduled;
@@ -173,15 +173,15 @@ namespace NActors {
         }
     };
 
-    class TSchedulingLimitReachedException : public yexception {
-    public:
-        TSchedulingLimitReachedException(ui64 limit) {
-            TStringStream str;
-            str << "TestActorRuntime Processed over " << limit << " events.";
-            Append(str.Str());
-        }
-    };
-
+    class TSchedulingLimitReachedException : public yexception { 
+    public: 
+        TSchedulingLimitReachedException(ui64 limit) { 
+            TStringStream str; 
+            str << "TestActorRuntime Processed over " << limit << " events."; 
+            Append(str.Str()); 
+        } 
+    }; 
+ 
     class TTestActorRuntimeBase: public TNonCopyable {
     public:
         class TEdgeActor;
@@ -222,9 +222,9 @@ namespace NActors {
         static bool IsVerbose();
         static void SetVerbose(bool verbose);
         TDuration SetDispatchTimeout(TDuration timeout);
-        void SetDispatchedEventsLimit(ui64 limit) {
-            DispatchedEventsLimit = limit;
-        }
+        void SetDispatchedEventsLimit(ui64 limit) { 
+            DispatchedEventsLimit = limit; 
+        } 
         TDuration SetReschedulingDelay(TDuration delay);
         void SetLogBackend(const TAutoPtr<TLogBackend> logBackend);
         void SetLogPriority(NActors::NLog::EComponent component, NActors::NLog::EPriority priority);
@@ -399,15 +399,15 @@ namespace NActors {
             return {};
         }
 
-        template <typename TEvent>
+        template <typename TEvent> 
         TEvent* GrabEdgeEventRethrow(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) {
-            try {
+            try { 
                 return GrabEdgeEvent<TEvent>(handle, simTimeout);
-            } catch (...) {
+            } catch (...) { 
                 ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage();
-            }
-        }
-
+            } 
+        } 
+ 
         template<class TEvent>
         typename TEvent::TPtr GrabEdgeEventRethrow(const TSet<TActorId>& edgeFilter, TDuration simTimeout = TDuration::Max()) {
             try {
@@ -453,17 +453,17 @@ namespace NActors {
             }
         }
 
-        void ResetScheduledCount() {
-            ScheduledCount = 0;
-        }
-
-        void SetScheduledLimit(ui64 limit) {
-            ScheduledLimit = limit;
-        }
-
-        void SetDispatcherRandomSeed(TInstant time, ui64 iteration);
+        void ResetScheduledCount() { 
+            ScheduledCount = 0; 
+        } 
+ 
+        void SetScheduledLimit(ui64 limit) { 
+            ScheduledLimit = limit; 
+        } 
+ 
+        void SetDispatcherRandomSeed(TInstant time, ui64 iteration); 
         TString GetActorName(const TActorId& actorId) const;
-
+ 
         const TVector<ui64>& GetTxAllocatorTabletIds() const { return TxAllocatorTabletIds; }
         void SetTxAllocatorTabletIds(const TVector<ui64>& ids) { TxAllocatorTabletIds = ids; }
 
@@ -502,8 +502,8 @@ namespace NActors {
         bool DispatchEventsInternal(const TDispatchOptions& options, TInstant simDeadline);
 
     private:
-        ui64 ScheduledCount;
-        ui64 ScheduledLimit;
+        ui64 ScheduledCount; 
+        ui64 ScheduledLimit; 
         THolder<TTempDir> TmpDir;
         const TThread::TId MainThreadId;
 
@@ -525,9 +525,9 @@ namespace NActors {
         TMap<ui32, ui64> EvCounters;
         ui64 DispatchCyclesCount;
         ui64 DispatchedEventsCount;
-        ui64 DispatchedEventsLimit = 2'500'000;
+        ui64 DispatchedEventsLimit = 2'500'000; 
         TActorId CurrentRecipient;
-        ui64 DispatcherRandomSeed;
+        ui64 DispatcherRandomSeed; 
         TIntrusivePtr<IRandomProvider> DispatcherRandomProvider;
         TAutoPtr<TLogBackend> LogBackend;
         bool NeedMonitoring;

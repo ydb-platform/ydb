@@ -43,15 +43,15 @@ namespace NTxMediator {
                 return left.TxId < right.TxId;
             }
         };
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{TTx Moderator# " << Moderator;
-            str << " txid# " << TxId;
-            str << " AckTo# " << AckTo.ToString();
-            str << "}";
-            return str.Str();
-        }
+            TStringStream str; 
+            str << "{TTx Moderator# " << Moderator; 
+            str << " txid# " << TxId; 
+            str << " AckTo# " << AckTo.ToString(); 
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 
     struct TCoordinatorStep {
@@ -69,30 +69,30 @@ namespace NTxMediator {
         };
 
         TCoordinatorStep(const NKikimrTx::TEvCoordinatorStep &record);
-
+ 
         TString ToString() const {
-            TStringStream str;
+            TStringStream str; 
             str << "{TCoordinatorStep step# " << Step;
-            str << " PrevStep# " << PrevStep;
-            if (Transactions.size()) {
-                str << "Transactions: {";
-                for (size_t i = 0; i < Transactions.size(); ++i) {
-                    str << Transactions[i].ToString();
-                }
-                str << "}";
-            }
-            if (TabletsToTransaction.size()) {
-                str << "TabletsToTransaction: {";
-                for (size_t i = 0; i < TabletsToTransaction.size(); ++i) {
+            str << " PrevStep# " << PrevStep; 
+            if (Transactions.size()) { 
+                str << "Transactions: {"; 
+                for (size_t i = 0; i < Transactions.size(); ++i) { 
+                    str << Transactions[i].ToString(); 
+                } 
+                str << "}"; 
+            } 
+            if (TabletsToTransaction.size()) { 
+                str << "TabletsToTransaction: {"; 
+                for (size_t i = 0; i < TabletsToTransaction.size(); ++i) { 
                     str << "{tablet# " << TabletsToTransaction[i].first;
                     str << " txid# " << Transactions[TabletsToTransaction[i].second].TxId;
-                    str << "}";
-                }
-                str << "}";
-            }
-            str << "}";
-            return str.Str();
-        }
+                    str << "}"; 
+                } 
+                str << "}"; 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 
     struct TMediateStep {
@@ -105,21 +105,21 @@ namespace NTxMediator {
             : From(from)
             , To(to)
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{TMediateStep From " << From;
-            str << " To# " << To;
-            if (Steps.size()) {
-                str << "Steps: {";
-                for (size_t i = 0; i < Steps.size(); ++i) {
-                    str << Steps[i]->ToString();
-                }
-                str << "}";
-            }
-            str << "}";
-            return str.Str();
-        }
+            TStringStream str; 
+            str << "{TMediateStep From " << From; 
+            str << " To# " << To; 
+            if (Steps.size()) { 
+                str << "Steps: {"; 
+                for (size_t i = 0; i < Steps.size(); ++i) { 
+                    str << Steps[i]->ToString(); 
+                } 
+                str << "}"; 
+            } 
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 }
 
@@ -148,13 +148,13 @@ struct TEvTxMediator {
         TEvCommitStep(TAutoPtr<NTxMediator::TMediateStep> &mds)
             : MediateStep(mds)
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{TEvCommitStep MediateStep: " << MediateStep->ToString();
-            str << "}";
-            return str.Str();
-        }
+            TStringStream str; 
+            str << "{TEvCommitStep MediateStep: " << MediateStep->ToString(); 
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 
     struct TEvRequestLostAcks : public TEventLocal<TEvRequestLostAcks, EvRequestLostAcks> {
@@ -165,14 +165,14 @@ struct TEvTxMediator {
             : CoordinatorStep(cds)
             , AckTo(ackTo)
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{TEvRequestLostAcks CoordinatorStep: " << CoordinatorStep->ToString();
-            str << " AckTo# " << AckTo.ToString();
-            str << "}";
-            return str.Str();
-        }
+            TStringStream str; 
+            str << "{TEvRequestLostAcks CoordinatorStep: " << CoordinatorStep->ToString(); 
+            str << " AckTo# " << AckTo.ToString(); 
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 
     // just reschedule command, actual transport is over command queue
@@ -186,18 +186,18 @@ struct TEvTxMediator {
             , TabletId(tabletId)
             , Transactions(transactions.begin(), transactions.end())
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
+            TStringStream str; 
             str << "{TEvCommitTabletStep step# " << Step;
-            str << " TabletId# " << TabletId;
-            str << " Transactions {";
-            for (size_t i = 0; i < Transactions.size(); ++i) {
-                str << Transactions[i].ToString();
-            }
-            str << "}}";
-            return str.Str();
-        }
+            str << " TabletId# " << TabletId; 
+            str << " Transactions {"; 
+            for (size_t i = 0; i < Transactions.size(); ++i) { 
+                str << Transactions[i].ToString(); 
+            } 
+            str << "}}"; 
+            return str.Str(); 
+        } 
     };
 
     struct TEvStepPlanComplete : public TEventLocal<TEvStepPlanComplete, EvStepPlanComplete> {
@@ -206,13 +206,13 @@ struct TEvTxMediator {
         TEvStepPlanComplete(TStepId step)
             : Step(step)
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
+            TStringStream str; 
             str << "{TEvStepPlanComplete step# " << Step;
-            str << "}";
-            return str.Str();
-        }
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 
     struct TEvOoOTabletStep : public TEventLocal<TEvOoOTabletStep, EvOoOTabletStep> {
@@ -225,18 +225,18 @@ struct TEvTxMediator {
             , TabletId(tabletId)
             , Transactions(transactions.begin(), transactions.end())
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
+            TStringStream str; 
             str << "{TEvOoOTabletStep step# " << Step;
-            str << " TabletId# " << TabletId;
-            str << " Transactions {";
-            for (size_t i = 0; i < Transactions.size(); ++i) {
-                str << Transactions[i].ToString();
-            }
-            str << "}}";
-            return str.Str();
-        }
+            str << " TabletId# " << TabletId; 
+            str << " Transactions {"; 
+            for (size_t i = 0; i < Transactions.size(); ++i) { 
+                str << Transactions[i].ToString(); 
+            } 
+            str << "}}"; 
+            return str.Str(); 
+        } 
     };
 
     struct TEvWatchBucket : public TEventLocal<TEvWatchBucket, EvWatchBucket> {
@@ -245,13 +245,13 @@ struct TEvTxMediator {
         TEvWatchBucket(const TActorId &source)
             : Source(source)
         {}
-
+ 
         TString ToString() const {
-            TStringStream str;
-            str << "{TEvWatchBucket Source# " << Source.ToString();
-            str << "}";
-            return str.Str();
-        }
+            TStringStream str; 
+            str << "{TEvWatchBucket Source# " << Source.ToString(); 
+            str << "}"; 
+            return str.Str(); 
+        } 
     };
 };
 

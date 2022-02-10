@@ -1,10 +1,10 @@
 UNITTEST_FOR(ydb/core/keyvalue)
-
+ 
 OWNER(
     cthulhu
     g:kikimr
 )
-
+ 
 FORK_SUBTESTS()
 
 IF (WITH_VALGRIND OR SANITIZER_TYPE)
@@ -18,19 +18,19 @@ ELSE()
     SPLIT_FACTOR(10)
 ENDIF()
 
-PEERDIR(
+PEERDIR( 
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-SRCS(
-    keyvalue_ut.cpp
-    keyvalue_collector_ut.cpp
+SRCS( 
+    keyvalue_ut.cpp 
+    keyvalue_collector_ut.cpp 
     keyvalue_storage_read_request_ut.cpp
-)
-
-END()
+) 
+ 
+END() 

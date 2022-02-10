@@ -1,6 +1,6 @@
 #include "executor_thread.h"
 #include "actorsystem.h"
-#include "callstack.h"
+#include "callstack.h" 
 #include "mailbox.h"
 #include "event.h"
 #include "events.h"
@@ -148,10 +148,10 @@ namespace NActors {
                     TActorContext ctx(*mailbox, *this, hpprev, recipient);
                     TlsActivationContext = &ctx;
 
-#ifdef USE_ACTOR_CALLSTACK
+#ifdef USE_ACTOR_CALLSTACK 
                     TCallstack::GetTlsCallstack() = ev->Callstack;
                     TCallstack::GetTlsCallstack().SetLinesToSkip();
-#endif
+#endif 
                     CurrentRecipient = recipient;
                     CurrentActorScheduledEventsCounter = 0;
 

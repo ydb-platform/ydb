@@ -11,9 +11,9 @@
 
 namespace NKikimr {
 
-    namespace NPDisk {
+    namespace NPDisk { 
         struct TEvConfigureSchedulerResult;
-    } // NPDisk
+    } // NPDisk 
 
 
     ///////////////////////////////////////////////////////////////////////////////////////
@@ -370,7 +370,7 @@ namespace NKikimr {
 
         TDynamicPDiskWeightsManager(const TVDiskContextPtr &vctx, const TPDiskCtxPtr &pdiskCtx);
         void ApplyUpdates(const TActorContext &ctx);
-        void Feedback(const NPDisk::TEvConfigureSchedulerResult &res, const TActorContext &ctx);
+        void Feedback(const NPDisk::TEvConfigureSchedulerResult &res, const TActorContext &ctx); 
         void RenderHtml(IOutputStream &str) const;
         void ToWhiteboard(NKikimrWhiteboard::TVDiskSatisfactionRank &v) const;
         static void DefWhiteboard(NKikimrWhiteboard::TVDiskSatisfactionRank &v);

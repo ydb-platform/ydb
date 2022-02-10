@@ -1,41 +1,41 @@
 #include "dsproxy_mon.h"
-
+ 
 static const TVector<float> Percentiles1 = {1.0f};
 static const TVector<float> Percentiles4 = {0.5f, 0.9f, 0.95f, 1.0f};
 
-namespace NKikimr {
-
+namespace NKikimr { 
+ 
 TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
         const TIntrusivePtr<NMonitoring::TDynamicCounters>& percentileCounters,
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& overviewCounters,
-        const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+        const TIntrusivePtr<NMonitoring::TDynamicCounters>& overviewCounters, 
+        const TIntrusivePtr<TBlobStorageGroupInfo>& info, 
         const TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
         bool constructLimited)
-    : NodeMon(nodeMon)
-    , Counters(counters)
+    : NodeMon(nodeMon) 
+    , Counters(counters) 
     , PercentileCounters(percentileCounters)
     , ResponseGroup(percentileCounters->GetSubgroup("subsystem", "response"))
-    , LatencyOverviewGroup(overviewCounters->GetSubgroup("subsystem", "latency"))
-    , EventGroup(Counters->GetSubgroup("subsystem", "event"))
-    , HandoffGroup(Counters->GetSubgroup("subsystem", "handoff"))
+    , LatencyOverviewGroup(overviewCounters->GetSubgroup("subsystem", "latency")) 
+    , EventGroup(Counters->GetSubgroup("subsystem", "event")) 
+    , HandoffGroup(Counters->GetSubgroup("subsystem", "handoff")) 
     , ActiveRequestsGroup(Counters->GetSubgroup("subsystem", "requests"))
-{
+{ 
     if (info) {
         const TBlobStorageGroupInfo::TDynamicInfo& dyn = info->GetDynamicInfo();
         GroupIdGen = (ui64(dyn.GroupId) << 32) | dyn.GroupGeneration;
     }
 
     BlockResponseTime.Initialize(ResponseGroup, "event", "block", "Response in millisec", Percentiles1);
-
+ 
     if (!constructLimited) {
         BecomeFull();
     }
 
-    // event counters
+    // event counters 
     EventPut = EventGroup->GetCounter("EvPut", true);
     EventPutBytes = EventGroup->GetCounter("EvPutBytes", true);
     EventGet = EventGroup->GetCounter("EvGet", true);
-    EventGetResBytes = EventGroup->GetCounter("EvGetResBytes", true);
+    EventGetResBytes = EventGroup->GetCounter("EvGetResBytes", true); 
     EventBlock = EventGroup->GetCounter("EvBlock", true);
     EventDiscover = EventGroup->GetCounter("EvDiscover", true);
     EventRange = EventGroup->GetCounter("EvRange", true);
@@ -43,7 +43,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonito
     EventMultiGet = EventGroup->GetCounter("EvMultiGet", true);
     EventIndexRestoreGet = EventGroup->GetCounter("EvIndexRestoreGet", true);
     EventMultiCollect = EventGroup->GetCounter("EvMultiCollect", true);
-    EventStatus = EventGroup->GetCounter("EvStatus", true);
+    EventStatus = EventGroup->GetCounter("EvStatus", true); 
     EventStopPutBatching = EventGroup->GetCounter("EvStopPutBatching", true);
     EventStopGetBatching = EventGroup->GetCounter("EvStopGetBatching", true);
     EventPatch = EventGroup->GetCounter("EvPatch", true);
@@ -52,27 +52,27 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonito
     PutBatchesSent = EventGroup->GetCounter("PutBatchesSent", true);
 
     auto buckets = EventGroup->GetSubgroup("sensor", "EvPutBytesBuckets");
-    for (ui32 size : {0, 256, 4096, 65536, 250000, 1000000, 4000000}) {
-        EventPutBytesBuckets.emplace(size, buckets->GetNamedCounter("size", Sprintf("%" PRIu32, (ui32)size), true));
+    for (ui32 size : {0, 256, 4096, 65536, 250000, 1000000, 4000000}) { 
+        EventPutBytesBuckets.emplace(size, buckets->GetNamedCounter("size", Sprintf("%" PRIu32, (ui32)size), true)); 
     }
-
-    // handoff use reason
+ 
+    // handoff use reason 
     for (size_t i = 0; i < HandoffPartsSent.size(); ++i) {
         HandoffPartsSent[i] = HandoffGroup->GetSubgroup("handoffPartsSent", Sprintf("%zu", i))->GetCounter("events", true);
     }
 
     // active requests
     ActivePut = ActiveRequestsGroup->GetCounter("ActivePut");
-    ActivePutCapacity = ActiveRequestsGroup->GetCounter("ActivePutCapacity");
+    ActivePutCapacity = ActiveRequestsGroup->GetCounter("ActivePutCapacity"); 
     ActiveGet = ActiveRequestsGroup->GetCounter("ActiveGet");
-    ActiveGetCapacity = ActiveRequestsGroup->GetCounter("ActiveGetCapacity");
+    ActiveGetCapacity = ActiveRequestsGroup->GetCounter("ActiveGetCapacity"); 
     ActiveBlock = ActiveRequestsGroup->GetCounter("ActiveBlock");
     ActiveDiscover = ActiveRequestsGroup->GetCounter("ActiveDiscover");
     ActiveRange = ActiveRequestsGroup->GetCounter("ActiveRange");
     ActiveCollectGarbage = ActiveRequestsGroup->GetCounter("ActiveCollectGarbage");
-    ActiveStatus = ActiveRequestsGroup->GetCounter("ActiveStatus");
+    ActiveStatus = ActiveRequestsGroup->GetCounter("ActiveStatus"); 
     ActivePatch = ActiveRequestsGroup->GetCounter("ActivePatch");
-
+ 
     // special patch counters
     VPatchContinueFailed = ActiveRequestsGroup->GetCounter("VPatchContinueFailed");
     VPatchPartPlacementVerifyFailed = ActiveRequestsGroup->GetCounter("VPatchPartPlacementVerifyFailed");
@@ -88,9 +88,9 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonito
         PatchGroup.Init(group->GetSubgroup("request", "patch"));
     }
 
-    ActiveMultiGet = ActiveRequestsGroup->GetCounter("ActiveMultiGet");
-    ActiveIndexRestoreGet = ActiveRequestsGroup->GetCounter("ActiveIndexRestoreGet");
-    ActiveMultiCollect = ActiveRequestsGroup->GetCounter("ActiveMultiCollect");
+    ActiveMultiGet = ActiveRequestsGroup->GetCounter("ActiveMultiGet"); 
+    ActiveIndexRestoreGet = ActiveRequestsGroup->GetCounter("ActiveIndexRestoreGet"); 
+    ActiveMultiCollect = ActiveRequestsGroup->GetCounter("ActiveMultiCollect"); 
 
     auto respStatGroup = NodeMon->Group->GetSubgroup("subsystem", "responseStatus");
     RespStatPut.emplace(respStatGroup->GetSubgroup("request", "put"));
@@ -101,8 +101,8 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonito
     RespStatCollectGarbage.emplace(respStatGroup->GetSubgroup("request", "collectGarbage"));
     RespStatStatus.emplace(respStatGroup->GetSubgroup("request", "status"));
     RespStatPatch.emplace(respStatGroup->GetSubgroup("request", "patch"));
-}
-
+} 
+ 
 void TBlobStorageGroupProxyMon::BecomeFull() {
     if (IsLimitedMon) {
         ThroughputGroup = PercentileCounters->GetSubgroup("subsystem", "throughput");
@@ -154,10 +154,10 @@ void TBlobStorageGroupProxyMon::SerializeToWhiteboard(NKikimrWhiteboard::TBSGrou
         }
     };
 
-    if (!IsLimitedMon) {
-        calculate(PutResponseTime);
-        calculate(GetResponseTime);
-    }
+    if (!IsLimitedMon) { 
+        calculate(PutResponseTime); 
+        calculate(GetResponseTime); 
+    } 
     pb.SetGroupID(groupId);
     pb.SetLatency(flag);
 }
@@ -174,36 +174,36 @@ bool TBlobStorageGroupProxyMon::GetGroupIdGen(ui32 *groupId, ui32 *groupGen) con
     }
 }
 
-void TBlobStorageGroupProxyMon::Update() {
-    if (!IsLimitedMon) {
-        PutResponseTime.Update();
-
-        PutTabletLogResponseTime.Update();
-        PutTabletLogResponseTime256.Update();
-        PutTabletLogResponseTime512.Update();
-
-        PutAsyncBlobResponseTime.Update();
-        PutUserDataResponseTime.Update();
-
-        GetResponseTime.Update();
-
-        DiscoverResponseTime.Update();
-        IndexRestoreGetResponseTime.Update();
-        RangeResponseTime.Update();
+void TBlobStorageGroupProxyMon::Update() { 
+    if (!IsLimitedMon) { 
+        PutResponseTime.Update(); 
+ 
+        PutTabletLogResponseTime.Update(); 
+        PutTabletLogResponseTime256.Update(); 
+        PutTabletLogResponseTime512.Update(); 
+ 
+        PutAsyncBlobResponseTime.Update(); 
+        PutUserDataResponseTime.Update(); 
+ 
+        GetResponseTime.Update(); 
+ 
+        DiscoverResponseTime.Update(); 
+        IndexRestoreGetResponseTime.Update(); 
+        RangeResponseTime.Update(); 
         PatchResponseTime.Update();
-    }
-
-    BlockResponseTime.Update();
-}
-
-void TBlobStorageGroupProxyMon::ThroughputUpdate() {
+    } 
+ 
+    BlockResponseTime.Update(); 
+} 
+ 
+void TBlobStorageGroupProxyMon::ThroughputUpdate() { 
     if (!IsLimitedMon) {
         for (auto *sensor : {&PutTabletLogThroughput, &PutAsyncBlobThroughput, &PutUserDataThroughput, &PutThroughput}) {
             sensor->get()->UpdateHistogram();
         }
-    }
-}
+    } 
+} 
+ 
 
-
-} // NKikimr
-
+} // NKikimr 
+ 

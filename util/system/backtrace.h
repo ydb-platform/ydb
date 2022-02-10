@@ -19,10 +19,10 @@ void FormatBackTrace(IOutputStream* out);
 void PrintBackTrace();
 
 using TFormatBackTraceFn = void (*)(IOutputStream*, void* const* backtrace, size_t backtraceSize);
-
-TFormatBackTraceFn SetFormatBackTraceFn(TFormatBackTraceFn f);
+ 
+TFormatBackTraceFn SetFormatBackTraceFn(TFormatBackTraceFn f); 
 TFormatBackTraceFn GetFormatBackTraceFn();
-
+ 
 using TBackTraceView = TArrayRef<void* const>;
 
 class TBackTrace {

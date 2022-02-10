@@ -404,7 +404,7 @@ void KqpSetTxLocksKeys(const NKikimrTxDataShard::TKqpLocks& locks, const TSysLoc
     }
 }
 
-NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId,
+NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId, 
     const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& tasks, NKqp::TKqpTasksRunner& tasksRunner)
 {
     return RunKqpTransactionInternal(ctx, txId, /* inReadSets */ nullptr, tasks, tasksRunner, /* applyEffects */ false);
@@ -421,7 +421,7 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
         return nullptr;
     }
 
-    MKQL_ENSURE_S(runStatus == NYql::NDq::ERunStatus::Finished);
+    MKQL_ENSURE_S(runStatus == NYql::NDq::ERunStatus::Finished); 
 
     auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA,
         origin, txId, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);

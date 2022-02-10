@@ -68,7 +68,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
     }
 
     TSetupSysLocks guardLocks(op, DataShard);
-    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
     DataShard.ReleaseCache(*tx);
@@ -168,7 +168,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             KqpFillTxStats(DataShard, dataTx->GetCounters(), *op->Result());
             KqpFillStats(DataShard, tasksRunner, computeCtx, statsMode, *op->Result());
         }
-    } catch (const TMemoryLimitExceededException&) {
+    } catch (const TMemoryLimitExceededException&) { 
         txc.NotEnoughMemory();
 
         LOG_T("Operation " << *op << " at " << tabletId

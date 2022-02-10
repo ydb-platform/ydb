@@ -203,8 +203,8 @@ IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// TDqTaskRunner
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class TDqTaskRunner : public IDqTaskRunner {
-public:
+class TDqTaskRunner : public IDqTaskRunner { 
+public: 
     TDqTaskRunner(const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
         : Context(context)
         , Settings(settings)
@@ -538,7 +538,7 @@ public:
             }
             if (Y_UNLIKELY(CollectProfileStats)) {
                 StopWaiting(Stats->FinishTs);
-            }
+            } 
 
             return ERunStatus::Finished;
         }

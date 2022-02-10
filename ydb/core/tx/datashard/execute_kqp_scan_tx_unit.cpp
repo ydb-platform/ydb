@@ -12,10 +12,10 @@ class TExecuteKqpScanTxUnit : public TExecutionUnit {
 public:
     TExecuteKqpScanTxUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::ExecuteKqpScanTx, false, dataShard, pipeline) {
-    }
+    } 
 
     ~TExecuteKqpScanTxUnit() override {
-    }
+    } 
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
         if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) {

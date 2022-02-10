@@ -79,8 +79,8 @@ namespace NProtoBuf {
     bool MergeFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage) {
         return MergePartialFromString(m, serializedProtoMessage) && m.IsInitialized();
     }
-} 
- 
+}
+
 int operator&(NProtoBuf::Message& m, IBinSaver& f) {
     TStringStream ss;
     if (f.IsReading()) {

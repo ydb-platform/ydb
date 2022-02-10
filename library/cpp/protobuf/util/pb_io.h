@@ -35,7 +35,7 @@ namespace NProtoBuf {
     TString SerializeToBase64String(const Message& m);
     void SerializeToBase64String(const Message& m, TString& dataBase64);
     bool TrySerializeToBase64String(const Message& m, TString& dataBase64);
- 
+
     const TString ShortUtf8DebugString(const Message& message);
 
     bool MergePartialFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage);

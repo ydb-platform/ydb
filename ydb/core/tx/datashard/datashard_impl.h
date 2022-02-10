@@ -1901,6 +1901,7 @@ private:
     TInstant LastDbStatsUpdateTime;
     TInstant LastDbStatsReportTime;
     TInstant LastCpuWarnTime;
+    TInstant LastDataSizeWarnTime;
     TActorId DbStatsReportPipe;
     TActorId TableResolvePipe;
     ui64 StatsReportRound = 0;
@@ -1978,6 +1979,8 @@ private:
     TControlWrapper PerShardReadSizeLimit;
     TControlWrapper CpuUsageReportThreshlodPercent;
     TControlWrapper CpuUsageReportIntervalSeconds;
+    TControlWrapper HighDataSizeReportThreshlodBytes;
+    TControlWrapper HighDataSizeReportIntervalSeconds;
 
     TControlWrapper DataTxProfileLogThresholdMs;
     TControlWrapper DataTxProfileBufferThresholdMs;

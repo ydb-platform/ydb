@@ -30,7 +30,7 @@ RECURSE(
     aiopg
     aioredis
     aioredis-lock
-    aioresponses
+    aioresponses 
     aiormq
     aiosignal
     aiosmtpd

@@ -409,16 +409,16 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         r += "<html>Hello</html>";
         TStringInput stringInput(r);
         THttpInput input(&stringInput);
- 
+
         const THttpHeaders& httpHeaders = input.Headers();
         UNIT_ASSERT_VALUES_EQUAL(httpHeaders.Count(), 3u);
- 
+
         THttpHeaders::TConstIterator it = httpHeaders.Begin();
         UNIT_ASSERT_VALUES_EQUAL(it->ToString(), TString(headerLine1));
         UNIT_ASSERT_VALUES_EQUAL((++it)->ToString(), TString::Join(headerLine2, headerLine3));
         UNIT_ASSERT_VALUES_EQUAL((++it)->ToString(), TString(headerLine4));
     }
- 
+
     Y_UNIT_TEST(ContentLengthRemoval) {
         TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip\r\n\r\n");
         THttpInput i(&request);

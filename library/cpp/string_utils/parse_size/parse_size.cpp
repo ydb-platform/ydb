@@ -3,36 +3,36 @@
 #include <util/generic/yexception.h>
 #include <util/generic/ylimits.h>
 #include <util/string/cast.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 
-namespace { 
+namespace {
     enum ESuffixShifts {
         ESS_KILO_BYTES = 10,
         ESS_MEGA_BYTES = 20,
         ESS_GIGA_BYTES = 30,
         ESS_TERA_BYTES = 40,
     };
- 
+
     bool TryShiftValue(ui64& value, ui64 shift) {
         if (value > (Max<ui64>() >> shift)) {
             return false;
         }
- 
+
         value <<= shift;
         return true;
-    } 
- 
+    }
+
     ui64 ShiftValue(ui64 value, ui64 shift) {
         if (!TryShiftValue(value, shift)) {
             ythrow yexception() << "value overflow '" << value << " << " << shift << "'";
         } else {
             return value;
         }
-    } 
- 
-} 
- 
-namespace NSize { 
+    }
+
+}
+
+namespace NSize {
     ui64 ParseSize(TStringBuf str) {
         if (! str.size())
             ythrow yexception() << "Wrong size " << str;
@@ -56,7 +56,7 @@ namespace NSize {
             default:
                 ythrow yexception() << "Unknown suffix " << str;
         }
- 
+
         ui64 value = FromString<ui64>(str.substr(0, str.size() - 1));
 
         if (!TryShiftValue(value, shift)) {
@@ -77,19 +77,19 @@ namespace NSize {
     TSize FromGigaBytes(ui64 value) {
         return TSize(ShiftValue(value, ESS_GIGA_BYTES));
     }
- 
+
     TSize FromTeraBytes(ui64 value) {
         return TSize(ShiftValue(value, ESS_TERA_BYTES));
     }
- 
-} 
- 
+
+}
+
 template <>
-NSize::TSize FromStringImpl<NSize::TSize>(const char* data, size_t len) { 
-    return NSize::TSize(NSize::ParseSize(TStringBuf(data, len))); 
-} 
- 
-template <> 
+NSize::TSize FromStringImpl<NSize::TSize>(const char* data, size_t len) {
+    return NSize::TSize(NSize::ParseSize(TStringBuf(data, len)));
+}
+
+template <>
 void Out<NSize::TSize>(IOutputStream& os, const NSize::TSize& size) {
-    os << size.GetValue(); 
-} 
+    os << size.GetValue();
+}

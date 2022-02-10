@@ -1065,13 +1065,13 @@ size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalengt
     using namespace NCompactTrie;
     return CompactTrieMinimizeImpl(os, data, datalength, verbose, &packer, mode);
 }
- 
-template <class TTrieBuilder> 
+
+template <class TTrieBuilder>
 size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool verbose /*=false*/) {
-    TBufferStream buftmp; 
-    size_t len = builder.Save(buftmp); 
-    return CompactTrieMinimize<typename TTrieBuilder::TPacker>(os, buftmp.Buffer().Data(), len, verbose); 
-} 
+    TBufferStream buftmp;
+    size_t len = builder.Save(buftmp);
+    return CompactTrieMinimize<typename TTrieBuilder::TPacker>(os, buftmp.Buffer().Data(), len, verbose);
+}
 
 //----------------------------------------------------------------------------------------------------------------
 // Lay the trie in memory in such a way that there are less cache misses when jumping from root to leaf.

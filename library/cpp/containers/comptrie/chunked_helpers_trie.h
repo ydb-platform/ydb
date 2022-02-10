@@ -166,7 +166,7 @@ public:
 
     void Save(IOutputStream& out, bool minimize = false) const {
         if (minimize) {
-            CompactTrieMinimize<TBuilder>(out, Builder, false); 
+            CompactTrieMinimize<TBuilder>(out, Builder, false);
         } else {
             Builder.Save(out);
         }

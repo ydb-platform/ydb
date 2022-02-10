@@ -470,7 +470,7 @@ template <>
 void Out<TFsPath>(IOutputStream& os, const TFsPath& f) {
     os << f.GetPath();
 }
- 
+
 template <>
 TFsPath FromStringImpl<TFsPath>(const char* s, size_t len) {
     return TFsPath{TStringBuf{s, len}};

@@ -300,14 +300,14 @@ enum EMMapMode {
     MM_NORMAL, // memory for small allocs
     MM_HUGE    // memory for large allocs
 };
- 
+
 #ifndef _MSC_VER
-inline void VerifyMmapResult(void* result) { 
+inline void VerifyMmapResult(void* result) {
     if (Y_UNLIKELY(result == MAP_FAILED))
         NMalloc::AbortFromCorruptedAllocator("negative size requested? or just out of mem");
-} 
+}
 #endif
- 
+
 #if !defined(_MSC_VER) && !defined(_freebsd_) && defined(_64_)
 static char* AllocWithMMapLinuxImpl(uintptr_t sz, EMMapMode mode) {
     char* volatile* areaPtr;
@@ -349,7 +349,7 @@ static char* AllocWithMMapLinuxImpl(uintptr_t sz, EMMapMode mode) {
             continue;
 
         char* largeBlock = (char*)mmap(prevAllocPtr, sz, mapProt, mapFlags, -1, 0);
-        VerifyMmapResult(largeBlock); 
+        VerifyMmapResult(largeBlock);
         if (largeBlock == prevAllocPtr)
             return largeBlock;
         if (largeBlock)

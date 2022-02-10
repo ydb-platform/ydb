@@ -80,12 +80,12 @@ struct TRet {
 
     template <class B>
     inline void CheckTryFail(B v) {
-        static const A defaultV = 42; 
+        static const A defaultV = 42;
         A convV = defaultV;                                                    // to check that original value is not trashed on bad cast
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<A>(ToString(v), convV), false); // char
-        UNIT_ASSERT_VALUES_EQUAL(defaultV, convV); 
+        UNIT_ASSERT_VALUES_EQUAL(defaultV, convV);
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<A>(ToWtring(v), convV), false); // wide char
-        UNIT_ASSERT_VALUES_EQUAL(defaultV, convV); 
+        UNIT_ASSERT_VALUES_EQUAL(defaultV, convV);
 
         TRY_HEX_MACROS_MAP(TRY_FAIL_HEX_CHECK, A, v, convV, defaultV);
     }
@@ -112,10 +112,10 @@ struct TRet<bool> {
 
     template <class B>
     inline void CheckTryFail(B v) {
-        static const bool defaultV = false; 
-        bool convV = defaultV; 
+        static const bool defaultV = false;
+        bool convV = defaultV;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<bool>(ToString(v), convV), false);
-        UNIT_ASSERT_VALUES_EQUAL(defaultV, convV); 
+        UNIT_ASSERT_VALUES_EQUAL(defaultV, convV);
     }
 };
 

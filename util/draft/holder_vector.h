@@ -9,11 +9,11 @@ class THolderVector: public TVector<T*>, public TNonCopyable {
     using TBase = TVector<T*>;
 
 public:
-    explicit THolderVector(size_t n = 0) 
+    explicit THolderVector(size_t n = 0)
         : TBase(n)
     {
-    } 
- 
+    }
+
     ~THolderVector() {
         Clear();
     }
@@ -50,14 +50,14 @@ public:
     }
 
     void Reset(size_t i, THolder<T> t) {
-        T* current = (*this)[i]; 
-        if (current) { 
+        T* current = (*this)[i];
+        if (current) {
             Y_ASSERT(current != t.Get());
-            D::Destroy(current); 
-        } 
-        (*this)[i] = t.Release(); 
-    } 
- 
+            D::Destroy(current);
+        }
+        (*this)[i] = t.Release();
+    }
+
     void PopBack() {
         if (size()) {
             D::Destroy(back());

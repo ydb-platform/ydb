@@ -75,7 +75,7 @@ TExprNode::TPtr MkqlRewriteCallables(TCallable callable, TExprContext& ctx, cons
                     .Seal()
                 .Build();
         } else {
-            ctx.AddError(TIssue(ctx.GetPosition(selectRange.Pos()), TStringBuilder() << "Got unsupported callable: "
+            ctx.AddError(TIssue(ctx.GetPosition(selectRange.Pos()), TStringBuilder() << "Got unsupported callable: " 
                 << selectRange.CallableName()));
             return nullptr;
         }

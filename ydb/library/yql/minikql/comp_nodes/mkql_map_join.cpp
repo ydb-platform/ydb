@@ -169,14 +169,14 @@ protected:
         if constexpr (IsTuple) {
             NUdf::TUnboxedValue* items = nullptr;
             const auto keys = KeyTuple.NewArray(ctx, LeftKeyColumns.size(), items);
-            if (!LeftKeyColumns.empty()) {
-                Y_VERIFY(items);
-                for (auto i = 0U; i < LeftKeyColumns.size(); ++i) {
-                    const auto value = Fields[LeftKeyColumns[i]];
-                    const auto converter = LeftKeyConverters[i].Function;
-                    if (!(*items++ = converter ? converter(value) : *value))
-                        return NUdf::TUnboxedValuePod();
-                }
+            if (!LeftKeyColumns.empty()) { 
+                Y_VERIFY(items); 
+                for (auto i = 0U; i < LeftKeyColumns.size(); ++i) { 
+                    const auto value = Fields[LeftKeyColumns[i]]; 
+                    const auto converter = LeftKeyConverters[i].Function; 
+                    if (!(*items++ = converter ? converter(value) : *value)) 
+                        return NUdf::TUnboxedValuePod(); 
+                } 
             }
 
             return keys;
@@ -602,10 +602,10 @@ protected:
     {}
 
     static void FillStruct(const NUdf::TUnboxedValue& structObj, NUdf::TUnboxedValue* items, const std::vector<ui32>& renames) {
-        if (renames.empty()) {
-            return;
-        }
-        Y_VERIFY(items);
+        if (renames.empty()) { 
+            return; 
+        } 
+        Y_VERIFY(items); 
         if (const auto ptr = structObj.GetElements()) {
             for (auto i = 0U; i < renames.size();) {
                 const auto prevIndex = renames[i++];
@@ -633,15 +633,15 @@ protected:
         if (IsTuple) {
             NUdf::TUnboxedValue* items = nullptr;
             const auto keys = KeyTuple.NewArray(ctx, LeftKeyColumns.size(), items);
-            if (!LeftKeyColumns.empty()) {
-                Y_VERIFY(items);
-                const auto ptr = structObj.GetElements();
-                for (auto i = 0U; i < LeftKeyColumns.size(); ++i) {
-                    auto value = ptr ? ptr[LeftKeyColumns[i]] : structObj.GetElement(LeftKeyColumns[i]);
-                    const auto converter = LeftKeyConverters[i].Function;
-                    if (!(*items++ = converter ? NUdf::TUnboxedValue(converter(&value)) : std::move(value)))
-                        return NUdf::TUnboxedValuePod();
-                }
+            if (!LeftKeyColumns.empty()) { 
+                Y_VERIFY(items); 
+                const auto ptr = structObj.GetElements(); 
+                for (auto i = 0U; i < LeftKeyColumns.size(); ++i) { 
+                    auto value = ptr ? ptr[LeftKeyColumns[i]] : structObj.GetElement(LeftKeyColumns[i]); 
+                    const auto converter = LeftKeyConverters[i].Function; 
+                    if (!(*items++ = converter ? NUdf::TUnboxedValue(converter(&value)) : std::move(value))) 
+                        return NUdf::TUnboxedValuePod(); 
+                } 
             }
 
             return keys;

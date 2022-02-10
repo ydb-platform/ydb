@@ -58,7 +58,7 @@ bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
 TExprBase BuildReadTable(const TKiReadTable& read, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
 {
-    bool unwrapValues = HasSetting(read.Settings().Ref(), "unwrap_values");
+    bool unwrapValues = HasSetting(read.Settings().Ref(), "unwrap_values"); 
 
     TExprNode::TPtr readTable;
     const auto& columns = read.GetSelectColumns(ctx, tableData, withSystemColumns);

@@ -78,7 +78,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
 
                 auto name = TString(node->Child(3)->Content());
                 if (name.StartsWith('_')) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()),
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), 
                         TStringBuilder() << "Failed to override system setting: " << name));
                     return nullptr;
                 }
@@ -113,7 +113,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
                     return nullptr;
                 }
             } else {
-                ctx.AddError(TIssue(ctx.GetPosition(node->Child(2)->Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(2)->Pos()), TStringBuilder() 
                     << "Unsupported configuration option: " << atom));
                 return nullptr;
             }
@@ -125,7 +125,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
     return status;
 }
 
-bool TProviderConfigurationTransformer::HandleAttr(TPositionHandle pos, const TString& cluster, const TString& name,
+bool TProviderConfigurationTransformer::HandleAttr(TPositionHandle pos, const TString& cluster, const TString& name, 
     const TMaybe<TString>& value, TExprContext& ctx)
 {
     Y_UNUSED(pos);
@@ -134,17 +134,17 @@ bool TProviderConfigurationTransformer::HandleAttr(TPositionHandle pos, const TS
     return true;
 }
 
-bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias,
+bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias, 
     TExprContext& ctx)
 {
     auto cred = Types.FindCredential(alias);
     if (!cred) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown credential: " << alias));
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown credential: " << alias)); 
         return false;
     }
 
     if (cred->Category != Provider) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() 
             << "Mismatch credential category, expected: "
             << Provider << ", but found: " << cred->Category));
         return false;

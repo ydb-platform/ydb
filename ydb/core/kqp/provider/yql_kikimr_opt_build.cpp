@@ -492,7 +492,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, const TMaybe<bool>& useNewEngine, T
     txExplore.GetTableOperations(hasScheme, hasData);
 
     if (hasData && hasScheme) {
-        ctx.AddError(YqlIssue(ctx.GetPosition(commit.Pos()), TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX));
+        ctx.AddError(YqlIssue(ctx.GetPosition(commit.Pos()), TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX)); 
         return nullptr;
     }
 

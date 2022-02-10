@@ -27,9 +27,9 @@ using namespace NKikimr;
 
 class TWriter {
 public:
-    TWriter(TExprContext& ctx, ui16 components)
-        : Ctx(ctx)
-        , Components_(components)
+    TWriter(TExprContext& ctx, ui16 components) 
+        : Ctx(ctx) 
+        , Components_(components) 
     {
     }
 
@@ -117,7 +117,7 @@ public:
 
         if (Components_ & TSerializedExprGraphComponents::Positions) {
             // will write position
-            if (Ctx.GetPosition(node.Pos()) == LastPosition_) {
+            if (Ctx.GetPosition(node.Pos()) == LastPosition_) { 
                 command |= SAME_POSITION;
             }
         }
@@ -139,7 +139,7 @@ public:
 
         Write(command);
         if ((Components_ & TSerializedExprGraphComponents::Positions) && !(command & SAME_POSITION)) {
-            const auto& pos = Ctx.GetPosition(node.Pos());
+            const auto& pos = Ctx.GetPosition(node.Pos()); 
             ui32 fileNum = 0;
             if (pos.File) {
                 auto fileIt = Files_.find(pos.File);
@@ -181,7 +181,7 @@ private:
         }
 
         if (Components_ & TSerializedExprGraphComponents::Positions) {
-            const auto& pos = Ctx.GetPosition(node.Pos());
+            const auto& pos = Ctx.GetPosition(node.Pos()); 
             const auto& file = pos.File;
             ui32 fileNum = 0;
             if (file) {
@@ -216,7 +216,7 @@ private:
     }
 
 private:
-    TExprContext& Ctx;
+    TExprContext& Ctx; 
     const ui16 Components_;
     THashMap<TStringBuf, ui32> Files_;
     THashMap<std::tuple<ui32, ui32, ui32>, ui32> Positions_;
@@ -478,18 +478,18 @@ private:
 
 }
 
-TString SerializeGraph(const TExprNode& node, TExprContext& ctx, ui16 components) {
-    TWriter writer(ctx, components);
+TString SerializeGraph(const TExprNode& node, TExprContext& ctx, ui16 components) { 
+    TWriter writer(ctx, components); 
     writer.Prepare(node);
     writer.Init();
     writer.Save(node);
     return writer.Out();
 }
 
-TExprNode::TPtr DeserializeGraph(TPositionHandle pos, TStringBuf buffer, TExprContext& ctx) {
-    return DeserializeGraph(ctx.GetPosition(pos), buffer, ctx);
-}
-
+TExprNode::TPtr DeserializeGraph(TPositionHandle pos, TStringBuf buffer, TExprContext& ctx) { 
+    return DeserializeGraph(ctx.GetPosition(pos), buffer, ctx); 
+} 
+ 
 TExprNode::TPtr DeserializeGraph(TPosition pos, TStringBuf buffer, TExprContext& ctx) {
     TReader reader(pos, buffer, ctx);
     return reader.Load();

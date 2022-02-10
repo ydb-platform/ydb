@@ -35,8 +35,8 @@ SRCS(
     yql_opt_aggregate.cpp
     yql_opt_proposed_by_data.cpp
     yql_opt_proposed_by_data.h
-    yql_opt_range.cpp
-    yql_opt_range.h
+    yql_opt_range.cpp 
+    yql_opt_range.h 
     yql_opt_rewrite_io.cpp
     yql_opt_rewrite_io.h
     yql_opt_utils.cpp
@@ -45,8 +45,8 @@ SRCS(
     yql_opt_window.h
     yql_type_annotation.cpp
     yql_type_annotation.h
-    yql_type_helpers.cpp
-    yql_type_helpers.h
+    yql_type_helpers.cpp 
+    yql_type_helpers.h 
     yql_udf_index.cpp
     yql_udf_index.h
     yql_udf_index_package_set.cpp

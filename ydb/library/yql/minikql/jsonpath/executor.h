@@ -83,9 +83,9 @@ public:
     }
 
 private:
-    i64 From = 0;
+    i64 From = 0; 
     TPosition FromPos;
-    i64 To = 0;
+    i64 To = 0; 
     TPosition ToPos;
     bool HasTo;
 };

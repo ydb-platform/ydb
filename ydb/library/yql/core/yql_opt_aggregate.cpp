@@ -1,90 +1,90 @@
 #include "yql_opt_aggregate.h"
 #include "yql_opt_utils.h"
-#include "yql_opt_window.h"
+#include "yql_opt_window.h" 
 #include "yql_expr_type_annotation.h"
 
 namespace NYql {
 
 TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, bool forceCompact) {
     auto list = node->HeadPtr();
-    auto keyColumns = node->ChildPtr(1);
+    auto keyColumns = node->ChildPtr(1); 
     auto aggregatedColumns = node->Child(2);
-    auto settings = node->Child(3);
-
+    auto settings = node->Child(3); 
+ 
     YQL_ENSURE(!HasSetting(*settings, "hopping"), "Aggregate with hopping unsupported here.");
 
-    static const TStringBuf sessionStartMemberName = "_yql_group_session_start";
-    const TExprNode::TPtr voidNode = ctx.NewCallable(node->Pos(), "Void", {});
-
-    TExprNode::TPtr sessionKey;
-    const TTypeAnnotationNode* sessionKeyType = nullptr;
-    const TTypeAnnotationNode* sessionParamsType = nullptr;
-    TExprNode::TPtr sessionInit;
-    TExprNode::TPtr sessionUpdate;
-
-    TExprNode::TPtr sortKey = voidNode;
-    TExprNode::TPtr sortOrder = voidNode;
-
+    static const TStringBuf sessionStartMemberName = "_yql_group_session_start"; 
+    const TExprNode::TPtr voidNode = ctx.NewCallable(node->Pos(), "Void", {}); 
+ 
+    TExprNode::TPtr sessionKey; 
+    const TTypeAnnotationNode* sessionKeyType = nullptr; 
+    const TTypeAnnotationNode* sessionParamsType = nullptr; 
+    TExprNode::TPtr sessionInit; 
+    TExprNode::TPtr sessionUpdate; 
+ 
+    TExprNode::TPtr sortKey = voidNode; 
+    TExprNode::TPtr sortOrder = voidNode; 
+ 
     bool effectiveCompact = forceCompact || HasSetting(*settings, "compact");
+ 
+    const TStructExprType* originalRowType = GetSeqItemType(node->Head().GetTypeAnn())->Cast<TStructExprType>(); 
+    TVector<const TItemExprType*> rowItems = originalRowType->GetItems(); 
+ 
+    const auto sessionSetting = GetSetting(*settings, "session"); 
+    TMaybe<TStringBuf> sessionOutputColumn; 
+    if (sessionSetting) { 
+        YQL_ENSURE(sessionSetting->Child(1)->Child(0)->IsAtom()); 
+        sessionOutputColumn = sessionSetting->Child(1)->Child(0)->Content(); 
+ 
+        // remove session column from other keys 
+        TExprNodeList keyColumnsList = keyColumns->ChildrenList(); 
+        EraseIf(keyColumnsList, [&](const auto& key) { return sessionOutputColumn == key->Content(); }); 
+        keyColumns = ctx.NewList(keyColumns->Pos(), std::move(keyColumnsList)); 
+ 
+        const bool haveDistinct = AnyOf(aggregatedColumns->ChildrenList(), 
+            [](const auto& child) { return child->ChildrenSize() == 3; }); 
+ 
+        TExprNode::TPtr sessionSortTraits; 
+        ExtractSessionWindowParams(node->Pos(), sessionSetting->Child(1)->ChildPtr(1), sessionKey, sessionKeyType, sessionParamsType, sessionSortTraits, 
+            sessionInit, sessionUpdate, ctx); 
+        ExtractSortKeyAndOrder(node->Pos(), sessionSortTraits, sortKey, sortOrder, ctx); 
+ 
+        if (haveDistinct) { 
+            auto keySelector = BuildKeySelector(node->Pos(), *originalRowType, keyColumns, ctx); 
+            const auto sessionStartMemberLambda = AddSessionParamsMemberLambda(node->Pos(), sessionStartMemberName, "", keySelector, 
+                sessionKey, sessionInit, sessionUpdate, ctx); 
+ 
+            list = ctx.Builder(node->Pos()) 
+                .Callable("PartitionsByKeys") 
+                    .Add(0, list) 
+                    .Add(1, keySelector) 
+                    .Add(2, sortOrder) 
+                    .Add(3, sortKey) 
+                    .Lambda(4) 
+                        .Param("partitionedStream") 
+                        .Apply(sessionStartMemberLambda) 
+                            .With(0, "partitionedStream") 
+                        .Seal() 
+                    .Seal() 
+                .Seal() 
+                .Build(); 
+ 
+            auto keyColumnsList = keyColumns->ChildrenList(); 
+            keyColumnsList.push_back(ctx.NewAtom(node->Pos(), sessionStartMemberName)); 
+            keyColumns = ctx.NewList(node->Pos(), std::move(keyColumnsList)); 
+ 
+            rowItems.push_back(ctx.MakeType<TItemExprType>(sessionStartMemberName, sessionKeyType)); 
+ 
+            sortOrder = sortKey = voidNode; 
+            sessionKey = sessionInit = sessionUpdate = {}; 
+            sessionKeyType = nullptr; 
+        } else { 
+            effectiveCompact = true; 
+        } 
+    } 
 
-    const TStructExprType* originalRowType = GetSeqItemType(node->Head().GetTypeAnn())->Cast<TStructExprType>();
-    TVector<const TItemExprType*> rowItems = originalRowType->GetItems();
-
-    const auto sessionSetting = GetSetting(*settings, "session");
-    TMaybe<TStringBuf> sessionOutputColumn;
-    if (sessionSetting) {
-        YQL_ENSURE(sessionSetting->Child(1)->Child(0)->IsAtom());
-        sessionOutputColumn = sessionSetting->Child(1)->Child(0)->Content();
-
-        // remove session column from other keys
-        TExprNodeList keyColumnsList = keyColumns->ChildrenList();
-        EraseIf(keyColumnsList, [&](const auto& key) { return sessionOutputColumn == key->Content(); });
-        keyColumns = ctx.NewList(keyColumns->Pos(), std::move(keyColumnsList));
-
-        const bool haveDistinct = AnyOf(aggregatedColumns->ChildrenList(),
-            [](const auto& child) { return child->ChildrenSize() == 3; });
-
-        TExprNode::TPtr sessionSortTraits;
-        ExtractSessionWindowParams(node->Pos(), sessionSetting->Child(1)->ChildPtr(1), sessionKey, sessionKeyType, sessionParamsType, sessionSortTraits,
-            sessionInit, sessionUpdate, ctx);
-        ExtractSortKeyAndOrder(node->Pos(), sessionSortTraits, sortKey, sortOrder, ctx);
-
-        if (haveDistinct) {
-            auto keySelector = BuildKeySelector(node->Pos(), *originalRowType, keyColumns, ctx);
-            const auto sessionStartMemberLambda = AddSessionParamsMemberLambda(node->Pos(), sessionStartMemberName, "", keySelector,
-                sessionKey, sessionInit, sessionUpdate, ctx);
-
-            list = ctx.Builder(node->Pos())
-                .Callable("PartitionsByKeys")
-                    .Add(0, list)
-                    .Add(1, keySelector)
-                    .Add(2, sortOrder)
-                    .Add(3, sortKey)
-                    .Lambda(4)
-                        .Param("partitionedStream")
-                        .Apply(sessionStartMemberLambda)
-                            .With(0, "partitionedStream")
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Build();
-
-            auto keyColumnsList = keyColumns->ChildrenList();
-            keyColumnsList.push_back(ctx.NewAtom(node->Pos(), sessionStartMemberName));
-            keyColumns = ctx.NewList(node->Pos(), std::move(keyColumnsList));
-
-            rowItems.push_back(ctx.MakeType<TItemExprType>(sessionStartMemberName, sessionKeyType));
-
-            sortOrder = sortKey = voidNode;
-            sessionKey = sessionInit = sessionUpdate = {};
-            sessionKeyType = nullptr;
-        } else {
-            effectiveCompact = true;
-        }
-    }
-
-    const bool compact = effectiveCompact;
-    const auto rowType = ctx.MakeType<TStructExprType>(rowItems);
+    const bool compact = effectiveCompact; 
+    const auto rowType = ctx.MakeType<TStructExprType>(rowItems); 
 
     auto preMap = ctx.Builder(node->Pos())
         .Lambda()
@@ -99,7 +99,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
         YQL_ENSURE(index, "Unknown column: " << keyColumn->Content());
         auto type = rowType->GetItems()[*index]->GetItemType();
         keyItemTypes.push_back(type);
-        needPickle = needPickle || !IsDataOrOptionalOfData(type);
+        needPickle = needPickle || !IsDataOrOptionalOfData(type); 
     }
 
     const TTypeAnnotationNode* pickleType = nullptr;
@@ -795,7 +795,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
     }
 
     // If no aggregation functions than add addional combiner
-    if (aggregatedColumns->ChildrenSize() == 0 && keyColumns->ChildrenSize() > 0 && !sessionUpdate) {
+    if (aggregatedColumns->ChildrenSize() == 0 && keyColumns->ChildrenSize() > 0 && !sessionUpdate) { 
         // Return key as-is
         auto uniqCombineInit = ctx.Builder(node->Pos())
             .Lambda()
@@ -878,7 +878,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Build();
     }
 
-    ui32 index = 0U;
+    ui32 index = 0U; 
     auto groupInit = ctx.Builder(node->Pos())
         .Lambda()
             .Param("item")
@@ -886,7 +886,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     for (ui32 i = 0; i < keyColumns->ChildrenSize(); ++i) {
                         parent
-                            .List(index++)
+                            .List(index++) 
                                 .Add(0, keyColumns->ChildPtr(i))
                                 .Callable(1, "Member")
                                     .Arg(0, "item")
@@ -894,16 +894,16 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                                 .Seal()
                             .Seal();
                     }
-                    if (sessionUpdate) {
-                        parent
-                            .List(index++)
-                                .Atom(0, sessionStartMemberName)
-                                .Callable(1, "Member")
-                                    .Arg(0, "item")
-                                    .Atom(1, sessionStartMemberName)
-                                .Seal()
-                            .Seal();
-                    }
+                    if (sessionUpdate) { 
+                        parent 
+                            .List(index++) 
+                                .Atom(0, sessionStartMemberName) 
+                                .Callable(1, "Member") 
+                                    .Arg(0, "item") 
+                                    .Atom(1, sessionStartMemberName) 
+                                .Seal() 
+                            .Seal(); 
+                    } 
                     return parent;
                 })
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -914,7 +914,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                             auto loadLambda = trait->Child(4);
 
                             if (!distinctFields.empty()) {
-                                parent.List(index++)
+                                parent.List(index++) 
                                     .Add(0, initialColumnNames[i])
                                     .Callable(1, "Map")
                                         .Callable(0, "Member")
@@ -925,7 +925,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                                     .Seal()
                                 .Seal();
                             } else {
-                                parent.List(index++)
+                                parent.List(index++) 
                                     .Add(0, initialColumnNames[i])
                                     .Apply(1, *loadLambda)
                                         .With(0)
@@ -979,7 +979,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                             if (distinctField) {
                                 const bool isFirst = *distinct2Columns[distinctField->Content()].begin() == i;
                                 if (isFirst) {
-                                    parent.List(index++)
+                                    parent.List(index++) 
                                         .Add(0, initialColumnNames[i])
                                         .List(1)
                                             .Callable(0, "NamedApply")
@@ -1017,13 +1017,13 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                                         .Seal()
                                         .Seal();
                                 } else {
-                                    parent.List(index++)
+                                    parent.List(index++) 
                                         .Add(0, initialColumnNames[i])
                                         .Do(initApply)
                                         .Seal();
                                 }
                             } else {
-                                parent.List(index++)
+                                parent.List(index++) 
                                     .Add(0, initialColumnNames[i])
                                     .Do(initApply)
                                 .Seal();
@@ -1036,7 +1036,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
         .Seal()
         .Build();
 
-    index = 0;
+    index = 0; 
     auto groupMerge = ctx.Builder(node->Pos())
         .Lambda()
             .Param("item")
@@ -1045,7 +1045,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     for (ui32 i = 0; i < keyColumns->ChildrenSize(); ++i) {
                         parent
-                            .List(index++)
+                            .List(index++) 
                                 .Add(0, keyColumns->ChildPtr(i))
                                 .Callable(1, "Member")
                                     .Arg(0, "state")
@@ -1053,16 +1053,16 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                                 .Seal()
                             .Seal();
                     }
-                    if (sessionUpdate) {
-                        parent
-                            .List(index++)
-                                .Atom(0, sessionStartMemberName)
-                                .Callable(1, "Member")
-                                    .Arg(0, "state")
-                                    .Atom(1, sessionStartMemberName)
-                                .Seal()
-                            .Seal();
-                    }
+                    if (sessionUpdate) { 
+                        parent 
+                            .List(index++) 
+                                .Atom(0, sessionStartMemberName) 
+                                .Callable(1, "Member") 
+                                    .Arg(0, "state") 
+                                    .Atom(1, sessionStartMemberName) 
+                                .Seal() 
+                            .Seal(); 
+                    } 
                     return parent;
                 })
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -1074,7 +1074,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                             auto mergeLambda = trait->Child(5);
 
                             if (!distinctFields.empty()) {
-                                parent.List(index++)
+                                parent.List(index++) 
                                     .Add(0, initialColumnNames[i])
                                     .Callable(1, "OptionalReduce")
                                         .Callable(0, "Map")
@@ -1092,7 +1092,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                                     .Seal()
                                 .Seal();
                             } else {
-                                parent.List(index++)
+                                parent.List(index++) 
                                     .Add(0, initialColumnNames[i])
                                     .Apply(1, *mergeLambda)
                                         .With(0)
@@ -1214,7 +1214,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                                     return parent;
                                 };
 
-                                parent.List(index++)
+                                parent.List(index++) 
                                     .Add(0, initialColumnNames[i])
                                     .Callable(1, "If")
                                         .Callable(0, "NamedApply")
@@ -1272,7 +1272,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                                     .Seal()
                                     .Seal();
                             } else {
-                                parent.List(index++)
+                                parent.List(index++) 
                                     .Add(0, initialColumnNames[i])
                                     .Do(updateApply)
                                 .Seal();
@@ -1285,16 +1285,16 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
         .Seal()
         .Build();
 
-    index = 0U;
+    index = 0U; 
     auto groupSave = ctx.Builder(node->Pos())
         .Lambda()
             .Param("state")
             .Callable("AsStruct")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     for (ui32 i = 0; i < keyColumns->ChildrenSize(); ++i) {
-                        if (keyColumns->Child(i)->Content() == sessionStartMemberName) {
-                            continue;
-                        }
+                        if (keyColumns->Child(i)->Content() == sessionStartMemberName) { 
+                            continue; 
+                        } 
                         parent
                             .List(index++)
                                 .Add(0, keyColumns->ChildPtr(i))
@@ -1304,17 +1304,17 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
                                 .Seal()
                             .Seal();
                     }
-
-                    if (sessionOutputColumn) {
-                        parent
-                            .List(index++)
-                                .Atom(0, *sessionOutputColumn)
-                                .Callable(1, "Member")
-                                    .Arg(0, "state")
-                                    .Atom(1, sessionStartMemberName)
-                                .Seal()
-                            .Seal();
-                    }
+ 
+                    if (sessionOutputColumn) { 
+                        parent 
+                            .List(index++) 
+                                .Atom(0, *sessionOutputColumn) 
+                                .Callable(1, "Member") 
+                                    .Arg(0, "state") 
+                                    .Atom(1, sessionStartMemberName) 
+                                .Seal() 
+                            .Seal(); 
+                    } 
                     return parent;
                 })
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -1416,101 +1416,101 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
         groupInput = std::move(list);
     }
 
-    TExprNode::TPtr preprocessLambda;
-    TExprNode::TPtr condenseSwitch;
-    if (sessionUpdate) {
-        YQL_ENSURE(compact);
-        YQL_ENSURE(sessionKey);
-        YQL_ENSURE(sessionKeyType);
-        YQL_ENSURE(sessionInit);
-
-        preprocessLambda =
-            AddSessionParamsMemberLambda(node->Pos(), sessionStartMemberName, "", keyExtractor, sessionKey, sessionInit, sessionUpdate, ctx);
-
-        if (!IsDataOrOptionalOfData(sessionKeyType)) {
-            preprocessLambda = ctx.Builder(node->Pos())
-                .Lambda()
-                    .Param("stream")
-                    .Callable("OrderedMap")
-                        .Apply(0, preprocessLambda)
-                            .With(0, "stream")
-                        .Seal()
-                        .Lambda(1)
-                            .Param("item")
-                            .Callable("ReplaceMember")
-                                .Arg(0, "item")
-                                .Atom(1, sessionStartMemberName)
-                                .Callable(2, "StablePickle")
-                                    .Callable(0, "Member")
-                                        .Arg(0, "item")
-                                        .Atom(1, sessionStartMemberName)
-                                    .Seal()
-                                .Seal()
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Build();
-        }
-
-        condenseSwitch = ctx.Builder(node->Pos())
-            .Lambda()
-                .Param("item")
-                .Param("state")
-                .Callable("Or")
-                    .Callable(0, "AggrNotEquals")
-                        .Apply(0, keyExtractor)
-                            .With(0, "item")
-                        .Seal()
-                        .Apply(1, keyExtractor)
-                            .With(0, "state")
-                        .Seal()
-                    .Seal()
-                    .Callable(1, "AggrNotEquals")
-                        .Callable(0, "Member")
-                            .Arg(0, "item")
-                            .Atom(1, sessionStartMemberName)
-                        .Seal()
-                        .Callable(1, "Member")
-                            .Arg(0, "state")
-                            .Atom(1, sessionStartMemberName)
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Build();
-    } else {
-        YQL_ENSURE(!sessionKey);
-        preprocessLambda = MakeIdentityLambda(node->Pos(), ctx);
-        condenseSwitch = ctx.Builder(node->Pos())
-            .Lambda()
-                .Param("item")
-                .Param("state")
-                .Callable("IsKeySwitch")
-                    .Arg(0, "item")
-                    .Arg(1, "state")
-                    .Add(2, keyExtractor)
-                    .Add(3, keyExtractor)
-                .Seal()
-            .Seal()
-            .Build();
-    }
-
+    TExprNode::TPtr preprocessLambda; 
+    TExprNode::TPtr condenseSwitch; 
+    if (sessionUpdate) { 
+        YQL_ENSURE(compact); 
+        YQL_ENSURE(sessionKey); 
+        YQL_ENSURE(sessionKeyType); 
+        YQL_ENSURE(sessionInit); 
+ 
+        preprocessLambda = 
+            AddSessionParamsMemberLambda(node->Pos(), sessionStartMemberName, "", keyExtractor, sessionKey, sessionInit, sessionUpdate, ctx); 
+ 
+        if (!IsDataOrOptionalOfData(sessionKeyType)) { 
+            preprocessLambda = ctx.Builder(node->Pos()) 
+                .Lambda() 
+                    .Param("stream") 
+                    .Callable("OrderedMap") 
+                        .Apply(0, preprocessLambda) 
+                            .With(0, "stream") 
+                        .Seal() 
+                        .Lambda(1) 
+                            .Param("item") 
+                            .Callable("ReplaceMember") 
+                                .Arg(0, "item") 
+                                .Atom(1, sessionStartMemberName) 
+                                .Callable(2, "StablePickle") 
+                                    .Callable(0, "Member") 
+                                        .Arg(0, "item") 
+                                        .Atom(1, sessionStartMemberName) 
+                                    .Seal() 
+                                .Seal() 
+                            .Seal() 
+                        .Seal() 
+                    .Seal() 
+                .Seal() 
+                .Build(); 
+        } 
+ 
+        condenseSwitch = ctx.Builder(node->Pos()) 
+            .Lambda() 
+                .Param("item") 
+                .Param("state") 
+                .Callable("Or") 
+                    .Callable(0, "AggrNotEquals") 
+                        .Apply(0, keyExtractor) 
+                            .With(0, "item") 
+                        .Seal() 
+                        .Apply(1, keyExtractor) 
+                            .With(0, "state") 
+                        .Seal() 
+                    .Seal() 
+                    .Callable(1, "AggrNotEquals") 
+                        .Callable(0, "Member") 
+                            .Arg(0, "item") 
+                            .Atom(1, sessionStartMemberName) 
+                        .Seal() 
+                        .Callable(1, "Member") 
+                            .Arg(0, "state") 
+                            .Atom(1, sessionStartMemberName) 
+                        .Seal() 
+                    .Seal() 
+                .Seal() 
+            .Seal() 
+            .Build(); 
+    } else { 
+        YQL_ENSURE(!sessionKey); 
+        preprocessLambda = MakeIdentityLambda(node->Pos(), ctx); 
+        condenseSwitch = ctx.Builder(node->Pos()) 
+            .Lambda() 
+                .Param("item") 
+                .Param("state") 
+                .Callable("IsKeySwitch") 
+                    .Arg(0, "item") 
+                    .Arg(1, "state") 
+                    .Add(2, keyExtractor) 
+                    .Add(3, keyExtractor) 
+                .Seal() 
+            .Seal() 
+            .Build(); 
+    } 
+ 
     auto grouper = ctx.Builder(node->Pos())
         .Callable("PartitionsByKeys")
             .Add(0, std::move(groupInput))
             .Add(1, keyExtractor)
-            .Add(2, sortOrder)
-            .Add(3, sortKey)
+            .Add(2, sortOrder) 
+            .Add(3, sortKey) 
             .Lambda(4)
                 .Param("stream")
                 .Callable("Map")
                     .Callable(0, "Condense1")
-                        .Apply(0, preprocessLambda)
-                            .With(0, "stream")
-                        .Seal()
+                        .Apply(0, preprocessLambda) 
+                            .With(0, "stream") 
+                        .Seal() 
                         .Add(1, std::move(groupInit))
-                        .Add(2, condenseSwitch)
+                        .Add(2, condenseSwitch) 
                         .Add(3, std::move(groupMerge))
                     .Seal()
                     .Add(1, std::move(groupSave))
@@ -1518,7 +1518,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Seal()
         .Seal().Build();
 
-    if (keyColumns->ChildrenSize() == 0 && !sessionSetting) {
+    if (keyColumns->ChildrenSize() == 0 && !sessionSetting) { 
         return MakeSingleGroupRow(*node, grouper, ctx);
     }
 

@@ -1342,7 +1342,7 @@ bool ISource::SetSamplingOptions(TContext& ctx,
     Y_UNUSED(mode);
     Y_UNUSED(samplingRate);
     Y_UNUSED(samplingSeed);
-    ctx.Error() << "Sampling is only supported for table sources";
+    ctx.Error() << "Sampling is only supported for table sources"; 
     return false;
 }
 
@@ -1484,7 +1484,7 @@ struct TWinFrame {
 
 struct TWinPartition {
     TString ParentLabel;
-    size_t Id = 0;
+    size_t Id = 0; 
     TVector<size_t> FrameIds;
     TVector<TSortSpecificationPtr> OrderBy;
     TVector<TNodePtr> Partitions;
@@ -1752,54 +1752,54 @@ IJoin* IJoin::GetJoin() {
     return this;
 }
 
-bool TryStringContent(const TString& str, TString& result, ui32& flags, TString& error, TPosition& pos) {
-    error.clear();
-    result.clear();
-
+bool TryStringContent(const TString& str, TString& result, ui32& flags, TString& error, TPosition& pos) { 
+    error.clear(); 
+    result.clear(); 
+ 
     bool doubleQuoted = (str.StartsWith('"') && str.EndsWith('"'));
     bool singleQuoted = !doubleQuoted && (str.StartsWith('\'') && str.EndsWith('\''));
 
     if (str.size() >= 2 && (doubleQuoted || singleQuoted)) {
-        flags = TNodeFlags::ArbitraryContent;
+        flags = TNodeFlags::ArbitraryContent; 
         char quoteChar = doubleQuoted ? '"' : '\'';
         size_t readBytes = 0;
         TStringBuf atom(str);
-        TStringOutput sout(result);
+        TStringOutput sout(result); 
         atom.Skip(1);
-        result.reserve(str.size());
-
-        auto unescapeResult = UnescapeArbitraryAtom(atom, quoteChar, &sout, &readBytes);
-        if (unescapeResult != EUnescapeResult::OK) {
-            TTextWalker walker(pos);
-            walker.Advance(atom.Trunc(readBytes));
-            error = UnescapeResultToString(unescapeResult);
-            return false;
-        }
+        result.reserve(str.size()); 
+ 
+        auto unescapeResult = UnescapeArbitraryAtom(atom, quoteChar, &sout, &readBytes); 
+        if (unescapeResult != EUnescapeResult::OK) { 
+            TTextWalker walker(pos); 
+            walker.Advance(atom.Trunc(readBytes)); 
+            error = UnescapeResultToString(unescapeResult); 
+            return false; 
+        } 
     } else if (str.size() >= 4 && str.StartsWith("@@") && str.EndsWith("@@")) {
         flags = TNodeFlags::MultilineContent;
         TString s = str.substr(2, str.length() - 4);
         SubstGlobal(s, "@@@@", "@@");
-        result.swap(s);
+        result.swap(s); 
     } else {
         flags = TNodeFlags::Default;
-        result = str;
+        result = str; 
     }
-    return true;
+    return true; 
 }
 
-TString StringContent(TContext& ctx, const TString& str) {
-    ui32 flags = 0;
-    TString result;
-    TString error;
-    TPosition pos;
-
-    if (!TryStringContent(str, result, flags, error, pos)) {
-        ctx.Error(pos) << "Failed to parse string literal: " << error;
-        return {};
-    }
-    return result;
-}
-
+TString StringContent(TContext& ctx, const TString& str) { 
+    ui32 flags = 0; 
+    TString result; 
+    TString error; 
+    TPosition pos; 
+ 
+    if (!TryStringContent(str, result, flags, error, pos)) { 
+        ctx.Error(pos) << "Failed to parse string literal: " << error; 
+        return {}; 
+    } 
+    return result; 
+} 
+ 
 TString IdContent(TContext& ctx, const TString& s) {
     YQL_ENSURE(!s.empty(), "Empty identifier not expected");
     if (!s.StartsWith('[') && !s.StartsWith('`')) {
@@ -1833,17 +1833,17 @@ TString IdContent(TContext& ctx, const TString& s) {
     unescapedStr.reserve(s.size());
 
     size_t readBytes = 0;
-    TPosition pos = ctx.Pos();
-    pos.Column += skipSymbols - 1;
-
-    auto unescapeResult = UnescapeArbitraryAtom(atom, endSym, &sout, &readBytes);
-    if (unescapeResult != EUnescapeResult::OK) {
-        TTextWalker walker(pos);
-        walker.Advance(atom.Trunc(readBytes));
-        ctx.Error(pos) << "Cannot parse broken identifier: " << UnescapeResultToString(unescapeResult);
+    TPosition pos = ctx.Pos(); 
+    pos.Column += skipSymbols - 1; 
+ 
+    auto unescapeResult = UnescapeArbitraryAtom(atom, endSym, &sout, &readBytes); 
+    if (unescapeResult != EUnescapeResult::OK) { 
+        TTextWalker walker(pos); 
+        walker.Advance(atom.Trunc(readBytes)); 
+        ctx.Error(pos) << "Cannot parse broken identifier: " << UnescapeResultToString(unescapeResult); 
         return {};
     }
-
+ 
     if (readBytes != atom.size()) {
         ctx.Error() << "The identifier not parsed completely";
         return {};
@@ -1852,32 +1852,32 @@ TString IdContent(TContext& ctx, const TString& s) {
     return unescapedStr;
 }
 
-namespace {
-class TInvalidLiteralNode final: public INode {
-public:
-    TInvalidLiteralNode(TPosition pos)
-        : INode(pos)
-    {
-    }
-
-    bool DoInit(TContext& ctx, ISource* source) override {
-        Y_UNUSED(ctx);
-        Y_UNUSED(source);
-        return false;
-    }
-
-    TAstNode* Translate(TContext& ctx) const override {
-        Y_UNUSED(ctx);
-        return nullptr;
-    }
-
-    TPtr DoClone() const override {
-        return {};
-    }
-};
-
-}
-
+namespace { 
+class TInvalidLiteralNode final: public INode { 
+public: 
+    TInvalidLiteralNode(TPosition pos) 
+        : INode(pos) 
+    { 
+    } 
+ 
+    bool DoInit(TContext& ctx, ISource* source) override { 
+        Y_UNUSED(ctx); 
+        Y_UNUSED(source); 
+        return false; 
+    } 
+ 
+    TAstNode* Translate(TContext& ctx) const override { 
+        Y_UNUSED(ctx); 
+        return nullptr; 
+    } 
+ 
+    TPtr DoClone() const override { 
+        return {}; 
+    } 
+}; 
+ 
+} 
+ 
 TLiteralNode::TLiteralNode(TPosition pos, bool isNull)
     : TAstListNode(pos)
     , Null(isNull)
@@ -1896,14 +1896,14 @@ TLiteralNode::TLiteralNode(TPosition pos, const TString& type, const TString& va
     Add(Type, BuildQuotedAtom(Pos, Value));
 }
 
-TLiteralNode::TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags)
+TLiteralNode::TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags) 
     : TAstListNode(pos)
     , Null(false)
     , Void(false)
     , Type("String")
-    , Value(value)
+    , Value(value) 
 {
-    Add(Type, BuildQuotedAtom(pos, Value, nodeFlags));
+    Add(Type, BuildQuotedAtom(pos, Value, nodeFlags)); 
 }
 
 bool TLiteralNode::IsNull() const {
@@ -1969,19 +1969,19 @@ TNodePtr BuildLiteralVoid(TPosition pos) {
     return new TLiteralNode(pos, false);
 }
 
-TNodePtr BuildLiteralSmartString(TContext& ctx, const TString& value) {
-
-    TString unescaped;
-    TString error;
-    TPosition pos = ctx.Pos();
-    ui32 flags = 0;
-
-    if (TryStringContent(value, unescaped, flags, error, pos)) {
-        return new TLiteralNode(ctx.Pos(), unescaped, flags);
-    } else {
-        ctx.Error(pos) << "Failed to parse string literal: " << error;
-        return new TInvalidLiteralNode(ctx.Pos());
-    }
+TNodePtr BuildLiteralSmartString(TContext& ctx, const TString& value) { 
+ 
+    TString unescaped; 
+    TString error; 
+    TPosition pos = ctx.Pos(); 
+    ui32 flags = 0; 
+ 
+    if (TryStringContent(value, unescaped, flags, error, pos)) { 
+        return new TLiteralNode(ctx.Pos(), unescaped, flags); 
+    } else { 
+        ctx.Error(pos) << "Failed to parse string literal: " << error; 
+        return new TInvalidLiteralNode(ctx.Pos()); 
+    } 
 }
 
 TNodePtr BuildLiteralRawString(TPosition pos, const TString& value) {
@@ -2086,7 +2086,7 @@ bool TStructNode::DoInit(TContext& ctx, ISource* src) {
             ctx.Error(expr->GetPos()) << "Structure does not allow anonymous members";
             return false;
         }
-        Nodes.push_back(Q(Y(BuildQuotedAtom(expr->GetPos(), label), expr)));
+        Nodes.push_back(Q(Y(BuildQuotedAtom(expr->GetPos(), label), expr))); 
     }
     return TAstListNode::DoInit(ctx, src);
 }

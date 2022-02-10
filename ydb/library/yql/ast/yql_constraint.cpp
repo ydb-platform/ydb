@@ -66,10 +66,10 @@ void TConstraintSet::ToJson(NJson::TJsonWriter& writer) const {
     for (const auto& node : Constraints_) {
         writer.WriteKey(node->GetName());
         node->ToJson(writer);
-    }
+    } 
     writer.CloseMap();
-}
-
+} 
+ 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TColumnSetConstraintNodeBase::TColumnSetConstraintNodeBase(TExprContext& ctx, TStringBuf name, const TSetType& columns)
@@ -165,10 +165,10 @@ void TColumnSetConstraintNodeBase::ToJson(NJson::TJsonWriter& out) const {
     out.OpenArray();
     for (const auto& column : Columns_) {
         out.Write(column);
-    }
+    } 
     out.CloseArray();
-}
-
+} 
+ 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&& content)
@@ -245,10 +245,10 @@ void TSortedConstraintNode::ToJson(NJson::TJsonWriter& out) const {
         out.Write(JoinSeq(';', Content_[i].first));
         out.Write(Content_[i].second);
         out.CloseArray();
-    }
+    } 
     out.CloseArray();
-}
-
+} 
+ 
 bool TSortedConstraintNode::IsPrefixOf(const TSortedConstraintNode& node) const {
     return node.Includes(*this);
 }
@@ -603,10 +603,10 @@ void TPassthroughConstraintNode::ToJson(NJson::TJsonWriter& out) const {
         for (const auto& [resultColumn, originalColumn] : part.second) {
             out.Write(JoinSeq(';', resultColumn), originalColumn);
         }
-    }
+    } 
     out.CloseMap();
-}
-
+} 
+ 
 const TPassthroughConstraintNode* TPassthroughConstraintNode::ExtractField(TExprContext& ctx, const std::string_view& field) const {
     TMapType passtrought;
     for (const auto& part : Mapping_) {
@@ -722,8 +722,8 @@ bool TEmptyConstraintNode::Equals(const TConstraintNode& node) const {
 
 void TEmptyConstraintNode::ToJson(NJson::TJsonWriter& out) const {
     out.Write(true);
-}
-
+} 
+ 
 const TEmptyConstraintNode* TEmptyConstraintNode::MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& /*ctx*/) {
     if (constraints.empty()) {
         return nullptr;
@@ -838,10 +838,10 @@ void TVarIndexConstraintNode::ToJson(NJson::TJsonWriter& out) const {
         out.Write(resultIndex);
         out.Write(originalIndex);
         out.CloseArray();
-    }
+    } 
     out.CloseArray();
-}
-
+} 
+ 
 const TVarIndexConstraintNode* TVarIndexConstraintNode::MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& ctx) {
     if (constraints.empty()) {
         return nullptr;
@@ -1003,10 +1003,10 @@ void TMultiConstraintNode::ToJson(NJson::TJsonWriter& out) const {
     for (const auto& [index, constraintSet] : Items_) {
         out.WriteKey(ToString(index));
         constraintSet.ToJson(out);
-    }
+    } 
     out.CloseMap();
-}
-
+} 
+ 
 const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& ctx) {
     if (constraints.empty()) {
         return nullptr;

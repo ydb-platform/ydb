@@ -124,8 +124,8 @@ void TIssueManager::RaiseIssues(const TIssues& issues) {
 bool TIssueManager::RaiseWarning(TIssue issue) {
     bool isWarning = true;
     if (issue.GetSeverity() == ESeverity::TSeverityIds_ESeverityId_S_WARNING) {
-        const auto action = WarningPolicy_.GetAction(issue.GetCode());
-        switch (action) {
+        const auto action = WarningPolicy_.GetAction(issue.GetCode()); 
+        switch (action) { 
             case EWarningAction::DISABLE:
                 return isWarning;
             case EWarningAction::ERROR:
@@ -139,8 +139,8 @@ bool TIssueManager::RaiseWarning(TIssue issue) {
                 }
                 isWarning = false;
                 break;
-            case EWarningAction::DEFAULT:
-                break;
+            case EWarningAction::DEFAULT: 
+                break; 
             default:
                 Y_ENSURE(false, "Unknown action");
         }
@@ -206,9 +206,9 @@ void TIssueManager::Reset() {
     Reset(TIssues());
 }
 
-void TIssueManager::AddWarningRule(const TWarningRule &rule)
-{
-    WarningPolicy_.AddRule(rule);
+void TIssueManager::AddWarningRule(const TWarningRule &rule) 
+{ 
+    WarningPolicy_.AddRule(rule); 
 }
 
 void TIssueManager::SetWarningToErrorTreatMessage(const TString& msg) {

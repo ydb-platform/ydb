@@ -17,7 +17,7 @@ struct TClickHouseState : public TThrRefBase
 
     struct TTableMeta {
         const TStructExprType* ItemType = nullptr;
-        TVector<TString> ColumnOrder;
+        TVector<TString> ColumnOrder; 
     };
 
     THashMap<std::pair<TString, TString>, TTableMeta> Tables;

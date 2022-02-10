@@ -237,7 +237,7 @@ public:
                         Y_UNUSED(output);
                         Y_UNUSED(ctx);
 
-                        input->SetState(TExprNode::EState::ExecutionComplete);
+                        input->SetState(TExprNode::EState::ExecutionComplete); 
                         input->SetResult(TExprNode::TPtr(resultNode));
                         return IGraphTransformer::TStatus::Ok;
                     })));
@@ -273,7 +273,7 @@ public:
                 SessionCtx->Config().Dispatch(clusterName, name, value, NCommon::TSettingDispatcher::EStage::RUNTIME);
             }
 
-            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetState(TExprNode::EState::ExecutionComplete); 
             input->SetResult(ctx.NewWorld(input->Pos()));
             return SyncOk();
         }
@@ -298,7 +298,7 @@ public:
 
             writer.OnEndList();
 
-            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetState(TExprNode::EState::ExecutionComplete); 
             input->SetResult(ctx.NewAtom(input->Pos(), out.Str()));
             return SyncOk();
         }
@@ -309,12 +309,12 @@ public:
                 return SyncStatus(requireStatus);
             }
 
-            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetState(TExprNode::EState::ExecutionComplete); 
             input->SetResult(ctx.NewWorld(input->Pos()));
             return SyncOk();
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() 
             << "(Kikimr DataSource) Failed to execute node: " << input->Content()));
         return SyncError();
     }
@@ -366,7 +366,7 @@ private:
         }
 
         if (NCommon::HasResOrPullOption(res.Ref(), "ref")) {
-            ctx.AddError(TIssue(ctx.GetPosition(res.Pos()), TStringBuilder() << "refselect isn't supported for Kikimr provider."));
+            ctx.AddError(TIssue(ctx.GetPosition(res.Pos()), TStringBuilder() << "refselect isn't supported for Kikimr provider.")); 
             return SyncError();
         }
 
@@ -374,7 +374,7 @@ private:
 
         auto* runResult = SessionCtx->Query().Results.FindPtr(exec.Ref().UniqueId());
         if (!runResult) {
-            ctx.AddError(TIssue(ctx.GetPosition(exec.Pos()), TStringBuilder() << "KiExecute run result not found."));
+            ctx.AddError(TIssue(ctx.GetPosition(exec.Pos()), TStringBuilder() << "KiExecute run result not found.")); 
             return SyncError();
         }
 
@@ -430,7 +430,7 @@ public:
                 }
             }
 
-            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetState(TExprNode::EState::ExecutionComplete); 
             input->SetResult(ctx.NewWorld(input->Pos()));
             return SyncOk();
         }
@@ -445,7 +445,7 @@ public:
         }
 
         if (TMaybeNode<TCoNth>(input)) {
-            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetState(TExprNode::EState::ExecutionComplete); 
             input->SetResult(ctx.NewWorld(input->Pos()));
             return SyncOk();
         }
@@ -503,7 +503,7 @@ public:
                     return resultNode;
                 });
 
-            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetState(TExprNode::EState::ExecutionComplete); 
             input->SetResult(ctx.NewWorld(input->Pos()));
             return SyncOk();
         }
@@ -967,7 +967,7 @@ public:
             }, "Executing DROP GROUP");
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() 
             << "(Kikimr DataSink) Failed to execute node: " << input->Content()));
         return SyncError();
     }
@@ -982,7 +982,7 @@ private:
         TExprContext& ctx, const TString& cluster, TMaybe<TString> mode, TMaybe<bool> useNewEngine,
         const TExecuteRunFunc& runFunc, const TExecuteFinalizeFunc& finalizeFunc)
     {
-        if (node.Ref().GetState() == TExprNode::EState::ExecutionComplete) {
+        if (node.Ref().GetState() == TExprNode::EState::ExecutionComplete) { 
             return SyncOk();
         }
 
@@ -1038,7 +1038,7 @@ private:
 
             auto result = asyncResult->GetResult();
             if (!result.Success()) {
-                node.Ptr()->SetState(TExprNode::EState::Error);
+                node.Ptr()->SetState(TExprNode::EState::Error); 
 
                 return std::make_pair(IGraphTransformer::TStatus::Error, TAsyncTransformCallbackFuture());
             }
@@ -1048,7 +1048,7 @@ private:
 
             SessionCtx->Query().ExecutionOrder.push_back(resultId);
 
-            node.Ptr()->SetState(TExprNode::EState::ExecutionComplete);
+            node.Ptr()->SetState(TExprNode::EState::ExecutionComplete); 
             node.Ptr()->SetResult(ctx.NewAtom(node.Pos(), ToString(resultId)));
 
             if (finalizeFunc) {
@@ -1067,7 +1067,7 @@ private:
                         Y_UNUSED(ctx);
                         output = input;
 
-                        input->SetState(TExprNode::EState::ExecutionRequired);
+                        input->SetState(TExprNode::EState::ExecutionRequired); 
                         return IGraphTransformer::TStatus::Repeat;
                     });
             }));
@@ -1115,16 +1115,16 @@ private:
         return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, isolationLevel, strictDml, queryType, ctx);
     }
 
-    bool ApplyDdlOperation(const TString& cluster, TPositionHandle pos, const TString& table,
+    bool ApplyDdlOperation(const TString& cluster, TPositionHandle pos, const TString& table, 
         TYdbOperation op, TExprContext& ctx)
     {
         YQL_ENSURE(op & KikimrSchemeOps());
 
-        auto position = ctx.GetPosition(pos);
-
+        auto position = ctx.GetPosition(pos); 
+ 
         NKqpProto::TKqpTableOp protoOp;
-        protoOp.MutablePosition()->SetRow(position.Row);
-        protoOp.MutablePosition()->SetColumn(position.Column);
+        protoOp.MutablePosition()->SetRow(position.Row); 
+        protoOp.MutablePosition()->SetColumn(position.Column); 
         protoOp.SetTable(table);
         protoOp.SetOperation((ui32)op);
 

@@ -651,7 +651,7 @@ ANTLR_MARKER	BaseRecognizer<ImplTraits, StreamType>::getRuleMemoization( ANTLR_I
 	/* The rule memos are an ANTLR3_LIST of ANTLR3_LIST.
      */
 	typedef IntTrie<ImplTraits, ANTLR_MARKER> RuleListType;
-	typedef TrieEntry<ImplTraits, std::shared_ptr<RuleListType>> EntryType;
+	typedef TrieEntry<ImplTraits, std::shared_ptr<RuleListType>> EntryType; 
 	typedef TrieEntry<ImplTraits, ANTLR_MARKER> SubEntryType;
     ANTLR_MARKER	stopIndex;
     EntryType*	entry;
@@ -670,14 +670,14 @@ ANTLR_MARKER	BaseRecognizer<ImplTraits, StreamType>::getRuleMemoization( ANTLR_I
 		 * no idea of the size, but you should remember that this will cause the leftmost
 		 * bit match algorithm to run to 63 bits, which will be the whole time spent in the trie ;-)
 		 */
-		m_state->get_ruleMemo()->add( ruleIndex, std::make_shared<RuleListType>(63) );
+		m_state->get_ruleMemo()->add( ruleIndex, std::make_shared<RuleListType>(63) ); 
 
 		/* We cannot have a stopIndex in a trie we have just created of course
 		 */
 		return	MEMO_RULE_UNKNOWN;
     }
 
-    std::shared_ptr<RuleListType> ruleList	= entry->get_data();
+    std::shared_ptr<RuleListType> ruleList	= entry->get_data(); 
 
     /* See if there is a stop index associated with the supplied start index.
      */
@@ -732,7 +732,7 @@ void	BaseRecognizer<ImplTraits, StreamType>::memoize(ANTLR_MARKER ruleIndex, ANT
    /* The rule memos are an ANTLR3_LIST of ANTLR3_LIST.
     */
 	typedef IntTrie<ImplTraits, ANTLR_MARKER> RuleListType;
-	typedef TrieEntry<ImplTraits, std::shared_ptr<RuleListType>> EntryType;
+	typedef TrieEntry<ImplTraits, std::shared_ptr<RuleListType>> EntryType; 
     EntryType*	    entry;
     ANTLR_MARKER	    stopIndex;
 	SuperType* super = static_cast<SuperType*>(this);
@@ -744,7 +744,7 @@ void	BaseRecognizer<ImplTraits, StreamType>::memoize(ANTLR_MARKER ruleIndex, ANT
 
     if	(entry != NULL)
     {
-		std::shared_ptr<RuleListType>	ruleList = entry->get_data();
+		std::shared_ptr<RuleListType>	ruleList = entry->get_data(); 
 
 		/* If we don't already have this entry, append it. The memoize trie does not
 		 * accept duplicates so it won't add it if already there and we just ignore the

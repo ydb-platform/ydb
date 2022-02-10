@@ -52,7 +52,7 @@ public:
     void SetUdfResolver(IUdfResolver::TPtr udfResolver);
     void SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet::TPtr udfIndexPackageSet);
     void SetFileStorage(TFileStoragePtr fileStorage);
-    void EnableRangeComputeFor();
+    void EnableRangeComputeFor(); 
 
     TProgramPtr Create(
             const TFile& file,
@@ -80,7 +80,7 @@ private:
     TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
     TFileStoragePtr FileStorage_;
     TString Runner_;
-    bool EnableRangeComputeFor_ = false;
+    bool EnableRangeComputeFor_ = false; 
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -176,7 +176,7 @@ public:
         }
     }
 
-    void Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan = false);
+    void Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan = false); 
 
     inline void PrintErrorsTo(IOutputStream& out) const {
         if (ExprCtx_) {
@@ -192,10 +192,10 @@ public:
         return ExprRoot_;
     }
 
-    inline TExprContext& ExprCtx() const {
-        return *ExprCtx_;
-    }
-
+    inline TExprContext& ExprCtx() const { 
+        return *ExprCtx_; 
+    } 
+ 
     inline bool HasResults() const {
         return ResultProviderConfig_ &&
                 !ResultProviderConfig_->CommittedResults.empty();
@@ -311,8 +311,8 @@ private:
         const TString& filename,
         const TString& sourceCode,
         const TString& sessionId,
-        const TString& runner,
-        bool enableRangeComputeFor);
+        const TString& runner, 
+        bool enableRangeComputeFor); 
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
@@ -328,7 +328,7 @@ private:
     TFutureStatus RemoteKikimrOptimize(const TString& cluster, const IPipelineConfigurator* pipelineConf);
     TFutureStatus RemoteKikimrRun(const TString& cluster, const IPipelineConfigurator* pipelineConf);
 
-    bool FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRules* warningRules = nullptr);
+    bool FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRules* warningRules = nullptr); 
     TString GetSessionId() const;
     TString TakeSessionId();
 
@@ -384,7 +384,7 @@ private:
     IOutputStream* PlanStream_ = nullptr;
     TOperationProgressWriter ProgressWriter_ = [](const TOperationProgress&) {};
     TString ExtractedQueryParametersMetadataYson_;
-    const bool EnableRangeComputeFor_;
+    const bool EnableRangeComputeFor_; 
 };
 
 } // namspace NYql

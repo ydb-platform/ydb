@@ -1,85 +1,85 @@
---- original/src/pg_query_outfuncs_protobuf.c	2021-11-14 19:42:26.000000000 +0300
-+++ contrib/src/pg_query_outfuncs_protobuf.c	2021-11-14 21:33:02.000000000 +0300
-@@ -1,3 +1,5 @@
-+#include "protobuf/pg_query.pb-c.h"
-+
- #include "pg_query_outfuncs.h"
- 
- #include "postgres.h"
-@@ -8,7 +10,8 @@
- #include "nodes/value.h"
- #include "utils/datum.h"
- 
--#include "protobuf/pg_query.pb-c.h"
-+typedef void (*out_func)(void*, void*);
-+int register_specific_node(void* out, void* node, out_func func);
- 
- #define OUT_TYPE(typename, typename_c) PgQuery__##typename_c*
- 
-@@ -85,20 +88,24 @@
- 	{ \
- 		PgQuery__##typename *__node = palloc(sizeof(PgQuery__##typename)); \
- 		pg_query__##typename_underscore##__init(__node); \
--		_out##typename(__node, &node->fldname); \
- 		out->outname = __node; \
-+        if (!register_specific_node(__node, &node->fldname, (out_func)&_out##typename)) \
-+		_out##typename(__node, &node->fldname); \
- 	}
- 
- #define WRITE_SPECIFIC_NODE_PTR_FIELD(typename, typename_underscore, outname, outname_json, fldname) \
- 	if (node->fldname != NULL) { \
- 		PgQuery__##typename *__node = palloc(sizeof(PgQuery__##typename)); \
- 		pg_query__##typename_underscore##__init(__node); \
--		_out##typename(__node, node->fldname); \
- 		out->outname = __node; \
-+        if (!register_specific_node(__node, node->fldname, (out_func)&_out##typename)) \
-+		_out##typename(__node, node->fldname); \
- 	}
- 
- static void _outNode(PgQuery__Node* out, const void *obj);
- 
-+void _outNodeImpl(PgQuery__Node* out, const void *obj);
-+
- static void
- _outList(PgQuery__List* out, const List *node)
- {
-@@ -182,8 +189,18 @@
- #include "pg_query_enum_defs.c"
- #include "pg_query_outfuncs_defs.c"
- 
-+int register_out_node(PgQuery__Node* out, const void *obj);
-+
- static void
--_outNode(PgQuery__Node* out, const void *obj)
-+_outNode(PgQuery__Node* out, const void *obj) {
-+        if (register_out_node(out, obj))
-+               return;
-+
-+        _outNodeImpl(out, obj);
-+}
-+
-+void
-+_outNodeImpl(PgQuery__Node* out, const void *obj)
- {
- 	if (obj == NULL)
- 		return; // Keep out as NULL
---- original/vendor/protobuf-c/protobuf-c.c	2021-11-14 19:42:26.000000000 +0300
-+++ contrib/vendor/protobuf-c/protobuf-c.c	2021-11-14 21:33:02.000000000 +0300
-@@ -526,7 +526,7 @@
- 	return required_field_get_packed_size(field, member);
- }
- 
--static protobuf_c_boolean
-+protobuf_c_boolean
- field_is_zeroish(const ProtobufCFieldDescriptor *field,
- 		 const void *member)
- {
-@@ -1234,7 +1234,7 @@
-  * \return
-  *      Size of the field.
-  */
--static inline size_t
-+size_t
- sizeof_elt_in_repeated_array(ProtobufCType type)
- {
- 	switch (type) {
+--- original/src/pg_query_outfuncs_protobuf.c	2021-11-14 19:42:26.000000000 +0300 
++++ contrib/src/pg_query_outfuncs_protobuf.c	2021-11-14 21:33:02.000000000 +0300 
+@@ -1,3 +1,5 @@ 
++#include "protobuf/pg_query.pb-c.h" 
++ 
+ #include "pg_query_outfuncs.h" 
+  
+ #include "postgres.h" 
+@@ -8,7 +10,8 @@ 
+ #include "nodes/value.h" 
+ #include "utils/datum.h" 
+  
+-#include "protobuf/pg_query.pb-c.h" 
++typedef void (*out_func)(void*, void*); 
++int register_specific_node(void* out, void* node, out_func func); 
+  
+ #define OUT_TYPE(typename, typename_c) PgQuery__##typename_c* 
+  
+@@ -85,20 +88,24 @@ 
+ 	{ \ 
+ 		PgQuery__##typename *__node = palloc(sizeof(PgQuery__##typename)); \ 
+ 		pg_query__##typename_underscore##__init(__node); \ 
+-		_out##typename(__node, &node->fldname); \ 
+ 		out->outname = __node; \ 
++        if (!register_specific_node(__node, &node->fldname, (out_func)&_out##typename)) \ 
++		_out##typename(__node, &node->fldname); \ 
+ 	} 
+  
+ #define WRITE_SPECIFIC_NODE_PTR_FIELD(typename, typename_underscore, outname, outname_json, fldname) \ 
+ 	if (node->fldname != NULL) { \ 
+ 		PgQuery__##typename *__node = palloc(sizeof(PgQuery__##typename)); \ 
+ 		pg_query__##typename_underscore##__init(__node); \ 
+-		_out##typename(__node, node->fldname); \ 
+ 		out->outname = __node; \ 
++        if (!register_specific_node(__node, node->fldname, (out_func)&_out##typename)) \ 
++		_out##typename(__node, node->fldname); \ 
+ 	} 
+  
+ static void _outNode(PgQuery__Node* out, const void *obj); 
+  
++void _outNodeImpl(PgQuery__Node* out, const void *obj); 
++ 
+ static void 
+ _outList(PgQuery__List* out, const List *node) 
+ { 
+@@ -182,8 +189,18 @@ 
+ #include "pg_query_enum_defs.c" 
+ #include "pg_query_outfuncs_defs.c" 
+  
++int register_out_node(PgQuery__Node* out, const void *obj); 
++ 
+ static void 
+-_outNode(PgQuery__Node* out, const void *obj) 
++_outNode(PgQuery__Node* out, const void *obj) { 
++        if (register_out_node(out, obj)) 
++               return; 
++ 
++        _outNodeImpl(out, obj); 
++} 
++ 
++void 
++_outNodeImpl(PgQuery__Node* out, const void *obj) 
+ { 
+ 	if (obj == NULL) 
+ 		return; // Keep out as NULL 
+--- original/vendor/protobuf-c/protobuf-c.c	2021-11-14 19:42:26.000000000 +0300 
++++ contrib/vendor/protobuf-c/protobuf-c.c	2021-11-14 21:33:02.000000000 +0300 
+@@ -526,7 +526,7 @@ 
+ 	return required_field_get_packed_size(field, member); 
+ } 
+  
+-static protobuf_c_boolean 
++protobuf_c_boolean 
+ field_is_zeroish(const ProtobufCFieldDescriptor *field, 
+ 		 const void *member) 
+ { 
+@@ -1234,7 +1234,7 @@ 
+  * \return 
+  *      Size of the field. 
+  */ 
+-static inline size_t 
++size_t 
+ sizeof_elt_in_repeated_array(ProtobufCType type) 
+ { 
+ 	switch (type) { 

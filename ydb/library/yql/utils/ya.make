@@ -8,7 +8,7 @@ OWNER(
 SRCS(
     bind_in_range.cpp
     bind_in_range.h
-    cast.h
+    cast.h 
     debug_info.cpp
     debug_info.h
     future_action.cpp
@@ -32,8 +32,8 @@ SRCS(
     swap_bytes.h
     yql_panic.cpp
     yql_panic.h
-    yql_paths.cpp
-    yql_paths.h
+    yql_paths.cpp 
+    yql_paths.h 
     utf8.cpp
 )
 

@@ -42,18 +42,18 @@ protected:
 template <typename TDerived>
 class TYqlTypeYsonSaverImpl: public TYqlTypeYsonSaverBase {
     typedef TYqlTypeYsonSaverImpl<TDerived> TSelf;
-
+ 
 public:
     TYqlTypeYsonSaverImpl(TConsumer& writer)
         : TYqlTypeYsonSaverBase(writer)
     {
     }
-
+ 
     template <typename TType>
     void Save(TType* type) {
         static_cast<TDerived*>(this)->Save(type);
     }
-
+ 
 protected:
     template <typename TTaggedType>
     void SaveTaggedType(const TTaggedType& taggedType) {

@@ -64,7 +64,7 @@ const TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_
     #if defined(_tsan_enabled_)
         TGuard<TMutex> guard(SanitizerJsonPathTranslationMutex);
     #endif
-        NProtoAST::TProtoASTBuilder<NALP::JsonPathParser, NALP::JsonPathLexer> builder(path, "JsonPath", &arena);
+        NProtoAST::TProtoASTBuilder<NALP::JsonPathParser, NALP::JsonPathLexer> builder(path, "JsonPath", &arena); 
         TParseErrorsCollector collector(issues, maxParseErrors);
         rawAst = builder.BuildAST(collector);
     }

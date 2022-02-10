@@ -8,7 +8,7 @@ RecognizerSharedState<ImplTraits, StreamType>::RecognizerSharedState()
 	m_error = false;
 	m_errorRecovery = false;
 	m_failed = false;
-	m_token_present = false;
+	m_token_present = false; 
 	m_lastErrorIndex = 0;
 	m_errorCount = 0;
 	m_backtracking = false;

@@ -7,8 +7,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-using NYql::EnsureDynamicCast;
-
+using NYql::EnsureDynamicCast; 
+ 
 namespace {
 
 using namespace std::placeholders;
@@ -161,7 +161,7 @@ private:
 
         std::vector<Value*> items(ItemArgs.size(), nullptr);
         for (ui32 i = 0U; i < items.size(); ++i) {
-            EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
+            EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block)); 
         }
 
         const auto chop = SwitchItem ? items[*SwitchItem] : GetNodeValue(Chop, ctx, block);
@@ -186,7 +186,7 @@ private:
     }
 public:
     TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        EnsureDynamicCast<IWideFlowProxyCodegeneratorNode*>(Input)->SetGenerator(std::bind(&TWideChopperWrapper::DoGenGetValuesInput, this, _1, _2));
+        EnsureDynamicCast<IWideFlowProxyCodegeneratorNode*>(Input)->SetGenerator(std::bind(&TWideChopperWrapper::DoGenGetValuesInput, this, _1, _2)); 
 
         auto& context = ctx.Codegen->GetContext();
 
@@ -220,14 +220,14 @@ public:
 
             std::vector<Value*> items(ItemArgs.size(), nullptr);
             for (ui32 i = 0U; i < items.size(); ++i) {
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs[i])->CreateSetValue(ctx, block, items[i] = getfirst.second[i](ctx, block));
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs[i])->CreateSetValue(ctx, block, items[i] = getfirst.second[i](ctx, block)); 
             }
 
             for (ui32 i = 0U; i < Keys.size(); ++i) {
                 if (KeyArgs[i]->GetDependencesCount() > 0U) {
                     const auto map = KeysOnItems[i];
                     const auto key = map ? items[*map] : GetNodeValue(Keys[i], ctx, block);
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs[i])->CreateSetValue(ctx, block, key);
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs[i])->CreateSetValue(ctx, block, key); 
                 }
             }
 
@@ -249,7 +249,7 @@ public:
 
         block = part;
 
-        EnsureDynamicCast<IWideFlowProxyCodegeneratorNode*>(Input)->CreateInvalidate(ctx, block);
+        EnsureDynamicCast<IWideFlowProxyCodegeneratorNode*>(Input)->CreateInvalidate(ctx, block); 
 
         result->addIncoming(ConstantInt::get(resultType, i32(EFetchResult::Finish)), block);
 
@@ -272,7 +272,7 @@ public:
 
         std::vector<Value*> items(ItemArgs.size(), nullptr);
         for (ui32 i = 0U; i < items.size(); ++i) {
-            EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs[i])->CreateSetValue(ctx, block, items[i] = getnext.second[i](ctx, block));
+            EnsureDynamicCast<ICodegeneratorExternalNode*>(ItemArgs[i])->CreateSetValue(ctx, block, items[i] = getnext.second[i](ctx, block)); 
         }
 
         const auto chop = SwitchItem ? items[*SwitchItem] : GetNodeValue(Chop, ctx, block);
@@ -288,7 +288,7 @@ public:
             if (KeyArgs[i]->GetDependencesCount() > 0U) {
                 const auto map = KeysOnItems[i];
                 const auto key = GetNodeValue(Keys[i], ctx, block);
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs[i])->CreateSetValue(ctx, block, key);
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs[i])->CreateSetValue(ctx, block, key); 
             }
         }
 
@@ -362,9 +362,9 @@ IComputationNode* WrapWideChopper(TCallable& callable, const TComputationNodeFac
     std::generate_n(std::back_inserter(keyArgs), keysSize, [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); } );
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
-        return new TWideChopperWrapper(ctx.Mutables, wide, std::move(itemArgs), std::move(keys), std::move(keyArgs), switchResult,
-                                       EnsureDynamicCast<IComputationWideFlowProxyNode*>(input),
-                                       EnsureDynamicCast<IComputationWideFlowNode*>(output));
+        return new TWideChopperWrapper(ctx.Mutables, wide, std::move(itemArgs), std::move(keys), std::move(keyArgs), switchResult, 
+                                       EnsureDynamicCast<IComputationWideFlowProxyNode*>(input), 
+                                       EnsureDynamicCast<IComputationWideFlowNode*>(output)); 
     }
 
     THROW yexception() << "Expected wide flow.";

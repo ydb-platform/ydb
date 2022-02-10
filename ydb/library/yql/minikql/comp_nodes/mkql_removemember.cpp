@@ -24,24 +24,24 @@ public:
 
         NUdf::TUnboxedValue* itemsPtr = nullptr;
         const auto result = Cache.NewArray(ctx, Representations.size() - 1U, itemsPtr);
-        if (Representations.size() > 1) {
-            Y_VERIFY(itemsPtr);
-            if (const auto ptr = baseStruct.GetElements()) {
-                for (ui32 i = 0; i < Index; ++i) {
-                    *itemsPtr++ = ptr[i];
-                }
+        if (Representations.size() > 1) { 
+            Y_VERIFY(itemsPtr); 
+            if (const auto ptr = baseStruct.GetElements()) { 
+                for (ui32 i = 0; i < Index; ++i) { 
+                    *itemsPtr++ = ptr[i]; 
+                } 
 
-                for (ui32 i = Index + 1; i < Representations.size(); ++i) {
-                    *itemsPtr++ = ptr[i];
-                }
-            } else {
-                for (ui32 i = 0; i < Index; ++i) {
-                    *itemsPtr++ = baseStruct.GetElement(i);
-                }
+                for (ui32 i = Index + 1; i < Representations.size(); ++i) { 
+                    *itemsPtr++ = ptr[i]; 
+                } 
+            } else { 
+                for (ui32 i = 0; i < Index; ++i) { 
+                    *itemsPtr++ = baseStruct.GetElement(i); 
+                } 
 
-                for (ui32 i = Index + 1; i < Representations.size(); ++i) {
-                    *itemsPtr++ = baseStruct.GetElement(i);
-                }
+                for (ui32 i = Index + 1; i < Representations.size(); ++i) { 
+                    *itemsPtr++ = baseStruct.GetElement(i); 
+                } 
             }
         }
 

@@ -52,7 +52,7 @@ IGraphTransformer::TStatus CheckWholeProgramType(const TExprNode::TPtr& input, T
 void ClearExprTypeAnnotations(TExprNode& root);
 bool AreAllNodesTypeAnnotated(const TExprNode& root);
 void EnsureAllNodesTypeAnnotated(const TExprNode& root);
-bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation, bool& isOptional, const TDataExprType*& dataType);
+bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation, bool& isOptional, const TDataExprType*& dataType); 
 bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation);
 bool UpdateLambdaAllArgumentsTypes(TExprNode::TPtr& lambda, const std::vector<const TTypeAnnotationNode*>& argumentsAnnotations, TExprContext& ctx);
 bool UpdateLambdaArgumentsType(const TExprNode& lambda, TExprContext& ctx);
@@ -60,12 +60,12 @@ bool EnsureArgsCount(const TExprNode& node, ui32 expectedArgs, TExprContext& ctx
 bool EnsureMinArgsCount(const TExprNode& node, ui32 expectedArgs, TExprContext& ctx);
 bool EnsureMaxArgsCount(const TExprNode& node, ui32 expectedArgs, TExprContext& ctx);
 bool EnsureMinMaxArgsCount(const TExprNode& node, ui32 minArgs, ui32 maxArgs, TExprContext& ctx);
-bool EnsureCallableMinArgsCount(const TPositionHandle& pos, ui32 args, ui32 expectedArgs, TExprContext& ctx);
-bool EnsureCallableMaxArgsCount(const TPositionHandle& pos, ui32 args, ui32 expectedArgs, TExprContext& ctx);
+bool EnsureCallableMinArgsCount(const TPositionHandle& pos, ui32 args, ui32 expectedArgs, TExprContext& ctx); 
+bool EnsureCallableMaxArgsCount(const TPositionHandle& pos, ui32 args, ui32 expectedArgs, TExprContext& ctx); 
 bool EnsureAtom(const TExprNode& node, TExprContext& ctx);
 bool EnsureCallable(const TExprNode& node, TExprContext& ctx);
 bool EnsureTuple(const TExprNode& node, TExprContext& ctx);
-bool EnsureTupleOfAtoms(const TExprNode& node, TExprContext& ctx);
+bool EnsureTupleOfAtoms(const TExprNode& node, TExprContext& ctx); 
 bool EnsureLambda(const TExprNode& node, TExprContext& ctx);
 IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, ui32 argumentsCount, ui32 maxArgumentsCount = Max<ui32>(),
     bool withTypes = true);
@@ -73,21 +73,21 @@ bool EnsureTupleSize(const TExprNode& node, ui32 expectedSize, TExprContext& ctx
 bool EnsureTupleMinSize(const TExprNode& node, ui32 minSize, TExprContext& ctx);
 bool EnsureTupleMaxSize(const TExprNode& node, ui32 maxSize, TExprContext& ctx);
 bool EnsureTupleType(const TExprNode& node, TExprContext& ctx);
-bool EnsureTupleType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureTupleType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureTupleTypeSize(const TExprNode& node, ui32 expectedSize, TExprContext& ctx);
-bool EnsureTupleTypeSize(TPositionHandle position, const TTypeAnnotationNode* type, ui32 expectedSize, TExprContext& ctx);
+bool EnsureTupleTypeSize(TPositionHandle position, const TTypeAnnotationNode* type, ui32 expectedSize, TExprContext& ctx); 
 bool EnsureMultiType(const TExprNode& node, TExprContext& ctx);
 bool EnsureMultiType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureVariantType(const TExprNode& node, TExprContext& ctx);
-bool EnsureVariantType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureVariantType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureDataType(const TExprNode& node, TExprContext& ctx);
-bool EnsureDataType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureDataType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureSpecificDataType(const TExprNode& node, EDataSlot expectedDataSlot, TExprContext& ctx, bool allowOptional = false);
-bool EnsureSpecificDataType(TPositionHandle position, const TTypeAnnotationNode& type, EDataSlot expectedDataSlot, TExprContext& ctx);
+bool EnsureSpecificDataType(TPositionHandle position, const TTypeAnnotationNode& type, EDataSlot expectedDataSlot, TExprContext& ctx); 
 bool EnsureStringOrUtf8Type(const TExprNode& node, TExprContext& ctx);
 bool EnsureStringOrUtf8Type(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureStructType(const TExprNode& node, TExprContext& ctx);
-bool EnsureStructType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureStructType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureTypeWithStructType(const TExprNode& node, TExprContext& ctx);
 bool EnsureComposable(const TExprNode& node, TExprContext& ctx);
 bool EnsureComposableType(const TExprNode& node, TExprContext& ctx);
@@ -98,57 +98,57 @@ bool EnsureDataProvider(const TExprNode& node, TExprContext& ctx);
 bool EnsureSpecificDataSource(const TExprNode& node, TStringBuf expectedCategory, TExprContext& ctx);
 bool EnsureSpecificDataSink(const TExprNode& node, TStringBuf expectedCategory, TExprContext& ctx);
 bool EnsureListType(const TExprNode& node, TExprContext& ctx);
-bool EnsureListType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureListType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureListOrEmptyType(const TExprNode& node, TExprContext& ctx);
 bool EnsureListOrEmptyType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureListOfVoidType(const TExprNode& node, TExprContext& ctx);
-bool EnsureListOfVoidType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureListOfVoidType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureStreamType(const TExprNode& node, TExprContext& ctx);
-bool EnsureStreamType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureStreamType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureFlowType(const TExprNode& node, TExprContext& ctx);
-bool EnsureFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureWideFlowType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureOptionalType(const TExprNode& node, TExprContext& ctx);
-bool EnsureOptionalType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureOptionalType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureType(const TExprNode& node, TExprContext& ctx);
-IGraphTransformer::TStatus EnsureTypeRewrite(TExprNode::TPtr& node, TExprContext& ctx);
-IGraphTransformer::TStatus EnsureTypeOrAtomRewrite(TExprNode::TPtr& node, TExprContext& ctx);
+IGraphTransformer::TStatus EnsureTypeRewrite(TExprNode::TPtr& node, TExprContext& ctx); 
+IGraphTransformer::TStatus EnsureTypeOrAtomRewrite(TExprNode::TPtr& node, TExprContext& ctx); 
 bool EnsureDryType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureDryType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(const TExprNode& node, TExprContext& ctx);
-bool EnsureDictType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureDictType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureVoidType(const TExprNode& node, TExprContext& ctx);
 bool EnsureVoidLiteral(const TExprNode& node, TExprContext& ctx);
 bool EnsureCallableType(const TExprNode& node, TExprContext& ctx);
-bool EnsureCallableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureCallableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureResourceType(const TExprNode& node, TExprContext& ctx);
 bool EnsureTaggedType(const TExprNode& node, TExprContext& ctx);
 
-bool EnsureComposableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureComposableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext& ctx);
-bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureComparableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureComparableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx);
-bool EnsureEquatableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureEquatableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx);
-bool EnsureHashableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx);
+bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
+bool EnsureComparableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
+bool EnsureComparableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx); 
+bool EnsureEquatableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
+bool EnsureEquatableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx); 
+bool EnsureHashableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx); 
 bool EnsureDataOrOptionalOfData(const TExprNode& node, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx);
-bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode* type, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx);
+bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode* type, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx); 
 bool EnsurePersistable(const TExprNode& node, TExprContext& ctx);
-bool EnsurePersistableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsurePersistableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureComputable(const TExprNode& node, TExprContext& ctx);
-bool EnsureComputableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureComputableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureInspectable(const TExprNode& node, TExprContext& ctx);
-bool EnsureInspectableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureInspectableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureListOrOptionalType(const TExprNode& node, TExprContext& ctx);
 bool EnsureListOrOptionalListType(const TExprNode& node, TExprContext& ctx);
 bool EnsureStructOrOptionalStructType(const TExprNode& node, TExprContext& ctx);
-bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 bool EnsureSeqType(const TExprNode& node, TExprContext& ctx, bool* isStream = nullptr);
-bool EnsureSeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, bool* isStream = nullptr);
+bool EnsureSeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, bool* isStream = nullptr); 
 bool EnsureSeqOrOptionalType(const TExprNode& node, TExprContext& ctx);
-bool EnsureSeqOrOptionalType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureSeqOrOptionalType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 template <bool WithOptional, bool WithList = true, bool WithStream = true>
 bool EnsureNewSeqType(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationNode** itemType = nullptr);
 template <bool WithOptional, bool WithList = true, bool WithStream = true>
@@ -220,8 +220,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
     const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
 IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx);
 
-bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node);
-
+bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node); 
+ 
 bool IsDataTypeNumeric(EDataSlot dataSlot);
 bool IsDataTypeFloat(EDataSlot dataSlot);
 bool IsDataTypeIntegral(EDataSlot dataSlot);
@@ -250,14 +250,14 @@ bool AllowIntegralConversion(NNodes::TCoIntegralCtor node, bool negate, EDataSlo
     TString* atomValue = nullptr);
 void ExtractIntegralValue(const TExprNode& constructor, bool negate, bool& hasSign, bool& isSigned, ui64& value);
 bool IsDataTypeString(EDataSlot dataSlot);
-bool EnsureComparableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
-bool EnsureEquatableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
-bool EnsureHashableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
+bool EnsureComparableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx); 
+bool EnsureEquatableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx); 
+bool EnsureHashableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx); 
 TMaybe<TIssue> NormalizeName(TPosition position, TString& name);
 TString NormalizeName(const TStringBuf& name);
 
 bool HasError(const TTypeAnnotationNode* type, TExprContext& ctx);
-bool HasError(const TTypeAnnotationNode* type, TIssue& errIssue);
+bool HasError(const TTypeAnnotationNode* type, TIssue& errIssue); 
 bool IsNull(const TExprNode& node);
 bool IsNull(const TTypeAnnotationNode& type);
 bool IsEmptyList(const TExprNode& node);
@@ -265,15 +265,15 @@ bool IsEmptyList(const TTypeAnnotationNode& type);
 bool IsInstantEqual(const TTypeAnnotationNode& type);
 
 TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
-TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx); 
 
-bool IsSystemMember(const TStringBuf& memberName);
+bool IsSystemMember(const TStringBuf& memberName); 
 
-IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx,
-    bool deduplicte = true);
-IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
-    TExprContext& ctx, bool deduplicate = false);
-
+IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx, 
+    bool deduplicte = true); 
+IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output, 
+    TExprContext& ctx, bool deduplicate = false); 
+ 
 std::optional<ui32> GetFieldPosition(const TMultiExprType& tupleType, const TStringBuf& field);
 std::optional<ui32> GetFieldPosition(const TTupleExprType& tupleType, const TStringBuf& field);
 std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TStringBuf& field);

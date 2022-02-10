@@ -70,10 +70,10 @@ namespace NSQLTranslationV0 {
         TMaybe<TString> GetClusterProvider(const TString& cluster, TString& normalizedClusterName) const {
             auto provider = ClusterMapping.GetClusterProvider(cluster, normalizedClusterName);
             if (!provider) {
-                if (Settings.AssumeYdbOnClusterWithSlash && cluster.StartsWith('/')) {
+                if (Settings.AssumeYdbOnClusterWithSlash && cluster.StartsWith('/')) { 
                     normalizedClusterName = cluster;
                     return TString(NYql::KikimrProviderName);
-                }
+                } 
                 return Nothing();
             }
 
@@ -148,14 +148,14 @@ namespace NSQLTranslationV0 {
         bool PragmaYsonAutoConvert = false;
         bool PragmaYsonStrict = false;
         bool PragmaClassicDivision = true;
-        bool PragmaPullUpFlatMapOverJoin = true;
+        bool PragmaPullUpFlatMapOverJoin = true; 
         bool EnableSystemColumns = true;
         ui32 ResultRowsLimit = 0;
         ui64 ResultSizeLimit = 0;
         ui32 PragmaGroupByLimit = 1 << 5;
         ui32 PragmaGroupByCubeLimit = 5;
         THashSet<TString> Libraries;
-        NYql::TWarningPolicy WarningPolicy;
+        NYql::TWarningPolicy WarningPolicy; 
         TVector<TString> AllResults;
         TSet<TString> UsedClusters;
 

@@ -68,8 +68,8 @@ IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKi
     YQL_ENSURE(actualType->GetKind() == ETypeAnnotationKind::Struct);
     auto rowType = actualType->Cast<TStructExprType>();
 
-    auto pos = ctx.GetPosition(input->Pos());
-    auto expectedType = GetExpectedRowType(tableDesc, *rowType, pos, ctx);
+    auto pos = ctx.GetPosition(input->Pos()); 
+    auto expectedType = GetExpectedRowType(tableDesc, *rowType, pos, ctx); 
     if (!expectedType) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -88,7 +88,7 @@ IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKi
     auto convertStatus = TryConvertTo(input, *expectedType, ctx);
 
     if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
-        ctx.AddError(TIssue(pos, TStringBuilder()
+        ctx.AddError(TIssue(pos, TStringBuilder() 
             << "Row type mismatch for table: "
             << FullTableName(tableDesc.Metadata->Cluster, tableDesc.Metadata->Name)));
         return IGraphTransformer::TStatus::Error;
@@ -127,7 +127,7 @@ private:
                         return TStatus::Error;
                     }
                     if (tableDesc->Metadata->GetIndexMetadata(view.GetRef()).first == nullptr) {
-                        ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
+                        ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder() 
                             << "Required global index not found, index name: " << view.GetRef()));
                         return TStatus::Error;
                     }
@@ -201,7 +201,7 @@ private:
     }
 
     TStatus HandleRead(TExprBase node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Failed to annotate Read!, IO rewrite should handle this"));
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Failed to annotate Read!, IO rewrite should handle this")); 
         return TStatus::Error;
     }
 
@@ -302,7 +302,7 @@ private:
             return TStatus::Error;
         }
 
-        auto pos = ctx.GetPosition(node.Pos());
+        auto pos = ctx.GetPosition(node.Pos()); 
         if (auto maybeTuple = node.Input().Maybe<TExprList>()) {
             auto tuple = maybeTuple.Cast();
 
@@ -310,12 +310,12 @@ private:
             for (const auto& value : tuple) {
                 auto valueType = value.Ref().GetTypeAnn();
                 if (valueType->GetKind() != ETypeAnnotationKind::Struct) {
-                    ctx.AddError(TIssue(pos, TStringBuilder()
+                    ctx.AddError(TIssue(pos, TStringBuilder() 
                         << "Expected structs as input, but got: " << *valueType));
                     return TStatus::Error;
                 }
 
-                auto expectedType = GetExpectedRowType(*table, *valueType->Cast<TStructExprType>(), pos, ctx);
+                auto expectedType = GetExpectedRowType(*table, *valueType->Cast<TStructExprType>(), pos, ctx); 
                 if (!expectedType) {
                     return TStatus::Error;
                 }
@@ -356,7 +356,7 @@ private:
         }
 
         if (!rowType) {
-            ctx.AddError(TIssue(pos, TStringBuilder()
+            ctx.AddError(TIssue(pos, TStringBuilder() 
                 << "Expected list or stream of structs as input, but got: " << *inputType));
             return TStatus::Error;
         }
@@ -480,7 +480,7 @@ private:
             const auto& name = item->GetName();
 
             if (table->GetKeyColumnIndex(TString(name))) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
                     << "Cannot update primary key column: " << name));
                 return IGraphTransformer::TStatus::Error;
             }
@@ -629,7 +629,7 @@ private:
 
             for (const auto& indexCol : index.Columns()) {
                 if (!meta->Columns.contains(TString(indexCol.Value()))) {
-                    ctx.AddError(TIssue(ctx.GetPosition(indexCol.Pos()), TStringBuilder()
+                    ctx.AddError(TIssue(ctx.GetPosition(indexCol.Pos()), TStringBuilder() 
                         << "Index column: " << indexCol.Value() << " was not found in the index table"));
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -822,7 +822,7 @@ private:
 
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, table);
         if (tableDesc.DoesExist() && !tableDesc.Metadata->IsSameTable(*meta)) {
-            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder() 
                 << "Table name conflict: " << NCommon::FullTableName(cluster, table)
                 << " is used to reference multiple tables."));
             return TStatus::Error;
@@ -1129,7 +1129,7 @@ private:
     }
 
     virtual TStatus HandleWrite(TExprBase node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Failed to annotate Write!, IO rewrite should handle this"));
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Failed to annotate Write!, IO rewrite should handle this")); 
         return TStatus::Error;
     }
 
@@ -1141,7 +1141,7 @@ private:
             auto mode = settings.Mode.Cast().Value();
 
             if (!KikimrCommitModes().contains(mode)) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
                     << "Unsupported Kikimr commit mode: " << mode));
                 return TStatus::Error;
             }
@@ -1164,7 +1164,7 @@ private:
 
             default:
                 if (!isFlushCommit) {
-                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder() 
                         << "COMMIT not supported inside Kikimr query"));
 
                     return TStatus::Error;
@@ -1183,7 +1183,7 @@ private:
             }
 
             if (!KikimrSupportedEffects().contains(effect.CallableName())) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
                     << "Unsupported Kikimr data query effect: " << effect.CallableName()));
                 return TStatus::Error;
             }
@@ -1212,7 +1212,7 @@ private:
 
             for (const auto& column : result.Columns()) {
                 if (!structType->FindItem(column)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
                         << "Invalid column in result: " << column.Value()));
                     return TStatus::Error;
                 }
@@ -1344,7 +1344,7 @@ private:
 
             auto retKind = lambda->GetTypeAnn()->GetKind();
             if (retKind != ETypeAnnotationKind::List) {
-                ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder() << "Expected list as labmda return type, but got: " << *lambda->GetTypeAnn()));
+                ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder() << "Expected list as labmda return type, but got: " << *lambda->GetTypeAnn())); 
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -1376,7 +1376,7 @@ private:
             YQL_ENSURE(predicateType);
 
             if (predicateType->GetSlot() != EDataSlot::Bool) {
-                ctx.AddError(TIssue(ctx.GetPosition(condEffect.Pos()), "Expected bool as predicate type"));
+                ctx.AddError(TIssue(ctx.GetPosition(condEffect.Pos()), "Expected bool as predicate type")); 
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -1389,13 +1389,13 @@ private:
             return TStatus::Ok;
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() 
             << "Unknown Kql callable in type annotation: " << node.CallableName()));
 
         return TStatus::Error;
     }
 
-    bool EnsureModifyPermissions(const TString& cluster, const TString& table, TPositionHandle pos, TExprContext& ctx) {
+    bool EnsureModifyPermissions(const TString& cluster, const TString& table, TPositionHandle pos, TExprContext& ctx) { 
         bool restrictPermissions = SessionCtx->Config()._RestrictModifyPermissions.Get(cluster).GetRef();
         if (!restrictPermissions) {
             return true;
@@ -1406,7 +1406,7 @@ private:
 
         auto tablePath = Gateway->CanonizePath(table);
         if (!tablePath.StartsWith(tmpDir) && !tablePath.StartsWith(homeDir)) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() 
                 << "User " << SessionCtx->GetUserName() << " doesn't have permissions to modify table: " << table));
             return false;
         }

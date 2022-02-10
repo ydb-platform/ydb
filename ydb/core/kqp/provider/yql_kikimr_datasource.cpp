@@ -124,7 +124,7 @@ public:
                         case EKikimrQueryType::Unspecified: {
                             if (value.Metadata) {
                                 if (!value.Metadata->Indexes.empty()) {
-                                    result->AddIssue(TIssue({}, TStringBuilder()
+                                    result->AddIssue(TIssue({}, TStringBuilder() 
                                         << "Using index tables unsupported for legacy or unspecified request type"));
                                     result->SetStatus(TIssuesIds::KIKIMR_INDEX_METADATA_LOAD_FAILED);
                                     return;
@@ -181,8 +181,8 @@ public:
                     return TStatus::Error;
                 }
             } else {
-                TIssueScopeGuard issueScope(ctx.IssueManager, [input, &table, &ctx]() {
-                    return MakeIntrusive<TIssue>(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                TIssueScopeGuard issueScope(ctx.IssueManager, [input, &table, &ctx]() { 
+                    return MakeIntrusive<TIssue>(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() 
                         << "Failed to load metadata for table: "
                         << NCommon::FullTableName(table.first, table.second)));
                 });
@@ -217,7 +217,7 @@ protected:
         "scanquery"
     };
 
-    bool HandleAttr(TPositionHandle pos, const TString& cluster, const TString& name, const TMaybe<TString>& value,
+    bool HandleAttr(TPositionHandle pos, const TString& cluster, const TString& name, const TMaybe<TString>& value, 
         TExprContext& ctx) final
     {
         YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified);
@@ -251,11 +251,11 @@ protected:
         return true;
     }
 
-    bool HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias, TExprContext& ctx) final {
+    bool HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias, TExprContext& ctx) final { 
         YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified);
 
         if (SessionCtx->Query().Type != EKikimrQueryType::YqlInternal) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED, TStringBuilder()
+            ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED, TStringBuilder() 
                 << "Pragma auth not supported inside Kikimr query."));
             return false;
         }
@@ -302,7 +302,7 @@ public:
         TString defaultToken;
         if (auto credential = Types.FindCredential(TString("default_") + KikimrProviderName)) {
             if (credential->Category != KikimrProviderName) {
-                ctx.AddError(TIssue({}, TStringBuilder()
+                ctx.AddError(TIssue({}, TStringBuilder() 
                     << "Mismatch default credential category, expected: " << KikimrProviderName
                     << ", but found: " << credential->Category));
                 return false;
@@ -322,7 +322,7 @@ public:
 
             if (auto credential = Types.FindCredential(TString("default_") + cluster)) {
                 if (credential->Category != KikimrProviderName) {
-                    ctx.AddError(TIssue({}, TStringBuilder()
+                    ctx.AddError(TIssue({}, TStringBuilder() 
                         << "Mismatch credential category, for cluster " << cluster
                         << " expected: " << KikimrProviderName
                         << ", but found: " << credential->Category));
@@ -365,7 +365,7 @@ public:
         if (node.IsCallable(TCoDataSource::CallableName())) {
             if (node.Child(0)->Content() == KikimrProviderName) {
                 if (node.Child(1)->Content().empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name"));
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name")); 
                     return false;
                 }
 
@@ -374,7 +374,7 @@ public:
             }
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid Kikimr DataSource parameters."));
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid Kikimr DataSource parameters.")); 
         return false;
     }
 
@@ -616,7 +616,7 @@ IGraphTransformer::TStatus TKiSourceVisitorTransformer::DoTransform(TExprNode::T
         return HandleConfigure(TExprBase(input), ctx);
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSource) Unsupported function: " << input->Content()));
+    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSource) Unsupported function: " << input->Content())); 
     return TStatus::Error;
 }
 

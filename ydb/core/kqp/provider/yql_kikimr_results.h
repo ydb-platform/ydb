@@ -23,7 +23,7 @@ bool IsRawKikimrResult(const NKikimrMiniKQL::TResult& result);
 const TTypeAnnotationNode* ParseTypeFromKikimrProto(const NKikimrMiniKQL::TType& type, TExprContext& ctx);
 bool ExportTypeToKikimrProto(const TTypeAnnotationNode& type, NKikimrMiniKQL::TType& protoType, TExprContext& ctx);
 TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
-    TPositionHandle pos, TExprContext& ctx);
+    TPositionHandle pos, TExprContext& ctx); 
 bool CheckKqpResultType(const NKikimrMiniKQL::TResult& kqpResult, const TTypeAnnotationNode& expectedType,
     TExprContext& ctx);
 

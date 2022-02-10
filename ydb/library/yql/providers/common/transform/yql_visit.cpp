@@ -20,7 +20,7 @@ IGraphTransformer::TStatus TVisitorTransformerBase::DoTransform(TExprNode::TPtr 
         return (*handler)(input, output, ctx);
     }
     if (FailOnUnknown) {
-        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unsupported callable: " << input->Content()));
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unsupported callable: " << input->Content())); 
         return TStatus::Error;
     }
     return TStatus::Ok;

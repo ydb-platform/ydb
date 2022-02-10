@@ -49,8 +49,8 @@ xor_subexpr: eq_subexpr cond_expr?;
 
 cond_expr:
     NOT? match_op eq_subexpr (ESCAPE eq_subexpr)?
-  | NOT? IN COMPACT? in_expr
-  | (ISNULL | NOTNULL | IS NULL | (IS)? NOT NULL)
+  | NOT? IN COMPACT? in_expr 
+  | (ISNULL | NOTNULL | IS NULL | (IS)? NOT NULL) 
   | NOT? BETWEEN eq_subexpr AND eq_subexpr
   | ((EQUALS | EQUALS2 | NOT_EQUALS | NOT_EQUALS2) eq_subexpr)+ /* order of the eq subexpressions is reversed! */
 ;
@@ -74,41 +74,41 @@ unary_op: PLUS | MINUS | TILDA | NOT;
 unary_subexpr:    (id_expr    | atom_expr   ) key_expr* (DOT (bind_parameter | DIGITS | id_or_string) key_expr*)* (COLLATE id)?;
 
 in_unary_subexpr: (in_id_expr | in_atom_expr) key_expr* (DOT (bind_parameter | DIGITS | id_or_string) key_expr*)* (COLLATE id)?;
-
+ 
 atom_expr:
     literal_value
   | bind_parameter
   | window_function
   | lambda
-  | cast_expr
-  | exists_expr
-  | case_expr
-  | id_or_string NAMESPACE id_or_string
+  | cast_expr 
+  | exists_expr 
+  | case_expr 
+  | id_or_string NAMESPACE id_or_string 
   | bitcast_expr
 ;
 
-in_atom_expr:
-    literal_value
-  | bind_parameter
-  | in_window_function
-  | smart_parenthesis
-  | cast_expr
-  | case_expr
-  | LPAREN select_stmt RPAREN
+in_atom_expr: 
+    literal_value 
+  | bind_parameter 
+  | in_window_function 
+  | smart_parenthesis 
+  | cast_expr 
+  | case_expr 
+  | LPAREN select_stmt RPAREN 
   | bitcast_expr
-;
-
-cast_expr: CAST LPAREN expr AS type_name RPAREN;
-
+; 
+ 
+cast_expr: CAST LPAREN expr AS type_name RPAREN; 
+ 
 bitcast_expr: BITCAST LPAREN expr AS type_name RPAREN;
 
-exists_expr: EXISTS LPAREN select_stmt RPAREN;
-
-case_expr: CASE expr? when_expr+ (ELSE expr)? END;
-
+exists_expr: EXISTS LPAREN select_stmt RPAREN; 
+ 
+case_expr: CASE expr? when_expr+ (ELSE expr)? END; 
+ 
 lambda: smart_parenthesis (ARROW LBRACE_CURLY lambda_body RBRACE_CURLY)?;
 
-in_expr: in_unary_subexpr;
+in_expr: in_unary_subexpr; 
 
 // struct, tuple or named list
 smart_parenthesis: LPAREN named_expr_list? COMMA? RPAREN;
@@ -134,8 +134,8 @@ named_column_list: named_column (COMMA named_column)*;
 
 call_expr: ((id_or_string NAMESPACE id_or_string) | id_expr | bind_parameter) LPAREN (opt_set_quantifier named_expr_list COMMA? | ASTERISK)? RPAREN;
 
-in_call_expr: ((id_or_string NAMESPACE id_or_string) | in_id_expr | bind_parameter) LPAREN (opt_set_quantifier named_expr_list COMMA? | ASTERISK)? RPAREN;
-
+in_call_expr: ((id_or_string NAMESPACE id_or_string) | in_id_expr | bind_parameter) LPAREN (opt_set_quantifier named_expr_list COMMA? | ASTERISK)? RPAREN; 
+ 
 key_expr: LBRACE_CURLY expr RBRACE_CURLY;
 
 when_expr: WHEN expr THEN expr;
@@ -345,8 +345,8 @@ set_target_list: LPAREN set_target (COMMA set_target)* RPAREN;
 // differ from 2003 for resolve conflict
 window_function: call_expr (null_treatment? OVER window_name_or_specification)?;
 
-in_window_function: in_call_expr (null_treatment? OVER window_name_or_specification)?;
-
+in_window_function: in_call_expr (null_treatment? OVER window_name_or_specification)?; 
+ 
 null_treatment: RESPECT NULLS | IGNORE NULLS;
 
 window_name_or_specification: window_name | in_line_window_specification;
@@ -412,8 +412,8 @@ rollback_stmt: ROLLBACK;
 id_or_string: IDENTIFIER | STRING | keyword;
 id: IDENTIFIER | keyword;
 id_schema: IDENTIFIER | keyword_restricted;
-id_expr: IDENTIFIER | keyword_compat | keyword_alter_uncompat | keyword_in_uncompat;
-in_id_expr: IDENTIFIER | keyword_compat | keyword_alter_uncompat;
+id_expr: IDENTIFIER | keyword_compat | keyword_alter_uncompat | keyword_in_uncompat; 
+in_id_expr: IDENTIFIER | keyword_compat | keyword_alter_uncompat; 
 id_table: IDENTIFIER | keyword_restricted;
 id_table_or_at: AT? id_table;
 id_or_at: AT? id;
@@ -421,7 +421,7 @@ id_or_at: AT? id;
 opt_id_prefix: (id_or_string DOT)?;
 
 keyword: keyword_restricted | keyword_alter_uncompat | keyword_table_uncompat;
-keyword_restricted: keyword_compat | keyword_expr_uncompat | keyword_select_uncompat | keyword_in_uncompat;
+keyword_restricted: keyword_compat | keyword_expr_uncompat | keyword_select_uncompat | keyword_in_uncompat; 
 
 keyword_expr_uncompat:
     BITCAST
@@ -463,10 +463,10 @@ keyword_alter_uncompat:
     COLUMN
 ;
 
-keyword_in_uncompat:
-    COMPACT
-;
-
+keyword_in_uncompat: 
+    COMPACT 
+; 
+ 
 keyword_compat: (
     ABORT
   | ACTION
@@ -723,7 +723,7 @@ COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
 COLUMNS: C O L U M N S;
 COMMIT: C O M M I T;
-COMPACT: C O M P A C T;
+COMPACT: C O M P A C T; 
 CONFLICT: C O N F L I C T;
 CONSTRAINT: C O N S T R A I N T;
 CREATE: C R E A T E;
@@ -879,13 +879,13 @@ XOR: X O R;
 TRUE: T R U E;
 FALSE: F A L S E;
 
-fragment STRING_CORE_SINGLE: ( ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .) )*;
-fragment STRING_CORE_DOUBLE: ( ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .) )*;
+fragment STRING_CORE_SINGLE: ( ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .) )*; 
+fragment STRING_CORE_DOUBLE: ( ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .) )*; 
 fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE QUOTE_SINGLE);
 fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE QUOTE_DOUBLE);
-fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?;
+fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?; 
 
-STRING: (STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE);
+STRING: (STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE); 
 
 fragment ID_START: ('a'..'z' | 'A'..'Z' | UNDERSCORE);
 fragment ID_CORE: (ID_START | DIGIT | DOLLAR);
@@ -910,9 +910,9 @@ fragment BINDIGITS: '0' B ('0' | '1')+;
 fragment DECDIGITS: DIGIT+;
 DIGITS: DECDIGITS | HEXDIGITS | OCTDIGITS | BINDIGITS;
 
-INTEGER: DIGITS (U? (L | S | T)?);
-LEGACY_TINY_INTEGER: DIGITS (U? B?);
-integer: DIGITS | INTEGER | LEGACY_TINY_INTEGER;
+INTEGER: DIGITS (U? (L | S | T)?); 
+LEGACY_TINY_INTEGER: DIGITS (U? B?); 
+integer: DIGITS | INTEGER | LEGACY_TINY_INTEGER; 
 
 fragment FLOAT_EXP : E (PLUS | MINUS)? DECDIGITS ;
 REAL:
@@ -925,7 +925,7 @@ real: REAL;
 
 BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
 
-fragment MULTILINE_COMMENT: '/*' ( options {greedy=false;} : . )* '*/';
+fragment MULTILINE_COMMENT: '/*' ( options {greedy=false;} : . )* '*/'; 
 fragment LINE_COMMENT: '--' ~('\n'|'\r')* ('\n' | '\r' | EOF);
-WS: (' '|'\r'|'\t'|'\u000C'|'\n') {$channel=HIDDEN;};
-COMMENT: (MULTILINE_COMMENT|LINE_COMMENT) {$channel=HIDDEN;};
+WS: (' '|'\r'|'\t'|'\u000C'|'\n') {$channel=HIDDEN;}; 
+COMMENT: (MULTILINE_COMMENT|LINE_COMMENT) {$channel=HIDDEN;}; 

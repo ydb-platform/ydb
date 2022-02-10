@@ -127,16 +127,16 @@ TExprBase DqEnforceCompactPartition(TExprBase node, TExprList frames, TExprConte
 }
 
 TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, bool enforceCompact) {
-    if (node.Maybe<TCoCalcOverWindowBase>() || node.Maybe<TCoCalcOverWindowGroup>()) {
+    if (node.Maybe<TCoCalcOverWindowBase>() || node.Maybe<TCoCalcOverWindowGroup>()) { 
         if (enforceCompact) {
-            auto calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);
-            for (auto& c : calcs) {
-                TCoCalcOverWindowTuple win(c);
+            auto calcs = ExtractCalcsOverWindow(node.Ptr(), ctx); 
+            for (auto& c : calcs) { 
+                TCoCalcOverWindowTuple win(c); 
                 node = DqEnforceCompactPartition(node, win.Frames(), ctx);
             }
         }
-
-        return TExprBase(ExpandCalcOverWindow(node.Ptr(), ctx));
+ 
+        return TExprBase(ExpandCalcOverWindow(node.Ptr(), ctx)); 
     } else {
         return node;
     }

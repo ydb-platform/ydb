@@ -5,7 +5,7 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include <library/cpp/malloc/api/malloc.h>
-
+ 
 #include <util/generic/hash.h>
 #include <util/generic/xrange.h>
 #include <util/generic/yexception.h>
@@ -147,10 +147,10 @@ void KikimrBacktraceFormatImpl(IOutputStream* out, void* const* stack, size_t st
 
 void PrintBacktraceToStderr(int signum)
 {
-    if (!NMalloc::IsAllocatorCorrupted) {
-        /* we want memory allocation for backtrace printing */
-        KikimrBacktraceFormatImpl(&Cerr);
-    }
+    if (!NMalloc::IsAllocatorCorrupted) { 
+        /* we want memory allocation for backtrace printing */ 
+        KikimrBacktraceFormatImpl(&Cerr); 
+    } 
     /* Now reraise the signal. We reactivate the signal’s default handling,
        which is to terminate the process. We could just call exit or abort,
        but reraising the signal sets the return status from the process

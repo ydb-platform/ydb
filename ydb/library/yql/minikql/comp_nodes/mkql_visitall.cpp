@@ -46,7 +46,7 @@ public:
             block = var;
 
             const auto codegenArg = dynamic_cast<ICodegeneratorExternalNode*>(Args[i]);
-            MKQL_ENSURE(codegenArg, "Arg must be codegenerator node.");
+            MKQL_ENSURE(codegenArg, "Arg must be codegenerator node."); 
             codegenArg->CreateSetValue(ctx, block, unpack.second);
             const auto item = GetNodeValue(NewNodes[i], ctx, block);
 
@@ -121,7 +121,7 @@ public:
                 block = var;
 
                 const auto codegenArg = dynamic_cast<ICodegeneratorExternalNode*>(Args[i]);
-                MKQL_ENSURE(codegenArg, "Arg must be codegenerator node.");
+                MKQL_ENSURE(codegenArg, "Arg must be codegenerator node."); 
                 codegenArg->CreateSetValue(ctx, block, unpack.second);
                 BranchInst::Create(work, block);
             }
@@ -216,7 +216,7 @@ public:
                 block = var;
 
                 const auto codegenArg = dynamic_cast<ICodegeneratorExternalNode*>(Args[i]);
-                MKQL_ENSURE(codegenArg, "Arg must be codegenerator node.");
+                MKQL_ENSURE(codegenArg, "Arg must be codegenerator node."); 
                 codegenArg->CreateSetValue(ctx, block, unpack.second);
                 BranchInst::Create(work, block);
             }

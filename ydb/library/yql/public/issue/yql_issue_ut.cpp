@@ -1,5 +1,5 @@
-#include "yql_issue.h"
-
+#include "yql_issue.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -9,7 +9,7 @@
 #include <google/protobuf/descriptor.h>
 
 using namespace google::protobuf;
-using namespace NYql;
+using namespace NYql; 
 
 void ensureMessageTypesSame(const Descriptor* a, const Descriptor* b, THashSet<TString>* visitedTypes);
 void ensureFieldDescriptorsSame(const FieldDescriptor* a, const FieldDescriptor* b, THashSet<TString>* visitedTypes) {
@@ -75,40 +75,40 @@ Y_UNIT_TEST_SUITE(IssueProtoTest) {
         UNIT_ASSERT_EXCEPTION(IssueFromBinaryMessage("qqq"), yexception);
     }
 }
-
-
-Y_UNIT_TEST_SUITE(TextWalkerTest) {
-    Y_UNIT_TEST(BasicTest) {
-        TPosition pos;
-        pos.Row = 1;
-
-        TTextWalker walker(pos);
+ 
+ 
+Y_UNIT_TEST_SUITE(TextWalkerTest) { 
+    Y_UNIT_TEST(BasicTest) { 
+        TPosition pos; 
+        pos.Row = 1; 
+ 
+        TTextWalker walker(pos); 
         walker.Advance(TStringBuf("a\r\taa"));
-
-        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(5, 1));
+ 
+        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(5, 1)); 
         walker.Advance(TStringBuf("\na"));
-        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(1, 2));
-    }
-
-    Y_UNIT_TEST(CrLfTest) {
-        TPosition pos;
-        pos.Row = 1;
-
-        TTextWalker walker(pos);
+        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(1, 2)); 
+    } 
+ 
+    Y_UNIT_TEST(CrLfTest) { 
+        TPosition pos; 
+        pos.Row = 1; 
+ 
+        TTextWalker walker(pos); 
         walker.Advance(TStringBuf("a\raa\r"));
-        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 1));
-        walker.Advance('\n');
-        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 1));
+        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 1)); 
+        walker.Advance('\n'); 
+        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 1)); 
         walker.Advance(TStringBuf("\r\r\ra"));
-        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 2));
-        walker.Advance('\r');
-        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 2));
-        walker.Advance('\n');
-        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 2));
-        walker.Advance('a');
-        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(1, 3));
-    }
-}
+        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 2)); 
+        walker.Advance('\r'); 
+        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 2)); 
+        walker.Advance('\n'); 
+        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(4, 2)); 
+        walker.Advance('a'); 
+        UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(1, 3)); 
+    } 
+} 
 
 Y_UNIT_TEST_SUITE(ToOneLineStringTest) {
     Y_UNIT_TEST(OneMessageTest) {

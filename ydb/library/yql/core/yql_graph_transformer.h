@@ -56,7 +56,7 @@ public:
             , Padding(0)
         {}
 
-        [[nodiscard]]
+        [[nodiscard]] 
         TStatus Combine(TStatus other) const {
             const bool hasRestart = HasRestart || other.HasRestart;
             return TStatus((TStatus::ELevel)Max(Level, other.Level), hasRestart);
@@ -194,32 +194,32 @@ struct TTransformStage {
     TString IssueMessage;
 
     TTransformStage(const TAutoPtr<IGraphTransformer>& transformer, const TString& name, EYqlIssueCode issueCode, const TString& issueMessage = {})
-        : Name(name)
+        : Name(name) 
         , IssueCode(issueCode)
         , IssueMessage(issueMessage)
-        , RawTransformer(transformer.Get())
-        , Transformer(transformer)
+        , RawTransformer(transformer.Get()) 
+        , Transformer(transformer) 
     {}
-
-    TTransformStage(IGraphTransformer& transformer, const TString& name, EYqlIssueCode issueCode, const TString& issueMessage = {})
-        : Name(name)
-        , IssueCode(issueCode)
-        , IssueMessage(issueMessage)
-        , RawTransformer(&transformer)
-    {}
-
-    IGraphTransformer& GetTransformer() const
-    {
-        return *RawTransformer;
-    }
-private:
-    IGraphTransformer* const RawTransformer;
-    const TAutoPtr<IGraphTransformer> Transformer;
+ 
+    TTransformStage(IGraphTransformer& transformer, const TString& name, EYqlIssueCode issueCode, const TString& issueMessage = {}) 
+        : Name(name) 
+        , IssueCode(issueCode) 
+        , IssueMessage(issueMessage) 
+        , RawTransformer(&transformer) 
+    {} 
+ 
+    IGraphTransformer& GetTransformer() const 
+    { 
+        return *RawTransformer; 
+    } 
+private: 
+    IGraphTransformer* const RawTransformer; 
+    const TAutoPtr<IGraphTransformer> Transformer; 
 };
 
 TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes);
-TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformerWithNoArgChecks(const TVector<TTransformStage>& stages, bool useIssueScopes);
-
+TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformerWithNoArgChecks(const TVector<TTransformStage>& stages, bool useIssueScopes); 
+ 
 TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer(
     const std::function<bool(const TExprNode::TPtr& input, TExprContext& ctx)>& condition,
     const TTransformStage& left,
@@ -333,7 +333,7 @@ WrapFutureCallback(const TFuture& future, const TCallback& callback, const TStri
 
                     TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
                         return MakeIntrusive<TIssue>(
-                            ctx.GetPosition(input->Pos()),
+                            ctx.GetPosition(input->Pos()), 
                             message.empty()
                                 ? TStringBuilder() << "Execution of node: " << input->Content()
                                 : message);
@@ -341,7 +341,7 @@ WrapFutureCallback(const TFuture& future, const TCallback& callback, const TStri
                     res.ReportIssues(ctx.IssueManager);
 
                     if (!res.Success()) {
-                        input->SetState(TExprNode::EState::Error);
+                        input->SetState(TExprNode::EState::Error); 
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }
                     else {
@@ -355,7 +355,7 @@ template <typename TFuture, typename TResultExtractor>
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture>
 WrapFuture(const TFuture& future, const TResultExtractor& extractor, const TString& message = "") {
     return WrapFutureCallback(future, [extractor](const NThreading::TFutureType<TFuture>& res, const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
-        input->SetState(TExprNode::EState::ExecutionComplete);
+        input->SetState(TExprNode::EState::ExecutionComplete); 
         input->SetResult(extractor(res, input, ctx));
         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok);
     }, message);
@@ -366,7 +366,7 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture>
 WrapModifyFuture(const TFuture& future, const TResultExtractor& extractor, const TString& message = "") {
     return WrapFutureCallback(future, [extractor](const NThreading::TFutureType<TFuture>& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         TExprNode::TPtr resultNode = extractor(res, input, output, ctx);
-        input->SetState(TExprNode::EState::ExecutionComplete);
+        input->SetState(TExprNode::EState::ExecutionComplete); 
         output->SetResult(std::move(resultNode));
         if (input != output) {
             return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);

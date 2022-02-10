@@ -229,7 +229,7 @@ void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& w
 }
 
 TExprNode::TPtr MakeAtomForDataType(EDataSlot slot, const NKikimrMiniKQL::TValue& value,
-    TPositionHandle pos, TExprContext& ctx)
+    TPositionHandle pos, TExprContext& ctx) 
 {
     if (slot == EDataSlot::Bool) {
         return ctx.NewAtom(pos, ToString(value.GetBool()));
@@ -625,9 +625,9 @@ bool ExportTypeToKikimrProto(const TTypeAnnotationNode& type, NKikimrMiniKQL::TT
 }
 
 TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
-    TPositionHandle pos, TExprContext& ctx)
+    TPositionHandle pos, TExprContext& ctx) 
 {
-    auto position = ctx.GetPosition(pos);
+    auto position = ctx.GetPosition(pos); 
     switch (type.GetKind()) {
         case NKikimrMiniKQL::ETypeKind::Void: {
             return ctx.NewCallable(pos, "Void", {});
@@ -644,7 +644,7 @@ TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const N
 
             auto valueAtom = MakeAtomForDataType(dataTypeNode->GetSlot(), value, pos, ctx);
             if (!valueAtom) {
-                ctx.AddError(TIssue(position, TStringBuilder() << "Unsupported data type: "
+                ctx.AddError(TIssue(position, TStringBuilder() << "Unsupported data type: " 
                     << dataTypeNode->GetName()));
                 return nullptr;
             }
@@ -673,7 +673,7 @@ TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const N
         case NKikimrMiniKQL::ETypeKind::Tuple: {
             const auto& tupleType = type.GetTuple();
             if (tupleType.ElementSize() != value.TupleSize()) {
-                ctx.AddError(TIssue(position, TStringBuilder() << "Bad tuple value, size mismatch"));
+                ctx.AddError(TIssue(position, TStringBuilder() << "Bad tuple value, size mismatch")); 
                 return nullptr;
             }
 
@@ -717,7 +717,7 @@ TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const N
         case NKikimrMiniKQL::ETypeKind::Struct: {
             const auto& structType = type.GetStruct();
             if (structType.MemberSize() != value.StructSize()) {
-                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Bad struct value, size mismatch"));
+                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Bad struct value, size mismatch")); 
                 return nullptr;
             }
 
@@ -768,7 +768,7 @@ TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const N
         }
 
         default: {
-            ctx.AddError(TIssue(position, TStringBuilder() << "Unexpected type for protobuf value: " << type));
+            ctx.AddError(TIssue(position, TStringBuilder() << "Unexpected type for protobuf value: " << type)); 
             return nullptr;
         }
     }

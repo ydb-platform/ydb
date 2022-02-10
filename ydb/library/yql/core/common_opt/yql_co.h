@@ -17,20 +17,20 @@ struct TOptimizeContext {
         const auto it = ParentsMap->find(&node);
         YQL_ENSURE(it != ParentsMap->cend());
 
-        auto& parents = it->second;
-        YQL_ENSURE(!parents.empty());
-        if (parents.size() > 1) {
+        auto& parents = it->second; 
+        YQL_ENSURE(!parents.empty()); 
+        if (parents.size() > 1) { 
             return nullptr;
-        }
-
-        size_t usageCount = 0;
+        } 
+ 
+        size_t usageCount = 0; 
         for (const auto& child : (*parents.cbegin())->ChildrenList()) {
-            if (child.Get() == &node && ++usageCount > 1) {
+            if (child.Get() == &node && ++usageCount > 1) { 
                 return nullptr;
-            }
-        }
-
-        YQL_ENSURE(usageCount == 1);
+            } 
+        } 
+ 
+        YQL_ENSURE(usageCount == 1); 
         return *parents.cbegin();
     }
 
@@ -38,15 +38,15 @@ struct TOptimizeContext {
         return bool(GetParentIfSingle(node));
     }
 
-    bool IsSingleUsage(const NNodes::TExprBase& node) const {
-        return IsSingleUsage(node.Ref());
+    bool IsSingleUsage(const NNodes::TExprBase& node) const { 
+        return IsSingleUsage(node.Ref()); 
     }
 
-    bool HasParent(const TExprNode& node) const {
-        YQL_ENSURE(ParentsMap);
-        return ParentsMap->contains(&node);
-    }
-
+    bool HasParent(const TExprNode& node) const { 
+        YQL_ENSURE(ParentsMap); 
+        return ParentsMap->contains(&node); 
+    } 
+ 
     bool IsPersistentNode(const TExprNode& node) const {
         if (Types) {
             for (auto& source: Types->DataSources) {
@@ -88,16 +88,16 @@ struct TCoCallableRules {
         FLOW_STEPS
     };
 
-    // rules that don't make a flow fork - e.g. False || x -> x
+    // rules that don't make a flow fork - e.g. False || x -> x 
     TCallableOptimizerMap SimpleCallables[SIMPLE_STEPS];
-    // rules that make a flow fork - Join pushdown if Join has multiple usage
+    // rules that make a flow fork - Join pushdown if Join has multiple usage 
     TCallableOptimizerMap FlowCallables[FLOW_STEPS];
 
     TFinalizingOptimizerMap Finalizers;
 
-    // rules to be applied before execution
-    TCallableOptimizerMap FinalCallables;
-
+    // rules to be applied before execution 
+    TCallableOptimizerMap FinalCallables; 
+ 
     TCoCallableRules();
     static const TCoCallableRules& Instance();
 };
@@ -107,6 +107,6 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map);
 void RegisterCoFlowCallables1(TCallableOptimizerMap& map);
 void RegisterCoFlowCallables2(TCallableOptimizerMap& map);
 void RegisterCoFinalizers(TFinalizingOptimizerMap& map);
-void RegisterCoFinalCallables(TCallableOptimizerMap& map);
+void RegisterCoFinalCallables(TCallableOptimizerMap& map); 
 
 }

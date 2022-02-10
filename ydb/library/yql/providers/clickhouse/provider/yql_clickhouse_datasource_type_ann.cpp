@@ -95,11 +95,11 @@ public:
         }
 
         auto itemType = found->ItemType;
-        auto columnOrder = found->ColumnOrder;
+        auto columnOrder = found->ColumnOrder; 
         if (columnsSet) {
-            TVector<const TItemExprType*> items = itemType->GetItems();
-            EraseIf(items, [&](const TItemExprType* item) { return !columnsSet->contains(item->GetName()); });
-            EraseIf(columnOrder, [&](const TString& col) { return !columnsSet->contains(col); });
+            TVector<const TItemExprType*> items = itemType->GetItems(); 
+            EraseIf(items, [&](const TItemExprType* item) { return !columnsSet->contains(item->GetName()); }); 
+            EraseIf(columnOrder, [&](const TString& col) { return !columnsSet->contains(col); }); 
             itemType = ctx.MakeType<TStructExprType>(items);
         }
 
@@ -108,7 +108,7 @@ public:
             ctx.MakeType<TListExprType>(itemType)
         }));
 
-        return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
+        return State_->Types->SetColumnOrder(*input, columnOrder, ctx); 
     }
 
 private:

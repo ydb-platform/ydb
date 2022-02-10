@@ -255,7 +255,7 @@ protected:
     THolder<TPipedInput> Stdout;
     THolder<TPipedInput> Stderr;
 
-    int Pid = -1;
+    int Pid = -1; 
 
     virtual void Exec() {
         char ** args;
@@ -1465,7 +1465,7 @@ private:
     NKikimr::NMiniKQL::THolderFactory HolderFactory;
 
     std::atomic<bool> Running;
-    int Code = -1;
+    int Code = -1; 
     TString Stderr;
     THolder<TChildProcess> Command;
     THolder<TThread> StderrReader;

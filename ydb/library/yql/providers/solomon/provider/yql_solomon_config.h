@@ -8,7 +8,7 @@
 namespace NYql {
 
 struct TSolomonSettings {
-    using TConstPtr = std::shared_ptr<const TSolomonSettings>;
+    using TConstPtr = std::shared_ptr<const TSolomonSettings>; 
 };
 
 struct TSolomonConfiguration

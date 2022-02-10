@@ -42,45 +42,45 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
         }
     };
 
-    struct TMappingOrderedStructAdaptor {
-        TVector<std::pair<TStringBuf, const TTypeAnnotationNode*>> Members;
-
-        TMappingOrderedStructAdaptor(const TStructMemberMapper& mapper, const TMaybe<TVector<TString>>& columns, const TStructExprType* type)
-        {
-            TMap<TStringBuf, const TTypeAnnotationNode*> members;
-            for (auto& item: type->GetItems()) {
-                TMaybe<TStringBuf> name = mapper ? mapper(item->GetName()) : item->GetName();
-                if (!name) {
-                    continue;
-                }
-                members[*name] = item->GetItemType();
-            }
-
-            if (columns) {
-                for (auto& column : *columns) {
-                    auto it = members.find(column);
-                    if (it != members.end()) {
-                        Members.push_back(*it);
-                    }
-                }
-            } else {
-                Members.insert(Members.end(), members.begin(), members.end());
-            }
-        }
-
-        ui32 GetMembersCount() const {
-            return Members.size();
-        }
-
-        const TStringBuf& GetMemberName(ui32 idx) const {
-            return Members[idx].first;
-        }
-
-        const TTypeAnnotationNode* GetMemberType(ui32 idx) const {
-            return Members[idx].second;
-        }
-    };
-
+    struct TMappingOrderedStructAdaptor { 
+        TVector<std::pair<TStringBuf, const TTypeAnnotationNode*>> Members; 
+ 
+        TMappingOrderedStructAdaptor(const TStructMemberMapper& mapper, const TMaybe<TVector<TString>>& columns, const TStructExprType* type) 
+        { 
+            TMap<TStringBuf, const TTypeAnnotationNode*> members; 
+            for (auto& item: type->GetItems()) { 
+                TMaybe<TStringBuf> name = mapper ? mapper(item->GetName()) : item->GetName(); 
+                if (!name) { 
+                    continue; 
+                } 
+                members[*name] = item->GetItemType(); 
+            } 
+ 
+            if (columns) { 
+                for (auto& column : *columns) { 
+                    auto it = members.find(column); 
+                    if (it != members.end()) { 
+                        Members.push_back(*it); 
+                    } 
+                } 
+            } else { 
+                Members.insert(Members.end(), members.begin(), members.end()); 
+            } 
+        } 
+ 
+        ui32 GetMembersCount() const { 
+            return Members.size(); 
+        } 
+ 
+        const TStringBuf& GetMemberName(ui32 idx) const { 
+            return Members[idx].first; 
+        } 
+ 
+        const TTypeAnnotationNode* GetMemberType(ui32 idx) const { 
+            return Members[idx].second; 
+        } 
+    }; 
+ 
     struct TTupleAdaptor {
         const TTupleExprType* Type;
 
@@ -224,9 +224,9 @@ public:
         }
     }
 
-    void SaveStructType(const TStructExprType* type, const TMaybe<TVector<TString>>& columns, const TStructMemberMapper& mapper) {
-        if (mapper || columns) {
-            TBase::SaveStructType(TMappingOrderedStructAdaptor(mapper, columns, type));
+    void SaveStructType(const TStructExprType* type, const TMaybe<TVector<TString>>& columns, const TStructMemberMapper& mapper) { 
+        if (mapper || columns) { 
+            TBase::SaveStructType(TMappingOrderedStructAdaptor(mapper, columns, type)); 
         } else {
             Save(type);
         }
@@ -235,9 +235,9 @@ public:
 
 void SaveStructTypeToYson(NYson::TYsonConsumerBase& writer, const TStructExprType* type, const TMaybe<TVector<TString>>& columns, const TStructMemberMapper& mapper) {
     TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer);
-    saver.SaveStructType(type, columns, mapper);
-}
-
+    saver.SaveStructType(type, columns, mapper); 
+} 
+ 
 void WriteTypeToYson(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type) {
     TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer);
     saver.Save(type);
@@ -291,7 +291,7 @@ struct TExprTypeLoader {
     }
     TMaybe<TType> LoadDataTypeParams(const TString& dataType, const TString& paramOne, const TString& paramTwo, ui32 /*level*/) {
         auto ret = Ctx.MakeType<TDataExprParamsType>(NYql::NUdf::GetDataSlot(dataType), paramOne, paramTwo);
-        YQL_ENSURE(ret->Validate(TPosition(), Ctx));
+        YQL_ENSURE(ret->Validate(TPosition(), Ctx)); 
         return ret;
     }
     TMaybe<TType> LoadResourceType(const TString& tag, ui32 /*level*/) {
@@ -311,7 +311,7 @@ struct TExprTypeLoader {
             items.push_back(Ctx.MakeType<TItemExprType>(member.first, member.second));
         }
         auto ret = Ctx.MakeType<TStructExprType>(items);
-        YQL_ENSURE(ret->Validate(TPosition(), Ctx));
+        YQL_ENSURE(ret->Validate(TPosition(), Ctx)); 
         return ret;
     }
     TMaybe<TType> LoadListType(TType itemType, ui32 /*level*/) {
@@ -325,12 +325,12 @@ struct TExprTypeLoader {
     }
     TMaybe<TType> LoadTupleType(const TVector<TType>& elements, ui32 /*level*/) {
         auto ret = Ctx.MakeType<TTupleExprType>(elements);
-        YQL_ENSURE(ret->Validate(TPosition(), Ctx));
+        YQL_ENSURE(ret->Validate(TPosition(), Ctx)); 
         return ret;
     }
     TMaybe<TType> LoadDictType(TType keyType, TType valType, ui32 /*level*/) {
         auto ret = Ctx.MakeType<TDictExprType>(keyType, valType);
-        YQL_ENSURE(ret->Validate(TPosition(), Ctx));
+        YQL_ENSURE(ret->Validate(TPosition(), Ctx)); 
         return ret;
     }
     TMaybe<TType> LoadCallableType(TType returnType, const TVector<TType>& argTypes, const TVector<TString>& argNames,
@@ -344,12 +344,12 @@ struct TExprTypeLoader {
             args.back().Flags = argFlags[i];
         }
         auto ret = Ctx.MakeType<TCallableExprType>(returnType, args, optionalCount, Ctx.AppendString(payload));
-        YQL_ENSURE(ret->Validate(TPosition(), Ctx));
+        YQL_ENSURE(ret->Validate(TPosition(), Ctx)); 
         return ret;
     }
     TMaybe<TType> LoadVariantType(TType underlyingType, ui32 /*level*/) {
         auto ret = Ctx.MakeType<TVariantExprType>(underlyingType);
-        YQL_ENSURE(ret->Validate(TPosition(), Ctx));
+        YQL_ENSURE(ret->Validate(TPosition(), Ctx)); 
         return ret;
     }
     void Error(const TString& info) {
@@ -368,49 +368,49 @@ const TTypeAnnotationNode* ParseTypeFromYson(const TStringBuf yson, TExprContext
     return ParseTypeFromYson(node, ctx, pos);
 }
 
-const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const TStringBuf yson, TVector<TString>& topLevelColumns, TExprContext& ctx, const TPosition& pos) {
-    NYT::TNode node;
-    TStringStream err;
-    if (!ParseYson(node, yson, err)) {
-        ctx.AddError(TIssue(pos, err.Str()));
-        return nullptr;
-    }
-
-    return ParseOrderAwareTypeFromYson(node, topLevelColumns, ctx, pos);
-}
-
+const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const TStringBuf yson, TVector<TString>& topLevelColumns, TExprContext& ctx, const TPosition& pos) { 
+    NYT::TNode node; 
+    TStringStream err; 
+    if (!ParseYson(node, yson, err)) { 
+        ctx.AddError(TIssue(pos, err.Str())); 
+        return nullptr; 
+    } 
+ 
+    return ParseOrderAwareTypeFromYson(node, topLevelColumns, ctx, pos); 
+} 
+ 
 const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContext& ctx, const TPosition& pos) {
     TExprTypeLoader loader(ctx, pos);
     return DoLoadTypeFromYson(loader, node, 0).GetOrElse(nullptr);
 }
 
-struct TOrderAwareExprTypeLoader: public TExprTypeLoader {
-    typedef const TTypeAnnotationNode* TType;
-    TVector<TString>& TopLevelColumns;
-
-    TOrderAwareExprTypeLoader(TExprContext& ctx, const TPosition& pos, TVector<TString>& topLevelColumns)
-        : TExprTypeLoader(ctx, pos)
-        , TopLevelColumns(topLevelColumns)
-    {
-        TopLevelColumns.clear();
-    }
-
-    TMaybe<TType> LoadStructType(const TVector<std::pair<TString, TType>>& members, ui32 level) {
-        if (level == 0) {
-            YQL_ENSURE(TopLevelColumns.empty());
-            for (auto& [column, type] : members) {
-                TopLevelColumns.push_back(column);
-            }
-        }
-        return TExprTypeLoader::LoadStructType(members, level);
-    }
-};
-
-const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TVector<TString>& topLevelColumns, TExprContext& ctx, const TPosition& pos) {
-    TOrderAwareExprTypeLoader loader(ctx, pos, topLevelColumns);
-    return DoLoadTypeFromYson(loader, node, 0).GetOrElse(nullptr);
-}
-
+struct TOrderAwareExprTypeLoader: public TExprTypeLoader { 
+    typedef const TTypeAnnotationNode* TType; 
+    TVector<TString>& TopLevelColumns; 
+ 
+    TOrderAwareExprTypeLoader(TExprContext& ctx, const TPosition& pos, TVector<TString>& topLevelColumns) 
+        : TExprTypeLoader(ctx, pos) 
+        , TopLevelColumns(topLevelColumns) 
+    { 
+        TopLevelColumns.clear(); 
+    } 
+ 
+    TMaybe<TType> LoadStructType(const TVector<std::pair<TString, TType>>& members, ui32 level) { 
+        if (level == 0) { 
+            YQL_ENSURE(TopLevelColumns.empty()); 
+            for (auto& [column, type] : members) { 
+                TopLevelColumns.push_back(column); 
+            } 
+        } 
+        return TExprTypeLoader::LoadStructType(members, level); 
+    } 
+}; 
+ 
+const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TVector<TString>& topLevelColumns, TExprContext& ctx, const TPosition& pos) { 
+    TOrderAwareExprTypeLoader loader(ctx, pos, topLevelColumns); 
+    return DoLoadTypeFromYson(loader, node, 0).GetOrElse(nullptr); 
+} 
+ 
 void WriteResOrPullType(NYson::TYsonConsumerBase& writer,const TTypeAnnotationNode* type, const TVector<TString>& columns) {
     if (columns.empty() ||
         type->GetKind() != ETypeAnnotationKind::List ||
@@ -422,7 +422,7 @@ void WriteResOrPullType(NYson::TYsonConsumerBase& writer,const TTypeAnnotationNo
         writer.OnStringScalar("ListType");
         writer.OnListItem();
 
-        SaveStructTypeToYson(writer, type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(), columns);
+        SaveStructTypeToYson(writer, type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(), columns); 
 
         writer.OnEndList();
     }

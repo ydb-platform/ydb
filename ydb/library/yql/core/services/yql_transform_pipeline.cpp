@@ -124,10 +124,10 @@ TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool for
         issueCode));
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(
-            [forSubGraph, coStore = TypeAnnotationContext_->ColumnOrderStorage](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                return EliminateCommonSubExpressions(input, output, ctx, forSubGraph, *coStore);
-            }
-        ),
+            [forSubGraph, coStore = TypeAnnotationContext_->ColumnOrderStorage](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
+                return EliminateCommonSubExpressions(input, output, ctx, forSubGraph, *coStore); 
+            } 
+        ), 
         "CSEE",
         issueCode));
 
@@ -147,13 +147,13 @@ TTransformationPipeline& TTransformationPipeline::AddCommonOptimization(EYqlIssu
 }
 
 TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYqlIssueCode issueCode) {
-    Transformers_.push_back(TTransformStage(
-        CreateCommonOptFinalTransformer(TypeAnnotationContext_.Get()),
-        "FinalCommonOptimization",
-        issueCode));
-    return *this;
-}
-
+    Transformers_.push_back(TTransformStage( 
+        CreateCommonOptFinalTransformer(TypeAnnotationContext_.Get()), 
+        "FinalCommonOptimization", 
+        issueCode)); 
+    return *this; 
+} 
+ 
 TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
     AddCommonOptimization(issueCode);
     Transformers_.push_back(TTransformStage(

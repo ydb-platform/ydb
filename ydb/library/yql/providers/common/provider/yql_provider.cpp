@@ -20,7 +20,7 @@ using namespace NNodes;
 
 bool TCommitSettings::EnsureModeEmpty(TExprContext& ctx) {
     if (Mode) {
-        ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder()
+        ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder() 
             << "Unsupported mode:" << Mode.Cast().Value()));
         return false;
     }
@@ -30,7 +30,7 @@ bool TCommitSettings::EnsureModeEmpty(TExprContext& ctx) {
 
 bool TCommitSettings::EnsureEpochEmpty(TExprContext& ctx) {
     if (Epoch) {
-        ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder()
+        ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder() 
             << "Epochs are unsupported."));
         return false;
     }
@@ -40,7 +40,7 @@ bool TCommitSettings::EnsureEpochEmpty(TExprContext& ctx) {
 
 bool TCommitSettings::EnsureOtherEmpty(TExprContext& ctx) {
     if (!Other.Empty()) {
-        ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder()
+        ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder() 
             << "Unsupported setting:" << Other.Item(0).Name().Value()));
         return false;
     }
@@ -90,7 +90,7 @@ const TStructExprType* BuildCommonTableListType(TExprContext& ctx) {
     return ctx.MakeType<TStructExprType>(items);
 }
 
-TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& ann, TExprContext& ctx) {
+TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& ann, TExprContext& ctx) { 
     return ExpandType(pos, ann, ctx);
 }
 
@@ -434,7 +434,7 @@ bool FillUsedFilesImpl(
         const auto& name = node.Head().Content();
         const auto block = types.UserDataStorage->FindUserDataBlock(name);
         if (!block) {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "File not found: " << name));
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "File not found: " << name)); 
             return false;
         }
         else {
@@ -447,7 +447,7 @@ bool FillUsedFilesImpl(
         const auto& name = node.Head().Content();
         auto blocks = types.UserDataStorage->FindUserDataFolder(name);
         if (!blocks) {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Folder not found: " << name));
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Folder not found: " << name)); 
             return false;
         } else {
             for (const auto& x : *blocks) {
@@ -643,25 +643,25 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedF
                         completedFuture.GetValue()();
                     }
                     catch (const std::exception& e) {
-                        auto inputPos = ctx.GetPosition(input->Pos());
+                        auto inputPos = ctx.GetPosition(input->Pos()); 
                         TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-                            return MakeIntrusive<TIssue>(YqlIssue(inputPos, TIssuesIds::UNEXPECTED));
+                            return MakeIntrusive<TIssue>(YqlIssue(inputPos, TIssuesIds::UNEXPECTED)); 
                         });
-                        ctx.AddError(ExceptionToIssue(e, inputPos));
-                        input->SetState(TExprNode::EState::Error);
+                        ctx.AddError(ExceptionToIssue(e, inputPos)); 
+                        input->SetState(TExprNode::EState::Error); 
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }
                     catch (...) {
-                        auto inputPos = ctx.GetPosition(input->Pos());
+                        auto inputPos = ctx.GetPosition(input->Pos()); 
                         TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-                            return MakeIntrusive<TIssue>(YqlIssue(inputPos, TIssuesIds::UNEXPECTED));
+                            return MakeIntrusive<TIssue>(YqlIssue(inputPos, TIssuesIds::UNEXPECTED)); 
                         });
-                        ctx.AddError(YqlIssue(inputPos, TIssuesIds::UNEXPECTED, CurrentExceptionMessage()));
-                        input->SetState(TExprNode::EState::Error);
+                        ctx.AddError(YqlIssue(inputPos, TIssuesIds::UNEXPECTED, CurrentExceptionMessage())); 
+                        input->SetState(TExprNode::EState::Error); 
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }
 
-                    input->SetState(TExprNode::EState::ExecutionRequired);
+                    input->SetState(TExprNode::EState::ExecutionRequired); 
                     return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat);
                 });
             }));
@@ -693,19 +693,19 @@ void WriteColumns(NYson::TYsonWriter& writer, const TExprBase& columns) {
     }
 }
 
-TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes) {
+TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes) { 
     ui32 typeFlags = TExprAnnotationFlags::None;
     if (withTypes) {
         typeFlags |= TExprAnnotationFlags::Types;
     }
 
-    auto ast = ConvertToAst(expr, ctx, typeFlags, true);
+    auto ast = ConvertToAst(expr, ctx, typeFlags, true); 
     YQL_ENSURE(ast.Root);
     return ast.Root->ToString();
 }
 
-TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr) {
-    auto ast = ConvertToAst(expr, ctx, TExprAnnotationFlags::None, true);
+TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr) { 
+    auto ast = ConvertToAst(expr, ctx, TExprAnnotationFlags::None, true); 
     TStringStream exprStream;
     YQL_ENSURE(ast.Root);
     ast.Root->PrettyPrintTo(exprStream, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
@@ -834,7 +834,7 @@ void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCo
     writer.OnEndList();
 }
 
-double GetDataReplicationFactor(double factor, const TExprNode* node, const TExprNode* stream, TExprContext& ctx) {
+double GetDataReplicationFactor(double factor, const TExprNode* node, const TExprNode* stream, TExprContext& ctx) { 
     if (node == stream) {
         return factor;
     }
@@ -851,12 +851,12 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
             double applyFactor = 0.0;
             for (size_t i = 1; i < node->ChildrenSize(); ++i) {
                 if (IsFlowOrStream(node->Child(i))) {
-                    applyFactor += GetDataReplicationFactor(factor, node->Child(i), stream, ctx);
+                    applyFactor += GetDataReplicationFactor(factor, node->Child(i), stream, ctx); 
                 } else if (node->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
                     if (node->Child(i)->IsCallable("ForwardList")) {
-                        applyFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(0), stream, ctx);
+                        applyFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(0), stream, ctx); 
                     } else if (node->Child(i)->IsCallable("Collect") && IsFlowOrStream(node->Child(i)->HeadPtr().Get())) {
-                        applyFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(0), stream, ctx);
+                        applyFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(0), stream, ctx); 
                     }
                 }
             }
@@ -870,7 +870,7 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
     }
 
     if (!TCoExtendBase::Match(node) && node->ChildrenSize() > 0) {
-        factor = GetDataReplicationFactor(factor, node->Child(0), stream, ctx);
+        factor = GetDataReplicationFactor(factor, node->Child(0), stream, ctx); 
     }
 
     if (TCoFlatMapBase::Match(node)) {
@@ -908,7 +908,7 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
             TMaybe<bool> isHashed;
             bool isCompact = false;
             TMaybe<ui64> itemsCount;
-            ParseToDictSettings(*node->Child(1), ctx, isMany, isHashed, itemsCount, isCompact);
+            ParseToDictSettings(*node->Child(1), ctx, isMany, isHashed, itemsCount, isCompact); 
             if (isMany.GetOrElse(true)) {
                 factor *= 5.0;
             }
@@ -924,7 +924,7 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
     else if (TCoExtendBase::Match(node) && node->ChildrenSize() > 0) {
         double extendFactor = 0.0;
         for (size_t i = 0; i < node->ChildrenSize(); ++i) {
-            extendFactor += GetDataReplicationFactor(factor, node->Child(i), stream, ctx);
+            extendFactor += GetDataReplicationFactor(factor, node->Child(i), stream, ctx); 
         }
         factor = Max(1.0, extendFactor);
     }
@@ -935,7 +935,7 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
     return factor;
 }
 
-double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx) {
+double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx) { 
     return GetDataReplicationFactor(1.0, lambda.Child(1), lambda.Head().ChildrenSize() > 0 ? lambda.Head().Child(0) : nullptr, ctx);
 }
 

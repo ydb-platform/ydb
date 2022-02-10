@@ -7,8 +7,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-using NYql::EnsureDynamicCast;
-
+using NYql::EnsureDynamicCast; 
+ 
 namespace {
 
 class TExpandMapWrapper : public TStatelessWideFlowCodegeneratorNode<TExpandMapWrapper> {
@@ -133,7 +133,7 @@ public:
 
         for (auto i = 0U; i < Items.size(); ++i)
             if (Items[i]->GetDependencesCount() > 0U)
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, result.second[i](ctx, block));
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, result.second[i](ctx, block)); 
 
         BranchInst::Create(pass, block);
 
@@ -219,7 +219,7 @@ public:
         } else {
             for (auto i = 0U; i < Items.size(); ++i)
                 if (Items[i]->GetDependencesCount() > 0U)
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block)); 
 
             result->addIncoming(GetNodeValue(NewItem, ctx, block), block);
         }

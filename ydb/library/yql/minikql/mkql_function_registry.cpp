@@ -31,13 +31,13 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
 {
     struct TUdfModule {
         TString LibraryPath;
-        std::shared_ptr<NUdf::IUdfModule> Impl;
+        std::shared_ptr<NUdf::IUdfModule> Impl; 
     };
 
     using TUdfModulesMap = THashMap<TString, TUdfModule>;
 
     struct TUdfLibrary: public TThrRefBase {
-        ui32 AbiVersion = 0;
+        ui32 AbiVersion = 0; 
         TDynamicLibrary Lib;
         TUdfLibrary()
         {
@@ -68,7 +68,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
             if (!HasError()) {
                 TUdfModule m;
                 m.LibraryPath = LibraryPath;
-                m.Impl.reset(module.Release());
+                m.Impl.reset(module.Release()); 
 
                 auto it = Remappings.find(name);
                 const TString& newName = (it == Remappings.end())
@@ -232,8 +232,8 @@ public:
             if (it != UdfModules_.end()) {
                 TFunctionTypeInfoBuilder typeInfoBuilder(env, typeInfoHelper, moduleName,
                     (flags & NUdf::IUdfModule::TFlags::TypesOnly) ? nullptr : countersProvider, pos, secureParamsProvider);
-                const auto& module = *it->second.Impl;
-                module.BuildFunctionTypeInfo(
+                const auto& module = *it->second.Impl; 
+                module.BuildFunctionTypeInfo( 
                     funcName, userType, typeConfig, flags, typeInfoBuilder);
 
                 if (typeInfoBuilder.HasError()) {

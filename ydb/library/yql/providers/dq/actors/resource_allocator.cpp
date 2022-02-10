@@ -302,7 +302,7 @@ private:
 
     THashMap<ui64, TRequestInfo> RequestedNodes;
     ui32 RequestedCount;
-    ui64 ResourceId = 0;
+    ui64 ResourceId = 0; 
     bool LocalMode = false;
 
     TVector<NDqProto::TWorkerGroup> AllocatedWorkers;

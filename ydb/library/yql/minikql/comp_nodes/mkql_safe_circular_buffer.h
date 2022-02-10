@@ -1,8 +1,8 @@
 #pragma once
 #include <ydb/library/yql/utils/yql_panic.h>
-
+ 
 #include <util/system/yassert.h>
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <vector>
 
 namespace NKikimr {
@@ -11,35 +11,35 @@ namespace NMiniKQL {
 template<class T>
 class TSafeCircularBuffer {
 public:
-    TSafeCircularBuffer(TMaybe<size_t> size, T emptyValue, size_t initSize = 0)
-        : Buffer(size ? *size : initSize, emptyValue)
+    TSafeCircularBuffer(TMaybe<size_t> size, T emptyValue, size_t initSize = 0) 
+        : Buffer(size ? *size : initSize, emptyValue) 
         , EmptyValue(emptyValue)
-        , Unbounded(!size.Defined())
-        , Count(initSize)
+        , Unbounded(!size.Defined()) 
+        , Count(initSize) 
     {
-        if (!Unbounded) {
-            Y_VERIFY(initSize <= *size);
-        }
+        if (!Unbounded) { 
+            Y_VERIFY(initSize <= *size); 
+        } 
     }
 
-    bool IsUnbounded() const {
-        return Unbounded;
+    bool IsUnbounded() const { 
+        return Unbounded; 
     }
 
     void PushBack(T&& data) {
-        if (Unbounded) {
-            Y_VERIFY(Head + Count == Size());
-            Buffer.emplace_back(std::move(data));
-        } else {
-            YQL_ENSURE(!IsFull());
-            Buffer[RealIndex(Head + Count)] = std::move(data);
-        }
-        Count++;
-        MutationCount++;
+        if (Unbounded) { 
+            Y_VERIFY(Head + Count == Size()); 
+            Buffer.emplace_back(std::move(data)); 
+        } else { 
+            YQL_ENSURE(!IsFull()); 
+            Buffer[RealIndex(Head + Count)] = std::move(data); 
+        } 
+        Count++; 
+        MutationCount++; 
     }
 
     const T& Get(size_t index) const {
-        if (index < Count) {
+        if (index < Count) { 
             return Buffer[RealIndex(Head + index)];
         } else {
             // Circular buffer out of bounds
@@ -48,28 +48,28 @@ public:
     }
 
     void PopFront() {
-        if (!Count) {
+        if (!Count) { 
             // Circular buffer not have elements for pop, no elements, no problem
         } else {
             Buffer[Head] = EmptyValue;
-            Head = RealIndex(Head+1);
-            Count--;
+            Head = RealIndex(Head+1); 
+            Count--; 
         }
-        MutationCount++;
+        MutationCount++; 
     }
 
-    size_t Size() const {
+    size_t Size() const { 
         return Buffer.size();
     }
 
     size_t UsedSize() const {
-        return Count;
+        return Count; 
     }
 
-    ui64 Generation() const {
-        return MutationCount;
-    }
-
+    ui64 Generation() const { 
+        return MutationCount; 
+    } 
+ 
     void Clean() {
         const auto usedSize = UsedSize();
         for (size_t index = 0; index < usedSize; ++index) {
@@ -78,31 +78,31 @@ public:
     }
 
     void Clear() {
-        Head = Count = 0;
+        Head = Count = 0; 
         Buffer.clear();
         Buffer.shrink_to_fit();
     }
 
-private:
-    bool IsFull() const {
-        if (Unbounded) {
-            return false;
-        }
-        return UsedSize() == Size();
+private: 
+    bool IsFull() const { 
+        if (Unbounded) { 
+            return false; 
+        } 
+        return UsedSize() == Size(); 
     }
 
-    size_t RealIndex(size_t index) const {
-        auto size = Size();
-        Y_VERIFY(size);
-        return index % size;
-    }
-
+    size_t RealIndex(size_t index) const { 
+        auto size = Size(); 
+        Y_VERIFY(size); 
+        return index % size; 
+    } 
+ 
     std::vector<T> Buffer;
     const T EmptyValue;
-    const bool Unbounded;
+    const bool Unbounded; 
     size_t Head = 0;
-    size_t Count;
-    ui64 MutationCount = 0;
+    size_t Count; 
+    ui64 MutationCount = 0; 
 };
 
 }

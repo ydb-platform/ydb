@@ -59,21 +59,21 @@ public:
     virtual TString GetOperationDisplayName(const TExprNode& node) = 0;
 };
 
-class ITrackableNodeProcessor {
-public:
-    virtual ~ITrackableNodeProcessor() = default;
-
-    struct TExprNodeAndId
-    {
-        TExprNode::TPtr Node;
-        TString Id;
-    };
-
-    virtual void GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) = 0;
-    virtual void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) = 0;
-    virtual IGraphTransformer& GetCleanupTransformer() = 0;
-};
-
+class ITrackableNodeProcessor { 
+public: 
+    virtual ~ITrackableNodeProcessor() = default; 
+ 
+    struct TExprNodeAndId 
+    { 
+        TExprNode::TPtr Node; 
+        TString Id; 
+    }; 
+ 
+    virtual void GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) = 0; 
+    virtual void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) = 0; 
+    virtual IGraphTransformer& GetCleanupTransformer() = 0; 
+}; 
+ 
 class IDqIntegration;
 
 class IOptimizationContext;
@@ -162,9 +162,9 @@ public:
     //-- plan
     virtual IGraphTransformer& GetPlanInfoTransformer() = 0;
     virtual IPlanFormatter& GetPlanFormatter() = 0;
-
-    //-- garbage collection
-    virtual ITrackableNodeProcessor& GetTrackableNodeProcessor() = 0;
+ 
+    //-- garbage collection 
+    virtual ITrackableNodeProcessor& GetTrackableNodeProcessor() = 0; 
 
     // DQ
     virtual IDqIntegration* GetDqIntegration() = 0;

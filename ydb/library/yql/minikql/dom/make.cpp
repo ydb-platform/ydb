@@ -161,9 +161,9 @@ TUnboxedValuePod MakeDom(const ITypeInfoHelper::TPtr typeHelper, const TType* sh
         case ETypeKind::Resource:
             if (const auto inspector = TResourceTypeInspector(*typeHelper, shape); TStringBuf(inspector.GetTag()) == NodeResourceName)
                 return value;
-            [[fallthrough]];
+            [[fallthrough]]; 
         default:
-            Y_FAIL("Unsupported data kind: %s", ToCString(kind));
+            Y_FAIL("Unsupported data kind: %s", ToCString(kind)); 
     }
 }
 

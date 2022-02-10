@@ -118,14 +118,14 @@ struct TKikimrData {
 } // namespace
 
 const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TString& cluster,
-    const TString& table, TPositionHandle pos, TExprContext& ctx) const
+    const TString& table, TPositionHandle pos, TExprContext& ctx) const 
 {
     auto desc = Tables.FindPtr(std::make_pair(cluster, table));
     if (desc && desc->DoesExist()) {
         return desc;
     }
 
-    ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
+    ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder() 
         << "Cannot find table '" << NCommon::FullTableName(cluster, table)
         << "' because it does not exist or you do not have access permissions."
         << " Please check correctness of table path and user permissions."));
@@ -316,12 +316,12 @@ void TKikimrTableDescription::ToYson(NYson::TYsonWriter& writer) const {
 
 bool TKikimrKey::Extract(const TExprNode& key) {
     if (key.IsCallable("MrTableConcat")) {
-        Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "CONCAT is not supported on Kikimr clusters."));
+        Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "CONCAT is not supported on Kikimr clusters.")); 
         return false;
     }
 
     if (!key.IsCallable("Key")) {
-        Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected key"));
+        Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected key")); 
         return false;
     }
 
@@ -331,12 +331,12 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         const TExprNode* nameNode = key.Child(0)->Child(1);
 
         if (nameNode->IsCallable("MrTableRange") || nameNode->IsCallable("MrTableRangeStrict")) {
-            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "RANGE is not supported on Kikimr clusters."));
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "RANGE is not supported on Kikimr clusters.")); 
             return false;
         }
 
         if (!nameNode->IsCallable("String")) {
-            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as table key."));
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as table key.")); 
             return false;
         }
 
@@ -361,16 +361,16 @@ bool TKikimrKey::Extract(const TExprNode& key) {
             if (tag->Content() == TStringBuf("view")) {
                 const TExprNode* viewNode = key.Child(i)->Child(1);
                 if (!viewNode->IsCallable("String")) {
-                    Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Pos()), "Expected String"));
+                    Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Pos()), "Expected String")); 
                     return false;
                 }
 
                 if (viewNode->ChildrenSize() != 1 || !EnsureAtom(*viewNode->Child(0), Ctx)) {
-                    Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Child(0)->Pos()), "Dynamic views names are not supported"));
+                    Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Child(0)->Pos()), "Dynamic views names are not supported")); 
                     return false;
                 }
                 if (viewNode->Child(0)->Content().empty()) {
-                    Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Child(0)->Pos()), "Secondary index name must not be empty"));
+                    Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Child(0)->Pos()), "Secondary index name must not be empty")); 
                     return false;
                 }
                 View = viewNode->Child(0)->Content();
@@ -489,11 +489,11 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TCoNameValueTupleLi
     for (const auto& op : operations) {
         auto table = TString(op.Name());
         auto tableOp = FromString<TYdbOperation>(TString(op.Value().Cast<TCoAtom>()));
-        auto pos = ctx.GetPosition(op.Pos());
+        auto pos = ctx.GetPosition(op.Pos()); 
 
         NKqpProto::TKqpTableOp protoOp;
-        protoOp.MutablePosition()->SetRow(pos.Row);
-        protoOp.MutablePosition()->SetColumn(pos.Column);
+        protoOp.MutablePosition()->SetRow(pos.Row); 
+        protoOp.MutablePosition()->SetColumn(pos.Column); 
         protoOp.SetTable(table);
         protoOp.SetOperation((ui32)tableOp);
 
@@ -508,11 +508,11 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TKiOperationList& o
     for (const auto& op : operations) {
         auto table = TString(op.Table());
         auto tableOp = FromString<TYdbOperation>(TString(op.Operation()));
-        auto pos = ctx.GetPosition(op.Pos());
+        auto pos = ctx.GetPosition(op.Pos()); 
 
         NKqpProto::TKqpTableOp protoOp;
-        protoOp.MutablePosition()->SetRow(pos.Row);
-        protoOp.MutablePosition()->SetColumn(pos.Column);
+        protoOp.MutablePosition()->SetRow(pos.Row); 
+        protoOp.MutablePosition()->SetColumn(pos.Column); 
         protoOp.SetTable(table);
         protoOp.SetOperation((ui32)tableOp);
 
@@ -539,7 +539,7 @@ bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto
 {
     if (IsClosed()) {
         TString message = TStringBuilder() << "Cannot perform operations on closed transaction.";
-        ctx.AddError(YqlIssue({}, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+        ctx.AddError(YqlIssue({}, TIssuesIds::KIKIMR_BAD_OPERATION, message)); 
         return false;
     }
 
@@ -766,7 +766,7 @@ TKiExecDataQuerySettings TKiExecDataQuerySettings::Parse(TKiExecDataQuery exec) 
     return settings;
 }
 
-TCoNameValueTupleList TKiExecDataQuerySettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+TCoNameValueTupleList TKiExecDataQuerySettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const { 
     TVector<TCoNameValueTuple> settings(Other);
 
     if (Mode) {

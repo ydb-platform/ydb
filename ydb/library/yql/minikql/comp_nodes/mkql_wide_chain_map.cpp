@@ -8,8 +8,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-using NYql::EnsureDynamicCast;
-
+using NYql::EnsureDynamicCast; 
+ 
 namespace {
 
 class TWideChain1MapWrapper : public TStatefulWideFlowCodegeneratorNode<TWideChain1MapWrapper> {
@@ -53,7 +53,7 @@ public:
         block = good;
         for (auto i = 0U; i < Inputs.size(); ++i)
             if (Inputs[i]->GetDependencesCount() > 0U)
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Inputs[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Inputs[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block)); 
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
@@ -67,7 +67,7 @@ public:
             if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
                 const auto& map = InitOnInputs[i];
                 const auto value = map ? getres.second[*map](ctx, block) : GetNodeValue(InitItems[i], ctx, block);
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Outputs[i])->CreateSetValue(ctx, block, value);
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Outputs[i])->CreateSetValue(ctx, block, value); 
             }
         }
 
@@ -86,7 +86,7 @@ public:
 
         for (auto i = 0U; i < outputs.size(); ++i)
             if (const auto out = outputs[i])
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Outputs[i])->CreateSetValue(ctx, block, out);
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Outputs[i])->CreateSetValue(ctx, block, out); 
 
         BranchInst::Create(done, block);
 

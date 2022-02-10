@@ -1,57 +1,57 @@
-Index: contrib/pg_query.h
-===================================================================
---- contrib/pg_query.h	(revision 8784387)
-+++ contrib/pg_query.h	(revision 8784388)
-@@ -75,7 +75,7 @@
- 
- //PgQueryNormalizeResult pg_query_normalize(const char* input);
- PgQueryScanResult pg_query_scan(const char* input);
--PgQueryParseResult pg_query_parse(const char* input);
-+//PgQueryParseResult pg_query_parse(const char* input);
- PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input);
- //PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input);
- 
-Index: contrib/src/pg_query_outfuncs_defs.c
-===================================================================
---- contrib/src/pg_query_outfuncs_defs.c	(revision 8784387)
-+++ contrib/src/pg_query_outfuncs_defs.c	(revision 8784388)
-@@ -51,7 +51,7 @@
- static void _outFromExpr(OUT_TYPE(FromExpr, FromExpr) out_node, const FromExpr *node);
- static void _outOnConflictExpr(OUT_TYPE(OnConflictExpr, OnConflictExpr) out_node, const OnConflictExpr *node);
- static void _outIntoClause(OUT_TYPE(IntoClause, IntoClause) out_node, const IntoClause *node);
--static void _outRawStmt(OUT_TYPE(RawStmt, RawStmt) out_node, const RawStmt *node);
-+/*static*/ void _outRawStmt(OUT_TYPE(RawStmt, RawStmt) out_node, const RawStmt *node);
- static void _outQuery(OUT_TYPE(Query, Query) out_node, const Query *node);
- static void _outInsertStmt(OUT_TYPE(InsertStmt, InsertStmt) out_node, const InsertStmt *node);
- static void _outDeleteStmt(OUT_TYPE(DeleteStmt, DeleteStmt) out_node, const DeleteStmt *node);
-@@ -772,7 +772,7 @@
-   WRITE_BOOL_FIELD(skip_data, skipData, skipData);
- }
- 
--static void
-+/*static*/ void
- _outRawStmt(OUT_TYPE(RawStmt, RawStmt) out, const RawStmt *node)
- {
-   WRITE_NODE_PTR_FIELD(stmt, stmt, stmt);
-Index: contrib/src/pg_query_parse.c
-===================================================================
---- contrib/src/pg_query_parse.c	(revision 8784387)
-+++ contrib/src/pg_query_parse.c	(revision 8784388)
-@@ -83,7 +83,7 @@
- 	return result;
- }
- 
--PgQueryParseResult pg_query_parse(const char* input)
-+/*PgQueryParseResult pg_query_parse(const char* input)
- {
- 	MemoryContext ctx = NULL;
- 	PgQueryInternalParsetreeAndError parsetree_and_error;
-@@ -105,7 +105,7 @@
- 	pg_query_exit_memory_context(ctx);
- 
- 	return result;
--}
-+}*/
- 
- PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input)
- {
+Index: contrib/pg_query.h 
+=================================================================== 
+--- contrib/pg_query.h	(revision 8784387) 
++++ contrib/pg_query.h	(revision 8784388) 
+@@ -75,7 +75,7 @@ 
+  
+ //PgQueryNormalizeResult pg_query_normalize(const char* input); 
+ PgQueryScanResult pg_query_scan(const char* input); 
+-PgQueryParseResult pg_query_parse(const char* input); 
++//PgQueryParseResult pg_query_parse(const char* input); 
+ PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input); 
+ //PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input); 
+  
+Index: contrib/src/pg_query_outfuncs_defs.c 
+=================================================================== 
+--- contrib/src/pg_query_outfuncs_defs.c	(revision 8784387) 
++++ contrib/src/pg_query_outfuncs_defs.c	(revision 8784388) 
+@@ -51,7 +51,7 @@ 
+ static void _outFromExpr(OUT_TYPE(FromExpr, FromExpr) out_node, const FromExpr *node); 
+ static void _outOnConflictExpr(OUT_TYPE(OnConflictExpr, OnConflictExpr) out_node, const OnConflictExpr *node); 
+ static void _outIntoClause(OUT_TYPE(IntoClause, IntoClause) out_node, const IntoClause *node); 
+-static void _outRawStmt(OUT_TYPE(RawStmt, RawStmt) out_node, const RawStmt *node); 
++/*static*/ void _outRawStmt(OUT_TYPE(RawStmt, RawStmt) out_node, const RawStmt *node); 
+ static void _outQuery(OUT_TYPE(Query, Query) out_node, const Query *node); 
+ static void _outInsertStmt(OUT_TYPE(InsertStmt, InsertStmt) out_node, const InsertStmt *node); 
+ static void _outDeleteStmt(OUT_TYPE(DeleteStmt, DeleteStmt) out_node, const DeleteStmt *node); 
+@@ -772,7 +772,7 @@ 
+   WRITE_BOOL_FIELD(skip_data, skipData, skipData); 
+ } 
+  
+-static void 
++/*static*/ void 
+ _outRawStmt(OUT_TYPE(RawStmt, RawStmt) out, const RawStmt *node) 
+ { 
+   WRITE_NODE_PTR_FIELD(stmt, stmt, stmt); 
+Index: contrib/src/pg_query_parse.c 
+=================================================================== 
+--- contrib/src/pg_query_parse.c	(revision 8784387) 
++++ contrib/src/pg_query_parse.c	(revision 8784388) 
+@@ -83,7 +83,7 @@ 
+ 	return result; 
+ } 
+  
+-PgQueryParseResult pg_query_parse(const char* input) 
++/*PgQueryParseResult pg_query_parse(const char* input) 
+ { 
+ 	MemoryContext ctx = NULL; 
+ 	PgQueryInternalParsetreeAndError parsetree_and_error; 
+@@ -105,7 +105,7 @@ 
+ 	pg_query_exit_memory_context(ctx); 
+  
+ 	return result; 
+-} 
++}*/ 
+  
+ PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input) 
+ { 

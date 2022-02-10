@@ -13,40 +13,40 @@
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/set.h>
-#include <util/generic/deque.h>
+#include <util/generic/deque.h> 
 #include <util/generic/vector.h>
 
 namespace NSQLTranslationV1 {
-    inline bool IsAnonymousName(const TString& name) {
-        return name == "$_";
-    }
-
+    inline bool IsAnonymousName(const TString& name) { 
+        return name == "$_"; 
+    } 
+ 
     inline bool IsStreamingService(const TString& service) {
         return service == NYql::RtmrProviderName || service == NYql::PqProviderName;
     }
 
-    struct TNodeWithUsageInfo : public TThrRefBase {
-        explicit TNodeWithUsageInfo(const TNodePtr& node, TPosition namePos, int level)
-            : Node(node)
-            , NamePos(namePos)
-            , Level(level)
-        {}
+    struct TNodeWithUsageInfo : public TThrRefBase { 
+        explicit TNodeWithUsageInfo(const TNodePtr& node, TPosition namePos, int level) 
+            : Node(node) 
+            , NamePos(namePos) 
+            , Level(level) 
+        {} 
 
-        TNodePtr Node;
-        TPosition NamePos;
-        int Level = 0;
-        bool IsUsed = false;
-    };
-
-    using TNodeWithUsageInfoPtr = TIntrusivePtr<TNodeWithUsageInfo>;
-    using TNamedNodesMap = THashMap<TString, TDeque<TNodeWithUsageInfoPtr>>;
+        TNodePtr Node; 
+        TPosition NamePos; 
+        int Level = 0; 
+        bool IsUsed = false; 
+    }; 
+ 
+    using TNodeWithUsageInfoPtr = TIntrusivePtr<TNodeWithUsageInfo>; 
+    using TNamedNodesMap = THashMap<TString, TDeque<TNodeWithUsageInfoPtr>>; 
     using TBlocks = TVector<TNodePtr>;
 
     struct TScopedState : public TThrRefBase {
         TString CurrService;
         TDeferredAtom CurrCluster;
         bool PragmaClassicDivision = true;
-        bool StrictJoinKeyTypes = false;
+        bool StrictJoinKeyTypes = false; 
         TNamedNodesMap NamedNodes;
 
         struct TLocal {
@@ -64,18 +64,18 @@ namespace NSQLTranslationV1 {
         TNodePtr WrapCluster(const TDeferredAtom& cluster, TContext& ctx);
         void AddExprCluster(TNodePtr expr, TContext& ctx);
         void Clear();
-        TNodePtr LookupNode(const TString& name);
+        TNodePtr LookupNode(const TString& name); 
     };
 
     using TScopedStatePtr = TIntrusivePtr<TScopedState>;
 
-    class TColumnRefScope;
-    enum class EColumnRefState {
-        Deny,
-        Allow,
-        AsStringLiteral,
-    };
-
+    class TColumnRefScope; 
+    enum class EColumnRefState { 
+        Deny, 
+        Allow, 
+        AsStringLiteral, 
+    }; 
+ 
     class TContext {
     public:
         TContext(const NSQLTranslation::TTranslationSettings& settings,
@@ -93,8 +93,8 @@ namespace NSQLTranslationV1 {
         IOutputStream& Warning(NYql::TPosition pos, NYql::TIssueCode code);
         IOutputStream& Info(NYql::TPosition pos);
 
-        void SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action);
-
+        void SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action); 
+ 
         template <typename TToken>
         const TString& Token(const TToken& token) {
             Position.Row = token.GetLine();
@@ -128,10 +128,10 @@ namespace NSQLTranslationV1 {
         TMaybe<TString> GetClusterProvider(const TString& cluster, TString& normalizedClusterName) const {
             auto provider = ClusterMapping.GetClusterProvider(cluster, normalizedClusterName);
             if (!provider) {
-                if (Settings.AssumeYdbOnClusterWithSlash && cluster.StartsWith('/')) {
+                if (Settings.AssumeYdbOnClusterWithSlash && cluster.StartsWith('/')) { 
                     normalizedClusterName = cluster;
                     return TString(NYql::KikimrProviderName);
-                }
+                } 
                 return Nothing();
             }
 
@@ -156,32 +156,32 @@ namespace NSQLTranslationV1 {
             return IntoHeading;
         }
 
-        void DeclareVariable(const TString& varName, const TNodePtr& typeNode);
+        void DeclareVariable(const TString& varName, const TNodePtr& typeNode); 
 
-        bool AddExport(TPosition symbolPos, const TString& symbolName);
+        bool AddExport(TPosition symbolPos, const TString& symbolName); 
         TString AddImport(const TVector<TString>& modulePath);
         TString AddSimpleUdf(const TString& udf);
         void SetPackageVersion(const TString& packageName, ui32 version);
 
         bool IsStreamingService(const TStringBuf service) const;
-
-        bool CheckColumnReference(TPosition pos, const TString& name) {
-            const bool allowed = GetColumnReferenceState() != EColumnRefState::Deny;
-            if (!allowed) {
-                Error(pos) << "Column reference \"" << name << "\" is not allowed " << NoColumnErrorContext;
-                IncrementMonCounter("sql_errors", "ColumnReferenceInScopeIsNotAllowed");
-            }
-            return allowed;
-        }
-
-        EColumnRefState GetColumnReferenceState() const {
-            return ColumnReferenceState;
-        }
-
-        EColumnRefState GetTopLevelColumnReferenceState() const {
-            return TopLevelColumnReferenceState;
-        }
-
+ 
+        bool CheckColumnReference(TPosition pos, const TString& name) { 
+            const bool allowed = GetColumnReferenceState() != EColumnRefState::Deny; 
+            if (!allowed) { 
+                Error(pos) << "Column reference \"" << name << "\" is not allowed " << NoColumnErrorContext; 
+                IncrementMonCounter("sql_errors", "ColumnReferenceInScopeIsNotAllowed"); 
+            } 
+            return allowed; 
+        } 
+ 
+        EColumnRefState GetColumnReferenceState() const { 
+            return ColumnReferenceState; 
+        } 
+ 
+        EColumnRefState GetTopLevelColumnReferenceState() const { 
+            return TopLevelColumnReferenceState; 
+        } 
+ 
     private:
         IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
 
@@ -194,12 +194,12 @@ namespace NSQLTranslationV1 {
         THashMap<TString, TString> ClusterPathPrefixes;
         bool IntoHeading = true;
 
-        friend class TColumnRefScope;
-
-        EColumnRefState ColumnReferenceState = EColumnRefState::Deny;
-        EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny;
-        TString NoColumnErrorContext = "in current scope";
-
+        friend class TColumnRefScope; 
+ 
+        EColumnRefState ColumnReferenceState = EColumnRefState::Deny; 
+        EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny; 
+        TString NoColumnErrorContext = "in current scope"; 
+ 
     public:
         THashMap<TString, TNodePtr> Variables;
         NSQLTranslation::TTranslationSettings Settings;
@@ -211,88 +211,88 @@ namespace NSQLTranslationV1 {
         TMap<TString, TString> SimpleUdfs;
         NSQLTranslation::TIncrementMonCounterFunction IncrementMonCounterFunction;
         TScopedStatePtr Scoped;
-        int ScopeLevel = 0;
-        size_t AnonymousNameIndex = 0;
+        int ScopeLevel = 0; 
+        size_t AnonymousNameIndex = 0; 
         TDeque<TScopedStatePtr> AllScopes;
         bool HasPendingErrors;
         THashMap<TString, ui32> GenIndexes;
-        using TWinSpecsRef = std::reference_wrapper<TWinSpecs>;
-        TDeque<TWinSpecsRef> WinSpecsScopes;
+        using TWinSpecsRef = std::reference_wrapper<TWinSpecs>; 
+        TDeque<TWinSpecsRef> WinSpecsScopes; 
         bool PragmaRefSelect = false;
         bool PragmaSampleSelect = false;
         bool PragmaAllowDotInAlias = false;
         bool PragmaInferSchema = false;
         bool PragmaAutoCommit = false;
         bool SimpleColumns = true;
-        bool CoalesceJoinKeysOnQualifiedAll = false;
+        bool CoalesceJoinKeysOnQualifiedAll = false; 
         bool PragmaDirectRead = false;
         bool PragmaYsonFast = true;
         bool PragmaYsonAutoConvert = false;
         bool PragmaYsonStrict = true;
         bool PragmaRegexUseRe2 = true;
-        bool PragmaPullUpFlatMapOverJoin = true;
-        bool WarnUnnamedColumns = false;
+        bool PragmaPullUpFlatMapOverJoin = true; 
+        bool WarnUnnamedColumns = false; 
         bool DiscoveryMode = false;
         bool EnableSystemColumns = true;
         bool DqEngineEnable = false;
         bool DqEngineForce = false;
         TMaybe<bool> JsonQueryReturnsJsonDocument;
-        TMaybe<bool> AnsiInForEmptyOrNullableItemsCollections;
-        TMaybe<bool> AnsiRankForNullableKeys = true;
-        TMaybe<bool> AnsiOrderByLimitInUnionAll = true;
-        const bool AnsiQuotedIdentifiers;
-        bool AnsiOptionalAs = true;
-        bool OrderedColumns = false;
-        bool PositionalUnionAll = false;
-        bool BogousStarInGroupByOverJoin = false;
-        bool UnorderedSubqueries = true;
+        TMaybe<bool> AnsiInForEmptyOrNullableItemsCollections; 
+        TMaybe<bool> AnsiRankForNullableKeys = true; 
+        TMaybe<bool> AnsiOrderByLimitInUnionAll = true; 
+        const bool AnsiQuotedIdentifiers; 
+        bool AnsiOptionalAs = true; 
+        bool OrderedColumns = false; 
+        bool PositionalUnionAll = false; 
+        bool BogousStarInGroupByOverJoin = false; 
+        bool UnorderedSubqueries = true; 
         bool PragmaDataWatermarks = true;
-        bool WarnOnAnsiAliasShadowing = true;
+        bool WarnOnAnsiAliasShadowing = true; 
         ui32 ResultRowsLimit = 0;
         ui64 ResultSizeLimit = 0;
         ui32 PragmaGroupByLimit = 1 << 5;
         ui32 PragmaGroupByCubeLimit = 5;
-        // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type
-        bool FlexibleTypes = false;
+        // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type 
+        bool FlexibleTypes = false; 
         THashMap<TString, TMaybe<TString>> Libraries; // alias -> optional file
         THashMap<TString, ui32> PackageVersions;
-        NYql::TWarningPolicy WarningPolicy;
+        NYql::TWarningPolicy WarningPolicy; 
         TString PqReadByRtmrCluster;
     };
 
-    class TColumnRefScope {
-    public:
-        TColumnRefScope(TContext& ctx, EColumnRefState state, bool isTopLevelExpr = true)
-            : PrevTop(ctx.TopLevelColumnReferenceState)
-            , Prev(ctx.ColumnReferenceState)
-            , PrevErr(ctx.NoColumnErrorContext)
-            , Ctx(ctx)
-        {
-            if (isTopLevelExpr) {
-                Ctx.ColumnReferenceState = Ctx.TopLevelColumnReferenceState = state;
-            } else {
-                Ctx.ColumnReferenceState = state;
-            }
-        }
-
-        void SetNoColumnErrContext(const TString& msg) {
-            Ctx.NoColumnErrorContext = msg;
-        }
-
-        ~TColumnRefScope() {
-            Ctx.TopLevelColumnReferenceState = PrevTop;
-            Ctx.ColumnReferenceState = Prev;
-            std::swap(Ctx.NoColumnErrorContext, PrevErr);
-        }
-    private:
-        const EColumnRefState PrevTop;
-        const EColumnRefState Prev;
-        TString PrevErr;
-        TContext& Ctx;
-    };
-
-    TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex);
-
+    class TColumnRefScope { 
+    public: 
+        TColumnRefScope(TContext& ctx, EColumnRefState state, bool isTopLevelExpr = true) 
+            : PrevTop(ctx.TopLevelColumnReferenceState) 
+            , Prev(ctx.ColumnReferenceState) 
+            , PrevErr(ctx.NoColumnErrorContext) 
+            , Ctx(ctx) 
+        { 
+            if (isTopLevelExpr) { 
+                Ctx.ColumnReferenceState = Ctx.TopLevelColumnReferenceState = state; 
+            } else { 
+                Ctx.ColumnReferenceState = state; 
+            } 
+        } 
+ 
+        void SetNoColumnErrContext(const TString& msg) { 
+            Ctx.NoColumnErrorContext = msg; 
+        } 
+ 
+        ~TColumnRefScope() { 
+            Ctx.TopLevelColumnReferenceState = PrevTop; 
+            Ctx.ColumnReferenceState = Prev; 
+            std::swap(Ctx.NoColumnErrorContext, PrevErr); 
+        } 
+    private: 
+        const EColumnRefState PrevTop; 
+        const EColumnRefState Prev; 
+        TString PrevErr; 
+        TContext& Ctx; 
+    }; 
+ 
+    TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex); 
+ 
     class TTranslation {
     protected:
         typedef TSet<ui32> TSetType;
@@ -319,13 +319,13 @@ namespace NSQLTranslationV1 {
         }
 
         TNodePtr GetNamedNode(const TString& name);
-
-        using TNodeBuilderByName = std::function<TNodePtr(const TString& effectiveName)>;
-        TString PushNamedNode(TPosition namePos, const TString& name, const TNodeBuilderByName& builder);
-        TString PushNamedNode(TPosition namePos, const TString& name, TNodePtr node);
-        TString PushNamedAtom(TPosition namePos, const TString& name);
+ 
+        using TNodeBuilderByName = std::function<TNodePtr(const TString& effectiveName)>; 
+        TString PushNamedNode(TPosition namePos, const TString& name, const TNodeBuilderByName& builder); 
+        TString PushNamedNode(TPosition namePos, const TString& name, TNodePtr node); 
+        TString PushNamedAtom(TPosition namePos, const TString& name); 
         void PopNamedNode(const TString& name);
-        void WarnUnusedNodes() const;
+        void WarnUnusedNodes() const; 
 
         template <typename TNode>
         void AltNotImplemented(const TString& ruleName, const TNode& node) {

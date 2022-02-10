@@ -33,7 +33,7 @@ public:
             return {};
         }
 
-        TPositionHandle pos;
+        TPositionHandle pos; 
         return Build<TCoAtom>(ctx, pos)
             .Value(config->GetCluster())
             .Done().Ptr();
@@ -77,7 +77,7 @@ public:
             if (node.Child(0)->Content() == SolomonProviderName) {
                 auto clusterName = node.Child(1)->Content();
                 if (!State_->Gateway->HasCluster(clusterName)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() <<
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << 
                         "Unknown cluster name: " << clusterName
                     ));
                     return false;
@@ -86,7 +86,7 @@ public:
                 return true;
             }
         }
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid Solomon DataSink parameters"));
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid Solomon DataSink parameters")); 
         return false;
     }
 
@@ -109,14 +109,14 @@ public:
 
         auto tagName = key.Child(0)->Child(0)->Content();
         if (tagName != TStringBuf("table")) {
-            ctx.AddError(TIssue(ctx.GetPosition(key.Child(0)->Pos()),
+            ctx.AddError(TIssue(ctx.GetPosition(key.Child(0)->Pos()), 
                 TStringBuilder() << "Unexpected tag: " << tagName));
             return {};
         }
 
         const TExprNode* nameNode = key.Child(0)->Child(1);
         if (!nameNode->IsCallable("String")) {
-            ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), "Expected String as table key"));
+            ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), "Expected String as table key")); 
             return {};
         }
 
@@ -129,7 +129,7 @@ public:
             return {};
         }
         if (tablePath->Content().empty()) {
-            ctx.AddError(TIssue(ctx.GetPosition(tablePath->Pos()), "Table name must not be empty"));
+            ctx.AddError(TIssue(ctx.GetPosition(tablePath->Pos()), "Table name must not be empty")); 
             return {};
         }
 

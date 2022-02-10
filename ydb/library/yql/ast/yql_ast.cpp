@@ -35,7 +35,7 @@ namespace {
             }
         }
 
-        return str.empty();
+        return str.empty(); 
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -56,7 +56,7 @@ namespace {
         }
 
         inline char Peek() const {
-            Y_VERIFY(!AtEnd());
+            Y_VERIFY(!AtEnd()); 
             return Str_[Offset_];
         }
 
@@ -65,7 +65,7 @@ namespace {
         }
 
         inline char Next() {
-            Y_VERIFY(!AtEnd());
+            Y_VERIFY(!AtEnd()); 
             char ch = Str_[Offset_];
             if (ch == '\n') {
                 ++Position_.Row;
@@ -86,7 +86,7 @@ namespace {
         }
 
         inline TStringBuf GetToken(ui32 begin, ui32 end) {
-            Y_VERIFY(end >= begin);
+            Y_VERIFY(end >= begin); 
             return Str_.SubString(begin, end - begin);
         }
 
@@ -326,7 +326,7 @@ namespace {
                             Ctx_.Next();
                         }
 
-                        if (unescapeResult != EUnescapeResult::OK) {
+                        if (unescapeResult != EUnescapeResult::OK) { 
                             AddError(TString(UnescapeResultToString(unescapeResult)));
                             return nullptr;
                         }
@@ -358,7 +358,7 @@ namespace {
                             Ctx_.Next();
                         }
 
-                        if (unescapeResult != EUnescapeResult::OK) {
+                        if (unescapeResult != EUnescapeResult::OK) { 
                             AddError(TString(UnescapeResultToString(unescapeResult)));
                             return nullptr;
                         }
@@ -477,8 +477,8 @@ namespace {
                 EscapeBinaryAtom(node.GetContent(), '"', &out);
             } else if (node.GetFlags() & TNodeFlags::MultilineContent) {
                 MultilineAtomPrint(out, node.GetContent());
-            } else if (node.GetContent().empty()) {
-                EscapeArbitraryAtom(node.GetContent(), '"', &out);
+            } else if (node.GetContent().empty()) { 
+                EscapeArbitraryAtom(node.GetContent(), '"', &out); 
             } else {
                 out << node.GetContent();
             }
@@ -527,8 +527,8 @@ namespace {
             } else if (node.GetFlags() & TNodeFlags::MultilineContent) {
                 MultilineAtomPrint(out, node.GetContent());
             } else {
-                if (((flags & TAstPrintFlags::AdaptArbitraryContent) && NeedEscaping(node.GetContent())) ||
-                    node.GetContent().empty())
+                if (((flags & TAstPrintFlags::AdaptArbitraryContent) && NeedEscaping(node.GetContent())) || 
+                    node.GetContent().empty()) 
                 {
                     EscapeArbitraryAtom(node.GetContent(), '"', &out);
                 } else {

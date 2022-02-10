@@ -985,10 +985,10 @@ public:
                 auto configSource = Y("DataSource", BuildQuotedAtom(Pos, TString(ConfigProviderName)));
                 auto resultSink = Y("DataSink", BuildQuotedAtom(Pos, TString(ResultProviderName)));
 
-                for (const auto& warningPragma : ctx.WarningPolicy.GetRules()) {
+                for (const auto& warningPragma : ctx.WarningPolicy.GetRules()) { 
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                        BuildQuotedAtom(Pos, "Warning"), BuildQuotedAtom(Pos, warningPragma.GetPattern()),
-                            BuildQuotedAtom(Pos, to_lower(ToString(warningPragma.GetAction()))))));
+                        BuildQuotedAtom(Pos, "Warning"), BuildQuotedAtom(Pos, warningPragma.GetPattern()), 
+                            BuildQuotedAtom(Pos, to_lower(ToString(warningPragma.GetAction())))))); 
                 }
 
                 if (ctx.ResultSizeLimit > 0) {
@@ -996,10 +996,10 @@ public:
                         BuildQuotedAtom(Pos, "SizeLimit"), BuildQuotedAtom(Pos, ToString(ctx.ResultSizeLimit)))));
                 }
 
-                if (!ctx.PragmaPullUpFlatMapOverJoin) {
+                if (!ctx.PragmaPullUpFlatMapOverJoin) { 
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                        BuildQuotedAtom(Pos, "DisablePullUpFlatMapOverJoin"))));
-                }
+                        BuildQuotedAtom(Pos, "DisablePullUpFlatMapOverJoin")))); 
+                } 
             }
         }
 

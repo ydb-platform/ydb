@@ -24,45 +24,45 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
         return path.Build();
     }
 
-    if (path.GetLiteral()) {
-        return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(prefixPath, *path.GetLiteral()));
-    }
+    if (path.GetLiteral()) { 
+        return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(prefixPath, *path.GetLiteral())); 
+    } 
 
-    auto pathNode = path.Build();
-    pathNode = new TCallNodeImpl(pathNode->GetPos(), "String", { pathNode });
-    auto prefixNode = BuildLiteralRawString(pathNode->GetPos(), TString(prefixPath));
+    auto pathNode = path.Build(); 
+    pathNode = new TCallNodeImpl(pathNode->GetPos(), "String", { pathNode }); 
+    auto prefixNode = BuildLiteralRawString(pathNode->GetPos(), TString(prefixPath)); 
 
-    TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", { prefixNode, pathNode });
+    TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", { prefixNode, pathNode }); 
 
-    TDeferredAtom result;
-    MakeTableFromExpression(ctx, buildPathNode, result);
-    return result.Build();
+    TDeferredAtom result; 
+    MakeTableFromExpression(ctx, buildPathNode, result); 
+    return result.Build(); 
 }
 
 typedef bool TContext::*TPragmaField;
 
 THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
-    {"AnsiOptionalAs", &TContext::AnsiOptionalAs},
-    {"WarnOnAnsiAliasShadowing", &TContext::WarnOnAnsiAliasShadowing},
-    {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin},
+    {"AnsiOptionalAs", &TContext::AnsiOptionalAs}, 
+    {"WarnOnAnsiAliasShadowing", &TContext::WarnOnAnsiAliasShadowing}, 
+    {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin}, 
     {"DqEngineEnable", &TContext::DqEngineEnable},
     {"DqEngineForce", &TContext::DqEngineForce},
-    {"RegexUseRe2", &TContext::PragmaRegexUseRe2},
-    {"OrderedColumns", &TContext::OrderedColumns},
-    {"BogousStarInGroupByOverJoin", &TContext::BogousStarInGroupByOverJoin},
-    {"CoalesceJoinKeysOnQualifiedAll", &TContext::CoalesceJoinKeysOnQualifiedAll},
-    {"UnorderedSubqueries", &TContext::UnorderedSubqueries},
-    {"FlexibleTypes", &TContext::FlexibleTypes},
+    {"RegexUseRe2", &TContext::PragmaRegexUseRe2}, 
+    {"OrderedColumns", &TContext::OrderedColumns}, 
+    {"BogousStarInGroupByOverJoin", &TContext::BogousStarInGroupByOverJoin}, 
+    {"CoalesceJoinKeysOnQualifiedAll", &TContext::CoalesceJoinKeysOnQualifiedAll}, 
+    {"UnorderedSubqueries", &TContext::UnorderedSubqueries}, 
+    {"FlexibleTypes", &TContext::FlexibleTypes}, 
 };
 
-typedef TMaybe<bool> TContext::*TPragmaMaybeField;
-
-THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
-    {"AnsiRankForNullableKeys", &TContext::AnsiRankForNullableKeys},
-    {"AnsiOrderByLimitInUnionAll", &TContext::AnsiOrderByLimitInUnionAll},
-    {"AnsiInForEmptyOrNullableItemsCollections", &TContext::AnsiInForEmptyOrNullableItemsCollections},
-};
-
+typedef TMaybe<bool> TContext::*TPragmaMaybeField; 
+ 
+THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = { 
+    {"AnsiRankForNullableKeys", &TContext::AnsiRankForNullableKeys}, 
+    {"AnsiOrderByLimitInUnionAll", &TContext::AnsiOrderByLimitInUnionAll}, 
+    {"AnsiInForEmptyOrNullableItemsCollections", &TContext::AnsiInForEmptyOrNullableItemsCollections}, 
+}; 
+ 
 } // namespace
 
 TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
@@ -76,7 +76,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , IncrementMonCounterFunction(settings.IncrementCounter)
     , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
-    , AnsiQuotedIdentifiers(settings.AnsiLexer)
+    , AnsiQuotedIdentifiers(settings.AnsiLexer) 
 {
     for (auto lib : settings.Libraries) {
         Libraries[lib] = Nothing();
@@ -97,17 +97,17 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
         bool value = true;
         TStringBuf key = flag;
         auto ptr = CTX_PRAGMA_FIELDS.FindPtr(key);
-        auto ptrMaybe = CTX_PRAGMA_MAYBE_FIELDS.FindPtr(key);
-        if (!ptr && !ptrMaybe && key.SkipPrefix("Disable")) {
+        auto ptrMaybe = CTX_PRAGMA_MAYBE_FIELDS.FindPtr(key); 
+        if (!ptr && !ptrMaybe && key.SkipPrefix("Disable")) { 
             value = false;
             ptr = CTX_PRAGMA_FIELDS.FindPtr(key);
-            ptrMaybe = CTX_PRAGMA_MAYBE_FIELDS.FindPtr(key);
+            ptrMaybe = CTX_PRAGMA_MAYBE_FIELDS.FindPtr(key); 
         }
-        if (ptr) {
-            this->*(*ptr) = value;
-        } else if (ptrMaybe) {
-            this->*(*ptrMaybe) = value;
-        }
+        if (ptr) { 
+            this->*(*ptr) = value; 
+        } else if (ptrMaybe) { 
+            this->*(*ptrMaybe) = value; 
+        } 
     }
     DiscoveryMode = (NSQLTranslation::ESqlMode::DISCOVERY == Settings.Mode);
 }
@@ -151,25 +151,25 @@ IOutputStream& TContext::Info(NYql::TPosition pos) {
     return MakeIssue(TSeverityIds::S_INFO, TIssuesIds::INFO, pos);
 }
 
-void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action) {
-    TString codePattern = ToString(code);
-    TString actionString = ToString(action);
-
-    TWarningRule rule;
-    TString parseError;
-    auto parseResult = TWarningRule::ParseFrom(codePattern, actionString, rule, parseError);
-    YQL_ENSURE(parseResult == TWarningRule::EParseResult::PARSE_OK);
-    WarningPolicy.AddRule(rule);
-}
-
+void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action) { 
+    TString codePattern = ToString(code); 
+    TString actionString = ToString(action); 
+ 
+    TWarningRule rule; 
+    TString parseError; 
+    auto parseResult = TWarningRule::ParseFrom(codePattern, actionString, rule, parseError); 
+    YQL_ENSURE(parseResult == TWarningRule::EParseResult::PARSE_OK); 
+    WarningPolicy.AddRule(rule); 
+} 
+ 
 IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TPosition pos) {
     if (severity == TSeverityIds::S_WARNING) {
-        auto action = WarningPolicy.GetAction(code);
-        if (action == EWarningAction::ERROR) {
-            severity = TSeverityIds::S_ERROR;
-            HasPendingErrors = true;
-        } else if (action == EWarningAction::DISABLE) {
-            return Cnull;
+        auto action = WarningPolicy.GetAction(code); 
+        if (action == EWarningAction::ERROR) { 
+            severity = TSeverityIds::S_ERROR; 
+            HasPendingErrors = true; 
+        } else if (action == EWarningAction::DISABLE) { 
+            return Cnull; 
         }
     }
 
@@ -246,24 +246,24 @@ TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {
     return BuildAtom(node->GetPos(), alias, TNodeFlags::Default);
 }
 
-void TContext::DeclareVariable(const TString& varName, const TNodePtr& typeNode) {
+void TContext::DeclareVariable(const TString& varName, const TNodePtr& typeNode) { 
     Variables.emplace(varName, typeNode);
 }
 
-bool TContext::AddExport(TPosition pos, const TString& name) {
-    if (IsAnonymousName(name)) {
-        Error(pos) << "Can not export anonymous name " << name;
-        return false;
+bool TContext::AddExport(TPosition pos, const TString& name) { 
+    if (IsAnonymousName(name)) { 
+        Error(pos) << "Can not export anonymous name " << name; 
+        return false; 
     }
-    if (Exports.contains(name)) {
-        Error(pos) << "Duplicate export symbol: " << name;
-        return false;
-    }
-    if (!Scoped->LookupNode(name)) {
-        Error(pos) << "Unable to export unknown symbol: " << name;
-        return false;
-    }
-    Exports.emplace(name);
+    if (Exports.contains(name)) { 
+        Error(pos) << "Duplicate export symbol: " << name; 
+        return false; 
+    } 
+    if (!Scoped->LookupNode(name)) { 
+        Error(pos) << "Unable to export unknown symbol: " << name; 
+        return false; 
+    } 
+    Exports.emplace(name); 
     return true;
 }
 
@@ -336,16 +336,16 @@ void TScopedState::Clear() {
    *this = TScopedState();
 }
 
-TNodePtr TScopedState::LookupNode(const TString& name) {
-    auto mapIt = NamedNodes.find(name);
-    if (mapIt == NamedNodes.end()) {
-        return nullptr;
-    }
-    Y_VERIFY_DEBUG(!mapIt->second.empty());
-    mapIt->second.front()->IsUsed = true;
-    return mapIt->second.front()->Node->Clone();
-}
-
+TNodePtr TScopedState::LookupNode(const TString& name) { 
+    auto mapIt = NamedNodes.find(name); 
+    if (mapIt == NamedNodes.end()) { 
+        return nullptr; 
+    } 
+    Y_VERIFY_DEBUG(!mapIt->second.empty()); 
+    mapIt->second.front()->IsUsed = true; 
+    return mapIt->second.front()->Node->Clone(); 
+} 
+ 
 bool TContext::HasNonYtProvider(const ISource& source) const {
     TTableList tableList;
     source.GetInputTables(tableList);
@@ -374,89 +374,89 @@ bool TContext::UseUnordered(const TTableRef& table) const {
     return YtProviderName == table.Service;
 }
 
-
-TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex) {
-    static const TSet<TStringBuf> denyForAllArgs = {
-        "datatype",
-        "optionaltype",
-        "listtype",
-        "streamtype",
-        "dicttype",
-        "tupletype",
-        "resourcetype",
-        "taggedtype",
-        "varianttype",
-        "callabletype",
-        "optionalitemtype",
-        "listitemtype",
-        "streamitemtype",
-        "dictkeytype",
-        "dictpayloadtype",
-        "tupleelementtype",
-        "structmembertype",
-        "callableresulttype",
-        "callableargumenttype",
-        "variantunderlyingtype",
-    };
-    static const TMap<std::pair<TStringBuf, size_t>, EColumnRefState> positionalArgsCustomStatus = {
-        { {"frombytes", 1},           EColumnRefState::Deny },
-        { {"enum", 0},                EColumnRefState::Deny },
-        { {"asenum", 0},              EColumnRefState::Deny },
-        { {"variant", 1},             EColumnRefState::Deny },
-        { {"variant", 2},             EColumnRefState::Deny },
-        { {"asvariant", 1},           EColumnRefState::Deny },
-        { {"astagged", 1},            EColumnRefState::Deny },
-        { {"ensuretype", 1},          EColumnRefState::Deny },
-        { {"ensuretype", 2},          EColumnRefState::Deny },
-        { {"ensureconvertibleto", 1}, EColumnRefState::Deny },
-        { {"ensureconvertibleto", 2}, EColumnRefState::Deny },
-
-        // TODO: switch to Deny here
-        { {"evaluateexpr", 0},        EColumnRefState::AsStringLiteral },
-        { {"evaluateatom", 0},        EColumnRefState::AsStringLiteral },
-        { {"evaluatetype", 0},        EColumnRefState::AsStringLiteral },
-
-        { {"nothing", 0},             EColumnRefState::Deny },
-        { {"formattype", 0},          EColumnRefState::Deny },
-        { {"instanceof", 0},          EColumnRefState::Deny },
-
-        { {"unpickle", 0},            EColumnRefState::Deny },
-        { {"typehandle", 0},          EColumnRefState::Deny },
-
-        { {"listcreate", 0},          EColumnRefState::Deny },
-        { {"setcreate", 0},           EColumnRefState::Deny },
-        { {"dictcreate", 0},          EColumnRefState::Deny },
-        { {"dictcreate", 1},          EColumnRefState::Deny },
-        { {"weakfield", 1},           EColumnRefState::Deny },
-
-        { {"Yson::ConvertTo", 1},     EColumnRefState::Deny },
-    };
-
-    TString normalized;
-    if (module.empty()) {
-        normalized = to_lower(func);
-    } else if (to_upper(module) == "YQL") {
-        normalized = "YQL::" + func;
-    } else {
-        normalized = module + "::" + func;
-    }
-
-    if (normalized == "typeof" && argIndex == 0) {
-        // TODO: more such cases?
-        return ctx.GetTopLevelColumnReferenceState();
-    }
-
-    if (denyForAllArgs.contains(normalized)) {
-        return EColumnRefState::Deny;
-    }
-
-    auto it = positionalArgsCustomStatus.find(std::make_pair(normalized, argIndex));
-    if (it != positionalArgsCustomStatus.end()) {
-        return it->second;
-    }
-    return {};
-}
-
+ 
+TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex) { 
+    static const TSet<TStringBuf> denyForAllArgs = { 
+        "datatype", 
+        "optionaltype", 
+        "listtype", 
+        "streamtype", 
+        "dicttype", 
+        "tupletype", 
+        "resourcetype", 
+        "taggedtype", 
+        "varianttype", 
+        "callabletype", 
+        "optionalitemtype", 
+        "listitemtype", 
+        "streamitemtype", 
+        "dictkeytype", 
+        "dictpayloadtype", 
+        "tupleelementtype", 
+        "structmembertype", 
+        "callableresulttype", 
+        "callableargumenttype", 
+        "variantunderlyingtype", 
+    }; 
+    static const TMap<std::pair<TStringBuf, size_t>, EColumnRefState> positionalArgsCustomStatus = { 
+        { {"frombytes", 1},           EColumnRefState::Deny }, 
+        { {"enum", 0},                EColumnRefState::Deny }, 
+        { {"asenum", 0},              EColumnRefState::Deny }, 
+        { {"variant", 1},             EColumnRefState::Deny }, 
+        { {"variant", 2},             EColumnRefState::Deny }, 
+        { {"asvariant", 1},           EColumnRefState::Deny }, 
+        { {"astagged", 1},            EColumnRefState::Deny }, 
+        { {"ensuretype", 1},          EColumnRefState::Deny }, 
+        { {"ensuretype", 2},          EColumnRefState::Deny }, 
+        { {"ensureconvertibleto", 1}, EColumnRefState::Deny }, 
+        { {"ensureconvertibleto", 2}, EColumnRefState::Deny }, 
+ 
+        // TODO: switch to Deny here 
+        { {"evaluateexpr", 0},        EColumnRefState::AsStringLiteral }, 
+        { {"evaluateatom", 0},        EColumnRefState::AsStringLiteral }, 
+        { {"evaluatetype", 0},        EColumnRefState::AsStringLiteral }, 
+ 
+        { {"nothing", 0},             EColumnRefState::Deny }, 
+        { {"formattype", 0},          EColumnRefState::Deny }, 
+        { {"instanceof", 0},          EColumnRefState::Deny }, 
+ 
+        { {"unpickle", 0},            EColumnRefState::Deny }, 
+        { {"typehandle", 0},          EColumnRefState::Deny }, 
+ 
+        { {"listcreate", 0},          EColumnRefState::Deny }, 
+        { {"setcreate", 0},           EColumnRefState::Deny }, 
+        { {"dictcreate", 0},          EColumnRefState::Deny }, 
+        { {"dictcreate", 1},          EColumnRefState::Deny }, 
+        { {"weakfield", 1},           EColumnRefState::Deny }, 
+ 
+        { {"Yson::ConvertTo", 1},     EColumnRefState::Deny }, 
+    }; 
+ 
+    TString normalized; 
+    if (module.empty()) { 
+        normalized = to_lower(func); 
+    } else if (to_upper(module) == "YQL") { 
+        normalized = "YQL::" + func; 
+    } else { 
+        normalized = module + "::" + func; 
+    } 
+ 
+    if (normalized == "typeof" && argIndex == 0) { 
+        // TODO: more such cases? 
+        return ctx.GetTopLevelColumnReferenceState(); 
+    } 
+ 
+    if (denyForAllArgs.contains(normalized)) { 
+        return EColumnRefState::Deny; 
+    } 
+ 
+    auto it = positionalArgsCustomStatus.find(std::make_pair(normalized, argIndex)); 
+    if (it != positionalArgsCustomStatus.end()) { 
+        return it->second; 
+    } 
+    return {}; 
+} 
+ 
 TTranslation::TTranslation(TContext& ctx)
     : Ctx(ctx)
 {
@@ -471,78 +471,78 @@ IOutputStream& TTranslation::Error() {
 }
 
 TNodePtr TTranslation::GetNamedNode(const TString& name) {
-    if (name == "$_") {
-        Ctx.Error() << "Unable to reference anonymous name " << name;
-        return nullptr;
-    }
-    auto res = Ctx.Scoped->LookupNode(name);
-    if (!res) {
+    if (name == "$_") { 
+        Ctx.Error() << "Unable to reference anonymous name " << name; 
+        return nullptr; 
+    } 
+    auto res = Ctx.Scoped->LookupNode(name); 
+    if (!res) { 
         Ctx.Error() << "Unknown name: " << name;
     }
-    return res;
+    return res; 
 }
 
-TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, const TNodeBuilderByName& builder) {
-    TString resultName = name;
-    if (IsAnonymousName(name)) {
-        resultName = "$_yql_anonymous_name_" + ToString(Ctx.AnonymousNameIndex++);
-        YQL_ENSURE(Ctx.Scoped->NamedNodes.find(resultName) == Ctx.Scoped->NamedNodes.end());
-    }
-    auto node = builder(resultName);
+TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, const TNodeBuilderByName& builder) { 
+    TString resultName = name; 
+    if (IsAnonymousName(name)) { 
+        resultName = "$_yql_anonymous_name_" + ToString(Ctx.AnonymousNameIndex++); 
+        YQL_ENSURE(Ctx.Scoped->NamedNodes.find(resultName) == Ctx.Scoped->NamedNodes.end()); 
+    } 
+    auto node = builder(resultName); 
     Y_VERIFY_DEBUG(node);
-    auto mapIt = Ctx.Scoped->NamedNodes.find(resultName);
+    auto mapIt = Ctx.Scoped->NamedNodes.find(resultName); 
     if (mapIt == Ctx.Scoped->NamedNodes.end()) {
-        auto result = Ctx.Scoped->NamedNodes.insert(std::make_pair(resultName, TDeque<TNodeWithUsageInfoPtr>()));
+        auto result = Ctx.Scoped->NamedNodes.insert(std::make_pair(resultName, TDeque<TNodeWithUsageInfoPtr>())); 
         Y_VERIFY_DEBUG(result.second);
         mapIt = result.first;
     }
 
-    mapIt->second.push_front(MakeIntrusive<TNodeWithUsageInfo>(node, namePos, Ctx.ScopeLevel));
-    return resultName;
+    mapIt->second.push_front(MakeIntrusive<TNodeWithUsageInfo>(node, namePos, Ctx.ScopeLevel)); 
+    return resultName; 
 }
 
-TString TTranslation::PushNamedNode(NYql::TPosition namePos, const TString &name, NSQLTranslationV1::TNodePtr node) {
-    return PushNamedNode(namePos, name, [node](const TString&) { return node; });
-}
-
-TString TTranslation::PushNamedAtom(TPosition namePos, const TString& name) {
-    auto buildAtom = [namePos](const TString& resultName) {
-        return BuildAtom(namePos, resultName);
-    };
-    return PushNamedNode(namePos, name, buildAtom);
-}
-
+TString TTranslation::PushNamedNode(NYql::TPosition namePos, const TString &name, NSQLTranslationV1::TNodePtr node) { 
+    return PushNamedNode(namePos, name, [node](const TString&) { return node; }); 
+} 
+ 
+TString TTranslation::PushNamedAtom(TPosition namePos, const TString& name) { 
+    auto buildAtom = [namePos](const TString& resultName) { 
+        return BuildAtom(namePos, resultName); 
+    }; 
+    return PushNamedNode(namePos, name, buildAtom); 
+} 
+ 
 void TTranslation::PopNamedNode(const TString& name) {
     auto mapIt = Ctx.Scoped->NamedNodes.find(name);
     Y_VERIFY_DEBUG(mapIt != Ctx.Scoped->NamedNodes.end());
     Y_VERIFY_DEBUG(mapIt->second.size() > 0);
-    auto& top = mapIt->second.front();
-    if (!top->IsUsed && !Ctx.HasPendingErrors && !name.StartsWith("$_")) {
-        Ctx.Warning(top->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL) << "Symbol " << name << " is not used";
-    }
-    mapIt->second.pop_front();
+    auto& top = mapIt->second.front(); 
+    if (!top->IsUsed && !Ctx.HasPendingErrors && !name.StartsWith("$_")) { 
+        Ctx.Warning(top->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL) << "Symbol " << name << " is not used"; 
+    } 
+    mapIt->second.pop_front(); 
     if (mapIt->second.empty()) {
         Ctx.Scoped->NamedNodes.erase(mapIt);
     }
 }
 
-void TTranslation::WarnUnusedNodes() const {
-    if (Ctx.HasPendingErrors) {
-        // result is not reliable in this case
-        return;
-    }
-    for (const auto& [name, items]: Ctx.Scoped->NamedNodes) {
-        if (name.StartsWith("$_")) {
-            continue;
-        }
-        for (const auto& item : items) {
-            if (!item->IsUsed && item->Level == Ctx.ScopeLevel) {
-                Ctx.Warning(item->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL) << "Symbol " << name << " is not used";
-            }
-        }
-    }
-}
-
+void TTranslation::WarnUnusedNodes() const { 
+    if (Ctx.HasPendingErrors) { 
+        // result is not reliable in this case 
+        return; 
+    } 
+    for (const auto& [name, items]: Ctx.Scoped->NamedNodes) { 
+        if (name.StartsWith("$_")) { 
+            continue; 
+        } 
+        for (const auto& item : items) { 
+            if (!item->IsUsed && item->Level == Ctx.ScopeLevel) { 
+                Ctx.Warning(item->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL) << "Symbol " << name << " is not used"; 
+            } 
+        } 
+    } 
+} 
+ 
 TString GetDescription(const google::protobuf::Message& node, const google::protobuf::FieldDescriptor* d) {
     const auto& field = node.GetReflection()->GetMessage(node, d);
     return field.GetReflection()->GetString(field, d->message_type()->FindFieldByName("Descr"));

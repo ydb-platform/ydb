@@ -146,9 +146,9 @@ ui32 FillLevels(THashMap<ui32, TLevelContext>& basicNodesMap, ui32 current, THas
         return 0;
     }
 
-    auto findPtr = basicNodesMap.FindPtr(current);
-    YQL_ENSURE(findPtr);
-    auto& ctx = *findPtr;
+    auto findPtr = basicNodesMap.FindPtr(current); 
+    YQL_ENSURE(findPtr); 
+    auto& ctx = *findPtr; 
     if (ctx.Node->Level) {
         return ctx.Node->Level;
     }
@@ -157,18 +157,18 @@ ui32 FillLevels(THashMap<ui32, TLevelContext>& basicNodesMap, ui32 current, THas
     ui32 maxLevel = 0;
     bool hasOutputs = false;
     for (auto& child : ctx.Inputs) {
-        auto findPtr = basicNodesMap.FindPtr(child);
-        YQL_ENSURE(findPtr);
-        auto& childCtx = *findPtr;
+        auto findPtr = basicNodesMap.FindPtr(child); 
+        YQL_ENSURE(findPtr); 
+        auto& childCtx = *findPtr; 
         hasOutputs = hasOutputs || !childCtx.Outputs.empty();
         maxLevel = Max(maxLevel, FillLevels(basicNodesMap, child, visited));
     }
 
     ctx.Node->Level = maxLevel + (hasOutputs ? 2 : 1);
     for (auto& child : ctx.Outputs) {
-        auto findPtr = basicNodesMap.FindPtr(child);
-        YQL_ENSURE(findPtr);
-        auto& childCtx = *findPtr;
+        auto findPtr = basicNodesMap.FindPtr(child); 
+        YQL_ENSURE(findPtr); 
+        auto& childCtx = *findPtr; 
         childCtx.Node->Level = ctx.Node->Level + 1;
     }
 
@@ -537,7 +537,7 @@ public:
         for (auto& link : basicLinks) {
             basicNodesMap[link.Target].Inputs.push_back(link.Source);
             auto target = basicNodesMap.FindPtr(link.Target);
-            YQL_ENSURE(target);
+            YQL_ENSURE(target); 
             if (target->Node->Type == TBasicNode::EType::Output) {
                 basicNodesMap[link.Source].Outputs.push_back(link.Target);
             }
@@ -570,16 +570,16 @@ public:
         for (auto& pin : pins) {
             if (pin.DataSource) {
                 auto providerName = pin.DataSource->Child(0)->Content();
-                auto providerPtr = Types_.DataSourceMap.FindPtr(providerName);
-                YQL_ENSURE(providerPtr);
-                UpdateProviders(providers, pin.DataSource, providerPtr->Get());
+                auto providerPtr = Types_.DataSourceMap.FindPtr(providerName); 
+                YQL_ENSURE(providerPtr); 
+                UpdateProviders(providers, pin.DataSource, providerPtr->Get()); 
             }
 
             if (pin.DataSink) {
                 auto providerName = pin.DataSink->Child(0)->Content();
-                auto providerPtr = Types_.DataSinkMap.FindPtr(providerName);
-                YQL_ENSURE(providerPtr);
-                UpdateProviders(providers, pin.DataSink, providerPtr->Get());
+                auto providerPtr = Types_.DataSinkMap.FindPtr(providerName); 
+                YQL_ENSURE(providerPtr); 
+                UpdateProviders(providers, pin.DataSink, providerPtr->Get()); 
             }
         }
     }
@@ -587,16 +587,16 @@ public:
     IDataProvider& GetProvider(const TPinInfo& pin, TTypeAnnotationContext& types) {
         if (pin.DataSource) {
             auto providerName = pin.DataSource->Child(0)->Content();
-            auto providerPtr = types.DataSourceMap.FindPtr(providerName);
-            YQL_ENSURE(providerPtr && *providerPtr);
-            return **providerPtr;
+            auto providerPtr = types.DataSourceMap.FindPtr(providerName); 
+            YQL_ENSURE(providerPtr && *providerPtr); 
+            return **providerPtr; 
         }
 
         if (pin.DataSink) {
             auto providerName = pin.DataSink->Child(0)->Content();
-            auto providerPtr = types.DataSinkMap.FindPtr(providerName);
-            YQL_ENSURE(providerPtr && *providerPtr);
-            return **providerPtr;
+            auto providerPtr = types.DataSinkMap.FindPtr(providerName); 
+            YQL_ENSURE(providerPtr && *providerPtr); 
+            return **providerPtr; 
         }
 
         YQL_ENSURE(false, "Expected either datasource or sink");
@@ -605,20 +605,20 @@ public:
     TProviderInfo& FindProvider(TProviderInfoMap& providers, const TPinInfo& pin) const {
         if (pin.DataSource) {
             auto providerName = pin.DataSource->Child(0)->Content();
-            auto providerPtr = Types_.DataSourceMap.FindPtr(providerName);
-            YQL_ENSURE(providerPtr && *providerPtr);
-            auto infoPtr = providers.FindPtr((*providerPtr)->GetPlanFormatter().GetProviderPath(*pin.DataSource));
-            YQL_ENSURE(infoPtr);
-            return *infoPtr;
+            auto providerPtr = Types_.DataSourceMap.FindPtr(providerName); 
+            YQL_ENSURE(providerPtr && *providerPtr); 
+            auto infoPtr = providers.FindPtr((*providerPtr)->GetPlanFormatter().GetProviderPath(*pin.DataSource)); 
+            YQL_ENSURE(infoPtr); 
+            return *infoPtr; 
         }
 
         if (pin.DataSink) {
             auto providerName = pin.DataSink->Child(0)->Content();
-            auto providerPtr = Types_.DataSinkMap.FindPtr(providerName);
-            YQL_ENSURE(providerPtr && *providerPtr);
-            auto infoPtr = providers.FindPtr((*providerPtr)->GetPlanFormatter().GetProviderPath(*pin.DataSink));
-            YQL_ENSURE(infoPtr);
-            return *infoPtr;
+            auto providerPtr = Types_.DataSinkMap.FindPtr(providerName); 
+            YQL_ENSURE(providerPtr && *providerPtr); 
+            auto infoPtr = providers.FindPtr((*providerPtr)->GetPlanFormatter().GetProviderPath(*pin.DataSink)); 
+            YQL_ENSURE(infoPtr); 
+            return *infoPtr; 
         }
 
         YQL_ENSURE(false, "Expected either datasource or sink");

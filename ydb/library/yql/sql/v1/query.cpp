@@ -169,14 +169,14 @@ public:
         }
 
         TCiString func(Func);
-        if (func != "object") {
-            for (auto& arg: Args) {
-                if (arg.Expr->GetLabel()) {
-                    ctx.Error(Pos) << "Named arguments are not supported for table function " << to_upper(Func);
-                    return nullptr;
-                }
-            }
-        }
+        if (func != "object") { 
+            for (auto& arg: Args) { 
+                if (arg.Expr->GetLabel()) { 
+                    ctx.Error(Pos) << "Named arguments are not supported for table function " << to_upper(Func); 
+                    return nullptr; 
+                } 
+            } 
+        } 
         if (func == "concat_strict") {
             auto tuple = Y();
             for (auto& arg: Args) {
@@ -406,42 +406,42 @@ public:
 
             return L(Y("DataTables"));
         }
-        else if (func == "object") {
-            const size_t positionalArgs = 2;
-            auto result = Y("MrObject");
-            auto settings = Y();
-            //TVector<TNodePtr> settings;
-            size_t argc = 0;
-            for (ui32 index = 0; index < Args.size(); ++index) {
-                auto& arg = Args[index];
-                if (arg.HasAt) {
-                    ctx.Error(arg.Expr->GetPos()) << "Temporary tables are not supported here";
-                    return nullptr;
-                }
-
-                if (!arg.View.empty()) {
-                    ctx.Error(Pos) << to_upper(Func) << " doesn't supports views";
-                    return nullptr;
-                }
-
-                if (!arg.Expr->GetLabel()) {
-                    ExtractTableName(ctx, arg);
-                    result = L(result, arg.Id.Build());
-                    ++argc;
-                } else {
-                    settings = L(settings, Q(Y(BuildQuotedAtom(arg.Expr->GetPos(), arg.Expr->GetLabel()), arg.Expr)));
-                }
-            }
-
-            if (argc != positionalArgs) {
-                ctx.Error(Pos) << to_upper(Func) << " requires exacty " << positionalArgs << " positional args, but got " << argc;
-                return nullptr;
-            }
-
-            result = L(result, Q(settings));
-            return result;
-        }
-
+        else if (func == "object") { 
+            const size_t positionalArgs = 2; 
+            auto result = Y("MrObject"); 
+            auto settings = Y(); 
+            //TVector<TNodePtr> settings; 
+            size_t argc = 0; 
+            for (ui32 index = 0; index < Args.size(); ++index) { 
+                auto& arg = Args[index]; 
+                if (arg.HasAt) { 
+                    ctx.Error(arg.Expr->GetPos()) << "Temporary tables are not supported here"; 
+                    return nullptr; 
+                } 
+ 
+                if (!arg.View.empty()) { 
+                    ctx.Error(Pos) << to_upper(Func) << " doesn't supports views"; 
+                    return nullptr; 
+                } 
+ 
+                if (!arg.Expr->GetLabel()) { 
+                    ExtractTableName(ctx, arg); 
+                    result = L(result, arg.Id.Build()); 
+                    ++argc; 
+                } else { 
+                    settings = L(settings, Q(Y(BuildQuotedAtom(arg.Expr->GetPos(), arg.Expr->GetLabel()), arg.Expr))); 
+                } 
+            } 
+ 
+            if (argc != positionalArgs) { 
+                ctx.Error(Pos) << to_upper(Func) << " requires exacty " << positionalArgs << " positional args, but got " << argc; 
+                return nullptr; 
+            } 
+ 
+            result = L(result, Q(settings)); 
+            return result; 
+        } 
+ 
         ctx.Error(Pos) << "Unknown table name preprocessor: " << Func;
         return nullptr;
     }
@@ -468,14 +468,14 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         for (auto& hint: Hints) {
-            TString hintName = hint.first;
-            TMaybe<TIssue> normalizeError = NormalizeName(Pos, hintName);
+            TString hintName = hint.first; 
+            TMaybe<TIssue> normalizeError = NormalizeName(Pos, hintName); 
             if (!normalizeError.Empty()) {
                 ctx.Error() << normalizeError->Message;
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
                 return false;
             }
-            TNodePtr option = Y(BuildQuotedAtom(Pos, hintName));
+            TNodePtr option = Y(BuildQuotedAtom(Pos, hintName)); 
             for (auto& x : hint.second) {
                 if (!x->Init(ctx, src)) {
                     return false;
@@ -1055,333 +1055,333 @@ TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, TScopedStatePtr scop
     return new TDropTableNode(pos, tr, scoped);
 }
 
-class TCreateRole final: public TAstListNode {
-public:
-    TCreateRole(TPosition pos, bool isUser, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped)
-        : TAstListNode(pos)
-        , IsUser(isUser)
-        , Service(service)
-        , Cluster(cluster)
-        , Name(name)
-        , Params(params)
-        , Scoped(scoped)
-    {
-        FakeSource = BuildFakeSource(pos);
-        scoped->UseCluster(service, cluster);
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(src);
-        auto name = Name.Build();
-        TNodePtr password;
-        if (Params && Params->Password) {
-            password = Params->Password->Build();
-        }
-        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx);
-
-        if (!name->Init(ctx, FakeSource.Get()) || !cluster->Init(ctx, FakeSource.Get())) {
-            return false;
-        }
-        if (password && !password->Init(ctx, FakeSource.Get())) {
-            return false;
-        }
-
-        auto options = Y(Q(Y(Q("mode"), Q(IsUser ? "createUser" : "createGroup"))));
-        if (Params) {
-            if (Params->IsPasswordEncrypted) {
-                options = L(options, Q(Y(Q("passwordEncrypted"))));
-            }
-            if (Params->Password) {
-                options = L(options, Q(Y(Q("password"), password)));
-            } else {
-                options = L(options, Q(Y(Q("nullPassword"))));
-            }
-        }
-
-        Add("block", Q(Y(
-            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)),
-            Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("role"), Y("String", name)))), Y("Void"), Q(options))),
-            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
-            )));
-
-        return TAstListNode::DoInit(ctx, FakeSource.Get());
-    }
-
-    TPtr DoClone() const final {
-        return {};
-    }
-private:
-    const bool IsUser;
-    const TString Service;
-    TDeferredAtom Cluster;
-    TDeferredAtom Name;
-    const TMaybe<TRoleParameters> Params;
-    TScopedStatePtr Scoped;
-    TSourcePtr FakeSource;
-};
-
-TNodePtr BuildCreateUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped) {
-    bool isUser = true;
-    return new TCreateRole(pos, isUser, service, cluster, name, params, scoped);
-}
-
-TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, TScopedStatePtr scoped) {
-    bool isUser = false;
-    return new TCreateRole(pos, isUser, service, cluster, name, {}, scoped);
-}
-
-class TAlterUser final: public TAstListNode {
-public:
-    TAlterUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TRoleParameters& params, TScopedStatePtr scoped)
-        : TAstListNode(pos)
-        , Service(service)
-        , Cluster(cluster)
-        , Name(name)
-        , Params(params)
-        , Scoped(scoped)
-    {
-        FakeSource = BuildFakeSource(pos);
-        scoped->UseCluster(service, cluster);
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(src);
-        auto name = Name.Build();
-        TNodePtr password;
-        if (Params.Password) {
-            password = Params.Password->Build();
-        }
-        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx);
-
-        if (!name->Init(ctx, FakeSource.Get()) || !cluster->Init(ctx, FakeSource.Get())) {
-            return false;
-        }
-        if (password && !password->Init(ctx, FakeSource.Get())) {
-            return false;
-        }
-
-        auto options = Y(Q(Y(Q("mode"), Q("alterUser"))));
-        if (Params.IsPasswordEncrypted) {
-            options = L(options, Q(Y(Q("passwordEncrypted"))));
-        }
-        if (Params.Password) {
-            options = L(options, Q(Y(Q("password"), password)));
-        } else {
-            options = L(options, Q(Y(Q("nullPassword"))));
-        }
-
-        Add("block", Q(Y(
-            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)),
-            Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("role"), Y("String", name)))), Y("Void"), Q(options))),
-            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
-            )));
-
-        return TAstListNode::DoInit(ctx, FakeSource.Get());
-    }
-
-    TPtr DoClone() const final {
-        return {};
-    }
-private:
-    const TString Service;
-    TDeferredAtom Cluster;
-    TDeferredAtom Name;
-    const TRoleParameters Params;
-    TScopedStatePtr Scoped;
-    TSourcePtr FakeSource;
-};
-
-TNodePtr BuildAlterUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TRoleParameters& params, TScopedStatePtr scoped) {
-    return new TAlterUser(pos, service, cluster, name, params, scoped);
-}
-
-class TRenameRole final: public TAstListNode {
-public:
-    TRenameRole(TPosition pos, bool isUser, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped)
-        : TAstListNode(pos)
-        , IsUser(isUser)
-        , Service(service)
-        , Cluster(cluster)
-        , Name(name)
-        , NewName(newName)
-        , Scoped(scoped)
-    {
-        FakeSource = BuildFakeSource(pos);
-        scoped->UseCluster(service, cluster);
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(src);
-        auto name = Name.Build();
-        auto newName = NewName.Build();
-        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx);
-
-        if (!name->Init(ctx, FakeSource.Get()) ||
-            !newName->Init(ctx, FakeSource.Get()) ||
-            !cluster->Init(ctx, FakeSource.Get()))
-        {
-            return false;
-        }
-
-        auto options = Y(Q(Y(Q("mode"), Q(IsUser ? "renameUser" : "renameGroup"))));
-        options = L(options, Q(Y(Q("newName"), newName)));
-
-        Add("block", Q(Y(
-            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)),
-            Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("role"), Y("String", name)))), Y("Void"), Q(options))),
-            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
-            )));
-
-        return TAstListNode::DoInit(ctx, FakeSource.Get());
-    }
-
-    TPtr DoClone() const final {
-        return {};
-    }
-private:
-    const bool IsUser;
-    const TString Service;
-    TDeferredAtom Cluster;
-    TDeferredAtom Name;
-    TDeferredAtom NewName;
-    TScopedStatePtr Scoped;
-    TSourcePtr FakeSource;
-};
-
-TNodePtr BuildRenameUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped) {
-    const bool isUser = true;
-    return new TRenameRole(pos, isUser, service, cluster, name, newName, scoped);
-}
-
-TNodePtr BuildRenameGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped) {
-    const bool isUser = false;
-    return new TRenameRole(pos, isUser, service, cluster, name, newName, scoped);
-}
-
-class TAlterGroup final: public TAstListNode {
-public:
-    TAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop, TScopedStatePtr scoped)
-        : TAstListNode(pos)
-        , Service(service)
-        , Cluster(cluster)
-        , Name(name)
-        , ToChange(toChange)
-        , IsDrop(isDrop)
-        , Scoped(scoped)
-    {
-        FakeSource = BuildFakeSource(pos);
-        scoped->UseCluster(service, cluster);
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(src);
-        auto name = Name.Build();
-        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx);
-
-        if (!name->Init(ctx, FakeSource.Get()) || !cluster->Init(ctx, FakeSource.Get())) {
-            return false;
-        }
-
-        TVector<TNodePtr> toChange;
-        for (auto& item : ToChange) {
-            toChange.push_back(item.Build());
-            if (!toChange.back()->Init(ctx, FakeSource.Get())) {
-                return false;
-            }
-        }
-
-        auto options = Y(Q(Y(Q("mode"), Q(IsDrop ? "dropUsersFromGroup" : "addUsersToGroup"))));
-        options = L(options, Q(Y(Q("roles"), Q(new TAstListNodeImpl(Pos, std::move(toChange))))));
-
-        Add("block", Q(Y(
-            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)),
-            Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("role"), Y("String", name)))), Y("Void"), Q(options))),
-            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
-            )));
-
-        return TAstListNode::DoInit(ctx, FakeSource.Get());
-    }
-
-    TPtr DoClone() const final {
-        return {};
-    }
-private:
-    const TString Service;
-    TDeferredAtom Cluster;
-    TDeferredAtom Name;
-    TVector<TDeferredAtom> ToChange;
-    const bool IsDrop;
-    TScopedStatePtr Scoped;
-    TSourcePtr FakeSource;
-};
-
-TNodePtr BuildAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop,
-    TScopedStatePtr scoped)
-{
-    return new TAlterGroup(pos, service, cluster, name, toChange, isDrop, scoped);
-}
-
-class TDropRoles final: public TAstListNode {
-public:
-    TDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool force, TScopedStatePtr scoped)
-        : TAstListNode(pos)
-        , Service(service)
-        , Cluster(cluster)
-        , ToDrop(toDrop)
-        , IsUser(isUser)
-        , Force(force)
-        , Scoped(scoped)
-    {
-        FakeSource = BuildFakeSource(pos);
-        scoped->UseCluster(service, cluster);
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(src);
-        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx);
-
-        if (!cluster->Init(ctx, FakeSource.Get())) {
-            return false;
-        }
-
-        auto options = Y(Q(Y(Q("mode"), Q(IsUser ? "dropUser" : "dropGroup"))));
-        if (Force) {
-            options = L(options, Q(Y(Q("force"))));
-        }
-
-
-        auto block = Y(Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)));
-        for (auto& item : ToDrop) {
-            auto name = item.Build();
-            if (!name->Init(ctx, FakeSource.Get())) {
-                return false;
-            }
-
-            block = L(block, Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("role"), Y("String", name)))), Y("Void"), Q(options))));
-        }
-        block = L(block, Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")));
-        Add("block", Q(block));
-
-        return TAstListNode::DoInit(ctx, FakeSource.Get());
-    }
-
-    TPtr DoClone() const final {
-        return {};
-    }
-private:
-    const TString Service;
-    TDeferredAtom Cluster;
-    TVector<TDeferredAtom> ToDrop;
-    const bool IsUser;
-    const bool Force;
-    TScopedStatePtr Scoped;
-    TSourcePtr FakeSource;
-};
-
-TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool force, TScopedStatePtr scoped) {
-    return new TDropRoles(pos, service, cluster, toDrop, isUser, force, scoped);
-}
-
+class TCreateRole final: public TAstListNode { 
+public: 
+    TCreateRole(TPosition pos, bool isUser, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped) 
+        : TAstListNode(pos) 
+        , IsUser(isUser) 
+        , Service(service) 
+        , Cluster(cluster) 
+        , Name(name) 
+        , Params(params) 
+        , Scoped(scoped) 
+    { 
+        FakeSource = BuildFakeSource(pos); 
+        scoped->UseCluster(service, cluster); 
+    } 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override { 
+        Y_UNUSED(src); 
+        auto name = Name.Build(); 
+        TNodePtr password; 
+        if (Params && Params->Password) { 
+            password = Params->Password->Build(); 
+        } 
+        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx); 
+ 
+        if (!name->Init(ctx, FakeSource.Get()) || !cluster->Init(ctx, FakeSource.Get())) { 
+            return false; 
+        } 
+        if (password && !password->Init(ctx, FakeSource.Get())) { 
+            return false; 
+        } 
+ 
+        auto options = Y(Q(Y(Q("mode"), Q(IsUser ? "createUser" : "createGroup")))); 
+        if (Params) { 
+            if (Params->IsPasswordEncrypted) { 
+                options = L(options, Q(Y(Q("passwordEncrypted")))); 
+            } 
+            if (Params->Password) { 
+                options = L(options, Q(Y(Q("password"), password))); 
+            } else { 
+                options = L(options, Q(Y(Q("nullPassword")))); 
+            } 
+        } 
+ 
+        Add("block", Q(Y( 
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)), 
+            Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("role"), Y("String", name)))), Y("Void"), Q(options))), 
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")) 
+            ))); 
+ 
+        return TAstListNode::DoInit(ctx, FakeSource.Get()); 
+    } 
+ 
+    TPtr DoClone() const final { 
+        return {}; 
+    } 
+private: 
+    const bool IsUser; 
+    const TString Service; 
+    TDeferredAtom Cluster; 
+    TDeferredAtom Name; 
+    const TMaybe<TRoleParameters> Params; 
+    TScopedStatePtr Scoped; 
+    TSourcePtr FakeSource; 
+}; 
+ 
+TNodePtr BuildCreateUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped) { 
+    bool isUser = true; 
+    return new TCreateRole(pos, isUser, service, cluster, name, params, scoped); 
+} 
+ 
+TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, TScopedStatePtr scoped) { 
+    bool isUser = false; 
+    return new TCreateRole(pos, isUser, service, cluster, name, {}, scoped); 
+} 
+ 
+class TAlterUser final: public TAstListNode { 
+public: 
+    TAlterUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TRoleParameters& params, TScopedStatePtr scoped) 
+        : TAstListNode(pos) 
+        , Service(service) 
+        , Cluster(cluster) 
+        , Name(name) 
+        , Params(params) 
+        , Scoped(scoped) 
+    { 
+        FakeSource = BuildFakeSource(pos); 
+        scoped->UseCluster(service, cluster); 
+    } 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override { 
+        Y_UNUSED(src); 
+        auto name = Name.Build(); 
+        TNodePtr password; 
+        if (Params.Password) { 
+            password = Params.Password->Build(); 
+        } 
+        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx); 
+ 
+        if (!name->Init(ctx, FakeSource.Get()) || !cluster->Init(ctx, FakeSource.Get())) { 
+            return false; 
+        } 
+        if (password && !password->Init(ctx, FakeSource.Get())) { 
+            return false; 
+        } 
+ 
+        auto options = Y(Q(Y(Q("mode"), Q("alterUser")))); 
+        if (Params.IsPasswordEncrypted) { 
+            options = L(options, Q(Y(Q("passwordEncrypted")))); 
+        } 
+        if (Params.Password) { 
+            options = L(options, Q(Y(Q("password"), password))); 
+        } else { 
+            options = L(options, Q(Y(Q("nullPassword")))); 
+        } 
+ 
+        Add("block", Q(Y( 
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)), 
+            Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("role"), Y("String", name)))), Y("Void"), Q(options))), 
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")) 
+            ))); 
+ 
+        return TAstListNode::DoInit(ctx, FakeSource.Get()); 
+    } 
+ 
+    TPtr DoClone() const final { 
+        return {}; 
+    } 
+private: 
+    const TString Service; 
+    TDeferredAtom Cluster; 
+    TDeferredAtom Name; 
+    const TRoleParameters Params; 
+    TScopedStatePtr Scoped; 
+    TSourcePtr FakeSource; 
+}; 
+ 
+TNodePtr BuildAlterUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TRoleParameters& params, TScopedStatePtr scoped) { 
+    return new TAlterUser(pos, service, cluster, name, params, scoped); 
+} 
+ 
+class TRenameRole final: public TAstListNode { 
+public: 
+    TRenameRole(TPosition pos, bool isUser, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped) 
+        : TAstListNode(pos) 
+        , IsUser(isUser) 
+        , Service(service) 
+        , Cluster(cluster) 
+        , Name(name) 
+        , NewName(newName) 
+        , Scoped(scoped) 
+    { 
+        FakeSource = BuildFakeSource(pos); 
+        scoped->UseCluster(service, cluster); 
+    } 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override { 
+        Y_UNUSED(src); 
+        auto name = Name.Build(); 
+        auto newName = NewName.Build(); 
+        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx); 
+ 
+        if (!name->Init(ctx, FakeSource.Get()) || 
+            !newName->Init(ctx, FakeSource.Get()) || 
+            !cluster->Init(ctx, FakeSource.Get())) 
+        { 
+            return false; 
+        } 
+ 
+        auto options = Y(Q(Y(Q("mode"), Q(IsUser ? "renameUser" : "renameGroup")))); 
+        options = L(options, Q(Y(Q("newName"), newName))); 
+ 
+        Add("block", Q(Y( 
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)), 
+            Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("role"), Y("String", name)))), Y("Void"), Q(options))), 
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")) 
+            ))); 
+ 
+        return TAstListNode::DoInit(ctx, FakeSource.Get()); 
+    } 
+ 
+    TPtr DoClone() const final { 
+        return {}; 
+    } 
+private: 
+    const bool IsUser; 
+    const TString Service; 
+    TDeferredAtom Cluster; 
+    TDeferredAtom Name; 
+    TDeferredAtom NewName; 
+    TScopedStatePtr Scoped; 
+    TSourcePtr FakeSource; 
+}; 
+ 
+TNodePtr BuildRenameUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped) { 
+    const bool isUser = true; 
+    return new TRenameRole(pos, isUser, service, cluster, name, newName, scoped); 
+} 
+ 
+TNodePtr BuildRenameGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped) { 
+    const bool isUser = false; 
+    return new TRenameRole(pos, isUser, service, cluster, name, newName, scoped); 
+} 
+ 
+class TAlterGroup final: public TAstListNode { 
+public: 
+    TAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop, TScopedStatePtr scoped) 
+        : TAstListNode(pos) 
+        , Service(service) 
+        , Cluster(cluster) 
+        , Name(name) 
+        , ToChange(toChange) 
+        , IsDrop(isDrop) 
+        , Scoped(scoped) 
+    { 
+        FakeSource = BuildFakeSource(pos); 
+        scoped->UseCluster(service, cluster); 
+    } 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override { 
+        Y_UNUSED(src); 
+        auto name = Name.Build(); 
+        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx); 
+ 
+        if (!name->Init(ctx, FakeSource.Get()) || !cluster->Init(ctx, FakeSource.Get())) { 
+            return false; 
+        } 
+ 
+        TVector<TNodePtr> toChange; 
+        for (auto& item : ToChange) { 
+            toChange.push_back(item.Build()); 
+            if (!toChange.back()->Init(ctx, FakeSource.Get())) { 
+                return false; 
+            } 
+        } 
+ 
+        auto options = Y(Q(Y(Q("mode"), Q(IsDrop ? "dropUsersFromGroup" : "addUsersToGroup")))); 
+        options = L(options, Q(Y(Q("roles"), Q(new TAstListNodeImpl(Pos, std::move(toChange)))))); 
+ 
+        Add("block", Q(Y( 
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)), 
+            Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("role"), Y("String", name)))), Y("Void"), Q(options))), 
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")) 
+            ))); 
+ 
+        return TAstListNode::DoInit(ctx, FakeSource.Get()); 
+    } 
+ 
+    TPtr DoClone() const final { 
+        return {}; 
+    } 
+private: 
+    const TString Service; 
+    TDeferredAtom Cluster; 
+    TDeferredAtom Name; 
+    TVector<TDeferredAtom> ToChange; 
+    const bool IsDrop; 
+    TScopedStatePtr Scoped; 
+    TSourcePtr FakeSource; 
+}; 
+ 
+TNodePtr BuildAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop, 
+    TScopedStatePtr scoped) 
+{ 
+    return new TAlterGroup(pos, service, cluster, name, toChange, isDrop, scoped); 
+} 
+ 
+class TDropRoles final: public TAstListNode { 
+public: 
+    TDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool force, TScopedStatePtr scoped) 
+        : TAstListNode(pos) 
+        , Service(service) 
+        , Cluster(cluster) 
+        , ToDrop(toDrop) 
+        , IsUser(isUser) 
+        , Force(force) 
+        , Scoped(scoped) 
+    { 
+        FakeSource = BuildFakeSource(pos); 
+        scoped->UseCluster(service, cluster); 
+    } 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override { 
+        Y_UNUSED(src); 
+        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx); 
+ 
+        if (!cluster->Init(ctx, FakeSource.Get())) { 
+            return false; 
+        } 
+ 
+        auto options = Y(Q(Y(Q("mode"), Q(IsUser ? "dropUser" : "dropGroup")))); 
+        if (Force) { 
+            options = L(options, Q(Y(Q("force")))); 
+        } 
+ 
+ 
+        auto block = Y(Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster))); 
+        for (auto& item : ToDrop) { 
+            auto name = item.Build(); 
+            if (!name->Init(ctx, FakeSource.Get())) { 
+                return false; 
+            } 
+ 
+            block = L(block, Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("role"), Y("String", name)))), Y("Void"), Q(options)))); 
+        } 
+        block = L(block, Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))); 
+        Add("block", Q(block)); 
+ 
+        return TAstListNode::DoInit(ctx, FakeSource.Get()); 
+    } 
+ 
+    TPtr DoClone() const final { 
+        return {}; 
+    } 
+private: 
+    const TString Service; 
+    TDeferredAtom Cluster; 
+    TVector<TDeferredAtom> ToDrop; 
+    const bool IsUser; 
+    const bool Force; 
+    TScopedStatePtr Scoped; 
+    TSourcePtr FakeSource; 
+}; 
+ 
+TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool force, TScopedStatePtr scoped) { 
+    return new TDropRoles(pos, service, cluster, toDrop, isUser, force, scoped); 
+} 
+ 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "append"},
@@ -1622,28 +1622,28 @@ public:
             }
 
             for (auto& nodes: Scoped->NamedNodes) {
-                if (src || ctx.Exports.contains(nodes.first)) {
-                    auto& item = nodes.second.front();
-                    if (!item->Node->Init(ctx, src)) {
-                        hasError = true;
-                        continue;
-                    }
-
-                    // Some constants may be used directly by YQL code and need to be translated without reference from SQL AST
-                    if (item->Node->IsConstant() || ctx.Exports.contains(nodes.first)) {
-                        Add(Y("let", BuildAtom(item->Node->GetPos(), nodes.first), item->Node));
-                    }
-                }
-            }
-
+                if (src || ctx.Exports.contains(nodes.first)) { 
+                    auto& item = nodes.second.front(); 
+                    if (!item->Node->Init(ctx, src)) { 
+                        hasError = true; 
+                        continue; 
+                    } 
+ 
+                    // Some constants may be used directly by YQL code and need to be translated without reference from SQL AST 
+                    if (item->Node->IsConstant() || ctx.Exports.contains(nodes.first)) { 
+                        Add(Y("let", BuildAtom(item->Node->GetPos(), nodes.first), item->Node)); 
+                    } 
+                } 
+            } 
+ 
             if (ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIBRARY) {
                 auto configSource = Y("DataSource", BuildQuotedAtom(Pos, TString(ConfigProviderName)));
                 auto resultSink = Y("DataSink", BuildQuotedAtom(Pos, TString(ResultProviderName)));
 
-                for (const auto& warningPragma : ctx.WarningPolicy.GetRules()) {
+                for (const auto& warningPragma : ctx.WarningPolicy.GetRules()) { 
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                        BuildQuotedAtom(Pos, "Warning"), BuildQuotedAtom(Pos, warningPragma.GetPattern()),
-                            BuildQuotedAtom(Pos, to_lower(ToString(warningPragma.GetAction()))))));
+                        BuildQuotedAtom(Pos, "Warning"), BuildQuotedAtom(Pos, warningPragma.GetPattern()), 
+                            BuildQuotedAtom(Pos, to_lower(ToString(warningPragma.GetAction())))))); 
                 }
 
                 if (ctx.ResultSizeLimit > 0) {
@@ -1651,10 +1651,10 @@ public:
                         BuildQuotedAtom(Pos, "SizeLimit"), BuildQuotedAtom(Pos, ToString(ctx.ResultSizeLimit)))));
                 }
 
-                if (!ctx.PragmaPullUpFlatMapOverJoin) {
+                if (!ctx.PragmaPullUpFlatMapOverJoin) { 
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                        BuildQuotedAtom(Pos, "DisablePullUpFlatMapOverJoin"))));
-                }
+                        BuildQuotedAtom(Pos, "DisablePullUpFlatMapOverJoin")))); 
+                } 
 
                 if (ctx.DiscoveryMode) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
@@ -1680,11 +1680,11 @@ public:
 
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, BuildQuotedAtom(Pos, pragmaName))));
                 }
-
-                if (ctx.OrderedColumns) {
-                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                        BuildQuotedAtom(Pos, "OrderedColumns"))));
-                }
+ 
+                if (ctx.OrderedColumns) { 
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, 
+                        BuildQuotedAtom(Pos, "OrderedColumns")))); 
+                } 
 
                 if (ctx.PqReadByRtmrCluster) {
                     auto pqSourceAll = Y("DataSource", BuildQuotedAtom(Pos, TString(PqProviderName)), BuildQuotedAtom(Pos, "$all"));
@@ -1718,7 +1718,7 @@ public:
         for (const auto& x : Scoped->Local.ExprClusters) {
             auto& data = Scoped->Local.ExprClustersMap[x.Get()];
             auto& node = data.second;
-
+ 
             if (!node->Init(ctx, nullptr)) {
                 hasError = true;
                 continue;
@@ -1738,8 +1738,8 @@ public:
                     Add(Y("let", ref, Y("Nth", *subqueryAliasPtr, Q("1"))));
                 }
             } else {
-                const auto& ref = block->GetLabel();
-                Add(Y("let", ref ? ref : "world", block));
+                const auto& ref = block->GetLabel(); 
+                Add(Y("let", ref ? ref : "world", block)); 
             }
         }
 
@@ -1864,7 +1864,7 @@ TNodePtr BuildPragma(TPosition pos, const TString& prefix, const TString& name, 
 
 class TSqlLambda final: public TAstListNode {
 public:
-    TSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq)
+    TSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq) 
         : TAstListNode(pos)
         , Args(args)
         , ExprSeq(exprSeq)
@@ -1891,14 +1891,14 @@ public:
         body = Y("block", Q(L(body, Y("return", *end))));
         auto args = Y();
         for (const auto& arg: Args) {
-            args = L(args, BuildAtom(GetPos(), arg));
+            args = L(args, BuildAtom(GetPos(), arg)); 
         }
         Add("lambda", Q(args), body);
         return TAstListNode::DoInit(ctx, src);
     }
 
     TPtr DoClone() const final {
-        return {};
+        return {}; 
     }
 
     void DoUpdateState() const override {
@@ -1933,20 +1933,20 @@ public:
         }
         Add(IsEvaluate ? "EvaluateIf!" : "If!");
         Add("world");
-        auto coalesced = Y("Coalesce", Predicate, Y("Bool", Q("false")));
+        auto coalesced = Y("Coalesce", Predicate, Y("Bool", Q("false"))); 
         Add(IsEvaluate ? Y("EvaluateExpr", Y("EnsureType", coalesced, Y("DataType", Q("Bool")))) : coalesced);
 
         if (!ThenNode->Init(ctx, FakeSource.Get())) {
             return{};
         }
 
-        Add(ThenNode);
+        Add(ThenNode); 
         if (ElseNode) {
             if (!ElseNode->Init(ctx, FakeSource.Get())) {
                 return{};
             }
 
-            Add(ElseNode);
+            Add(ElseNode); 
         }
 
         return TAstListNode::DoInit(ctx, src);
@@ -1986,18 +1986,18 @@ public:
         }
         Add(IsEvaluate ? "EvaluateFor!" : "For!");
         Add("world");
-        Add(IsEvaluate ? Y("EvaluateExpr", List) : List);
-
+        Add(IsEvaluate ? Y("EvaluateExpr", List) : List); 
+ 
         if (!BodyNode->Init(ctx, FakeSource.Get())) {
             return{};
         }
-        Add(BodyNode);
+        Add(BodyNode); 
 
         if (ElseNode) {
             if (!ElseNode->Init(ctx, FakeSource.Get())) {
                 return{};
             }
-            Add(ElseNode);
+            Add(ElseNode); 
         }
 
         return TAstListNode::DoInit(ctx, src);

@@ -38,7 +38,7 @@ public:
 
         auto name = input->Content();
         TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-            return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), TStringBuilder() << "At function: " << name);
+            return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), TStringBuilder() << "At function: " << name); 
         });
 
         TStatus status = TStatus::Ok;
@@ -168,7 +168,7 @@ protected:
         auto datasinkName = input.Child(1)->Child(0)->Content();
         auto datasink = Types.DataSinkMap.FindPtr(datasinkName);
         if (!datasink) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName));
+            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName)); 
             return nullptr;
         }
 
@@ -191,7 +191,7 @@ protected:
         auto datasourceName = input.Child(1)->Child(0)->Content();
         auto datasource = Types.DataSourceMap.FindPtr(datasourceName);
         if (!datasource) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasource: " << datasourceName));
+            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasource: " << datasourceName)); 
             return nullptr;
         }
 
@@ -214,7 +214,7 @@ protected:
         auto datasinkName = input.Child(1)->Child(0)->Content();
         auto datasink = Types.DataSinkMap.FindPtr(datasinkName);
         if (!datasink) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName));
+            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName)); 
             return nullptr;
         }
 
@@ -238,7 +238,7 @@ protected:
             auto datasourceName = input.Child(1)->Child(0)->Content();
             auto datasource = Types.DataSourceMap.FindPtr(datasourceName);
             if (!datasource) {
-                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasource: " << datasourceName));
+                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasource: " << datasourceName)); 
                 return nullptr;
             }
 
@@ -249,7 +249,7 @@ protected:
             auto datasinkName = input.Child(1)->Child(0)->Content();
             auto datasink = Types.DataSinkMap.FindPtr(datasinkName);
             if (!datasink) {
-                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName));
+                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName)); 
                 return nullptr;
             }
 
@@ -264,7 +264,7 @@ protected:
         auto status = static_cast<TDerived*>(this)->GetTransformer(dataProvider).Transform(input, output, ctx);
         if (status.Level == IGraphTransformer::TStatus::Async) {
             if (InstantOnly) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() <<
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << 
                     "Async status is not allowed for instant transform, provider name: " << dataProvider.GetName()));
                 return IGraphTransformer::TStatus::Error;
             }

@@ -307,68 +307,68 @@ TExprNode::TPtr OptimizeNot(const TExprNode::TPtr& node, TExprContext& ctx) {
         {"AggrGreater", "AggrLessOrEqual"},
     };
 
-    auto& arg = node->Head();
-    const auto it = InverseComparators.find(arg.Content());
+    auto& arg = node->Head(); 
+    const auto it = InverseComparators.find(arg.Content()); 
     if (InverseComparators.cend() != it && (
-        (arg.Content().front() != '<' && arg.Content().front() != '>') ||
-        (HasTotalOrder(*arg.Head().GetTypeAnn()) && HasTotalOrder(*arg.Tail().GetTypeAnn()))))
-    {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << arg.Content();
-        return ctx.RenameNode(arg, it->second);
+        (arg.Content().front() != '<' && arg.Content().front() != '>') || 
+        (HasTotalOrder(*arg.Head().GetTypeAnn()) && HasTotalOrder(*arg.Tail().GetTypeAnn())))) 
+    { 
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << arg.Content(); 
+        return ctx.RenameNode(arg, it->second); 
     }
 
     return node;
 }
 
-TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (auto opt = OptimizeDups(node, ctx); opt != node) {
-        return opt;
-    }
-
-    TExprNodeList children = node->ChildrenList();
-    TNodeMap<size_t> exists;
-    TNodeSet toReplace;
-    for (size_t i = 0; i < children.size(); ++i) {
-        const auto& child = children[i];
-        if (child->IsCallable("Exists")) {
-            auto pred = child->Child(0);
-            YQL_ENSURE(!exists.contains(pred));
-            exists[pred] = i;
-        } else if (child->IsCallable("Unwrap")) {
-            auto pred = child->Child(0);
-            if (exists.contains(pred)) {
-                toReplace.insert(pred);
-            }
-        }
-    }
-
-    if (toReplace.empty()) {
-        return node;
-    }
-
-    TExprNodeList newChildren;
-    for (size_t i = 0; i < children.size(); ++i) {
-        const auto& child = children[i];
-        if (child->IsCallable({"Exists", "Unwrap"})) {
-            auto pred = child->HeadPtr();
-            auto it = exists.find(pred.Get());
-            if (it != exists.end() && toReplace.contains(it->first)) {
-                if (i == it->second) {
-                    newChildren.push_back(ctx.NewCallable(pred->Pos(), "Coalesce", { pred, MakeBool<false>(pred->Pos(), ctx)}));
-                    continue;
-                }
-                if (i > it->second) {
-                    continue;
-                }
-            }
-        }
-        newChildren.push_back(child);
-    }
-
-    YQL_CLOG(DEBUG, Core) << "Exist(pred) AND Unwrap(pred) -> Coalesce(pred, false)";
-    return ctx.ChangeChildren(*node, std::move(newChildren));
-}
-
+TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx) { 
+    if (auto opt = OptimizeDups(node, ctx); opt != node) { 
+        return opt; 
+    } 
+ 
+    TExprNodeList children = node->ChildrenList(); 
+    TNodeMap<size_t> exists; 
+    TNodeSet toReplace; 
+    for (size_t i = 0; i < children.size(); ++i) { 
+        const auto& child = children[i]; 
+        if (child->IsCallable("Exists")) { 
+            auto pred = child->Child(0); 
+            YQL_ENSURE(!exists.contains(pred)); 
+            exists[pred] = i; 
+        } else if (child->IsCallable("Unwrap")) { 
+            auto pred = child->Child(0); 
+            if (exists.contains(pred)) { 
+                toReplace.insert(pred); 
+            } 
+        } 
+    } 
+ 
+    if (toReplace.empty()) { 
+        return node; 
+    } 
+ 
+    TExprNodeList newChildren; 
+    for (size_t i = 0; i < children.size(); ++i) { 
+        const auto& child = children[i]; 
+        if (child->IsCallable({"Exists", "Unwrap"})) { 
+            auto pred = child->HeadPtr(); 
+            auto it = exists.find(pred.Get()); 
+            if (it != exists.end() && toReplace.contains(it->first)) { 
+                if (i == it->second) { 
+                    newChildren.push_back(ctx.NewCallable(pred->Pos(), "Coalesce", { pred, MakeBool<false>(pred->Pos(), ctx)})); 
+                    continue; 
+                } 
+                if (i > it->second) { 
+                    continue; 
+                } 
+            } 
+        } 
+        newChildren.push_back(child); 
+    } 
+ 
+    YQL_CLOG(DEBUG, Core) << "Exist(pred) AND Unwrap(pred) -> Coalesce(pred, false)"; 
+    return ctx.ChangeChildren(*node, std::move(newChildren)); 
+} 
+ 
 TExprNode::TPtr CheckIfWorldWithSame(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Child(3U) == node->Child(2U)) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " with identical branches";
@@ -472,8 +472,8 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
     map["Xor"] = std::bind(&OptimizeXor, _1, _2);
     map["Not"] = std::bind(&OptimizeNot, _1, _2);
 
-    map["And"] = std::bind(&OptimizeAnd, _1, _2);
-    map["Or"] = std::bind(OptimizeDups, _1, _2);
+    map["And"] = std::bind(&OptimizeAnd, _1, _2); 
+    map["Or"] = std::bind(OptimizeDups, _1, _2); 
 
     map["Min"] = map["Max"] = std::bind(&OptimizeDups, _1, _2);
 

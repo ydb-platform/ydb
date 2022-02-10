@@ -9,8 +9,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-using NYql::EnsureDynamicCast;
-
+using NYql::EnsureDynamicCast; 
+ 
 namespace {
 
 template <bool Interruptable>
@@ -121,7 +121,7 @@ public:
         new StoreInst(GetFalse(context), statePtr, block);
 
         for (ui32 i = 0U; i < State.size(); ++i) {
-            EnsureDynamicCast<ICodegeneratorExternalNode*>(State[i])->CreateSetValue(ctx, block, GetNodeValue(InitState[i], ctx, block));
+            EnsureDynamicCast<ICodegeneratorExternalNode*>(State[i])->CreateSetValue(ctx, block, GetNodeValue(InitState[i], ctx, block)); 
         }
 
         empty->addIncoming(ConstantInt::getFalse(context), block);
@@ -140,7 +140,7 @@ public:
         std::vector<Value*> items(Items.size(), nullptr);
         for (ui32 i = 0U; i < items.size(); ++i) {
             if (Items[i]->GetDependencesCount() > 0U || ItemsOnInit[i])
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block)); 
             else if (ItemsOnUpdate[i] || SwitchItem && i == *SwitchItem)
                 items[i] = getres.second[i](ctx, block);
         }
@@ -181,7 +181,7 @@ public:
 
         for (ui32 i = 0U; i < updates.size(); ++i) {
             if (const auto s = updates[i])
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(State[i])->CreateSetValue(ctx, block, s);
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(State[i])->CreateSetValue(ctx, block, s); 
         }
 
         empty->addIncoming(ConstantInt::getFalse(context), block);

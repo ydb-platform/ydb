@@ -46,7 +46,7 @@ public:
         , Config(config)
     {
 #define HNDL(name) "DqsLogical-"#name, Hndl(&TDqsLogicalOptProposalTransformer::name)
-        AddHandler(0, &TCoUnorderedBase::Match, HNDL(SkipUnordered));
+        AddHandler(0, &TCoUnorderedBase::Match, HNDL(SkipUnordered)); 
         AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
@@ -61,7 +61,7 @@ public:
 protected:
     TMaybeNode<TExprBase> SkipUnordered(TExprBase node, TExprContext& ctx) {
         Y_UNUSED(ctx);
-        auto unordered = node.Cast<TCoUnorderedBase>();
+        auto unordered = node.Cast<TCoUnorderedBase>(); 
         if (unordered.Input().Maybe<TDqConnection>()) {
             return unordered.Input();
         }

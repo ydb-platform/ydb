@@ -6,7 +6,7 @@
 #include "yql_expr_builder.h"
 #include "yql_gc_nodes.h"
 #include "yql_constraint.h"
-#include "yql_pos_handle.h"
+#include "yql_pos_handle.h" 
 
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
@@ -36,9 +36,9 @@
 //#define YQL_CHECK_NODES_CONSISTENCY
 #ifdef YQL_CHECK_NODES_CONSISTENCY
     #define ENSURE_NOT_DELETED \
-        YQL_ENSURE(!Dead(), "Access to dead node # " << UniqueId_ << ": " << Type_ << " '" << ContentUnchecked() << "'");
+        YQL_ENSURE(!Dead(), "Access to dead node # " << UniqueId_ << ": " << Type_ << " '" << ContentUnchecked() << "'"); 
     #define ENSURE_NOT_FROZEN \
-        YQL_ENSURE(!Frozen(), "Change in frozen node # " << UniqueId_ << ": " << Type_ << " '" << ContentUnchecked() << "'");
+        YQL_ENSURE(!Frozen(), "Change in frozen node # " << UniqueId_ << ": " << Type_ << " '" << ContentUnchecked() << "'"); 
     #define ENSURE_NOT_FROZEN_CTX \
         YQL_ENSURE(!Frozen, "Change in frozen expr context.");
 #else
@@ -209,15 +209,15 @@ public:
         return (GetFlags() & TypeHasOptional) != 0;
     }
 
-    bool HasOptionalOrNull() const {
-        return (GetFlags() & (TypeHasOptional | TypeHasNull)) != 0;
-    }
-
-    bool IsOptionalOrNull() const {
-        auto kind = GetKind();
-        return kind == ETypeAnnotationKind::Optional || kind == ETypeAnnotationKind::Null;
-    }
-
+    bool HasOptionalOrNull() const { 
+        return (GetFlags() & (TypeHasOptional | TypeHasNull)) != 0; 
+    } 
+ 
+    bool IsOptionalOrNull() const { 
+        auto kind = GetKind(); 
+        return kind == ETypeAnnotationKind::Optional || kind == ETypeAnnotationKind::Null; 
+    } 
+ 
     bool IsSingleton() const {
         return (GetFlags() & TypeHasManyValues) == 0;
     }
@@ -335,7 +335,7 @@ public:
     }
 
     bool Validate(TPosition position, TExprContext& ctx) const;
-    bool Validate(TPositionHandle position, TExprContext& ctx) const;
+    bool Validate(TPositionHandle position, TExprContext& ctx) const; 
 
 private:
     TTypeAnnotationNode::TListType Items;
@@ -390,9 +390,9 @@ private:
     TTypeAnnotationNode::TListType Items;
 };
 
-struct TExprContext;
-
-
+struct TExprContext; 
+ 
+ 
 bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprContext& ctx);
 bool ValidateName(TPositionHandle position, TStringBuf name, TStringBuf descr, TExprContext& ctx);
 
@@ -415,7 +415,7 @@ public:
     }
 
     bool Validate(TPosition position, TExprContext& ctx) const;
-    bool Validate(TPositionHandle position, TExprContext& ctx) const;
+    bool Validate(TPositionHandle position, TExprContext& ctx) const; 
 
     const TStringBuf& GetName() const {
         return Name;
@@ -470,7 +470,7 @@ public:
     }
 
     bool Validate(TPosition position, TExprContext& ctx) const;
-    bool Validate(TPositionHandle position, TExprContext& ctx) const;
+    bool Validate(TPositionHandle position, TExprContext& ctx) const; 
 
     size_t GetSize() const {
         return Items.size();
@@ -689,8 +689,8 @@ public:
     }
 
     bool Validate(TPosition position, TExprContext& ctx) const;
-    bool Validate(TPositionHandle position, TExprContext& ctx) const;
-
+    bool Validate(TPositionHandle position, TExprContext& ctx) const; 
+ 
 private:
     const TStringBuf One, Two;
 };
@@ -776,7 +776,7 @@ public:
     }
 
     bool Validate(TPosition position, TExprContext& ctx) const;
-    bool Validate(TPositionHandle position, TExprContext& ctx) const;
+    bool Validate(TPositionHandle position, TExprContext& ctx) const; 
 
     static ui32 MakeFlags(const TTypeAnnotationNode* underlyingType);
 
@@ -828,7 +828,7 @@ public:
     }
 
     bool Validate(TPosition position, TExprContext& ctx) const;
-    bool Validate(TPositionHandle position, TExprContext& ctx) const;
+    bool Validate(TPositionHandle position, TExprContext& ctx) const; 
 
     const TTypeAnnotationNode* GetKeyType() const {
         return KeyType;
@@ -987,8 +987,8 @@ public:
     }
 
     bool Validate(TPosition position, TExprContext& ctx) const;
-    bool Validate(TPositionHandle position, TExprContext& ctx) const;
-
+    bool Validate(TPositionHandle position, TExprContext& ctx) const; 
+ 
     TMaybe<ui32> ArgumentIndexByName(const TStringBuf& name) const {
         auto it = IndexByName.find(name);
         if (it == IndexByName.end()) {
@@ -1314,7 +1314,7 @@ private:
             Dead = 0x01,
             Frozen = 0x02,
         };
-        static constexpr ui32 FlagsMask = 0x03; // all flags should fit here
+        static constexpr ui32 FlagsMask = 0x03; // all flags should fit here 
     };
 
 public:
@@ -1355,10 +1355,10 @@ public:
     xx(ExecutionInProgress, 8) \
     xx(ExecutionPending, 9) \
     xx(ExecutionComplete, 10) \
-    xx(Error, 11) \
-    xx(Last, 12)
+    xx(Error, 11) \ 
+    xx(Last, 12) 
 
-    enum class EState : ui8 {
+    enum class EState : ui8 { 
         YQL_EXPR_NODE_STATE_MAP(ENUM_VALUE_GEN)
     };
 
@@ -1492,7 +1492,7 @@ public:
     void Ref() {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(RefCount_ < Max<ui32>());
+        Y_ENSURE(RefCount_ < Max<ui32>()); 
         ++RefCount_;
     }
 
@@ -1514,13 +1514,13 @@ public:
         return ExprFlags_ & TExprFlags::Dead;
     }
 
-    TPositionHandle Pos() const {
+    TPositionHandle Pos() const { 
         ENSURE_NOT_DELETED
         return Position_;
     }
 
-    TPosition Pos(const TExprContext& ctx) const;
-
+    TPosition Pos(const TExprContext& ctx) const; 
+ 
     EType Type() const {
         ENSURE_NOT_DELETED
         return (EType)Type_;
@@ -1621,9 +1621,9 @@ public:
             visitor(*child);
     }
 
-    TStringBuf Content() const {
+    TStringBuf Content() const { 
         ENSURE_NOT_DELETED
-        return ContentUnchecked();
+        return ContentUnchecked(); 
     }
 
     ui32 Flags() const {
@@ -1697,15 +1697,15 @@ public:
         State = EState::ConstrComplete;
     }
 
-    static TPtr NewAtom(ui64 uniqueId, TPositionHandle pos, const TStringBuf& content, ui32 flags) {
+    static TPtr NewAtom(ui64 uniqueId, TPositionHandle pos, const TStringBuf& content, ui32 flags) { 
         return Make(pos, Atom, {}, content, flags, uniqueId);
     }
 
-    static TPtr NewArgument(ui64 uniqueId, TPositionHandle pos, const TStringBuf& name) {
+    static TPtr NewArgument(ui64 uniqueId, TPositionHandle pos, const TStringBuf& name) { 
         return Make(pos, Argument, {}, name, 0, uniqueId);
     }
 
-    static TPtr NewArguments(ui64 uniqueId, TPositionHandle pos, TListType&& argNodes) {
+    static TPtr NewArguments(ui64 uniqueId, TPositionHandle pos, TListType&& argNodes) { 
         return Make(pos, Arguments, std::move(argNodes), ZeroString, 0, uniqueId);
     }
 
@@ -1720,7 +1720,7 @@ public:
         return NewLambda(uniqueId, pos, std::move(lambda));
     }
 
-    static TPtr NewLambda(ui64 uniqueId, TPositionHandle pos, TPtr&& args, TPtr&& body) {
+    static TPtr NewLambda(ui64 uniqueId, TPositionHandle pos, TPtr&& args, TPtr&& body) { 
         TListType children(body ? 2 : 1);
         children.front() = std::move(args);
         if (body) {
@@ -1730,24 +1730,24 @@ public:
         return NewLambda(uniqueId, pos, std::move(children));
     }
 
-    static TPtr NewWorld(ui64 uniqueId, TPositionHandle pos) {
+    static TPtr NewWorld(ui64 uniqueId, TPositionHandle pos) { 
         return Make(pos, World, {}, {}, 0, uniqueId);
     }
 
-    static TPtr NewList(ui64 uniqueId, TPositionHandle pos, TListType&& children) {
+    static TPtr NewList(ui64 uniqueId, TPositionHandle pos, TListType&& children) { 
         return Make(pos, List, std::move(children), ZeroString, 0, uniqueId);
     }
 
-    static TPtr NewCallable(ui64 uniqueId, TPositionHandle pos, const TStringBuf& name, TListType&& children) {
+    static TPtr NewCallable(ui64 uniqueId, TPositionHandle pos, const TStringBuf& name, TListType&& children) { 
         return Make(pos, Callable, std::move(children), name, 0, uniqueId);
     }
 
     TPtr Clone(ui64 newUniqueId) const {
         ENSURE_NOT_DELETED
-        return Make(Position_, (EType)Type_, TListType(Children_), Content(), Flags_, newUniqueId);
+        return Make(Position_, (EType)Type_, TListType(Children_), Content(), Flags_, newUniqueId); 
     }
 
-    static TPtr NewNode(TPositionHandle position, EType type, TListType&& children, const TStringBuf& content, ui32 flags, ui64 uniqueId) {
+    static TPtr NewNode(TPositionHandle position, EType type, TListType&& children, const TStringBuf& content, ui32 flags, ui64 uniqueId) { 
         return Make(position, type, std::move(children), content, flags, uniqueId);
     }
 
@@ -1758,7 +1758,7 @@ public:
 
     TPtr ChangeChildren(ui64 newUniqueId, TListType&& children) const {
         ENSURE_NOT_DELETED
-        return Make(Position_, (EType)Type_, std::move(children), Content(), Flags_, newUniqueId);
+        return Make(Position_, (EType)Type_, std::move(children), Content(), Flags_, newUniqueId); 
     }
 
     TPtr ChangeChild(ui64 newUniqueId, ui32 index, TPtr&& child) const {
@@ -1766,7 +1766,7 @@ public:
         Y_ENSURE(index < Children_.size(), "index out of range");
         TListType newChildren(Children_);
         newChildren[index] = std::move(child);
-        return Make(Position_, (EType)Type_, std::move(newChildren), Content(), Flags_, newUniqueId);
+        return Make(Position_, (EType)Type_, std::move(newChildren), Content(), Flags_, newUniqueId); 
     }
 
     void SetTypeAnn(const TTypeAnnotationNode* typeAnn) {
@@ -1778,34 +1778,34 @@ public:
         return TypeAnnotation_;
     }
 
-    EState GetState() const {
-        return State;
-    }
-
-    void SetState(EState state) {
-        State = state;
-    }
-
-    ui32 GetArgIndex() const {
-        YQL_ENSURE(Type() == EType::Argument);
-        return ArgIndex;
-    }
-
-    void SetArgIndex(ui32 argIndex) {
-        YQL_ENSURE(Type() == EType::Argument);
-        YQL_ENSURE(argIndex <= Max<ui16>());
-        ArgIndex = (ui16)argIndex;
-    }
-
-    ui64 GetHash() const {
+    EState GetState() const { 
+        return State; 
+    } 
+ 
+    void SetState(EState state) { 
+        State = state; 
+    } 
+ 
+    ui32 GetArgIndex() const { 
+        YQL_ENSURE(Type() == EType::Argument); 
+        return ArgIndex; 
+    } 
+ 
+    void SetArgIndex(ui32 argIndex) { 
+        YQL_ENSURE(Type() == EType::Argument); 
+        YQL_ENSURE(argIndex <= Max<ui16>()); 
+        ArgIndex = (ui16)argIndex; 
+    } 
+ 
+    ui64 GetHash() const { 
         Y_VERIFY_DEBUG(HashAbove == HashBelow);
         return HashAbove;
-    }
-
-    void SetHash(ui64 hash) {
+    } 
+ 
+    void SetHash(ui64 hash) { 
         HashAbove = HashBelow = hash;
-    }
-
+    } 
+ 
     ui64 GetHashAbove() const {
         return HashAbove;
     }
@@ -1822,42 +1822,42 @@ public:
         HashBelow = hash;
     }
 
-    ui64 GetBloom() const {
-        return Bloom;
-    }
-
-    void SetBloom(ui64 bloom) {
-        Bloom = bloom;
-    }
-
+    ui64 GetBloom() const { 
+        return Bloom; 
+    } 
+ 
+    void SetBloom(ui64 bloom) { 
+        Bloom = bloom; 
+    } 
+ 
     // return pair of outer and inner lambda.
     std::optional<std::pair<const TExprNode*, const TExprNode*>> GetDependencyScope() const {
         if (HasLambdaScope) {
             return std::make_pair(OuterLambda, InnerLambda);
-        }
+        } 
         return std::nullopt;
-    }
-
+    } 
+ 
     void SetDependencyScope(const TExprNode* outerLambda, const TExprNode* innerLambda) {
         Y_VERIFY_DEBUG(outerLambda == innerLambda || outerLambda->GetLambdaLevel() < innerLambda->GetLambdaLevel(), "Wrong scope of closures.");
         HasLambdaScope = 1;
-        OuterLambda = outerLambda;
+        OuterLambda = outerLambda; 
         InnerLambda = innerLambda;
-    }
-
+    } 
+ 
     ui16 GetLambdaLevel() const { return LambdaLevel; }
     void SetLambdaLevel(ui16 lambdaLevel) { LambdaLevel = lambdaLevel; }
-
-    bool IsUsedInDependsOn() const {
-        YQL_ENSURE(Type() == EType::Argument);
-        return UsedInDependsOn;
-    }
-
-    void SetUsedInDependsOn() {
-        YQL_ENSURE(Type() == EType::Argument);
-        UsedInDependsOn = 1;
-    }
-
+ 
+    bool IsUsedInDependsOn() const { 
+        YQL_ENSURE(Type() == EType::Argument); 
+        return UsedInDependsOn; 
+    } 
+ 
+    void SetUsedInDependsOn() { 
+        YQL_ENSURE(Type() == EType::Argument); 
+        UsedInDependsOn = 1; 
+    } 
+ 
     void SetUnorderedChildren() {
         YQL_ENSURE(Type() == EType::List || Type() == EType::Callable);
         UnordChildren = 1;
@@ -1870,35 +1870,35 @@ public:
 
     ~TExprNode() {
         Y_VERIFY(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
-            UniqueId_, ToString(Type_).data(),  TString(ContentUnchecked()).data());
+            UniqueId_, ToString(Type_).data(),  TString(ContentUnchecked()).data()); 
         Y_VERIFY(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.",
-            UniqueId_, ToString(Type_).data(),  TString(ContentUnchecked()).data());
+            UniqueId_, ToString(Type_).data(),  TString(ContentUnchecked()).data()); 
     }
-
+ 
 private:
-    static TPtr Make(TPositionHandle position, EType type, TListType&& children, const TStringBuf& content, ui32 flags, ui64 uniqueId) {
-        Y_ENSURE(flags <= TNodeFlags::FlagsMask);
+    static TPtr Make(TPositionHandle position, EType type, TListType&& children, const TStringBuf& content, ui32 flags, ui64 uniqueId) { 
+        Y_ENSURE(flags <= TNodeFlags::FlagsMask); 
         Y_ENSURE(children.size() <= Max<ui32>());
-        Y_ENSURE(content.size() <= Max<ui32>());
-        for (size_t i = 0; i < children.size(); ++i) {
-            Y_ENSURE(children[i], "Unable to create node " << content << ": " << i << "th child is null");
-        }
-        return TPtr(new TExprNode(position, type, std::move(children), content.data(), ui32(content.size()), flags, uniqueId));
+        Y_ENSURE(content.size() <= Max<ui32>()); 
+        for (size_t i = 0; i < children.size(); ++i) { 
+            Y_ENSURE(children[i], "Unable to create node " << content << ": " << i << "th child is null"); 
+        } 
+        return TPtr(new TExprNode(position, type, std::move(children), content.data(), ui32(content.size()), flags, uniqueId)); 
     }
 
-    TExprNode(TPositionHandle position, EType type, TListType&& children,
-        const char* content, ui32 contentSize, ui32 flags, ui64 uniqueId)
-        : Children_(std::move(children))
-        , Content_(content)
-        , UniqueId_(uniqueId)
-        , Position_(position)
-        , ContentSize(contentSize)
-        , Type_(type)
+    TExprNode(TPositionHandle position, EType type, TListType&& children, 
+        const char* content, ui32 contentSize, ui32 flags, ui64 uniqueId) 
+        : Children_(std::move(children)) 
+        , Content_(content) 
+        , UniqueId_(uniqueId) 
+        , Position_(position) 
+        , ContentSize(contentSize) 
+        , Type_(type) 
         , Flags_(flags)
         , ExprFlags_(TExprFlags::Default)
-        , State(EState::Initial)
+        , State(EState::Initial) 
         , HasLambdaScope(0)
-        , UsedInDependsOn(0)
+        , UsedInDependsOn(0) 
         , UnordChildren(0)
         , ShallBeDisclosed(0)
     {}
@@ -1923,51 +1923,51 @@ private:
     void MarkDead() {
         ExprFlags_ |= TExprFlags::Dead;
     }
-
-    TStringBuf ContentUnchecked() const {
-        return TStringBuf(Content_, ContentSize);
-    }
-
-    TListType Children_;
+ 
+    TStringBuf ContentUnchecked() const { 
+        return TStringBuf(Content_, ContentSize); 
+    } 
+ 
+    TListType Children_; 
     TConstraintSet Constraints_;
-
-    const char* Content_ = nullptr;
-
-    const TExprNode* OuterLambda = nullptr;
+ 
+    const char* Content_ = nullptr; 
+ 
+    const TExprNode* OuterLambda = nullptr; 
     const TExprNode* InnerLambda = nullptr;
-
-    TPtr Result;
-
+ 
+    TPtr Result; 
+ 
     ui64 HashAbove = 0ULL;
     ui64 HashBelow = 0ULL;
-    ui64 Bloom = 0ULL;
-
-    const ui64 UniqueId_;
-    const TTypeAnnotationNode* TypeAnnotation_ = nullptr;
-
-    const TPositionHandle Position_;
-    ui32 RefCount_ = 0U;
-    const ui32 ContentSize;
-
-    ui16 ArgIndex = ui16(-1);
-    ui16 LambdaLevel = 0; // filled together with OuterLambda
-    ui16 IntermediateHashesCount = 0;
-
-    static_assert(TypeMask <= 7, "EType wont fit in 3 bits, increase Type_ bitfield size");
-    static_assert(TNodeFlags::FlagsMask <= 7, "TNodeFlags wont fit in 3 bits, increase Flags_ bitfield size");
-    static_assert(TExprFlags::FlagsMask <= 3, "TExprFlags wont fit in 2 bits, increase ExprFlags_ bitfield size");
-    static_assert(int(EState::Last) <= 16, "EState wont fit in 4 bits, increase State bitfield size");
-    struct {
-        ui8 Type_           : 3;
-        ui8 Flags_          : 3;
-        ui8 ExprFlags_      : 2;
-
-        EState State        : 4;
+    ui64 Bloom = 0ULL; 
+ 
+    const ui64 UniqueId_; 
+    const TTypeAnnotationNode* TypeAnnotation_ = nullptr; 
+ 
+    const TPositionHandle Position_; 
+    ui32 RefCount_ = 0U; 
+    const ui32 ContentSize; 
+ 
+    ui16 ArgIndex = ui16(-1); 
+    ui16 LambdaLevel = 0; // filled together with OuterLambda 
+    ui16 IntermediateHashesCount = 0; 
+ 
+    static_assert(TypeMask <= 7, "EType wont fit in 3 bits, increase Type_ bitfield size"); 
+    static_assert(TNodeFlags::FlagsMask <= 7, "TNodeFlags wont fit in 3 bits, increase Flags_ bitfield size"); 
+    static_assert(TExprFlags::FlagsMask <= 3, "TExprFlags wont fit in 2 bits, increase ExprFlags_ bitfield size"); 
+    static_assert(int(EState::Last) <= 16, "EState wont fit in 4 bits, increase State bitfield size"); 
+    struct { 
+        ui8 Type_           : 3; 
+        ui8 Flags_          : 3; 
+        ui8 ExprFlags_      : 2; 
+ 
+        EState State        : 4; 
         ui8 HasLambdaScope  : 1;
-        ui8 UsedInDependsOn : 1;
+        ui8 UsedInDependsOn : 1; 
         ui8 UnordChildren   : 1;
         ui8 ShallBeDisclosed: 1;
-    };
+    }; 
 };
 
 class TExportTable {
@@ -2253,8 +2253,8 @@ struct TExprContext : private TNonCopyable {
     ui64 NodeAllocationCounter = 0;
     ui64 NodesAllocationLimit = 3000000;
     ui64 StringsAllocationLimit = 100000000;
-    ui64 RepeatTransformLimit = 1000000;
-    ui64 RepeatTransformCounter = 0;
+    ui64 RepeatTransformLimit = 1000000; 
+    ui64 RepeatTransformCounter = 0; 
 
     TGcNodeConfig GcConfig;
 
@@ -2289,10 +2289,10 @@ struct TExprContext : private TNonCopyable {
         return newBuf;
     }
 
-    TPositionHandle AppendPosition(const TPosition& pos);
-    TPosition GetPosition(TPositionHandle handle) const;
-
-    TExprNodeBuilder Builder(TPositionHandle pos) {
+    TPositionHandle AppendPosition(const TPosition& pos); 
+    TPosition GetPosition(TPositionHandle handle) const; 
+ 
+    TExprNodeBuilder Builder(TPositionHandle pos) { 
         return TExprNodeBuilder(pos, *this);
     }
 
@@ -2328,21 +2328,21 @@ struct TExprContext : private TNonCopyable {
     template<bool KeepTypeAnns = false>
     TExprNode::TListType ReplaceNodes(TExprNode::TListType&& start, const TNodeOnNodeOwnedMap& replaces);
 
-    TExprNode::TPtr NewAtom(TPositionHandle pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent) {
+    TExprNode::TPtr NewAtom(TPositionHandle pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent) { 
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewAtom(AllocateNextUniqueId(), pos, AppendString(content), flags);
         ExprNodes.emplace_back(node.Get());
         return node;
     }
 
-    TExprNode::TPtr NewArgument(TPositionHandle pos, const TStringBuf& name) {
+    TExprNode::TPtr NewArgument(TPositionHandle pos, const TStringBuf& name) { 
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewArgument(AllocateNextUniqueId(), pos, AppendString(name));
         ExprNodes.emplace_back(node.Get());
         return node;
     }
 
-    TExprNode::TPtr NewArguments(TPositionHandle pos, TExprNode::TListType&& argNodes) {
+    TExprNode::TPtr NewArguments(TPositionHandle pos, TExprNode::TListType&& argNodes) { 
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewArguments(AllocateNextUniqueId(), pos, std::move(argNodes));
         ExprNodes.emplace_back(node.Get());
@@ -2363,46 +2363,46 @@ struct TExprContext : private TNonCopyable {
         return node;
     }
 
-    TExprNode::TPtr NewLambda(TPositionHandle pos, TExprNode::TPtr&& args, TExprNode::TPtr&& body) {
+    TExprNode::TPtr NewLambda(TPositionHandle pos, TExprNode::TPtr&& args, TExprNode::TPtr&& body) { 
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewLambda(AllocateNextUniqueId(), pos, std::move(args), std::move(body));
         ExprNodes.emplace_back(node.Get());
         return node;
     }
 
-    TExprNode::TPtr NewWorld(TPositionHandle pos) {
+    TExprNode::TPtr NewWorld(TPositionHandle pos) { 
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewWorld(AllocateNextUniqueId(), pos);
         ExprNodes.emplace_back(node.Get());
         return node;
     }
 
-    TExprNode::TPtr NewList(TPositionHandle pos, TExprNode::TListType&& children) {
+    TExprNode::TPtr NewList(TPositionHandle pos, TExprNode::TListType&& children) { 
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewList(AllocateNextUniqueId(), pos, std::move(children));
         ExprNodes.emplace_back(node.Get());
         return node;
     }
 
-    TExprNode::TPtr NewCallable(TPositionHandle pos, const TStringBuf& name, TExprNode::TListType&& children) {
+    TExprNode::TPtr NewCallable(TPositionHandle pos, const TStringBuf& name, TExprNode::TListType&& children) { 
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewCallable(AllocateNextUniqueId(), pos, AppendString(name), std::move(children));
         ExprNodes.emplace_back(node.Get());
         return node;
     }
 
-    TExprNode::TPtr NewAtom(TPosition pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent) {
-        return NewAtom(AppendPosition(pos), content, flags);
-    }
-
-    TExprNode::TPtr NewArgument(TPosition pos, const TStringBuf& name) {
-        return NewArgument(AppendPosition(pos), name);
-    }
-
-    TExprNode::TPtr NewArguments(TPosition pos, TExprNode::TListType&& argNodes) {
-        return NewArguments(AppendPosition(pos), std::move(argNodes));
-    }
-
+    TExprNode::TPtr NewAtom(TPosition pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent) { 
+        return NewAtom(AppendPosition(pos), content, flags); 
+    } 
+ 
+    TExprNode::TPtr NewArgument(TPosition pos, const TStringBuf& name) { 
+        return NewArgument(AppendPosition(pos), name); 
+    } 
+ 
+    TExprNode::TPtr NewArguments(TPosition pos, TExprNode::TListType&& argNodes) { 
+        return NewArguments(AppendPosition(pos), std::move(argNodes)); 
+    } 
+ 
     TExprNode::TPtr NewLambda(TPosition pos, TExprNode::TListType&& lambda) {
         return NewLambda(AppendPosition(pos), std::move(lambda));
     }
@@ -2411,22 +2411,22 @@ struct TExprContext : private TNonCopyable {
         return NewLambda(AppendPosition(pos), std::move(args), std::move(body));
     }
 
-    TExprNode::TPtr NewLambda(TPosition pos, TExprNode::TPtr&& args, TExprNode::TPtr&& body) {
-        return NewLambda(AppendPosition(pos), std::move(args), std::move(body));
-    }
-
-    TExprNode::TPtr NewWorld(TPosition pos) {
-        return NewWorld(AppendPosition(pos));
-    }
-
-    TExprNode::TPtr NewList(TPosition pos, TExprNode::TListType&& children) {
-        return NewList(AppendPosition(pos), std::move(children));
-    }
-
-    TExprNode::TPtr NewCallable(TPosition pos, const TStringBuf& name, TExprNode::TListType&& children) {
-        return NewCallable(AppendPosition(pos), name, std::move(children));
-    }
-
+    TExprNode::TPtr NewLambda(TPosition pos, TExprNode::TPtr&& args, TExprNode::TPtr&& body) { 
+        return NewLambda(AppendPosition(pos), std::move(args), std::move(body)); 
+    } 
+ 
+    TExprNode::TPtr NewWorld(TPosition pos) { 
+        return NewWorld(AppendPosition(pos)); 
+    } 
+ 
+    TExprNode::TPtr NewList(TPosition pos, TExprNode::TListType&& children) { 
+        return NewList(AppendPosition(pos), std::move(children)); 
+    } 
+ 
+    TExprNode::TPtr NewCallable(TPosition pos, const TStringBuf& name, TExprNode::TListType&& children) { 
+        return NewCallable(AppendPosition(pos), name, std::move(children)); 
+    } 
+ 
     TExprNode::TPtr WrapByCallableIf(bool condition, const TStringBuf& callable, TExprNode::TPtr&& node);
 
     template <typename T, typename... Args>
@@ -2449,21 +2449,21 @@ struct TExprContext : private TNonCopyable {
     void UnFreeze();
 
     void Reset();
-
+ 
     template <class TConstraint>
     bool IsConstraintEnabled() const {
         return DisabledConstraints.find(TConstraint::Name()) == DisabledConstraints.end();
     }
 
-private:
-    using TPositionHandleEqualPred = std::function<bool(TPositionHandle, TPositionHandle)>;
-    using TPositionHandleHasher = std::function<size_t(TPositionHandle)>;
-
-    bool IsEqual(TPositionHandle a, TPositionHandle b) const;
-    size_t GetHash(TPositionHandle p) const;
-
-    std::unordered_set<TPositionHandle, TPositionHandleHasher, TPositionHandleEqualPred> PositionSet;
-    std::deque<TPosition> Positions;
+private: 
+    using TPositionHandleEqualPred = std::function<bool(TPositionHandle, TPositionHandle)>; 
+    using TPositionHandleHasher = std::function<size_t(TPositionHandle)>; 
+ 
+    bool IsEqual(TPositionHandle a, TPositionHandle b) const; 
+    size_t GetHash(TPositionHandle p) const; 
+ 
+    std::unordered_set<TPositionHandle, TPositionHandleHasher, TPositionHandleEqualPred> PositionSet; 
+    std::deque<TPosition> Positions; 
 };
 
 template <typename T, typename... Args>
@@ -2513,14 +2513,14 @@ public:
     TNodeException();
     explicit TNodeException(const TExprNode& node);
     explicit TNodeException(const TExprNode* node);
-    explicit TNodeException(const TPositionHandle& pos);
+    explicit TNodeException(const TPositionHandle& pos); 
 
-    inline const TPositionHandle& Pos() const {
+    inline const TPositionHandle& Pos() const { 
         return Pos_;
     }
 
 private:
-    const TPositionHandle Pos_;
+    const TPositionHandle Pos_; 
 };
 
 bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
@@ -2530,7 +2530,7 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
     IModuleResolver* resolver, ui32 annotationFlags, ui16 syntaxVersion = 0);
 
 struct TLibraryCohesion {
-    TExportTable Exports;
+    TExportTable Exports; 
     TNodeMap<std::pair<TString, TString>> Imports;
 };
 

@@ -32,8 +32,8 @@ void TYqlTypeYsonSaverBase::SaveDataType(const TStringBuf& dataType) {
     Writer.OnListItem();
     Writer.OnStringScalar(dataType);
     Writer.OnEndList();
-}
-
+} 
+ 
 void TYqlTypeYsonSaverBase::SaveDataTypeParams(const TStringBuf& dataType, const TStringBuf& paramOne, const TStringBuf& paramTwo) {
     SaveTypeHeader("DataType");
     Writer.OnListItem();

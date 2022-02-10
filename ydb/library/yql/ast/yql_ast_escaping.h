@@ -2,7 +2,7 @@
 
 #include <util/generic/fwd.h>
 #include <util/system/types.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/strbuf.h> 
 
 
 class IOutputStream;
@@ -20,8 +20,8 @@ enum class EUnescapeResult
     INVALID_END,
 };
 
-TStringBuf UnescapeResultToString(EUnescapeResult result);
-
+TStringBuf UnescapeResultToString(EUnescapeResult result); 
+ 
 void EscapeArbitraryAtom(TStringBuf atom, char quoteChar, IOutputStream* out);
 
 EUnescapeResult UnescapeArbitraryAtom(

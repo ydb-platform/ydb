@@ -27,31 +27,31 @@ void SanitizeNonAscii(TString& s) {
     }
 }
 
-TTextWalker& TTextWalker::Advance(char c) {
-    if (c == '\n') {
-        HaveCr = false;
-        ++LfCount;
-        return *this;
-    }
-
-
-    if (c == '\r' && !HaveCr) {
-        HaveCr = true;
-        return *this;
-    }
-
-    // either not '\r' or second '\r'
-    if (LfCount) {
-        Position.Row += LfCount;
-        Position.Column = 1;
-        LfCount = 0;
-    } else {
-        Position.Column += 1 + (HaveCr && c != '\r');
-    }
-    HaveCr = (c == '\r');
-    return *this;
-}
-
+TTextWalker& TTextWalker::Advance(char c) { 
+    if (c == '\n') { 
+        HaveCr = false; 
+        ++LfCount; 
+        return *this; 
+    } 
+ 
+ 
+    if (c == '\r' && !HaveCr) { 
+        HaveCr = true; 
+        return *this; 
+    } 
+ 
+    // either not '\r' or second '\r' 
+    if (LfCount) { 
+        Position.Row += LfCount; 
+        Position.Column = 1; 
+        LfCount = 0; 
+    } else { 
+        Position.Column += 1 + (HaveCr && c != '\r'); 
+    } 
+    HaveCr = (c == '\r'); 
+    return *this; 
+} 
+ 
 void TIssue::PrintTo(IOutputStream& out, bool oneLine) const {
     out << Range() << ": " << SeverityToString(GetSeverity()) << ": ";
     if (oneLine) {

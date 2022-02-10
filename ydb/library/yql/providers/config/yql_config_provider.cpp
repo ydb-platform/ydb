@@ -75,15 +75,15 @@ namespace {
                         writer.OnEndMap();
 
                         input->SetResult(ctx.NewAtom(input->Pos(), out.Str()));
-                        input->SetState(TExprNode::EState::ExecutionComplete);
+                        input->SetState(TExprNode::EState::ExecutionComplete); 
                         return TStatus::Ok;
                     } else {
-                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unsupported tag: " << tag));
+                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unsupported tag: " << tag)); 
                         return TStatus::Error;
                     }
                 }
 
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unknown node to pull, type: "
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unknown node to pull, type: " 
                     << nodeToPull->Type() << ", content: " << nodeToPull->Content()));
                 return TStatus::Error;
             }
@@ -94,7 +94,7 @@ namespace {
                     return requireStatus;
                 }
 
-                input->SetState(TExprNode::EState::ExecutionComplete);
+                input->SetState(TExprNode::EState::ExecutionComplete); 
                 input->SetResult(ctx.NewWorld(input->Pos()));
                 return TStatus::Ok;
             }
@@ -105,12 +105,12 @@ namespace {
                     return requireStatus;
                 }
 
-                input->SetState(TExprNode::EState::ExecutionComplete);
+                input->SetState(TExprNode::EState::ExecutionComplete); 
                 input->SetResult(ctx.NewWorld(input->Pos()));
                 return TStatus::Ok;
             }
 
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Failed to execute node: " << input->Content()));
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Failed to execute node: " << input->Content())); 
             return TStatus::Error;
         }
 
@@ -128,10 +128,10 @@ namespace {
             }
         };
 
-        TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TAllowSettingPolicy& policy)
+        TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TAllowSettingPolicy& policy) 
             : Types(types)
             , CoreConfig(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
-            , Policy(policy)
+            , Policy(policy) 
         {}
 
         TStringBuf GetName() const override {
@@ -265,23 +265,23 @@ namespace {
 
                         auto key = input->Child(2);
                         if (!key->IsCallable("Key")) {
-                            ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Expected key"));
+                            ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Expected key")); 
                             return IGraphTransformer::TStatus::Error;
                         }
 
                         if (key->ChildrenSize() == 0) {
-                            ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Empty key is not allowed"));
+                            ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Empty key is not allowed")); 
                             return IGraphTransformer::TStatus::Error;
                         }
 
                         auto tag = key->Child(0)->Child(0)->Content();
                         if (key->Child(0)->ChildrenSize() > 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(key->Child(0)->Pos()), "Only tag must be specified"));
+                            ctx.AddError(TIssue(ctx.GetPosition(key->Child(0)->Pos()), "Only tag must be specified")); 
                             return IGraphTransformer::TStatus::Error;
                         }
 
                         if (key->ChildrenSize() > 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Too many tags"));
+                            ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Too many tags")); 
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -291,12 +291,12 @@ namespace {
                         }
 
                         if (fields->ChildrenSize() != 0) {
-                            ctx.AddError(TIssue(ctx.GetPosition(fields->Pos()), "Fields tuple must be empty"));
+                            ctx.AddError(TIssue(ctx.GetPosition(fields->Pos()), "Fields tuple must be empty")); 
                             return IGraphTransformer::TStatus::Error;
                         }
 
                         if (!input->Child(3)->GetTypeAnn() || !input->Child(3)->IsComposable()) {
-                            ctx.AddError(TIssue(ctx.GetPosition(input->Child(3)->Pos()), "Expected composable data"));
+                            ctx.AddError(TIssue(ctx.GetPosition(input->Child(3)->Pos()), "Expected composable data")); 
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -306,7 +306,7 @@ namespace {
                         }
 
                         if (settings->ChildrenSize() != 0) {
-                            ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), "Unsupported settings"));
+                            ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), "Unsupported settings")); 
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -317,7 +317,7 @@ namespace {
                         if (tag == "data_sources" || tag == "data_sinks") {
                             children.push_back(listOfString);
                         } else {
-                            ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), TStringBuilder() << "Unknown tag: " << tag));
+                            ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), TStringBuilder() << "Unknown tag: " << tag)); 
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -334,7 +334,7 @@ namespace {
                         return IGraphTransformer::TStatus::Ok;
                     }
 
-                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Config) Unsupported function: " << input->Content()));
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Config) Unsupported function: " << input->Content())); 
                     return IGraphTransformer::TStatus::Error;
                 });
             }
@@ -412,19 +412,19 @@ namespace {
         }
 
     private:
-        bool IsSettingAllowed(const TPosition& pos, TStringBuf name, TExprContext& ctx) {
-            if (Policy && !Policy(name)) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "Changing setting " << name << " is not allowed"));
-                return false;
-            }
-            return true;
-        }
-
+        bool IsSettingAllowed(const TPosition& pos, TStringBuf name, TExprContext& ctx) { 
+            if (Policy && !Policy(name)) { 
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Changing setting " << name << " is not allowed")); 
+                return false; 
+            } 
+            return true; 
+        } 
+ 
         bool ApplyFlag(const TPosition& pos, const TStringBuf name, const TVector<TStringBuf>& args, TExprContext& ctx) {
-            if (!IsSettingAllowed(pos, name, ctx)) {
-                return false;
-            }
-
+            if (!IsSettingAllowed(pos, name, ctx)) { 
+                return false; 
+            } 
+ 
             if (name == "UnsecureCredential") {
                 if (!AddCredential(pos, args, ctx)) {
                     return false;
@@ -727,14 +727,14 @@ namespace {
 
                 Types.JsonQueryReturnsJsonDocument = (name == "DisableJsonQueryReturnsJsonDocument");
             }
-            else if (name == "OrderedColumns" || name == "DisableOrderedColumns") {
-                if (args.size() != 0) {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
-                    return false;
-                }
-
-                Types.OrderedColumns = (name == "OrderedColumns");
-            }
+            else if (name == "OrderedColumns" || name == "DisableOrderedColumns") { 
+                if (args.size() != 0) { 
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size())); 
+                    return false; 
+                } 
+ 
+                Types.OrderedColumns = (name == "OrderedColumns"); 
+            } 
             else if (name == "FolderSubDirsLimit") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
@@ -855,11 +855,11 @@ namespace {
         }
 
         bool DoListSandboxFolder(const TStringBuf url, const TPosition& pos, TExprContext& ctx, NJson::TJsonValue& content) {
-            TString urlStr(url);
-            if (!url.empty() && url.back() != '/') {
-                urlStr += "/";
-            }
-            const THttpURL& httpUrl = ParseURL(urlStr);
+            TString urlStr(url); 
+            if (!url.empty() && url.back() != '/') { 
+                urlStr += "/"; 
+            } 
+            const THttpURL& httpUrl = ParseURL(urlStr); 
             if (httpUrl.GetHost() != "proxy.sandbox.yandex-team.ru") {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Adding folder by URL is currently supported only for proxy.sandbox.yandex-team.ru. Host " << httpUrl.GetHost() << " is not supported"));
                 return false;
@@ -994,14 +994,14 @@ namespace {
         TAutoPtr<IGraphTransformer> ConfigurationTransformer;
         TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
         const TYqlCoreConfig* CoreConfig;
-        const TAllowSettingPolicy Policy;
+        const TAllowSettingPolicy Policy; 
     };
 }
 
-TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config,
-    const TAllowSettingPolicy& policy)
-{
-    return new TConfigProvider(types, config, policy);
+TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, 
+    const TAllowSettingPolicy& policy) 
+{ 
+    return new TConfigProvider(types, config, policy); 
 }
 
 const THashSet<TStringBuf>& ConfigProviderFunctions() {

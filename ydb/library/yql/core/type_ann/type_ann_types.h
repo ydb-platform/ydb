@@ -50,7 +50,7 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus FormatCodeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ReprCodeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus RestartEvaluationWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-    IGraphTransformer::TStatus EvaluateExprIfPureWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus EvaluateExprIfPureWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx); 
 
     template <TExprNode::EType>
     IGraphTransformer::TStatus MakeCodeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

@@ -290,7 +290,7 @@ TMaybe<TVector<ui32>> CreateStructPositions(TType* inputType, const TVector<TStr
     return structPositions;
 }
 
-namespace {
+namespace { 
 NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type) {
     YQL_ENSURE(type->GetKind() == TType::EKind::Data);
 
@@ -357,53 +357,53 @@ NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr
             return NYT::TNode(ToString(TStringBuf(value.AsStringRef())));
         }
     }
-    YQL_ENSURE(false, "Unsupported type: " << static_cast<int>(dataType->GetSchemeType()));
+    YQL_ENSURE(false, "Unsupported type: " << static_cast<int>(dataType->GetSchemeType())); 
 }
 
-TExprNode::TPtr DataNodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode& type, const NYT::TNode& node, TExprContext& ctx) {
-    YQL_ENSURE(type.GetKind() == ETypeAnnotationKind::Data, "Expecting data type, got: " << type);
-
-    TString strData;
-    if (type.Cast<TDataExprType>()->GetSlot() == EDataSlot::Yson) {
-        strData = NYT::NodeToYsonString(node);
-    } else {
-        switch (node.GetType()) {
-            case NYT::TNode::String:
-                strData = node.AsString();
-                break;
-            case NYT::TNode::Int64:
-                strData = ToString(node.AsInt64());
-                break;
-            case NYT::TNode::Uint64:
-                strData = ToString(node.AsUint64());
-                break;
-            case NYT::TNode::Double:
-                strData = FloatToString(node.AsDouble());
-                break;
-            case NYT::TNode::Bool:
-                strData = ToString(node.AsBool());
-                break;
-            default:
-                YQL_ENSURE(false, "Unexpected Yson type: " << node.GetType() << " while deserializing literal of type " << type);
-        }
-    }
-
-    return ctx.Builder(pos)
-        .Callable(type.Cast<TDataExprType>()->GetName())
-        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-            parent.Atom(0, strData);
-            if (IsDataTypeDecimal(type.Cast<TDataExprType>()->GetSlot())) {
-                auto decimalType = type.Cast<TDataExprParamsType>();
-                parent.Atom(1, decimalType->GetParamOne());
-                parent.Atom(2, decimalType->GetParamTwo());
-            }
-            return parent;
-        })
-        .Seal()
-        .Build();
-}
-
-
+TExprNode::TPtr DataNodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode& type, const NYT::TNode& node, TExprContext& ctx) { 
+    YQL_ENSURE(type.GetKind() == ETypeAnnotationKind::Data, "Expecting data type, got: " << type); 
+ 
+    TString strData; 
+    if (type.Cast<TDataExprType>()->GetSlot() == EDataSlot::Yson) { 
+        strData = NYT::NodeToYsonString(node); 
+    } else { 
+        switch (node.GetType()) { 
+            case NYT::TNode::String: 
+                strData = node.AsString(); 
+                break; 
+            case NYT::TNode::Int64: 
+                strData = ToString(node.AsInt64()); 
+                break; 
+            case NYT::TNode::Uint64: 
+                strData = ToString(node.AsUint64()); 
+                break; 
+            case NYT::TNode::Double: 
+                strData = FloatToString(node.AsDouble()); 
+                break; 
+            case NYT::TNode::Bool: 
+                strData = ToString(node.AsBool()); 
+                break; 
+            default: 
+                YQL_ENSURE(false, "Unexpected Yson type: " << node.GetType() << " while deserializing literal of type " << type); 
+        } 
+    } 
+ 
+    return ctx.Builder(pos) 
+        .Callable(type.Cast<TDataExprType>()->GetName()) 
+        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
+            parent.Atom(0, strData); 
+            if (IsDataTypeDecimal(type.Cast<TDataExprType>()->GetSlot())) { 
+                auto decimalType = type.Cast<TDataExprParamsType>(); 
+                parent.Atom(1, decimalType->GetParamOne()); 
+                parent.Atom(2, decimalType->GetParamTwo()); 
+            } 
+            return parent; 
+        }) 
+        .Seal() 
+        .Build(); 
+} 
+ 
+ 
 TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TDataExprType* type) {
     switch (type->GetSlot()) {
         case NUdf::EDataSlot::Int32:
@@ -467,90 +467,90 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
 
     Y_FAIL("Unexpected");
 }
-} //namespace
-
-NYT::TNode ValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type) {
-    NYT::TNode result;
-    switch (type->GetKind()) {
-        case TType::EKind::Optional: {
-            result = NYT::TNode::CreateList();
-            if (value) {
-                result.Add(ValueToNode(value.GetOptionalValue(), AS_TYPE(TOptionalType, type)->GetItemType()));
-            }
-            break;
-        }
-        case TType::EKind::Tuple: {
-            auto tupleType = AS_TYPE(TTupleType, type);
-            result = NYT::TNode::CreateList();
-            for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-                result.Add(ValueToNode(value.GetElement(i), tupleType->GetElementType(i)));
-            }
-            break;
-        }
-        case TType::EKind::List: {
-            auto listType = AS_TYPE(TListType, type);
-            result = NYT::TNode::CreateList();
-            const auto iter = value.GetListIterator();
-            for (NUdf::TUnboxedValue item; iter.Next(item); ) {
-                result.Add(ValueToNode(item, listType->GetItemType()));
-            }
-            break;
-        }
-        default: {
-            result = DataValueToNode(value, type);
-        }
-    }
-    return result;
+} //namespace 
+ 
+NYT::TNode ValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type) { 
+    NYT::TNode result; 
+    switch (type->GetKind()) { 
+        case TType::EKind::Optional: { 
+            result = NYT::TNode::CreateList(); 
+            if (value) { 
+                result.Add(ValueToNode(value.GetOptionalValue(), AS_TYPE(TOptionalType, type)->GetItemType())); 
+            } 
+            break; 
+        } 
+        case TType::EKind::Tuple: { 
+            auto tupleType = AS_TYPE(TTupleType, type); 
+            result = NYT::TNode::CreateList(); 
+            for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) { 
+                result.Add(ValueToNode(value.GetElement(i), tupleType->GetElementType(i))); 
+            } 
+            break; 
+        } 
+        case TType::EKind::List: { 
+            auto listType = AS_TYPE(TListType, type); 
+            result = NYT::TNode::CreateList(); 
+            const auto iter = value.GetListIterator(); 
+            for (NUdf::TUnboxedValue item; iter.Next(item); ) { 
+                result.Add(ValueToNode(item, listType->GetItemType())); 
+            } 
+            break; 
+        } 
+        default: { 
+            result = DataValueToNode(value, type); 
+        } 
+    } 
+    return result; 
 }
 
-TExprNode::TPtr NodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode& type, const NYT::TNode& node, TExprContext& ctx) {
-    TExprNode::TPtr result;
-    switch(type.GetKind()) {
-        case ETypeAnnotationKind::Optional: {
-            YQL_ENSURE(node.IsList() || node.IsNull());
-            if (node.IsNull() || node.AsList().empty()) {
-                return ctx.NewCallable(pos, "Nothing", { ExpandType(pos, type, ctx) });
-            }
-            YQL_ENSURE(node.AsList().size() == 1);
-            result = ctx.NewCallable(pos, "Just", {
-                NodeToExprLiteral(pos, *type.Cast<TOptionalExprType>()->GetItemType(), node.AsList().front(), ctx)
-            });
-            break;
-        }
-        case ETypeAnnotationKind::Tuple: {
-            YQL_ENSURE(node.IsList());
-            const TTypeAnnotationNode::TListType& itemTypes = type.Cast<TTupleExprType>()->GetItems();
-            const auto& items = node.AsList();
-            YQL_ENSURE(itemTypes.size() == items.size());
-            TExprNodeList resultNodes;
-            for (size_t i = 0; i < items.size(); ++i) {
-                resultNodes.push_back(NodeToExprLiteral(pos, *itemTypes[i], items[i], ctx));
-            }
-            result = ctx.NewList(pos, std::move(resultNodes));
-            break;
-        }
-        case ETypeAnnotationKind::List: {
-            YQL_ENSURE(node.IsList());
-            const TTypeAnnotationNode& itemType = *type.Cast<TListExprType>()->GetItemType();
-            if (node.AsList().empty()) {
-                return ctx.NewCallable(pos, "List", { ExpandType(pos, *ctx.MakeType<TListExprType>(&itemType), ctx) });
-            }
-
-            TExprNodeList children;
-            for (auto& child : node.AsList()) {
-                children.push_back(NodeToExprLiteral(pos, itemType, child, ctx));
-            }
-
-            result = ctx.NewCallable(pos, "AsList", std::move(children));
-            break;
-        }
-        default: {
-            result = DataNodeToExprLiteral(pos, type, node, ctx);
-        }
-    }
-    return result;
-}
-
+TExprNode::TPtr NodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode& type, const NYT::TNode& node, TExprContext& ctx) { 
+    TExprNode::TPtr result; 
+    switch(type.GetKind()) { 
+        case ETypeAnnotationKind::Optional: { 
+            YQL_ENSURE(node.IsList() || node.IsNull()); 
+            if (node.IsNull() || node.AsList().empty()) { 
+                return ctx.NewCallable(pos, "Nothing", { ExpandType(pos, type, ctx) }); 
+            } 
+            YQL_ENSURE(node.AsList().size() == 1); 
+            result = ctx.NewCallable(pos, "Just", { 
+                NodeToExprLiteral(pos, *type.Cast<TOptionalExprType>()->GetItemType(), node.AsList().front(), ctx) 
+            }); 
+            break; 
+        } 
+        case ETypeAnnotationKind::Tuple: { 
+            YQL_ENSURE(node.IsList()); 
+            const TTypeAnnotationNode::TListType& itemTypes = type.Cast<TTupleExprType>()->GetItems(); 
+            const auto& items = node.AsList(); 
+            YQL_ENSURE(itemTypes.size() == items.size()); 
+            TExprNodeList resultNodes; 
+            for (size_t i = 0; i < items.size(); ++i) { 
+                resultNodes.push_back(NodeToExprLiteral(pos, *itemTypes[i], items[i], ctx)); 
+            } 
+            result = ctx.NewList(pos, std::move(resultNodes)); 
+            break; 
+        } 
+        case ETypeAnnotationKind::List: { 
+            YQL_ENSURE(node.IsList()); 
+            const TTypeAnnotationNode& itemType = *type.Cast<TListExprType>()->GetItemType(); 
+            if (node.AsList().empty()) { 
+                return ctx.NewCallable(pos, "List", { ExpandType(pos, *ctx.MakeType<TListExprType>(&itemType), ctx) }); 
+            } 
+ 
+            TExprNodeList children; 
+            for (auto& child : node.AsList()) { 
+                children.push_back(NodeToExprLiteral(pos, itemType, child, ctx)); 
+            } 
+ 
+            result = ctx.NewCallable(pos, "AsList", std::move(children)); 
+            break; 
+        } 
+        default: { 
+            result = DataNodeToExprLiteral(pos, type, node, ctx); 
+        } 
+    } 
+    return result; 
+} 
+ 
 void CopyYsonWithAttrs(char cmd, TInputBuf& buf, TVector<char>& yson) {
     if (cmd == BeginAttributesSymbol) {
         yson.push_back(cmd);
@@ -704,15 +704,15 @@ TStringBuf ReadNextString(char cmd, TInputBuf& buf) {
 template <typename T>
 T ReadNextSerializedNumber(char cmd, TInputBuf& buf) {
     auto nextString = ReadNextString(cmd, buf);
-    if constexpr (!std::numeric_limits<T>::is_integer) {
-        if (nextString == "inf" || nextString == "+inf") {
-            return std::numeric_limits<T>::infinity();
-        } else if (nextString == "-inf") {
-            return -std::numeric_limits<T>::infinity();
-        } else if (nextString == "nan") {
-            return std::numeric_limits<T>::quiet_NaN();
-        }
-    }
+    if constexpr (!std::numeric_limits<T>::is_integer) { 
+        if (nextString == "inf" || nextString == "+inf") { 
+            return std::numeric_limits<T>::infinity(); 
+        } else if (nextString == "-inf") { 
+            return -std::numeric_limits<T>::infinity(); 
+        } else if (nextString == "nan") { 
+            return std::numeric_limits<T>::quiet_NaN(); 
+        } 
+    } 
     return FromString<T>(nextString);
 }
 
@@ -2252,7 +2252,7 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
 }
 
 TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikimr::NUdf::TUnboxedValuePod& value, TExprContext& ctx,
-    TPositionHandle pos) {
+    TPositionHandle pos) { 
     switch (type->GetKind()) {
     case ETypeAnnotationKind::Variant: {
         auto variantType = type->Cast<TVariantExprType>();

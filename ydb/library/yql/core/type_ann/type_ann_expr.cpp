@@ -56,7 +56,7 @@ public:
         Processed.clear();
         if (status == TStatus::Ok) {
             Types.ExpectedTypes.clear();
-            Types.ExpectedColumnOrders.clear();
+            Types.ExpectedColumnOrders.clear(); 
         }
 
         HasRenames = false;
@@ -79,7 +79,7 @@ public:
         output = input;
         TStatus combinedStatus = TStatus::Ok;
         for (const auto& callable : CallableInputs) {
-            callable->SetState(TExprNode::EState::TypePending);
+            callable->SetState(TExprNode::EState::TypePending); 
             TExprNode::TPtr callableOutput;
             auto status = CallableTransformer->ApplyAsyncChanges(callable, callableOutput, ctx);
             Y_VERIFY(callableOutput);
@@ -87,7 +87,7 @@ public:
             YQL_ENSURE(callableOutput == callable);
             combinedStatus = combinedStatus.Combine(status);
             if (status.Level == TStatus::Error) {
-                callable->SetState(TExprNode::EState::Error);
+                callable->SetState(TExprNode::EState::Error); 
             }
         }
 
@@ -133,7 +133,7 @@ private:
                 return TStatus::Repeat;
             }
 
-            switch (start->GetState()) {
+            switch (start->GetState()) { 
             case TExprNode::EState::Initial:
                 return TStatus(TStatus::Repeat, true);
             case TExprNode::EState::TypeInProgress:
@@ -170,7 +170,7 @@ private:
 
         auto input = start;
         for (;;) {
-            TIssueScopeGuard issueScope(ctx.IssueManager, [this, input, &ctx]() -> TIssuePtr {
+            TIssueScopeGuard issueScope(ctx.IssueManager, [this, input, &ctx]() -> TIssuePtr { 
                 TStringBuilder str;
                 str << "At ";
                 switch (input->Type()) {
@@ -209,7 +209,7 @@ private:
                     str << "unknown";
                 }
 
-                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), str);
+                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), str); 
             });
 
             if (input->Type() == TExprNode::Callable) {
@@ -225,7 +225,7 @@ private:
             };
 
             TStatus retStatus = TStatus::Error;
-            switch (input->GetState()) {
+            switch (input->GetState()) { 
             case TExprNode::EState::Initial:
                 break;
             case TExprNode::EState::TypeInProgress:
@@ -247,12 +247,12 @@ private:
                 YQL_ENSURE(false, "Unknown state");
             }
 
-            input->SetState(TExprNode::EState::TypePending);
+            input->SetState(TExprNode::EState::TypePending); 
             switch (input->Type()) {
             case TExprNode::Atom:
             {
                 input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
-                CheckExpected(*input, ctx);
+                CheckExpected(*input, ctx); 
                 return TStatus::Ok;
             }
 
@@ -274,7 +274,7 @@ private:
 
                 if (combinedStatus != TStatus::Ok) {
                     if (combinedStatus.Level == TStatus::Error) {
-                        input->SetState(TExprNode::EState::Error);
+                        input->SetState(TExprNode::EState::Error); 
                     }
                     else if (updatedChildren) {
                         input->ChangeChildrenInplace(std::move(newChildren));
@@ -289,7 +289,7 @@ private:
                 bool isUnit = false;
                 for (auto& child : input->Children()) {
                     if (!EnsureComposable(*child, ctx)) {
-                        input->SetState(TExprNode::EState::Error);
+                        input->SetState(TExprNode::EState::Error); 
                         return TStatus::Error;
                     }
 
@@ -302,7 +302,7 @@ private:
                 input->SetTypeAnn(isUnit ?
                     (const TTypeAnnotationNode*)ctx.MakeType<TUnitExprType>() :
                     ctx.MakeType<TTupleExprType>(children));
-                CheckExpected(*input, ctx);
+                CheckExpected(*input, ctx); 
                 return TStatus::Ok;
             }
 
@@ -318,7 +318,7 @@ private:
                 auto argStatus = TransformNode(input->HeadPtr(), out, ctx);
                 UpdateStatusIfChanged(argStatus, input->HeadPtr(), out);
                 if (argStatus.Level == TStatus::Error) {
-                    input->SetState(TExprNode::EState::Error);
+                    input->SetState(TExprNode::EState::Error); 
                     return argStatus;
                 }
 
@@ -342,7 +342,7 @@ private:
 
                 if (combinedStatus != TStatus::Ok) {
                     if (combinedStatus.Level == TStatus::Error) {
-                        input->SetState(TExprNode::EState::Error);
+                        input->SetState(TExprNode::EState::Error); 
                     }
                     else if (updatedChildren) {
                         input->ChangeChildrenInplace(std::move(newChildren));
@@ -364,7 +364,7 @@ private:
                 }
 
                 if (input->GetTypeAnn()) {
-                    CheckExpected(*input, ctx);
+                    CheckExpected(*input, ctx); 
                 }
 
                 return TStatus::Ok;
@@ -373,8 +373,8 @@ private:
             case TExprNode::Argument:
                 if (input->GetTypeAnn()) {
                     if (input->Type() == TExprNode::Lambda) {
-                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Unable to use lambda as argument"));
-                        input->SetState(TExprNode::EState::Error);
+                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Unable to use lambda as argument")); 
+                        input->SetState(TExprNode::EState::Error); 
                         return TStatus::Error;
                     }
                 }
@@ -403,7 +403,7 @@ private:
 
                     if (combinedStatus != TStatus::Ok) {
                         if (combinedStatus.Level == TStatus::Error) {
-                            input->SetState(TExprNode::EState::Error);
+                            input->SetState(TExprNode::EState::Error); 
                         }
                         else if (updatedChildren) {
                             input->ChangeChildrenInplace(std::move(newChildren));
@@ -425,23 +425,23 @@ private:
                 }
 
                 if (status == TStatus::Error) {
-                    input->SetState(TExprNode::EState::Error);
+                    input->SetState(TExprNode::EState::Error); 
                     return status;
                 }
 
                 if (status == TStatus::Ok) {
                     if (!input->GetTypeAnn()) {
-                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Node is not annotated yet"));
-                        input->SetState(TExprNode::EState::Error);
+                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Node is not annotated yet")); 
+                        input->SetState(TExprNode::EState::Error); 
                         return TStatus::Error;
                     }
 
-                    input->SetState(TExprNode::EState::TypeComplete);
-                    CheckExpected(*input, ctx);
+                    input->SetState(TExprNode::EState::TypeComplete); 
+                    CheckExpected(*input, ctx); 
                 }
                 else if (status == TStatus::Async) {
                     CallableInputs.push_back(input);
-                    input->SetState(TExprNode::EState::TypeInProgress);
+                    input->SetState(TExprNode::EState::TypeInProgress); 
                 } else {
                     RepeatCallableCount[input.Get()->Content()] += 1;
                     if (output != input.Get()) {
@@ -459,7 +459,7 @@ private:
             case TExprNode::World:
             {
                 input->SetTypeAnn(ctx.MakeType<TWorldExprType>());
-                CheckExpected(*input, ctx);
+                CheckExpected(*input, ctx); 
                 return TStatus::Ok;
             }
 
@@ -467,7 +467,7 @@ private:
             {
                 if (input->Children().empty()) {
                     if (input->GetTypeAnn()) {
-                        input->SetState(TExprNode::EState::TypeComplete);
+                        input->SetState(TExprNode::EState::TypeComplete); 
                         return TStatus::Ok;
                     }
 
@@ -485,7 +485,7 @@ private:
 
                 if (combinedStatus != TStatus::Ok) {
                     if (combinedStatus.Level == TStatus::Error) {
-                        input->SetState(TExprNode::EState::Error);
+                        input->SetState(TExprNode::EState::Error); 
                     }
 
                     return combinedStatus;
@@ -513,32 +513,32 @@ private:
         }
     }
 
-    void CheckExpected(const TExprNode& input, TExprContext& ctx) {
-        Y_UNUSED(ctx);
+    void CheckExpected(const TExprNode& input, TExprContext& ctx) { 
+        Y_UNUSED(ctx); 
         auto it = Types.ExpectedTypes.find(input.UniqueId());
         if (it != Types.ExpectedTypes.end()) {
             YQL_ENSURE(IsSameAnnotation(*input.GetTypeAnn(), *it->second),
                 "Rewrite error, type should be : " <<
                 *it->second << ", but it is: " << *input.GetTypeAnn() << " for node " << input.Content());
         }
-
-        auto coIt = Types.ExpectedColumnOrders.find(input.UniqueId());
-        if (coIt != Types.ExpectedColumnOrders.end()) {
-            TColumnOrder oldColumnOrder = coIt->second;
-            TMaybe<TColumnOrder> newColumnOrder = Types.LookupColumnOrder(input);
-            if (!newColumnOrder) {
-                // keep column order after rewrite
-                // TODO: check if needed
-                auto status = Types.SetColumnOrder(input, oldColumnOrder, ctx);
-                YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
-            } else {
-                YQL_ENSURE(newColumnOrder == oldColumnOrder,
-                    "Rewrite error, column order should be: "
-                    << FormatColumnOrder(oldColumnOrder) << ", but it is: "
-                    << FormatColumnOrder(newColumnOrder) << " for node "
-                    << input.Content());
-            }
-        }
+ 
+        auto coIt = Types.ExpectedColumnOrders.find(input.UniqueId()); 
+        if (coIt != Types.ExpectedColumnOrders.end()) { 
+            TColumnOrder oldColumnOrder = coIt->second; 
+            TMaybe<TColumnOrder> newColumnOrder = Types.LookupColumnOrder(input); 
+            if (!newColumnOrder) { 
+                // keep column order after rewrite 
+                // TODO: check if needed 
+                auto status = Types.SetColumnOrder(input, oldColumnOrder, ctx); 
+                YQL_ENSURE(status == IGraphTransformer::TStatus::Ok); 
+            } else { 
+                YQL_ENSURE(newColumnOrder == oldColumnOrder, 
+                    "Rewrite error, column order should be: " 
+                    << FormatColumnOrder(oldColumnOrder) << ", but it is: " 
+                    << FormatColumnOrder(newColumnOrder) << " for node " 
+                    << input.Content()); 
+            } 
+        } 
     }
 
 private:
@@ -557,8 +557,8 @@ private:
 IGraphTransformer::TStatus CheckWholeProgramType(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     if (input->Type() == TExprNode::Lambda || input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
-        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Return must be world"));
-        input->SetState(TExprNode::EState::Error);
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Return must be world")); 
+        input->SetState(TExprNode::EState::Error); 
         return IGraphTransformer::TStatus::Error;
     }
 

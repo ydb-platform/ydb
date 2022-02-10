@@ -2443,22 +2443,22 @@ TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, 
     return Invoke(callableName, resultType, args);
 }
 
-TRuntimeNode TProgramBuilder::BuildRangeLogical(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists) {
-    MKQL_ENSURE(!lists.empty(), "Expecting at least one argument");
-
-    for (auto& list : lists) {
-        MKQL_ENSURE(list.GetStaticType()->IsList(), "Expecting lists");
-        MKQL_ENSURE(list.GetStaticType()->IsSameType(*lists.front().GetStaticType()), "Expecting arguments of same type");
-    }
-
-    TCallableBuilder callableBuilder(Env, callableName, lists.front().GetStaticType());
-    for (auto& list : lists) {
-        callableBuilder.Add(list);
-    }
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+TRuntimeNode TProgramBuilder::BuildRangeLogical(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists) { 
+    MKQL_ENSURE(!lists.empty(), "Expecting at least one argument"); 
+ 
+    for (auto& list : lists) { 
+        MKQL_ENSURE(list.GetStaticType()->IsList(), "Expecting lists"); 
+        MKQL_ENSURE(list.GetStaticType()->IsSameType(*lists.front().GetStaticType()), "Expecting arguments of same type"); 
+    } 
+ 
+    TCallableBuilder callableBuilder(Env, callableName, lists.front().GetStaticType()); 
+    for (auto& list : lists) { 
+        callableBuilder.Add(list); 
+    } 
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TProgramBuilder::AggrEquals(TRuntimeNode data1, TRuntimeNode data2) {
     return AggrCompare(__func__, data1, data2);
 }
@@ -2724,17 +2724,17 @@ TRuntimeNode TProgramBuilder::AggrAdd(TRuntimeNode data1, TRuntimeNode data2) {
 TRuntimeNode TProgramBuilder::QueueCreate(TRuntimeNode initCapacity, TRuntimeNode initSize, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType) {
     auto resType = AS_TYPE(TResourceType, returnType);
     const auto tag = resType->GetTag();
-
-    if (initCapacity.GetStaticType()->IsVoid()) {
+ 
+    if (initCapacity.GetStaticType()->IsVoid()) { 
         MKQL_ENSURE(RuntimeVersion >= 13, "Unbounded queue is not supported in runtime version " << RuntimeVersion);
-    } else {
-        auto initCapacityType = AS_TYPE(TDataType, initCapacity);
-        MKQL_ENSURE(initCapacityType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "init capcity must be ui64");
-    }
-
+    } else { 
+        auto initCapacityType = AS_TYPE(TDataType, initCapacity); 
+        MKQL_ENSURE(initCapacityType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "init capcity must be ui64"); 
+    } 
+ 
     auto initSizeType = AS_TYPE(TDataType, initSize);
     MKQL_ENSURE(initSizeType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "init size must be ui64");
-
+ 
     TCallableBuilder callableBuilder(Env, __func__, returnType, true);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(tag));
     callableBuilder.Add(initCapacity);
@@ -2780,30 +2780,30 @@ TRuntimeNode TProgramBuilder::QueuePeek(TRuntimeNode resource, TRuntimeNode inde
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::QueueRange(TRuntimeNode resource, TRuntimeNode begin, TRuntimeNode end, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType) {
+TRuntimeNode TProgramBuilder::QueueRange(TRuntimeNode resource, TRuntimeNode begin, TRuntimeNode end, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType) { 
     MKQL_ENSURE(RuntimeVersion >= 14, "QueueRange is not supported in runtime version " << RuntimeVersion);
-
-    MKQL_ENSURE(returnType->IsList(), "Expected list type as result of QueueRange");
-    auto resType = AS_TYPE(TResourceType, resource);
-
-    auto beginType = AS_TYPE(TDataType, begin);
-    MKQL_ENSURE(beginType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "begin index must be ui64");
-
-    auto endType = AS_TYPE(TDataType, end);
-    MKQL_ENSURE(endType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "end index must be ui64");
-
-    const auto tag = resType->GetTag();
-    MKQL_ENSURE(tag.StartsWith(ResourceQueuePrefix), "Expected Queue resource");
-    TCallableBuilder callableBuilder(Env, __func__, returnType);
-    callableBuilder.Add(resource);
-    callableBuilder.Add(begin);
-    callableBuilder.Add(end);
-    for (auto node : dependentNodes) {
-        callableBuilder.Add(node);
-    }
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+ 
+    MKQL_ENSURE(returnType->IsList(), "Expected list type as result of QueueRange"); 
+    auto resType = AS_TYPE(TResourceType, resource); 
+ 
+    auto beginType = AS_TYPE(TDataType, begin); 
+    MKQL_ENSURE(beginType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "begin index must be ui64"); 
+ 
+    auto endType = AS_TYPE(TDataType, end); 
+    MKQL_ENSURE(endType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "end index must be ui64"); 
+ 
+    const auto tag = resType->GetTag(); 
+    MKQL_ENSURE(tag.StartsWith(ResourceQueuePrefix), "Expected Queue resource"); 
+    TCallableBuilder callableBuilder(Env, __func__, returnType); 
+    callableBuilder.Add(resource); 
+    callableBuilder.Add(begin); 
+    callableBuilder.Add(end); 
+    for (auto node : dependentNodes) { 
+        callableBuilder.Add(node); 
+    } 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TProgramBuilder::PreserveStream(TRuntimeNode stream, TRuntimeNode queue, TRuntimeNode outpace) {
     auto streamType = AS_TYPE(TStreamType, stream);
     auto resType = AS_TYPE(TResourceType, queue);
@@ -2818,16 +2818,16 @@ TRuntimeNode TProgramBuilder::PreserveStream(TRuntimeNode stream, TRuntimeNode q
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::Seq(const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
-    MKQL_ENSURE(RuntimeVersion >= 15, "Seq is not supported in runtime version " << RuntimeVersion);
-
-    TCallableBuilder callableBuilder(Env, __func__, returnType);
-    for (auto node : args) {
-        callableBuilder.Add(node);
-    }
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+TRuntimeNode TProgramBuilder::Seq(const TArrayRef<const TRuntimeNode>& args, TType* returnType) { 
+    MKQL_ENSURE(RuntimeVersion >= 15, "Seq is not supported in runtime version " << RuntimeVersion); 
+ 
+    TCallableBuilder callableBuilder(Env, __func__, returnType); 
+    for (auto node : args) { 
+        callableBuilder.Add(node); 
+    } 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TProgramBuilder::FromYsonSimpleType(TRuntimeNode input, NUdf::TDataTypeId schemeType) {
     auto type = input.GetStaticType();
     if (type->IsOptional()) {
@@ -4806,164 +4806,164 @@ TRuntimeNode TProgramBuilder::Cast(TRuntimeNode arg, TType* type) {
     return useToIntegral ? ToIntegral(arg, type) : Convert(arg, type);
 }
 
-TRuntimeNode TProgramBuilder::RangeCreate(TRuntimeNode list) {
-    MKQL_ENSURE(list.GetStaticType()->IsList(), "Expecting list");
-    auto itemType = static_cast<TListType*>(list.GetStaticType())->GetItemType();
-    MKQL_ENSURE(itemType->IsTuple(), "Expecting list of tuples");
-
-    auto tupleType = static_cast<TTupleType*>(itemType);
-    MKQL_ENSURE(tupleType->GetElementsCount() == 2,
-        "Expecting list ot 2-element tuples, got: " << tupleType->GetElementsCount() << " elements");
-
-    MKQL_ENSURE(tupleType->GetElementType(0)->IsSameType(*tupleType->GetElementType(1)),
-        "Expecting list ot 2-element tuples of same type");
-
-    MKQL_ENSURE(tupleType->GetElementType(0)->IsTuple(),
-        "Expecting range boundary to be tuple");
-
-    auto boundaryType = static_cast<TTupleType*>(tupleType->GetElementType(0));
-    MKQL_ENSURE(boundaryType->GetElementsCount() >= 2,
-        "Range boundary should have at least 2 components, got: " << boundaryType->GetElementsCount());
-
-    auto lastComp = boundaryType->GetElementType(boundaryType->GetElementsCount() - 1);
-    std::vector<TType*> outputComponents;
-    for (ui32 i = 0; i < boundaryType->GetElementsCount() - 1; ++i) {
-        outputComponents.push_back(lastComp);
-        outputComponents.push_back(boundaryType->GetElementType(i));
-    }
-    outputComponents.push_back(lastComp);
-
-    auto outputBoundary = TTupleType::Create(outputComponents.size(), &outputComponents.front(), Env);
-    std::vector<TType*> outputRangeComps(2, outputBoundary);
-    auto outputRange = TTupleType::Create(outputRangeComps.size(), &outputRangeComps.front(), Env);
-
-    TCallableBuilder callableBuilder(Env, __func__, TListType::Create(outputRange, Env));
-    callableBuilder.Add(list);
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
-TRuntimeNode TProgramBuilder::RangeUnion(const TArrayRef<const TRuntimeNode>& lists) {
-    return BuildRangeLogical(__func__, lists);
-}
-
-TRuntimeNode TProgramBuilder::RangeIntersect(const TArrayRef<const TRuntimeNode>& lists) {
-    return BuildRangeLogical(__func__, lists);
-}
-
-TRuntimeNode TProgramBuilder::RangeMultiply(const TArrayRef<const TRuntimeNode>& args) {
-    MKQL_ENSURE(args.size() >= 2, "Expecting at least two arguments");
-
-    MKQL_ENSURE(args.front().GetStaticType()->IsData() &&
-        static_cast<TDataType*>(args.front().GetStaticType())->GetSchemeType() == NUdf::TDataType<ui64>::Id,
-            "Expected ui64 as first argument");
-
-    std::vector<TType*> outputComponents;
-    for (size_t i = 1; i < args.size(); ++i) {
-        const auto& list = args[i];
-
-        MKQL_ENSURE(list.GetStaticType()->IsList(), "Expecting list");
-
-        auto listItemType = static_cast<TListType*>(list.GetStaticType())->GetItemType();
-        MKQL_ENSURE(listItemType->IsTuple(), "Expecting list of tuples");
-
-        auto rangeType = static_cast<TTupleType*>(listItemType);
-        MKQL_ENSURE(rangeType->GetElementsCount() == 2, "Expecting list of 2-element tuples");
-        MKQL_ENSURE(rangeType->GetElementType(0)->IsTuple(), "Range boundary should be tuple");
-
-        auto boundaryType = static_cast<TTupleType*>(rangeType->GetElementType(0));
-
-        ui32 elementsCount = boundaryType->GetElementsCount();
-        MKQL_ENSURE(elementsCount >= 3 && elementsCount % 2 == 1, "Range boundary should have odd number components (at least 3)");
-
-        for (size_t j = 0; j < elementsCount - 1; ++j) {
-            outputComponents.push_back(boundaryType->GetElementType(j));
-        }
-    }
-    outputComponents.push_back(TDataType::Create(NUdf::TDataType<i32>::Id, Env));
-
-    auto outputBoundary = TTupleType::Create(outputComponents.size(), &outputComponents.front(), Env);
-    std::vector<TType*> outputRangeComps(2, outputBoundary);
-    auto outputRange = TTupleType::Create(outputRangeComps.size(), &outputRangeComps.front(), Env);
-
-    TCallableBuilder callableBuilder(Env, __func__, TListType::Create(outputRange, Env));
-    for (auto& arg : args) {
-        callableBuilder.Add(arg);
-    }
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
-TRuntimeNode TProgramBuilder::RangeFinalize(TRuntimeNode list) {
-    MKQL_ENSURE(list.GetStaticType()->IsList(), "Expecting list");
-
-    auto listItemType = static_cast<TListType*>(list.GetStaticType())->GetItemType();
-    MKQL_ENSURE(listItemType->IsTuple(), "Expecting list of tuples");
-
-    auto rangeType = static_cast<TTupleType*>(listItemType);
-    MKQL_ENSURE(rangeType->GetElementsCount() == 2, "Expecting list of 2-element tuples");
-    MKQL_ENSURE(rangeType->GetElementType(0)->IsTuple(), "Range boundary should be tuple");
-
-    auto boundaryType = static_cast<TTupleType*>(rangeType->GetElementType(0));
-
-    ui32 elementsCount = boundaryType->GetElementsCount();
-    MKQL_ENSURE(elementsCount >= 3 && elementsCount % 2 == 1, "Range boundary should have odd number components (at least 3)");
-
-    std::vector<TType*> outputComponents;
-    for (ui32 i = 0; i < elementsCount; ++i) {
-        if (i % 2 == 1 || i + 1 == elementsCount) {
-            outputComponents.push_back(boundaryType->GetElementType(i));
-        }
-    }
-
-    auto outputBoundary = TTupleType::Create(outputComponents.size(), &outputComponents.front(), Env);
-    std::vector<TType*> outputRangeComps(2, outputBoundary);
-    auto outputRange = TTupleType::Create(outputRangeComps.size(), &outputRangeComps.front(), Env);
-
-    TCallableBuilder callableBuilder(Env, __func__, TListType::Create(outputRange, Env));
-    callableBuilder.Add(list);
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
-TRuntimeNode TProgramBuilder::Round(const std::string_view& callableName, TRuntimeNode source, TType* targetType) {
-    const auto sourceType = source.GetStaticType();
-    MKQL_ENSURE(sourceType->IsData(), "Expecting first arg to be of Data type");
-    MKQL_ENSURE(targetType->IsData(), "Expecting second arg to be Data type");
-
-
-    const auto ss = *static_cast<TDataType*>(sourceType)->GetDataSlot();
-    const auto ts = *static_cast<TDataType*>(targetType)->GetDataSlot();
-
-    const auto options = NKikimr::NUdf::GetCastResult(ss, ts);
-    MKQL_ENSURE(options && !(*options & NKikimr::NUdf::ECastOptions::Impossible),
-        "Impossible to cast " <<  *sourceType << " into " << *targetType);
-
-    MKQL_ENSURE(*options & (NKikimr::NUdf::ECastOptions::MayFail |
-                            NKikimr::NUdf::ECastOptions::MayLoseData |
-                            NKikimr::NUdf::ECastOptions::AnywayLoseData),
-        "Rounding from " <<  *sourceType << " to " << *targetType << " is trivial");
-
-    TCallableBuilder callableBuilder(Env, callableName, TOptionalType::Create(targetType, Env));
-    callableBuilder.Add(source);
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
-TRuntimeNode TProgramBuilder::NextValue(TRuntimeNode value) {
-    const auto valueType = value.GetStaticType();
-    MKQL_ENSURE(valueType->IsData(), "Expecting argument of Data type");
-
-    const auto slot = *static_cast<TDataType*>(valueType)->GetDataSlot();
-    MKQL_ENSURE(slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Utf8,
-                "Unsupported type: " << *valueType);
-
-    TCallableBuilder callableBuilder(Env, __func__, TOptionalType::Create(valueType, Env));
-    callableBuilder.Add(value);
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+TRuntimeNode TProgramBuilder::RangeCreate(TRuntimeNode list) { 
+    MKQL_ENSURE(list.GetStaticType()->IsList(), "Expecting list"); 
+    auto itemType = static_cast<TListType*>(list.GetStaticType())->GetItemType(); 
+    MKQL_ENSURE(itemType->IsTuple(), "Expecting list of tuples"); 
+ 
+    auto tupleType = static_cast<TTupleType*>(itemType); 
+    MKQL_ENSURE(tupleType->GetElementsCount() == 2, 
+        "Expecting list ot 2-element tuples, got: " << tupleType->GetElementsCount() << " elements"); 
+ 
+    MKQL_ENSURE(tupleType->GetElementType(0)->IsSameType(*tupleType->GetElementType(1)), 
+        "Expecting list ot 2-element tuples of same type"); 
+ 
+    MKQL_ENSURE(tupleType->GetElementType(0)->IsTuple(), 
+        "Expecting range boundary to be tuple"); 
+ 
+    auto boundaryType = static_cast<TTupleType*>(tupleType->GetElementType(0)); 
+    MKQL_ENSURE(boundaryType->GetElementsCount() >= 2, 
+        "Range boundary should have at least 2 components, got: " << boundaryType->GetElementsCount()); 
+ 
+    auto lastComp = boundaryType->GetElementType(boundaryType->GetElementsCount() - 1); 
+    std::vector<TType*> outputComponents; 
+    for (ui32 i = 0; i < boundaryType->GetElementsCount() - 1; ++i) { 
+        outputComponents.push_back(lastComp); 
+        outputComponents.push_back(boundaryType->GetElementType(i)); 
+    } 
+    outputComponents.push_back(lastComp); 
+ 
+    auto outputBoundary = TTupleType::Create(outputComponents.size(), &outputComponents.front(), Env); 
+    std::vector<TType*> outputRangeComps(2, outputBoundary); 
+    auto outputRange = TTupleType::Create(outputRangeComps.size(), &outputRangeComps.front(), Env); 
+ 
+    TCallableBuilder callableBuilder(Env, __func__, TListType::Create(outputRange, Env)); 
+    callableBuilder.Add(list); 
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
+TRuntimeNode TProgramBuilder::RangeUnion(const TArrayRef<const TRuntimeNode>& lists) { 
+    return BuildRangeLogical(__func__, lists); 
+} 
+ 
+TRuntimeNode TProgramBuilder::RangeIntersect(const TArrayRef<const TRuntimeNode>& lists) { 
+    return BuildRangeLogical(__func__, lists); 
+} 
+ 
+TRuntimeNode TProgramBuilder::RangeMultiply(const TArrayRef<const TRuntimeNode>& args) { 
+    MKQL_ENSURE(args.size() >= 2, "Expecting at least two arguments"); 
+ 
+    MKQL_ENSURE(args.front().GetStaticType()->IsData() && 
+        static_cast<TDataType*>(args.front().GetStaticType())->GetSchemeType() == NUdf::TDataType<ui64>::Id, 
+            "Expected ui64 as first argument"); 
+ 
+    std::vector<TType*> outputComponents; 
+    for (size_t i = 1; i < args.size(); ++i) { 
+        const auto& list = args[i]; 
+ 
+        MKQL_ENSURE(list.GetStaticType()->IsList(), "Expecting list"); 
+ 
+        auto listItemType = static_cast<TListType*>(list.GetStaticType())->GetItemType(); 
+        MKQL_ENSURE(listItemType->IsTuple(), "Expecting list of tuples"); 
+ 
+        auto rangeType = static_cast<TTupleType*>(listItemType); 
+        MKQL_ENSURE(rangeType->GetElementsCount() == 2, "Expecting list of 2-element tuples"); 
+        MKQL_ENSURE(rangeType->GetElementType(0)->IsTuple(), "Range boundary should be tuple"); 
+ 
+        auto boundaryType = static_cast<TTupleType*>(rangeType->GetElementType(0)); 
+ 
+        ui32 elementsCount = boundaryType->GetElementsCount(); 
+        MKQL_ENSURE(elementsCount >= 3 && elementsCount % 2 == 1, "Range boundary should have odd number components (at least 3)"); 
+ 
+        for (size_t j = 0; j < elementsCount - 1; ++j) { 
+            outputComponents.push_back(boundaryType->GetElementType(j)); 
+        } 
+    } 
+    outputComponents.push_back(TDataType::Create(NUdf::TDataType<i32>::Id, Env)); 
+ 
+    auto outputBoundary = TTupleType::Create(outputComponents.size(), &outputComponents.front(), Env); 
+    std::vector<TType*> outputRangeComps(2, outputBoundary); 
+    auto outputRange = TTupleType::Create(outputRangeComps.size(), &outputRangeComps.front(), Env); 
+ 
+    TCallableBuilder callableBuilder(Env, __func__, TListType::Create(outputRange, Env)); 
+    for (auto& arg : args) { 
+        callableBuilder.Add(arg); 
+    } 
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
+TRuntimeNode TProgramBuilder::RangeFinalize(TRuntimeNode list) { 
+    MKQL_ENSURE(list.GetStaticType()->IsList(), "Expecting list"); 
+ 
+    auto listItemType = static_cast<TListType*>(list.GetStaticType())->GetItemType(); 
+    MKQL_ENSURE(listItemType->IsTuple(), "Expecting list of tuples"); 
+ 
+    auto rangeType = static_cast<TTupleType*>(listItemType); 
+    MKQL_ENSURE(rangeType->GetElementsCount() == 2, "Expecting list of 2-element tuples"); 
+    MKQL_ENSURE(rangeType->GetElementType(0)->IsTuple(), "Range boundary should be tuple"); 
+ 
+    auto boundaryType = static_cast<TTupleType*>(rangeType->GetElementType(0)); 
+ 
+    ui32 elementsCount = boundaryType->GetElementsCount(); 
+    MKQL_ENSURE(elementsCount >= 3 && elementsCount % 2 == 1, "Range boundary should have odd number components (at least 3)"); 
+ 
+    std::vector<TType*> outputComponents; 
+    for (ui32 i = 0; i < elementsCount; ++i) { 
+        if (i % 2 == 1 || i + 1 == elementsCount) { 
+            outputComponents.push_back(boundaryType->GetElementType(i)); 
+        } 
+    } 
+ 
+    auto outputBoundary = TTupleType::Create(outputComponents.size(), &outputComponents.front(), Env); 
+    std::vector<TType*> outputRangeComps(2, outputBoundary); 
+    auto outputRange = TTupleType::Create(outputRangeComps.size(), &outputRangeComps.front(), Env); 
+ 
+    TCallableBuilder callableBuilder(Env, __func__, TListType::Create(outputRange, Env)); 
+    callableBuilder.Add(list); 
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
+TRuntimeNode TProgramBuilder::Round(const std::string_view& callableName, TRuntimeNode source, TType* targetType) { 
+    const auto sourceType = source.GetStaticType(); 
+    MKQL_ENSURE(sourceType->IsData(), "Expecting first arg to be of Data type"); 
+    MKQL_ENSURE(targetType->IsData(), "Expecting second arg to be Data type"); 
+ 
+ 
+    const auto ss = *static_cast<TDataType*>(sourceType)->GetDataSlot(); 
+    const auto ts = *static_cast<TDataType*>(targetType)->GetDataSlot(); 
+ 
+    const auto options = NKikimr::NUdf::GetCastResult(ss, ts); 
+    MKQL_ENSURE(options && !(*options & NKikimr::NUdf::ECastOptions::Impossible), 
+        "Impossible to cast " <<  *sourceType << " into " << *targetType); 
+ 
+    MKQL_ENSURE(*options & (NKikimr::NUdf::ECastOptions::MayFail | 
+                            NKikimr::NUdf::ECastOptions::MayLoseData | 
+                            NKikimr::NUdf::ECastOptions::AnywayLoseData), 
+        "Rounding from " <<  *sourceType << " to " << *targetType << " is trivial"); 
+ 
+    TCallableBuilder callableBuilder(Env, callableName, TOptionalType::Create(targetType, Env)); 
+    callableBuilder.Add(source); 
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
+TRuntimeNode TProgramBuilder::NextValue(TRuntimeNode value) { 
+    const auto valueType = value.GetStaticType(); 
+    MKQL_ENSURE(valueType->IsData(), "Expecting argument of Data type"); 
+ 
+    const auto slot = *static_cast<TDataType*>(valueType)->GetDataSlot(); 
+    MKQL_ENSURE(slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Utf8, 
+                "Unsupported type: " << *valueType); 
+ 
+    TCallableBuilder callableBuilder(Env, __func__, TOptionalType::Create(valueType, Env)); 
+    callableBuilder.Add(value); 
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 bool TProgramBuilder::IsNull(TRuntimeNode arg) {
     return arg.GetStaticType()->IsSameType(*NewNull().GetStaticType()); // TODO ->IsNull();
 }

@@ -2,7 +2,7 @@
 
 #include "yql_ast.h"
 #include "yql_errors.h"
-#include "yql_pos_handle.h"
+#include "yql_pos_handle.h" 
 
 #include <functional>
 
@@ -20,21 +20,21 @@ friend class TExprNodeReplaceBuilder;
 public:
     typedef std::function<TExprNodePtr(const TStringBuf&)> ExtArgsFuncType;
 public:
-    TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx);
-    TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx, ExtArgsFuncType extArgsFunc);
+    TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx); 
+    TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx, ExtArgsFuncType extArgsFunc); 
     TExprNodePtr Build();
     TExprNodeBuilder& Seal();
     TExprNodeReplaceBuilder& Done();
 
     // Indexed version of methods must be used inside of Callable or List, otherwise
     // non-indexed version must be used (at root or as lambda body)
-    TExprNodeBuilder& Atom(ui32 index, TPositionHandle pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent);
-    TExprNodeBuilder& Atom(TPositionHandle pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent);
+    TExprNodeBuilder& Atom(ui32 index, TPositionHandle pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent); 
+    TExprNodeBuilder& Atom(TPositionHandle pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent); 
     TExprNodeBuilder& Atom(ui32 index, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent);
     TExprNodeBuilder& Atom(const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent);
 
-    TExprNodeBuilder List(ui32 index, TPositionHandle pos);
-    TExprNodeBuilder List(TPositionHandle pos);
+    TExprNodeBuilder List(ui32 index, TPositionHandle pos); 
+    TExprNodeBuilder List(TPositionHandle pos); 
     TExprNodeBuilder List(ui32 index);
     TExprNodeBuilder List();
 
@@ -45,22 +45,22 @@ public:
     TExprNodeBuilder& Set(TExprNodePtr&& body);
     TExprNodeBuilder& Set(const TExprNodePtr& body);
 
-    TExprNodeBuilder Callable(ui32 index, TPositionHandle pos, const TStringBuf& content);
-    TExprNodeBuilder Callable(TPositionHandle pos, const TStringBuf& content);
+    TExprNodeBuilder Callable(ui32 index, TPositionHandle pos, const TStringBuf& content); 
+    TExprNodeBuilder Callable(TPositionHandle pos, const TStringBuf& content); 
     TExprNodeBuilder Callable(ui32 index, const TStringBuf& content);
     TExprNodeBuilder Callable(const TStringBuf& content);
 
-    TExprNodeBuilder& World(ui32 index, TPositionHandle pos);
-    TExprNodeBuilder& World(TPositionHandle pos);
+    TExprNodeBuilder& World(ui32 index, TPositionHandle pos); 
+    TExprNodeBuilder& World(TPositionHandle pos); 
     TExprNodeBuilder& World(ui32 index);
     TExprNodeBuilder& World();
 
-    TExprNodeBuilder Lambda(ui32 index, TPositionHandle pos);
-    TExprNodeBuilder Lambda(TPositionHandle pos);
+    TExprNodeBuilder Lambda(ui32 index, TPositionHandle pos); 
+    TExprNodeBuilder Lambda(TPositionHandle pos); 
     TExprNodeBuilder Lambda(ui32 index);
     TExprNodeBuilder Lambda();
 
-    TExprNodeBuilder& Param(TPositionHandle pos, const TStringBuf& name);
+    TExprNodeBuilder& Param(TPositionHandle pos, const TStringBuf& name); 
     TExprNodeBuilder& Param(const TStringBuf& name);
     TExprNodeBuilder& Params(const TStringBuf& name, ui32 width);
 
@@ -88,8 +88,8 @@ public:
     }
 
 private:
-    TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, const TExprNodePtr& container);
-    TExprNodeBuilder(TPositionHandle pos, TExprNodeReplaceBuilder* parentReplacer);
+    TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, const TExprNodePtr& container); 
+    TExprNodeBuilder(TPositionHandle pos, TExprNodeReplaceBuilder* parentReplacer); 
     TExprNodePtr FindArgument(const TStringBuf& name);
 
 private:
@@ -97,7 +97,7 @@ private:
     TExprNodeBuilder* Parent;
     TExprNodeReplaceBuilder* ParentReplacer;
     TExprNodePtr Container;
-    TPositionHandle Pos;
+    TPositionHandle Pos; 
     TExprNodePtr CurrentNode;
     ExtArgsFuncType ExtArgsFunc;
 };

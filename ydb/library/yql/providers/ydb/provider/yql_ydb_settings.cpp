@@ -10,7 +10,7 @@ TYdbConfiguration::TYdbConfiguration()
 }
 
 TYdbSettings::TConstPtr TYdbConfiguration::Snapshot() const {
-    return std::make_shared<const TYdbSettings>(*this);
+    return std::make_shared<const TYdbSettings>(*this); 
 }
 
 bool TYdbConfiguration::HasCluster(TStringBuf cluster) const {

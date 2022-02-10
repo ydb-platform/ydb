@@ -94,8 +94,8 @@ protected:
                 return false;
             }
             DistinctKey = *column;
-            YQL_ENSURE(src);
-            if (src->GetJoin()) {
+            YQL_ENSURE(src); 
+            if (src->GetJoin()) { 
                 const auto sourcePtr = Expr->GetSourceName();
                 if (!sourcePtr || !*sourcePtr) {
                     if (!src->IsGroupByColumn(DistinctKey)) {
@@ -131,8 +131,8 @@ protected:
                         Y("NthArg", Q("1"), "x"),
                         Y("NthArg", Q("2"), "x"),
                         BuildLambda(Pos, Y("value", "state"), Y("Void")),
-                        Y("NthArg", Q("6"), "x"),
-                        Y("NthArg", Q("7"), "x")
+                        Y("NthArg", Q("6"), "x"), 
+                        Y("NthArg", Q("7"), "x") 
                     ))
                 ))));
             }
@@ -729,7 +729,7 @@ private:
     TSourcePtr FakeSource;
     std::multimap<TString, TNodePtr> Percentiles;
     TNodePtr FactoryPercentile;
-    const TString* Column = nullptr;
+    const TString* Column = nullptr; 
 };
 
 TAggregationPtr BuildPercentileFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {

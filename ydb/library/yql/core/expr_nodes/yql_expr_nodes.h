@@ -53,7 +53,7 @@ template<typename TParent>
 class TNodeBuilder<TParent, TCoWorld> : public NGenerated::TCoWorldBuilder<TParent>
 {
 public:
-    TNodeBuilder(TExprContext& ctx, TPositionHandle pos,
+    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, 
         typename NGenerated::TCoWorldBuilder<TParent>::BuildFuncType buildFunc,
         typename NGenerated::TCoWorldBuilder<TParent>::GetArgFuncType getArgFunc)
         : NGenerated::TCoWorldBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {}
@@ -68,7 +68,7 @@ template<typename TParent>
 class TNodeBuilder<TParent, TCoArgument> : public NGenerated::TCoArgumentBuilder<TParent>
 {
 public:
-    TNodeBuilder(TExprContext& ctx, TPositionHandle pos,
+    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, 
         typename NGenerated::TCoArgumentBuilder<TParent>::BuildFuncType buildFunc,
         typename NGenerated::TCoArgumentBuilder<TParent>::GetArgFuncType getArgFunc)
         : NGenerated::TCoArgumentBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {}
@@ -92,7 +92,7 @@ template<typename TParent>
 class TNodeBuilder<TParent, TCoAtom> : public NGenerated::TCoAtomBuilder<TParent>
 {
 public:
-    TNodeBuilder(TExprContext& ctx, TPositionHandle pos,
+    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, 
         typename NGenerated::TCoAtomBuilder<TParent>::BuildFuncType buildFunc,
         typename NGenerated::TCoAtomBuilder<TParent>::GetArgFuncType getArgFunc)
         : NGenerated::TCoAtomBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {}
@@ -131,10 +131,10 @@ template<typename TParent>
 class TNodeBuilder<TParent, TCoLambda> : public NGenerated::TCoLambdaBuilder<TParent>
 {
 public:
-    TNodeBuilder(TExprContext& ctx, TPositionHandle pos,
+    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, 
         typename NGenerated::TCoLambdaBuilder<TParent>::BuildFuncType buildFunc,
         typename NGenerated::TCoLambdaBuilder<TParent>::GetArgFuncType getArgFunc,
-        std::shared_ptr<TMap<TStringBuf, TExprBase>> argsStore = std::make_shared<TMap<TStringBuf, TExprBase>>())
+        std::shared_ptr<TMap<TStringBuf, TExprBase>> argsStore = std::make_shared<TMap<TStringBuf, TExprBase>>()) 
         : NGenerated::TCoLambdaBuilder<TParent>(ctx, pos, buildFunc, [argsStore, getArgFunc] (const TStringBuf& argName) {
             if (auto res = argsStore->FindPtr(argName)) {
                 return *res;
@@ -209,7 +209,7 @@ public:
     }
 
 private:
-    std::shared_ptr<TMap<TStringBuf, TExprBase>> ArgsMap;
+    std::shared_ptr<TMap<TStringBuf, TExprBase>> ArgsMap; 
 };
 
 class TExprApplier : public TExprBase {
@@ -250,7 +250,7 @@ public:
     typedef std::function<TExprBase (const TStringBuf& arg)> GetArgFuncType;
     typedef TExprApplier ResultType;
 
-    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
+    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc) 
         : TNodeBuilderBase(ctx, pos, getArgFunc)
         , BuildFunc(buildFunc) {}
 

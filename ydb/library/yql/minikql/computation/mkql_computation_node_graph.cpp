@@ -200,7 +200,7 @@ private:
     THolder<TDefaultValueBuilder> ValueBuilder;
     TComputationMutables Mutables;
     TComputationNodePtrDeque ComputationNodesList;
-    IComputationNode* RootNode = nullptr;
+    IComputationNode* RootNode = nullptr; 
     TComputationExternalNodePtrVector Runtime2Computation;
     TComputationNodeOnNodeMap ElementsCache;
 };
@@ -771,13 +771,13 @@ public:
             Alloc->Acquire();
         }
         PatternNodes.Reset();
-        TypeEnv.reset();
+        TypeEnv.reset(); 
         if (Alloc) {
             Alloc->Release();
         }
     }
 
-    void HoldInternals(const std::shared_ptr<TScopedAlloc>& alloc, const std::shared_ptr<TTypeEnvironment>& typeEnv) {
+    void HoldInternals(const std::shared_ptr<TScopedAlloc>& alloc, const std::shared_ptr<TTypeEnvironment>& typeEnv) { 
         Alloc = alloc;
         TypeEnv = typeEnv;
     }
@@ -799,8 +799,8 @@ public:
         return MakeHolder<TComputationGraph>(PatternNodes, compOpts);
     }
 private:
-    std::shared_ptr<TScopedAlloc> Alloc;
-    std::shared_ptr<TTypeEnvironment> TypeEnv;
+    std::shared_ptr<TScopedAlloc> Alloc; 
+    std::shared_ptr<TTypeEnvironment> TypeEnv; 
     TPatternNodes::TPtr PatternNodes;
     NYql::NCodegen::ICodegen::TPtr Codegen;
 };

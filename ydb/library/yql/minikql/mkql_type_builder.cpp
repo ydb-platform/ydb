@@ -635,7 +635,7 @@ public:
         if (!value) {
             return 0;
         }
-        return CombineHashes(ui64(1), Hash_->Hash(value.GetOptionalValue()));
+        return CombineHashes(ui64(1), Hash_->Hash(value.GetOptionalValue())); 
     }
 
 private:
@@ -834,7 +834,7 @@ public:
             if (!rhs) {
                 return false;
             }
-            return Equate_->Equals(lhs.GetOptionalValue(), rhs.GetOptionalValue());
+            return Equate_->Equals(lhs.GetOptionalValue(), rhs.GetOptionalValue()); 
         }
     }
 
@@ -1063,8 +1063,8 @@ public:
 template <>
 class TCompare<NMiniKQL::TType::EKind::Optional> final : public NUdf::ICompare {
 public:
-    explicit TCompare(const NMiniKQL::TType* type)
-        : Compare_(MakeCompareImpl(static_cast<const NMiniKQL::TOptionalType*>(type)->GetItemType()))
+    explicit TCompare(const NMiniKQL::TType* type) 
+        : Compare_(MakeCompareImpl(static_cast<const NMiniKQL::TOptionalType*>(type)->GetItemType())) 
     {}
 
     bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
@@ -1077,7 +1077,7 @@ public:
             if (!rhs) {
                 return false;
             }
-            return Compare_->Less(lhs.GetOptionalValue(), rhs.GetOptionalValue());
+            return Compare_->Less(lhs.GetOptionalValue(), rhs.GetOptionalValue()); 
         }
     }
 
@@ -1091,7 +1091,7 @@ public:
             if (!rhs) {
                 return 1;
             }
-            return Compare_->Compare(lhs.GetOptionalValue(), rhs.GetOptionalValue());
+            return Compare_->Compare(lhs.GetOptionalValue(), rhs.GetOptionalValue()); 
         }
     }
 
@@ -1102,12 +1102,12 @@ private:
 template <>
 class TCompare<NMiniKQL::TType::EKind::Tuple> final : public NUdf::ICompare {
 public:
-    explicit TCompare(const NMiniKQL::TType* type) {
+    explicit TCompare(const NMiniKQL::TType* type) { 
         auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type);
         auto count = tupleType->GetElementsCount();
         Compare_.reserve(count);
         for (ui32 i = 0; i < count; ++i) {
-            Compare_.push_back(MakeCompareImpl(tupleType->GetElementType(i)));
+            Compare_.push_back(MakeCompareImpl(tupleType->GetElementType(i))); 
         }
     }
 
@@ -1132,18 +1132,18 @@ private:
 };
 
 template <>
-class TCompare<NMiniKQL::TType::EKind::Variant> final : public NUdf::ICompare {
+class TCompare<NMiniKQL::TType::EKind::Variant> final : public NUdf::ICompare { 
 public:
-    explicit TCompare(const NMiniKQL::TType* type) {
-        auto variantType = static_cast<const NMiniKQL::TVariantType*>(type);
-        if (variantType->GetUnderlyingType()->IsStruct()) {
-            throw TTypeNotSupported() << "Variant over struct is unordered";
+    explicit TCompare(const NMiniKQL::TType* type) { 
+        auto variantType = static_cast<const NMiniKQL::TVariantType*>(type); 
+        if (variantType->GetUnderlyingType()->IsStruct()) { 
+            throw TTypeNotSupported() << "Variant over struct is unordered"; 
         }
-        auto tupleType = static_cast<const NMiniKQL::TTupleType*>(variantType->GetUnderlyingType());
-        ui32 count = tupleType->GetElementsCount();
+        auto tupleType = static_cast<const NMiniKQL::TTupleType*>(variantType->GetUnderlyingType()); 
+        ui32 count = tupleType->GetElementsCount(); 
         Compare_.reserve(count);
         for (ui32 i = 0; i < count; ++i) {
-            Compare_.push_back(MakeCompareImpl(tupleType->GetElementType(i)));
+            Compare_.push_back(MakeCompareImpl(tupleType->GetElementType(i))); 
         }
     }
 
@@ -1175,8 +1175,8 @@ private:
 template <>
 class TCompare<NMiniKQL::TType::EKind::List> final : public NUdf::ICompare {
 public:
-    explicit TCompare(const NMiniKQL::TType* type)
-        : Compare_(MakeCompareImpl(static_cast<const NMiniKQL::TListType*>(type)->GetItemType()))
+    explicit TCompare(const NMiniKQL::TType* type) 
+        : Compare_(MakeCompareImpl(static_cast<const NMiniKQL::TListType*>(type)->GetItemType())) 
     {}
 
     bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
@@ -1540,7 +1540,7 @@ NUdf::IEquate::TPtr TFunctionTypeInfoBuilder::MakeEquate(const NUdf::TType* type
 NUdf::ICompare::TPtr TFunctionTypeInfoBuilder::MakeCompare(const NUdf::TType* type) {
     try {
         auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
-        return MakeCompareImpl(mkqlType);
+        return MakeCompareImpl(mkqlType); 
     } catch (const TTypeNotSupported& ex) {
         SetError(TStringBuf(ex.what()));
         return nullptr;
@@ -1713,131 +1713,131 @@ void TTypeInfoHelper::DoTagged(const NMiniKQL::TTaggedType* tt, NUdf::ITypeVisit
     }
 }
 
-NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type) {
-    switch (type->GetKind()) {
-        case NMiniKQL::TType::EKind::Data: {
-
-#define MAKE_HASH(slot, ...)        \
-        case NUdf::EDataSlot::slot: \
-            return new THash<NMiniKQL::TType::EKind::Data, NUdf::EDataSlot::slot>;
-
-            auto slot = static_cast<const NMiniKQL::TDataType*>(type)->GetDataSlot();
-            if (!slot) {
-                throw TTypeNotSupported() << "Invalid data slot";
-            }
-            if (!(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanHash)) {
-                throw TTypeNotSupported() << "Data type is not hashable";
-            }
-            switch (*slot) {
-                UDF_TYPE_ID_MAP(MAKE_HASH)
-            }
-
-#undef MAKE_HASH
-        }
-        case NMiniKQL::TType::EKind::Optional:
-            return new THash<NMiniKQL::TType::EKind::Optional>(type);
-        case NMiniKQL::TType::EKind::Tuple:
-            return new THash<NMiniKQL::TType::EKind::Tuple>(type);
-        case NMiniKQL::TType::EKind::Struct:
-            return new THash<NMiniKQL::TType::EKind::Struct>(type);
-        case NMiniKQL::TType::EKind::List:
-            return new THash<NMiniKQL::TType::EKind::List>(type);
-        case NMiniKQL::TType::EKind::Variant:
-            return new THash<NMiniKQL::TType::EKind::Variant>(type);
-        case NMiniKQL::TType::EKind::Dict:
-            return new THash<NMiniKQL::TType::EKind::Dict>(type);
-        case NMiniKQL::TType::EKind::Void:
-        case NMiniKQL::TType::EKind::Null:
-        case NMiniKQL::TType::EKind::EmptyList:
-        case NMiniKQL::TType::EKind::EmptyDict:
-            return new TEmptyHash();
-        default:
-            throw TTypeNotSupported() << "Data, Optional, Tuple, Struct, List, Variant or Dict is expected for hashing";
-    }
-}
-
-NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type) {
-    switch (type->GetKind()) {
-        case NMiniKQL::TType::EKind::Data: {
-
-#define MAKE_COMPARE(slot, ...)     \
-        case NUdf::EDataSlot::slot: \
-            return new TCompare<NMiniKQL::TType::EKind::Data, NUdf::EDataSlot::slot>;
-
-            auto slot = static_cast<const NMiniKQL::TDataType*>(type)->GetDataSlot();
-            if (!slot) {
-                throw TTypeNotSupported() << "Invalid data slot";
-            }
-            if (!(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare)) {
-                throw TTypeNotSupported() << "Data type is not comparable";
-            }
-            switch (*slot) {
-                UDF_TYPE_ID_MAP(MAKE_COMPARE)
-            }
-
-#undef MAKE_COMPARE
-        }
-        case NMiniKQL::TType::EKind::Optional:
-            return new TCompare<NMiniKQL::TType::EKind::Optional>(type);
-        case NMiniKQL::TType::EKind::Tuple:
-            return new TCompare<NMiniKQL::TType::EKind::Tuple>(type);
-        case NMiniKQL::TType::EKind::Void:
-        case NMiniKQL::TType::EKind::Null:
-        case NMiniKQL::TType::EKind::EmptyList:
-        case NMiniKQL::TType::EKind::EmptyDict:
-            return new TEmptyCompare();
-        case NMiniKQL::TType::EKind::Variant: {
-            return new TCompare<NMiniKQL::TType::EKind::Variant>(type);
-        }
-        case NMiniKQL::TType::EKind::List:
-            return new TCompare<NMiniKQL::TType::EKind::List>(type);
-        default:
-            throw TTypeNotSupported() << "Data, Optional, Variant over Tuple, Tuple or List is expected for comparing";
-    }
-}
-
-NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type) {
-    switch (type->GetKind()) {
-        case NMiniKQL::TType::EKind::Data: {
-
-#define MAKE_EQUATE(slot, ...)      \
-        case NUdf::EDataSlot::slot: \
-            return new TEquate<NMiniKQL::TType::EKind::Data, NUdf::EDataSlot::slot>;
-
-            auto slot = static_cast<const NMiniKQL::TDataType*>(type)->GetDataSlot();
-            if (!slot) {
-                throw TTypeNotSupported() << "Invalid data slot";
-            }
-            if (!(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanEquate)) {
-                throw TTypeNotSupported() << "Data type is not equatable";
-            }
-            switch (*slot) {
-                UDF_TYPE_ID_MAP(MAKE_EQUATE)
-            }
-
-#undef MAKE_EQUATE
-        }
-        case NMiniKQL::TType::EKind::Optional:
-            return new TEquate<NMiniKQL::TType::EKind::Optional>(type);
-        case NMiniKQL::TType::EKind::Tuple:
-            return new TEquate<NMiniKQL::TType::EKind::Tuple>(type);
-        case NMiniKQL::TType::EKind::Struct:
-            return new TEquate<NMiniKQL::TType::EKind::Struct>(type);
-        case NMiniKQL::TType::EKind::List:
-            return new TEquate<NMiniKQL::TType::EKind::List>(type);
-        case NMiniKQL::TType::EKind::Void:
-        case NMiniKQL::TType::EKind::Null:
-        case NMiniKQL::TType::EKind::EmptyList:
-        case NMiniKQL::TType::EKind::EmptyDict:
-            return new TEmptyEquate();
-        case NMiniKQL::TType::EKind::Variant:
-            return new TEquate<NMiniKQL::TType::EKind::Variant>(type);
-        case NMiniKQL::TType::EKind::Dict:
-            return new TEquate<NMiniKQL::TType::EKind::Dict>(type);
-        default:
-            throw TTypeNotSupported() << "Data, Optional, Tuple, Struct, List, Variant or Dict is expected for equating";
-    }
-}
-
+NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type) { 
+    switch (type->GetKind()) { 
+        case NMiniKQL::TType::EKind::Data: { 
+ 
+#define MAKE_HASH(slot, ...)        \ 
+        case NUdf::EDataSlot::slot: \ 
+            return new THash<NMiniKQL::TType::EKind::Data, NUdf::EDataSlot::slot>; 
+ 
+            auto slot = static_cast<const NMiniKQL::TDataType*>(type)->GetDataSlot(); 
+            if (!slot) { 
+                throw TTypeNotSupported() << "Invalid data slot"; 
+            } 
+            if (!(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanHash)) { 
+                throw TTypeNotSupported() << "Data type is not hashable"; 
+            } 
+            switch (*slot) { 
+                UDF_TYPE_ID_MAP(MAKE_HASH) 
+            } 
+ 
+#undef MAKE_HASH 
+        } 
+        case NMiniKQL::TType::EKind::Optional: 
+            return new THash<NMiniKQL::TType::EKind::Optional>(type); 
+        case NMiniKQL::TType::EKind::Tuple: 
+            return new THash<NMiniKQL::TType::EKind::Tuple>(type); 
+        case NMiniKQL::TType::EKind::Struct: 
+            return new THash<NMiniKQL::TType::EKind::Struct>(type); 
+        case NMiniKQL::TType::EKind::List: 
+            return new THash<NMiniKQL::TType::EKind::List>(type); 
+        case NMiniKQL::TType::EKind::Variant: 
+            return new THash<NMiniKQL::TType::EKind::Variant>(type); 
+        case NMiniKQL::TType::EKind::Dict: 
+            return new THash<NMiniKQL::TType::EKind::Dict>(type); 
+        case NMiniKQL::TType::EKind::Void: 
+        case NMiniKQL::TType::EKind::Null: 
+        case NMiniKQL::TType::EKind::EmptyList: 
+        case NMiniKQL::TType::EKind::EmptyDict: 
+            return new TEmptyHash(); 
+        default: 
+            throw TTypeNotSupported() << "Data, Optional, Tuple, Struct, List, Variant or Dict is expected for hashing"; 
+    } 
+} 
+ 
+NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type) { 
+    switch (type->GetKind()) { 
+        case NMiniKQL::TType::EKind::Data: { 
+ 
+#define MAKE_COMPARE(slot, ...)     \ 
+        case NUdf::EDataSlot::slot: \ 
+            return new TCompare<NMiniKQL::TType::EKind::Data, NUdf::EDataSlot::slot>; 
+ 
+            auto slot = static_cast<const NMiniKQL::TDataType*>(type)->GetDataSlot(); 
+            if (!slot) { 
+                throw TTypeNotSupported() << "Invalid data slot"; 
+            } 
+            if (!(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare)) { 
+                throw TTypeNotSupported() << "Data type is not comparable"; 
+            } 
+            switch (*slot) { 
+                UDF_TYPE_ID_MAP(MAKE_COMPARE) 
+            } 
+ 
+#undef MAKE_COMPARE 
+        } 
+        case NMiniKQL::TType::EKind::Optional: 
+            return new TCompare<NMiniKQL::TType::EKind::Optional>(type); 
+        case NMiniKQL::TType::EKind::Tuple: 
+            return new TCompare<NMiniKQL::TType::EKind::Tuple>(type); 
+        case NMiniKQL::TType::EKind::Void: 
+        case NMiniKQL::TType::EKind::Null: 
+        case NMiniKQL::TType::EKind::EmptyList: 
+        case NMiniKQL::TType::EKind::EmptyDict: 
+            return new TEmptyCompare(); 
+        case NMiniKQL::TType::EKind::Variant: { 
+            return new TCompare<NMiniKQL::TType::EKind::Variant>(type); 
+        } 
+        case NMiniKQL::TType::EKind::List: 
+            return new TCompare<NMiniKQL::TType::EKind::List>(type); 
+        default: 
+            throw TTypeNotSupported() << "Data, Optional, Variant over Tuple, Tuple or List is expected for comparing"; 
+    } 
+} 
+ 
+NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type) { 
+    switch (type->GetKind()) { 
+        case NMiniKQL::TType::EKind::Data: { 
+ 
+#define MAKE_EQUATE(slot, ...)      \ 
+        case NUdf::EDataSlot::slot: \ 
+            return new TEquate<NMiniKQL::TType::EKind::Data, NUdf::EDataSlot::slot>; 
+ 
+            auto slot = static_cast<const NMiniKQL::TDataType*>(type)->GetDataSlot(); 
+            if (!slot) { 
+                throw TTypeNotSupported() << "Invalid data slot"; 
+            } 
+            if (!(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanEquate)) { 
+                throw TTypeNotSupported() << "Data type is not equatable"; 
+            } 
+            switch (*slot) { 
+                UDF_TYPE_ID_MAP(MAKE_EQUATE) 
+            } 
+ 
+#undef MAKE_EQUATE 
+        } 
+        case NMiniKQL::TType::EKind::Optional: 
+            return new TEquate<NMiniKQL::TType::EKind::Optional>(type); 
+        case NMiniKQL::TType::EKind::Tuple: 
+            return new TEquate<NMiniKQL::TType::EKind::Tuple>(type); 
+        case NMiniKQL::TType::EKind::Struct: 
+            return new TEquate<NMiniKQL::TType::EKind::Struct>(type); 
+        case NMiniKQL::TType::EKind::List: 
+            return new TEquate<NMiniKQL::TType::EKind::List>(type); 
+        case NMiniKQL::TType::EKind::Void: 
+        case NMiniKQL::TType::EKind::Null: 
+        case NMiniKQL::TType::EKind::EmptyList: 
+        case NMiniKQL::TType::EKind::EmptyDict: 
+            return new TEmptyEquate(); 
+        case NMiniKQL::TType::EKind::Variant: 
+            return new TEquate<NMiniKQL::TType::EKind::Variant>(type); 
+        case NMiniKQL::TType::EKind::Dict: 
+            return new TEquate<NMiniKQL::TType::EKind::Dict>(type); 
+        default: 
+            throw TTypeNotSupported() << "Data, Optional, Tuple, Struct, List, Variant or Dict is expected for equating"; 
+    } 
+} 
+ 
 } // namespace NMiniKQL
 } // namespace Nkikimr

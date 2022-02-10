@@ -192,8 +192,8 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         TestBadArbitraryAtom("(a\")", "Unexpected \"");
         TestBadArbitraryAtom("(\"++++\"11111)", "Unexpected end of \"");
         TestBadArbitraryAtom("(\"\\", "Expected escape sequence");
-        TestBadArbitraryAtom("(\"\\\")", "Unexpected end of atom");
-        TestBadArbitraryAtom("(\"abc)", "Unexpected end of atom");
+        TestBadArbitraryAtom("(\"\\\")", "Unexpected end of atom"); 
+        TestBadArbitraryAtom("(\"abc)", "Unexpected end of atom"); 
 
         TestBadArbitraryAtom("(\"\\018\")", "Invalid octal value");
         TestBadArbitraryAtom("(\"\\01\")", "Invalid octal value");
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         TestBadArbitraryAtom("(x\"ag\")", "Invalid binary value");
         TestBadArbitraryAtom("(x\"abc\")", "Invalid binary value");
         TestBadArbitraryAtom("(x\"abcd)", "Invalid binary value");
-        TestBadArbitraryAtom("(x\"abcd", "Unexpected end of atom");
+        TestBadArbitraryAtom("(x\"abcd", "Unexpected end of atom"); 
     }
 
     void ParseAndPrint(const TString& program, const TString& expected) {
@@ -252,8 +252,8 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
                     "(\"тестовая строка\")",
                     "(\"\\u0442\\u0435\\u0441\\u0442\\u043E\\u0432\\u0430"
                     "\\u044F \\u0441\\u0442\\u0440\\u043E\\u043A\\u0430\")");
-
-        ParseAndPrint("(\"\")", "(\"\")");
+ 
+        ParseAndPrint("(\"\")", "(\"\")"); 
     }
 
     Y_UNIT_TEST(BinaryAtom) {
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         ParseAndAdaptPrint("(\"braces(in)test\")", "(\"braces(in)test\")");
         ParseAndAdaptPrint("(\"escaped\\u1234sequence\")", "(\"escaped\\u1234sequence\")");
         ParseAndAdaptPrint("(\"escaped\\x41sequence\")", "(escapedAsequence)");
-        ParseAndAdaptPrint("(\"\")", "(\"\")");
+        ParseAndAdaptPrint("(\"\")", "(\"\")"); 
     }
 
     void ParseError(const TString& program) {
@@ -380,24 +380,24 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
     Y_UNIT_TEST(UnicodePrettyPrint) {
         ParseAndAdaptPrint("(\"абв αβγ ﬡ\")", "(\"\\u0430\\u0431\\u0432 \\u03B1\\u03B2\\u03B3 \\uFB21\")");
     }
-
-    Y_UNIT_TEST(SerializeQuotedEmptyAtom) {
-        TMemoryPool pool(1024);
-        TPosition pos(1, 1);
-        TAstNode* empty = TAstNode::Quote(pos, pool, TAstNode::NewAtom(pos, "", pool));
-        TString expected = "'\"\"";
-
-        UNIT_ASSERT_STRINGS_EQUAL(empty->ToString(), expected);
-
-        TString pretty = empty->ToString(TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine |
-                                         TAstPrintFlags::AdaptArbitraryContent);
-        RemoveAll(pretty, '\n');
-        UNIT_ASSERT_EQUAL(pretty, expected);
-
-        pretty = empty->ToString(TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
-        RemoveAll(pretty, '\n');
-        UNIT_ASSERT_EQUAL(pretty, expected);
-    }
+ 
+    Y_UNIT_TEST(SerializeQuotedEmptyAtom) { 
+        TMemoryPool pool(1024); 
+        TPosition pos(1, 1); 
+        TAstNode* empty = TAstNode::Quote(pos, pool, TAstNode::NewAtom(pos, "", pool)); 
+        TString expected = "'\"\""; 
+ 
+        UNIT_ASSERT_STRINGS_EQUAL(empty->ToString(), expected); 
+ 
+        TString pretty = empty->ToString(TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine | 
+                                         TAstPrintFlags::AdaptArbitraryContent); 
+        RemoveAll(pretty, '\n'); 
+        UNIT_ASSERT_EQUAL(pretty, expected); 
+ 
+        pretty = empty->ToString(TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine); 
+        RemoveAll(pretty, '\n'); 
+        UNIT_ASSERT_EQUAL(pretty, expected); 
+    } 
 }
 
 } // namespace NYql

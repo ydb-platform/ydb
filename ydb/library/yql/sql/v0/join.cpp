@@ -176,9 +176,9 @@ public:
                 expr = eq;
             }
         }
-        if (expr && Sources.size() > 2) {
-            ctx.Warning(ctx.Pos(), TIssuesIds::YQL_MULTIWAY_JOIN_WITH_USING) << "Multi-way JOINs should be connected with ON clause instead of USING clause";
-        }
+        if (expr && Sources.size() > 2) { 
+            ctx.Warning(ctx.Pos(), TIssuesIds::YQL_MULTIWAY_JOIN_WITH_USING) << "Multi-way JOINs should be connected with ON clause instead of USING clause"; 
+        } 
         return expr;
     }
 

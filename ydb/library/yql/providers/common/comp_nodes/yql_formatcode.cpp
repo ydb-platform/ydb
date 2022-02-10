@@ -10,18 +10,18 @@ namespace NMiniKQL {
 class TFormatCodeWrapper : public TMutableComputationNode<TFormatCodeWrapper> {
     typedef TMutableComputationNode<TFormatCodeWrapper> TBaseComputation;
 public:
-    TFormatCodeWrapper(TComputationMutables& mutables, IComputationNode* code, bool annotatePosition, ui32 exprCtxMutableIndex)
+    TFormatCodeWrapper(TComputationMutables& mutables, IComputationNode* code, bool annotatePosition, ui32 exprCtxMutableIndex) 
         : TBaseComputation(mutables)
         , Code_(code)
         , AnnotatePosition_(annotatePosition)
-        , ExprCtxMutableIndex_(exprCtxMutableIndex)
+        , ExprCtxMutableIndex_(exprCtxMutableIndex) 
     {}
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto codeValue = Code_->GetValue(ctx);
         auto code = GetYqlCode(codeValue);
-        NYql::TExprContext& exprCtx = GetExprContext(ctx, ExprCtxMutableIndex_);
-        auto ast = NYql::ConvertToAst(*code, exprCtx, AnnotatePosition_ ?
+        NYql::TExprContext& exprCtx = GetExprContext(ctx, ExprCtxMutableIndex_); 
+        auto ast = NYql::ConvertToAst(*code, exprCtx, AnnotatePosition_ ? 
             NYql::TExprAnnotationFlags::Position :
             NYql::TExprAnnotationFlags::None, true);
         auto str = ast.Root->ToString(NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
@@ -35,23 +35,23 @@ public:
 private:
     IComputationNode* Code_;
     bool AnnotatePosition_;
-    const ui32 ExprCtxMutableIndex_;
+    const ui32 ExprCtxMutableIndex_; 
 };
 
 class TSerializeCodeWrapper : public TMutableComputationNode<TSerializeCodeWrapper> {
     typedef TMutableComputationNode<TSerializeCodeWrapper> TBaseComputation;
 public:
-    TSerializeCodeWrapper(TComputationMutables& mutables, IComputationNode* code, ui32 exprCtxMutableIndex)
+    TSerializeCodeWrapper(TComputationMutables& mutables, IComputationNode* code, ui32 exprCtxMutableIndex) 
         : TBaseComputation(mutables)
         , Code_(code)
-        , ExprCtxMutableIndex_(exprCtxMutableIndex)
+        , ExprCtxMutableIndex_(exprCtxMutableIndex) 
     {}
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto codeValue = Code_->GetValue(ctx);
         auto code = GetYqlCode(codeValue);
-        NYql::TExprContext& exprCtx = GetExprContext(ctx, ExprCtxMutableIndex_);
-        auto str = NYql::SerializeGraph(*code, exprCtx,
+        NYql::TExprContext& exprCtx = GetExprContext(ctx, ExprCtxMutableIndex_); 
+        auto str = NYql::SerializeGraph(*code, exprCtx, 
             NYql::TSerializedExprGraphComponents::Graph |
             NYql::TSerializedExprGraphComponents::Positions);
         return MakeString(str);
@@ -63,14 +63,14 @@ public:
 
 private:
     IComputationNode* Code_;
-    const ui32 ExprCtxMutableIndex_;
+    const ui32 ExprCtxMutableIndex_; 
 };
 
 template <bool AnnotatePosition>
 IComputationNode* WrapFormatCode(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
     auto code = LocateNode(ctx.NodeLocator, callable, 0);
-    return new TFormatCodeWrapper(ctx.Mutables, code, AnnotatePosition, exprCtxMutableIndex);
+    return new TFormatCodeWrapper(ctx.Mutables, code, AnnotatePosition, exprCtxMutableIndex); 
 }
 
 template IComputationNode* WrapFormatCode<false>
@@ -82,7 +82,7 @@ template IComputationNode* WrapFormatCode<true>
 IComputationNode* WrapSerializeCode(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
     auto code = LocateNode(ctx.NodeLocator, callable, 0);
-    return new TSerializeCodeWrapper(ctx.Mutables, code, exprCtxMutableIndex);
+    return new TSerializeCodeWrapper(ctx.Mutables, code, exprCtxMutableIndex); 
 }
 
 }

@@ -418,21 +418,21 @@ message TYqlCoreConfig {
     repeated TCoreAttr Flags = 1;
 }
 
-/////////////////////////////// Sql Core ///////////////////////////////
-message TWarnAsErrorByHourPercentage {
-    required uint32 Hour = 1;
-    required uint32 Percentage = 2;
-}
-
-message TSqlCoreConfig {
-    optional uint32 V0SyntaxWarnAsErrorPercentage = 1 [default = 0]; // Probability of 'deprecated syntax'
-                                                                     // warning to become an error
-    repeated TWarnAsErrorByHourPercentage V0SyntaxWarnAsErrorByHour = 2;
-    repeated string NoV0SyntaxErrorForUsers = 3;
+/////////////////////////////// Sql Core /////////////////////////////// 
+message TWarnAsErrorByHourPercentage { 
+    required uint32 Hour = 1; 
+    required uint32 Percentage = 2; 
+} 
+ 
+message TSqlCoreConfig { 
+    optional uint32 V0SyntaxWarnAsErrorPercentage = 1 [default = 0]; // Probability of 'deprecated syntax' 
+                                                                     // warning to become an error 
+    repeated TWarnAsErrorByHourPercentage V0SyntaxWarnAsErrorByHour = 2; 
+    repeated string NoV0SyntaxErrorForUsers = 3; 
 
     repeated string TranslationFlags = 4;
-}
-
+} 
+ 
 /////////////////////////////// Root ///////////////////////////////
 
 message TGatewaysConfig {
@@ -447,7 +447,7 @@ message TGatewaysConfig {
     optional TFileStorageAdditionalConfig Fs = 9;
     optional TYqlCoreConfig YqlCore = 10;
     optional TPostgresqlGatewayConfig Postgresql = 11;
-    optional TSqlCoreConfig SqlCore = 12;
+    optional TSqlCoreConfig SqlCore = 12; 
     optional TDqGatewayConfig Dq = 13;
     optional TMysqlGatewayConfig Mysql = 14;
     optional TYdbGatewayConfig Ydb = 15;

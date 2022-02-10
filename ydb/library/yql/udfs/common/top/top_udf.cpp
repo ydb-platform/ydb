@@ -3,11 +3,11 @@
 
 #include <library/cpp/containers/top_keeper/top_keeper.h>
 
-#include <util/generic/set.h>
-
-#include <algorithm>
-#include <iterator>
-
+#include <util/generic/set.h> 
+ 
+#include <algorithm> 
+#include <iterator> 
+ 
 using namespace NKikimr;
 using namespace NUdf;
 
@@ -17,7 +17,7 @@ using TUnboxedValuePair = std::pair<TUnboxedValue, TUnboxedValue>;
 
 template <EDataSlot Slot, bool IsTop>
 struct TDataCompare {
-    bool operator()(const TUnboxedValue& left, const TUnboxedValue& right) const {
+    bool operator()(const TUnboxedValue& left, const TUnboxedValue& right) const { 
         if (IsTop) {
             return CompareValues<Slot>(left, right) > 0;
         } else {
@@ -28,7 +28,7 @@ struct TDataCompare {
 
 template <EDataSlot Slot, bool IsTop>
 struct TDataPairCompare {
-    bool operator()(const TUnboxedValuePair& left, const TUnboxedValuePair& right) const {
+    bool operator()(const TUnboxedValuePair& left, const TUnboxedValuePair& right) const { 
         if (IsTop) {
             return CompareValues<Slot>(left.first, right.first) > 0;
         } else {
@@ -41,7 +41,7 @@ template <bool IsTop>
 struct TGenericCompare {
     ICompare::TPtr Compare;
 
-    bool operator()(const TUnboxedValue& left, const TUnboxedValue& right) const {
+    bool operator()(const TUnboxedValue& left, const TUnboxedValue& right) const { 
         if (IsTop) {
             return Compare->Less(right, left);
         } else {
@@ -54,7 +54,7 @@ template <bool IsTop>
 struct TGenericPairCompare {
     ICompare::TPtr Compare;
 
-    bool operator()(const TUnboxedValuePair& left, const TUnboxedValuePair& right) const {
+    bool operator()(const TUnboxedValuePair& left, const TUnboxedValuePair& right) const { 
         if (IsTop) {
             return Compare->Less(right.first, left.first);
         } else {
@@ -63,95 +63,95 @@ struct TGenericPairCompare {
     }
 };
 
-template <typename TValue, typename TCompare, typename TAllocator>
-class TTopKeeperContainer {
-    TTopKeeper<TValue, TCompare, true, TAllocator> Keeper;
-    using TOrderedSet = TSet<TValue, TCompare, TAllocator>;
-    TMaybe<TOrderedSet> OrderedSet;
-    size_t MaxSize = 0;
-    bool Finalized = false;
-    TCompare Compare;
-public:
-    explicit TTopKeeperContainer(TCompare compare)
-        : Keeper(0, compare)
-        , Compare(compare)
-    {}
-
-    TVector<TValue, TAllocator> GetInternal() {
-        if (OrderedSet) {
-            TVector<TValue, TAllocator> result;
-            std::copy(OrderedSet->begin(), OrderedSet->end(), std::back_inserter(result));
-            return result;
-        }
-        Finalized = true;
-        return Keeper.GetInternal();
-    }
-
-    void Insert(const TValue& value) {
-        if (MaxSize == 0) {
-            return;
-        }
-        if (Finalized && !OrderedSet) {
-            const auto& items = Keeper.Extract();
-            OrderedSet = TOrderedSet{items.begin(), items.end(), Compare};
-        }
-        if (OrderedSet) {
-            if (OrderedSet->size() < MaxSize) {
-                OrderedSet->insert(value);
-                return;
-            }
-            Y_ENSURE(OrderedSet->size() == MaxSize);
-            Y_ENSURE(!OrderedSet->empty());
-            auto last = --OrderedSet->end();
-            if (Compare(value, *last)) {
-                OrderedSet->erase(last);
-                OrderedSet->insert(value);
-            }
-            return;
-        }
-        Keeper.Insert(value);
-    }
-
-    bool IsEmpty() const {
-        return OrderedSet ? OrderedSet->empty() : Keeper.IsEmpty();
-    }
-
-    size_t GetSize() const {
-        return OrderedSet ? OrderedSet->size() : Keeper.GetSize();
-    }
-
-    size_t GetMaxSize() const {
-        return MaxSize;
-    }
-
-    void SetMaxSize(size_t newMaxSize) {
-        MaxSize = newMaxSize;
-        if (Finalized && !OrderedSet) {
-            auto items = Keeper.Extract();
-            auto begin = items.begin();
-            auto end = begin + Min(MaxSize, items.size());
-            OrderedSet = TOrderedSet{begin, end, Compare};
-        }
-        if (OrderedSet) {
-            while (OrderedSet->size() > MaxSize) {
-                auto last = --OrderedSet->end();
-                OrderedSet->erase(last);
-            }
-            return;
-        }
-
-        Keeper.SetMaxSize(MaxSize);
-    }
-};
-
+template <typename TValue, typename TCompare, typename TAllocator> 
+class TTopKeeperContainer { 
+    TTopKeeper<TValue, TCompare, true, TAllocator> Keeper; 
+    using TOrderedSet = TSet<TValue, TCompare, TAllocator>; 
+    TMaybe<TOrderedSet> OrderedSet; 
+    size_t MaxSize = 0; 
+    bool Finalized = false; 
+    TCompare Compare; 
+public: 
+    explicit TTopKeeperContainer(TCompare compare) 
+        : Keeper(0, compare) 
+        , Compare(compare) 
+    {} 
+ 
+    TVector<TValue, TAllocator> GetInternal() { 
+        if (OrderedSet) { 
+            TVector<TValue, TAllocator> result; 
+            std::copy(OrderedSet->begin(), OrderedSet->end(), std::back_inserter(result)); 
+            return result; 
+        } 
+        Finalized = true; 
+        return Keeper.GetInternal(); 
+    } 
+ 
+    void Insert(const TValue& value) { 
+        if (MaxSize == 0) { 
+            return; 
+        } 
+        if (Finalized && !OrderedSet) { 
+            const auto& items = Keeper.Extract(); 
+            OrderedSet = TOrderedSet{items.begin(), items.end(), Compare}; 
+        } 
+        if (OrderedSet) { 
+            if (OrderedSet->size() < MaxSize) { 
+                OrderedSet->insert(value); 
+                return; 
+            } 
+            Y_ENSURE(OrderedSet->size() == MaxSize); 
+            Y_ENSURE(!OrderedSet->empty()); 
+            auto last = --OrderedSet->end(); 
+            if (Compare(value, *last)) { 
+                OrderedSet->erase(last); 
+                OrderedSet->insert(value); 
+            } 
+            return; 
+        } 
+        Keeper.Insert(value); 
+    } 
+ 
+    bool IsEmpty() const { 
+        return OrderedSet ? OrderedSet->empty() : Keeper.IsEmpty(); 
+    } 
+ 
+    size_t GetSize() const { 
+        return OrderedSet ? OrderedSet->size() : Keeper.GetSize(); 
+    } 
+ 
+    size_t GetMaxSize() const { 
+        return MaxSize; 
+    } 
+ 
+    void SetMaxSize(size_t newMaxSize) { 
+        MaxSize = newMaxSize; 
+        if (Finalized && !OrderedSet) { 
+            auto items = Keeper.Extract(); 
+            auto begin = items.begin(); 
+            auto end = begin + Min(MaxSize, items.size()); 
+            OrderedSet = TOrderedSet{begin, end, Compare}; 
+        } 
+        if (OrderedSet) { 
+            while (OrderedSet->size() > MaxSize) { 
+                auto last = --OrderedSet->end(); 
+                OrderedSet->erase(last); 
+            } 
+            return; 
+        } 
+ 
+        Keeper.SetMaxSize(MaxSize); 
+    } 
+}; 
+ 
 template <typename TCompare>
 class TTopKeeperWrapperBase {
 protected:
-    TTopKeeperContainer<TUnboxedValue, TCompare, TUnboxedValue::TAllocator> Keeper;
+    TTopKeeperContainer<TUnboxedValue, TCompare, TUnboxedValue::TAllocator> Keeper; 
 
 protected:
     explicit TTopKeeperWrapperBase(TCompare compare)
-        : Keeper(compare)
+        : Keeper(compare) 
     {}
 
     void Init(const TUnboxedValuePod& value, ui32 maxSize) {
@@ -215,11 +215,11 @@ public:
 template <typename TCompare>
 class TTopKeeperPairWrapperBase {
 protected:
-    TTopKeeperContainer<TUnboxedValuePair, TCompare, TStdAllocatorForUdf<TUnboxedValuePair>> Keeper;
+    TTopKeeperContainer<TUnboxedValuePair, TCompare, TStdAllocatorForUdf<TUnboxedValuePair>> Keeper; 
 
 protected:
     explicit TTopKeeperPairWrapperBase(TCompare compare)
-        : Keeper(compare)
+        : Keeper(compare) 
     {}
 
     void Init(const TUnboxedValuePod& key, const TUnboxedValuePod& payload, ui32 maxSize) {

@@ -27,7 +27,7 @@ TExecTransformerBase::TStatusCallbackPair TExecTransformerBase::CallbackTransfor
         return (handlerInfo->Handler)(input, output, ctx);
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Don't know how to execute node: " << input->Content()));
+    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Don't know how to execute node: " << input->Content())); 
     return SyncError();
 }
 
@@ -47,7 +47,7 @@ TExecTransformerBase::THandler TExecTransformerBase::Pass() {
 }
 
 TExecTransformerBase::TStatusCallbackPair TExecTransformerBase::ExecPass(const TExprNode::TPtr& input, TExprContext& ctx) {
-    input->SetState(TExprNode::EState::ExecutionComplete);
+    input->SetState(TExprNode::EState::ExecutionComplete); 
     input->SetResult(ctx.NewWorld(input->Pos()));
     return SyncOk();
 }

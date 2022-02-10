@@ -138,15 +138,15 @@
             ]
         },
         {
-            "Name": "TCoImplicitEquals",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "ImplicitEquals"},
-            "Children": [
-                {"Index": 0, "Name": "Value", "Type": "TExprBase"},
-                {"Index": 1, "Name": "CommonType", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Name": "TCoImplicitEquals", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "ImplicitEquals"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "CommonType", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoNothing",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "Nothing"},
@@ -320,24 +320,24 @@
             "Match": {"Type": "Callable", "Name": "OrderedFlatMap"}
         },
         {
-            "Name": "TCoFlatMapToEquiJoinBase",
-            "Base": "TCoInputBase",
-            "Match": {"Type": "CallableBase"},
-            "Children": [
-                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"}
-            ]
-        },
-        {
-            "Name": "TCoFlatMapToEquiJoin",
-            "Base": "TCoFlatMapToEquiJoinBase",
-            "Match": {"Type": "Callable", "Name": "FlatMapToEquiJoin"}
-        },
-        {
-            "Name": "TCoOrderedFlatMapToEquiJoin",
-            "Base": "TCoFlatMapToEquiJoinBase",
-            "Match": {"Type": "Callable", "Name": "OrderedFlatMapToEquiJoin"}
-        },
-        {
+            "Name": "TCoFlatMapToEquiJoinBase", 
+            "Base": "TCoInputBase", 
+            "Match": {"Type": "CallableBase"}, 
+            "Children": [ 
+                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"} 
+            ] 
+        }, 
+        { 
+            "Name": "TCoFlatMapToEquiJoin", 
+            "Base": "TCoFlatMapToEquiJoinBase", 
+            "Match": {"Type": "Callable", "Name": "FlatMapToEquiJoin"} 
+        }, 
+        { 
+            "Name": "TCoOrderedFlatMapToEquiJoin", 
+            "Base": "TCoFlatMapToEquiJoinBase", 
+            "Match": {"Type": "Callable", "Name": "OrderedFlatMapToEquiJoin"} 
+        }, 
+        { 
             "Name": "TCoCollect",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "Collect"}
@@ -353,21 +353,21 @@
             "Match": {"Type": "Callable", "Name": "Last"}
         },
         {
-            "Name": "TCoUnorderedBase",
-            "Base": "TCoInputBase",
-            "Match": {"Type": "CallableBase"}
-        },
-        {
+            "Name": "TCoUnorderedBase", 
+            "Base": "TCoInputBase", 
+            "Match": {"Type": "CallableBase"} 
+        }, 
+        { 
             "Name": "TCoUnordered",
-            "Base": "TCoUnorderedBase",
+            "Base": "TCoUnorderedBase", 
             "Match": {"Type": "Callable", "Name": "Unordered"}
         },
         {
-            "Name": "TCoUnorderedSubquery",
-            "Base": "TCoUnorderedBase",
-            "Match": {"Type": "Callable", "Name": "UnorderedSubquery"}
-        },
-        {
+            "Name": "TCoUnorderedSubquery", 
+            "Base": "TCoUnorderedBase", 
+            "Match": {"Type": "Callable", "Name": "UnorderedSubquery"} 
+        }, 
+        { 
             "Name": "TCoConditionalValueBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},
@@ -538,16 +538,16 @@
             "Match": {"Type": "Callable", "Name": "PartitionsByKeys"}
         },
         {
-            "Name": "TCoSortTraits",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "SortTraits"},
-            "Children": [
-                {"Index": 0, "Name": "ListType",              "Type": "TExprBase"},
-                {"Index": 1, "Name": "SortDirections",        "Type": "TExprBase"},
-                {"Index": 2, "Name": "SortKeySelectorLambda", "Type": "TCoLambda"}
-            ]
-        },
-        {
+            "Name": "TCoSortTraits", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "SortTraits"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "ListType",              "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "SortDirections",        "Type": "TExprBase"}, 
+                {"Index": 2, "Name": "SortKeySelectorLambda", "Type": "TCoLambda"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoHoppingTraits",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "HoppingTraits"},
@@ -561,18 +561,18 @@
             ]
         },
         {
-            "Name": "TCoSessionWindowTraits",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "SessionWindowTraits"},
-            "Children": [
-                {"Index": 0, "Name": "ListType",      "Type": "TExprBase"},
-                {"Index": 1, "Name": "SortSpec",      "Type": "TExprBase"},
-                {"Index": 2, "Name": "InitState",     "Type": "TCoLambda"},
-                {"Index": 3, "Name": "UpdateState",   "Type": "TCoLambda"},
-                {"Index": 4, "Name": "Calculate",     "Type": "TCoLambda"}
-            ]
-        },
-        {
+            "Name": "TCoSessionWindowTraits", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "SessionWindowTraits"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "ListType",      "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "SortSpec",      "Type": "TExprBase"}, 
+                {"Index": 2, "Name": "InitState",     "Type": "TCoLambda"}, 
+                {"Index": 3, "Name": "UpdateState",   "Type": "TCoLambda"}, 
+                {"Index": 4, "Name": "Calculate",     "Type": "TCoLambda"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoAggregationTraits",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "AggregationTraits"},
@@ -1015,32 +1015,32 @@
             ]
         },
         {
-            "Name": "TCoLookupBase",
+            "Name": "TCoLookupBase", 
             "Base": "TCallable",
-            "Match": {"Type": "CallableBase"},
-            "Builder": {"Generate": "None"},
+            "Match": {"Type": "CallableBase"}, 
+            "Builder": {"Generate": "None"}, 
             "Children": [
-                {"Index": 0, "Name": "Collection", "Type": "TExprBase"},
+                {"Index": 0, "Name": "Collection", "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "Lookup", "Type": "TExprBase"}
             ]
         },
         {
-            "Name": "TCoContains",
-            "Base": "TCoLookupBase",
+            "Name": "TCoContains", 
+            "Base": "TCoLookupBase", 
             "Match": {"Type": "Callable", "Name": "Contains"}
-        },
-        {
-            "Name": "TCoSqlIn",
-            "Base": "TCoLookupBase",
-            "Match": {"Type": "Callable", "Name": "SqlIn"},
-            "Children": [
-                {"Index": 2, "Name": "Options", "Type": "TCoNameValueTupleList"}
-            ]
-        },
-        {
+        }, 
+        { 
+            "Name": "TCoSqlIn", 
+            "Base": "TCoLookupBase", 
+            "Match": {"Type": "Callable", "Name": "SqlIn"}, 
+            "Children": [ 
+                {"Index": 2, "Name": "Options", "Type": "TCoNameValueTupleList"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoLookup",
-            "Base": "TCoLookupBase",
-            "Match": {"Type": "Callable", "Name": "Lookup"}
+            "Base": "TCoLookupBase", 
+            "Match": {"Type": "Callable", "Name": "Lookup"} 
         },
         {
             "Name": "TCoMember",
@@ -1289,10 +1289,10 @@
             ]
         },
         {
-            "Name": "TCoCalcOverWindowBase",
+            "Name": "TCoCalcOverWindowBase", 
             "Base": "TCoInputBase",
-            "Match": {"Type": "CallableBase"},
-            "Builder": {"Generate": "None"},
+            "Match": {"Type": "CallableBase"}, 
+            "Builder": {"Generate": "None"}, 
             "Children": [
                 {"Index": 1, "Name": "Keys",      "Type": "TCoAtomList"},
                 {"Index": 2, "Name": "SortSpec",  "Type": "TExprBase"},
@@ -1300,44 +1300,44 @@
             ]
         },
         {
-            "Name": "TCoCalcOverWindow",
-            "Base": "TCoCalcOverWindowBase",
-            "Match": {"Type": "Callable", "Name": "CalcOverWindow"}
-        },
-        {
-            "Name": "TCoCalcOverSessionWindow",
-            "Base": "TCoCalcOverWindowBase",
-            "Match": {"Type": "Callable", "Name": "CalcOverSessionWindow"},
-            "Children": [
-                {"Index": 4, "Name": "SessionSpec",    "Type": "TExprBase"},
-                {"Index": 5, "Name": "SessionColumns", "Type": "TCoAtomList"}
-            ]
-        },
-        {
-            "Name": "TCoCalcOverWindowTuple",
-            "Base": "TExprBase",
-            "Match": {"Type": "Tuple"},
-            "Children": [
-                {"Index": 0, "Name": "Keys",           "Type": "TCoAtomList"},
-                {"Index": 1, "Name": "SortSpec",       "Type": "TExprBase"},
-                {"Index": 2, "Name": "Frames",         "Type": "TExprList"},
-                {"Index": 3, "Name": "SessionSpec",    "Type": "TExprBase"},
-                {"Index": 4, "Name": "SessionColumns", "Type": "TCoAtomList"}
-            ]
-        },
-        {
-            "Name": "TCoCalcOverWindowTupleList",
-            "ListBase": "TCoCalcOverWindowTuple"
-        },
-        {
-            "Name": "TCoCalcOverWindowGroup",
-            "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "CalcOverWindowGroup"},
-            "Children": [
-                {"Index": 1, "Name": "Calcs", "Type": "TCoCalcOverWindowTupleList"}
-            ]
-        },
-        {
+            "Name": "TCoCalcOverWindow", 
+            "Base": "TCoCalcOverWindowBase", 
+            "Match": {"Type": "Callable", "Name": "CalcOverWindow"} 
+        }, 
+        { 
+            "Name": "TCoCalcOverSessionWindow", 
+            "Base": "TCoCalcOverWindowBase", 
+            "Match": {"Type": "Callable", "Name": "CalcOverSessionWindow"}, 
+            "Children": [ 
+                {"Index": 4, "Name": "SessionSpec",    "Type": "TExprBase"}, 
+                {"Index": 5, "Name": "SessionColumns", "Type": "TCoAtomList"} 
+            ] 
+        }, 
+        { 
+            "Name": "TCoCalcOverWindowTuple", 
+            "Base": "TExprBase", 
+            "Match": {"Type": "Tuple"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Keys",           "Type": "TCoAtomList"}, 
+                {"Index": 1, "Name": "SortSpec",       "Type": "TExprBase"}, 
+                {"Index": 2, "Name": "Frames",         "Type": "TExprList"}, 
+                {"Index": 3, "Name": "SessionSpec",    "Type": "TExprBase"}, 
+                {"Index": 4, "Name": "SessionColumns", "Type": "TCoAtomList"} 
+            ] 
+        }, 
+        { 
+            "Name": "TCoCalcOverWindowTupleList", 
+            "ListBase": "TCoCalcOverWindowTuple" 
+        }, 
+        { 
+            "Name": "TCoCalcOverWindowGroup", 
+            "Base": "TCoInputBase", 
+            "Match": {"Type": "Callable", "Name": "CalcOverWindowGroup"}, 
+            "Children": [ 
+                {"Index": 1, "Name": "Calcs", "Type": "TCoCalcOverWindowTupleList"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoEquiJoinTuple",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
@@ -1511,22 +1511,22 @@
             ]
         },
         {
-            "Name": "TCoAssumeColumnOrder",
-            "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "AssumeColumnOrder"},
-            "Children": [
-                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"}
-            ]
-        },
-        {
-            "Name": "TCoAssumeColumnOrderPartial",
-            "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "AssumeColumnOrderPartial"},
-            "Children": [
-                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"}
-            ]
-        },
-        {
+            "Name": "TCoAssumeColumnOrder", 
+            "Base": "TCoInputBase", 
+            "Match": {"Type": "Callable", "Name": "AssumeColumnOrder"}, 
+            "Children": [ 
+                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"} 
+            ] 
+        }, 
+        { 
+            "Name": "TCoAssumeColumnOrderPartial", 
+            "Base": "TCoInputBase", 
+            "Match": {"Type": "Callable", "Name": "AssumeColumnOrderPartial"}, 
+            "Children": [ 
+                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoAssumeAllMembersNullableAtOnce",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "AssumeAllMembersNullableAtOnce"}
@@ -1954,16 +1954,16 @@
             ]
         },
         {
-            "Name": "TCoAsRange",
-            "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "AsRange"}
+            "Name": "TCoAsRange", 
+            "VarArgBase": "TExprBase", 
+            "Match": {"Type": "Callable", "Name": "AsRange"} 
         },
         {
-            "Name": "TCoRangeCreate",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "RangeCreate"},
+            "Name": "TCoRangeCreate", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "RangeCreate"}, 
             "Children": [
-                {"Index": 0, "Name": "UserRange", "Type": "TExprBase"}
+                {"Index": 0, "Name": "UserRange", "Type": "TExprBase"} 
             ]
         },
         {

@@ -55,7 +55,7 @@ public:
         return TExprBase(Raw_);
     }
 
-    TPositionHandle Pos() const {
+    TPositionHandle Pos() const { 
         return Raw_->Pos();
     }
 
@@ -127,10 +127,10 @@ private:
 template<typename TNode>
 class TChildIterator : public std::iterator<std::forward_iterator_tag, TNode> {
 public:
-    TChildIterator()
-    {
-        CurIt = EndIt = {};
-    }
+    TChildIterator() 
+    { 
+        CurIt = EndIt = {}; 
+    } 
 
     TChildIterator(const TExprBase &node, size_t startIndex = 0)
         : CurIt(node.Ref().Children().begin() + startIndex)
@@ -407,14 +407,14 @@ class TNodeBuilderBase {
 protected:
     typedef std::function<TExprBase (const TStringBuf& arg)> GetArgFuncType;
 
-    TNodeBuilderBase(TExprContext& ctx, TPositionHandle pos, GetArgFuncType getArgFunc)
+    TNodeBuilderBase(TExprContext& ctx, TPositionHandle pos, GetArgFuncType getArgFunc) 
         : Ctx(ctx)
         , Pos(pos)
         , GetArgFunc(getArgFunc) {}
 
 protected:
     TExprContext& Ctx;
-    TPositionHandle Pos;
+    TPositionHandle Pos; 
     GetArgFuncType GetArgFunc;
 };
 
@@ -423,7 +423,7 @@ class TListBuilderBase : public TNodeBuilderBase {
 protected:
     typedef std::function<TParent& (const TDerived&)> BuildFuncType;
 
-    TListBuilderBase(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
+    TListBuilderBase(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc) 
         : TNodeBuilderBase(ctx, pos, getArgFunc)
         , BuildFunc(buildFunc) {}
 
@@ -510,7 +510,7 @@ class TNodeBuilder<TParent, TVector<TExprBase>> : public TListBuilderBase<TParen
 public:
     typedef std::function<TParent& (const TVector<TExprBase>&)> BuildFuncType;
 
-    TNodeBuilder<TParent, TVector<TExprBase>>(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc,
+    TNodeBuilder<TParent, TVector<TExprBase>>(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, 
         TNodeBuilderBase::GetArgFuncType getArgFunc)
         : TListBuilderBase<TParent, TVector<TExprBase>, TExprBase>(ctx, pos, buildFunc, getArgFunc) {}
 
@@ -522,7 +522,7 @@ public:
 template <typename TParent, typename TDerived>
 class TFreeArgCallableBuilderBase : public TNodeBuilderBase {
 protected:
-    TFreeArgCallableBuilderBase(TExprContext& ctx, TPositionHandle pos, GetArgFuncType getArgFunc)
+    TFreeArgCallableBuilderBase(TExprContext& ctx, TPositionHandle pos, GetArgFuncType getArgFunc) 
         : TNodeBuilderBase(ctx, pos, getArgFunc) {}
 
     TVector<TExprBase> FreeArgsHolder;
@@ -557,7 +557,7 @@ private:
 };
 
 template<typename TNode>
-TNodeBuilder<TBuildValueHolder<TNode>, TNode> Build(TExprContext& ctx, TPositionHandle pos) {
+TNodeBuilder<TBuildValueHolder<TNode>, TNode> Build(TExprContext& ctx, TPositionHandle pos) { 
     TBuildValueHolder<TNode> holder;
     TNodeBuilder<TBuildValueHolder<TNode>, TNode> builder(ctx, pos,
         [holder](const TNode& node) mutable -> TBuildValueHolder<TNode>& {

@@ -59,7 +59,7 @@ TCoNameValueTupleList CreateSecondaryIndexKeyTuples(TCoArgument itemArg, const T
 
 TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryIndexVector(
     const TKikimrTableDescription& table,
-    TPositionHandle pos,
+    TPositionHandle pos, 
     TExprContext& ctx,
     const THashSet<TStringBuf>* filter = nullptr)
 {
@@ -517,7 +517,7 @@ TExprNode::TPtr KiDeleteOnTableToKql(const TKiWriteTable& node, TExprContext& ct
 
 TExprNode::TPtr KiReadTableToKql(TCoRight right, TExprContext& ctx, const TKikimrTablesData& tablesData, bool withSystemColumns) {
     const auto& read = right.Input().Cast<TKiReadTable>();
-    bool unwrapValues = HasSetting(read.Settings().Ref(), "unwrap_values");
+    bool unwrapValues = HasSetting(read.Settings().Ref(), "unwrap_values"); 
 
     TKikimrKey key(ctx);
     YQL_ENSURE(key.Extract(read.TableKey().Ref()));
@@ -554,7 +554,7 @@ TExprNode::TPtr KiReadTableToKql(TCoRight right, TExprContext& ctx, const TKikim
     if (secondaryIndex) {
         const auto& indexTableName = secondaryIndex.GetRef();
         const auto& keyTableDesc = tablesData.ExistingTable(TString(cluster), TString(indexTableName));
-        TKikimrKeyRange range(ctx, keyTableDesc);
+        TKikimrKeyRange range(ctx, keyTableDesc); 
 
         const auto& selectRange = Build<TKiSelectIndexRange>(ctx, read.Pos())
             .Cluster(cluster)
@@ -574,7 +574,7 @@ TExprNode::TPtr KiReadTableToKql(TCoRight right, TExprContext& ctx, const TKikim
             return TExprBase(selectRange).Ptr();
         }
     } else {
-        TKikimrKeyRange range(ctx, tableDesc);
+        TKikimrKeyRange range(ctx, tableDesc); 
 
         const auto& selectRange = Build<TKiSelectRange>(ctx, read.Pos())
             .Cluster(cluster)
@@ -820,7 +820,7 @@ TExprNode::TPtr KiUpdateTableToKql(TKiUpdateTable update, TExprContext& ctx,
 
     auto schemaVersion = TStringBuilder() << tableDesc.Metadata->SchemaVersion;
 
-    TKikimrKeyRange range(ctx, tableDesc);
+    TKikimrKeyRange range(ctx, tableDesc); 
     const auto& selectRange = Build<TKiSelectRange>(ctx, update.Pos())
         .Cluster(cluster)
         .Table(versionedTable)
@@ -996,7 +996,7 @@ TExprNode::TPtr KiDeleteTableToKql(TKiDeleteTable del, TExprContext& ctx,
     const auto versionedTable = BuildVersionedTable(*tableDesc.Metadata, del.Pos(), ctx);
     YQL_ENSURE(versionedTable.Path() == table);
 
-    TKikimrKeyRange range(ctx, tableDesc);
+    TKikimrKeyRange range(ctx, tableDesc); 
     const auto& selectRange = Build<TKiSelectRange>(ctx, del.Pos())
         .Cluster(cluster)
         .Table(versionedTable)

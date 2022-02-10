@@ -177,7 +177,7 @@ public:
                 }
             }
         }
-        Y_UNREACHABLE();
+        Y_UNREACHABLE(); 
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, NUdf::TUnboxedValue& current, TComputationContext& ctx) const {

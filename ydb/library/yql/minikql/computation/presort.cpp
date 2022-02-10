@@ -536,7 +536,7 @@ void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& ou
         auto hasValue = (bool)value;
         EncodeBool<false>(output, hasValue);
         if (hasValue) {
-            EncodeValue(itemType, value.GetOptionalValue(), output);
+            EncodeValue(itemType, value.GetOptionalValue(), output); 
         }
 
         break;

@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         exprCtx.IssueManager.GetIssues().PrintTo(Cout);
 
         UNIT_ASSERT(success);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->GetState(), typeAnnotationIndex != Max<ui32>() ? TExprNode::EState::TypeComplete : TExprNode::EState::Initial);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->GetState(), typeAnnotationIndex != Max<ui32>() ? TExprNode::EState::TypeComplete : TExprNode::EState::Initial); 
     }
 
     static void CompileExprWithCheck(TAstNode& root, TLibraryCohesion& cohesion, TExprContext& exprCtx) {
@@ -94,10 +94,10 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         TExprContext exprCtx;
         TLibraryCohesion cohesion;
         CompileExprWithCheck(*astRes.Root, cohesion, exprCtx);
-        auto& exports = cohesion.Exports.Symbols(exprCtx);
-        UNIT_ASSERT_VALUES_EQUAL(2U, exports.size());
-        UNIT_ASSERT_VALUES_EQUAL("42", exports["ex"]->Content());
-        UNIT_ASSERT_VALUES_EQUAL("Y", exports["X"]->Content());
+        auto& exports = cohesion.Exports.Symbols(exprCtx); 
+        UNIT_ASSERT_VALUES_EQUAL(2U, exports.size()); 
+        UNIT_ASSERT_VALUES_EQUAL("42", exports["ex"]->Content()); 
+        UNIT_ASSERT_VALUES_EQUAL("Y", exports["X"]->Content()); 
     }
 
     Y_UNIT_TEST(TestEmptyLib) {
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         TExprContext exprCtx;
         TLibraryCohesion cohesion;
         CompileExprWithCheck(*astRes.Root, cohesion, exprCtx);
-        UNIT_ASSERT(cohesion.Exports.Symbols().empty());
+        UNIT_ASSERT(cohesion.Exports.Symbols().empty()); 
         UNIT_ASSERT(cohesion.Imports.empty());
     }
 
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT_STRINGS_EQUAL(HexEncode(exprRoot->Content()), "0123456789ABCDEF");
         UNIT_ASSERT(exprRoot->Flags() & TNodeFlags::ArbitraryContent);
 
-        auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
+        auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true); 
         TAstNode* xValue = ast.Root->GetChild(0)->GetChild(1)->GetChild(1);
         UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "0123456789ABCDEF");
         UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::ArbitraryContent);
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT_STRINGS_EQUAL(HexEncode(exprRoot->Content()), "FEDCBA9876543210");
         UNIT_ASSERT(exprRoot->Flags() & TNodeFlags::BinaryContent);
 
-        auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
+        auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true); 
         TAstNode* xValue = ast.Root->GetChild(0)->GetChild(2)->GetChild(1);
         UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "FEDCBA9876543210");
         UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::BinaryContent);
@@ -321,8 +321,8 @@ Y_UNIT_TEST_SUITE(TCompareExprTrees) {
 
         if (diffPositions) {
             UNIT_ASSERT(!CompareExprTrees(diffOne, diffTwo));
-            UNIT_ASSERT_EQUAL(ctxOne.GetPosition(diffOne->Pos()), diffPositions->first);
-            UNIT_ASSERT_EQUAL(ctxTwo.GetPosition(diffTwo->Pos()), diffPositions->second);
+            UNIT_ASSERT_EQUAL(ctxOne.GetPosition(diffOne->Pos()), diffPositions->first); 
+            UNIT_ASSERT_EQUAL(ctxTwo.GetPosition(diffTwo->Pos()), diffPositions->second); 
         } else
             UNIT_ASSERT(CompareExprTrees(diffOne, diffTwo));
     }
@@ -896,7 +896,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr));
         UNIT_ASSERT(exprRoot);
 
-        const auto convRes = ConvertToAst(*exprRoot, exprCtx, 0, true);
+        const auto convRes = ConvertToAst(*exprRoot, exprCtx, 0, true); 
         UNIT_ASSERT(convRes.IsOk());
 
         TExprContext exprCtx2;

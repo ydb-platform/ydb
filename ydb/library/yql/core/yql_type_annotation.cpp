@@ -1,8 +1,8 @@
 #include "yql_type_annotation.h"
-
-#include "yql_expr_type_annotation.h"
+ 
+#include "yql_expr_type_annotation.h" 
 #include "yql_library_compiler.h"
-#include "yql_type_helpers.h"
+#include "yql_type_helpers.h" 
 
 #include <ydb/library/yql/sql/sql.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
@@ -10,7 +10,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <util/stream/file.h>
-#include <util/string/join.h>
+#include <util/string/join.h> 
 
 namespace NYql {
 
@@ -50,93 +50,93 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     return true;
 }
 
-TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder) {
-    TStringStream ss;
-    if (columnOrder) {
-        ss << "[" << JoinSeq(", ", *columnOrder) << "]";
-    } else {
-        ss << "default";
-    }
-    return ss.Str();
-}
-
-ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash) {
-    if (!columnOrder) {
-        return hash;
-    }
-
-    hash = CombineHashes(hash, NumericHash(columnOrder->size()));
-    for (auto& col : *columnOrder) {
-        hash = CombineHashes(hash, THash<TString>()(col));
-    }
-
-    return hash;
-}
-
-
-TMaybe<TColumnOrder> TTypeAnnotationContext::LookupColumnOrder(const TExprNode& node) const {
-    return ColumnOrderStorage->Lookup(node.UniqueId());
-}
-
-IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNode& node,
-    const TColumnOrder& columnOrder, TExprContext& ctx)
-{
-    if (!OrderedColumns) {
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    YQL_ENSURE(node.GetTypeAnn());
-    YQL_ENSURE(node.IsCallable());
-
-    if (auto existing = ColumnOrderStorage->Lookup(node.UniqueId())) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Column order " << FormatColumnOrder(existing) << " is already set for node " << node.Content()));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    auto nodeType = node.GetTypeAnn();
-    // allow Tuple(world, sequence-of-struct)
-    if (nodeType->GetKind() == ETypeAnnotationKind::Tuple) {
-        if (!EnsureTupleTypeSize(node, 2, ctx)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto worldType = nodeType->Cast<TTupleExprType>()->GetItems()[0];
-        if (worldType->GetKind() != ETypeAnnotationKind::World) {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-                TStringBuilder() << "Expected world type as type of first tuple element, but got: " << *worldType));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        nodeType = nodeType->Cast<TTupleExprType>()->GetItems()[1];
-    }
-
-    TSet<TStringBuf> allColumns = GetColumnsOfStructOrSequenceOfStruct(*nodeType);
-
-    for (auto& col : columnOrder) {
-        auto it = allColumns.find(col);
-        if (it == allColumns.end()) {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-                TStringBuilder() << "Unable to set column order " << FormatColumnOrder(columnOrder) << " for node "
-                                 << node.Content() << " with type: " << *node.GetTypeAnn()));
-            return IGraphTransformer::TStatus::Error;
-        }
-        allColumns.erase(it);
-    }
-
-    if (!allColumns.empty()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Some columns are left unordered with column order " << FormatColumnOrder(columnOrder) << " for node "
-                             << node.Content() << " with type: " << *node.GetTypeAnn()));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    YQL_CLOG(DEBUG, Core) << "Setting column order " << FormatColumnOrder(columnOrder) << " for " << node.Content() << "#" << node.UniqueId();
-
-    ColumnOrderStorage->Set(node.UniqueId(), columnOrder);
-    return IGraphTransformer::TStatus::Ok;
-}
-
+TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder) { 
+    TStringStream ss; 
+    if (columnOrder) { 
+        ss << "[" << JoinSeq(", ", *columnOrder) << "]"; 
+    } else { 
+        ss << "default"; 
+    } 
+    return ss.Str(); 
+} 
+ 
+ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash) { 
+    if (!columnOrder) { 
+        return hash; 
+    } 
+ 
+    hash = CombineHashes(hash, NumericHash(columnOrder->size())); 
+    for (auto& col : *columnOrder) { 
+        hash = CombineHashes(hash, THash<TString>()(col)); 
+    } 
+ 
+    return hash; 
+} 
+ 
+ 
+TMaybe<TColumnOrder> TTypeAnnotationContext::LookupColumnOrder(const TExprNode& node) const { 
+    return ColumnOrderStorage->Lookup(node.UniqueId()); 
+} 
+ 
+IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNode& node, 
+    const TColumnOrder& columnOrder, TExprContext& ctx) 
+{ 
+    if (!OrderedColumns) { 
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
+    YQL_ENSURE(node.GetTypeAnn()); 
+    YQL_ENSURE(node.IsCallable()); 
+ 
+    if (auto existing = ColumnOrderStorage->Lookup(node.UniqueId())) { 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), 
+            TStringBuilder() << "Column order " << FormatColumnOrder(existing) << " is already set for node " << node.Content())); 
+        return IGraphTransformer::TStatus::Error; 
+    } 
+ 
+    auto nodeType = node.GetTypeAnn(); 
+    // allow Tuple(world, sequence-of-struct) 
+    if (nodeType->GetKind() == ETypeAnnotationKind::Tuple) { 
+        if (!EnsureTupleTypeSize(node, 2, ctx)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        auto worldType = nodeType->Cast<TTupleExprType>()->GetItems()[0]; 
+        if (worldType->GetKind() != ETypeAnnotationKind::World) { 
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), 
+                TStringBuilder() << "Expected world type as type of first tuple element, but got: " << *worldType)); 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        nodeType = nodeType->Cast<TTupleExprType>()->GetItems()[1]; 
+    } 
+ 
+    TSet<TStringBuf> allColumns = GetColumnsOfStructOrSequenceOfStruct(*nodeType); 
+ 
+    for (auto& col : columnOrder) { 
+        auto it = allColumns.find(col); 
+        if (it == allColumns.end()) { 
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), 
+                TStringBuilder() << "Unable to set column order " << FormatColumnOrder(columnOrder) << " for node " 
+                                 << node.Content() << " with type: " << *node.GetTypeAnn())); 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        allColumns.erase(it); 
+    } 
+ 
+    if (!allColumns.empty()) { 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), 
+            TStringBuilder() << "Some columns are left unordered with column order " << FormatColumnOrder(columnOrder) << " for node " 
+                             << node.Content() << " with type: " << *node.GetTypeAnn())); 
+        return IGraphTransformer::TStatus::Error; 
+    } 
+ 
+    YQL_CLOG(DEBUG, Core) << "Setting column order " << FormatColumnOrder(columnOrder) << " for " << node.Content() << "#" << node.UniqueId(); 
+ 
+    ColumnOrderStorage->Set(node.UniqueId(), columnOrder); 
+    return IGraphTransformer::TStatus::Ok; 
+} 
+ 
 const TCredential* TTypeAnnotationContext::FindCredential(const TStringBuf& name) const {
     for (auto& x : Credentials) {
         auto data = x->FindPtr(name);
@@ -226,7 +226,7 @@ bool TModuleResolver::AddFromUrl(const TStringBuf& file, const TStringBuf& url, 
 
 bool TModuleResolver::AddFromFile(const TStringBuf& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) {
     if (!UserData) {
-        ctx.AddError(TIssue(TPosition(), "Loading libraries is prohibited"));
+        ctx.AddError(TIssue(TPosition(), "Loading libraries is prohibited")); 
         return false;
     }
 
@@ -348,7 +348,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
 
     if (exports) {
         exports->clear();
-        for (auto p : cohesion.Exports.Symbols()) {
+        for (auto p : cohesion.Exports.Symbols()) { 
             exports->push_back(p.first);
         }
     }

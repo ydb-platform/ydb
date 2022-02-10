@@ -74,7 +74,7 @@ template<typename TParent>
 class TNodeBuilder<TParent, TKiColumnRangeTuple> : public NGenerated::TKiColumnRangeTupleBuilder<TParent>
 {
 public:
-    TNodeBuilder(TExprContext& ctx, TPositionHandle pos,
+    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, 
         typename NGenerated::TKiColumnRangeTupleBuilder<TParent>::BuildFuncType buildFunc,
         typename NGenerated::TKiColumnRangeTupleBuilder<TParent>::GetArgFuncType getArgFunc)
         : NGenerated::TKiColumnRangeTupleBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {}

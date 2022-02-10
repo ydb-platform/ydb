@@ -45,7 +45,7 @@ public:
     typedef std::function<TExprBase (const TStringBuf& arg)> GetArgFuncType;
     typedef TResultDataSink ResultType;
 
-    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
+    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc) 
         : TNodeBuilderBase(ctx, pos, getArgFunc)
         , BuildFunc(buildFunc) {}
 

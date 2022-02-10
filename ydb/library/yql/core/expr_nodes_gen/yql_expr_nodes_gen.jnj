@@ -113,7 +113,7 @@ class {{ node.aux.stubBuilderName }} : public TBase {
 protected:
     typedef std::function<TParent& (const TDerived&)> BuildFuncType;
 
-    {{ node.aux.stubBuilderName }}(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, typename TBase::GetArgFuncType getArgFunc)
+    {{ node.aux.stubBuilderName }}(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, typename TBase::GetArgFuncType getArgFunc) 
         : TBase(ctx, pos, getArgFunc)
         , BuildFunc(buildFunc) {}
 
@@ -304,7 +304,7 @@ private:
     typedef typename NGenerated::{{ node.aux.stubBuilderAliasName }}<TParent>::BuildFuncType BuildFuncType;
     typedef typename NGenerated::{{ node.aux.stubBuilderAliasName }}<TParent>::GetArgFuncType GetArgFuncType;
 public:
-    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
+    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc) 
         : NGenerated::{{ node.aux.stubBuilderAliasName }}<TParent>(ctx, pos, buildFunc, getArgFunc) {}
         {% elif node.Builder.Kind == "List" %}
 template<typename TParent>
@@ -314,7 +314,7 @@ private:
     typedef typename TListBuilderBase<TParent, {{ node.Name }}, {{ node.Builder.ListItemType }}>::BuildFuncType BuildFuncType;
     typedef typename TListBuilderBase<TParent, {{ node.Name }}, {{ node.Builder.ListItemType }}>::GetArgFuncType GetArgFuncType;
 public:
-    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
+    TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc) 
         : TListBuilderBase<TParent, {{ node.Name }}, {{ node.Builder.ListItemType }}>(ctx, pos, buildFunc, getArgFunc) {}
         {% else %}
 class UnknownBuilder {

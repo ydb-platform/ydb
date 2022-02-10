@@ -7,8 +7,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-using NYql::EnsureDynamicCast;
-
+using NYql::EnsureDynamicCast; 
+ 
 namespace {
 
 class TFlowFlatMapFlowWrapper : public TStatefulFlowCodegeneratorNode<TFlowFlatMapFlowWrapper> {
@@ -45,7 +45,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input);
-        MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
+        MKQL_ENSURE(codegenInput, "Input must be codegenerator node."); 
 
         auto& context = ctx.Codegen->GetContext();
 
@@ -138,7 +138,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input);
-        MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
+        MKQL_ENSURE(codegenInput, "Input must be codegenerator node."); 
 
         auto& context = ctx.Codegen->GetContext();
 
@@ -236,7 +236,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input);
-        MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
+        MKQL_ENSURE(codegenInput, "Input must be codegenerator node."); 
 
         auto& context = ctx.Codegen->GetContext();
 
@@ -335,7 +335,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input);
-        MKQL_ENSURE(codegenInput, "Input must be codegenerator node.");
+        MKQL_ENSURE(codegenInput, "Input must be codegenerator node."); 
 
         auto& context = ctx.Codegen->GetContext();
 
@@ -480,7 +480,7 @@ public:
 
         for (auto i = 0U; i < Items.size(); ++i)
             if (Items[i]->GetDependencesCount() > 0U)
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block)); 
 
         BranchInst::Create(work, block);
 
@@ -781,7 +781,7 @@ public:
         } else {
             for (auto i = 0U; i < Items.size(); ++i)
                 if (Items[i]->GetDependencesCount() > 0U)
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block)); 
 
             value = GetNodeValue(NewItem, ctx, block);
         }
@@ -1402,8 +1402,8 @@ public:
                     this->Item->SetValue(ctx, std::move(item));
                     *it = this->NewItem->GetValue(ctx);
                     if (IsMultiRowPerItem || *it) {
-                        auto value = it->GetOptionalValueIf<!IsMultiRowPerItem && ResultContainerOpt>();
-                        *it++ = value;
+                        auto value = it->GetOptionalValueIf<!IsMultiRowPerItem && ResultContainerOpt>(); 
+                        *it++ = value; 
                     }
                 });
 

@@ -27,7 +27,7 @@ struct TDqSettings {
         static constexpr ui32 CloudFunctionConcurrency = 10;
     };
 
-    using TPtr = std::shared_ptr<TDqSettings>;
+    using TPtr = std::shared_ptr<TDqSettings>; 
 
     NCommon::TConfSetting<ui64, false> DataSizePerJob;
     NCommon::TConfSetting<ui64, false> MaxDataSizePerJob;
@@ -109,7 +109,7 @@ struct TDqSettings {
     }
 
     TDqSettings::TPtr WithFillSettings(const IDataProvider::TFillSettings& fillSettings) const {
-        auto copy = std::make_shared<TDqSettings>(*this);
+        auto copy = std::make_shared<TDqSettings>(*this); 
         if (fillSettings.RowsLimitPerWrite) {
             copy->_RowsLimitPerWrite = *fillSettings.RowsLimitPerWrite;
         }

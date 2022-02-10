@@ -174,8 +174,8 @@ UNKNOWN: 'unknown';
 WITH: 'with';
 
 // String literal
-fragment STRING_CORE_SINGLE: ( ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .) )*;
-fragment STRING_CORE_DOUBLE: ( ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .) )*;
+fragment STRING_CORE_SINGLE: ( ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .) )*; 
+fragment STRING_CORE_DOUBLE: ( ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .) )*; 
 fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE QUOTE_SINGLE);
 fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE QUOTE_DOUBLE);
 
@@ -198,7 +198,7 @@ IDENTIFIER: ID_START (ID_CORE)*;
 // Jsonpath variable
 VARIABLE: DOLLAR (ID_CORE)*;
 
-WS: (' '|'\r'|'\t'|'\n') {$channel=HIDDEN;};
-// FIXME: WS and COMMENT tokens are currently required.
-// FIXME: Since there are no comments in JSONPATH, we split whitespace characters between WS and COMMENT
-COMMENT: ('\u000C') {$channel=HIDDEN;};
+WS: (' '|'\r'|'\t'|'\n') {$channel=HIDDEN;}; 
+// FIXME: WS and COMMENT tokens are currently required. 
+// FIXME: Since there are no comments in JSONPATH, we split whitespace characters between WS and COMMENT 
+COMMENT: ('\u000C') {$channel=HIDDEN;}; 

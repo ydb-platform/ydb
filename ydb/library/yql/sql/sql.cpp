@@ -9,8 +9,8 @@
 
 #include <google/protobuf/arena.h>
 
-#include <util/string/builder.h>
-
+#include <util/string/builder.h> 
+ 
 namespace NSQLTranslation {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
@@ -37,18 +37,18 @@ namespace NSQLTranslation {
 
         switch (parsedSettings.SyntaxVersion) {
             case 0:
-                if (settings.V0ForceDisable || parsedSettings.V0Behavior == EV0Behavior::Disable) {
+                if (settings.V0ForceDisable || parsedSettings.V0Behavior == EV0Behavior::Disable) { 
                     result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                         "V0 syntax is disabled"));
                     return result;
                 }
 
-                if (parsedSettings.AnsiLexer) {
-                    result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                        "Ansi lexer is not supported in V0 syntax"));
-                    return result;
-                }
-
+                if (parsedSettings.AnsiLexer) { 
+                    result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR, 
+                        "Ansi lexer is not supported in V0 syntax")); 
+                    return result; 
+                } 
+ 
                 return NSQLTranslationV0::SqlToYql(query, parsedSettings, warningRules);
             case 1:
                 return NSQLTranslationV1::SqlToYql(query, parsedSettings, warningRules);
@@ -73,21 +73,21 @@ namespace NSQLTranslation {
 
         switch (parsedSettings.SyntaxVersion) {
             case 0:
-                if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
+                if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) { 
                     issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                         "V0 syntax is disabled"));
                     return nullptr;
                 }
 
-                if (parsedSettings.AnsiLexer) {
-                    issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                        "Ansi lexer is not supported in V0 syntax"));
-                    return nullptr;
-                }
-
+                if (parsedSettings.AnsiLexer) { 
+                    issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR, 
+                        "Ansi lexer is not supported in V0 syntax")); 
+                    return nullptr; 
+                } 
+ 
                 return NSQLTranslationV0::SqlAST(query, queryName, issues, maxErrors, settings.Arena);
             case 1:
-                return NSQLTranslationV1::SqlAST(query, queryName, issues, maxErrors, parsedSettings.AnsiLexer, settings.Arena);
+                return NSQLTranslationV1::SqlAST(query, queryName, issues, maxErrors, parsedSettings.AnsiLexer, settings.Arena); 
             default:
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
@@ -95,57 +95,57 @@ namespace NSQLTranslation {
         }
     }
 
-    ILexer::TPtr SqlLexer(const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings, ui16* actualSyntaxVersion)
-    {
-        TTranslationSettings parsedSettings(settings);
-        if (!ParseTranslationSettings(query, parsedSettings, issues)) {
-            return {};
-        }
-
-        if (actualSyntaxVersion) {
-            *actualSyntaxVersion = parsedSettings.SyntaxVersion;
-        }
-
-        switch (parsedSettings.SyntaxVersion) {
-            case 0:
-                if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
-                    issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                        "V0 syntax is disabled"));
-                    return {};
-                }
-
-                if (parsedSettings.AnsiLexer) {
-                    issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                        "Ansi lexer is not supported in V0 syntax"));
-                    return {};
-                }
-
-                return NSQLTranslationV0::MakeLexer();
-            case 1:
-                return NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer);
-            default:
-                issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                    TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
-                return {};
-        }
-    }
-
+    ILexer::TPtr SqlLexer(const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings, ui16* actualSyntaxVersion) 
+    { 
+        TTranslationSettings parsedSettings(settings); 
+        if (!ParseTranslationSettings(query, parsedSettings, issues)) { 
+            return {}; 
+        } 
+ 
+        if (actualSyntaxVersion) { 
+            *actualSyntaxVersion = parsedSettings.SyntaxVersion; 
+        } 
+ 
+        switch (parsedSettings.SyntaxVersion) { 
+            case 0: 
+                if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) { 
+                    issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR, 
+                        "V0 syntax is disabled")); 
+                    return {}; 
+                } 
+ 
+                if (parsedSettings.AnsiLexer) { 
+                    issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR, 
+                        "Ansi lexer is not supported in V0 syntax")); 
+                    return {}; 
+                } 
+ 
+                return NSQLTranslationV0::MakeLexer(); 
+            case 1: 
+                return NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer); 
+            default: 
+                issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR, 
+                    TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion)); 
+                return {}; 
+        } 
+    } 
+ 
     NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const TTranslationSettings& settings) {
         NYql::TAstParseResult result;
         switch (settings.SyntaxVersion) {
             case 0:
-                if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
+                if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) { 
                     result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                         "V0 syntax is disabled"));
                     return result;
                 }
 
-                if (settings.AnsiLexer) {
-                    result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                        "Ansi lexer is not supported in V0 syntax"));
-                    return result;
-                }
-
+                if (settings.AnsiLexer) { 
+                    result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR, 
+                        "Ansi lexer is not supported in V0 syntax")); 
+                    return result; 
+                } 
+ 
                 return NSQLTranslationV0::SqlASTToYql(protoAst, settings);
             case 1:
                 return NSQLTranslationV1::SqlASTToYql(protoAst, settings);

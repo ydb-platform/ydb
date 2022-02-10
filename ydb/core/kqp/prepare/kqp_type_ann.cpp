@@ -46,7 +46,7 @@ bool CheckKeyTuple(const TKqlKeyTuple& tuple, const TKikimrTableDescription& tab
             }
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(tuple.Pos()), TStringBuilder()
+        ctx.AddError(TIssue(ctx.GetPosition(tuple.Pos()), TStringBuilder() 
             << "Table key type mismatch"
             << ", column: " << meta->KeyColumnNames[i]
             << ", table: " << meta->Name
@@ -1162,7 +1162,7 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckKiProgramTransformer() {
                 typeOk = listType->GetItemType()->GetKind() == ETypeAnnotationKind::Void;
             }
             if (!typeOk) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() 
                     << "Invalid program effects type: " << FormatType(effectsType)));
                 return TStatus::Error;
             }

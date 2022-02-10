@@ -12,7 +12,7 @@ TS3Configuration::TS3Configuration()
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {
-    return std::make_shared<const TS3Settings>(*this);
+    return std::make_shared<const TS3Settings>(*this); 
 }
 
 bool TS3Configuration::HasCluster(TStringBuf cluster) const {

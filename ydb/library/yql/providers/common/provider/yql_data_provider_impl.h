@@ -24,18 +24,18 @@ public:
     TString GetOperationDisplayName(const TExprNode& node) override;
 };
 
-class TTrackableNodeProcessorBase : public ITrackableNodeProcessor {
-public:
-    TTrackableNodeProcessorBase() = default;
-
-    void GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) override;
-    void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) override;
-    IGraphTransformer& GetCleanupTransformer() override;
-
-protected:
-    TNullTransformer NullTransformer_;
-};
-
+class TTrackableNodeProcessorBase : public ITrackableNodeProcessor { 
+public: 
+    TTrackableNodeProcessorBase() = default; 
+ 
+    void GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) override; 
+    void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) override; 
+    IGraphTransformer& GetCleanupTransformer() override; 
+ 
+protected: 
+    TNullTransformer NullTransformer_; 
+}; 
+ 
 class TDataProviderBase : public IDataProvider, public TPlanFormatterBase {
 public:
     TDataProviderBase() = default;
@@ -79,14 +79,14 @@ public:
     bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) override;
     bool CollectDiscoveredData(NYson::TYsonWriter& writer) override;
     IPlanFormatter& GetPlanFormatter() override;
-    ITrackableNodeProcessor& GetTrackableNodeProcessor() override;
+    ITrackableNodeProcessor& GetTrackableNodeProcessor() override; 
     IGraphTransformer& GetPlanInfoTransformer() override;
     IDqIntegration* GetDqIntegration() override;
 
 protected:
     THolder<IGraphTransformer> DefConstraintTransformer_;
     TNullTransformer NullTransformer_;
-    TTrackableNodeProcessorBase NullTrackableNodeProcessor_;
+    TTrackableNodeProcessorBase NullTrackableNodeProcessor_; 
 };
 
 } // namespace NYql

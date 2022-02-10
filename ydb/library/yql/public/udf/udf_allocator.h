@@ -2,7 +2,7 @@
 #include "udf_version.h"
 #include <util/system/types.h>
 #include <new>
-#include <cstddef>
+#include <cstddef> 
 #include <limits>
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
@@ -34,7 +34,7 @@ struct TStdAllocatorForUdf
     typedef const Type& const_reference;
     typedef size_t size_type;
     typedef ptrdiff_t difference_type;
-
+ 
     TStdAllocatorForUdf() noexcept = default;
     ~TStdAllocatorForUdf() noexcept = default;
 
@@ -50,8 +50,8 @@ struct TStdAllocatorForUdf
 #else
         return static_cast<pointer>(UdfAllocate(n * sizeof(value_type)));
 #endif
-    }
-
+    } 
+ 
     static void deallocate(const_pointer p, size_type n) noexcept
     {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
@@ -61,9 +61,9 @@ struct TStdAllocatorForUdf
         (void)(n);
         return UdfFree(static_cast<const void*>(p));
 #endif
-    }
-};
-
+    } 
+}; 
+ 
 struct TWithUdfAllocator {
     void* operator new(size_t sz) {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)

@@ -124,17 +124,17 @@ TProgramFactory::TProgramFactory(
     , GatewaysConfig_(nullptr)
     , Runner_(runner)
 {
-    AddCredentialsTable(std::make_shared<TCredentialTable>());
+    AddCredentialsTable(std::make_shared<TCredentialTable>()); 
 }
 
 void TProgramFactory::UnrepeatableRandom() {
     UseUnrepeatableRandom = true;
 }
 
-void TProgramFactory::EnableRangeComputeFor() {
-    EnableRangeComputeFor_ = true;
-}
-
+void TProgramFactory::EnableRangeComputeFor() { 
+    EnableRangeComputeFor_ = true; 
+} 
+ 
 void TProgramFactory::AddUserDataTable(const TUserDataTable& userDataTable) {
     for (auto& p : userDataTable) {
         if (!UserDataTable_.emplace(p).second) {
@@ -198,7 +198,7 @@ TProgramPtr TProgramFactory::Create(
     // make UserDataTable_ copy here
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
         UserDataTable_, CredentialTables_, UserCredentials_, moduleResolver, udfResolver, udfIndex, udfIndexPackageSet, FileStorage_,
-        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_);
+        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_); 
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -222,8 +222,8 @@ TProgram::TProgram(
         const TString& filename,
         const TString& sourceCode,
         const TString& sessionId,
-        const TString& runner,
-        bool enableRangeComputeFor
+        const TString& runner, 
+        bool enableRangeComputeFor 
     )
     : FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
@@ -248,7 +248,7 @@ TProgram::TProgram(
     , SessionId_(sessionId)
     , ResultFormat_(NYson::EYsonFormat::Binary)
     , OutputFormat_(NYson::EYsonFormat::Pretty)
-    , EnableRangeComputeFor_(enableRangeComputeFor)
+    , EnableRangeComputeFor_(enableRangeComputeFor) 
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -344,15 +344,15 @@ bool TProgram::ExtractQueryParametersMetadata() {
     return true;
 }
 
-bool TProgram::FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRules* warningRules) {
+bool TProgram::FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRules* warningRules) { 
     if (!astRes.Issues.Empty()) {
         if (!ExprCtx_) {
             ExprCtx_.Reset(new TExprContext(NextUniqueId_));
         }
         auto& iManager = ExprCtx_->IssueManager;
-        if (warningRules) {
-            for (auto warningRule: *warningRules) {
-                iManager.AddWarningRule(warningRule);
+        if (warningRules) { 
+            for (auto warningRule: *warningRules) { 
+                iManager.AddWarningRule(warningRule); 
             }
         }
         iManager.AddScope([this]() {
@@ -413,8 +413,8 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Sql;
     SyntaxVersion_ = settings.SyntaxVersion;
-    NYql::TWarningRules warningRules;
-    return FillParseResult(SqlToYql(SourceCode_, settings, &warningRules), &warningRules);
+    NYql::TWarningRules warningRules; 
+    return FillParseResult(SqlToYql(SourceCode_, settings, &warningRules), &warningRules); 
 }
 
 bool TProgram::Compile(const TString& username) {
@@ -576,7 +576,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
             .AddExpressionEvaluation(*FunctionRegistry_)
             .AddIOAnnotation()
             .AddTypeAnnotation()
-            .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
+            .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput") 
             .Build();
 
     TFuture<void> openSession = OpenSession(username);
@@ -645,10 +645,10 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
         .AddIOAnnotation()
         .AddTypeAnnotation()
         .AddPostTypeAnnotation()
-        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
+        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput") 
         .AddOptimization()
         .Add(CreatePlanInfoTransformer(*TypeCtx_), "PlanInfo")
-        .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
+        .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput") 
         .Add(TPlanOutputTransformer::Sync(tracePlan, GetPlanBuilder(), OutputFormat_), "PlanOutput")
         .Build();
 
@@ -711,11 +711,11 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
     pipeline.AddOptimization();
-    if (EnableRangeComputeFor_) {
-        pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
-                     "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
-    }
-
+    if (EnableRangeComputeFor_) { 
+        pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()), 
+                     "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC); 
+    } 
+ 
     pipeline.Add(CreatePlanInfoTransformer(*TypeCtx_), "PlanInfo");
     pipelineConf.AfterOptimize(&pipeline);
 
@@ -780,26 +780,26 @@ TProgram::TFutureStatus TProgram::RunAsync(
     ExprStream_ = exprOut;
     PlanStream_ = tracePlan;
 
-    TTransformationPipeline pipeline(TypeCtx_);
-    pipeline.AddServiceTransformers();
-    pipeline.AddParametersEvaluation(*FunctionRegistry_);
-    pipeline.AddPreTypeAnnotation();
-    pipeline.AddExpressionEvaluation(*FunctionRegistry_);
-    pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotation();
-    pipeline.AddPostTypeAnnotation();
-    pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput");
-    pipeline.AddOptimization();
-    if (EnableRangeComputeFor_) {
-        pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
-                     "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
-    }
-    pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput");
-    pipeline.Add(TPlanOutputTransformer::Sync(tracePlan, GetPlanBuilder(), OutputFormat_), "PlanOutput");
-    pipeline.AddRun(ProgressWriter_);
-
-    Transformer_ = pipeline.Build();
-
+    TTransformationPipeline pipeline(TypeCtx_); 
+    pipeline.AddServiceTransformers(); 
+    pipeline.AddParametersEvaluation(*FunctionRegistry_); 
+    pipeline.AddPreTypeAnnotation(); 
+    pipeline.AddExpressionEvaluation(*FunctionRegistry_); 
+    pipeline.AddIOAnnotation(); 
+    pipeline.AddTypeAnnotation(); 
+    pipeline.AddPostTypeAnnotation(); 
+    pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput"); 
+    pipeline.AddOptimization(); 
+    if (EnableRangeComputeFor_) { 
+        pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()), 
+                     "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC); 
+    } 
+    pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput"); 
+    pipeline.Add(TPlanOutputTransformer::Sync(tracePlan, GetPlanBuilder(), OutputFormat_), "PlanOutput"); 
+    pipeline.AddRun(ProgressWriter_); 
+ 
+    Transformer_ = pipeline.Build(); 
+ 
     TFuture<void> openSession = OpenSession(username);
     if (!openSession.Initialized()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
@@ -863,10 +863,10 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
     pipeline.AddOptimization();
-    if (EnableRangeComputeFor_) {
-        pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
-            "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
-    }
+    if (EnableRangeComputeFor_) { 
+        pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()), 
+            "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC); 
+    } 
     pipelineConf.AfterOptimize(&pipeline);
     pipeline.AddRun(ProgressWriter_);
 
@@ -1006,7 +1006,7 @@ TMaybe<TString> TProgram::GetQueryAst() {
     astStream.Reserve(DEFAULT_AST_BUF_SIZE);
 
     if (ExprRoot_) {
-        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, TExprAnnotationFlags::None, true);
+        auto ast = ConvertToAst(*ExprRoot_, *ExprCtx_, TExprAnnotationFlags::None, true); 
         ast.Root->PrettyPrintTo(astStream, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         return astStream.Str();
     } else if (AstRoot_) {
@@ -1361,19 +1361,19 @@ TFuture<void> TProgram::OpenSession(const TString& username)
     return WaitExceptionOrAll(openFutures);
 }
 
-void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan) {
+void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan) { 
     TVector<TTransformStage> printTransformers;
     const auto issueCode = TIssuesIds::DEFAULT_ERROR;
     if (exprOut) {
         printTransformers.push_back(TTransformStage(
-            TExprOutputTransformer::Sync(ExprRoot_, exprOut),
+            TExprOutputTransformer::Sync(ExprRoot_, exprOut), 
             "ExprOutput",
             issueCode));
     }
     if (planOut) {
-        if (cleanPlan) {
-            GetPlanBuilder().Clear();
-        }
+        if (cleanPlan) { 
+            GetPlanBuilder().Clear(); 
+        } 
         printTransformers.push_back(TTransformStage(
             TPlanOutputTransformer::Sync(planOut, GetPlanBuilder(), OutputFormat_),
             "PlanOutput",

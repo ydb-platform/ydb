@@ -267,7 +267,7 @@ public:
         {
             auto name = input->Content();
             TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), TStringBuilder() << "At function: " << name);
+                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), TStringBuilder() << "At function: " << name); 
             });
 
             if (input->IsCallable("SelectRow")) {
@@ -1283,9 +1283,9 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
     return compiler;
 }
 
-TRuntimeNode CompileNode(const TExprNode& node, TExprContext& exprCtx, TContext::TPtr ctx, const IMkqlCallableCompiler* compiler) {
+TRuntimeNode CompileNode(const TExprNode& node, TExprContext& exprCtx, TContext::TPtr ctx, const IMkqlCallableCompiler* compiler) { 
     const auto guard = ctx->TypeEnv->BindAllocator();
-    TMkqlBuildContext mkqlCtx(*compiler, *ctx->PgmBuilder, exprCtx);
+    TMkqlBuildContext mkqlCtx(*compiler, *ctx->PgmBuilder, exprCtx); 
     return MkqlBuildExpr(node, mkqlCtx);
 }
 
@@ -1369,14 +1369,14 @@ ConvertToMiniKQL(TExprContainer::TPtr expr,
                         return;
                     }
 
-                    TRuntimeNode convertedNode = CompileNode(*expr->Root, expr->Context, ctx, compiler.Get());
+                    TRuntimeNode convertedNode = CompileNode(*expr->Root, expr->Context, ctx, compiler.Get()); 
                     TConvertResult convRes = ctx->Finish(convertedNode);
                     promise.SetValue(convRes);
                 }
                 catch (const TNodeException& ex) {
                     // TODO: pass backtrace
                     TConvertResult convRes;
-                    convRes.Errors.AddIssue(expr->Context.GetPosition(ex.Pos()), ex.what());
+                    convRes.Errors.AddIssue(expr->Context.GetPosition(ex.Pos()), ex.what()); 
                     promise.SetValue(convRes);
                 }
                 catch (const yexception& ex) { // Catch TProgramBuilder exceptions.
@@ -1395,14 +1395,14 @@ ConvertToMiniKQL(TExprContainer::TPtr expr,
                 return promise.GetFuture();
             }
 
-            TRuntimeNode convertedNode = CompileNode(*expr->Root, expr->Context, ctx, compiler.Get());
+            TRuntimeNode convertedNode = CompileNode(*expr->Root, expr->Context, ctx, compiler.Get()); 
             TConvertResult convRes = ctx->Finish(convertedNode);
             promise.SetValue(convRes);
         }
     } catch (const TNodeException& ex) {
         // TODO: pass backtrace
         TConvertResult convRes;
-        convRes.Errors.AddIssue(expr->Context.GetPosition(ex.Pos()), ex.what());
+        convRes.Errors.AddIssue(expr->Context.GetPosition(ex.Pos()), ex.what()); 
         promise.SetValue(convRes);
     } catch (const yexception& ex) { // Catch TProgramBuilder exceptions.
         // TODO: pass backtrace
@@ -1474,7 +1474,7 @@ public:
             }
         } catch (const TNodeException& ex) {
             // TODO: pass backtrace
-            TMiniKQLCompileResult res(NYql::TIssue(Expr->Context.GetPosition(ex.Pos()), ex.what()));
+            TMiniKQLCompileResult res(NYql::TIssue(Expr->Context.GetPosition(ex.Pos()), ex.what())); 
             return SendResponseAndDie(res, {}, ctx);
         } catch (const yexception& ex) { // Catch TProgramBuilder exceptions.
             // TODO: pass backtrace
@@ -1549,7 +1549,7 @@ private:
         }
         catch (const TNodeException& ex) {
             // TODO: pass backtrace
-            TMiniKQLCompileResult result(NYql::TIssue(Expr->Context.GetPosition(ex.Pos()), ex.what()));
+            TMiniKQLCompileResult result(NYql::TIssue(Expr->Context.GetPosition(ex.Pos()), ex.what())); 
             return SendResponseAndDie(result, std::move(compileResolveCookies), ctx);
         }
         catch (const yexception& ex) { // Catch TProgramBuilder exceptions.
@@ -1587,7 +1587,7 @@ private:
     }
 
     TString CompileProgram() {
-        TRuntimeNode convertedNode = CompileNode(*Expr->Root, Expr->Context, CompileCtx, Compiler.Get());
+        TRuntimeNode convertedNode = CompileNode(*Expr->Root, Expr->Context, CompileCtx, Compiler.Get()); 
         TConvertResult convRes = CompileCtx->Finish(convertedNode);
         return NMiniKQL::SerializeRuntimeNode(convRes.Node, CompileCtx->PgmBuilder->GetTypeEnvironment());
     }

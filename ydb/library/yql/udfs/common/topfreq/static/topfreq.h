@@ -4,8 +4,8 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_type_ops.h>
 
-#include <unordered_map>
-
+#include <unordered_map> 
+ 
 template <typename THash, typename TEquals>
 class TTopFreqBase {
 protected:
@@ -14,12 +14,12 @@ protected:
     using IValueBuilder = NKikimr::NUdf::IValueBuilder;
 
     using TVectorElement = std::pair<TUnboxedValue, ui64>;
-    using TVectorType = std::vector<TVectorElement, NKikimr::NUdf::TStdAllocatorForUdf<TVectorElement>>;
+    using TVectorType = std::vector<TVectorElement, NKikimr::NUdf::TStdAllocatorForUdf<TVectorElement>>; 
 
     TVectorType Freqs_;
-    std::unordered_map<TUnboxedValue, ui32, THash, TEquals, NKikimr::NUdf::TStdAllocatorForUdf<std::pair<const TUnboxedValue, ui32>>> Indices_;
-    ui32 MinSize_ = 0;
-    ui32 MaxSize_ = 0;
+    std::unordered_map<TUnboxedValue, ui32, THash, TEquals, NKikimr::NUdf::TStdAllocatorForUdf<std::pair<const TUnboxedValue, ui32>>> Indices_; 
+    ui32 MinSize_ = 0; 
+    ui32 MaxSize_ = 0; 
 
     void Add(const TTopFreqBase& otherCalc);
     void Update(const TUnboxedValuePod& key, const ui64 value);

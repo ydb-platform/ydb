@@ -10,7 +10,7 @@ SRCS(
     yql_issue_message.cpp
     yql_issue_manager.cpp
     yql_issue_utils.cpp
-    yql_warning.cpp
+    yql_warning.cpp 
 )
 
 PEERDIR(
@@ -22,7 +22,7 @@ PEERDIR(
     ydb/library/yql/utils
 )
 
-GENERATE_ENUM_SERIALIZATION(yql_warning.h)
+GENERATE_ENUM_SERIALIZATION(yql_warning.h) 
 
 END()
 

@@ -15,7 +15,7 @@ struct TMkqlBuildContext {
 
     const IMkqlCallableCompiler& MkqlCompiler;
     NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
-    TExprContext& ExprCtx;
+    TExprContext& ExprCtx; 
     TMemoizedNodesMap Memoization;
     TMkqlBuildContext *const ParentCtx = nullptr;
     const size_t Level = 0ULL;
@@ -25,7 +25,7 @@ struct TMkqlBuildContext {
     TMkqlBuildContext(const IMkqlCallableCompiler& mkqlCompiler, NKikimr::NMiniKQL::TProgramBuilder& builder, TExprContext& exprCtx, ui64 lambdaId = 0ULL, TArgumentsMap&& args = {})
         : MkqlCompiler(mkqlCompiler)
         , ProgramBuilder(builder)
-        , ExprCtx(exprCtx)
+        , ExprCtx(exprCtx) 
         , Memoization(std::move(args))
         , LambdaId(lambdaId)
     {}
@@ -33,7 +33,7 @@ struct TMkqlBuildContext {
     TMkqlBuildContext(TMkqlBuildContext& parent, TArgumentsMap&& args, ui64 lambdaId)
         : MkqlCompiler(parent.MkqlCompiler)
         , ProgramBuilder(parent.ProgramBuilder)
-        , ExprCtx(parent.ExprCtx)
+        , ExprCtx(parent.ExprCtx) 
         , Memoization(std::move(args))
         , ParentCtx(&parent)
         , Level(parent.Level + 1U)

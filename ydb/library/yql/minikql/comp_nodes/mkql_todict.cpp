@@ -17,8 +17,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-using NYql::EnsureDynamicCast;
-
+using NYql::EnsureDynamicCast; 
+ 
 namespace {
 
 class THashedMultiMapAccumulator {
@@ -72,10 +72,10 @@ public:
                     return value;
                 };
 
-                ui64 start = 0;
-                ui64 finish = pair.second.size();
+                ui64 start = 0; 
+                ui64 finish = pair.second.size(); 
                 auto payloadList = CreateOwningVectorListAdapter(std::move(pair.second), itemFactory,
-                    start, finish, false, Ctx.HolderFactory.GetMemInfo());
+                    start, finish, false, Ctx.HolderFactory.GetMemInfo()); 
 
                 targetMap.emplace(pair.first, std::move(payloadList));
             }
@@ -170,10 +170,10 @@ public:
                     return value;
                 };
 
-                ui64 start = 0;
-                ui64 finish = pair.second.size();
+                ui64 start = 0; 
+                ui64 finish = pair.second.size(); 
                 auto payloadList = CreateOwningVectorListAdapter(std::move(pair.second), itemFactory,
-                    start, finish, false,
+                    start, finish, false, 
                     Ctx.HolderFactory.GetMemInfo());
 
                 targetMap.emplace(NUdf::TUnboxedValuePod(pair.first), std::move(payloadList));
@@ -788,14 +788,14 @@ public:
                 statePtr->Insert(Key->GetValue(ctx).Release());
             }
         }
-        Y_UNREACHABLE();
+        Y_UNREACHABLE(); 
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
 
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(Item);
-        MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node.");
+        MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node."); 
 
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
@@ -976,7 +976,7 @@ public:
                 }
             }
         }
-        Y_UNREACHABLE();
+        Y_UNREACHABLE(); 
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
@@ -1042,7 +1042,7 @@ public:
         if (!PasstroughKey) {
             for (auto i = 0U; i < Items.size(); ++i)
                 if (Items[i]->GetDependencesCount() > 0U)
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block)); 
         }
 
         const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);
@@ -1279,14 +1279,14 @@ public:
                 statePtr->Insert(Key->GetValue(ctx).Release(), Payload->GetValue(ctx).Release());
             }
         }
-        Y_UNREACHABLE();
+        Y_UNREACHABLE(); 
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
 
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(Item);
-        MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node.");
+        MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node."); 
 
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
@@ -1476,7 +1476,7 @@ public:
                 }
             }
         }
-        Y_UNREACHABLE();
+        Y_UNREACHABLE(); 
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
@@ -1542,7 +1542,7 @@ public:
         if (!(PasstroughKey && PasstroughPayload)) {
             for (auto i = 0U; i < Items.size(); ++i)
                 if (Items[i]->GetDependencesCount() > 0U)
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block)); 
         }
 
         const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);

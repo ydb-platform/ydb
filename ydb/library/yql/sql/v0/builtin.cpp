@@ -1065,7 +1065,7 @@ private:
 class TYqlIn final: public TCallNode {
 public:
     TYqlIn(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "IN", 3, 3, args)
+        : TCallNode(pos, "IN", 3, 3, args) 
     {}
 
 private:
@@ -1077,53 +1077,53 @@ private:
             return false;
         }
 
-        auto key = Args[0];
+        auto key = Args[0]; 
         auto inNode = Args[1];
-        auto hints = Args[2];
+        auto hints = Args[2]; 
 
-        if (!key->Init(ctx, src)) {
-            return false;
-        }
-
-        if (!inNode->Init(ctx, inNode->GetSource() ? nullptr : src)) {
-            return false;
-        }
-
+        if (!key->Init(ctx, src)) { 
+            return false; 
+        } 
+ 
+        if (!inNode->Init(ctx, inNode->GetSource() ? nullptr : src)) { 
+            return false; 
+        } 
+ 
         if (inNode->GetLiteral("String")) {
-            ctx.Error(inNode->GetPos()) << "Unable to use IN predicate with string argument, it won't search substring - "
-                                           "expecting tuple, list, dict or single column table source";
+            ctx.Error(inNode->GetPos()) << "Unable to use IN predicate with string argument, it won't search substring - " 
+                                           "expecting tuple, list, dict or single column table source"; 
             return false;
         }
-
-        if (inNode->GetTupleSize() == 1) {
-            auto singleElement = inNode->GetTupleElement(0);
-            // TODO: 'IN ((select ...))' is parsed exactly like 'IN (select ...)' instead of a single element tuple
-            if (singleElement->GetSource() || singleElement->IsSelect()) {
-                TStringBuf parenKind = singleElement->GetSource() ? "" : "external ";
-                ctx.Warning(inNode->GetPos(),
-                            TIssuesIds::YQL_CONST_SUBREQUEST_IN_LIST) << "Using subrequest in scalar context after IN, "
-                                                                      << "perhaps you should remove "
-                                                                      << parenKind << "parenthesis here";
-            }
+ 
+        if (inNode->GetTupleSize() == 1) { 
+            auto singleElement = inNode->GetTupleElement(0); 
+            // TODO: 'IN ((select ...))' is parsed exactly like 'IN (select ...)' instead of a single element tuple 
+            if (singleElement->GetSource() || singleElement->IsSelect()) { 
+                TStringBuf parenKind = singleElement->GetSource() ? "" : "external "; 
+                ctx.Warning(inNode->GetPos(), 
+                            TIssuesIds::YQL_CONST_SUBREQUEST_IN_LIST) << "Using subrequest in scalar context after IN, " 
+                                                                      << "perhaps you should remove " 
+                                                                      << parenKind << "parenthesis here"; 
+            } 
         }
-
-        if (inNode->GetSource() || inNode->IsSelect()) {
-            TVector<TNodePtr> hintElements;
-            for (size_t i = 0; i < hints->GetTupleSize(); ++i) {
-                hintElements.push_back(hints->GetTupleElement(i));
-            }
-            auto pos = inNode->GetPos();
-            auto tableSourceHint = BuildTuple(pos, { BuildQuotedAtom(pos, "tableSource", NYql::TNodeFlags::Default) });
-            hintElements.push_back(tableSourceHint);
-            hints = BuildTuple(pos, hintElements);
-        }
-
-        OpName = "SqlIn";
-        MinArgs = MaxArgs = 3;
+ 
+        if (inNode->GetSource() || inNode->IsSelect()) { 
+            TVector<TNodePtr> hintElements; 
+            for (size_t i = 0; i < hints->GetTupleSize(); ++i) { 
+                hintElements.push_back(hints->GetTupleElement(i)); 
+            } 
+            auto pos = inNode->GetPos(); 
+            auto tableSourceHint = BuildTuple(pos, { BuildQuotedAtom(pos, "tableSource", NYql::TNodeFlags::Default) }); 
+            hintElements.push_back(tableSourceHint); 
+            hints = BuildTuple(pos, hintElements); 
+        } 
+ 
+        OpName = "SqlIn"; 
+        MinArgs = MaxArgs = 3; 
         Args = {
-            inNode->GetSource() ? inNode->GetSource() : inNode,
+            inNode->GetSource() ? inNode->GetSource() : inNode, 
             key,
-            hints
+            hints 
         };
 
         return TCallNode::DoInit(ctx, src);
@@ -1388,15 +1388,15 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         if (Module == "yql") {
             ui32 flags;
-            TString nameParseError;
-            TPosition pos = Pos;
-            TString parsedName;
-            if (!TryStringContent(Name, parsedName, flags, nameParseError, pos)) {
-                ctx.Error(pos) << "Failed to parse YQL: " << nameParseError;
-                return false;
-            }
-
-            const TString yql("(" + parsedName + ")");
+            TString nameParseError; 
+            TPosition pos = Pos; 
+            TString parsedName; 
+            if (!TryStringContent(Name, parsedName, flags, nameParseError, pos)) { 
+                ctx.Error(pos) << "Failed to parse YQL: " << nameParseError; 
+                return false; 
+            } 
+ 
+            const TString yql("(" + parsedName + ")"); 
             TAstParseResult ast = ParseAst(yql, ctx.Pool.get());
             /// TODO: do not drop warnings
             if (ast.IsOk()) {
@@ -1436,7 +1436,7 @@ public:
     }
 
     void DoUpdateState() const override {
-        YQL_ENSURE(Node);
+        YQL_ENSURE(Node); 
         State.Set(ENodeState::Const, Node->IsConstant());
         State.Set(ENodeState::Aggregated, Node->IsAggregated());
     }
@@ -2236,32 +2236,32 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             positionalArgs = args[0];
             namedArgs = args[1];
             *mustUseNamed = false;
-        }
-
-        TVector<TNodePtr> reuseArgs;
-        if (!namedArgs && args && funcPrepareNameNode) {
-            TString reusedBaseName = TStringBuilder() << "Arg" << to_title(nameSpace) << to_title(name);
-            reuseArgs.reserve(args.size());
-            for (const auto& arg: args) {
-                reuseArgs.push_back(funcPrepareNameNode(reusedBaseName, arg));
-            }
-        }
-
-        auto usedArgs = reuseArgs ? reuseArgs : args;
-
-        TVector<TNodePtr> positionalArgsElements;
-
-        if (namedArgs) {
-            auto positionalArgsTuple = dynamic_cast<TTupleNode*>(positionalArgs.Get());
-            Y_VERIFY_DEBUG(positionalArgsTuple, "unexpected value at String::SplitToList positional args");
-            positionalArgsElements = positionalArgsTuple->Elements();
+        } 
+ 
+        TVector<TNodePtr> reuseArgs; 
+        if (!namedArgs && args && funcPrepareNameNode) { 
+            TString reusedBaseName = TStringBuilder() << "Arg" << to_title(nameSpace) << to_title(name); 
+            reuseArgs.reserve(args.size()); 
+            for (const auto& arg: args) { 
+                reuseArgs.push_back(funcPrepareNameNode(reusedBaseName, arg)); 
+            } 
+        } 
+ 
+        auto usedArgs = reuseArgs ? reuseArgs : args; 
+ 
+        TVector<TNodePtr> positionalArgsElements; 
+ 
+        if (namedArgs) { 
+            auto positionalArgsTuple = dynamic_cast<TTupleNode*>(positionalArgs.Get()); 
+            Y_VERIFY_DEBUG(positionalArgsTuple, "unexpected value at String::SplitToList positional args"); 
+            positionalArgsElements = positionalArgsTuple->Elements(); 
         } else {
-            positionalArgsElements = usedArgs;
+            positionalArgsElements = usedArgs; 
         }
 
-        auto positionalArgsTupleSize = positionalArgsElements.size();
-        auto argsSize = positionalArgsTupleSize;
-
+        auto positionalArgsTupleSize = positionalArgsElements.size(); 
+        auto argsSize = positionalArgsTupleSize; 
+ 
         TNodePtr trueLiteral = BuildLiteralBool(pos, "true");
         TNodePtr falseLiteral = BuildLiteralBool(pos, "false");
         TNodePtr namedDelimeterStringArg;
@@ -2285,18 +2285,18 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         if (argsSize < 4 && !hasDelimeterString) {
             positionalArgsElements.push_back(trueLiteral);
         }
-
-        if (namedArgs) {
-            positionalArgs = BuildTuple(pos, positionalArgsElements);
-        } else {
-            usedArgs = positionalArgsElements;
+ 
+        if (namedArgs) { 
+            positionalArgs = BuildTuple(pos, positionalArgsElements); 
+        } else { 
+            usedArgs = positionalArgsElements; 
         }
 
         TNodePtr customUserType = nullptr;
-        const auto& udfArgs = BuildUdfArgs(ctx, pos, usedArgs, positionalArgs, namedArgs, customUserType);
-        TNodePtr udfNode = BuildUdf(ctx, pos, nameSpace, name, udfArgs);
-        TVector<TNodePtr> applyArgs = { udfNode };
-        applyArgs.insert(applyArgs.end(), usedArgs.begin(), usedArgs.end());
+        const auto& udfArgs = BuildUdfArgs(ctx, pos, usedArgs, positionalArgs, namedArgs, customUserType); 
+        TNodePtr udfNode = BuildUdf(ctx, pos, nameSpace, name, udfArgs); 
+        TVector<TNodePtr> applyArgs = { udfNode }; 
+        applyArgs.insert(applyArgs.end(), usedArgs.begin(), usedArgs.end()); 
         return new TCallNodeImpl(pos, namedArgs ? "NamedApply" : "Apply", applyArgs);
     } else if (moduleResource) {
         auto exportName = ns == "core" ? name : "$" + name;
@@ -2427,11 +2427,11 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 (normalizedName == "asstruct" ? "AsStruct" : "StructType") <<
                 " requires all argument to be named");
         } else if (normalizedName == "expandstruct") {
-            if (mustUseNamed) {
-                if (!*mustUseNamed) {
-                    return new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires at least one named argument");
-                }
-                *mustUseNamed = false;
+            if (mustUseNamed) { 
+                if (!*mustUseNamed) { 
+                    return new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires at least one named argument"); 
+                } 
+                *mustUseNamed = false; 
             }
             YQL_ENSURE(args.size() == 2);
             auto posArgs = static_cast<TTupleNode*>(args[0].Get());

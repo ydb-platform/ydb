@@ -53,7 +53,7 @@ protected:
 
 public:
     TCompactTrie() = default;
-
+ 
     TCompactTrie(const char* d, size_t len, TPacker packer);
     TCompactTrie(const char* d, size_t len)
         : TCompactTrie{d, len, TPacker{}} {
@@ -79,7 +79,7 @@ public:
 
     bool IsInitialized() const;
     bool IsEmpty() const;
-
+ 
     bool Find(const TSymbol* key, size_t keylen, TData* value = nullptr) const;
     bool Find(const TKeyBuf& key, TData* value = nullptr) const {
         return Find(key.data(), key.size(), value);
@@ -136,7 +136,7 @@ public:
     bool FindTails(const TKeyBuf& key, TCompactTrie<T, D, S>& res) const {
         return FindTails(key.data(), key.size(), res);
     }
-
+ 
     // same as FindTails(&key, 1), a bit faster
     // return false, if no arc with @label exists
     inline bool FindTails(TSymbol label, TCompactTrie<T, D, S>& res) const;
@@ -208,8 +208,8 @@ protected:
 template <class T = char, class D = ui64, class S = TCompactTriePacker<D>>
 class TCompactTrieHolder: public TCompactTrie<T, D, S>, NNonCopyable::TNonCopyable {
 private:
-    typedef TCompactTrie<T, D, S> TBase;
-    TArrayHolder<char> Storage;
+    typedef TCompactTrie<T, D, S> TBase; 
+    TArrayHolder<char> Storage; 
 
 public:
     TCompactTrieHolder(IInputStream& is, size_t len);

@@ -14,23 +14,23 @@
 namespace NTvmAuth {
     static const char* EX_MSG = "Method cannot be used in non-valid ticket";
 
-    TStringBuf GetBlackboxEnvAsString(EBlackboxEnv environment) {
-        switch (environment) {
-            case (EBlackboxEnv::Prod):
-                return TStringBuf("Prod");
-            case (EBlackboxEnv::Test):
-                return TStringBuf("Test");
-            case (EBlackboxEnv::ProdYateam):
-                return TStringBuf("ProdYateam");
-            case (EBlackboxEnv::TestYateam):
-                return TStringBuf("TestYateam");
-            case (EBlackboxEnv::Stress):
-                return TStringBuf("Stress");
-            default: 
-                throw yexception() << "Unknown environment";
-        }
-    }
-
+    TStringBuf GetBlackboxEnvAsString(EBlackboxEnv environment) { 
+        switch (environment) { 
+            case (EBlackboxEnv::Prod): 
+                return TStringBuf("Prod"); 
+            case (EBlackboxEnv::Test): 
+                return TStringBuf("Test"); 
+            case (EBlackboxEnv::ProdYateam): 
+                return TStringBuf("ProdYateam"); 
+            case (EBlackboxEnv::TestYateam): 
+                return TStringBuf("TestYateam"); 
+            case (EBlackboxEnv::Stress): 
+                return TStringBuf("Stress"); 
+            default:  
+                throw yexception() << "Unknown environment"; 
+        } 
+    } 
+ 
     TCheckedUserTicket::TImpl::operator bool() const {
         return (Status_ == ETicketStatus::Ok);
     }
@@ -39,7 +39,7 @@ namespace NTvmAuth {
         Y_ENSURE_EX(bool(*this), TNotAllowedException() << EX_MSG);
         return ProtobufTicket_.user().defaultuid();
     }
-
+ 
     time_t TCheckedUserTicket::TImpl::GetExpirationTime() const {
         Y_ENSURE_EX(bool(*this), TNotAllowedException() << EX_MSG);
         return ProtobufTicket_.expirationtime();
@@ -104,10 +104,10 @@ namespace NTvmAuth {
         for (const auto& user : ProtobufTicket_.user().users()) {
             targetString.append(";uid=").append(IntToString<10>(user.uid()));
         }
-
-        targetString.append(";env=");
-        EBlackboxEnv environment = static_cast<EBlackboxEnv>(ProtobufTicket_.user().env());
-        targetString.append(GetBlackboxEnvAsString(environment));
+ 
+        targetString.append(";env="); 
+        EBlackboxEnv environment = static_cast<EBlackboxEnv>(ProtobufTicket_.user().env()); 
+        targetString.append(GetBlackboxEnvAsString(environment)); 
         targetString.append(";");
 
         CachedDebugInfo_ = targetString;

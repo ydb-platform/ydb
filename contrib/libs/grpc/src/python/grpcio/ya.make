@@ -1,4 +1,4 @@
-PY23_LIBRARY()
+PY23_LIBRARY() 
 
 LICENSE(Apache-2.0)
 
@@ -15,13 +15,13 @@ PEERDIR(
     contrib/python/six
 )
 
-IF (PYTHON2)
-    PEERDIR(
-        contrib/python/enum34
-        contrib/python/futures
-    )
-ENDIF()
-
+IF (PYTHON2) 
+    PEERDIR( 
+        contrib/python/enum34 
+        contrib/python/futures 
+    ) 
+ENDIF() 
+ 
 ADDINCL(
     ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
     contrib/libs/grpc

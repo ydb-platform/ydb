@@ -258,7 +258,7 @@ def on_go_process_srcs(unit):
         import_runtime_cgo = 'false' if import_path in import_runtime_cgo_false[race_mode] else 'true'
         import_syscall = 'false' if import_path in import_syscall_false[race_mode] else 'true'
         args = [import_path] + cgo_files + ['FLAGS', '-import_runtime_cgo=' + import_runtime_cgo, '-import_syscall=' + import_syscall]
-        unit.on_go_compile_cgo1(args)
+        unit.on_go_compile_cgo1(args) 
         cgo2_cflags = get_appended_values(unit, 'CGO2_CFLAGS_VALUE')
         for f in cgo_files:
             if f.endswith('.go'):
@@ -272,7 +272,7 @@ def on_go_process_srcs(unit):
             args += ['S_FILES'] + s_files
         if len(syso_files) > 0:
             args += ['OBJ_FILES'] + syso_files
-        unit.on_go_compile_cgo2(args)
+        unit.on_go_compile_cgo2(args) 
 
 
 def on_go_resource(unit, *args):

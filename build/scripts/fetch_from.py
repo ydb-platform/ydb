@@ -210,7 +210,7 @@ def fetch_url(url, unpack, resource_file_name, expected_md5=None, expected_sha1=
     tmp_file_name = uniq_string_generator()
 
     request = urllib2.Request(url, headers={'User-Agent': make_user_agent()})
-    req = retry.retry_func(lambda: urllib2.urlopen(request, timeout=30), tries=tries, delay=5, backoff=1.57079)
+    req = retry.retry_func(lambda: urllib2.urlopen(request, timeout=30), tries=tries, delay=5, backoff=1.57079) 
     logging.debug('Headers: %s', req.headers.headers)
     expected_file_size = int(req.headers['Content-Length'])
     real_md5 = hashlib.md5()

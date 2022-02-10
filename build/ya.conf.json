@@ -816,8 +816,8 @@
                 "c_compiler": "$(MSVC)/bin/Hostx64/x64/cl.exe",
                 "cxx_compiler": "$(MSVC)/bin/Hostx64/x64/cl.exe",
                 "cxx_std": "c++latest",
-                "version": "2019",
-                "for_ide": "msvs2019"
+                "version": "2019", 
+                "for_ide": "msvs2019" 
             }
         },
         "msvc2019-arm": {
@@ -6534,7 +6534,7 @@
         },
         "yndexer": {
             "formula": {
-                "sandbox_id": 992600186,
+                "sandbox_id": 992600186, 
                 "match": "YNDEXER"
             },
             "executable": {
@@ -6545,7 +6545,7 @@
         },
         "ytyndexer": {
             "formula": {
-                "sandbox_id": 1051903185,
+                "sandbox_id": 1051903185, 
                 "match": "YTYNDEXER"
             },
             "executable": {
@@ -7273,7 +7273,7 @@
         },
         "contexts_difference": {
             "formula": {
-                "sandbox_id": 1128937263,
+                "sandbox_id": 1128937263, 
                 "match": "contexts_difference"
             },
             "executable": {
@@ -7284,7 +7284,7 @@
         },
         "ycmerge": {
             "formula": {
-                "sandbox_id": 1164600398,
+                "sandbox_id": 1164600398, 
                 "match": "ycmerge"
             },
             "executable": {

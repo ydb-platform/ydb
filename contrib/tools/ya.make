@@ -1,5 +1,5 @@
-OWNER(g:contrib)
-
+OWNER(g:contrib) 
+ 
 RECURSE(
     bdb
     bison
@@ -24,7 +24,7 @@ RECURSE(
     mp4viewer
     open-vcdiff
     open-vcdiff/bin
-    plantuml
+    plantuml 
     protoc
     protoc-c
     protoc_std

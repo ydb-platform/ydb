@@ -1,5 +1,5 @@
-OWNER(g:contrib)
-
+OWNER(g:contrib) 
+ 
 IF (USE_PREBUILT_TOOLS)
     INCLUDE(${ARCADIA_ROOT}/build/prebuilt/contrib/tools/protoc/plugins/cpp_styleguide/ya.make.prebuilt)
 ENDIF()

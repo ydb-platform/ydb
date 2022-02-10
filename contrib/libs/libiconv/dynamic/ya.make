@@ -1,4 +1,4 @@
-DYNAMIC_LIBRARY(iconv)
+DYNAMIC_LIBRARY(iconv) 
 
 OWNER(
     g:contrib g:cpp-contrib
@@ -13,12 +13,12 @@ LICENSE(
 
 LICENSE_TEXTS(../.yandex_meta/licenses.list.txt)
 
-PROVIDES(libiconv)
-
+PROVIDES(libiconv) 
+ 
 NO_RUNTIME()
 
-EXPORTS_SCRIPT(libiconv.exports)
+EXPORTS_SCRIPT(libiconv.exports) 
 
-DYNAMIC_LIBRARY_FROM(contrib/libs/libiconv/static)
-
+DYNAMIC_LIBRARY_FROM(contrib/libs/libiconv/static) 
+ 
 END()

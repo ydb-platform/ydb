@@ -3,16 +3,16 @@ OWNER(
     orivej
     g:contrib
 )
-
-PY23_LIBRARY()
-
+ 
+PY23_LIBRARY() 
+ 
 LICENSE(YandexOpen)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-NO_PYTHON_INCLUDES()
-
-IF (USE_ARCADIA_PYTHON)
+NO_PYTHON_INCLUDES() 
+ 
+IF (USE_ARCADIA_PYTHON) 
     PEERDIR(
         contrib/libs/python/Include
         library/python/symbols/module
@@ -29,21 +29,21 @@ IF (USE_ARCADIA_PYTHON)
             contrib/tools/python/lib
             library/python/runtime
         )
-    ELSE()
+    ELSE() 
         PEERDIR(
             contrib/tools/python3/lib
             library/python/runtime_py3
         )
-    ENDIF()
-ELSE()
-    IF (USE_SYSTEM_PYTHON)
+    ENDIF() 
+ELSE() 
+    IF (USE_SYSTEM_PYTHON) 
         PEERDIR(
             build/platform/python
         )
-    ELSE()
-        CFLAGS(GLOBAL $PYTHON_INCLUDE)
-    ENDIF()
-ENDIF()
+    ELSE() 
+        CFLAGS(GLOBAL $PYTHON_INCLUDE) 
+    ENDIF() 
+ENDIF() 
 
 END()
 

@@ -3,7 +3,7 @@ from __res import resfs_read, resfs_resolve, resfs_src  # noqa
 
 import six
 
-
+ 
 def iterkeys(prefix='', strip_prefix=False):
     decode = lambda s: s
     if isinstance(prefix, six.text_type):

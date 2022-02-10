@@ -1,9 +1,9 @@
-OWNER(spreis)
-
-UNITTEST()
-SRCS(use.cpp)
-
-PEERDIR(
-    contrib/libs/python/ut/lib
-)
-END()
+OWNER(spreis) 
+ 
+UNITTEST() 
+SRCS(use.cpp) 
+ 
+PEERDIR( 
+    contrib/libs/python/ut/lib 
+) 
+END() 

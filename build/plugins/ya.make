@@ -14,8 +14,8 @@ PY_SRCS(
     _test_const.py
 )
 
-PEERDIR(build/plugins/lib)
-
+PEERDIR(build/plugins/lib) 
+ 
 END()
 
 RECURSE(

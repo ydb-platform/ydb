@@ -3,12 +3,12 @@ import collections
 from hashlib import md5
 
 import ymake
-from _common import stripext, rootrel_arc_src, tobuilddir, listid, resolve_to_ymake_path, generate_chunks, pathid
+from _common import stripext, rootrel_arc_src, tobuilddir, listid, resolve_to_ymake_path, generate_chunks, pathid 
 
 
 YA_IDE_VENV_VAR = 'YA_IDE_VENV'
 PY_NAMESPACE_PREFIX = 'py/namespace'
-BUILTIN_PROTO = 'builtin_proto'
+BUILTIN_PROTO = 'builtin_proto' 
 
 def is_arc_src(src, unit):
     return (
@@ -29,11 +29,11 @@ def to_build_root(path, unit):
         return '${ARCADIA_BUILD_ROOT}/' + rootrel_arc_src(path, unit)
     return path
 
-def uniq_suffix(path, unit):
-    upath = unit.path()
-    if '/' not in path:
-        return ''
-    return '.{}'.format(pathid(path)[:4])
+def uniq_suffix(path, unit): 
+    upath = unit.path() 
+    if '/' not in path: 
+        return '' 
+    return '.{}'.format(pathid(path)[:4]) 
 
 def pb2_arg(suf, path, mod, unit):
     return '{path}__int__{suf}={mod}{modsuf}'.format(
@@ -104,8 +104,8 @@ def parse_pyx_includes(filename, path, source_root, seen=None):
             else:
                 ymake.report_configure_error("'{}' includes missing file: {} ({})".format(path, incfile, abs_path))
 
-def has_pyx(args):
-    return any(arg.endswith('.pyx') for arg in args)
+def has_pyx(args): 
+    return any(arg.endswith('.pyx') for arg in args) 
 
 def get_srcdir(path, unit):
     return rootrel_arc_src(path, unit)[:-len(path)].rstrip('/')
@@ -170,8 +170,8 @@ def py_program(unit, py3):
 
 def onpy_srcs(unit, *args):
     """
-        @usage PY_SRCS({| CYTHON_C} { | TOP_LEVEL | NAMESPACE ns} Files...)
-
+        @usage PY_SRCS({| CYTHON_C} { | TOP_LEVEL | NAMESPACE ns} Files...) 
+ 
         PY_SRCS() - is rule to build extended versions of Python interpreters and containing all application code in its executable file. It can be used to collect only the executables but not shared libraries, and, in particular, not to collect the modules that are imported using import directive.
         The main disadvantage is the lack of IDE support; There is also no readline yet.
         The application can be collect from any of the sources from which the C library, and with the help of PY_SRCS .py , .pyx,.proto and .swg files.
@@ -182,16 +182,16 @@ def onpy_srcs(unit, *args):
 
         Example of library declaration with PY_SRCS():
         PY2_LIBRARY(mymodule)
-        PY_SRCS(a.py sub/dir/b.py e.proto sub/dir/f.proto c.pyx sub/dir/d.pyx g.swg sub/dir/h.swg)
+        PY_SRCS(a.py sub/dir/b.py e.proto sub/dir/f.proto c.pyx sub/dir/d.pyx g.swg sub/dir/h.swg) 
         END()
 
-        PY_REGISTER honors Python2 and Python3 differences and adjusts itself to Python version of a current module
-        Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#modulipylibrarypy3libraryimakrospysrcs
+        PY_REGISTER honors Python2 and Python3 differences and adjusts itself to Python version of a current module 
+        Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#modulipylibrarypy3libraryimakrospysrcs 
     """
     # Each file arg must either be a path, or "${...}/buildpath=modname", where
     # "${...}/buildpath" part will be used as a file source in a future macro,
     # and "modname" will be used as a module name.
-
+ 
     upath = unit.path()[3:]
     py3 = is_py3(unit)
     py_main_only = unit.get('PROCESS_PY_MAIN_ONLY')
@@ -200,7 +200,7 @@ def onpy_srcs(unit, *args):
     in_proto_library = unit.get('PY_PROTO') or unit.get('PY3_PROTO')
     venv = unit.get(YA_IDE_VENV_VAR)
     need_gazetteer_peerdir = False
-    trim = 0
+    trim = 0 
 
     if not upath.startswith('contrib/tools/python') and not upath.startswith('library/python/runtime') and unit.get('NO_PYTHON_INCLS') != 'yes':
         unit.onpeerdir(['contrib/libs/python'])
@@ -217,7 +217,7 @@ def onpy_srcs(unit, *args):
 
     cython_coverage = unit.get('CYTHON_COVERAGE') == 'yes'
     cythonize_py = False
-    optimize_proto = unit.get('OPTIMIZE_PY_PROTOS_FLAG') == 'yes'
+    optimize_proto = unit.get('OPTIMIZE_PY_PROTOS_FLAG') == 'yes' 
 
     cython_directives = []
     if cython_coverage:
@@ -274,10 +274,10 @@ def onpy_srcs(unit, *args):
         # Unsupported but legal PROTO_LIBRARY arguments.
         elif arg == 'GLOBAL' or not in_proto_library and arg.endswith('.gztproto'):
             pass
-        elif arg == '_MR':
-            # GLOB support: convert arcadia-root-relative paths to module-relative
-            # srcs are assumed to start with ${ARCADIA_ROOT}
-            trim = len(unit.path()) + 14
+        elif arg == '_MR': 
+            # GLOB support: convert arcadia-root-relative paths to module-relative 
+            # srcs are assumed to start with ${ARCADIA_ROOT} 
+            trim = len(unit.path()) + 14 
         # Sources.
         else:
             main_mod = arg == 'MAIN'
@@ -288,8 +288,8 @@ def onpy_srcs(unit, *args):
                 main_py = False
                 path, mod = arg.split('=', 1)
             else:
-                if trim:
-                    arg = arg[trim:]
+                if trim: 
+                    arg = arg[trim:] 
                 if arg.endswith('.gztproto'):
                     need_gazetteer_peerdir = True
                     path = '{}.proto'.format(arg[:-9])
@@ -381,10 +381,10 @@ def onpy_srcs(unit, *args):
                 pass
 
         for pyxs, cython, out_suffix, noext in [
-            (pyxs_c, unit.on_buildwith_cython_c_dep, ".c", False),
-            (pyxs_c_h, unit.on_buildwith_cython_c_h, ".c", True),
-            (pyxs_c_api_h, unit.on_buildwith_cython_c_api_h, ".c", True),
-            (pyxs_cpp, unit.on_buildwith_cython_cpp_dep, ".cpp", False),
+            (pyxs_c, unit.on_buildwith_cython_c_dep, ".c", False), 
+            (pyxs_c_h, unit.on_buildwith_cython_c_h, ".c", True), 
+            (pyxs_c_api_h, unit.on_buildwith_cython_c_api_h, ".c", True), 
+            (pyxs_cpp, unit.on_buildwith_cython_cpp_dep, ".cpp", False), 
         ]:
             for path, mod in pyxs:
                 filename = rootrel_arc_src(path, unit)
@@ -476,9 +476,9 @@ def onpy_srcs(unit, *args):
                     ]
                 if with_pyc:
                     src = unit.resolve_arc_path(path) or path
-                    dst = path + uniq_suffix(path, unit)
-                    unit.on_py_compile_bytecode([root_rel_path + '-', src, dst])
-                    res += [dst + '.yapyc', '/py_code/' + mod]
+                    dst = path + uniq_suffix(path, unit) 
+                    unit.on_py_compile_bytecode([root_rel_path + '-', src, dst]) 
+                    res += [dst + '.yapyc', '/py_code/' + mod] 
 
             unit.onresource(res)
             add_python_lint_checks(unit, 2, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split())
@@ -500,7 +500,7 @@ def onpy_srcs(unit, *args):
         unit.onpeerdir(unit.get("PY_PROTO_DEPS").split())
 
         proto_paths = [path for path, mod in protos]
-        unit.on_generate_py_protos_internal(proto_paths)
+        unit.on_generate_py_protos_internal(proto_paths) 
         unit.onpy_srcs([
             pb2_arg(py_suf, path, mod, unit)
             for path, mod in protos
@@ -509,10 +509,10 @@ def onpy_srcs(unit, *args):
 
         if optimize_proto and need_gazetteer_peerdir:
             unit.onpeerdir(['kernel/gazetteer/proto'])
-
+ 
     if evs:
         unit.onpeerdir([cpp_runtime_path])
-        unit.on_generate_py_evs_internal([path for path, mod in evs])
+        unit.on_generate_py_evs_internal([path for path, mod in evs]) 
         unit.onpy_srcs([ev_arg(path, mod, unit) for path, mod in evs])
 
     if fbss:
@@ -520,7 +520,7 @@ def onpy_srcs(unit, *args):
         pysrc_base_name = listid(fbss)
         unit.onfbs_to_pysrc([pysrc_base_name] + [path for path, _ in fbss])
         unit.onsrcs(['GLOBAL', '{}.fbs.pysrc'.format(pysrc_base_name)])
-
+ 
 
 def _check_test_srcs(*args):
     used = set(args) & {"NAMESPACE", "TOP_LEVEL", "__main__.py"}
@@ -536,12 +536,12 @@ def ontest_srcs(unit, *args):
 
 
 def onpy_doctests(unit, *args):
-    """
-    @usage PY_DOCTEST(Packages...)
-
-    Add to the test doctests for specified Python packages
-    The packages should be part of a test (listed as sources of the test or its PEERDIRs).
-    """
+    """ 
+    @usage PY_DOCTEST(Packages...) 
+ 
+    Add to the test doctests for specified Python packages 
+    The packages should be part of a test (listed as sources of the test or its PEERDIRs). 
+    """ 
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
         unit.onresource(['-', 'PY_DOCTEST_PACKAGES="{}"'.format(' '.join(args))])
 
@@ -556,17 +556,17 @@ def py_register(unit, func, py3):
 def onpy_register(unit, *args):
     """
     @usage: PY_REGISTER([package.]module_name)
-
+ 
     Python knows about which built-ins can be imported, due to their registration in the Assembly or at the start of the interpreter.
     All modules from the sources listed in PY_SRCS() are registered automatically.
     To register the modules from the sources in the SRCS(), you need to use PY_REGISTER().
-
-    PY_REGISTER(module_name) initializes module globally via call to initmodule_name()
+ 
+    PY_REGISTER(module_name) initializes module globally via call to initmodule_name() 
     PY_REGISTER(package.module_name) initializes module in the specified package
     It renames its init function with CFLAGS(-Dinitmodule_name=init7package11module_name)
     or CFLAGS(-DPyInit_module_name=PyInit_7package11module_name)
-
-    Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#makrospyregister
+ 
+    Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#makrospyregister 
     """
 
     py3 = is_py3(unit)
@@ -593,11 +593,11 @@ def py_main(unit, arg):
 
 def onpy_main(unit, arg):
     """
-        @usage: PY_MAIN(package.module[:func])
+        @usage: PY_MAIN(package.module[:func]) 
 
-        Specifies the module or function from which to start executing a python program
+        Specifies the module or function from which to start executing a python program 
 
-        Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#modulipyprogrampy3programimakrospymain
+        Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#modulipyprogrampy3programimakrospymain 
     """
 
     arg = arg.replace('/', '.')

@@ -1,7 +1,7 @@
-#pragma once
-
-class TTestPyInvoker {
-public:
-    TTestPyInvoker();
-    const char* GetVersion();
-};
+#pragma once 
+ 
+class TTestPyInvoker { 
+public: 
+    TTestPyInvoker(); 
+    const char* GetVersion(); 
+}; 

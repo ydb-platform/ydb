@@ -1,17 +1,17 @@
-OWNER(spreis)
-
-PY23_LIBRARY()
+OWNER(spreis) 
+ 
+PY23_LIBRARY() 
 
 WITHOUT_LICENSE_TEXTS()
 
 LICENSE(YandexOpen)
 
-PEERDIR(
+PEERDIR( 
     library/cpp/testing/unittest
-)
+) 
 
 SRCS(
     test.cpp
 )
 
-END()
+END() 

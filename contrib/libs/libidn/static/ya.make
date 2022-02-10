@@ -17,8 +17,8 @@ LICENSE_TEXTS(../.yandex_meta/licenses.list.txt)
 
 VERSION(1.9)
 
-PROVIDES(libidn)
-
+PROVIDES(libidn) 
+ 
 NO_RUNTIME()
 
 NO_COMPILER_WARNINGS()

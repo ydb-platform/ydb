@@ -107,7 +107,7 @@ TMaybe<TResult> DoWithRetry(std::function<TResult()> func, TRetryOptions retryOp
 }
 
 template <typename TException = yexception>
-bool DoWithRetry(std::function<void()> func, std::function<void(const TException&)> onFail, TRetryOptions retryOptions, bool throwLast) {
+bool DoWithRetry(std::function<void()> func, std::function<void(const TException&)> onFail, TRetryOptions retryOptions, bool throwLast) { 
     auto f = [&]() {
         func();
         return nullptr;

@@ -1,5 +1,5 @@
-OWNER(g:ymake)
-
+OWNER(g:ymake) 
+ 
 LIBRARY(dummy-vcs)
 NO_PLATFORM()
 

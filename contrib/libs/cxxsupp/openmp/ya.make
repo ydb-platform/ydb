@@ -39,8 +39,8 @@ COMPILE_C_AS_CXX()
 
 CXXFLAGS(-fno-exceptions)
 
-SET_APPEND(CFLAGS -fno-lto)
-
+SET_APPEND(CFLAGS -fno-lto) 
+ 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/openmp
 )

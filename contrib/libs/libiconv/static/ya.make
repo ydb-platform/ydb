@@ -14,8 +14,8 @@ LICENSE(
 
 LICENSE_TEXTS(../.yandex_meta/licenses.list.txt)
 
-PROVIDES(libiconv)
-
+PROVIDES(libiconv) 
+ 
 NO_RUNTIME()
 
 NO_COMPILER_WARNINGS()

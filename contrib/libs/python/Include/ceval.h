@@ -1,7 +1,7 @@
-#pragma once
-
-#ifdef USE_PYTHON3
-#include <contrib/tools/python3/src/Include/ceval.h>
-#else
-#include <contrib/tools/python/src/Include/ceval.h>
-#endif
+#pragma once 
+ 
+#ifdef USE_PYTHON3 
+#include <contrib/tools/python3/src/Include/ceval.h> 
+#else 
+#include <contrib/tools/python/src/Include/ceval.h> 
+#endif 

@@ -33,7 +33,7 @@ RUN_PROGRAM(
     OUT yql_expr_nodes.defs.inl.h
     OUTPUT_INCLUDES
     ${ARCADIA_ROOT}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h
-    ${ARCADIA_ROOT}/util/generic/hash_set.h
+    ${ARCADIA_ROOT}/util/generic/hash_set.h 
 )
 
 END()

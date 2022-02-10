@@ -102,10 +102,10 @@ bool NX86::HaveSSE3() noexcept {
     return TX86CpuInfo(0x1).ECX & 1u;
 }
 
-bool NX86::HavePCLMUL() noexcept {
-    return (TX86CpuInfo(0x1).ECX >> 1) & 1u;
-}
-
+bool NX86::HavePCLMUL() noexcept { 
+    return (TX86CpuInfo(0x1).ECX >> 1) & 1u; 
+} 
+ 
 bool NX86::HaveSSSE3() noexcept {
     return (TX86CpuInfo(0x1).ECX >> 9) & 1u;
 }
@@ -259,5 +259,5 @@ const char* CpuBrand(ui32* store) noexcept {
     bool NX86::CachedHave##X() noexcept {                           \
         return SingletonWithPriority<TFlagsCache, 0>()->Have##X##_; \
     }
-Y_CPU_ID_ENUMERATE_OUTLINED_CACHED_DEFINE(Y_DEF_NAME)
+Y_CPU_ID_ENUMERATE_OUTLINED_CACHED_DEFINE(Y_DEF_NAME) 
 #undef Y_DEF_NAME

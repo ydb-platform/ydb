@@ -10,25 +10,25 @@ WITHOUT_LICENSE_TEXTS()
 VERSION(2015-07-01-5a546a834c36070648158d19dd564762d59f8eb8)
 
 OWNER(
-    g:contrib
-    g:cpp-contrib
+    g:contrib 
+    g:cpp-contrib 
 )
 
 NO_RUNTIME()
 
-IF (USE_DYNAMIC_AIO)
-    PEERDIR(
-        contrib/libs/libaio/dynamic
-    )
-ELSE()
-    PEERDIR(
-        contrib/libs/libaio/static
-    )
-ENDIF()
+IF (USE_DYNAMIC_AIO) 
+    PEERDIR( 
+        contrib/libs/libaio/dynamic 
+    ) 
+ELSE() 
+    PEERDIR( 
+        contrib/libs/libaio/static 
+    ) 
+ENDIF() 
 
 END()
-
-RECURSE(
-    dynamic
-    static
-)
+ 
+RECURSE( 
+    dynamic 
+    static 
+) 

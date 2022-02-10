@@ -110,8 +110,8 @@ def iter_py_modules(with_keys=False):
                 yield key, mod
             else:
                 yield mod
-
-
+ 
+ 
 def iter_prefixes(s):
     i = s.find('.')
     while i >= 0:
@@ -119,7 +119,7 @@ def iter_prefixes(s):
         i = s.find('.', i + 1)
 
 
-def resfs_resolve(path):
+def resfs_resolve(path): 
     """
     Return the absolute path of a root-relative path if it exists.
     """
@@ -140,7 +140,7 @@ def resfs_src(key, resfs_file=False):
     return __resource.find(b'resfs/src/' + _b(key))
 
 
-def resfs_read(path, builtin=None):
+def resfs_read(path, builtin=None): 
     """
     Return the bytes of the resource file at path, or None.
     If builtin is True, do not look for it on the filesystem.
@@ -165,11 +165,11 @@ def resfs_files(prefix=b''):
 
 
 def mod_path(mod):
-    """
+    """ 
     Return the resfs path to the source code of the module with the given name.
-    """
+    """ 
     return py_prefix + _b(mod).replace(b'.', b'/') + b'.py'
-
+ 
 
 class ResourceImporter(object):
 
@@ -279,12 +279,12 @@ class ResourceImporter(object):
                 data = file_bytes(abspath)
                 return compile(data, _s(abspath), 'exec', dont_inherit=True)
 
-        yapyc_path = path + b'.yapyc3'
-        yapyc_data = resfs_read(yapyc_path, builtin=True)
+        yapyc_path = path + b'.yapyc3' 
+        yapyc_data = resfs_read(yapyc_path, builtin=True) 
         if yapyc_data:
             return marshal.loads(yapyc_data)
         else:
-            py_data = resfs_read(path, builtin=True)
+            py_data = resfs_read(path, builtin=True) 
             if py_data:
                 return compile(py_data, _s(relpath), 'exec', dont_inherit=True)
             else:

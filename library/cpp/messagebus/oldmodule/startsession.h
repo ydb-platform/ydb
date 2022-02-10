@@ -1,12 +1,12 @@
 #pragma once
- 
+
 #include <library/cpp/messagebus/ybus.h>
 
-#include <util/system/thread.h> 
- 
-namespace NBus { 
+#include <util/system/thread.h>
+
+namespace NBus {
     class TBusModule;
- 
+
     class TBusStarter {
     private:
         TBusModule* Module;
@@ -23,12 +23,12 @@ namespace NBus {
         TString GetStatus(ui16 /*flags=YBUS_STATUS_CONNS*/) {
             return "";
         }
- 
+
     public:
         TBusStarter(TBusModule* module, const TBusSessionConfig& config);
         ~TBusStarter();
 
         void Shutdown();
     };
- 
+
 }

@@ -3,15 +3,15 @@
 
 #include <util/random/random.h>
 #include <util/string/printf.h>
-#include <util/system/atomic.h> 
- 
+#include <util/system/atomic.h>
+
 #include <string.h>
- 
+
 using namespace NBus;
 
 namespace NBus {
     using namespace NBus::NPrivate;
- 
+
     TBusIdentity::TBusIdentity()
         : MessageId(0)
         , Size(0)
@@ -73,7 +73,7 @@ namespace NBus {
         GetHeader()->Type = type;
         DoReset();
     }
- 
+
     TBusMessage::TBusMessage(ECreateUninitialized)
         //: TCtr("BusMessage")
         : TRefCounted<TBusMessage, TAtomicCounter, TDelete>(1)
@@ -81,11 +81,11 @@ namespace NBus {
         , Data(nullptr)
     {
     }
- 
+
     TString TBusMessage::Describe() const {
         return Sprintf("object type: %s, message type: %d", TypeName(*this).data(), int(GetHeader()->Type));
     }
- 
+
     TBusMessage::~TBusMessage() {
 #ifndef NDEBUG
         Y_VERIFY(GetHeader()->Id != YBUS_KEYINVALID, "must not be invalid key, message type: %d, ", int(Type));
@@ -94,7 +94,7 @@ namespace NBus {
         CheckClean();
 #endif
     }
- 
+
     void TBusMessage::DoReset() {
         GetHeader()->SendTime = 0;
         GetHeader()->Size = 0;
@@ -125,7 +125,7 @@ namespace NBus {
         memcpy(this, data.data(), sizeof(TBusHeader));
         return sizeof(TBusHeader);
     }
- 
+
     ///////////////////////////////////////////////////////
     /// \brief Packs header to network order
 
@@ -140,7 +140,7 @@ namespace NBus {
         data.Flags = GetHeader()->FlagsInternal;
         //data.LocalFlags = LocalFlags;
     }
- 
+
     ////////////////////////////////////////////////////////////
     /// \brief set message identity from serialized form
 

@@ -7,7 +7,7 @@ using namespace NBus;
 namespace NBus {
     TBusSession::TBusSession() {
     }
- 
+
     ////////////////////////////////////////////////////////////////////
     /// \brief Adds peer of connection into connection list
 
@@ -20,7 +20,7 @@ namespace NBus {
             case AF_INET: {
                 return memcmp(&(((const sockaddr_in*)l.Addr())->sin_addr), &(((const sockaddr_in*)r.Addr())->sin_addr), sizeof(in_addr));
             }
- 
+
             case AF_INET6: {
                 return memcmp(&(((const sockaddr_in6*)l.Addr())->sin6_addr), &(((const sockaddr_in6*)r.Addr())->sin6_addr), sizeof(in6_addr));
             }
@@ -32,13 +32,13 @@ namespace NBus {
     bool operator<(const TNetAddr& a1, const TNetAddr& a2) {
         return CompareByHost(a1, a2) < 0;
     }
- 
+
     size_t TBusSession::GetInFlight(const TNetAddr& addr) const {
         size_t r;
         GetInFlightBulk({addr}, MakeArrayRef(&r, 1));
         return r;
     }
- 
+
     size_t TBusSession::GetConnectSyscallsNumForTest(const TNetAddr& addr) const {
         size_t r;
         GetConnectSyscallsNumBulkForTest({addr}, MakeArrayRef(&r, 1));
@@ -107,16 +107,16 @@ namespace NBus {
                 return -1;
             }
         }
- 
+
         TBusService service = GetProto()->GetService();
         return GetQueue()->GetLocator()->Register(service, hostName.data(), portNum, start, end, ipVersion);
-    } 
- 
+    }
+
     TBusSession::~TBusSession() {
     }
 
-} 
- 
+}
+
 TBusClientSessionPtr TBusClientSession::Create(TBusProtocol* proto, IBusClientHandler* handler, const TBusClientSessionConfig& config, TBusMessageQueuePtr queue) {
     return queue->CreateSource(proto, handler, config);
 }

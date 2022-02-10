@@ -1,24 +1,24 @@
 #pragma once
- 
+
 #include <library/cpp/messagebus/ybus.h>
- 
+
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
- 
+
 #include <util/generic/cast.h>
 #include <util/generic/vector.h>
 #include <util/stream/mem.h>
- 
+
 #include <array>
 
-namespace NBus { 
+namespace NBus {
     using TBusBufferRecord = ::google::protobuf::Message;
- 
+
     template <class TBufferMessage>
     class TBusBufferMessagePtr;
     template <class TBufferMessage>
     class TBusBufferMessageAutoPtr;
- 
+
     class TBusBufferBase: public TBusMessage {
     public:
         TBusBufferBase(int type)
@@ -43,7 +43,7 @@ namespace NBus {
 
     /// @param TBufferRecord is record described in .proto file with namespace
     /// @param MessageFile is offset for .proto file message ids
- 
+
     /// \attention If you want one protocol NBus::TBusBufferProtocol to handle
     /// messageges described in different .proto files, make sure that they have
     /// unique values for MessageFile
@@ -52,7 +52,7 @@ namespace NBus {
     class TBusBufferMessage: public TBusBufferBase {
     public:
         static const int MessageType = MType;
- 
+
         typedef TBusBufferMessagePtr<TBusBufferMessage<TBufferRecord, MType>> TPtr;
         typedef TBusBufferMessageAutoPtr<TBusBufferMessage<TBufferRecord, MType>> TAutoPtr;
 
@@ -88,7 +88,7 @@ namespace NBus {
             return new TBusBufferMessage<TBufferRecord, MessageType>();
         }
     };
- 
+
     template <class TSelf, class TBufferMessage>
     class TBusBufferMessagePtrBase {
     public:
@@ -101,7 +101,7 @@ namespace NBus {
         const TSelf* GetSelf() const {
             return static_cast<const TSelf*>(this);
         }
- 
+
     public:
         RecordType* operator->() {
             Y_ASSERT(GetSelf()->Get());
@@ -119,7 +119,7 @@ namespace NBus {
             Y_ASSERT(GetSelf()->Get());
             return GetSelf()->Get()->Record;
         }
- 
+
         TBusHeader* GetHeader() {
             return GetSelf()->Get()->GetHeader();
         }
@@ -127,7 +127,7 @@ namespace NBus {
             return GetSelf()->Get()->GetHeader();
         }
     };
- 
+
     template <class TBufferMessage>
     class TBusBufferMessagePtr: public TBusBufferMessagePtrBase<TBusBufferMessagePtr<TBufferMessage>, TBufferMessage> {
     protected:
@@ -179,7 +179,7 @@ namespace NBus {
             : AutoPtr(message)
         {
         }
- 
+
         TBufferMessage* Get() {
             return AutoPtr.Get();
         }
@@ -198,7 +198,7 @@ namespace NBus {
             return AutoPtr.Release();
         }
     };
- 
+
     /////////////////////////////////////////////
     /// \brief Generic protocol object for messages descibed with protobuf
 
@@ -223,7 +223,7 @@ namespace NBus {
         void RegisterType(TAutoPtr<TBusBufferBase> mess);
 
         TArrayRef<TBusBufferBase* const> GetTypes() const;
- 
+
         /// serialized protocol specific data into TBusData
         void Serialize(const TBusMessage* mess, TBuffer& data) override;
 

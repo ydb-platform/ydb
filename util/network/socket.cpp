@@ -81,8 +81,8 @@ struct evpair {
 };
 
 static const evpair evpairs_to_win[] = {
-    {POLLIN, FD_READ | FD_CLOSE | FD_ACCEPT}, 
-    {POLLRDNORM, FD_READ | FD_CLOSE | FD_ACCEPT}, 
+    {POLLIN, FD_READ | FD_CLOSE | FD_ACCEPT},
+    {POLLRDNORM, FD_READ | FD_CLOSE | FD_ACCEPT},
     {POLLRDBAND, -1},
     {POLLPRI, -1},
     {POLLOUT, FD_WRITE | FD_CLOSE},
@@ -95,7 +95,7 @@ static const evpair evpairs_to_win[] = {
 static const size_t nevpairs_to_win = sizeof(evpairs_to_win) / sizeof(evpairs_to_win[0]);
 
 static const evpair evpairs_to_unix[] = {
-    {FD_ACCEPT, POLLIN | POLLRDNORM}, 
+    {FD_ACCEPT, POLLIN | POLLRDNORM},
     {FD_READ, POLLIN | POLLRDNORM},
     {FD_WRITE, POLLOUT | POLLWRNORM},
     {FD_CLOSE, POLLHUP},
@@ -150,8 +150,8 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept {
 
     TWSAEventHolder event(rawEvent);
 
-    int checked_sockets = 0; 
- 
+    int checked_sockets = 0;
+
     for (pollfd* fd = fds; fd < fds + nfds; ++fd) {
         int win_events = convert_events(fd->events, evpairs_to_win, nevpairs_to_win, false);
         if (win_events == -1) {
@@ -161,7 +161,7 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept {
         fd->revents = 0;
         if (WSAEventSelect(fd->fd, event.Get(), win_events)) {
             int error = WSAGetLastError();
-            if (error == WSAEINVAL || error == WSAENOTSOCK) { 
+            if (error == WSAEINVAL || error == WSAENOTSOCK) {
                 fd->revents = POLLNVAL;
                 ++checked_sockets;
             } else {
@@ -169,34 +169,34 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept {
                 return -1;
             }
         }
-        fd_set readfds; 
-        fd_set writefds; 
+        fd_set readfds;
+        fd_set writefds;
         struct timeval timeout = {0, 0};
-        FD_ZERO(&readfds); 
-        FD_ZERO(&writefds); 
-        if (fd->events & POLLIN) { 
+        FD_ZERO(&readfds);
+        FD_ZERO(&writefds);
+        if (fd->events & POLLIN) {
             FD_SET(fd->fd, &readfds);
-        } 
-        if (fd->events & POLLOUT) { 
+        }
+        if (fd->events & POLLOUT) {
             FD_SET(fd->fd, &writefds);
-        } 
+        }
         int error = select(0, &readfds, &writefds, nullptr, &timeout);
-        if (error > 0) { 
+        if (error > 0) {
             if (FD_ISSET(fd->fd, &readfds)) {
-                fd->revents |= POLLIN; 
-            } 
+                fd->revents |= POLLIN;
+            }
             if (FD_ISSET(fd->fd, &writefds)) {
-                fd->revents |= POLLOUT; 
-            } 
+                fd->revents |= POLLOUT;
+            }
             ++checked_sockets;
-        } 
+        }
     }
 
-    if (checked_sockets > 0) { 
-        // returns without wait since we already have sockets in desired conditions 
-        return checked_sockets; 
-    } 
- 
+    if (checked_sockets > 0) {
+        // returns without wait since we already have sockets in desired conditions
+        return checked_sockets;
+    }
+
     HANDLE events[] = {event.Get()};
     DWORD wait_result = WSAWaitForMultipleEvents(1, events, TRUE, timeout, FALSE);
     if (wait_result == WSA_WAIT_TIMEOUT)

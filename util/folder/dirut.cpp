@@ -491,12 +491,12 @@ void MakePathIfNotExist(const char* path, int mode) {
 
 const char* GetFileNameComponent(const char* f) {
     const char* p = strrchr(f, LOCSLASH_C);
-#ifdef _win_ 
-    // "/" is also valid char separator on Windows 
-    const char* p2 = strrchr(f, '/'); 
-    if (p2 > p) 
-        p = p2; 
-#endif 
+#ifdef _win_
+    // "/" is also valid char separator on Windows
+    const char* p2 = strrchr(f, '/');
+    if (p2 > p)
+        p = p2;
+#endif
 
     if (p) {
         return p + 1;

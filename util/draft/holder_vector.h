@@ -91,7 +91,7 @@ public:
     using TBase::empty;
     using TBase::end;
     using TBase::front;
-    using TBase::reserve; 
+    using TBase::reserve;
     using TBase::size;
 
     using typename TBase::const_iterator;

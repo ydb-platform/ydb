@@ -566,28 +566,28 @@ public:
     }
 
     template <class TTo>
-    void Export(size_t pos, TTo& to) const { 
+    void Export(size_t pos, TTo& to) const {
         static_assert(std::is_unsigned<TTo>::value, "expect std::is_unsigned<TTo>::value");
-        to = 0; 
-        size_t chunkpos = pos >> DivCount; 
-        if (chunkpos >= Mask.GetChunkCapacity()) 
-            return; 
-        if ((pos & ModMask) == 0) { 
-            if (sizeof(TChunk) >= sizeof(TTo)) 
-                to = (TTo)Mask.Data[chunkpos]; 
-            else //if (sizeof(TChunk) < sizeof(TTo)) 
-                NBitMapPrivate::CopyData(&to, 1, Mask.Data + chunkpos, Min(((sizeof(TTo) * 8) >> DivCount), Mask.GetChunkCapacity() - chunkpos)); 
-        } else if ((pos & (sizeof(TTo) * 8 - 1)) == 0 && sizeof(TChunk) >= 2 * sizeof(TTo)) 
-            to = (TTo)(Mask.Data[chunkpos] >> (pos & ModMask)); 
-        else { 
+        to = 0;
+        size_t chunkpos = pos >> DivCount;
+        if (chunkpos >= Mask.GetChunkCapacity())
+            return;
+        if ((pos & ModMask) == 0) {
+            if (sizeof(TChunk) >= sizeof(TTo))
+                to = (TTo)Mask.Data[chunkpos];
+            else //if (sizeof(TChunk) < sizeof(TTo))
+                NBitMapPrivate::CopyData(&to, 1, Mask.Data + chunkpos, Min(((sizeof(TTo) * 8) >> DivCount), Mask.GetChunkCapacity() - chunkpos));
+        } else if ((pos & (sizeof(TTo) * 8 - 1)) == 0 && sizeof(TChunk) >= 2 * sizeof(TTo))
+            to = (TTo)(Mask.Data[chunkpos] >> (pos & ModMask));
+        else {
             static constexpr size_t copyToSize = (sizeof(TChunk) >= sizeof(TTo)) ? (sizeof(TChunk) / sizeof(TTo)) + 2 : 3;
-            TTo temp[copyToSize] = {0, 0}; 
-            //or use non defined by now TBitmap<copyToSize, TTo>::CopyData,RShift(pos & ModMask),Export(0,to) 
-            NBitMapPrivate::CopyData(temp, copyToSize, Mask.Data + chunkpos, Min((sizeof(TTo) / sizeof(TChunk)) + 1, Mask.GetChunkCapacity() - chunkpos)); 
-            to = (temp[0] >> (pos & ModMask)) | (temp[1] << (8 * sizeof(TTo) - (pos & ModMask))); 
-        } 
-    } 
- 
+            TTo temp[copyToSize] = {0, 0};
+            //or use non defined by now TBitmap<copyToSize, TTo>::CopyData,RShift(pos & ModMask),Export(0,to)
+            NBitMapPrivate::CopyData(temp, copyToSize, Mask.Data + chunkpos, Min((sizeof(TTo) / sizeof(TChunk)) + 1, Mask.GetChunkCapacity() - chunkpos));
+            to = (temp[0] >> (pos & ModMask)) | (temp[1] << (8 * sizeof(TTo) - (pos & ModMask)));
+        }
+    }
+
     Y_FORCE_INLINE bool Test(size_t n) const {
         return Get(n);
     }
@@ -608,8 +608,8 @@ public:
             Mask.Data[i] = 0;
         }
         return *this;
-    } 
- 
+    }
+
     // Returns bits capacity
     Y_FORCE_INLINE constexpr size_t Size() const noexcept {
         return Mask.GetBitCapacity();
@@ -631,10 +631,10 @@ public:
     Y_PURE_FUNCTION Y_FORCE_INLINE bool Empty() const {
         for (size_t i = 0; i < Mask.GetChunkCapacity(); ++i)
             if (Mask.Data[i])
-                return false; 
-        return true; 
-    } 
- 
+                return false;
+        return true;
+    }
+
     bool HasAny(const TThis& bitmap) const {
         for (size_t i = 0; i < Min(Mask.GetChunkCapacity(), bitmap.Mask.GetChunkCapacity()); ++i) {
             if (0 != (Mask.Data[i] & bitmap.Mask.Data[i])) {

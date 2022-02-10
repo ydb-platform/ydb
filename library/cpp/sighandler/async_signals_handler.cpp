@@ -1,6 +1,6 @@
 #include "async_signals_handler.h"
 
-#include <util/system/platform.h> 
+#include <util/system/platform.h>
 
 #if !defined(_win_)
 

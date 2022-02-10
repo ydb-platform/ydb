@@ -82,9 +82,9 @@ private:
         inline ~TDirHier() {
             for (size_t i = 0; i < Paths_.size(); ++i) {
                 NFs::Remove(Paths_[Paths_.size() - i - 1].Path);
-            } 
-        } 
- 
+            }
+        }
+
     private:
         TVector<TPath> Paths_;
         THashMap<TString, TPath> Srch_;

@@ -707,10 +707,10 @@ static inline SOCKET DoConnect(const struct addrinfo* res, const TInstant& deadL
 }
 
 static inline ssize_t DoSendV(SOCKET fd, const struct iovec* iov, size_t count) {
-    ssize_t ret = -1; 
-    do { 
+    ssize_t ret = -1;
+    do {
         ret = DoSendMsg(fd, iov, (int)count);
-    } while (ret == -1 && errno == EINTR); 
+    } while (ret == -1 && errno == EINTR);
 
     if (ret < 0) {
         return -LastSystemError();

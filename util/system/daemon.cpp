@@ -1,17 +1,17 @@
 #include <util/generic/yexception.h>
 
-#include <cerrno> 
+#include <cerrno>
 #include <cstdlib>
 #include <util/system/info.h>
 
-#if defined(_win_) 
+#if defined(_win_)
     #include <io.h>
-#else 
+#else
     #include <sys/wait.h>
     #include <unistd.h>
     #include <fcntl.h>
-#endif 
- 
+#endif
+
 #include "daemon.h"
 
 #ifdef _unix_
@@ -62,18 +62,18 @@ static void CloseFromToExcept(int from, int to, const int* except) {
                 goto dontclose;
             }
         }
-        while (close(s) == -1) { 
+        while (close(s) == -1) {
             if (errno == EBADF) {
-                break; 
+                break;
             }
             if (errno != EINTR) {
                 ythrow TSystemError() << "close(" << s << ") failed";
             }
-        } 
+        }
     dontclose:;
     }
-#endif /* _unix_ */ 
-} 
+#endif /* _unix_ */
+}
 
 bool NDaemonMaker::MakeMeDaemon(ECloseDescriptors cd, EStdIoDescriptors iod, EChDir chd, EParent parent) {
     (void)cd;

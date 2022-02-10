@@ -264,25 +264,25 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
 
         TDynBitMap bitmap4 = ~((bitmap3 | 3) & bitmap2);
         CHECK_BITMAP_WITH_TAIL(bitmap4, resBits);
- 
-        TBitMap<128, ui32> expmap; 
-        expmap.Set(47); 
-        expmap.Set(90); 
-        ui64 tst1 = 0; 
-        ui32 tst2 = 0; 
-        ui16 tst3 = 0; 
-        expmap.Export(32, tst1); 
+
+        TBitMap<128, ui32> expmap;
+        expmap.Set(47);
+        expmap.Set(90);
+        ui64 tst1 = 0;
+        ui32 tst2 = 0;
+        ui16 tst3 = 0;
+        expmap.Export(32, tst1);
         UNIT_ASSERT_EQUAL(tst1, (1 << 15) | (((ui64)1) << 58));
-        expmap.Export(32, tst2); 
+        expmap.Export(32, tst2);
         UNIT_ASSERT_EQUAL(tst2, (1 << 15));
-        expmap.Export(32, tst3); 
+        expmap.Export(32, tst3);
         UNIT_ASSERT_EQUAL(tst3, (1 << 15));
- 
-        expmap.Export(33, tst1); 
+
+        expmap.Export(33, tst1);
         UNIT_ASSERT_EQUAL(tst1, (1 << 14) | (((ui64)1) << 57));
-        expmap.Export(33, tst2); 
+        expmap.Export(33, tst2);
         UNIT_ASSERT_EQUAL(tst2, (1 << 14));
-        expmap.Export(33, tst3); 
+        expmap.Export(33, tst3);
         UNIT_ASSERT_EQUAL(tst3, (1 << 14));
     }
 

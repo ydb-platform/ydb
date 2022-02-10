@@ -56,8 +56,8 @@ TString HexEncode(const void* in, size_t len) {
 TString HexDecode(const void* in, size_t len) {
     TString ret;
 
-    ret.ReserveAndResize(len >> 1); 
-    HexDecode(in, len, ret.begin()); 
+    ret.ReserveAndResize(len >> 1);
+    HexDecode(in, len, ret.begin());
 
     return ret;
 }

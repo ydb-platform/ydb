@@ -4,7 +4,7 @@
 #include "scheme_raw_type_value.h"
 
 #include <util/charset/utf8.h>
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/stream/output.h> // for IOutputStream
 #include <util/string/ascii.h>
 
@@ -38,12 +38,12 @@ public:
     };
 
     TTypedType() = default;
- 
+
     // IType interface
     const char* GetName() const override {
         return Name_;
     }
- 
+
     static constexpr ui32 GetFixedSize() {
         return sizeof(T);
     }
@@ -169,9 +169,9 @@ void WriteEscapedValue(IOutputStream &out, const char *data, size_t size);
 class TString : public TStringBase<TString, NTypeIds::String, NNames::String> {};
 
 class TUtf8 : public TStringBase<TUtf8, NTypeIds::Utf8, NNames::Utf8> {
-public: 
-}; 
- 
+public:
+};
+
 class TYson : public TStringBase<TYson, NTypeIds::Yson, NNames::Yson> {
 public:
 };

@@ -103,33 +103,33 @@ Y_UNIT_TEST_SUITE(TEscapeCTest) {
         // UNIT_ASSERT_VALUES_EQUAL("[x]?z", EscapeC(TString("??(x??)?z")));
         UNIT_ASSERT_VALUES_EQUAL("\\x3F?x\\x3F\\x3F?z", EscapeC(TString("??x???z")));
     }
- 
+
     Y_UNIT_TEST(TestUnescapeCCharLen) {
-        auto test = [](const char* str, size_t len) { 
-            UNIT_ASSERT_EQUAL(UnescapeCCharLen(str, str + strlen(str)), len); 
-        }; 
- 
-        test("", 0); 
-        test("abc", 1); 
-        test("\\", 1); 
-        test("\\\\", 2); 
-        test("\\#", 2); 
-        test("\\n10", 2); 
-        test("\\r\\n", 2); 
-        test("\\x05abc", 4); 
-        test("\\u11117777", 6); 
-        test("\\u123yyy", 2); 
-        test("\\U11117777cccc", 10); 
-        test("\\U111yyy", 2); 
-        test("\\0\\1", 2); 
-        test("\\01\\1", 3); 
-        test("\\012\\1", 4); 
-        test("\\0123\\1", 4); 
-        test("\\4\\1", 2); 
-        test("\\40\\1", 3); 
-        test("\\400\\1", 3); 
-        test("\\4xxx", 2); 
-    } 
+        auto test = [](const char* str, size_t len) {
+            UNIT_ASSERT_EQUAL(UnescapeCCharLen(str, str + strlen(str)), len);
+        };
+
+        test("", 0);
+        test("abc", 1);
+        test("\\", 1);
+        test("\\\\", 2);
+        test("\\#", 2);
+        test("\\n10", 2);
+        test("\\r\\n", 2);
+        test("\\x05abc", 4);
+        test("\\u11117777", 6);
+        test("\\u123yyy", 2);
+        test("\\U11117777cccc", 10);
+        test("\\U111yyy", 2);
+        test("\\0\\1", 2);
+        test("\\01\\1", 3);
+        test("\\012\\1", 4);
+        test("\\0123\\1", 4);
+        test("\\4\\1", 2);
+        test("\\40\\1", 3);
+        test("\\400\\1", 3);
+        test("\\4xxx", 2);
+    }
 
     Y_UNIT_TEST(TestUnbounded) {
         char buf[100000];

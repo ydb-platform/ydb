@@ -1,7 +1,7 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(g:util)
- 
+
 PEERDIR(
     util/draft
     library/cpp/pop_count
@@ -12,4 +12,4 @@ SRCS(
     readonly_bitvector.cpp
 )
 
-END() 
+END()

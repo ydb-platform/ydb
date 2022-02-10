@@ -9,7 +9,7 @@
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
 
- 
+
 namespace NKikimr {
 namespace NScheme {
 
@@ -24,7 +24,7 @@ public:
 
     //
     template <typename T>
-    void RegisterType() { 
+    void RegisterType() {
         RegisterType(Singleton<T>());
     }
 
@@ -40,14 +40,14 @@ public:
 
     //
     ITypeSP GetType(TTypeId typeId) const {
-        if (typeId) { 
+        if (typeId) {
             auto iter = TypeByIdMap.find(typeId);
-            if (iter != TypeByIdMap.end()) { 
+            if (iter != TypeByIdMap.end()) {
                 Y_VERIFY_DEBUG(iter->second);
-                return iter->second; 
-            } 
+                return iter->second;
+            }
         }
-        return typeId; 
+        return typeId;
     }
 
     ::TString GetTypeName(TTypeId typeId) const {
@@ -62,32 +62,32 @@ public:
         if (!typeId)
             ythrow yexception() << "Type id must be non zero";
 
-        auto type = GetType(typeId); 
+        auto type = GetType(typeId);
         if (Y_LIKELY(type))
-            return type; 
+            return type;
         ythrow yexception() << "Unknown type: " << typeId;
     }
 
     const IType* GetType(const TStringBuf& name) const {
         auto iter = TypeByNameMap.find(name);
-        return iter != TypeByNameMap.end() ? iter->second : nullptr; 
-    } 
+        return iter != TypeByNameMap.end() ? iter->second : nullptr;
+    }
 
     const IType* GetKnownType(const TStringBuf& name) const {
-        auto type = GetType(name); 
+        auto type = GetType(name);
         if (Y_LIKELY(type))
-            return type; 
-        ythrow yexception() << "Unknown type: " << name; 
+            return type;
+        ythrow yexception() << "Unknown type: " << name;
     }
 
     TVector<const IType*> GetTypes() const {
         TVector<const IType*> types;
-        types.reserve(TypeByIdMap.size()); 
-        for (const auto& entry : TypeByIdMap) 
-            types.push_back(entry.second); 
-        return types; 
-    } 
- 
+        types.reserve(TypeByIdMap.size());
+        for (const auto& entry : TypeByIdMap)
+            types.push_back(entry.second);
+        return types;
+    }
+
     TTypeMetadataRegistry& GetTypeMetadataRegistry() {
         return TypeMetadataRegistry;
     }

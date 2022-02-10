@@ -756,23 +756,23 @@ void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus
     }
 
     if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyTrackWallClock) {
-        auto *timings = x->Record.MutableTimings(); 
+        auto *timings = x->Record.MutableTimings();
         if (WallClockAccepted.GetValue())
-            timings->SetWallClockAccepted(WallClockAccepted.MicroSeconds()); 
+            timings->SetWallClockAccepted(WallClockAccepted.MicroSeconds());
         if (WallClockResolved.GetValue())
-            timings->SetWallClockResolved(WallClockResolved.MicroSeconds()); 
+            timings->SetWallClockResolved(WallClockResolved.MicroSeconds());
         if (WallClockPrepared.GetValue())
-            timings->SetWallClockPrepared(WallClockPrepared.MicroSeconds()); 
+            timings->SetWallClockPrepared(WallClockPrepared.MicroSeconds());
         if (WallClockPlanned.GetValue())
-            timings->SetWallClockPlanned(WallClockPlanned.MicroSeconds()); 
+            timings->SetWallClockPlanned(WallClockPlanned.MicroSeconds());
         if (ElapsedExecExec.GetValue())
-            timings->SetElapsedExecExec(ElapsedExecExec.MicroSeconds()); 
+            timings->SetElapsedExecExec(ElapsedExecExec.MicroSeconds());
         if (ElapsedExecComplete.GetValue())
-            timings->SetElapsedExecComplete(ElapsedExecComplete.MicroSeconds()); 
+            timings->SetElapsedExecComplete(ElapsedExecComplete.MicroSeconds());
         if (ElapsedPrepareExec.GetValue())
-            timings->SetElapsedPrepareExec(ElapsedExecExec.MicroSeconds()); 
+            timings->SetElapsedPrepareExec(ElapsedExecExec.MicroSeconds());
         if (ElapsedPrepareComplete.GetValue())
-            timings->SetElapsedPrepareComplete(ElapsedExecComplete.MicroSeconds()); 
+            timings->SetElapsedPrepareComplete(ElapsedExecComplete.MicroSeconds());
         timings->SetWallClockNow(Now().MicroSeconds());
     }
 

@@ -587,11 +587,11 @@ Y_UNIT_TEST_SUITE(TDurationParseTest) {
         UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(7196400), TDuration::Parse("1.999h"));
         UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(7199640), TDuration::Parse("1.9999h"));
 
-        UNIT_ASSERT_EQUAL(TDuration::Minutes(15), TDuration::Parse("15m")); 
-        UNIT_ASSERT_EQUAL(TDuration::Hours(10), TDuration::Parse("10h")); 
-        UNIT_ASSERT_EQUAL(TDuration::Days(365), TDuration::Parse("365d")); 
-        UNIT_ASSERT_EQUAL(TDuration::Hours(36), TDuration::Parse("1.5d")); 
- 
+        UNIT_ASSERT_EQUAL(TDuration::Minutes(15), TDuration::Parse("15m"));
+        UNIT_ASSERT_EQUAL(TDuration::Hours(10), TDuration::Parse("10h"));
+        UNIT_ASSERT_EQUAL(TDuration::Days(365), TDuration::Parse("365d"));
+        UNIT_ASSERT_EQUAL(TDuration::Hours(36), TDuration::Parse("1.5d"));
+
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Hours(24), TDuration::Parse("1d"));
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Hours(36), TDuration::Parse("1.5d"));
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Minutes(2448), TDuration::Parse("1.7d"));
@@ -618,10 +618,10 @@ Y_UNIT_TEST_SUITE(TDurationParseTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(112), TDuration::Parse("112"));
         UNIT_ASSERT_VALUES_EQUAL(TDuration::MicroSeconds(14456), TDuration::Parse("14456us"));
- 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::MicroSeconds(1), TDuration::Parse("1000ns")); 
-        UNIT_ASSERT_VALUES_EQUAL(TDuration::MicroSeconds(1), TDuration::Parse("0.000001s")); 
- 
-        UNIT_ASSERT_EQUAL(TDuration(), TDuration::Parse("10ns")); // TDuration has 1us precision. 
+
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MicroSeconds(1), TDuration::Parse("1000ns"));
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MicroSeconds(1), TDuration::Parse("0.000001s"));
+
+        UNIT_ASSERT_EQUAL(TDuration(), TDuration::Parse("10ns")); // TDuration has 1us precision.
     }
 }

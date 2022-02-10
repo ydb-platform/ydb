@@ -61,10 +61,10 @@ TUtf16String& UnescapeC(const TWtringBuf str, TUtf16String& res);
 
 TString UnescapeC(const TStringBuf str);
 TUtf16String UnescapeC(const TWtringBuf wtr);
- 
-/// Returns number of chars in escape sequence. 
-///   - 0, if begin >= end 
-///   - 1, if [begin, end) starts with an unescaped char 
-///   - at least 2 (including '\'), if [begin, end) starts with an escaped symbol 
-template <class TChar> 
-size_t UnescapeCCharLen(const TChar* begin, const TChar* end); 
+
+/// Returns number of chars in escape sequence.
+///   - 0, if begin >= end
+///   - 1, if [begin, end) starts with an unescaped char
+///   - at least 2 (including '\'), if [begin, end) starts with an escaped symbol
+template <class TChar>
+size_t UnescapeCCharLen(const TChar* begin, const TChar* end);

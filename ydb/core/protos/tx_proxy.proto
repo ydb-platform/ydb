@@ -196,18 +196,18 @@ message TEvProposeTransaction {
     optional string RequestType = 8;
 }
 
-message TTxProxyTimings { 
-    optional uint64 WallClockAccepted = 10; 
-    optional uint64 WallClockResolved = 11; 
-    optional uint64 WallClockPrepared = 12; 
-    optional uint64 WallClockPlanned = 13; 
-    optional uint64 WallClockNow = 14; 
-    optional uint64 ElapsedPrepareExec = 15; 
-    optional uint64 ElapsedExecExec = 16; 
-    optional uint64 ElapsedPrepareComplete = 17; 
-    optional uint64 ElapsedExecComplete = 18; 
-} 
- 
+message TTxProxyTimings {
+    optional uint64 WallClockAccepted = 10;
+    optional uint64 WallClockResolved = 11;
+    optional uint64 WallClockPrepared = 12;
+    optional uint64 WallClockPlanned = 13;
+    optional uint64 WallClockNow = 14;
+    optional uint64 ElapsedPrepareExec = 15;
+    optional uint64 ElapsedExecExec = 16;
+    optional uint64 ElapsedPrepareComplete = 17;
+    optional uint64 ElapsedExecComplete = 18;
+}
+
 message TEvProposeTransactionStatus {
     optional uint32 Status = 1;
     optional fixed64 TxId = 2;
@@ -218,7 +218,7 @@ message TEvProposeTransactionStatus {
 
     optional uint32 ExecutionEngineStatus = 10;
     optional uint32 ExecutionEngineResponseStatus = 11;
-    optional bytes ExecutionEngineResponse = 12; // Native document. 
+    optional bytes ExecutionEngineResponse = 12; // Native document.
     optional bytes MiniKQLErrors = 13;
     optional bytes DataShardErrors = 14;
     repeated fixed64 ComplainingDataShards = 15;
@@ -228,7 +228,7 @@ message TEvProposeTransactionStatus {
     optional NKikimrMiniKQL.TResult ExecutionEngineEvaluatedResponse = 18;
 
     optional NKikimrQueryStats.TTxStats TxStats = 19;
-    optional TTxProxyTimings Timings = 20; 
+    optional TTxProxyTimings Timings = 20;
     optional bool HadFollowerReads = 21;
 
     optional uint32 SchemeShardStatus = 30;

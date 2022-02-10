@@ -242,9 +242,9 @@ static TStr& DoUnescapeC(const TChar* p, size_t sz, TStr& res) {
                 default:
                     res.append(*p);
                     break;
-                case 'a': 
-                    res.append('\a'); 
-                    break; 
+                case 'a':
+                    res.append('\a');
+                    break;
                 case 'b':
                     res.append('\b');
                     break;
@@ -260,9 +260,9 @@ static TStr& DoUnescapeC(const TChar* p, size_t sz, TStr& res) {
                 case 't':
                     res.append('\t');
                     break;
-                case 'v': 
-                    res.append('\v'); 
-                    break; 
+                case 'v':
+                    res.append('\v');
+                    break;
                 case 'u': {
                     ui16 cp[2];
 
@@ -318,13 +318,13 @@ static TStr& DoUnescapeC(const TChar* p, size_t sz, TStr& res) {
             }
 
             ++p;
-        } else { 
+        } else {
             const auto r = std::basic_string_view<TChar>(p, pe - p).find('\\');
             const auto n = r != std::string::npos ? p + r : pe;
 
             res.append(p, n);
             p = n;
-        } 
+        }
     }
 
     return res;
@@ -363,43 +363,43 @@ template TUtf16String& UnescapeCImpl<TUtf16String::TChar>(const TUtf16String::TC
 
 template char* UnescapeC<char>(const char* str, size_t len, char* buf);
 
-template <class TChar> 
-size_t UnescapeCCharLen(const TChar* begin, const TChar* end) { 
+template <class TChar>
+size_t UnescapeCCharLen(const TChar* begin, const TChar* end) {
     if (begin >= end) {
-        return 0; 
+        return 0;
     }
     if (*begin != '\\') {
-        return 1; 
+        return 1;
     }
     if (++begin == end) {
-        return 1; 
+        return 1;
     }
- 
-    switch (*begin) { 
-        default: 
-            return 2; 
-        case 'u': 
-            return CountHex<4>(begin + 1, end) == 4 ? 6 : 2; 
-        case 'U': 
-            return CountHex<8>(begin + 1, end) == 8 ? 10 : 2; 
-        case 'x': 
-            return 2 + CountHex<2>(begin + 1, end); 
-        case '0': 
-        case '1': 
-        case '2': 
-        case '3': 
-            return 1 + CountOct<3>(begin, end); // >= 2 
-        case '4': 
-        case '5': 
-        case '6': 
-        case '7': 
-            return 1 + CountOct<2>(begin, end); // >= 2 
-    } 
-} 
- 
-template size_t UnescapeCCharLen<char>(const char* begin, const char* end); 
+
+    switch (*begin) {
+        default:
+            return 2;
+        case 'u':
+            return CountHex<4>(begin + 1, end) == 4 ? 6 : 2;
+        case 'U':
+            return CountHex<8>(begin + 1, end) == 8 ? 10 : 2;
+        case 'x':
+            return 2 + CountHex<2>(begin + 1, end);
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+            return 1 + CountOct<3>(begin, end); // >= 2
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+            return 1 + CountOct<2>(begin, end); // >= 2
+    }
+}
+
+template size_t UnescapeCCharLen<char>(const char* begin, const char* end);
 template size_t UnescapeCCharLen<TUtf16String::TChar>(const TUtf16String::TChar* begin, const TUtf16String::TChar* end);
- 
+
 TString& EscapeC(const TStringBuf str, TString& s) {
     return EscapeC(str.data(), str.size(), s);
 }

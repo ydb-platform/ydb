@@ -32,15 +32,15 @@ public:
     bool IsSingular() const {
         return !ValueType;
     }
- 
-    inline bool operator==(const TTagDetails& other) const { 
-        return Idx == other.Idx && ValueType == other.ValueType && PayloadType == other.PayloadType 
-            && (Name.empty() || other.Name.empty() || Name == other.Name); 
-    } 
- 
-    inline bool operator!=(const TTagDetails& other) const { 
-        return !operator==(other); 
-    } 
+
+    inline bool operator==(const TTagDetails& other) const {
+        return Idx == other.Idx && ValueType == other.ValueType && PayloadType == other.PayloadType
+            && (Name.empty() || other.Name.empty() || Name == other.Name);
+    }
+
+    inline bool operator!=(const TTagDetails& other) const {
+        return !operator==(other);
+    }
 };
 
 ////////////////////////////////////////////

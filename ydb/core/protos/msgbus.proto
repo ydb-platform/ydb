@@ -158,7 +158,7 @@ message TResponse {
     ];  // Program "exit code": see NMiniKQL::IEngine::EStatus.
 
     optional NKikimrMiniKQL.TResult ExecutionEngineEvaluatedResponse = 103;
- 
+
     optional bytes MiniKQLErrors = 104;
     optional bytes DataShardErrors = 105;
     repeated fixed64 ComplainingDataShards = 106;
@@ -171,7 +171,7 @@ message TResponse {
 
     optional uint32 BSAssignedID = 40;
 
-    optional NKikimrTxUserProxy.TTxProxyTimings ProxyTimings = 50; 
+    optional NKikimrTxUserProxy.TTxProxyTimings ProxyTimings = 50;
 
     optional int32 SchemeStatus = 300; // for enum definition see flat_tx_scheme.proto - enum EStatus
     optional uint32 SchemeTagId = 301;

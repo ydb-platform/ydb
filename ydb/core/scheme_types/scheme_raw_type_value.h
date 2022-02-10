@@ -42,7 +42,7 @@ public:
 
     TString ToString() const {
         TStringBuilder builder;
-        builder << "(type:" << ValueType; 
+        builder << "(type:" << ValueType;
         if (!IsEmpty()) {
             builder << ", value:" << TString((const char*)Buffer, BufferSize).Quote();
         }
@@ -65,7 +65,7 @@ private:
 };
 
 } // namspace NKikimr
- 
+
 inline IOutputStream& operator << (IOutputStream& out, const NKikimr::TRawTypeValue& v) {
     out << v.ToString();
     return out;

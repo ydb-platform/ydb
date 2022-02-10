@@ -5,7 +5,7 @@
 #include <util/digest/murmur.h>
 #include <util/generic/algorithm.h>
 
- 
+
 #define REGISTER_TYPE(name, size, ...) RegisterType<T##name>();
 
 namespace NKikimr {

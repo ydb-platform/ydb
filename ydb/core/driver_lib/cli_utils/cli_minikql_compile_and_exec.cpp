@@ -143,10 +143,10 @@ void TCmdCompileAndExecMiniKQLConfig::Parse(int argc, char **argv) {
     using namespace NLastGetopt;
 
     TOpts opts = TOpts::Default();
-    opts.AddLongOption('f', "pgm-txt", "path to file with text program").RequiredArgument("PATH").StoreResult(&PathToTextPgm); 
-    opts.AddLongOption('b', "pgm-bin", "path to file with serialized program").RequiredArgument("PATH").StoreResult(&PathToBinPgm); 
-    opts.AddLongOption("params-txt", "path to file with text program params").RequiredArgument("PATH").StoreResult(&PathToTextParams); 
-    opts.AddLongOption("params-bin", "path to file with serialized program params").RequiredArgument("PATH").StoreResult(&PathToBinParams); 
+    opts.AddLongOption('f', "pgm-txt", "path to file with text program").RequiredArgument("PATH").StoreResult(&PathToTextPgm);
+    opts.AddLongOption('b', "pgm-bin", "path to file with serialized program").RequiredArgument("PATH").StoreResult(&PathToBinPgm);
+    opts.AddLongOption("params-txt", "path to file with text program params").RequiredArgument("PATH").StoreResult(&PathToTextParams);
+    opts.AddLongOption("params-bin", "path to file with serialized program params").RequiredArgument("PATH").StoreResult(&PathToBinParams);
 
     ConfigureBaseLastGetopt(opts);
 

@@ -71,7 +71,7 @@ void TCmdSchemeInitShardConfig::Parse(int argc, char **argv) {
     TOpts opts = TOpts::Default();
     opts.AddLongOption('n', "name", "domain name").Required().RequiredArgument("STR").StoreResult(&TagName);
     opts.AddLongOption("config", "apply global config").RequiredArgument("STR").StoreResult(&configPb);
-    opts.AddLongOption("config-file", "load global config from file").RequiredArgument("PATH").StoreResult(&configPbFile); 
+    opts.AddLongOption("config-file", "load global config from file").RequiredArgument("PATH").StoreResult(&configPbFile);
 
     ConfigureBaseLastGetopt(opts);
     TOptsParseResult res(&opts, argc, argv);

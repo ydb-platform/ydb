@@ -451,30 +451,30 @@ namespace NThreading {
         }
 
         template <typename T>
-        inline void SetValueImpl(TPromise<T>& promise, const TFuture<T>& future,
-                                 std::enable_if_t<!std::is_void<T>::value, bool> = false) {
+        inline void SetValueImpl(TPromise<T>& promise, const TFuture<T>& future, 
+                                 std::enable_if_t<!std::is_void<T>::value, bool> = false) { 
             future.Subscribe([=](const TFuture<T>& f) mutable {
-                T const* value;
+                T const* value; 
                 try {
-                    value = &f.GetValue();
+                    value = &f.GetValue(); 
                 } catch (...) {
                     promise.SetException(std::current_exception());
-                    return;
+                    return; 
                 }
-                promise.SetValue(*value);
+                promise.SetValue(*value); 
             });
         }
 
-        template <typename T>
-        inline void SetValueImpl(TPromise<void>& promise, const TFuture<T>& future) {
-            future.Subscribe([=](const TFuture<T>& f) mutable {
+        template <typename T> 
+        inline void SetValueImpl(TPromise<void>& promise, const TFuture<T>& future) { 
+            future.Subscribe([=](const TFuture<T>& f) mutable { 
                 try {
                     f.TryRethrow();
                 } catch (...) {
                     promise.SetException(std::current_exception());
-                    return;
+                    return; 
                 }
-                promise.SetValue();
+                promise.SetValue(); 
             });
         }
 
@@ -483,10 +483,10 @@ namespace NThreading {
             try {
                 SetValueImpl(promise, func());
             } catch (...) {
-                const bool success = promise.TrySetException(std::current_exception());
-                if (Y_UNLIKELY(!success)) {
-                    throw;
-                }
+                const bool success = promise.TrySetException(std::current_exception()); 
+                if (Y_UNLIKELY(!success)) { 
+                    throw; 
+                } 
             }
         }
 
@@ -497,9 +497,9 @@ namespace NThreading {
                 func();
             } catch (...) {
                 promise.SetException(std::current_exception());
-                return;
+                return; 
             }
-            promise.SetValue();
+            promise.SetValue(); 
         }
 
     }
@@ -631,7 +631,7 @@ namespace NThreading {
     inline TFuture<void> TFuture<T>::IgnoreResult() const {
         auto promise = NewPromise();
         Subscribe([=](const TFuture<T>& future) mutable {
-            NImpl::SetValueImpl(promise, future);
+            NImpl::SetValueImpl(promise, future); 
         });
         return promise;
     }
@@ -734,9 +734,9 @@ namespace NThreading {
                 future.TryRethrow();
             } catch (...) {
                 promise.SetException(std::current_exception());
-                return;
+                return; 
             }
-            promise.SetValue(value);
+            promise.SetValue(value); 
         });
         return promise;
     }

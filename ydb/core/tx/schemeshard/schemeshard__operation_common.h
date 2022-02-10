@@ -33,7 +33,7 @@ class TProposedWaitParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "NTableState::TProposedWaitParts"
                 << " operationId# " << OperationId;
@@ -129,7 +129,7 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "NSubDomainState::TConfigureParts"
                 << " operationId#" << OperationId;
@@ -365,7 +365,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "NSubDomainState::TPropose"
                 << " operationId#" << OperationId;
@@ -463,7 +463,7 @@ class TCreateParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateParts"
                 << " operationId: " << OperationId;
@@ -827,7 +827,7 @@ class TDone: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TDone operationId#" << OperationId;
     }
@@ -900,7 +900,7 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "NPQState::TConfigureParts"
                 << " operationId#" << OperationId;
@@ -1107,7 +1107,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "NPQState::TPropose"
                 << " operationId#" << OperationId;
@@ -1189,7 +1189,7 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
             << "NBSVState::TConfigureParts"
             << " operationId: " << OperationId;
@@ -1316,7 +1316,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "NBSVState::TPropose"
                 << " operationId#" << OperationId;
@@ -1401,7 +1401,7 @@ public:
 namespace NCdcStreamState {
 
 class TConfigurePartsAtTable: public TSubOperationState {
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
             << "NCdcStreamState::TConfigurePartsAtTable"
             << " operationId: " << OperationId;
@@ -1487,7 +1487,7 @@ private:
 }; // TConfigurePartsAtTable
 
 class TProposeAtTable: public TSubOperationState {
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
             << "NCdcStreamState::TProposeAtTable"
             << " operationId: " << OperationId;

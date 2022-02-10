@@ -37,7 +37,7 @@ public:
         return false;
     }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
+    bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxSyncTablets(" << Local << ")::Execute");
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo& node = Self->GetNode(Local.NodeId());
@@ -111,7 +111,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override { 
+    void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxSyncTablets(" << Local << ")::Complete");
         for (std::pair<TTabletId, TFollowerId> tabletId : TabletsToStop) {
             Self->Execute(Self->CreateRestartTablet(tabletId), ctx);

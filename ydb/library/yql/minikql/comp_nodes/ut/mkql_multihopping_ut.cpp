@@ -118,7 +118,7 @@ namespace {
         ui32 Index;
         std::function<void()> FetchCallback;
 
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final { 
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
             FetchCallback();
             if (Index >= Items.size()) {
                 return NUdf::EFetchStatus::Finish;

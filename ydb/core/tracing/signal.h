@@ -84,7 +84,7 @@ public:
         return PbSignal.SerializeToString(&str);
     }
 
-    EType GetType() const override { 
+    EType GetType() const override {
         return TSignalType;
     }
 

@@ -15,7 +15,7 @@ namespace NSchemeShard {
 namespace {
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
             << "NewCdcStream TPropose"
             << " opId# " << OperationId << " ";

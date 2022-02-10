@@ -29,7 +29,7 @@ public:
         return NUdf::TUnboxedValuePod(new TYqlCodeResource(exprCtxPtr, node));
     }
 
-    void RegisterDependencies() const override { 
+    void RegisterDependencies() const override {
         DependsOn(Value_);
     }
 

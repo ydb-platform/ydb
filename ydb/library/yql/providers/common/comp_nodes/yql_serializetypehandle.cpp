@@ -22,7 +22,7 @@ public:
         return MakeString(NYql::NCommon::WriteTypeToYson(type));
     }
 
-    void RegisterDependencies() const override { 
+    void RegisterDependencies() const override {
         DependsOn(Handle_);
     }
 

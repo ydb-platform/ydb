@@ -1024,7 +1024,7 @@ public:
         }
     }
 
-    TVector<TString> GetCollectedSchemeData() override { 
+    TVector<TString> GetCollectedSchemeData() override {
         return MetadataLoader->GetCollectedSchemeData();
     }
 
@@ -1214,7 +1214,7 @@ public:
         }
     }
 
-    TFuture<TGenericResult> AlterTable(Ydb::Table::AlterTableRequest&& req, const TString& cluster) override { 
+    TFuture<TGenericResult> AlterTable(Ydb::Table::AlterTableRequest&& req, const TString& cluster) override {
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);

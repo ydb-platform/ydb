@@ -25,7 +25,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
         Reply.Reset(new TEvKesus::TEvCreateSemaphoreResult(Record.GetProxyGeneration()));
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
             "[" << Self->TabletID() << "] TTxSemaphoreCreate::Execute (sender=" << Sender
                 << ", cookie=" << Cookie << ", name=" << Record.GetName().Quote()

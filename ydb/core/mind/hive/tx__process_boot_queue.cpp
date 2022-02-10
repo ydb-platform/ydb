@@ -12,13 +12,13 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_BOOT_QUEUE; }
 
-    bool Execute(TTransactionContext&, const TActorContext&) override { 
+    bool Execute(TTransactionContext&, const TActorContext&) override {
         BLOG_D("THive::TTxProcessBootQueue()::Execute");
         Self->RunProcessBootQueue();
         return true;
     }
 
-    void Complete(const TActorContext&) override { 
+    void Complete(const TActorContext&) override {
         BLOG_D("THive::TTxProcessBootQueue()::Complete");
     }
 };

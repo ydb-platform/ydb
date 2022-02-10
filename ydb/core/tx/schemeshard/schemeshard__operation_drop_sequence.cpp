@@ -14,7 +14,7 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropSequence TDropParts"
                 << " operationId#" << OperationId;
@@ -130,7 +130,7 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropSequence TPropose"
                 << " operationId#" << OperationId;

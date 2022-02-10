@@ -36,7 +36,7 @@ public:
 
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvSeizeTablets& request(Request->Get()->Record);
         NKikimrHive::TEvSeizeTabletsReply& response(Response->Record);
         BLOG_D("THive::TTxSeizeTablets::Execute " << request);
@@ -150,7 +150,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& txc) override { 
+    void Complete(const TActorContext& txc) override {
         BLOG_D("THive::TTxSeizeTablets::Complete " << Request->Get()->Record);
         txc.Send(Request->Sender, Response.Release());
     }

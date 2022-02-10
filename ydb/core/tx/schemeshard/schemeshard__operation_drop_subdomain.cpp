@@ -13,7 +13,7 @@ class TDeleteParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropSubdomain TDeleteParts"
                 << " operationId#" << OperationId;
@@ -50,7 +50,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropSubdomain TPropose"
                 << " operationId#" << OperationId;

@@ -111,7 +111,7 @@ public:
             *rec.AddHosts() = host;
     }
 
-    void PrintOkResponse(const NKikimrClient::TCmsResponse &response) override 
+    void PrintOkResponse(const NKikimrClient::TCmsResponse &response) override
     {
         auto &state = response.GetClusterStateResponse().GetState();
 
@@ -1138,7 +1138,7 @@ public:
         req.MutableLogFilter()->SetOffset(Offset);
     }
 
-    void PrintOkResponse(const NKikimrClient::TCmsResponse &response) override 
+    void PrintOkResponse(const NKikimrClient::TCmsResponse &response) override
     {
         if (!response.GetGetLogTailResponse().LogRecordsSize())
             Cout << "<empty>" << Endl;

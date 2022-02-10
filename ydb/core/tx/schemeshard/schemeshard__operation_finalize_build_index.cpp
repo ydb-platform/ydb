@@ -15,7 +15,7 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
             << "TFinalizeBuildIndex TConfigureParts"
             << " operationId#" << OperationId;
@@ -112,7 +112,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
             << "TFinalizeBuildIndex TPropose"
             << " operationId#" << OperationId;
@@ -207,7 +207,7 @@ class TCreateTxShards: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
             << "TFinalizeBuildIndex TCreateTxShards"
             << " operationId: " << OperationId;

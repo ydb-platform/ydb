@@ -17,7 +17,7 @@ class TConfigurePart: public TSubOperationState {
     const TTxState::ETxType TxType;
     const TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << TKind::Name() << " TConfigurePart"
                 << ", opId: " << OperationId;
@@ -70,7 +70,7 @@ protected:
     const TOperationId OperationId;
 
 private:
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << TKind::Name() << " TProposedWaitParts"
                 << ", opId: " << OperationId;
@@ -288,7 +288,7 @@ class TAborting: public TProposedWaitParts<TKind> {
     using TProposedWaitParts<TKind>::OperationId;
     using TProposedWaitParts<TKind>::TxType;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << TKind::Name() << " TAborting"
                 << ", opId: " << OperationId;
@@ -366,7 +366,7 @@ class TPropose: public TSubOperationState {
     const TTxState::ETxType TxType;
     const TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << TKind::Name() << " TPropose"
                 << ", opId: " << OperationId;

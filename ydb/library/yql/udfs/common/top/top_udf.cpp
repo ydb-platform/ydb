@@ -514,7 +514,7 @@ public:
 template <EDataSlot Slot, bool HasKey, bool IsTop>
 class TTopSerializeData : public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResourceData<Slot, HasKey, IsTop>(args[0]);
         return resource->Get()->Serialize(valueBuilder);
     }
@@ -523,7 +523,7 @@ private:
 template <bool HasKey, bool IsTop>
 class TTopSerialize : public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResource<HasKey, IsTop>(args[0]);
         return resource->Get()->Serialize(valueBuilder);
     }
@@ -536,7 +536,7 @@ public:
 template <EDataSlot Slot, bool HasKey, bool IsTop>
 class TTopDeserializeData : public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TTopResourceData<Slot, HasKey, IsTop>(args[0]));
     }
 };
@@ -544,7 +544,7 @@ private:
 template <bool HasKey, bool IsTop>
 class TTopDeserialize : public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TTopResource<HasKey, IsTop>(args[0], Compare_));
     }
 
@@ -560,7 +560,7 @@ private:
 template <EDataSlot Slot, bool HasKey, bool IsTop>
 class TTopMergeData : public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto left = GetTopResourceData<Slot, HasKey, IsTop>(args[0]);
         auto right = GetTopResourceData<Slot, HasKey, IsTop>(args[1]);
         return TUnboxedValuePod(new TTopResourceData<Slot, HasKey, IsTop>(*left->Get(), *right->Get()));
@@ -570,7 +570,7 @@ private:
 template <bool HasKey, bool IsTop>
 class TTopMerge : public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto left = GetTopResource<HasKey, IsTop>(args[0]);
         auto right = GetTopResource<HasKey, IsTop>(args[1]);
         return TUnboxedValuePod(new TTopResource<HasKey, IsTop>(*left->Get(), *right->Get(), Compare_));
@@ -588,7 +588,7 @@ private:
 template <EDataSlot Slot, bool HasKey, bool IsTop>
 class TTopGetResultData : public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResourceData<Slot, HasKey, IsTop>(args[0]);
         return resource->Get()->GetResult(valueBuilder);
     }
@@ -597,7 +597,7 @@ private:
 template <bool HasKey, bool IsTop>
 class TTopGetResult : public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResource<HasKey, IsTop>(args[0]);
         return resource->Get()->GetResult(valueBuilder);
     }

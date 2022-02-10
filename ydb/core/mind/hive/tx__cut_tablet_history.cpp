@@ -14,7 +14,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_CUT_TABLET_HISTORY; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TEvHive::TEvCutTabletHistory* msg = Event->Get();
         auto tabletId = msg->Record.GetTabletID();
         BLOG_D("THive::TTxCutTabletHistory::Execute(" << tabletId << ")");
@@ -38,7 +38,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {} 
+    void Complete(const TActorContext&) override {}
 };
 
 ITransaction* THive::CreateCutTabletHistory(TEvHive::TEvCutTabletHistory::TPtr& ev) {

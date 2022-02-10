@@ -16,7 +16,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_SEIZE_TABLETS_REPLY; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvSeizeTabletsReply& request(Request->Get()->Record);
         BLOG_D("THive::TTxSeizeTabletsReply::Execute");
         NIceDb::TNiceDb db(txc.DB);
@@ -150,7 +150,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override { 
+    void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxSeizeTabletsReply::Complete");
         if (!TabletIds.empty()) {
             THolder<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());

@@ -54,7 +54,7 @@ private:
         ctx.Send(Sender, ev);
     }
 
-    void RaiseIssue(const NYql::TIssue& issue) override { 
+    void RaiseIssue(const NYql::TIssue& issue) override {
         Issues.AddIssue(issue);
     }
 

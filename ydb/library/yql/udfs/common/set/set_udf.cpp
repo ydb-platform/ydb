@@ -187,14 +187,14 @@ TSetResource* GetSetResource(const TUnboxedValuePod& arg) {
 template <EDataSlot Slot>
 class TSetCreateData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TSetResourceData<Slot>(args[0], args[1].Get<ui32>()));
     }
 };
 
 class TSetCreate: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TSetResource(args[0], args[1].Get<ui32>(), Hash_, Equate_));
     }
 
@@ -212,7 +212,7 @@ private:
 template <EDataSlot Slot>
 class TSetAddValueData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto resource = GetSetResourceData<Slot>(args[0]);
         resource->Get()->ResetChanged();
         resource->Get()->AddValue(args[1]);
@@ -222,7 +222,7 @@ private:
 
 class TSetAddValue: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto resource = GetSetResource(args[0]);
         resource->Get()->ResetChanged();
         resource->Get()->AddValue(args[1]);
@@ -233,7 +233,7 @@ private:
 template <EDataSlot Slot>
 class TSetWasChangedData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto resource = GetSetResourceData<Slot>(args[0]);
         return TUnboxedValuePod(resource->Get()->Changed());
     }
@@ -241,7 +241,7 @@ private:
 
 class TSetWasChanged: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto resource = GetSetResource(args[0]);
         return TUnboxedValuePod(resource->Get()->Changed());
     }
@@ -250,14 +250,14 @@ private:
 template <EDataSlot Slot>
 class TSetSerializeData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         return GetSetResourceData<Slot>(args[0])->Get()->Serialize(valueBuilder);
     }
 };
 
 class TSetSerialize: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         return GetSetResource(args[0])->Get()->Serialize(valueBuilder);
     }
 };
@@ -265,14 +265,14 @@ private:
 template <EDataSlot Slot>
 class TSetDeserializeData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TSetResourceData<Slot>(args[0]));
     }
 };
 
 class TSetDeserialize: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TSetResource(args[0], Hash_, Equate_));
     }
 
@@ -290,7 +290,7 @@ private:
 template <EDataSlot Slot>
 class TSetMergeData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto left = GetSetResourceData<Slot>(args[0]);
         auto right = GetSetResourceData<Slot>(args[1]);
         return TUnboxedValuePod(new TSetResourceData<Slot>(*left->Get(), *right->Get()));
@@ -299,7 +299,7 @@ private:
 
 class TSetMerge: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto left = GetSetResource(args[0]);
         auto right = GetSetResource(args[1]);
         return TUnboxedValuePod(new TSetResource(*left->Get(), *right->Get(), Hash_, Equate_));
@@ -319,14 +319,14 @@ private:
 template <EDataSlot Slot>
 class TSetGetResultData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         return GetSetResourceData<Slot>(args[0])->Get()->GetResult(valueBuilder);
     }
 };
 
 class TSetGetResult: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override { 
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         return GetSetResource(args[0])->Get()->GetResult(valueBuilder);
     }
 };

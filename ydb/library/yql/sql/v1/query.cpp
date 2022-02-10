@@ -1841,7 +1841,7 @@ public:
         return true;
     }
 
-    TAstNode* Translate(TContext& ctx) const final { 
+    TAstNode* Translate(TContext& ctx) const final {
         return Node->Translate(ctx);
     }
 

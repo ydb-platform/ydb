@@ -42,7 +42,7 @@ private:
         };
 
         struct TLocalThread: public ISimpleThread {
-            void* ThreadProc() override { 
+            void* ThreadProc() override {
                 TSimpleIntrusivePtr<S> ptr;
                 return nullptr;
             }

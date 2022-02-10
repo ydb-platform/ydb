@@ -75,7 +75,7 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_GET_TABLE_STATS; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
         ui64 tableId = Ev->Get()->Record.GetTableId();
@@ -139,7 +139,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override { 
+    void Complete(const TActorContext& ctx) override {
         ctx.Send(Ev->Sender, Result.Release());
     }
 
@@ -235,7 +235,7 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_INITIATE_STATS_UPDATE; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Self->State != TShardState::Ready)
             return true;
 
@@ -337,7 +337,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override { 
+    void Complete(const TActorContext& ctx) override {
         Y_UNUSED(ctx);
     }
 };

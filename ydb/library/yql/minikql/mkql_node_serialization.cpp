@@ -107,37 +107,37 @@ namespace {
             {
             }
 
-            void Visit(TTypeType& node) override { 
+            void Visit(TTypeType& node) override {
                 Y_UNUSED(node);
                 Owner.Write(TypeMarker | (char)TType::EKind::Type);
                 IsProcessed0 = true;
             }
 
-            void Visit(TVoidType& node) override { 
+            void Visit(TVoidType& node) override {
                 Y_UNUSED(node);
                 Owner.Write(TypeMarker | (char)TType::EKind::Void);
                 IsProcessed0 = true;
             }
 
-            void Visit(TNullType& node) override { 
+            void Visit(TNullType& node) override {
                 Y_UNUSED(node);
                 Owner.Write(TypeMarker | (char)TType::EKind::Null);
                 IsProcessed0 = true;
             }
 
-            void Visit(TEmptyListType& node) override { 
+            void Visit(TEmptyListType& node) override {
                 Y_UNUSED(node);
                 Owner.Write(TypeMarker | (char)TType::EKind::EmptyList);
                 IsProcessed0 = true;
             }
 
-            void Visit(TEmptyDictType& node) override { 
+            void Visit(TEmptyDictType& node) override {
                 Y_UNUSED(node);
                 Owner.Write(TypeMarker | (char)TType::EKind::EmptyDict);
                 IsProcessed0 = true;
             }
 
-            void Visit(TDataType& node) override { 
+            void Visit(TDataType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -154,7 +154,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TStructType& node) override { 
+            void Visit(TStructType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -171,7 +171,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TListType& node) override { 
+            void Visit(TListType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -184,7 +184,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TStreamType& node) override { 
+            void Visit(TStreamType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -197,7 +197,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TFlowType& node) override { 
+            void Visit(TFlowType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -223,7 +223,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TTaggedType& node) override { 
+            void Visit(TTaggedType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -236,7 +236,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TOptionalType& node) override { 
+            void Visit(TOptionalType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -249,7 +249,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TDictType& node) override { 
+            void Visit(TDictType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -264,7 +264,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TCallableType& node) override { 
+            void Visit(TCallableType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -288,13 +288,13 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TAnyType& node) override { 
+            void Visit(TAnyType& node) override {
                 Y_UNUSED(node);
                 Owner.Write(TypeMarker | (char)TType::EKind::Any);
                 IsProcessed0 = true;
             }
 
-            void Visit(TTupleType& node) override { 
+            void Visit(TTupleType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -311,7 +311,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TResourceType& node) override { 
+            void Visit(TResourceType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -324,7 +324,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TVariantType& node) override { 
+            void Visit(TVariantType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -337,31 +337,31 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TVoid& node) override { 
+            void Visit(TVoid& node) override {
                 Y_UNUSED(node);
                 Owner.Write((char)TType::EKind::Void);
                 IsProcessed0 = true;
             }
 
-            void Visit(TNull& node) override { 
+            void Visit(TNull& node) override {
                 Y_UNUSED(node);
                 Owner.Write((char)TType::EKind::Null);
                 IsProcessed0 = true;
             }
 
-            void Visit(TEmptyList& node) override { 
+            void Visit(TEmptyList& node) override {
                 Y_UNUSED(node);
                 Owner.Write((char)TType::EKind::EmptyList);
                 IsProcessed0 = true;
             }
 
-            void Visit(TEmptyDict& node) override { 
+            void Visit(TEmptyDict& node) override {
                 Y_UNUSED(node);
                 Owner.Write((char)TType::EKind::EmptyDict);
                 IsProcessed0 = true;
             }
 
-            void Visit(TDataLiteral& node) override { 
+            void Visit(TDataLiteral& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -374,7 +374,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TStructLiteral& node) override { 
+            void Visit(TStructLiteral& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -393,7 +393,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TListLiteral& node) override { 
+            void Visit(TListLiteral& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -413,7 +413,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TOptionalLiteral& node) override { 
+            void Visit(TOptionalLiteral& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -434,7 +434,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TDictLiteral& node) override { 
+            void Visit(TDictLiteral& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -454,7 +454,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TCallable& node) override { 
+            void Visit(TCallable& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -480,7 +480,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TAny& node) override { 
+            void Visit(TAny& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -499,7 +499,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TTupleLiteral& node) override { 
+            void Visit(TTupleLiteral& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;
@@ -518,7 +518,7 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TVariantLiteral& node) override { 
+            void Visit(TVariantLiteral& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
                     IsProcessed0 = true;

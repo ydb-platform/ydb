@@ -27,7 +27,7 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
         Reply = MakeHolder<TEvKesus::TEvUpdateQuoterResourceResult>(result);
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
             "[" << Self->TabletID() << "] TTxQuoterResourceUpdate::Execute (sender=" << Sender
                 << ", cookie=" << Cookie << ", id=" << Record.GetResource().GetResourceId() << ", path=\"" << Record.GetResource().GetResourcePath()

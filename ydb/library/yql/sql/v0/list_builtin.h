@@ -24,7 +24,7 @@ public:
         , Args(args)
     {}
 
-    bool DoInit(TContext& ctx, ISource* src) override = 0; 
+    bool DoInit(TContext& ctx, ISource* src) override = 0;
 
     TAstNode* Translate(TContext& ctx) const override;
 
@@ -189,9 +189,9 @@ public:
 private:
     bool DoInit(TContext& ctx, ISource* src) override;
 
-    TNodePtr GetInitialState() override; 
+    TNodePtr GetInitialState() override;
 
-    TNodePtr GetUpdateLambda() override; 
+    TNodePtr GetUpdateLambda() override;
 };
 
 class TListHasBuiltin final: public TListFoldBuiltin {
@@ -205,7 +205,7 @@ public:
         return new TListHasBuiltin(Pos, CloneContainer(Args));
     }
 private:
-    TNodePtr GetUpdateLambda() override; 
+    TNodePtr GetUpdateLambda() override;
 
     void DoUpdateState() const override {
         bool isAggregated = true;

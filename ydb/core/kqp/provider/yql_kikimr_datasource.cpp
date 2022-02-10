@@ -391,7 +391,7 @@ public:
         return false;
     }
 
-    bool IsPersistent(const TExprNode& node) override { 
+    bool IsPersistent(const TExprNode& node) override {
         if (node.IsCallable(ReadName)) {
             return node.Child(1)->Child(0)->Content() == KikimrProviderName;
         }

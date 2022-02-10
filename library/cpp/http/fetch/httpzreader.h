@@ -25,9 +25,9 @@ public:
     using TBase::ParseGeneric;
     using TBase::State;
 
-    static constexpr size_t DefaultBufSize = 64 << 10; 
-    static constexpr unsigned int DefaultWinSize = 15; 
- 
+    static constexpr size_t DefaultBufSize = 64 << 10;
+    static constexpr unsigned int DefaultWinSize = 15;
+
     TCompressedHttpReader()
         : CompressedInput(false)
         , BufSize(0)
@@ -58,19 +58,19 @@ public:
         IgnoreTrailingGarbage = ignore;
     }
 
-    int Init( 
-        THttpHeader* H, 
-        int parsHeader, 
-        const size_t maxContSize = Max<size_t>(), 
-        const size_t bufSize = DefaultBufSize, 
-        const unsigned int winSize = DefaultWinSize, 
-        bool headRequest = false) 
-    { 
+    int Init(
+        THttpHeader* H,
+        int parsHeader,
+        const size_t maxContSize = Max<size_t>(),
+        const size_t bufSize = DefaultBufSize,
+        const unsigned int winSize = DefaultWinSize,
+        bool headRequest = false)
+    {
         ZErr = 0;
         CurContSize = 0;
         MaxContSize = maxContSize;
 
-        int ret = TBase::Init(H, parsHeader, ConnectionClosed, headRequest); 
+        int ret = TBase::Init(H, parsHeader, ConnectionClosed, headRequest);
         if (ret)
             return ret;
 
@@ -256,15 +256,15 @@ public:
     {
     }
 
-    int Init( 
-        THttpHeader* H, 
-        int parsHeader, 
-        const size_t maxContSize = Max<size_t>(), 
-        const size_t bufSize = TBase::DefaultBufSize, 
-        const unsigned int winSize = TBase::DefaultWinSize, 
-        bool headRequest = false) 
-    { 
-        int ret = TBase::Init(H, parsHeader, maxContSize, bufSize, winSize, headRequest); 
+    int Init(
+        THttpHeader* H,
+        int parsHeader,
+        const size_t maxContSize = Max<size_t>(),
+        const size_t bufSize = TBase::DefaultBufSize,
+        const unsigned int winSize = TBase::DefaultWinSize,
+        bool headRequest = false)
+    {
+        int ret = TBase::Init(H, parsHeader, maxContSize, bufSize, winSize, headRequest);
         return (int)HandleRetValue((long)ret);
     }
 

@@ -18,7 +18,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_RESPONSE_TABLET_SEQUENCE; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         BLOG_D("THive::TTxResponseTabletSequence()::Execute");
         const auto& pbRecord(Event->Get()->Record);
         if (!pbRecord.HasOwner()) {
@@ -53,7 +53,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override { 
+    void Complete(const TActorContext&) override {
         BLOG_D("THive::TTxResponseTabletSequence()::Complete");
         if (!Sequence.Empty()) {
             Self->ProcessPendingOperations();

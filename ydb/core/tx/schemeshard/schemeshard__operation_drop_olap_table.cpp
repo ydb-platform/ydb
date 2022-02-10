@@ -14,7 +14,7 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropOlapTable TDropParts"
                 << " operationId#" << OperationId;
@@ -92,7 +92,7 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropOlapTable TPropose"
                 << " operationId#" << OperationId;
@@ -179,7 +179,7 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropOlapTable TProposedWaitParts"
                 << " operationId#" << OperationId;
@@ -260,7 +260,7 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropOlapTable TProposedDeleteParts"
                 << " operationId#" << OperationId;

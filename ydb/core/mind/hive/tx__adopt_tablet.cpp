@@ -36,7 +36,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_ADOPT_TABLET; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
+    bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxAdoptTablet::Execute");
         NIceDb::TNiceDb db(txc.DB);
 
@@ -100,7 +100,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override { 
+    void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxAdoptTablet::Complete TabletId: " << TabletId <<
                " Status: " << NKikimrProto::EReplyStatus_Name(Status) <<
                " Explain: " << Explain);

@@ -16,7 +16,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_BLOCK_STORAGE_RESULT; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
         BLOG_D("THive::TTxBlockStorageResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
@@ -35,7 +35,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override { 
+    void Complete(const TActorContext& ctx) override {
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
         BLOG_D("THive::TTxBlockStorageResult::Complete(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);

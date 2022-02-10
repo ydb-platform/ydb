@@ -83,7 +83,7 @@ public:
         return true;
     }
 
-    TAffinity* Affinity() const override { 
+    TAffinity* Affinity() const override {
         Y_FAIL();
     }
 };

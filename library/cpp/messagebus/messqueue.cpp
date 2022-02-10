@@ -131,34 +131,34 @@ TBusClientSessionPtr TBusMessageQueue::CreateSource(TBusProtocol* proto, IBusCli
 }
 
 TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IBusServerHandler* handler, const TBusClientSessionConfig& config, const TString& name) {
-    TRemoteServerSessionPtr session(new TRemoteServerSession(this, proto, handler, config, name)); 
-    try { 
-        int port = config.ListenPort; 
-        if (port == 0) { 
-            port = Locator->GetLocalPort(proto->GetService()); 
-        } 
-        if (port == 0) { 
-            port = proto->GetPort(); 
-        } 
+    TRemoteServerSessionPtr session(new TRemoteServerSession(this, proto, handler, config, name));
+    try {
+        int port = config.ListenPort;
+        if (port == 0) {
+            port = Locator->GetLocalPort(proto->GetService());
+        }
+        if (port == 0) {
+            port = proto->GetPort();
+        }
 
-        session->Listen(port, this); 
- 
-        Add(session.Get()); 
-        return session.Release(); 
-    } catch (...) { 
-        Y_FAIL("create destination failure: %s", CurrentExceptionMessage().c_str()); 
-    } 
+        session->Listen(port, this);
+
+        Add(session.Get());
+        return session.Release();
+    } catch (...) {
+        Y_FAIL("create destination failure: %s", CurrentExceptionMessage().c_str());
+    }
 }
 
 TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IBusServerHandler* handler, const TBusServerSessionConfig& config, const TVector<TBindResult>& bindTo, const TString& name) {
-    TRemoteServerSessionPtr session(new TRemoteServerSession(this, proto, handler, config, name)); 
-    try { 
-        session->Listen(bindTo, this); 
-        Add(session.Get()); 
-        return session.Release(); 
-    } catch (...) { 
-        Y_FAIL("create destination failure: %s", CurrentExceptionMessage().c_str()); 
-    } 
+    TRemoteServerSessionPtr session(new TRemoteServerSession(this, proto, handler, config, name));
+    try {
+        session->Listen(bindTo, this);
+        Add(session.Get());
+        return session.Release();
+    } catch (...) {
+        Y_FAIL("create destination failure: %s", CurrentExceptionMessage().c_str());
+    }
 }
 
 void TBusMessageQueue::Add(TIntrusivePtr<TBusSessionImpl> session) {

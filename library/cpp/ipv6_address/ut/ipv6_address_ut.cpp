@@ -5,12 +5,12 @@
 class TIpv6AddressTest: public TTestBase {
     UNIT_TEST_SUITE(TIpv6AddressTest);
     UNIT_TEST(ParseHostAndMayBePortFromString_data);
-    UNIT_TEST(CheckAddressValidity) 
+    UNIT_TEST(CheckAddressValidity)
     UNIT_TEST_SUITE_END();
 
 private:
     void ParseHostAndMayBePortFromString_data();
-    void CheckAddressValidity(); 
+    void CheckAddressValidity();
     void HashCompileTest();
 };
 
@@ -79,33 +79,33 @@ void TIpv6AddressTest::ParseHostAndMayBePortFromString_data() {
     CheckIpDefPortAgainstIpPortDefPort("ya.ru", 123, HostRes("ya.ru", 123), true);
 }
 
-void TIpv6AddressTest::CheckAddressValidity() { 
-    bool Ok; 
- 
-    constexpr TIpv6Address partsV4 {12, 34, 56, 78}; 
-    static_assert(partsV4.Type() == TIpv6Address::Ipv4); 
- 
-    constexpr TIpv6Address intV4 {0x0C22384E, TIpv6Address::Ipv4}; 
-    static_assert(partsV4 == intV4); 
- 
-    const auto parsedV4 = TIpv6Address::FromString("12.34.56.78", Ok); 
+void TIpv6AddressTest::CheckAddressValidity() {
+    bool Ok;
+
+    constexpr TIpv6Address partsV4 {12, 34, 56, 78};
+    static_assert(partsV4.Type() == TIpv6Address::Ipv4);
+
+    constexpr TIpv6Address intV4 {0x0C22384E, TIpv6Address::Ipv4};
+    static_assert(partsV4 == intV4);
+
+    const auto parsedV4 = TIpv6Address::FromString("12.34.56.78", Ok);
     UNIT_ASSERT(Ok);
     UNIT_ASSERT_EQUAL(parsedV4, partsV4);
- 
-    constexpr TIpv6Address partsV6 {0xFB, 0x1634, 0x19, 0xABED, 0, 0x8001, 0x1670, 0x742}; 
-    static_assert(partsV6.Type() == TIpv6Address::Ipv6); 
- 
-    constexpr TIpv6Address intV6 {{0x00FB16340019ABED, 0x0000800116700742}, TIpv6Address::Ipv6}; 
-    static_assert(partsV6 == intV6); 
- 
-    const auto parsedV6 = TIpv6Address::FromString("FB:1634:19:ABED:0:8001:1670:742", Ok); 
+
+    constexpr TIpv6Address partsV6 {0xFB, 0x1634, 0x19, 0xABED, 0, 0x8001, 0x1670, 0x742};
+    static_assert(partsV6.Type() == TIpv6Address::Ipv6);
+
+    constexpr TIpv6Address intV6 {{0x00FB16340019ABED, 0x0000800116700742}, TIpv6Address::Ipv6};
+    static_assert(partsV6 == intV6);
+
+    const auto parsedV6 = TIpv6Address::FromString("FB:1634:19:ABED:0:8001:1670:742", Ok);
     UNIT_ASSERT(Ok);
     UNIT_ASSERT_EQUAL(parsedV6, partsV6);
- 
-    static_assert(Get127001() == TIpv6Address(0x7F000001, TIpv6Address::Ipv4)); 
-    static_assert(Get1() == TIpv6Address(0, 0, 0, 0, 0, 0, 0, 1)); 
-} 
- 
+
+    static_assert(Get127001() == TIpv6Address(0x7F000001, TIpv6Address::Ipv4));
+    static_assert(Get1() == TIpv6Address(0, 0, 0, 0, 0, 0, 0, 1));
+}
+
 void TIpv6AddressTest::HashCompileTest() {
     std::unordered_set<TIpv6Address> test;
     Y_UNUSED(test);

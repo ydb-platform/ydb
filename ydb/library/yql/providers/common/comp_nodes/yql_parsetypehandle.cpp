@@ -52,7 +52,7 @@ public:
         return NUdf::TUnboxedValuePod(new TYqlTypeResource(exprCtxPtr, exprRoot->GetTypeAnn()->Cast<NYql::TTypeExprType>()->GetType()));
     }
 
-    void RegisterDependencies() const override { 
+    void RegisterDependencies() const override {
         DependsOn(Str_);
     }
 

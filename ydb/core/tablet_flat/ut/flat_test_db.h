@@ -67,23 +67,23 @@ public:
         return ready;
     }
 
-    bool IsValid() override { 
+    bool IsValid() override {
         return Iter->Last() == EReady::Data;
     }
 
-    bool IsRowDeleted() override { 
+    bool IsRowDeleted() override {
         return Iter->Row().GetRowState() == ERowOp::Erase;
     }
 
-    TDbTupleRef GetKey() override { 
+    TDbTupleRef GetKey() override {
         return Iter->GetKey();
     }
 
-    TDbTupleRef GetValues() override { 
+    TDbTupleRef GetValues() override {
         return Iter->GetValues();
     }
 
-    TCell GetValue(ui32 idx) override { 
+    TCell GetValue(ui32 idx) override {
         return Iter->Row().Get(idx);
     }
 };
@@ -106,16 +106,16 @@ public:
         return Db;
     }
 
-    void Init(const TScheme& scheme) override { 
+    void Init(const TScheme& scheme) override {
         Y_UNUSED(scheme);
         Y_VERIFY("Not supported by flat db wrapper");
     }
 
-    const TScheme& GetScheme() const override { 
+    const TScheme& GetScheme() const override {
         return Db->GetScheme();
     }
 
-    TString FinishTransaction(bool commit) override { 
+    TString FinishTransaction(bool commit) override {
         Y_UNUSED(commit);
         Y_VERIFY("Not supported by flat db wrapper");
         return "42";
@@ -126,15 +126,15 @@ public:
         Db->Update(root, rop, key, ops);
     }
 
-    void Precharge(ui32 root, 
+    void Precharge(ui32 root,
                            TRawVals keyFrom, TRawVals keyTo,
-                           TTagsRef tags, ui32 flags) override { 
+                           TTagsRef tags, ui32 flags) override {
         bool res = Db->Precharge(root, keyFrom, keyTo, tags, flags, -1, -1);
         if (!res)
             throw TIteratorNotReady();
     }
 
-    ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup mode) override { 
+    ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup mode) override {
         if (auto res = Db->Iterate(root, key, tags, mode))
             return new TFlatDbIterator(res);
         throw TIteratorNotReady();
@@ -170,29 +170,29 @@ public:
         return one;
     }
 
-    bool IsValid() override { 
+    bool IsValid() override {
         return It1->IsValid();
     }
 
-    bool IsRowDeleted() override { 
+    bool IsRowDeleted() override {
         return It2->IsRowDeleted();
     }
 
-    TDbTupleRef GetKey() override { 
+    TDbTupleRef GetKey() override {
         TDbTupleRef keyTuple1 = It1->GetKey();
         TDbTupleRef keyTuple2 = It2->GetKey();
         VerifyEqualTuples(keyTuple1, keyTuple2);
         return keyTuple1;
     }
 
-    TDbTupleRef GetValues() override { 
+    TDbTupleRef GetValues() override {
         TDbTupleRef tuple1 = It1->GetValues();
         TDbTupleRef tuple2 = It2->GetValues();
         VerifyEqualTuples(tuple1, tuple2);
         return tuple1;
     }
 
-    TCell GetValue(ui32 idx) override { 
+    TCell GetValue(ui32 idx) override {
         TCell c1 = It1->GetValue(idx);
         TCell c2 = It2->GetValue(idx);
         UNIT_ASSERT(c1.IsNull() == c2.IsNull());
@@ -224,12 +224,12 @@ public:
         , Db2(&db2)
     {}
 
-    void Init(const TScheme& scheme) override { 
+    void Init(const TScheme& scheme) override {
         Db1->Init(scheme);
         Db2->Init(scheme);
     }
 
-    const TScheme& GetScheme() const override { 
+    const TScheme& GetScheme() const override {
         return Db1->GetScheme();
     }
 
@@ -241,7 +241,7 @@ public:
         return Db2;
     }
 
-    TString FinishTransaction(bool commit) override { 
+    TString FinishTransaction(bool commit) override {
         auto res = Db1->FinishTransaction(commit);
         Db2->FinishTransaction(commit);
         return res;
@@ -252,14 +252,14 @@ public:
         Db2->Update(root, rop, key, ops);
     }
 
-    void Precharge(ui32 root, 
+    void Precharge(ui32 root,
                            TRawVals keyFrom, TRawVals keyTo,
-                           TTagsRef tags, ui32 flags) override { 
+                           TTagsRef tags, ui32 flags) override {
         Db1->Precharge(root, keyFrom, keyTo, tags, flags);
         Db2->Precharge(root, keyFrom, keyTo, tags, flags);
     }
 
-    ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup mode) override { 
+    ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup mode) override {
         return new TIteratorPair(
                     Db1->Iterate(root, key, tags, mode),
                     Db2->Iterate(root, key, tags, mode));

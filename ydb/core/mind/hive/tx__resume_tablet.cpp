@@ -19,7 +19,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_RESUME_TABLET; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
+    bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxResumeTablet::Execute Tablet: " << TabletId);
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
@@ -62,7 +62,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override { 
+    void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxResumeTablet::Complete TabletId: " << TabletId);
         if (Status != NKikimrProto::UNKNOWN) {
             ctx.Send(ActorToNotify, new TEvHive::TEvResumeTabletResult(Status, TabletId), 0, 0);

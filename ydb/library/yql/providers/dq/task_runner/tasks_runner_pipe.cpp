@@ -646,7 +646,7 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
-    const TDqInputChannelStats* GetStats() const override { 
+    const TDqInputChannelStats* GetStats() const override {
         try {
             NDqProto::TCommandHeader header;
             header.SetVersion(3);
@@ -808,7 +808,7 @@ public:
         return InputIndex;
     }
 
-    const TDqSourceStats* GetStats() const override { 
+    const TDqSourceStats* GetStats() const override {
         try {
             NDqProto::TCommandHeader header;
             header.SetVersion(4);
@@ -881,7 +881,7 @@ public:
     { }
 
     [[nodiscard]]
-    NDqProto::TPopResponse Pop(NDqProto::TData& data, ui64) override { 
+    NDqProto::TPopResponse Pop(NDqProto::TData& data, ui64) override {
         NDqProto::TCommandHeader header;
         header.SetVersion(1);
         header.SetCommand(NDqProto::TCommandHeader::POP);
@@ -895,7 +895,7 @@ public:
         return response;
     }
 
-    bool IsFinished() const override { 
+    bool IsFinished() const override {
         if (Finished) {
             return true;
         }
@@ -1043,7 +1043,7 @@ public:
         return nullptr;
     }
 
-    const TDqOutputChannelStats* GetStats() const override { 
+    const TDqOutputChannelStats* GetStats() const override {
         try {
             NDqProto::TCommandHeader header;
             header.SetVersion(3);
@@ -1423,7 +1423,7 @@ public:
     }
 
     [[noreturn]]
-    void RaiseException() override { 
+    void RaiseException() override {
         auto status = GetStatus();
         TString message;
         message += "ExitCode: " + ToString(status.ExitCode) + "\n";
@@ -1431,11 +1431,11 @@ public:
         ythrow yexception() << message;
     }
 
-    IOutputStream& GetOutput() override { 
+    IOutputStream& GetOutput() override {
         return Output;
     }
 
-    IInputStream& GetInput() override { 
+    IInputStream& GetInput() override {
         return Input;
     }
 

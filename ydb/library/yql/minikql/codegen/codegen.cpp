@@ -336,7 +336,7 @@ public:
         Engine_->RegisterJITEventListener(this);
     }
 
-    void TogglePerfJITEventListener() override { 
+    void TogglePerfJITEventListener() override {
 #ifdef __linux__
         PerfListener_ = llvm::JITEventListener::createPerfJITEventListener();
         Engine_->RegisterJITEventListener(PerfListener_);
@@ -377,7 +377,7 @@ public:
         }
     }
 
-    void GetStats(TCodegenStats& stats) override { 
+    void GetStats(TCodegenStats& stats) override {
         TCodegenStats ret;
         for (auto& func : Module_->functions()) {
             if (func.isDeclaration()) {

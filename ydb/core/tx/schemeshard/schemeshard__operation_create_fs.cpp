@@ -16,7 +16,7 @@ class TConfigureParts: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
             << "TCreateFileStore::TConfigureParts"
             << " operationId#" << OperationId;
@@ -127,7 +127,7 @@ class TPropose: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
             << "TCreateFileStore::TPropose"
             << " operationId#" << OperationId;

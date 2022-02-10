@@ -20,7 +20,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_DELETE_TABLET_RESULT; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TEvTabletBase::TEvDeleteTabletResult* msg = Result->Get();
         BLOG_D("THive::TTxDeleteTabletResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
         Tablet = Self->FindTabletEvenInDeleting(TabletId);
@@ -52,7 +52,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override { 
+    void Complete(const TActorContext& ctx) override {
         TEvTabletBase::TEvDeleteTabletResult* msg = Result->Get();
         BLOG_D("THive::TTxDeleteTabletResult(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")::Complete");
         Tablet = Self->FindTabletEvenInDeleting(TabletId);

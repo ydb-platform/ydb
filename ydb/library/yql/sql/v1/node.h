@@ -305,7 +305,7 @@ namespace NSQLTranslationV1 {
         TAstListNode(TPosition pos);
         virtual ~TAstListNode();
 
-        TAstNode* Translate(TContext& ctx) const override; 
+        TAstNode* Translate(TContext& ctx) const override;
 
     protected:
         explicit TAstListNode(const TAstListNode& node);
@@ -401,7 +401,7 @@ namespace NSQLTranslationV1 {
     protected:
         void DoUpdateState() const override;
         bool DoInit(TContext& ctx, ISource* src) override;
-        TPtr WindowSpecFunc(const TNodePtr& type) const override; 
+        TPtr WindowSpecFunc(const TNodePtr& type) const override;
     public:
         TWinAggrEmulation(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
     protected:
@@ -647,11 +647,11 @@ namespace NSQLTranslationV1 {
         TColumnNode(TPosition pos, const TNodePtr& column, const TString& source);
 
         virtual ~TColumnNode();
-        bool IsAsterisk() const override; 
+        bool IsAsterisk() const override;
         virtual bool IsArtificial() const;
-        const TString* GetColumnName() const override; 
-        const TString* GetSourceName() const override; 
-        TAstNode* Translate(TContext& ctx) const override; 
+        const TString* GetColumnName() const override;
+        const TString* GetSourceName() const override;
+        TAstNode* Translate(TContext& ctx) const override;
         void ResetColumn(const TString& column, const TString& source);
         void ResetColumn(const TNodePtr& column, const TString& source);
 
@@ -774,7 +774,7 @@ namespace NSQLTranslationV1 {
 
     protected:
         IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode mode);
-        TAstNode* Translate(TContext& ctx) const override; 
+        TAstNode* Translate(TContext& ctx) const override;
 
         TString Name;
         TString Func;
@@ -1015,7 +1015,7 @@ namespace NSQLTranslationV1 {
 
         bool DoInit(TContext& ctx, ISource* src) override;
 
-        void DoUpdateState() const override; 
+        void DoUpdateState() const override;
 
         TNodePtr DoClone() const final;
         TAstNode* Translate(TContext& ctx) const override;

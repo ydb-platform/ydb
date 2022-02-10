@@ -17,7 +17,7 @@ namespace {
     class TAlwaysDiallowPolicy : public ISqlFeaturePolicy {
     public:
         TAlwaysDiallowPolicy() = default;
-        bool Allow() const override { 
+        bool Allow() const override {
             return false;
         }
     };

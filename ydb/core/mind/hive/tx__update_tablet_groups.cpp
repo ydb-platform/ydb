@@ -27,7 +27,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_GROUPS; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext& ctx) override { 
+    bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         TStringBuilder tabletBootState;
 
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -249,7 +249,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override { 
+    void Complete(const TActorContext& ctx) override {
         if (Ignored) {
             BLOG_NOTICE("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Complete"
                         " - Ignored transaction");

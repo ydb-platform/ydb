@@ -1007,13 +1007,13 @@ private:
         return nullptr;
     }
 
-    NUdf::EFetchStatus FetchBlock(NUdf::TUnboxedValue& result, ui32 rowsLimitHint) override { 
+    NUdf::EFetchStatus FetchBlock(NUdf::TUnboxedValue& result, ui32 rowsLimitHint) override {
         Y_UNUSED(result);
         Y_UNUSED(rowsLimitHint);
         ThrowNotSupported(__func__);
     }
 
-    bool VisitBlocks(NUdf::TBlockCallback callback, void* context) override { 
+    bool VisitBlocks(NUdf::TBlockCallback callback, void* context) override {
         Y_UNUSED(callback);
         Y_UNUSED(context);
         ThrowNotSupported(__func__);

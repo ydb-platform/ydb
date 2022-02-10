@@ -23,7 +23,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_RESTART_TABLET; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override { 
+    bool Execute(TTransactionContext &txc, const TActorContext&) override {
         TTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             if (PreferredNodeId != 0) {
@@ -48,7 +48,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override { 
+    void Complete(const TActorContext&) override {
         BLOG_D("THive::TTxRestartTablet(" << TabletId << ")::Complete");
     }
 };

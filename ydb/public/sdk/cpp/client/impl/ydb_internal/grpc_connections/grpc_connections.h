@@ -63,7 +63,7 @@ public:
         const TMaybe<bool>& enableSsl,
         const TMaybe<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory
     );
-    IQueueClientContextPtr CreateContext() override; 
+    IQueueClientContextPtr CreateContext() override;
     bool TryCreateContext(IQueueClientContextPtr& context);
     void WaitIdle();
     void Stop(bool wait = false);
@@ -582,7 +582,7 @@ public:
             }, dbState, TStringType(), endpointPolicy);
     }
 
-    TAsyncListEndpointsResult GetEndpoints(TDbDriverStatePtr dbState) override; 
+    TAsyncListEndpointsResult GetEndpoints(TDbDriverStatePtr dbState) override;
     TListEndpointsResult MutateDiscovery(TListEndpointsResult result, const TStringType& database);
 
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL

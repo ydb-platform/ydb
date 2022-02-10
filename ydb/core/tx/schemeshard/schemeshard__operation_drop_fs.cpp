@@ -16,7 +16,7 @@ class TDeleteParts: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
             << "TDropFileStore::TDeleteParts"
             << ", operationId: " << OperationId;
@@ -56,7 +56,7 @@ class TPropose: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
             << "TDropFileStore::TPropose"
             << ", operationId: " << OperationId;

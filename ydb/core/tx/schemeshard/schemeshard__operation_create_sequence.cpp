@@ -14,7 +14,7 @@ class TConfigureParts : public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateSequence TConfigureParts"
                 << " operationId#" << OperationId;
@@ -164,7 +164,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override { 
+    TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateSequence TPropose"
                 << " operationId#" << OperationId;
@@ -391,7 +391,7 @@ public:
                 if (!parentPath->IsTable()) {
                     checks.DepthLimit();
                 }
- 
+
                 checks
                     .PathsLimit()
                     .DirChildrenLimit()

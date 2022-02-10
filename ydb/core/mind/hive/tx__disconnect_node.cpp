@@ -16,7 +16,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_DISCONNECT_NODE; }
 
-    bool Execute(TTransactionContext&, const TActorContext&) override { 
+    bool Execute(TTransactionContext&, const TActorContext&) override {
         BLOG_D("THive::TTxDisconnectNode()::Execute");
         TNodeInfo* node = Self->FindNode(Event->NodeId);
         if (node != nullptr) {
@@ -42,7 +42,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override { 
+    void Complete(const TActorContext&) override {
         BLOG_D("THive::TTxDisconnectNode()::Complete");
     }
 };

@@ -84,7 +84,7 @@ public:
     { }
 
     [[nodiscard]]
-    NDqProto::TPopResponse Pop(NDqProto::TData& data, ui64 bytes) override { 
+    NDqProto::TPopResponse Pop(NDqProto::TData& data, ui64 bytes) override {
         NDqProto::TPopResponse response;
         response.SetResult(Channel->Pop(data, bytes));
         if (Channel->IsFinished()) {
@@ -94,7 +94,7 @@ public:
         return response;
     }
 
-    bool IsFinished() const override { 
+    bool IsFinished() const override {
         return Channel->IsFinished();
     }
 

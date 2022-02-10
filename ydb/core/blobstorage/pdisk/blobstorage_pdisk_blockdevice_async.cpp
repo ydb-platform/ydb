@@ -1024,7 +1024,7 @@ protected:
         TrimThread->Schedule(op);
     }
 
-    bool GetIsTrimEnabled() override { 
+    bool GetIsTrimEnabled() override {
         return IsTrimEnabled;
     }
 

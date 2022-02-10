@@ -24,7 +24,7 @@ public:
         , Args(args)
     {}
 
-    bool DoInit(TContext& ctx, ISource* src) override = 0; 
+    bool DoInit(TContext& ctx, ISource* src) override = 0;
 
     TAstNode* Translate(TContext& ctx) const override;
 

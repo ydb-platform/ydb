@@ -23,16 +23,16 @@ namespace {
             *(reinterpret_cast<const ui64*>(memPtr) + 1)
         };
     }
- 
-    // zero-terminated copy of address string 
-    template <size_t N> 
-    inline auto AddrBuf(TStringBuf str) noexcept { 
-        std::array<char, N+1> res; 
-        auto len = Min(str.size(), N); 
-        CopyN(str.begin(), len, res.begin()); 
-        res[len] = '\0'; 
-        return res; 
-    } 
+
+    // zero-terminated copy of address string
+    template <size_t N>
+    inline auto AddrBuf(TStringBuf str) noexcept {
+        std::array<char, N+1> res;
+        auto len = Min(str.size(), N);
+        CopyN(str.begin(), len, res.begin());
+        res[len] = '\0';
+        return res;
+    }
 }
 
 void TIpv6Address::InitFrom(const in6_addr& addr) {
@@ -78,35 +78,35 @@ TIpv6Address::TIpv6Address(const in_addr& addr) {
     InitFrom(addr);
 }
 
-TIpv6Address TIpv6Address::FromString(TStringBuf str, bool& ok) noexcept { 
-    const TIpType ipType = FigureOutType(str); 
+TIpv6Address TIpv6Address::FromString(TStringBuf str, bool& ok) noexcept {
+    const TIpType ipType = FigureOutType(str);
 
     if (ipType == Ipv6) {
-        ui32 scopeId = 0; 
-        if (size_t pos = str.find('%'); pos != TStringBuf::npos) { 
-            ::TryFromString(str.substr(pos + 1), scopeId); 
-            str.Trunc(pos); 
+        ui32 scopeId = 0;
+        if (size_t pos = str.find('%'); pos != TStringBuf::npos) {
+            ::TryFromString(str.substr(pos + 1), scopeId);
+            str.Trunc(pos);
         }
 
-        const auto buf = AddrBuf<INET6_ADDRSTRLEN>(str); 
+        const auto buf = AddrBuf<INET6_ADDRSTRLEN>(str);
         in6_addr addr;
-        if (inet_pton(AF_INET6, buf.data(), &addr) != 1) { 
+        if (inet_pton(AF_INET6, buf.data(), &addr) != 1) {
             ok = false;
             return TIpv6Address();
         }
- 
+
         ok = true;
-        return TIpv6Address(addr, scopeId); 
+        return TIpv6Address(addr, scopeId);
     } else { // if (ipType == Ipv4) {
-        const auto buf = AddrBuf<INET_ADDRSTRLEN>(str); 
+        const auto buf = AddrBuf<INET_ADDRSTRLEN>(str);
         in_addr addr;
-        if (inet_pton(AF_INET, buf.data(), &addr) != 1) { 
+        if (inet_pton(AF_INET, buf.data(), &addr) != 1) {
             ok = false;
             return TIpv6Address();
         }
- 
+
         ok = true;
-        return TIpv6Address(addr); 
+        return TIpv6Address(addr);
     }
 }
 
@@ -192,12 +192,12 @@ void TIpv6Address::ToIn6Addr(in6_addr& Addr6) const {
 }
 
 void TIpv6Address::Save(IOutputStream* out) const {
-    ::Save(out, Ip); 
+    ::Save(out, Ip);
     ::Save(out, static_cast<ui8>(Type_));
     ::Save(out, ScopeId_);
 }
 void TIpv6Address::Load(IInputStream* in) {
-    ::Load(in, Ip); 
+    ::Load(in, Ip);
     ui8 num;
     ::Load(in, num);
     Type_ = static_cast<TIpType>(num);
@@ -242,14 +242,14 @@ TIpv6Address TIpv6Address::Normalized() const noexcept {
 }
 
 IOutputStream& operator<<(IOutputStream& Out, const TIpv6Address::TIpType Type) noexcept {
-    switch (Type) { 
-    case TIpv6Address::Ipv4: 
-        Out << "Ipv4"; 
-        return Out; 
-    case TIpv6Address::Ipv6: 
-        Out << "Ipv6"; 
-        return Out; 
-    default: 
+    switch (Type) {
+    case TIpv6Address::Ipv4:
+        Out << "Ipv4";
+        return Out;
+    case TIpv6Address::Ipv6:
+        Out << "Ipv6";
+        return Out;
+    default:
         Out << "UnknownType";
         return Out;
     }
@@ -317,16 +317,16 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
     const size_t BracketColPos = RawStr.find("]:");
     if (BracketColPos != TString::npos) {
         // [ipv6]:port
-        if (!RawStr.StartsWith('[')) { 
+        if (!RawStr.StartsWith('[')) {
             Ok = false;
             return {};
         }
-        const TStringBuf StrIpv6(RawStr.begin() + 1, RawStr.begin() + BracketColPos); 
-        const TStringBuf StrPort(RawStr.begin() + BracketColPos + 2, RawStr.end()); 
+        const TStringBuf StrIpv6(RawStr.begin() + 1, RawStr.begin() + BracketColPos);
+        const TStringBuf StrPort(RawStr.begin() + BracketColPos + 2, RawStr.end());
 
         bool IpConverted;
         const TIpv6Address Ip = TIpv6Address::FromString(StrIpv6, IpConverted);
-        if (!IpConverted) { 
+        if (!IpConverted) {
             Ok = false;
             return {};
         }
@@ -334,8 +334,8 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
             Ok = false;
             return {};
         }
-        TIpPort Port {}; 
-        if (!::TryFromString(StrPort, Port)) { 
+        TIpPort Port {};
+        if (!::TryFromString(StrPort, Port)) {
             Ok = false;
             return {};
         }
@@ -349,15 +349,15 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
 
     if (RawStr.StartsWith('[')) {
         // [ipv6]
-        if (!RawStr.EndsWith(']')) { 
+        if (!RawStr.EndsWith(']')) {
             Ok = false;
             return {};
         }
-        const TStringBuf StrIpv6(RawStr.begin() + 1, RawStr.end() - 1); 
+        const TStringBuf StrIpv6(RawStr.begin() + 1, RawStr.end() - 1);
 
         bool IpConverted;
         const TIpv6Address Ip = TIpv6Address::FromString(StrIpv6, IpConverted);
-        if (!IpConverted || Ip.Type() != TIpv6Address::Ipv6) { 
+        if (!IpConverted || Ip.Type() != TIpv6Address::Ipv6) {
             Ok = false;
             return {};
         }
@@ -386,14 +386,14 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
             }
         }
 
-        const TStringBuf StrPort(RawStr.begin() + ColPos + 1, RawStr.end()); 
-        TIpPort Port {}; 
-        if (!::TryFromString(StrPort, Port)) { 
+        const TStringBuf StrPort(RawStr.begin() + ColPos + 1, RawStr.end());
+        TIpPort Port {};
+        if (!::TryFromString(StrPort, Port)) {
             Ok = false;
             return {};
         }
 
-        const TStringBuf StrIpv4OrHost(RawStr.begin(), RawStr.begin() + ColPos); 
+        const TStringBuf StrIpv4OrHost(RawStr.begin(), RawStr.begin() + ColPos);
         {
             bool IpConverted;
             const TIpv6Address Ipv4 = TIpv6Address::FromString(StrIpv4OrHost, IpConverted);
@@ -408,7 +408,7 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
         {
             // host:port
             Ok = true;
-            TRes Res{THostAddressAndPort{}, TString(StrIpv4OrHost), Port}; 
+            TRes Res{THostAddressAndPort{}, TString(StrIpv4OrHost), Port};
             return Res;
         }
     }
@@ -431,7 +431,7 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
     {
         // host
         Ok = true;
-        TRes Res{THostAddressAndPort{}, TString(RawStr), DefaultPort}; 
+        TRes Res{THostAddressAndPort{}, TString(RawStr), DefaultPort};
         return Res;
     }
 }

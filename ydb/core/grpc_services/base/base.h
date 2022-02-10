@@ -446,7 +446,7 @@ public:
         return {};
     }
 
-    void  SetRlPath(TMaybe<NRpcService::TRlPath>&&) override {} 
+    void  SetRlPath(TMaybe<NRpcService::TRlPath>&&) override {}
 
     TMaybe<NRpcService::TRlPath> GetRlPath() const override {
         return Nothing();
@@ -508,7 +508,7 @@ public:
         return TInstant::Max();
     }
 
-    void SetRespHook(TRespHook&&) override { /* do nothing */} 
+    void SetRespHook(TRespHook&&) override { /* do nothing */}
 
     TRateLimiterMode GetRlMode() const override {
         return TRateLimiterMode::Off;
@@ -670,7 +670,7 @@ public:
         return GetPeerMetaValues(NGrpc::GRPC_USER_AGENT_HEADER);
     }
 
-    const TMaybe<TString> GetPeerMetaValues(const TString& key) const override { 
+    const TMaybe<TString> GetPeerMetaValues(const TString& key) const override {
         return ToMaybe(Ctx_->GetPeerMetaValues(key));
     }
 
@@ -678,7 +678,7 @@ public:
         NGRpcService::RefreshToken(token, GetDatabaseName().GetOrElse(""), ctx, id);
     }
 
-    void SetRespHook(TRespHook&&) override { 
+    void SetRespHook(TRespHook&&) override {
         /* cannot add hook to bidirect streaming */
         Y_FAIL("Unimplemented");
     }
@@ -694,68 +694,68 @@ private:
     TMaybe<NRpcService::TRlPath> RlPath_;
 };
 
-template <typename TDerived> 
-class TGrpcResponseSenderImpl : public IRequestOpCtx { 
-public: 
-    void SendOperation(const Ydb::Operations::Operation& operation) override { 
-        auto self = Derived(); 
-        auto resp = self->CreateResponseMessage(); 
-        resp->mutable_operation()->CopyFrom(operation); 
-        self->Ctx_->Reply(resp, operation.status()); 
-    } 
- 
-    void SendResult(Ydb::StatusIds::StatusCode status, 
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) override 
-    { 
-        auto self = Derived(); 
-        auto resp = self->CreateResponseMessage(); 
-        auto deferred = resp->mutable_operation(); 
-        deferred->set_ready(true); 
-        deferred->set_status(status); 
-        deferred->mutable_issues()->MergeFrom(message); 
-        if (self->CostInfo) { 
-            deferred->mutable_cost_info()->Swap(self->CostInfo); 
-        } 
-        self->Reply(resp, status); 
-    } 
- 
-    void SendResult(const google::protobuf::Message& result, 
-        Ydb::StatusIds::StatusCode status, 
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) override 
-    { 
-        auto self = Derived(); 
-        auto resp = self->CreateResponseMessage(); 
-        auto deferred = resp->mutable_operation(); 
-        deferred->set_ready(true); 
-        deferred->set_status(status); 
-        deferred->mutable_issues()->MergeFrom(message); 
-        if (self->CostInfo) { 
-            deferred->mutable_cost_info()->Swap(self->CostInfo); 
-        } 
-        auto data = deferred->mutable_result(); 
-        data->PackFrom(result); 
-        self->Reply(resp, status); 
-    } 
- 
-    void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override { 
-        auto self = Derived(); 
-        auto resp = self->CreateResponseMessage(); 
-        auto deferred = resp->mutable_operation(); 
-        deferred->set_ready(true); 
-        deferred->set_status(status); 
-        if (self->CostInfo) { 
-            deferred->mutable_cost_info()->Swap(self->CostInfo); 
-        } 
-        NYql::IssuesToMessage(self->IssueManager.GetIssues(), deferred->mutable_issues()); 
-        auto data = deferred->mutable_result(); 
-        data->PackFrom(result); 
-        self->Reply(resp, status); 
-    } 
- 
-private: 
-    TDerived* Derived() noexcept { return static_cast<TDerived*>(this); } 
-}; 
- 
+template <typename TDerived>
+class TGrpcResponseSenderImpl : public IRequestOpCtx {
+public:
+    void SendOperation(const Ydb::Operations::Operation& operation) override {
+        auto self = Derived();
+        auto resp = self->CreateResponseMessage();
+        resp->mutable_operation()->CopyFrom(operation);
+        self->Ctx_->Reply(resp, operation.status());
+    }
+
+    void SendResult(Ydb::StatusIds::StatusCode status,
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) override
+    {
+        auto self = Derived();
+        auto resp = self->CreateResponseMessage();
+        auto deferred = resp->mutable_operation();
+        deferred->set_ready(true);
+        deferred->set_status(status);
+        deferred->mutable_issues()->MergeFrom(message);
+        if (self->CostInfo) {
+            deferred->mutable_cost_info()->Swap(self->CostInfo);
+        }
+        self->Reply(resp, status);
+    }
+
+    void SendResult(const google::protobuf::Message& result,
+        Ydb::StatusIds::StatusCode status,
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) override
+    {
+        auto self = Derived();
+        auto resp = self->CreateResponseMessage();
+        auto deferred = resp->mutable_operation();
+        deferred->set_ready(true);
+        deferred->set_status(status);
+        deferred->mutable_issues()->MergeFrom(message);
+        if (self->CostInfo) {
+            deferred->mutable_cost_info()->Swap(self->CostInfo);
+        }
+        auto data = deferred->mutable_result();
+        data->PackFrom(result);
+        self->Reply(resp, status);
+    }
+
+    void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
+        auto self = Derived();
+        auto resp = self->CreateResponseMessage();
+        auto deferred = resp->mutable_operation();
+        deferred->set_ready(true);
+        deferred->set_status(status);
+        if (self->CostInfo) {
+            deferred->mutable_cost_info()->Swap(self->CostInfo);
+        }
+        NYql::IssuesToMessage(self->IssueManager.GetIssues(), deferred->mutable_issues());
+        auto data = deferred->mutable_result();
+        data->PackFrom(result);
+        self->Reply(resp, status);
+    }
+
+private:
+    TDerived* Derived() noexcept { return static_cast<TDerived*>(this); }
+};
+
 class TEvProxyRuntimeEvent
     : public IRequestProxyCtx
     , public TEventLocal<TEvProxyRuntimeEvent, TRpcServices::EvGrpcRuntimeRequest>
@@ -787,15 +787,15 @@ public:
 
 template<ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
 class TGRpcRequestWrapperImpl :
-    public std::conditional_t<IsOperation, 
-        TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>, 
-        IRequestNoOpCtx>, 
+    public std::conditional_t<IsOperation,
+        TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>,
+        IRequestNoOpCtx>,
     public std::conditional_t<TRpcId == TRpcServices::EvGrpcRuntimeRequest,
         TEvProxyRuntimeEvent,
         TEvProxyLegacyEvent<TRpcId, TDerived>>
 {
     friend class TProtoResponseHelper;
-    friend class TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>; 
+    friend class TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>;
 public:
     using TRequest = TReq;
     using TResponse = TResp;
@@ -879,7 +879,7 @@ public:
         Reply(resp, status);
     }
 
-    TString GetPeerName() const override { 
+    TString GetPeerName() const override {
         return Ctx_->GetPeer();
     }
 
@@ -898,7 +898,7 @@ public:
         return GetProtoRequest(this);
     }
 
-    TMaybe<TString> GetTraceId() const override { 
+    TMaybe<TString> GetTraceId() const override {
         return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
     }
 
@@ -910,7 +910,7 @@ public:
         return Ctx_->Deadline();
     }
 
-    const TMaybe<TString> GetRequestType() const override { 
+    const TMaybe<TString> GetRequestType() const override {
         return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER);
     }
 
@@ -932,7 +932,7 @@ public:
         Ctx_->Reply(&data, status);
     }
 
-    void SetCostInfo(float consumed_units) override { 
+    void SetCostInfo(float consumed_units) override {
         CostInfo = google::protobuf::Arena::CreateMessage<Ydb::CostInfo>(GetArena());
         CostInfo->set_consumed_units(consumed_units);
     }

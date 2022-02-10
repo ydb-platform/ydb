@@ -148,7 +148,7 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override { 
+    void Complete(const TActorContext& ctx) override {
         Y_VERIFY(Self->CleanDroppedPathsInFly);
 
         if (RemovedCount || SkippedCount) {
@@ -233,7 +233,7 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override { 
+    void Complete(const TActorContext& ctx) override {
         Y_VERIFY(Self->CleanDroppedSubDomainsInFly);
 
         if (RemovedCount || SkippedCount) {

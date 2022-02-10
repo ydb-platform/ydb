@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/deprecated/accessors/accessors.h>
 
 #include <util/stream/output.h>
@@ -7,7 +7,7 @@
 #include <util/generic/bitops.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
-
+ 
 namespace NBitIO {
     // Based on junk/solar/codecs/bitstream.h
 
@@ -34,7 +34,7 @@ namespace NBitIO {
             , Offset()
         {
         }
-
+ 
         ui64 GetOffset() const {
             return Offset + BytesUp(64ULL - FreeBits);
         }
@@ -49,13 +49,13 @@ namespace NBitIO {
 
     public:
         // interface
-
+ 
         // Write "bits" lower bits.
         Y_FORCE_INLINE void Write(ui64 data, ui64 bits) {
             if (FreeBits < bits) {
                 if (FreeBits) {
                     bits -= FreeBits;
-
+ 
                     Active |= (data & MaskLowerBits(FreeBits)) << (64ULL - FreeBits);
                     data >>= FreeBits;
 
@@ -67,8 +67,8 @@ namespace NBitIO {
 
             Active |= bits ? ((data & MaskLowerBits(bits)) << (64ULL - FreeBits)) : 0;
             FreeBits -= bits;
-        }
-
+        } 
+ 
         // Write "bits" lower bits starting from "skipbits" bit.
         Y_FORCE_INLINE void Write(ui64 data, ui64 bits, ui64 skipbits) {
             Write(data >> skipbits, bits);
@@ -100,7 +100,7 @@ namespace NBitIO {
             }
 
             const ui64 padded = FreeBits & 7;
-
+ 
             FreeBits = 64ULL;
             Active = 0ULL;
 

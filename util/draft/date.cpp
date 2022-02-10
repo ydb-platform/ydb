@@ -15,17 +15,17 @@ time_t GetDateStart(time_t ts) {
     dateTm.tm_min = 0;
     dateTm.tm_hour = 0;
     return mktime(&dateTm);
-}
-
+} 
+ 
 static time_t ParseDate(const char* date, const char* format) {
-    tm dateTm;
-    memset(&dateTm, 0, sizeof(tm));
+    tm dateTm; 
+    memset(&dateTm, 0, sizeof(tm)); 
     if (!strptime(date, format, &dateTm)) {
         ythrow yexception() << "Invalid date string and format: " << date << ", " << format;
     }
     return mktime(&dateTm);
-}
-
+} 
+ 
 static time_t ParseDate(const char* dateStr) {
     if (strlen(dateStr) != 8) {
         ythrow yexception() << "Invalid date string: " << dateStr;
@@ -51,9 +51,9 @@ TDate::TDate(const TString& yyyymmdd)
 
 TDate::TDate(time_t ts)
     : Timestamp(GetDateStart(ts))
-{
-}
-
+{ 
+} 
+ 
 TDate::TDate(const TString& date, const TString& format)
     : Timestamp(GetDateStart(ParseDate(date.data(), format.data())))
 {
@@ -86,8 +86,8 @@ TString TDate::ToStroka(const char* format) const {
     tm dateTm;
     localtime_r(&Timestamp, &dateTm);
     return Strftime(format, &dateTm);
-}
-
+} 
+ 
 unsigned TDate::GetWeekDay() const {
     tm dateTm;
     localtime_r(&Timestamp, &dateTm);

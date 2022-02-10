@@ -1,11 +1,11 @@
-#pragma once
-
+#pragma once 
+ 
 #include "bitinput_impl.h"
 
 #include <util/system/yassert.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
-
+ 
 #include <iterator>
 
 namespace NBitIO {
@@ -119,7 +119,7 @@ namespace NBitIO {
         Y_FORCE_INLINE bool Read(ui64& result, ui64 bits) {
             return ReadImpl(result, bits);
         }
-
+ 
         // Do not try to read more than 56 bits at once. Split in two reads or use ReadSafe.
         // Preserves what's in result.
         template <typename T>
@@ -136,7 +136,7 @@ namespace NBitIO {
         template <ui64 bits, typename T>
         Y_FORCE_INLINE bool ReadWords(T& result) {
             ui64 r64 = 0;
-
+ 
             bool retCode = ReadWordsImpl<bits>(r64);
             result = r64;
 
@@ -152,11 +152,11 @@ namespace NBitIO {
         Y_FORCE_INLINE bool Back(int bits) {
             return Seek(BitOffset() - bits);
         }
-
+ 
         Y_FORCE_INLINE bool Seek(int bitoffset) {
             return TBitInputImpl::Seek(bitoffset);
         }
-
+ 
         // A way to read a portion of bits at random location.
         // Didn't want to complicate sequential read, neither to copypaste.
         template <typename T>

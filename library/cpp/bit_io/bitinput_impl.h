@@ -43,8 +43,8 @@ namespace NBitIO {
                 return false;
             }
             Start = FStart;
-            return true;
-        }
+            return true; 
+        } 
 
         Y_FORCE_INLINE bool ReadImpl(ui64& result, ui32 bits) {
             result = (ReadUnaligned<ui64>((const void*)(Start + (BOffset >> 3))) >> (BOffset & 7)) & MaskLowerBits(bits);
@@ -67,7 +67,7 @@ namespace NBitIO {
         Y_FORCE_INLINE ui64 BitOffset() const {
             return BOffset;
         }
-
+ 
         Y_FORCE_INLINE bool Seek(i64 offset) {
             if (offset < 0 || offset > (i64)Length)
                 return false;
@@ -75,7 +75,7 @@ namespace NBitIO {
             Start = BOffset < FakeStart ? RealStart : FStart;
             return true;
         }
-
+ 
     protected:
         template <ui64 bits, typename T>
         Y_FORCE_INLINE static void CopyToResultK(T& result, ui64 r64, ui64 skipbits) {

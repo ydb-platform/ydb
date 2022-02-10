@@ -115,7 +115,7 @@ def test_stringize_deep():
     assert library.python.strings.stringize_deep({
         'key 1': 'value 1',
         u'ключ 2': u'значение 2',
-        'list': [u'ключ 2', 'key 1', (u'к', 2)]
+        'list': [u'ключ 2', 'key 1', (u'к', 2)] 
     }) == {
         'key 1' if six.PY2 else b'key 1': 'value 1' if six.PY2 else b'value 1',
         u'ключ 2'.encode('utf-8'): u'значение 2'.encode('utf-8'),
@@ -157,9 +157,9 @@ def test_stringize_deep_plain():
 
 def test_stringize_deep_nonstr():
     with pytest.raises(TypeError):
-        library.python.strings.stringize_deep(Convertible(), relaxed=False)
-    x = Convertible()
-    assert x == library.python.strings.stringize_deep(x)
+        library.python.strings.stringize_deep(Convertible(), relaxed=False) 
+    x = Convertible() 
+    assert x == library.python.strings.stringize_deep(x) 
 
 
 def test_unicodize_deep():
@@ -200,6 +200,6 @@ def test_unicodize_deep_plain():
 
 def test_unicodize_deep_nonstr():
     with pytest.raises(TypeError):
-        library.python.strings.unicodize_deep(Convertible(), relaxed=False)
-    x = Convertible()
-    assert x == library.python.strings.stringize_deep(x)
+        library.python.strings.unicodize_deep(Convertible(), relaxed=False) 
+    x = Convertible() 
+    assert x == library.python.strings.stringize_deep(x) 

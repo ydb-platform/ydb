@@ -3,8 +3,8 @@ from __future__ import print_function
 import os
 import re
 import sys
-import time
-import traceback
+import time 
+import traceback 
 
 import __res
 from __res import importer
@@ -32,7 +32,7 @@ def check_imports(no_check=(), extra=(), skip_func=None, py_main=None):
     rx = re.compile('^({})$'.format('|'.join(patterns)))
 
     failed = []
-    import_times = {}
+    import_times = {} 
 
     norm = lambda s: s[:-9] if s.endswith('.__init__') else s
 
@@ -59,10 +59,10 @@ def check_imports(no_check=(), extra=(), skip_func=None, py_main=None):
 
         try:
             print('TRY', module)
-            # XXX waiting for py3 to use print(..., flush=True)
-            sys.stdout.flush()
-
-            s = time.time()
+            # XXX waiting for py3 to use print(..., flush=True) 
+            sys.stdout.flush() 
+ 
+            s = time.time() 
             if module == '__main__':
                 importer.load_module('__main__', '__main__py')
             elif module.endswith('.__init__'):
@@ -70,10 +70,10 @@ def check_imports(no_check=(), extra=(), skip_func=None, py_main=None):
             else:
                 __import__(module)
 
-            delay = time.time() - s
-            import_times[str(module)] = delay
-            print('OK ', module, '{:.3f}s'.format(delay))
-
+            delay = time.time() - s 
+            import_times[str(module)] = delay 
+            print('OK ', module, '{:.3f}s'.format(delay)) 
+ 
         except Exception as e:
             print('FAIL:', module, e, file=sys.stderr)
             print_backtrace_marked(sys.exc_info())
@@ -86,10 +86,10 @@ def check_imports(no_check=(), extra=(), skip_func=None, py_main=None):
             failed.append('{}: {}'.format(module, e))
             raise
 
-    print("Slowest imports:")
-    for m, t in sorted(import_times.items(), key=lambda x: x[1], reverse=True)[:30]:
-        print('  ', '{:.3f}s'.format(t), m)
-
+    print("Slowest imports:") 
+    for m, t in sorted(import_times.items(), key=lambda x: x[1], reverse=True)[:30]: 
+        print('  ', '{:.3f}s'.format(t), m) 
+ 
     if failed:
         raise ImportError('modules not imported:\n' + '\n'.join(failed))
 

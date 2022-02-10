@@ -1,15 +1,15 @@
-# coding: utf-8
-
-import base64
-import errno
-import re
+# coding: utf-8 
+ 
+import base64 
+import errno 
+import re 
 import sys
 import os
 import logging
 import fnmatch
 import json
 import time
-import traceback
+import traceback 
 import collections
 import signal
 import inspect
@@ -28,7 +28,7 @@ import _pytest.outcomes
 import _pytest.skipping
 
 from _pytest.warning_types import PytestUnhandledCoroutineWarning
-
+ 
 from yatest_lib import test_splitter
 
 try:
@@ -42,12 +42,12 @@ except ImportError:
     # fallback for pytest script mode
     import yatest_tools as tools
 
-try:
-    from library.python import filelock
-except ImportError:
-    filelock = None
-
-
+try: 
+    from library.python import filelock 
+except ImportError: 
+    filelock = None 
+ 
+ 
 import yatest_lib.tools
 
 import yatest_lib.external as canon
@@ -61,7 +61,7 @@ yatest_logger = logging.getLogger("ya.test")
 
 
 _pytest.main.EXIT_NOTESTSCOLLECTED = 0
-SHUTDOWN_REQUESTED = False
+SHUTDOWN_REQUESTED = False 
 
 pytest_config = None
 
@@ -71,8 +71,8 @@ def configure_pdb_on_demand():
 
     if hasattr(signal, "SIGUSR1"):
         def on_signal(*args):
-            import ipdb
-            ipdb.set_trace()
+            import ipdb 
+            ipdb.set_trace() 
 
         signal.signal(signal.SIGUSR1, on_signal)
 
@@ -147,40 +147,40 @@ def pytest_addoption(parser):
     parser.addoption("--python-path", action="store", dest="python_path", default="", help="path the canonical python binary")
     parser.addoption("--valgrind-path", action="store", dest="valgrind_path", default="", help="path the canonical valgring binary")
     parser.addoption("--test-filter", action="append", dest="test_filter", default=None, help="test filter")
-    parser.addoption("--test-file-filter", action="store", dest="test_file_filter", default=None, help="test file filter")
+    parser.addoption("--test-file-filter", action="store", dest="test_file_filter", default=None, help="test file filter") 
     parser.addoption("--test-param", action="append", dest="test_params", default=None, help="test parameters")
     parser.addoption("--test-log-level", action="store", dest="test_log_level", choices=["critical", "error", "warning", "info", "debug"], default="debug", help="test log level")
     parser.addoption("--mode", action="store", choices=[yatest_lib.ya.RunMode.List, yatest_lib.ya.RunMode.Run], dest="mode", default=yatest_lib.ya.RunMode.Run, help="testing mode")
-    parser.addoption("--test-list-file", action="store", dest="test_list_file")
+    parser.addoption("--test-list-file", action="store", dest="test_list_file") 
     parser.addoption("--modulo", default=1, type=int)
     parser.addoption("--modulo-index", default=0, type=int)
     parser.addoption("--partition-mode", default='SEQUENTIAL', help="Split tests according to partitoin mode")
     parser.addoption("--split-by-tests", action='store_true', help="Split test execution by tests instead of suites", default=False)
     parser.addoption("--project-path", action="store", default="", help="path to CMakeList where test is declared")
     parser.addoption("--build-type", action="store", default="", help="build type")
-    parser.addoption("--flags", action="append", dest="flags", default=[], help="build flags (-D)")
+    parser.addoption("--flags", action="append", dest="flags", default=[], help="build flags (-D)") 
     parser.addoption("--sanitize", action="store", default="", help="sanitize mode")
     parser.addoption("--test-stderr", action="store_true", default=False, help="test stderr")
     parser.addoption("--test-debug", action="store_true", default=False, help="test debug mode")
     parser.addoption("--root-dir", action="store", default=None)
     parser.addoption("--ya-trace", action="store", dest="ya_trace_path", default=None, help="path to ya trace report")
-    parser.addoption("--ya-version", action="store", dest="ya_version", default=0, type=int, help="allows to be compatible with ya and the new changes in ya-dev")
+    parser.addoption("--ya-version", action="store", dest="ya_version", default=0, type=int, help="allows to be compatible with ya and the new changes in ya-dev") 
     parser.addoption(
         "--test-suffix", action="store", dest="test_suffix", default=None, help="add suffix to every test name"
     )
     parser.addoption("--gdb-path", action="store", dest="gdb_path", default="", help="path the canonical gdb binary")
     parser.addoption("--collect-cores", action="store_true", dest="collect_cores", default=False, help="allows core dump file recovering during test")
-    parser.addoption("--sanitizer-extra-checks", action="store_true", dest="sanitizer_extra_checks", default=False, help="enables extra checks for tests built with sanitizers")
+    parser.addoption("--sanitizer-extra-checks", action="store_true", dest="sanitizer_extra_checks", default=False, help="enables extra checks for tests built with sanitizers") 
     parser.addoption("--report-deselected", action="store_true", dest="report_deselected", default=False, help="report deselected tests to the trace file")
     parser.addoption("--pdb-on-sigusr1", action="store_true", default=False, help="setup pdb.set_trace on SIGUSR1")
-    parser.addoption("--test-tool-bin", help="Path to test_tool")
+    parser.addoption("--test-tool-bin", help="Path to test_tool") 
     parser.addoption("--test-list-path", dest="test_list_path", action="store", help="path to test list", default="")
 
 
-def from_ya_test():
-    return "YA_TEST_RUNNER" in os.environ
-
-
+def from_ya_test(): 
+    return "YA_TEST_RUNNER" in os.environ 
+ 
+ 
 def pytest_configure(config):
     global pytest_config
     pytest_config = config
@@ -189,7 +189,7 @@ def pytest_configure(config):
 
     config.addinivalue_line("markers", "ya:external")
 
-    config.from_ya_test = from_ya_test()
+    config.from_ya_test = from_ya_test() 
     config.test_logs = collections.defaultdict(dict)
     config.test_metrics = {}
     config.suite_metrics = {}
@@ -234,65 +234,65 @@ def pytest_configure(config):
     config.current_test_name = None
     config.test_cores_count = 0
     config.collect_cores = config.option.collect_cores
-    config.sanitizer_extra_checks = config.option.sanitizer_extra_checks
+    config.sanitizer_extra_checks = config.option.sanitizer_extra_checks 
     try:
         config.test_tool_bin = config.option.test_tool_bin
     except AttributeError:
         logging.info("test_tool_bin not specified")
 
     if config.sanitizer_extra_checks:
-        for envvar in ['LSAN_OPTIONS', 'ASAN_OPTIONS']:
-            if envvar in os.environ:
-                os.environ.pop(envvar)
-            if envvar + '_ORIGINAL' in os.environ:
-                os.environ[envvar] = os.environ[envvar + '_ORIGINAL']
+        for envvar in ['LSAN_OPTIONS', 'ASAN_OPTIONS']: 
+            if envvar in os.environ: 
+                os.environ.pop(envvar) 
+            if envvar + '_ORIGINAL' in os.environ: 
+                os.environ[envvar] = os.environ[envvar + '_ORIGINAL'] 
 
     if config.option.root_dir:
         config.rootdir = py.path.local(config.option.root_dir)
         config.invocation_params = attr.evolve(config.invocation_params, dir=config.rootdir)
 
-    extra_sys_path = []
-    # Arcadia paths from the test DEPENDS section of ya.make
-    extra_sys_path.append(os.path.join(config.option.source_root, config.option.project_path))
+    extra_sys_path = [] 
+    # Arcadia paths from the test DEPENDS section of ya.make 
+    extra_sys_path.append(os.path.join(config.option.source_root, config.option.project_path)) 
     # Build root is required for correct import of protobufs, because imports are related to the root
     # (like import devtools.dummy_arcadia.protos.lib.my_proto_pb2)
-    extra_sys_path.append(config.option.build_root)
+    extra_sys_path.append(config.option.build_root) 
 
-    for path in config.option.dep_roots:
-        if os.path.isabs(path):
-            extra_sys_path.append(path)
-        else:
-            extra_sys_path.append(os.path.join(config.option.source_root, path))
-
-    sys_path_set = set(sys.path)
-    for path in extra_sys_path:
-        if path not in sys_path_set:
-            sys.path.append(path)
-            sys_path_set.add(path)
-
-    os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
-
+    for path in config.option.dep_roots: 
+        if os.path.isabs(path): 
+            extra_sys_path.append(path) 
+        else: 
+            extra_sys_path.append(os.path.join(config.option.source_root, path)) 
+ 
+    sys_path_set = set(sys.path) 
+    for path in extra_sys_path: 
+        if path not in sys_path_set: 
+            sys.path.append(path) 
+            sys_path_set.add(path) 
+ 
+    os.environ["PYTHONPATH"] = os.pathsep.join(sys.path) 
+ 
     if not config.option.collectonly:
         if config.option.ya_trace_path:
             config.ya_trace_reporter = TraceReportGenerator(config.option.ya_trace_path)
         else:
             config.ya_trace_reporter = DryTraceReportGenerator(config.option.ya_trace_path)
-    config.ya_version = config.option.ya_version
+    config.ya_version = config.option.ya_version 
 
     sys.meta_path.append(CustomImporter([config.option.build_root] + [os.path.join(config.option.build_root, dep) for dep in config.option.dep_roots]))
     if config.option.pdb_on_sigusr1:
         configure_pdb_on_demand()
 
-    # Dump python backtrace in case of any errors
-    faulthandler.enable()
-    if hasattr(signal, "SIGQUIT"):
-        # SIGQUIT is used by test_tool to teardown tests which overruns timeout
-        faulthandler.register(signal.SIGQUIT, chain=True)
+    # Dump python backtrace in case of any errors 
+    faulthandler.enable() 
+    if hasattr(signal, "SIGQUIT"): 
+        # SIGQUIT is used by test_tool to teardown tests which overruns timeout 
+        faulthandler.register(signal.SIGQUIT, chain=True) 
+ 
+    if hasattr(signal, "SIGUSR2"): 
+        signal.signal(signal.SIGUSR2, _graceful_shutdown) 
 
-    if hasattr(signal, "SIGUSR2"):
-        signal.signal(signal.SIGUSR2, _graceful_shutdown)
-
-
+ 
 session_should_exit = False
 
 
@@ -313,20 +313,20 @@ def pytest_runtest_logfinish(nodeid, location):
     _graceful_shutdown_on_log(session_should_exit)
 
 
-def _graceful_shutdown(*args):
+def _graceful_shutdown(*args): 
     global session_should_exit
     session_should_exit = True
-    try:
-        import library.python.coverage
-        library.python.coverage.stop_coverage_tracing()
-    except ImportError:
-        pass
-    traceback.print_stack(file=sys.stderr)
+    try: 
+        import library.python.coverage 
+        library.python.coverage.stop_coverage_tracing() 
+    except ImportError: 
+        pass 
+    traceback.print_stack(file=sys.stderr) 
     capman = pytest_config.pluginmanager.getplugin("capturemanager")
     capman.suspend(in_=True)
     _graceful_shutdown_on_log(not capman.is_globally_capturing())
-
-
+ 
+ 
 def _get_rusage():
     return resource and resource.getrusage(resource.RUSAGE_SELF)
 
@@ -342,7 +342,7 @@ def _collect_test_rusage(item):
             if not modifier:
                 modifier = lambda x: x
             if hasattr(item.rusage, attr_name):
-                ya_inst.set_metric_value(metric_name, modifier(getattr(finish_rusage, attr_name) - getattr(item.rusage, attr_name)))
+                ya_inst.set_metric_value(metric_name, modifier(getattr(finish_rusage, attr_name) - getattr(item.rusage, attr_name))) 
 
         for args in [
             ("ru_maxrss", "ru_rss", lambda x: x*1024),  # to be the same as in util/system/rusage.cpp
@@ -431,7 +431,7 @@ def pytest_collection_modifyitems(items, config):
             canonical_node_id = str(CustomTestItem(item.nodeid, pytest_config.option.test_suffix))
             matched = False
             for flt in filters:
-                if "::" not in flt and "*" not in flt:
+                if "::" not in flt and "*" not in flt: 
                     flt += "*"  # add support for filtering by module name
                 if canonical_node_id.endswith(flt) or fnmatch.fnmatch(tools.escape_for_fnmatch(canonical_node_id), tools.escape_for_fnmatch(flt)):
                     matched = True
@@ -507,10 +507,10 @@ def pytest_collection_modifyitems(items, config):
                 "tags": _get_item_tags(item),
             }
             tests.append(record)
-        if config.option.test_list_file:
-            with open(config.option.test_list_file, 'w') as afile:
-                json.dump(tests, afile)
-        # TODO prettyboy remove after test_tool release - currently it's required for backward compatibility
+        if config.option.test_list_file: 
+            with open(config.option.test_list_file, 'w') as afile: 
+                json.dump(tests, afile) 
+        # TODO prettyboy remove after test_tool release - currently it's required for backward compatibility 
         sys.stderr.write(json.dumps(tests))
 
 
@@ -548,7 +548,7 @@ def pytest_runtest_makereport(item, call):
         if not pytest_config.suite_metrics and context.Ctx.get("YA_PYTEST_START_TIMESTAMP"):
             pytest_config.suite_metrics["pytest_startup_duration"] = call.start - context.Ctx["YA_PYTEST_START_TIMESTAMP"]
             pytest_config.ya_trace_reporter.dump_suite_metrics()
-
+ 
         pytest_config.ya_trace_reporter.on_log_report(test_item)
 
         if report.outcome == "failed":
@@ -591,48 +591,48 @@ def pytest_make_parametrize_id(config, val, argname):
     return None
 
 
-def get_formatted_error(report):
-    if isinstance(report.longrepr, tuple):
-        text = ""
-        for entry in report.longrepr:
-            text += colorize(entry)
-    else:
-        text = colorize(report.longrepr)
+def get_formatted_error(report): 
+    if isinstance(report.longrepr, tuple): 
+        text = "" 
+        for entry in report.longrepr: 
+            text += colorize(entry) 
+    else: 
+        text = colorize(report.longrepr) 
     text = yatest_lib.tools.to_utf8(text)
-    return text
-
-
-def colorize(longrepr):
-    # use default pytest colorization
+    return text 
+ 
+ 
+def colorize(longrepr): 
+    # use default pytest colorization 
     if pytest_config.option.tbstyle != "short":
-        io = py.io.TextIO()
+        io = py.io.TextIO() 
         if six.PY2:
             writer = py.io.TerminalWriter(file=io)
         else:
             writer = _pytest._io.TerminalWriter(file=io)
-        # enable colorization
-        writer.hasmarkup = True
-
-        if hasattr(longrepr, 'reprtraceback') and hasattr(longrepr.reprtraceback, 'toterminal'):
-            longrepr.reprtraceback.toterminal(writer)
-            return io.getvalue().strip()
+        # enable colorization 
+        writer.hasmarkup = True 
+ 
+        if hasattr(longrepr, 'reprtraceback') and hasattr(longrepr.reprtraceback, 'toterminal'): 
+            longrepr.reprtraceback.toterminal(writer) 
+            return io.getvalue().strip() 
         return yatest_lib.tools.to_utf8(longrepr)
-
+ 
     text = yatest_lib.tools.to_utf8(longrepr)
-    pos = text.find("E   ")
-    if pos == -1:
-        return text
-
-    bt, error = text[:pos], text[pos:]
-    filters = [
-        # File path, line number and function name
-        (re.compile(r"^(.*?):(\d+): in (\S+)", flags=re.MULTILINE), r"[[unimp]]\1[[rst]]:[[alt2]]\2[[rst]]: in [[alt1]]\3[[rst]]"),
-    ]
-    for regex, substitution in filters:
-        bt = regex.sub(substitution, bt)
-    return "{}[[bad]]{}".format(bt, error)
-
-
+    pos = text.find("E   ") 
+    if pos == -1: 
+        return text 
+ 
+    bt, error = text[:pos], text[pos:] 
+    filters = [ 
+        # File path, line number and function name 
+        (re.compile(r"^(.*?):(\d+): in (\S+)", flags=re.MULTILINE), r"[[unimp]]\1[[rst]]:[[alt2]]\2[[rst]]: in [[alt1]]\3[[rst]]"), 
+    ] 
+    for regex, substitution in filters: 
+        bt = regex.sub(substitution, bt) 
+    return "{}[[bad]]{}".format(bt, error) 
+ 
+ 
 class TestItem(object):
 
     def __init__(self, report, result, test_suffix):
@@ -691,7 +691,7 @@ class TestItem(object):
     def error(self):
         return self._error
 
-    def set_error(self, entry, marker='bad'):
+    def set_error(self, entry, marker='bad'): 
         if isinstance(entry, _pytest.reports.BaseReport):
             self._error = get_formatted_error(entry)
         else:
@@ -750,80 +750,80 @@ class DeselectedTestItem(CustomTestItem):
 class TraceReportGenerator(object):
 
     def __init__(self, out_file_path):
-        self._filename = out_file_path
-        self._file = open(out_file_path, 'w')
-        self._wreckage_filename = out_file_path + '.wreckage'
+        self._filename = out_file_path 
+        self._file = open(out_file_path, 'w') 
+        self._wreckage_filename = out_file_path + '.wreckage' 
         self._test_messages = {}
         self._test_duration = {}
-        # Some machinery to avoid data corruption due sloppy fork()
-        self._current_test = (None, None)
-        self._pid = os.getpid()
-        self._check_intricate_respawn()
+        # Some machinery to avoid data corruption due sloppy fork() 
+        self._current_test = (None, None) 
+        self._pid = os.getpid() 
+        self._check_intricate_respawn() 
 
-    def _check_intricate_respawn(self):
-        pid_file = self._filename + '.pid'
-        try:
-            # python2 doesn't support open(f, 'x')
-            afile = os.fdopen(os.open(pid_file, os.O_WRONLY | os.O_EXCL | os.O_CREAT), 'w')
-            afile.write(str(self._pid))
-            afile.close()
-            return
-        except OSError as e:
-            if e.errno != errno.EEXIST:
-                raise
-
-        # Looks like the test binary was respawned
-        if from_ya_test():
-            try:
-                with open(pid_file) as afile:
-                    prev_pid = afile.read()
-            except Exception as e:
-                prev_pid = '(failed to obtain previous pid: {})'.format(e)
-
-            parts = [
-                "Aborting test run: test machinery found that the test binary {} has already been run before.".format(sys.executable),
-                "Looks like test has incorrect respawn/relaunch logic within test binary.",
-                "Test should not try to restart itself - this is a poorly designed test case that leads to errors and could corrupt internal test machinery files.",
-                "Debug info: previous pid:{} current:{}".format(prev_pid, self._pid),
-            ]
-            msg = '\n'.join(parts)
-            yatest_logger.error(msg)
-
-            if filelock:
-                lock = filelock.FileLock(self._wreckage_filename + '.lock')
-                lock.acquire()
-
-            with open(self._wreckage_filename, 'a') as afile:
-                self._file = afile
-
-                self._dump_trace('chunk_event', {"errors": [('fail', '[[bad]]' + msg)]})
-
-            raise Exception(msg)
-        else:
-            # Test binary is launched without `ya make -t`'s testing machinery - don't rely on clean environment
-            pass
-
+    def _check_intricate_respawn(self): 
+        pid_file = self._filename + '.pid' 
+        try: 
+            # python2 doesn't support open(f, 'x') 
+            afile = os.fdopen(os.open(pid_file, os.O_WRONLY | os.O_EXCL | os.O_CREAT), 'w') 
+            afile.write(str(self._pid)) 
+            afile.close() 
+            return 
+        except OSError as e: 
+            if e.errno != errno.EEXIST: 
+                raise 
+ 
+        # Looks like the test binary was respawned 
+        if from_ya_test(): 
+            try: 
+                with open(pid_file) as afile: 
+                    prev_pid = afile.read() 
+            except Exception as e: 
+                prev_pid = '(failed to obtain previous pid: {})'.format(e) 
+ 
+            parts = [ 
+                "Aborting test run: test machinery found that the test binary {} has already been run before.".format(sys.executable), 
+                "Looks like test has incorrect respawn/relaunch logic within test binary.", 
+                "Test should not try to restart itself - this is a poorly designed test case that leads to errors and could corrupt internal test machinery files.", 
+                "Debug info: previous pid:{} current:{}".format(prev_pid, self._pid), 
+            ] 
+            msg = '\n'.join(parts) 
+            yatest_logger.error(msg) 
+ 
+            if filelock: 
+                lock = filelock.FileLock(self._wreckage_filename + '.lock') 
+                lock.acquire() 
+ 
+            with open(self._wreckage_filename, 'a') as afile: 
+                self._file = afile 
+ 
+                self._dump_trace('chunk_event', {"errors": [('fail', '[[bad]]' + msg)]}) 
+ 
+            raise Exception(msg) 
+        else: 
+            # Test binary is launched without `ya make -t`'s testing machinery - don't rely on clean environment 
+            pass 
+ 
     def on_start_test_class(self, test_item):
         pytest_config.ya.set_test_item_node_id(test_item.nodeid)
-        class_name = test_item.class_name.decode('utf-8') if sys.version_info[0] < 3 else test_item.class_name
-        self._current_test = (class_name, None)
-        self.trace('test-started', {'class': class_name})
+        class_name = test_item.class_name.decode('utf-8') if sys.version_info[0] < 3 else test_item.class_name 
+        self._current_test = (class_name, None) 
+        self.trace('test-started', {'class': class_name}) 
 
     def on_finish_test_class(self, test_item):
         pytest_config.ya.set_test_item_node_id(test_item.nodeid)
         self.trace('test-finished', {'class': test_item.class_name.decode('utf-8') if sys.version_info[0] < 3 else test_item.class_name})
 
     def on_start_test_case(self, test_item):
-        class_name = yatest_lib.tools.to_utf8(test_item.class_name)
-        subtest_name = yatest_lib.tools.to_utf8(test_item.test_name)
+        class_name = yatest_lib.tools.to_utf8(test_item.class_name) 
+        subtest_name = yatest_lib.tools.to_utf8(test_item.test_name) 
         message = {
-            'class': class_name,
-            'subtest': subtest_name,
+            'class': class_name, 
+            'subtest': subtest_name, 
         }
         if test_item.nodeid in pytest_config.test_logs:
             message['logs'] = pytest_config.test_logs[test_item.nodeid]
         pytest_config.ya.set_test_item_node_id(test_item.nodeid)
-        self._current_test = (class_name, subtest_name)
+        self._current_test = (class_name, subtest_name) 
         self.trace('subtest-started', message)
 
     def on_finish_test_case(self, test_item, duration_only=False):
@@ -865,9 +865,9 @@ class TraceReportGenerator(object):
         message = {"metrics": pytest_config.suite_metrics}
         self.trace("suite-event", message)
 
-    def on_error(self, test_item):
-        self.trace('chunk_event', {"errors": [(test_item.status, self._get_comment(test_item))]})
-
+    def on_error(self, test_item): 
+        self.trace('chunk_event', {"errors": [(test_item.status, self._get_comment(test_item))]}) 
+ 
     def on_log_report(self, test_item):
         if test_item.nodeid in self._test_duration:
             self._test_duration[test_item.nodeid] += test_item._duration
@@ -879,77 +879,77 @@ class TraceReportGenerator(object):
         msg = yatest_lib.tools.to_utf8(test_item.error)
         if not msg:
             return ""
-        return msg + "[[rst]]"
+        return msg + "[[rst]]" 
 
-    def _dump_trace(self, name, value):
+    def _dump_trace(self, name, value): 
         event = {
             'timestamp': time.time(),
             'value': value,
             'name': name
         }
-
+ 
         data = yatest_lib.tools.to_str(json.dumps(event, ensure_ascii=False))
-        self._file.write(data + '\n')
-        self._file.flush()
+        self._file.write(data + '\n') 
+        self._file.flush() 
 
-    def _check_sloppy_fork(self, name, value):
-        if self._pid == os.getpid():
-            return
+    def _check_sloppy_fork(self, name, value): 
+        if self._pid == os.getpid(): 
+            return 
 
-        yatest_logger.error("Skip tracing to avoid data corruption, name = %s, value = %s", name, value)
-
-        try:
-            # Lock wreckage tracefile to avoid race if multiple tests use fork sloppily
-            if filelock:
-                lock = filelock.FileLock(self._wreckage_filename + '.lock')
-                lock.acquire()
-
-            with open(self._wreckage_filename, 'a') as afile:
-                self._file = afile
-
-                parts = [
-                    "It looks like you have leaked process - it could corrupt internal test machinery files.",
-                    "Usually it happens when you casually use fork() without os._exit(),",
-                    "which results in two pytest processes running at the same time.",
-                    "Pid of the original pytest's process is {}, however current process has {} pid.".format(self._pid, os.getpid()),
-                ]
-                if self._current_test[1]:
-                    parts.append("Most likely the problem is in '{}' test.".format(self._current_test))
-                else:
-                    parts.append("Most likely new process was created before any test was launched (during the import stage?).")
-
-                if value.get('comment'):
-                    comment = value.get('comment', '').strip()
-                    # multiline comment
-                    newline_required = '\n' if '\n' in comment else ''
-                    parts.append("Debug info: name = '{}' comment:{}{}".format(name, newline_required, comment))
-                else:
-                    val_str = json.dumps(value, ensure_ascii=False).encode('utf-8')
-                    parts.append("Debug info: name = '{}' value = '{}'".format(name, base64.b64encode(val_str)))
-
-                msg = "[[bad]]{}".format('\n'.join(parts))
-                class_name, subtest_name = self._current_test
-                if subtest_name:
-                    data = {
-                        'class': class_name,
-                        'subtest': subtest_name,
-                        'status': 'fail',
-                        'comment': msg,
-                    }
-                    # overwrite original status
-                    self._dump_trace('subtest-finished', data)
-                else:
-                    self._dump_trace('chunk_event', {"errors": [('fail', msg)]})
-        except Exception as e:
-            yatest_logger.exception(e)
-        finally:
-            os._exit(38)
-
-    def trace(self, name, value):
-        self._check_sloppy_fork(name, value)
-        self._dump_trace(name, value)
-
-
+        yatest_logger.error("Skip tracing to avoid data corruption, name = %s, value = %s", name, value) 
+ 
+        try: 
+            # Lock wreckage tracefile to avoid race if multiple tests use fork sloppily 
+            if filelock: 
+                lock = filelock.FileLock(self._wreckage_filename + '.lock') 
+                lock.acquire() 
+ 
+            with open(self._wreckage_filename, 'a') as afile: 
+                self._file = afile 
+ 
+                parts = [ 
+                    "It looks like you have leaked process - it could corrupt internal test machinery files.", 
+                    "Usually it happens when you casually use fork() without os._exit(),", 
+                    "which results in two pytest processes running at the same time.", 
+                    "Pid of the original pytest's process is {}, however current process has {} pid.".format(self._pid, os.getpid()), 
+                ] 
+                if self._current_test[1]: 
+                    parts.append("Most likely the problem is in '{}' test.".format(self._current_test)) 
+                else: 
+                    parts.append("Most likely new process was created before any test was launched (during the import stage?).") 
+ 
+                if value.get('comment'): 
+                    comment = value.get('comment', '').strip() 
+                    # multiline comment 
+                    newline_required = '\n' if '\n' in comment else '' 
+                    parts.append("Debug info: name = '{}' comment:{}{}".format(name, newline_required, comment)) 
+                else: 
+                    val_str = json.dumps(value, ensure_ascii=False).encode('utf-8') 
+                    parts.append("Debug info: name = '{}' value = '{}'".format(name, base64.b64encode(val_str))) 
+ 
+                msg = "[[bad]]{}".format('\n'.join(parts)) 
+                class_name, subtest_name = self._current_test 
+                if subtest_name: 
+                    data = { 
+                        'class': class_name, 
+                        'subtest': subtest_name, 
+                        'status': 'fail', 
+                        'comment': msg, 
+                    } 
+                    # overwrite original status 
+                    self._dump_trace('subtest-finished', data) 
+                else: 
+                    self._dump_trace('chunk_event', {"errors": [('fail', msg)]}) 
+        except Exception as e: 
+            yatest_logger.exception(e) 
+        finally: 
+            os._exit(38) 
+ 
+    def trace(self, name, value): 
+        self._check_sloppy_fork(name, value) 
+        self._dump_trace(name, value) 
+ 
+ 
 class DryTraceReportGenerator(TraceReportGenerator):
     """
     Generator does not write any information.

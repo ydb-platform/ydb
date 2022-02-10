@@ -1,46 +1,46 @@
 """
   array.pxd
-
+ 
   Cython interface to Python's array.array module.
-
+ 
   * 1D contiguous data view
   * tools for fast array creation, maximum C-speed and handiness
   * suitable as allround light weight auto-array within Cython code too
-
+ 
   Usage:
-
+ 
   >>> cimport array
 
-  Usage through Cython buffer interface (Py2.3+):
-
+  Usage through Cython buffer interface (Py2.3+): 
+ 
     >>> def f(arg1, unsigned i, double dx)
     ...     array.array[double] a = arg1
     ...     a[i] += dx
-
+ 
   Fast C-level new_array(_zeros), resize_array, copy_array, Py_SIZE(obj),
   zero_array
-
-    cdef array.array[double] k = array.copy(d)
+ 
+    cdef array.array[double] k = array.copy(d) 
     cdef array.array[double] n = array.array(d, Py_SIZE(d) * 2 )
     cdef array.array[double] m = array.zeros_like(FLOAT_TEMPLATE)
     array.resize(f, 200000)
-
-  Zero overhead with naked data pointer views by union:
-  _f, _d, _i, _c, _u, ...
+ 
+  Zero overhead with naked data pointer views by union: 
+  _f, _d, _i, _c, _u, ... 
   => Original C array speed + Python dynamic memory management
 
     cdef array.array a = inarray
-    if
+    if 
     a._d[2] += 0.66   # use as double array without extra casting
-
+ 
     float *subview = vector._f + 10  # starting from 10th element
-    unsigned char *subview_buffer = vector._B + 4
-
-  Suitable as lightweight arrays intra Cython without speed penalty.
-  Replacement for C stack/malloc arrays; no trouble with refcounting,
+    unsigned char *subview_buffer = vector._B + 4 
+ 
+  Suitable as lightweight arrays intra Cython without speed penalty. 
+  Replacement for C stack/malloc arrays; no trouble with refcounting, 
   mem.leaks; seamless Python compatibility, buffer() optional
 
-
+ 
   last changes: 2009-05-15 rk
               : 2009-12-06 bp
               : 2012-05-02 andreasvc
@@ -75,8 +75,8 @@ cdef extern from *:  # Hard-coded utility code hack.
         char *as_chars
         unsigned long *as_ulongs
         long *as_longs
-        unsigned long long *as_ulonglongs
-        long long *as_longlongs
+        unsigned long long *as_ulonglongs 
+        long long *as_longlongs 
         short *as_shorts
         unsigned short *as_ushorts
         Py_UNICODE *as_pyunicodes
@@ -92,7 +92,7 @@ cdef extern from *:  # Hard-coded utility code hack.
 
         def __getbuffer__(self, Py_buffer* info, int flags):
             # This implementation of getbuffer is geared towards Cython
-            # requirements, and does not yet fulfill the PEP.
+            # requirements, and does not yet fulfill the PEP. 
             # In particular strided access is always provided regardless
             # of flags
             item_count = Py_SIZE(self)
@@ -143,7 +143,7 @@ cdef inline array copy(array self):
     return op
 
 cdef inline int extend_buffer(array self, char* stuff, Py_ssize_t n) except -1:
-    """ efficient appending of new stuff of same type
+    """ efficient appending of new stuff of same type 
     (e.g. of same array type)
     n: number of elements (not number of bytes!) """
     cdef Py_ssize_t itemsize = self.ob_descr.itemsize

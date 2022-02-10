@@ -1,15 +1,15 @@
-# coding: utf-8
+# coding: utf-8 
 
 import collections
 
 
-def flatten_tests(test_classes):
+def flatten_tests(test_classes): 
     """
     >>> test_classes = {x: [x] for x in range(5)}
-    >>> flatten_tests(test_classes)
+    >>> flatten_tests(test_classes) 
     [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)]
     >>> test_classes = {x: [x + 1, x + 2] for x in range(2)}
-    >>> flatten_tests(test_classes)
+    >>> flatten_tests(test_classes) 
     [(0, 1), (0, 2), (1, 2), (1, 3)]
     """
     tests = []

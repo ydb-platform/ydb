@@ -1,12 +1,12 @@
 # coding=utf-8
 
 import errno
-import os
-import shutil
-import contextlib
-
+import os 
+import shutil 
+import contextlib 
+ 
 import library.python.fs as lpf
-
+ 
 
 def replace_in_file(path, old, new):
     """
@@ -21,32 +21,32 @@ def replace_in_file(path, old, new):
     lpf.ensure_removed(path)
     with open(path, 'w') as fp:
         fp.write(content.replace(old, new))
-
-
-@contextlib.contextmanager
-def change_dir(path):
-    old = os.getcwd()
-    try:
-        os.chdir(path)
-        yield path
-    finally:
-        os.chdir(old)
-
-
+ 
+ 
+@contextlib.contextmanager 
+def change_dir(path): 
+    old = os.getcwd() 
+    try: 
+        os.chdir(path) 
+        yield path 
+    finally: 
+        os.chdir(old) 
+ 
+ 
 def copytree(src, dst, symlinks=False, ignore=None, postprocessing=None):
-    '''
-    Copy an entire directory of files into an existing directory
-    instead of raising Exception what shtuil.copytree does
-    '''
+    ''' 
+    Copy an entire directory of files into an existing directory 
+    instead of raising Exception what shtuil.copytree does 
+    ''' 
     if not os.path.exists(dst) and os.path.isdir(src):
         os.makedirs(dst)
-    for item in os.listdir(src):
-        s = os.path.join(src, item)
-        d = os.path.join(dst, item)
-        if os.path.isdir(s):
-            shutil.copytree(s, d, symlinks, ignore)
-        else:
-            shutil.copy2(s, d)
+    for item in os.listdir(src): 
+        s = os.path.join(src, item) 
+        d = os.path.join(dst, item) 
+        if os.path.isdir(s): 
+            shutil.copytree(s, d, symlinks, ignore) 
+        else: 
+            shutil.copy2(s, d) 
     if postprocessing:
         postprocessing(dst, False)
         for root, dirs, files in os.walk(dst):

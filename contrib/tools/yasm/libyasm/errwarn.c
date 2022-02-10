@@ -27,7 +27,7 @@
 #include "util.h"
 
 #include <ctype.h>
-#include <errno.h>
+#include <errno.h> 
 #include <stdarg.h>
 
 #include "coretype.h"
@@ -528,10 +528,10 @@ yasm__fatal(const char *message, ...)
     /*@notreached@*/
     va_end(va);
 }
-
-void
-yasm__fatal_missing_input_file(const char *message, const char *filename)
-{
-    fprintf(stderr, "%s: %s %s (%s)\n", yasm_gettext_hook(N_("FATAL")), yasm_gettext_hook(message), strerror(errno), yasm_gettext_hook(filename));
-    exit(EXIT_FAILURE);
-}
+ 
+void 
+yasm__fatal_missing_input_file(const char *message, const char *filename) 
+{ 
+    fprintf(stderr, "%s: %s %s (%s)\n", yasm_gettext_hook(N_("FATAL")), yasm_gettext_hook(message), strerror(errno), yasm_gettext_hook(filename)); 
+    exit(EXIT_FAILURE); 
+} 

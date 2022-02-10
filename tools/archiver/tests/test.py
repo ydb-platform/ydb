@@ -8,7 +8,7 @@ logger = logging.getLogger("test_logger")
 class TestArchiver(object):
     @classmethod
     def setup_class(cls):
-        cls.archiver_path = ytc.binary_path("tools/archiver/archiver")
+        cls.archiver_path = ytc.binary_path("tools/archiver/archiver") 
 
     def test_recursive(self):
         assert 'archiver' == os.path.basename(self.archiver_path)

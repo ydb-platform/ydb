@@ -1,25 +1,25 @@
-# coding: utf-8
-
-import collections
-import functools
-import math
+# coding: utf-8 
+ 
+import collections 
+import functools 
+import math 
 import os
 import re
-import sys
+import sys 
 
 import yatest_lib.tools
 
 
 class Subtest(object):
-    def __init__(self, name, test_name, status, comment, elapsed, result=None, test_type=None, logs=None, cwd=None, metrics=None):
-        self._name = name
-        self._test_name = test_name
+    def __init__(self, name, test_name, status, comment, elapsed, result=None, test_type=None, logs=None, cwd=None, metrics=None): 
+        self._name = name 
+        self._test_name = test_name 
         self.status = status
         self.elapsed = elapsed
         self.comment = comment
         self.result = result
         self.test_type = test_type
-        self.logs = logs or {}
+        self.logs = logs or {} 
         self.cwd = cwd
         self.metrics = metrics
 
@@ -31,17 +31,17 @@ class Subtest(object):
     def __str__(self):
         return yatest_lib.tools.to_utf8(unicode(self))
 
-    def __unicode__(self):
-        return u"{}::{}".format(self.test_name, self.test_name)
-
-    @property
-    def name(self):
+    def __unicode__(self): 
+        return u"{}::{}".format(self.test_name, self.test_name) 
+ 
+    @property 
+    def name(self): 
         return yatest_lib.tools.to_utf8(self._name)
-
-    @property
-    def test_name(self):
+ 
+    @property 
+    def test_name(self): 
         return yatest_lib.tools.to_utf8(self._test_name)
-
+ 
     def __repr__(self):
         return "Subtest [{}::{} - {}[{}]: {}]".format(self.name, self.test_name, self.status, self.elapsed, self.comment)
 
@@ -84,7 +84,7 @@ class SubtestInfo(object):
 
 
 class Status(object):
-    GOOD, XFAIL, FAIL, XPASS, MISSING, CRASHED, TIMEOUT = range(7)
+    GOOD, XFAIL, FAIL, XPASS, MISSING, CRASHED, TIMEOUT = range(7) 
     SKIPPED = -100
     NOT_LAUNCHED = -200
     CANON_DIFF = -300
@@ -152,76 +152,76 @@ ya_ctx = YaCtx()
 TRACE_FILE_NAME = "ytest.report.trace"
 
 
-def lazy(func):
-    mem = {}
-
-    @functools.wraps(func)
-    def wrapper():
-        if "results" not in mem:
-            mem["results"] = func()
-        return mem["results"]
-
-    return wrapper
-
-
-@lazy
-def _get_mtab():
-    if os.path.exists("/etc/mtab"):
-        with open("/etc/mtab") as afile:
-            data = afile.read()
-        return [line.split(" ") for line in data.split("\n") if line]
-    return []
-
-
-def get_max_filename_length(dirname):
+def lazy(func): 
+    mem = {} 
+ 
+    @functools.wraps(func) 
+    def wrapper(): 
+        if "results" not in mem: 
+            mem["results"] = func() 
+        return mem["results"] 
+ 
+    return wrapper 
+ 
+ 
+@lazy 
+def _get_mtab(): 
+    if os.path.exists("/etc/mtab"): 
+        with open("/etc/mtab") as afile: 
+            data = afile.read() 
+        return [line.split(" ") for line in data.split("\n") if line] 
+    return [] 
+ 
+ 
+def get_max_filename_length(dirname): 
     """
-    Return maximum filename length for the filesystem
-    :return:
-    """
-    if sys.platform.startswith("linux"):
-        # Linux user's may work on mounted ecryptfs filesystem
-        # which has filename length limitations
-        for entry in _get_mtab():
-            mounted_dir, filesystem = entry[1], entry[2]
-            # http://unix.stackexchange.com/questions/32795/what-is-the-maximum-allowed-filename-and-folder-size-with-ecryptfs
-            if filesystem == "ecryptfs" and dirname and dirname.startswith(mounted_dir):
-                return 140
-    # default maximum filename length for most filesystems
-    return 255
-
-
-def get_unique_file_path(dir_path, filename, cache=collections.defaultdict(set)):
-    """
-    Get unique filename in dir with proper filename length, using given filename/dir.
-    File/dir won't be created (thread nonsafe)
+    Return maximum filename length for the filesystem 
+    :return: 
+    """ 
+    if sys.platform.startswith("linux"): 
+        # Linux user's may work on mounted ecryptfs filesystem 
+        # which has filename length limitations 
+        for entry in _get_mtab(): 
+            mounted_dir, filesystem = entry[1], entry[2] 
+            # http://unix.stackexchange.com/questions/32795/what-is-the-maximum-allowed-filename-and-folder-size-with-ecryptfs 
+            if filesystem == "ecryptfs" and dirname and dirname.startswith(mounted_dir): 
+                return 140 
+    # default maximum filename length for most filesystems 
+    return 255 
+ 
+ 
+def get_unique_file_path(dir_path, filename, cache=collections.defaultdict(set)): 
+    """ 
+    Get unique filename in dir with proper filename length, using given filename/dir. 
+    File/dir won't be created (thread nonsafe) 
     :param dir_path: path to dir
-    :param filename: original filename
-    :return: unique filename
+    :param filename: original filename 
+    :return: unique filename 
     """
-    max_suffix = 10000
-    # + 1 symbol for dot before suffix
-    tail_length = int(round(math.log(max_suffix, 10))) + 1
-    # truncate filename length in accordance with filesystem limitations
-    filename, extension = os.path.splitext(filename)
-    # XXX
-    if sys.platform.startswith("win"):
-        # Trying to fit into MAX_PATH if it's possible.
-        # Remove after DEVTOOLS-1646
-        max_path = 260
-        filename_len = len(dir_path) + len(extension) + tail_length + len(os.sep)
-        if filename_len < max_path:
+    max_suffix = 10000 
+    # + 1 symbol for dot before suffix 
+    tail_length = int(round(math.log(max_suffix, 10))) + 1 
+    # truncate filename length in accordance with filesystem limitations 
+    filename, extension = os.path.splitext(filename) 
+    # XXX 
+    if sys.platform.startswith("win"): 
+        # Trying to fit into MAX_PATH if it's possible. 
+        # Remove after DEVTOOLS-1646 
+        max_path = 260 
+        filename_len = len(dir_path) + len(extension) + tail_length + len(os.sep) 
+        if filename_len < max_path: 
             filename = yatest_lib.tools.trim_string(filename, max_path - filename_len)
     filename = yatest_lib.tools.trim_string(filename, get_max_filename_length(dir_path) - tail_length - len(extension)) + extension
-    candidate = os.path.join(dir_path, filename)
-
-    key = dir_path + filename
-    counter = sorted(cache.get(key, {0, }))[-1]
-    while os.path.exists(candidate):
-        cache[key].add(counter)
-        counter += 1
-        assert counter < max_suffix
-        candidate = os.path.join(dir_path, filename + ".{}".format(counter))
-    return candidate
+    candidate = os.path.join(dir_path, filename) 
+ 
+    key = dir_path + filename 
+    counter = sorted(cache.get(key, {0, }))[-1] 
+    while os.path.exists(candidate): 
+        cache[key].add(counter) 
+        counter += 1 
+        assert counter < max_suffix 
+        candidate = os.path.join(dir_path, filename + ".{}".format(counter)) 
+    return candidate 
 
 
 def escape_for_fnmatch(s):
@@ -251,18 +251,18 @@ def normalize_name(name):
     return name
 
 
-def normalize_filename(filename):
+def normalize_filename(filename): 
     """
     Replace invalid for file names characters with string equivalents
     :param some_string: string to be converted to a valid file name
     :return: valid file name
     """
     not_allowed_pattern = r"[\[\]\/:*?\"\'<>|+\0\\\s\x0b\x0c]"
-    filename = re.sub(not_allowed_pattern, ".", filename)
-    return re.sub(r"\.{2,}", ".", filename)
+    filename = re.sub(not_allowed_pattern, ".", filename) 
+    return re.sub(r"\.{2,}", ".", filename) 
 
 
-def get_test_log_file_path(output_dir, class_name, test_name, extension="log"):
+def get_test_log_file_path(output_dir, class_name, test_name, extension="log"): 
     """
     get test log file path, platform dependant
     :param output_dir: dir where log file should be placed
@@ -271,16 +271,16 @@ def get_test_log_file_path(output_dir, class_name, test_name, extension="log"):
     :return: test log file name
     """
     if os.name == "nt":
-        # don't add class name to the log's filename
-        # to reduce it's length on windows
-        filename = test_name
+        # don't add class name to the log's filename 
+        # to reduce it's length on windows 
+        filename = test_name 
     else:
-        filename = "{}.{}".format(class_name, test_name)
-    if not filename:
-        filename = "test"
-    filename += "." + extension
-    filename = normalize_filename(filename)
-    return get_unique_file_path(output_dir, filename)
+        filename = "{}.{}".format(class_name, test_name) 
+    if not filename: 
+        filename = "test" 
+    filename += "." + extension 
+    filename = normalize_filename(filename) 
+    return get_unique_file_path(output_dir, filename) 
 
 
 def split_node_id(nodeid, test_suffix=None):

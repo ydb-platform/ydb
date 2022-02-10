@@ -106,10 +106,10 @@ struct TDiffColorizer {
     }
 };
 
-struct TTraceDiffFormatter {
+struct TTraceDiffFormatter { 
     bool Reverse = false;
 
-    explicit TTraceDiffFormatter(bool reverse = false)
+    explicit TTraceDiffFormatter(bool reverse = false) 
         : Reverse(reverse)
     {
     }
@@ -123,26 +123,26 @@ struct TTraceDiffFormatter {
     }
 
     TString Left(TArrayRef<const char> str) const {
-        return NUnitTest::GetFormatTag("good") +
+        return NUnitTest::GetFormatTag("good") + 
                TString(str.begin(), str.end()) +
                NUnitTest::GetResetTag();
     }
 
     TString Right(TArrayRef<const char> str) const {
-        return NUnitTest::GetFormatTag("bad") +
+        return NUnitTest::GetFormatTag("bad") + 
                TString(str.begin(), str.end()) +
                NUnitTest::GetResetTag();
     }
 };
 
 TString NUnitTest::GetFormatTag(const char* name) {
-    return Sprintf("[[%s]]", name);
-}
-
+    return Sprintf("[[%s]]", name); 
+} 
+ 
 TString NUnitTest::GetResetTag() {
     return TString("[[rst]]");
-}
-
+} 
+ 
 TString NUnitTest::ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& delims, bool reverse) {
     TStringStream res;
     TVector<NDiff::TChunk<char>> chunks;
@@ -150,8 +150,8 @@ TString NUnitTest::ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& deli
     if (NUnitTest::ShouldColorizeDiff) {
         NDiff::PrintChunks(res, TDiffColorizer(reverse), chunks);
     } else {
-        res << NUnitTest::GetResetTag();
-        NDiff::PrintChunks(res, TTraceDiffFormatter(reverse), chunks);
+        res << NUnitTest::GetResetTag(); 
+        NDiff::PrintChunks(res, TTraceDiffFormatter(reverse), chunks); 
     }
     return res.Str();
 }
@@ -478,18 +478,18 @@ unsigned NUnitTest::TTestFactory::Execute() {
 #ifdef _unix_ // on Windows RTTI causes memory leaks
         TString type = test->TypeId();
         if (types.insert(type).second == false) {
-            warnx("Duplicate suite found: %s (%s). Probably you have copy-pasted suite without changing it name", factory->Name().c_str(), type.c_str());
+            warnx("Duplicate suite found: %s (%s). Probably you have copy-pasted suite without changing it name", factory->Name().c_str(), type.c_str()); 
             return 1;
         }
 #endif // _unix_
 
         test->Parent_ = this;
 
-#ifdef UT_SKIP_EXCEPTIONS
+#ifdef UT_SKIP_EXCEPTIONS 
         try {
 #endif
             test->Execute();
-#ifdef UT_SKIP_EXCEPTIONS
+#ifdef UT_SKIP_EXCEPTIONS 
         } catch (...) {
         }
 #endif
@@ -497,7 +497,7 @@ unsigned NUnitTest::TTestFactory::Execute() {
 
     Processor_->End();
 
-    return bool(Processor_->FailTests());
+    return bool(Processor_->FailTests()); 
 }
 
 void NUnitTest::TTestFactory::SetProcessor(ITestSuiteProcessor* processor) {

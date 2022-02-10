@@ -1,20 +1,20 @@
 from __future__ import absolute_import
 
-import re
+import re 
 import sys
 import copy
-import logging
+import logging 
 
 from . import tools
 from datetime import date, datetime
 
-import enum
+import enum 
 import six
 
-logger = logging.getLogger(__name__)
-MDS_URI_PREFIX = 'https://storage.yandex-team.ru/get-devtools/'
+logger = logging.getLogger(__name__) 
+MDS_URI_PREFIX = 'https://storage.yandex-team.ru/get-devtools/' 
 
-
+ 
 def apply(func, value, apply_to_keys=False):
     """
     Applies func to every possible member of value
@@ -67,8 +67,8 @@ def serialize(value):
             return val
         if isinstance(val, six.string_types) or isinstance(val, bytes):
             return tools.to_utf8(val)
-        if isinstance(val, enum.Enum):
-            return str(val)
+        if isinstance(val, enum.Enum): 
+            return str(val) 
         if isinstance(val, six.integer_types) or type(val) in [float, bool]:
             return val
         if is_external(val):
@@ -136,19 +136,19 @@ class ExternalDataInfo(object):
 
     @property
     def path(self):
-        if self.uri.count("://") != 1:
-            logger.error("Invalid external data uri: '%s'", self.uri)
-            return self.uri
+        if self.uri.count("://") != 1: 
+            logger.error("Invalid external data uri: '%s'", self.uri) 
+            return self.uri 
         _, path = self.uri.split("://")
         return path
 
-    def get_mds_key(self):
-        assert self.is_http
-        m = re.match(re.escape(MDS_URI_PREFIX) + r'(.*?)($|#)', self.uri)
-        if m:
-            return m.group(1)
-        raise AssertionError("Failed to extract mds key properly from '{}'".format(self.uri))
-
+    def get_mds_key(self): 
+        assert self.is_http 
+        m = re.match(re.escape(MDS_URI_PREFIX) + r'(.*?)($|#)', self.uri) 
+        if m: 
+            return m.group(1) 
+        raise AssertionError("Failed to extract mds key properly from '{}'".format(self.uri)) 
+ 
     @property
     def size(self):
         return self._data.get("size")

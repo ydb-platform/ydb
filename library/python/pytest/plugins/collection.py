@@ -89,7 +89,7 @@ def pytest_ignore_collect(module, session, filenames_from_full_filters, accept_f
     if test_file_filter is None:
         return False
     if module.name != test_file_filter.replace('/', '.'):
-        return True
+        return True 
     return False
 
 

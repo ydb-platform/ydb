@@ -29,7 +29,7 @@ typedef struct arraydescr {
     int (*setitem)(struct arrayobject *, Py_ssize_t, PyObject *);
 #if PY_MAJOR_VERSION >= 3
     char *formats;
-#endif
+#endif 
 } arraydescr;
 
 
@@ -47,10 +47,10 @@ struct arrayobject {
         char *as_chars;
         unsigned long *as_ulongs;
         long *as_longs;
-#if PY_MAJOR_VERSION >= 3
-        unsigned long long *as_ulonglongs;
-        long long *as_longlongs;
-#endif
+#if PY_MAJOR_VERSION >= 3 
+        unsigned long long *as_ulonglongs; 
+        long long *as_longlongs; 
+#endif 
         short *as_shorts;
         unsigned short *as_ushorts;
         Py_UNICODE *as_pyunicodes;
@@ -114,7 +114,7 @@ static CYTHON_INLINE int resize(arrayobject *self, Py_ssize_t n) {
     if (items == NULL) {
         PyErr_NoMemory();
         return -1;
-    }
+    } 
     self->data.ob_item = (char*) items;
     __Pyx_SET_SIZE(self, n);
     self->allocated = n;

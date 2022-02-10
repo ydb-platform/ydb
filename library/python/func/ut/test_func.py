@@ -1,13 +1,13 @@
 import pytest
-import threading
+import threading 
 
 import library.python.func as func
 
 
 def test_map0():
-    assert None is func.map0(lambda x: x + 1, None)
+    assert None is func.map0(lambda x: x + 1, None) 
     assert 3 == func.map0(lambda x: x + 1, 2)
-    assert None is func.map0(len, None)
+    assert None is func.map0(len, None) 
     assert 2 == func.map0(len, [1, 2])
 
 
@@ -26,34 +26,34 @@ def test_memoize():
             Counter._qty = getattr(Counter, '_qty', 0) + 1
             return Counter._qty
 
-    @func.memoize()
+    @func.memoize() 
     def t1(a):
         return a, Counter.inc()
 
-    @func.memoize()
+    @func.memoize() 
     def t2(a):
         return a, Counter.inc()
 
-    @func.memoize()
+    @func.memoize() 
     def t3(a):
         return a, Counter.inc()
 
-    @func.memoize()
+    @func.memoize() 
     def t4(a):
         return a, Counter.inc()
 
-    @func.memoize()
+    @func.memoize() 
     def t5(a, b, c):
         return a + b + c, Counter.inc()
 
-    @func.memoize()
+    @func.memoize() 
     def t6():
         return Counter.inc()
 
-    @func.memoize(limit=2)
-    def t7(a, _b):
-        return a, Counter.inc()
-
+    @func.memoize(limit=2) 
+    def t7(a, _b): 
+        return a, Counter.inc() 
+ 
     assert (1, 1) == t1(1)
     assert (1, 1) == t1(1)
     assert (2, 2) == t1(2)
@@ -82,48 +82,48 @@ def test_memoize():
     assert 11 == t6()
     assert 11 == t6()
 
-    assert (1, 12) == t7(1, None)
-    assert (2, 13) == t7(2, None)
-    assert (1, 12) == t7(1, None)
-    assert (2, 13) == t7(2, None)
-    # removed result for (1, None)
-    assert (3, 14) == t7(3, None)
-    assert (1, 15) == t7(1, None)
-
-    class ClassWithMemoizedMethod(object):
-        def __init__(self):
-            self.a = 0
-
-        @func.memoize(True)
-        def t(self, i):
-            self.a += i
-            return i
-
-    obj = ClassWithMemoizedMethod()
-    assert 10 == obj.t(10)
-    assert 10 == obj.a
-    assert 10 == obj.t(10)
-    assert 10 == obj.a
-
-    assert 20 == obj.t(20)
-    assert 30 == obj.a
-    assert 20 == obj.t(20)
-    assert 30 == obj.a
-
-
-def test_first():
-    assert func.first([0, [], (), None, False, {}, 0.0, '1', 0]) == '1'
-    assert func.first([]) is None
-    assert func.first([0]) is None
-
-
-def test_split():
-    assert func.split([1, 1], lambda x: x) == ([1, 1], [])
-    assert func.split([0, 0], lambda x: x) == ([], [0, 0])
-    assert func.split([], lambda x: x) == ([], [])
-    assert func.split([1, 0, 1], lambda x: x) == ([1, 1], [0])
-
-
+    assert (1, 12) == t7(1, None) 
+    assert (2, 13) == t7(2, None) 
+    assert (1, 12) == t7(1, None) 
+    assert (2, 13) == t7(2, None) 
+    # removed result for (1, None) 
+    assert (3, 14) == t7(3, None) 
+    assert (1, 15) == t7(1, None) 
+ 
+    class ClassWithMemoizedMethod(object): 
+        def __init__(self): 
+            self.a = 0 
+ 
+        @func.memoize(True) 
+        def t(self, i): 
+            self.a += i 
+            return i 
+ 
+    obj = ClassWithMemoizedMethod() 
+    assert 10 == obj.t(10) 
+    assert 10 == obj.a 
+    assert 10 == obj.t(10) 
+    assert 10 == obj.a 
+ 
+    assert 20 == obj.t(20) 
+    assert 30 == obj.a 
+    assert 20 == obj.t(20) 
+    assert 30 == obj.a 
+ 
+ 
+def test_first(): 
+    assert func.first([0, [], (), None, False, {}, 0.0, '1', 0]) == '1' 
+    assert func.first([]) is None 
+    assert func.first([0]) is None 
+ 
+ 
+def test_split(): 
+    assert func.split([1, 1], lambda x: x) == ([1, 1], []) 
+    assert func.split([0, 0], lambda x: x) == ([], [0, 0]) 
+    assert func.split([], lambda x: x) == ([], []) 
+    assert func.split([1, 0, 1], lambda x: x) == ([1, 1], [0]) 
+ 
+ 
 def test_flatten_dict():
     assert func.flatten_dict({"a": 1, "b": 2}) == {"a": 1, "b": 2}
     assert func.flatten_dict({"a": 1}) == {"a": 1}
@@ -132,31 +132,31 @@ def test_flatten_dict():
     assert func.flatten_dict({"a": 1, "b": {"c": {"d": 2}}}, separator="/") == {"a": 1, "b/c/d": 2}
 
 
-def test_memoize_thread_local():
-    class Counter(object):
-        def __init__(self, s):
-            self.val = s
-
-        def inc(self):
-            self.val += 1
-            return self.val
-
-    @func.memoize(thread_local=True)
-    def get_counter(start):
-        return Counter(start)
-
-    def th_inc():
-        assert get_counter(0).inc() == 1
-        assert get_counter(0).inc() == 2
-        assert get_counter(10).inc() == 11
-        assert get_counter(10).inc() == 12
-
-    th_inc()
-
-    th = threading.Thread(target=th_inc)
-    th.start()
-    th.join()
-
-
+def test_memoize_thread_local(): 
+    class Counter(object): 
+        def __init__(self, s): 
+            self.val = s 
+ 
+        def inc(self): 
+            self.val += 1 
+            return self.val 
+ 
+    @func.memoize(thread_local=True) 
+    def get_counter(start): 
+        return Counter(start) 
+ 
+    def th_inc(): 
+        assert get_counter(0).inc() == 1 
+        assert get_counter(0).inc() == 2 
+        assert get_counter(10).inc() == 11 
+        assert get_counter(10).inc() == 12 
+ 
+    th_inc() 
+ 
+    th = threading.Thread(target=th_inc) 
+    th.start() 
+    th.join() 
+ 
+ 
 if __name__ == '__main__':
     pytest.main([__file__])

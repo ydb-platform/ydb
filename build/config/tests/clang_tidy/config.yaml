@@ -1,6 +1,6 @@
 Checks: >
   -*,
-  arcadia-typeid-name-restriction,
+  arcadia-typeid-name-restriction, 
   bugprone-use-after-move,
   readability-identifier-naming,
 CheckOptions:

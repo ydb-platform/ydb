@@ -1,7 +1,7 @@
 #pragma once
 
-#include <unordered_map>
-
+#include <unordered_map> 
+ 
 #include <util/folder/path.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
@@ -14,7 +14,7 @@ TString ArcadiaSourceRoot();
 //        for the instance: there is 2 files in folder test example_ut.cpp and example.data, so full path to test/example.data can be obtained
 //        from example_ut.cpp as ArcadiaFromCurrentLocation(__SOURCE_FILE__, "example.data")
 TString ArcadiaFromCurrentLocation(TStringBuf where, TStringBuf path);
-
+ 
 // @brief return build folder path
 TString BuildRoot();
 
@@ -34,26 +34,26 @@ TString GetWorkPath();
 TFsPath GetOutputPath();
 
 // @brief return path from env:YA_TEST_RAM_DRIVE_PATH
-const TString& GetRamDrivePath();
-
+const TString& GetRamDrivePath(); 
+ 
 // @brief return path from env:YA_TEST_OUTPUT_RAM_DRIVE_PATH
-const TString& GetOutputRamDrivePath();
+const TString& GetOutputRamDrivePath(); 
 
-// @brief return test parameter by name. If not exists, return an empty string
-const TString& GetTestParam(TStringBuf name);
-
-// @brief return test parameter by name. If not exists, return specified default value
-const TString& GetTestParam(TStringBuf name, const TString& def);
-
-// @brief return path to the gdb
-const TString& GdbPath();
-
-// @brief register the process. Test suite will be marked as failed if the process is terminated with a core dump file after testing
-void WatchProcessCore(int pid, const TFsPath& binaryPath, const TFsPath& cwd = TFsPath());
-
-// @brief mark the process as successfully completed - a test machinery won't try to recover core dump file for the process
-void StopProcessCoreWatching(int pid);
-
+// @brief return test parameter by name. If not exists, return an empty string 
+const TString& GetTestParam(TStringBuf name); 
+ 
+// @brief return test parameter by name. If not exists, return specified default value 
+const TString& GetTestParam(TStringBuf name, const TString& def); 
+ 
+// @brief return path to the gdb 
+const TString& GdbPath(); 
+ 
+// @brief register the process. Test suite will be marked as failed if the process is terminated with a core dump file after testing 
+void WatchProcessCore(int pid, const TFsPath& binaryPath, const TFsPath& cwd = TFsPath()); 
+ 
+// @brief mark the process as successfully completed - a test machinery won't try to recover core dump file for the process 
+void StopProcessCoreWatching(int pid); 
+ 
 #define SRC_(path) ArcadiaFromCurrentLocation(__SOURCE_FILE__, path)
 
 namespace NPrivate {
@@ -63,8 +63,8 @@ namespace NPrivate {
 
         void ReInitialize();
 
-        void AddTestParam(TStringBuf name, TStringBuf value);
-
+        void AddTestParam(TStringBuf name, TStringBuf value); 
+ 
         bool IsRunningFromTest;
         TString ArcadiaTestsDataDir;
         TString SourceRoot;
@@ -73,9 +73,9 @@ namespace NPrivate {
         TString RamDrivePath;
         TString YtHddPath;
         TString TestOutputRamDrivePath;
-        TString GdbPath;
-        TString CoreSearchFile;
-        std::unordered_map<TString, TString> TestParameters;
+        TString GdbPath; 
+        TString CoreSearchFile; 
+        std::unordered_map<TString, TString> TestParameters; 
     };
 
     TString GetCwd();

@@ -45,27 +45,27 @@ def main():
         cflags.append('-fopenmp')
         cflags.remove('-fopenmp=libomp')
 
-    skip_list = [
-        '-gline-tables-only',
-        # clang coverage
-        '-fprofile-instr-generate',
-        '-fcoverage-mapping',
+    skip_list = [ 
+        '-gline-tables-only', 
+        # clang coverage 
+        '-fprofile-instr-generate', 
+        '-fcoverage-mapping', 
         '/Zc:inline',  # disable unreferenced functions (kernel registrators) remove
         '-Wno-c++17-extensions',
         '-flto',
         '-faligned-allocation',
-    ]
-
+    ] 
+ 
     if skip_nocxxinc:
         skip_list.append('-nostdinc++')
 
-    for flag in skip_list:
+    for flag in skip_list: 
         if flag in cflags:
             cflags.remove(flag)
 
     skip_prefix_list = [
         '-fsanitize=',
-        '-fsanitize-coverage=',
+        '-fsanitize-coverage=', 
         '-fsanitize-blacklist=',
         '--system-header-prefix',
     ]

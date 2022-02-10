@@ -32,10 +32,10 @@ static CYTHON_INLINE int __Pyx_is_valid_index(Py_ssize_t i, Py_ssize_t limit) {
     #define __Pyx_sst_abs(value) abs(value)
 #elif SIZEOF_LONG >= SIZEOF_SIZE_T
     #define __Pyx_sst_abs(value) labs(value)
-#elif defined (_MSC_VER)
+#elif defined (_MSC_VER) 
     // abs() is defined for long, but 64-bits type on MSVC is long long.
     // Use MS-specific _abs64 instead.
-    #define __Pyx_sst_abs(value) ((Py_ssize_t)_abs64(value))
+    #define __Pyx_sst_abs(value) ((Py_ssize_t)_abs64(value)) 
 #elif defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
     #define __Pyx_sst_abs(value) llabs(value)
 #elif defined (__GNUC__)
@@ -45,8 +45,8 @@ static CYTHON_INLINE int __Pyx_is_valid_index(Py_ssize_t i, Py_ssize_t limit) {
     #define __Pyx_sst_abs(value) ((value<0) ? -value : value)
 #endif
 
-static CYTHON_INLINE const char* __Pyx_PyObject_AsString(PyObject*);
-static CYTHON_INLINE const char* __Pyx_PyObject_AsStringAndSize(PyObject*, Py_ssize_t* length);
+static CYTHON_INLINE const char* __Pyx_PyObject_AsString(PyObject*); 
+static CYTHON_INLINE const char* __Pyx_PyObject_AsStringAndSize(PyObject*, Py_ssize_t* length); 
 
 #define __Pyx_PyByteArray_FromString(s) PyByteArray_FromStringAndSize((const char*)s, strlen((const char*)s))
 #define __Pyx_PyByteArray_FromStringAndSize(s, l) PyByteArray_FromStringAndSize((const char*)s, l)
@@ -62,25 +62,25 @@ static CYTHON_INLINE PyObject* __Pyx_PyUnicode_FromString(const char*);
     #define __Pyx_PyStr_FromStringAndSize __Pyx_PyUnicode_FromStringAndSize
 #endif
 
-#define __Pyx_PyBytes_AsWritableString(s)     ((char*) PyBytes_AS_STRING(s))
-#define __Pyx_PyBytes_AsWritableSString(s)    ((signed char*) PyBytes_AS_STRING(s))
-#define __Pyx_PyBytes_AsWritableUString(s)    ((unsigned char*) PyBytes_AS_STRING(s))
-#define __Pyx_PyBytes_AsString(s)     ((const char*) PyBytes_AS_STRING(s))
-#define __Pyx_PyBytes_AsSString(s)    ((const signed char*) PyBytes_AS_STRING(s))
-#define __Pyx_PyBytes_AsUString(s)    ((const unsigned char*) PyBytes_AS_STRING(s))
-#define __Pyx_PyObject_AsWritableString(s)    ((char*) __Pyx_PyObject_AsString(s))
-#define __Pyx_PyObject_AsWritableSString(s)    ((signed char*) __Pyx_PyObject_AsString(s))
-#define __Pyx_PyObject_AsWritableUString(s)    ((unsigned char*) __Pyx_PyObject_AsString(s))
-#define __Pyx_PyObject_AsSString(s)    ((const signed char*) __Pyx_PyObject_AsString(s))
-#define __Pyx_PyObject_AsUString(s)    ((const unsigned char*) __Pyx_PyObject_AsString(s))
+#define __Pyx_PyBytes_AsWritableString(s)     ((char*) PyBytes_AS_STRING(s)) 
+#define __Pyx_PyBytes_AsWritableSString(s)    ((signed char*) PyBytes_AS_STRING(s)) 
+#define __Pyx_PyBytes_AsWritableUString(s)    ((unsigned char*) PyBytes_AS_STRING(s)) 
+#define __Pyx_PyBytes_AsString(s)     ((const char*) PyBytes_AS_STRING(s)) 
+#define __Pyx_PyBytes_AsSString(s)    ((const signed char*) PyBytes_AS_STRING(s)) 
+#define __Pyx_PyBytes_AsUString(s)    ((const unsigned char*) PyBytes_AS_STRING(s)) 
+#define __Pyx_PyObject_AsWritableString(s)    ((char*) __Pyx_PyObject_AsString(s)) 
+#define __Pyx_PyObject_AsWritableSString(s)    ((signed char*) __Pyx_PyObject_AsString(s)) 
+#define __Pyx_PyObject_AsWritableUString(s)    ((unsigned char*) __Pyx_PyObject_AsString(s)) 
+#define __Pyx_PyObject_AsSString(s)    ((const signed char*) __Pyx_PyObject_AsString(s)) 
+#define __Pyx_PyObject_AsUString(s)    ((const unsigned char*) __Pyx_PyObject_AsString(s)) 
 #define __Pyx_PyObject_FromCString(s)  __Pyx_PyObject_FromString((const char*)s)
 #define __Pyx_PyBytes_FromCString(s)   __Pyx_PyBytes_FromString((const char*)s)
 #define __Pyx_PyByteArray_FromCString(s)   __Pyx_PyByteArray_FromString((const char*)s)
 #define __Pyx_PyStr_FromCString(s)     __Pyx_PyStr_FromString((const char*)s)
 #define __Pyx_PyUnicode_FromCString(s) __Pyx_PyUnicode_FromString((const char*)s)
 
-// There used to be a Py_UNICODE_strlen() in CPython 3.x, but it is deprecated since Py3.3.
-static CYTHON_INLINE size_t __Pyx_Py_UNICODE_strlen(const Py_UNICODE *u) {
+// There used to be a Py_UNICODE_strlen() in CPython 3.x, but it is deprecated since Py3.3. 
+static CYTHON_INLINE size_t __Pyx_Py_UNICODE_strlen(const Py_UNICODE *u) { 
     const Py_UNICODE *u_end = u;
     while (*u_end++) ;
     return (size_t)(u_end - u - 1);
@@ -97,9 +97,9 @@ static CYTHON_INLINE int __Pyx_PyObject_IsTrue(PyObject*);
 static CYTHON_INLINE int __Pyx_PyObject_IsTrueAndDecref(PyObject*);
 static CYTHON_INLINE PyObject* __Pyx_PyNumber_IntOrLong(PyObject* x);
 
-#define __Pyx_PySequence_Tuple(obj) \
-    (likely(PyTuple_CheckExact(obj)) ? __Pyx_NewRef(obj) : PySequence_Tuple(obj))
-
+#define __Pyx_PySequence_Tuple(obj) \ 
+    (likely(PyTuple_CheckExact(obj)) ? __Pyx_NewRef(obj) : PySequence_Tuple(obj)) 
+ 
 static CYTHON_INLINE Py_ssize_t __Pyx_PyIndex_AsSsize_t(PyObject*);
 static CYTHON_INLINE PyObject * __Pyx_PyInt_FromSize_t(size_t);
 static CYTHON_INLINE Py_hash_t __Pyx_PyIndex_AsHash_t(PyObject*);
@@ -207,67 +207,67 @@ static CYTHON_INLINE PyObject* __Pyx_PyUnicode_FromString(const char* c_str) {
     return __Pyx_PyUnicode_FromStringAndSize(c_str, (Py_ssize_t)strlen(c_str));
 }
 
-// Py3.7 returns a "const char*" for unicode strings
-static CYTHON_INLINE const char* __Pyx_PyObject_AsString(PyObject* o) {
+// Py3.7 returns a "const char*" for unicode strings 
+static CYTHON_INLINE const char* __Pyx_PyObject_AsString(PyObject* o) { 
     Py_ssize_t ignore;
     return __Pyx_PyObject_AsStringAndSize(o, &ignore);
 }
 
-#if __PYX_DEFAULT_STRING_ENCODING_IS_ASCII || __PYX_DEFAULT_STRING_ENCODING_IS_DEFAULT
-#if !CYTHON_PEP393_ENABLED
-static const char* __Pyx_PyUnicode_AsStringAndSize(PyObject* o, Py_ssize_t *length) {
-    char* defenc_c;
-    // borrowed reference, cached internally in 'o' by CPython
-    PyObject* defenc = _PyUnicode_AsDefaultEncodedString(o, NULL);
-    if (!defenc) return NULL;
-    defenc_c = PyBytes_AS_STRING(defenc);
+#if __PYX_DEFAULT_STRING_ENCODING_IS_ASCII || __PYX_DEFAULT_STRING_ENCODING_IS_DEFAULT 
+#if !CYTHON_PEP393_ENABLED 
+static const char* __Pyx_PyUnicode_AsStringAndSize(PyObject* o, Py_ssize_t *length) { 
+    char* defenc_c; 
+    // borrowed reference, cached internally in 'o' by CPython 
+    PyObject* defenc = _PyUnicode_AsDefaultEncodedString(o, NULL); 
+    if (!defenc) return NULL; 
+    defenc_c = PyBytes_AS_STRING(defenc); 
 #if __PYX_DEFAULT_STRING_ENCODING_IS_ASCII
-    {
-        char* end = defenc_c + PyBytes_GET_SIZE(defenc);
-        char* c;
-        for (c = defenc_c; c < end; c++) {
-            if ((unsigned char) (*c) >= 128) {
-                // raise the error
-                PyUnicode_AsASCIIString(o);
-                return NULL;
+    { 
+        char* end = defenc_c + PyBytes_GET_SIZE(defenc); 
+        char* c; 
+        for (c = defenc_c; c < end; c++) { 
+            if ((unsigned char) (*c) >= 128) { 
+                // raise the error 
+                PyUnicode_AsASCIIString(o); 
+                return NULL; 
             }
         }
-    }
+    } 
 #endif /*__PYX_DEFAULT_STRING_ENCODING_IS_ASCII*/
-    *length = PyBytes_GET_SIZE(defenc);
-    return defenc_c;
-}
-
-#else /* CYTHON_PEP393_ENABLED: */
-
-static CYTHON_INLINE const char* __Pyx_PyUnicode_AsStringAndSize(PyObject* o, Py_ssize_t *length) {
-    if (unlikely(__Pyx_PyUnicode_READY(o) == -1)) return NULL;
+    *length = PyBytes_GET_SIZE(defenc); 
+    return defenc_c; 
+} 
+ 
+#else /* CYTHON_PEP393_ENABLED: */ 
+ 
+static CYTHON_INLINE const char* __Pyx_PyUnicode_AsStringAndSize(PyObject* o, Py_ssize_t *length) { 
+    if (unlikely(__Pyx_PyUnicode_READY(o) == -1)) return NULL; 
 #if __PYX_DEFAULT_STRING_ENCODING_IS_ASCII
-    if (likely(PyUnicode_IS_ASCII(o))) {
-        // cached for the lifetime of the object
-        *length = PyUnicode_GET_LENGTH(o);
-        return PyUnicode_AsUTF8(o);
-    } else {
-        // raise the error
-        PyUnicode_AsASCIIString(o);
-        return NULL;
-    }
+    if (likely(PyUnicode_IS_ASCII(o))) { 
+        // cached for the lifetime of the object 
+        *length = PyUnicode_GET_LENGTH(o); 
+        return PyUnicode_AsUTF8(o); 
+    } else { 
+        // raise the error 
+        PyUnicode_AsASCIIString(o); 
+        return NULL; 
+    } 
 #else /* __PYX_DEFAULT_STRING_ENCODING_IS_ASCII */
-    return PyUnicode_AsUTF8AndSize(o, length);
+    return PyUnicode_AsUTF8AndSize(o, length); 
 #endif /* __PYX_DEFAULT_STRING_ENCODING_IS_ASCII */
-}
-#endif /* CYTHON_PEP393_ENABLED */
-#endif
-
-// Py3.7 returns a "const char*" for unicode strings
-static CYTHON_INLINE const char* __Pyx_PyObject_AsStringAndSize(PyObject* o, Py_ssize_t *length) {
-#if __PYX_DEFAULT_STRING_ENCODING_IS_ASCII || __PYX_DEFAULT_STRING_ENCODING_IS_DEFAULT
-    if (
-#if PY_MAJOR_VERSION < 3 && __PYX_DEFAULT_STRING_ENCODING_IS_ASCII
-            __Pyx_sys_getdefaultencoding_not_ascii &&
-#endif
-            PyUnicode_Check(o)) {
-        return __Pyx_PyUnicode_AsStringAndSize(o, length);
+} 
+#endif /* CYTHON_PEP393_ENABLED */ 
+#endif 
+ 
+// Py3.7 returns a "const char*" for unicode strings 
+static CYTHON_INLINE const char* __Pyx_PyObject_AsStringAndSize(PyObject* o, Py_ssize_t *length) { 
+#if __PYX_DEFAULT_STRING_ENCODING_IS_ASCII || __PYX_DEFAULT_STRING_ENCODING_IS_DEFAULT 
+    if ( 
+#if PY_MAJOR_VERSION < 3 && __PYX_DEFAULT_STRING_ENCODING_IS_ASCII 
+            __Pyx_sys_getdefaultencoding_not_ascii && 
+#endif 
+            PyUnicode_Check(o)) { 
+        return __Pyx_PyUnicode_AsStringAndSize(o, length); 
     } else
 #endif /* __PYX_DEFAULT_STRING_ENCODING_IS_ASCII  || __PYX_DEFAULT_STRING_ENCODING_IS_DEFAULT */
 
@@ -303,28 +303,28 @@ static CYTHON_INLINE int __Pyx_PyObject_IsTrueAndDecref(PyObject* x) {
     return retval;
 }
 
-static PyObject* __Pyx_PyNumber_IntOrLongWrongResultType(PyObject* result, const char* type_name) {
-#if PY_MAJOR_VERSION >= 3
-    if (PyLong_Check(result)) {
-        // CPython issue #17576: warn if 'result' not of exact type int.
-        if (PyErr_WarnFormat(PyExc_DeprecationWarning, 1,
-                "__int__ returned non-int (type %.200s).  "
-                "The ability to return an instance of a strict subclass of int "
-                "is deprecated, and may be removed in a future version of Python.",
-                Py_TYPE(result)->tp_name)) {
-            Py_DECREF(result);
-            return NULL;
-        }
-        return result;
-    }
-#endif
-    PyErr_Format(PyExc_TypeError,
-                 "__%.4s__ returned non-%.4s (type %.200s)",
-                 type_name, type_name, Py_TYPE(result)->tp_name);
-    Py_DECREF(result);
-    return NULL;
-}
-
+static PyObject* __Pyx_PyNumber_IntOrLongWrongResultType(PyObject* result, const char* type_name) { 
+#if PY_MAJOR_VERSION >= 3 
+    if (PyLong_Check(result)) { 
+        // CPython issue #17576: warn if 'result' not of exact type int. 
+        if (PyErr_WarnFormat(PyExc_DeprecationWarning, 1, 
+                "__int__ returned non-int (type %.200s).  " 
+                "The ability to return an instance of a strict subclass of int " 
+                "is deprecated, and may be removed in a future version of Python.", 
+                Py_TYPE(result)->tp_name)) { 
+            Py_DECREF(result); 
+            return NULL; 
+        } 
+        return result; 
+    } 
+#endif 
+    PyErr_Format(PyExc_TypeError, 
+                 "__%.4s__ returned non-%.4s (type %.200s)", 
+                 type_name, type_name, Py_TYPE(result)->tp_name); 
+    Py_DECREF(result); 
+    return NULL; 
+} 
+ 
 static CYTHON_INLINE PyObject* __Pyx_PyNumber_IntOrLong(PyObject* x) {
 #if CYTHON_USE_TYPE_SLOTS
   PyNumberMethods *m;
@@ -332,9 +332,9 @@ static CYTHON_INLINE PyObject* __Pyx_PyNumber_IntOrLong(PyObject* x) {
   const char *name = NULL;
   PyObject *res = NULL;
 #if PY_MAJOR_VERSION < 3
-  if (likely(PyInt_Check(x) || PyLong_Check(x)))
+  if (likely(PyInt_Check(x) || PyLong_Check(x))) 
 #else
-  if (likely(PyLong_Check(x)))
+  if (likely(PyLong_Check(x))) 
 #endif
     return __Pyx_NewRef(x);
 #if CYTHON_USE_TYPE_SLOTS
@@ -342,30 +342,30 @@ static CYTHON_INLINE PyObject* __Pyx_PyNumber_IntOrLong(PyObject* x) {
   #if PY_MAJOR_VERSION < 3
   if (m && m->nb_int) {
     name = "int";
-    res = m->nb_int(x);
+    res = m->nb_int(x); 
   }
   else if (m && m->nb_long) {
     name = "long";
-    res = m->nb_long(x);
+    res = m->nb_long(x); 
   }
   #else
-  if (likely(m && m->nb_int)) {
+  if (likely(m && m->nb_int)) { 
     name = "int";
-    res = m->nb_int(x);
+    res = m->nb_int(x); 
   }
   #endif
 #else
-  if (!PyBytes_CheckExact(x) && !PyUnicode_CheckExact(x)) {
-    res = PyNumber_Int(x);
-  }
+  if (!PyBytes_CheckExact(x) && !PyUnicode_CheckExact(x)) { 
+    res = PyNumber_Int(x); 
+  } 
 #endif
-  if (likely(res)) {
+  if (likely(res)) { 
 #if PY_MAJOR_VERSION < 3
-    if (unlikely(!PyInt_Check(res) && !PyLong_Check(res))) {
+    if (unlikely(!PyInt_Check(res) && !PyLong_Check(res))) { 
 #else
-    if (unlikely(!PyLong_CheckExact(res))) {
+    if (unlikely(!PyLong_CheckExact(res))) { 
 #endif
-        return __Pyx_PyNumber_IntOrLongWrongResultType(res, name);
+        return __Pyx_PyNumber_IntOrLongWrongResultType(res, name); 
     }
   }
   else if (!PyErr_Occurred()) {
@@ -712,8 +712,8 @@ static const char DIGIT_PAIRS_8[2*8*8+1] = {
 };
 
 static const char DIGITS_HEX[2*16+1] = {
-    "0123456789abcdef"
-    "0123456789ABCDEF"
+    "0123456789abcdef" 
+    "0123456789ABCDEF" 
 };
 
 
@@ -751,39 +751,39 @@ static CYTHON_INLINE PyObject* {{TO_PY_FUNCTION}}({{TYPE}} value, Py_ssize_t wid
     if (format_char == 'X') {
         hex_digits += 16;
         format_char = 'x';
-    }
+    } 
 
     // surprise: even trivial sprintf() calls don't get optimised in gcc (4.8)
     remaining = value; /* not using abs(value) to avoid overflow problems */
     last_one_off = 0;
     dpos = end;
-    do {
+    do { 
         int digit_pos;
         switch (format_char) {
         case 'o':
-            digit_pos = abs((int)(remaining % (8*8)));
-            remaining = ({{TYPE}}) (remaining / (8*8));
+            digit_pos = abs((int)(remaining % (8*8))); 
+            remaining = ({{TYPE}}) (remaining / (8*8)); 
             dpos -= 2;
             memcpy(dpos, DIGIT_PAIRS_8 + digit_pos * 2, 2); /* copy 2 digits at a time, unaligned */
             last_one_off = (digit_pos < 8);
             break;
         case 'd':
-            digit_pos = abs((int)(remaining % (10*10)));
-            remaining = ({{TYPE}}) (remaining / (10*10));
+            digit_pos = abs((int)(remaining % (10*10))); 
+            remaining = ({{TYPE}}) (remaining / (10*10)); 
             dpos -= 2;
             memcpy(dpos, DIGIT_PAIRS_10 + digit_pos * 2, 2); /* copy 2 digits at a time, unaligned */
             last_one_off = (digit_pos < 10);
             break;
         case 'x':
-            *(--dpos) = hex_digits[abs((int)(remaining % 16))];
-            remaining = ({{TYPE}}) (remaining / 16);
+            *(--dpos) = hex_digits[abs((int)(remaining % 16))]; 
+            remaining = ({{TYPE}}) (remaining / 16); 
             break;
         default:
             assert(0);
             break;
         }
-    } while (unlikely(remaining != 0));
-
+    } while (unlikely(remaining != 0)); 
+ 
     if (last_one_off) {
         assert(*dpos == '0');
         dpos++;

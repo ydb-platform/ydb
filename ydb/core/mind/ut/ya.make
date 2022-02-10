@@ -10,8 +10,8 @@ FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(3600)
-    SIZE(LARGE)
-    TAG(ya:fat)
+    SIZE(LARGE) 
+    TAG(ya:fat) 
     SPLIT_FACTOR(80)
     REQUIREMENTS(
         cpu:4

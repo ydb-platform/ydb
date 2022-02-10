@@ -1,4 +1,4 @@
-OWNER(
-    g:python-committee
-    g:yatest
-)
+OWNER( 
+    g:python-committee 
+    g:yatest 
+) 

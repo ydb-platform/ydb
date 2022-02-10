@@ -29,7 +29,7 @@ virtual void Scenario(const TActorContext &ctx) {
 
     // read command
     TAutoPtr<IActor> readCmd;
-    auto sendFunc = [part0, &instance](const TActorContext &ctx) {
+    auto sendFunc = [part0, &instance](const TActorContext &ctx) { 
         auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(instance.VDiskID,
                                                                    TInstant::Max(),
                                                                    NKikimrBlobStorage::EGetHandleClass::AsyncRead,
@@ -38,7 +38,7 @@ virtual void Scenario(const TActorContext &ctx) {
                                                                    {part0});
         ctx.Send(instance.ActorID, req.release());
     };
-    auto checkFunc = [](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
+    auto checkFunc = [](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) { 
         CheckQueryResult(ev, ctx, EQR_OK_NODATA, nullptr);
     };
     readCmd.Reset(CreateOneGet(SyncRunner->NotifyID(), sendFunc, checkFunc));
@@ -293,7 +293,7 @@ virtual void Scenario(const TActorContext &ctx) {
                                                                       10);
             ctx.Send(instance.ActorID, req.release());
         };
-        auto checkFunc = [&done](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
+        auto checkFunc = [&done](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) { 
             TEvBlobStorage::TEvVGetResult *msg = ev->Get();
             Y_VERIFY(msg->Record.GetStatus() == NKikimrProto::OK);
             done = msg->Record.ResultSize() == 0;
@@ -359,7 +359,7 @@ virtual void Scenario(const TActorContext &ctx) {
                                                                       10);
             ctx.Send(instance.ActorID, req.release());
         };
-        auto checkFunc = [&done](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
+        auto checkFunc = [&done](TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) { 
             TEvBlobStorage::TEvVGetResult *msg = ev->Get();
             Y_VERIFY(msg->Record.GetStatus() == NKikimrProto::OK);
             done = msg->Record.ResultSize() == 0;

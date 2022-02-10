@@ -120,7 +120,7 @@ namespace NKikimr {
             auto it = WriteQueue.insert(WriteQueue.end(), std::move(item));
 
             // fill in callback
-            auto callback = [it](NKikimrProto::EReplyStatus status, IEventBase* /*msg*/, const TActorContext& ctx) {
+            auto callback = [it](NKikimrProto::EReplyStatus status, IEventBase* /*msg*/, const TActorContext& ctx) { 
                 ctx.Send(it->Sender, new TEvIncrHugeWriteResult(status, it->Id, std::move(it->Payload)), 0, it->Cookie);
             };
             it->Callback = MakeCallback(std::move(callback));

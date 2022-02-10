@@ -1,5 +1,5 @@
 ////////// MemviewSliceStruct.proto //////////
-//@proto_block: utility_code_proto_before_types
+//@proto_block: utility_code_proto_before_types 
 
 /* memoryview slice struct */
 struct {{memview_struct_name}};
@@ -12,12 +12,12 @@ typedef struct {
   Py_ssize_t suboffsets[{{max_dims}}];
 } {{memviewslice_name}};
 
-// used for "len(memviewslice)"
-#define __Pyx_MemoryView_Len(m)  (m.shape[0])
+// used for "len(memviewslice)" 
+#define __Pyx_MemoryView_Len(m)  (m.shape[0]) 
 
-
+ 
 /////////// Atomics.proto /////////////
-//@proto_block: utility_code_proto_before_types
+//@proto_block: utility_code_proto_before_types 
 
 #include <pythread.h>
 
@@ -82,7 +82,7 @@ typedef volatile __pyx_atomic_int_type __pyx_atomic_int;
 
 /////////////// ObjectToMemviewSlice.proto ///////////////
 
-static CYTHON_INLINE {{memviewslice_name}} {{funcname}}(PyObject *, int writable_flag);
+static CYTHON_INLINE {{memviewslice_name}} {{funcname}}(PyObject *, int writable_flag); 
 
 
 ////////// MemviewSliceInit.proto //////////
@@ -127,7 +127,7 @@ static CYTHON_INLINE char *__pyx_memviewslice_index_full(
 /////////////// ObjectToMemviewSlice ///////////////
 //@requires: MemviewSliceValidateAndInit
 
-static CYTHON_INLINE {{memviewslice_name}} {{funcname}}(PyObject *obj, int writable_flag) {
+static CYTHON_INLINE {{memviewslice_name}} {{funcname}}(PyObject *obj, int writable_flag) { 
     {{memviewslice_name}} result = {{memslice_init}};
     __Pyx_BufFmt_StackElem stack[{{struct_nesting_depth}}];
     int axes_specs[] = { {{axes_specs}} };
@@ -140,7 +140,7 @@ static CYTHON_INLINE {{memviewslice_name}} {{funcname}}(PyObject *obj, int writa
     }
 
     retcode = __Pyx_ValidateAndInit_memviewslice(axes_specs, {{c_or_f_flag}},
-                                                 {{buf_flag}} | writable_flag, {{ndim}},
+                                                 {{buf_flag}} | writable_flag, {{ndim}}, 
                                                  &{{dtype_typeinfo}}, stack,
                                                  &result, obj);
 
@@ -169,8 +169,8 @@ static int __Pyx_ValidateAndInit_memviewslice(
 
 /////////////// MemviewSliceValidateAndInit ///////////////
 //@requires: Buffer.c::TypeInfoCompare
-//@requires: Buffer.c::BufferFormatStructs
-//@requires: Buffer.c::BufferFormatCheck
+//@requires: Buffer.c::BufferFormatStructs 
+//@requires: Buffer.c::BufferFormatCheck 
 
 static int
 __pyx_check_strides(Py_buffer *buf, int dim, int ndim, int spec)
@@ -441,12 +441,12 @@ no_fail:
     return retval;
 }
 
-#ifndef Py_NO_RETURN
-// available since Py3.3
-#define Py_NO_RETURN
-#endif
+#ifndef Py_NO_RETURN 
+// available since Py3.3 
+#define Py_NO_RETURN 
+#endif 
 
-static void __pyx_fatalerror(const char *fmt, ...) Py_NO_RETURN {
+static void __pyx_fatalerror(const char *fmt, ...) Py_NO_RETURN { 
     va_list vargs;
     char msg[200];
 
@@ -455,8 +455,8 @@ static void __pyx_fatalerror(const char *fmt, ...) Py_NO_RETURN {
 #else
     va_start(vargs);
 #endif
-    vsnprintf(msg, 200, fmt, vargs);
-    va_end(vargs);
+    vsnprintf(msg, 200, fmt, vargs); 
+    va_end(vargs); 
 
     Py_FatalError(msg);
 }
@@ -696,21 +696,21 @@ __pyx_slices_overlap({{memviewslice_name}} *slice1,
 }
 
 
-////////// MemviewSliceCheckContig.proto //////////
+////////// MemviewSliceCheckContig.proto ////////// 
 
-#define __pyx_memviewslice_is_contig_{{contig_type}}{{ndim}}(slice) \
-    __pyx_memviewslice_is_contig(slice, '{{contig_type}}', {{ndim}})
+#define __pyx_memviewslice_is_contig_{{contig_type}}{{ndim}}(slice) \ 
+    __pyx_memviewslice_is_contig(slice, '{{contig_type}}', {{ndim}}) 
 
 
 ////////// MemviewSliceIsContig.proto //////////
 
-static int __pyx_memviewslice_is_contig(const {{memviewslice_name}} mvs, char order, int ndim);/*proto*/
+static int __pyx_memviewslice_is_contig(const {{memviewslice_name}} mvs, char order, int ndim);/*proto*/ 
 
 
 ////////// MemviewSliceIsContig //////////
 
 static int
-__pyx_memviewslice_is_contig(const {{memviewslice_name}} mvs, char order, int ndim)
+__pyx_memviewslice_is_contig(const {{memviewslice_name}} mvs, char order, int ndim) 
 {
     int i, index, step, start;
     Py_ssize_t itemsize = mvs.memview->view.itemsize;

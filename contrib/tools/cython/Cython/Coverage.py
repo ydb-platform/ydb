@@ -12,7 +12,7 @@ import sys
 from collections import defaultdict
 
 from coverage.plugin import CoveragePlugin, FileTracer, FileReporter  # requires coverage.py 4.0+
-from coverage.files import canonical_filename
+from coverage.files import canonical_filename 
 
 from .Utils import find_root_package_dir, is_package_dir, open_source_file
 
@@ -46,8 +46,8 @@ def _find_dep_file_path(main_file, file_path, relative_path_search=False):
         for sys_path in sys.path:
             test_path = os.path.realpath(os.path.join(sys_path, file_path))
             if os.path.exists(test_path):
-                return canonical_filename(test_path)
-    return canonical_filename(abs_path)
+                return canonical_filename(test_path) 
+    return canonical_filename(abs_path) 
 
 
 class Plugin(CoveragePlugin):
@@ -65,14 +65,14 @@ class Plugin(CoveragePlugin):
         """
         Try to find a C source file for a file path found by the tracer.
         """
-        # TODO We need to pxd-files to the include map. For more info see pybuild.py
-        # Currently skip such files, because they are not supported in Arcadia pybuild with coverage.
-        if os.path.splitext(filename)[-1] not in ('.pyx', '.pxi'):
-            return None
+        # TODO We need to pxd-files to the include map. For more info see pybuild.py 
+        # Currently skip such files, because they are not supported in Arcadia pybuild with coverage. 
+        if os.path.splitext(filename)[-1] not in ('.pyx', '.pxi'): 
+            return None 
         if filename.startswith('<') or filename.startswith('memory:'):
             return None
         c_file = py_file = None
-        filename = canonical_filename(filename)
+        filename = canonical_filename(filename) 
         if self._c_files_map and filename in self._c_files_map:
             c_file = self._c_files_map[filename][0]
 
@@ -102,21 +102,21 @@ class Plugin(CoveragePlugin):
         #    from coverage.python import PythonFileReporter
         #    return PythonFileReporter(filename)
 
-        filename = canonical_filename(filename)
+        filename = canonical_filename(filename) 
         if self._c_files_map and filename in self._c_files_map:
             c_file, rel_file_path, code = self._c_files_map[filename]
         else:
             c_file, _ = self._find_source_files(filename)
             if not c_file:
-                if standalone():
-                    raise AssertionError(filename)
+                if standalone(): 
+                    raise AssertionError(filename) 
                 return None  # unknown file
             rel_file_path, code = self._read_source_lines(c_file, filename)
-            if code is None:
-                if standalone():
-                    raise AssertionError(filename)
-                return None  # no source found
-
+            if code is None: 
+                if standalone(): 
+                    raise AssertionError(filename) 
+                return None  # no source found 
+ 
         return CythonModuleReporter(c_file, filename, rel_file_path, code)
 
     def _find_source_files(self, filename):
@@ -124,16 +124,16 @@ class Plugin(CoveragePlugin):
         ext = ext.lower()
         if ext in MODULE_FILE_EXTENSIONS:
             pass
-        elif ext == '.pyd':
-            # Windows extension module
-            platform_suffix = re.search(r'[.]cp[0-9]+-win[_a-z0-9]*$', basename, re.I)
+        elif ext == '.pyd': 
+            # Windows extension module 
+            platform_suffix = re.search(r'[.]cp[0-9]+-win[_a-z0-9]*$', basename, re.I) 
             if platform_suffix:
                 basename = basename[:platform_suffix.start()]
-        elif ext == '.so':
-            # Linux/Unix/Mac extension module
-            platform_suffix = re.search(r'[.](?:cpython|pypy)-[0-9]+[-_a-z0-9]*$', basename, re.I)
-            if platform_suffix:
-                basename = basename[:platform_suffix.start()]
+        elif ext == '.so': 
+            # Linux/Unix/Mac extension module 
+            platform_suffix = re.search(r'[.](?:cpython|pypy)-[0-9]+[-_a-z0-9]*$', basename, re.I) 
+            if platform_suffix: 
+                basename = basename[:platform_suffix.start()] 
         elif ext == '.pxi':
             # if we get here, it means that the first traced line of a Cython module was
             # not in the main module but in an include file, so try a little harder to
@@ -141,8 +141,8 @@ class Plugin(CoveragePlugin):
             self._find_c_source_files(os.path.dirname(filename), filename)
             if filename in self._c_files_map:
                 return self._c_files_map[filename][0], None
-            if standalone():
-                raise AssertionError(filename)
+            if standalone(): 
+                raise AssertionError(filename) 
         else:
             # none of our business
             return None, None
@@ -176,20 +176,20 @@ class Plugin(CoveragePlugin):
         Desperately parse all C files in the directory or its package parents
         (not re-descending) to find the (included) source file in one of them.
         """
-        if standalone():
-            if os.environ.get('PYTHON_COVERAGE_CYTHON_BUILD_ROOT'):
-                broot = os.environ['PYTHON_COVERAGE_CYTHON_BUILD_ROOT']
-                iter_files = lambda: (os.path.join(root, filename) for root, _, files in os.walk(broot) for filename in files)
-            else:
+        if standalone(): 
+            if os.environ.get('PYTHON_COVERAGE_CYTHON_BUILD_ROOT'): 
+                broot = os.environ['PYTHON_COVERAGE_CYTHON_BUILD_ROOT'] 
+                iter_files = lambda: (os.path.join(root, filename) for root, _, files in os.walk(broot) for filename in files) 
+            else: 
                 import library.python.resource
                 iter_files = library.python.resource.resfs_files
-            for c_file in iter_files():
-                if os.path.splitext(c_file)[1] in C_FILE_EXTENSIONS:
-                    self._read_source_lines(c_file, source_file)
-                    if source_file in self._c_files_map:
-                        return
-            raise AssertionError((source_file, os.environ.get('PYTHON_COVERAGE_CYTHON_BUILD_ROOT')))
-
+            for c_file in iter_files(): 
+                if os.path.splitext(c_file)[1] in C_FILE_EXTENSIONS: 
+                    self._read_source_lines(c_file, source_file) 
+                    if source_file in self._c_files_map: 
+                        return 
+            raise AssertionError((source_file, os.environ.get('PYTHON_COVERAGE_CYTHON_BUILD_ROOT'))) 
+ 
         if not os.path.isdir(dir_path):
             return
         splitext = os.path.splitext
@@ -248,7 +248,7 @@ class Plugin(CoveragePlugin):
         executable_lines = defaultdict(set)
         current_filename = None
 
-        with OpenFile(c_file) as lines:
+        with OpenFile(c_file) as lines: 
             lines = iter(lines)
             for line in lines:
                 match = match_source_path_line(line)
@@ -305,10 +305,10 @@ class CythonModuleTracer(FileTracer):
             return self._file_path_map[source_file]
         except KeyError:
             pass
-        if standalone():
-            abs_path = self.module_file
-        else:
-            abs_path = _find_dep_file_path(filename, source_file)
+        if standalone(): 
+            abs_path = self.module_file 
+        else: 
+            abs_path = _find_dep_file_path(filename, source_file) 
 
         if self.py_file and source_file[-3:].lower() == '.py':
             # always let coverage.py handle this case itself
@@ -331,7 +331,7 @@ class CythonModuleReporter(FileReporter):
         self.name = rel_file_path
         self.c_file = c_file
         self._code = code
-        self._abs_filename = self._find_abs_filename()
+        self._abs_filename = self._find_abs_filename() 
 
     def lines(self):
         """
@@ -352,8 +352,8 @@ class CythonModuleReporter(FileReporter):
         """
         Return the source code of the file as a string.
         """
-        if os.path.exists(self._abs_filename):
-            with open_source_file(self._abs_filename) as f:
+        if os.path.exists(self._abs_filename): 
+            with open_source_file(self._abs_filename) as f: 
                 return f.read()
         else:
             return '\n'.join(
@@ -364,114 +364,114 @@ class CythonModuleReporter(FileReporter):
         """
         Iterate over the source code tokens.
         """
-        if os.path.exists(self._abs_filename):
-            with open_source_file(self._abs_filename) as f:
+        if os.path.exists(self._abs_filename): 
+            with open_source_file(self._abs_filename) as f: 
                 for line in f:
                     yield [('txt', line.rstrip('\n'))]
         else:
             for line in self._iter_source_tokens():
-                yield line
+                yield line 
 
-    def _find_abs_filename(self):
-        for root in [
-            os.environ.get('PYTHON_COVERAGE_ARCADIA_SOURCE_ROOT'),
-            os.environ.get('PYTHON_COVERAGE_CYTHON_BUILD_ROOT'),
-        ]:
-            if root:
-                abs_path = os.path.join(root, self.filename)
-                if root and os.path.exists(abs_path):
-                    return abs_path
-        return self.filename
+    def _find_abs_filename(self): 
+        for root in [ 
+            os.environ.get('PYTHON_COVERAGE_ARCADIA_SOURCE_ROOT'), 
+            os.environ.get('PYTHON_COVERAGE_CYTHON_BUILD_ROOT'), 
+        ]: 
+            if root: 
+                abs_path = os.path.join(root, self.filename) 
+                if root and os.path.exists(abs_path): 
+                    return abs_path 
+        return self.filename 
 
-
+ 
 def coverage_init(reg, options):
     reg.add_file_tracer(Plugin())
-
-
-# ========================== Arcadia specific =================================
-
-def standalone():
-    return getattr(sys, 'is_standalone_binary', False)
-
-
-class OpenFile(object):
-
-    def __init__(self, filename, mode='r'):
-        assert 'r' in mode, ('Read-only', mode)
-        self.filename = filename
-        self.mode = mode
-        self.file = None
-        self.build_root = os.environ.get('PYTHON_COVERAGE_CYTHON_BUILD_ROOT')
-
-    def __enter__(self):
-        # See redefined _find_c_source() description for more info
-        if self.build_root:
-            self.file = open(os.path.join(self.build_root, self.filename), self.mode)
-            return self.file
-        elif standalone():
+ 
+ 
+# ========================== Arcadia specific ================================= 
+ 
+def standalone(): 
+    return getattr(sys, 'is_standalone_binary', False) 
+ 
+ 
+class OpenFile(object): 
+ 
+    def __init__(self, filename, mode='r'): 
+        assert 'r' in mode, ('Read-only', mode) 
+        self.filename = filename 
+        self.mode = mode 
+        self.file = None 
+        self.build_root = os.environ.get('PYTHON_COVERAGE_CYTHON_BUILD_ROOT') 
+ 
+    def __enter__(self): 
+        # See redefined _find_c_source() description for more info 
+        if self.build_root: 
+            self.file = open(os.path.join(self.build_root, self.filename), self.mode) 
+            return self.file 
+        elif standalone(): 
             import library.python.resource
             from six import StringIO
-
+ 
             content = library.python.resource.resfs_read(self.filename, builtin=True)
-            assert content, (self.filename, os.environ.items())
+            assert content, (self.filename, os.environ.items()) 
             return StringIO(content.decode())
-        else:
-            self.file = open(self.filename, self.mode)
-            return self.file
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.file:
-            self.file.close()
-
-# ======================= Redefine some methods ===============================
-
-if standalone():
-    import json
-
-    CYTHON_INCLUDE_MAP = {'undef': True}
-
-
-    def _find_c_source(base_path):
-        '''
-        There are two different coverage stages when c source file might be required:
-         * trace - python calls c_tracefunc on every line and CythonModuleTracer needs to match
-            pyd and pxi files with source files. This is test's runtime and tests' clean environment might
-            doesn't contain required sources and generated files (c, cpp), that's why we get files from resfs_src.
-         * report - coverage data contains only covered data and CythonModuleReporter needs to
-            parse source files to obtain missing lines and branches. This is test_tool's resolve/build_report step.
-            test_tools doesn't have compiled in sources, however, it can extract required files
-            from binary and set PYTHON_COVERAGE_CYTHON_BUILD_ROOT to guide coverage.
-        '''
-        if os.environ.get('PYTHON_COVERAGE_CYTHON_BUILD_ROOT'):
-            # Report stage (resolve)
-            def exists(filename):
-                return os.path.exists(os.path.join(os.environ['PYTHON_COVERAGE_CYTHON_BUILD_ROOT'], filename))
-        else:
-            # Trace stage (test's runtime)
-            def exists(filename):
+        else: 
+            self.file = open(self.filename, self.mode) 
+            return self.file 
+ 
+    def __exit__(self, exc_type, exc_val, exc_tb): 
+        if self.file: 
+            self.file.close() 
+ 
+# ======================= Redefine some methods =============================== 
+ 
+if standalone(): 
+    import json 
+ 
+    CYTHON_INCLUDE_MAP = {'undef': True} 
+ 
+ 
+    def _find_c_source(base_path): 
+        ''' 
+        There are two different coverage stages when c source file might be required: 
+         * trace - python calls c_tracefunc on every line and CythonModuleTracer needs to match 
+            pyd and pxi files with source files. This is test's runtime and tests' clean environment might 
+            doesn't contain required sources and generated files (c, cpp), that's why we get files from resfs_src. 
+         * report - coverage data contains only covered data and CythonModuleReporter needs to 
+            parse source files to obtain missing lines and branches. This is test_tool's resolve/build_report step. 
+            test_tools doesn't have compiled in sources, however, it can extract required files 
+            from binary and set PYTHON_COVERAGE_CYTHON_BUILD_ROOT to guide coverage. 
+        ''' 
+        if os.environ.get('PYTHON_COVERAGE_CYTHON_BUILD_ROOT'): 
+            # Report stage (resolve) 
+            def exists(filename): 
+                return os.path.exists(os.path.join(os.environ['PYTHON_COVERAGE_CYTHON_BUILD_ROOT'], filename)) 
+        else: 
+            # Trace stage (test's runtime) 
+            def exists(filename): 
                 import library.python.resource
                 return library.python.resource.resfs_src(filename, resfs_file=True)
-
-        if os.environ.get('PYTHON_COVERAGE_CYTHON_INCLUDE_MAP'):
-            if CYTHON_INCLUDE_MAP.get('undef'):
-                with open(os.environ['PYTHON_COVERAGE_CYTHON_INCLUDE_MAP']) as afile:
-                    data = json.load(afile)
+ 
+        if os.environ.get('PYTHON_COVERAGE_CYTHON_INCLUDE_MAP'): 
+            if CYTHON_INCLUDE_MAP.get('undef'): 
+                with open(os.environ['PYTHON_COVERAGE_CYTHON_INCLUDE_MAP']) as afile: 
+                    data = json.load(afile) 
                     data = {os.path.splitext(k)[0]: v for k, v in data.items()}
-
-                CYTHON_INCLUDE_MAP.clear()
-                CYTHON_INCLUDE_MAP.update(data)
-
-            if base_path in CYTHON_INCLUDE_MAP:
-                # target file was included and should be sought inside another pyx file
-                base_path = CYTHON_INCLUDE_MAP[base_path]
-
-        for suffix in ['.pyx.c', '.pyx.cpp'] + C_FILE_EXTENSIONS:
-            if exists(base_path + suffix):
-                return base_path + suffix
-
-        return None
-
-
-    def _find_dep_file_path(main_file, file_path, relative_path_search=False):
-        # file_path is already arcadia root relative
-        return canonical_filename(file_path)
+ 
+                CYTHON_INCLUDE_MAP.clear() 
+                CYTHON_INCLUDE_MAP.update(data) 
+ 
+            if base_path in CYTHON_INCLUDE_MAP: 
+                # target file was included and should be sought inside another pyx file 
+                base_path = CYTHON_INCLUDE_MAP[base_path] 
+ 
+        for suffix in ['.pyx.c', '.pyx.cpp'] + C_FILE_EXTENSIONS: 
+            if exists(base_path + suffix): 
+                return base_path + suffix 
+ 
+        return None 
+ 
+ 
+    def _find_dep_file_path(main_file, file_path, relative_path_search=False): 
+        # file_path is already arcadia root relative 
+        return canonical_filename(file_path) 

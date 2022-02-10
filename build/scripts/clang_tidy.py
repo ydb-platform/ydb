@@ -1,11 +1,11 @@
 import argparse
-import contextlib
+import contextlib 
 import json
-import os
-import re
-import shutil
+import os 
+import re 
+import shutil 
 import sys
-import tempfile
+import tempfile 
 
 import subprocess
 
@@ -20,12 +20,12 @@ def setup_script(args):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--testing-src", required=True)
-    parser.add_argument("--clang-tidy-bin", required=True)
+    parser.add_argument("--testing-src", required=True) 
+    parser.add_argument("--clang-tidy-bin", required=True) 
     parser.add_argument("--config-validation-script", required=True)
     parser.add_argument("--ymake-python", required=True)
-    parser.add_argument("--tidy-json", required=True)
-    parser.add_argument("--source-root", required=True)
+    parser.add_argument("--tidy-json", required=True) 
+    parser.add_argument("--source-root", required=True) 
     parser.add_argument("--build-root", required=True)
     parser.add_argument("--default-config-file", required=True)
     parser.add_argument("--project-config-file", required=True)
@@ -35,27 +35,27 @@ def parse_args():
     return parser.parse_known_args()
 
 
-def generate_compilation_database(clang_cmd, source_root, filename, path):
-    compile_database = [
-        {
-            "file": filename,
+def generate_compilation_database(clang_cmd, source_root, filename, path): 
+    compile_database = [ 
+        { 
+            "file": filename, 
             "command": subprocess.list2cmdline(clang_cmd),
-            "directory": source_root,
-        }
-    ]
-    compilation_database_json = os.path.join(path, "compile_commands.json")
-    with open(compilation_database_json, "w") as afile:
+            "directory": source_root, 
+        } 
+    ] 
+    compilation_database_json = os.path.join(path, "compile_commands.json") 
+    with open(compilation_database_json, "w") as afile: 
         json.dump(compile_database, afile)
     return compilation_database_json
 
 
-@contextlib.contextmanager
-def gen_tmpdir():
-    path = tempfile.mkdtemp()
-    yield path
-    shutil.rmtree(path)
-
-
+@contextlib.contextmanager 
+def gen_tmpdir(): 
+    path = tempfile.mkdtemp() 
+    yield path 
+    shutil.rmtree(path) 
+ 
+ 
 @contextlib.contextmanager
 def gen_tmpfile():
     _, path = tempfile.mkstemp()
@@ -63,21 +63,21 @@ def gen_tmpfile():
     os.remove(path)
 
 
-def load_profile(path):
-    if os.path.exists(path):
-        files = os.listdir(path)
-        if len(files) == 1:
-            with open(os.path.join(path, files[0])) as afile:
-                return json.load(afile)["profile"]
-        elif len(files) > 1:
-            return {
-                "error": "found several profile files: {}".format(files),
-            }
-    return {
-        "error": "profile file is missing",
-    }
-
-
+def load_profile(path): 
+    if os.path.exists(path): 
+        files = os.listdir(path) 
+        if len(files) == 1: 
+            with open(os.path.join(path, files[0])) as afile: 
+                return json.load(afile)["profile"] 
+        elif len(files) > 1: 
+            return { 
+                "error": "found several profile files: {}".format(files), 
+            } 
+    return { 
+        "error": "profile file is missing", 
+    } 
+ 
+ 
 def load_fixes(path):
     if os.path.exists(path):
         with open(path, 'r') as afile:
@@ -125,46 +125,46 @@ def main():
             filter_configs(args.project_config_file, filtered_config)
             result_config_file = tidy_config_validation.merge_tidy_configs(base_config_path=args.default_config_file, additional_config_path=filtered_config, result_config_path=result_config)
         compile_command_path = generate_compilation_database(clang_cmd, args.source_root, args.testing_src, db_tmpdir)
-        cmd = [
-            clang_tidy_bin,
-            args.testing_src,
-            "-p",
-            compile_command_path,
-            "--warnings-as-errors",
-            "*",
-            "--config-file",
+        cmd = [ 
+            clang_tidy_bin, 
+            args.testing_src, 
+            "-p", 
+            compile_command_path, 
+            "--warnings-as-errors", 
+            "*", 
+            "--config-file", 
             result_config_file,
-            "--header-filter",
-            header_filter,
-            "--use-color",
-            "--enable-check-profile",
+            "--header-filter", 
+            header_filter, 
+            "--use-color", 
+            "--enable-check-profile", 
             "--store-check-profile={}".format(profile_tmpdir),
-        ]
+        ] 
         if args.export_fixes == "yes":
             cmd += ["--export-fixes", fixes_file]
 
         if args.checks:
             cmd += ["--checks", args.checks]
-        res = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, err = res.communicate()
-        exit_code = res.returncode
+        res = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE) 
+        out, err = res.communicate() 
+        exit_code = res.returncode 
         profile = load_profile(profile_tmpdir)
         testing_src = os.path.relpath(args.testing_src, args.source_root)
         tidy_fixes = load_fixes(fixes_file)
-
-    with open(output_json, "wb") as afile:
-        json.dump(
-            {
+ 
+    with open(output_json, "wb") as afile: 
+        json.dump( 
+            { 
                 "file": testing_src,
-                "exit_code": exit_code,
-                "profile": profile,
-                "stderr": err,
-                "stdout": out,
+                "exit_code": exit_code, 
+                "profile": profile, 
+                "stderr": err, 
+                "stdout": out, 
                 "fixes": tidy_fixes,
-            },
-            afile,
-        )
-
+            }, 
+            afile, 
+        ) 
+ 
 
 if __name__ == "__main__":
     main()

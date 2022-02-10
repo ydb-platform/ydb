@@ -1,3 +1,3 @@
-RECURSE(
-    tests
-)
+RECURSE( 
+    tests 
+) 

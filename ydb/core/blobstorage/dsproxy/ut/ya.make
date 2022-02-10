@@ -12,8 +12,8 @@ OWNER(
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(3600)
-    SIZE(LARGE)
-    TAG(ya:fat)
+    SIZE(LARGE) 
+    TAG(ya:fat) 
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)

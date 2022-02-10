@@ -16,6 +16,6 @@ TAG(
     ya:force_sandbox
 )
 
-SIZE(LARGE)
+SIZE(LARGE) 
 
 END()

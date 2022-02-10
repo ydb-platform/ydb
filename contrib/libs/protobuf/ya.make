@@ -23,7 +23,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 PEERDIR(
     contrib/libs/zlib
 )
-
+ 
 ADDINCL(
     GLOBAL contrib/libs/protobuf/src
     GLOBAL FOR

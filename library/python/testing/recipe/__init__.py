@@ -16,7 +16,7 @@ collect_cores = None
 sanitizer_extra_checks = None
 
 
-def _setup_logging(level=logging.DEBUG):
+def _setup_logging(level=logging.DEBUG): 
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
 
@@ -41,7 +41,7 @@ def get_options():
     args, opts = parser.parse_known_args()
 
     global ya, sanitizer_extra_checks, collect_cores
-    _setup_logging()
+    _setup_logging() 
 
     context = {
         "test_stderr": args.test_stderr,
@@ -96,7 +96,7 @@ def declare_recipe(start, stop):
     except Exception:
         if parsed_args.pdb:
             tty()
-            import ipdb
-            ipdb.post_mortem()
+            import ipdb 
+            ipdb.post_mortem() 
         else:
             raise

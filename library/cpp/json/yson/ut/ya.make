@@ -15,10 +15,10 @@ PEERDIR(
     library/cpp/testing/unittest
 )
 
-SIZE(LARGE)
+SIZE(LARGE) 
 
-TAG(ya:fat)
-
+TAG(ya:fat) 
+ 
 TIMEOUT(600)
 
 SRCS(

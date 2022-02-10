@@ -1648,18 +1648,18 @@ private:
                 return lpoFunc;
 
             if (name == Strings.CombineByKeyMerge) {
-                return TCallableVisitFunc([](TCallable& callable, const TTypeEnvironment& env) {
+                return TCallableVisitFunc([](TCallable& callable, const TTypeEnvironment& env) { 
                     Y_UNUSED(env);
                     return callable.GetInput(0);
                 });
             } else
             if (name == Strings.PartialSort) {
-                return TCallableVisitFunc([](TCallable& callable, const TTypeEnvironment& env) {
+                return TCallableVisitFunc([](TCallable& callable, const TTypeEnvironment& env) { 
                     return RenameCallable(callable, "Sort", env);
                 });
             } else
             if (name == Strings.PartialTake) {
-                return TCallableVisitFunc([](TCallable& callable, const TTypeEnvironment& env) {
+                return TCallableVisitFunc([](TCallable& callable, const TTypeEnvironment& env) { 
                     return RenameCallable(callable, "Take", env);
                 });
             }
@@ -1835,7 +1835,7 @@ private:
             firstPass, Env, false, wereChanges);
         ProxyProgramExplorer.Walk(ProxyProgram.GetNode(), Env, {});
 
-        auto getCallableForPushdown = [&pureCallables, &callableConsumers] (TRuntimeNode node,
+        auto getCallableForPushdown = [&pureCallables, &callableConsumers] (TRuntimeNode node, 
             TInternName name) -> TCallable*
         {
             if (!node.GetNode()->GetType()->IsCallable()) {

@@ -7,15 +7,15 @@
 from __future__ import absolute_import
 
 import cython
-cython.declare(os=object, re=object, operator=object, textwrap=object,
-               Template=object, Naming=object, Options=object, StringEncoding=object,
+cython.declare(os=object, re=object, operator=object, textwrap=object, 
+               Template=object, Naming=object, Options=object, StringEncoding=object, 
                Utils=object, SourceDescriptor=object, StringIOTree=object,
-               DebugFlags=object, basestring=object, defaultdict=object,
-               closing=object, partial=object)
+               DebugFlags=object, basestring=object, defaultdict=object, 
+               closing=object, partial=object) 
 
 import os
 import re
-import shutil
+import shutil 
 import sys
 import operator
 import textwrap
@@ -71,42 +71,42 @@ basicsize_builtins_map = {
 }
 
 uncachable_builtins = [
-    # Global/builtin names that cannot be cached because they may or may not
-    # be available at import time, for various reasons:
-    ## - Py3.7+
-    'breakpoint',  # might deserve an implementation in Cython
-    ## - Py3.4+
-    '__loader__',
-    '__spec__',
-    ## - Py3+
-    'BlockingIOError',
-    'BrokenPipeError',
-    'ChildProcessError',
-    'ConnectionAbortedError',
-    'ConnectionError',
-    'ConnectionRefusedError',
-    'ConnectionResetError',
-    'FileExistsError',
-    'FileNotFoundError',
-    'InterruptedError',
-    'IsADirectoryError',
-    'ModuleNotFoundError',
-    'NotADirectoryError',
-    'PermissionError',
-    'ProcessLookupError',
-    'RecursionError',
-    'ResourceWarning',
-    #'StopAsyncIteration',  # backported
-    'TimeoutError',
-    '__build_class__',
-    'ascii',  # might deserve an implementation in Cython
-    #'exec',  # implemented in Cython
-    ## - Py2.7+
-    'memoryview',
-    ## - platform specific
+    # Global/builtin names that cannot be cached because they may or may not 
+    # be available at import time, for various reasons: 
+    ## - Py3.7+ 
+    'breakpoint',  # might deserve an implementation in Cython 
+    ## - Py3.4+ 
+    '__loader__', 
+    '__spec__', 
+    ## - Py3+ 
+    'BlockingIOError', 
+    'BrokenPipeError', 
+    'ChildProcessError', 
+    'ConnectionAbortedError', 
+    'ConnectionError', 
+    'ConnectionRefusedError', 
+    'ConnectionResetError', 
+    'FileExistsError', 
+    'FileNotFoundError', 
+    'InterruptedError', 
+    'IsADirectoryError', 
+    'ModuleNotFoundError', 
+    'NotADirectoryError', 
+    'PermissionError', 
+    'ProcessLookupError', 
+    'RecursionError', 
+    'ResourceWarning', 
+    #'StopAsyncIteration',  # backported 
+    'TimeoutError', 
+    '__build_class__', 
+    'ascii',  # might deserve an implementation in Cython 
+    #'exec',  # implemented in Cython 
+    ## - Py2.7+ 
+    'memoryview', 
+    ## - platform specific 
     'WindowsError',
-    ## - others
-    '_',  # e.g. used by gettext
+    ## - others 
+    '_',  # e.g. used by gettext 
 ]
 
 special_py_methods = set([
@@ -121,82 +121,82 @@ modifier_output_mapper = {
 }.get
 
 
-class IncludeCode(object):
-    """
-    An include file and/or verbatim C code to be included in the
-    generated sources.
-    """
-    # attributes:
-    #
-    #  pieces    {order: unicode}: pieces of C code to be generated.
-    #            For the included file, the key "order" is zero.
-    #            For verbatim include code, the "order" is the "order"
-    #            attribute of the original IncludeCode where this piece
-    #            of C code was first added. This is needed to prevent
-    #            duplication if the same include code is found through
-    #            multiple cimports.
-    #  location  int: where to put this include in the C sources, one
-    #            of the constants INITIAL, EARLY, LATE
-    #  order     int: sorting order (automatically set by increasing counter)
-
-    # Constants for location. If the same include occurs with different
-    # locations, the earliest one takes precedense.
-    INITIAL = 0
-    EARLY = 1
-    LATE = 2
-
-    counter = 1   # Counter for "order"
-
-    def __init__(self, include=None, verbatim=None, late=True, initial=False):
-        self.order = self.counter
-        type(self).counter += 1
-        self.pieces = {}
-
-        if include:
-            if include[0] == '<' and include[-1] == '>':
-                self.pieces[0] = u'#include {0}'.format(include)
-                late = False  # system include is never late
-            else:
-                self.pieces[0] = u'#include "{0}"'.format(include)
-
-        if verbatim:
-            self.pieces[self.order] = verbatim
-
-        if initial:
-            self.location = self.INITIAL
-        elif late:
-            self.location = self.LATE
-        else:
-            self.location = self.EARLY
-
-    def dict_update(self, d, key):
-        """
-        Insert `self` in dict `d` with key `key`. If that key already
-        exists, update the attributes of the existing value with `self`.
-        """
-        if key in d:
-            other = d[key]
-            other.location = min(self.location, other.location)
-            other.pieces.update(self.pieces)
-        else:
-            d[key] = self
-
-    def sortkey(self):
-        return self.order
-
-    def mainpiece(self):
-        """
-        Return the main piece of C code, corresponding to the include
-        file. If there was no include file, return None.
-        """
-        return self.pieces.get(0)
-
-    def write(self, code):
-        # Write values of self.pieces dict, sorted by the keys
-        for k in sorted(self.pieces):
-            code.putln(self.pieces[k])
-
-
+class IncludeCode(object): 
+    """ 
+    An include file and/or verbatim C code to be included in the 
+    generated sources. 
+    """ 
+    # attributes: 
+    # 
+    #  pieces    {order: unicode}: pieces of C code to be generated. 
+    #            For the included file, the key "order" is zero. 
+    #            For verbatim include code, the "order" is the "order" 
+    #            attribute of the original IncludeCode where this piece 
+    #            of C code was first added. This is needed to prevent 
+    #            duplication if the same include code is found through 
+    #            multiple cimports. 
+    #  location  int: where to put this include in the C sources, one 
+    #            of the constants INITIAL, EARLY, LATE 
+    #  order     int: sorting order (automatically set by increasing counter) 
+ 
+    # Constants for location. If the same include occurs with different 
+    # locations, the earliest one takes precedense. 
+    INITIAL = 0 
+    EARLY = 1 
+    LATE = 2 
+ 
+    counter = 1   # Counter for "order" 
+ 
+    def __init__(self, include=None, verbatim=None, late=True, initial=False): 
+        self.order = self.counter 
+        type(self).counter += 1 
+        self.pieces = {} 
+ 
+        if include: 
+            if include[0] == '<' and include[-1] == '>': 
+                self.pieces[0] = u'#include {0}'.format(include) 
+                late = False  # system include is never late 
+            else: 
+                self.pieces[0] = u'#include "{0}"'.format(include) 
+ 
+        if verbatim: 
+            self.pieces[self.order] = verbatim 
+ 
+        if initial: 
+            self.location = self.INITIAL 
+        elif late: 
+            self.location = self.LATE 
+        else: 
+            self.location = self.EARLY 
+ 
+    def dict_update(self, d, key): 
+        """ 
+        Insert `self` in dict `d` with key `key`. If that key already 
+        exists, update the attributes of the existing value with `self`. 
+        """ 
+        if key in d: 
+            other = d[key] 
+            other.location = min(self.location, other.location) 
+            other.pieces.update(self.pieces) 
+        else: 
+            d[key] = self 
+ 
+    def sortkey(self): 
+        return self.order 
+ 
+    def mainpiece(self): 
+        """ 
+        Return the main piece of C code, corresponding to the include 
+        file. If there was no include file, return None. 
+        """ 
+        return self.pieces.get(0) 
+ 
+    def write(self, code): 
+        # Write values of self.pieces dict, sorted by the keys 
+        for k in sorted(self.pieces): 
+            code.putln(self.pieces[k]) 
+ 
+ 
 def get_utility_dir():
     # make this a function and not global variables:
     # http://trac.cython.org/cython_trac/ticket/475
@@ -256,15 +256,15 @@ class UtilityCodeBase(object):
         if type == 'proto':
             utility[0] = code
         elif type == 'impl':
-            utility[1] = code
+            utility[1] = code 
         else:
-            all_tags = utility[2]
+            all_tags = utility[2] 
             if KEYWORDS_MUST_BE_BYTES:
                 type = type.encode('ASCII')
             all_tags[type] = code
 
         if tags:
-            all_tags = utility[2]
+            all_tags = utility[2] 
             for name, values in tags.items():
                 if KEYWORDS_MUST_BE_BYTES:
                     name = name.encode('ASCII')
@@ -295,7 +295,7 @@ class UtilityCodeBase(object):
         with closing(Utils.open_source_file(filename, encoding='UTF-8')) as f:
             all_lines = f.readlines()
 
-        utilities = defaultdict(lambda: [None, None, {}])
+        utilities = defaultdict(lambda: [None, None, {}]) 
         lines = []
         tags = defaultdict(set)
         utility = type = None
@@ -369,7 +369,7 @@ class UtilityCodeBase(object):
             from_file = files[0]
 
         utilities = cls.load_utilities_from_file(from_file)
-        proto, impl, tags = utilities[util_code_name]
+        proto, impl, tags = utilities[util_code_name] 
 
         if tags:
             orig_kwargs = kwargs.copy()
@@ -388,7 +388,7 @@ class UtilityCodeBase(object):
                 elif not values:
                     values = None
                 elif len(values) == 1:
-                    values = list(values)[0]
+                    values = list(values)[0] 
                 kwargs[name] = values
 
         if proto is not None:
@@ -453,7 +453,7 @@ class UtilityCode(UtilityCodeBase):
     hashes/equals by instance
 
     proto           C prototypes
-    impl            implementation code
+    impl            implementation code 
     init            code to call on module initialization
     requires        utility code dependencies
     proto_block     the place in the resulting file where the prototype should
@@ -531,22 +531,22 @@ class UtilityCode(UtilityCodeBase):
     def inject_string_constants(self, impl, output):
         """Replace 'PYIDENT("xyz")' by a constant Python identifier cname.
         """
-        if 'PYIDENT(' not in impl and 'PYUNICODE(' not in impl:
+        if 'PYIDENT(' not in impl and 'PYUNICODE(' not in impl: 
             return False, impl
 
         replacements = {}
         def externalise(matchobj):
-            key = matchobj.groups()
+            key = matchobj.groups() 
             try:
-                cname = replacements[key]
+                cname = replacements[key] 
             except KeyError:
-                str_type, name = key
-                cname = replacements[key] = output.get_py_string_const(
-                        StringEncoding.EncodedString(name), identifier=str_type == 'IDENT').cname
+                str_type, name = key 
+                cname = replacements[key] = output.get_py_string_const( 
+                        StringEncoding.EncodedString(name), identifier=str_type == 'IDENT').cname 
             return cname
 
-        impl = re.sub(r'PY(IDENT|UNICODE)\("([^"]+)"\)', externalise, impl)
-        assert 'PYIDENT(' not in impl and 'PYUNICODE(' not in impl
+        impl = re.sub(r'PY(IDENT|UNICODE)\("([^"]+)"\)', externalise, impl) 
+        assert 'PYIDENT(' not in impl and 'PYUNICODE(' not in impl 
         return True, impl
 
     def inject_unbound_methods(self, impl, output):
@@ -556,18 +556,18 @@ class UtilityCode(UtilityCodeBase):
             return False, impl
 
         def externalise(matchobj):
-            type_cname, method_name, obj_cname, args = matchobj.groups()
-            args = [arg.strip() for arg in args[1:].split(',')] if args else []
-            assert len(args) < 3, "CALL_UNBOUND_METHOD() does not support %d call arguments" % len(args)
-            return output.cached_unbound_method_call_code(obj_cname, type_cname, method_name, args)
+            type_cname, method_name, obj_cname, args = matchobj.groups() 
+            args = [arg.strip() for arg in args[1:].split(',')] if args else [] 
+            assert len(args) < 3, "CALL_UNBOUND_METHOD() does not support %d call arguments" % len(args) 
+            return output.cached_unbound_method_call_code(obj_cname, type_cname, method_name, args) 
 
-        impl = re.sub(
-            r'CALL_UNBOUND_METHOD\('
-            r'([a-zA-Z_]+),'      # type cname
-            r'\s*"([^"]+)",'      # method name
-            r'\s*([^),]+)'        # object cname
-            r'((?:,\s*[^),]+)*)'  # args*
-            r'\)', externalise, impl)
+        impl = re.sub( 
+            r'CALL_UNBOUND_METHOD\(' 
+            r'([a-zA-Z_]+),'      # type cname 
+            r'\s*"([^"]+)",'      # method name 
+            r'\s*([^),]+)'        # object cname 
+            r'((?:,\s*[^),]+)*)'  # args* 
+            r'\)', externalise, impl) 
         assert 'CALL_UNBOUND_METHOD(' not in impl
 
         return True, impl
@@ -679,7 +679,7 @@ class LazyUtilityCode(UtilityCodeBase):
     available. Useful when you only have 'env' but not 'code'.
     """
     __name__ = '<lazy>'
-    requires = None
+    requires = None 
 
     def __init__(self, callback):
         self.callback = callback
@@ -718,7 +718,7 @@ class FunctionState(object):
 
         self.in_try_finally = 0
         self.exc_vars = None
-        self.current_except = None
+        self.current_except = None 
         self.can_trace = False
         self.gil_owned = True
 
@@ -764,8 +764,8 @@ class FunctionState(object):
             label += '_' + name
         return label
 
-    def new_yield_label(self, expr_type='yield'):
-        label = self.new_label('resume_from_%s' % expr_type)
+    def new_yield_label(self, expr_type='yield'): 
+        label = self.new_label('resume_from_%s' % expr_type) 
         num_and_label = (len(self.yield_labels) + 1, label)
         self.yield_labels.append(num_and_label)
         return num_and_label
@@ -1131,7 +1131,7 @@ class GlobalState(object):
         'global_var',
         'string_decls',
         'decls',
-        'late_includes',
+        'late_includes', 
         'all_the_rest',
         'pystring_table',
         'cached_builtins',
@@ -1399,8 +1399,8 @@ class GlobalState(object):
             prefix = Naming.const_prefix
         return "%s%s" % (prefix, name_suffix)
 
-    def get_cached_unbound_method(self, type_cname, method_name):
-        key = (type_cname, method_name)
+    def get_cached_unbound_method(self, type_cname, method_name): 
+        key = (type_cname, method_name) 
         try:
             cname = self.cached_cmethods[key]
         except KeyError:
@@ -1408,18 +1408,18 @@ class GlobalState(object):
                 'umethod', '%s_%s' % (type_cname, method_name))
         return cname
 
-    def cached_unbound_method_call_code(self, obj_cname, type_cname, method_name, arg_cnames):
-        # admittedly, not the best place to put this method, but it is reused by UtilityCode and ExprNodes ...
-        utility_code_name = "CallUnboundCMethod%d" % len(arg_cnames)
-        self.use_utility_code(UtilityCode.load_cached(utility_code_name, "ObjectHandling.c"))
-        cache_cname = self.get_cached_unbound_method(type_cname, method_name)
-        args = [obj_cname] + arg_cnames
-        return "__Pyx_%s(&%s, %s)" % (
-            utility_code_name,
-            cache_cname,
-            ', '.join(args),
-        )
-
+    def cached_unbound_method_call_code(self, obj_cname, type_cname, method_name, arg_cnames): 
+        # admittedly, not the best place to put this method, but it is reused by UtilityCode and ExprNodes ... 
+        utility_code_name = "CallUnboundCMethod%d" % len(arg_cnames) 
+        self.use_utility_code(UtilityCode.load_cached(utility_code_name, "ObjectHandling.c")) 
+        cache_cname = self.get_cached_unbound_method(type_cname, method_name) 
+        args = [obj_cname] + arg_cnames 
+        return "__Pyx_%s(&%s, %s)" % ( 
+            utility_code_name, 
+            cache_cname, 
+            ', '.join(args), 
+        ) 
+ 
     def add_cached_builtin_decl(self, entry):
         if entry.is_builtin and entry.is_const:
             if self.should_declare(entry.cname, entry):
@@ -1472,7 +1472,7 @@ class GlobalState(object):
         decl = self.parts['decls']
         init = self.parts['init_globals']
         cnames = []
-        for (type_cname, method_name), cname in sorted(self.cached_cmethods.items()):
+        for (type_cname, method_name), cname in sorted(self.cached_cmethods.items()): 
             cnames.append(cname)
             method_name_cname = self.get_interned_identifier(StringEncoding.EncodedString(method_name)).cname
             decl.putln('static __Pyx_CachedCFunction %s = {0, &%s, 0, 0, 0};' % (
@@ -1606,13 +1606,13 @@ class GlobalState(object):
     #
 
     def lookup_filename(self, source_desc):
-        entry = source_desc.get_filenametable_entry()
+        entry = source_desc.get_filenametable_entry() 
         try:
-            index = self.filename_table[entry]
+            index = self.filename_table[entry] 
         except KeyError:
             index = len(self.filename_list)
             self.filename_list.append(source_desc)
-            self.filename_table[entry] = index
+            self.filename_table[entry] = index 
         return index
 
     def commented_file_contents(self, source_desc):
@@ -1693,7 +1693,7 @@ class CCodeWriter(object):
       as well
     - labels, temps, exc_vars: One must construct a scope in which these can
       exist by calling enter_cfunc_scope/exit_cfunc_scope (these are for
-      sanity checking and forward compatibility). Created insertion points
+      sanity checking and forward compatibility). Created insertion points 
       looses this scope and cannot access it.
     - marker: Not copied to insertion point
     - filename_table, filename_list, input_file_contents: All codewriters
@@ -1807,7 +1807,7 @@ class CCodeWriter(object):
     # Functions delegated to function scope
     def new_label(self, name=None):    return self.funcstate.new_label(name)
     def new_error_label(self):         return self.funcstate.new_error_label()
-    def new_yield_label(self, *args):  return self.funcstate.new_yield_label(*args)
+    def new_yield_label(self, *args):  return self.funcstate.new_yield_label(*args) 
     def get_loop_labels(self):         return self.funcstate.get_loop_labels()
     def set_loop_labels(self, labels): return self.funcstate.set_loop_labels(labels)
     def new_loop_labels(self):         return self.funcstate.new_loop_labels()
@@ -1918,7 +1918,7 @@ class CCodeWriter(object):
                 tmp_path = '%s.tmp%s' % (path, os.getpid())
                 with closing(Utils.open_new_file(tmp_path)) as f:
                     f.write(code)
-                shutil.move(tmp_path, path)
+                shutil.move(tmp_path, path) 
             code = '#include "%s"\n' % path
         self.put(code)
 
@@ -2093,12 +2093,12 @@ class CCodeWriter(object):
         if entry.type.is_pyobject:
             self.putln("__Pyx_XGIVEREF(%s);" % self.entry_as_pyobject(entry))
 
-    def put_var_incref(self, entry, nanny=True):
+    def put_var_incref(self, entry, nanny=True): 
         if entry.type.is_pyobject:
-            if nanny:
-                self.putln("__Pyx_INCREF(%s);" % self.entry_as_pyobject(entry))
-            else:
-                self.putln("Py_INCREF(%s);" % self.entry_as_pyobject(entry))
+            if nanny: 
+                self.putln("__Pyx_INCREF(%s);" % self.entry_as_pyobject(entry)) 
+            else: 
+                self.putln("Py_INCREF(%s);" % self.entry_as_pyobject(entry)) 
 
     def put_var_xincref(self, entry):
         if entry.type.is_pyobject:
@@ -2122,8 +2122,8 @@ class CCodeWriter(object):
             self.put_xdecref_memoryviewslice(cname, have_gil=have_gil)
             return
 
-        prefix = '__Pyx' if nanny else 'Py'
-        X = 'X' if null_check else ''
+        prefix = '__Pyx' if nanny else 'Py' 
+        X = 'X' if null_check else '' 
 
         if clear:
             if clear_before_decref:
@@ -2147,12 +2147,12 @@ class CCodeWriter(object):
         if entry.type.is_pyobject:
             self.putln("__Pyx_XDECREF(%s);" % self.entry_as_pyobject(entry))
 
-    def put_var_xdecref(self, entry, nanny=True):
+    def put_var_xdecref(self, entry, nanny=True): 
         if entry.type.is_pyobject:
-            if nanny:
-                self.putln("__Pyx_XDECREF(%s);" % self.entry_as_pyobject(entry))
-            else:
-                self.putln("Py_XDECREF(%s);" % self.entry_as_pyobject(entry))
+            if nanny: 
+                self.putln("__Pyx_XDECREF(%s);" % self.entry_as_pyobject(entry)) 
+            else: 
+                self.putln("Py_XDECREF(%s);" % self.entry_as_pyobject(entry)) 
 
     def put_var_decref_clear(self, entry):
         self._put_var_decref_clear(entry, null_check=False)
@@ -2273,30 +2273,30 @@ class CCodeWriter(object):
         """
         self.globalstate.use_utility_code(
             UtilityCode.load_cached("ForceInitThreads", "ModuleSetupCode.c"))
-        if self.globalstate.directives['fast_gil']:
-          self.globalstate.use_utility_code(UtilityCode.load_cached("FastGil", "ModuleSetupCode.c"))
-        else:
-          self.globalstate.use_utility_code(UtilityCode.load_cached("NoFastGil", "ModuleSetupCode.c"))
+        if self.globalstate.directives['fast_gil']: 
+          self.globalstate.use_utility_code(UtilityCode.load_cached("FastGil", "ModuleSetupCode.c")) 
+        else: 
+          self.globalstate.use_utility_code(UtilityCode.load_cached("NoFastGil", "ModuleSetupCode.c")) 
         self.putln("#ifdef WITH_THREAD")
         if not variable:
             variable = '__pyx_gilstate_save'
             if declare_gilstate:
                 self.put("PyGILState_STATE ")
-        self.putln("%s = __Pyx_PyGILState_Ensure();" % variable)
+        self.putln("%s = __Pyx_PyGILState_Ensure();" % variable) 
         self.putln("#endif")
 
     def put_release_ensured_gil(self, variable=None):
         """
         Releases the GIL, corresponds to `put_ensure_gil`.
         """
-        if self.globalstate.directives['fast_gil']:
-          self.globalstate.use_utility_code(UtilityCode.load_cached("FastGil", "ModuleSetupCode.c"))
-        else:
-          self.globalstate.use_utility_code(UtilityCode.load_cached("NoFastGil", "ModuleSetupCode.c"))
+        if self.globalstate.directives['fast_gil']: 
+          self.globalstate.use_utility_code(UtilityCode.load_cached("FastGil", "ModuleSetupCode.c")) 
+        else: 
+          self.globalstate.use_utility_code(UtilityCode.load_cached("NoFastGil", "ModuleSetupCode.c")) 
         if not variable:
             variable = '__pyx_gilstate_save'
         self.putln("#ifdef WITH_THREAD")
-        self.putln("__Pyx_PyGILState_Release(%s);" % variable)
+        self.putln("__Pyx_PyGILState_Release(%s);" % variable) 
         self.putln("#endif")
 
     def put_acquire_gil(self, variable=None):
@@ -2304,12 +2304,12 @@ class CCodeWriter(object):
         Acquire the GIL. The thread's thread state must have been initialized
         by a previous `put_release_gil`
         """
-        if self.globalstate.directives['fast_gil']:
-          self.globalstate.use_utility_code(UtilityCode.load_cached("FastGil", "ModuleSetupCode.c"))
-        else:
-          self.globalstate.use_utility_code(UtilityCode.load_cached("NoFastGil", "ModuleSetupCode.c"))
+        if self.globalstate.directives['fast_gil']: 
+          self.globalstate.use_utility_code(UtilityCode.load_cached("FastGil", "ModuleSetupCode.c")) 
+        else: 
+          self.globalstate.use_utility_code(UtilityCode.load_cached("NoFastGil", "ModuleSetupCode.c")) 
         self.putln("#ifdef WITH_THREAD")
-        self.putln("__Pyx_FastGIL_Forget();")
+        self.putln("__Pyx_FastGIL_Forget();") 
         if variable:
             self.putln('_save = %s;' % variable)
         self.putln("Py_BLOCK_THREADS")
@@ -2317,16 +2317,16 @@ class CCodeWriter(object):
 
     def put_release_gil(self, variable=None):
         "Release the GIL, corresponds to `put_acquire_gil`."
-        if self.globalstate.directives['fast_gil']:
-          self.globalstate.use_utility_code(UtilityCode.load_cached("FastGil", "ModuleSetupCode.c"))
-        else:
-          self.globalstate.use_utility_code(UtilityCode.load_cached("NoFastGil", "ModuleSetupCode.c"))
+        if self.globalstate.directives['fast_gil']: 
+          self.globalstate.use_utility_code(UtilityCode.load_cached("FastGil", "ModuleSetupCode.c")) 
+        else: 
+          self.globalstate.use_utility_code(UtilityCode.load_cached("NoFastGil", "ModuleSetupCode.c")) 
         self.putln("#ifdef WITH_THREAD")
         self.putln("PyThreadState *_save;")
         self.putln("Py_UNBLOCK_THREADS")
         if variable:
             self.putln('%s = _save;' % variable)
-        self.putln("__Pyx_FastGIL_Remember();")
+        self.putln("__Pyx_FastGIL_Remember();") 
         self.putln("#endif")
 
     def declare_gilstate(self):
@@ -2410,7 +2410,7 @@ class CCodeWriter(object):
     def put_finish_refcount_context(self):
         self.putln("__Pyx_RefNannyFinishContext();")
 
-    def put_add_traceback(self, qualified_name, include_cline=True):
+    def put_add_traceback(self, qualified_name, include_cline=True): 
         """
         Build a Python traceback for propagating exceptions.
 
@@ -2418,7 +2418,7 @@ class CCodeWriter(object):
         """
         format_tuple = (
             qualified_name,
-            Naming.clineno_cname if include_cline else 0,
+            Naming.clineno_cname if include_cline else 0, 
             Naming.lineno_cname,
             Naming.filename_cname,
         )
@@ -2486,7 +2486,7 @@ class CCodeWriter(object):
         self.putln("    #define unlikely(x) __builtin_expect(!!(x), 0)")
         self.putln("#endif")
 
-
+ 
 class PyrexCodeWriter(object):
     # f                file      output file
     # level            int       indentation level

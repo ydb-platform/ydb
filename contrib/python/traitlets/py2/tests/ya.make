@@ -3,7 +3,7 @@ PY2TEST()
 OWNER(g:python-contrib borman nslus)
 
 PEERDIR(
-    contrib/python/traitlets
+    contrib/python/traitlets 
 )
 
 ENV(

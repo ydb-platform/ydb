@@ -9,7 +9,7 @@ def split(lst, limit):
     filepath = None
     lenght = 0
     bucket = []
-
+ 
     for item in lst:
         if filepath:
             lenght += root_lenght + len(filepath) + len(item)
@@ -17,17 +17,17 @@ def split(lst, limit):
                 yield bucket
                 bucket = []
                 lenght = 0
-
+ 
             bucket.append(filepath)
             bucket.append(item)
             filepath = None
         else:
             filepath = item
-
+ 
     if bucket:
         yield bucket
-
-
+ 
+ 
 def remove_prefix(text, prefix):
     if text.startswith(prefix):
         return text[len(prefix):]
@@ -38,8 +38,8 @@ def onfat_resource(unit, *args):
     unit.onpeerdir(['library/cpp/resource'])
 
     # Since the maximum length of lpCommandLine string for CreateProcess is 8kb (windows) characters,
-    # we make several calls of rescompiler
-    # https://msdn.microsoft.com/ru-ru/library/windows/desktop/ms682425.aspx
+    # we make several calls of rescompiler 
+    # https://msdn.microsoft.com/ru-ru/library/windows/desktop/ms682425.aspx 
     for part_args in split(args, 8000):
         output = listid(part_args) + '.cpp'
         inputs = [x for x, y in iterpair(part_args) if x != '-']
@@ -47,7 +47,7 @@ def onfat_resource(unit, *args):
             inputs = ['IN'] + inputs
 
         unit.onrun_program(['tools/rescompiler', output] + part_args + inputs + ['OUT_NOAUTO', output])
-        unit.onsrcs(['GLOBAL', output])
+        unit.onsrcs(['GLOBAL', output]) 
 
 
 def onresource_files(unit, *args):

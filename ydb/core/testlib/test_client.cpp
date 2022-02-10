@@ -2267,10 +2267,10 @@ namespace Tests {
     }
 
     TServerSetup GetServerSetup() {
-        if (!IsServerRedirected()) {
+        if (!IsServerRedirected()) { 
             return TServerSetup("localhost", 0);
-        }
-
+        } 
+ 
         TStringBuf str(GetEnv(ServerRedirectEnvVar));
         TStringBuf address;
         TStringBuf port;

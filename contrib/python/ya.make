@@ -4,7 +4,7 @@ RECURSE(
     absl-py
     adblockparser
     aenum
-    ago
+    ago 
     aio-pika
     aioboto3
     aiobotocore
@@ -45,8 +45,8 @@ RECURSE(
     alembic
     allpairspy
     amqp
-    aniso8601
-    annoy
+    aniso8601 
+    annoy 
     antlr4
     ansiwrap
     anyconfig
@@ -55,17 +55,17 @@ RECURSE(
     apipkg
     apispec
     apispec-flask-restful
-    appdirs
+    appdirs 
     APScheduler
     apsw
     aresponses
-    argcomplete
+    argcomplete 
     argon2-cffi
     argon2-cffi-bindings
     argparse-addons
     arq
     arrow
-    asciitree
+    asciitree 
     asgiref
     asn1crypto
     astroid
@@ -75,7 +75,7 @@ RECURSE(
     async-lru
     async-timeout
     asyncio-pool
-    asyncmc
+    asyncmc 
     asyncpg
     asyncssh
     asynctest
@@ -101,18 +101,18 @@ RECURSE(
     banal
     bandit
     bcrypt
-    beautifulsoup4
+    beautifulsoup4 
     behave
     betamax
     betamax-serializers
     billiard
     binaryornot
     bincopy
-    biplist
+    biplist 
     bitarray
     black
-    bleach
-    blinker
+    bleach 
+    blinker 
     blis
     bokeh
     boltons
@@ -125,7 +125,7 @@ RECURSE(
     bravado
     bravado-core
     bsddb3
-    bson
+    bson 
     bz2file
     cached-property
     cachelib
@@ -165,7 +165,7 @@ RECURSE(
     colorhash
     colorlog
     commoncode
-    commonmark
+    commonmark 
     ConfigArgParse
     configobj
     configparser
@@ -176,7 +176,7 @@ RECURSE(
     convertdate
     cookies
     cov-core
-    coverage
+    coverage 
     coverage/bin
     cpu-cores
     crcmod
@@ -322,13 +322,13 @@ RECURSE(
     dominate
     dotmap
     dparse
-    dpath
+    dpath 
     dpkt
     drf-extensions
     drf_ujson
     drf-yasg
-    easywebdav
-    ecdsa
+    easywebdav 
+    ecdsa 
     edera
     editdistance
     elasticsearch
@@ -353,7 +353,7 @@ RECURSE(
     facebook-business
     factory-boy
     Faker
-    fakeredis
+    fakeredis 
     falcon
     falcon-cors
     falcon-multipart
@@ -365,7 +365,7 @@ RECURSE(
     fasteners
     fastjsonschema
     fastsnmp
-    faulthandler
+    faulthandler 
     fbprophet
     feedparser
     ffmpeg-python
@@ -424,7 +424,7 @@ RECURSE(
     ftfy
     funcparserlib
     funcsigs
-    functools32
+    functools32 
     furl
     future
     futures
@@ -461,10 +461,10 @@ RECURSE(
     graphene-sqlalchemy
     graphql-core
     graphql-relay
-    graphviz
+    graphviz 
     greenify
     greenlet
-    grequests
+    grequests 
     grpcio-opentracing
     gspread
     gunicorn
@@ -481,11 +481,11 @@ RECURSE(
     horovod
     hpack
     hstspreload
-    html2text
+    html2text 
     html5lib
     httmock
     http-parser
-    httpagentparser
+    httpagentparser 
     httpcore
     httplib2
     httpretty
@@ -542,10 +542,10 @@ RECURSE(
     janus
     jaraco.functools
     javaproperties
-    jdcal
+    jdcal 
     jedi
     Jinja2
-    jinja2-time
+    jinja2-time 
     jmespath
     joblib
     jmespath
@@ -598,7 +598,7 @@ RECURSE(
     lunardate
     lunr
     lxml
-    lz4
+    lz4 
     M2Crypto
     m3u8
     Mako
@@ -664,7 +664,7 @@ RECURSE(
     nested-diff
     netaddr
     netifaces
-    networkx
+    networkx 
     nltk
     normality
     nose
@@ -673,7 +673,7 @@ RECURSE(
     numpy
     oauth2client
     oauthlib
-    objgraph
+    objgraph 
     observable
     odfpy
     Office365-REST-Python-Client
@@ -751,7 +751,7 @@ RECURSE(
     plumbum
     ply
     plyvel
-    polib
+    polib 
     portalocker
     portpicker
     ppdeep
@@ -760,7 +760,7 @@ RECURSE(
     prance
     premailer
     preshed
-    pretend
+    pretend 
     prettytable
     priority
     progressbar2
@@ -792,7 +792,7 @@ RECURSE(
     pyaml
     pyasn1
     pyasn1-modules
-    pybreaker
+    pybreaker 
     pycares
     pycbrf
     pycodestyle
@@ -806,7 +806,7 @@ RECURSE(
     pydantic
     pydash
     PyDispatcher
-    pyDOE
+    pyDOE 
     pydocstyle
     pydot
     pydub
@@ -858,7 +858,7 @@ RECURSE(
     pysyncobj
     pyTelegramBotAPI
     pytest
-    pytest-allure-adaptor
+    pytest-allure-adaptor 
     pytest-asyncio
     pytest-bdd
     pytest-datadir
@@ -943,7 +943,7 @@ RECURSE(
     requests
     requests-file
     requests-mock
-    requests-oauthlib
+    requests-oauthlib 
     requests-toolbelt
     requests-unixsocket
     responses
@@ -955,7 +955,7 @@ RECURSE(
     RPi.GPIO
     RPI-ST7789
     rsa
-    rstr
+    rstr 
     ruamel.std.pathlib
     ruamel.yaml
     Rx
@@ -1007,7 +1007,7 @@ RECURSE(
     smmap
     snappy
     sniffio
-    snowballstemmer
+    snowballstemmer 
     sobol-seq
     sockjs
     soft-webauthn
@@ -1029,7 +1029,7 @@ RECURSE(
     sqltap
     srptools
     srsly
-    sshpubkeys
+    sshpubkeys 
     sshtunnel
     stack-data
     starlette
@@ -1070,7 +1070,7 @@ RECURSE(
     tinycss2
     tinyrpc
     tldextract
-    toml
+    toml 
     tomli
     toolz
     toposort
@@ -1084,7 +1084,7 @@ RECURSE(
     traitlets
     transfer_manager_client
     transitions
-    transliterate
+    transliterate 
     trollius
     trollsift
     Twiggy
@@ -1142,14 +1142,14 @@ RECURSE(
     webauthn
     webcolors
     webencodings
-    WebOb
+    WebOb 
     websocket-client
     websockets
     webstruct
     WebTest
     webvtt-py
     weighted-levenshtein
-    Werkzeug
+    Werkzeug 
     wheel
     whitenoise
     whodap

@@ -23,7 +23,7 @@ static PyObject *__Pyx_Import(PyObject *name, PyObject *from_list, int level) {
     PyObject *global_dict = 0;
     PyObject *empty_dict = 0;
     PyObject *list;
-    #if PY_MAJOR_VERSION < 3
+    #if PY_MAJOR_VERSION < 3 
     PyObject *py_import;
     py_import = __Pyx_PyObject_GetAttrStr($builtins_cname, PYIDENT("__import__"));
     if (!py_import)
@@ -61,7 +61,7 @@ static PyObject *__Pyx_Import(PyObject *name, PyObject *from_list, int level) {
         }
         #endif
         if (!module) {
-            #if PY_MAJOR_VERSION < 3
+            #if PY_MAJOR_VERSION < 3 
             PyObject *py_level = PyInt_FromLong(level);
             if (!py_level)
                 goto bad;
@@ -75,7 +75,7 @@ static PyObject *__Pyx_Import(PyObject *name, PyObject *from_list, int level) {
         }
     }
 bad:
-    #if PY_MAJOR_VERSION < 3
+    #if PY_MAJOR_VERSION < 3 
     Py_XDECREF(py_import);
     #endif
     Py_XDECREF(empty_list);
@@ -226,8 +226,8 @@ bad:
 
 /////////////// SetPackagePathFromImportLib.proto ///////////////
 
-// PY_VERSION_HEX >= 0x03030000
-#if PY_MAJOR_VERSION >= 3 && !CYTHON_PEP489_MULTI_PHASE_INIT
+// PY_VERSION_HEX >= 0x03030000 
+#if PY_MAJOR_VERSION >= 3 && !CYTHON_PEP489_MULTI_PHASE_INIT 
 static int __Pyx_SetPackagePathFromImportLib(const char* parent_package_name, PyObject *module_name);
 #else
 #define __Pyx_SetPackagePathFromImportLib(a, b) 0
@@ -237,8 +237,8 @@ static int __Pyx_SetPackagePathFromImportLib(const char* parent_package_name, Py
 //@requires: ObjectHandling.c::PyObjectGetAttrStr
 //@substitute: naming
 
-// PY_VERSION_HEX >= 0x03030000
-#if PY_MAJOR_VERSION >= 3 && !CYTHON_PEP489_MULTI_PHASE_INIT
+// PY_VERSION_HEX >= 0x03030000 
+#if PY_MAJOR_VERSION >= 3 && !CYTHON_PEP489_MULTI_PHASE_INIT 
 static int __Pyx_SetPackagePathFromImportLib(const char* parent_package_name, PyObject *module_name) {
     PyObject *importlib, *loader, *osmod, *ossep, *parts, *package_path;
     PyObject *path = NULL, *file_path = NULL;
@@ -636,104 +636,104 @@ bad:
     Py_XDECREF(ob);
     return NULL;
 }
-
-
-/////////////// MergeVTables.proto ///////////////
-//@requires: GetVTable
-
-static int __Pyx_MergeVtables(PyTypeObject *type); /*proto*/
-
-/////////////// MergeVTables ///////////////
-
-static int __Pyx_MergeVtables(PyTypeObject *type) {
-    int i;
-    void** base_vtables;
-    void* unknown = (void*)-1;
-    PyObject* bases = type->tp_bases;
-    int base_depth = 0;
-    {
-        PyTypeObject* base = type->tp_base;
-        while (base) {
-            base_depth += 1;
-            base = base->tp_base;
-        }
-    }
+ 
+ 
+/////////////// MergeVTables.proto /////////////// 
+//@requires: GetVTable 
+ 
+static int __Pyx_MergeVtables(PyTypeObject *type); /*proto*/ 
+ 
+/////////////// MergeVTables /////////////// 
+ 
+static int __Pyx_MergeVtables(PyTypeObject *type) { 
+    int i; 
+    void** base_vtables; 
+    void* unknown = (void*)-1; 
+    PyObject* bases = type->tp_bases; 
+    int base_depth = 0; 
+    { 
+        PyTypeObject* base = type->tp_base; 
+        while (base) { 
+            base_depth += 1; 
+            base = base->tp_base; 
+        } 
+    } 
     base_vtables = (void**) malloc(sizeof(void*) * (size_t)(base_depth + 1));
-    base_vtables[0] = unknown;
-    // Could do MRO resolution of individual methods in the future, assuming
-    // compatible vtables, but for now simply require a common vtable base.
-    // Note that if the vtables of various bases are extended separately,
-    // resolution isn't possible and we must reject it just as when the
-    // instance struct is so extended.  (It would be good to also do this
-    // check when a multiple-base class is created in pure Python as well.)
-    for (i = 1; i < PyTuple_GET_SIZE(bases); i++) {
-        void* base_vtable = __Pyx_GetVtable(((PyTypeObject*)PyTuple_GET_ITEM(bases, i))->tp_dict);
-        if (base_vtable != NULL) {
-            int j;
-            PyTypeObject* base = type->tp_base;
-            for (j = 0; j < base_depth; j++) {
-                if (base_vtables[j] == unknown) {
-                    base_vtables[j] = __Pyx_GetVtable(base->tp_dict);
-                    base_vtables[j + 1] = unknown;
-                }
-                if (base_vtables[j] == base_vtable) {
-                    break;
-                } else if (base_vtables[j] == NULL) {
-                    // No more potential matching bases (with vtables).
-                    goto bad;
-                }
-                base = base->tp_base;
-            }
-        }
-    }
-    PyErr_Clear();
-    free(base_vtables);
-    return 0;
-bad:
-    PyErr_Format(
-        PyExc_TypeError,
-        "multiple bases have vtable conflict: '%s' and '%s'",
-        type->tp_base->tp_name, ((PyTypeObject*)PyTuple_GET_ITEM(bases, i))->tp_name);
-    free(base_vtables);
-    return -1;
-}
-
-
-/////////////// ImportNumPyArray.proto ///////////////
-
-static PyObject *__pyx_numpy_ndarray = NULL;
-
-static PyObject* __Pyx_ImportNumPyArrayTypeIfAvailable(void); /*proto*/
-
-/////////////// ImportNumPyArray.cleanup ///////////////
-Py_CLEAR(__pyx_numpy_ndarray);
-
-/////////////// ImportNumPyArray ///////////////
-//@requires: ImportExport.c::Import
-
-static PyObject* __Pyx__ImportNumPyArray(void) {
-    PyObject *numpy_module, *ndarray_object = NULL;
-    numpy_module = __Pyx_Import(PYIDENT("numpy"), NULL, 0);
-    if (likely(numpy_module)) {
-        ndarray_object = PyObject_GetAttrString(numpy_module, "ndarray");
-        Py_DECREF(numpy_module);
-    }
-    if (unlikely(!ndarray_object)) {
-        // ImportError, AttributeError, ...
-        PyErr_Clear();
-    }
-    if (unlikely(!ndarray_object || !PyObject_TypeCheck(ndarray_object, &PyType_Type))) {
-        Py_XDECREF(ndarray_object);
-        Py_INCREF(Py_None);
-        ndarray_object = Py_None;
-    }
-    return ndarray_object;
-}
-
-static CYTHON_INLINE PyObject* __Pyx_ImportNumPyArrayTypeIfAvailable(void) {
-    if (unlikely(!__pyx_numpy_ndarray)) {
-        __pyx_numpy_ndarray = __Pyx__ImportNumPyArray();
-    }
-    Py_INCREF(__pyx_numpy_ndarray);
-    return __pyx_numpy_ndarray;
-}
+    base_vtables[0] = unknown; 
+    // Could do MRO resolution of individual methods in the future, assuming 
+    // compatible vtables, but for now simply require a common vtable base. 
+    // Note that if the vtables of various bases are extended separately, 
+    // resolution isn't possible and we must reject it just as when the 
+    // instance struct is so extended.  (It would be good to also do this 
+    // check when a multiple-base class is created in pure Python as well.) 
+    for (i = 1; i < PyTuple_GET_SIZE(bases); i++) { 
+        void* base_vtable = __Pyx_GetVtable(((PyTypeObject*)PyTuple_GET_ITEM(bases, i))->tp_dict); 
+        if (base_vtable != NULL) { 
+            int j; 
+            PyTypeObject* base = type->tp_base; 
+            for (j = 0; j < base_depth; j++) { 
+                if (base_vtables[j] == unknown) { 
+                    base_vtables[j] = __Pyx_GetVtable(base->tp_dict); 
+                    base_vtables[j + 1] = unknown; 
+                } 
+                if (base_vtables[j] == base_vtable) { 
+                    break; 
+                } else if (base_vtables[j] == NULL) { 
+                    // No more potential matching bases (with vtables). 
+                    goto bad; 
+                } 
+                base = base->tp_base; 
+            } 
+        } 
+    } 
+    PyErr_Clear(); 
+    free(base_vtables); 
+    return 0; 
+bad: 
+    PyErr_Format( 
+        PyExc_TypeError, 
+        "multiple bases have vtable conflict: '%s' and '%s'", 
+        type->tp_base->tp_name, ((PyTypeObject*)PyTuple_GET_ITEM(bases, i))->tp_name); 
+    free(base_vtables); 
+    return -1; 
+} 
+ 
+ 
+/////////////// ImportNumPyArray.proto /////////////// 
+ 
+static PyObject *__pyx_numpy_ndarray = NULL; 
+ 
+static PyObject* __Pyx_ImportNumPyArrayTypeIfAvailable(void); /*proto*/ 
+ 
+/////////////// ImportNumPyArray.cleanup /////////////// 
+Py_CLEAR(__pyx_numpy_ndarray); 
+ 
+/////////////// ImportNumPyArray /////////////// 
+//@requires: ImportExport.c::Import 
+ 
+static PyObject* __Pyx__ImportNumPyArray(void) { 
+    PyObject *numpy_module, *ndarray_object = NULL; 
+    numpy_module = __Pyx_Import(PYIDENT("numpy"), NULL, 0); 
+    if (likely(numpy_module)) { 
+        ndarray_object = PyObject_GetAttrString(numpy_module, "ndarray"); 
+        Py_DECREF(numpy_module); 
+    } 
+    if (unlikely(!ndarray_object)) { 
+        // ImportError, AttributeError, ... 
+        PyErr_Clear(); 
+    } 
+    if (unlikely(!ndarray_object || !PyObject_TypeCheck(ndarray_object, &PyType_Type))) { 
+        Py_XDECREF(ndarray_object); 
+        Py_INCREF(Py_None); 
+        ndarray_object = Py_None; 
+    } 
+    return ndarray_object; 
+} 
+ 
+static CYTHON_INLINE PyObject* __Pyx_ImportNumPyArrayTypeIfAvailable(void) { 
+    if (unlikely(!__pyx_numpy_ndarray)) { 
+        __pyx_numpy_ndarray = __Pyx__ImportNumPyArray(); 
+    } 
+    Py_INCREF(__pyx_numpy_ndarray); 
+    return __pyx_numpy_ndarray; 
+} 

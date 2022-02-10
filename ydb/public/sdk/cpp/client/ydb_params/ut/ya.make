@@ -8,7 +8,7 @@ OWNER(
 IF (SANITIZER_TYPE)
     TIMEOUT(1200)
     SIZE(LARGE)
-    TAG(ya:fat)
+    TAG(ya:fat) 
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)

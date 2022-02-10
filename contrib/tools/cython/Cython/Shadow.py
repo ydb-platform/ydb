@@ -109,12 +109,12 @@ cclass = ccall = cfunc = _EmptyDecoratorAndManager()
 
 returns = wraparound = boundscheck = initializedcheck = nonecheck = \
     embedsignature = cdivision = cdivision_warnings = \
-    always_allows_keywords = profile = linetrace = infer_types = \
+    always_allows_keywords = profile = linetrace = infer_types = \ 
     unraisable_tracebacks = freelist = \
-        lambda _: _EmptyDecoratorAndManager()
+        lambda _: _EmptyDecoratorAndManager() 
 
-exceptval = lambda _=None, check=True: _EmptyDecoratorAndManager()
-
+exceptval = lambda _=None, check=True: _EmptyDecoratorAndManager() 
+ 
 overflowcheck = lambda _: _EmptyDecoratorAndManager()
 optimization = _Optimization()
 
@@ -149,7 +149,7 @@ def cdiv(a, b):
     q = a / b
     if q < 0:
         q += 1
-    return q
+    return q 
 
 def cmod(a, b):
     r = a % b
@@ -396,7 +396,7 @@ py_complex = typedef(complex, "double complex")
 int_types = ['char', 'short', 'Py_UNICODE', 'int', 'Py_UCS4', 'long', 'longlong', 'Py_ssize_t', 'size_t']
 float_types = ['longdouble', 'double', 'float']
 complex_types = ['longdoublecomplex', 'doublecomplex', 'floatcomplex', 'complex']
-other_types = ['bint', 'void', 'Py_tss_t']
+other_types = ['bint', 'void', 'Py_tss_t'] 
 
 to_repr = {
     'longlong': 'long long',
@@ -431,18 +431,18 @@ for name in complex_types:
     gs[name] = typedef(py_complex, to_repr(name, name))
 
 bint = typedef(bool, "bint")
-void = typedef(None, "void")
-Py_tss_t = typedef(None, "Py_tss_t")
+void = typedef(None, "void") 
+Py_tss_t = typedef(None, "Py_tss_t") 
 
 for t in int_types + float_types + complex_types + other_types:
     for i in range(1, 4):
-        gs["%s_%s" % ('p'*i, t)] = gs[t]._pointer(i)
+        gs["%s_%s" % ('p'*i, t)] = gs[t]._pointer(i) 
 
-NULL = gs['p_void'](0)
+NULL = gs['p_void'](0) 
 
-# looks like 'gs' has some users out there by now...
-#del gs
-
+# looks like 'gs' has some users out there by now... 
+#del gs 
+ 
 integral = floating = numeric = _FusedType()
 
 type_ordering = [py_int, py_long, py_float, py_complex]

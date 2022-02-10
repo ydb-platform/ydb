@@ -1,1 +1,1 @@
-void some_c_function(void);
+void some_c_function(void); 

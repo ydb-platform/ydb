@@ -1,10 +1,10 @@
-# coding: utf-8
-
+# coding: utf-8 
+ 
 import os
 import stat
-import sys
+import sys 
 import shutil
-import logging
+import logging 
 
 from six import reraise
 
@@ -75,9 +75,9 @@ def errorfix(f):
     def f_wrapped(*args, **kwargs):
         try:
             return f(*args, **kwargs)
-        except WindowsError:
-            tp, value, tb = sys.exc_info()
-            fix_error(value)
+        except WindowsError: 
+            tp, value, tb = sys.exc_info() 
+            fix_error(value) 
             reraise(tp, value, tb)
 
     return f_wrapped
@@ -105,7 +105,7 @@ if on_win():
     _has_ctypes = True
     try:
         import ctypes
-        from ctypes import wintypes
+        from ctypes import wintypes 
     except ImportError:
         _has_ctypes = False
 
@@ -141,8 +141,8 @@ if on_win():
     def run_diehard(f, winerrors, tries, delay, *args, **kwargs):
         if isinstance(winerrors, int):
             winerrors = (winerrors,)
-
-        ei = None
+ 
+        ei = None 
         for t in xrange(tries):
             if t:
                 logger.debug('Diehard [errs %s]: try #%d in %s', ','.join(str(x) for x in winerrors), t, f)
@@ -151,7 +151,7 @@ if on_win():
             except WindowsError as e:
                 if e.winerror not in winerrors:
                     raise
-                ei = sys.exc_info()
+                ei = sys.exc_info() 
                 time.sleep(delay)
         reraise(ei[0], ei[1], ei[2])
 
@@ -323,34 +323,34 @@ if on_win():
     @require_ctypes
     def _high_dword(x):
         return ctypes.c_ulong((x >> 32) & ((1 << 32) - 1))
-
-    @win_only
-    @require_ctypes
-    def get_current_process():
-        handle = ctypes.windll.kernel32.GetCurrentProcess()
-        if not handle:
-            raise ctypes.WinError()
-        return wintypes.HANDLE(handle)
-
-    @win_only
-    @require_ctypes
-    def get_process_handle_count(proc_handle):
-        assert isinstance(proc_handle, wintypes.HANDLE)
-
-        GetProcessHandleCount = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HANDLE, wintypes.POINTER(wintypes.DWORD))(("GetProcessHandleCount", ctypes.windll.kernel32))
-        hndcnt = wintypes.DWORD()
-        if not GetProcessHandleCount(proc_handle, ctypes.byref(hndcnt)):
-            raise ctypes.WinError()
-        return hndcnt.value
-
-    @win_only
-    @require_ctypes
-    def set_handle_information(file, inherit=None, protect_from_close=None):
-        for flag, value in [(inherit, 1), (protect_from_close, 2)]:
-            if flag is not None:
-                assert isinstance(flag, bool)
-                if not ctypes.windll.kernel32.SetHandleInformation(file_handle(file), _low_dword(value), _low_dword(int(flag))):
-                    raise ctypes.WinError()
+ 
+    @win_only 
+    @require_ctypes 
+    def get_current_process(): 
+        handle = ctypes.windll.kernel32.GetCurrentProcess() 
+        if not handle: 
+            raise ctypes.WinError() 
+        return wintypes.HANDLE(handle) 
+ 
+    @win_only 
+    @require_ctypes 
+    def get_process_handle_count(proc_handle): 
+        assert isinstance(proc_handle, wintypes.HANDLE) 
+ 
+        GetProcessHandleCount = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HANDLE, wintypes.POINTER(wintypes.DWORD))(("GetProcessHandleCount", ctypes.windll.kernel32)) 
+        hndcnt = wintypes.DWORD() 
+        if not GetProcessHandleCount(proc_handle, ctypes.byref(hndcnt)): 
+            raise ctypes.WinError() 
+        return hndcnt.value 
+ 
+    @win_only 
+    @require_ctypes 
+    def set_handle_information(file, inherit=None, protect_from_close=None): 
+        for flag, value in [(inherit, 1), (protect_from_close, 2)]: 
+            if flag is not None: 
+                assert isinstance(flag, bool) 
+                if not ctypes.windll.kernel32.SetHandleInformation(file_handle(file), _low_dword(value), _low_dword(int(flag))): 
+                    raise ctypes.WinError() 
 
     @win_only
     @require_ctypes

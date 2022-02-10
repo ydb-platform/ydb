@@ -207,7 +207,7 @@ class HybridJsonLoader(JSONFileLoader):
     @classmethod
     def path_in_arcadia_resources(cls, file_path):
         for prefix in cls.arcadia_resources_path:
-            path = '{}{}.json'.format(prefix, file_path)
+            path = '{}{}.json'.format(prefix, file_path) 
             if path in resource.resfs_files():
                 return path
         return

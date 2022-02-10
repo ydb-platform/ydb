@@ -198,8 +198,8 @@ static PyObject* __Pyx_PyDict_GetItemDefault(PyObject* d, PyObject* key, PyObjec
         value = default_value;
     }
     Py_INCREF(value);
-    // avoid C compiler warning about unused utility functions
-    if ((1));
+    // avoid C compiler warning about unused utility functions 
+    if ((1)); 
 #else
     if (PyString_CheckExact(key) || PyUnicode_CheckExact(key) || PyInt_CheckExact(key)) {
         /* these presumably have safe hash functions */
@@ -208,13 +208,13 @@ static PyObject* __Pyx_PyDict_GetItemDefault(PyObject* d, PyObject* key, PyObjec
             value = default_value;
         }
         Py_INCREF(value);
-    }
-#endif
-    else {
+    } 
+#endif 
+    else { 
         if (default_value == Py_None)
-            value = CALL_UNBOUND_METHOD(PyDict_Type, "get", d, key);
-        else
-            value = CALL_UNBOUND_METHOD(PyDict_Type, "get", d, key, default_value);
+            value = CALL_UNBOUND_METHOD(PyDict_Type, "get", d, key); 
+        else 
+            value = CALL_UNBOUND_METHOD(PyDict_Type, "get", d, key, default_value); 
     }
     return value;
 }
@@ -231,7 +231,7 @@ static CYTHON_INLINE PyObject *__Pyx_PyDict_SetDefault(PyObject *d, PyObject *ke
     PyObject* value;
 #if PY_VERSION_HEX >= 0x030400A0
     // we keep the method call at the end to avoid "unused" C compiler warnings
-    if ((1)) {
+    if ((1)) { 
         value = PyDict_SetDefault(d, key, default_value);
         if (unlikely(!value)) return NULL;
         Py_INCREF(value);
@@ -261,7 +261,7 @@ static CYTHON_INLINE PyObject *__Pyx_PyDict_SetDefault(PyObject *d, PyObject *ke
 #endif
 #endif
     } else {
-        value = CALL_UNBOUND_METHOD(PyDict_Type, "setdefault", d, key, default_value);
+        value = CALL_UNBOUND_METHOD(PyDict_Type, "setdefault", d, key, default_value); 
     }
     return value;
 }
@@ -271,28 +271,28 @@ static CYTHON_INLINE PyObject *__Pyx_PyDict_SetDefault(PyObject *d, PyObject *ke
 
 #define __Pyx_PyDict_Clear(d) (PyDict_Clear(d), 0)
 
-
-/////////////// py_dict_pop.proto ///////////////
-
-static CYTHON_INLINE PyObject *__Pyx_PyDict_Pop(PyObject *d, PyObject *key, PyObject *default_value); /*proto*/
-
-/////////////// py_dict_pop ///////////////
-
-static CYTHON_INLINE PyObject *__Pyx_PyDict_Pop(PyObject *d, PyObject *key, PyObject *default_value) {
-#if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX > 0x030600B3
-    if ((1)) {
-        return _PyDict_Pop(d, key, default_value);
-    } else
-    // avoid "function unused" warnings
-#endif
-    if (default_value) {
-        return CALL_UNBOUND_METHOD(PyDict_Type, "pop", d, key, default_value);
-    } else {
-        return CALL_UNBOUND_METHOD(PyDict_Type, "pop", d, key);
-    }
-}
-
-
+ 
+/////////////// py_dict_pop.proto /////////////// 
+ 
+static CYTHON_INLINE PyObject *__Pyx_PyDict_Pop(PyObject *d, PyObject *key, PyObject *default_value); /*proto*/ 
+ 
+/////////////// py_dict_pop /////////////// 
+ 
+static CYTHON_INLINE PyObject *__Pyx_PyDict_Pop(PyObject *d, PyObject *key, PyObject *default_value) { 
+#if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX > 0x030600B3 
+    if ((1)) { 
+        return _PyDict_Pop(d, key, default_value); 
+    } else 
+    // avoid "function unused" warnings 
+#endif 
+    if (default_value) { 
+        return CALL_UNBOUND_METHOD(PyDict_Type, "pop", d, key, default_value); 
+    } else { 
+        return CALL_UNBOUND_METHOD(PyDict_Type, "pop", d, key); 
+    } 
+} 
+ 
+ 
 /////////////// dict_iter.proto ///////////////
 
 static CYTHON_INLINE PyObject* __Pyx_dict_iterator(PyObject* dict, int is_dict, PyObject* method_name,
@@ -309,31 +309,31 @@ static CYTHON_INLINE PyObject* __Pyx_dict_iterator(PyObject* iterable, int is_di
                                                    Py_ssize_t* p_orig_length, int* p_source_is_dict) {
     is_dict = is_dict || likely(PyDict_CheckExact(iterable));
     *p_source_is_dict = is_dict;
-    if (is_dict) {
+    if (is_dict) { 
 #if !CYTHON_COMPILING_IN_PYPY
         *p_orig_length = PyDict_Size(iterable);
         Py_INCREF(iterable);
         return iterable;
-#elif PY_MAJOR_VERSION >= 3
-        // On PyPy3, we need to translate manually a few method names.
-        // This logic is not needed on CPython thanks to the fast case above.
-        static PyObject *py_items = NULL, *py_keys = NULL, *py_values = NULL;
-        PyObject **pp = NULL;
-        if (method_name) {
-            const char *name = PyUnicode_AsUTF8(method_name);
-            if (strcmp(name, "iteritems") == 0) pp = &py_items;
-            else if (strcmp(name, "iterkeys") == 0) pp = &py_keys;
-            else if (strcmp(name, "itervalues") == 0) pp = &py_values;
-            if (pp) {
-                if (!*pp) {
-                    *pp = PyUnicode_FromString(name + 4);
-                    if (!*pp)
-                        return NULL;
-                }
-                method_name = *pp;
-            }
-        }
-#endif
+#elif PY_MAJOR_VERSION >= 3 
+        // On PyPy3, we need to translate manually a few method names. 
+        // This logic is not needed on CPython thanks to the fast case above. 
+        static PyObject *py_items = NULL, *py_keys = NULL, *py_values = NULL; 
+        PyObject **pp = NULL; 
+        if (method_name) { 
+            const char *name = PyUnicode_AsUTF8(method_name); 
+            if (strcmp(name, "iteritems") == 0) pp = &py_items; 
+            else if (strcmp(name, "iterkeys") == 0) pp = &py_keys; 
+            else if (strcmp(name, "itervalues") == 0) pp = &py_values; 
+            if (pp) { 
+                if (!*pp) { 
+                    *pp = PyUnicode_FromString(name + 4); 
+                    if (!*pp) 
+                        return NULL; 
+                } 
+                method_name = *pp; 
+            } 
+        } 
+#endif 
     }
     *p_orig_length = 0;
     if (method_name) {
@@ -421,143 +421,143 @@ static CYTHON_INLINE int __Pyx_dict_iter_next(
 }
 
 
-/////////////// set_iter.proto ///////////////
-
-static CYTHON_INLINE PyObject* __Pyx_set_iterator(PyObject* iterable, int is_set,
-                                                  Py_ssize_t* p_orig_length, int* p_source_is_set); /*proto*/
-static CYTHON_INLINE int __Pyx_set_iter_next(
-        PyObject* iter_obj, Py_ssize_t orig_length,
-        Py_ssize_t* ppos, PyObject **value,
-        int source_is_set); /*proto*/
-
-/////////////// set_iter ///////////////
-//@requires: ObjectHandling.c::IterFinish
-
-static CYTHON_INLINE PyObject* __Pyx_set_iterator(PyObject* iterable, int is_set,
-                                                  Py_ssize_t* p_orig_length, int* p_source_is_set) {
-#if CYTHON_COMPILING_IN_CPYTHON
-    is_set = is_set || likely(PySet_CheckExact(iterable) || PyFrozenSet_CheckExact(iterable));
-    *p_source_is_set = is_set;
+/////////////// set_iter.proto /////////////// 
+ 
+static CYTHON_INLINE PyObject* __Pyx_set_iterator(PyObject* iterable, int is_set, 
+                                                  Py_ssize_t* p_orig_length, int* p_source_is_set); /*proto*/ 
+static CYTHON_INLINE int __Pyx_set_iter_next( 
+        PyObject* iter_obj, Py_ssize_t orig_length, 
+        Py_ssize_t* ppos, PyObject **value, 
+        int source_is_set); /*proto*/ 
+ 
+/////////////// set_iter /////////////// 
+//@requires: ObjectHandling.c::IterFinish 
+ 
+static CYTHON_INLINE PyObject* __Pyx_set_iterator(PyObject* iterable, int is_set, 
+                                                  Py_ssize_t* p_orig_length, int* p_source_is_set) { 
+#if CYTHON_COMPILING_IN_CPYTHON 
+    is_set = is_set || likely(PySet_CheckExact(iterable) || PyFrozenSet_CheckExact(iterable)); 
+    *p_source_is_set = is_set; 
     if (likely(is_set)) {
         *p_orig_length = PySet_Size(iterable);
         Py_INCREF(iterable);
         return iterable;
     }
-#else
-    (void)is_set;
-    *p_source_is_set = 0;
+#else 
+    (void)is_set; 
+    *p_source_is_set = 0; 
 #endif
-    *p_orig_length = 0;
-    return PyObject_GetIter(iterable);
-}
-
-static CYTHON_INLINE int __Pyx_set_iter_next(
-        PyObject* iter_obj, Py_ssize_t orig_length,
-        Py_ssize_t* ppos, PyObject **value,
-        int source_is_set) {
-    if (!CYTHON_COMPILING_IN_CPYTHON || unlikely(!source_is_set)) {
-        *value = PyIter_Next(iter_obj);
-        if (unlikely(!*value)) {
-            return __Pyx_IterFinish();
-        }
-        (void)orig_length;
-        (void)ppos;
+    *p_orig_length = 0; 
+    return PyObject_GetIter(iterable); 
+} 
+ 
+static CYTHON_INLINE int __Pyx_set_iter_next( 
+        PyObject* iter_obj, Py_ssize_t orig_length, 
+        Py_ssize_t* ppos, PyObject **value, 
+        int source_is_set) { 
+    if (!CYTHON_COMPILING_IN_CPYTHON || unlikely(!source_is_set)) { 
+        *value = PyIter_Next(iter_obj); 
+        if (unlikely(!*value)) { 
+            return __Pyx_IterFinish(); 
+        } 
+        (void)orig_length; 
+        (void)ppos; 
         return 1;
-    }
-#if CYTHON_COMPILING_IN_CPYTHON
-    if (unlikely(PySet_GET_SIZE(iter_obj) != orig_length)) {
-        PyErr_SetString(
-            PyExc_RuntimeError,
-            "set changed size during iteration");
-        return -1;
-    }
-    {
-        Py_hash_t hash;
-        int ret = _PySet_NextEntry(iter_obj, ppos, value, &hash);
-        // CPython does not raise errors here, only if !isinstance(iter_obj, set/frozenset)
-        assert (ret != -1);
-        if (likely(ret)) {
-            Py_INCREF(*value);
-            return 1;
-        }
-    }
-#endif
+    } 
+#if CYTHON_COMPILING_IN_CPYTHON 
+    if (unlikely(PySet_GET_SIZE(iter_obj) != orig_length)) { 
+        PyErr_SetString( 
+            PyExc_RuntimeError, 
+            "set changed size during iteration"); 
+        return -1; 
+    } 
+    { 
+        Py_hash_t hash; 
+        int ret = _PySet_NextEntry(iter_obj, ppos, value, &hash); 
+        // CPython does not raise errors here, only if !isinstance(iter_obj, set/frozenset) 
+        assert (ret != -1); 
+        if (likely(ret)) { 
+            Py_INCREF(*value); 
+            return 1; 
+        } 
+    } 
+#endif 
     return 0;
-}
-
-/////////////// py_set_discard_unhashable ///////////////
-//@requires: Builtins.c::pyfrozenset_new
-
-static int __Pyx_PySet_DiscardUnhashable(PyObject *set, PyObject *key) {
-    PyObject *tmpkey;
-    int rv;
-
-    if (likely(!PySet_Check(key) || !PyErr_ExceptionMatches(PyExc_TypeError)))
-        return -1;
-    PyErr_Clear();
-    tmpkey = __Pyx_PyFrozenSet_New(key);
-    if (tmpkey == NULL)
-        return -1;
-    rv = PySet_Discard(set, tmpkey);
-    Py_DECREF(tmpkey);
-    return rv;
-}
-
-
-/////////////// py_set_discard.proto ///////////////
-
-static CYTHON_INLINE int __Pyx_PySet_Discard(PyObject *set, PyObject *key); /*proto*/
-
-/////////////// py_set_discard ///////////////
-//@requires: py_set_discard_unhashable
-
-static CYTHON_INLINE int __Pyx_PySet_Discard(PyObject *set, PyObject *key) {
-    int found = PySet_Discard(set, key);
-    // Convert *key* to frozenset if necessary
-    if (unlikely(found < 0)) {
-        found = __Pyx_PySet_DiscardUnhashable(set, key);
-    }
-    // note: returns -1 on error, 0 (not found) or 1 (found) otherwise => error check for -1 or < 0 works
-    return found;
-}
-
-
-/////////////// py_set_remove.proto ///////////////
-
-static CYTHON_INLINE int __Pyx_PySet_Remove(PyObject *set, PyObject *key); /*proto*/
-
-/////////////// py_set_remove ///////////////
-//@requires: py_set_discard_unhashable
-
-static int __Pyx_PySet_RemoveNotFound(PyObject *set, PyObject *key, int found) {
-    // Convert *key* to frozenset if necessary
-    if (unlikely(found < 0)) {
-        found = __Pyx_PySet_DiscardUnhashable(set, key);
-    }
-    if (likely(found == 0)) {
-        // Not found
-        PyObject *tup;
-        tup = PyTuple_Pack(1, key);
-        if (!tup)
-            return -1;
-        PyErr_SetObject(PyExc_KeyError, tup);
-        Py_DECREF(tup);
-        return -1;
-    }
-    // note: returns -1 on error, 0 (not found) or 1 (found) otherwise => error check for -1 or < 0 works
-    return found;
-}
-
-static CYTHON_INLINE int __Pyx_PySet_Remove(PyObject *set, PyObject *key) {
-    int found = PySet_Discard(set, key);
-    if (unlikely(found != 1)) {
-        // note: returns -1 on error, 0 (not found) or 1 (found) otherwise => error check for -1 or < 0 works
-        return __Pyx_PySet_RemoveNotFound(set, key, found);
-    }
-    return 0;
-}
-
-
+} 
+ 
+/////////////// py_set_discard_unhashable /////////////// 
+//@requires: Builtins.c::pyfrozenset_new 
+ 
+static int __Pyx_PySet_DiscardUnhashable(PyObject *set, PyObject *key) { 
+    PyObject *tmpkey; 
+    int rv; 
+ 
+    if (likely(!PySet_Check(key) || !PyErr_ExceptionMatches(PyExc_TypeError))) 
+        return -1; 
+    PyErr_Clear(); 
+    tmpkey = __Pyx_PyFrozenSet_New(key); 
+    if (tmpkey == NULL) 
+        return -1; 
+    rv = PySet_Discard(set, tmpkey); 
+    Py_DECREF(tmpkey); 
+    return rv; 
+} 
+ 
+ 
+/////////////// py_set_discard.proto /////////////// 
+ 
+static CYTHON_INLINE int __Pyx_PySet_Discard(PyObject *set, PyObject *key); /*proto*/ 
+ 
+/////////////// py_set_discard /////////////// 
+//@requires: py_set_discard_unhashable 
+ 
+static CYTHON_INLINE int __Pyx_PySet_Discard(PyObject *set, PyObject *key) { 
+    int found = PySet_Discard(set, key); 
+    // Convert *key* to frozenset if necessary 
+    if (unlikely(found < 0)) { 
+        found = __Pyx_PySet_DiscardUnhashable(set, key); 
+    } 
+    // note: returns -1 on error, 0 (not found) or 1 (found) otherwise => error check for -1 or < 0 works 
+    return found; 
+} 
+ 
+ 
+/////////////// py_set_remove.proto /////////////// 
+ 
+static CYTHON_INLINE int __Pyx_PySet_Remove(PyObject *set, PyObject *key); /*proto*/ 
+ 
+/////////////// py_set_remove /////////////// 
+//@requires: py_set_discard_unhashable 
+ 
+static int __Pyx_PySet_RemoveNotFound(PyObject *set, PyObject *key, int found) { 
+    // Convert *key* to frozenset if necessary 
+    if (unlikely(found < 0)) { 
+        found = __Pyx_PySet_DiscardUnhashable(set, key); 
+    } 
+    if (likely(found == 0)) { 
+        // Not found 
+        PyObject *tup; 
+        tup = PyTuple_Pack(1, key); 
+        if (!tup) 
+            return -1; 
+        PyErr_SetObject(PyExc_KeyError, tup); 
+        Py_DECREF(tup); 
+        return -1; 
+    } 
+    // note: returns -1 on error, 0 (not found) or 1 (found) otherwise => error check for -1 or < 0 works 
+    return found; 
+} 
+ 
+static CYTHON_INLINE int __Pyx_PySet_Remove(PyObject *set, PyObject *key) { 
+    int found = PySet_Discard(set, key); 
+    if (unlikely(found != 1)) { 
+        // note: returns -1 on error, 0 (not found) or 1 (found) otherwise => error check for -1 or < 0 works 
+        return __Pyx_PySet_RemoveNotFound(set, key, found); 
+    } 
+    return 0; 
+} 
+ 
+ 
 /////////////// unicode_iter.proto ///////////////
 
 static CYTHON_INLINE int __Pyx_init_unicode_iteration(
@@ -866,7 +866,7 @@ static {{c_ret_type}} {{cfunc_name}}(PyObject *op1, PyObject *op2, CYTHON_UNUSED
             return PyInt_FromLong(x);
         {{elif op == 'TrueDivide'}}
             {{zerodiv_check('b')}}
-            if (8 * sizeof(long) <= 53 || likely(labs({{ival}}) <= ((PY_LONG_LONG)1 << 53))) {
+            if (8 * sizeof(long) <= 53 || likely(labs({{ival}}) <= ((PY_LONG_LONG)1 << 53))) { 
                 return PyFloat_FromDouble((double)a / (double)b);
             }
             // let Python do the rounding
@@ -929,7 +929,7 @@ static {{c_ret_type}} {{cfunc_name}}(PyObject *op1, PyObject *op2, CYTHON_UNUSED
                     {{endif}}
                     }
                     // if size doesn't fit into a long or PY_LONG_LONG anymore, fall through to default
-                    CYTHON_FALLTHROUGH;
+                    CYTHON_FALLTHROUGH; 
                 {{endfor}}
                 {{endfor}}
 
@@ -961,7 +961,7 @@ static {{c_ret_type}} {{cfunc_name}}(PyObject *op1, PyObject *op2, CYTHON_UNUSED
                 x += ((x != 0) & ((x ^ b) < 0)) * b;
             {{elif op == 'TrueDivide'}}
                 {{zerodiv_check('b')}}
-                if ((8 * sizeof(long) <= 53 || likely(labs({{ival}}) <= ((PY_LONG_LONG)1 << 53)))
+                if ((8 * sizeof(long) <= 53 || likely(labs({{ival}}) <= ((PY_LONG_LONG)1 << 53))) 
                         || __Pyx_sst_abs(size) <= 52 / PyLong_SHIFT) {
                     return PyFloat_FromDouble((double)a / (double)b);
                 }
@@ -1132,7 +1132,7 @@ static {{c_ret_type}} {{cfunc_name}}(PyObject *op1, PyObject *op2, double floatv
                 if (8 * sizeof(unsigned long) > {{_size}} * PyLong_SHIFT && ((8 * sizeof(unsigned long) < 53) || ({{_size-1}} * PyLong_SHIFT < 53))) {
                     {{fval}} = (double) {{pylong_join(_size, 'digits')}};
                     // let CPython do its own float rounding from 2**53 on (max. consecutive integer in double float)
-                    if ((8 * sizeof(unsigned long) < 53) || ({{_size}} * PyLong_SHIFT < 53) || ({{fval}} < (double) ((PY_LONG_LONG)1 << 53))) {
+                    if ((8 * sizeof(unsigned long) < 53) || ({{_size}} * PyLong_SHIFT < 53) || ({{fval}} < (double) ((PY_LONG_LONG)1 << 53))) { 
                         if (size == {{-_size}})
                             {{fval}} = -{{fval}};
                         break;
@@ -1143,7 +1143,7 @@ static {{c_ret_type}} {{cfunc_name}}(PyObject *op1, PyObject *op2, double floatv
                 // check above.  However, the number of digits that CPython uses for a given PyLong
                 // value is minimal, and together with the "(size-1) * SHIFT < 53" check above,
                 // this should make it safe.
-                CYTHON_FALLTHROUGH;
+                CYTHON_FALLTHROUGH; 
             {{endfor}}
             default:
         #else

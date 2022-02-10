@@ -10,8 +10,8 @@ SRCS(
     wide_ut.cpp
 )
 
-INCLUDE(${ARCADIA_ROOT}/util/tests/ya_util_tests.inc)
-
+INCLUDE(${ARCADIA_ROOT}/util/tests/ya_util_tests.inc) 
+ 
 REQUIREMENTS(ram:17)
 
 END()

@@ -24,7 +24,7 @@ from . import UtilNodes
 
 
 class StringParseContext(Main.Context):
-    def __init__(self, name, include_directories=None, compiler_directives=None, cpp=False):
+    def __init__(self, name, include_directories=None, compiler_directives=None, cpp=False): 
         if include_directories is None:
             include_directories = []
         if compiler_directives is None:
@@ -209,9 +209,9 @@ def strip_common_indent(lines):
     """Strips empty lines and common indentation from the list of strings given in lines"""
     # TODO: Facilitate textwrap.indent instead
     lines = [x for x in lines if x.strip() != u""]
-    if lines:
-        minindent = min([len(_match_indent(x).group(0)) for x in lines])
-        lines = [x[minindent:] for x in lines]
+    if lines: 
+        minindent = min([len(_match_indent(x).group(0)) for x in lines]) 
+        lines = [x[minindent:] for x in lines] 
     return lines
 
 

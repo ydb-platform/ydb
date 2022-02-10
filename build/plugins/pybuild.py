@@ -1,7 +1,7 @@
-import os
-import collections
+import os 
+import collections 
 from hashlib import md5
-
+ 
 import ymake
 from _common import stripext, rootrel_arc_src, tobuilddir, listid, resolve_to_ymake_path, generate_chunks, pathid
 
@@ -61,55 +61,55 @@ def mangle(name):
     return ''.join('{}{}'.format(len(s), s) for s in name.split('.'))
 
 
-def parse_pyx_includes(filename, path, source_root, seen=None):
-    normpath = lambda *x: os.path.normpath(os.path.join(*x))
-
-    abs_path = normpath(source_root, filename)
-    seen = seen or set()
-    if abs_path in seen:
-        return
-    seen.add(abs_path)
-
-    if not os.path.exists(abs_path):
-        # File might be missing, because it might be generated
-        return
-
-    with open(abs_path, 'rb') as f:
-        # Don't parse cimports and etc - irrelevant for cython, it's linker work
+def parse_pyx_includes(filename, path, source_root, seen=None): 
+    normpath = lambda *x: os.path.normpath(os.path.join(*x)) 
+ 
+    abs_path = normpath(source_root, filename) 
+    seen = seen or set() 
+    if abs_path in seen: 
+        return 
+    seen.add(abs_path) 
+ 
+    if not os.path.exists(abs_path): 
+        # File might be missing, because it might be generated 
+        return 
+ 
+    with open(abs_path, 'rb') as f: 
+        # Don't parse cimports and etc - irrelevant for cython, it's linker work 
         includes = ymake.parse_cython_includes(f.read())
-
-    abs_dirname = os.path.dirname(abs_path)
-    # All includes are relative to the file which include
-    path_dirname = os.path.dirname(path)
-    file_dirname = os.path.dirname(filename)
-
-    for incfile in includes:
-        abs_path = normpath(abs_dirname, incfile)
-        if os.path.exists(abs_path):
-            incname, incpath = normpath(file_dirname, incfile), normpath(path_dirname, incfile)
-            yield (incname, incpath)
-            # search for includes in the included files
-            for e in parse_pyx_includes(incname, incpath, source_root, seen):
-                yield e
-        else:
-            # There might be arcadia root or cython relative include.
-            # Don't treat such file as missing, because there must be PEERDIR on py_library
-            # which contains it.
-            for path in [
-                source_root,
-                source_root + "/contrib/tools/cython/Cython/Includes",
-            ]:
-                if os.path.exists(normpath(path, incfile)):
-                    break
-            else:
-                ymake.report_configure_error("'{}' includes missing file: {} ({})".format(path, incfile, abs_path))
-
+ 
+    abs_dirname = os.path.dirname(abs_path) 
+    # All includes are relative to the file which include 
+    path_dirname = os.path.dirname(path) 
+    file_dirname = os.path.dirname(filename) 
+ 
+    for incfile in includes: 
+        abs_path = normpath(abs_dirname, incfile) 
+        if os.path.exists(abs_path): 
+            incname, incpath = normpath(file_dirname, incfile), normpath(path_dirname, incfile) 
+            yield (incname, incpath) 
+            # search for includes in the included files 
+            for e in parse_pyx_includes(incname, incpath, source_root, seen): 
+                yield e 
+        else: 
+            # There might be arcadia root or cython relative include. 
+            # Don't treat such file as missing, because there must be PEERDIR on py_library 
+            # which contains it. 
+            for path in [ 
+                source_root, 
+                source_root + "/contrib/tools/cython/Cython/Includes", 
+            ]: 
+                if os.path.exists(normpath(path, incfile)): 
+                    break 
+            else: 
+                ymake.report_configure_error("'{}' includes missing file: {} ({})".format(path, incfile, abs_path)) 
+ 
 def has_pyx(args):
     return any(arg.endswith('.pyx') for arg in args)
-
-def get_srcdir(path, unit):
-    return rootrel_arc_src(path, unit)[:-len(path)].rstrip('/')
-
+ 
+def get_srcdir(path, unit): 
+    return rootrel_arc_src(path, unit)[:-len(path)].rstrip('/') 
+ 
 def add_python_lint_checks(unit, py_ver, files):
     def get_resolved_files():
         resolved_files = []
@@ -119,27 +119,27 @@ def add_python_lint_checks(unit, py_ver, files):
                 resolved_files.append(resolved)
         return resolved_files
 
-    if unit.get('LINT_LEVEL_VALUE') == "none":
-
-        no_lint_allowed_paths = (
-            "contrib/",
-            "devtools/",
-            "junk/",
-            # temporary allowed, TODO: remove
-            "taxi/uservices/",
-            "travel/",
+    if unit.get('LINT_LEVEL_VALUE') == "none": 
+ 
+        no_lint_allowed_paths = ( 
+            "contrib/", 
+            "devtools/", 
+            "junk/", 
+            # temporary allowed, TODO: remove 
+            "taxi/uservices/", 
+            "travel/", 
             "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
             "passport/backend/oauth/",  # PASSP-35982
-        )
-
-        upath = unit.path()[3:]
-
-        if not upath.startswith(no_lint_allowed_paths):
-            ymake.report_configure_error("NO_LINT() is allowed only in " + ", ".join(no_lint_allowed_paths))
-
-    if files and unit.get('LINT_LEVEL_VALUE') not in ("none", "none_internal"):
+        ) 
+ 
+        upath = unit.path()[3:] 
+ 
+        if not upath.startswith(no_lint_allowed_paths): 
+            ymake.report_configure_error("NO_LINT() is allowed only in " + ", ".join(no_lint_allowed_paths)) 
+ 
+    if files and unit.get('LINT_LEVEL_VALUE') not in ("none", "none_internal"): 
         resolved_files = get_resolved_files()
-        flake8_cfg = 'build/config/tests/flake8/flake8.conf'
+        flake8_cfg = 'build/config/tests/flake8/flake8.conf' 
         unit.onadd_check(["flake8.py{}".format(py_ver), flake8_cfg] + resolved_files)
 
 
@@ -214,14 +214,14 @@ def onpy_srcs(unit, *args):
         ns = ""
     else:
         ns = (unit.get('PY_NAMESPACE_VALUE') or upath.replace('/', '.')) + '.'
-
-    cython_coverage = unit.get('CYTHON_COVERAGE') == 'yes'
+ 
+    cython_coverage = unit.get('CYTHON_COVERAGE') == 'yes' 
     cythonize_py = False
     optimize_proto = unit.get('OPTIMIZE_PY_PROTOS_FLAG') == 'yes'
-
+ 
     cython_directives = []
-    if cython_coverage:
-        cython_directives += ['-X', 'linetrace=True']
+    if cython_coverage: 
+        cython_directives += ['-X', 'linetrace=True'] 
 
     pyxs_c = []
     pyxs_c_h = []
@@ -353,41 +353,41 @@ def onpy_srcs(unit, *args):
         dump_output.close()
 
     if pyxs:
-        files2res = set()
-        # Include map stores files which were included in the processing pyx file,
-        # to be able to find source code of the included file inside generated file
-        # for currently processing pyx file.
-        include_map = collections.defaultdict(set)
-
-        if cython_coverage:
-            def process_pyx(filename, path, out_suffix, noext):
-                # skip generated files
-                if not is_arc_src(path, unit):
-                    return
-                # source file
-                files2res.add((filename, path))
-                # generated
-                if noext:
-                    files2res.add((os.path.splitext(filename)[0] + out_suffix, os.path.splitext(path)[0] + out_suffix))
-                else:
-                    files2res.add((filename + out_suffix, path + out_suffix))
-                # used includes
-                for entry in parse_pyx_includes(filename, path, unit.resolve('$S')):
-                    files2res.add(entry)
-                    include_arc_rel = entry[0]
-                    include_map[filename].add(include_arc_rel)
-        else:
-            def process_pyx(filename, path, out_suffix, noext):
-                pass
-
-        for pyxs, cython, out_suffix, noext in [
+        files2res = set() 
+        # Include map stores files which were included in the processing pyx file, 
+        # to be able to find source code of the included file inside generated file 
+        # for currently processing pyx file. 
+        include_map = collections.defaultdict(set) 
+ 
+        if cython_coverage: 
+            def process_pyx(filename, path, out_suffix, noext): 
+                # skip generated files 
+                if not is_arc_src(path, unit): 
+                    return 
+                # source file 
+                files2res.add((filename, path)) 
+                # generated 
+                if noext: 
+                    files2res.add((os.path.splitext(filename)[0] + out_suffix, os.path.splitext(path)[0] + out_suffix)) 
+                else: 
+                    files2res.add((filename + out_suffix, path + out_suffix)) 
+                # used includes 
+                for entry in parse_pyx_includes(filename, path, unit.resolve('$S')): 
+                    files2res.add(entry) 
+                    include_arc_rel = entry[0] 
+                    include_map[filename].add(include_arc_rel) 
+        else: 
+            def process_pyx(filename, path, out_suffix, noext): 
+                pass 
+ 
+        for pyxs, cython, out_suffix, noext in [ 
             (pyxs_c, unit.on_buildwith_cython_c_dep, ".c", False),
             (pyxs_c_h, unit.on_buildwith_cython_c_h, ".c", True),
             (pyxs_c_api_h, unit.on_buildwith_cython_c_api_h, ".c", True),
             (pyxs_cpp, unit.on_buildwith_cython_cpp_dep, ".cpp", False),
         ]:
             for path, mod in pyxs:
-                filename = rootrel_arc_src(path, unit)
+                filename = rootrel_arc_src(path, unit) 
                 cython_args = [path]
 
                 dep = path
@@ -400,26 +400,26 @@ def onpy_srcs(unit, *args):
                 cython_args += [
                     '--module-name', mod,
                     '--init-suffix', mangle(mod),
-                    '--source-root', '${ARCADIA_ROOT}',
-                    # set arcadia root relative __file__ for generated modules
-                    '-X', 'set_initial_path={}'.format(filename),
+                    '--source-root', '${ARCADIA_ROOT}', 
+                    # set arcadia root relative __file__ for generated modules 
+                    '-X', 'set_initial_path={}'.format(filename), 
                 ] + cython_directives
 
                 cython(cython_args)
                 py_register(unit, mod, py3)
-                process_pyx(filename, path, out_suffix, noext)
+                process_pyx(filename, path, out_suffix, noext) 
 
-        if files2res:
-            # Compile original and generated sources into target for proper cython coverage calculation
-            unit.onresource_files([x for name, path in files2res for x in ('DEST', name, path)])
-
-        if include_map:
-            data = []
-            prefix = 'resfs/cython/include'
-            for line in sorted('{}/{}={}'.format(prefix, filename, ':'.join(sorted(files))) for filename, files in include_map.iteritems()):
-                data += ['-', line]
-            unit.onresource(data)
-
+        if files2res: 
+            # Compile original and generated sources into target for proper cython coverage calculation 
+            unit.onresource_files([x for name, path in files2res for x in ('DEST', name, path)]) 
+ 
+        if include_map: 
+            data = [] 
+            prefix = 'resfs/cython/include' 
+            for line in sorted('{}/{}={}'.format(prefix, filename, ':'.join(sorted(files))) for filename, files in include_map.iteritems()): 
+                data += ['-', line] 
+            unit.onresource(data) 
+ 
     for swigs, on_swig_python in [
             (swigs_c, unit.on_swig_python_c),
             (swigs_cpp, unit.on_swig_python_cpp),
@@ -433,11 +433,11 @@ def onpy_srcs(unit, *args):
             onpy_srcs(unit, swg_py + '=' + mod)
 
     if pys:
-        pys_seen = set()
-        pys_dups = {m for _, m in pys if (m in pys_seen or pys_seen.add(m))}
-        if pys_dups:
-            ymake.report_configure_error('Duplicate(s) is found in the PY_SRCS macro: {}'.format(pys_dups))
-
+        pys_seen = set() 
+        pys_dups = {m for _, m in pys if (m in pys_seen or pys_seen.add(m))} 
+        if pys_dups: 
+            ymake.report_configure_error('Duplicate(s) is found in the PY_SRCS macro: {}'.format(pys_dups)) 
+ 
         res = []
 
         if py3:
@@ -523,10 +523,10 @@ def onpy_srcs(unit, *args):
 
 
 def _check_test_srcs(*args):
-    used = set(args) & {"NAMESPACE", "TOP_LEVEL", "__main__.py"}
-    if used:
-        param = list(used)[0]
-        ymake.report_configure_error('in TEST_SRCS: you cannot use {} here - it would broke testing machinery'.format(param))
+    used = set(args) & {"NAMESPACE", "TOP_LEVEL", "__main__.py"} 
+    if used: 
+        param = list(used)[0] 
+        ymake.report_configure_error('in TEST_SRCS: you cannot use {} here - it would broke testing machinery'.format(param)) 
 
 
 def ontest_srcs(unit, *args):
@@ -606,21 +606,21 @@ def onpy_main(unit, arg):
         arg += ':main'
 
     py_main(unit, arg)
-
-
-def onpy_constructor(unit, arg):
-    """
-        @usage: PY_CONSTRUCTOR(package.module[:func])
-
-        Specifies the module or function which will be started before python's main()
-        init() is expected in the target module if no function is specified
-        Can be considered as __attribute__((constructor)) for python
-    """
-    if ':' not in arg:
-        arg = arg + '=init'
-    else:
-        arg[arg.index(':')] = '='
-    unit.onresource(['-', 'py/constructors/{}'.format(arg)])
+ 
+ 
+def onpy_constructor(unit, arg): 
+    """ 
+        @usage: PY_CONSTRUCTOR(package.module[:func]) 
+ 
+        Specifies the module or function which will be started before python's main() 
+        init() is expected in the target module if no function is specified 
+        Can be considered as __attribute__((constructor)) for python 
+    """ 
+    if ':' not in arg: 
+        arg = arg + '=init' 
+    else: 
+        arg[arg.index(':')] = '=' 
+    unit.onresource(['-', 'py/constructors/{}'.format(arg)]) 
 
 def onpy_enums_serialization(unit, *args):
     ns = ''

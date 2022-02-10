@@ -10,7 +10,7 @@ FORK_SUBTESTS()
 IF (WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
-    TAG(ya:fat)
+    TAG(ya:fat) 
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -34,6 +34,6 @@ SRCS(
     proxy_ut_helpers.cpp
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:32) 
 
 END()

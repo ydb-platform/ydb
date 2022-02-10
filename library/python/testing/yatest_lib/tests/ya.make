@@ -1,13 +1,13 @@
-OWNER(g:yatest)
+OWNER(g:yatest) 
 
-PY23_TEST()
+PY23_TEST() 
 
 PEERDIR(
     library/python/testing/yatest_lib
 )
 
 TEST_SRCS(
-    test_external.py
+    test_external.py 
     test_testsplitter.py
 )
 

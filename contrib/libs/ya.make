@@ -118,7 +118,7 @@ RECURSE(
     jansson
     jdk
     jemalloc
-    jemalloc/dynamic
+    jemalloc/dynamic 
     jerasure
     jinja2cpp
     js-v8
@@ -325,7 +325,7 @@ RECURSE(
     taocrypt
     tbb
     tcmalloc
-    tcmalloc/dynamic
+    tcmalloc/dynamic 
     tensorboard
     termbox
     tf

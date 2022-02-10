@@ -864,9 +864,9 @@ public:
 
     TDeferredCommit();
     TDeferredCommit(const TDeferredCommit&) = delete;
-    TDeferredCommit(TDeferredCommit&&); 
-    TDeferredCommit& operator=(const TDeferredCommit&) = delete; 
-    TDeferredCommit& operator=(TDeferredCommit&&); 
+    TDeferredCommit(TDeferredCommit&&);
+    TDeferredCommit& operator=(const TDeferredCommit&) = delete;
+    TDeferredCommit& operator=(TDeferredCommit&&);
 
     ~TDeferredCommit();
 

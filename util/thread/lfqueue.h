@@ -26,19 +26,19 @@ struct TDefaultLFCounter {
 template <class T, class TCounter>
 class TLockFreeQueue: public TNonCopyable {
     struct TListNode {
-        template <typename U> 
-        TListNode(U&& u, TListNode* next) 
-            : Next(next) 
-            , Data(std::forward<U>(u)) 
-        { 
-        } 
- 
-        template <typename U> 
-        explicit TListNode(U&& u) 
-            : Data(std::forward<U>(u)) 
-        { 
-        } 
- 
+        template <typename U>
+        TListNode(U&& u, TListNode* next)
+            : Next(next)
+            , Data(std::forward<U>(u))
+        {
+        }
+
+        template <typename U>
+        explicit TListNode(U&& u)
+            : Data(std::forward<U>(u))
+        {
+        }
+
         TListNode* volatile Next;
         T Data;
     };
@@ -158,7 +158,7 @@ class TLockFreeQueue: public TNonCopyable {
                         newTail = Tail; // tried to invert same list
                     break;
                 }
-                TListNode* newElem = new TListNode(ptr->Data, newCopy); 
+                TListNode* newElem = new TListNode(ptr->Data, newCopy);
                 newCopy = newElem;
                 ptr = AtomicGet(ptr->Next);
                 if (!newTail)
@@ -239,19 +239,19 @@ public:
         EraseList(JobQueue->PopQueue);
         delete JobQueue;
     }
-    template <typename U> 
-    void Enqueue(U&& data) { 
-        TListNode* newNode = new TListNode(std::forward<U>(data)); 
+    template <typename U>
+    void Enqueue(U&& data) {
+        TListNode* newNode = new TListNode(std::forward<U>(data));
         EnqueueImpl(newNode, newNode);
     }
-    void Enqueue(T&& data) { 
-        TListNode* newNode = new TListNode(std::move(data)); 
-        EnqueueImpl(newNode, newNode); 
-    } 
-    void Enqueue(const T& data) { 
-        TListNode* newNode = new TListNode(data); 
-        EnqueueImpl(newNode, newNode); 
-    } 
+    void Enqueue(T&& data) {
+        TListNode* newNode = new TListNode(std::move(data));
+        EnqueueImpl(newNode, newNode);
+    }
+    void Enqueue(const T& data) {
+        TListNode* newNode = new TListNode(data);
+        EnqueueImpl(newNode, newNode);
+    }
     template <typename TCollection>
     void EnqueueAll(const TCollection& data) {
         EnqueueAll(data.begin(), data.end());
@@ -262,12 +262,12 @@ public:
             return;
 
         TIter i = dataBegin;
-        TListNode* volatile node = new TListNode(*i); 
+        TListNode* volatile node = new TListNode(*i);
         TListNode* volatile tail = node;
 
         for (++i; i != dataEnd; ++i) {
             TListNode* nextNode = node;
-            node = new TListNode(*i, nextNode); 
+            node = new TListNode(*i, nextNode);
         }
         EnqueueImpl(node, tail);
     }
@@ -289,7 +289,7 @@ public:
                 newRoot->DecCount(tail->Data);
                 Y_ASSERT(AtomicGet(curRoot->PopQueue) == tail);
                 if (AtomicCas(&JobQueue, newRoot, curRoot)) {
-                    *data = std::move(tail->Data); 
+                    *data = std::move(tail->Data);
                     AtomicSet(tail->Next, nullptr);
                     AsyncUnref(curRoot, tail);
                     return true;

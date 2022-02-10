@@ -8,35 +8,35 @@
 #include <util/generic/noncopyable.h>
 
 class TGlobalImpl : TNonCopyable {
-private:
+private: 
     const char* Str;
     regmatch_t* Pmatch;
-    int Options;
-    int StrLen;
-    int StartOffset, NotEmptyOpts, MatchPos;
-    int MatchBuf[NMATCHES * 3];
+    int Options; 
+    int StrLen; 
+    int StartOffset, NotEmptyOpts, MatchPos; 
+    int MatchBuf[NMATCHES * 3]; 
     pcre* PregComp;
-
-    enum StateCode {
-        TGI_EXIT,
-        TGI_CONTINUE,
-        TGI_WALKTHROUGH
-    };
-
-private:
+ 
+    enum StateCode { 
+        TGI_EXIT, 
+        TGI_CONTINUE, 
+        TGI_WALKTHROUGH 
+    }; 
+ 
+private: 
     void CopyResults(int count) {
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < count; i++) { 
             Pmatch[MatchPos].rm_so = MatchBuf[2 * i];
             Pmatch[MatchPos].rm_eo = MatchBuf[2 * i + 1];
-            MatchPos++;
-            if (MatchPos >= NMATCHES) {
+            MatchPos++; 
+            if (MatchPos >= NMATCHES) { 
                 ythrow yexception() << "TRegExBase::Exec(): Not enough space in internal buffer.";
-            }
+            } 
         }
-    }
-
+    } 
+ 
     int DoPcreExec(int opts) {
-        int rc = pcre_exec(
+        int rc = pcre_exec( 
             PregComp,    /* the compiled pattern */
             nullptr,     /* no extra data - we didn't study the pattern */
             Str,         /* the subject string */
@@ -45,37 +45,37 @@ private:
             opts,        /* default options */
             MatchBuf,    /* output vector for substring information */
             NMATCHES);   /* number of elements in the output vector */
-
-        if (rc == 0) {
+ 
+        if (rc == 0) { 
             ythrow yexception() << "TRegExBase::Exec(): Not enough space in internal buffer.";
-        }
-
-        return rc;
-    }
-
-    StateCode CheckEmptyCase() {
-        if (MatchBuf[0] == MatchBuf[1]) { // founded an empty string
+        } 
+ 
+        return rc; 
+    } 
+ 
+    StateCode CheckEmptyCase() { 
+        if (MatchBuf[0] == MatchBuf[1]) { // founded an empty string 
             if (MatchBuf[0] == StrLen) {  // at the end
-                return TGI_EXIT;
-            }
-            NotEmptyOpts = PCRE_NOTEMPTY | PCRE_ANCHORED; // trying to find non empty string
-        }
-        return TGI_WALKTHROUGH;
-    }
-
-    StateCode CheckNoMatch(int rc) {
-        if (rc == PCRE_ERROR_NOMATCH) {
+                return TGI_EXIT; 
+            } 
+            NotEmptyOpts = PCRE_NOTEMPTY | PCRE_ANCHORED; // trying to find non empty string 
+        } 
+        return TGI_WALKTHROUGH; 
+    } 
+ 
+    StateCode CheckNoMatch(int rc) { 
+        if (rc == PCRE_ERROR_NOMATCH) { 
             if (NotEmptyOpts == 0) {
-                return TGI_EXIT;
-            }
+                return TGI_EXIT; 
+            } 
 
             MatchBuf[1] = StartOffset + 1; // we have failed to find non-empty-string. trying to find again shifting "previous match offset"
-            return TGI_CONTINUE;
-        }
-        return TGI_WALKTHROUGH;
-    }
-
-public:
+            return TGI_CONTINUE; 
+        } 
+        return TGI_WALKTHROUGH; 
+    } 
+ 
+public: 
     TGlobalImpl(const char* st, regmatch_t& pma, int opts, pcre* pc_re)
         : Str(st)
         , Pmatch(&pma)
@@ -84,52 +84,52 @@ public:
         , NotEmptyOpts(0)
         , MatchPos(0)
         , PregComp(pc_re)
-    {
-        memset(Pmatch, -1, sizeof(regmatch_t) * NMATCHES);
-        StrLen = strlen(Str);
-    }
-
+    { 
+        memset(Pmatch, -1, sizeof(regmatch_t) * NMATCHES); 
+        StrLen = strlen(Str); 
+    } 
+ 
     int ExecGlobal() {
-        StartOffset = 0;
-        int rc = DoPcreExec(Options);
-
-        if (rc < 0) {
-            return rc;
-        }
-        CopyResults(rc);
-        do {
-            NotEmptyOpts = 0;
-            StartOffset = MatchBuf[1];
-
-            if (CheckEmptyCase() == TGI_EXIT) {
-                return 0;
-            }
-
-            rc = DoPcreExec(NotEmptyOpts | Options);
-
-            switch (CheckNoMatch(rc)) {
-                case TGI_CONTINUE:
-                    continue;
-                case TGI_EXIT:
-                    return 0;
-                case TGI_WALKTHROUGH:
-                default:
+        StartOffset = 0; 
+        int rc = DoPcreExec(Options); 
+ 
+        if (rc < 0) { 
+            return rc; 
+        } 
+        CopyResults(rc); 
+        do { 
+            NotEmptyOpts = 0; 
+            StartOffset = MatchBuf[1]; 
+ 
+            if (CheckEmptyCase() == TGI_EXIT) { 
+                return 0; 
+            } 
+ 
+            rc = DoPcreExec(NotEmptyOpts | Options); 
+ 
+            switch (CheckNoMatch(rc)) { 
+                case TGI_CONTINUE: 
+                    continue; 
+                case TGI_EXIT: 
+                    return 0; 
+                case TGI_WALKTHROUGH: 
+                default: 
                     break;
             }
-
-            if (rc < 0) {
-                return rc;
-            }
-
-            CopyResults(rc);
+ 
+            if (rc < 0) { 
+                return rc; 
+            } 
+ 
+            CopyResults(rc); 
         } while (true);
-
+ 
         return 0;
-    }
+    } 
 
-private:
-};
-
+private: 
+}; 
+ 
 class TRegExBaseImpl: public TAtomicRefCount<TRegExBaseImpl> {
     friend class TRegExBase;
 
@@ -198,8 +198,8 @@ bool TRegExBase::IsCompiled() const {
 TRegExBase::TRegExBase(const char* re, int cflags) {
     if (re) {
         Compile(re, cflags);
-    }
-}
+    } 
+} 
 
 TRegExBase::TRegExBase(const TString& re, int cflags) {
     Compile(re, cflags);

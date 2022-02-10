@@ -110,7 +110,7 @@ public:
             spec.tv_nsec = deadLine.NanoSecondsOfSecond();
 
             int ret = pthread_cond_timedwait(&Cond_, (pthread_mutex_t*)lock.Handle(), &spec);
-
+ 
             Y_VERIFY(ret == 0 || ret == ETIMEDOUT, "pthread_cond_timedwait failed: %s", LastSystemErrorText(ret));
 
             return ret == 0;

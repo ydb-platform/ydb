@@ -55,7 +55,7 @@ private:
         TStringBuilder res;
         res << thisPtr->Pos << " Failed to unwrap empty optional";
         if (messageStr.Size() > 0) {
-            res << ":\n\n" << TStringBuf(messageStr) << "\n\n";
+            res << ":\n\n" << TStringBuf(messageStr) << "\n\n"; 
         }
 
         UdfTerminate(res.data());

@@ -627,16 +627,16 @@ template <class T1, class T2, class O>
 static inline void Transform(T1 b, T1 e, T2 o, O f) {
     std::transform(b, e, o, f);
 }
- 
+
 template <class T1, class T2, class T3, class O>
 static inline void Transform(T1 b1, T1 e1, T2 b2, T3 o, O f) {
     std::transform(b1, e1, b2, o, f);
 }
 
-template <class T, class V> 
+template <class T, class V>
 inline typename std::iterator_traits<T>::difference_type Count(T first, T last, const V& value) {
     return std::count(first, last, value);
-} 
+}
 
 template <class TContainer, class TValue>
 static inline auto Count(const TContainer& container, const TValue& value) {

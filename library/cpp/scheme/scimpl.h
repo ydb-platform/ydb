@@ -194,11 +194,11 @@ namespace NSc {
             return Array;
         }
 
-        TDict& GetDictMutable() {
-            SetDict();
-            return Dict;
-        }
-
+        TDict& GetDictMutable() { 
+            SetDict(); 
+            return Dict; 
+        } 
+ 
         const TDict& GetDict() const {
             return IsDict() ? Dict : TValue::DefaultDict();
         }
@@ -738,10 +738,10 @@ namespace NSc {
         return Core().GetDict();
     }
 
-    TDict& TValue::GetDictMutable() {
-        return CoreMutable().GetDictMutable();
-    }
-
+    TDict& TValue::GetDictMutable() { 
+        return CoreMutable().GetDictMutable(); 
+    } 
+ 
     size_t TValue::StringSize() const {
         return GetString().size();
     }

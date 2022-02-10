@@ -186,23 +186,23 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
     }
 
     Y_UNIT_TEST(TestNextStringTok) {
-        TStringBuf buf1("a@@b@@c");
+        TStringBuf buf1("a@@b@@c"); 
         UNIT_ASSERT_EQUAL(buf1.NextTok("@@"), TStringBuf("a"));
         UNIT_ASSERT_EQUAL(buf1.NextTok("@@"), TStringBuf("b"));
         UNIT_ASSERT_EQUAL(buf1.NextTok("@@"), TStringBuf("c"));
-        UNIT_ASSERT_EQUAL(buf1, TStringBuf());
-
-        TStringBuf buf2("a@@b@@c");
+        UNIT_ASSERT_EQUAL(buf1, TStringBuf()); 
+ 
+        TStringBuf buf2("a@@b@@c"); 
         UNIT_ASSERT_EQUAL(buf2.RNextTok("@@"), TStringBuf("c"));
         UNIT_ASSERT_EQUAL(buf2.RNextTok("@@"), TStringBuf("b"));
         UNIT_ASSERT_EQUAL(buf2.RNextTok("@@"), TStringBuf("a"));
-        UNIT_ASSERT_EQUAL(buf2, TStringBuf());
+        UNIT_ASSERT_EQUAL(buf2, TStringBuf()); 
 
         TStringBuf buf3("a@@b@@c");
         UNIT_ASSERT_EQUAL(buf3.RNextTok("@@@"), TStringBuf("a@@b@@c"));
         UNIT_ASSERT_EQUAL(buf3, TStringBuf());
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestReadLine) {
         TStringBuf buf("12\n45\r\n\r\n23");
         TStringBuf tok;

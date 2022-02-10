@@ -759,14 +759,14 @@ namespace {
 IThread* IThreadPool::DoCreate() {
     return new TPoolThread(this);
 }
-
+ 
 THolder<IThreadPool> CreateThreadPool(size_t threadsCount, size_t queueSizeLimit, const TThreadPoolParams& params) {
     THolder<IThreadPool> queue;
-    if (threadsCount > 1) {
+    if (threadsCount > 1) { 
         queue.Reset(new TThreadPool(params));
-    } else {
+    } else { 
         queue.Reset(new TFakeThreadPool());
-    }
-    queue->Start(threadsCount, queueSizeLimit);
-    return queue;
-}
+    } 
+    queue->Start(threadsCount, queueSizeLimit); 
+    return queue; 
+} 

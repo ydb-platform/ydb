@@ -215,8 +215,8 @@ public:
      */
     inline bool TrySplit(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
         return TrySplitOn(TBase::find(delim), l, r, delim.size());
-    }
-
+    } 
+ 
     /**
      * Tries to split string in two parts using given delimiter sequence.
      * Searches for the delimiter, scanning string from the end.
@@ -230,31 +230,31 @@ public:
      */
     inline bool TryRSplit(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
         return TrySplitOn(TBase::rfind(delim), l, r, delim.size());
-    }
-
+    } 
+ 
     inline void Split(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
-        SplitTemplate(delim, l, r);
+        SplitTemplate(delim, l, r); 
     }
 
     inline void RSplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
-        RSplitTemplate(delim, l, r);
+        RSplitTemplate(delim, l, r); 
     }
 
     inline void Split(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
-        SplitTemplate(delim, l, r);
-    }
-
+        SplitTemplate(delim, l, r); 
+    } 
+ 
     inline void RSplit(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
-        RSplitTemplate(delim, l, r);
-    }
-
+        RSplitTemplate(delim, l, r); 
+    } 
+ 
 private:
     // splits on a delimiter at a given position; delimiter is excluded
     void DoSplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len) const noexcept {
         Y_ASSERT(pos != TBase::npos);
 
         // make a copy in case one of l/r is really *this
-        const TdSelf tok = SubStr(pos + len);
+        const TdSelf tok = SubStr(pos + len); 
         l = Head(pos);
         r = tok;
     }
@@ -271,7 +271,7 @@ public:
         if (TBase::npos == pos)
             return false;
 
-        DoSplitOn(pos, l, r, len);
+        DoSplitOn(pos, l, r, len); 
         return true;
     }
 
@@ -390,21 +390,21 @@ public:
     }
 
     bool NextTok(TCharType delim, TdSelf& tok) {
-        return NextTokTemplate(delim, tok);
-    }
+        return NextTokTemplate(delim, tok); 
+    } 
 
     bool NextTok(TdSelf delim, TdSelf& tok) {
-        return NextTokTemplate(delim, tok);
-    }
+        return NextTokTemplate(delim, tok); 
+    } 
 
     bool RNextTok(TCharType delim, TdSelf& tok) {
-        return RNextTokTemplate(delim, tok);
+        return RNextTokTemplate(delim, tok); 
     }
 
     bool RNextTok(TdSelf delim, TdSelf& tok) {
-        return RNextTokTemplate(delim, tok);
-    }
-
+        return RNextTokTemplate(delim, tok); 
+    } 
+ 
     bool ReadLine(TdSelf& tok) {
         if (NextTok('\n', tok)) {
             while (!tok.empty() && tok.back() == '\r') {
@@ -418,20 +418,20 @@ public:
     }
 
     TdSelf NextTok(TCharType delim) {
-        return NextTokTemplate(delim);
+        return NextTokTemplate(delim); 
     }
 
     TdSelf RNextTok(TCharType delim) {
-        return RNextTokTemplate(delim);
+        return RNextTokTemplate(delim); 
     }
 
     TdSelf NextTok(TdSelf delim) {
-        return NextTokTemplate(delim);
-    }
-
+        return NextTokTemplate(delim); 
+    } 
+ 
     TdSelf RNextTok(TdSelf delim) {
-        return RNextTokTemplate(delim);
-    }
+        return RNextTokTemplate(delim); 
+    } 
 
 public: // string subsequences
     /// Cut last @c shift characters (or less if length is less than @c shift)
@@ -487,53 +487,53 @@ public: // string subsequences
     }
 
 private:
-    template <typename TDelimiterType>
-    TdSelf NextTokTemplate(TDelimiterType delim) {
-        TdSelf tok;
-        Split(delim, tok, *this);
-        return tok;
-    }
-
-    template <typename TDelimiterType>
-    TdSelf RNextTokTemplate(TDelimiterType delim) {
-        TdSelf tok;
-        RSplit(delim, *this, tok);
-        return tok;
-    }
-
-    template <typename TDelimiterType>
-    bool NextTokTemplate(TDelimiterType delim, TdSelf& tok) {
+    template <typename TDelimiterType> 
+    TdSelf NextTokTemplate(TDelimiterType delim) { 
+        TdSelf tok; 
+        Split(delim, tok, *this); 
+        return tok; 
+    } 
+ 
+    template <typename TDelimiterType> 
+    TdSelf RNextTokTemplate(TDelimiterType delim) { 
+        TdSelf tok; 
+        RSplit(delim, *this, tok); 
+        return tok; 
+    } 
+ 
+    template <typename TDelimiterType> 
+    bool NextTokTemplate(TDelimiterType delim, TdSelf& tok) { 
         if (!empty()) {
-            tok = NextTokTemplate(delim);
-            return true;
-        }
-        return false;
-    }
-
-    template <typename TDelimiterType>
-    bool RNextTokTemplate(TDelimiterType delim, TdSelf& tok) {
+            tok = NextTokTemplate(delim); 
+            return true; 
+        } 
+        return false; 
+    } 
+ 
+    template <typename TDelimiterType> 
+    bool RNextTokTemplate(TDelimiterType delim, TdSelf& tok) { 
         if (!empty()) {
             tok = RNextTokTemplate(delim);
-            return true;
-        }
-        return false;
-    }
-
-    template <typename TDelimiterType>
+            return true; 
+        } 
+        return false; 
+    } 
+ 
+    template <typename TDelimiterType> 
     inline void SplitTemplate(TDelimiterType delim, TdSelf& l, TdSelf& r) const noexcept {
         if (!TrySplit(delim, l, r)) {
-            l = *this;
-            r = TdSelf();
-        }
-    }
-
-    template <typename TDelimiterType>
+            l = *this; 
+            r = TdSelf(); 
+        } 
+    } 
+ 
+    template <typename TDelimiterType> 
     inline void RSplitTemplate(TDelimiterType delim, TdSelf& l, TdSelf& r) const noexcept {
         if (!TryRSplit(delim, l, r)) {
-            r = *this;
-            l = TdSelf();
-        }
-    }
+            r = *this; 
+            l = TdSelf(); 
+        } 
+    } 
 };
 
 std::ostream& operator<<(std::ostream& os, TStringBuf buf);

@@ -72,7 +72,7 @@ TModChooser::TMode::TMode(const TString& name, TMainClass* main, const TString& 
 TModChooser::TModChooser()
     : ModesHelpOption("-?") // Default help option in last_getopt
     , VersionHandler(nullptr)
-    , ShowSeparated(true)
+    , ShowSeparated(true) 
     , SvnRevisionOptionDisabled(false)
     , PrintShortCommandInUsage(false)
 {

@@ -382,7 +382,7 @@ inline void Delete(THolder<IThreadPool> q) {
         q->Stop();
     }
 }
-
+ 
 /**
  * Creates and starts TThreadPool if threadsCount > 1, or TFakeThreadPool otherwise
  * You could specify blocking and catching modes for TThreadPool only

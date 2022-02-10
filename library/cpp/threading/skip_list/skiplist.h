@@ -172,7 +172,7 @@ namespace NThreading {
         TNode* Prev[MaxHeight];
 
         template <typename TValue>
-        using TComparerReturnType = std::invoke_result_t<TComparer, const T&, const TValue&>; 
+        using TComparerReturnType = std::invoke_result_t<TComparer, const T&, const TValue&>;
 
     public:
         TSkipList(TAllocator& allocator, const TComparer& comparer = TComparer())

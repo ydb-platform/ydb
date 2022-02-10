@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/typelist.h> 
+#include <util/generic/typelist.h>
 #include <util/system/defaults.h>
 
 /*

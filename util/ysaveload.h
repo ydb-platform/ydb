@@ -5,7 +5,7 @@
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/generic/typetraits.h>
-#include <util/generic/algorithm.h> 
+#include <util/generic/algorithm.h>
 #include <util/stream/output.h>
 #include <util/stream/input.h>
 
@@ -128,15 +128,15 @@ struct TSerializerTakingIntoAccountThePodType {
     }
 };
 
-namespace NHasSaveLoad { 
-    Y_HAS_MEMBER(SaveLoad); 
-} 
- 
-template <class T, class = void> 
-struct TSerializerMethodSelector; 
- 
-template <class T> 
-struct TSerializerMethodSelector<T, std::enable_if_t<NHasSaveLoad::THasSaveLoad<T>::value>> { 
+namespace NHasSaveLoad {
+    Y_HAS_MEMBER(SaveLoad);
+}
+
+template <class T, class = void>
+struct TSerializerMethodSelector;
+
+template <class T>
+struct TSerializerMethodSelector<T, std::enable_if_t<NHasSaveLoad::THasSaveLoad<T>::value>> {
     static inline void Save(IOutputStream* out, const T& t) {
         //assume Save clause do not change t
         (const_cast<T&>(t)).SaveLoad(out);
@@ -153,7 +153,7 @@ struct TSerializerMethodSelector<T, std::enable_if_t<NHasSaveLoad::THasSaveLoad<
 };
 
 template <class T>
-struct TSerializerMethodSelector<T, std::enable_if_t<!NHasSaveLoad::THasSaveLoad<T>::value>> { 
+struct TSerializerMethodSelector<T, std::enable_if_t<!NHasSaveLoad::THasSaveLoad<T>::value>> {
     static inline void Save(IOutputStream* out, const T& t) {
         t.Save(out);
     }
@@ -420,24 +420,24 @@ public:
     }
 };
 
-template <class T> 
+template <class T>
 struct TTupleSerializer {
-    template <class F, class Tuple, size_t... Indices> 
-    static inline void ReverseUseless(F&& f, Tuple&& t, std::index_sequence<Indices...>) { 
-        ApplyToMany( 
-            std::forward<F>(f), 
-            // We need to do this trick because we don't want to break backward compatibility. 
-            // Tuples are being packed in reverse order. 
-            std::get<std::tuple_size<T>::value - Indices - 1>(std::forward<Tuple>(t))...); 
+    template <class F, class Tuple, size_t... Indices>
+    static inline void ReverseUseless(F&& f, Tuple&& t, std::index_sequence<Indices...>) {
+        ApplyToMany(
+            std::forward<F>(f),
+            // We need to do this trick because we don't want to break backward compatibility.
+            // Tuples are being packed in reverse order.
+            std::get<std::tuple_size<T>::value - Indices - 1>(std::forward<Tuple>(t))...);
     }
 
-    static inline void Save(IOutputStream* stream, const T& t) { 
-        ReverseUseless([&](const auto& v) { ::Save(stream, v); }, t, 
+    static inline void Save(IOutputStream* stream, const T& t) {
+        ReverseUseless([&](const auto& v) { ::Save(stream, v); }, t,
                        std::make_index_sequence<std::tuple_size<T>::value>{});
     }
 
-    static inline void Load(IInputStream* stream, T& t) { 
-        ReverseUseless([&](auto& v) { ::Load(stream, v); }, t, 
+    static inline void Load(IInputStream* stream, T& t) {
+        ReverseUseless([&](auto& v) { ::Load(stream, v); }, t,
                        std::make_index_sequence<std::tuple_size<T>::value>{});
     }
 };
@@ -641,15 +641,15 @@ public:
 
 #ifndef __NVCC__
 
-namespace NPrivate { 
-    template <class Variant, class T, size_t I> 
-    void LoadVariantAlternative(IInputStream* is, Variant& v) { 
-        T loaded; 
-        ::Load(is, loaded); 
-        v.template emplace<I>(std::move(loaded)); 
-    } 
-} 
- 
+namespace NPrivate {
+    template <class Variant, class T, size_t I>
+    void LoadVariantAlternative(IInputStream* is, Variant& v) {
+        T loaded;
+        ::Load(is, loaded);
+        v.template emplace<I>(std::move(loaded));
+    }
+}
+
 template <typename... Args>
 struct TSerializer<std::variant<Args...>> {
     using TVar = std::variant<Args...>;
@@ -664,21 +664,21 @@ struct TSerializer<std::variant<Args...>> {
     }
 
     static void Load(IInputStream* is, TVar& v) {
-        ui8 index; 
-        ::Load(is, index); 
+        ui8 index;
+        ::Load(is, index);
         if (Y_UNLIKELY(index >= sizeof...(Args))) {
             ::NPrivate::ThrowUnexpectedVariantTagException(index);
-        } 
-        LoadImpl(is, v, index, std::index_sequence_for<Args...>{}); 
+        }
+        LoadImpl(is, v, index, std::index_sequence_for<Args...>{});
     }
- 
-private: 
-    template <size_t... Is> 
-    static void LoadImpl(IInputStream* is, TVar& v, ui8 index, std::index_sequence<Is...>) { 
+
+private:
+    template <size_t... Is>
+    static void LoadImpl(IInputStream* is, TVar& v, ui8 index, std::index_sequence<Is...>) {
         using TLoader = void (*)(IInputStream*, TVar & v);
-        constexpr TLoader loaders[] = {::NPrivate::LoadVariantAlternative<TVar, Args, Is>...}; 
-        loaders[index](is, v); 
-    } 
+        constexpr TLoader loaders[] = {::NPrivate::LoadVariantAlternative<TVar, Args, Is>...};
+        loaders[index](is, v);
+    }
 };
 
 #endif
@@ -693,14 +693,14 @@ static inline void SaveLoad(IInputStream* in, T& t) {
     Load(in, t);
 }
 
-template <class S, class... Ts> 
-static inline void SaveMany(S* s, const Ts&... t) { 
-    ApplyToMany([&](const auto& v) { Save(s, v); }, t...); 
+template <class S, class... Ts>
+static inline void SaveMany(S* s, const Ts&... t) {
+    ApplyToMany([&](const auto& v) { Save(s, v); }, t...);
 }
 
-template <class S, class... Ts> 
-static inline void LoadMany(S* s, Ts&... t) { 
-    ApplyToMany([&](auto& v) { Load(s, v); }, t...); 
+template <class S, class... Ts>
+static inline void LoadMany(S* s, Ts&... t) {
+    ApplyToMany([&](auto& v) { Load(s, v); }, t...);
 }
 
 #define Y_SAVELOAD_DEFINE(...)                 \

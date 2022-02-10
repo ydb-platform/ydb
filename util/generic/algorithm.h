@@ -454,27 +454,27 @@ static inline void Rotate(T f, T m, T l) {
 }
 
 template <typename It, typename Val>
-Val Accumulate(It begin, It end, Val val) { 
-    // std::move since C++20 
-    return std::accumulate(begin, end, std::move(val)); 
+Val Accumulate(It begin, It end, Val val) {
+    // std::move since C++20
+    return std::accumulate(begin, end, std::move(val));
 }
 
 template <typename It, typename Val, typename BinOp>
-Val Accumulate(It begin, It end, Val val, BinOp binOp) { 
-    // std::move since C++20 
-    return std::accumulate(begin, end, std::move(val), binOp); 
+Val Accumulate(It begin, It end, Val val, BinOp binOp) {
+    // std::move since C++20
+    return std::accumulate(begin, end, std::move(val), binOp);
 }
 
-template <typename C, typename Val> 
-Val Accumulate(const C& c, Val val) { 
-    // std::move since C++20 
-    return Accumulate(std::begin(c), std::end(c), std::move(val)); 
+template <typename C, typename Val>
+Val Accumulate(const C& c, Val val) {
+    // std::move since C++20
+    return Accumulate(std::begin(c), std::end(c), std::move(val));
 }
 
-template <typename C, typename Val, typename BinOp> 
-Val Accumulate(const C& c, Val val, BinOp binOp) { 
-    // std::move since C++20 
-    return Accumulate(std::begin(c), std::end(c), std::move(val), binOp); 
+template <typename C, typename Val, typename BinOp>
+Val Accumulate(const C& c, Val val, BinOp binOp) {
+    // std::move since C++20
+    return Accumulate(std::begin(c), std::end(c), std::move(val), binOp);
 }
 
 template <typename It1, typename It2, typename Val>
@@ -549,19 +549,19 @@ auto MinElementBy(const C& c, F&& func) {
     return MinElementBy(std::begin(c), std::end(c), std::forward<F>(func));
 }
 
-template <class TOp, class... TArgs> 
-void ApplyToMany(TOp op, TArgs&&... args) { 
+template <class TOp, class... TArgs>
+void ApplyToMany(TOp op, TArgs&&... args) {
     int dummy[] = {((void)op(std::forward<TArgs>(args)), 0)...};
-    Y_UNUSED(dummy); 
-} 
- 
+    Y_UNUSED(dummy);
+}
+
 template <class TI, class TOp>
-inline void ForEach(TI f, TI l, TOp op) { 
+inline void ForEach(TI f, TI l, TOp op) {
     std::for_each(f, l, op);
 }
 
-namespace NPrivate { 
-    template <class T, class TOp, size_t... Is> 
+namespace NPrivate {
+    template <class T, class TOp, size_t... Is>
     constexpr bool AllOfImpl(T&& t, TOp&& op, std::index_sequence<Is...>) {
 #if _LIBCPP_STD_VER >= 17
         return (true && ... && op(std::get<Is>(std::forward<T>(t))));
@@ -592,13 +592,13 @@ namespace NPrivate {
 #if _LIBCPP_STD_VER >= 17
         (..., op(std::get<Is>(std::forward<T>(t))));
 #else
-        ::ApplyToMany(std::forward<TOp>(op), std::get<Is>(std::forward<T>(t))...); 
+        ::ApplyToMany(std::forward<TOp>(op), std::get<Is>(std::forward<T>(t))...);
 #endif
-    } 
-} 
- 
+    }
+}
+
 // check that TOp return true for all of element from tuple T
-template <class T, class TOp> 
+template <class T, class TOp>
 constexpr ::TEnableIfTuple<T, bool> AllOf(T&& t, TOp&& op) {
     return ::NPrivate::AllOfImpl(
         std::forward<T>(t),
@@ -617,12 +617,12 @@ constexpr ::TEnableIfTuple<T, bool> AnyOf(T&& t, TOp&& op) {
 
 template <class T, class TOp>
 constexpr ::TEnableIfTuple<T> ForEach(T&& t, TOp&& op) {
-    ::NPrivate::ForEachImpl( 
-        std::forward<T>(t), 
-        std::forward<TOp>(op), 
-        std::make_index_sequence<std::tuple_size<std::decay_t<T>>::value>{}); 
-} 
- 
+    ::NPrivate::ForEachImpl(
+        std::forward<T>(t),
+        std::forward<TOp>(op),
+        std::make_index_sequence<std::tuple_size<std::decay_t<T>>::value>{});
+}
+
 template <class T1, class T2, class O>
 static inline void Transform(T1 b, T1 e, T2 o, O f) {
     std::transform(b, e, o, f);

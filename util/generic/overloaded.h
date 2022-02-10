@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 /**
  * Construct an ad-hoc object with an overloaded `operator()`.
  *
@@ -47,10 +47,10 @@
  * ```
  */
 
-template <class... Fs> 
+template <class... Fs>
 struct TOverloaded: Fs... {
-    using Fs::operator()...; 
-}; 
- 
-template <class... Fs> 
-TOverloaded(Fs...) -> TOverloaded<Fs...>; 
+    using Fs::operator()...;
+};
+
+template <class... Fs>
+TOverloaded(Fs...) -> TOverloaded<Fs...>;

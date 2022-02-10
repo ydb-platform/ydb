@@ -66,8 +66,8 @@ namespace {
     };
 }
 
-THolder<IThread> IThreadFactory::Run(std::function<void()> func) { 
-    THolder<IThread> ret(DoCreate()); 
+THolder<IThread> IThreadFactory::Run(std::function<void()> func) {
+    THolder<IThread> ret(DoCreate());
 
     ret->Run(new ::TThreadFactoryFuncObj(func));
 

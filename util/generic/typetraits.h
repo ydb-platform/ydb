@@ -9,74 +9,74 @@
 #include <stlfwd>
 
 #if _LIBCPP_STD_VER >= 17
-template <bool B> 
+template <bool B>
 using TBoolConstant = std::bool_constant<B>;
 #else
 template <bool B>
 struct TBoolConstant: std::integral_constant<bool, B> {};
 #endif
- 
+
 #if _LIBCPP_STD_VER >= 17
-template <class B> 
+template <class B>
 using TNegation = std::negation<B>;
 #else
 template <class B>
 struct TNegation: ::TBoolConstant<!bool(B::value)> {};
 #endif
- 
-namespace NPrivate { 
-    template <class... Bs> 
-    constexpr bool ConjunctionImpl() { 
+
+namespace NPrivate {
+    template <class... Bs>
+    constexpr bool ConjunctionImpl() {
         bool bs[] = {(bool)Bs::value...};
-        for (auto b : bs) { 
-            if (!b) { 
-                return false; 
-            } 
-        } 
-        return true; 
-    } 
- 
-    template <class... Bs> 
-    constexpr bool DisjunctionImpl() { 
+        for (auto b : bs) {
+            if (!b) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    template <class... Bs>
+    constexpr bool DisjunctionImpl() {
         bool bs[] = {(bool)Bs::value...};
-        for (auto b : bs) { 
-            if (b) { 
-                return true; 
-            } 
-        } 
-        return false; 
-    } 
-} 
- 
+        for (auto b : bs) {
+            if (b) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
 #if _LIBCPP_STD_VER >= 17 && !defined(_MSC_VER)
 // Disable std::conjunction for MSVC by analogy with std::disjunction.
-template <class... Bs> 
+template <class... Bs>
 using TConjunction = std::conjunction<Bs...>;
 #else
 template <class... Bs>
 struct TConjunction: ::TBoolConstant<::NPrivate::ConjunctionImpl<Bs...>()> {};
 #endif
- 
+
 #if _LIBCPP_STD_VER >= 17 && !defined(_MSC_VER)
 // Disable std::disjunction for MSVC.
 // It reduces build time (500 -> 20 seconds) and memory consumption (20 GB -> less than 1 GB)
 // for some files (notably search/dssm_boosting/dssm_boosting_calcer.cpp).
-template <class... Bs> 
+template <class... Bs>
 using TDisjunction = std::disjunction<Bs...>;
 #else
 template <class... Bs>
 struct TDisjunction: ::TBoolConstant<::NPrivate::DisjunctionImpl<Bs...>()> {};
 #endif
- 
+
 #if _LIBCPP_STD_VER >= 17
 template <class... Bs>
 using TVoidT = std::void_t<Bs...>;
 #else
-template <class...> 
-using TVoidT = void; 
+template <class...>
+using TVoidT = void;
 #endif
- 
-template <class T> 
+
+template <class T>
 struct TPodTraits {
     enum {
         IsPod = false
@@ -160,7 +160,7 @@ class TTypeTraits<void>: public TTypeTraitsBase<void> {};
         : std::integral_constant<bool, TClassHas##name<T>::value> {};                     \
     template <class T>                                                                    \
     struct THas##name                                                                     \
-        : TBaseHas##name<T, std::is_class<T>::value || std::is_union<T>::value> {} 
+        : TBaseHas##name<T, std::is_class<T>::value || std::is_union<T>::value> {}
 
 #define Y_HAS_MEMBER_IMPL_1(name) Y_HAS_MEMBER_IMPL_2(name, name)
 
@@ -170,7 +170,7 @@ class TTypeTraits<void>: public TTypeTraitsBase<void> {};
  * metaprogramming.
  *
  * Macro accept one or two parameters, when used with two parameters e.g. `Y_HAS_MEMBER(xyz, ABC)`
- * will define class `THasABC` with static member `value` of type bool. Usage with one parameter 
+ * will define class `THasABC` with static member `value` of type bool. Usage with one parameter
  * e.g. `Y_HAS_MEMBER(xyz)` will produce the same result as `Y_HAS_MEMBER(xyz, xyz)`.
  *
  * @code
@@ -179,13 +179,13 @@ class TTypeTraits<void>: public TTypeTraitsBase<void> {};
  * Y_HAS_MEMBER(push_front, PushFront);
  *
  * template <typename T, typename U>
- * std::enable_if_t<THasPushFront<T>::value, void> 
+ * std::enable_if_t<THasPushFront<T>::value, void>
  * PushFront(T& container, const U value) {
  *     container.push_front(x);
  * }
  *
  * template <typename T, typename U>
- * std::enable_if_t<!THasPushFront<T>::value, void> 
+ * std::enable_if_t<!THasPushFront<T>::value, void>
  * PushFront(T& container, const U value) {
  *     container.insert(container.begin(), x);
  * }
@@ -207,7 +207,7 @@ class TTypeTraits<void>: public TTypeTraitsBase<void> {};
  * metaprogramming.
  *
  * Macro accept one or two parameters, when used with two parameters e.g. `Y_HAS_SUBTYPE(xyz, ABC)`
- * will define class `THasABC` with static member `value` of type bool. Usage with one parameter 
+ * will define class `THasABC` with static member `value` of type bool. Usage with one parameter
  * e.g. `Y_HAS_SUBTYPE(xyz)` will produce the same result as `Y_HAS_SUBTYPE(xyz, xyz)`.
  *
  * @code
@@ -217,7 +217,7 @@ class TTypeTraits<void>: public TTypeTraitsBase<void> {};
  *
  * template <typename T>
  * using TIsAssocCont = std::conditional_t<
- *     THasFindMethod<T>::value && THasConstIterator<T>::value && THasKeyType<T>::value, 
+ *     THasFindMethod<T>::value && THasConstIterator<T>::value && THasKeyType<T>::value,
  *     std::true_type,
  *     std::false_type,
  * >;
@@ -262,11 +262,11 @@ struct TIsPointerToConstMemberFunction<R (T::*)(Args..., ...) const&>: std::true
 template <class R, class T, class... Args>
 struct TIsPointerToConstMemberFunction<R (T::*)(Args..., ...) const&&>: std::true_type {
 };
- 
-template <template <class...> class T, class U> 
+
+template <template <class...> class T, class U>
 struct TIsSpecializationOf: std::false_type {};
- 
-template <template <class...> class T, class... Ts> 
+
+template <template <class...> class T, class... Ts>
 struct TIsSpecializationOf<T, T<Ts...>>: std::true_type {};
 
 /*

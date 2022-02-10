@@ -39,7 +39,7 @@ namespace NThreading {
         struct TBigCompareSelector {
             template <typename T>
             static inline int Compare(const T& l, const T& r) {
-                return TSmallCompareSelector<THascompare<T>::value>::Compare(l, r); 
+                return TSmallCompareSelector<THascompare<T>::value>::Compare(l, r);
             }
         };
 
@@ -52,7 +52,7 @@ namespace NThreading {
         };
 
         template <typename T>
-        struct TCompareSelector: public TBigCompareSelector<THasCompare<T>::value> { 
+        struct TCompareSelector: public TBigCompareSelector<THasCompare<T>::value> {
         };
     }
 

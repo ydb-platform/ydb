@@ -13,7 +13,7 @@
 namespace NSorted {
     namespace NPrivate {
         template <class TPredicate>
-        struct TEqual { 
+        struct TEqual {
             template<typename TValueType1, typename TValueType2>
             inline bool operator()(const TValueType1& l, const TValueType2& r) const {
                 TPredicate comp;
@@ -22,7 +22,7 @@ namespace NSorted {
         };
 
         template <typename TValueType, class TPredicate, class TKeyExtractor>
-        struct TKeyCompare { 
+        struct TKeyCompare {
             inline bool operator()(const TValueType& l, const TValueType& r) const {
                 TKeyExtractor extractKey;
                 return TPredicate()(extractKey(l), extractKey(r));

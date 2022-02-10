@@ -47,15 +47,15 @@ public:
     virtual ~IThreadFactory() = default;
 
     // XXX: rename to Start
-    inline THolder<IThread> Run(IThreadAble* func) { 
-        THolder<IThread> ret(DoCreate()); 
+    inline THolder<IThread> Run(IThreadAble* func) {
+        THolder<IThread> ret(DoCreate());
 
         ret->Run(func);
 
         return ret;
     }
 
-    THolder<IThread> Run(std::function<void()> func); 
+    THolder<IThread> Run(std::function<void()> func);
 
 private:
     virtual IThread* DoCreate() = 0;

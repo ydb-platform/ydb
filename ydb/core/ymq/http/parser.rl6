@@ -177,7 +177,7 @@ void TParametersParser::Append(const TString& name, const TString& value) {
     %% write init;
 
     Y_UNUSED(ts);
-    Y_UNUSED(act); 
+    Y_UNUSED(act);
 
     const unsigned char* p = (const unsigned char*)name.data();
     const unsigned char* pe = p + name.size();

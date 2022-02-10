@@ -153,7 +153,7 @@ public:
         Y_ENSURE_EX(AddFunc(std::forward<T>(func)), TThreadPoolException() << TStringBuf("can not add function to queue"));
     }
 
-    void SafeAddAndOwn(THolder<IObjectInQueue> obj); 
+    void SafeAddAndOwn(THolder<IObjectInQueue> obj);
 
     /**
      * Add object to queue, run ojb->Proccess in other threads.
@@ -173,7 +173,7 @@ public:
         return added;
     }
 
-    bool AddAndOwn(THolder<IObjectInQueue> obj) Y_WARN_UNUSED_RESULT; 
+    bool AddAndOwn(THolder<IObjectInQueue> obj) Y_WARN_UNUSED_RESULT;
     virtual void Start(size_t threadCount, size_t queueSizeLimit = 0) = 0;
     /** Wait for completion of all scheduled objects, and then exit */
     virtual void Stop() noexcept = 0;
@@ -377,7 +377,7 @@ private:
     TSlave* Slave_;
 };
 
-inline void Delete(THolder<IThreadPool> q) { 
+inline void Delete(THolder<IThreadPool> q) {
     if (q.Get()) {
         q->Stop();
     }

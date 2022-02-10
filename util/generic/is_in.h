@@ -17,7 +17,7 @@ namespace NIsInHelper {
     Y_HAS_SUBTYPE(key_type, KeyType);
 
     template <class T>
-    using TIsAssocCont = TConjunction<THasFindMethod<T>, THasConstIterator<T>, THasKeyType<T>>; 
+    using TIsAssocCont = TConjunction<THasFindMethod<T>, THasConstIterator<T>, THasKeyType<T>>;
 
     template <class C, class T, bool isAssoc>
     struct TIsInTraits {

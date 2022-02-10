@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
             deviationCalculator.Add(arguments[i], weights[i]);
         }
 
-        double actualMean = InnerProduct(arguments, weights) / Accumulate(weights, 0.0); 
+        double actualMean = InnerProduct(arguments, weights) / Accumulate(weights, 0.0);
         double actualDeviation = 0.;
         for (size_t i = 0; i < arguments.size(); ++i) {
             double deviation = arguments[i] - actualMean;
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
         UNIT_ASSERT(IsValidFloat(meanCalculator.GetSumWeights()));
         UNIT_ASSERT(IsValidFloat(deviationCalculator.GetSumWeights()));
         UNIT_ASSERT_DOUBLES_EQUAL(meanCalculator.GetSumWeights(), deviationCalculator.GetSumWeights(), 0);
-        UNIT_ASSERT_DOUBLES_EQUAL(meanCalculator.GetSumWeights(), Accumulate(weights, 0.0), 0); 
+        UNIT_ASSERT_DOUBLES_EQUAL(meanCalculator.GetSumWeights(), Accumulate(weights, 0.0), 0);
 
         ValueIsCorrect(deviationCalculator.GetDeviation(), actualDeviation, 1e-5);
 
@@ -94,8 +94,8 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
             covariationCalculator.Add(firstValues[i], secondValues[i], weights[i]);
         }
 
-        const double firstValuesMean = InnerProduct(firstValues, weights) / Accumulate(weights, 0.0); 
-        const double secondValuesMean = InnerProduct(secondValues, weights) / Accumulate(weights, 0.0); 
+        const double firstValuesMean = InnerProduct(firstValues, weights) / Accumulate(weights, 0.0);
+        const double secondValuesMean = InnerProduct(secondValues, weights) / Accumulate(weights, 0.0);
 
         double actualCovariation = 0.;
         for (size_t i = 0; i < argumentsCount; ++i) {
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator.GetSecondValueMean(), secondValuesMean, 1e-10);
 
         UNIT_ASSERT(IsValidFloat(covariationCalculator.GetSumWeights()));
-        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator.GetSumWeights(), Accumulate(weights, 0.0), 0); 
+        UNIT_ASSERT_DOUBLES_EQUAL(covariationCalculator.GetSumWeights(), Accumulate(weights, 0.0), 0);
 
         ValueIsCorrect(covariationCalculator.GetCovariation(), actualCovariation, 1e-5);
 
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
             }
 
             if (!regularizationThreshold) {
-                UNIT_ASSERT(predictedSumSquaredErrors < Accumulate(weights, 0.0) * randomError * randomError); 
+                UNIT_ASSERT(predictedSumSquaredErrors < Accumulate(weights, 0.0) * randomError * randomError);
             }
             UNIT_ASSERT_DOUBLES_EQUAL(predictedSumSquaredErrors, sumSquaredErrors, 1e-8);
         }
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
         }
         UNIT_ASSERT_DOUBLES_EQUAL(model.GetIntercept(), intercept, 1e-2);
 
-        const double expectedSumSquaredErrors = randomError * randomError * Accumulate(weights, 0.0); 
+        const double expectedSumSquaredErrors = randomError * randomError * Accumulate(weights, 0.0);
         UNIT_ASSERT_DOUBLES_EQUAL(lrSolver.SumSquaredErrors(), expectedSumSquaredErrors, expectedSumSquaredErrors * 0.01);
     }
 

@@ -34,11 +34,11 @@ public:
     struct TC {};
     void TestHave() {
         using TListType = TTypeList<TA, TB*, const TC&>;
-        UNIT_ASSERT(TListType::THave<TA>::value); 
-        UNIT_ASSERT(TListType::THave<TB*>::value); 
-        UNIT_ASSERT(!TListType::THave<TB>::value); 
-        UNIT_ASSERT(TListType::THave<const TC&>::value); 
-        UNIT_ASSERT(!TListType::THave<TC&>::value); 
+        UNIT_ASSERT(TListType::THave<TA>::value);
+        UNIT_ASSERT(TListType::THave<TB*>::value);
+        UNIT_ASSERT(!TListType::THave<TB>::value);
+        UNIT_ASSERT(TListType::THave<const TC&>::value);
+        UNIT_ASSERT(!TListType::THave<TC&>::value);
     }
 
     template <class T>
@@ -55,7 +55,7 @@ public:
 
     template <template <class...> class TT, class... R>
     struct TIsNArgTemplate<TT<R...>>: std::true_type {};
- 
+
     template <class>
     struct TAnyType: std::true_type {};
 
@@ -68,10 +68,10 @@ public:
     void TestSelectBy() {
         using TListType = TTypeList<TA, TB, TMyMap<TA*, TB>, TMyVector<TA>, TC>;
 
-        UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TAnyType>::type, TA); 
-        UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TIs1ArgTemplate>::type, TMyVector<TA>); 
+        UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TAnyType>::type, TA);
+        UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TIs1ArgTemplate>::type, TMyVector<TA>);
         using TMyMapPTATB = TMyMap<TA*, TB>;
-        UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TIsNArgTemplate>::type, TMyMapPTATB); 
+        UNIT_ASSERT_TYPES_EQUAL(TListType::TSelectBy<TIsNArgTemplate>::type, TMyMapPTATB);
     }
 
     void TestFloatList() {

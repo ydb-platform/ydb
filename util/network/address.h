@@ -15,7 +15,7 @@ namespace NAddr {
         virtual socklen_t Len() const = 0;
     };
 
-    using IRemoteAddrPtr = THolder<IRemoteAddr>; 
+    using IRemoteAddrPtr = THolder<IRemoteAddr>;
     using IRemoteAddrRef = TAtomicSharedPtr<NAddr::IRemoteAddr>;
 
     IRemoteAddrPtr GetSockAddr(SOCKET s);

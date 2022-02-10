@@ -141,7 +141,7 @@ namespace NUri {
         bool FldTrySet(EField fld, const TUri& other) {
             return FldTrySet(fld, other.GetField(fld));
         }
-
+ 
     private:
         /// copies the value if it fits
         bool FldTryCpy(EField fld, const TStringBuf& value);

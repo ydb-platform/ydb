@@ -177,7 +177,7 @@ RECURSE(
     startrek_python_client
     startrek_python_client/tests_int
     statface_client
-    step
+    step 
     strings
     strings/ut
     svn_ssh

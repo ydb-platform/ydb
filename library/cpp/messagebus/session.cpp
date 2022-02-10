@@ -24,11 +24,11 @@ namespace NBus {
             case AF_INET6: {
                 return memcmp(&(((const sockaddr_in6*)l.Addr())->sin6_addr), &(((const sockaddr_in6*)r.Addr())->sin6_addr), sizeof(in6_addr));
             }
-        }
-
+        } 
+ 
         return memcmp(l.Addr(), r.Addr(), Min<size_t>(l.Len(), r.Len()));
-    }
-
+    } 
+ 
     bool operator<(const TNetAddr& a1, const TNetAddr& a2) {
         return CompareByHost(a1, a2) < 0;
     }

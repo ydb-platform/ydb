@@ -3,17 +3,17 @@ OWNER(
     g:sqs
 )
 
-LIBRARY()
+LIBRARY() 
 
-SRCS(
-    parser.rl6
-    http.cpp
-    types.cpp
-    xml.cpp
+SRCS( 
+    parser.rl6 
+    http.cpp 
+    types.cpp 
+    xml.cpp 
     xml_builder.cpp
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     contrib/libs/libxml
     library/cpp/actors/core
     library/cpp/cgiparam
@@ -28,6 +28,6 @@ PEERDIR(
     ydb/core/ymq/base
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error
-)
-
-END()
+) 
+ 
+END() 

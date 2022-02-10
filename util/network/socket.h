@@ -92,10 +92,10 @@ static inline void FixIPv6ListenSocket(SOCKET s) {
 #endif
 }
 
-namespace NAddr {
-    class IRemoteAddr;
-}
-
+namespace NAddr { 
+    class IRemoteAddr; 
+} 
+ 
 void SetSocketTimeout(SOCKET s, long timeout);
 void SetSocketTimeout(SOCKET s, long sec, long msec);
 void SetNoDelay(SOCKET s, bool value);
@@ -112,10 +112,10 @@ bool GetRemoteAddr(SOCKET s, char* str, socklen_t size);
 size_t GetMaximumSegmentSize(SOCKET s);
 size_t GetMaximumTransferUnit(SOCKET s);
 void SetDeferAccept(SOCKET s);
-void SetSocketToS(SOCKET s, int tos);
-void SetSocketToS(SOCKET s, const NAddr::IRemoteAddr* addr, int tos);
-int GetSocketToS(SOCKET s);
-int GetSocketToS(SOCKET s, const NAddr::IRemoteAddr* addr);
+void SetSocketToS(SOCKET s, int tos); 
+void SetSocketToS(SOCKET s, const NAddr::IRemoteAddr* addr, int tos); 
+int GetSocketToS(SOCKET s); 
+int GetSocketToS(SOCKET s, const NAddr::IRemoteAddr* addr); 
 void SetSocketPriority(SOCKET s, int priority);
 void SetTcpFastOpen(SOCKET s, int qlen);
 /**

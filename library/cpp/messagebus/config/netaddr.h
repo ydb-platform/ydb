@@ -1,22 +1,22 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/digest/numeric.h>
 #include <util/generic/hash.h>
-#include <util/generic/ptr.h>
+#include <util/generic/ptr.h> 
 #include <util/generic/strbuf.h>
-#include <util/generic/vector.h>
-#include <util/network/address.h>
-
-namespace NBus {
+#include <util/generic/vector.h> 
+#include <util/network/address.h> 
+ 
+namespace NBus { 
     using namespace NAddr;
-
+ 
     /// IP protocol version.
     enum EIpVersion {
         EIP_VERSION_4 = 1,
         EIP_VERSION_6 = 2,
         EIP_VERSION_ANY = EIP_VERSION_4 | EIP_VERSION_6,
     };
-
+ 
     inline bool IsFamilyAllowed(ui16 sa_family, EIpVersion ipVersion) {
         if (ipVersion == EIP_VERSION_4 && sa_family != AF_INET) {
             return false;
@@ -51,26 +51,26 @@ namespace NBus {
         inline explicit operator bool() const noexcept {
             return !!Ptr;
         }
-
+ 
         const sockaddr* Addr() const override;
         socklen_t Len() const override;
-
+ 
         bool IsIpv4() const;
         bool IsIpv6() const;
         int GetPort() const;
-
+ 
     private:
         TAtomicSharedPtr<IRemoteAddr> Ptr;
     };
 
     using TSockAddrInVector = TVector<TNetAddr>;
-
+ 
     struct TNetAddrHostPortHash {
         inline size_t operator()(const TNetAddr& a) const {
             const sockaddr* s = a.Addr();
             const sockaddr_in* const sa = reinterpret_cast<const sockaddr_in*>(s);
             const sockaddr_in6* const sa6 = reinterpret_cast<const sockaddr_in6*>(s);
-
+ 
             switch (s->sa_family) {
                 case AF_INET:
                     return CombineHashes<size_t>(ComputeHash(TStringBuf(reinterpret_cast<const char*>(&sa->sin_addr), sizeof(sa->sin_addr))), IntHashImpl(sa->sin_port));

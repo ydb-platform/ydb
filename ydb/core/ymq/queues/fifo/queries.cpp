@@ -1,11 +1,11 @@
-#include "queries.h"
+#include "queries.h" 
 #include <ydb/core/ymq/base/constants.h>
-
+ 
 namespace NKikimr::NSQS {
-namespace {
-
-const char* const ChangeMessageVisibilityQuery = R"__(
-    (
+namespace { 
+ 
+const char* const ChangeMessageVisibilityQuery = R"__( 
+    ( 
         (let now  (Parameter 'NOW      (DataType 'Uint64)))
         (let groupsReadAttemptIdsPeriod (Parameter 'GROUPS_READ_ATTEMPT_IDS_PERIOD (DataType 'Uint64)))
         (let keys (Parameter 'KEYS
@@ -15,10 +15,10 @@ const char* const ChangeMessageVisibilityQuery = R"__(
                 '('ReceiveAttemptId (DataType 'Utf8String))
                 '('LockTimestamp (DataType 'Uint64))
                 '('NewVisibilityDeadline (DataType 'Uint64))))))
-
-        (let groupTable '%1$s/Groups)
+ 
+        (let groupTable '%1$s/Groups) 
         (let readsTable '%1$s/Reads)
-
+ 
         (let records
             (MapParameter keys (lambda '(item) (block '(
                 (let groupRow '(
@@ -29,7 +29,7 @@ const char* const ChangeMessageVisibilityQuery = R"__(
                     'VisibilityDeadline
                     'ReceiveAttemptId))
                 (let groupRead (SelectRow groupTable groupRow groupSelect))
-
+ 
                 (let readsRow '(
                     '('ReceiveAttemptId (Member item 'ReceiveAttemptId))))
                 (let readsSelect '(
@@ -37,7 +37,7 @@ const char* const ChangeMessageVisibilityQuery = R"__(
                 (let readsRead (SelectRow readsTable readsRow readsSelect))
 
                 (let exists (Exists groupRead))
-
+ 
                 (let changeCond
                     (IfPresent groupRead
                         (lambda '(x)
@@ -47,7 +47,7 @@ const char* const ChangeMessageVisibilityQuery = R"__(
                                     (LessOrEqual now (Member groupRead 'VisibilityDeadline)))
                              (Bool 'false)))
                     (Bool 'false)))
-
+ 
                 (let lockTimestamp (Member item 'LockTimestamp))
                 (let readDeadline (Member readsRead 'Deadline))
                 (let readCreateTimestamp (Sub readDeadline groupsReadAttemptIdsPeriod))
@@ -98,20 +98,20 @@ const char* const ChangeMessageVisibilityQuery = R"__(
                 (return (EraseRow readsTable readsRow))
             ))))
         ))
-    )
-)__";
-
-const char* const PurgeQueueQuery = R"__(
-    (
+    ) 
+)__"; 
+ 
+const char* const PurgeQueueQuery = R"__( 
+    ( 
         (let offsetFrom     (Parameter 'OFFSET_FROM (DataType 'Uint64)))
         (let offsetTo       (Parameter 'OFFSET_TO   (DataType 'Uint64)))
         (let now            (Parameter 'NOW         (DataType 'Uint64)))
         (let shard          (Parameter 'SHARD       (DataType 'Uint64)))
         (let batchSize      (Parameter 'BATCH_SIZE  (DataType 'Uint64)))
 
-        (let messageTable '%1$s/Messages)
-        (let stateTable   '%1$s/State)
-
+        (let messageTable '%1$s/Messages) 
+        (let stateTable   '%1$s/State) 
+ 
         (let stateRow '(
             '('State shard)))
         (let stateSelect '(
@@ -119,22 +119,22 @@ const char* const PurgeQueueQuery = R"__(
             'LastModifiedTimestamp))
         (let stateRead
             (SelectRow stateTable stateRow stateSelect))
-
+ 
         (let modifiedTimestamp (Max now (Member stateRead 'LastModifiedTimestamp)))
 
-        (let messageRange '(
+        (let messageRange '( 
             '('Offset offsetFrom offsetTo)))
-        (let messageSelect '(
+        (let messageSelect '( 
             'SentTimestamp
-            'Offset
+            'Offset 
             'RandomId))
-
+ 
         (let selectResult (SelectRange messageTable messageRange messageSelect '('('"ItemsLimit" batchSize))))
-
+ 
         (let messages (Member selectResult 'List))
         (let truncated (Member selectResult 'Truncated))
         (let newCleanupVersion (Add (Member stateRead 'CleanupVersion) (Uint64 '1)))
-
+ 
         (let stateUpdate '(
             '('LastModifiedTimestamp modifiedTimestamp)
             '('CleanupVersion newCleanupVersion)
@@ -186,8 +186,8 @@ const char* const PurgeQueueStage2Query = R"__(
                 (return (Exists item))
         )))))
 
-        (let stateRow '(
-            '('State (Uint64 '0))))
+        (let stateRow '( 
+            '('State (Uint64 '0)))) 
         (let stateSelect '(
             'MessageCount
             'CleanupVersion
@@ -197,10 +197,10 @@ const char* const PurgeQueueStage2Query = R"__(
         (let count (Sub (Member stateRead 'MessageCount) (Length recordsExisted)))
         (let modifiedTimestamp (Max now (Member stateRead 'LastModifiedTimestamp)))
 
-        (let stateUpdate '(
+        (let stateUpdate '( 
             '('LastModifiedTimestamp modifiedTimestamp)
             '('MessageCount count)))
-
+ 
         (let versionIsSame
             (Coalesce
                 (Equal (Member stateRead 'CleanupVersion) cleanupVersion)
@@ -208,18 +208,18 @@ const char* const PurgeQueueStage2Query = R"__(
             )
         )
 
-        (return (Extend
+        (return (Extend 
             (AsList (SetResult 'versionIsSame versionIsSame))
             (AsList (SetResult 'messagesDeleted
                 (If versionIsSame
                     (Length recordsExisted)
                     (Uint64 '0))
             ))
-
+ 
             (If versionIsSame
                 (AsList (UpdateRow stateTable stateRow stateUpdate))
             (AsList (Void)))
-
+ 
             (If versionIsSame
                 (Map recordsExisted (lambda '(item) (block '(
                     (let groupRow '(
@@ -227,7 +227,7 @@ const char* const PurgeQueueStage2Query = R"__(
                     (let update '(
                         '('RandomId (Member item 'NextRandomId))
                         '('Head (Member item 'NextOffset))))
-
+ 
                     # If we delete the last message, we need to delete the empty group
                     (let groupIsEmpty
                         (Coalesce
@@ -235,7 +235,7 @@ const char* const PurgeQueueStage2Query = R"__(
                             (Bool 'false)
                         )
                     )
-
+ 
                     (return
                         (If groupIsEmpty
                             (EraseRow groupTable groupRow)
@@ -243,7 +243,7 @@ const char* const PurgeQueueStage2Query = R"__(
                         )
                     )))))
                 (AsList (Void)))
-
+ 
             (If versionIsSame
                 (Map recordsExisted (lambda '(item) (block '(
                     (let row '(
@@ -251,7 +251,7 @@ const char* const PurgeQueueStage2Query = R"__(
                         '('Offset   (Member item 'Offset))))
                     (return (EraseRow dataTable row))))))
                 (AsList (Void)))
-
+ 
             (If versionIsSame
                 (Map recordsExisted (lambda '(item) (block '(
                     (let row '(
@@ -266,47 +266,47 @@ const char* const PurgeQueueStage2Query = R"__(
                         '('Offset        (Member item 'Offset))))
                     (return (EraseRow sentTsIdx row))))))
                 (AsList (Void)))
-        ))
-    )
-)__";
-
-const char* const DeleteMessageQuery = R"__(
-    (
-        (let keys (Parameter 'KEYS
-            (ListType (StructType
-                '('GroupId (DataType 'String))
-                '('Offset  (DataType 'Uint64))
+        )) 
+    ) 
+)__"; 
+ 
+const char* const DeleteMessageQuery = R"__( 
+    ( 
+        (let keys (Parameter 'KEYS 
+            (ListType (StructType 
+                '('GroupId (DataType 'String)) 
+                '('Offset  (DataType 'Uint64)) 
                 '('LockTimestamp (DataType 'Uint64))
                 '('ReceiveAttemptId (DataType 'Utf8String))))))
-        (let now  (Parameter 'NOW (DataType 'Uint64)))
+        (let now  (Parameter 'NOW (DataType 'Uint64))) 
         (let groupsReadAttemptIdsPeriod (Parameter 'GROUPS_READ_ATTEMPT_IDS_PERIOD (DataType 'Uint64)))
-
-        (let dataTable    '%1$s/Data)
-        (let groupTable   '%1$s/Groups)
-        (let messageTable '%1$s/Messages)
-        (let sentTsIdx    '%1$s/SentTimestampIdx)
-        (let stateTable   '%1$s/State)
+ 
+        (let dataTable    '%1$s/Data) 
+        (let groupTable   '%1$s/Groups) 
+        (let messageTable '%1$s/Messages) 
+        (let sentTsIdx    '%1$s/SentTimestampIdx) 
+        (let stateTable   '%1$s/State) 
         (let readsTable   '%1$s/Reads)
-
-        (let records
-            (MapParameter keys (lambda '(item) (block '(
-                (let messageRow '(
-                    '('Offset (Member item 'Offset))))
-                (let messageSelect '(
-                    'Offset
-                    'RandomId
-                    'NextOffset
-                    'NextRandomId
-                    'SentTimestamp))
-
-                (let groupRow '(
-                    '('GroupId (Member item 'GroupId))))
-                (let groupSelect '(
-                    'GroupId
-                    'Head
+ 
+        (let records 
+            (MapParameter keys (lambda '(item) (block '( 
+                (let messageRow '( 
+                    '('Offset (Member item 'Offset)))) 
+                (let messageSelect '( 
+                    'Offset 
+                    'RandomId 
+                    'NextOffset 
+                    'NextRandomId 
+                    'SentTimestamp)) 
+ 
+                (let groupRow '( 
+                    '('GroupId (Member item 'GroupId)))) 
+                (let groupSelect '( 
+                    'GroupId 
+                    'Head 
                     'LockTimestamp
                     'ReceiveAttemptId))
-
+ 
                 (let readsRow '(
                     '('ReceiveAttemptId (Member item 'ReceiveAttemptId))))
                 (let readsSelect '(
@@ -326,100 +326,100 @@ const char* const DeleteMessageQuery = R"__(
                     )
                 )
 
-                (return '(
-                    (SelectRow groupTable groupRow groupSelect)
-                    (SelectRow messageTable messageRow messageSelect)
+                (return '( 
+                    (SelectRow groupTable groupRow groupSelect) 
+                    (SelectRow messageTable messageRow messageSelect) 
                     (Member item 'LockTimestamp)
                     (Member item 'ReceiveAttemptId)
                     sameReceiveAttempt)))))))
-
-        (let valid
-            (Filter records (lambda '(item) (block '(
-                (let group (Nth item '0))
-                (let msg   (Nth item '1))
-                (let lockTimestamp (Nth item '2))
-
-                (return
-                    (Coalesce
-                        (And
-                            (Equal  (Member group 'Head) (Member msg 'Offset))
-                            (Equal  (Member group 'LockTimestamp) lockTimestamp))
-                        (Bool 'false))))))))
-
+ 
+        (let valid 
+            (Filter records (lambda '(item) (block '( 
+                (let group (Nth item '0)) 
+                (let msg   (Nth item '1)) 
+                (let lockTimestamp (Nth item '2)) 
+ 
+                (return 
+                    (Coalesce 
+                        (And 
+                            (Equal  (Member group 'Head) (Member msg 'Offset)) 
+                            (Equal  (Member group 'LockTimestamp) lockTimestamp)) 
+                        (Bool 'false)))))))) 
+ 
         (let validWithReceiveAttemptToDelete
             (Filter records (lambda '(item) (block '(
                 (let sameReceiveAttempt (Nth item '4))
                 (return sameReceiveAttempt))))))
 
-        (let result
-            (Map valid (lambda '(item) (block '(
-                (let msg (Nth item '1))
-
-                (return (AsStruct
-                    '('Offset (Member msg 'Offset)))))))))
-
-        (let stateRow '(
-            '('State (Uint64 '0))))
-        (let stateSelect '(
+        (let result 
+            (Map valid (lambda '(item) (block '( 
+                (let msg (Nth item '1)) 
+ 
+                (return (AsStruct 
+                    '('Offset (Member msg 'Offset))))))))) 
+ 
+        (let stateRow '( 
+            '('State (Uint64 '0)))) 
+        (let stateSelect '( 
             'MessageCount
             'LastModifiedTimestamp))
-        (let stateRead (SelectRow stateTable stateRow stateSelect))
-
+        (let stateRead (SelectRow stateTable stateRow stateSelect)) 
+ 
         (let modifiedTimestamp (Max now (Member stateRead 'LastModifiedTimestamp)))
-        (let count (Sub (Member stateRead 'MessageCount) (Length valid)))
+        (let count (Sub (Member stateRead 'MessageCount) (Length valid))) 
 
-        (let stateUpdate '(
+        (let stateUpdate '( 
             '('LastModifiedTimestamp modifiedTimestamp)
-            '('MessageCount count)))
-
-        (return (Extend
-            (AsList (SetResult 'deleted result))
-            (ListIf (HasItems valid) (UpdateRow stateTable stateRow stateUpdate))
-
-            (Map valid (lambda '(item) (block '(
-                (let group (Nth item '0))
-                (let msg   (Nth item '1))
-
-                (let row '(
-                    '('GroupId (Member group 'GroupId))))
-                (let update '(
-                    '('RandomId (Member msg 'NextRandomId))
-                    '('Head (Member msg 'NextOffset))
-                    '('LockTimestamp (Uint64 '0))
-                    '('VisibilityDeadline (Uint64 '0))))
-
-                (return
-                    (If (Coalesce (Equal (Member msg 'NextOffset) (Uint64 '0)) (Bool 'false))
-                        (EraseRow  groupTable row)
-                        (UpdateRow groupTable row update)))))))
-
-            (Map valid (lambda '(item) (block '(
-                (let row '(
-                    '('RandomId (Member (Nth item '1) 'RandomId))
-                    '('Offset   (Member (Nth item '1) 'Offset))))
-                (return (EraseRow dataTable row))))))
-
-            (Map valid (lambda '(item) (block '(
-                (let row '(
-                    '('Offset (Member (Nth item '1) 'Offset))))
-                (return (EraseRow messageTable row))))))
-
-            (Map valid (lambda '(item) (block '(
-                (let row '(
-                    '('SentTimestamp (Member (Nth item '1) 'SentTimestamp))
-                    '('Offset        (Member (Nth item '1) 'Offset))))
-                (return (EraseRow sentTsIdx row))))))
+            '('MessageCount count))) 
+ 
+        (return (Extend 
+            (AsList (SetResult 'deleted result)) 
+            (ListIf (HasItems valid) (UpdateRow stateTable stateRow stateUpdate)) 
+ 
+            (Map valid (lambda '(item) (block '( 
+                (let group (Nth item '0)) 
+                (let msg   (Nth item '1)) 
+ 
+                (let row '( 
+                    '('GroupId (Member group 'GroupId)))) 
+                (let update '( 
+                    '('RandomId (Member msg 'NextRandomId)) 
+                    '('Head (Member msg 'NextOffset)) 
+                    '('LockTimestamp (Uint64 '0)) 
+                    '('VisibilityDeadline (Uint64 '0)))) 
+ 
+                (return 
+                    (If (Coalesce (Equal (Member msg 'NextOffset) (Uint64 '0)) (Bool 'false)) 
+                        (EraseRow  groupTable row) 
+                        (UpdateRow groupTable row update))))))) 
+ 
+            (Map valid (lambda '(item) (block '( 
+                (let row '( 
+                    '('RandomId (Member (Nth item '1) 'RandomId)) 
+                    '('Offset   (Member (Nth item '1) 'Offset)))) 
+                (return (EraseRow dataTable row)))))) 
+ 
+            (Map valid (lambda '(item) (block '( 
+                (let row '( 
+                    '('Offset (Member (Nth item '1) 'Offset)))) 
+                (return (EraseRow messageTable row)))))) 
+ 
+            (Map valid (lambda '(item) (block '( 
+                (let row '( 
+                    '('SentTimestamp (Member (Nth item '1) 'SentTimestamp)) 
+                    '('Offset        (Member (Nth item '1) 'Offset)))) 
+                (return (EraseRow sentTsIdx row)))))) 
 
             (Map validWithReceiveAttemptToDelete (lambda '(item) (block '(
                 (let row '(
                     '('ReceiveAttemptId (Nth item '3))))
                 (return (EraseRow readsTable row))))))
-        ))
-    )
-)__";
-
-const char* const SetQueueAttributesQuery = R"__(
-    (
+        )) 
+    ) 
+)__"; 
+ 
+const char* const SetQueueAttributesQuery = R"__( 
+    ( 
         (let delay                     (Parameter 'DELAY                       (OptionalType (DataType 'Uint64))))
         (let retention                 (Parameter 'RETENTION                   (OptionalType (DataType 'Uint64))))
         (let visibility                (Parameter 'VISIBILITY                  (OptionalType (DataType 'Uint64))))
@@ -430,34 +430,34 @@ const char* const SetQueueAttributesQuery = R"__(
         (let dlqArn                    (Parameter 'DLQ_TARGET_ARN              (OptionalType (DataType 'Utf8String))))
         (let dlqName                   (Parameter 'DLQ_TARGET_NAME             (OptionalType (DataType 'Utf8String))))
         (let userName                  (Parameter 'USER_NAME                   (DataType 'Utf8String)))
-
-        (let attrsTable '%1$s/Attributes)
-
-        (let attrsRow '(
-            '('State (Uint64 '0))))
-        (let attrsSelect '(
-            'DelaySeconds
-            'MessageRetentionPeriod
-            'ReceiveMessageWaitTime
+ 
+        (let attrsTable '%1$s/Attributes) 
+ 
+        (let attrsRow '( 
+            '('State (Uint64 '0)))) 
+        (let attrsSelect '( 
+            'DelaySeconds 
+            'MessageRetentionPeriod 
+            'ReceiveMessageWaitTime 
             'VisibilityTimeout
             'MaximumMessageSize
             'DlqName
             'DlqArn
             'MaxReceiveCount
             'ContentBasedDeduplication))
-        (let attrsRead (SelectRow attrsTable attrsRow attrsSelect))
-
-        (let attrsUpdate '(
-            '('DelaySeconds (Coalesce delay (Member attrsRead 'DelaySeconds)))
-            '('MessageRetentionPeriod (Coalesce retention (Member attrsRead 'MessageRetentionPeriod)))
-            '('ReceiveMessageWaitTime (Coalesce wait (Member attrsRead 'ReceiveMessageWaitTime)))
+        (let attrsRead (SelectRow attrsTable attrsRow attrsSelect)) 
+ 
+        (let attrsUpdate '( 
+            '('DelaySeconds (Coalesce delay (Member attrsRead 'DelaySeconds))) 
+            '('MessageRetentionPeriod (Coalesce retention (Member attrsRead 'MessageRetentionPeriod))) 
+            '('ReceiveMessageWaitTime (Coalesce wait (Member attrsRead 'ReceiveMessageWaitTime))) 
             '('VisibilityTimeout (Coalesce visibility (Member attrsRead 'VisibilityTimeout)))
             '('MaximumMessageSize (Coalesce maxMessageSize (Member attrsRead 'MaximumMessageSize)))
             '('MaxReceiveCount (Coalesce maxReceiveCount (Member attrsRead 'MaxReceiveCount)))
             '('DlqName (Coalesce dlqName (Member attrsRead 'DlqName)))
             '('DlqArn (Coalesce dlqArn (Member attrsRead 'DlqArn)))
             '('ContentBasedDeduplication (Coalesce contentBasedDeduplication (Member attrsRead 'ContentBasedDeduplication)))))
-
+ 
         (let queuesTable '%5$s/.Queues)
         (let queuesRow '(
             '('Account userName)
@@ -471,12 +471,12 @@ const char* const SetQueueAttributesQuery = R"__(
         (let queuesRowUpdate '(
             '('DlqName (Coalesce dlqName (Member queuesRowRead 'DlqName)))))
 
-        (return (AsList
+        (return (AsList 
             (UpdateRow attrsTable attrsRow attrsUpdate)
             (UpdateRow queuesTable queuesRow queuesRowUpdate)))
-    )
-)__";
-
+    ) 
+)__"; 
+ 
 const char* const InternalGetQueueAttributesQuery = R"__(
     (
         (let attrsTable '%1$s/Attributes)
@@ -501,22 +501,22 @@ const char* const InternalGetQueueAttributesQuery = R"__(
     )
 )__";
 
-const char* const ListQueuesQuery = R"__(
-    (
+const char* const ListQueuesQuery = R"__( 
+    ( 
         (let folderId (Parameter 'FOLDERID  (DataType 'Utf8String)))
         (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
-
+ 
         (let queuesTable '%5$s/.Queues)
 
         (let skipFolderIdFilter (Equal folderId (Utf8String '"")))
 
         (let queuesRange '(
             '('Account userName userName)
-            '('QueueName (Utf8String '"") (Void))))
+            '('QueueName (Utf8String '"") (Void)))) 
         (let queueSelect '('QueueName 'QueueId 'QueueState 'FifoQueue 'CreatedTimestamp 'CustomQueueName 'FolderId 'MasterTabletId 'Version 'Shards))
         (let queues (Member (SelectRange queuesTable queuesRange queueSelect '()) 'List))
-
-        (let filtered (Filter queues (lambda '(item) (block '(
+ 
+        (let filtered (Filter queues (lambda '(item) (block '( 
             (return (Coalesce
                 (And
                     (Or
@@ -526,144 +526,144 @@ const char* const ListQueuesQuery = R"__(
                         (Equal (Member item 'FolderId) folderId)
                         skipFolderIdFilter))
                 (Bool 'false)))
-        )))))
-
-        (return (AsList
-            (SetResult 'queues filtered)))
-    )
-)__";
-
-const char* const LockGroupsQuery = R"__(
-    (
-        (let attemptId (Parameter 'ATTEMPT_ID (DataType 'Utf8String)))
-        (let now       (Parameter 'NOW        (DataType 'Uint64)))
-        (let count     (Parameter 'COUNT      (DataType 'Uint64)))
+        ))))) 
+ 
+        (return (AsList 
+            (SetResult 'queues filtered))) 
+    ) 
+)__"; 
+ 
+const char* const LockGroupsQuery = R"__( 
+    ( 
+        (let attemptId (Parameter 'ATTEMPT_ID (DataType 'Utf8String))) 
+        (let now       (Parameter 'NOW        (DataType 'Uint64))) 
+        (let count     (Parameter 'COUNT      (DataType 'Uint64))) 
         (let visibilityTimeout (Parameter 'VISIBILITY_TIMEOUT (DataType 'Uint64)))
         (let groupsReadAttemptIdsPeriod (Parameter 'GROUPS_READ_ATTEMPT_IDS_PERIOD (DataType 'Uint64)))
         (let fromGroup (Parameter 'FROM_GROUP (DataType 'String)))
         (let batchSize (Parameter 'BATCH_SIZE  (DataType 'Uint64)))
-
-        (let groupTable '%1$s/Groups)
-        (let readsTable '%1$s/Reads)
-        (let sentTsIdx  '%1$s/SentTimestampIdx)
-
-        (let readsRow '(
-            '('ReceiveAttemptId attemptId)))
-        (let readsSelect (SelectRow readsTable readsRow '('Deadline)))
-        (let readsUpdate '(
+ 
+        (let groupTable '%1$s/Groups) 
+        (let readsTable '%1$s/Reads) 
+        (let sentTsIdx  '%1$s/SentTimestampIdx) 
+ 
+        (let readsRow '( 
+            '('ReceiveAttemptId attemptId))) 
+        (let readsSelect (SelectRow readsTable readsRow '('Deadline))) 
+        (let readsUpdate '( 
             '('Deadline (Add now groupsReadAttemptIdsPeriod))))
-
-        (let sameCond (IfPresent readsSelect (lambda '(x) (Coalesce (Less now (Member x 'Deadline)) (Bool 'false))) (Bool 'false)))
-
-        (let groupRange '(
+ 
+        (let sameCond (IfPresent readsSelect (lambda '(x) (Coalesce (Less now (Member x 'Deadline)) (Bool 'false))) (Bool 'false))) 
+ 
+        (let groupRange '( 
             '('GroupId fromGroup (Void))))
-        (let groupSelect '(
-            'GroupId
-            'RandomId
-            'Head
-            'ReceiveAttemptId
-            'VisibilityDeadline))
+        (let groupSelect '( 
+            'GroupId 
+            'RandomId 
+            'Head 
+            'ReceiveAttemptId 
+            'VisibilityDeadline)) 
         (let groupsRead (SelectRange groupTable groupRange groupSelect '('('"ItemsLimit" batchSize))))
         (let groups (Member groupsRead 'List))
         (let truncated (Member groupsRead 'Truncated))
         (let lastProcessedGroup (ToOptional (Skip groups (Sub (Length groups) (Uint64 '1)))))
-
-        (let previous (Take (Filter groups (lambda '(item) (block '(
-            (return (Coalesce (Equal (Member item 'ReceiveAttemptId) attemptId) (Bool 'false)))
-        )))) count))
-
-        (let filtered_1 (Filter groups (lambda '(item) (block '(
-            (return (Coalesce (Less (Member item 'VisibilityDeadline) now) (Bool 'false)))
-        )))))
-
-        (let filtered (Take (Sort filtered_1 (Bool 'true) (lambda '(item) (block '(
-            (return (Member item 'Head))
-        )))) count))
-
-        (let update (lambda '(item) (block '(
-            (let groupId (Member item 'GroupId))
-
-            (let groupRow '(
-                '('GroupId groupId)))
-            (let groupUpdate '(
-                '('ReceiveAttemptId attemptId)
-                '('LockTimestamp now)
+ 
+        (let previous (Take (Filter groups (lambda '(item) (block '( 
+            (return (Coalesce (Equal (Member item 'ReceiveAttemptId) attemptId) (Bool 'false))) 
+        )))) count)) 
+ 
+        (let filtered_1 (Filter groups (lambda '(item) (block '( 
+            (return (Coalesce (Less (Member item 'VisibilityDeadline) now) (Bool 'false))) 
+        ))))) 
+ 
+        (let filtered (Take (Sort filtered_1 (Bool 'true) (lambda '(item) (block '( 
+            (return (Member item 'Head)) 
+        )))) count)) 
+ 
+        (let update (lambda '(item) (block '( 
+            (let groupId (Member item 'GroupId)) 
+ 
+            (let groupRow '( 
+                '('GroupId groupId))) 
+            (let groupUpdate '( 
+                '('ReceiveAttemptId attemptId) 
+                '('LockTimestamp now) 
                 '('VisibilityDeadline (Add now visibilityTimeout))))
-            (return (UpdateRow groupTable groupRow groupUpdate))
-        ))))
-
-        (return (Extend
-            (AsList (SetResult 'sameCond sameCond))
+            (return (UpdateRow groupTable groupRow groupUpdate)) 
+        )))) 
+ 
+        (return (Extend 
+            (AsList (SetResult 'sameCond sameCond)) 
             (AsList (SetResult 'truncated truncated))
             (AsList (SetResult 'lastProcessedGroup lastProcessedGroup))
-            (AsList (If sameCond (SetResult 'offsets previous) (SetResult 'offsets filtered)))
-            (ListIf (And (Not sameCond) (HasItems filtered)) (UpdateRow readsTable readsRow readsUpdate))
-            (If sameCond (Map previous update) (Map filtered update))))
-    )
-)__";
-
-const char* const ReadMessageQuery = R"__(
-    (
-        (let keys (Parameter 'KEYS
-            (ListType (StructType
-                '('RandomId (DataType 'Uint64))
-                '('Offset   (DataType 'Uint64))))))
-        (let now  (Parameter 'NOW (DataType 'Uint64)))
-
-        (let dataTable    '%1$s/Data)
-        (let messageTable '%1$s/Messages)
-
+            (AsList (If sameCond (SetResult 'offsets previous) (SetResult 'offsets filtered))) 
+            (ListIf (And (Not sameCond) (HasItems filtered)) (UpdateRow readsTable readsRow readsUpdate)) 
+            (If sameCond (Map previous update) (Map filtered update)))) 
+    ) 
+)__"; 
+ 
+const char* const ReadMessageQuery = R"__( 
+    ( 
+        (let keys (Parameter 'KEYS 
+            (ListType (StructType 
+                '('RandomId (DataType 'Uint64)) 
+                '('Offset   (DataType 'Uint64)))))) 
+        (let now  (Parameter 'NOW (DataType 'Uint64))) 
+ 
+        (let dataTable    '%1$s/Data) 
+        (let messageTable '%1$s/Messages) 
+ 
         (let unfilteredResult
-            (MapParameter keys (lambda '(item) (block '(
-                (let dataRow '(
-                    '('RandomId (Member item 'RandomId))
-                    '('Offset   (Member item 'Offset))))
-                (let dataFields '(
-                    'Offset
-                    'DedupId
-                    'Attributes
-                    'Data
+            (MapParameter keys (lambda '(item) (block '( 
+                (let dataRow '( 
+                    '('RandomId (Member item 'RandomId)) 
+                    '('Offset   (Member item 'Offset)))) 
+                (let dataFields '( 
+                    'Offset 
+                    'DedupId 
+                    'Attributes 
+                    'Data 
                     'MessageId
                     'SenderId))
-
-                (let messageRow '(
-                    '('Offset (Member item 'Offset))))
-                (let messageFields '(
-                    'GroupId
-                    'Offset
-                    'ReceiveCount
-                    'FirstReceiveTimestamp
-                    'SentTimestamp))
-
+ 
+                (let messageRow '( 
+                    '('Offset (Member item 'Offset)))) 
+                (let messageFields '( 
+                    'GroupId 
+                    'Offset 
+                    'ReceiveCount 
+                    'FirstReceiveTimestamp 
+                    'SentTimestamp)) 
+ 
                 (let sourceDataFieldsRead (SelectRow dataTable dataRow dataFields))
 
                 (return (AsStruct
                     '('Valid (Exists sourceDataFieldsRead))
                     '('SourceDataFieldsRead sourceDataFieldsRead)
                     '('SourceMessageFieldsRead (SelectRow messageTable messageRow messageFields)))))))))
-
+ 
         (let result
             (Filter unfilteredResult (lambda '(item) (block '(
                 (return (Coalesce (Member item 'Valid) (Bool 'false)))
         )))))
 
-        (return (Extend
-            (AsList (SetResult 'result result))
+        (return (Extend 
+            (AsList (SetResult 'result result)) 
             (AsList (SetResult 'movedMessagesCount (Uint64 '0)))
-
-            (Map result (lambda '(item) (block '(
+ 
+            (Map result (lambda '(item) (block '( 
                 (let message (Member item 'SourceMessageFieldsRead))
-                (let row '(
-                    '('Offset (Member message 'Offset))))
-                (let receiveTimestamp
-                    (If (Coalesce (Equal (Member message 'FirstReceiveTimestamp) (Uint64 '0)) (Bool 'false)) now (Member message 'FirstReceiveTimestamp)))
-                (let update '(
-                    '('FirstReceiveTimestamp receiveTimestamp)
-                    '('ReceiveCount (Add (Member message 'ReceiveCount) (Uint32 '1)))))
-                (return (UpdateRow messageTable row update))))))))
-    )
-)__";
-
+                (let row '( 
+                    '('Offset (Member message 'Offset)))) 
+                (let receiveTimestamp 
+                    (If (Coalesce (Equal (Member message 'FirstReceiveTimestamp) (Uint64 '0)) (Bool 'false)) now (Member message 'FirstReceiveTimestamp))) 
+                (let update '( 
+                    '('FirstReceiveTimestamp receiveTimestamp) 
+                    '('ReceiveCount (Add (Member message 'ReceiveCount) (Uint32 '1))))) 
+                (return (UpdateRow messageTable row update)))))))) 
+    ) 
+)__"; 
+ 
 const char* const ReadOrRedriveMessageQuery = R"__(
     (
         (let keys (Parameter 'KEYS
@@ -929,10 +929,10 @@ const char* const ReadOrRedriveMessageQuery = R"__(
     )
 )__";
 
-const char* const WriteMessageQuery = R"__(
-    (
-        (let randomId   (Parameter 'RANDOM_ID  (DataType 'Uint64)))
-        (let timestamp  (Parameter 'TIMESTAMP  (DataType 'Uint64)))
+const char* const WriteMessageQuery = R"__( 
+    ( 
+        (let randomId   (Parameter 'RANDOM_ID  (DataType 'Uint64))) 
+        (let timestamp  (Parameter 'TIMESTAMP  (DataType 'Uint64))) 
         (let deduplicationPeriod (Parameter 'DEDUPLICATION_PERIOD (DataType 'Uint64)))
         (let messages  (Parameter 'MESSAGES
             (ListType (StructType
@@ -946,26 +946,26 @@ const char* const WriteMessageQuery = R"__(
                 '('Index      (DataType 'Uint64))
             ))
         ))
-
-        (let dataTable  '%1$s/Data)
-        (let dedupTable '%1$s/Deduplication)
-        (let stateTable '%1$s/State)
-        (let msgTable   '%1$s/Messages)
-        (let groupTable '%1$s/Groups)
-        (let sentTsIdx  '%1$s/SentTimestampIdx)
-
-        (let stateRow '(
-            '('State (Uint64 '0))))
-        (let stateSelect '(
-            'MessageCount
+ 
+        (let dataTable  '%1$s/Data) 
+        (let dedupTable '%1$s/Deduplication) 
+        (let stateTable '%1$s/State) 
+        (let msgTable   '%1$s/Messages) 
+        (let groupTable '%1$s/Groups) 
+        (let sentTsIdx  '%1$s/SentTimestampIdx) 
+ 
+        (let stateRow '( 
+            '('State (Uint64 '0)))) 
+        (let stateSelect '( 
+            'MessageCount 
             'WriteOffset
             'LastModifiedTimestamp))
-
-        (let stateRead (SelectRow stateTable stateRow stateSelect))
-
+ 
+        (let stateRead (SelectRow stateTable stateRow stateSelect)) 
+ 
         (let sentTimestamp (Max timestamp (Member stateRead 'LastModifiedTimestamp)))
         (let startOffset (Add (Member stateRead 'WriteOffset) (Uint64 '1)))
-
+ 
         (let messagesInfo
             (MapParameter messages (lambda '(item) (block '(
                 (let dedupRow '(
@@ -975,7 +975,7 @@ const char* const WriteMessageQuery = R"__(
                     'MessageId
                     'Offset))
                 (let dedupRead (SelectRow dedupTable dedupRow dedupSelect))
-
+ 
                 (let dedupCond (IfPresent dedupRead (lambda '(x) (Coalesce (Less (Member x 'Deadline) sentTimestamp) (Bool 'false))) (Bool 'true)))
 
                 (let groupRow '(
@@ -1040,16 +1040,16 @@ const char* const WriteMessageQuery = R"__(
                     ))
         )))))
 
-        (let stateUpdate '(
+        (let stateUpdate '( 
             '('LastModifiedTimestamp sentTimestamp)
             '('MessageCount newMessagesCount)
             '('WriteOffset newWriteOffset)))
-
+ 
         (return (Extend
             (AsList (SetResult 'result result))
-
+ 
             (AsList (If (Greater (Length messagesAdded) (Uint64 '0)) (UpdateRow stateTable stateRow stateUpdate) (Void)))
-
+ 
             (Map messagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dedupCond (Member (Nth item '1) 'dedupCond))
                 (let dedupRow '(
@@ -1059,7 +1059,7 @@ const char* const WriteMessageQuery = R"__(
                     '('Offset (Nth item '0))
                     '('MessageId (Member (Nth item '1) 'MessageId))))
                 (return (If dedupCond (UpdateRow dedupTable dedupRow dedupUpdate) (Void)))))))
-
+ 
             (Map messagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dedupCond (Member (Nth item '1) 'dedupCond))
                 (let dataRow '(
@@ -1072,7 +1072,7 @@ const char* const WriteMessageQuery = R"__(
                     '('SenderId (Member (Nth item '1) 'SenderId))
                     '('MessageId (Member (Nth item '1) 'MessageId))))
                 (return (If dedupCond (UpdateRow dataTable dataRow dataUpdate) (Void)))))))
-
+ 
             (Map messagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dedupCond (Member (Nth item '1) 'dedupCond))
                 (let msgRow '(
@@ -1086,7 +1086,7 @@ const char* const WriteMessageQuery = R"__(
                     '('FirstReceiveTimestamp (Uint64 '0))
                     '('SentTimestamp sentTimestamp)))
                 (return (If dedupCond (UpdateRow msgTable msgRow messageUpdate) (Void)))))))
-
+ 
             (Map messagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dedupCond (Member (Nth item '1) 'dedupCond))
                 (let sentTsRow '(
@@ -1099,7 +1099,7 @@ const char* const WriteMessageQuery = R"__(
                     '('DelayDeadline delayDeadline)
                     '('GroupId (Member (Nth item '1) 'GroupId))))
                 (return (If dedupCond (UpdateRow sentTsIdx sentTsRow sentTsUpdate) (Void)))))))
-
+ 
             (Map messagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dedupCond (Member (Nth item '1) 'dedupCond))
                 (let groupRow '(
@@ -1140,24 +1140,24 @@ const char* const WriteMessageQuery = R"__(
                         (Void))
                 )))))
         ))
-    )
-)__";
-
+    ) 
+)__"; 
+ 
 static const char* const DeduplicationCleanupQuery = R"__(
-    (
+    ( 
         (let now           (Parameter 'NOW             (DataType 'Uint64)))
         (let batchSize     (Parameter 'BATCH_SIZE      (DataType 'Uint64)))
         (let keyRangeStart (Parameter 'KEY_RANGE_START (DataType 'String)))
-
-        (let dedupTable '%1$s/Deduplication)
-
-        (let dedupRange '(
+ 
+        (let dedupTable '%1$s/Deduplication) 
+ 
+        (let dedupRange '( 
             '('DedupId keyRangeStart (Void))))
-        (let dedupSelect '(
-            'DedupId
-            'Deadline))
+        (let dedupSelect '( 
+            'DedupId 
+            'Deadline)) 
         (let dedups (SelectRange dedupTable dedupRange dedupSelect '('('"ItemsLimit" batchSize))))
-
+ 
         (let dedupsList (Member dedups 'List))
         (let dedupToErase (Filter dedupsList (lambda '(item) (block '(
             (return (Coalesce (Less (Member item 'Deadline) now) (Bool 'false)))
@@ -1185,86 +1185,86 @@ static const char* const ReadsCleanupQuery = R"__(
 
         (let readsTable '%1$s/Reads)
 
-        (let readRange '(
+        (let readRange '( 
             '('ReceiveAttemptId keyRangeStart (Void))))
-        (let readSelect '(
-            'ReceiveAttemptId
-            'Deadline))
+        (let readSelect '( 
+            'ReceiveAttemptId 
+            'Deadline)) 
         (let reads (SelectRange readsTable readRange readSelect '('('"ItemsLimit" batchSize))))
-
+ 
         (let readsList (Member reads 'List))
         (let readsToErase (Filter readsList (lambda '(item) (block '(
-            (return (Coalesce (Less (Member item 'Deadline) now) (Bool 'false)))
-        )))))
-
+            (return (Coalesce (Less (Member item 'Deadline) now) (Bool 'false))) 
+        ))))) 
+ 
         (let readsCount (Length readsList))
         (let lastSelectedRow (ToOptional (Skip readsList (Max (Sub readsCount (Uint64 '1)) (Uint64 '0)))))
-
-        (return (Extend
+ 
+        (return (Extend 
             (AsList (SetResult 'moreData (Member reads 'Truncated)))
             (AsList (SetResult 'lastProcessedKey (Member lastSelectedRow 'ReceiveAttemptId)))
 
-            (Map readsToErase (lambda '(item) (block '(
-                (return (EraseRow readsTable '(
-                    '('ReceiveAttemptId (Member item 'ReceiveAttemptId)))))))))
-        ))
-    )
-)__";
-
-const char* const SetRetentionQuery = R"__(
-    (
-        (let now   (Parameter 'NOW   (DataType 'Uint64)))
-        (let purge (Parameter 'PURGE (DataType 'Bool)))
-
-        (let attrsTable '%1$s/Attributes)
-        (let stateTable '%1$s/State)
-
-        (let attrs (block '(
-            (let row '(
-                '('State (Uint64 '0))))
-            (let fields '(
-                'MessageRetentionPeriod))
-            (return (SelectRow attrsTable row fields)))))
-
-        (let boundary
-            (If purge now (Coalesce (Sub now (Member attrs 'MessageRetentionPeriod)) (Uint64 '0))))
-
+            (Map readsToErase (lambda '(item) (block '( 
+                (return (EraseRow readsTable '( 
+                    '('ReceiveAttemptId (Member item 'ReceiveAttemptId))))))))) 
+        )) 
+    ) 
+)__"; 
+ 
+const char* const SetRetentionQuery = R"__( 
+    ( 
+        (let now   (Parameter 'NOW   (DataType 'Uint64))) 
+        (let purge (Parameter 'PURGE (DataType 'Bool))) 
+ 
+        (let attrsTable '%1$s/Attributes) 
+        (let stateTable '%1$s/State) 
+ 
+        (let attrs (block '( 
+            (let row '( 
+                '('State (Uint64 '0)))) 
+            (let fields '( 
+                'MessageRetentionPeriod)) 
+            (return (SelectRow attrsTable row fields))))) 
+ 
+        (let boundary 
+            (If purge now (Coalesce (Sub now (Member attrs 'MessageRetentionPeriod)) (Uint64 '0)))) 
+ 
         (let range '(
             '('State (Uint64 '0) (Uint64 '18446744073709551615))))
         (let fields '(
             'State
             'RetentionBoundary))
         (let records (Member (SelectRange stateTable range fields '()) 'List))
-
+ 
         (let result
             (Map records (lambda '(item) (block '(
                 (let updated
                     (Coalesce
                         (Less (Member item 'RetentionBoundary) boundary)
                         (Bool 'false)))
-
+ 
                 (return (AsStruct
                     '('Shard (Member item 'State))
                     '('RetentionBoundary (Max boundary (Member item 'RetentionBoundary)))
                     '('Updated updated))))))))
-
+ 
         (let updated (Filter result (lambda '(item) (block '(
             (return (Coalesce (Equal (Member item 'Updated) (Bool 'true)) (Bool 'false))))))))
-
-        (return (Extend
-            (AsList (SetResult 'result result))
-            (AsList (SetResult 'retention (Member attrs 'MessageRetentionPeriod)))
-
+ 
+        (return (Extend 
+            (AsList (SetResult 'result result)) 
+            (AsList (SetResult 'retention (Member attrs 'MessageRetentionPeriod))) 
+ 
             (Map updated (lambda '(item) (block '(
-                (let row '(
-                    '('State (Member item 'Shard))))
-                (let update '(
-                    '('RetentionBoundary (Member item 'RetentionBoundary))))
-                (return (UpdateRow stateTable row update))))))
-        ))
-    )
-)__";
-
+                (let row '( 
+                    '('State (Member item 'Shard)))) 
+                (let update '( 
+                    '('RetentionBoundary (Member item 'RetentionBoundary)))) 
+                (return (UpdateRow stateTable row update)))))) 
+        )) 
+    ) 
+)__"; 
+ 
 const char* const GetMessageCountMetricsQuery = R"__(
     (
         (let shard  (Parameter 'SHARD  (DataType 'Uint64)))
@@ -1380,10 +1380,10 @@ const char* const ListDeadLetterSourceQueuesQuery = R"__(
     )
 )__";
 
-} // namespace
-
-const char* GetFifoQueryById(size_t id) {
-    switch (id) {
+} // namespace 
+ 
+const char* GetFifoQueryById(size_t id) { 
+    switch (id) { 
     case DELETE_MESSAGE_ID: // 0
         return DeleteMessageQuery;
     case LOCK_GROUP_ID: // 1
@@ -1420,9 +1420,9 @@ const char* GetFifoQueryById(size_t id) {
         return ListDeadLetterSourceQueuesQuery;
     case READ_OR_REDRIVE_MESSAGE_ID: // 22
         return ReadOrRedriveMessageQuery;
-    }
-
-    return nullptr;
-}
-
+    } 
+ 
+    return nullptr; 
+} 
+ 
 } // namespace NKikimr::NSQS

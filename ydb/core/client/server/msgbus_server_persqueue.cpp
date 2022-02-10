@@ -506,10 +506,10 @@ public:
                 return;
             }
             if (meta.HasCmdGetPartitionLocations()) {
-                if (!GetTopicsList(meta.GetCmdGetPartitionLocations().topicrequest()))
+                if (!GetTopicsList(meta.GetCmdGetPartitionLocations().topicrequest())) 
                     return;
             } else if (meta.HasCmdGetPartitionOffsets()) {
-                if (!GetTopicsList(meta.GetCmdGetPartitionOffsets().topicrequest()))
+                if (!GetTopicsList(meta.GetCmdGetPartitionOffsets().topicrequest())) 
                     return;
             } else if (meta.HasCmdGetTopicMetadata()) {
                 auto& d = meta.GetCmdGetTopicMetadata();
@@ -521,7 +521,7 @@ public:
                     TopicInfo[d.GetTopic(i)];
                 }
             } else if (meta.HasCmdGetPartitionStatus()) {
-                if (!GetTopicsList(meta.GetCmdGetPartitionStatus().topicrequest()))
+                if (!GetTopicsList(meta.GetCmdGetPartitionStatus().topicrequest())) 
                     return;
             } else if (meta.HasCmdGetReadSessionsInfo()) {
                 auto& d = meta.GetCmdGetReadSessionsInfo();
@@ -580,15 +580,15 @@ public:
         auto& meta = RequestProto.GetMetaRequest();
 
         THashMap<ui32, TString> hostName(NodesInfo->Nodes.size());
-        for (const auto& n : NodesInfo->Nodes)
-            hostName.insert(std::make_pair(n.NodeId, n.Host));
+        for (const auto& n : NodesInfo->Nodes) 
+            hostName.insert(std::make_pair(n.NodeId, n.Host)); 
 
 
         NKikimrClient::TResponse record;
         record.SetStatus(MSTATUS_OK);
         record.SetErrorCode(NPersQueue::NErrorCode::OK);
         auto res = record.MutableMetaResponse()->MutableCmdGetPartitionLocationsResult();
-        for (const auto& p : TopicInfo) {
+        for (const auto& p : TopicInfo) { 
             auto topicResult = res->AddTopicResult();
             topicResult->SetTopic(p.first);
             if (p.second.PartitionToTablet.empty()) {
@@ -596,7 +596,7 @@ public:
             } else {
                 topicResult->SetErrorCode(NPersQueue::NErrorCode::OK);
             }
-            for (const auto& pp : p.second.PartitionToTablet) {
+            for (const auto& pp : p.second.PartitionToTablet) { 
                 auto it = TabletInfo.find(pp.second);
                 Y_VERIFY(it != TabletInfo.end());
                 auto ht = hostName.find(it->second.NodeId);
@@ -629,7 +629,7 @@ public:
         record.SetErrorCode(NPersQueue::NErrorCode::OK);
         auto res = record.MutableMetaResponse()->MutableCmdGetTopicMetadataResult();
         for (const auto& ti : TopicInfo) {
-            auto topicInfo = res->AddTopicInfo();
+            auto topicInfo = res->AddTopicInfo(); 
             topicInfo->SetTopic(ti.first);
             topicInfo->MutableConfig()->CopyFrom(ti.second.Config);
             topicInfo->SetNumPartitions(ti.second.NumParts);
@@ -658,7 +658,7 @@ public:
             } else {
                 topicResult->SetErrorCode(NPersQueue::NErrorCode::OK);
             }
-            for (const auto& tablet: p.second.Tablets) {
+            for (const auto& tablet: p.second.Tablets) { 
                 auto it = TabletInfo.find(tablet);
                 Y_VERIFY(it != TabletInfo.end());
                 for (const auto& r : it->second.OffsetResponses) {
@@ -669,7 +669,7 @@ public:
                     res->CopyFrom(r);
                 }
             }
-            for (const auto& part : p.second.PartitionToTablet) {
+            for (const auto& part : p.second.PartitionToTablet) { 
                 auto res = topicResult->AddPartitionResult();
                 res->SetPartition(part.first);
                 res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
@@ -695,7 +695,7 @@ public:
                 topicResult->SetErrorCode(NPersQueue::NErrorCode::OK);
             }
 
-            for (const auto& tablet: p.second.Tablets) {
+            for (const auto& tablet: p.second.Tablets) { 
                 auto it = TabletInfo.find(tablet);
                 Y_VERIFY(it != TabletInfo.end());
                 for (const auto& r : it->second.StatusResponses) {
@@ -706,7 +706,7 @@ public:
                     res->CopyFrom(r);
                 }
             }
-            for (const auto& part : p.second.PartitionToTablet) {
+            for (const auto& part : p.second.PartitionToTablet) { 
                 auto res = topicResult->AddPartitionResult();
                 res->SetPartition(part.first);
                 res->SetStatus(NKikimrPQ::TStatusResponse::STATUS_UNKNOWN);
@@ -783,7 +783,7 @@ public:
             return false;
         if (DescribeRequests)
             return false;
-        const auto& meta = RequestProto.GetMetaRequest();
+        const auto& meta = RequestProto.GetMetaRequest(); 
         if (meta.HasCmdGetPartitionLocations()) {
             if (TopicsAnswered != TopicInfo.size() || TabletInfo.size() != TabletsDiscovered.size() || !NodesInfo)
                 return false;
@@ -1082,7 +1082,7 @@ public:
                     if (CanProcessFetchRequest) {
                         ProceedFetchRequest(ctx);
                     } else {
-                        const auto& tabletInfo = TabletInfo[tabletId];
+                        const auto& tabletInfo = TabletInfo[tabletId]; 
                         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "sending HasDataInfoResponse " << it->second.FetchInfo[part]->Record);
 
                         NTabletPipe::SendData(ctx, tabletInfo.PipeClient, it->second.FetchInfo[part].Release());
@@ -1194,7 +1194,7 @@ public:
         }
         CanProcessFetchRequest = true;
         Y_VERIFY(IsFetchRequest);
-        const auto& fetch = RequestProto.GetFetchRequest();
+        const auto& fetch = RequestProto.GetFetchRequest(); 
 
         if (FetchRequestReadsDone == fetch.PartitionSize()) {
             NKikimrClient::TResponse record;
@@ -1203,7 +1203,7 @@ public:
             record.SetErrorCode(NPersQueue::NErrorCode::OK);
             return SendReplyAndDie(std::move(record), ctx);
         }
-        const auto& clientId = fetch.GetClientId();
+        const auto& clientId = fetch.GetClientId(); 
         Y_VERIFY(FetchRequestReadsDone < fetch.PartitionSize());
         const auto& req = fetch.GetPartition(FetchRequestReadsDone);
         const auto& topic = req.GetTopic();
@@ -1297,7 +1297,7 @@ public:
         return rec;
     }
 
-
+ 
     void Bootstrap(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "proxy got request " << RequestId << " IsMetaRequest " << IsMetaRequest << " IsFetchRequest " << IsFetchRequest);
 
@@ -1316,7 +1316,7 @@ public:
 
         if (RequestProto.HasMetaRequest() && (RequestProto.GetMetaRequest().HasCmdGetPartitionLocations()
                 || RequestProto.GetMetaRequest().HasCmdGetReadSessionsInfo())) {
-            //only for this request NodeId-s and Nodes names are required
+            //only for this request NodeId-s and Nodes names are required 
             const TActorId nameserviceId = GetNameserviceActorId();
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         }
@@ -1338,9 +1338,9 @@ public:
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     )
 private:
-    bool GetTopicsList(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests) {
-        for (auto ri = requests.begin(); ri != requests.end(); ++ri) {
-            const auto& topicRequest = *ri;
+    bool GetTopicsList(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests) { 
+        for (auto ri = requests.begin(); ri != requests.end(); ++ri) { 
+            const auto& topicRequest = *ri; 
             if (!topicRequest.HasTopic() || topicRequest.GetTopic().empty()) {
                 ErrorReason = "TopicRequest must have Topic field.";
                 return false;

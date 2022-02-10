@@ -1,15 +1,15 @@
-#include "location.h"
-#include "uri.h"
-
-namespace NUri {
+#include "location.h" 
+#include "uri.h" 
+ 
+namespace NUri { 
     static const int URI_PARSE_FLAGS =
         (TFeature::FeaturesRecommended | TFeature::FeatureConvertHostIDN | TFeature::FeatureEncodeExtendedDelim | TFeature::FeatureEncodePercent) & ~TFeature::FeatureHashBangToEscapedFragment;
-
+ 
     TString ResolveRedirectLocation(const TStringBuf& baseUrl,
                                     const TStringBuf& location) {
         TUri baseUri;
         TUri locationUri;
-
+ 
         // Parse base URL.
         if (baseUri.Parse(baseUrl, URI_PARSE_FLAGS) != NUri::TState::ParsedOK) {
             return "";
@@ -26,6 +26,6 @@ namespace NUri {
         TString res;
         locationUri.Print(res, NUri::TField::FlagAllFields);
         return res;
-    }
-
-}
+    } 
+ 
+} 

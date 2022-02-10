@@ -368,61 +368,61 @@ size_t GetMaximumTransferUnit(SOCKET /*s*/) {
     return 8192;
 }
 
-int GetSocketToS(SOCKET s) {
-    TOpaqueAddr addr;
-
+int GetSocketToS(SOCKET s) { 
+    TOpaqueAddr addr; 
+ 
     if (getsockname(s, addr.MutableAddr(), addr.LenPtr()) < 0) {
         ythrow TSystemError() << "getsockname() failed";
-    }
-
-    return GetSocketToS(s, &addr);
-}
-
-int GetSocketToS(SOCKET s, const IRemoteAddr* addr) {
-    int result = 0;
-
-    switch (addr->Addr()->sa_family) {
+    } 
+ 
+    return GetSocketToS(s, &addr); 
+} 
+ 
+int GetSocketToS(SOCKET s, const IRemoteAddr* addr) { 
+    int result = 0; 
+ 
+    switch (addr->Addr()->sa_family) { 
         case AF_INET:
             CheckedGetSockOpt(s, IPPROTO_IP, IP_TOS, result, "tos");
             break;
-
+ 
         case AF_INET6:
-#ifdef IPV6_TCLASS
+#ifdef IPV6_TCLASS 
             CheckedGetSockOpt(s, IPPROTO_IPV6, IPV6_TCLASS, result, "tos");
-#endif
+#endif 
             break;
-    }
-
-    return result;
-}
-
-void SetSocketToS(SOCKET s, const NAddr::IRemoteAddr* addr, int tos) {
-    switch (addr->Addr()->sa_family) {
+    } 
+ 
+    return result; 
+} 
+ 
+void SetSocketToS(SOCKET s, const NAddr::IRemoteAddr* addr, int tos) { 
+    switch (addr->Addr()->sa_family) { 
         case AF_INET:
             CheckedSetSockOpt(s, IPPROTO_IP, IP_TOS, tos, "tos");
             return;
-
+ 
         case AF_INET6:
-#ifdef IPV6_TCLASS
+#ifdef IPV6_TCLASS 
             CheckedSetSockOpt(s, IPPROTO_IPV6, IPV6_TCLASS, tos, "tos");
             return;
-#endif
+#endif 
             break;
-    }
-
-    ythrow yexception() << "SetSocketToS unsupported for family " << addr->Addr()->sa_family;
-}
-
-void SetSocketToS(SOCKET s, int tos) {
-    TOpaqueAddr addr;
-
+    } 
+ 
+    ythrow yexception() << "SetSocketToS unsupported for family " << addr->Addr()->sa_family; 
+} 
+ 
+void SetSocketToS(SOCKET s, int tos) { 
+    TOpaqueAddr addr; 
+ 
     if (getsockname(s, addr.MutableAddr(), addr.LenPtr()) < 0) {
         ythrow TSystemError() << "getsockname() failed";
-    }
-
-    SetSocketToS(s, &addr, tos);
-}
-
+    } 
+ 
+    SetSocketToS(s, &addr, tos); 
+} 
+ 
 void SetSocketPriority(SOCKET s, int priority) {
 #if defined(SO_PRIORITY)
     CheckedSetSockOpt(s, SOL_SOCKET, SO_PRIORITY, priority, "priority");

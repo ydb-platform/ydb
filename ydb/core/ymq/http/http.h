@@ -1,33 +1,33 @@
-#pragma once
-
-#include "params.h"
-#include "types.h"
+#pragma once 
+ 
+#include "params.h" 
+#include "types.h" 
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/sqs.pb.h>
-
+ 
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/core/ymq/base/counters.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/http/server/http.h>
-
+ 
 #include <util/generic/buffer.h>
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <library/cpp/cgiparam/cgiparam.h>
-
+ 
 namespace NKikimr::NSQS {
-
+ 
 class TAsyncHttpServer;
 class THttpRequest;
-
+ 
 class THttpRequest : public TRequestReplier {
 public:
     THttpRequest(TAsyncHttpServer* p);
     ~THttpRequest();
-
+ 
     void SendResponse(const TSqsHttpResponse& r);
-
+ 
     const TString& GetRequestId() const {
         return RequestId_;
     }
@@ -38,13 +38,13 @@ public:
 
 private:
     bool DoReply(const TReplyParams& p) override;
-
+ 
     void WriteResponse(const TReplyParams& replyParams, const TSqsHttpResponse& response);
 
     TString LogHttpRequestResponseCommonInfoString();
     TString LogHttpRequestResponseDebugInfoString(const TReplyParams& replyParams, const TSqsHttpResponse& response);
     void LogHttpRequestResponse(const TReplyParams& replyParams, const TSqsHttpResponse& response);
-
+ 
 private:
     template<typename T>
     void CopyCredentials(T* const request, const NKikimrConfig::TSqsConfig& config) {
@@ -57,19 +57,19 @@ private:
     TString GetRequestPathPart(TStringBuf path, size_t partIdx) const;
     TString ExtractQueueNameFromPath(const TStringBuf path);
     TString ExtractAccountNameFromPath(const TStringBuf path);
-
+ 
     ui64 CalculateRequestSizeInBytes(const THttpInput& input, const ui64 contentLength) const;
     void ExtractQueueAndAccountNames(const TStringBuf path);
-
+ 
     TString HttpHeadersLogString(const THttpInput& input);
     void ParseHeaders(const THttpInput& input);
     void ParseAuthorization(const TString& value);
     void ParseRequest(THttpInput& input);
     void ParseCgiParameters(const TCgiParameters& params);
     void ParsePrivateRequestPathPrefix(const TStringBuf& path);
-
+ 
     bool SetupRequest();
-
+ 
     void SetupChangeMessageVisibility(TChangeMessageVisibilityRequest* const req);
     void SetupChangeMessageVisibilityBatch(TChangeMessageVisibilityBatchRequest* const req);
     void SetupCreateQueue(TCreateQueueRequest* const req);
@@ -94,7 +94,7 @@ private:
     void SetupSendMessageBatch(TSendMessageBatchRequest* const req);
     void SetupPurgeQueue(TPurgeQueueRequest* const req);
     void SetupSetQueueAttributes(TSetQueueAttributesRequest* const req);
-
+ 
     void ExtractSourceAddressFromSocket();
 
     void GenerateRequestId(const TString& sourceReqId);
@@ -108,7 +108,7 @@ private:
 private:
     TAsyncHttpServer* const Parent_;
     TIntrusivePtr<THttpUserCounters> UserCounters_;
-
+ 
     TParameters QueryParams_;
     EAction Action_ = EAction::Unknown;
     TString UserName_;
@@ -118,7 +118,7 @@ private:
     TString IamToken_;
     TString FolderId_;
     TString ApiMethod_;
-
+ 
     THolder<TAwsRequestSignV4> AwsSignature_;
 
     TMaybe<TBuffer> InputData;
@@ -134,44 +134,44 @@ private:
     bool IsPrivateRequest_ = false; // Has "/private" path prefix
     TInstant StartTime_ = TInstant::Now();
 };
-
+ 
 class TAsyncHttpServer
     : public THttpServer
     , public THttpServer::ICallBack
 {
     friend THttpRequest;
 
-public:
+public: 
     TAsyncHttpServer(const NKikimrConfig::TSqsConfig& config);
     ~TAsyncHttpServer();
-
+ 
     void Initialize(
             NActors::TActorSystem* as,
             TIntrusivePtr<NMonitoring::TDynamicCounters> sqsCounters,
             TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters,
             ui32 poolId);
-
+ 
     void Start();
 
     NActors::TActorSystem* GetActorSystem() const {
         return ActorSystem_;
     }
 
-private:
+private: 
     // THttpServer::ICallback
-    TClientRequest* CreateClient() override;
+    TClientRequest* CreateClient() override; 
     void OnException() override;
     static THttpServerOptions MakeHttpServerOptions(const NKikimrConfig::TSqsConfig& config);
-
+ 
     void UpdateConnectionsCountCounter();
 
-private:
+private: 
     const NKikimrConfig::TSqsConfig Config;
     NActors::TActorSystem* ActorSystem_ = nullptr;
     TIntrusivePtr<THttpCounters> HttpCounters_; // http subsystem counters
     THolder<TCloudAuthCounters> CloudAuthCounters_; // cloud_auth subsystem counters
     TIntrusivePtr<TUserCounters> AggregatedUserCounters_; // aggregated counters for user in core subsystem
     ui32 PoolId_ = 0;
-};
-
+}; 
+ 
 } // namespace NKikimr::NSQS

@@ -1,16 +1,16 @@
-#pragma once
+#pragma once 
 #include "defs.h"
-
-#include "actor.h"
+ 
+#include "actor.h" 
 #include "cfg.h"
 #include "error.h"
-#include "events.h"
-#include "limits.h"
+#include "events.h" 
+#include "limits.h" 
 #include "log.h"
 #include "proxy_actor.h"
-#include "serviceid.h"
+#include "serviceid.h" 
 #include "schema.h"
-
+ 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/base/quoter.h>
@@ -21,34 +21,34 @@
 #include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/base/security.h>
-
+ 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
-
+ 
 #include <util/folder/path.h>
-#include <util/generic/guid.h>
+#include <util/generic/guid.h> 
 #include <util/generic/is_in.h>
-#include <util/string/ascii.h>
-#include <util/string/join.h>
-
+#include <util/string/ascii.h> 
+#include <util/string/join.h> 
+ 
 namespace NKikimr::NSQS {
-
-template <typename TDerived>
-class TActionActor
+ 
+template <typename TDerived> 
+class TActionActor 
     : public TActorBootstrapped<TDerived>
-{
-public:
+{ 
+public: 
     TActionActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, EAction action, THolder<IReplyCallback> cb)
         : Action_(action)
         , RequestId_(sourceSqsRequest.GetRequestId())
-        , Cb_(std::move(cb))
-        , Shards_(1)
+        , Cb_(std::move(cb)) 
+        , Shards_(1) 
         , SourceSqsRequest_(sourceSqsRequest)
-    {
+    { 
         Y_VERIFY(RequestId_);
         DebugInfo->ActionActors.emplace(RequestId_, this);
-    }
-
+    } 
+ 
     ~TActionActor() {
         DebugInfo->ActionActors.EraseKeyValue(RequestId_, this);
     }
@@ -96,14 +96,14 @@ public:
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueLeader;
         }
         this->Send(MakeSqsServiceID(this->SelfId().NodeId()),
-            MakeHolder<TSqsEvents::TEvGetConfiguration>(
+            MakeHolder<TSqsEvents::TEvGetConfiguration>( 
                 RequestId_,
-                UserName_,
+                UserName_, 
                 GetQueueName(),
                 configurationFlags)
-        );
+        ); 
     }
-
+ 
     void CreateAccountOnTheFly() const {
         // TODO: move to separate actor
         this->Register(
@@ -132,7 +132,7 @@ public:
 
         const auto& cfg = Cfg();
 
-        this->Become(&TActionActor::InitialState);
+        this->Become(&TActionActor::InitialState); 
 
         // Set timeout
         if (cfg.GetRequestTimeoutMs()) {
@@ -150,9 +150,9 @@ public:
         }
 
         DoBootstrap();
-    }
-
-protected:
+    } 
+ 
+protected: 
     template<typename TReq>
     void CopySecurityToken(const TReq& request) {
         SecurityToken_ = ExtractSecurityToken<TReq, TCredentials>(request);
@@ -164,11 +164,11 @@ protected:
     }
 
     virtual void DoAction() = 0;
-
+ 
     virtual TError* MutableErrorDesc() = 0;
 
-    virtual TString DoGetQueueName() const = 0;
-
+    virtual TString DoGetQueueName() const = 0; 
+ 
     virtual bool Validate() {
         if (TDerived::NeedUserSpecified() && !UserName_) {
             MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED, "No account name.");
@@ -176,19 +176,19 @@ protected:
         return DoValidate();
     }
 
-    virtual bool DoValidate() {
-        return true;
-    }
-
+    virtual bool DoValidate() { 
+        return true; 
+    } 
+ 
     virtual bool IsFifoQueue() const {
         Y_VERIFY(IsFifo_);
         return *IsFifo_;
     }
 
-    virtual void DoStart() { }
-
-    virtual void DoFinish() { }
-
+    virtual void DoStart() { } 
+ 
+    virtual void DoFinish() { } 
+ 
     virtual TString DumpState() {
         TStringBuilder ret;
         ret << "SecurityCheckRequestsToWaitFor: " << SecurityCheckRequestsToWaitFor_
@@ -241,23 +241,23 @@ protected:
     }
 
     TString GetQueueName() const {
-        return DoGetQueueName();
-    }
-
+        return DoGetQueueName(); 
+    } 
+ 
     TQueuePath GetQueuePath() const {
         const TString root = Cfg().GetRoot();
         return TQueuePath(root, UserName_, DoGetQueueName());
-    }
-
+    } 
+ 
     TQueuePath GetUserPath() const {
         const TString root = Cfg().GetRoot();
         return TQueuePath(root, UserName_, TString());
-    }
-
+    } 
+ 
     TString MakeQueueUrl(const TString& name) const {
-        return Join("/", RootUrl_, UserName_, name);
-    }
-
+        return Join("/", RootUrl_, UserName_, name); 
+    } 
+ 
     void SendReplyAndDie() {
         RLOG_SQS_TRACE("SendReplyAndDie from action actor " << Response_);
         auto actionCountersCouple = GetActionCounters();
@@ -298,8 +298,8 @@ protected:
 
         Cb_->DoSendReply(Response_);
         PassAway();
-    }
-
+    } 
+ 
     void PassAway() {
         if (TProxyActor::NeedCreateProxyActor(Action_)) {
             if (TString queueName = GetQueueName()) {
@@ -348,7 +348,7 @@ protected:
     void PrintSlowRequestWarning() {
         RLOG_SQS_INFO("Request [" << UserName_ << "] [" << GetQueueName() << "] [" << Action_ << "] is slow. Working duration: " << GetRequestWorkingDuration().MilliSeconds() << "ms");
     }
-
+ 
     TString SanitizeNodePath(const TString& path) const {
         TStringBuf sanitizedPath(path);
         // just skip SQS root path if there's such a prefix
@@ -410,7 +410,7 @@ protected:
             if (UserCounters_->NeedToShowDetailedCounters()) {
                 result.SqsCounters = &UserCounters_->SqsActionCounters[Action_];
             }
-        }
+        } 
         if (IsActionForQueueYMQ(Action_) && QueueCounters_) {
             if (IsActionForMessage(Action_) || QueueCounters_->NeedToShowDetailedCounters()) {
                 result.YmqCounters = &QueueCounters_->YmqActionCounters[Action_];
@@ -421,8 +421,8 @@ protected:
             }
         }
         return result;
-    }
-
+    } 
+ 
     void RequestSchemeCache(const TString& path) {
         auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
@@ -434,15 +434,15 @@ protected:
         this->Send(SchemeCache_, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
     }
 
-private:
+private: 
     STATEFN(InitialState) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TSqsEvents::TEvConfiguration, HandleConfiguration);
             hFunc(TSqsEvents::TEvUserCreated, HandleAccountCreated);
             hFunc(TEvWakeup, HandleWakeup);
-        }
-    }
-
+        } 
+    } 
+ 
     STATEFN(WaitAuthCheckMessages) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
@@ -501,7 +501,7 @@ private:
         RootUrl_  = std::move(ev->Get()->RootUrl);
         UserExists_ = ev->Get()->UserExists;
         QueueExists_ = ev->Get()->QueueExists;
-        Shards_   = ev->Get()->Shards;
+        Shards_   = ev->Get()->Shards; 
         IsFifo_ = ev->Get()->Fifo;
         QueueAttributes_ = std::move(ev->Get()->QueueAttributes);
         SchemeCache_ = ev->Get()->SchemeCache;
@@ -510,7 +510,7 @@ private:
         UserCounters_ = std::move(ev->Get()->UserCounters);
         QueueLeader_ = ev->Get()->QueueLeader;
         QuoterResources_ = std::move(ev->Get()->QuoterResources);
-
+ 
         Y_VERIFY(SchemeCache_);
 
         RLOG_SQS_TRACE("Got configuration. Root url: " << RootUrl_
@@ -565,7 +565,7 @@ private:
 
             RequestSchemeCache(GetActionACLSourcePath()); // this also checks that requested queue (if any) does exist
             RequestTicketParser();
-        } else {
+        } else { 
             if (!isACLProtectedAccount) { // !IsCloud && !SecurityToken_ && account is in AccountsWithoutMandatoryAuth setting.
                 INC_COUNTER(UserCounters_, UnauthenticatedAccess); // if !ForceAccessControl, this counter is not initialized.
             }
@@ -592,7 +592,7 @@ private:
 
             SendReplyAndDie();
             return;
-        }
+        } 
 
         SecurityObject_ = navigate->ResultSet.front().SecurityObject;
 
@@ -612,8 +612,8 @@ private:
         }
 
         OnAuthCheckMessage();
-    }
-
+    } 
+ 
     void OnAuthCheckMessage() {
         --SecurityCheckRequestsToWaitFor_;
 
@@ -735,12 +735,12 @@ private:
         }
     }
 
-protected:
+protected: 
     static constexpr ui64 REQUEST_TIMEOUT_WAKEUP_TAG = 100;
 
     const EAction Action_;
-    const TString RequestId_;
-    THolder<IReplyCallback> Cb_;
+    const TString RequestId_; 
+    THolder<IReplyCallback> Cb_; 
     TString  RootUrl_;
     TString  UserName_;
     TString  SecurityToken_;
@@ -760,7 +760,7 @@ protected:
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TQueueCounters> QueueCounters_;
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
-    NKikimrClient::TSqsResponse Response_;
+    NKikimrClient::TSqsResponse Response_; 
     TActorId SchemeCache_;
     TActorId QueueLeader_;
     bool StartRequestWasCalled_ = false;
@@ -771,6 +771,6 @@ protected:
     bool NeedReportYmqActionInflyCounter = false;
     TSchedulerCookieHolder TimeoutCookie_ = ISchedulerCookie::Make2Way();
     NKikimrClient::TSqsRequest SourceSqsRequest_;
-};
-
+}; 
+ 
 } // namespace NKikimr::NSQS

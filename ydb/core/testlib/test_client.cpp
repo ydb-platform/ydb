@@ -247,14 +247,14 @@ namespace Tests {
     void TServer::EnableGRpc(const NGrpc::TServerOptions& options) {
         GRpcServer.reset(new NGrpc::TGRpcServer(options));
         auto grpcService = new NGRpcProxy::TGRpcService();
-
-        auto system(Runtime->GetAnyNodeActorSystem());
+ 
+        auto system(Runtime->GetAnyNodeActorSystem()); 
         auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(Settings->AppConfig);
         auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled);
         system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
-
+ 
         GRpcServerRootCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto& counters = GRpcServerRootCounters;
 
@@ -280,11 +280,11 @@ namespace Tests {
         }
 
         auto future = grpcService->Prepare(
-            system,
+            system, 
             NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
             NMsgBusProxy::CreateMsgBusProxyId(),
             counters
-        );
+        ); 
         auto startCb = [grpcService] (NThreading::TFuture<void> result) {
             if (result.HasException()) {
                 try {
@@ -331,8 +331,8 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcYdbLogStoreService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxyId));
         GRpcServer->Start();
-    }
-
+    } 
+ 
     void TServer::EnableGRpc(ui16 port) {
         EnableGRpc(NGrpc::TServerOptions()
             .SetHost("localhost")

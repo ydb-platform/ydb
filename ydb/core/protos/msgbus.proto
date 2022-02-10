@@ -588,26 +588,26 @@ message TCmsResponse {
     }
     optional NKikimrCms.TStatus Status = 100;
 }
-
-message TSqsRequest {
-    oneof Request {
-        NKikimr.NSQS.TChangeMessageVisibilityRequest ChangeMessageVisibility = 1;
-        NKikimr.NSQS.TCreateQueueRequest CreateQueue = 2;
-        NKikimr.NSQS.TGetQueueAttributesRequest GetQueueAttributes = 3;
-        NKikimr.NSQS.TDeleteMessageRequest DeleteMessage = 4;
-        NKikimr.NSQS.TDeleteQueueRequest DeleteQueue = 5;
-        NKikimr.NSQS.TListQueuesRequest ListQueues = 6;
-        NKikimr.NSQS.TPurgeQueueRequest PurgeQueue = 7;
-        NKikimr.NSQS.TReceiveMessageRequest ReceiveMessage = 8;
-        NKikimr.NSQS.TSendMessageRequest SendMessage = 9;
-        NKikimr.NSQS.TSetQueueAttributesRequest SetQueueAttributes = 10;
-        NKikimr.NSQS.TGetQueueUrlRequest GetQueueUrl = 11;
-        NKikimr.NSQS.TChangeMessageVisibilityBatchRequest ChangeMessageVisibilityBatch = 12;
-        NKikimr.NSQS.TDeleteMessageBatchRequest DeleteMessageBatch = 13;
-        NKikimr.NSQS.TSendMessageBatchRequest SendMessageBatch = 14;
-        NKikimr.NSQS.TCreateUserRequest CreateUser = 15;
-        NKikimr.NSQS.TDeleteUserRequest DeleteUser = 16;
-        NKikimr.NSQS.TListUsersRequest ListUsers = 17;
+ 
+message TSqsRequest { 
+    oneof Request { 
+        NKikimr.NSQS.TChangeMessageVisibilityRequest ChangeMessageVisibility = 1; 
+        NKikimr.NSQS.TCreateQueueRequest CreateQueue = 2; 
+        NKikimr.NSQS.TGetQueueAttributesRequest GetQueueAttributes = 3; 
+        NKikimr.NSQS.TDeleteMessageRequest DeleteMessage = 4; 
+        NKikimr.NSQS.TDeleteQueueRequest DeleteQueue = 5; 
+        NKikimr.NSQS.TListQueuesRequest ListQueues = 6; 
+        NKikimr.NSQS.TPurgeQueueRequest PurgeQueue = 7; 
+        NKikimr.NSQS.TReceiveMessageRequest ReceiveMessage = 8; 
+        NKikimr.NSQS.TSendMessageRequest SendMessage = 9; 
+        NKikimr.NSQS.TSetQueueAttributesRequest SetQueueAttributes = 10; 
+        NKikimr.NSQS.TGetQueueUrlRequest GetQueueUrl = 11; 
+        NKikimr.NSQS.TChangeMessageVisibilityBatchRequest ChangeMessageVisibilityBatch = 12; 
+        NKikimr.NSQS.TDeleteMessageBatchRequest DeleteMessageBatch = 13; 
+        NKikimr.NSQS.TSendMessageBatchRequest SendMessageBatch = 14; 
+        NKikimr.NSQS.TCreateUserRequest CreateUser = 15; 
+        NKikimr.NSQS.TDeleteUserRequest DeleteUser = 16; 
+        NKikimr.NSQS.TListUsersRequest ListUsers = 17; 
         NKikimr.NSQS.TModifyPermissionsRequest ModifyPermissions = 18;
         NKikimr.NSQS.TListPermissionsRequest ListPermissions = 19;
         NKikimr.NSQS.TDeleteQueueBatchRequest DeleteQueueBatch = 20;
@@ -615,30 +615,30 @@ message TSqsRequest {
         NKikimr.NSQS.TGetQueueAttributesBatchRequest GetQueueAttributesBatch = 22;
         NKikimr.NSQS.TListDeadLetterSourceQueuesRequest ListDeadLetterSourceQueues = 23;
         NKikimr.NSQS.TCountQueuesRequest CountQueues = 24;
-    }
+    } 
     optional string RequestId = 30;
     optional bool RequestRateLimit = 31 [default = true];
-}
-
-message TSqsResponse {
-    oneof Response {
-        NKikimr.NSQS.TChangeMessageVisibilityResponse ChangeMessageVisibility = 1;
-        NKikimr.NSQS.TCreateQueueResponse CreateQueue = 2;
-        NKikimr.NSQS.TGetQueueAttributesResponse GetQueueAttributes = 3;
-        NKikimr.NSQS.TDeleteMessageResponse DeleteMessage = 4;
-        NKikimr.NSQS.TDeleteQueueResponse DeleteQueue = 5;
-        NKikimr.NSQS.TListQueuesResponse ListQueues = 6;
-        NKikimr.NSQS.TPurgeQueueResponse PurgeQueue = 7;
-        NKikimr.NSQS.TReceiveMessageResponse ReceiveMessage = 8;
-        NKikimr.NSQS.TSendMessageResponse SendMessage = 9;
-        NKikimr.NSQS.TSetQueueAttributesResponse SetQueueAttributes = 10;
-        NKikimr.NSQS.TGetQueueUrlResponse GetQueueUrl = 11;
-        NKikimr.NSQS.TChangeMessageVisibilityBatchResponse ChangeMessageVisibilityBatch = 12;
-        NKikimr.NSQS.TDeleteMessageBatchResponse DeleteMessageBatch = 13;
-        NKikimr.NSQS.TSendMessageBatchResponse SendMessageBatch = 14;
-        NKikimr.NSQS.TCreateUserResponse CreateUser = 15;
-        NKikimr.NSQS.TDeleteUserResponse DeleteUser = 16;
-        NKikimr.NSQS.TListUsersResponse ListUsers = 17;
+} 
+ 
+message TSqsResponse { 
+    oneof Response { 
+        NKikimr.NSQS.TChangeMessageVisibilityResponse ChangeMessageVisibility = 1; 
+        NKikimr.NSQS.TCreateQueueResponse CreateQueue = 2; 
+        NKikimr.NSQS.TGetQueueAttributesResponse GetQueueAttributes = 3; 
+        NKikimr.NSQS.TDeleteMessageResponse DeleteMessage = 4; 
+        NKikimr.NSQS.TDeleteQueueResponse DeleteQueue = 5; 
+        NKikimr.NSQS.TListQueuesResponse ListQueues = 6; 
+        NKikimr.NSQS.TPurgeQueueResponse PurgeQueue = 7; 
+        NKikimr.NSQS.TReceiveMessageResponse ReceiveMessage = 8; 
+        NKikimr.NSQS.TSendMessageResponse SendMessage = 9; 
+        NKikimr.NSQS.TSetQueueAttributesResponse SetQueueAttributes = 10; 
+        NKikimr.NSQS.TGetQueueUrlResponse GetQueueUrl = 11; 
+        NKikimr.NSQS.TChangeMessageVisibilityBatchResponse ChangeMessageVisibilityBatch = 12; 
+        NKikimr.NSQS.TDeleteMessageBatchResponse DeleteMessageBatch = 13; 
+        NKikimr.NSQS.TSendMessageBatchResponse SendMessageBatch = 14; 
+        NKikimr.NSQS.TCreateUserResponse CreateUser = 15; 
+        NKikimr.NSQS.TDeleteUserResponse DeleteUser = 16; 
+        NKikimr.NSQS.TListUsersResponse ListUsers = 17; 
         NKikimr.NSQS.TModifyPermissionsResponse ModifyPermissions = 18;
         NKikimr.NSQS.TListPermissionsResponse ListPermissions = 19;
         NKikimr.NSQS.TDeleteQueueBatchResponse DeleteQueueBatch = 20;
@@ -646,12 +646,12 @@ message TSqsResponse {
         NKikimr.NSQS.TGetQueueAttributesBatchResponse GetQueueAttributesBatch = 22;
         NKikimr.NSQS.TListDeadLetterSourceQueuesResponse ListDeadLetterSourceQueues = 23;
         NKikimr.NSQS.TCountQueuesResponse CountQueues = 24;
-    }
+    } 
     optional string RequestId = 30;
     optional string FolderId = 31;
     optional string ResourceId = 32;
     optional bool IsFifo = 33;
-}
+} 
 
 message TS3ListingRequest {
     optional string SecurityToken = 1;

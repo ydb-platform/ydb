@@ -1,22 +1,22 @@
-#pragma once
-
+#pragma once 
+ 
 #include "grpc_pq_actor.h"
 #include "persqueue.h"
-
+ 
 #include <ydb/core/client/server/grpc_base.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
-
-#include <util/generic/hash.h>
+ 
+#include <util/generic/hash.h> 
 #include <util/generic/maybe.h>
-#include <util/system/mutex.h>
-
-namespace NKikimr {
-namespace NGRpcProxy {
+#include <util/system/mutex.h> 
+ 
+namespace NKikimr { 
+namespace NGRpcProxy { 
 namespace V1 {
-
+ 
 inline TActorId GetPQWriteServiceActorID() {
     return TActorId(0, "PQWriteSvc");
 }
@@ -25,21 +25,21 @@ IActor* CreatePQWriteService(const NActors::TActorId& schemeCache, const NActors
                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
 
 class TPQWriteService : public NActors::TActorBootstrapped<TPQWriteService> {
-public:
+public: 
     TPQWriteService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
                     TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
-
+ 
     ~TPQWriteService()
     {}
 
     void Bootstrap(const TActorContext& ctx);
 
-private:
-    ui64 NextCookie();
-
+private: 
+    ui64 NextCookie(); 
+ 
     bool TooMuchSessions();
     TString AvailableLocalCluster(const TActorContext& ctx) const;
-
+ 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKikimr::NGRpcService::TEvStreamPQWriteRequest, Handle);
@@ -51,7 +51,7 @@ private:
         }
     }
 
-private:
+private: 
     void Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx);
     void Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx);
@@ -61,9 +61,9 @@ private:
 
     NActors::TActorId SchemeCache;
     NActors::TActorId NewSchemeCache;
-
+ 
     TAtomic LastCookie = 0;
-
+ 
     THashMap<ui64, TActorId> Sessions;
     // Created at by session cookie map by remote preferred cluster name
     THashMap<TString, THashMap<ui64, TInstant>> SessionsByRemotePreferredCluster;
@@ -84,9 +84,9 @@ private:
     bool HaveClusters;
     NPersQueue::TConverterFactoryPtr ConverterFactory;
     std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
-};
+}; 
+ 
 
-
-}
-}
+} 
+} 
 }

@@ -1,38 +1,38 @@
-#include "action.h"
+#include "action.h" 
 #include "error.h"
 #include "log.h"
 #include "params.h"
-#include "serviceid.h"
+#include "serviceid.h" 
 #include "executor.h"
-
+ 
 #include <ydb/public/lib/value/value.h>
-
-#include <util/string/ascii.h>
-#include <util/string/cast.h>
-#include <util/string/join.h>
-
-using NKikimr::NClient::TValue;
-
+ 
+#include <util/string/ascii.h> 
+#include <util/string/cast.h> 
+#include <util/string/join.h> 
+ 
+using NKikimr::NClient::TValue; 
+ 
 namespace NKikimr::NSQS {
-
-class TListQueuesActor
-    : public TActionActor<TListQueuesActor>
-{
-public:
+ 
+class TListQueuesActor 
+    : public TActionActor<TListQueuesActor> 
+{ 
+public: 
     static constexpr bool NeedExistingQueue() {
         return false;
     }
 
     TListQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ListQueues, std::move(cb))
-    {
+    { 
         CopyAccountName(Request());
-        Response_.MutableListQueues()->SetRequestId(RequestId_);
+        Response_.MutableListQueues()->SetRequestId(RequestId_); 
 
         CopySecurityToken(Request());
-    }
-
-private:
+    } 
+ 
+private: 
     TError* MutableErrorDesc() override {
         return Response_.MutableListQueues()->MutableError();
     }
@@ -47,8 +47,8 @@ private:
                 .Utf8("FOLDERID", FolderId_)
                 .Utf8("USER_NAME", UserName_)
             .ParentBuilder().Start();
-    }
-
+    } 
+ 
     void DoAction() override {
         Become(&TThis::StateFunc);
 
@@ -63,56 +63,56 @@ private:
         DiscoverQueues();
     }
 
-    TString DoGetQueueName() const override {
-        return TString();
-    }
-
-private:
+    TString DoGetQueueName() const override { 
+        return TString(); 
+    } 
+ 
+private: 
     STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TEvWakeup,      HandleWakeup);
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         auto* result = Response_.MutableListQueues();
-
+ 
         if (ev->Get()->IsOk()) {
-            const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
-            const TValue queues(val["queues"]);
+            const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse())); 
+            const TValue queues(val["queues"]); 
             const TString prefix = Request().GetQueueNamePrefix();
-
-            for (size_t i = 0; i < queues.Size(); ++i) {
-                const TString name((TString(queues[i]["QueueName"])));
+ 
+            for (size_t i = 0; i < queues.Size(); ++i) { 
+                const TString name((TString(queues[i]["QueueName"]))); 
                 const TString customQueueName((TString(queues[i]["CustomQueueName"])));
-
+ 
                 if (prefix.empty() || AsciiHasPrefix((IsCloud() ? customQueueName : name), prefix)) {
                     auto* item = result->AddQueues();
-                    item->SetQueueName(name);
+                    item->SetQueueName(name); 
                     if (IsCloud()) {
                         item->SetQueueUrl(MakeQueueUrl(TString::Join(name, '/', customQueueName)));
                     } else {
                         item->SetQueueUrl(MakeQueueUrl(name));
                     }
-                }
-            }
-        } else {
+                } 
+            } 
+        } else { 
             RLOG_SQS_WARN("Request failed: " << record);
             MakeError(result, NErrors::INTERNAL_FAILURE);
-        }
-
+        } 
+ 
         SendReplyAndDie();
-    }
-
+    } 
+ 
     const TListQueuesRequest& Request() const {
         return SourceSqsRequest_.GetListQueues();
     }
-};
-
+}; 
+ 
 IActor* CreateListQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
     return new TListQueuesActor(sourceSqsRequest, std::move(cb));
-}
-
+} 
+ 
 } // namespace NKikimr::NSQS

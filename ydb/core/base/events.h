@@ -69,7 +69,7 @@ struct TKikimrEvents : TEvents {
         ES_BLACKBOX_VALIDATOR,
         ES_SELF_PING,
         ES_PIPECACHE,
-        ES_PQ_PROXY,
+        ES_PQ_PROXY, 
         ES_CMS,
         ES_NODE_BROKER,
         ES_TX_ALLOCATOR, //4152
@@ -82,7 +82,7 @@ struct TKikimrEvents : TEvents {
         ES_VIEWER,
         ES_SUB_DOMAIN,
         ES_GRPC_PROXY_STATUS, //OLD
-        ES_SQS,
+        ES_SQS, 
         ES_BLOCKSTORE, //4162
         ES_RTMR_ICBUS,
         ES_TENANT_POOL,

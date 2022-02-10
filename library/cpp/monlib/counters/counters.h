@@ -80,7 +80,7 @@ namespace NMonitoring {
         TValueBase Sub(const TValue val) {
             return AtomicAdd(Value, -val);
         }
-
+ 
         // operator overloads convinient
         void operator++() {
             Inc();
@@ -107,7 +107,7 @@ namespace NMonitoring {
             AtomicSwap(&Value, rhs);
             return rhs;
         }
-
+ 
         bool operator!() const {
             return AtomicGet(Value) == 0;
         }

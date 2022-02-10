@@ -11,7 +11,7 @@ PEERDIR(
 )
 
 SRCS(
-    location_ut.cpp
+    location_ut.cpp 
     uri-ru_ut.cpp
     uri_ut.cpp
 )

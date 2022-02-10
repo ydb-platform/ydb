@@ -82,7 +82,7 @@ void THttpHeaderParserTestSuite::TestRequestHeader() {
     UNIT_ASSERT_EQUAL(result, 2);
     UNIT_ASSERT_EQUAL(httpRequestHeader.http_method, HTTP_METHOD_GET);
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.host, "www.google.ru:8080"), 0);
-    UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri, "/search?q=hi");
+    UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri, "/search?q=hi"); 
     UNIT_ASSERT_EQUAL(httpRequestHeader.GetUrl(), "http://www.google.ru:8080/search?q=hi");
     UNIT_ASSERT_EQUAL(httpHeaderParser->lastchar - request + 1,
                       (i32)strlen(request));
@@ -123,7 +123,7 @@ void THttpHeaderParserTestSuite::TestSplitRequestHeader() {
 
             UNIT_ASSERT_EQUAL(httpRequestHeader.http_method, HTTP_METHOD_GET);
             UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.host, "www.google.ru:8080"), 0);
-            UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri, "/search?q=hi");
+            UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri, "/search?q=hi"); 
         }
     }
 
@@ -143,7 +143,7 @@ void THttpHeaderParserTestSuite::TestTrailingData() {
     UNIT_ASSERT_EQUAL(result, 2);
     UNIT_ASSERT_EQUAL(httpRequestHeader.http_method, HTTP_METHOD_GET);
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.host, "www.google.ru:8080"), 0);
-    UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri, "/search?q=hi");
+    UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri, "/search?q=hi"); 
     UNIT_ASSERT_EQUAL(TString(httpHeaderParser->lastchar + 1), "high.ru");
     UNIT_ASSERT_EQUAL(httpRequestHeader.http_minor, 1);
     UNIT_ASSERT_EQUAL(httpRequestHeader.transfer_chunked, -1);
@@ -178,10 +178,10 @@ void THttpHeaderParserTestSuite::TestProxyRequestHeader() {
     UNIT_ASSERT_EQUAL(httpRequestHeader.max_age, 100);
     UNIT_ASSERT_VALUES_EQUAL(httpRequestHeader.if_modified_since,
                              TInstant::ParseIso8601Deprecated("1994-10-29 19:43:31Z").TimeT());
-    UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri,
+    UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri, 
                       "http://www.google.ru:8080/search?q=hi");
     UNIT_ASSERT(httpRequestHeader.GetUrl() ==
-                "http://www.google.ru:8080/search?q=hi");
+                "http://www.google.ru:8080/search?q=hi"); 
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.host, ""), 0);
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.from, "webadmin@yandex.ru"), 0);
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.user_agent,
@@ -420,7 +420,7 @@ void THttpHeaderParserTestSuite::TestRelCanonical() {
         "Link: <http://yandex.ru>; rel = \"canonical\"\r\n\r\n";
     i32 result = httpHeaderParser->Execute(headers, strlen(headers));
     UNIT_ASSERT_EQUAL(result, 2);
-    UNIT_ASSERT_EQUAL(httpHeader.rel_canonical, "http://yandex.ru");
+    UNIT_ASSERT_EQUAL(httpHeader.rel_canonical, "http://yandex.ru"); 
     TestFinish();
 }
 

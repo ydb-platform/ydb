@@ -78,7 +78,7 @@ bool TBusMessageQueue::IsRunning() {
     return AtomicGet(Running);
 }
 
-TBusMessageQueueStatus TBusMessageQueue::GetStatusRecordInternal() const {
+TBusMessageQueueStatus TBusMessageQueue::GetStatusRecordInternal() const { 
     TBusMessageQueueStatus r;
     r.ExecutorStatus = WorkQueue->GetStatusRecordInternal();
     r.Config = Config;

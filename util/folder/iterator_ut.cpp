@@ -22,7 +22,7 @@ class TDirIteratorTest: public TTestBase {
     UNIT_TEST(TestIt)
     UNIT_TEST(TestError)
     UNIT_TEST(TestLocal)
-    UNIT_TEST(TestSkip)
+    UNIT_TEST(TestSkip) 
     UNIT_TEST(TestSort)
     UNIT_TEST_SUITE_END();
 
@@ -134,45 +134,45 @@ private:
         }
     }
 
-    inline void TestSkip() {
-        TDirHier hier;
-
-        const TString dir = "tmpdir";
-        const TDirHier::TPath path = {dir, 1};
-
-        hier.Add(path);
-        hier.AddDir(dir + LOCSLASH_C + "dir1");
-        hier.AddDir(dir + LOCSLASH_C + "dir1" + LOCSLASH_C + "dir2");
-        //
-        // Without skip
-        //
-        {
-            TDirIterator di(dir);
-
-            UNIT_ASSERT(di.Next());
-            UNIT_ASSERT_EQUAL(TStringBuf(di.Next()->fts_name), "dir1");
-            UNIT_ASSERT_EQUAL(TStringBuf(di.Next()->fts_name), "dir2");
-            UNIT_ASSERT_EQUAL(TStringBuf(di.Next()->fts_name), "dir2");
-            UNIT_ASSERT_EQUAL(TStringBuf(di.Next()->fts_name), "dir1");
-            UNIT_ASSERT(di.Next());
-            UNIT_ASSERT_EQUAL(di.Next(), nullptr);
-        }
-        //
-        // With skip
-        //
-        {
-            TDirIterator di(dir);
-
-            UNIT_ASSERT(di.Next());
-            auto ent = di.Next();
-            UNIT_ASSERT_EQUAL(TStringBuf(ent->fts_name), "dir1");
-            di.Skip(ent);
-            UNIT_ASSERT_EQUAL(TStringBuf(di.Next()->fts_name), "dir1");
-            UNIT_ASSERT(di.Next());
-            UNIT_ASSERT_EQUAL(di.Next(), nullptr);
-        }
-    }
-
+    inline void TestSkip() { 
+        TDirHier hier; 
+ 
+        const TString dir = "tmpdir"; 
+        const TDirHier::TPath path = {dir, 1}; 
+ 
+        hier.Add(path); 
+        hier.AddDir(dir + LOCSLASH_C + "dir1"); 
+        hier.AddDir(dir + LOCSLASH_C + "dir1" + LOCSLASH_C + "dir2"); 
+        // 
+        // Without skip 
+        // 
+        { 
+            TDirIterator di(dir); 
+ 
+            UNIT_ASSERT(di.Next()); 
+            UNIT_ASSERT_EQUAL(TStringBuf(di.Next()->fts_name), "dir1"); 
+            UNIT_ASSERT_EQUAL(TStringBuf(di.Next()->fts_name), "dir2"); 
+            UNIT_ASSERT_EQUAL(TStringBuf(di.Next()->fts_name), "dir2"); 
+            UNIT_ASSERT_EQUAL(TStringBuf(di.Next()->fts_name), "dir1"); 
+            UNIT_ASSERT(di.Next()); 
+            UNIT_ASSERT_EQUAL(di.Next(), nullptr); 
+        } 
+        // 
+        // With skip 
+        // 
+        { 
+            TDirIterator di(dir); 
+ 
+            UNIT_ASSERT(di.Next()); 
+            auto ent = di.Next(); 
+            UNIT_ASSERT_EQUAL(TStringBuf(ent->fts_name), "dir1"); 
+            di.Skip(ent); 
+            UNIT_ASSERT_EQUAL(TStringBuf(di.Next()->fts_name), "dir1"); 
+            UNIT_ASSERT(di.Next()); 
+            UNIT_ASSERT_EQUAL(di.Next(), nullptr); 
+        } 
+    } 
+ 
     inline void TestSort() {
         TDirHier dh;
         const TString dir("tmpdir");

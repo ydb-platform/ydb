@@ -1,4 +1,4 @@
-#include "mime.h"
+#include "mime.h" 
 
 #include <util/system/defaults.h>
 #include <util/generic/hash.h>
@@ -59,7 +59,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_RTF, "text/rtf\0application/rtf\0", "rtf\0"},
     {MIME_DOC, "application/msword\0", "doc\0"},
     {MIME_MPEG, "audio/mpeg\0", "mp3\0mpa\0m2a\0mp2\0mpg\0mpga\0"},
-    {MIME_XML, "text/xml\0application/xml\0", "xml\0"},
+    {MIME_XML, "text/xml\0application/xml\0", "xml\0"}, 
     {MIME_WML, "text/vnd.wap.wml\0", "wml\0"},
     {MIME_SWF, "application/x-shockwave-flash\0", "swf\0"},
     {MIME_XLS, "application/vnd.ms-excel\0", "xls\0"},
@@ -85,7 +85,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_EPUB, "application/epub+zip\0", "epub\0"},
     {MIME_TEX, "application/x-tex\0application/x-latex\0text/x-tex\0", "tex\0"},
     {MIME_JSON, "application/json\0", "json\0"},
-    {MIME_APK, "application/vnd.android.package-archive\0", "apk\0"},
+    {MIME_APK, "application/vnd.android.package-archive\0", "apk\0"}, 
     {MIME_CSS, "text/css\0", "css\0"},
     {MIME_IMAGE_WEBP, "image/webp\0", "webp\0"},
     {MIME_DJVU, "image/vnd.djvu\0image/x-djvu\0", "djvu\0djv\0"},
@@ -235,8 +235,8 @@ const char* MimeNames[MIME_MAX] = {
     "js",      // MIME_JAVASCRIPT      // 29
     "epub",    // MIME_EPUB            // 30
     "tex",     // MIME_TEX             // 31
-    "json",    // MIME_JSON            // 32
-    "apk",     // MIME_APK             // 33
+    "json",    // MIME_JSON            // 32 
+    "apk",     // MIME_APK             // 33 
     "css",     // MIME_CSS             // 34
     "webp",    // MIME_IMAGE_WEBP      // 35
     "djvu",    // MIME_DJVU            // 36

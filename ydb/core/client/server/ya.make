@@ -46,7 +46,7 @@ SRCS(
     msgbus_server_s3_listing.cpp
     msgbus_server_scheme_initroot.cpp
     msgbus_server_scheme_request.cpp
-    msgbus_server_sqs.cpp
+    msgbus_server_sqs.cpp 
     msgbus_server_tablet_counters.cpp
     msgbus_server_tablet_kill.cpp
     msgbus_server_tablet_state.cpp
@@ -58,7 +58,7 @@ SRCS(
     msgbus_server_whoami.cpp
     msgbus_servicereq.h
     msgbus_tabletreq.h
-    grpc_server.cpp
+    grpc_server.cpp 
     grpc_server.h
     grpc_proxy_status.h
     grpc_proxy_status.cpp

@@ -275,8 +275,8 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusCmsRequest, NMsgBusProxy::TBusCmsResponse>(&NGRpcProxy::TGRpcClient::CmsRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CHOOSE_PROXY:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusChooseProxy>(&NGRpcProxy::TGRpcClient::ChooseProxy, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusSqsRequest, NMsgBusProxy::TBusSqsResponse>(&NGRpcProxy::TGRpcClient::SqsRequest, promise, request);
+        case NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST: 
+            return ExecuteGRpcRequest<NMsgBusProxy::TBusSqsRequest, NMsgBusProxy::TBusSqsResponse>(&NGRpcProxy::TGRpcClient::SqsRequest, promise, request); 
         case NMsgBusProxy::MTYPE_CLIENT_S3_LISTING_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusS3ListingRequest, NMsgBusProxy::TBusS3ListingResponse>(&NGRpcProxy::TGRpcClient::S3Listing, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_INTERCONNECT_DEBUG:
@@ -494,7 +494,7 @@ NThreading::TFuture<TPrepareResult> TKikimr::PrepareQuery(const TTextQuery& quer
     mkqlTx->SetMode(NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE);
     mkqlTx->MutableProgram()->SetText(query.TextProgram);
     auto future = ExecuteRequest(request.Release());
-    return future.Apply([&query](const NThreading::TFuture<TResult>& result) -> TPrepareResult {
+    return future.Apply([&query](const NThreading::TFuture<TResult>& result) -> TPrepareResult { 
         return TPrepareResult(result.GetValue(TDuration::Max()), query);
     });
 }

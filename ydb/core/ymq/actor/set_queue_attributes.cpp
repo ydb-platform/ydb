@@ -1,56 +1,56 @@
-#include "action.h"
+#include "action.h" 
 #include "error.h"
 #include "executor.h"
 #include "log.h"
-#include "params.h"
-#include "serviceid.h"
-
+#include "params.h" 
+#include "serviceid.h" 
+ 
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/dlq_helpers.h>
 #include <ydb/core/ymq/base/queue_attributes.h>
 #include <ydb/public/lib/value/value.h>
-
+ 
 #include <library/cpp/scheme/scheme.h>
 
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <util/generic/utility.h>
-#include <util/string/cast.h>
-
-using NKikimr::NClient::TValue;
-
+#include <util/string/cast.h> 
+ 
+using NKikimr::NClient::TValue; 
+ 
 namespace NKikimr::NSQS {
-
-class TSetQueueAttributesActor
-    : public TActionActor<TSetQueueAttributesActor>
-{
-public:
+ 
+class TSetQueueAttributesActor 
+    : public TActionActor<TSetQueueAttributesActor> 
+{ 
+public: 
     TSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::SetQueueAttributes, std::move(cb))
-    {
+    { 
         CopyAccountName(Request());
-        Response_.MutableSetQueueAttributes()->SetRequestId(RequestId_);
-
+        Response_.MutableSetQueueAttributes()->SetRequestId(RequestId_); 
+ 
         for (const auto& attr : Request().attributes()) {
-            Attributes_[attr.GetName()] = attr.GetValue();
-        }
+            Attributes_[attr.GetName()] = attr.GetValue(); 
+        } 
 
         CopySecurityToken(Request());
-    }
-
-private:
-    static TMaybe<ui64> ToMilliSeconds(const TMaybe<ui64>& value) {
-        if (value) {
-            return TDuration::Seconds(*value).MilliSeconds();
-        }
-        return Nothing();
-    }
-
-    bool DoValidate() override {
-        if (!GetQueueName()) {
+    } 
+ 
+private: 
+    static TMaybe<ui64> ToMilliSeconds(const TMaybe<ui64>& value) { 
+        if (value) { 
+            return TDuration::Seconds(*value).MilliSeconds(); 
+        } 
+        return Nothing(); 
+    } 
+ 
+    bool DoValidate() override { 
+        if (!GetQueueName()) { 
             MakeError(Response_.MutableSetQueueAttributes(), NErrors::MISSING_PARAMETER, "No QueueName parameter.");
-            return false;
-        }
-
+            return false; 
+        } 
+ 
         const bool clampValues = !Cfg().GetEnableQueueAttributesValidation();
         ValidatedAttributes_ = TQueueAttributes::FromAttributesAndConfig(Attributes_, Cfg(), IsFifoQueue(), clampValues);
         if (!ValidatedAttributes_.Validate()) {
@@ -58,9 +58,9 @@ private:
             return false;
         }
 
-        return true;
-    }
-
+        return true; 
+    } 
+ 
     TError* MutableErrorDesc() override {
         return Response_.MutableSetQueueAttributes()->MutableError();
     }
@@ -74,7 +74,7 @@ private:
             .QueryId(SET_QUEUE_ATTRIBUTES_ID)
             .Counters(QueueCounters_)
             .RetryOnTimeout();
-
+ 
         builder.Params().OptionalUint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount);
         builder.Params().OptionalUtf8("DLQ_TARGET_ARN", ValidatedAttributes_.RedrivePolicy.TargetArn);
         builder.Params().OptionalUtf8("DLQ_TARGET_NAME", ValidatedAttributes_.RedrivePolicy.TargetQueueName);
@@ -84,7 +84,7 @@ private:
         builder.Params().OptionalUint64("RETENTION", ToMilliSeconds(ValidatedAttributes_.MessageRetentionPeriod));
         builder.Params().OptionalUint64("WAIT", ToMilliSeconds(ValidatedAttributes_.ReceiveMessageWaitTimeSeconds));
         builder.Params().OptionalUint64("MAX_MESSAGE_SIZE", ValidatedAttributes_.MaximumMessageSize);
-
+ 
         if (IsFifoQueue()) {
             builder.Params().OptionalBool("CONTENT_BASED_DEDUPLICATION", ValidatedAttributes_.ContentBasedDeduplication);
         }
@@ -92,8 +92,8 @@ private:
         builder.Params().Utf8("USER_NAME", UserName_);
 
         builder.Start();
-    }
-
+    } 
+ 
     void DoAction() override {
         Become(&TThis::StateFunc);
 
@@ -108,18 +108,18 @@ private:
         }
     }
 
-    TString DoGetQueueName() const override {
+    TString DoGetQueueName() const override { 
         return Request().GetQueueName();
-    }
-
+    } 
+ 
     STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TEvWakeup,      HandleWakeup);
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
             hFunc(TSqsEvents::TEvQueueId,  HandleQueueId);
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev) {
         if (ev->Get()->Failed) {
             RLOG_SQS_WARN("Get queue id failed");
@@ -140,31 +140,31 @@ private:
         const auto& record = ev->Get()->Record;
         const ui32 status = record.GetStatus();
         auto* result = Response_.MutableSetQueueAttributes();
-
-        if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-            // OK
+ 
+        if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) { 
+            // OK 
             RLOG_SQS_DEBUG("Sending clear attributes cache event for queue [" << UserName_ << "/" << GetQueueName() << "]");
             Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
-        } else {
+        } else { 
             RLOG_SQS_WARN("Request failed: " << record);
             MakeError(result, NErrors::INTERNAL_FAILURE);
-        }
-
+        } 
+ 
         SendReplyAndDie();
-    }
-
+    } 
+ 
     const TSetQueueAttributesRequest& Request() const {
         return SourceSqsRequest_.GetSetQueueAttributes();
     }
 
-private:
-    THashMap<TString, TString> Attributes_;
+private: 
+    THashMap<TString, TString> Attributes_; 
 
     TQueueAttributes ValidatedAttributes_;
-};
-
+}; 
+ 
 IActor* CreateSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
     return new TSetQueueAttributesActor(sourceSqsRequest, std::move(cb));
-}
-
+} 
+ 
 } // namespace NKikimr::NSQS

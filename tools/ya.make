@@ -90,7 +90,7 @@ RECURSE(
     print_ranking_features
     printcorpus
     printdocstat
-    printdom
+    printdom 
     printkeys
     printlinks
     printphones

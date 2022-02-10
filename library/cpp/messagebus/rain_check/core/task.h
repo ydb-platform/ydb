@@ -178,7 +178,7 @@ namespace NRainCheck {
         }
     };
 
-    // Check that current method executed inside some task.
-    bool AreWeInsideTask();
-
+    // Check that current method executed inside some task. 
+    bool AreWeInsideTask(); 
+ 
 }

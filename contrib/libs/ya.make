@@ -33,7 +33,7 @@ RECURSE(
     chromaprint
     clang12
     clang12-rt
-    clapack
+    clapack 
     cld2
     cnpy
     cookiemy
@@ -44,7 +44,7 @@ RECURSE(
     crcutil
     crfsuite
     croaring
-    ctemplate
+    ctemplate 
     curl
     cxxsupp/libcxx
     cxxsupp/libcxxabi-parts
@@ -62,7 +62,7 @@ RECURSE(
     falconn
     farmhash
     farmhash/ut
-    faster-rnnlm
+    faster-rnnlm 
     fastlz
     fastops
     fcgi
@@ -109,7 +109,7 @@ RECURSE(
     i18n
     i18n/ut
     icu
-    ImageMagick
+    ImageMagick 
     inja
     inja/ut
     intel
@@ -197,7 +197,7 @@ RECURSE(
     libwebp
     libx264
     libx265
-    libxml
+    libxml 
     libxml/dynamic
     libxslt
     libyang
@@ -235,7 +235,7 @@ RECURSE(
     musl
     nanosvg
     nanosvg/ut
-    nayuki_md5
+    nayuki_md5 
     nghttp2
     node-addon-api
     nodejs_12
@@ -271,9 +271,9 @@ RECURSE(
     picohttpparser
     #pire/ut
     pixman
-    poco
+    poco 
     portaudio
-    porto_api
+    porto_api 
     proj
     protobuf
     protobuf/python
@@ -284,7 +284,7 @@ RECURSE(
     pthreadpool
     pugixml
     pybind11
-    pycxx
+    pycxx 
     python
     python/ut
     qhull
@@ -355,7 +355,7 @@ RECURSE(
     woff2
     xdelta3
     xmlsec
-    xpdf-3.04
+    xpdf-3.04 
     xxhash
     xz
     yajl
@@ -365,7 +365,7 @@ RECURSE(
     zlib
     zlib-ng-develop
     zookeeper
-    zstd
+    zstd 
     zstd06
     zzip
 )
@@ -382,7 +382,7 @@ ENDIF()
 IF (OS_DARWIN)
     RECURSE(
         gperftools
-        osxfuse
+        osxfuse 
         macfuse-headers
         uuid
     )
@@ -412,8 +412,8 @@ ENDIF()
 IF (OS_WINDOWS)
     RECURSE(
         pthreads_win32
-        dokany/dokan
-        dokany/dokan_fuse
+        dokany/dokan 
+        dokany/dokan_fuse 
     )
 ELSE()
     RECURSE(

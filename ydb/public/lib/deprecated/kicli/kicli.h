@@ -450,7 +450,7 @@ class TTextQuery : public TQuery {
 public:
     TTextQuery(TTextQuery&&) = default;
     TTextQuery& operator = (TTextQuery&&) = default;
-    TTextQuery(const TTextQuery&) = delete;
+    TTextQuery(const TTextQuery&) = delete; 
     TTextQuery& operator = (const TTextQuery&) = delete;
 
     // prepare query using round-trip to server

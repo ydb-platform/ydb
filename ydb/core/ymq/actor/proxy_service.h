@@ -1,9 +1,9 @@
-#pragma once
+#pragma once 
 #include "defs.h"
 #include "log.h"
-#include "events.h"
+#include "events.h" 
 #include <ydb/core/ymq/base/query_id.h>
-
+ 
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/protos/config.pb.h>
@@ -14,14 +14,14 @@
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/hfunc.h>
-
-#include <util/generic/hash.h>
+ 
+#include <util/generic/hash.h> 
 #include <util/generic/hash_set.h>
-#include <util/generic/queue.h>
-#include <util/generic/vector.h>
-
+#include <util/generic/queue.h> 
+#include <util/generic/vector.h> 
+ 
 namespace NKikimr::NSQS {
-
+ 
 struct TReplierToSenderActorCallback : public IReplyCallback {
     TReplierToSenderActorCallback(TSqsEvents::TEvSqsRequest::TPtr& ev)
         : Request(ev)
@@ -46,7 +46,7 @@ struct TReplierToSenderActorCallback : public IReplyCallback {
 
 class TSqsProxyService
     : public TActorBootstrapped<TSqsProxyService>
-{
+{ 
 public:
     struct TNodeInfo;
     using TNodeInfoRef = TIntrusivePtr<TNodeInfo>;
@@ -54,17 +54,17 @@ public:
     struct TProxyRequestInfo;
     using TProxyRequestInfoRef = TIntrusivePtr<TProxyRequestInfo>;
 
-public:
+public: 
     TSqsProxyService();
     ~TSqsProxyService();
-
+ 
     void Bootstrap();
-
+ 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SQS_PROXY_SERVICE_ACTOR;
     }
 
-private:
+private: 
     void SendProxyRequestToNode(TNodeInfo& nodeInfo, TProxyRequestInfoRef request);
 
     TNodeInfoRef GetNodeInfo(ui32 nodeId);
@@ -72,7 +72,7 @@ private:
     void SendProxyError(TProxyRequestInfoRef request, TSqsEvents::TEvProxySqsResponse::EProxyStatus proxyStatus);
     void SendProxyErrors(TNodeInfo& nodeInfo, TSqsEvents::TEvProxySqsResponse::EProxyStatus proxyStatus);
 
-private:
+private: 
     STATEFN(StateFunc);
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
     void HandleSqsRequest(TSqsEvents::TEvSqsRequest::TPtr& ev); // request from proxy
@@ -83,8 +83,8 @@ private:
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev);
     void HandleDisconnect(ui32 nodeId);
     void HandleGetLeaderNodeForQueueResponse(TSqsEvents::TEvGetLeaderNodeForQueueResponse::TPtr& ev);
-
-private:
+ 
+private: 
     TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCounters_;
     TIntrusivePtr<NMonitoring::TDynamicCounters> YmqPublicCounters_;
 
@@ -92,6 +92,6 @@ private:
     THashMap<ui32, TNodeInfoRef> NodesInfo_;
 
     THashMap<TString, TProxyRequestInfoRef> RequestsToProxy_;
-};
-
+}; 
+ 
 } // namespace NKikimr::NSQS

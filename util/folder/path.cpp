@@ -367,14 +367,14 @@ void TFsPath::MkDir(const int mode) const {
     CheckDefined();
     if (!Exists()) {
         int r = Mkdir(this->c_str(), mode);
-        if (r != 0) {
-            // TODO (stanly) will still fail on Windows because
-            // LastSystemError() returns windows specific ERROR_ALREADY_EXISTS
-            // instead of EEXIST.
-            if (LastSystemError() != EEXIST) {
-                ythrow TIoSystemError() << "could not create directory " << Path_;
-            }
-        }
+        if (r != 0) { 
+            // TODO (stanly) will still fail on Windows because 
+            // LastSystemError() returns windows specific ERROR_ALREADY_EXISTS 
+            // instead of EEXIST. 
+            if (LastSystemError() != EEXIST) { 
+                ythrow TIoSystemError() << "could not create directory " << Path_; 
+            } 
+        } 
     }
 }
 

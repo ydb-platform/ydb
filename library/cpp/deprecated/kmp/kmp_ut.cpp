@@ -27,11 +27,11 @@ public:
     void Test() {
         TVector<int> ans = {0, 2};
         UNIT_ASSERT_EQUAL(FindAll("a", "aba"), ans);
-        ans = {0};
+        ans = {0}; 
         UNIT_ASSERT_EQUAL(FindAll("aba", "aba"), ans);
         ans.clear();
         UNIT_ASSERT_EQUAL(FindAll("abad", "aba"), ans);
-        ans = {0, 2};
+        ans = {0, 2}; 
         UNIT_ASSERT_EQUAL(FindAll("ab", "abab"), ans);
     }
 

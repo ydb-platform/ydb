@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
         TStringStream out;
         TVector<TVector<wchar16>> vec(2);
         vec[0].push_back(0);
-        vec[1] = {wchar16('a')};
+        vec[1] = {wchar16('a')}; 
         out << DbgDump(vec);
         UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "[[w'\\0'], [w'a']]");
     }

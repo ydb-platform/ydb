@@ -70,12 +70,12 @@ public: // TODO: private
     public:
         static constexpr bool IsNoexceptNext = noexcept(std::declval<TSlave>().Next());
 
-        using difference_type = std::ptrdiff_t;
+        using difference_type = std::ptrdiff_t; 
         using pointer = decltype(std::declval<TSlave>().Next());
         using reference = decltype(*std::declval<TSlave>().Next());
         using value_type = std::remove_cv_t<std::remove_reference_t<reference>>;
         using iterator_category = std::input_iterator_tag;
-
+ 
         inline TIterator() noexcept
             : Slave_(nullptr)
             , Cur_()

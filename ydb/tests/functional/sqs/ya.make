@@ -39,7 +39,7 @@ ELSE()
         cpu:4
         ram:16
     )
-    TIMEOUT(600)
+    TIMEOUT(600) 
     SIZE(MEDIUM)
 ENDIF()
 

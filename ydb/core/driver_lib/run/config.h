@@ -42,13 +42,13 @@ union TBasicKikimrServicesMask {
         bool EnablePersQueueL2Cache:1;
         bool EnableKqp:1;
         bool EnableMemoryLog:1;
-        bool EnableGRpcService:1;
+        bool EnableGRpcService:1; 
         bool EnableNodeIdentifier:1;
         bool EnableCms:1;
         bool EnableNodeTable:1;
         bool EnableGRpcProxyStatus:1;
         bool EnablePQ:1;
-        bool EnableSqs:1;
+        bool EnableSqs:1; 
         bool EnableConfigsDispatcher:1;
         bool EnableSecurityServices:1;
         bool EnableTabletInfo:1;

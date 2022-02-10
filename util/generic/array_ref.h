@@ -252,12 +252,12 @@ TArrayRef<char> as_writable_bytes(TArrayRef<T> arrayRef) noexcept {
 template <class Range>
 constexpr TArrayRef<const typename Range::value_type> MakeArrayRef(const Range& range) {
     return TArrayRef<const typename Range::value_type>(range);
-}
-
+} 
+ 
 template <class Range>
 constexpr TArrayRef<typename Range::value_type> MakeArrayRef(Range& range) {
     return TArrayRef<typename Range::value_type>(range);
-}
+} 
 
 template <class Range>
 constexpr TArrayRef<const typename Range::value_type> MakeConstArrayRef(const Range& range) {

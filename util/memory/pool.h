@@ -8,7 +8,7 @@
 #include <util/generic/utility.h>
 #include <util/generic/intrlist.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/singleton.h>
+#include <util/generic/singleton.h> 
 
 #include <new>
 #include <string>
@@ -67,7 +67,7 @@ private:
         inline size_t Used() const noexcept {
             return Cur_ - (const char*)this;
         }
-
+ 
         inline size_t Left() const noexcept {
             return Left_;
         }
@@ -146,7 +146,7 @@ public:
     inline ~TMemoryPool() {
         Clear();
     }
-
+ 
     inline void* Allocate(size_t len) {
         return RawAllocate(AlignUp<size_t>(len, PLATFORM_DATA_ALIGN));
     }
@@ -231,7 +231,7 @@ public:
         *(ret + buf.size()) = 0;
         return TBasicStringBuf<TChar>(ret, buf.size());
     }
-
+ 
     inline size_t Available() const noexcept {
         return Current_->Left();
     }
@@ -309,8 +309,8 @@ private:
 template <typename TPool>
 struct TPoolableBase {
     inline void* operator new(size_t bytes, TPool& pool) {
-        return pool.Allocate(bytes);
-    }
+        return pool.Allocate(bytes); 
+    } 
 
     inline void* operator new(size_t bytes, std::align_val_t align, TPool& pool) {
         return pool.Allocate(bytes, (size_t)align);
@@ -324,8 +324,8 @@ struct TPoolableBase {
 
 private:
     inline void* operator new(size_t); // disallow default allocation
-};
-
+}; 
+ 
 struct TPoolable: public TPoolableBase<TMemoryPool> {
 };
 

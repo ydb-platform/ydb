@@ -1109,14 +1109,14 @@
                 }
             ]
         },
-        "arc": {
-            "tools": {
+        "arc": { 
+            "tools": { 
                 "arc": {
                     "bottle": "arc",
                     "executable": "arc"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -1135,8 +1135,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "yo": {
             "tools": {
                 "yo": {
@@ -5795,19 +5795,19 @@
                 ]
             }
         },
-        "arc": {
-            "formula": {
+        "arc": { 
+            "formula": { 
                 "sandbox_id": [
                     1205199935
                 ],
-                "match": "arc"
-            },
-            "executable": {
+                "match": "arc" 
+            }, 
+            "executable": { 
                 "arc": [
                     "arc"
                 ]
-            }
-        },
+            } 
+        }, 
         "godoc": {
             "formula": {
                 "sandbox_id": 511821444,

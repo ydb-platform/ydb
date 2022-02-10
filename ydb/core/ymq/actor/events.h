@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 #include "defs.h"
 
 #include <ydb/core/base/defs.h>
@@ -19,43 +19,43 @@
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
+ 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
-
+ 
 #include <map>
 #include <set>
 
 namespace NKikimr::NSQS {
-
-enum class EQueueState {
-    Creating = 0,
-    Active   = 1,
-    Deleting = 2,
-};
-
-struct TSqsEvents {
-    enum EEv {
+ 
+enum class EQueueState { 
+    Creating = 0, 
+    Active   = 1, 
+    Deleting = 2, 
+}; 
+ 
+struct TSqsEvents { 
+    enum EEv { 
         /// Request for queue configuration
-        EvGetConfiguration = EventSpaceBegin(TKikimrEvents::ES_SQS),
-        EvConfiguration,
+        EvGetConfiguration = EventSpaceBegin(TKikimrEvents::ES_SQS), 
+        EvConfiguration, 
         /// Request for transaction execution
-        EvExecute,
+        EvExecute, 
         /// Notification about completed transaction
-        EvExecuted,
+        EvExecuted, 
         /// Request to select the requested number of visible messages
         EvLockRequest, // not used
         EvLockResponse, // not used
         /// Notification about queue creation
-        EvQueueCreated,
+        EvQueueCreated, 
         /// Notification about queue deletion
-        EvQueueDeleted,
+        EvQueueDeleted, 
         /// Notification about catalogs creation for a new user
-        EvUserCreated,
-        EvUserDeleted,
+        EvUserCreated, 
+        EvUserDeleted, 
         /// Clear the queue
-        EvPurgeQueue,
+        EvPurgeQueue, 
         /// Go to the next request from a packet
         EvNextRequest, // not used
         /// Request from a proxy to sqs service
@@ -126,11 +126,11 @@ struct TSqsEvents {
 
         EvCleanupQueryComplete,
 
-        EvEnd,
-    };
-
+        EvEnd, 
+    }; 
+ 
     using TExecutedCallback = std::function<void (const NKikimrTxUserProxy::TEvProposeTransactionStatus&)>;
-
+ 
     struct TQueueAttributes {
         bool ContentBasedDeduplication = false;
         TDuration DelaySeconds = TDuration::Zero();
@@ -143,27 +143,27 @@ struct TSqsEvents {
         // has operator<<
     };
 
-    struct TEvGetConfiguration : public NActors::TEventLocal<TEvGetConfiguration, EvGetConfiguration> {
+    struct TEvGetConfiguration : public NActors::TEventLocal<TEvGetConfiguration, EvGetConfiguration> { 
         TString  RequestId;
-        TString  UserName;
-        TString  QueueName;
+        TString  UserName; 
+        TString  QueueName; 
         ui64 Flags = 0;
-
+ 
         enum EFlags {
             NeedQueueLeader = 1,
             NeedQueueAttributes = NeedQueueLeader | 2, // attributes are stored in leader actor, so, when you need attributes, you need leader
         };
-
+ 
         TEvGetConfiguration() = default;
         TEvGetConfiguration(const TEvGetConfiguration& other) = default;
         TEvGetConfiguration(TString requestId, const TString& user, const TString& name, ui64 flags = 0)
             : RequestId(std::move(requestId))
-            , UserName(user)
-            , QueueName(name)
+            , UserName(user) 
+            , QueueName(name) 
             , Flags(flags)
-        { }
-    };
-
+        { } 
+    }; 
+ 
     struct TQuoterResourcesForActions : public TAtomicRefCount<TQuoterResourcesForActions> {
         virtual ~TQuoterResourcesForActions() = default;
 
@@ -177,7 +177,7 @@ struct TSqsEvents {
         TResourceDescription CreateQueueAction; // Separate action for create queue. Quota is requested only when actor knows that there is no such queue. https://st.yandex-team.ru/SQS-620
     };
 
-    struct TEvConfiguration : public NActors::TEventLocal<TEvConfiguration, EvConfiguration> {
+    struct TEvConfiguration : public NActors::TEventLocal<TEvConfiguration, EvConfiguration> { 
         // Success status
         bool Fail = false;
 
@@ -195,77 +195,77 @@ struct TSqsEvents {
         TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCoreCounters; // Raw counters interface. Is is not prefered to use them
         TIntrusivePtr<TUserCounters> UserCounters;
         TIntrusivePtr<TQueueCounters> QueueCounters;
-
+ 
         // Common info
         TString RootUrl;
         TActorId SchemeCache;
         TActorId QueueLeader;
-    };
-
+    }; 
+ 
     struct TEvClearQueueAttributesCache : public NActors::TEventLocal<TEvClearQueueAttributesCache, EvClearQueueAttributesCache> {
     };
 
-    struct TEvExecute : public NActors::TEventLocal<TEvExecute, EvExecute> {
+    struct TEvExecute : public NActors::TEventLocal<TEvExecute, EvExecute> { 
         /// Query sender
         TActorId Sender;
         // User request id this query belongs to
         TString RequestId;
         /// Queue path in the catalog
-        TQueuePath QueuePath;
+        TQueuePath QueuePath; 
         /// Shard id we address by this query
-        ui64 Shard;
+        ui64 Shard; 
         /// Query index to execute
         EQueryId QueryIdx;
         /// Query params
-        NKikimrMiniKQL::TParams Params;
+        NKikimrMiniKQL::TParams Params; 
         /// Callback that is called on response receiving
-        TExecutedCallback Cb;
+        TExecutedCallback Cb; 
         /// This option specifies if it safe to retry transaction in case of undertermined transaction status,
         /// for example timeout. If transaction is idempotent, this options makes the whole system less sensitive to
         /// tablets restarts.
         bool RetryOnTimeout = false;
-
+ 
         TEvExecute() = default;
-
+ 
         TEvExecute(const TEvExecute& other) = default;
-
+ 
         TEvExecute(const TActorId& sender, TString requestId, const TQueuePath& path, const EQueryId idx, const ui64 shard = 0)
-            : Sender(sender)
+            : Sender(sender) 
             , RequestId(std::move(requestId))
-            , QueuePath(path)
-            , Shard(shard)
+            , QueuePath(path) 
+            , Shard(shard) 
             , QueryIdx(idx)
         {
             Y_VERIFY(QueryIdx < EQueryId::QUERY_VECTOR_SIZE);
         }
-    };
-
-    struct TEvExecuted : public NActors::TEventPB<TEvExecuted, NKikimrTxUserProxy::TEvProposeTransactionStatus, EvExecuted> {
-        using TRecord = ProtoRecordType;
-
-        TExecutedCallback Cb;
-        ui64 Shard;
-
+    }; 
+ 
+    struct TEvExecuted : public NActors::TEventPB<TEvExecuted, NKikimrTxUserProxy::TEvProposeTransactionStatus, EvExecuted> { 
+        using TRecord = ProtoRecordType; 
+ 
+        TExecutedCallback Cb; 
+        ui64 Shard; 
+ 
         TEvExecuted()
-            : Shard(0)
-        { }
-
+            : Shard(0) 
+        { } 
+ 
         explicit TEvExecuted(TExecutedCallback cb, ui64 shard)
-            : Cb(cb)
-            , Shard(shard)
-        { }
-
+            : Cb(cb) 
+            , Shard(shard) 
+        { } 
+ 
         TEvExecuted(const TRecord& rec, TExecutedCallback cb, ui64 shard)
-            : TEventPB(rec)
-            , Cb(cb)
-            , Shard(shard)
-        { }
-
+            : TEventPB(rec) 
+            , Cb(cb) 
+            , Shard(shard) 
+        { } 
+ 
         void Call() {
-            if (Cb) {
+            if (Cb) { 
                 Cb(Record);
-            }
-        }
+            } 
+        } 
 
         static bool IsOk(const NKikimrTxUserProxy::TEvProposeTransactionStatus& record) {
             const ui32 status = record.GetStatus();
@@ -298,29 +298,29 @@ struct TSqsEvents {
         bool IsResolvingError() const {
             return IsResolvingError(Record);
         }
-    };
-
-    struct TEvUserCreated : public NActors::TEventLocal<TEvUserCreated, EvUserCreated> {
-        bool    Success;
-
+    }; 
+ 
+    struct TEvUserCreated : public NActors::TEventLocal<TEvUserCreated, EvUserCreated> { 
+        bool    Success; 
+ 
         TEvUserCreated(bool success)
-            : Success(success)
-        {
-        }
-    };
-
-    struct TEvUserDeleted : public NActors::TEventLocal<TEvUserDeleted, EvUserDeleted> {
-        bool    Success;
-        TString Error;
-
-        TEvUserDeleted(bool success, const TString& error = TString())
-            : Success(success)
-            , Error(error)
-        {
-        }
-    };
-
-    struct TEvQueueCreated : public NActors::TEventLocal<TEvQueueCreated, EvQueueCreated> {
+            : Success(success) 
+        { 
+        } 
+    }; 
+ 
+    struct TEvUserDeleted : public NActors::TEventLocal<TEvUserDeleted, EvUserDeleted> { 
+        bool    Success; 
+        TString Error; 
+ 
+        TEvUserDeleted(bool success, const TString& error = TString()) 
+            : Success(success) 
+            , Error(error) 
+        { 
+        } 
+    }; 
+ 
+    struct TEvQueueCreated : public NActors::TEventLocal<TEvQueueCreated, EvQueueCreated> { 
         TString      QueueId;
         TString      ExistingQueueResourceId;
         TString      Error;
@@ -328,28 +328,28 @@ struct TSqsEvents {
         bool         AlreadyExists;
         bool         Success;
         const TErrorClass* ErrorClass = nullptr;
-    };
-
-    struct TEvQueueDeleted : public NActors::TEventLocal<TEvQueueDeleted, EvQueueDeleted> {
-        TQueuePath QueuePath;
-        TString    Message;
-        bool       Success;
-
-        TEvQueueDeleted(const TQueuePath& path, bool success, const TString& message = TString())
-            : QueuePath(path)
-            , Message(message)
-            , Success(success)
-        {
-        }
-
-        TEvQueueDeleted(const TEvQueueDeleted& other)
-            : QueuePath(other.QueuePath)
-            , Message(other.Message)
-            , Success(other.Success)
-        {
-        }
-    };
-
+    }; 
+ 
+    struct TEvQueueDeleted : public NActors::TEventLocal<TEvQueueDeleted, EvQueueDeleted> { 
+        TQueuePath QueuePath; 
+        TString    Message; 
+        bool       Success; 
+ 
+        TEvQueueDeleted(const TQueuePath& path, bool success, const TString& message = TString()) 
+            : QueuePath(path) 
+            , Message(message) 
+            , Success(success) 
+        { 
+        } 
+ 
+        TEvQueueDeleted(const TEvQueueDeleted& other) 
+            : QueuePath(other.QueuePath) 
+            , Message(other.Message) 
+            , Success(other.Success) 
+        { 
+        } 
+    }; 
+ 
     struct TEvAtomicCounterIncrementResult : public NActors::TEventLocal<TEvAtomicCounterIncrementResult, EvAtomicCounterIncrementResult> {
         bool Success;
         TString Error;
@@ -365,23 +365,23 @@ struct TSqsEvents {
         TEvAtomicCounterIncrementResult(const TEvAtomicCounterIncrementResult& other) = default;
     };
 
-    struct TEvPurgeQueue : public NActors::TEventLocal<TEvPurgeQueue, EvPurgeQueue> {
+    struct TEvPurgeQueue : public NActors::TEventLocal<TEvPurgeQueue, EvPurgeQueue> { 
         /// Queue path in the catalog
-        TQueuePath QueuePath;
+        TQueuePath QueuePath; 
         /// All messages must be deleted until this timestamp
-        TInstant Boundary;
-        ui64 Shard;
-
+        TInstant Boundary; 
+        ui64 Shard; 
+ 
         TEvPurgeQueue() = default;
-
-        TEvPurgeQueue(const TEvPurgeQueue& other)
+ 
+        TEvPurgeQueue(const TEvPurgeQueue& other) 
             : QueuePath(other.QueuePath)
-            , Boundary(other.Boundary)
-            , Shard(other.Shard)
-        {
-        }
-    };
-
+            , Boundary(other.Boundary) 
+            , Shard(other.Shard) 
+        { 
+        } 
+    }; 
+ 
     // Request that is sent from proxy to sqs service actor on other (leader) node
     struct TEvSqsRequest : public NActors::TEventPB<TEvSqsRequest, NKikimrClient::TSqsRequest, EvSqsRequest> {
         using TEventPB::TEventPB;
@@ -885,6 +885,6 @@ struct TSqsEvents {
         TString Name;
         ui64 Type;
     };
-};
-
+}; 
+ 
 } // namespace NKikimr::NSQS

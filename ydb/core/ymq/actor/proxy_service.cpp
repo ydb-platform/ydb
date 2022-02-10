@@ -1,30 +1,30 @@
 #include "actor.h"
-#include "executor.h"
+#include "executor.h" 
 #include "log.h"
 #include "service.h"
 #include "queue_leader.h"
-#include "params.h"
+#include "params.h" 
 #include "proxy_service.h"
-#include "serviceid.h"
-
+#include "serviceid.h" 
+ 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/actor/actor.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/secure_protobuf_printer.h>
-
+ 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/map.h>
-#include <util/generic/queue.h>
-
+#include <util/generic/map.h> 
+#include <util/generic/queue.h> 
+ 
 #include <queue>
 
-using namespace NKikimrTxUserProxy;
-using NKikimr::NClient::TValue;
-
+using namespace NKikimrTxUserProxy; 
+using NKikimr::NClient::TValue; 
+ 
 namespace NKikimr::NSQS {
-
+ 
 struct TSqsProxyService::TNodeInfo : public TAtomicRefCount<TNodeInfo> {
     explicit TNodeInfo(ui32 nodeId)
         : NodeId(nodeId)
@@ -55,26 +55,26 @@ TSqsProxyService::TSqsProxyService() {
 TSqsProxyService::~TSqsProxyService() {
     DebugInfo->SqsProxyServiceActorPtr = nullptr;
 }
-
+ 
 void TSqsProxyService::Bootstrap() {
     LOG_SQS_INFO("Start SQS proxy service actor");
-    Become(&TThis::StateFunc);
-
+    Become(&TThis::StateFunc); 
+ 
     SqsCounters_ = GetSqsServiceCounters(AppData()->Counters, "core");
     YmqPublicCounters_ = GetYmqPublicCounters(AppData()->Counters);
-}
-
+} 
+ 
 void TSqsProxyService::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     ev->Get()->Call();
-}
-
+} 
+ 
 void TSqsProxyService::HandleSqsRequest(TSqsEvents::TEvSqsRequest::TPtr& ev) {
     auto replier = MakeHolder<TReplierToSenderActorCallback>(ev);
     const auto& request = replier->Request->Get()->Record;
     RLOG_SQS_REQ_DEBUG(request.GetRequestId(), "Received Sqs Request: " << SecureShortUtf8DebugString(request));
     Register(CreateActionActor(request, std::move(replier)));
 }
-
+ 
 void TSqsProxyService::HandleProxySqsRequest(TSqsEvents::TEvProxySqsRequest::TPtr& ev) {
     TProxyRequestInfoRef request = new TProxyRequestInfo(std::move(ev));
     RequestsToProxy_.emplace(request->RequestId, request);
@@ -114,8 +114,8 @@ void TSqsProxyService::HandleGetLeaderNodeForQueueResponse(TSqsEvents::TEvGetLea
     } else {
         SendProxyError(request, GetLeaderNodeForQueueStatusToProxyStatus(ev->Get()->Status));
     }
-}
-
+} 
+ 
 void TSqsProxyService::HandleSqsResponse(TSqsEvents::TEvSqsResponse::TPtr& ev) {
     LOG_SQS_TRACE("HandleSqsResponse " << SecureShortUtf8DebugString(ev->Get()->Record));
     const ui32 nodeId = ev->Sender.NodeId();

@@ -88,9 +88,9 @@ inline TString Base64StrictDecode(const TStringBuf src) {
 }
 /// @}
 
-/// Works with strings which length is not divisible by 4.
+/// Works with strings which length is not divisible by 4. 
 TString Base64DecodeUneven(const TStringBuf s);
-
+ 
 //encode
 constexpr size_t Base64EncodeBufSize(const size_t len) noexcept {
     return (len + 2) / 3 * 4 + 1;

@@ -1,23 +1,23 @@
-#pragma once
+#pragma once 
 #include "defs.h"
-
-#include "events.h"
+ 
+#include "events.h" 
 #include <ydb/core/ymq/base/table_info.h>
 #include <ydb/core/protos/sqs.pb.h>
-
+ 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-
+ 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/hfunc.h>
-
-#include <util/generic/hash.h>
-
+ 
+#include <util/generic/hash.h> 
+ 
 namespace NKikimr::NSQS {
-
+ 
 extern const TString QUOTER_KESUS_NAME;
 extern const TString RPS_QUOTA_NAME;
 
@@ -48,52 +48,52 @@ inline TIntrusivePtr<TTransactionCounters> GetTransactionCounters(const TIntrusi
     return nullptr;
 }
 
-class TCreateUserSchemaActor
+class TCreateUserSchemaActor 
     : public TActorBootstrapped<TCreateUserSchemaActor>
-{
-public:
+{ 
+public: 
     TCreateUserSchemaActor(const TString& root, const TString& userName, const TActorId& sender, const TString& requestId, TIntrusivePtr<TUserCounters> userCounters);
-    ~TCreateUserSchemaActor();
-
+    ~TCreateUserSchemaActor(); 
+ 
     void Bootstrap();
-
+ 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SQS_ACTOR;
     }
 
-private:
+private: 
     void NextAction();
-
+ 
     void Process();
-
-private:
+ 
+private: 
     STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
             hFunc(NKesus::TEvKesus::TEvAddQuoterResourceResult, HandleAddQuoterResource);
             cFunc(TEvPoisonPill::EventType, PassAway);
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
     void HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev);
-
+ 
     THolder<TEvTxUserProxy::TEvProposeTransaction> MakeMkDirRequest(const TString& root, const TString& dirName);
 
     void AddRPSQuota();
 
     void PassAway() override;
 
-private:
+private: 
     enum class ECreating : int {
         MakeRootSqsDirectory = -1, // optional state
-        MakeDirectory = 0,
+        MakeDirectory = 0, 
         Quoter,
         RPSQuota,
         Finish,
-    };
-
-    const TString Root_;
+    }; 
+ 
+    const TString Root_; 
     const TString UserName_;
     const TActorId Sender_;
     int SI_;
@@ -102,52 +102,52 @@ private:
     TIntrusivePtr<TUserCounters> UserCounters_;
     std::pair<ui64, ui64> KesusPathId_ = {}; // SchemeShardTableId, PathId for quoter kesus
     TActorId AddQuoterResourceActor_;
-};
-
-class TDeleteUserSchemaActor
+}; 
+ 
+class TDeleteUserSchemaActor 
     : public TActorBootstrapped<TDeleteUserSchemaActor>
-{
-public:
+{ 
+public: 
      TDeleteUserSchemaActor(const TString& root, const TString& name, const TActorId& sender, const TString& requestId, TIntrusivePtr<TUserCounters> userCounters);
-    ~TDeleteUserSchemaActor();
-
+    ~TDeleteUserSchemaActor(); 
+ 
     void Bootstrap();
-
+ 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SQS_ACTOR;
     }
 
-private:
+private: 
     void NextAction();
-
+ 
     void Process();
-
-private:
+ 
+private: 
     STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
-
+ 
     void SkipQuoterStages();
 
-private:
-    enum class EDeleting : ui32 {
+private: 
+    enum class EDeleting : ui32 { 
         RemoveQuoter = 0,
-        RemoveDirectory,
-        Finish
-    };
-
-    const TString Root_;
-    const TString Name_;
+        RemoveDirectory, 
+        Finish 
+    }; 
+ 
+    const TString Root_; 
+    const TString Name_; 
     const TActorId Sender_;
-    ui32 SI_;
+    ui32 SI_; 
     const TString RequestId_;
     TIntrusivePtr<TUserCounters> UserCounters_;
-};
-
+}; 
+ 
 class TAtomicCounterActor
     : public TActorBootstrapped<TAtomicCounterActor>
 {

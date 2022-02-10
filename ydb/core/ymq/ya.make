@@ -3,15 +3,15 @@ OWNER(
     g:sqs
 )
 
-RECURSE(
-    actor
-    base
-    client
-    http
-    queues
+RECURSE( 
+    actor 
+    base 
+    client 
+    http 
+    queues 
     proto
 )
 
 RECURSE_FOR_TESTS(
     ut
-)
+) 

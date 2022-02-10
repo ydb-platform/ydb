@@ -9,7 +9,7 @@ RECURSE(
     jwt
     operation_id
     scheme_types
-    value
+    value 
     ydb_cli
     yq
     yson_value

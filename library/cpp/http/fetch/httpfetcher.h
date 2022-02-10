@@ -35,7 +35,7 @@ public:
     static const size_t TCP_MIN = 1500;
     static int TerminateNow;
 
-    THttpFetcher()
+    THttpFetcher() 
         : THttpParser<TCheck>()
         , TAlloc()
         , TWriter()
@@ -55,15 +55,15 @@ public:
         size_t schemelen = strlen(scheme);
         if (*path == '/') {
             header->base = TStringBuf(scheme, schemelen);
-            header->base += TStringBuf("://", 3);
-            header->base += TStringBuf(TAgent::pHostBeg, TAgent::pHostEnd - TAgent::pHostBeg);
-            header->base += path;
+            header->base += TStringBuf("://", 3); 
+            header->base += TStringBuf(TAgent::pHostBeg, TAgent::pHostEnd - TAgent::pHostBeg); 
+            header->base += path; 
         } else {
-            if (strlen(path) >= FETCHER_URL_MAX) {
-                header->error = HTTP_URL_TOO_LARGE;
-                return 0;
-            }
-            header->base = path;
+            if (strlen(path) >= FETCHER_URL_MAX) { 
+                header->error = HTTP_URL_TOO_LARGE; 
+                return 0; 
+            } 
+            header->base = path; 
         }
 
         if ((ret = TAgent::RequestGet(path, headers, persistent, head_request))) {

@@ -1,32 +1,32 @@
 #include "cfg.h"
-#include "executor.h"
+#include "executor.h" 
 #include "log.h"
-#include "params.h"
-#include "schema.h"
+#include "params.h" 
+#include "schema.h" 
 #include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/queues/fifo/schema.h>
 #include <ydb/core/ymq/queues/std/schema.h>
-
+ 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/public/lib/value/value.h>
-
-#include <util/generic/guid.h>
+ 
+#include <util/generic/guid.h> 
 #include <util/generic/utility.h>
-#include <util/string/ascii.h>
-#include <util/string/cast.h>
-#include <util/string/join.h>
-
-using NKikimr::NClient::TValue;
-
+#include <util/string/ascii.h> 
+#include <util/string/cast.h> 
+#include <util/string/join.h> 
+ 
+using NKikimr::NClient::TValue; 
+ 
 namespace NKikimr::NSQS {
 
 extern const TString QUOTER_KESUS_NAME = ".Quoter";
 extern const TString RPS_QUOTA_NAME = "RPSQuota";
 
-namespace {
-
+namespace { 
+ 
 static const char* const GetNextAtomicValueQuery = R"__(
     (
         (let counterTable '%1$s/.AtomicCounter)
@@ -47,62 +47,62 @@ static const char* const GetNextAtomicValueQuery = R"__(
     )
 )__";
 
-static bool SuccessStatusCode(ui32 code) {
-    switch (NTxProxy::TResultStatus::EStatus(code)) {
-        case NTxProxy::TResultStatus::EStatus::ExecComplete:
-        case NTxProxy::TResultStatus::EStatus::ExecAlready:
-            return true;
-        default:
-            return false;
-    }
-}
-
+static bool SuccessStatusCode(ui32 code) { 
+    switch (NTxProxy::TResultStatus::EStatus(code)) { 
+        case NTxProxy::TResultStatus::EStatus::ExecComplete: 
+        case NTxProxy::TResultStatus::EStatus::ExecAlready: 
+            return true; 
+        default: 
+            return false; 
+    } 
+} 
+ 
 static void SetCompactionPolicyForSmallTable(NKikimrSchemeOp::TPartitionConfig& partitionConfig) {
-    auto& policyPb = *partitionConfig.MutableCompactionPolicy();
-    policyPb.SetInMemSizeToSnapshot(100000);
-    policyPb.SetInMemStepsToSnapshot(300);
-    policyPb.SetInMemForceStepsToSnapshot(500);
-    policyPb.SetInMemForceSizeToSnapshot(400000);
-    policyPb.SetInMemCompactionBrokerQueue(0);
-    policyPb.SetReadAheadHiThreshold(64 * 1024 * 1024);
-    policyPb.SetReadAheadLoThreshold(16 * 1024 * 1024);
-    policyPb.SetMinDataPageSize(7168);
-}
-
+    auto& policyPb = *partitionConfig.MutableCompactionPolicy(); 
+    policyPb.SetInMemSizeToSnapshot(100000); 
+    policyPb.SetInMemStepsToSnapshot(300); 
+    policyPb.SetInMemForceStepsToSnapshot(500); 
+    policyPb.SetInMemForceSizeToSnapshot(400000); 
+    policyPb.SetInMemCompactionBrokerQueue(0); 
+    policyPb.SetReadAheadHiThreshold(64 * 1024 * 1024); 
+    policyPb.SetReadAheadLoThreshold(16 * 1024 * 1024); 
+    policyPb.SetMinDataPageSize(7168); 
+} 
+ 
 static void SetCompactionPolicyForTimestampOrdering(NKikimrSchemeOp::TPartitionConfig& partitionConfig) {
     const bool enableCompression = false;
-
-    auto& policyPb = *partitionConfig.MutableCompactionPolicy();
-    policyPb.SetInMemSizeToSnapshot(1*1024*1024);
-    policyPb.SetInMemStepsToSnapshot(100000);
-    policyPb.SetInMemForceStepsToSnapshot(100000);
-    policyPb.SetInMemForceSizeToSnapshot(4*1024*1024);
-    policyPb.SetInMemCompactionBrokerQueue(0);
-    policyPb.SetReadAheadHiThreshold(64 * 1024 * 1024);
-    policyPb.SetReadAheadLoThreshold(16 * 1024 * 1024);
-    policyPb.SetMinDataPageSize(enableCompression ? 256*1024 : 63*1024);
-    policyPb.SetSnapBrokerQueue(0);
-    policyPb.SetBackupBrokerQueue(0);
-
-    auto& g1 = *policyPb.AddGeneration();
-    g1.SetGenerationId(0);
-    g1.SetSizeToCompact(100 * 1024 * 1024);
-    g1.SetCountToCompact(40);
-    g1.SetForceCountToCompact(60);
-    g1.SetForceSizeToCompact(140 * 1024 * 1024);
-    g1.SetCompactionBrokerQueue(1);
-    g1.SetKeepInCache(true);
-
-    auto& g2 = *policyPb.AddGeneration();
-    g2.SetGenerationId(1);
-    g2.SetSizeToCompact(500ull * 1024 * 1024);
-    g2.SetCountToCompact(30);
-    g2.SetForceCountToCompact(60);
-    g2.SetForceSizeToCompact(700ull * 1024 * 1024);
-    g2.SetCompactionBrokerQueue(2);
-    g2.SetKeepInCache(false);
-}
-
+ 
+    auto& policyPb = *partitionConfig.MutableCompactionPolicy(); 
+    policyPb.SetInMemSizeToSnapshot(1*1024*1024); 
+    policyPb.SetInMemStepsToSnapshot(100000); 
+    policyPb.SetInMemForceStepsToSnapshot(100000); 
+    policyPb.SetInMemForceSizeToSnapshot(4*1024*1024); 
+    policyPb.SetInMemCompactionBrokerQueue(0); 
+    policyPb.SetReadAheadHiThreshold(64 * 1024 * 1024); 
+    policyPb.SetReadAheadLoThreshold(16 * 1024 * 1024); 
+    policyPb.SetMinDataPageSize(enableCompression ? 256*1024 : 63*1024); 
+    policyPb.SetSnapBrokerQueue(0); 
+    policyPb.SetBackupBrokerQueue(0); 
+ 
+    auto& g1 = *policyPb.AddGeneration(); 
+    g1.SetGenerationId(0); 
+    g1.SetSizeToCompact(100 * 1024 * 1024); 
+    g1.SetCountToCompact(40); 
+    g1.SetForceCountToCompact(60); 
+    g1.SetForceSizeToCompact(140 * 1024 * 1024); 
+    g1.SetCompactionBrokerQueue(1); 
+    g1.SetKeepInCache(true); 
+ 
+    auto& g2 = *policyPb.AddGeneration(); 
+    g2.SetGenerationId(1); 
+    g2.SetSizeToCompact(500ull * 1024 * 1024); 
+    g2.SetCountToCompact(30); 
+    g2.SetForceCountToCompact(60); 
+    g2.SetForceSizeToCompact(700ull * 1024 * 1024); 
+    g2.SetCompactionBrokerQueue(2); 
+    g2.SetKeepInCache(false); 
+} 
+ 
 static void SetOnePartitionPerShardSettings(NKikimrSchemeOp::TTableDescription& desc, size_t queueShardsCount) {
     for (size_t boundary = 1; boundary < queueShardsCount; ++boundary) {
         NKikimrSchemeOp::TSplitBoundary* splitBoundarySetting = desc.AddSplitBoundary();
@@ -125,48 +125,48 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
 }
 
 THolder<TEvTxUserProxy::TEvProposeTransaction>
-    MakeCreateTableEvent(const TString& root,
+    MakeCreateTableEvent(const TString& root, 
                          const TTable& table,
                          size_t queueShardsCount)
-{
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-    // Transaction info
+{ 
+    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
+    // Transaction info 
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
-
-    if (table.Shard != -1) {
+ 
+    if (table.Shard != -1) { 
         trans->SetWorkingDir(TString::Join(root, "/", ToString(table.Shard)));
-    } else {
-        trans->SetWorkingDir(root);
-    }
+    } else { 
+        trans->SetWorkingDir(root); 
+    } 
     trans->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
-    // Table info
+    // Table info 
     auto* desc = trans->MutableCreateTable();
-    desc->SetName(table.Name);
-    // Columns info
-    for (const auto& col : table.Columns) {
+    desc->SetName(table.Name); 
+    // Columns info 
+    for (const auto& col : table.Columns) { 
         if (col.Partitions && !table.EnableAutosplit) {
-            desc->SetUniformPartitionsCount(col.Partitions);
-        }
-        if (col.Key) {
-            desc->AddKeyColumnNames(col.Name);
-        }
-
+            desc->SetUniformPartitionsCount(col.Partitions); 
+        } 
+        if (col.Key) { 
+            desc->AddKeyColumnNames(col.Name); 
+        } 
+ 
         auto* item = desc->AddColumns();
-        item->SetName(col.Name);
-        item->SetType(NScheme::TypeName(col.TypeId));
-    }
-
-    if (table.InMemory) {
+        item->SetName(col.Name); 
+        item->SetType(NScheme::TypeName(col.TypeId)); 
+    } 
+ 
+    if (table.InMemory) { 
         auto* def = desc->MutablePartitionConfig()->AddColumnFamilies();
-        def->SetId(0);
+        def->SetId(0); 
         def->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
-    }
-
-    if (table.Sequential) {
-        SetCompactionPolicyForTimestampOrdering(*desc->MutablePartitionConfig());
-    } else if (table.Small) {
-        SetCompactionPolicyForSmallTable(*desc->MutablePartitionConfig());
-    }
+    } 
+ 
+    if (table.Sequential) { 
+        SetCompactionPolicyForTimestampOrdering(*desc->MutablePartitionConfig()); 
+    } else if (table.Small) { 
+        SetCompactionPolicyForSmallTable(*desc->MutablePartitionConfig()); 
+    } 
     if (table.OnePartitionPerShard) {
         Y_VERIFY(queueShardsCount > 0);
         SetOnePartitionPerShardSettings(*desc, queueShardsCount);
@@ -178,10 +178,10 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
         partitioningPolicy->SetMinPartitionsCount(1);
         partitioningPolicy->SetMaxPartitionsCount(MAX_PARTITIONS_COUNT);
     }
-
-    return ev;
-}
-
+ 
+    return ev; 
+} 
+ 
 THolder<TEvTxUserProxy::TEvProposeTransaction>
     MakeDeleteTableEvent(const TString& root,
                          const TTable& table)
@@ -247,39 +247,39 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     return ev;
 }
 
-TCreateUserSchemaActor::TCreateUserSchemaActor(const TString& root,
+TCreateUserSchemaActor::TCreateUserSchemaActor(const TString& root, 
                                                const TString& userName,
                                                const TActorId& sender,
                                                const TString& requestId,
                                                TIntrusivePtr<TUserCounters> userCounters)
-    : Root_(root)
+    : Root_(root) 
     , UserName_(userName)
-    , Sender_(sender)
+    , Sender_(sender) 
     , SI_(static_cast<int>(ECreating::MakeDirectory))
     , RequestId_(requestId)
     , UserCounters_(std::move(userCounters))
-{
-}
-
+{ 
+} 
+ 
 TCreateUserSchemaActor::~TCreateUserSchemaActor() = default;
-
+ 
 void TCreateUserSchemaActor::Bootstrap() {
     Process();
-    Become(&TThis::StateFunc);
-}
-
+    Become(&TThis::StateFunc); 
+} 
+ 
 void TCreateUserSchemaActor::NextAction() {
     SI_++;
-
+ 
     if (!Cfg().GetQuotingConfig().GetEnableQuoting() || !Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
         while (ECreating(SI_) == ECreating::Quoter || ECreating(SI_) == ECreating::RPSQuota) {
             SI_++;
         }
-    }
-
+    } 
+ 
     Process();
-}
-
+} 
+ 
 THolder<TEvTxUserProxy::TEvProposeTransaction> TCreateUserSchemaActor::MakeMkDirRequest(const TString& root, const TString& dirName) {
     auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
@@ -292,7 +292,7 @@ THolder<TEvTxUserProxy::TEvProposeTransaction> TCreateUserSchemaActor::MakeMkDir
 }
 
 void TCreateUserSchemaActor::Process() {
-    switch (ECreating(SI_)) {
+    switch (ECreating(SI_)) { 
         case ECreating::MakeRootSqsDirectory: {
             CreateRootSqsDirAttemptWasMade_ = true;
             TStringBuf rootSqs = Root_;
@@ -307,10 +307,10 @@ void TCreateUserSchemaActor::Process() {
             Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, MakeMkDirRequest(TString(mainRoot), TString(sqsDirName)), false, TQueuePath(Root_, UserName_, TString()), GetTransactionCounters(UserCounters_)));
             break;
         }
-        case ECreating::MakeDirectory: {
+        case ECreating::MakeDirectory: { 
             Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, MakeMkDirRequest(Root_, UserName_), false, TQueuePath(Root_, UserName_, TString()), GetTransactionCounters(UserCounters_)));
-            break;
-        }
+            break; 
+        } 
         case ECreating::Quoter: {
             Register(new TMiniKqlExecutionActor(
                 SelfId(), RequestId_, MakeCreateKesusEvent(Root_ + "/" + UserName_, QUOTER_KESUS_NAME), false, TQueuePath(Root_, UserName_, TString()), GetTransactionCounters(UserCounters_))
@@ -321,25 +321,25 @@ void TCreateUserSchemaActor::Process() {
             AddRPSQuota();
             break;
         }
-        case ECreating::Finish: {
+        case ECreating::Finish: { 
             Send(Sender_, MakeHolder<TSqsEvents::TEvUserCreated>(true));
             PassAway();
-            break;
-        }
-    }
-}
-
+            break; 
+        } 
+    } 
+} 
+ 
 void TCreateUserSchemaActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
-    const auto& record = ev->Get()->Record;
+    const auto& record = ev->Get()->Record; 
     const auto status = record.GetStatus();
-
+ 
     if (SuccessStatusCode(status)) {
         if (ECreating(SI_) == ECreating::Quoter) {
             KesusPathId_ = std::make_pair(record.GetSchemeShardTabletId(), record.GetPathId());
         }
 
         NextAction();
-    } else {
+    } else { 
         // Try to create /Root/SQS directory only if error occurs, because this is very rare operation.
         if (ECreating(SI_) == ECreating::MakeDirectory
             && record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPathDoesNotExist
@@ -352,12 +352,12 @@ void TCreateUserSchemaActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
             return;
         }
         RLOG_SQS_WARN("request execution error: " << record);
-
+ 
         Send(Sender_, MakeHolder<TSqsEvents::TEvUserCreated>(false));
         PassAway();
-    }
-}
-
+    } 
+} 
+ 
 void TCreateUserSchemaActor::HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev) {
     AddQuoterResourceActor_ = TActorId();
     auto status = ev->Get()->Record.GetError().GetStatus();
@@ -387,27 +387,27 @@ void TCreateUserSchemaActor::PassAway() {
     TActorBootstrapped<TCreateUserSchemaActor>::PassAway();
 }
 
-TDeleteUserSchemaActor::TDeleteUserSchemaActor(const TString& root,
-                                               const TString& name,
+TDeleteUserSchemaActor::TDeleteUserSchemaActor(const TString& root, 
+                                               const TString& name, 
                                                const TActorId& sender,
                                                const TString& requestId,
                                                TIntrusivePtr<TUserCounters> userCounters)
-    : Root_(root)
-    , Name_(name)
-    , Sender_(sender)
-    , SI_(0)
+    : Root_(root) 
+    , Name_(name) 
+    , Sender_(sender) 
+    , SI_(0) 
     , RequestId_(requestId)
     , UserCounters_(std::move(userCounters))
-{
-}
-
+{ 
+} 
+ 
 TDeleteUserSchemaActor::~TDeleteUserSchemaActor() = default;
-
+ 
 void TDeleteUserSchemaActor::Bootstrap() {
     Process();
-    Become(&TThis::StateFunc);
-}
-
+    Become(&TThis::StateFunc); 
+} 
+ 
 void TDeleteUserSchemaActor::SkipQuoterStages() {
     if (EDeleting(SI_) == EDeleting::RemoveQuoter && (!Cfg().GetQuotingConfig().GetEnableQuoting() || !Cfg().GetQuotingConfig().HasKesusQuoterConfig())) {
         SI_++;
@@ -418,46 +418,46 @@ void TDeleteUserSchemaActor::NextAction() {
     SI_++;
 
     Process();
-}
-
+} 
+ 
 void TDeleteUserSchemaActor::Process() {
     SkipQuoterStages();
 
-    switch (EDeleting(SI_)) {
+    switch (EDeleting(SI_)) { 
         case EDeleting::RemoveQuoter: {
             Register(new TMiniKqlExecutionActor(
                 SelfId(), RequestId_, MakeRemoveKesusEvent(Root_ + "/" + Name_, QUOTER_KESUS_NAME), false, TQueuePath(Root_, Name_, TString()), GetTransactionCounters(UserCounters_))
             );
             break;
         }
-        case EDeleting::RemoveDirectory: {
+        case EDeleting::RemoveDirectory: { 
             Register(new TMiniKqlExecutionActor(
                 SelfId(), RequestId_, MakeRemoveDirectoryEvent(Root_, Name_), false, TQueuePath(Root_, Name_, TString()), GetTransactionCounters(UserCounters_))
-            );
-            break;
-        }
-        case EDeleting::Finish: {
+            ); 
+            break; 
+        } 
+        case EDeleting::Finish: { 
             Send(Sender_, MakeHolder<TSqsEvents::TEvUserDeleted>(true));
             PassAway();
-            break;
-        }
-    }
-}
-
+            break; 
+        } 
+    } 
+} 
+ 
 void TDeleteUserSchemaActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
-    const auto& record = ev->Get()->Record;
+    const auto& record = ev->Get()->Record; 
     const auto status = record.GetStatus();
-
+ 
     if (SuccessStatusCode(status)) {
         NextAction();
-    } else {
+    } else { 
         RLOG_SQS_WARN("request execution error: " << record);
-
+ 
         Send(Sender_, MakeHolder<TSqsEvents::TEvUserDeleted>(false, record.GetMiniKQLErrors()));
         PassAway();
-    }
-}
-
+    } 
+} 
+ 
 TAtomicCounterActor::TAtomicCounterActor(const TActorId& sender, const TString& rootPath, const TString& requestId)
     : Sender_(sender)
     , RootPath_(rootPath)

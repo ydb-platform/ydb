@@ -1,5 +1,5 @@
-RECURSE(
-    detect
+RECURSE( 
+    detect 
     detect_ut
-    types
-)
+    types 
+) 

@@ -1,43 +1,43 @@
-#pragma once
-
-#include <util/generic/string.h>
-
+#pragma once 
+ 
+#include <util/generic/string.h> 
+ 
 namespace NKikimr::NSQS {
-
+ 
 enum EAction {
-    Unknown = 0,
-    ChangeMessageVisibility,
-    ChangeMessageVisibilityBatch,
-    CreateQueue,
-    CreateUser,
-    GetQueueAttributes,
+    Unknown = 0, 
+    ChangeMessageVisibility, 
+    ChangeMessageVisibilityBatch, 
+    CreateQueue, 
+    CreateUser, 
+    GetQueueAttributes, 
     GetQueueAttributesBatch,
-    GetQueueUrl,
-    DeleteMessage,
-    DeleteMessageBatch,
-    DeleteQueue,
+    GetQueueUrl, 
+    DeleteMessage, 
+    DeleteMessageBatch, 
+    DeleteQueue, 
     DeleteQueueBatch,
-    DeleteUser,
-    ListQueues,
-    ListUsers,
-    PurgeQueue,
+    DeleteUser, 
+    ListQueues, 
+    ListUsers, 
+    PurgeQueue, 
     PurgeQueueBatch,
-    ReceiveMessage,
-    SendMessage,
-    SendMessageBatch,
-    SetQueueAttributes,
+    ReceiveMessage, 
+    SendMessage, 
+    SendMessageBatch, 
+    SetQueueAttributes, 
     ModifyPermissions,
     ListPermissions,
     ListDeadLetterSourceQueues,
     CountQueues,
-
+ 
     ActionsArraySize,
-};
-
-EAction ActionFromString(const TString& name);
+}; 
+ 
+EAction ActionFromString(const TString& name); 
 const TString& ActionToString(EAction action);
 const TString& ActionToCloudConvMethod(EAction action);
-
+ 
 bool IsBatchAction(EAction action);
 bool IsActionForQueue(EAction action);
 bool IsActionForQueueYMQ(EAction action);

@@ -97,10 +97,10 @@ public:
         return ret;
     }
 
-    inline void Skip(FTSENT* ent) {
-        yfts_set(FileTree_.Get(), ent, FTS_SKIP);
-    }
-
+    inline void Skip(FTSENT* ent) { 
+        yfts_set(FileTree_.Get(), ent, FTS_SKIP); 
+    } 
+ 
 private:
     TOptions Options_;
     TString Path_;

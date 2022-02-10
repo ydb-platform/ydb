@@ -4,7 +4,7 @@
 
 #include <cstdlib>
 
-namespace NBus {
+namespace NBus { 
     const char* ToCString(EIpVersion ipVersion) {
         switch (ipVersion) {
             case EIP_VERSION_ANY:
@@ -37,12 +37,12 @@ namespace NBus {
         {
         }
     };
-
+ 
     static bool Compare(const IRemoteAddr& l, const IRemoteAddr& r) noexcept {
         if (l.Addr()->sa_family != r.Addr()->sa_family) {
             return false;
         }
-
+ 
         switch (l.Addr()->sa_family) {
             case AF_INET: {
                 return memcmp(&(((const sockaddr_in*)l.Addr())->sin_addr), &(((const sockaddr_in*)r.Addr())->sin_addr), sizeof(in_addr)) == 0 &&
@@ -53,25 +53,25 @@ namespace NBus {
                 return memcmp(&(((const sockaddr_in6*)l.Addr())->sin6_addr), &(((const sockaddr_in6*)r.Addr())->sin6_addr), sizeof(in6_addr)) == 0 &&
                        ((const sockaddr_in6*)l.Addr())->sin6_port == ((const sockaddr_in6*)r.Addr())->sin6_port;
             }
-        }
-
+        } 
+ 
         return memcmp(l.Addr(), r.Addr(), Min<size_t>(l.Len(), r.Len())) == 0;
-    }
-
+    } 
+ 
     TNetAddr::TNetAddr()
         : Ptr(new TOpaqueAddr)
     {
     }
-
+ 
     TNetAddr::TNetAddr(TAutoPtr<IRemoteAddr> addr)
         : Ptr(addr)
     {
         Y_VERIFY(!!Ptr);
     }
-
+ 
     namespace {
         using namespace NAddr;
-
+ 
         const char* Describe(EIpVersion version) {
             switch (version) {
                 case EIP_VERSION_4:
@@ -150,7 +150,7 @@ namespace NBus {
     socklen_t TNetAddr::Len() const {
         return Ptr->Len();
     }
-
+ 
     int TNetAddr::GetPort() const {
         switch (Ptr->Addr()->sa_family) {
             case AF_INET:
@@ -162,11 +162,11 @@ namespace NBus {
                 throw 1;
         }
     }
-
+ 
     bool TNetAddr::IsIpv4() const {
         return Ptr->Addr()->sa_family == AF_INET;
     }
-
+ 
     bool TNetAddr::IsIpv6() const {
         return Ptr->Addr()->sa_family == AF_INET6;
     }
@@ -177,7 +177,7 @@ namespace NBus {
 
 }
 
-template <>
+template <> 
 void Out<NBus::TNetAddr>(IOutputStream& out, const NBus::TNetAddr& addr) {
-    Out<NAddr::IRemoteAddr>(out, addr);
-}
+    Out<NAddr::IRemoteAddr>(out, addr); 
+} 

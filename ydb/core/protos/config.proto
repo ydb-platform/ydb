@@ -557,11 +557,11 @@ message TMemoryLogConfig {
     optional uint64 LogGrainSize = 2;
 }
 
-message TGRpcConfig {
+message TGRpcConfig { 
     optional bool   StartGRpcProxy = 1 [default = true];
     optional string Host = 2 [default = "[::]"];
-    optional uint32 Port = 3;
-    optional uint32 WorkerThreads = 4 [default = 2];
+    optional uint32 Port = 3; 
+    optional uint32 WorkerThreads = 4 [default = 2]; 
     optional uint64 GRpcMemoryQuotaBytes = 5 [default = 1073741824]; // 1 GB default; 0 == unlimited
     optional uint64 MaxMessageSize = 6; // default = DEFAULT_GRPC_MESSAGE_SIZE_LIMIT
     optional uint32 MaxInFlight = 7; // 0 == unlimited [default]
@@ -595,8 +595,8 @@ message TGRpcConfig {
     optional uint32 KeepAliveProbeIntervalSec = 103 [default = 10]; // TCP_KEEPINTVL
 
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
-}
-
+} 
+ 
 message TDynamicNodeConfig {
     optional string NodeBrokerAddress = 1; //DEPRECATED
     optional string DomainName = 2; //DEPRECATED
@@ -678,16 +678,16 @@ message TFeatureFlags {
     optional bool EnablePredicateExtractForScanQueries = 62 [default = true];
 }
 
-message TSqsConfig {
+message TSqsConfig { 
     optional bool EnableSqs = 5;
-    optional string Root = 1 [default = "/Root/SQS"];
+    optional string Root = 1 [default = "/Root/SQS"]; 
     // optional uint32 HttpPort = 2 [default = 8771]; // moved to HttpServerConfig
 
     // URL that must be specified as an entry point to SQS cluster.
     // It must be used if SQS nodes are placed behind the balancer.
     // If this field is not specified, every node uses its own
     // fqdn here.
-    optional string Endpoint = 3;
+    optional string Endpoint = 3; 
 
     optional THttpServerConfig HttpServerConfig = 4;
 
@@ -871,8 +871,8 @@ message TSqsConfig {
 
     optional TYcSearchEventsConfig YcSearchEventsConfig = 66;
     optional TYdbAuthConfig AuthConfig = 67;
-}
-
+} 
+ 
 message TConfigsDispatcherConfig {
 }
 
@@ -1350,13 +1350,13 @@ message TAppConfig {
     repeated string UDFsPaths = 16;
     optional TKQPConfig KQPConfig = 17;
     optional TMemoryLogConfig MemoryLogConfig = 19;
-    optional TGRpcConfig GRpcConfig = 20;
+    optional TGRpcConfig GRpcConfig = 20; 
     optional TDynamicNameserviceConfig DynamicNameserviceConfig = 22;
     //optional TLocalConfig LocalConfig = 23; DEPRECATED
     optional TDynamicNodeConfig DynamicNodeConfig = 24;
     optional NKikimrCms.TCmsConfig CmsConfig = 25;
     optional TFeatureFlags FeatureFlags = 26;
-    optional TSqsConfig SqsConfig = 27;
+    optional TSqsConfig SqsConfig = 27; 
     optional NKikimrPQ.TPQConfig PQConfig = 28;
     optional NKikimrTenantPool.TTenantPoolConfig TenantPoolConfig = 29;
     optional NKikimrProto.TAuthConfig AuthConfig = 30;

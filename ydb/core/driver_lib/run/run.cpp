@@ -326,14 +326,14 @@ TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
 
 TKikimrRunner::~TKikimrRunner() {
     if (!!ActorSystem) {
-        // Stop ActorSystem first, so no one actor can call any grpc stuff.
+        // Stop ActorSystem first, so no one actor can call any grpc stuff. 
         ActorSystem->Stop();
-        // After that stop sending any requests to actors
-        // by destroing grpc subsystem.
+        // After that stop sending any requests to actors 
+        // by destroing grpc subsystem. 
         for (auto& serv : GRpcServers) {
             serv.second.Destroy();
         }
-
+ 
         ActorSystem.Destroy();
     }
 }
@@ -481,8 +481,8 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
     KqpShutdownController->Initialize(ActorSystem.Get());
 }
 
-void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
-    const auto& appConfig = runConfig.AppConfig;
+void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) { 
+    const auto& appConfig = runConfig.AppConfig; 
 
     auto fillFn = [&](const NKikimrConfig::TGRpcConfig& grpcConfig, NGrpc::TGRpcServer& server, NGrpc::TServerOptions& opts) {
         const auto& services = grpcConfig.GetServices();
@@ -729,14 +729,14 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
     };
 
-    if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy()) {
-        const auto& grpcConfig = appConfig.GetGRpcConfig();
-
+    if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy()) { 
+        const auto& grpcConfig = appConfig.GetGRpcConfig(); 
+ 
         EnabledGrpcService = true;
         NGrpc::TServerOptions opts;
-        opts.SetHost(grpcConfig.GetHost());
-        opts.SetPort(grpcConfig.GetPort());
-        opts.SetWorkerThreads(grpcConfig.GetWorkerThreads());
+        opts.SetHost(grpcConfig.GetHost()); 
+        opts.SetPort(grpcConfig.GetPort()); 
+        opts.SetWorkerThreads(grpcConfig.GetWorkerThreads()); 
         opts.SetGRpcMemoryQuotaBytes(grpcConfig.GetGRpcMemoryQuotaBytes());
         opts.SetMaxMessageSize(grpcConfig.HasMaxMessageSize() ? grpcConfig.GetMaxMessageSize() : DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
         opts.SetMaxGlobalRequestInFlight(grpcConfig.GetMaxInFlight());
@@ -747,7 +747,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             appConfig.GetDomainsConfig().GetSecurityConfig().HasEnforceUserTokenRequirement()) {
             opts.SetUseAuth(appConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement());
         }
-
+ 
         if (grpcConfig.HasKeepAliveEnable()) {
             if (grpcConfig.GetKeepAliveEnable()) {
                 Y_VERIFY(grpcConfig.HasKeepAliveIdleTimeoutTriggerSec(), "KeepAliveIdleTimeoutTriggerSec not set");
@@ -818,9 +818,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 fillFn(ex, *GRpcServers.back().second, xopts);
             }
         }
-    }
-}
-
+    } 
+} 
+ 
 void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
     const auto& cfg = runConfig.AppConfig;
     const auto& allocConfig = cfg.GetAllocatorConfig();
@@ -1102,7 +1102,7 @@ void TKikimrRunner::InitializeActorSystem(
             Monitoring->RegisterActorPage(nullptr, "grpc", "GRPC", false, ActorSystem.Get(), NGRpcService::GrpcMonServiceId());
         }
     }
-
+ 
     if (servicesMask.EnableSqs && AppData->SqsConfig.GetEnableSqs()) {
         if (AppData->SqsConfig.GetHttpServerConfig().GetPort()) {
 
@@ -1111,8 +1111,8 @@ void TKikimrRunner::InitializeActorSystem(
                                 GetServiceCounters(AppData->Counters, "sqs"),
                                 GetServiceCounters(AppData->Counters, "ymq_public"),
                                 AppData->UserPoolId);
-        }
-    }
+        } 
+    } 
 
     if (runConfig.AppConfig.HasGRpcConfig()) {
         if (const ui32 grpcPort = runConfig.AppConfig.GetGRpcConfig().GetPort()) {
@@ -1276,10 +1276,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TCmsServiceInitializer(runConfig));
     }
 
-    if (serviceMask.EnableSqs) {
+    if (serviceMask.EnableSqs) { 
         sil->AddServiceInitializer(new TSqsServiceInitializer(runConfig, ModuleFactories));
-    }
-
+    } 
+ 
     if (serviceMask.EnableConfigsDispatcher) {
         sil->AddServiceInitializer(new TConfigsDispatcherInitializer(runConfig));
     }
@@ -1453,10 +1453,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         PollerThreads->Stop();
     }
 
-    if (SqsHttp) {
-        SqsHttp.Destroy();
-    }
-
+    if (SqsHttp) { 
+        SqsHttp.Destroy(); 
+    } 
+ 
     // stop processing grpc requests/response - we must stop feeding ActorSystem
     for (auto& server : GRpcServers) {
         if (server.second) {
@@ -1471,7 +1471,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     for (auto& server : GRpcServers) {
         server.second.Destroy();
     }
-
+ 
     if (Bus) {
         Bus->Stop();
         Bus.Drop();

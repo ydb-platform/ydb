@@ -1,30 +1,30 @@
-#include "grpc_pq_write.h"
-#include "grpc_pq_actor.h"
-
+#include "grpc_pq_write.h" 
+#include "grpc_pq_actor.h" 
+ 
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/base/appdata.h>
-#include <util/generic/queue.h>
-
-using namespace NActors;
-using namespace NKikimrClient;
-
-using grpc::Status;
-
-namespace NKikimr {
-namespace NGRpcProxy {
+#include <util/generic/queue.h> 
+ 
+using namespace NActors; 
+using namespace NKikimrClient; 
+ 
+using grpc::Status; 
+ 
+namespace NKikimr { 
+namespace NGRpcProxy { 
 namespace V1 {
-
+ 
 using namespace PersQueue::V1;
 
-///////////////////////////////////////////////////////////////////////////////
-
+/////////////////////////////////////////////////////////////////////////////// 
+ 
 IActor* CreatePQWriteService(const TActorId& schemeCache, const TActorId& newSchemeCache,
                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions) {
     return new TPQWriteService(schemeCache, newSchemeCache, counters, maxSessions);
 }
+ 
 
-
-
+ 
 TPQWriteService::TPQWriteService(const TActorId& schemeCache, const TActorId& newSchemeCache,
                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions)
     : SchemeCache(schemeCache)
@@ -34,8 +34,8 @@ TPQWriteService::TPQWriteService(const TActorId& schemeCache, const TActorId& ne
     , Enabled(false)
 {
 }
-
-
+ 
+ 
 void TPQWriteService::Bootstrap(const TActorContext& ctx) {
     HaveClusters = !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(); // ToDo[migration]: switch to proper option
     if (HaveClusters) {
@@ -48,7 +48,7 @@ void TPQWriteService::Bootstrap(const TActorContext& ctx) {
     );
     Become(&TThis::StateFunc);
 }
-
+ 
 
 ui64 TPQWriteService::NextCookie() {
     return ++LastCookie;
@@ -130,7 +130,7 @@ void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvCluster
         }
     }
 }
-
+ 
 void TPQWriteService::Handle(TEvPQProxy::TEvSessionSetPreferredCluster::TPtr& ev, const TActorContext& ctx) {
     const auto& cookie = ev->Get()->Cookie;
     const auto& preferredCluster = ev->Get()->PreferredCluster;
@@ -155,20 +155,20 @@ void TPQWriteService::Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorC
         }
         RemotePreferredClusterBySessionCookie.erase(cookie);
     }
-}
-
-
+} 
+ 
+ 
 StreamingWriteServerMessage FillWriteResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
     StreamingWriteServerMessage res;
     FillIssue(res.add_issues(), code, errorReason);
     res.set_status(ConvertPersQueueInternalCodeToStatus(code));
     return res;
-}
-
+} 
+ 
 void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx) {
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection");
-
+ 
     if (TooMuchSessions()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - too much sessions");
         ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
@@ -195,7 +195,7 @@ void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPt
         const ui64 cookie = NextCookie();
 
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new session created cookie " << cookie);
-
+ 
         auto ip = ev->Get()->GetStreamCtx()->GetPeerName();
         TActorId worker = ctx.Register(new TWriteSessionActor(
                 ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
@@ -204,9 +204,9 @@ void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPt
         ));
 
         Sessions[cookie] = worker;
-    }
-}
-
+    } 
+} 
+ 
 bool TPQWriteService::TooMuchSessions() {
     return Sessions.size() >= MaxSessions;
 }

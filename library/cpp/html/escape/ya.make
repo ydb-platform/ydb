@@ -1,9 +1,9 @@
-LIBRARY()
+LIBRARY() 
 
-OWNER(stanly)
-
-SRCS(
-    escape.cpp
-)
-
-END()
+OWNER(stanly) 
+ 
+SRCS( 
+    escape.cpp 
+) 
+ 
+END() 

@@ -1,22 +1,22 @@
-#include "action.h"
+#include "action.h" 
 #include "common_batch_actor.h"
 #include "error.h"
 #include "executor.h"
 #include "log.h"
-#include "params.h"
-#include "serviceid.h"
-
+#include "params.h" 
+#include "serviceid.h" 
+ 
 #include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/dlq_helpers.h>
 #include <ydb/public/lib/value/value.h>
-
-#include <util/string/cast.h>
-
-using NKikimr::NClient::TValue;
-
+ 
+#include <util/string/cast.h> 
+ 
+using NKikimr::NClient::TValue; 
+ 
 namespace NKikimr::NSQS {
-
+ 
 struct TAttributeInfo {
     bool NeedRuntimeAttributes = false;
     bool NeedAttributesTable = false;
@@ -40,20 +40,20 @@ static const std::map<TString, TAttributeInfo> AttributesInfo = {
     { "QueueArn",                              { false, false,  true, false } },
 };
 
-class TGetQueueAttributesActor
-    : public TActionActor<TGetQueueAttributesActor>
-{
-public:
+class TGetQueueAttributesActor 
+    : public TActionActor<TGetQueueAttributesActor> 
+{ 
+public: 
     TGetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::GetQueueAttributes, std::move(cb))
-    {
+    { 
         CopyAccountName(Request());
-        Response_.MutableGetQueueAttributes()->SetRequestId(RequestId_);
+        Response_.MutableGetQueueAttributes()->SetRequestId(RequestId_); 
 
         CopySecurityToken(Request());
-    }
-
-private:
+    } 
+ 
+private: 
     bool ExpandNames() {
         if (!Request().NamesSize()) {
             return false;
@@ -61,7 +61,7 @@ private:
 
         bool all = false;
         for (const auto& name : Request().names()) {
-            if (name == "All") {
+            if (name == "All") { 
                 all = true;
             } else {
                 const auto info = AttributesInfo.find(name);
@@ -82,39 +82,39 @@ private:
                 AttributesSet_.insert(name);
             }
         }
-
+ 
         if (all) {
             const bool isFifo = IsFifoQueue();
             for (const auto& [name, props] : AttributesInfo) {
                 if (!props.FifoOnly || isFifo) {
                     AttributesSet_.insert(name);
                 }
-            }
+            } 
             NeedRuntimeAttributes_ = true;
             NeedAttributesTable_ = true;
             NeedArn_ = true;
-        }
+        } 
         return true;
-    }
-
-private:
-    bool HasAttributeName(const TStringBuf name) const {
+    } 
+ 
+private: 
+    bool HasAttributeName(const TStringBuf name) const { 
         return IsIn(AttributesSet_, name);
-    }
-
+    } 
+ 
     TString MakeQueueArn(const TString& prefix, const TString& region, const TString& account, const TString& queueName) const {
         return Join(":", prefix, region, account, queueName);
     }
 
-    bool DoValidate() override {
-        if (!GetQueueName()) {
+    bool DoValidate() override { 
+        if (!GetQueueName()) { 
             MakeError(Response_.MutableGetQueueAttributes(), NErrors::MISSING_PARAMETER, "No QueueName parameter.");
-            return false;
-        }
-
-        return true;
-    }
-
+            return false; 
+        } 
+ 
+        return true; 
+    } 
+ 
     TError* MutableErrorDesc() override {
         return Response_.MutableGetQueueAttributes()->MutableError();
     }
@@ -126,8 +126,8 @@ private:
     }
 
     void DoAction() override {
-        Become(&TThis::StateFunc);
-
+        Become(&TThis::StateFunc); 
+ 
         if (!ExpandNames()) {
             SendReplyAndDie();
             return;
@@ -145,11 +145,11 @@ private:
                 .Start();
             ++WaitCount_;
         }
-
+ 
         if (NeedRuntimeAttributes_) {
             Send(QueueLeader_, MakeHolder<TSqsEvents::TEvGetRuntimeQueueAttributes>(RequestId_));
             ++WaitCount_;
-        }
+        } 
 
         if (NeedArn_) {
             if (IsCloud()) {
@@ -162,30 +162,30 @@ private:
         }
 
         ReplyIfReady();
-    }
-
-    TString DoGetQueueName() const override {
+    } 
+ 
+    TString DoGetQueueName() const override { 
         return Request().GetQueueName();
-    }
-
+    } 
+ 
     STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TEvWakeup,      HandleWakeup);
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
             hFunc(TSqsEvents::TEvGetRuntimeQueueAttributesResponse, HandleRuntimeAttributes);
             hFunc(TSqsEvents::TEvQueueFolderIdAndCustomName, HandleQueueFolderIdAndCustomName);
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui32 status = record.GetStatus();
         auto* result = Response_.MutableGetQueueAttributes();
-
-        if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-            const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
+ 
+        if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) { 
+            const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse())); 
             const TValue& attrs(val["attrs"]);
-
+ 
             if (HasAttributeName("ContentBasedDeduplication")) {
                 result->SetContentBasedDeduplication(bool(attrs["ContentBasedDeduplication"]));
             }
@@ -223,21 +223,21 @@ private:
             SendReplyAndDie();
             return;
         }
-
+ 
         --WaitCount_;
         ReplyIfReady();
     }
-
+ 
     void HandleRuntimeAttributes(TSqsEvents::TEvGetRuntimeQueueAttributesResponse::TPtr& ev) {
         auto* result = Response_.MutableGetQueueAttributes();
-
+ 
         if (ev->Get()->Failed) {
             RLOG_SQS_ERROR("Get runtime queue attributes failed");
             MakeError(result, NErrors::INTERNAL_FAILURE);
             SendReplyAndDie();
             return;
-        }
-
+        } 
+ 
         if (HasAttributeName("CreatedTimestamp")) {
             result->SetCreatedTimestamp(ev->Get()->CreatedTimestamp.Seconds());
         }
@@ -250,7 +250,7 @@ private:
         if (HasAttributeName("ApproximateNumberOfMessagesDelayed")) {
             result->SetApproximateNumberOfMessagesDelayed(ev->Get()->MessagesDelayed);
         }
-
+ 
         --WaitCount_;
         ReplyIfReady();
     }
@@ -263,7 +263,7 @@ private:
             MakeError(result, NErrors::INTERNAL_FAILURE);
             SendReplyAndDie();
             return;
-        }
+        } 
 
         if (NeedArn_) {
             result->SetQueueArn(MakeQueueArn(cloudArnPrefix, Cfg().GetYandexCloudServiceRegion(), ev->Get()->QueueFolderId, ev->Get()->QueueCustomName));
@@ -271,20 +271,20 @@ private:
 
         --WaitCount_;
         ReplyIfReady();
-    }
-
+    } 
+ 
     const TGetQueueAttributesRequest& Request() const {
         return SourceSqsRequest_.GetGetQueueAttributes();
     }
 
-private:
+private: 
     THashSet<TString> AttributesSet_;
     bool NeedRuntimeAttributes_ = false;
     bool NeedAttributesTable_ = false;
     bool NeedArn_ = false;
     size_t WaitCount_ = 0;
-};
-
+}; 
+ 
 class TGetQueueAttributesBatchActor
     : public TCommonBatchActor<TGetQueueAttributesBatchActor>
 {
@@ -355,8 +355,8 @@ private:
 
 IActor* CreateGetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
     return new TGetQueueAttributesActor(sourceSqsRequest, std::move(cb));
-}
-
+} 
+ 
 IActor* CreateGetQueueAttributesBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
     return new TGetQueueAttributesBatchActor(sourceSqsRequest, std::move(cb));
 }

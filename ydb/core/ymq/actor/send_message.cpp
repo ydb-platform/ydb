@@ -1,29 +1,29 @@
-#include "action.h"
+#include "action.h" 
 #include "attributes_md5.h"
 #include "error.h"
 #include "executor.h"
 #include "log.h"
-#include "params.h"
-#include "serviceid.h"
-
+#include "params.h" 
+#include "serviceid.h" 
+ 
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/actor/sha256.h>
 #include <ydb/core/ymq/proto/records.pb.h>
-
+ 
 #include <ydb/public/lib/value/value.h>
-
+ 
 #include <library/cpp/digest/md5/md5.h>
-#include <util/random/random.h>
-
-using NKikimr::NClient::TValue;
-
+#include <util/random/random.h> 
+ 
+using NKikimr::NClient::TValue; 
+ 
 namespace NKikimr::NSQS {
-
-class TSendMessageActor
-    : public TActionActor<TSendMessageActor>
-{
-public:
+ 
+class TSendMessageActor 
+    : public TActionActor<TSendMessageActor> 
+{ 
+public: 
     static constexpr bool NeedQueueAttributes() {
         return true;
     }
@@ -31,7 +31,7 @@ public:
     TSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, isBatch ? EAction::SendMessageBatch : EAction::SendMessage, std::move(cb))
         , IsBatch_(isBatch)
-    {
+    { 
         if (IsBatch_) {
             CopyAccountName(BatchRequest());
             Response_.MutableSendMessageBatch()->SetRequestId(RequestId_);
@@ -41,26 +41,26 @@ public:
             Response_.MutableSendMessage()->SetRequestId(RequestId_);
             CopySecurityToken(Request());
         }
-    }
-
-private:
-    size_t CalculateMessageSize(const TSendMessageRequest& req) const {
-        size_t ret = 0;
-        for (const auto& a : req.GetMessageAttributes()) {
-            ret += a.ByteSize();
-        }
-        ret += req.GetMessageBody().size();
-        return ret;
-    }
-
+    } 
+ 
+private: 
+    size_t CalculateMessageSize(const TSendMessageRequest& req) const { 
+        size_t ret = 0; 
+        for (const auto& a : req.GetMessageAttributes()) { 
+            ret += a.ByteSize(); 
+        } 
+        ret += req.GetMessageBody().size(); 
+        return ret; 
+    } 
+ 
     TDuration GetDelay(const TSendMessageRequest& request) const {
         if (request.HasDelaySeconds()) {
             return TDuration::Seconds(request.GetDelaySeconds());
         } else {
             return QueueAttributes_->DelaySeconds;
         }
-    }
-
+    } 
+ 
     bool ValidateSingleRequest(const TSendMessageRequest& req, TSendMessageResponse* resp) {
         if (IsFifoQueue()) {
             if (!req.GetMessageGroupId()) {
@@ -106,13 +106,13 @@ private:
         return true;
     }
 
-    bool DoValidate() override {
+    bool DoValidate() override { 
         const size_t maxMessageSize = Min(TLimits::MaxMessageSize, QueueAttributes_->MaximumMessageSize);
-        if (IsBatch_) {
-            size_t size  = 0;
-            size_t count = 0;
+        if (IsBatch_) { 
+            size_t size  = 0; 
+            size_t count = 0; 
             bool tooBig = false;
-
+ 
             for (const auto& req : BatchRequest().GetEntries()) {
                 const size_t msgSize = CalculateMessageSize(req);
                 if (msgSize > maxMessageSize) {
@@ -120,9 +120,9 @@ private:
                     break;
                 }
                 size  += msgSize;
-                count += 1;
-            }
-
+                count += 1; 
+            } 
+ 
             if (tooBig) {
                 MakeError(Response_.MutableSendMessageBatch(), NErrors::INVALID_PARAMETER_VALUE,
                           TStringBuilder() << "Each message must be shorter than " << maxMessageSize << " bytes.");
@@ -131,56 +131,56 @@ private:
 
             if (size > TLimits::MaxMessageSize) {
                 MakeError(Response_.MutableSendMessageBatch(), NErrors::BATCH_REQUEST_TOO_LONG);
-                return false;
-            }
-            if (count == 0) {
+                return false; 
+            } 
+            if (count == 0) { 
                 MakeError(Response_.MutableSendMessageBatch(), NErrors::EMPTY_BATCH_REQUEST);
-                return false;
-            }
-            if (count > TLimits::MaxBatchSize) {
+                return false; 
+            } 
+            if (count > TLimits::MaxBatchSize) { 
                 MakeError(Response_.MutableSendMessageBatch(), NErrors::TOO_MANY_ENTRIES_IN_BATCH_REQUEST);
-                return false;
-            }
-
-            if (!GetQueueName()) {
+                return false; 
+            } 
+ 
+            if (!GetQueueName()) { 
                 MakeError(Response_.MutableSendMessageBatch(), NErrors::MISSING_PARAMETER, "No QueueName parameter.");
-                return false;
-            }
-        } else {
+                return false; 
+            } 
+        } else { 
             if (CalculateMessageSize(Request()) > maxMessageSize) {
                 MakeError(Response_.MutableSendMessage(), NErrors::INVALID_PARAMETER_VALUE, TStringBuilder() << "Message must be shorter than " << maxMessageSize << " bytes.");
-                return false;
-            }
-
-            if (!GetQueueName()) {
+                return false; 
+            } 
+ 
+            if (!GetQueueName()) { 
                 MakeError(Response_.MutableSendMessage(), NErrors::MISSING_PARAMETER, "No QueueName parameter.");
-                return false;
-            }
-        }
-
-        return true;
-    }
-
+                return false; 
+            } 
+        } 
+ 
+        return true; 
+    } 
+ 
     TError* MutableErrorDesc() override {
         return IsBatch_ ? Response_.MutableSendMessageBatch()->MutableError() : Response_.MutableSendMessage()->MutableError();
     }
 
     // coverity[var_deref_model]: false positive
     void DoAction() override {
-        Become(&TThis::StateFunc);
+        Become(&TThis::StateFunc); 
         Y_VERIFY(QueueAttributes_.Defined());
-
+ 
         const bool isFifo = IsFifoQueue();
         THolder<TSqsEvents::TEvSendMessageBatch> req;
         for (size_t i = 0, size = IsBatch_ ? BatchRequest().EntriesSize() : 1; i < size; ++i) {
             auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(i) : &Request();
             auto* currentResponse = IsBatch_ ? Response_.MutableSendMessageBatch()->AddEntries() : Response_.MutableSendMessage();
-
+ 
             currentResponse->SetId(currentRequest->GetId());
             if (!ValidateSingleRequest(*currentRequest, currentResponse)) {
                 continue;
             }
-
+ 
             TString deduplicationId;
             if (isFifo) {
                 const TString& dedupParam = currentRequest->GetMessageDeduplicationId();
@@ -220,33 +220,33 @@ private:
                 messageReq.Attributes = ProtobufToString(attrs);
             }
         }
-
+ 
         if (req) {
             Send(QueueLeader_, req.Release());
         } else {
             SendReplyAndDie();
         }
-    }
+    } 
+ 
 
-
-    TString DoGetQueueName() const override {
+    TString DoGetQueueName() const override { 
         return IsBatch_ ? BatchRequest().GetQueueName() : Request().GetQueueName();
-    }
-
-    static TString ProtobufToString(const NProtoBuf::Message& proto) {
-        TString ret;
+    } 
+ 
+    static TString ProtobufToString(const NProtoBuf::Message& proto) { 
+        TString ret; 
         Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&ret);
-        return ret;
-    }
-
-private:
+        return ret; 
+    } 
+ 
+private: 
     STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TEvWakeup,         HandleWakeup);
             hFunc(TSqsEvents::TEvSendMessageBatchResponse, HandleSendResponse);
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleSendResponse(TSqsEvents::TEvSendMessageBatchResponse::TPtr& ev) {
         const bool isFifo = IsFifoQueue();
         for (size_t i = 0, size = ev->Get()->Statuses.size(); i < size; ++i) {
@@ -266,7 +266,7 @@ private:
                     currentResponse->SetMD5OfMessageAttributes(md5);
                     RLOG_SQS_DEBUG("Calculating MD5 of message attributes. Request: " << *currentRequest << "\nMD5 of message attributes: " << md5);
                 }
-
+ 
                 // counters
                 if (status.Status == TSqsEvents::TEvSendMessageBatchResponse::ESendMessageStatus::AlreadySent) {
                     INC_COUNTER_COUPLE(QueueCounters_, SendMessage_DeduplicationCount, deduplicated_count_per_second);
@@ -276,12 +276,12 @@ private:
                 }
             } else {
                 MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
-            }
-        }
-
+            } 
+        } 
+ 
         SendReplyAndDie();
-    }
-
+    } 
+ 
     const TSendMessageRequest& Request() const {
         return SourceSqsRequest_.GetSendMessage();
     }
@@ -290,18 +290,18 @@ private:
         return SourceSqsRequest_.GetSendMessageBatch();
     }
 
-private:
+private: 
     std::vector<size_t> RequestToReplyIndexMapping_;
-
-    const bool IsBatch_;
-};
-
+ 
+    const bool IsBatch_; 
+}; 
+ 
 IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
     return new TSendMessageActor(sourceSqsRequest, false, std::move(cb));
-}
-
+} 
+ 
 IActor* CreateSendMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
     return new TSendMessageActor(sourceSqsRequest, true, std::move(cb));
-}
-
+} 
+ 
 } // namespace NKikimr::NSQS

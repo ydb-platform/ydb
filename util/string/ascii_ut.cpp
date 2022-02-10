@@ -84,15 +84,15 @@ Y_UNIT_TEST_SUITE(TAsciiTest) {
 
         UNIT_ASSERT(AsciiCompareIgnoreCase("qqQ", "qq") > 0);
         UNIT_ASSERT(AsciiCompareIgnoreCase("qq", "qq") == 0);
-
-        UNIT_ASSERT_EQUAL(AsciiHasPrefix("qweasd", "qwe"), true);
-        UNIT_ASSERT_EQUAL(AsciiHasPrefix("qweasd", "qWe"), false);
-        UNIT_ASSERT_EQUAL(AsciiHasPrefix("qweasd", "eWq"), false);
-
-        UNIT_ASSERT_EQUAL(AsciiHasPrefixIgnoreCase("qweasd", "qWe"), true);
-        UNIT_ASSERT_EQUAL(AsciiHasPrefixIgnoreCase("qweasd", "eWq"), false);
-
-        UNIT_ASSERT_EQUAL(AsciiHasSuffixIgnoreCase("qweasd", "asD"), true);
-        UNIT_ASSERT_EQUAL(AsciiHasSuffixIgnoreCase("qweasd", "ast"), false);
+ 
+        UNIT_ASSERT_EQUAL(AsciiHasPrefix("qweasd", "qwe"), true); 
+        UNIT_ASSERT_EQUAL(AsciiHasPrefix("qweasd", "qWe"), false); 
+        UNIT_ASSERT_EQUAL(AsciiHasPrefix("qweasd", "eWq"), false); 
+ 
+        UNIT_ASSERT_EQUAL(AsciiHasPrefixIgnoreCase("qweasd", "qWe"), true); 
+        UNIT_ASSERT_EQUAL(AsciiHasPrefixIgnoreCase("qweasd", "eWq"), false); 
+ 
+        UNIT_ASSERT_EQUAL(AsciiHasSuffixIgnoreCase("qweasd", "asD"), true); 
+        UNIT_ASSERT_EQUAL(AsciiHasSuffixIgnoreCase("qweasd", "ast"), false); 
     }
 }

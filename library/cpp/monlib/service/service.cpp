@@ -55,7 +55,7 @@ namespace NMonitoring {
         }
 
         const char* GetURI() const override {
-            return Header.request_uri.c_str();
+            return Header.request_uri.c_str(); 
         }
         const char* GetPath() const override {
             return Url.Get(THttpURL::FieldPath);

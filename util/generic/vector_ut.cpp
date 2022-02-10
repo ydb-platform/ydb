@@ -29,7 +29,7 @@ class TYVectorTest: public TTestBase {
     UNIT_TEST(TestFillInConstructor)
     UNIT_TEST(TestYResize)
     UNIT_TEST(TestCrop)
-    UNIT_TEST(TestInitializeList)
+    UNIT_TEST(TestInitializeList) 
     UNIT_TEST_SUITE_END();
 
 private:
@@ -563,34 +563,34 @@ private:
         TestYResize<TPod>();
         TestYResize<TNonPod>();
     }
-
+ 
     void CheckInitializeList(const TVector<int>& v) {
         for (size_t i = 0; i < v.size(); ++i) {
             UNIT_ASSERT_EQUAL(v[i], static_cast<int>(i));
-        }
-    }
-
-    void TestInitializeList() {
-        {
+        } 
+    } 
+ 
+    void TestInitializeList() { 
+        { 
             TVector<int> v;
-            v.assign({0, 1, 2});
-            CheckInitializeList(v);
-        }
-        {
+            v.assign({0, 1, 2}); 
+            CheckInitializeList(v); 
+        } 
+        { 
             TVector<int> v = {0, 1, 2};
-            CheckInitializeList(v);
-        }
-        {
+            CheckInitializeList(v); 
+        } 
+        { 
             TVector<int> v;
-            v = {0, 1, 2};
-            CheckInitializeList(v);
-        }
-        {
+            v = {0, 1, 2}; 
+            CheckInitializeList(v); 
+        } 
+        { 
             TVector<int> v = {0, 3};
-            v.insert(v.begin() + 1, {1, 2});
-            CheckInitializeList(v);
-        }
-    }
+            v.insert(v.begin() + 1, {1, 2}); 
+            CheckInitializeList(v); 
+        } 
+    } 
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TYVectorTest);

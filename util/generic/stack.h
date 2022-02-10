@@ -12,7 +12,7 @@ class TStack: public std::stack<T, S> {
 public:
     using TBase::TBase;
 
-    inline explicit operator bool() const noexcept {
-        return !this->empty();
-    }
+    inline explicit operator bool() const noexcept { 
+        return !this->empty(); 
+    } 
 };

@@ -3,13 +3,13 @@
 #include <library/cpp/dbg_output/dump.h>
 
 #include <util/generic/bt_exception.h>
-#include <util/generic/hash.h>
+#include <util/generic/hash.h> 
 #include <util/generic/intrlist.h>
-#include <util/generic/map.h>
+#include <util/generic/map.h> 
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 #include <util/generic/typetraits.h>
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 #include <util/generic/yexception.h>
 
 #include <util/string/builder.h>
@@ -103,64 +103,64 @@ namespace NUnitTest {
             bool Success;
         };
 
-        ITestSuiteProcessor();
+        ITestSuiteProcessor(); 
 
-        virtual ~ITestSuiteProcessor();
+        virtual ~ITestSuiteProcessor(); 
 
-        void Start();
+        void Start(); 
 
-        void End();
+        void End(); 
 
-        void UnitStart(const TUnit& unit);
+        void UnitStart(const TUnit& unit); 
 
-        void UnitStop(const TUnit& unit);
+        void UnitStop(const TUnit& unit); 
 
-        void Error(const TError& descr);
+        void Error(const TError& descr); 
 
-        void BeforeTest(const TTest& test);
+        void BeforeTest(const TTest& test); 
 
-        void Finish(const TFinish& descr);
+        void Finish(const TFinish& descr); 
 
-        unsigned GoodTests() const noexcept;
+        unsigned GoodTests() const noexcept; 
 
-        unsigned FailTests() const noexcept;
+        unsigned FailTests() const noexcept; 
 
-        unsigned GoodTestsInCurrentUnit() const noexcept;
+        unsigned GoodTestsInCurrentUnit() const noexcept; 
 
-        unsigned FailTestsInCurrentUnit() const noexcept;
+        unsigned FailTestsInCurrentUnit() const noexcept; 
 
         // Should execute test suite?
-        virtual bool CheckAccess(TString /*name*/, size_t /*num*/);
+        virtual bool CheckAccess(TString /*name*/, size_t /*num*/); 
 
         // Should execute a test whitin suite?
-        virtual bool CheckAccessTest(TString /*suite*/, const char* /*name*/);
+        virtual bool CheckAccessTest(TString /*suite*/, const char* /*name*/); 
 
         virtual void Run(std::function<void()> f, const TString& /*suite*/, const char* /*name*/, bool /*forceFork*/);
 
         // This process is forked for current test
-        virtual bool GetIsForked() const;
-
+        virtual bool GetIsForked() const; 
+ 
         // --fork-tests is set (warning: this may be false, but never the less test will be forked if called inside UNIT_FORKED_TEST)
-        virtual bool GetForkTests() const;
+        virtual bool GetForkTests() const; 
 
     private:
-        virtual void OnStart();
+        virtual void OnStart(); 
 
-        virtual void OnEnd();
+        virtual void OnEnd(); 
 
-        virtual void OnUnitStart(const TUnit* /*unit*/);
+        virtual void OnUnitStart(const TUnit* /*unit*/); 
 
-        virtual void OnUnitStop(const TUnit* /*unit*/);
+        virtual void OnUnitStop(const TUnit* /*unit*/); 
 
-        virtual void OnError(const TError* /*error*/);
+        virtual void OnError(const TError* /*error*/); 
 
-        virtual void OnFinish(const TFinish* /*finish*/);
+        virtual void OnFinish(const TFinish* /*finish*/); 
 
-        virtual void OnBeforeTest(const TTest* /*test*/);
+        virtual void OnBeforeTest(const TTest* /*test*/); 
 
-        void AddTestError(const TTest& test);
+        void AddTestError(const TTest& test); 
 
-        void AddTestFinish(const TTest& test);
+        void AddTestFinish(const TTest& test); 
 
     private:
         TMap<TString, size_t> TestErrors_;
@@ -172,16 +172,16 @@ namespace NUnitTest {
 
     class ITestBaseFactory: public TIntrusiveListItem<ITestBaseFactory> {
     public:
-        ITestBaseFactory();
+        ITestBaseFactory(); 
 
-        virtual ~ITestBaseFactory();
+        virtual ~ITestBaseFactory(); 
 
         // name of test suite
         virtual TString Name() const noexcept = 0;
         virtual TTestBase* ConstructTest() = 0;
 
     private:
-        void Register() noexcept;
+        void Register() noexcept; 
     };
 
     class TTestBase {
@@ -189,18 +189,18 @@ namespace NUnitTest {
         TRusage rusage;
 
     public:
-        TTestBase() noexcept;
+        TTestBase() noexcept; 
 
-        virtual ~TTestBase();
+        virtual ~TTestBase(); 
 
-        virtual TString TypeId() const;
+        virtual TString TypeId() const; 
 
         virtual TString Name() const noexcept = 0;
         virtual void Execute() = 0;
 
-        virtual void SetUp();
+        virtual void SetUp(); 
 
-        virtual void TearDown();
+        virtual void TearDown(); 
 
         void AddError(const char* msg, const TString& backtrace = TString(), TTestContext* context = nullptr);
 
@@ -209,15 +209,15 @@ namespace NUnitTest {
         void RunAfterTest(std::function<void()> f); // function like atexit to run after current unit test
 
     protected:
-        bool CheckAccessTest(const char* test);
+        bool CheckAccessTest(const char* test); 
 
-        void BeforeTest(const char* func);
+        void BeforeTest(const char* func); 
 
         void Finish(const char* func, TTestContext* context);
 
-        void AtStart();
+        void AtStart(); 
 
-        void AtEnd();
+        void AtEnd(); 
 
         void Run(std::function<void()> f, const TString& suite, const char* name, bool forceFork);
 
@@ -225,21 +225,21 @@ namespace NUnitTest {
         public:
             explicit TCleanUp(TTestBase* base);
 
-            ~TCleanUp();
+            ~TCleanUp(); 
 
         private:
             TTestBase* Base_;
         };
 
-        void BeforeTest();
+        void BeforeTest(); 
 
-        void AfterTest();
+        void AfterTest(); 
 
-        bool GetIsForked() const;
+        bool GetIsForked() const; 
 
-        bool GetForkTests() const;
-
-        ITestSuiteProcessor* Processor() const noexcept;
+        bool GetForkTests() const; 
+ 
+        ITestSuiteProcessor* Processor() const noexcept; 
 
     private:
         TTestFactory* Parent_;
@@ -759,21 +759,21 @@ public:                       \
         friend class ITestBaseFactory;
 
     public:
-        static TTestFactory& Instance();
+        static TTestFactory& Instance(); 
 
-        unsigned Execute();
+        unsigned Execute(); 
 
-        void SetProcessor(ITestSuiteProcessor* processor);
+        void SetProcessor(ITestSuiteProcessor* processor); 
 
     private:
-        void Register(ITestBaseFactory* b) noexcept;
+        void Register(ITestBaseFactory* b) noexcept; 
 
-        ITestSuiteProcessor* Processor() const noexcept;
+        ITestSuiteProcessor* Processor() const noexcept; 
 
     private:
         explicit TTestFactory(ITestSuiteProcessor* processor);
 
-        ~TTestFactory();
+        ~TTestFactory(); 
 
     private:
         TIntrusiveList<ITestBaseFactory> Items_;
@@ -783,13 +783,13 @@ public:                       \
     template <class T>
     class TTestBaseFactory: public ITestBaseFactory {
     public:
-        ~TTestBaseFactory() override = default;
+        ~TTestBaseFactory() override = default; 
 
-        inline TTestBase* ConstructTest() override {
+        inline TTestBase* ConstructTest() override { 
             return new T;
         }
 
-        inline TString Name() const noexcept override {
+        inline TString Name() const noexcept override { 
             return T::StaticName();
         }
     };
@@ -804,7 +804,7 @@ public:                       \
             : TBaseTestCase(nullptr, nullptr, false)
         {
         }
-
+ 
         inline TBaseTestCase(const char* name, std::function<void(TTestContext&)> body, bool forceFork)
             : Name_(name)
             , Body_(std::move(body))

@@ -1,72 +1,72 @@
-#include "action.h"
-
+#include "action.h" 
+ 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/yverify_stream.h>
-
-#include <util/string/ascii.h>
-#include <util/string/vector.h>
-#include <util/string/cast.h>
-#include <util/string/join.h>
-
+ 
+#include <util/string/ascii.h> 
+#include <util/string/vector.h> 
+#include <util/string/cast.h> 
+#include <util/string/join.h> 
+ 
 namespace NKikimr::NSQS {
-
-class TListUsersActor
-    : public TActionActor<TListUsersActor>
-{
-public:
+ 
+class TListUsersActor 
+    : public TActionActor<TListUsersActor> 
+{ 
+public: 
     static constexpr bool NeedExistingQueue() {
         return false;
     }
 
     TListUsersActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ListUsers, std::move(cb))
-    {
+    { 
         CopyAccountName(Request());
-        Response_.MutableListUsers()->SetRequestId(RequestId_);
+        Response_.MutableListUsers()->SetRequestId(RequestId_); 
 
         CopySecurityToken(Request());
-    }
-
-private:
+    } 
+ 
+private: 
     void PassAway() override {
         TActionActor<TListUsersActor>::PassAway();
-    }
-
+    } 
+ 
     TError* MutableErrorDesc() override {
         return Response_.MutableListUsers()->MutableError();
     }
 
     void DoAction() override {
-        Become(&TThis::StateFunc);
-
+        Become(&TThis::StateFunc); 
+ 
         auto proxy = MakeTxProxyID();
-
+ 
         auto ev = MakeHolder<TEvTxUserProxy::TEvNavigate>();
         ev->Record.MutableDescribePath()->SetPath(Cfg().GetRoot());
-
+ 
         RLOG_SQS_TRACE("TListUsersActor generate request."
                        << ". Proxy actor: " << proxy
                        << ". TEvNavigate: " << ev->Record.ShortDebugString());
-
+ 
         Send(proxy, ev.Release());
-    }
-
-    TString DoGetQueueName() const override {
-        return TString();
-    }
-
-private:
+    } 
+ 
+    TString DoGetQueueName() const override { 
+        return TString(); 
+    } 
+ 
+private: 
     STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) { 
             hFunc(TEvWakeup, HandleWakeup);
             hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
-        }
-    }
-
+        } 
+    } 
+ 
     void HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        const auto& record = ev->Get()->GetRecord();
-        const auto& desc = record.GetPathDescription();
+        const auto& record = ev->Get()->GetRecord(); 
+        const auto& desc = record.GetPathDescription(); 
 
         if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
             RLOG_SQS_CRIT("No error handler at TListUsersActor in HandleDescribeSchemeResult"
@@ -76,25 +76,25 @@ private:
         }
 
         const TString prefix = Request().GetUserNamePrefix();
-
-        for (const auto& child : desc.children()) {
+ 
+        for (const auto& child : desc.children()) { 
             if (child.GetPathType() == NKikimrSchemeOp::EPathTypeDir) {
-                if (prefix.empty() || AsciiHasPrefix(child.GetName(), prefix)) {
-                    Response_.MutableListUsers()->AddUserNames(child.GetName());
-                }
-            }
-        }
-
+                if (prefix.empty() || AsciiHasPrefix(child.GetName(), prefix)) { 
+                    Response_.MutableListUsers()->AddUserNames(child.GetName()); 
+                } 
+            } 
+        } 
+ 
         SendReplyAndDie();
-    }
-
+    } 
+ 
     const TListUsersRequest& Request() const {
         return SourceSqsRequest_.GetListUsers();
     }
-};
-
+}; 
+ 
 IActor* CreateListUsersActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
     return new TListUsersActor(sourceSqsRequest, std::move(cb));
-}
-
+} 
+ 
 } // namespace NKikimr::NSQS

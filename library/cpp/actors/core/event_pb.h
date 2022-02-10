@@ -144,12 +144,12 @@ namespace NActors {
         {
             Record = rec;
         }
-
+ 
         explicit TEventPBBase(TRecord&& rec)
         {
             Record = std::move(rec);
         }
-
+ 
         TString ToStringHeader() const override {
             return Record.GetTypeName();
         }
@@ -216,7 +216,7 @@ namespace NActors {
             return Record.SerializeToZeroCopyStream(chunker);
         }
 
-        ui32 CalculateSerializedSize() const override {
+        ui32 CalculateSerializedSize() const override { 
             ssize_t result = Record.ByteSize();
             if (result >= 0 && Payload) {
                 ++result; // marker

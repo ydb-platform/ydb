@@ -472,7 +472,7 @@ struct TStateStorageInfo : public TThrRefBase {
     };
 
     struct TRing {
-        bool UseRingSpecificNodeSelection;
+        bool UseRingSpecificNodeSelection; 
         TVector<TActorId> Replicas;
 
         TActorId SelectReplica(ui32 hash) const;

@@ -159,13 +159,13 @@ public:
 		/// Sets the priority for log messages to Message::PRIO_TRACE
 		/// and writes the given message.
 
-	LogStream& test(); 
-		/// Sets the priority for log messages to Message::PRIO_TEST. 
- 
-	LogStream& test(const std::string& message); 
-		/// Sets the priority for log messages to Message::PRIO_TEST 
-		/// and writes the given message. 
- 
+	LogStream& test();
+		/// Sets the priority for log messages to Message::PRIO_TEST.
+
+	LogStream& test(const std::string& message);
+		/// Sets the priority for log messages to Message::PRIO_TEST
+		/// and writes the given message.
+
 	LogStream& priority(Message::Priority priority);
 		/// Sets the priority for log messages.
 };

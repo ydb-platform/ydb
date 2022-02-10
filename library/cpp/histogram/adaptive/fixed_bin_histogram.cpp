@@ -495,14 +495,14 @@ namespace NKiwiAggr {
         return (BinRange == 0.0) ? BaseIndex : static_cast<i32>(BaseIndex + (value - ReferencePoint) / BinRange);
     }
 
-    double TFixedBinHistogram::CalcDensity(double value) { 
+    double TFixedBinHistogram::CalcDensity(double value) {
         i32 bin = CalcBin(value);
         if (bin < 0 || bin >= (i32)Freqs.size() || BinRange == 0.0 || GetSum() == 0) {
             return 0.0;
         }
-        return Freqs[bin] / GetSum() / BinRange; 
-    } 
- 
+        return Freqs[bin] / GetSum() / BinRange;
+    }
+
     double TFixedBinHistogram::BinStart(i32 i) {
         return Max(ReferencePoint + (i - BaseIndex) * BinRange, MinValue);
     }

@@ -7,13 +7,13 @@ class IDbSchemeResolver;
 
 namespace NActors {
     class TActorSystem;
-    struct TActorId;
+    struct TActorId; 
 }
 
 namespace NKikimr {
 namespace NSchCache {
 
-NYql::IDbSchemeResolver* CreateDbSchemeResolver(TActorSystem *actorSystem, const TActorId &schemeCacheActor);
+NYql::IDbSchemeResolver* CreateDbSchemeResolver(TActorSystem *actorSystem, const TActorId &schemeCacheActor); 
 
 } // namespace NSchCache
 } // namespace NKikimr

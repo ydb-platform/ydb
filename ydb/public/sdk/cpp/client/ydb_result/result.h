@@ -67,18 +67,18 @@ public:
     //! Returns number of columns
     size_t ColumnsCount() const;
 
-    //! Returns number of rows
-    size_t RowsCount() const;
-
+    //! Returns number of rows 
+    size_t RowsCount() const; 
+ 
     //! Set iterator to the next result row.
     //! On success TryNextRow will reset all column parsers to the values in next row.
     //! Column parsers are invalid before the first TryNextRow call.
     bool TryNextRow();
 
-    //! Returns index for column with specified name.
-    //! If there is no column with such name, then -1 is returned.
-    ssize_t ColumnIndex(const TString& columnName);
-
+    //! Returns index for column with specified name. 
+    //! If there is no column with such name, then -1 is returned. 
+    ssize_t ColumnIndex(const TString& columnName); 
+ 
     //! Returns column value parser for column with specified index.
     //! State of the parser is preserved until next TryNextRow call.
     TValueParser& ColumnParser(size_t columnIndex);

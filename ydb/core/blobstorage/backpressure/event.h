@@ -33,7 +33,7 @@ inline NLWTrace::TOrbit MoveOrbit<TEvBlobStorage::TEvVPut::TPtr>(TEvBlobStorage:
 class TEventHolder {
     ui32 Type;
     ui32 ByteSize;
-    TActorId Sender;
+    TActorId Sender; 
     ui64 Cookie;
     ui32 InterconnectChannel;
     mutable NLWTrace::TOrbit Orbit;
@@ -122,7 +122,7 @@ public:
         return Type;
     }
 
-    const TActorId& GetSender() const {
+    const TActorId& GetSender() const { 
         return Sender;
     }
 
@@ -134,7 +134,7 @@ public:
         return Orbit;
     }
 
-    void SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, ui64 queueCookie, ui64 msgId, ui64 sequenceId,
+    void SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, ui64 queueCookie, ui64 msgId, ui64 sequenceId, 
             bool sendMeCostSettings, NWilson::TTraceId traceId, const NBackpressure::TQueueClientId& clientId,
             const THPTimer& processingTimer);
 

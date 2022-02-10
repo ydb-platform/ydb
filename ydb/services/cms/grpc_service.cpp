@@ -9,19 +9,19 @@ namespace NGRpcService {
 
 TGRpcCmsService::TGRpcCmsService(NActors::TActorSystem *system,
                                  TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-                                 NActors::TActorId id)
+                                 NActors::TActorId id) 
     : ActorSystem_(system)
     , Counters_(counters)
     , GRpcRequestProxyId_(id)
 {
 }
 
-void TGRpcCmsService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcCmsService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) { 
     CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
+    SetupIncomingRequests(std::move(logger)); 
 }
 
-void TGRpcCmsService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter)
+void TGRpcCmsService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) 
 {
     Limiter_ = limiter;
 }
@@ -35,18 +35,18 @@ void TGRpcCmsService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcCmsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcCmsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Cms::IN, Ydb::Cms::OUT, TGRpcCmsService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Cms::V1::CmsService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("cms", #NAME))->Run();
+        #NAME, logger, getCounterBlock("cms", #NAME))->Run(); 
 
     ADD_REQUEST(CreateDatabase, CreateDatabaseRequest, CreateDatabaseResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvCreateTenantRequest(ctx));

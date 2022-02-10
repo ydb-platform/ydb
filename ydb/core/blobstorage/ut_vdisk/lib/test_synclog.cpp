@@ -24,8 +24,8 @@ public:
     TPDiskCtxPtr PDiskCtx;
     TIntrusivePtr<TLsnMngr> LsnMngr;
     TVDiskID SelfVDiskId;
-    TActorId LoggerId;
-    TActorId SyncLogId;
+    TActorId LoggerId; 
+    TActorId SyncLogId; 
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -35,7 +35,7 @@ class TDataWriterActor : public TActorBootstrapped<TDataWriterActor> {
     friend class TActorBootstrapped<TDataWriterActor>;
     const TDuration Period = TDuration::MilliSeconds(100);
     std::shared_ptr<TTestContext> TestCtx;
-    TActorId ParentId;
+    TActorId ParentId; 
     ui32 Generation = 0;
     ui32 Iterations = 10;
 
@@ -153,8 +153,8 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
     std::shared_ptr<TTestContext> TestCtx = std::make_shared<TTestContext>();
     TVDiskContextPtr VCtx;
     TIntrusivePtr<TVDiskConfig> VDiskConfig;
-    TActorId LogCutterId;
-    TActorId DataWriterId;
+    TActorId LogCutterId; 
+    TActorId DataWriterId; 
 
     TIntrusivePtr<NKikimr::TDb> Db;
 

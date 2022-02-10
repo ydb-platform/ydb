@@ -85,8 +85,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
         typedef TPriorityQueue<TQueueItem, TVector<TQueueItem>, TQueueItem::TGreater> TQueueType;
 
-        const TActorId YardID;
-        const TActorId SkeletonID;
+        const TActorId YardID; 
+        const TActorId SkeletonID; 
         const NPDisk::TOwner Owner;
         const NPDisk::TOwnerRound OwnerRound;
         ui64 CurSentLsn = 0;
@@ -206,7 +206,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             return NKikimrServices::TActivity::BS_RECOVERY_LOG_WRITER;
         }
 
-        TRecoveryLogWriter(const TActorId &yardID, const TActorId &skeletonID,
+        TRecoveryLogWriter(const TActorId &yardID, const TActorId &skeletonID, 
                            NPDisk::TOwner owner, NPDisk::TOwnerRound ownerRound, ui64 startLsn,
                            TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
             : TActorBootstrapped<TRecoveryLogWriter>()
@@ -221,7 +221,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         {}
     };
 
-    IActor* CreateRecoveryLogWriter(const TActorId &yardID, const TActorId &skeletonID, NPDisk::TOwner owner,
+    IActor* CreateRecoveryLogWriter(const TActorId &yardID, const TActorId &skeletonID, NPDisk::TOwner owner, 
                                     NPDisk::TOwnerRound ownerRound,
                                     ui64 startLsn, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
         return new TRecoveryLogWriter(yardID, skeletonID, owner, ownerRound, startLsn, counters);

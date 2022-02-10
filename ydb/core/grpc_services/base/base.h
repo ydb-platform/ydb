@@ -3,7 +3,7 @@
 #include <grpc++/support/byte_buffer.h>
 #include <grpc++/support/slice.h>
 
-#include <library/cpp/grpc/server/grpc_request_base.h>
+#include <library/cpp/grpc/server/grpc_request_base.h> 
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
@@ -46,7 +46,7 @@ using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
-void RefreshToken(const TString& token, const TString& database, const TActorContext& ctx, TActorId id);
+void RefreshToken(const TString& token, const TString& database, const TActorContext& ctx, TActorId id); 
 
 struct TRpcServices {
     enum EServiceId {
@@ -288,7 +288,7 @@ public:
     }
 
 private:
-    TIntrusivePtr<NGrpc::IRequestContextBase> Ctx_;
+    TIntrusivePtr<NGrpc::IRequestContextBase> Ctx_; 
     TMessage* RespData_; //Allocated on arena owned by implementation of IRequestContextBase
     const TString RequestName_;
     const ui64 Ru_;
@@ -323,9 +323,9 @@ class IRequestProxyCtx : public virtual IRequestCtxBase {
 public:
     virtual ~IRequestProxyCtx() = default;
     virtual const TMaybe<TString> GetYdbToken() const  = 0;
-    virtual void UpdateAuthState(NGrpc::TAuthState::EAuthState state) = 0;
+    virtual void UpdateAuthState(NGrpc::TAuthState::EAuthState state) = 0; 
     virtual void SetInternalToken(const TString& token) = 0;
-    virtual const NGrpc::TAuthState& GetAuthState() const = 0;
+    virtual const NGrpc::TAuthState& GetAuthState() const = 0; 
     virtual void ReplyUnauthenticated(const TString& msg = "") = 0;
     virtual void ReplyUnavaliable() = 0;
 
@@ -411,7 +411,7 @@ class TRefreshTokenImpl
     : public IRequestProxyCtx
     , public TEventLocal<TRefreshTokenImpl, TRpcServices::EvRefreshTokenRequest> {
 public:
-    TRefreshTokenImpl(const TString& token, const TString& database, TActorId from)
+    TRefreshTokenImpl(const TString& token, const TString& database, TActorId from) 
         : Token_(token)
         , Database_(database)
         , From_(from)
@@ -422,7 +422,7 @@ public:
         return Token_;
     }
 
-    void UpdateAuthState(NGrpc::TAuthState::EAuthState state) override {
+    void UpdateAuthState(NGrpc::TAuthState::EAuthState state) override { 
         State_.State = state;
     }
 
@@ -434,7 +434,7 @@ public:
         return Database_;
     }
 
-    const NGrpc::TAuthState& GetAuthState() const override {
+    const NGrpc::TAuthState& GetAuthState() const override { 
         return State_;
     }
 
@@ -483,7 +483,7 @@ public:
         Y_UNUSED(database);
     }
 
-    TActorId GetFromId() const {
+    TActorId GetFromId() const { 
         return From_;
     }
 
@@ -525,8 +525,8 @@ public:
 private:
     const TString Token_;
     const TString Database_;
-    const TActorId From_;
-    NGrpc::TAuthState State_;
+    const TActorId From_; 
+    NGrpc::TAuthState State_; 
     TString InternalToken_;
     NYql::TIssueManager IssueManager_;
 };
@@ -563,7 +563,7 @@ public:
         if (res.empty()) {
             return {};
         }
-        return TString{res[0]};
+        return TString{res[0]}; 
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
@@ -574,12 +574,12 @@ public:
         return CGIUnescapeRet(res[0]);
     }
 
-    void UpdateAuthState(NGrpc::TAuthState::EAuthState state) override {
+    void UpdateAuthState(NGrpc::TAuthState::EAuthState state) override { 
         auto& s = Ctx_->GetAuthState();
         s.State = state;
     }
 
-    const NGrpc::TAuthState& GetAuthState() const override {
+    const NGrpc::TAuthState& GetAuthState() const override { 
         return Ctx_->GetAuthState();
     }
 
@@ -593,14 +593,14 @@ public:
     }
 
     void ReplyUnavaliable() override {
-        Ctx_->Attach(TActorId());
+        Ctx_->Attach(TActorId()); 
         TResponse resp;
         FillYdbStatus(resp, IssueManager_.GetIssues(), Ydb::StatusIds::UNAVAILABLE);
         Ctx_->WriteAndFinish(std::move(resp), grpc::Status());
     }
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
-        Ctx_->Attach(TActorId());
+        Ctx_->Attach(TActorId()); 
         TResponse resp;
         FillYdbStatus(resp, IssueManager_.GetIssues(), status);
         Ctx_->WriteAndFinish(std::move(resp), grpc::Status());
@@ -674,7 +674,7 @@ public:
         return ToMaybe(Ctx_->GetPeerMetaValues(key));
     }
 
-    void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id) {
+    void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id) { 
         NGRpcService::RefreshToken(token, GetDatabaseName().GetOrElse(""), ctx, id);
     }
 
@@ -800,7 +800,7 @@ public:
     using TRequest = TReq;
     using TResponse = TResp;
 
-    TGRpcRequestWrapperImpl(NGrpc::IRequestContextBase* ctx)
+    TGRpcRequestWrapperImpl(NGrpc::IRequestContextBase* ctx) 
         : Ctx_(ctx)
     { }
 
@@ -809,7 +809,7 @@ public:
         if (res.empty()) {
             return {};
         }
-        return TString{res[0]};
+        return TString{res[0]}; 
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
@@ -820,12 +820,12 @@ public:
         return CGIUnescapeRet(res[0]);
     }
 
-    void UpdateAuthState(NGrpc::TAuthState::EAuthState state) override {
+    void UpdateAuthState(NGrpc::TAuthState::EAuthState state) override { 
         auto& s = Ctx_->GetAuthState();
         s.State = state;
     }
 
-    const NGrpc::TAuthState& GetAuthState() const override {
+    const NGrpc::TAuthState& GetAuthState() const override { 
         return Ctx_->GetAuthState();
     }
 
@@ -960,9 +960,9 @@ public:
     }
 
     void SetClientLostAction(std::function<void()>&& cb) override {
-        auto shutdown = [cb{move(cb)}](const NGrpc::IRequestContextBase::TAsyncFinishResult& future) mutable {
+        auto shutdown = [cb{move(cb)}](const NGrpc::IRequestContextBase::TAsyncFinishResult& future) mutable { 
             Y_ASSERT(future.HasValue());
-            if (future.GetValue() == NGrpc::IRequestContextBase::EFinishStatus::CANCEL) {
+            if (future.GetValue() == NGrpc::IRequestContextBase::EFinishStatus::CANCEL) { 
                 cb();
             }
         };
@@ -1015,7 +1015,7 @@ private:
         return google::protobuf::Arena::CreateMessage<TResponse>(Ctx_->GetArena());
     }
 
-    TIntrusivePtr<NGrpc::IRequestContextBase> Ctx_;
+    TIntrusivePtr<NGrpc::IRequestContextBase> Ctx_; 
     TString InternalToken_;
     NYql::TIssueManager IssueManager;
     Ydb::CostInfo* CostInfo = nullptr;
@@ -1080,7 +1080,7 @@ public:
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
-    TGRpcRequestWrapper(NGrpc::IRequestContextBase* ctx)
+    TGRpcRequestWrapper(NGrpc::IRequestContextBase* ctx) 
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
               TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
     { }
@@ -1128,7 +1128,7 @@ public:
     static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
-    TGRpcRequestValidationWrapper(NGrpc::IRequestContextBase* ctx)
+    TGRpcRequestValidationWrapper(NGrpc::IRequestContextBase* ctx) 
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TGRpcRequestValidationWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
     { }
 

@@ -193,8 +193,8 @@ class TBuildIndexScan : public TActor<TBuildIndexScan>, public NTable::IScan {
     const TBuildIndexRecord::TSeqNo SeqNo;
 
     const ui64 DataShardId;
-    const TActorId DatashardActorId;
-    const TActorId SchemeShardActorID;
+    const TActorId DatashardActorId; 
+    const TActorId SchemeShardActorID; 
 
     const TTags ScanTags; // first: columns we scan, order as in IndexTable
     const std::shared_ptr<TTypes> UploadColumnsTypes; // columns types we upload to indexTable
@@ -212,7 +212,7 @@ class TBuildIndexScan : public TActor<TBuildIndexScan>, public NTable::IScan {
     TBufferData WriteBuf;
     TSerializedCellVec LastUploadedKey;
 
-    TActorId Uploader;
+    TActorId Uploader; 
     ui64 RetryCount = 0;
 
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
@@ -227,8 +227,8 @@ public:
                     const TString& target,
                     const TBuildIndexRecord::TSeqNo& seqNo,
                     ui64 dataShardId,
-                    const TActorId& datashardActorId,
-                    const TActorId& schemeshardActorId,
+                    const TActorId& datashardActorId, 
+                    const TActorId& schemeshardActorId, 
                     const TSerializedTableRange& range,
                     const TVector<TString> targetIndexColumns,
                     const TVector<TString> targetDataColumns,
@@ -532,8 +532,8 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
         TString target,
         const TBuildIndexRecord::TSeqNo& seqNo,
         ui64 dataShardId,
-        const TActorId& datashardActorId,
-        const TActorId& schemeshardActorId,
+        const TActorId& datashardActorId, 
+        const TActorId& schemeshardActorId, 
         const TSerializedTableRange& range,
         const TVector<TString>& targetIndexColumns,
         const TVector<TString>& targetDataColumns,

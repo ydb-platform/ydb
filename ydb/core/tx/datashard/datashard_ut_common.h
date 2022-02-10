@@ -102,7 +102,7 @@ public:
 
 private:
     ESchema Schema;
-    TActorId Sender;
+    TActorId Sender; 
     ui64 LastTxId;
     ui64 LastStep;
     TMockDbSchemeResolver DbSchemeResolver;
@@ -307,7 +307,7 @@ private:
     ui64& LastTxId_;
     ui64& LastStep_;
     TVector<TFakeProxyTx::TPtr> TxQueue;
-    TMap<ui64, TActorId> ShardActors;
+    TMap<ui64, TActorId> ShardActors; 
     //
     TVector<TExpectedReadSet> DelayedReadSets;
     TVector<TExpectedReadSet::TWaitFor> DelayedData;
@@ -360,7 +360,7 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml = true);
 
 void InitRoot(Tests::TServer::TPtr server,
-              TActorId sender);
+              TActorId sender); 
 
 enum class EShadowDataMode {
     Default,
@@ -452,13 +452,13 @@ struct TShardedTableOptions {
     void N(NUnitTest::TTestContext&)
 
 void CreateShardedTable(Tests::TServer::TPtr server,
-                        TActorId sender,
+                        TActorId sender, 
                         const TString &root,
                         const TString &name,
                         const TShardedTableOptions &opts = TShardedTableOptions());
 
 void CreateShardedTable(Tests::TServer::TPtr server,
-                        TActorId sender,
+                        TActorId sender, 
                         const TString &root,
                         const TString &name,
                         ui64 shards,
@@ -467,7 +467,7 @@ void CreateShardedTable(Tests::TServer::TPtr server,
                         EShadowDataMode shadowData = EShadowDataMode::Default);
 
 TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
-                             TActorId sender,
+                             TActorId sender, 
                              const TString &path);
 
 using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
@@ -477,7 +477,7 @@ std::pair<TTableInfoMap, ui64> GetTables(Tests::TServer::TPtr server,
 
 TTableId ResolveTableId(
         Tests::TServer::TPtr server,
-        TActorId sender,
+        TActorId sender, 
         const TString& path);
 
 NTable::TRowVersionRanges GetRemovedRowVersions(
@@ -522,14 +522,14 @@ TRowVersion CommitWrites(
 
 ui64 AsyncSplitTable(
         Tests::TServer::TPtr server,
-        TActorId sender,
+        TActorId sender, 
         const TString& path,
         ui64 sourceTablet,
         ui32 splitKey);
 
 ui64 AsyncMergeTable(
         Tests::TServer::TPtr server,
-        TActorId sender,
+        TActorId sender, 
         const TString& path,
         const TVector<ui64>& sourceTabletIds);
 
@@ -575,8 +575,8 @@ ui64 AsyncAlterDropStream(
         const TString& streamName);
 
 struct TReadShardedTableState {
-    TActorId Sender;
-    TActorId Worker;
+    TActorId Sender; 
+    TActorId Worker; 
     TString Result;
 };
 
@@ -596,17 +596,17 @@ TString ReadShardedTable(
         const TString& path,
         TRowVersion snapshot = TRowVersion::Max());
 
-void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId);
+void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId); 
 void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId);
 
 void SimulateSleep(Tests::TServer::TPtr server, TDuration duration);
 
 void SendSQL(Tests::TServer::TPtr server,
-             TActorId sender,
+             TActorId sender, 
              const TString &sql,
              bool dml = true);
 void ExecSQL(Tests::TServer::TPtr server,
-             TActorId sender,
+             TActorId sender, 
              const TString &sql,
              bool dml = true,
              Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS);

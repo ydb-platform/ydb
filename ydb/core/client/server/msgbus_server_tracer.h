@@ -26,7 +26,7 @@ public:
     );
     IActor* CreateMessageBusTraceService() override;
 protected:
-    TActorId MessageBusTracerActorID;
+    TActorId MessageBusTracerActorID; 
     bool TraceActive;
     TString TracePath;
     void OnMessage(NBus::TOnMessageContext &msg) override;
@@ -98,9 +98,9 @@ private:
     TString Path;
 };
 
-inline TActorId MakeMessageBusTraceServiceID(ui32 node = 0) {
+inline TActorId MakeMessageBusTraceServiceID(ui32 node = 0) { 
     char x[12] = {'m','s','g','b','u','s','t','r','a','c','e','r'};
-    return TActorId(node, TStringBuf(x, 12));
+    return TActorId(node, TStringBuf(x, 12)); 
 }
 
 IActor* CreateMessageBusTracerStartTrace(NMsgBusProxy::TBusMessageContext &msg, const TString &path);

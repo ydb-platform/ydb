@@ -42,7 +42,7 @@ private:
     TString CurrentQueue;
     THolder<TSqsEvents::TEvQueuesList> Result;
     bool ListingQueues = false;
-    THashSet<TActorId> Recipients;
+    THashSet<TActorId> Recipients; 
 };
 
 } // namespace NKikimr::NSQS

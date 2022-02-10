@@ -32,8 +32,8 @@ class TBlobStorageQueue {
     };
 
     template<typename TDerived>
-    struct TSenderNode : public TRbTreeItem<TSenderNode<TDerived>, TCompare<TActorId>> {
-        const TActorId& GetKey() const {
+    struct TSenderNode : public TRbTreeItem<TSenderNode<TDerived>, TCompare<TActorId>> { 
+        const TActorId& GetKey() const { 
             return static_cast<const TDerived&>(*this).Event.GetSender();
         }
     };
@@ -102,7 +102,7 @@ class TBlobStorageQueue {
         {}
     };
 
-    using TSenderMap = TRbTree<TSenderNode<TItem>, TCompare<TActorId>>;
+    using TSenderMap = TRbTree<TSenderNode<TItem>, TCompare<TActorId>>; 
 
     TQueues Queues;
     TSenderMap SenderToItems;
@@ -190,11 +190,11 @@ public:
 
     void SetItemQueue(TItem& item, EItemQueue newQueue);
 
-    void SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, IActor *actor);
+    void SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, IActor *actor); 
 
     void ReplyWithError(TItem& item, NKikimrProto::EReplyStatus status, const TString& errorReason, const TActorContext& ctx);
     bool Expecting(ui64 msgId, ui64 sequenceId) const;
-    bool OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TActorId *outSender, ui64 *outCookie, TDuration *processingTime);
+    bool OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TActorId *outSender, ui64 *outCookie, TDuration *processingTime); 
 
     void Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 expectedMsgId, ui64 expectedSequenceId);
 
@@ -231,7 +231,7 @@ public:
     }
 
     TItemList::iterator EraseItem(TItemList& queue, TItemList::iterator it);
-    void Prune(const TActorId& sender);
+    void Prune(const TActorId& sender); 
     TMaybe<TDuration> GetWorstRequestProcessingTime() const;
 };
 

@@ -1,10 +1,10 @@
 #pragma once
 
-#include <library/cpp/monlib/dynamic_counters/percentile/percentile.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/percentile/percentile.h> 
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 #include <util/generic/ptr.h>
 
-namespace NGrpc {
+namespace NGrpc { 
 
 struct ICounterBlock : public TThrRefBase {
     virtual void CountNotOkRequest() = 0;
@@ -14,7 +14,7 @@ struct ICounterBlock : public TThrRefBase {
     virtual void CountRequestBytes(ui32 requestSize) = 0;
     virtual void CountResponseBytes(ui32 responseSize) = 0;
     virtual void StartProcessing(ui32 requestSize) = 0;
-    virtual void FinishProcessing(ui32 requestSize, ui32 responseSize, bool ok, ui32 status, TDuration requestDuration) = 0;
+    virtual void FinishProcessing(ui32 requestSize, ui32 responseSize, bool ok, ui32 status, TDuration requestDuration) = 0; 
     virtual void CountRequestsWithoutDatabase() {}
     virtual void CountRequestsWithoutToken() {}
     virtual void CountRequestWithoutTls() {}
@@ -126,11 +126,11 @@ public:
 
 using TCounterBlockPtr = TIntrusivePtr<TCounterBlock>;
 
-/**
- * Creates new instance of ICounterBlock implementation which does nothing.
- *
- * @return new instance
- */
-ICounterBlockPtr FakeCounterBlock();
-
-} // namespace NGrpc
+/** 
+ * Creates new instance of ICounterBlock implementation which does nothing. 
+ * 
+ * @return new instance 
+ */ 
+ICounterBlockPtr FakeCounterBlock(); 
+ 
+} // namespace NGrpc 

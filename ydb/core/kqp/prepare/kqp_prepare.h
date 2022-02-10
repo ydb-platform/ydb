@@ -85,7 +85,7 @@ struct TKqlTransformContext : TThrRefBase {
     TIntrusivePtr<NYql::TKikimrQueryContext> QueryCtx;
     TIntrusivePtr<NYql::TKikimrTablesData> Tables;
     NKikimrKqp::TKqlSettings Settings;
-    NActors::TActorId ReplyTarget;
+    NActors::TActorId ReplyTarget; 
 
     TKqpAnalyzeResults AnalyzeResults;
     NKikimrKqp::TPreparedKql* PreparingKql = nullptr;

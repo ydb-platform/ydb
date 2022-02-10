@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
     };
 
     class TBasicResponderActor: public TActorBootstrapped<TBasicResponderActor> {
-        TDeque<TActorId> RespondTo;
+        TDeque<TActorId> RespondTo; 
 
     public:
         TBasicResponderActor() {
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
         }
 
         void Run() override {
-            TActorId child = GetActorContext().Register(new TBasicResponderActor);
+            TActorId child = GetActorContext().Register(new TBasicResponderActor); 
             ui32 itemsProcessed = 0;
             try {
                 while (!Finish) {

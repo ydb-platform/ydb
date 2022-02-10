@@ -31,7 +31,7 @@ inline void WaitACLModification() {
     const ui16 grpc = pm.GetPort(2135);\
     TServerSettings settings = PQSettings(port);\
     TServer server = TServer(settings);\
-    server.EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(grpc));\
+    server.EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(grpc));\ 
     TFlatMsgBusPQClient client(settings, grpc);\
     client.FullInit();\
     client.CreateTopic("rt3.dc1--" + TString(topic), 1);\

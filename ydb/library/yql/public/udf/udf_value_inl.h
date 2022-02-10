@@ -1,9 +1,9 @@
-#pragma once
-
-#if !defined(INCLUDE_UDF_VALUE_INL_H)
-#error "you should never include udf_value_inl.h directly"
-#endif  // INCLUDE_UDF_VALUE_INL_H
-
+#pragma once 
+ 
+#if !defined(INCLUDE_UDF_VALUE_INL_H) 
+#error "you should never include udf_value_inl.h directly" 
+#endif  // INCLUDE_UDF_VALUE_INL_H 
+ 
 #ifdef LLVM_BC
 
 #define UDF_VERIFY(expr, ...)                     \
@@ -22,21 +22,21 @@
 #define UDF_ALWAYS_INLINE   Y_FORCE_INLINE
 
 #endif
-
-//////////////////////////////////////////////////////////////////////////////
-// IBoxedValue
-//////////////////////////////////////////////////////////////////////////////
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// IBoxedValue 
+////////////////////////////////////////////////////////////////////////////// 
 inline void IBoxedValue1::Ref() noexcept
-{
+{ 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 4)
     if (Refs_ < 0)
         return;
 #endif
     ++Refs_;
-}
-
+} 
+ 
 inline void IBoxedValue1::UnRef() noexcept
-{
+{ 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 4)
     if (Refs_ < 0)
         return;

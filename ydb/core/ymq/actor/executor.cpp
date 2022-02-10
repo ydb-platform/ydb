@@ -37,7 +37,7 @@ static TString MiniKQLParamsToString(const NKikimrMiniKQL::TParams& params) {
     return val.GetValueText<NClient::TFormatJSON>();
 }
 
-TExecutorBuilder::TExecutorBuilder(TActorId parent, const TString& requestId)
+TExecutorBuilder::TExecutorBuilder(TActorId parent, const TString& requestId) 
     : Parent_(parent)
     , RequestId_(requestId)
     , ProposeTransactionRequest_(MakeHolder<TEvTxUserProxy::TEvProposeTransaction>())
@@ -116,7 +116,7 @@ const char* TExecutorBuilder::GetQueryById(size_t idx) {
 }
 
 TMiniKqlExecutionActor::TMiniKqlExecutionActor(
-        const TActorId sender,
+        const TActorId sender, 
         TString requestId,
         THolder<TRequest> req,
         bool retryOnTimeout,
@@ -435,7 +435,7 @@ TString TMiniKqlExecutionActor::GetRequestType() const {
 void TMiniKqlExecutionActor::PassAway() {
     if (TabletPipeClient_) {
         NTabletPipe::CloseClient(SelfId(), TabletPipeClient_);
-        TabletPipeClient_ = TActorId();
+        TabletPipeClient_ = TActorId(); 
     }
     TActorBootstrapped<TMiniKqlExecutionActor>::PassAway();
 }

@@ -13,12 +13,12 @@ TGRpcYdbImportService::TGRpcYdbImportService(NActors::TActorSystem *system, TInt
     , GRpcRequestProxyId_(id)
 { }
 
-void TGRpcYdbImportService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcYdbImportService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) { 
     CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
+    SetupIncomingRequests(std::move(logger)); 
 }
 
-void TGRpcYdbImportService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcYdbImportService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
     Limiter_ = limiter;
 }
 
@@ -31,7 +31,7 @@ void TGRpcYdbImportService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcYdbImportService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbImportService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef ADD_REQUEST
@@ -39,11 +39,11 @@ void TGRpcYdbImportService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Import::IN, Ydb::Import::OUT, TGRpcYdbImportService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Import::V1::ImportService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("import", #NAME))->Run();
+        #NAME, logger, getCounterBlock("import", #NAME))->Run(); 
 
     ADD_REQUEST(ImportFromS3, ImportFromS3Request, ImportFromS3Response, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvImportFromS3Request(ctx));

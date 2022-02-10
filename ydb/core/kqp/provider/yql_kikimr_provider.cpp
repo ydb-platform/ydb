@@ -254,7 +254,7 @@ void TKikimrTableDescription::ToYson(NYson::TYsonWriter& writer) const {
     writer.OnKeyedItem(TStringBuf("IsRealData"));
     writer.OnBooleanScalar(true);
     writer.OnKeyedItem(TStringBuf("YqlCompatibleSchema"));
-    writer.OnBooleanScalar(true);
+    writer.OnBooleanScalar(true); 
 
     writer.OnKeyedItem(TStringBuf("RecordsCount"));
     writer.OnInt64Scalar(meta.RecordsCount);

@@ -619,11 +619,11 @@ namespace {
                 TotalBytesRead_ = createRate(Metrics_, "interconnect.total_bytes_read");
 
                 for (const char *reason : TDisconnectReason::Reasons) {
-                    DisconnectByReason_[reason] = Metrics_->Rate(
-                            NMonitoring::MakeLabels({
-                                {"sensor", "interconnect.disconnect_reason"},
-                                {"reason", reason},
-                            }));
+                    DisconnectByReason_[reason] = Metrics_->Rate( 
+                            NMonitoring::MakeLabels({ 
+                                {"sensor", "interconnect.disconnect_reason"}, 
+                                {"reason", reason}, 
+                            })); 
                 }
             }
 

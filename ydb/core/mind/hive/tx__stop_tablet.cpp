@@ -6,11 +6,11 @@ namespace NHive {
 
 class TTxStopTablet : public TTransactionBase<THive> {
     const TTabletId TabletId;
-    const TActorId ActorToNotify;
+    const TActorId ActorToNotify; 
     NKikimrProto::EReplyStatus Status;
 
 public:
-    TTxStopTablet(ui64 tabletId, const TActorId &actorToNotify, THive *hive)
+    TTxStopTablet(ui64 tabletId, const TActorId &actorToNotify, THive *hive) 
         : TBase(hive)
         , TabletId(tabletId)
         , ActorToNotify(actorToNotify)
@@ -87,7 +87,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateStopTablet(TTabletId tabletId, const TActorId &actorToNotify) {
+ITransaction* THive::CreateStopTablet(TTabletId tabletId, const TActorId &actorToNotify) { 
     return new TTxStopTablet(tabletId, actorToNotify, this);
 }
 

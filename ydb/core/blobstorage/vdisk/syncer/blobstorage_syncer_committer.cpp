@@ -100,9 +100,9 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TSyncerCommitter : public TActorBootstrapped<TSyncerCommitter> {
         struct TNotify {
-            const TActorId ActorId;
+            const TActorId ActorId; 
             const void *Cookie = nullptr;
-            TNotify(const TActorId aid, const void *cookie)
+            TNotify(const TActorId aid, const void *cookie) 
                 : ActorId(aid)
                 , Cookie(cookie)
             {}

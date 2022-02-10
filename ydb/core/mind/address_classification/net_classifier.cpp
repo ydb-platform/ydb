@@ -58,7 +58,7 @@ private:
         return AppData(Ctx())->NetClassifierConfig;
     }
 
-    void AddSubscriber(const TActorId subscriberId) {
+    void AddSubscriber(const TActorId subscriberId) { 
         Subscribers.insert(subscriberId);
 
         *Counters->SubscribersCount = Subscribers.size();
@@ -286,7 +286,7 @@ private:
         SendClassifierUpdate(ev->Sender);
     }
 
-    void SendClassifierUpdate(const TActorId recipient) {
+    void SendClassifierUpdate(const TActorId recipient) { 
         auto ev = MakeHolder<TEvNetClassifier::TEvClassifierUpdate>();
         ev->Classifier = LabeledAddressClassifier;
         ev->NetDataUpdateTimestamp = NetDataUpdateTimestamp;
@@ -398,7 +398,7 @@ private:
 
     TLabeledAddressClassifier::TConstPtr LabeledAddressClassifier;
     TMaybe<TInstant> NetDataUpdateTimestamp;
-    THashSet<TActorId> Subscribers;
+    THashSet<TActorId> Subscribers; 
 
     ui64 ClassifierUpdatesSent = 0;
     ui64 GoodConfigNotifications = 0;

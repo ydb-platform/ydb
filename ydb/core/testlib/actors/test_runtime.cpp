@@ -103,7 +103,7 @@ namespace NActors {
             if (!SingleSysEnv) {
                 const TIntrusivePtr<NMonitoring::TDynamicCounters> profilerCounters = NKikimr::GetServiceCounters(node->DynamicCounters, "utils");
                 TActorSetupCmd profilerSetup(CreateProfilerActor(profilerCounters, "."), TMailboxType::Simple, 0);
-                node->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeProfilerID(FirstNodeId + nodeIndex), profilerSetup));
+                node->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeProfilerID(FirstNodeId + nodeIndex), profilerSetup)); 
             }
 
             if (!UseRealThreads) {
@@ -153,7 +153,7 @@ namespace NActors {
                 node->Mon->RegisterCountersPage("counters", "Counters", node->DynamicCounters);
                 auto actorsMonPage = node->Mon->RegisterIndexPage("actors", "Actors");
                 node->Mon->RegisterActorPage(actorsMonPage, "profiler", "Profiler", false, node->ActorSystem.Get(), MakeProfilerID(FirstNodeId + nodeIndex));
-                const NActors::TActorId loggerActorId = NActors::TActorId(FirstNodeId + nodeIndex, "logger");
+                const NActors::TActorId loggerActorId = NActors::TActorId(FirstNodeId + nodeIndex, "logger"); 
                 node->Mon->RegisterActorPage(actorsMonPage, "logger", "Logger", false, node->ActorSystem.Get(), loggerActorId);
                 MonPorts.push_back(port);
             }
@@ -209,8 +209,8 @@ namespace NActors {
         return true;
     }
 
-    void TTestActorRuntime::SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig, TActorId clientId, ui64 cookie) {
-        bool newPipe = (clientId == TActorId());
+    void TTestActorRuntime::SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig, TActorId clientId, ui64 cookie) { 
+        bool newPipe = (clientId == TActorId()); 
         if (newPipe)
             clientId = Register(NKikimr::NTabletPipe::CreateClient(sender, tabletId, pipeConfig), nodeIndex);
         if (!UseRealThreads) {
@@ -224,15 +224,15 @@ namespace NActors {
             Send(new IEventHandle(clientId, sender, new NKikimr::TEvTabletPipe::TEvShutdown()), nodeIndex, true);
     }
 
-    void TTestActorRuntime::SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload,
+    void TTestActorRuntime::SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload, 
                                        ui32 nodeIndex, ui64 cookie) {
         auto pipeEv = new IEventHandle(clientId, sender, payload, 0, cookie);
         pipeEv->Rewrite(NKikimr::TEvTabletPipe::EvSend, clientId);
         Send(pipeEv, nodeIndex, true);
     }
 
-    TActorId TTestActorRuntime::ConnectToPipe(ui64 tabletId, const TActorId& sender, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig) {
-        TActorId clientId = Register(NKikimr::NTabletPipe::CreateClient(sender, tabletId, pipeConfig), nodeIndex);
+    TActorId TTestActorRuntime::ConnectToPipe(ui64 tabletId, const TActorId& sender, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig) { 
+        TActorId clientId = Register(NKikimr::NTabletPipe::CreateClient(sender, tabletId, pipeConfig), nodeIndex); 
         if (!UseRealThreads) {
             EnableScheduleForActor(clientId, true);
         }

@@ -1,7 +1,7 @@
-PROTO_LIBRARY(api-grpc)
+PROTO_LIBRARY(api-grpc) 
 
-MAVEN_GROUP_ID(com.yandex.ydb)
-
+MAVEN_GROUP_ID(com.yandex.ydb) 
+ 
 GRPC()
 
 OWNER(

@@ -19,7 +19,7 @@ class TJsonCluster : public TActorBootstrapped<TJsonCluster> {
     using TThis = TJsonCluster;
     using TBase = TActorBootstrapped<TJsonCluster>;
     IViewer* Viewer;
-    TActorId Initiator;
+    TActorId Initiator; 
     ui32 Requested;
     ui32 Received;
     NMon::TEvHttpInfo::TPtr Event;
@@ -55,7 +55,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId();
+        const TActorId nameserviceId = GetNameserviceActorId(); 
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         TBase::Become(&TThis::StateRequestedBrowse);
         ctx.Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
@@ -71,7 +71,7 @@ public:
     }
 
     void SendRequest(ui32 nodeId, const TActorContext& ctx) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId); 
         ctx.Send(whiteboardServiceId, new TEvWhiteboard::TEvSystemStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
         ++Requested;
         ctx.Send(whiteboardServiceId, new TEvWhiteboard::TEvVDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
@@ -100,7 +100,7 @@ public:
             record->MutableOptions()->SetReturnPartitioningInfo(false);
             record->MutableOptions()->SetReturnPartitionConfig(false);
             record->MutableOptions()->SetReturnChildren(false);
-            TActorId txproxy = MakeTxProxyID();
+            TActorId txproxy = MakeTxProxyID(); 
             ctx.Send(txproxy, request.Release());
             ++Requested;
         }

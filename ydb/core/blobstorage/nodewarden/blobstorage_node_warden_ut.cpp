@@ -243,7 +243,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
     runtime.Initialize(app.Unwrap());
 
     for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-        TActorId localActor = runtime.GetLocalServiceId(
+        TActorId localActor = runtime.GetLocalServiceId( 
             MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)), nodeIndex);
         runtime.EnableScheduleForActor(localActor, true);
     }
@@ -300,11 +300,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         return pdiskId;
     }
 
-    void Put(TTestActorRuntime &runtime, TActorId &sender, ui32 groupId, TLogoBlobID logoBlobId, TString data, NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::OK) {
+    void Put(TTestActorRuntime &runtime, TActorId &sender, ui32 groupId, TLogoBlobID logoBlobId, TString data, NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::OK) { 
         VERBOSE_COUT(" Sending TEvPut");
-        TActorId proxy = MakeBlobStorageProxyID(groupId);
+        TActorId proxy = MakeBlobStorageProxyID(groupId); 
         ui32 nodeId = sender.NodeId();
-        TActorId nodeWarden = MakeBlobStorageNodeWardenID(nodeId);
+        TActorId nodeWarden = MakeBlobStorageNodeWardenID(nodeId); 
         ui64 cookie = 6543210;
         runtime.Send(new IEventHandle(proxy, sender,
             new TEvBlobStorage::TEvPut(logoBlobId, data, TInstant::Max()),
@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId);
         NKikimrBlobStorage::TDefineStoragePool storagePool = runtime.GetAppData().DomainsInfo->GetDomain(domainId).StoragePoolTypes.at(kind);
 
-        TActorId edge = runtime.AllocateEdgeActor();
+        TActorId edge = runtime.AllocateEdgeActor(); 
         auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         Y_VERIFY(storagePool.GetKind() == kind);
         storagePool.ClearStoragePoolId();
@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     ui32 GetGroupFromPool(TTestBasicRuntime& runtime, ui32 domainId, TString poolName) {
         auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId);
 
-        TActorId edge = runtime.AllocateEdgeActor();
+        TActorId edge = runtime.AllocateEdgeActor(); 
         auto selectGroups = std::make_unique<TEvBlobStorage::TEvControllerSelectGroups>();
         auto *record = &selectGroups->Record;
         record->SetReturnAllMatchingGroups(true);
@@ -358,12 +358,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         return reply->Get()->Record.GetMatchingGroups(0).GetGroups(0).GetGroupID();
     }
 
-    void SendToBsProxy(TTestBasicRuntime& runtime, TActorId sender, ui32 groupId, IEventBase *ev, ui64 cookie = 0) {
+    void SendToBsProxy(TTestBasicRuntime& runtime, TActorId sender, ui32 groupId, IEventBase *ev, ui64 cookie = 0) { 
         auto flags = NActors::IEventHandle::FlagTrackDelivery
                     | NActors::IEventHandle::FlagForwardOnNondelivery;
 
-        TActorId recipient = MakeBlobStorageProxyID(groupId);
-        TActorId nodeWarden = MakeBlobStorageNodeWardenID(sender.NodeId());
+        TActorId recipient = MakeBlobStorageProxyID(groupId); 
+        TActorId nodeWarden = MakeBlobStorageNodeWardenID(sender.NodeId()); 
         return runtime.Send(new IEventHandle(recipient, sender, ev,
             flags, cookie, &nodeWarden, {}), sender.NodeId() - runtime.GetNodeId(0));
     }
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(TTestBasicRuntime& runtime, ui32 domainId, const TString& name) {
         auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId);
 
-        TActorId edge = runtime.AllocateEdgeActor();
+        TActorId edge = runtime.AllocateEdgeActor(); 
         auto selectGroups = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto* request = selectGroups->Record.MutableRequest();
         auto* readPool = request->AddCommand()->MutableReadStoragePool();
@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     void RemoveStoragePool(TTestBasicRuntime& runtime, ui32 domainId, const NKikimrBlobStorage::TDefineStoragePool& storagePool) {
         auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId);
-        TActorId edge = runtime.AllocateEdgeActor();
+        TActorId edge = runtime.AllocateEdgeActor(); 
         auto selectGroups = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto* request = selectGroups->Record.MutableRequest();
         auto* deletePool = request->AddCommand()->MutableDeleteStoragePool();
@@ -646,8 +646,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TTestBasicRuntime runtime(2, false);
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap(32ull << 30ull));
         Setup(runtime, "SectorMap:new_pdisk", sectorMap);
-        TActorId sender0 = runtime.AllocateEdgeActor(0);
-//        TActorId sender1 = runtime.AllocateEdgeActor(1);
+        TActorId sender0 = runtime.AllocateEdgeActor(0); 
+//        TActorId sender1 = runtime.AllocateEdgeActor(1); 
 
         VERBOSE_COUT(" Formatting pdisk");
         FormatPDiskRandomKeys(tempDir() + "/new_pdisk.dat", sectorMap->DeviceSize, 32 << 20, 1, false, sectorMap);
@@ -667,7 +667,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             EntropyPool().Read(&guid2, sizeof(guid2));
         }
         ui32 nodeId = runtime.GetNodeId(0);
-        TActorId pDiskActorId = MakeBlobStoragePDiskID(nodeId, pDiskId);
+        TActorId pDiskActorId = MakeBlobStoragePDiskID(nodeId, pDiskId); 
         for (;;) {
             runtime.Send(new IEventHandle(pDiskActorId, sender0, new NPDisk::TEvYardInit(1, vDiskId, guid)), 0);
             TAutoPtr<IEventHandle> handle;

@@ -21,8 +21,8 @@ SRCS(
     mkql_node.h
     mkql_node_builder.cpp
     mkql_node_builder.h
-    mkql_node_cast.cpp
-    mkql_node_cast.h
+    mkql_node_cast.cpp 
+    mkql_node_cast.h 
     mkql_node_printer.cpp
     mkql_node_printer.h
     mkql_node_serialization.cpp
@@ -35,13 +35,13 @@ SRCS(
     mkql_program_builder.h
     mkql_runtime_version.cpp
     mkql_runtime_version.h
-    mkql_stats_registry.cpp
+    mkql_stats_registry.cpp 
     mkql_string_util.cpp
     mkql_string_util.h
     mkql_terminator.cpp
     mkql_terminator.h
-    mkql_type_builder.cpp
-    mkql_type_builder.h
+    mkql_type_builder.cpp 
+    mkql_type_builder.h 
     mkql_type_ops.cpp
     mkql_type_ops.h
     mkql_unboxed_value_stream.cpp
@@ -58,7 +58,7 @@ PEERDIR(
     library/cpp/actors/util
     library/cpp/deprecated/enum_codegen
     library/cpp/enumbitset
-    library/cpp/monlib/dynamic_counters
+    library/cpp/monlib/dynamic_counters 
     library/cpp/packedtypes
     library/cpp/resource
     library/cpp/yson

@@ -248,7 +248,7 @@ struct TDummyResult: public IDestructable {
 
 class TDummyScan : public TActor<TDummyScan>, public NTable::IScan {
 public:
-    TDummyScan(TActorId tablet, bool postponed, EAbort abort, ui32 rows)
+    TDummyScan(TActorId tablet, bool postponed, EAbort abort, ui32 rows) 
         : TActor(&TThis::StateWork)
         , Tablet(tablet)
         , ExpectedRows(rows)
@@ -324,7 +324,7 @@ private:
     }
 
 private:
-    TActorId Tablet;
+    TActorId Tablet; 
     IDriver *Driver = nullptr;
     TIntrusiveConstPtr<TScheme> Scheme;
     ui64 StoredRows = 0;
@@ -409,7 +409,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
     ui64 ScanTaskId;
     ui64 ScanCookie;
     ui64 SnapshotId;
-    TActorId Sender;
+    TActorId Sender; 
 
     void SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext&) override {
         Send(Sender, new TEvTestFlatTablet::TEvSnapshotComplete(std::move(snapContext)));
@@ -498,7 +498,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
     }
 
 public:
-    TTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info)
+    TTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info) 
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
         , Scan(nullptr)
@@ -553,7 +553,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
 
         env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
 
-        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) { 
             return new TTestFlatTablet(env.Edge, tablet, info);
         });
 
@@ -597,7 +597,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
 Y_UNIT_TEST_SUITE(TFlatTableExecutorTxLimit) {
 
     struct TTxSchema : public ITransaction {
-        TTxSchema(TActorId owner) : Owner(owner) { }
+        TTxSchema(TActorId owner) : Owner(owner) { } 
 
         bool Execute(TTransactionContext &txc, const TActorContext&) override
         {
@@ -611,11 +611,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorTxLimit) {
             ctx.Send(Owner, new NFake::TEvResult);
         }
 
-        const TActorId Owner;
+        const TActorId Owner; 
     };
 
     struct TTxNoop : public ITransaction {
-        TTxNoop(TActorId owner) : Owner(owner) { }
+        TTxNoop(TActorId owner) : Owner(owner) { } 
 
         bool Execute(TTransactionContext&, const TActorContext&) override
         {
@@ -627,7 +627,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorTxLimit) {
             ctx.Send(Owner, new NFake::TEvResult);
         }
 
-        const TActorId Owner;
+        const TActorId Owner; 
     };
 
     Y_UNIT_TEST(TestExecutorTxLimit) {
@@ -898,7 +898,7 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
             Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_INFO);
             Env.SetLogPriority(NKikimrServices::TABLET_OPS_HOST, NActors::NLog::PRI_INFO);
 
-            FireTablet(Edge, Tablet, [this](const TActorId &tablet, TTabletStorageInfo *info) {
+            FireTablet(Edge, Tablet, [this](const TActorId &tablet, TTabletStorageInfo *info) { 
                 return new TTestFlatTablet(Edge, tablet, info);
             });
 
@@ -3363,7 +3363,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
             WaitForSecondAttach,
         };
 
-        TActorId Edge;
+        TActorId Edge; 
         bool Debug = false;
         TTestActorRuntimeBase::TEventObserver PrevObserverFunc;
 

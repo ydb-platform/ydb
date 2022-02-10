@@ -26,7 +26,7 @@ namespace NSchemeShardUT_Private {
         NActors::TTestActorRuntime& runtime, const TActorId& proposer,
         TEvRequest* evRequest, const TVector<TStatus>& expectedStatuses)
     {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         ui64 txId = evRequest->Record.GetTxId();
         runtime.Send(new IEventHandle(proposer, sender, evRequest));
 
@@ -195,7 +195,7 @@ namespace NSchemeShardUT_Private {
     //
 
     NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, ui64 schemeShard, const TString& path, const NKikimrSchemeOp::TDescribeOptions& opts) {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         auto evLs = new TEvSchemeShard::TEvDescribeScheme(path);
         evLs->Record.MutableOptions()->CopyFrom(opts);
         ForwardToTablet(runtime, schemeShard, sender, evLs);
@@ -310,7 +310,7 @@ namespace NSchemeShardUT_Private {
 
     void AsyncCopyTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId,
                         const TString& dstPath, const TString& dstName, const TString& srcFullName) {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         ForwardToTablet(runtime, schemeShardId, sender, CopyTableRequest(txId, dstPath, dstName, srcFullName));
     }
 
@@ -376,7 +376,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncLock(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name) {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         ForwardToTablet(runtime, schemeShard, sender, LockRequest(txId, parentPath, name));
     }
 
@@ -408,7 +408,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncUnlock(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, ui64 lockId, const TString& parentPath, const TString& name) {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         ForwardToTablet(runtime, schemeShard, sender, UnlockRequest(txId, lockId, parentPath, name));
     }
 
@@ -810,7 +810,7 @@ namespace NSchemeShardUT_Private {
     void AsyncAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
             const TString& mountToken, ui64 tokenVersion)
     {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetWorkingDir(parentPath);
@@ -838,7 +838,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncCancelTxTable(TTestActorRuntime& runtime, ui64 txId, ui64 targetTxId) {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, CancelTxRequest(txId, targetTxId));
     }
 
@@ -1092,7 +1092,7 @@ namespace NSchemeShardUT_Private {
     }
 
     NKikimrProto::EReplyStatus LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query, NKikimrMiniKQL::TResult& result, TString& err) {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
 
         auto evTx = new TEvTablet::TEvLocalMKQL;
         auto *mkql = evTx->Record.MutableProgram();
@@ -1147,7 +1147,7 @@ namespace NSchemeShardUT_Private {
 
     NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId, const TString& schemeChangesStr, bool dryRun,
                        NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
 
         auto evTx = new TEvTablet::TEvLocalSchemeTx;
         evTx->Record.SetDryRun(dryRun);
@@ -1389,7 +1389,7 @@ namespace NSchemeShardUT_Private {
         Cdbg << result << "\n";
         UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, schemeShard, sender);
     }
 
@@ -1453,7 +1453,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name) {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         auto evTx = UpgradeSubDomainRequest(txId, parentPath, name);
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evTx);
     }
@@ -1479,7 +1479,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         auto evTx = UpgradeSubDomainDecisionRequest(txId, parentPath, name, decision);
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evTx);
     }
@@ -1499,7 +1499,7 @@ namespace NSchemeShardUT_Private {
         const TVector<TString>& tables,
         TDuration timeout)
     {
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
 
         {
             auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();

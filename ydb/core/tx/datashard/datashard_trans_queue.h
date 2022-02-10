@@ -81,7 +81,7 @@ private: // for pipeline only
 
     // Propose
 
-    void ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId source, const TStringBuf& txBody);
+    void ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId source, const TStringBuf& txBody); 
     void UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags);
     void UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf& txBody);
     void ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& op);
@@ -102,7 +102,7 @@ private: // for pipeline only
     bool GetNextPlannedTxId(ui64& step, ui64& txId) const;
     bool LoadTxDetails(NIceDb::TNiceDb &db,
                        ui64 txId,
-                       TActorId &targets,
+                       TActorId &targets, 
                        TString &txBody,
                        TVector<TSysTables::TLocksTable::TLock> &locks,
                        ui64 &artifactFlags);

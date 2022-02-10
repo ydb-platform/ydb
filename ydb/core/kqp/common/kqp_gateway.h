@@ -153,10 +153,10 @@ public:
 
     /* Physical */
     virtual NThreading::TFuture<TExecPhysicalResult> ExecutePhysical(TExecPhysicalRequest&& request,
-        const NActors::TActorId& target) = 0;
+        const NActors::TActorId& target) = 0; 
 
     virtual NThreading::TFuture<TExecPhysicalResult> ExecuteScanQuery(TExecPhysicalRequest&& request,
-        const NActors::TActorId& target) = 0;
+        const NActors::TActorId& target) = 0; 
 
     virtual NThreading::TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request,
         const NActors::TActorId& target) = 0;

@@ -1,13 +1,13 @@
 #include "appdata.h"
-#include "tablet_types.h"
+#include "tablet_types.h" 
 
 namespace NKikimr {
 
-TAppData::TAppData(
-        ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,
+TAppData::TAppData( 
+        ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId, 
         TMap<TString, ui32> servicePools,
-        const NScheme::TTypeRegistry* typeRegistry,
-        const NMiniKQL::IFunctionRegistry* functionRegistry,
+        const NScheme::TTypeRegistry* typeRegistry, 
+        const NMiniKQL::IFunctionRegistry* functionRegistry, 
         const TFormatFactory* formatFactory,
         TProgramShouldContinue *kikimrShouldContinue)
     : Magic(MagicTag)
@@ -17,7 +17,7 @@ TAppData::TAppData(
     , BatchPoolId(batchPoolId)
     , ServicePools(servicePools)
     , TypeRegistry(typeRegistry)
-    , FunctionRegistry(functionRegistry)
+    , FunctionRegistry(functionRegistry) 
     , FormatFactory(formatFactory)
     , ProxySchemeCacheNodes(Max<ui64>() / 4)
     , ProxySchemeCacheDistrNodes(Max<ui64>() / 4)

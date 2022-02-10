@@ -13,14 +13,14 @@ class TTxAdoptTablet : public TTransactionBase<THive> {
     const ui64 Owner;
     const ui64 OwnerIdx;
 
-    const TActorId Sender;
+    const TActorId Sender; 
     const ui64 Cookie;
 
     TString Explain;
     NKikimrProto::EReplyStatus Status;
 
 public:
-    TTxAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie, THive *hive)
+    TTxAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie, THive *hive) 
         : TBase(hive)
         , TabletId(rec.GetTabletID())
         , PrevOwner(rec.GetPrevOwner())
@@ -110,7 +110,7 @@ public:
 
 };
 
-ITransaction* THive::CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie) {
+ITransaction* THive::CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie) { 
     return new TTxAdoptTablet(rec, sender, cookie, this);
 }
 

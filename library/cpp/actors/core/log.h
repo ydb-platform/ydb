@@ -14,7 +14,7 @@
 #include <util/string/printf.h>
 #include <util/string/builder.h>
 #include <library/cpp/logger/all.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/svnversion/svnversion.h>
@@ -323,7 +323,7 @@ namespace NActors {
     {
         const NLog::TSettings *mSettings = ctx.LoggerSettings();
         TLoggerActor::Throttle(*mSettings);
-        ctx.Send(new IEventHandle(mSettings->LoggerActorId, TActorId(), new NLog::TEvLog(mPriority, mComponent, std::move(str))));
+        ctx.Send(new IEventHandle(mSettings->LoggerActorId, TActorId(), new NLog::TEvLog(mPriority, mComponent, std::move(str)))); 
     }
 
     template <typename TCtx, typename... TArgs>

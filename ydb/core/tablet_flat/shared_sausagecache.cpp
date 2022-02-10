@@ -112,7 +112,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         }
 
         const TLogoBlobID Label;
-        TActorId Source;    /* receiver of read results     */
+        TActorId Source;    /* receiver of read results     */ 
         TActorId Owner;     /* receiver of NBlockIO::TEvStat*/
         NBlockIO::EPriority Priority;
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
@@ -129,7 +129,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
 
     struct TCollection {
         TLogoBlobID MetaId;
-        TSet<TActorId> Owners;
+        TSet<TActorId> Owners; 
         TPageMap<TIntrusivePtr<TPage>> PageMap;
         TMap<ui32, TExpectant> Expectants;
         TDeque<ui32> DroppedPages;
@@ -149,20 +149,20 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
             THashMap<TLogoBlobID, TDeque<TPagesToRequest>> Index;
         };
 
-        TMap<TActorId, TByActorRequest> Requests;
+        TMap<TActorId, TByActorRequest> Requests; 
 
         i64 Limit = 0;
         i64 InFly = 0;
 
-        TActorId NextToRequest;
+        TActorId NextToRequest; 
     };
 
     TIntrusivePtr<TSharedPageGCList> GCList = new TSharedPageGCList;
 
-    TActorId Owner;
+    TActorId Owner; 
     TAutoPtr<NUtil::ILogger> Logger;
     THashMap<TLogoBlobID, TCollection> Collections;
-    THashMap<TActorId, TCollectionsOwner> CollectionsOwners;
+    THashMap<TActorId, TCollectionsOwner> CollectionsOwners; 
 
     TRequestQueue AsyncRequests;
     TRequestQueue ScanRequests;
@@ -179,7 +179,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
 
     bool GCScheduled = false;
 
-    void Registered(TActorSystem *sys, const TActorId &owner)
+    void Registered(TActorSystem *sys, const TActorId &owner) 
     {
         Owner = owner;
 
@@ -426,7 +426,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         if (queue.Requests.empty())
             return;
 
-        TMap<TActorId, TRequestQueue::TByActorRequest>::iterator it;
+        TMap<TActorId, TRequestQueue::TByActorRequest>::iterator it; 
         if (queue.NextToRequest) {
             it = queue.Requests.find(queue.NextToRequest);
             if (it == queue.Requests.end())
@@ -521,7 +521,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
                 it = queue.Requests.begin();
 
             if (it == queue.Requests.end()) {
-                queue.NextToRequest = TActorId();
+                queue.NextToRequest = TActorId(); 
                 break;
             }
 
@@ -749,7 +749,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         for (TCollection *collection : recheck) {
             if (collection->DroppedPages) {
                 // N.B. usually there is a single owner
-                for (TActorId owner : collection->Owners) {
+                for (TActorId owner : collection->Owners) { 
                     auto& actions = toSend[owner][collection->MetaId];
                     for (ui32 pageId : collection->DroppedPages) {
                         actions.Dropped.insert(pageId);
@@ -793,7 +793,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         result->Loaded = std::move(wa.ReadyBlocks);
 
         Send(wa.Source, result.Release(), 0, wa.EventCookie);
-        wa.Source = TActorId();
+        wa.Source = TActorId(); 
         StatBioReqs += 1;
     }
 
@@ -812,7 +812,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
                     continue;
 
                 Send(x->Source, new NSharedCache::TEvResult(std::move(x->PageCollection), x->RequestCookie, blobStorageError), 0, x->EventCookie);
-                x->Source = TActorId();
+                x->Source = TActorId(); 
             }
         }
         collection.Expectants.clear();
@@ -866,7 +866,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
             collection.PageMap.clear();
         }
 
-        for (TActorId owner : collection.Owners) {
+        for (TActorId owner : collection.Owners) { 
             DropRequestsFor(owner, pageCollectionId);
         }
 
@@ -876,12 +876,12 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         }
     }
 
-    void DropRequestsFor(TActorId owner, const TLogoBlobID &metaId) {
+    void DropRequestsFor(TActorId owner, const TLogoBlobID &metaId) { 
         DropFromQueue(ScanRequests, owner, metaId);
         DropFromQueue(AsyncRequests, owner, metaId);
     }
 
-    void DropFromQueue(TRequestQueue &queue, TActorId ownerId, const TLogoBlobID &metaId) {
+    void DropFromQueue(TRequestQueue &queue, TActorId ownerId, const TLogoBlobID &metaId) { 
         auto ownerIt = queue.Requests.find(ownerId);
         if (ownerIt == queue.Requests.end())
             return;
@@ -899,7 +899,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         }
     }
 
-    void DropFromQueue(TRequestQueue &queue, TActorId ownerId) {
+    void DropFromQueue(TRequestQueue &queue, TActorId ownerId) { 
         auto it = queue.Requests.find(ownerId);
         if (it != queue.Requests.end()) {
             if (auto logl = Logger->Log(ELnLev::Debug)) {

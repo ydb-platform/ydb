@@ -7,7 +7,7 @@
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
@@ -474,7 +474,7 @@ namespace NActors {
         if (ev->Sender == ReceiverId) {
             const bool wasConnected(Socket);
             LOG_INFO_IC_SESSION("ICS07", "socket disconnect %" PRIi64 " reason# %s", Socket ? i64(*Socket) : -1, ev->Get()->Reason.ToString().data());
-            ReceiverId = TActorId(); // reset receiver actor id as we have no more receiver yet
+            ReceiverId = TActorId(); // reset receiver actor id as we have no more receiver yet 
             if (wasConnected) {
                 // we were sucessfully connected and did not expect failure, so it arrived from the input side; we should
                 // restart handshake process, closing our part of socket first

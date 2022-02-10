@@ -10,7 +10,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
 
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>
 
@@ -163,7 +163,7 @@ namespace NKikimr {
         TQueueActorMapPtr QueueActorMapPtr;
         TBlobIdQueuePtr BlobsToReplicatePtr;
         TBlobIdQueuePtr UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
-        TActorId ReplJobActorId;
+        TActorId ReplJobActorId; 
         std::list<std::optional<TDonorQueueItem>> DonorQueue;
         std::deque<std::pair<TVDiskID, TActorId>> Donors;
         std::set<TVDiskID> ConnectedPeerDisks, ConnectedDonorDisks;

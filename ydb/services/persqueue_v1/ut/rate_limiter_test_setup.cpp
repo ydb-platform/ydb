@@ -51,10 +51,10 @@ void TRateLimiterTestSetup::CreateKesus(const TString& account) {
     UNIT_ASSERT_C(createKesusResult == NMsgBusProxy::MSTATUS_OK, createKesusResult);
 
     const TString kesusPath = TStringBuilder() << QuotersRootPath << "/" << account;
-
+ 
     Cerr << "Creating kesus with path=" << kesusPath << Endl;
     auto setAccountQuota = [&](const TString& quotaPrefix, double value) {
-        Cerr << "Adding quota for account kesus=" << kesusPath << " quota-path=" << quotaPrefix << " value=" << value << Endl;
+        Cerr << "Adding quota for account kesus=" << kesusPath << " quota-path=" << quotaPrefix << " value=" << value << Endl; 
         const auto statusCode = Server->AnnoyingClient->AddQuoterResource(
                 Server->CleverServer->GetRuntime(), kesusPath, quotaPrefix, value
         );
@@ -74,7 +74,7 @@ void TRateLimiterTestSetup::CreateQuotaResources(const TString& path, const TStr
     }
     TStringBuilder prefixPath;
     prefixPath << quotaPrefix;
-
+ 
     auto firstIt = pathComponents.begin() + 1; // resource path must be without account
     auto lastIt = pathComponents.end() - (excludeLastComponent ? 1 : 0);
 

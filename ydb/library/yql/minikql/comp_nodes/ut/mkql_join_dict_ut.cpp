@@ -2,7 +2,7 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-
+ 
 Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
     Y_UNIT_TEST_LLVM(TestInner) {
         for (ui32 pass = 0; pass < 1; ++pass) {

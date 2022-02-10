@@ -76,7 +76,7 @@ namespace NKikimr {
                 const TIntrusivePtr<TVDiskContext> &vctx,
                 const TIntrusivePtr<TVDiskConfig> &config,
                 const TVDiskID &selfVDiskId,
-                const TActorId &skeletonId,
+                const TActorId &skeletonId, 
                 const TActorId skeletonFrontId,
                 std::shared_ptr<TRopeArena> arena);
 

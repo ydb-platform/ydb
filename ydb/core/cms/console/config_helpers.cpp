@@ -39,15 +39,15 @@ private:
     };
 
     ui64 TabletId;
-    TActorId ServiceId;
+    TActorId ServiceId; 
     TString Tenant;
     bool DetectTenant;
     TString NodeType;
     TVector<ui32> ConfigItemKinds;
     ui64 SubscriptionId;
     EAction Action;
-    TActorId OwnerId;
-    TActorId Pipe;
+    TActorId OwnerId; 
+    TActorId Pipe; 
     ui64 Cookie;
 
 public:
@@ -58,10 +58,10 @@ public:
 
     // Add/replace subscription.
     TConfigHelper(ui64 tabletId,
-                  TActorId serviceId,
+                  TActorId serviceId, 
                   const TVector<ui32> &configItemKinds,
                   const TString &tenant,
-                  TActorId ownerId,
+                  TActorId ownerId, 
                   bool replace,
                   ui64 cookie)
         : TabletId(tabletId)
@@ -78,9 +78,9 @@ public:
 
     // Add/replace subscription.
     TConfigHelper(ui64 tabletId,
-                  TActorId serviceId,
+                  TActorId serviceId, 
                   const TVector<ui32> &configItemKinds,
-                  TActorId ownerId,
+                  TActorId ownerId, 
                   bool replace,
                   ui64 cookie)
         : TabletId(tabletId)
@@ -96,7 +96,7 @@ public:
 
     // Remove subscription.
     TConfigHelper(ui64 subscriptionId,
-                  TActorId ownerId,
+                  TActorId ownerId, 
                   ui64 cookie)
         : TabletId(0)
         , DetectTenant(false)
@@ -109,7 +109,7 @@ public:
 
     // Get node config.
     TConfigHelper(const TVector<ui32> &configItemKinds,
-                  TActorId ownerId,
+                  TActorId ownerId, 
                   ui64 cookie)
         : TabletId(0)
         , DetectTenant(true)
@@ -124,7 +124,7 @@ public:
     // Get node config.
     TConfigHelper(const TVector<ui32> &configItemKinds,
                   const TString &tenant,
-                  TActorId ownerId,
+                  TActorId ownerId, 
                   ui64 cookie)
         : TabletId(0)
         , Tenant(tenant)
@@ -151,7 +151,7 @@ public:
     {
         if (Pipe) {
             NTabletPipe::CloseClient(ctx, Pipe);
-            Pipe = TActorId();
+            Pipe = TActorId(); 
         }
 
         SendSubscriptionRequest(ctx);
@@ -184,7 +184,7 @@ public:
         if (TabletId)
             subscription.MutableSubscriber()->SetTabletId(TabletId);
         else
-            ActorIdToProto(ServiceId,
+            ActorIdToProto(ServiceId, 
                                subscription.MutableSubscriber()->MutableServiceId());
         subscription.MutableOptions()->SetNodeId(SelfId().NodeId());
         subscription.MutableOptions()->SetHost(FQDNHostName());
@@ -359,28 +359,28 @@ public:
 
 } // anonymous namespace
 
-IActor *CreateNodeConfigCourier(TActorId owner,
+IActor *CreateNodeConfigCourier(TActorId owner, 
                                 ui64 cookie)
 {
     return new TConfigHelper(TVector<ui32>(), owner, cookie);
 }
 
 IActor *CreateNodeConfigCourier(ui32 configItemKind,
-                                TActorId owner,
+                                TActorId owner, 
                                 ui64 cookie)
 {
     return new TConfigHelper(TVector<ui32>({configItemKind}), owner, cookie);
 }
 
 IActor *CreateNodeConfigCourier(const TVector<ui32> &configItemKinds,
-                                TActorId owner,
+                                TActorId owner, 
                                 ui64 cookie)
 {
     return new TConfigHelper(configItemKinds, owner, cookie);
 }
 
 IActor *CreateNodeConfigCourier(const TString &tenant,
-                                TActorId owner,
+                                TActorId owner, 
                                 ui64 cookie)
 {
     return new TConfigHelper(TVector<ui32>({}), tenant, owner, cookie);
@@ -388,7 +388,7 @@ IActor *CreateNodeConfigCourier(const TString &tenant,
 
 IActor *CreateNodeConfigCourier(ui32 configItemKind,
                                 const TString &tenant,
-                                TActorId owner,
+                                TActorId owner, 
                                 ui64 cookie)
 {
     return new TConfigHelper(TVector<ui32>({configItemKind}), tenant, owner, cookie);
@@ -396,7 +396,7 @@ IActor *CreateNodeConfigCourier(ui32 configItemKind,
 
 IActor *CreateNodeConfigCourier(const TVector<ui32> &configItemKinds,
                                 const TString &tenant,
-                                TActorId owner,
+                                TActorId owner, 
                                 ui64 cookie)
 {
     return new TConfigHelper(configItemKinds, tenant, owner, cookie);
@@ -404,36 +404,36 @@ IActor *CreateNodeConfigCourier(const TVector<ui32> &configItemKinds,
 
 IActor *CreateConfigSubscriber(ui64 tabletId,
                                const TVector<ui32> &configItemKinds,
-                               TActorId owner,
+                               TActorId owner, 
                                bool replace,
                                ui64 cookie)
 {
-    return new TConfigHelper(tabletId, TActorId(), configItemKinds, owner, replace, cookie);
+    return new TConfigHelper(tabletId, TActorId(), configItemKinds, owner, replace, cookie); 
 }
 
 IActor *CreateConfigSubscriber(ui64 tabletId,
                                const TVector<ui32> &configItemKinds,
                                const TString &tenant,
-                               TActorId owner,
+                               TActorId owner, 
                                bool replace,
                                ui64 cookie)
 {
-    return new TConfigHelper(tabletId, TActorId(), configItemKinds, tenant, owner, replace, cookie);
+    return new TConfigHelper(tabletId, TActorId(), configItemKinds, tenant, owner, replace, cookie); 
 }
 
-IActor *CreateConfigSubscriber(TActorId serviceId,
+IActor *CreateConfigSubscriber(TActorId serviceId, 
                                const TVector<ui32> &configItemKinds,
-                               TActorId owner,
+                               TActorId owner, 
                                bool replace,
                                ui64 cookie)
 {
     return new TConfigHelper(0, serviceId, configItemKinds, owner, replace, cookie);
 }
 
-IActor *CreateConfigSubscriber(TActorId serviceId,
+IActor *CreateConfigSubscriber(TActorId serviceId, 
                                const TVector<ui32> &configItemKinds,
                                const TString &tenant,
-                               TActorId owner,
+                               TActorId owner, 
                                bool replace,
                                ui64 cookie)
 {
@@ -441,7 +441,7 @@ IActor *CreateConfigSubscriber(TActorId serviceId,
 }
 
 IActor *CreateSubscriptionEraser(ui64 subscriptionId,
-                                 TActorId owner,
+                                 TActorId owner, 
                                  ui64 cookie)
 {
     return new TConfigHelper(subscriptionId, owner, cookie);

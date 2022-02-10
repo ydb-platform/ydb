@@ -20,7 +20,7 @@ TGRpcDataStreamsService::TGRpcDataStreamsService(NActors::TActorSystem *system,
 {
 }
 
-void TGRpcDataStreamsService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger)
+void TGRpcDataStreamsService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) 
 {
     CQ_ = cq;
 
@@ -32,7 +32,7 @@ void TGRpcDataStreamsService::InitService(grpc::ServerCompletionQueue *cq, NGrpc
     SetupIncomingRequests(logger);
 }
 
-void TGRpcDataStreamsService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) {
+void TGRpcDataStreamsService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) { 
     Limiter_ = limiter;
 }
 
@@ -53,7 +53,7 @@ void TGRpcDataStreamsService::InitNewSchemeCache() {
         TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
 }
 
-void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
+void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) 
 {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 #ifdef ADD_REQUEST
@@ -61,7 +61,7 @@ void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::DataStreams::V1::IN, Ydb::DataStreams::V1::OUT, TGRpcDataStreamsService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::DataStreams::V1::DataStreamsService::AsyncService::Request ## NAME, \

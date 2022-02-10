@@ -16,7 +16,7 @@ namespace NHttp {
 class THttpOutgoingCacheActor : public NActors::TActorBootstrapped<THttpOutgoingCacheActor>, THttpConfig {
 public:
     using TBase = NActors::TActorBootstrapped<THttpOutgoingCacheActor>;
-    NActors::TActorId HttpProxyId;
+    NActors::TActorId HttpProxyId; 
     TGetCachePolicy GetCachePolicy;
     static constexpr TDuration RefreshTimeout = TDuration::Seconds(1);
 
@@ -584,7 +584,7 @@ TCachePolicy GetDefaultCachePolicy(const THttpRequest* request, const TCachePoli
     return policy;
 }
 
-NActors::IActor* CreateHttpCache(const NActors::TActorId& httpProxyId, TGetCachePolicy cachePolicy) {
+NActors::IActor* CreateHttpCache(const NActors::TActorId& httpProxyId, TGetCachePolicy cachePolicy) { 
     return new THttpOutgoingCacheActor(httpProxyId, std::move(cachePolicy));
 }
 

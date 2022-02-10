@@ -81,11 +81,11 @@ namespace NActors {
     void TIOExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
         Y_UNUSED(workerId);
         const auto deadline = ActorSystem->Monotonic() + delta;
-
-        TTicketLock::TGuard guard(&ScheduleLock);
-        ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);
-    }
-
+ 
+        TTicketLock::TGuard guard(&ScheduleLock); 
+        ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie); 
+    } 
+ 
     void TIOExecutorPool::ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) {
         Activations.Push(activation, revolvingWriteCounter);
         const TAtomic x = AtomicIncrement(Semaphore);

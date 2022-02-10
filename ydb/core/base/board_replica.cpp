@@ -18,12 +18,12 @@
 namespace NKikimr {
 
 class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
-    using TOwnerIndex = TMap<TActorId, ui32, TActorId::TOrderedCmp>;
+    using TOwnerIndex = TMap<TActorId, ui32, TActorId::TOrderedCmp>; 
     using TPathIndex = TMap<TString, TSet<ui32>>;
 
     struct TEntry {
         TString Payload;
-        TActorId Owner;
+        TActorId Owner; 
         TOwnerIndex::iterator OwnerIt;
         TPathIndex::iterator PathIt;
     };
@@ -51,7 +51,7 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
     void Handle(TEvStateStorage::TEvReplicaBoardPublish::TPtr &ev) {
         auto &record = ev->Get()->Record;
         const TString &path = record.GetPath();
-        const TActorId &owner = ev->Sender;
+        const TActorId &owner = ev->Sender; 
 
         if (!record.GetRegister()) {
             BLOG_ERROR("free floating entries not implemented yet");
@@ -69,13 +69,13 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
             }
 
             entry.Payload = record.GetPayload();
-            Y_VERIFY_DEBUG(entry.Owner == ActorIdFromProto(record.GetOwner()));
+            Y_VERIFY_DEBUG(entry.Owner == ActorIdFromProto(record.GetOwner())); 
         } else {
             const ui32 entryIndex = AllocateEntry();
             TEntry &entry = Entries[entryIndex];
 
             entry.Payload = record.GetPayload();
-            entry.Owner = ActorIdFromProto(record.GetOwner());
+            entry.Owner = ActorIdFromProto(record.GetOwner()); 
 
             auto ownerInsPairIt = IndexOwner.emplace(owner, entryIndex);
             entry.OwnerIt = ownerInsPairIt.first;
@@ -118,7 +118,7 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
         IndexOwner.erase(entry.OwnerIt);
 
         TString().swap(entry.Payload);
-        entry.Owner = TActorId();
+        entry.Owner = TActorId(); 
         entry.PathIt = IndexPath.end();
         entry.OwnerIt = IndexOwner.end();
 
@@ -171,7 +171,7 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
         for (ui32 entryIndex : pathIt->second) {
             const TEntry &entry = Entries[entryIndex];
             auto *ex = info->Add();
-            ActorIdToProto(entry.Owner, ex->MutableOwner());
+            ActorIdToProto(entry.Owner, ex->MutableOwner()); 
             ex->SetPayload(entry.Payload);
         }
 
@@ -189,7 +189,7 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         auto *msg = ev->Get();
         const ui32 nodeId = msg->NodeId;
-        auto ownerIt = IndexOwner.lower_bound(TActorId(nodeId, 0, 0, 0));
+        auto ownerIt = IndexOwner.lower_bound(TActorId(nodeId, 0, 0, 0)); 
         while (ownerIt != IndexOwner.end() && ownerIt->first.NodeId() == nodeId) {
             const ui32 entryToCleanupIndex = ownerIt->second;
             ++ownerIt;

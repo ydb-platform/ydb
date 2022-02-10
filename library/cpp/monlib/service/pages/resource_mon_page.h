@@ -5,39 +5,39 @@
 #include <library/cpp/resource/resource.h>
 
 namespace NMonitoring {
-    struct TResourceMonPage: public IMonPage {
-    public:
-        enum EResourceType {
-            BINARY,
-            TEXT,
-            JSON,
-            CSS,
-            JAVASCRIPT,
+    struct TResourceMonPage: public IMonPage { 
+    public: 
+        enum EResourceType { 
+            BINARY, 
+            TEXT, 
+            JSON, 
+            CSS, 
+            JAVASCRIPT, 
 
-            FONT_EOT,
-            FONT_TTF,
-            FONT_WOFF,
-            FONT_WOFF2,
+            FONT_EOT, 
+            FONT_TTF, 
+            FONT_WOFF, 
+            FONT_WOFF2, 
 
-            PNG,
-            SVG
-        };
+            PNG, 
+            SVG 
+        }; 
 
-        TResourceMonPage(const TString& path, const TString& resourceName,
-                         const EResourceType& resourceType = BINARY)
-            : IMonPage(path, "")
-            , ResourceName(resourceName)
-            , ResourceType(resourceType)
-        {
-        }
+        TResourceMonPage(const TString& path, const TString& resourceName, 
+                         const EResourceType& resourceType = BINARY) 
+            : IMonPage(path, "") 
+            , ResourceName(resourceName) 
+            , ResourceType(resourceType) 
+        { 
+        } 
 
         void Output(NMonitoring::IMonHttpRequest& request) override;
 
         void NotFound(NMonitoring::IMonHttpRequest& request) const;
 
-    private:
-        TString ResourceName;
-        EResourceType ResourceType;
-    };
+    private: 
+        TString ResourceName; 
+        EResourceType ResourceType; 
+    }; 
 
-}
+} 

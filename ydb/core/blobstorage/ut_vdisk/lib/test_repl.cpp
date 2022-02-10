@@ -175,7 +175,7 @@ void TReadUntilSuccess::operator ()(TConfiguration *conf) {
 
 class TVDiskReplProxyReaderActor : public TActorBootstrapped<TVDiskReplProxyReaderActor> {
 private:
-    const TActorId NotifyID;
+    const TActorId NotifyID; 
     const TAllVDisks::TVDiskInstance VDiskInfo;
     TConfiguration *Conf;
     TVDiskContextPtr VCtx;
@@ -183,7 +183,7 @@ private:
     TVDiskProxyPtr Proxy;
     IDataSet *DataSet;
     TAutoPtr<TExpectedSet> ExpectedSetPtr;
-    TActorId QueueId;
+    TActorId QueueId; 
     bool Running = false;
     /*
     void Put(const NKikimr::TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data);
@@ -266,7 +266,7 @@ private:
     )
 
 public:
-    TVDiskReplProxyReaderActor(TConfiguration *conf, const TActorId &notifyID,
+    TVDiskReplProxyReaderActor(TConfiguration *conf, const TActorId &notifyID, 
                                const TAllVDisks::TVDiskInstance &vdiskInfo, TAutoPtr<TExpectedSet> expSetPtr,
                                IDataSet *dataSet)
         : TActorBootstrapped<TVDiskReplProxyReaderActor>()
@@ -280,7 +280,7 @@ public:
     {}
 };
 
-IActor *CreateVDiskReplProxyReader(TConfiguration *conf, const TActorId &notifyID,
+IActor *CreateVDiskReplProxyReader(TConfiguration *conf, const TActorId &notifyID, 
                                    const TAllVDisks::TVDiskInstance &vdiskInfo,
                                    TAutoPtr<TExpectedSet> expSetPtr, IDataSet *dataSet) {
     return new TVDiskReplProxyReaderActor(conf, notifyID, vdiskInfo, expSetPtr, dataSet);

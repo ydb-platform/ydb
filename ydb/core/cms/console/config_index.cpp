@@ -599,7 +599,7 @@ void TSubscription::Load(const NKikimrConsole::TSubscription &subscription)
     if (subscription.GetSubscriber().HasTabletId())
         Subscriber.TabletId = subscription.GetSubscriber().GetTabletId();
     else if (subscription.GetSubscriber().HasServiceId())
-        Subscriber.ServiceId = ActorIdFromProto(subscription.GetSubscriber().GetServiceId());
+        Subscriber.ServiceId = ActorIdFromProto(subscription.GetSubscriber().GetServiceId()); 
     NodeId = subscription.GetOptions().GetNodeId();
     Host = subscription.GetOptions().GetHost();
     Tenant = subscription.GetOptions().GetTenant();

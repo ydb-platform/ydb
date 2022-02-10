@@ -25,7 +25,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/html/pcdata
-    library/cpp/monlib/dynamic_counters
+    library/cpp/monlib/dynamic_counters 
     library/cpp/resource
     ydb/library/schlab/schemu
 )

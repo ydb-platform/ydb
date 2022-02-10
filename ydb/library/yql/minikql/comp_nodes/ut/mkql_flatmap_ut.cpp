@@ -3,7 +3,7 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-
+ 
 Y_UNIT_TEST_SUITE(TMiniKQLFlatMapTest) {
     Y_UNIT_TEST_LLVM(TestOverListAndPartialLists) {
         TSetup<LLVM> setup;

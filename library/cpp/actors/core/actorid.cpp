@@ -3,18 +3,18 @@
 #include <util/string/cast.h>
 
 namespace NActors {
-    void TActorId::Out(IOutputStream& o) const {
+    void TActorId::Out(IOutputStream& o) const { 
         o << "[" << NodeId() << ":" << LocalId() << ":" << Hint() << "]";
     }
 
-    TString TActorId::ToString() const {
+    TString TActorId::ToString() const { 
         TString x;
         TStringOutput o(x);
         Out(o);
         return x;
     }
 
-    bool TActorId::Parse(const char* buf, ui32 sz) {
+    bool TActorId::Parse(const char* buf, ui32 sz) { 
         if (sz < 4 || buf[0] != '[' || buf[sz - 1] != ']')
             return false;
 

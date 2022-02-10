@@ -19,8 +19,8 @@ namespace V1 {
 
 
 
-inline TActorId GetPQReadServiceActorID() {
-    return TActorId(0, "PQReadSvc");
+inline TActorId GetPQReadServiceActorID() { 
+    return TActorId(0, "PQReadSvc"); 
 }
 
 IActor* CreatePQReadService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
@@ -60,12 +60,12 @@ private:
 
     void Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorContext& ctx);
 
-    NActors::TActorId SchemeCache;
-    NActors::TActorId NewSchemeCache;
+    NActors::TActorId SchemeCache; 
+    NActors::TActorId NewSchemeCache; 
 
     TAtomic LastCookie = 0;
 
-    THashMap<ui64, TActorId> Sessions;
+    THashMap<ui64, TActorId> Sessions; 
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 

@@ -66,17 +66,17 @@ namespace NActors {
         virtual ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) = 0;
         virtual void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) = 0;
 
-        /**
-         * Schedule one-shot event that will be send at given time point in the future.
-         *
+        /** 
+         * Schedule one-shot event that will be send at given time point in the future. 
+         * 
          * @param deadline   the wallclock time point in future when event must be send
-         * @param ev         the event to send
-         * @param cookie     cookie that will be piggybacked with event
+         * @param ev         the event to send 
+         * @param cookie     cookie that will be piggybacked with event 
          * @param workerId   index of thread which will perform event dispatching
-         */
+         */ 
         virtual void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
-
-        /**
+ 
+        /** 
          * Schedule one-shot event that will be send at given time point in the future.
          *
          * @param deadline   the monotonic time point in future when event must be send
@@ -87,21 +87,21 @@ namespace NActors {
         virtual void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
 
         /**
-         * Schedule one-shot event that will be send after given delay.
-         *
-         * @param delta      the time from now to delay event sending
-         * @param ev         the event to send
-         * @param cookie     cookie that will be piggybacked with event
+         * Schedule one-shot event that will be send after given delay. 
+         * 
+         * @param delta      the time from now to delay event sending 
+         * @param ev         the event to send 
+         * @param cookie     cookie that will be piggybacked with event 
          * @param workerId   index of thread which will perform event dispatching
-         */
+         */ 
         virtual void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
-
+ 
         // for actorsystem
         virtual bool Send(TAutoPtr<IEventHandle>& ev) = 0;
         virtual void ScheduleActivation(ui32 activation) = 0;
         virtual void ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) = 0;
-        virtual TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingCounter, const TActorId& parentId) = 0;
-        virtual TActorId Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) = 0;
+        virtual TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingCounter, const TActorId& parentId) = 0; 
+        virtual TActorId Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) = 0; 
 
         // lifecycle stuff
         virtual void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) = 0;
@@ -223,7 +223,7 @@ namespace NActors {
         THolder<TServiceMap> ServiceMap;
 
         const ui32 InterconnectCount;
-        TArrayHolder<TActorId> Interconnect;
+        TArrayHolder<TActorId> Interconnect; 
 
         volatile ui64 CurrentTimestamp;
         volatile ui64 CurrentMonotonic;
@@ -235,7 +235,7 @@ namespace NActors {
         friend class TExecutorThread;
 
         THolder<TActorSystemSetup> SystemSetup;
-        TActorId DefSelfID;
+        TActorId DefSelfID; 
         void* AppData0;
         TIntrusivePtr<NLog::TSettings> LoggerSettings0;
         TProxyWrapperFactory ProxyWrapperFactory;
@@ -255,22 +255,22 @@ namespace NActors {
         void Stop();
         void Cleanup();
 
-        TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 executorPool = 0,
-                          ui64 revolvingCounter = 0, const TActorId& parentId = TActorId());
+        TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 executorPool = 0, 
+                          ui64 revolvingCounter = 0, const TActorId& parentId = TActorId()); 
 
         bool Send(TAutoPtr<IEventHandle> ev) const;
-        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0) const;
+        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0) const; 
 
         /**
-         * Schedule one-shot event that will be send at given time point in the future.
-         *
+         * Schedule one-shot event that will be send at given time point in the future. 
+         * 
          * @param deadline   the wallclock time point in future when event must be send
-         * @param ev         the event to send
-         * @param cookie     cookie that will be piggybacked with event
-         */
-        void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const;
-
-        /**
+         * @param ev         the event to send 
+         * @param cookie     cookie that will be piggybacked with event 
+         */ 
+        void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const; 
+ 
+        /** 
          * Schedule one-shot event that will be send at given time point in the future.
          *
          * @param deadline   the monotonic time point in future when event must be send
@@ -280,15 +280,15 @@ namespace NActors {
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const;
 
         /**
-         * Schedule one-shot event that will be send after given delay.
-         *
-         * @param delta      the time from now to delay event sending
-         * @param ev         the event to send
-         * @param cookie     cookie that will be piggybacked with event
-         */
-        void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const;
-
-        /**
+         * Schedule one-shot event that will be send after given delay. 
+         * 
+         * @param delta      the time from now to delay event sending 
+         * @param ev         the event to send 
+         * @param cookie     cookie that will be piggybacked with event 
+         */ 
+        void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const; 
+ 
+        /** 
          * A way to interact with actors from non-actor context.
          *
          * This method will send the `event` to the `recipient` and then will wait for a response. When response arrives,
@@ -303,7 +303,7 @@ namespace NActors {
          */
         template <typename T>
         [[nodiscard]]
-        NThreading::TFuture<THolder<T>> Ask(TActorId recipient, THolder<IEventBase> event, TDuration timeout = TDuration::Max()) {
+        NThreading::TFuture<THolder<T>> Ask(TActorId recipient, THolder<IEventBase> event, TDuration timeout = TDuration::Max()) { 
             if constexpr (std::is_same_v<T, IEventBase>) {
                 return AskGeneric(Nothing(), recipient, std::move(event), timeout);
             } else {
@@ -317,20 +317,20 @@ namespace NActors {
         [[nodiscard]]
         NThreading::TFuture<THolder<IEventBase>> AskGeneric(
             TMaybe<ui32> expectedEventType,
-            TActorId recipient,
+            TActorId recipient, 
             THolder<IEventBase> event,
             TDuration timeout);
 
         ui64 AllocateIDSpace(ui64 count);
 
-        TActorId InterconnectProxy(ui32 destinationNode) const;
-        ui32 BroadcastToProxies(const std::function<IEventHandle*(const TActorId&)>&);
+        TActorId InterconnectProxy(ui32 destinationNode) const; 
+        ui32 BroadcastToProxies(const std::function<IEventHandle*(const TActorId&)>&); 
 
         void UpdateLinkStatus(ui8 status, ui32 destinationNode);
         ui8 LinkStatus(ui32 destinationNode);
 
         TActorId LookupLocalService(const TActorId& x) const;
-        TActorId RegisterLocalService(const TActorId& serviceId, const TActorId& actorId);
+        TActorId RegisterLocalService(const TActorId& serviceId, const TActorId& actorId); 
 
         ui32 GetMaxActivityType() const {
             return SystemSetup ? SystemSetup->MaxActivityType : 1;

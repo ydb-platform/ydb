@@ -41,7 +41,7 @@ public:
     {}
 
     void Bootstrap(const TActorContext &ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId();
+        const TActorId nameserviceId = GetNameserviceActorId(); 
         ctx.Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         Become(&TThis::StateRequestedBrowse);
@@ -66,7 +66,7 @@ public:
         NodesInfo = ev->Release();
         if (!NodesInfo->Nodes.empty()) {
             for (const auto& ni : NodesInfo->Nodes) {
-                TActorId tabletStateActorId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ni.NodeId);
+                TActorId tabletStateActorId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ni.NodeId); 
                 ctx.Send(tabletStateActorId, new TEvWhiteboard::TEvTabletStateRequest(), IEventHandle::FlagTrackDelivery, ni.NodeId);
                 ++NodesRequested;
             }

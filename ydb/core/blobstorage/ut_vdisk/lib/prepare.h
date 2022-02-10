@@ -45,7 +45,7 @@ private:
 // TOnePDisk
 //////////////////////////////////////////////////////////////////////////////////////
 struct TOnePDisk {
-    NActors::TActorId PDiskActorID;
+    NActors::TActorId PDiskActorID; 
     const ui32 PDiskID = 0;
     ui64 PDiskGuid = 0;
     const TString Filename;
@@ -87,7 +87,7 @@ struct IVDiskSetup;
 class TAllVDisks {
 public:
     struct TVDiskInstance {
-        NActors::TActorId ActorID;
+        NActors::TActorId ActorID; 
         NKikimr::TVDiskID VDiskID;
         bool Initialized = false;
         TIntrusivePtr<NKikimr::TVDiskConfig> Cfg;

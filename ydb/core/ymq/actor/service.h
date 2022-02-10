@@ -140,8 +140,8 @@ private:
     TUsersMap Users_;
     THashMap<ui64, TQueueInfoPtr> LeaderTabletIdToQueue_;
     THashMap<TActorId, TQueueInfoPtr> LocalLeaderRefs_; // referer -> queue info
-    TActorId SchemeCache_;
-    TActorId QueuesListReader_;
+    TActorId SchemeCache_; 
+    TActorId QueuesListReader_; 
 
     // State machine
     bool RequestingUsersList_ = false;

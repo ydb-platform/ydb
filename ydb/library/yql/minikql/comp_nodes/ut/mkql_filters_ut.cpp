@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-
+ 
 Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
     Y_UNIT_TEST_LLVM(TestSkipNullMembers) {
         TSetup<LLVM> setup;

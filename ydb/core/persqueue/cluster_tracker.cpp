@@ -44,7 +44,7 @@ public:
     }
 
 private:
-    void AddSubscriber(const TActorId subscriberId) {
+    void AddSubscriber(const TActorId subscriberId) { 
         Subscribers.insert(subscriberId);
     }
 
@@ -89,7 +89,7 @@ private:
         }
     }
 
-    void SendClustersList(TActorId subscriberId) {
+    void SendClustersList(TActorId subscriberId) { 
         auto ev = MakeHolder<TEvClusterTracker::TEvClustersUpdate>();
 
         ev->ClustersList = ClustersList;
@@ -188,7 +188,7 @@ private:
     TString PreparedQueryId;
     TClustersList::TConstPtr ClustersList = nullptr;
     TMaybe<TInstant> ClustersListUpdateTimestamp;
-    THashSet<TActorId> Subscribers;
+    THashSet<TActorId> Subscribers; 
     TString Database;
 };
 

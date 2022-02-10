@@ -15,7 +15,7 @@ public:
         return NKikimrServices::TActivity::CMS_WALLE_REQ;
     }
 
-    TWalleRemoveTaskAdapter(TEvCms::TEvWalleRemoveTaskRequest::TPtr &event, const TCmsStatePtr state, TActorId cms)
+    TWalleRemoveTaskAdapter(TEvCms::TEvWalleRemoveTaskRequest::TPtr &event, const TCmsStatePtr state, TActorId cms) 
         : RequestEvent(event)
         , State(state)
         , Cms(cms)
@@ -83,11 +83,11 @@ private:
 
     TEvCms::TEvWalleRemoveTaskRequest::TPtr RequestEvent;
     const TCmsStatePtr State;
-    TActorId Cms;
+    TActorId Cms; 
 };
 
 
-IActor *CreateWalleAdapter(TEvCms::TEvWalleRemoveTaskRequest::TPtr &ev, const TCmsStatePtr state, TActorId cms)
+IActor *CreateWalleAdapter(TEvCms::TEvWalleRemoveTaskRequest::TPtr &ev, const TCmsStatePtr state, TActorId cms) 
 {
     return new TWalleRemoveTaskAdapter(ev, state, cms);
 }

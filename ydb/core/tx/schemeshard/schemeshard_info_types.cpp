@@ -1680,7 +1680,7 @@ bool TExportInfo::AllItemsAreDropped() const {
     return AllOf(Items, &TExportInfo::TItem::IsDropped);
 }
 
-void TExportInfo::AddNotifySubscriber(const TActorId &actorId) {
+void TExportInfo::AddNotifySubscriber(const TActorId &actorId) { 
     Y_VERIFY(!IsFinished());
     Subscribers.insert(actorId);
 }

@@ -37,7 +37,7 @@ namespace NFlatExecutorSetup {
         return true;
     }
 
-    void ITablet::UpdateTabletInfo(TIntrusivePtr<TTabletStorageInfo> info, const TActorId& launcherID) {
+    void ITablet::UpdateTabletInfo(TIntrusivePtr<TTabletStorageInfo> info, const TActorId& launcherID) { 
         if (info)
             TabletInfo = info;
 

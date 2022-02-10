@@ -29,7 +29,7 @@ namespace NKikimr {
 
         typedef NSync::TVDiskNeighbors<TInfo> TCells;
 
-        const TActorId ParentId;
+        const TActorId ParentId; 
         TProxiesPtr ProxiesPtr;
         NMon::TEvHttpInfo::TPtr Ev;
         TCells Cells;
@@ -114,7 +114,7 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_HANDOFF_MON_REQUEST;
         }
 
-        THandoffMonRequestActor(const TActorId &parentId,
+        THandoffMonRequestActor(const TActorId &parentId, 
                                 const TVDiskID &selfVDisk,
                                 const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                 TProxiesPtr proxiesPtr,

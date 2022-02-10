@@ -17,9 +17,9 @@ namespace NKikimr {
         // these fields below are reconfigurable
         TVDiskID SelfVDiskId;
         TVDiskID TargetVDiskId;
-        TActorId TargetServiceId;
+        TActorId TargetServiceId; 
         // notify this actor when done
-        const TActorId NotifyId;
+        const TActorId NotifyId; 
         const TDuration RetryPeriod = TDuration::MilliSeconds(50);
         TTrivialLogThrottler LogThrottler = { TDuration::Minutes(1) };
 
@@ -166,8 +166,8 @@ namespace NKikimr {
         TVDiskGuidProxyBase(TIntrusivePtr<TVDiskContext> vctx,
                             const TVDiskID &selfVDiskId,
                             const TVDiskID &targetVDiskId,
-                            const TActorId &targetServiceId,
-                            const TActorId &notifyId)
+                            const TActorId &targetServiceId, 
+                            const TActorId &notifyId) 
             : TActorBootstrapped<TVDiskGuidProxyBase>()
             , VCtx(vctx)
             , SelfVDiskId(selfVDiskId)

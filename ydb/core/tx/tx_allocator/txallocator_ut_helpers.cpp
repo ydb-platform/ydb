@@ -39,9 +39,9 @@ TAnswerWithCookie GrabAnswer(NActors::TTestActorRuntime &runtime) {
 }
 
 void AsyncAllocate(NActors::TTestActorRuntime &runtime, ui64 size) {
-    TActorId sender = runtime.AllocateEdgeActor();
+    TActorId sender = runtime.AllocateEdgeActor(); 
     TEvTxAllocator::TEvAllocate *ev = new TEvTxAllocator::TEvAllocate(size);
-    runtime.SendToPipe(TTestEnv::TxAllocatorTablet, sender, ev, 0, NKikimr::NTabletPipe::TClientConfig(), TActorId(), SomeCockie(size));
+    runtime.SendToPipe(TTestEnv::TxAllocatorTablet, sender, ev, 0, NKikimr::NTabletPipe::TClientConfig(), TActorId(), SomeCockie(size)); 
 }
 
 void AllocateAndCheck(NActors::TTestActorRuntime &runtime, ui64 size, const TVector<TResultStatus> &expected) {
@@ -90,7 +90,7 @@ void TTestEnv::Setup(TTestActorRuntime &runtime) {
 }
 
 void TTestEnv::Reboot(TTestActorRuntime &runtime) {
-    TActorId sender = runtime.AllocateEdgeActor();
+    TActorId sender = runtime.AllocateEdgeActor(); 
     RebootTablet(runtime, TxAllocatorTablet, sender);
 }
 

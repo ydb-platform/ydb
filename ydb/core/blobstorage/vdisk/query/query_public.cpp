@@ -13,7 +13,7 @@ namespace NKikimr {
     // Extreme Query Declaration
     IActor *CreateLevelIndexExtremeQueryActor(
                 std::shared_ptr<TQueryCtx> &queryCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barrierSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
@@ -23,7 +23,7 @@ namespace NKikimr {
     // Range Query Declaration
     IActor *CreateLevelIndexRangeQueryActor(
                 std::shared_ptr<TQueryCtx> &queryCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barrierSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
@@ -83,7 +83,7 @@ namespace NKikimr {
                     TReadQueryKeepChecker &&keepChecker,
                     const TActorContext &ctx,
                     THullDsSnap &&fullSnap,
-                    const TActorId &parentId,
+                    const TActorId &parentId, 
                     TEvBlobStorage::TEvVGet::TPtr &ev,
                     std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
                     TActorId replSchedulerId) {
@@ -167,7 +167,7 @@ namespace NKikimr {
             const TIntrusivePtr<THullCtx> &hullCtx,
             const TActorContext &ctx,
             TLevelIndexSnapshot<TKey, TMemRec> &&levelSnap,
-            const TActorId &parentId,
+            const TActorId &parentId, 
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
             std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result,
             const IActor& actor)
@@ -199,7 +199,7 @@ namespace NKikimr {
             const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
             const TActorContext &ctx,
             THullDsSnap &&fullSnap,
-            const TActorId &parentId,
+            const TActorId &parentId, 
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
             std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result,
             const IActor& actor) {

@@ -40,7 +40,7 @@ namespace NKikimr {
             TWritePayloadPtr Payload;
 
             // the actor who sent this request
-            TActorId Sender;
+            TActorId Sender; 
 
             // cookie of request; the same for response
             ui64 Cookie;

@@ -48,18 +48,18 @@ namespace NActors {
                 NActors::IActor *actor = new TTargetActor();
 
                 // register the actor
-                NActors::TActorId actorId = ctx.ExecutorThread.RegisterActor(actor, mbType, threadPoolId);
+                NActors::TActorId actorId = ctx.ExecutorThread.RegisterActor(actor, mbType, threadPoolId); 
                 Actors.push_back(actorId);
             }
         }
 
-        virtual TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId &self, const TActorId& parentId) override {
+        virtual TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId &self, const TActorId& parentId) override { 
             Y_UNUSED(parentId);
             return new NActors::IEventHandle(self, self, new TEvents::TEvBootstrap(), 0);
         }
 
     protected:
-        TVector<NActors::TActorId> Actors;
+        TVector<NActors::TActorId> Actors; 
         int Pos;
     };
 

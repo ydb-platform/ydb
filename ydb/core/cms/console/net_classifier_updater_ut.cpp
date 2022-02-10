@@ -10,7 +10,7 @@
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/json_writer.h> 
 
 #include <util/string/builder.h>
 
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
         TNetClassifierUpdaterConfig::EFormat format = TNetClassifierUpdaterConfig::TSV,
         const TVector<TString>& netBoxTags = {}
     ) {
-        NMonitoring::TMetricRegistry sensors;
+        NMonitoring::TMetricRegistry sensors; 
 
         TPortManager pm;
         const ui16 port = pm.GetPort(2134);
@@ -145,13 +145,13 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
         auto& actorSystem = *cleverServer.GetRuntime();
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);
-        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        NActors::TActorId proxyId = actorSystem.Register(proxy); 
 
         actorSystem.Send(
-            new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(netDataSourcePort)), 0, true
+            new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(netDataSourcePort)), 0, true 
         );
 
-        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor(); 
 
         actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler(NETWORKS_URI, serverId)), 0, true);
 
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
         UNIT_ASSERT_EQUAL(request->Request->URL, NETWORKS_URI);
 
         actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, MakeHttpResponse(request, sourceResponce)), 0, true);
-        const TActorId sender = actorSystem.AllocateEdgeActor();
+        const TActorId sender = actorSystem.AllocateEdgeActor(); 
 
         size_t iterations = 0;
         while (true) {

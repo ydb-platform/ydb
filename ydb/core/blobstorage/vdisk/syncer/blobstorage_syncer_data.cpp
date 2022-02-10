@@ -162,7 +162,7 @@ namespace NKikimr {
     // TSyncNeighbors
     ////////////////////////////////////////////////////////////////////////////
     TSyncNeighbors::TSyncNeighbors(const TString &logPrefix,
-                                   const TActorId &notifyId,
+                                   const TActorId &notifyId, 
                                    const TVDiskIdShort &self,
                                    std::shared_ptr<TBlobStorageGroupInfo::TTopology> top)
         : LogPrefix(logPrefix)
@@ -288,7 +288,7 @@ namespace NKikimr {
     }
 
     TSyncerData::TSyncerData(const TString &logPrefix,
-                             const TActorId &notifyId,
+                             const TActorId &notifyId, 
                              const TVDiskIdShort &selfVDisk,
                              std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                              const TString &entryPoint)
@@ -304,7 +304,7 @@ namespace NKikimr {
     }
 
     bool TSyncerData::CheckEntryPoint(const TString &logPrefix,
-                                      const TActorId &notifyId,
+                                      const TActorId &notifyId, 
                                       const TVDiskIdShort &selfVDisk,
                                       std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                                       const TString &entryPoint) {

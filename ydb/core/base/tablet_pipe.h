@@ -1,13 +1,13 @@
 #pragma once
-
+ 
 #include "defs.h"
-#include "events.h"
-
+#include "events.h" 
+ 
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/tablet_pipe.pb.h>
 #include <library/cpp/actors/core/event_local.h>
 
-
+ 
 namespace NKikimr {
 
     struct TEvTabletPipe {
@@ -44,7 +44,7 @@ namespace NKikimr {
             TEvConnect(ui64 tabletId, const TActorId& clientId, ui32 features = 0)
             {
                 Record.SetTabletId(tabletId);
-                ActorIdToProto(clientId, Record.MutableClientId());
+                ActorIdToProto(clientId, Record.MutableClientId()); 
                 if (features) {
                     Record.SetFeatures(features);
                 }
@@ -58,8 +58,8 @@ namespace NKikimr {
             {
                 Record.SetStatus(status);
                 Record.SetTabletId(tabletId);
-                ActorIdToProto(clientId, Record.MutableClientId());
-                ActorIdToProto(serverId, Record.MutableServerId());
+                ActorIdToProto(clientId, Record.MutableClientId()); 
+                ActorIdToProto(serverId, Record.MutableServerId()); 
                 Record.SetLeader(leader);
             }
         };
@@ -67,11 +67,11 @@ namespace NKikimr {
         struct TEvPush : public TEventPB<TEvPush, NKikimrTabletPipe::TEvPush, EvPush> {
             TEvPush() {}
 
-            TEvPush(ui64 tabletId, ui32 type, const TActorId& sender, const TStringBuf& buffer, ui64 cookie, bool extendedFormat)
+            TEvPush(ui64 tabletId, ui32 type, const TActorId& sender, const TStringBuf& buffer, ui64 cookie, bool extendedFormat) 
             {
                 Record.SetTabletId(tabletId);
                 Record.SetType(type);
-                ActorIdToProto(sender, Record.MutableSender());
+                ActorIdToProto(sender, Record.MutableSender()); 
                 Record.SetBuffer(buffer.data(), buffer.size());
                 Record.SetCookie(cookie);
                 Record.SetExtendedFormat(extendedFormat);
@@ -85,11 +85,11 @@ namespace NKikimr {
         struct TEvPeerClosed : public TEventPB<TEvPeerClosed, NKikimrTabletPipe::TEvPeerClosed, EvPeerClosed> {
             TEvPeerClosed() {}
 
-            TEvPeerClosed(ui64 tabletId, const TActorId& clientId, const TActorId& serverId)
+            TEvPeerClosed(ui64 tabletId, const TActorId& clientId, const TActorId& serverId) 
             {
                 Record.SetTabletId(tabletId);
-                ActorIdToProto(clientId, Record.MutableClientId());
-                ActorIdToProto(serverId, Record.MutableServerId());
+                ActorIdToProto(clientId, Record.MutableClientId()); 
+                ActorIdToProto(serverId, Record.MutableServerId()); 
             }
         };
 
@@ -125,34 +125,34 @@ namespace NKikimr {
 
             const ui64 TabletId;
             const NKikimrProto::EReplyStatus Status;
-            const TActorId ClientId;
-            const TActorId ServerId;
+            const TActorId ClientId; 
+            const TActorId ServerId; 
             const bool Leader;
             const bool Dead;
         };
 
         struct TEvServerConnected : public TEventLocal<TEvServerConnected, EvServerConnected> {
-            TEvServerConnected(ui64 tabletId, const TActorId& clientId, const TActorId& serverId)
+            TEvServerConnected(ui64 tabletId, const TActorId& clientId, const TActorId& serverId) 
                 : TabletId(tabletId)
                 , ClientId(clientId)
                 , ServerId(serverId)
             {}
 
             const ui64 TabletId;
-            const TActorId ClientId;
-            const TActorId ServerId;
+            const TActorId ClientId; 
+            const TActorId ServerId; 
         };
 
         struct TEvClientDestroyed : public TEventLocal<TEvClientDestroyed, EvClientDestroyed> {
-            TEvClientDestroyed(ui64 tabletId, const TActorId& clientId, const TActorId& serverId)
+            TEvClientDestroyed(ui64 tabletId, const TActorId& clientId, const TActorId& serverId) 
                 : TabletId(tabletId)
                 , ClientId(clientId)
                 , ServerId(serverId)
             {}
 
             const ui64 TabletId;
-            const TActorId ClientId;
-            const TActorId ServerId;
+            const TActorId ClientId; 
+            const TActorId ServerId; 
         };
 
         struct TEvClientShuttingDown : public TEventLocal<TEvClientShuttingDown, EvClientShuttingDown> {
@@ -170,27 +170,27 @@ namespace NKikimr {
         };
 
         struct TEvServerDisconnected : public TEventLocal<TEvServerDisconnected, EvServerDisconnected> {
-            TEvServerDisconnected(ui64 tabletId, const TActorId& clientId, const TActorId& serverId)
+            TEvServerDisconnected(ui64 tabletId, const TActorId& clientId, const TActorId& serverId) 
                 : TabletId(tabletId)
                 , ClientId(clientId)
                 , ServerId(serverId)
             {}
 
             const ui64 TabletId;
-            const TActorId ClientId;
-            const TActorId ServerId;
+            const TActorId ClientId; 
+            const TActorId ServerId; 
         };
 
         struct TEvServerDestroyed : public TEventLocal<TEvServerDestroyed, EvServerDestroyed> {
-            TEvServerDestroyed(ui64 tabletId, const TActorId& clientId, const TActorId& serverId)
+            TEvServerDestroyed(ui64 tabletId, const TActorId& clientId, const TActorId& serverId) 
                 : TabletId(tabletId)
                 , ClientId(clientId)
                 , ServerId(serverId)
             {}
 
             const ui64 TabletId;
-            const TActorId ClientId;
-            const TActorId ServerId;
+            const TActorId ClientId; 
+            const TActorId ServerId; 
         };
 
         struct TEvActivate : public TEventLocal<TEvActivate, EvActivate> {
@@ -202,8 +202,8 @@ namespace NKikimr {
             {}
 
             const ui64 TabletId;
-            const TActorId OwnerId;
-            const TActorId RecipientId;
+            const TActorId OwnerId; 
+            const TActorId RecipientId; 
             const bool Leader;
         };
 
@@ -281,7 +281,7 @@ namespace NKikimr {
 
             // Creates and activated server, returns serverId.
             // Created server will forward messages to the specified recipent.
-            virtual TActorId Accept(TEvTabletPipe::TEvConnect::TPtr &ev,
+            virtual TActorId Accept(TEvTabletPipe::TEvConnect::TPtr &ev, 
                 TActorIdentity owner, TActorId recipient, bool leader = true) = 0;
 
             // Rejects connect with an error.
@@ -295,7 +295,7 @@ namespace NKikimr {
 
             // Creates an inactive server, returns server Id.
             // Owner of context is not captured at this time.
-            virtual TActorId Enqueue(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner) = 0;
+            virtual TActorId Enqueue(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner) = 0; 
 
             // Activates all inactive servers, created by Enqueue.
             // All activated servers will forward messages to the specified recipent.
@@ -362,26 +362,26 @@ namespace NKikimr {
         };
 
         // Returns client actor.
-        IActor* CreateClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config = TClientConfig());
+        IActor* CreateClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config = TClientConfig()); 
 
         // Sends data via client actor.
         // Payload will be delivered as a event to the owner of server.
         // Sender field in that event will be taken from the passed context.
         // Recipient field in that event will be filled by serverId.
-        void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie = 0);
-        void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0);
-        void SendData(TActorId self, TActorId clientId, IEventBase* payload, ui64 cookie = 0);
+        void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie = 0); 
+        void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0); 
+        void SendData(TActorId self, TActorId clientId, IEventBase* payload, ui64 cookie = 0); 
         void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie = 0);
         void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase* payload, ui64 seqNo, ui64 cookie = 0);
-        void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0);
+        void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0); 
 
         // Shutdown client actor.
-        void ShutdownClient(const TActorContext& ctx, const TActorId& clientId);
+        void ShutdownClient(const TActorContext& ctx, const TActorId& clientId); 
 
         // Destroys client actor.
-        void CloseClient(const TActorContext& ctx, const TActorId& clientId);
-        void CloseClient(TActorIdentity self, TActorId clientId);
-        void CloseAndForgetClient(TActorIdentity self, TActorId &clientId);
+        void CloseClient(const TActorContext& ctx, const TActorId& clientId); 
+        void CloseClient(TActorIdentity self, TActorId clientId); 
+        void CloseAndForgetClient(TActorIdentity self, TActorId &clientId); 
 
         // Returns server actor in inactive state.
         IActor* CreateServer(ui64 tabletId, const TActorId& clientId, const TActorId& interconnectSession, ui32 features, ui64 connectCookie);
@@ -390,7 +390,7 @@ namespace NKikimr {
         void ActivateServer(ui64 tabletId, TActorId serverId, TActorIdentity owner, TActorId recipientId, bool leader);
 
         // Destroys server actor.
-        void CloseServer(TActorIdentity owner, TActorId serverId);
+        void CloseServer(TActorIdentity owner, TActorId serverId); 
 
         // Returns a controller for handling connects.
         IConnectAcceptor* CreateConnectAcceptor(ui64 tabletId);

@@ -1,8 +1,8 @@
 #include "legacy_protobuf.h"
 
-#include <library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.pb.h>
-#include <library/cpp/monlib/metrics/metric_consumer.h>
-#include <library/cpp/monlib/metrics/labels.h>
+#include <library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.pb.h> 
+#include <library/cpp/monlib/metrics/metric_consumer.h> 
+#include <library/cpp/monlib/metrics/labels.h> 
 
 #include <util/generic/yexception.h>
 #include <util/generic/maybe.h>
@@ -22,7 +22,7 @@
 
 namespace NMonitoring {
     namespace {
-        using TMaybeMeta = TMaybe<NMonProto::TMetricMeta>;
+        using TMaybeMeta = TMaybe<NMonProto::TMetricMeta>; 
 
         TString ReadLabelValue(const NProtoBuf::Message& msg, const NProtoBuf::FieldDescriptor* d, const NProtoBuf::Reflection& r) {
             using namespace NProtoBuf;
@@ -137,8 +137,8 @@ namespace NMonitoring {
         }
 
         TMaybeMeta MaybeGetMeta(const NProtoBuf::FieldOptions& opts) {
-            if (opts.HasExtension(NMonProto::Metric)) {
-                return opts.GetExtension(NMonProto::Metric);
+            if (opts.HasExtension(NMonProto::Metric)) { 
+                return opts.GetExtension(NMonProto::Metric); 
             }
 
             return Nothing();
@@ -218,37 +218,37 @@ namespace NMonitoring {
                 Reflection_ = nullptr;
             }
 
-            TDecoderContext CreateChildFromMeta(const NMonProto::TMetricMeta& metricMeta, const TString& name, i64 repeatedIdx = -1) {
+            TDecoderContext CreateChildFromMeta(const NMonProto::TMetricMeta& metricMeta, const TString& name, i64 repeatedIdx = -1) { 
                 TDecoderContext child{*this};
                 child.Clear();
 
-                if (metricMeta.HasCustomPath()) {
-                    if (const auto& nodePath = metricMeta.GetCustomPath()) {
+                if (metricMeta.HasCustomPath()) { 
+                    if (const auto& nodePath = metricMeta.GetCustomPath()) { 
                         child.AppendPath(nodePath);
                     }
-                } else if (metricMeta.GetPath()) {
+                } else if (metricMeta.GetPath()) { 
                     child.AppendPath(name);
                 }
 
-                if (metricMeta.HasKeys()) {
-                    child.ParseKeys(metricMeta.GetKeys(), repeatedIdx);
+                if (metricMeta.HasKeys()) { 
+                    child.ParseKeys(metricMeta.GetKeys(), repeatedIdx); 
                 }
 
                 return child;
             }
 
-            TDecoderContext CreateChildFromRepeatedScalar(const NMonProto::TMetricMeta& metricMeta, i64 repeatedIdx = -1) {
+            TDecoderContext CreateChildFromRepeatedScalar(const NMonProto::TMetricMeta& metricMeta, i64 repeatedIdx = -1) { 
                 TDecoderContext child{*this};
                 child.Clear();
 
-                if (metricMeta.HasKeys()) {
-                    child.ParseKeys(metricMeta.GetKeys(), repeatedIdx);
+                if (metricMeta.HasKeys()) { 
+                    child.ParseKeys(metricMeta.GetKeys(), repeatedIdx); 
                 }
 
                 return child;
             }
 
-            TDecoderContext CreateChildFromEls(const TString& name, const NMonProto::TExtraLabelMetrics& metrics, size_t idx, TMaybeMeta maybeMeta) {
+            TDecoderContext CreateChildFromEls(const TString& name, const NMonProto::TExtraLabelMetrics& metrics, size_t idx, TMaybeMeta maybeMeta) { 
                 TDecoderContext child{*this};
                 child.Clear();
 
@@ -261,8 +261,8 @@ namespace NMonitoring {
                 }
 
                 child.Labels_.push_back(::MakeIntrusive<TLazyLabel>(
-                    [ labelName = metrics.GetlabelName(), idx, &metrics ](const auto&) {
-                        const auto& val = metrics.Getvalues(idx);
+                    [ labelName = metrics.GetlabelName(), idx, &metrics ](const auto&) { 
+                        const auto& val = metrics.Getvalues(idx); 
                         TString labelVal;
                         const auto uintLabel = val.GetlabelValueUint();
 
@@ -356,7 +356,7 @@ namespace NMonitoring {
 
         class TDecoder {
         public:
-            TDecoder(IMetricConsumer* consumer, const NProtoBuf::Message& message, TInstant timestamp)
+            TDecoder(IMetricConsumer* consumer, const NProtoBuf::Message& message, TInstant timestamp) 
                 : Consumer_{consumer}
                 , Message_{message}
                 , Timestamp_{timestamp}
@@ -374,12 +374,12 @@ namespace NMonitoring {
             }
 
         private:
-            static const NMonProto::TExtraLabelMetrics& ExtractExtraMetrics(TDecoderContext& ctx, const NProtoBuf::FieldDescriptor& f) {
+            static const NMonProto::TExtraLabelMetrics& ExtractExtraMetrics(TDecoderContext& ctx, const NProtoBuf::FieldDescriptor& f) { 
                 const auto& parent = ctx.Message();
                 const auto& reflection = ctx.Reflection();
                 auto& subMessage = reflection.GetMessage(parent, &f);
 
-                return dynamic_cast<const NMonProto::TExtraLabelMetrics&>(subMessage);
+                return dynamic_cast<const NMonProto::TExtraLabelMetrics&>(subMessage); 
             }
 
             void DecodeImpl(const NProtoBuf::Message& msg, TDecoderContext ctx) const {
@@ -394,68 +394,68 @@ namespace NMonitoring {
 
                     const auto& opts = f->options();
                     const auto isMessage = f->type() == NProtoBuf::FieldDescriptor::TYPE_MESSAGE;
-                    const auto isExtraLabelMetrics = isMessage && f->message_type()->full_name() == "NMonProto.TExtraLabelMetrics";
+                    const auto isExtraLabelMetrics = isMessage && f->message_type()->full_name() == "NMonProto.TExtraLabelMetrics"; 
                     const auto maybeMeta = MaybeGetMeta(opts);
 
-                    if (!(maybeMeta || isExtraLabelMetrics)) {
+                    if (!(maybeMeta || isExtraLabelMetrics)) { 
                         continue;
                     }
 
-                    if (isExtraLabelMetrics) {
-                        const auto& extra = ExtractExtraMetrics(ctx, *f);
-                        RecurseExtraLabelMetrics(ctx, extra, f->name(), maybeMeta);
+                    if (isExtraLabelMetrics) { 
+                        const auto& extra = ExtractExtraMetrics(ctx, *f); 
+                        RecurseExtraLabelMetrics(ctx, extra, f->name(), maybeMeta); 
                     } else if (isMessage) {
                         RecurseMessage(ctx, *maybeMeta, *f);
                     } else if (f->is_repeated()) {
                         RecurseRepeatedScalar(ctx, *maybeMeta, *f);
-                    } else if (maybeMeta->HasType()) {
+                    } else if (maybeMeta->HasType()) { 
                         const auto val = ReadFieldAsDouble(msg, f, ctx.Reflection());
-                        const bool isRate = maybeMeta->GetType() == NMonProto::EMetricType::RATE;
-                        WriteMetric(val, ctx, f->name(), isRate);
+                        const bool isRate = maybeMeta->GetType() == NMonProto::EMetricType::RATE; 
+                        WriteMetric(val, ctx, f->name(), isRate); 
                     }
                 }
             }
 
-            void RecurseRepeatedScalar(TDecoderContext ctx, const NMonProto::TMetricMeta& meta, const NProtoBuf::FieldDescriptor& f) const {
+            void RecurseRepeatedScalar(TDecoderContext ctx, const NMonProto::TMetricMeta& meta, const NProtoBuf::FieldDescriptor& f) const { 
                 auto&& msg = ctx.Message();
                 auto&& reflection = ctx.Reflection();
-                const bool isRate = meta.GetType() == NMonProto::EMetricType::RATE;
+                const bool isRate = meta.GetType() == NMonProto::EMetricType::RATE; 
 
-                // this is a repeated scalar field, which makes metric only if it's indexing
+                // this is a repeated scalar field, which makes metric only if it's indexing 
                 for (auto i = 0; i < reflection.FieldSize(msg, &f); ++i) {
                     auto subCtx = ctx.CreateChildFromRepeatedScalar(meta, i);
                     subCtx.Init(&msg);
                     auto val = ReadRepeatedAsDouble(msg, &f, reflection, i);
-                    WriteMetric(val, subCtx, f.name(), isRate);
+                    WriteMetric(val, subCtx, f.name(), isRate); 
                 }
             }
 
-            void RecurseExtraLabelMetrics(TDecoderContext ctx, const NMonProto::TExtraLabelMetrics& msg, const TString& name, const TMaybeMeta& meta) const {
+            void RecurseExtraLabelMetrics(TDecoderContext ctx, const NMonProto::TExtraLabelMetrics& msg, const TString& name, const TMaybeMeta& meta) const { 
                 auto i = 0;
                 for (const auto& val : msg.Getvalues()) {
                     auto subCtx = ctx.CreateChildFromEls(name, msg, i++, meta);
                     subCtx.Init(&val);
 
-                    const bool isRate = val.Hastype()
-                             ? val.Gettype() == NMonProto::EMetricType::RATE
-                             : meta->GetType() == NMonProto::EMetricType::RATE;
+                    const bool isRate = val.Hastype() 
+                             ? val.Gettype() == NMonProto::EMetricType::RATE 
+                             : meta->GetType() == NMonProto::EMetricType::RATE; 
 
-                    double metricVal{0};
-                    if (isRate) {
-                        metricVal = val.GetlongValue();
+                    double metricVal{0}; 
+                    if (isRate) { 
+                        metricVal = val.GetlongValue(); 
                     } else {
-                        metricVal = val.GetdoubleValue();
+                        metricVal = val.GetdoubleValue(); 
                     }
 
-                    WriteMetric(metricVal, subCtx, "", isRate);
+                    WriteMetric(metricVal, subCtx, "", isRate); 
 
                     for (const auto& child : val.Getchildren()) {
-                        RecurseExtraLabelMetrics(subCtx, child, "", meta);
+                        RecurseExtraLabelMetrics(subCtx, child, "", meta); 
                     }
                 }
             }
 
-            void RecurseMessage(TDecoderContext ctx, const NMonProto::TMetricMeta& metricMeta, const NProtoBuf::FieldDescriptor& f) const {
+            void RecurseMessage(TDecoderContext ctx, const NMonProto::TMetricMeta& metricMeta, const NProtoBuf::FieldDescriptor& f) const { 
                 const auto& msg = ctx.Message();
                 const auto& reflection = ctx.Reflection();
 
@@ -463,12 +463,12 @@ namespace NMonitoring {
                     TRACE("recurse into repeated message " << f.name());
                     for (auto i = 0; i < reflection.FieldSize(msg, &f); ++i) {
                         auto& subMessage = reflection.GetRepeatedMessage(msg, &f, i);
-                        DecodeImpl(subMessage, ctx.CreateChildFromMeta(metricMeta, f.name(), i));
+                        DecodeImpl(subMessage, ctx.CreateChildFromMeta(metricMeta, f.name(), i)); 
                     }
                 } else {
                     TRACE("recurse into message " << f.name());
                     auto& subMessage = reflection.GetMessage(msg, &f);
-                    DecodeImpl(subMessage, ctx.CreateChildFromMeta(metricMeta, f.name()));
+                    DecodeImpl(subMessage, ctx.CreateChildFromMeta(metricMeta, f.name())); 
                 }
             }
 
@@ -480,12 +480,12 @@ namespace NMonitoring {
                 Consumer_->OnDouble(Timestamp_, value);
             }
 
-            void WriteMetric(double value, const TDecoderContext& ctx, const TString& name, bool isRate) const {
-                if (isRate) {
-                    Consumer_->OnMetricBegin(EMetricType::RATE);
+            void WriteMetric(double value, const TDecoderContext& ctx, const TString& name, bool isRate) const { 
+                if (isRate) { 
+                    Consumer_->OnMetricBegin(EMetricType::RATE); 
                     WriteValue(static_cast<ui64>(value));
                 } else {
-                    Consumer_->OnMetricBegin(EMetricType::GAUGE);
+                    Consumer_->OnMetricBegin(EMetricType::GAUGE); 
                     WriteValue(static_cast<double>(value));
                 }
 
@@ -504,23 +504,23 @@ namespace NMonitoring {
                 }
 
                 Consumer_->OnLabelsEnd();
-                Consumer_->OnMetricEnd();
+                Consumer_->OnMetricEnd(); 
             }
 
         private:
-            IMetricConsumer* Consumer_{nullptr};
+            IMetricConsumer* Consumer_{nullptr}; 
             const NProtoBuf::Message& Message_;
             TInstant Timestamp_;
         };
 
     }
 
-    void DecodeLegacyProto(const NProtoBuf::Message& data, IMetricConsumer* consumer, TInstant ts) {
+    void DecodeLegacyProto(const NProtoBuf::Message& data, IMetricConsumer* consumer, TInstant ts) { 
         Y_ENSURE(consumer);
         TDecoder(consumer, data, ts).Decode();
     }
 
-    void DecodeLegacyProtoToStream(const NProtoBuf::Message& data, IMetricConsumer* consumer, TInstant ts) {
+    void DecodeLegacyProtoToStream(const NProtoBuf::Message& data, IMetricConsumer* consumer, TInstant ts) { 
         Y_ENSURE(consumer);
         TDecoder(consumer, data, ts).DecodeToStream();
     }

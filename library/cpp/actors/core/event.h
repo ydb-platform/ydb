@@ -48,9 +48,9 @@ namespace NActors {
     // fat handle
     class IEventHandle : TNonCopyable {
         struct TOnNondelivery {
-            TActorId Recipient;
+            TActorId Recipient; 
 
-            TOnNondelivery(const TActorId& recipient)
+            TOnNondelivery(const TActorId& recipient) 
                 : Recipient(recipient)
             {
             }
@@ -99,8 +99,8 @@ namespace NActors {
 
         const ui32 Type;
         const ui32 Flags;
-        const TActorId Recipient;
-        const TActorId Sender;
+        const TActorId Recipient; 
+        const TActorId Sender; 
         const ui64 Cookie;
         const TScopeId OriginScopeId = TScopeId::LocallyGenerated; // filled in when the message is received from Interconnect
 
@@ -108,7 +108,7 @@ namespace NActors {
         NWilson::TTraceId TraceId;
 
         // filled if feeded by interconnect session
-        const TActorId InterconnectSession;
+        const TActorId InterconnectSession; 
 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         ::NHPTimer::STime SendTime;
@@ -138,13 +138,13 @@ namespace NActors {
         THolder<IEventBase> Event;
         TIntrusivePtr<TEventSerializedData> Buffer;
 
-        TActorId RewriteRecipient;
+        TActorId RewriteRecipient; 
         ui32 RewriteType;
 
         THolder<TOnNondelivery> OnNondeliveryHolder; // only for local events
 
     public:
-        void Rewrite(ui32 typeRewrite, TActorId recipientRewrite) {
+        void Rewrite(ui32 typeRewrite, TActorId recipientRewrite) { 
             RewriteRecipient = recipientRewrite;
             RewriteType = typeRewrite;
         }
@@ -154,7 +154,7 @@ namespace NActors {
             RewriteType = Type;
         }
 
-        const TActorId& GetRecipientRewrite() const {
+        const TActorId& GetRecipientRewrite() const { 
             return RewriteRecipient;
         }
 
@@ -162,12 +162,12 @@ namespace NActors {
             return RewriteType;
         }
 
-        TActorId GetForwardOnNondeliveryRecipient() const {
-            return OnNondeliveryHolder.Get() ? OnNondeliveryHolder->Recipient : TActorId();
+        TActorId GetForwardOnNondeliveryRecipient() const { 
+            return OnNondeliveryHolder.Get() ? OnNondeliveryHolder->Recipient : TActorId(); 
         }
 
-        IEventHandle(const TActorId& recipient, const TActorId& sender, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0,
-                     const TActorId* forwardOnNondelivery = nullptr, NWilson::TTraceId traceId = {})
+        IEventHandle(const TActorId& recipient, const TActorId& sender, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, 
+                     const TActorId* forwardOnNondelivery = nullptr, NWilson::TTraceId traceId = {}) 
             : Type(ev->Type())
             , Flags(flags)
             , Recipient(recipient)
@@ -187,11 +187,11 @@ namespace NActors {
 
         IEventHandle(ui32 type,
                      ui32 flags,
-                     const TActorId& recipient,
-                     const TActorId& sender,
+                     const TActorId& recipient, 
+                     const TActorId& sender, 
                      TIntrusivePtr<TEventSerializedData> buffer,
                      ui64 cookie,
-                     const TActorId* forwardOnNondelivery = nullptr,
+                     const TActorId* forwardOnNondelivery = nullptr, 
                      NWilson::TTraceId traceId = {})
             : Type(type)
             , Flags(flags)
@@ -211,11 +211,11 @@ namespace NActors {
         }
 
         // Special ctor for events from interconnect.
-        IEventHandle(const TActorId& session,
+        IEventHandle(const TActorId& session, 
                      ui32 type,
                      ui32 flags,
-                     const TActorId& recipient,
-                     const TActorId& sender,
+                     const TActorId& recipient, 
+                     const TActorId& sender, 
                      TIntrusivePtr<TEventSerializedData> buffer,
                      ui64 cookie,
                      TScopeId originScopeId,
@@ -276,7 +276,7 @@ namespace NActors {
             return x;
         }
 
-        TAutoPtr<IEventHandle> Forward(const TActorId& dest) {
+        TAutoPtr<IEventHandle> Forward(const TActorId& dest) { 
             if (Event)
                 return new IEventHandle(dest, Sender, Event.Release(), Flags, Cookie, nullptr, std::move(TraceId));
             else

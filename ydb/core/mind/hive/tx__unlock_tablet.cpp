@@ -6,18 +6,18 @@ namespace NHive {
 
 class TTxUnlockTabletExecution : public TTransactionBase<THive> {
     const ui64 TabletId;
-    const TActorId OwnerActor;
+    const TActorId OwnerActor; 
     const ui64 SeqNo;
 
-    const TActorId Sender;
+    const TActorId Sender; 
     const ui64 Cookie;
 
     NKikimrProto::EReplyStatus Status;
     TString StatusMessage;
-    TActorId PreviousOwner;
+    TActorId PreviousOwner; 
 
 public:
-    TTxUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie, THive* hive)
+    TTxUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie, THive* hive) 
         : TBase(hive)
         , TabletId(rec.GetTabletID())
         , OwnerActor(GetOwnerActor(rec, sender))
@@ -100,16 +100,16 @@ public:
     }
 
 private:
-    static TActorId GetOwnerActor(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender) {
-        TActorId owner = sender;
+    static TActorId GetOwnerActor(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender) { 
+        TActorId owner = sender; 
         if (rec.HasOwnerActor()) {
-            owner = ActorIdFromProto(rec.GetOwnerActor());
+            owner = ActorIdFromProto(rec.GetOwnerActor()); 
         }
         return owner;
     }
 };
 
-ITransaction* THive::CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie) {
+ITransaction* THive::CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie) { 
     return new TTxUnlockTabletExecution(rec, sender, cookie, this);
 }
 

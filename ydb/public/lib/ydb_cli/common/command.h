@@ -3,7 +3,7 @@
 #include "common.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
-
+ 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/colorizer/colors.h>
 #include <util/generic/strbuf.h>
@@ -94,9 +94,9 @@ public:
         TLoginCredentialsParams StaticCredentials;
 
         TString YCToken;
-        bool UseMetadataCredentials = false;
+        bool UseMetadataCredentials = false; 
         TString SaKeyFile;
-        TString IamEndpoint;
+        TString IamEndpoint; 
         TString YScope;
 
         TString YdbDir;

@@ -28,7 +28,7 @@ public:
     };
 
 private:
-    TActorId KeeperId;
+    TActorId KeeperId; 
     TTestActorState& State;
     ui8 Owner = 1;
     ui32 NumReadsPending = 0;
@@ -39,7 +39,7 @@ private:
     TManualEvent *Event;
 
 public:
-    TTestActorSeq(const TActorId& keeperId, TTestActorState& state, ui32 generation, TManualEvent *event)
+    TTestActorSeq(const TActorId& keeperId, TTestActorState& state, ui32 generation, TManualEvent *event) 
         : KeeperId(keeperId)
         , State(state)
         , Rng(42)

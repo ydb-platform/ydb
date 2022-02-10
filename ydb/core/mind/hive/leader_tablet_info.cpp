@@ -141,7 +141,7 @@ TFollowerGroup& TLeaderTabletInfo::AddFollowerGroup(TFollowerGroupId followerGro
 }
 
 TActorId TLeaderTabletInfo::SetLockedToActor(const TActorId& actor, const TDuration& timeout) {
-    TActorId previousOwner = LockedToActor;
+    TActorId previousOwner = LockedToActor; 
     if (LockedToActor != actor) {
         if (LockedToActor.NodeId() != actor.NodeId()) {
             if (LockedToActor) {

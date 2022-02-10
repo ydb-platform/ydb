@@ -22,7 +22,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
 
     TInstant WallClockStarted;
 
-    TActorId Source;
+    TActorId Source; 
     ui64 SourceCookie;
 
     TAutoPtr<const NACLib::TUserToken> UserToken;

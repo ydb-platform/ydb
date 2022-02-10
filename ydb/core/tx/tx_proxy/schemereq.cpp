@@ -32,8 +32,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     TInstant WallClockStarted;
 
-    TActorId Source;
-    TActorId PipeClient;
+    TActorId Source; 
+    TActorId PipeClient; 
 
     struct TPathToResolve {
         NKikimrSchemeOp::EOperationType OperationRelated;

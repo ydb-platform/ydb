@@ -10,7 +10,7 @@
 #include <deque>
 #include <typeindex>
 #include <typeinfo>
-#include <variant>
+#include <variant> 
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -185,7 +185,7 @@ using TAdvancedResponseCallback = std::function<void (const grpc::ClientContext&
 struct TCallMeta {
     std::shared_ptr<grpc::CallCredentials> CallCredentials;
     std::vector<std::pair<TString, TString>> Aux;
-    std::variant<TDuration, TInstant> Timeout; // timeout as duration from now or time point in future
+    std::variant<TDuration, TInstant> Timeout; // timeout as duration from now or time point in future 
 };
 
 class TGRpcRequestProcessorCommon {
@@ -197,17 +197,17 @@ protected:
         if (meta.CallCredentials) {
             Context.set_credentials(meta.CallCredentials);
         }
-        if (const TDuration* timeout = std::get_if<TDuration>(&meta.Timeout)) {
-            if (*timeout) {
-                auto deadline = gpr_time_add(
-                        gpr_now(GPR_CLOCK_MONOTONIC),
-                        gpr_time_from_micros(timeout->MicroSeconds(), GPR_TIMESPAN));
-                Context.set_deadline(deadline);
-            }
-        } else if (const TInstant* deadline = std::get_if<TInstant>(&meta.Timeout)) {
-            if (*deadline) {
-                Context.set_deadline(gpr_time_from_micros(deadline->MicroSeconds(), GPR_CLOCK_MONOTONIC));
-            }
+        if (const TDuration* timeout = std::get_if<TDuration>(&meta.Timeout)) { 
+            if (*timeout) { 
+                auto deadline = gpr_time_add( 
+                        gpr_now(GPR_CLOCK_MONOTONIC), 
+                        gpr_time_from_micros(timeout->MicroSeconds(), GPR_TIMESPAN)); 
+                Context.set_deadline(deadline); 
+            } 
+        } else if (const TInstant* deadline = std::get_if<TInstant>(&meta.Timeout)) { 
+            if (*deadline) { 
+                Context.set_deadline(gpr_time_from_micros(deadline->MicroSeconds(), GPR_CLOCK_MONOTONIC)); 
+            } 
         }
     }
 

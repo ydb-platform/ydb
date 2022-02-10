@@ -707,7 +707,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                 TVDiskID vDiskId = Info->CreateVDiskID(vId);
 
                 if (!curVDisk.IsError && !curVDisk.IsAllRead && !curVDisk.IsMoreRequested) {
-                    const TActorId &vdisk = Info->GetActorId(vDiskId);
+                    const TActorId &vdisk = Info->GetActorId(vDiskId); 
 
                     auto msg = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(vDiskId, Deadline,
                             NKikimrBlobStorage::EGetHandleClass::Discover, TEvBlobStorage::TEvVGet::EFlags::ShowInternals,

@@ -165,7 +165,7 @@ public:
         return res;
     }
 
-    std::vector<TTestSession> CreateSession(std::vector<TQuoterResourceTree*> resources, bool consume, double amount, TIntrusivePtr<TTestResourceSink> sink = nullptr, NActors::TActorId clientId = {}, NActors::TActorId pipeServerId = {}) {
+    std::vector<TTestSession> CreateSession(std::vector<TQuoterResourceTree*> resources, bool consume, double amount, TIntrusivePtr<TTestResourceSink> sink = nullptr, NActors::TActorId clientId = {}, NActors::TActorId pipeServerId = {}) { 
         UNIT_ASSERT(!resources.empty());
 
         if (!sink) {
@@ -185,7 +185,7 @@ public:
             TQuoterSession* session = Resources->GetOrCreateSession(clientId, resource);
             UNIT_ASSERT(session);
             session->SetResourceSink(sink);
-            const NActors::TActorId prevPipeServerId = session->SetPipeServerId(pipeServerId);
+            const NActors::TActorId prevPipeServerId = session->SetPipeServerId(pipeServerId); 
             UNIT_ASSERT(!newClientId || !prevPipeServerId);
             Resources->SetPipeServerId(TQuoterSessionId(clientId, resource->GetResourceId()), prevPipeServerId, pipeServerId);
             session->UpdateConsumptionState(consume, amount, queue, Time);
@@ -196,7 +196,7 @@ public:
         return result;
     }
 
-    TTestSession CreateSession(TQuoterResourceTree* resource, bool consume, double amount, TIntrusivePtr<TTestResourceSink> sink = nullptr, NActors::TActorId clientId = {}, NActors::TActorId pipeServerId = {}) {
+    TTestSession CreateSession(TQuoterResourceTree* resource, bool consume, double amount, TIntrusivePtr<TTestResourceSink> sink = nullptr, NActors::TActorId clientId = {}, NActors::TActorId pipeServerId = {}) { 
         return CreateSession(std::vector<TQuoterResourceTree*>(1, resource), consume, amount, sink, clientId, pipeServerId)[0];
     }
 
@@ -204,10 +204,10 @@ public:
         Resources->DisconnectSession(session->GetPipeServerId());
     }
 
-    NActors::TActorId NewActorID() {
+    NActors::TActorId NewActorID() { 
         const ui64 x1 = NextActorId++;
         const ui64 x2 = NextActorId++;
-        return NActors::TActorId(x1, x2);
+        return NActors::TActorId(x1, x2); 
     }
 
     // Tests
@@ -575,8 +575,8 @@ public:
 
         AddResource("Root", 100500);
 
-        const NActors::TActorId clientId = NewActorID();
-        const NActors::TActorId pipeServerId = NewActorID();
+        const NActors::TActorId clientId = NewActorID(); 
+        const NActors::TActorId pipeServerId = NewActorID(); 
         std::vector<TQuoterResourceTree*> resources;
         resources.reserve(resourcesCount);
         for (size_t resourceIndex = 0; resourceIndex < resourcesCount; ++resourceIndex) {

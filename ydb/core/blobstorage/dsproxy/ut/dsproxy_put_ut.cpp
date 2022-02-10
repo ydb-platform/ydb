@@ -114,7 +114,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> nextVPuts;
 
         TEvBlobStorage::TEvVPut& vPut = *vPuts[vPutIdx];
-        TActorId sender;
+        TActorId sender; 
         TEvBlobStorage::TEvVPutResult vPutResult;
         NKikimrProto::EReplyStatus status = group.OnVPut(vPut);
         vPutResult.MakeError(status, TString(), vPut.Record);
@@ -273,7 +273,7 @@ struct TTestPutAllOk {
                 break;
             }
 
-            TActorId sender;
+            TActorId sender; 
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts2;
             putImpl.OnVPutEventResult(LogCtx, sender, *vPutResults[resIdx], vPuts2, putResults);
             if (putResults.size()) {
@@ -304,7 +304,7 @@ struct TTestPutAllOk {
                 break;
             }
 
-            TActorId sender;
+            TActorId sender; 
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> vMultiPuts2;
             putImpl.OnVPutEventResult(LogCtx, sender, *vMultiPutResults[resIdx], vMultiPuts2, putResults);
             if (putResults.size() == BlobIds.size()) {

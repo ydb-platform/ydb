@@ -17,14 +17,14 @@ Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
         const TVDiskID self = vd;
 
         // fill in values
-        TSyncNeighbors n("Prefix", TActorId(), self, info->PickTopology());
+        TSyncNeighbors n("Prefix", TActorId(), self, info->PickTopology()); 
         ui64 i = 123456u;
         for (auto &x: n) {
             x.Get().PeerSyncState.SchTime = TInstant::MicroSeconds(++i);
         }
 
         // old serialize/parse
-        TSyncNeighbors n2("Prefix", TActorId(), self, info->PickTopology());
+        TSyncNeighbors n2("Prefix", TActorId(), self, info->PickTopology()); 
         {
             TStringStream output;
             n.OldSerialize(output, info.Get());
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
         }
 
         // new serialize/parse
-        TSyncNeighbors n3("Prefix", TActorId(), self, info->PickTopology());
+        TSyncNeighbors n3("Prefix", TActorId(), self, info->PickTopology()); 
         {
             TStringStream output;
             n2.Serialize(output, info.Get());

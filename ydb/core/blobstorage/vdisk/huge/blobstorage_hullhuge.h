@@ -13,7 +13,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TEvHullWriteHugeBlob : public TEventLocal<TEvHullWriteHugeBlob, TEvBlobStorage::EvHullWriteHugeBlob>, public TIntrusiveListItem<TEvHullWriteHugeBlob> {
     public:
-        const TActorId SenderId;
+        const TActorId SenderId; 
         const ui64 Cookie;
         const TLogoBlobID LogoBlobId;
         const TIngress Ingress;
@@ -22,7 +22,7 @@ namespace NKikimr {
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
 
-        TEvHullWriteHugeBlob(const TActorId &senderId,
+        TEvHullWriteHugeBlob(const TActorId &senderId, 
                              ui64 cookie,
                              const TLogoBlobID &logoBlobId,
                              const TIngress &ingress,
@@ -61,7 +61,7 @@ namespace NKikimr {
         const TIngress Ingress;
         const TDiskPart HugeBlob;
         const bool IgnoreBlock;
-        const TActorId OrigClient;
+        const TActorId OrigClient; 
         const ui64 OrigCookie;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
 
@@ -70,7 +70,7 @@ namespace NKikimr {
                            const TIngress &ingress,
                            const TDiskPart &hugeBlob,
                            bool ignoreBlock,
-                           const TActorId &origClient,
+                           const TActorId &origClient, 
                            ui64 origCookie,
                            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result)
             : WriteId(writeId)
@@ -195,9 +195,9 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskContext> VCtx;
         TPDiskCtxPtr PDiskCtx;
         TIntrusivePtr<TLsnMngr> LsnMngr;
-        TActorId SkeletonId;
-        TActorId LoggerId;
-        TActorId LogCutterId;
+        TActorId SkeletonId; 
+        TActorId LoggerId; 
+        TActorId LogCutterId; 
         const TString LocalRecoveryInfoDbg;
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TDskOutOfSpaceGroup DskOutOfSpaceGroup;
@@ -206,9 +206,9 @@ namespace NKikimr {
                 TIntrusivePtr<TVDiskContext> vctx,
                 TPDiskCtxPtr pdiskCtx,
                 TIntrusivePtr<TLsnMngr> lsnMngr,
-                TActorId skeletonId,
-                TActorId loggerId,
-                TActorId logCutterId,
+                TActorId skeletonId, 
+                TActorId loggerId, 
+                TActorId logCutterId, 
                 const TString &localRecoveryInfoDbg);
         ~THugeKeeperCtx();
     };

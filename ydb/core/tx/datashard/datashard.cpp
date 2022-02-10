@@ -6,7 +6,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 
@@ -410,7 +410,7 @@ void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEven
 
 void TDataShard::SendResult(const TActorContext &ctx,
                                    TOutputOpData::TResultPtr &res,
-                                   const TActorId &target,
+                                   const TActorId &target, 
                                    ui64 step,
                                    ui64 txId)
 {
@@ -1682,7 +1682,7 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
             return;
         }
 
-        TActorId target = item.Event->Get()->GetSource();
+        TActorId target = item.Event->Get()->GetSource(); 
         ui64 cookie = item.Event->Cookie;
         auto kind = item.Event->Get()->GetTxKind();
         auto txId = item.Event->Get()->GetTxId();
@@ -1747,7 +1747,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
         }
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
-            SchemeShardPipe = TActorId();
+            SchemeShardPipe = TActorId(); 
             NotifySchemeshard(ctx);
         }
         return;
@@ -1755,18 +1755,18 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
 
     if (ev->Get()->Status != NKikimrProto::OK) {
         if (ev->Get()->ClientId == StateReportPipe) {
-            StateReportPipe = TActorId();
+            StateReportPipe = TActorId(); 
             ReportState(ctx, State);
             return;
         }
 
         if (ev->Get()->ClientId == DbStatsReportPipe) {
-            DbStatsReportPipe = TActorId();
+            DbStatsReportPipe = TActorId(); 
             return;
         }
 
         if (ev->Get()->ClientId == TableResolvePipe) {
-            TableResolvePipe = TActorId();
+            TableResolvePipe = TActorId(); 
             ResolveTablePath(ctx);
             return;
         }
@@ -1821,19 +1821,19 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
             LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
                 "Datashard's schemeshard pipe destroyed while no messages to sent at %" PRIu64, TabletID());
         }
-        SchemeShardPipe = TActorId();
+        SchemeShardPipe = TActorId(); 
         NotifySchemeshard(ctx);
         return;
     }
 
     if (ev->Get()->ClientId == StateReportPipe) {
-        StateReportPipe = TActorId();
+        StateReportPipe = TActorId(); 
         ReportState(ctx, State);
         return;
     }
 
     if (ev->Get()->ClientId == DbStatsReportPipe) {
-        DbStatsReportPipe = TActorId();
+        DbStatsReportPipe = TActorId(); 
         return;
     }
 

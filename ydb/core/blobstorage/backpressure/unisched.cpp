@@ -14,10 +14,10 @@ namespace NKikimr {
 
     public:
         struct TEvRegister : TEventLocal<TEvRegister, EvRegister> {
-            const TActorId ActorId;
+            const TActorId ActorId; 
             TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
 
-            TEvRegister(const TActorId& actorId, TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord)
+            TEvRegister(const TActorId& actorId, TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord) 
                 : ActorId(actorId)
                 , FlowRecord(std::move(flowRecord))
             {}
@@ -26,7 +26,7 @@ namespace NKikimr {
     private:
         class TSubschedulerActor : public TActorBootstrapped<TSubschedulerActor> {
             const TDuration Interval;
-            THashMap<TActorId, TIntrusivePtr<NBackpressure::TFlowRecord>> Subscribers;
+            THashMap<TActorId, TIntrusivePtr<NBackpressure::TFlowRecord>> Subscribers; 
 
         public:
             TSubschedulerActor(TDuration interval)
@@ -73,10 +73,10 @@ namespace NKikimr {
 
     private:
         struct TSubschedulerInfo {
-            TActorId ActorId;
+            TActorId ActorId; 
             size_t NumSubscribers = 0;
 
-            TSubschedulerInfo(const TActorId& actorId)
+            TSubschedulerInfo(const TActorId& actorId) 
                 : ActorId(actorId)
             {}
 
@@ -89,11 +89,11 @@ namespace NKikimr {
     private:
         const size_t MaxActorsPerSubscheduler = 1024;
         const TDuration Interval;
-        THashMap<TActorId, TActorId> SubscriberToSubscheduler; // subscriber to subscheduler actor id map
+        THashMap<TActorId, TActorId> SubscriberToSubscheduler; // subscriber to subscheduler actor id map 
         using TOrderedSubschedulerSet = TSet<TSubschedulerInfo>;
         TOrderedSubschedulerSet PartialSubschedulers;
         TOrderedSubschedulerSet FullSubschedulers;
-        THashMap<TActorId, TOrderedSubschedulerSet::iterator> SubschedulerToOrderedSetPosition;
+        THashMap<TActorId, TOrderedSubschedulerSet::iterator> SubschedulerToOrderedSetPosition; 
 
     public:
         TUniversalSchedulerActor(const TDuration interval = TDuration::Seconds(1))
@@ -108,7 +108,7 @@ namespace NKikimr {
         }
 
         void RegisterSubscriber(const TActorId& actorId, std::unique_ptr<TEvRegister> msg, const TActorContext& ctx) {
-            TActorId subschedulerActorId;
+            TActorId subschedulerActorId; 
 
             // first, check if we have partially filled subscheduler actor -- if so, find the most filled one and stuff
             // it with one more subscriber
@@ -147,7 +147,7 @@ namespace NKikimr {
             Y_VERIFY(it != SubscriberToSubscheduler.end());
 
             // erase it from the map, remembering its actor id
-            const TActorId subschedulerActorId = it->second;
+            const TActorId subschedulerActorId = it->second; 
             SubscriberToSubscheduler.erase(it);
 
             // send unregister message to the actor
@@ -191,7 +191,7 @@ namespace NKikimr {
         return new TUniversalSchedulerActor;
     }
 
-    bool RegisterActorInUniversalScheduler(const TActorId& actorId, TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord,
+    bool RegisterActorInUniversalScheduler(const TActorId& actorId, TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord, 
             TActorSystem *actorSystem) {
         return actorSystem->Send(MakeUniversalSchedulerActorId(), new TUniversalSchedulerActor::TEvRegister(actorId,
             std::move(flowRecord)));

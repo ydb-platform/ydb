@@ -6,19 +6,19 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_terminator.h>
 #include "../mkql_factories.h"
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
-#define UNBOXED_VALUE_STR_EQUAL(unboxed, expected) \
-    do { \
+#define UNBOXED_VALUE_STR_EQUAL(unboxed, expected) \ 
+    do { \ 
         const auto v = (unboxed); \
-        if (!(v.AsStringRef() == (expected))) { \
-            UNIT_FAIL_IMPL( \
-                    "equal assertion failed", \
-                    Sprintf("%s == %s", #unboxed, #expected)); \
-        } \
-    } while (0)
-
+        if (!(v.AsStringRef() == (expected))) { \ 
+            UNIT_FAIL_IMPL( \ 
+                    "equal assertion failed", \ 
+                    Sprintf("%s == %s", #unboxed, #expected)); \ 
+        } \ 
+    } while (0) 
+ 
 
 
 #if defined(_msan_enabled_) || defined(_ubsan_enabled_) || defined(WITH_VALGRIND)

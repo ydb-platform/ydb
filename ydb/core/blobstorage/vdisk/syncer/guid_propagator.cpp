@@ -16,12 +16,12 @@ namespace NKikimr {
         // vdisk/actor ids are reconfigurable, they are changed during group reconfiguration
         TVDiskID SelfVDiskId;
         TVDiskID TargetVDiskId;
-        TActorId TargetServiceId;
+        TActorId TargetServiceId; 
         // const values we propagate
         const NKikimrBlobStorage::TSyncGuidInfo::EState State;
         const TVDiskEternalGuid Guid;
         // actors we borned
-        TActorId WriterId;
+        TActorId WriterId; 
         TActiveActors ActiveActors;
         const TDuration WaitPeriod = TDuration::Seconds(10);
 
@@ -52,7 +52,7 @@ namespace NKikimr {
 
         void Handle(TEvVDiskGuidWritten::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
-            WriterId = TActorId();
+            WriterId = TActorId(); 
             auto *msg = ev->Get();
             Y_VERIFY(msg->State == State &&
                      msg->Guid == Guid &&
@@ -119,7 +119,7 @@ namespace NKikimr {
         TSyncerGuidPropagator(TIntrusivePtr<TVDiskContext> vctx,
                               const TVDiskID &selfVDiskId,
                               const TVDiskID &targetVDiskId,
-                              const TActorId &targetServiceId,
+                              const TActorId &targetServiceId, 
                               NKikimrBlobStorage::TSyncGuidInfo::EState state,
                               TVDiskEternalGuid guid)
             : TActorBootstrapped<TSyncerGuidPropagator>()
@@ -139,7 +139,7 @@ namespace NKikimr {
     IActor* CreateSyncerGuidPropagator(TIntrusivePtr<TVDiskContext> vctx,
                                        const TVDiskID &selfVDiskId,
                                        const TVDiskID &targetVDiskId,
-                                       const TActorId &targetServiceId,
+                                       const TActorId &targetServiceId, 
                                        NKikimrBlobStorage::TSyncGuidInfo::EState state,
                                        TVDiskEternalGuid guid) {
         return new TSyncerGuidPropagator(std::move(vctx), selfVDiskId, targetVDiskId, targetServiceId,

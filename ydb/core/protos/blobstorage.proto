@@ -1147,7 +1147,7 @@ message TEvGroupStatReport {
         repeated uint32 Buckets = 1;
     }
     optional uint32 GroupId = 1;
-    optional NActorsProto.TActorId VDiskServiceId = 2;
+    optional NActorsProto.TActorId VDiskServiceId = 2; 
     optional TLatencyHistogram PutTabletLog = 10;
     optional TLatencyHistogram PutUserData = 11;
     optional TLatencyHistogram GetFast = 12;

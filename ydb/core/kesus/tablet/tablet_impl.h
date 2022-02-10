@@ -77,11 +77,11 @@ private:
     struct THtmlRenderer;
 
     struct TDelayedEvent {
-        const TActorId Recipient;
+        const TActorId Recipient; 
         const ui64 Cookie;
         THolder<IEventBase> Event;
 
-        TDelayedEvent(const TActorId& recipient, ui64 cookie, IEventBase* event)
+        TDelayedEvent(const TActorId& recipient, ui64 cookie, IEventBase* event) 
             : Recipient(recipient)
             , Cookie(cookie)
             , Event(event)
@@ -89,7 +89,7 @@ private:
     };
 
     struct TProxyInfo {
-        TActorId ActorID;
+        TActorId ActorID; 
         ui64 Generation = 0;
         THashSet<ui64> AttachedSessions;
     };
@@ -128,7 +128,7 @@ private:
         THashMap<TSemaphoreInfo*, ui64> SemaphoreWaitCookie;
         THashMap<TSemaphoreInfo*, ui64> SemaphoreWatchCookie;
 
-        TActorId LastOwnerProxy;
+        TActorId LastOwnerProxy; 
         ui64 LastOwnerSeqNo = 0;
 
         void ClearWatchCookies();
@@ -217,7 +217,7 @@ private:
     };
 
     struct TQuoterResourceSessionsAccumulator {
-        void Accumulate(const TActorId& recipient, ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props);
+        void Accumulate(const TActorId& recipient, ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props); 
         void SendAll(const TActorContext& ctx, ui64 tabletId);
 
         struct TSendInfo {
@@ -225,7 +225,7 @@ private:
             THashMap<ui64, size_t> ResIdIndex;
         };
 
-        THashMap<TActorId, TSendInfo> SendInfos;
+        THashMap<TActorId, TSendInfo> SendInfos; 
     };
 
     struct TEvPrivate {
@@ -293,7 +293,7 @@ private:
     THashMap<ui64, TSessionInfo> Sessions;
     THashMap<ui64, TSemaphoreInfo> Semaphores;
     THashMap<TString, TSemaphoreInfo*> SemaphoresByName;
-    THashMap<TActorId, TProxyInfo> Proxies;
+    THashMap<TActorId, TProxyInfo> Proxies; 
     THashMap<ui32, THashSet<TProxyInfo*>> ProxiesByNode;
     THashMap<ui64, ui64> SessionsTxCount;
 
@@ -317,7 +317,7 @@ private:
     ui64 StrictMarkerCounter = 0;
 
 public:
-    TKesusTablet(const TActorId& tablet, TTabletStorageInfo* info);
+    TKesusTablet(const TActorId& tablet, TTabletStorageInfo* info); 
     virtual ~TKesusTablet();
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

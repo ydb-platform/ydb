@@ -6,16 +6,16 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-
+ 
 #include <cfloat>
 #include <utility>
 #include <random>
-
+ 
 namespace NKikimr {
 namespace NMiniKQL {
-
+ 
 namespace {
-
+ 
 
 ui64 g_Yield = std::numeric_limits<ui64>::max();
 ui64 g_TestStreamData[] = {0, 0, 1, 0, 0, 0, 1, 2, 3};
@@ -58,7 +58,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TStreamValue>(Count);
     }
-
+ 
 private:
     void RegisterDependencies() const final {}
 
@@ -1851,7 +1851,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestDivZero) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto data1 = pb.NewDataLiteral<ui32>(17);
         const auto data2 = pb.NewDataLiteral<ui32>(0);
         const auto pgmReturn = pb.Div(data1, data2);
@@ -3957,12 +3957,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             pb.NewStruct(map3)
         });
 
-        {
+        { 
             const auto pgmReturn = pb.Sort(list, pb.NewDataLiteral(asc),
-                [&](TRuntimeNode item) {
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "key");
             });
-
+ 
             if (asc) {
                 // ascending sort
                 const auto graph = setup.BuildGraph(pgmReturn);
@@ -3998,64 +3998,64 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
                 UNIT_ASSERT(!iterator.Next(item));
                 UNIT_ASSERT(!iterator.Next(item));
             }
-        }
+        } 
     }
-
+ 
     Y_UNIT_TEST_LLVM(TestSort) {
         TestSortImpl<LLVM>(true);
         TestSortImpl<LLVM>(false);
     }
 
     using TTriple = std::tuple<ui32, ui32, ui32>;
-
+ 
     TRuntimeNode TupleOrder(TProgramBuilder& pb, bool asc1, bool asc2, bool asc3) {
         TVector<TRuntimeNode> ascending(3);
         ascending[0] = pb.NewDataLiteral(asc1);
         ascending[1] = pb.NewDataLiteral(asc2);
         ascending[2] = pb.NewDataLiteral(asc3);
-
+ 
         TVector<TType*> tupleTypes(3);
         tupleTypes[0] = pb.NewDataType(NUdf::TDataType<bool>::Id);
         tupleTypes[1] = pb.NewDataType(NUdf::TDataType<bool>::Id);
         tupleTypes[2] = pb.NewDataType(NUdf::TDataType<bool>::Id);
-
+ 
         return pb.NewTuple(pb.NewTupleType(tupleTypes), ascending);
-    }
-
+    } 
+ 
     template<bool LLVM>
     TVector<TTriple> SortTuples(TSetup<LLVM>& setup, TRuntimeNode list, TRuntimeNode order)
-    {
+    { 
         auto& pb = *setup.PgmBuilder;
         const auto pgmReturn = pb.Sort(list, order, [](TRuntimeNode item) { return item; });
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
-
+ 
         TVector<TTriple> result;
         for (NUdf::TUnboxedValue value; iterator.Next(value);) {
             ui32 first = value.GetElement(0).template Get<ui32>();
             ui32 second = value.GetElement(1).template Get<ui32>();
             ui32 third = value.GetElement(2).template Get<ui32>();
-            result.push_back(TTriple{ first, second, third });
-        }
+            result.push_back(TTriple{ first, second, third }); 
+        } 
         UNIT_ASSERT(!iterator.Skip());
-        return result;
-    }
-
+        return result; 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestSortTuples) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto listMaker = [&]()
-        {
-            TTriple testData[] = {
-                { 1, 1, 1 },
-                { 1, 1, 2 },
-                { 1, 2, 3 },
-                { 1, 3, 0 },
-                { 2, 0, 1 },
-                { 2, 1, 0 },
-            };
-
+        { 
+            TTriple testData[] = { 
+                { 1, 1, 1 }, 
+                { 1, 1, 2 }, 
+                { 1, 2, 3 }, 
+                { 1, 3, 0 }, 
+                { 2, 0, 1 }, 
+                { 2, 1, 0 }, 
+            }; 
+ 
             TVector<TRuntimeNode> tuplesList;
             for (ui32 i = 0; i < Y_ARRAY_SIZE(testData); i++) {
                 TVector<TRuntimeNode> elements(3);
@@ -4063,77 +4063,77 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
                 elements[1] = pb.NewDataLiteral(std::get<1>(testData[i]));
                 elements[2] = pb.NewDataLiteral(std::get<2>(testData[i]));
                 tuplesList.push_back(pb.NewTuple(elements));
-            }
-
+            } 
+ 
             TVector<TType*> tupleTypes(3);
             tupleTypes[0] = pb.NewDataType(NUdf::TDataType<ui32>::Id);
             tupleTypes[1] = pb.NewDataType(NUdf::TDataType<ui32>::Id);
             tupleTypes[2] = pb.NewDataType(NUdf::TDataType<ui32>::Id);
-
+ 
             return pb.NewList(pb.NewTupleType(tupleTypes), tuplesList);
         };
-
-        {
+ 
+        { 
             TRuntimeNode order = TupleOrder(pb, true, true, true);
-            TTriple expectedData[] = {
-                { 1, 1, 1 },
-                { 1, 1, 2 },
-                { 1, 2, 3 },
-                { 1, 3, 0 },
-                { 2, 0, 1 },
-                { 2, 1, 0 },
-            };
+            TTriple expectedData[] = { 
+                { 1, 1, 1 }, 
+                { 1, 1, 2 }, 
+                { 1, 2, 3 }, 
+                { 1, 3, 0 }, 
+                { 2, 0, 1 }, 
+                { 2, 1, 0 }, 
+            }; 
             TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
             TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
-            UNIT_ASSERT_EQUAL(result, expected);
-        }
-
-        {
+            UNIT_ASSERT_EQUAL(result, expected); 
+        } 
+ 
+        { 
             TRuntimeNode order = TupleOrder(pb, false, false, false);
-            TTriple expectedData[] = {
-                { 2, 1, 0 },
-                { 2, 0, 1 },
-                { 1, 3, 0 },
-                { 1, 2, 3 },
-                { 1, 1, 2 },
-                { 1, 1, 1 },
-            };
+            TTriple expectedData[] = { 
+                { 2, 1, 0 }, 
+                { 2, 0, 1 }, 
+                { 1, 3, 0 }, 
+                { 1, 2, 3 }, 
+                { 1, 1, 2 }, 
+                { 1, 1, 1 }, 
+            }; 
             TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
             TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
-            UNIT_ASSERT_EQUAL(result, expected);
-        }
-
-        {
+            UNIT_ASSERT_EQUAL(result, expected); 
+        } 
+ 
+        { 
             TRuntimeNode order = TupleOrder(pb, true, false, true);
-            TTriple expectedData[] = {
-                { 1, 3, 0 },
-                { 1, 2, 3 },
-                { 1, 1, 1 },
-                { 1, 1, 2 },
-                { 2, 1, 0 },
-                { 2, 0, 1 },
-            };
+            TTriple expectedData[] = { 
+                { 1, 3, 0 }, 
+                { 1, 2, 3 }, 
+                { 1, 1, 1 }, 
+                { 1, 1, 2 }, 
+                { 2, 1, 0 }, 
+                { 2, 0, 1 }, 
+            }; 
             TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
             TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
-            UNIT_ASSERT_EQUAL(result, expected);
-        }
-
-        {
+            UNIT_ASSERT_EQUAL(result, expected); 
+        } 
+ 
+        { 
             TRuntimeNode order = TupleOrder(pb, false, true, false);
-            TTriple expectedData[] = {
-                { 2, 0, 1 },
-                { 2, 1, 0 },
-                { 1, 1, 2 },
-                { 1, 1, 1 },
-                { 1, 2, 3 },
-                { 1, 3, 0 },
-            };
+            TTriple expectedData[] = { 
+                { 2, 0, 1 }, 
+                { 2, 1, 0 }, 
+                { 1, 1, 2 }, 
+                { 1, 1, 1 }, 
+                { 1, 2, 3 }, 
+                { 1, 3, 0 }, 
+            }; 
             TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
             TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
-            UNIT_ASSERT_EQUAL(result, expected);
-        }
-    }
-
+            UNIT_ASSERT_EQUAL(result, expected); 
+        } 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestAsList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4189,7 +4189,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto res = graph->GetValue().template Get<ui32>();
         UNIT_ASSERT_VALUES_EQUAL(res, 56);
     }
-
+ 
     Y_UNIT_TEST_LLVM(NonDeterministicEnv) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4202,7 +4202,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             pb.NewDataLiteral(false),
             [](TRuntimeNode item) { return item; }
         );
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
@@ -4215,8 +4215,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(std::abs(item.template Get<float>() - 1.0) < 0.001);
         UNIT_ASSERT(false == iterator.Next(item));
         UNIT_ASSERT(false == iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestIndexDictContains) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;

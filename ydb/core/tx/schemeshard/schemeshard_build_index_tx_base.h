@@ -311,7 +311,7 @@ protected:
               << ": id# " << indexInfo->Id
               << ", subscribers count# " << indexInfo->Subscribers.size());
 
-        TSet<TActorId> toAnswer;
+        TSet<TActorId> toAnswer; 
         toAnswer.swap(indexInfo->Subscribers);
         for (auto& actorId: toAnswer) {
             Send(actorId, MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(indexInfo->Id)));

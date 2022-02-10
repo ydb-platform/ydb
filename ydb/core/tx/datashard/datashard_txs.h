@@ -61,7 +61,7 @@ private:
     TEvTxProcessing::TEvPlanStep::TPtr Ev;
     bool IsAccepted;
     TInstant RequestStartTime;
-    TMap<TActorId, TVector<ui64>> TxByAck;
+    TMap<TActorId, TVector<ui64>> TxByAck; 
 };
 
 class TDataShard::TTxProgressTransaction : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -174,7 +174,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_STORE_SCAN_STATE; }
 private:
     TEvPrivate::TEvPersistScanState::TPtr Ev;
-    TActorId Sender;
+    TActorId Sender; 
 };
 
 class TDataShard::TTxRefreshVolatileSnapshot : public NTabletFlatExecutor::TTransactionBase<TDataShard> {

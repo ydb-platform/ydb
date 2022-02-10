@@ -34,7 +34,7 @@ protected:
 public:
     THive& Hive;
     TNodeId Id;
-    TActorId Local;
+    TActorId Local; 
     bool Down;
     bool Freeze;
     bool Drain;
@@ -187,7 +187,7 @@ public:
                 t->BecomeStopped();
             }
             Y_VERIFY(GetTabletsTotal() == 0, "%s", DumpTablets().data());
-            Local = TActorId();
+            Local = TActorId(); 
             ChangeVolatileState(EVolatileState::Disconnected);
             for (TTabletInfo* tablet : TabletsToRestart) {
                 if (tablet->IsReadyToBoot()) {
@@ -212,7 +212,7 @@ public:
     void RegisterInDomains();
     void DeregisterInDomains();
     void Ping();
-    void SendReconnect(const TActorId& local);
+    void SendReconnect(const TActorId& local); 
     void SetDown(bool down);
     void SetFreeze(bool freeze);
     void UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics);

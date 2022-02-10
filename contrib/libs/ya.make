@@ -100,7 +100,7 @@ RECURSE(
     h3
     harfbuzz
     hdf5
-    hdr_histogram
+    hdr_histogram 
     highwayhash
     hiredis
     httpd24

@@ -1,4 +1,4 @@
-#include "mkql_computation_node_holders.h"
+#include "mkql_computation_node_holders.h" 
 #include "mkql_value_builder.h"
 #include "mkql_computation_node_codegen.h"
 #include <ydb/library/yql/minikql/arrow/mkql_memory_pool.h>
@@ -9,7 +9,7 @@
 #include <util/system/env.h>
 #include <util/system/mutex.h>
 #include <util/digest/city.h>
-
+ 
 #ifndef MKQL_DISABLE_CODEGEN
 #include <llvm/Support/raw_ostream.h>
 #endif
@@ -37,7 +37,7 @@ const static TStatKey PagePool_PageHitCount("PagePool_PageHitCount", true);
 const static TStatKey PagePool_PageMissCount("PagePool_PageMissCount", true);
 const static TStatKey PagePool_OffloadedAllocCount("PagePool_OffloadedAllocCount", true);
 const static TStatKey PagePool_OffloadedBytes("PagePool_OffloadedBytes", true);
-
+ 
 const static TStatKey CodeGen_FullTime("CodeGen_FullTime", true);
 const static TStatKey CodeGen_GenerateTime("CodeGen_GenerateTime", true);
 const static TStatKey CodeGen_CompileTime("CodeGen_CompileTime", true);
@@ -46,7 +46,7 @@ const static TStatKey CodeGen_TotalInstructions("CodeGen_TotalInstructions", tru
 const static TStatKey CodeGen_MaxFunctionInstructions("CodeGen_MaxFunctionInstructions", false);
 const static TStatKey CodeGen_ModulePassTime("CodeGen_ModulePassTime", true);
 const static TStatKey CodeGen_FinalizeTime("CodeGen_FinalizeTime", true);
-
+ 
 const static TStatKey Mkql_TotalNodes("Mkql_TotalNodes", true);
 const static TStatKey Mkql_CodegenFunctions("Mkql_CodegenFunctions", true);
 
@@ -205,10 +205,10 @@ private:
     TComputationNodeOnNodeMap ElementsCache;
 };
 
-class TComputationGraphBuildingVisitor:
-        public INodeVisitor,
-        private TNonCopyable
-{
+class TComputationGraphBuildingVisitor: 
+        public INodeVisitor, 
+        private TNonCopyable 
+{ 
 public:
     TComputationGraphBuildingVisitor(const TComputationPatternOpts& opts)
         : Env(opts.Env)
@@ -236,10 +236,10 @@ public:
         return Env;
     }
 
-    const IFunctionRegistry& GetFunctionRegistry() const {
-        return FunctionRegistry;
-    }
-
+    const IFunctionRegistry& GetFunctionRegistry() const { 
+        return FunctionRegistry; 
+    } 
+ 
 private:
     template <typename T>
     void VisitType(T& node) {
@@ -382,7 +382,7 @@ private:
 
     void Visit(TOptionalLiteral& node) override {
         auto item = node.HasItem() ? GetComputationNode(node.GetItem().GetNode()) : nullptr;
-        AddNode(node, NodeFactory->CreateOptionalNode(item));
+        AddNode(node, NodeFactory->CreateOptionalNode(item)); 
     }
 
     void Visit(TDictLiteral& node) override {
@@ -414,10 +414,10 @@ private:
             return;
         }
 
-        TNodeLocator nodeLocator = [this](TNode* dependentNode, bool pop) {
-            return GetComputationNode(dependentNode, pop);
-        };
-        TComputationNodeFactoryContext ctx(
+        TNodeLocator nodeLocator = [this](TNode* dependentNode, bool pop) { 
+            return GetComputationNode(dependentNode, pop); 
+        }; 
+        TComputationNodeFactoryContext ctx( 
                 nodeLocator,
                 FunctionRegistry,
                 Env,
@@ -481,12 +481,12 @@ public:
 
     TPatternNodes::TPtr GetPatternNodes() {
         return PatternNodes;
-    }
-
+    } 
+ 
     const TComputationNodePtrDeque& GetNodes() const {
         return PatternNodes->GetNodes();
-    }
-
+    } 
+ 
     void PreserveRoot(IComputationNode* rootNode) {
         PatternNodes->RootNode = rootNode;
     }
@@ -512,9 +512,9 @@ private:
     NUdf::ICountersProvider* CountersProvider;
     const NUdf::ISecureParamsProvider* SecureParamsProvider;
     const TComputationNodeFactory Factory;
-    const IFunctionRegistry& FunctionRegistry;
+    const IFunctionRegistry& FunctionRegistry; 
     TIntrusivePtr<TMemoryUsageInfo> MemInfo;
-    THolder<TNodeFactory> NodeFactory;
+    THolder<TNodeFactory> NodeFactory; 
     NUdf::EValidateMode ValidateMode;
     NUdf::EValidatePolicy ValidatePolicy;
     EGraphPerProcess GraphPerProcess;
@@ -587,16 +587,16 @@ public:
 
     const TComputationNodePtrDeque& GetNodes() const override {
         return PatternNodes->GetNodes();
-    }
-
-    TMemoryUsageInfo& GetMemInfo() const override {
+    } 
+ 
+    TMemoryUsageInfo& GetMemInfo() const override { 
         return *MemInfo;
-    }
-
+    } 
+ 
     const THolderFactory& GetHolderFactory() const override {
         return *HolderFactory;
-    }
-
+    } 
+ 
     ITerminator* GetTerminator() const override {
         return ValueBuilder.Get();
     }
@@ -656,7 +656,7 @@ private:
     bool IsPrepared = false;
 };
 
-} // namespace
+} // namespace 
 
 class TComputationPatternImpl : public IComputationPattern {
 public:

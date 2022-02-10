@@ -406,7 +406,7 @@ public:
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-        const TActorId& ackTo = ev->Sender;
+        const TActorId& ackTo = ev->Sender; 
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TProposedDeletePart"

@@ -13,7 +13,7 @@ namespace NMsgBusProxy {
 template<typename TDerived, NKikimrServices::TActivity::EType Activity>
 class TMessageBusLocalServiceRequest : public TActorBootstrapped<TDerived>, public TMessageBusSessionIdentHolder {
 protected:
-    TActorId  ServiceID;
+    TActorId  ServiceID; 
     const TDuration Timeout;
 
     void SendReplyAndDie(NBus::TBusMessage *reply, const TActorContext &ctx) {

@@ -89,8 +89,8 @@ void TIpv6AddressTest::CheckAddressValidity() {
     static_assert(partsV4 == intV4);
 
     const auto parsedV4 = TIpv6Address::FromString("12.34.56.78", Ok);
-    UNIT_ASSERT(Ok);
-    UNIT_ASSERT_EQUAL(parsedV4, partsV4);
+    UNIT_ASSERT(Ok); 
+    UNIT_ASSERT_EQUAL(parsedV4, partsV4); 
 
     constexpr TIpv6Address partsV6 {0xFB, 0x1634, 0x19, 0xABED, 0, 0x8001, 0x1670, 0x742};
     static_assert(partsV6.Type() == TIpv6Address::Ipv6);
@@ -99,8 +99,8 @@ void TIpv6AddressTest::CheckAddressValidity() {
     static_assert(partsV6 == intV6);
 
     const auto parsedV6 = TIpv6Address::FromString("FB:1634:19:ABED:0:8001:1670:742", Ok);
-    UNIT_ASSERT(Ok);
-    UNIT_ASSERT_EQUAL(parsedV6, partsV6);
+    UNIT_ASSERT(Ok); 
+    UNIT_ASSERT_EQUAL(parsedV6, partsV6); 
 
     static_assert(Get127001() == TIpv6Address(0x7F000001, TIpv6Address::Ipv4));
     static_assert(Get1() == TIpv6Address(0, 0, 0, 0, 0, 0, 0, 1));

@@ -13,7 +13,7 @@ namespace NMiniKQL {
 
 class TFlatLocalReadColumns : public NTabletFlatExecutor::ITransaction {
 public:
-    TFlatLocalReadColumns(TActorId sender, TEvTablet::TEvLocalReadColumns::TPtr &ev)
+    TFlatLocalReadColumns(TActorId sender, TEvTablet::TEvLocalReadColumns::TPtr &ev) 
         : Sender(sender)
         , Ev(ev)
     {}
@@ -196,7 +196,7 @@ private:
     }
 
 private:
-    const TActorId Sender;
+    const TActorId Sender; 
     TEvTablet::TEvLocalReadColumns::TPtr Ev;
     TAutoPtr<TEvTablet::TEvLocalReadColumnsResponse> Response;
 

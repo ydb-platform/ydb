@@ -12,8 +12,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/monlib/encode
-    library/cpp/monlib/metrics
+    library/cpp/monlib/encode 
+    library/cpp/monlib/metrics 
 )
 
 END()

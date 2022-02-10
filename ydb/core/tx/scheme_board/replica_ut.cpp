@@ -99,7 +99,7 @@ public:
 
 private:
     THolder<TTestContext> Context;
-    TActorId Replica;
+    TActorId Replica; 
 
 }; // TReplicaTest
 
@@ -114,7 +114,7 @@ void TReplicaTest::Handshake() {
 }
 
 void TReplicaTest::HandshakeWithStaleGeneration() {
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->HandshakeReplica(Replica, edge, 1, 2);
     Context->HandshakeReplica(Replica, edge, 1, 1, false);
@@ -124,7 +124,7 @@ void TReplicaTest::HandshakeWithStaleGeneration() {
 }
 
 void TReplicaTest::Commit() {
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->HandshakeReplica(Replica, edge, 1, 1);
     Context->CommitReplica(Replica, edge, 1, 1);
@@ -137,7 +137,7 @@ void TReplicaTest::Commit() {
 }
 
 void TReplicaTest::CommitWithoutHandshake() {
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->CommitReplica(Replica, edge, 1, 1);
     auto ev = Context->HandshakeReplica(Replica, edge, 1, 1);
@@ -148,8 +148,8 @@ void TReplicaTest::CommitWithoutHandshake() {
 }
 
 void TReplicaTest::CommitWithStaleGeneration() {
-    const TActorId edgeA = Context->AllocateEdgeActor();
-    const TActorId edgeB = Context->AllocateEdgeActor();
+    const TActorId edgeA = Context->AllocateEdgeActor(); 
+    const TActorId edgeB = Context->AllocateEdgeActor(); 
 
     Context->HandshakeReplica(Replica, edgeA, 1, 0);
     Context->HandshakeReplica(Replica, edgeB, 1, 1);
@@ -165,7 +165,7 @@ void TReplicaTest::CommitWithStaleGeneration() {
 }
 
 void TReplicaTest::Update() {
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->HandshakeReplica(Replica, edge, 1, 1);
     Context->Send(Replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)), 1, 1));
@@ -194,7 +194,7 @@ void TReplicaTest::Update() {
 void TReplicaTest::Delete() {
     auto describe = GenerateDescribe("path", TPathId(42, 1));
 
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->HandshakeReplica(Replica, edge, 1, 1);
     Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1));
@@ -237,7 +237,7 @@ void TReplicaTest::Delete() {
 }
 
 void TReplicaTest::UpdateWithoutHandshake() {
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->Send(Replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)), 1, 1));
 
@@ -255,7 +255,7 @@ void TReplicaTest::UpdateWithoutHandshake() {
 }
 
 void TReplicaTest::UpdateWithStaleGeneration() {
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->HandshakeReplica(Replica, edge, 1, 1);
     Context->Send(Replica, edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)), 1, 0));
@@ -276,7 +276,7 @@ void TReplicaTest::UpdateWithStaleGeneration() {
 void TReplicaTest::Subscribe() {
     auto describe = GenerateDescribe("path", TPathId(1, 1));
 
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->HandshakeReplica(Replica, edge, 1, 1);
     Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1));
@@ -297,7 +297,7 @@ void TReplicaTest::Subscribe() {
 }
 
 void TReplicaTest::SubscribeUnknownPath() {
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->SubscribeReplica(Replica, edge, "path", false);
     {
@@ -310,10 +310,10 @@ void TReplicaTest::SubscribeUnknownPath() {
 void TReplicaTest::Unsubscribe() {
     auto describe = GenerateDescribe("path", TPathId(1, 1));
 
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
-    const TActorId subscriberA = Context->AllocateEdgeActor();
-    const TActorId subscriberB = Context->AllocateEdgeActor();
+    const TActorId subscriberA = Context->AllocateEdgeActor(); 
+    const TActorId subscriberB = Context->AllocateEdgeActor(); 
 
     Context->HandshakeReplica(Replica, edge, 1, 1);
 
@@ -332,7 +332,7 @@ void TReplicaTest::Unsubscribe() {
 }
 
 void TReplicaTest::UnsubscribeUnknownPath() {
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->UnsubscribeReplica(Replica, edge, "path");
 }
@@ -340,7 +340,7 @@ void TReplicaTest::UnsubscribeUnknownPath() {
 void TReplicaTest::DoubleUnsubscribe() {
     auto describe = GenerateDescribe("path", TPathId(1, 1));
 
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->HandshakeReplica(Replica, edge, 1, 1);
     Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1));
@@ -356,7 +356,7 @@ void TReplicaTest::DoubleUnsubscribe() {
 void TReplicaTest::UnsubscribeWithoutSubscribe() {
     auto describe = GenerateDescribe("path", TPathId(1, 1));
 
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
 
     Context->HandshakeReplica(Replica, edge, 1, 1);
     Context->Send(Replica, edge, GenerateUpdate(describe, 1, 1));
@@ -367,9 +367,9 @@ void TReplicaTest::UnsubscribeWithoutSubscribe() {
 void TReplicaTest::Merge() {
     auto describe = GenerateDescribe("path", TPathId(1, 1));
 
-    const TActorId populator = Context->AllocateEdgeActor();
-    const TActorId subscriberA = Context->AllocateEdgeActor();
-    const TActorId subscriberB = Context->AllocateEdgeActor();
+    const TActorId populator = Context->AllocateEdgeActor(); 
+    const TActorId subscriberA = Context->AllocateEdgeActor(); 
+    const TActorId subscriberB = Context->AllocateEdgeActor(); 
 
     Context->SubscribeReplica(Replica, subscriberA, "path");
     Context->SubscribeReplica(Replica, subscriberB, TPathId(1, 1));
@@ -388,10 +388,10 @@ void TReplicaTest::Merge() {
 void TReplicaTest::DoubleDelete() {
     auto describe = GenerateDescribe("path", TPathId(1, 1));
 
-    const TActorId populator = Context->AllocateEdgeActor();
+    const TActorId populator = Context->AllocateEdgeActor(); 
     Context->HandshakeReplica(Replica, populator);
 
-    const TActorId subscriberA = Context->AllocateEdgeActor();
+    const TActorId subscriberA = Context->AllocateEdgeActor(); 
     Context->SubscribeReplica(Replica, subscriberA, "path");
 
     Context->Send(Replica, populator, GenerateUpdate(describe));
@@ -400,14 +400,14 @@ void TReplicaTest::DoubleDelete() {
     Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true));
     Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotify>(subscriberA);
 
-    const TActorId subscriberB = Context->AllocateEdgeActor();
+    const TActorId subscriberB = Context->AllocateEdgeActor(); 
     Context->SubscribeReplica(Replica, subscriberB, "path");
 
     Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1, true));
 }
 
 void TReplicaTest::SyncVersion() {
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
     const ui64 version = 100500;
 
     Context->HandshakeReplica(Replica, edge);
@@ -425,10 +425,10 @@ void TReplicaTest::IdempotencyUpdates(bool aliveSubscriber) {
     auto describeA = GenerateDescribe("path", TPathId(1, 1));
     auto describeB = GenerateDescribe("path", TPathId(1, 2)); // same path but another path id
 
-    const TActorId populator = Context->AllocateEdgeActor();
+    const TActorId populator = Context->AllocateEdgeActor(); 
     Context->HandshakeReplica(Replica, populator);
 
-    const TActorId subscriberA = Context->AllocateEdgeActor();
+    const TActorId subscriberA = Context->AllocateEdgeActor(); 
     Context->SubscribeReplica(Replica, subscriberA, TPathId(1, 1));
 
     Context->Send(Replica, populator, GenerateUpdate(describeA));
@@ -441,7 +441,7 @@ void TReplicaTest::IdempotencyUpdates(bool aliveSubscriber) {
     Context->Send(Replica, populator, GenerateUpdate(describeA));
     Context->Send(Replica, populator, GenerateUpdate(describeB));
 
-    const TActorId subscriberB = Context->AllocateEdgeActor();
+    const TActorId subscriberB = Context->AllocateEdgeActor(); 
     Context->SubscribeReplica(Replica, subscriberB, TPathId(1, 2));
 }
 
@@ -457,7 +457,7 @@ void TReplicaTest::IdempotencyUpdatesVariant2() {
     auto describeA = GenerateDescribe("path", TPathId(1, 1));
     auto describeB = GenerateDescribe("path", TPathId(1, 2)); // same path but another path id
 
-    const TActorId populator = Context->AllocateEdgeActor();
+    const TActorId populator = Context->AllocateEdgeActor(); 
     Context->HandshakeReplica(Replica, populator);
 
     Context->Send(Replica, populator, GenerateUpdate(describeA));
@@ -470,8 +470,8 @@ void TReplicaTest::IdempotencyUpdatesVariant2() {
 void TReplicaTest::AckNotifications() {
     auto describe = GenerateDescribe("path", TPathId(1, 1));
 
-    const TActorId populator = Context->AllocateEdgeActor();
-    const TActorId subscriber = Context->AllocateEdgeActor();
+    const TActorId populator = Context->AllocateEdgeActor(); 
+    const TActorId subscriber = Context->AllocateEdgeActor(); 
 
     NKikimrSchemeBoard::TEvSubscribe::TCapabilities capabilities;
     capabilities.SetAckNotifications(true);
@@ -530,8 +530,8 @@ void TReplicaTest::AckNotificationsUponPathRecreation() {
 }
 
 void TReplicaTest::StrongNotificationAfterCommit() {
-    const TActorId populator = Context->AllocateEdgeActor();
-    const TActorId subscriber = Context->AllocateEdgeActor();
+    const TActorId populator = Context->AllocateEdgeActor(); 
+    const TActorId subscriber = Context->AllocateEdgeActor(); 
 
     Context->SubscribeReplica(Replica, subscriber, "path", false, 1);
     {
@@ -558,7 +558,7 @@ public:
         Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
     }
 
-    TActorId GetReplica() {
+    TActorId GetReplica() { 
         return CreateReplica(*Context);
     }
 
@@ -590,13 +590,13 @@ void TReplicaCombinationTest::UpdatesCombinationsDomainRoot() {
     //make all the variants
     for (const auto& argsLeft: combinations) {
         for (const auto& argsRight: combinations) {
-            const TActorId replica = GetReplica();
+            const TActorId replica = GetReplica(); 
 
-            const TActorId populatorLeft = Context->AllocateEdgeActor();
+            const TActorId populatorLeft = Context->AllocateEdgeActor(); 
             Context->HandshakeReplica(replica, populatorLeft, argsLeft.OwnerId, argsLeft.Generation);
             Context->CommitReplica(replica, populatorLeft, argsLeft.OwnerId, argsLeft.Generation);
 
-            const TActorId populatorRight = Context->AllocateEdgeActor();
+            const TActorId populatorRight = Context->AllocateEdgeActor(); 
             Context->HandshakeReplica(replica, populatorRight, argsRight.OwnerId, argsRight.Generation);
             Context->CommitReplica(replica, populatorRight, argsRight.OwnerId, argsRight.Generation);
 

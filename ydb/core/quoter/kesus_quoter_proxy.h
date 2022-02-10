@@ -15,14 +15,14 @@ namespace NKikimr {
 namespace NQuoter {
 
 struct ITabletPipeFactory {
-    virtual NActors::IActor* CreateTabletPipe(const NActors::TActorId& owner, ui64 tabletId, const NKikimr::NTabletPipe::TClientConfig& config = NKikimr::NTabletPipe::TClientConfig()) = 0;
+    virtual NActors::IActor* CreateTabletPipe(const NActors::TActorId& owner, ui64 tabletId, const NKikimr::NTabletPipe::TClientConfig& config = NKikimr::NTabletPipe::TClientConfig()) = 0; 
 
     virtual ~ITabletPipeFactory() = default;
 
     static THolder<ITabletPipeFactory> GetDefaultFactory();
 };
 
-NActors::IActor* CreateKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const NActors::TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory = ITabletPipeFactory::GetDefaultFactory());
+NActors::IActor* CreateKesusQuoterProxy(ui64 quoterId, const NSchemeCache::TSchemeCacheNavigate::TEntry& navEntry, const NActors::TActorId& quoterServiceId, THolder<ITabletPipeFactory> tabletPipeFactory = ITabletPipeFactory::GetDefaultFactory()); 
 
 class TKesusResourceAllocationStatistics {
 public:

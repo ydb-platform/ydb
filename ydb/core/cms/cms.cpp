@@ -1323,7 +1323,7 @@ void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
 
     if (State->BSControllerPipe) {
         NTabletPipe::CloseClient(ctx, State->BSControllerPipe);
-        State->BSControllerPipe = TActorId();
+        State->BSControllerPipe = TActorId(); 
     }
 
     if (State->Sentinel)
@@ -1907,7 +1907,7 @@ void TCms::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
         OnBSCPipeDestroyed(ctx);
 }
 
-IActor *CreateCms(const TActorId &tablet, TTabletStorageInfo *info)
+IActor *CreateCms(const TActorId &tablet, TTabletStorageInfo *info) 
 {
     return new TCms(tablet, info);
 }

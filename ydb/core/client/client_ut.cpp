@@ -274,7 +274,7 @@ void AlterTestTables(TClient& client) {
 
 struct TTxInfo {
     ui64 TabletId;
-    TActorId ActorId;
+    TActorId ActorId; 
     std::pair<ui32, ui64> GenStep;
     bool IsFollower;
     ui64 TxId;
@@ -311,7 +311,7 @@ void ExtractResultInfo(const NKikimrMiniKQL::TResult& result, TVector<TTxInfo>& 
 
         TTxInfo info;
         info.TabletId = row["TabletId"];
-        info.ActorId = TActorId(row["ActorIdRawX1"], row["ActorIdRawX2"]);
+        info.ActorId = TActorId(row["ActorIdRawX1"], row["ActorIdRawX2"]); 
         info.GenStep = std::make_pair(row["Generation"], row["GenStep"]);
         info.IsFollower = row["IsFollower"];
         info.TxId = row["TxId"];
@@ -1067,7 +1067,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             )
         )___";
 
-        UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
+        UNIT_ASSERT(client.FlatQuery(readQuery, readRes)); 
 
         {
             TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
@@ -1260,7 +1260,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 )
             )___";
 
-            UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
+            UNIT_ASSERT(client.FlatQuery(readQuery, readRes)); 
 
             {
                 TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
@@ -1288,7 +1288,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 )
             )___";
 
-            UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
+            UNIT_ASSERT(client.FlatQuery(readQuery, readRes)); 
 
             {
                 TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
@@ -1601,7 +1601,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         NTabletPipe::TClientConfig pipeClientConfig;
         pipeClientConfig.ForceFollower = true;
-        server.GetRuntime()->SendToPipe(tabletId, TActorId(), new TEvents::TEvPoisonPill(), 0, pipeClientConfig);
+        server.GetRuntime()->SendToPipe(tabletId, TActorId(), new TEvents::TEvPoisonPill(), 0, pipeClientConfig); 
 
         client.AlterTable(TablePlacement, Sprintf(
                             R"___(
@@ -2067,7 +2067,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
-        const TActorId edge = runtime.AllocateEdgeActor();
+        const TActorId edge = runtime.AllocateEdgeActor(); 
 
         const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
         const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
@@ -2147,7 +2147,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
-        const TActorId edge = runtime.AllocateEdgeActor();
+        const TActorId edge = runtime.AllocateEdgeActor(); 
 
         {
             const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
@@ -2198,7 +2198,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
-        const TActorId edge = runtime.AllocateEdgeActor();
+        const TActorId edge = runtime.AllocateEdgeActor(); 
 
         const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
         const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
@@ -2321,7 +2321,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
-        const TActorId edge = runtime.AllocateEdgeActor();
+        const TActorId edge = runtime.AllocateEdgeActor(); 
 
         const TActorId leaderTablet = runtime.Register(CreateTablet(edge, tabletInfo.Get(), setupInfo.Get(), 0, nullptr, nullptr));
         const TActorId leaderId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;

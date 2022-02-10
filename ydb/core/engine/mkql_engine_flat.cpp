@@ -299,7 +299,7 @@ public:
             if (params) {
                 TKikimrProgramBuilder builder(Env, *Settings.FunctionRegistry);
                 TRuntimeNode paramsNode = DeserializeRuntimeNode(params, Env);
-                programNode = builder.Bind(programNode, paramsNode, TKikimrProgramBuilder::TBindFlags::OptimizeLiterals);
+                programNode = builder.Bind(programNode, paramsNode, TKikimrProgramBuilder::TBindFlags::OptimizeLiterals); 
             }
 
             auto listType = programNode.GetStaticType();

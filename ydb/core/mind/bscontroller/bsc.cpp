@@ -25,7 +25,7 @@ TString TPDiskID::ToString() const {
     return str.Str();
 }
 
-IActor* CreateFlatBsController(const TActorId &tablet, TTabletStorageInfo *info) {
+IActor* CreateFlatBsController(const TActorId &tablet, TTabletStorageInfo *info) { 
     return new NBsController::TBlobStorageController(tablet, info);
 }
 

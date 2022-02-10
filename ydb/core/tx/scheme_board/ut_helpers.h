@@ -28,8 +28,8 @@ public:
     using TTestBasicRuntime::TTestBasicRuntime;
 
     void Send(
-        const TActorId& recipient,
-        const TActorId& sender,
+        const TActorId& recipient, 
+        const TActorId& sender, 
         IEventBase* ev,
         ui32 flags = 0,
         ui64 cookie = 0,
@@ -46,16 +46,16 @@ public:
     }
 
     void Connect(ui32 nodeIndexFrom, ui32 nodeIndexTo) {
-        const TActorId proxy = GetInterconnectProxy(nodeIndexFrom, nodeIndexTo);
+        const TActorId proxy = GetInterconnectProxy(nodeIndexFrom, nodeIndexTo); 
 
-        Send(proxy, TActorId(), new TEvInterconnect::TEvConnectNode(), 0, 0, nodeIndexFrom, true);
+        Send(proxy, TActorId(), new TEvInterconnect::TEvConnectNode(), 0, 0, nodeIndexFrom, true); 
         WaitForEvent(TEvInterconnect::EvNodeConnected);
     }
 
     void Disconnect(ui32 nodeIndexFrom, ui32 nodeIndexTo) {
-        const TActorId proxy = GetInterconnectProxy(nodeIndexFrom, nodeIndexTo);
+        const TActorId proxy = GetInterconnectProxy(nodeIndexFrom, nodeIndexTo); 
 
-        Send(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0, nodeIndexFrom, true);
+        Send(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0, nodeIndexFrom, true); 
         WaitForEvent(TEvInterconnect::EvNodeDisconnected);
     }
 
@@ -78,8 +78,8 @@ public:
     }
 
     TSchemeBoardEvents::TEvHandshakeResponse::TPtr HandshakeReplica(
-        const TActorId& replica,
-        const TActorId& sender,
+        const TActorId& replica, 
+        const TActorId& sender, 
         ui64 owner = 1,
         ui64 generation = 1,
         bool grabResponse = true
@@ -94,8 +94,8 @@ public:
     }
 
     void CommitReplica(
-        const TActorId& replica,
-        const TActorId& sender,
+        const TActorId& replica, 
+        const TActorId& sender, 
         ui64 owner = 1,
         ui64 generation = 1
     ) {
@@ -104,8 +104,8 @@ public:
 
     template <typename TPath>
     TSchemeBoardEvents::TEvNotify::TPtr SubscribeReplica(
-        const TActorId& replica,
-        const TActorId& sender,
+        const TActorId& replica, 
+        const TActorId& sender, 
         const TPath& path,
         bool grabResponse = true,
         const ui64 domainOwnerId = 0,
@@ -124,20 +124,20 @@ public:
     }
 
     template <typename TPath>
-    void UnsubscribeReplica(const TActorId& replica, const TActorId& sender, const TPath& path) {
+    void UnsubscribeReplica(const TActorId& replica, const TActorId& sender, const TPath& path) { 
         Send(replica, sender, new TSchemeBoardEvents::TEvUnsubscribe(path));
     }
 
     template <typename TEvent, typename TPath>
-    TActorId CreateSubscriber(
-        const TActorId& owner,
+    TActorId CreateSubscriber( 
+        const TActorId& owner, 
         const TPath& path,
         ui64 stateStorageGroup = 0,
         ui64 domainOwnerId = 1,
         bool grabResponse = true,
         ui32 nodeIndex = 0
     ) {
-        const TActorId subscriber = Register(
+        const TActorId subscriber = Register( 
             CreateSchemeBoardSubscriber(owner, path, stateStorageGroup, domainOwnerId), nodeIndex
         );
         EnableScheduleForActor(subscriber, true);
@@ -150,8 +150,8 @@ public:
     }
 
     template <typename TPath>
-    TActorId CreateSubscriber(
-        const TActorId& owner,
+    TActorId CreateSubscriber( 
+        const TActorId& owner, 
         const TPath& path,
         ui64 stateStorageGroup = 0,
         ui64 domainOwnerId = 1,
@@ -211,7 +211,7 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
 
-        const TActorId edge = runtime.AllocateEdgeActor();
+        const TActorId edge = runtime.AllocateEdgeActor(); 
 
         auto init = new TEvSchemeShard::TEvInitRootShard(edge, 32, "Root");
         runtime.SendToPipe(tabletId, edge, init, 0, GetPipeConfigWithRetries());
@@ -258,7 +258,7 @@ public:
             return;
         }
 
-        TActorId sender = Context->AllocateEdgeActor();
+        TActorId sender = Context->AllocateEdgeActor(); 
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::SchemeShard);
         for (auto x: xrange(TTestTxConfig::FakeHiveTablets,  TTestTxConfig::FakeHiveTablets + 10)) {

@@ -73,7 +73,7 @@ public:
     TCmsTestEnv(ui32 nodeCount,
                 const TNodeTenantsMap &tenants);
 
-    TActorId GetSender() { return Sender; }
+    TActorId GetSender() { return Sender; } 
 
     NCms::TPDiskID PDiskId(ui32 nodeIndex, ui32 pdiskIndex = 0);
     TString PDiskName(ui32 nodeIndex, ui32 pdiskIndex = 0);
@@ -362,7 +362,7 @@ private:
     void CheckResetMarker(TAutoPtr<NCms::TEvCms::TEvResetMarkerRequest> req,
                           NKikimrCms::TStatus::ECode code);
 
-    TActorId Sender;
+    TActorId Sender; 
 };
 
 } // NCmsTest

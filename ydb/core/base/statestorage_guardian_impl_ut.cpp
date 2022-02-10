@@ -30,9 +30,9 @@ namespace NKikimr {
 
                 auto merged = tracker.GetMerged();
                 UNIT_ASSERT(merged.size() == 2);
-                UNIT_ASSERT(merged.FindPtr(TActorId(1, 1, 1, 1)) != nullptr);
-                UNIT_ASSERT(merged.FindPtr(TActorId(1, 1, 5, 1)) != nullptr);
-                UNIT_ASSERT(merged.FindPtr(TActorId(1, 1, 10, 1)) == nullptr);
+                UNIT_ASSERT(merged.FindPtr(TActorId(1, 1, 1, 1)) != nullptr); 
+                UNIT_ASSERT(merged.FindPtr(TActorId(1, 1, 5, 1)) != nullptr); 
+                UNIT_ASSERT(merged.FindPtr(TActorId(1, 1, 10, 1)) == nullptr); 
             }
 
             Y_UNIT_TEST(FollowerTrackerDuplicates) {

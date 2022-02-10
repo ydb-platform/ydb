@@ -30,7 +30,7 @@ public:
     UNIT_TEST_SUITE_END();
 
     void Boot() {
-        const TActorId edge = Context->AllocateEdgeActor();
+        const TActorId edge = Context->AllocateEdgeActor(); 
 
         NKikimr::TPathId rootPathId(TTestTxConfig::SchemeShard, RootPathId);
 
@@ -43,7 +43,7 @@ public:
     }
 
     void MakeDir() {
-        const TActorId edge = Context->AllocateEdgeActor();
+        const TActorId edge = Context->AllocateEdgeActor(); 
 
         TestMkDir(*Context, 100, "/Root", "DirA");
         auto describe = DescribePath(*Context, "/Root/DirA");
@@ -59,7 +59,7 @@ public:
     }
 
     void RemoveDir() {
-        const TActorId edge = Context->AllocateEdgeActor();
+        const TActorId edge = Context->AllocateEdgeActor(); 
 
         TestMkDir(*Context, 100, "/Root", "DirB");
         auto describe = DescribePath(*Context, "/Root/DirB");
@@ -118,7 +118,7 @@ public:
     }
 
 private:
-    TMap<TActorId, bool> ReplicaPopulators;
+    TMap<TActorId, bool> ReplicaPopulators; 
     bool DropFirstAcks = false;
 
 }; // TPopulatorTestWithResets

@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NSysView {
 
-TSysViewProcessor::TSysViewProcessor(const TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode)
+TSysViewProcessor::TSysViewProcessor(const TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode) 
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 6 : 60))

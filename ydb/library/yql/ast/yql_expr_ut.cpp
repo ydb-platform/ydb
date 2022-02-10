@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(TCompareExprTrees) {
         const TExprNode* diffTwo = rootTwo.Get();
 
         if (diffPositions) {
-            UNIT_ASSERT(!CompareExprTrees(diffOne, diffTwo));
+            UNIT_ASSERT(!CompareExprTrees(diffOne, diffTwo)); 
             UNIT_ASSERT_EQUAL(ctxOne.GetPosition(diffOne->Pos()), diffPositions->first);
             UNIT_ASSERT_EQUAL(ctxTwo.GetPosition(diffTwo->Pos()), diffPositions->second);
         } else

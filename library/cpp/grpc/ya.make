@@ -1,5 +1,5 @@
 RECURSE(
     client
-    common
-    server
+    common 
+    server 
 )

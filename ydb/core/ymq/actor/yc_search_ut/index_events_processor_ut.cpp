@@ -13,7 +13,7 @@ using namespace NYdb;
 
 class TIndexProcesorTests : public TTestBase {
     using EEvType = TSearchEventsProcessor::EQueueEventType;
-
+ 
 public:
     TIndexProcesorTests() {
         TPortManager portManager;
@@ -22,7 +22,7 @@ public:
         auto settings = TServerSettings(mbusPort);
         settings.SetDomainName("Root");
         Server = MakeHolder<TServer>(settings);
-        Server->EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(grpcPort));
+        Server->EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(grpcPort)); 
         auto driverConfig = TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
 
         Driver = MakeHolder<TDriver>(driverConfig);
@@ -239,7 +239,7 @@ private:
         client.InitRootScheme();
         client.MkDir("/Root", "SQS");
     }
-
+ 
 private:
     THolder<TDriver> Driver;
     TSimpleSharedPtr<NYdb::NTable::TTableClient> TableClient;
@@ -254,7 +254,7 @@ private:
     UNIT_TEST(TestManyMessages)
     UNIT_TEST(TestOver1000Queues)
     UNIT_TEST_SUITE_END();
-
+ 
     void CheckEventsLine(
             const TString& line, EEvType type, const TString& queueName = TString())
     {
@@ -294,7 +294,7 @@ private:
     void TestCreateIndexProcessor() {
         TTestRunner("CreateIndexProcessor", this);
     }
-
+ 
     void TestSingleCreateQueueEvent() {
         TTestRunner runner{"SingleCreateQueueEvent", this};
         runner.AddEvent( "cloud1", "queue1", EEvType::Created);

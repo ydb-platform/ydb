@@ -36,7 +36,7 @@ TIntrusivePtr<NMonitoring::TDynamicCounters> Counters() {
     return counters;
 }
 
-TActorId StartSpillingService(TTestBasicRuntime& runtime, ui64 maxTotalSize = 1000, ui64 maxFileSize = 500,
+TActorId StartSpillingService(TTestBasicRuntime& runtime, ui64 maxTotalSize = 1000, ui64 maxFileSize = 500, 
     ui64 maxFilePartSize = 100, const TString& root = "./kqp_spilling/")
 {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
@@ -60,7 +60,7 @@ TActorId StartSpillingService(TTestBasicRuntime& runtime, ui64 maxTotalSize = 10
     return spillingServiceActorId;
 }
 
-TActorId StartSpillingActor(TTestBasicRuntime& runtime, const TActorId& client, bool removeBlobsAfterRead = true) {
+TActorId StartSpillingActor(TTestBasicRuntime& runtime, const TActorId& client, bool removeBlobsAfterRead = true) { 
     auto *spillingActor = CreateKqpLocalFileSpillingActor(1, "test", client, removeBlobsAfterRead);
     auto spillingActorId = runtime.Register(spillingActor);
     runtime.EnableScheduleForActor(spillingActorId);

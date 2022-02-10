@@ -24,7 +24,7 @@ namespace NKikimr {
             return NKikimrServices::TActivity::TX_COORDINATOR_ACTOR;
         }
 
-        TFakeCoordinator(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state)
+        TFakeCoordinator(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state) 
             : TActor<TFakeCoordinator>(&TFakeCoordinator::StateInit)
             , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
             , State(state)
@@ -101,7 +101,7 @@ namespace NKikimr {
                 auto planTx = evPlan->Record.AddTransactions();
                 planTx->SetCoordinator(TabletID());
                 planTx->SetTxId(tx.GetTxId());
-                ActorIdToProto(ctx.SelfID, planTx->MutableAckTo());
+                ActorIdToProto(ctx.SelfID, planTx->MutableAckTo()); 
                 State->QueuedPlans[std::make_pair(shard, State->CurrentStep)].push_back(evPlan);
             }
 

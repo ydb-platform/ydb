@@ -68,7 +68,7 @@ static TSignalTypeRegistrator SignalTypeRegistrator;
 TOnTabletBootstrap::TOnTabletBootstrap(ui32 suggestedGeneration, bool leader, const TActorId& proxyID) {
     PbSignal.SetSuggestedGeneration(suggestedGeneration);
     PbSignal.SetLeader(leader);
-    NActors::ActorIdToProto(proxyID, PbSignal.MutableStateStorageProxyID());
+    NActors::ActorIdToProto(proxyID, PbSignal.MutableStateStorageProxyID()); 
 }
 
 TOnTabletBootstrap::TOnTabletBootstrap(const TString& serializedSignal)
@@ -76,7 +76,7 @@ TOnTabletBootstrap::TOnTabletBootstrap(const TString& serializedSignal)
 {}
 
 void TOnTabletBootstrap::OutText(TStringStream& str, TTimestampData& tsData, const TString& prefix) const {
-    TActorId ID = NActors::ActorIdFromProto(PbSignal.GetStateStorageProxyID());
+    TActorId ID = NActors::ActorIdFromProto(PbSignal.GetStateStorageProxyID()); 
     str << prefix << TimeStamp(tsData) <<  " Bootstrapped. Sent TEvLookup to SS proxy " << ID.ToString() << Endl;
 }
 
@@ -184,8 +184,8 @@ void TOnPromoteToCandidate::OutText(TStringStream& str, TTimestampData& tsData, 
         << " Promoted to candidate (KnownGeneration=" << PbSignal.GetKnownGeneration() << ")" << Endl;
 }
 
-TOnTabletBlockBlobStorage::TOnTabletBlockBlobStorage(const TActorId& reqBlockBlobStorageID, ui32 knownGeneration) {
-    NActors::ActorIdToProto(reqBlockBlobStorageID, PbSignal.MutableReqBlockBlobStorageID());
+TOnTabletBlockBlobStorage::TOnTabletBlockBlobStorage(const TActorId& reqBlockBlobStorageID, ui32 knownGeneration) { 
+    NActors::ActorIdToProto(reqBlockBlobStorageID, PbSignal.MutableReqBlockBlobStorageID()); 
     PbSignal.SetKnownGeneration(knownGeneration);
 }
 
@@ -194,16 +194,16 @@ TOnTabletBlockBlobStorage::TOnTabletBlockBlobStorage(const TString& serializedSi
 {}
 
 void TOnTabletBlockBlobStorage::OutText(TStringStream& str, TTimestampData& tsData, const TString& prefix) const {
-    TActorId ID = NActors::ActorIdFromProto(PbSignal.GetReqBlockBlobStorageID());
+    TActorId ID = NActors::ActorIdFromProto(PbSignal.GetReqBlockBlobStorageID()); 
     str << prefix << TimeStamp(tsData) << " Created ReqBlockBlobStorage Actor (" << ID.ToString()
         << ") with KnownGeneration=" << PbSignal.GetKnownGeneration() << Endl;
 }
 
 TOnTabletRebuildGraph::TOnTabletRebuildGraph(
-    const TActorId& tabletReqRebuildGraphID
+    const TActorId& tabletReqRebuildGraphID 
     , const TTraceID& rebuildGraphTraceID
 ) {
-    NActors::ActorIdToProto(tabletReqRebuildGraphID, PbSignal.MutableTabletReqRebuildGraphID());
+    NActors::ActorIdToProto(tabletReqRebuildGraphID, PbSignal.MutableTabletReqRebuildGraphID()); 
     TraceIDFromTraceID(rebuildGraphTraceID, PbSignal.MutableRebuildGraphTraceID());
 }
 
@@ -212,7 +212,7 @@ TOnTabletRebuildGraph::TOnTabletRebuildGraph(const TString& serializedSignal)
 {}
 
 void TOnTabletRebuildGraph::OutText(TStringStream& str, TTimestampData& tsData, const TString& prefix) const {
-    TActorId ID = NActors::ActorIdFromProto(PbSignal.GetTabletReqRebuildGraphID());
+    TActorId ID = NActors::ActorIdFromProto(PbSignal.GetTabletReqRebuildGraphID()); 
     str << prefix << TimeStamp(tsData) << " Created ReqRebuildHistoryGraph Actor (" << ID.ToString() << ")" << Endl;
 }
 

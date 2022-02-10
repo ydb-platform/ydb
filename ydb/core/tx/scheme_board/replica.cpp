@@ -153,7 +153,7 @@ public:
             }
 
             auto notify = BuildNotify();
-            TVector<const TActorId*> subscribers(Reserve(Subscribers.size()));
+            TVector<const TActorId*> subscribers(Reserve(Subscribers.size())); 
 
             for (auto& [subscriber, info] : Subscribers) {
                 if (!info.EnqueueVersion(notify.Get())) {
@@ -435,26 +435,26 @@ public:
             return notify;
         }
 
-        void Subscribe(const TActorId& subscriber, const TString&, ui64 domainOwnerId, const TCapabilities& capabilities) {
+        void Subscribe(const TActorId& subscriber, const TString&, ui64 domainOwnerId, const TCapabilities& capabilities) { 
             Subscribers.emplace(subscriber, TSubscriberInfo(SUBSCRIPTION_BY_PATH, domainOwnerId, capabilities));
         }
 
-        void Subscribe(const TActorId& subscriber, const TPathId&, ui64 domainOwnerId, const TCapabilities& capabilities) {
+        void Subscribe(const TActorId& subscriber, const TPathId&, ui64 domainOwnerId, const TCapabilities& capabilities) { 
             Subscribers.emplace(subscriber, TSubscriberInfo(SUBSCRIPTION_BY_PATH_ID, domainOwnerId, capabilities));
         }
 
-        void Unsubscribe(const TActorId& subscriber) {
+        void Unsubscribe(const TActorId& subscriber) { 
             Subscribers.erase(subscriber);
         }
 
-        TSubscriberInfo& GetSubscriberInfo(const TActorId& subscriber) {
+        TSubscriberInfo& GetSubscriberInfo(const TActorId& subscriber) { 
             auto it = Subscribers.find(subscriber);
             Y_VERIFY(it != Subscribers.end());
             return it->second;
         }
 
-        THashMap<TActorId, TSubscriberInfo> GetSubscribers(const ESubscriptionType type = SUBSCRIPTION_UNSPECIFIED) const {
-            THashMap<TActorId, TSubscriberInfo> result;
+        THashMap<TActorId, TSubscriberInfo> GetSubscribers(const ESubscriptionType type = SUBSCRIPTION_UNSPECIFIED) const { 
+            THashMap<TActorId, TSubscriberInfo> result; 
 
             for (const auto& [subscriber, info] : Subscribers) {
                 if (type == SUBSCRIPTION_UNSPECIFIED || type == info.GetType()) {
@@ -477,7 +477,7 @@ public:
         bool ExplicitlyDeleted = false;
 
         // subscribers
-        THashMap<TActorId, TSubscriberInfo> Subscribers;
+        THashMap<TActorId, TSubscriberInfo> Subscribers; 
 
         // memory tracking
         size_t ResultSize = 0;
@@ -495,7 +495,7 @@ private:
     struct TPopulatorInfo {
         ui64 Generation = 0;
         ui64 PendingGeneration = 0;
-        TActorId PopulatorActor;
+        TActorId PopulatorActor; 
 
         bool IsCommited() const {
             return Generation && Generation == PendingGeneration;
@@ -627,16 +627,16 @@ private:
     }
 
     // call it _after_ Subscribe() & _before_ Unsubscribe()
-    bool IsSingleSubscriberOnNode(const TActorId& subscriber) const {
+    bool IsSingleSubscriberOnNode(const TActorId& subscriber) const { 
         const ui32 nodeId = subscriber.NodeId();
-        auto it = Subscribers.lower_bound(TActorId(nodeId, 0, 0, 0));
+        auto it = Subscribers.lower_bound(TActorId(nodeId, 0, 0, 0)); 
         Y_VERIFY(it != Subscribers.end());
 
         return ++it == Subscribers.end() || it->first.NodeId() != nodeId;
     }
 
     template <typename TPath>
-    void Subscribe(const TActorId& subscriber, const TPath& path, ui64 domainOwnerId, const TCapabilities& capabilities) {
+    void Subscribe(const TActorId& subscriber, const TPath& path, ui64 domainOwnerId, const TCapabilities& capabilities) { 
         TDescription* desc = Descriptions.FindPtr(path);
         Y_VERIFY(desc);
 
@@ -655,7 +655,7 @@ private:
     }
 
     template <typename TPath>
-    void Unsubscribe(const TActorId& subscriber, const TPath& path) {
+    void Unsubscribe(const TActorId& subscriber, const TPath& path) { 
         TDescription* desc = Descriptions.FindPtr(path);
         Y_VERIFY(desc);
 
@@ -669,7 +669,7 @@ private:
     }
 
     template <typename TPath>
-    void SubscribeBy(const TActorId& subscriber, const TPath& path, ui64 domainOwnerId, const TCapabilities& capabilities,
+    void SubscribeBy(const TActorId& subscriber, const TPath& path, ui64 domainOwnerId, const TCapabilities& capabilities, 
             bool needNotify = true) {
         TDescription* desc = Descriptions.FindPtr(path);
         if (!desc) {
@@ -698,7 +698,7 @@ private:
     }
 
     template <typename TPath>
-    void UnsubscribeBy(const TActorId& subscriber, const TPath& path) {
+    void UnsubscribeBy(const TActorId& subscriber, const TPath& path) { 
         if (!Descriptions.FindPtr(path) || !Subscribers.contains(subscriber)) {
             return;
         }
@@ -1268,9 +1268,9 @@ private:
             << ": self# " << SelfId()
             << ", nodeId# " << nodeId);
 
-        auto it = Subscribers.lower_bound(TActorId(nodeId, 0, 0, 0));
+        auto it = Subscribers.lower_bound(TActorId(nodeId, 0, 0, 0)); 
         while (it != Subscribers.end() && it->first.NodeId() == nodeId) {
-            const TActorId subscriber = it->first;
+            const TActorId subscriber = it->first; 
             const auto id = it->second;
             ++it;
 
@@ -1286,7 +1286,7 @@ private:
 
     void PassAway() override {
         for (auto &xpair : Populators) {
-            if (const TActorId populator = xpair.second.PopulatorActor) {
+            if (const TActorId populator = xpair.second.PopulatorActor) { 
                 Send(populator, new TEvStateStorage::TEvReplicaShutdown());
             }
         }

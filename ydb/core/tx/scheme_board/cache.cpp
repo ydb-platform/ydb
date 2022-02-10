@@ -104,7 +104,7 @@ namespace {
             return NKikimrServices::TActivity::SCHEME_BOARD_DB_RESOLVER;
         }
 
-        TDbResolver(const TActorId& cache, const TActorId& sender, THolder<TRequest> request, ui64 domainOwnerId)
+        TDbResolver(const TActorId& cache, const TActorId& sender, THolder<TRequest> request, ui64 domainOwnerId) 
             : Cache(cache)
             , Sender(sender)
             , Request(std::move(request))
@@ -135,8 +135,8 @@ namespace {
         using TBase = TDbResolver<TRequest, TEvRequest, TDerived>;
 
     private:
-        const TActorId Cache;
-        const TActorId Sender;
+        const TActorId Cache; 
+        const TActorId Sender; 
         THolder<TRequest> Request;
         const ui64 DomainOwnerId;
 
@@ -152,11 +152,11 @@ namespace {
         using TBase::TBase;
     };
 
-    IActor* CreateDbResolver(const TActorId& cache, const TActorId& sender, THolder<TNavigate> request, ui64 domainOwnerId) {
+    IActor* CreateDbResolver(const TActorId& cache, const TActorId& sender, THolder<TNavigate> request, ui64 domainOwnerId) { 
         return new TDbResolverNavigate(cache, sender, std::move(request), domainOwnerId);
     }
 
-    IActor* CreateDbResolver(const TActorId& cache, const TActorId& sender, THolder<TResolve> request, ui64 domainOwnerId) {
+    IActor* CreateDbResolver(const TActorId& cache, const TActorId& sender, THolder<TResolve> request, ui64 domainOwnerId) { 
         return new TDbResolverResolve(cache, sender, std::move(request), domainOwnerId);
     }
 
@@ -577,7 +577,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             ByPath,
         };
 
-        TActorId Subscriber;
+        TActorId Subscriber; 
         ui64 DomainOwnerId;
         EType Type;
         mutable ui64 SyncCookie;
@@ -589,7 +589,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         {
         }
 
-        explicit TSubscriber(const TActorId& subscriber, const ui64 domainOwnerId, const TPathId&)
+        explicit TSubscriber(const TActorId& subscriber, const ui64 domainOwnerId, const TPathId&) 
             : Subscriber(subscriber)
             , DomainOwnerId(domainOwnerId)
             , Type(EType::ByPathId)
@@ -597,7 +597,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         {
         }
 
-        explicit TSubscriber(const TActorId& subscriber, const ui64 domainOwnerId, const TString&)
+        explicit TSubscriber(const TActorId& subscriber, const ui64 domainOwnerId, const TString&) 
             : Subscriber(subscriber)
             , DomainOwnerId(domainOwnerId)
             , Type(EType::ByPath)

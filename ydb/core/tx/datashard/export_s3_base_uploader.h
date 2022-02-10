@@ -452,7 +452,7 @@ private:
     bool MultiPart;
     bool Last;
 
-    TActorId Scanner;
+    TActorId Scanner; 
     TString Buffer;
 
     TMaybe<TString> UploadId;

@@ -12,7 +12,7 @@
 namespace NKikimr {
 namespace NSchemeBoard {
 
-TActorId MakeInterconnectProxyId(const ui32 nodeId) {
+TActorId MakeInterconnectProxyId(const ui32 nodeId) { 
     return TActivationContext::InterconnectProxy(nodeId);
 }
 
@@ -87,9 +87,9 @@ TIntrusivePtr<TEventSerializedData> SerializeEvent(IEventBase* ev) {
     return serializer.Release(ev->IsExtendedFormat());
 }
 
-void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sender, TAutoPtr<IEventBase> ev, ui32 flags, ui64 cookie) {
+void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sender, TAutoPtr<IEventBase> ev, ui32 flags, ui64 cookie) { 
     auto buffer = SerializeEvent(ev.Get());
-    for (const TActorId* recipient : recipients) {
+    for (const TActorId* recipient : recipients) { 
         TlsActivationContext->Send(new IEventHandle(
             ev->Type(), flags, *recipient, sender, buffer, cookie
         ));

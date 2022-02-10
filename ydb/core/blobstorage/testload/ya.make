@@ -4,8 +4,8 @@ OWNER(fomichev)
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/monlib/dynamic_counters/percentile
-    library/cpp/monlib/service/pages
+    library/cpp/monlib/dynamic_counters/percentile 
+    library/cpp/monlib/service/pages 
     ydb/core/base
     ydb/core/blobstorage/backpressure
     ydb/core/blobstorage/base

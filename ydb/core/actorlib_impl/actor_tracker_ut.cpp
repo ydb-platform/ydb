@@ -51,7 +51,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         // create some subworkers
         for (int i = 0; i < 3; ++i) {
-            TActorId actorId = RegisterSubactor(MakeHolder<TSubworkerActor>(), ctx);
+            TActorId actorId = RegisterSubactor(MakeHolder<TSubworkerActor>(), ctx); 
             if (!actorId) {
                 Die(ctx);
             }
@@ -79,7 +79,7 @@ public:
 
         // create some workers
         for (int i = 0; i < 2; ++i) {
-            TActorId actorId = Tracker.RegisterSubactor(MakeHolder<TWorkerActor>(), ctx);
+            TActorId actorId = Tracker.RegisterSubactor(MakeHolder<TWorkerActor>(), ctx); 
             if (!actorId) {
                 // a race has occured
                 Die(ctx);
@@ -105,8 +105,8 @@ Y_UNIT_TEST_SUITE(TActorTracker) {
         {
             TTestBasicRuntime runtime;
             runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
-            TActorId managerId = runtime.Register(new TManagerActor);
-            TActorId edge = runtime.AllocateEdgeActor();
+            TActorId managerId = runtime.Register(new TManagerActor); 
+            TActorId edge = runtime.AllocateEdgeActor(); 
             runtime.Schedule(new IEventHandle(managerId, edge, new TEvents::TEvPoisonPill), TDuration::Seconds(1));
             runtime.DispatchEvents();
             TAutoPtr<IEventHandle> handle;

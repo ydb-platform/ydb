@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NSysView {
 
-THolder<IActor> CreateQueryMetricsScan(const TActorId& ownerId, ui32 scanId,
+THolder<IActor> CreateQueryMetricsScan(const TActorId& ownerId, ui32 scanId, 
     const TTableId& tableId, const TTableRange& tableRange,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns);
 

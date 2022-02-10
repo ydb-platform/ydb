@@ -83,7 +83,7 @@ private:
 struct TExecuteContext : TThrRefBase {
     TVector<IKqpHost::TQueryResult> QueryResults;
     IKikimrQueryExecutor::TExecuteSettings Settings;
-    NActors::TActorId ReplyTarget;
+    NActors::TActorId ReplyTarget; 
 
     void Reset(const IKikimrQueryExecutor::TExecuteSettings& settings) {
         Settings = settings;
@@ -1370,7 +1370,7 @@ public:
     }
 
     IAsyncQueryResultPtr ExecuteScanQuery(const TString& query, bool isSql, NKikimrMiniKQL::TParams&& parameters,
-        const NActors::TActorId& target, const IKikimrQueryExecutor::TExecuteSettings& settings) override
+        const NActors::TActorId& target, const IKikimrQueryExecutor::TExecuteSettings& settings) override 
     {
         return CheckedProcessQuery(*ExprCtx,
             [this, &query, isSql, parameters = std::move(parameters), target, settings] (TExprContext& ctx) mutable {
@@ -2063,7 +2063,7 @@ private:
     }
 
     IAsyncQueryResultPtr ExecuteScanQueryInternal(const TString& query, bool isSql,
-        NKikimrMiniKQL::TParams&& parameters, const NActors::TActorId& target,
+        NKikimrMiniKQL::TParams&& parameters, const NActors::TActorId& target, 
         const IKikimrQueryExecutor::TExecuteSettings& settings, TExprContext& ctx)
     {
         auto prepareResult = isSql
@@ -2096,7 +2096,7 @@ private:
     }
 
     IAsyncQueryResultPtr ExecuteScanQueryInternal(std::shared_ptr<const NKikimrKqp::TPreparedQuery>& query,
-        NKikimrMiniKQL::TParams&& parameters, const NActors::TActorId& target,
+        NKikimrMiniKQL::TParams&& parameters, const NActors::TActorId& target, 
         const IKikimrQueryExecutor::TExecuteSettings& settings, const TIssues& issues,
         const TMaybe<TSqlVersion>& sqlVersion, TExprContext& ctx)
     {

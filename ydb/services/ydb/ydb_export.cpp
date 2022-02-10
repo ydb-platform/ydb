@@ -7,18 +7,18 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-TGRpcYdbExportService::TGRpcYdbExportService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
+TGRpcYdbExportService::TGRpcYdbExportService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id) 
     : ActorSystem_(system)
     , Counters_(counters)
     , GRpcRequestProxyId_(id)
 { }
 
-void TGRpcYdbExportService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcYdbExportService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) { 
     CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
+    SetupIncomingRequests(std::move(logger)); 
 }
 
-void TGRpcYdbExportService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcYdbExportService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
     Limiter_ = limiter;
 }
 
@@ -31,7 +31,7 @@ void TGRpcYdbExportService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcYdbExportService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbExportService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef ADD_REQUEST
@@ -39,11 +39,11 @@ void TGRpcYdbExportService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Export::IN, Ydb::Export::OUT, TGRpcYdbExportService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Export::V1::ExportService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("export", #NAME))->Run();
+        #NAME, logger, getCounterBlock("export", #NAME))->Run(); 
 
     ADD_REQUEST(ExportToYt, ExportToYtRequest, ExportToYtResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvExportToYtRequest(ctx));

@@ -10,12 +10,12 @@ namespace NKikimr {
     struct TVDiskConfig;
     IActor *CreateSkeletonMonRequestHandler(TIntrusivePtr<TDb> &db,
                                             NMon::TEvHttpInfo::TPtr &ev,
-                                            const TActorId notifyId,
-                                            const TActorId &localRecovActorID);
+                                            const TActorId notifyId, 
+                                            const TActorId &localRecovActorID); 
     IActor *CreateFrontSkeletonMonRequestHandler(const TVDiskID &selfVDiskId,
-                                                 const TActorId &notifyId,
-                                                 const TActorId &skeletonID,
-                                                 const TActorId &skeletonFrontID,
+                                                 const TActorId &notifyId, 
+                                                 const TActorId &skeletonID, 
+                                                 const TActorId &skeletonFrontID, 
                                                  TIntrusivePtr<TVDiskConfig> cfg,
                                                  const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                                  NMon::TEvHttpInfo::TPtr &ev,

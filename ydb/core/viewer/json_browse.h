@@ -17,11 +17,11 @@
 namespace std {
 
 template <>
-struct hash<NActors::TActorId> {
-    size_t operator ()(const NActors::TActorId& actorId) const {
-        return actorId.Hash();
-    }
-};
+struct hash<NActors::TActorId> { 
+    size_t operator ()(const NActors::TActorId& actorId) const { 
+        return actorId.Hash(); 
+    } 
+}; 
 
 }
 
@@ -41,10 +41,10 @@ class TJsonBrowse : public TActorBootstrapped<TJsonBrowse> {
     struct TPathStateInfo {
         TString Name;
         TString Path;
-        TActorId BrowseActorId;
+        TActorId BrowseActorId; 
         NKikimrViewer::TBrowseInfo BrowseInfo;
 
-        TPathStateInfo(const TString& name, const TString& path, const TActorId& browseActorId)
+        TPathStateInfo(const TString& name, const TString& path, const TActorId& browseActorId) 
             : Name(name)
             , Path(path)
             , BrowseActorId(browseActorId)
@@ -61,7 +61,7 @@ class TJsonBrowse : public TActorBootstrapped<TJsonBrowse> {
 
     TVector<TPathStateInfo> Paths;
 
-    using TBrowseRequestKey = std::tuple<TActorId, TTabletId, ui32>;
+    using TBrowseRequestKey = std::tuple<TActorId, TTabletId, ui32>; 
     std::unordered_multiset<TBrowseRequestKey> BrowseRequestsInFlight;
     ui32 Responses = 0;
 
@@ -134,7 +134,7 @@ public:
         auto it = std::find(Paths.begin(), Paths.end(), event.BrowseInfo.GetPath());
         if (it != Paths.end()) {
             it->BrowseInfo.MergeFrom(event.BrowseInfo);
-            it->BrowseActorId = TActorId();
+            it->BrowseActorId = TActorId(); 
         }
         // TODO: error handling?
         ++Responses;

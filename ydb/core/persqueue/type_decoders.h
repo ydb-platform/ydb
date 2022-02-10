@@ -12,8 +12,8 @@
 #include <util/generic/strbuf.h>
 #include <util/system/unaligned_mem.h>
 
-namespace NKikimr {
-namespace NScheme {
+namespace NKikimr { 
+namespace NScheme { 
 
 using TMaskIterator = TBitIterator<ui8>;
 
@@ -559,6 +559,6 @@ const bool TBoolDecoder<IsNullable>::Values[2] = {false, true};
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NScheme
-} // namespace NKikimr
+} // namespace NScheme 
+} // namespace NKikimr 
 

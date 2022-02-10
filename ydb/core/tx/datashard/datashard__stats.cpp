@@ -49,7 +49,7 @@ public:
     }
 
 private:
-    TActorId ReplyTo;
+    TActorId ReplyTo; 
     ui64 TableId;
     ui64 IndexSize;
     TInstant StatsUpdateTime;

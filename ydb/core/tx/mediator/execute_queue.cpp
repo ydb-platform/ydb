@@ -13,10 +13,10 @@ namespace NTxMediator {
 
     class TTxMediatorExecQueue : public TActor<TTxMediatorExecQueue> {
         struct TBucket {
-            TActorId ActiveActor;
+            TActorId ActiveActor; 
         };
 
-        const TActorId Owner;
+        const TActorId Owner; 
         const ui64 MediatorId;
         const ui64 HashRange;
 
@@ -124,7 +124,7 @@ namespace NTxMediator {
         void Handle(TEvTxMediator::TEvRequestLostAcks::TPtr &ev, const TActorContext &ctx) {
             TEvTxMediator::TEvRequestLostAcks *msg = ev->Get();
             TCoordinatorStep *step = msg->CoordinatorStep.Get();
-            const TActorId &ackTo = msg->AckTo;
+            const TActorId &ackTo = msg->AckTo; 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "Actor# " << ctx.SelfID.ToString()
                 << " MediatorId# " << MediatorId << " HANDLE TEvRequestLostAcks " << step->ToString()
                 << " AckTo# " << ackTo.ToString());
@@ -153,7 +153,7 @@ namespace NTxMediator {
         void Handle(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx) {
             const NKikimrTxMediatorTimecast::TEvWatch &record = ev->Get()->Record;
             // todo: check config coherence
-            const TActorId &sender = ev->Sender;
+            const TActorId &sender = ev->Sender; 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "Actor# " << ctx.SelfID.ToString()
                 << " MediatorId# " << MediatorId << " HANDLE TEvWatch");
 
@@ -176,7 +176,7 @@ namespace NTxMediator {
             return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
         }
 
-        TTxMediatorExecQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui32 timecastBuckets)
+        TTxMediatorExecQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui32 timecastBuckets) 
             : TActor(&TThis::StateWork)
             , Owner(owner)
             , MediatorId(mediator)
@@ -186,7 +186,7 @@ namespace NTxMediator {
             Y_UNUSED(HashRange);
         }
 
-        TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId& parentId) override {
+        TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId& parentId) override { 
             Y_UNUSED(parentId);
             return new IEventHandle(self, self, new TEvents::TEvBootstrap());
         }
@@ -203,7 +203,7 @@ namespace NTxMediator {
     };
 }
 
-IActor* CreateTxMediatorExecQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui32 timecastBuckets) {
+IActor* CreateTxMediatorExecQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui32 timecastBuckets) { 
     return new NTxMediator::TTxMediatorExecQueue(owner, mediator, hashRange, timecastBuckets);
 }
 

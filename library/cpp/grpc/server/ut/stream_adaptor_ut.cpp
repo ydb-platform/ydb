@@ -1,14 +1,14 @@
-#include <library/cpp/grpc/server/grpc_request.h>
+#include <library/cpp/grpc/server/grpc_request.h> 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/system/thread.h>
 #include <util/thread/pool.h>
 
-using namespace NGrpc;
+using namespace NGrpc; 
 
 // Here we emulate stream data producer
-class TOrderedProducer: public TThread {
+class TOrderedProducer: public TThread { 
 public:
     TOrderedProducer(IStreamAdaptor* adaptor, ui64 max, bool withSleep, std::function<void(ui64)>&& consumerOp)
         : TThread(&ThreadProc, this)

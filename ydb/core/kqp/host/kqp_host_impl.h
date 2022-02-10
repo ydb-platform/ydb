@@ -267,7 +267,7 @@ public:
 
     virtual TIntrusivePtr<TAsyncQueryResult> ExecutePreparedScanQuery(const TString& cluster,
         const NYql::TExprNode::TPtr& world, const NKqpProto::TKqpPhyQuery& phyQuery, NYql::TExprContext& ctx,
-        const NActors::TActorId& target) = 0;
+        const NActors::TActorId& target) = 0; 
 };
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,

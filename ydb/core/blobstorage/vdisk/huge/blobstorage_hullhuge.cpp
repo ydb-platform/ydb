@@ -10,7 +10,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 using namespace NKikimrServices;
 using namespace NKikimr::NHuge;
@@ -148,7 +148,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class THullHugeBlobWriter : public TActorBootstrapped<THullHugeBlobWriter> {
         std::shared_ptr<THugeKeeperCtx> HugeKeeperCtx;
-        const TActorId NotifyID;
+        const TActorId NotifyID; 
         const NHuge::THugeSlot HugeSlot;
         std::unique_ptr<TEvHullWriteHugeBlob> Item;
         ui64 WriteId;
@@ -224,7 +224,7 @@ namespace NKikimr {
 
         THullHugeBlobWriter(
                 std::shared_ptr<THugeKeeperCtx> hugeKeeperCtx,
-                const TActorId &notifyID,
+                const TActorId &notifyID, 
                 const NHuge::THugeSlot &hugeSlot,
                 std::unique_ptr<TEvHullWriteHugeBlob> item,
                 ui64 wId)
@@ -245,7 +245,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class THullHugeBlobChunkAllocator : public TActorBootstrapped<THullHugeBlobChunkAllocator> {
         std::shared_ptr<THugeKeeperCtx> HugeKeeperCtx;
-        const TActorId NotifyID;
+        const TActorId NotifyID; 
         ui64 Lsn;
         std::shared_ptr<THullHugeKeeperPersState> Pers;
         ui32 ChunkId = 0;
@@ -336,7 +336,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class THullHugeBlobChunkDestroyer : public TActorBootstrapped<THullHugeBlobChunkDestroyer> {
         std::shared_ptr<THugeKeeperCtx> HugeKeeperCtx;
-        const TActorId NotifyID;
+        const TActorId NotifyID; 
         TVector<ui32> ChunksToFree;
         const ui64 Lsn;
 
@@ -410,7 +410,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class THullHugeBlobEntryPointSaver : public TActorBootstrapped<THullHugeBlobEntryPointSaver> {
         std::shared_ptr<THugeKeeperCtx> HugeKeeperCtx;
-        const TActorId NotifyID;
+        const TActorId NotifyID; 
         const ui64 EntryPointLsn;
         const TString Serialized;
 
@@ -599,9 +599,9 @@ namespace NKikimr {
             TIntrusivePtr<TVDiskContext> vctx,
             TPDiskCtxPtr pdiskCtx,
             TIntrusivePtr<TLsnMngr> lsnMngr,
-            TActorId skeletonId,
-            TActorId loggerId,
-            TActorId logCutterId,
+            TActorId skeletonId, 
+            TActorId loggerId, 
+            TActorId logCutterId, 
             const TString &localRecoveryInfoDbg)
         : VCtx(std::move(vctx))
         , PDiskCtx(std::move(pdiskCtx))

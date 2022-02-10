@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "mkql_computation_node_list.h"
 
 #include <ydb/library/yql/minikql/defs.h>
@@ -10,19 +10,19 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
 #include <ydb/library/yql/minikql/mkql_terminator.h>
-
+ 
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_validate.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
-
+ 
 #include <map>
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
-
+ 
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -69,7 +69,7 @@ class THolderFactory;
 
 // Do not reorder: used in LLVM!
 struct TComputationContextLLVM {
-    const THolderFactory& HolderFactory;
+    const THolderFactory& HolderFactory; 
     IStatsRegistry *const Stats;
     const std::unique_ptr<NUdf::TUnboxedValue[]> MutableValues;
     const NUdf::IValueBuilder *const Builder;
@@ -135,7 +135,7 @@ public:
     virtual void PrepareStageTwo() = 0;
 
     virtual TString DebugString() const = 0;
-
+ 
     virtual void Ref() = 0;
     virtual void UnRef() = 0;
     virtual ui32 RefCount() const = 0;
@@ -187,8 +187,8 @@ public:
     virtual IComputationExternalNode* GetEntryPoint(size_t index, bool require) = 0;
     virtual const TComputationNodePtrDeque& GetNodes() const = 0;
     virtual void Invalidate() = 0;
-    virtual TMemoryUsageInfo& GetMemInfo() const = 0;
-    virtual const THolderFactory& GetHolderFactory() const = 0;
+    virtual TMemoryUsageInfo& GetMemInfo() const = 0; 
+    virtual const THolderFactory& GetHolderFactory() const = 0; 
     virtual ITerminator* GetTerminator() const = 0;
     virtual bool SetExecuteLLVM(bool value) = 0;
     virtual TString SaveGraphState() = 0;
@@ -201,12 +201,12 @@ typedef std::function<void (IComputationNode*)> TNodePushBack;
 
 struct TComputationNodeFactoryContext {
     TNodeLocator NodeLocator;
-    const IFunctionRegistry& FunctionRegistry;
+    const IFunctionRegistry& FunctionRegistry; 
     const TTypeEnvironment& Env;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
     NUdf::ICountersProvider* CountersProvider;
     const NUdf::ISecureParamsProvider* SecureParamsProvider;
-    const TNodeFactory& NodeFactory;
+    const TNodeFactory& NodeFactory; 
     const THolderFactory& HolderFactory;
     const NUdf::IValueBuilder *const Builder;
     NUdf::EValidateMode ValidateMode;
@@ -216,10 +216,10 @@ struct TComputationNodeFactoryContext {
     TComputationNodeOnNodeMap& ElementsCache;
     const TNodePushBack NodePushBack;
 
-    TComputationNodeFactoryContext(
-            const TNodeLocator& nodeLocator,
-            const IFunctionRegistry& functionRegistry,
-            const TTypeEnvironment& env,
+    TComputationNodeFactoryContext( 
+            const TNodeLocator& nodeLocator, 
+            const IFunctionRegistry& functionRegistry, 
+            const TTypeEnvironment& env, 
             NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
             NUdf::ICountersProvider* countersProvider,
             const NUdf::ISecureParamsProvider* secureParamsProvider,
@@ -234,12 +234,12 @@ struct TComputationNodeFactoryContext {
             TNodePushBack&& nodePushBack
             )
         : NodeLocator(nodeLocator)
-        , FunctionRegistry(functionRegistry)
+        , FunctionRegistry(functionRegistry) 
         , Env(env)
         , TypeInfoHelper(typeInfoHelper)
         , CountersProvider(countersProvider)
         , SecureParamsProvider(secureParamsProvider)
-        , NodeFactory(nodeFactory)
+        , NodeFactory(nodeFactory) 
         , HolderFactory(holderFactory)
         , Builder(builder)
         , ValidateMode(validateMode)
@@ -253,7 +253,7 @@ struct TComputationNodeFactoryContext {
 
 using TComputationNodeFactory = std::function<IComputationNode* (TCallable&, const TComputationNodeFactoryContext&)>;
 using TStreamEmitter = std::function<void(NUdf::TUnboxedValue&&)>;
-
+ 
 struct TComputationPatternOpts {
     TComputationPatternOpts(const std::shared_ptr<TInjectedAlloc>& cacheAlloc, const std::shared_ptr<TTypeEnvironment>& cacheEnv)
         : CacheAlloc(std::move(cacheAlloc))
@@ -269,8 +269,8 @@ struct TComputationPatternOpts {
 
     TComputationPatternOpts(
         TAllocState& allocState,
-        const TTypeEnvironment& env,
-        TComputationNodeFactory factory,
+        const TTypeEnvironment& env, 
+        TComputationNodeFactory factory, 
         const IFunctionRegistry* functionRegistry,
         NUdf::EValidateMode validateMode,
         NUdf::EValidatePolicy validatePolicy,
@@ -325,7 +325,7 @@ struct TComputationPatternOpts {
         return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider);
     }
 };
-
+ 
 class IComputationPattern: public TAtomicRefCount<IComputationPattern> {
 public:
     typedef TIntrusivePtr<IComputationPattern> TPtr;
@@ -357,5 +357,5 @@ public:
 
 std::unique_ptr<NUdf::ISecureParamsProvider> MakeSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NMiniKQL 
+} // namespace NKikimr 

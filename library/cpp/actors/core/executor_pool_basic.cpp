@@ -315,11 +315,11 @@ namespace NActors {
 
     void TBasicExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
         Y_VERIFY_DEBUG(workerId < PoolThreads);
-
+ 
         const auto deadline = ActorSystem->Monotonic() + delta;
         ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
-    }
-
+    } 
+ 
     void TBasicExecutorPool::SetRealTimeMode() const {
 // TODO: musl-libc version of `sched_param` struct is for some reason different from pthread
 // version in Ubuntu 12.04

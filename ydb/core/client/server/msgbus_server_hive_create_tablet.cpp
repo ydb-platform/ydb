@@ -57,7 +57,7 @@ using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
 
     TDuration Timeout;
     bool WithRetry;
-    TActorId PipeClient;
+    TActorId PipeClient; 
 
     TDeque<TRequest> Requests;
     NKikimrProto::EReplyStatus Status;
@@ -204,7 +204,7 @@ public:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
-            PipeClient = TActorId();
+            PipeClient = TActorId(); 
             ErrorReason = Sprintf("Client pipe to Hive connection error, Status# %s, Marker# HC10",
                 NKikimrProto::EReplyStatus_Name(msg->Status).data());
             return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx), ctx);
@@ -213,7 +213,7 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
-        PipeClient = TActorId();
+        PipeClient = TActorId(); 
         ErrorReason = Sprintf("Client pipe to Hive destroyed (connection lost), Marker# HC9");
         SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx));
         return Die(ctx);
@@ -227,7 +227,7 @@ public:
     void Die(const TActorContext &ctx) override {
         if (PipeClient) {
             NTabletPipe::CloseClient(ctx, PipeClient);
-            PipeClient = TActorId();
+            PipeClient = TActorId(); 
         }
         TActorBootstrapped<TMessageBusHiveCreateTablet>::Die(ctx);
     }

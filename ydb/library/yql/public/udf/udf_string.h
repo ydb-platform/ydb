@@ -1,28 +1,28 @@
-#pragma once
-
-#include "udf_types.h"
+#pragma once 
+ 
+#include "udf_types.h" 
 #include "udf_allocator.h"
 #include "udf_string_ref.h"
-
-#include <util/generic/strbuf.h>
+ 
+#include <util/generic/strbuf.h> 
 #include <util/system/align.h>
-
+ 
 #include <new>
 
 namespace NYql {
-namespace NUdf {
-
-//////////////////////////////////////////////////////////////////////////////
-// TStringValue
-//////////////////////////////////////////////////////////////////////////////
-class TStringValue
-{
-    friend class TUnboxedValue;
+namespace NUdf { 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// TStringValue 
+////////////////////////////////////////////////////////////////////////////// 
+class TStringValue 
+{ 
+    friend class TUnboxedValue; 
     friend class TUnboxedValuePod;
-
-    class TData {
-        friend class TStringValue;
-    public:
+ 
+    class TData { 
+        friend class TStringValue; 
+    public: 
         inline TData(ui32 size, ui32 cap)
             : Size_(size)
             , Refs_(1)
@@ -208,7 +208,7 @@ public:
     TData* Data_;
 };
 
-UDF_ASSERT_TYPE_SIZE(TStringValue, 8);
-
-} // namspace NUdf
+UDF_ASSERT_TYPE_SIZE(TStringValue, 8); 
+ 
+} // namspace NUdf 
 } // namspace NYql

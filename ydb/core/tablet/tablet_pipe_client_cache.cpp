@@ -16,7 +16,7 @@ namespace NTabletPipe {
             ShutdownRequested = 1 << 1,
         };
 
-        TActorId Client;
+        TActorId Client; 
         ui32 Flags;
 
         TClientCacheEntry()
@@ -24,7 +24,7 @@ namespace NTabletPipe {
         {
         }
 
-        TClientCacheEntry(const TActorId& client, ui32 flags)
+        TClientCacheEntry(const TActorId& client, ui32 flags) 
             : Client(client)
             , Flags(flags)
         {
@@ -69,7 +69,7 @@ namespace NTabletPipe {
             ActorSystem->Send(value.Client, new TEvents::TEvPoisonPill);
         }
 
-        TActorId Prepare(const TActorContext& ctx, ui64 tabletId) override {
+        TActorId Prepare(const TActorContext& ctx, ui64 tabletId) override { 
             TClientCacheEntry* currentClient;
             if (Container->Find(tabletId, currentClient)) {
                 currentClient->Flags &= ~TClientCacheEntry::ShutdownRequested;
@@ -80,7 +80,7 @@ namespace NTabletPipe {
                 if (PoolContainer->Find(tabletId, currentClient)) {
                     TClientCacheEntry* insertedClient;
                     Container->Insert(tabletId, *currentClient, insertedClient);
-                    currentClient->Client = TActorId();
+                    currentClient->Client = TActorId(); 
                     insertedClient->Flags &= ~TClientCacheEntry::ShutdownRequested;
                     return insertedClient->Client;
                 }
@@ -98,13 +98,13 @@ namespace NTabletPipe {
             return clientId;
         }
 
-        TActorId Send(const TActorContext& ctx, ui64 tabletId, IEventBase* payload, ui64 cookie) override {
+        TActorId Send(const TActorContext& ctx, ui64 tabletId, IEventBase* payload, ui64 cookie) override { 
             auto clientId = Prepare(ctx, tabletId);
             SendData(ctx, clientId, payload, cookie);
             return clientId;
         }
 
-        TActorId Send(const TActorContext& ctx, ui64 tabletId, ui32 eventType, const TIntrusivePtr<TEventSerializedData>& eventBuffer, ui64 cookie) override {
+        TActorId Send(const TActorContext& ctx, ui64 tabletId, ui32 eventType, const TIntrusivePtr<TEventSerializedData>& eventBuffer, ui64 cookie) override { 
             auto clientId = Prepare(ctx, tabletId);
             SendData(ctx, clientId, eventType, eventBuffer, cookie);
             return clientId;
@@ -152,7 +152,7 @@ namespace NTabletPipe {
             if (!Container->Find(tabletId, currentClient))
                 return;
 
-            TActorId client = currentClient->Client;
+            TActorId client = currentClient->Client; 
             CloseClient(ctx, client);
             Container->Erase(tabletId);
         }
@@ -162,7 +162,7 @@ namespace NTabletPipe {
             if (!Container->Find(tabletId, currentClient))
                 return;
 
-            TActorId client = currentClient->Client;
+            TActorId client = currentClient->Client; 
             if (!PoolContainer) {
                 CloseClient(ctx, client);
                 Container->Erase(tabletId);
@@ -191,7 +191,7 @@ namespace NTabletPipe {
             Container->Erase(tabletId);
         }
 
-        void Erase(ui64 tabletId, const TActorId& clientId) {
+        void Erase(ui64 tabletId, const TActorId& clientId) { 
             TClientCacheEntry* currentClient;
             if (Container->Find(tabletId, currentClient)) {
                 Y_VERIFY_DEBUG(!!currentClient->Client);

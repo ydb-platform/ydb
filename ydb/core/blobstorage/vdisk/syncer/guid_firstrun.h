@@ -51,8 +51,8 @@ namespace NKikimr {
     class TVDiskContext;
     IActor *CreateVDiskGuidFirstRunActor(TIntrusivePtr<TVDiskContext> vctx,
                                          TIntrusivePtr<TBlobStorageGroupInfo> info,
-                                         const TActorId &committerId,
-                                         const TActorId &notifyId,
+                                         const TActorId &committerId, 
+                                         const TActorId &notifyId, 
                                          NSyncer::EFirstRunStep startStep,
                                          TVDiskEternalGuid guid);
 

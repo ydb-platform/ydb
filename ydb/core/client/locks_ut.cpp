@@ -49,8 +49,8 @@ public:
 
     void ResetSchemeCache(TServer server, TTableId tableId) {
         TTestActorRuntime* runtime = server.GetRuntime();
-        TActorId txProxy = MakeTxProxyID();
-        TActorId sender = runtime->AllocateEdgeActor();
+        TActorId txProxy = MakeTxProxyID(); 
+        TActorId sender = runtime->AllocateEdgeActor(); 
         TAutoPtr<TEvTxUserProxy::TEvInvalidateTable> ev(new TEvTxUserProxy::TEvInvalidateTable(tableId));
         runtime->Send(new IEventHandle(txProxy, sender, ev.Release()));
         TAutoPtr<IEventHandle> handle;

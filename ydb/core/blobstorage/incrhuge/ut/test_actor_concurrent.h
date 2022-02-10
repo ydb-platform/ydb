@@ -50,7 +50,7 @@ public:
 
 private:
     TVDiskID VDiskId;
-    TActorId KeeperId;
+    TActorId KeeperId; 
     TManualEvent *Event;
     ui8 Owner = 1;
     TTestActorState& State;
@@ -70,7 +70,7 @@ private:
     };
 
 public:
-    TTestActorConcurrent(const TActorId& keeperId, TManualEvent *event, TTestActorState& state, ui32 numActions,
+    TTestActorConcurrent(const TActorId& keeperId, TManualEvent *event, TTestActorState& state, ui32 numActions, 
             ui32 generation, ui32 writeScore = 10, ui32 deleteScore = 10, ui32 readScore = 5)
         : KeeperId(keeperId)
         , Event(event)

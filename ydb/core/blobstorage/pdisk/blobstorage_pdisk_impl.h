@@ -44,7 +44,7 @@ class TCompletionEventSender;
 class TPDisk : public IPDisk {
 public:
     ui32 PDiskId;
-    TActorId PDiskActor;
+    TActorId PDiskActor; 
 
     // Monitoring
     TPDiskMon Mon;
@@ -182,11 +182,11 @@ public:
     bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize); // Called by actor
     bool CheckGuid(TString *outReason); // Called by actor
     bool CheckFormatComplete(); // Called by actor
-    void ReadSysLog(const TActorId &pDiskActor); // Called by actor
+    void ReadSysLog(const TActorId &pDiskActor); // Called by actor 
     void ProcessChunk0(const TEvReadLogResult &readLogResult);
     void PrintChunksDebugInfo();
     TString ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn, const TEvReadLogResult &readLogResult);
-    void ReadAndParseMainLog(const TActorId &pDiskActor);
+    void ReadAndParseMainLog(const TActorId &pDiskActor); 
     // Called by the log reader on success with the current chunkOwnerMap.
     void ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap);
     void InitLogChunksInfo();

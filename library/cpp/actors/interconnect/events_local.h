@@ -107,29 +107,29 @@ namespace NActors {
 
     struct TEvHandshakeAsk: public TEventLocal<TEvHandshakeAsk, ui32(ENetwork::HandshakeAsk)> {
         DEFINE_SIMPLE_LOCAL_EVENT(TEvHandshakeAsk, "Network: TEvHandshakeAsk")
-        TEvHandshakeAsk(const TActorId& self,
-                        const TActorId& peer,
+        TEvHandshakeAsk(const TActorId& self, 
+                        const TActorId& peer, 
                         ui64 counter)
             : Self(self)
             , Peer(peer)
             , Counter(counter)
         {
         }
-        const TActorId Self;
-        const TActorId Peer;
+        const TActorId Self; 
+        const TActorId Peer; 
         const ui64 Counter;
     };
 
     struct TEvHandshakeAck: public TEventLocal<TEvHandshakeAck, ui32(ENetwork::HandshakeAck)> {
         DEFINE_SIMPLE_LOCAL_EVENT(TEvHandshakeAck, "Network: TEvHandshakeAck")
 
-        TEvHandshakeAck(const TActorId& self, ui64 nextPacket, TSessionParams params)
+        TEvHandshakeAck(const TActorId& self, ui64 nextPacket, TSessionParams params) 
             : Self(self)
             , NextPacket(nextPacket)
             , Params(std::move(params))
         {}
 
-        const TActorId Self;
+        const TActorId Self; 
         const ui64 NextPacket;
         const TSessionParams Params;
     };
@@ -185,8 +185,8 @@ namespace NActors {
 
         TEvHandshakeDone(
                 TIntrusivePtr<NInterconnect::TStreamSocket> socket,
-                const TActorId& peer,
-                const TActorId& self,
+                const TActorId& peer, 
+                const TActorId& self, 
                 ui64 nextPacket,
                 TAutoPtr<TProgramInfo>&& programInfo,
                 TSessionParams params)
@@ -200,8 +200,8 @@ namespace NActors {
         }
 
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
-        const TActorId Peer;
-        const TActorId Self;
+        const TActorId Peer; 
+        const TActorId Self; 
         const ui64 NextPacket;
         TAutoPtr<TProgramInfo> ProgramInfo;
         const TSessionParams Params;
@@ -319,10 +319,10 @@ namespace NActors {
 
         template <typename TContainer>
         TEvLoadMessage(const TContainer& route, const TString& id, const TString* payload) {
-            for (const TActorId& actorId : route) {
+            for (const TActorId& actorId : route) { 
                 auto* hop = Record.AddHops();
                 if (actorId) {
-                    ActorIdToProto(actorId, hop->MutableNextHop());
+                    ActorIdToProto(actorId, hop->MutableNextHop()); 
                 }
             }
             Record.SetId(id);
@@ -366,13 +366,13 @@ namespace NActors {
     };
 
     struct TEvSessionBufferSizeResponse : TEventLocal<TEvSessionBufferSizeResponse, static_cast<ui32>(ENetwork::EvSessionBufferSizeResponse)> {
-        TEvSessionBufferSizeResponse(const TActorId& sessionId, ui64 outputBufferSize)
+        TEvSessionBufferSizeResponse(const TActorId& sessionId, ui64 outputBufferSize) 
             : SessionID(sessionId)
             , BufferSize(outputBufferSize)
         {
         }
 
-        TActorId SessionID;
+        TActorId SessionID; 
         ui64 BufferSize;
     };
 

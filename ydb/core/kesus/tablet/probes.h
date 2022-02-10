@@ -9,7 +9,7 @@
 
 struct TActorIdParam {
     using TStoreType = TString;
-    using TFuncParam = typename TTypeTraits<NActors::TActorId>::TFuncParam;
+    using TFuncParam = typename TTypeTraits<NActors::TActorId>::TFuncParam; 
 
     inline static void ToString(typename TTypeTraits<TStoreType>::TFuncParam stored, TString* out) {
         *out = stored;

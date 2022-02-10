@@ -1,35 +1,35 @@
-#pragma once
-
-#include "udf_ptr.h"
-#include "udf_types.h"
+#pragma once 
+ 
+#include "udf_ptr.h" 
+#include "udf_types.h" 
 #include "udf_type_builder.h"
 #include "udf_string.h"
 #include "udf_value.h"
-
+ 
 #include <array>
 
 namespace NYql {
-namespace NUdf {
-
-///////////////////////////////////////////////////////////////////////////////
-// IDictValueBuilder
-///////////////////////////////////////////////////////////////////////////////
-struct TDictFlags {
-    enum EDictKind: ui32 {
-        Sorted = 0x01,
-        Hashed = 0x02,
-        Multi = 0x04,
-    };
-};
-
-class IDictValueBuilder
-{
-public:
-    using TPtr = TUniquePtr<IDictValueBuilder>;
-
-public:
-    virtual ~IDictValueBuilder() = default;
-
+namespace NUdf { 
+ 
+/////////////////////////////////////////////////////////////////////////////// 
+// IDictValueBuilder 
+/////////////////////////////////////////////////////////////////////////////// 
+struct TDictFlags { 
+    enum EDictKind: ui32 { 
+        Sorted = 0x01, 
+        Hashed = 0x02, 
+        Multi = 0x04, 
+    }; 
+}; 
+ 
+class IDictValueBuilder 
+{ 
+public: 
+    using TPtr = TUniquePtr<IDictValueBuilder>; 
+ 
+public: 
+    virtual ~IDictValueBuilder() = default; 
+ 
     virtual IDictValueBuilder& Add(TUnboxedValue&& key, TUnboxedValue&& value) = 0;
 
     virtual TUnboxedValue Build() = 0;
@@ -37,7 +37,7 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IDictValueBuilder, 8);
 
-///////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////// 
 // IDateBuilder
 ///////////////////////////////////////////////////////////////////////////////
 class IDateBuilder1
@@ -103,8 +103,8 @@ class IDateBuilder: public IDateBuilder1 {};
 UDF_ASSERT_TYPE_SIZE(IDateBuilder, 8);
 
 ///////////////////////////////////////////////////////////////////////////////
-// IValueBuilder
-///////////////////////////////////////////////////////////////////////////////
+// IValueBuilder 
+/////////////////////////////////////////////////////////////////////////////// 
 class IValueBuilder1
 {
 public:
@@ -190,8 +190,8 @@ class IValueBuilder: public IValueBuilder2 {};
 class IValueBuilder: public IValueBuilder1 {};
 #endif
 
-UDF_ASSERT_TYPE_SIZE(IValueBuilder, 8);
-
+UDF_ASSERT_TYPE_SIZE(IValueBuilder, 8); 
+ 
 class TPlainArrayCache {
 private:
     const ui32 Size;
@@ -227,5 +227,5 @@ public:
     }
 };
 
-} // namespace NUdf
+} // namespace NUdf 
 } // namespace NYql

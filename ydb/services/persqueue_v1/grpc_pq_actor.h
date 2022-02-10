@@ -570,7 +570,7 @@ private:
     };
 
     EState State;
-    TActorId SchemeCache;
+    TActorId SchemeCache; 
     TActorId NewSchemeCache;
     TActorId Writer;
 
@@ -649,7 +649,7 @@ private:
     TInstant LogSessionDeadline;
 
     ui64 BalancerTabletId;
-    TActorId PipeToBalancer;
+    TActorId PipeToBalancer; 
 
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;
@@ -720,12 +720,12 @@ private:
                                         const TActorContext& ctx);
 
 private:
-    const TActorId ParentId;
+    const TActorId ParentId; 
     const ui64 Cookie;
     const TString Session;
 
     const TActorId MetaCacheId;
-    const TActorId NewSchemeCache;
+    const TActorId NewSchemeCache; 
 
     const TString ClientId;
     const TString ClientPath;
@@ -867,12 +867,12 @@ private:
     void ProcessAnswer(const NActors::TActorContext& ctx, TIntrusivePtr<TFormedReadResponse> formedResponse); // returns false if actor died
 
     void RegisterSessions(const NActors::TActorContext& ctx);
-    void RegisterSession(const TActorId& pipe, const TString& topic, const TVector<ui32>& groups, const TActorContext& ctx);
+    void RegisterSession(const TActorId& pipe, const TString& topic, const TVector<ui32>& groups, const TActorContext& ctx); 
 
     struct TPartitionActorInfo;
     void DropPartition(THashMap<ui64, TPartitionActorInfo>::iterator it, const TActorContext& ctx);
 
-    bool ActualPartitionActor(const TActorId& part);
+    bool ActualPartitionActor(const TActorId& part); 
     void ReleasePartition(const THashMap<ui64, TPartitionActorInfo>::iterator& it,
                         bool couldBeReads, const TActorContext& ctx); // returns false if actor died
 
@@ -890,10 +890,10 @@ private:
 
     const TInstant StartTimestamp;
 
-    TActorId SchemeCache;
-    TActorId NewSchemeCache;
+    TActorId SchemeCache; 
+    TActorId NewSchemeCache; 
 
-    TActorId AuthInitActor;
+    TActorId AuthInitActor; 
     TIntrusivePtr<NACLib::TUserToken> Token;
 
     TString ClientId;
@@ -919,7 +919,7 @@ private:
     TInstant LastACLCheckTimestamp;
 
     struct TPartitionActorInfo {
-        TActorId Actor;
+        TActorId Actor; 
         const TPartitionId Partition;
         std::deque<ui64> Commits;
         bool Reading;
@@ -937,7 +937,7 @@ private:
 
         TInstant AssignTimestamp;
 
-        TPartitionActorInfo(const TActorId& actor, const TPartitionId& partition, const TActorContext& ctx)
+        TPartitionActorInfo(const TActorId& actor, const TPartitionId& partition, const TActorContext& ctx) 
             : Actor(actor)
             , Partition(partition)
             , Reading(false)
@@ -955,7 +955,7 @@ private:
     };
 
 
-    THashSet<TActorId> ActualPartitionActors;
+    THashSet<TActorId> ActualPartitionActors; 
     THashMap<ui64, std::pair<ui32, ui64>> BalancerGeneration;
     ui64 NextAssignId;
     THashMap<ui64, TPartitionActorInfo> Partitions; //assignId -> info
@@ -999,7 +999,7 @@ private:
         //returns byteSize diff
         i64 ApplyResponse(PersQueue::V1::MigrationStreamingReadServerMessage&& resp);
 
-        THashSet<TActorId> PartitionsTookPartInRead;
+        THashSet<TActorId> PartitionsTookPartInRead; 
         TSet<TPartitionId> PartitionsTookPartInControlMessages;
 
         TSet<TPartitionInfo> PartitionsBecameAvailable; // Partitions that became available during this read request execution.
@@ -1012,7 +1012,7 @@ private:
         TDuration WaitQuotaTime;
     };
 
-    THashMap<TActorId, TFormedReadResponse::TPtr> PartitionToReadResponse; // Partition actor -> TFormedReadResponse answer that has this partition.
+    THashMap<TActorId, TFormedReadResponse::TPtr> PartitionToReadResponse; // Partition actor -> TFormedReadResponse answer that has this partition. 
                                                                            // PartitionsTookPartInRead in formed read response contain this actor id.
 
     struct TControlMessages {
@@ -1112,10 +1112,10 @@ private:
     void ProcessAnswers(const TActorContext& ctx);
 
 private:
-    TActorId SchemeCache;
-    TActorId NewSchemeCache;
+    TActorId SchemeCache; 
+    TActorId NewSchemeCache; 
 
-    TActorId AuthInitActor;
+    TActorId AuthInitActor; 
 
     TTopicTabletsPairs TopicAndTablets;
 

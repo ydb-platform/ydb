@@ -55,7 +55,7 @@ namespace NSharedCache {
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-        TActorId Owner;
+        TActorId Owner; 
 
         TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TActorId owner)
             : PageCollection(std::move(pageCollection))
@@ -68,7 +68,7 @@ namespace NSharedCache {
     struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> {
         const EPriority Priority;
         TAutoPtr<NPageCollection::TFetch> Fetch;
-        TActorId Owner;
+        TActorId Owner; 
 
         TEvRequest(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch, TActorId owner)
             : Priority(priority)

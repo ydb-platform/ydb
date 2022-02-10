@@ -5,12 +5,12 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxSyncTablets : public TTransactionBase<THive> {
-    TActorId Local;
+    TActorId Local; 
     NKikimrLocal::TEvSyncTablets SyncTablets;
     THashSet<std::pair<TTabletId, TFollowerId>> TabletsToStop;
     THashSet<std::pair<TTabletId, TFollowerId>> TabletsToBoot;
 public:
-    TTxSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec, THive* hive)
+    TTxSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec, THive* hive) 
         : TBase(hive)
         , Local(local)
     {
@@ -126,7 +126,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec) {
+ITransaction* THive::CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec) { 
     return new TTxSyncTablets(local, rec, this);
 }
 

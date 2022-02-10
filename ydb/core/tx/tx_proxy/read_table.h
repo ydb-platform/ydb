@@ -14,7 +14,7 @@ namespace NTxProxy {
     };
 
     struct TReadTableSettings {
-        TActorId Owner;
+        TActorId Owner; 
         ui64 Cookie = 0;
         ui64 ProxyFlags = 0;
         TString DatabaseName;

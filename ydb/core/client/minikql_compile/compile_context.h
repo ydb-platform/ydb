@@ -21,7 +21,7 @@ using NKikimr::NMiniKQL::TParametersBuilder;
 using NKikimr::NMiniKQL::TTypeEnvironment;
 using NKikimr::NMiniKQL::TType;
 using NKikimr::NMiniKQL::TRuntimeNode;
-using NKikimr::NMiniKQL::TKikimrProgramBuilder;
+using NKikimr::NMiniKQL::TKikimrProgramBuilder; 
 
 
 struct TContext : public TAtomicRefCount<TContext> {
@@ -50,7 +50,7 @@ public:
     const IFunctionRegistry* FuncRegistry;
     const TTypeEnvironment* TypeEnv;
     NKikimr::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
-    TAutoPtr<TKikimrProgramBuilder> PgmBuilder;
+    TAutoPtr<TKikimrProgramBuilder> PgmBuilder; 
     TMaybe<TParametersBuilder> ParamsBuilder;
 
 private:

@@ -29,13 +29,13 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
 
         TGauge gauge(0);
         {
-            TMetricTimerScope<TGauge, milliseconds, TTestClock> t{&gauge};
+            TMetricTimerScope<TGauge, milliseconds, TTestClock> t{&gauge}; 
             TTestClock::TimePoint += milliseconds(10);
         }
         UNIT_ASSERT_EQUAL(10, gauge.Get());
 
         {
-            TMetricTimerScope<TGauge, milliseconds, TTestClock> t{&gauge};
+            TMetricTimerScope<TGauge, milliseconds, TTestClock> t{&gauge}; 
             TTestClock::TimePoint += milliseconds(20);
         }
         UNIT_ASSERT_EQUAL(20, gauge.Get());
@@ -46,13 +46,13 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
 
         TIntGauge gauge(0);
         {
-            TMetricTimerScope<TIntGauge, milliseconds, TTestClock> t{&gauge};
+            TMetricTimerScope<TIntGauge, milliseconds, TTestClock> t{&gauge}; 
             TTestClock::TimePoint += milliseconds(10);
         }
         UNIT_ASSERT_EQUAL(10, gauge.Get());
 
         {
-            TMetricTimerScope<TIntGauge, milliseconds, TTestClock> t{&gauge};
+            TMetricTimerScope<TIntGauge, milliseconds, TTestClock> t{&gauge}; 
             TTestClock::TimePoint += milliseconds(20);
         }
         UNIT_ASSERT_EQUAL(20, gauge.Get());
@@ -61,15 +61,15 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
     Y_UNIT_TEST(CounterNew) {
         TTestClock::TimePoint = TTestClock::time_point::min();
 
-        TCounter counter(0);
+        TCounter counter(0); 
         {
-            TMetricTimerScope<TCounter, milliseconds, TTestClock> t{&counter};
+            TMetricTimerScope<TCounter, milliseconds, TTestClock> t{&counter}; 
             TTestClock::TimePoint += milliseconds(10);
         }
         UNIT_ASSERT_EQUAL(10, counter.Get());
 
         {
-            TMetricTimerScope<TCounter, milliseconds, TTestClock> t{&counter};
+            TMetricTimerScope<TCounter, milliseconds, TTestClock> t{&counter}; 
             TTestClock::TimePoint += milliseconds(20);
         }
         UNIT_ASSERT_EQUAL(30, counter.Get());
@@ -80,13 +80,13 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
 
         TRate rate(0);
         {
-            TMetricTimerScope<TRate, milliseconds, TTestClock> t{&rate};
+            TMetricTimerScope<TRate, milliseconds, TTestClock> t{&rate}; 
             TTestClock::TimePoint += milliseconds(10);
         }
         UNIT_ASSERT_EQUAL(10, rate.Get());
 
         {
-            TMetricTimerScope<TRate, milliseconds, TTestClock> t{&rate};
+            TMetricTimerScope<TRate, milliseconds, TTestClock> t{&rate}; 
             TTestClock::TimePoint += milliseconds(20);
         }
         UNIT_ASSERT_EQUAL(30, rate.Get());
@@ -104,13 +104,13 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
 
         THistogram histogram(ExplicitHistogram({10, 20, 30}), true);
         {
-            TMetricTimerScope<THistogram, milliseconds, TTestClock> t{&histogram};
+            TMetricTimerScope<THistogram, milliseconds, TTestClock> t{&histogram}; 
             TTestClock::TimePoint += milliseconds(5);
         }
         assertHistogram({1, 0, 0, 0}, histogram.TakeSnapshot());
 
         {
-            TMetricTimerScope<THistogram, milliseconds, TTestClock> t{&histogram};
+            TMetricTimerScope<THistogram, milliseconds, TTestClock> t{&histogram}; 
             TTestClock::TimePoint += milliseconds(15);
         }
         assertHistogram({1, 1, 0, 0}, histogram.TakeSnapshot());
@@ -119,9 +119,9 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
     Y_UNIT_TEST(Moving) {
         TTestClock::TimePoint = TTestClock::time_point::min();
 
-        TCounter counter(0);
+        TCounter counter(0); 
         {
-            TMetricTimerScope<TCounter, milliseconds, TTestClock> t{&counter};
+            TMetricTimerScope<TCounter, milliseconds, TTestClock> t{&counter}; 
             [tt = std::move(t)] {
                 TTestClock::TimePoint += milliseconds(5);
                 Y_UNUSED(tt);
@@ -137,9 +137,9 @@ Y_UNIT_TEST_SUITE(TTimerTest) {
         TTestClock::TimePoint = TTestClock::time_point::min();
         auto pool = CreateThreadPool(1);
 
-        TCounter counter(0);
+        TCounter counter(0); 
         {
-            TFutureFriendlyTimer<TCounter, milliseconds, TTestClock> t{&counter};
+            TFutureFriendlyTimer<TCounter, milliseconds, TTestClock> t{&counter}; 
 
             auto f = Async([=] {
                 return;

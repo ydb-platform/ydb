@@ -21,7 +21,7 @@ struct TTestContext {
     TTabletTypes::EType TabletType;
     ui64 TabletId;
     THolder<TTestActorRuntime> Runtime;
-    THashMap<std::tuple<TActorId, ui64>, TActorId> ProxyClients;
+    THashMap<std::tuple<TActorId, ui64>, TActorId> ProxyClients; 
 
     TTestContext();
 
@@ -38,24 +38,24 @@ struct TTestContext {
     void RebootTablet();
 
     // Returns tablet actor for direct manipulation
-    TActorId GetTabletActorId();
+    TActorId GetTabletActorId(); 
 
     // Extremely pedantic version of GrabEdgeEvent
     template<class TEvent>
-    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor) {
+    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor) { 
         return Runtime->GrabEdgeEvent<TEvent>(actor)->Release();
     }
 
     // Extremely pedantic version of GrabEdgeEvent
     template<class TEvent>
-    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor, ui64 cookie) {
+    THolder<TEvent> ExpectEdgeEvent(const TActorId& actor, ui64 cookie) { 
         auto ev = Runtime->GrabEdgeEvent<TEvent>(actor);
         UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, cookie);
         return ev->Release();
     }
 
     template<class TEvent>
-    void ExpectNoEdgeEvent(const TActorId& actor, TDuration duration) {
+    void ExpectNoEdgeEvent(const TActorId& actor, TDuration duration) { 
         auto edge = Runtime->AllocateEdgeActor();
         Runtime->EnableScheduleForActor(edge);
         Runtime->Schedule(new IEventHandle(edge, edge, new TEvent()), duration);
@@ -64,72 +64,72 @@ struct TTestContext {
     }
 
     // Sends payload to tablet from edge, fresh pipe every time
-    void SendFromEdge(const TActorId& edge, IEventBase* payload, ui64 cookie = 0);
+    void SendFromEdge(const TActorId& edge, IEventBase* payload, ui64 cookie = 0); 
 
     template <class TEvent>
-    void SendFromEdge(const TActorId& edge, THolder<TEvent> payload, ui64 cookie = 0) {
+    void SendFromEdge(const TActorId& edge, THolder<TEvent> payload, ui64 cookie = 0) { 
         SendFromEdge(edge, payload.Release(), cookie);
     }
 
     // Sends payload to tablet from proxy (caches pipe per proxy/generation pair)
-    void SendFromProxy(const TActorId& proxy, ui64 generation, IEventBase* payload, ui64 cookie = 0);
+    void SendFromProxy(const TActorId& proxy, ui64 generation, IEventBase* payload, ui64 cookie = 0); 
 
     // set/get config requests
     NKikimrKesus::TEvGetConfigResult GetConfig();
     NKikimrKesus::TEvSetConfigResult SetConfig(ui64 txId, const Ydb::Coordination::Config& config, ui64 version, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
 
     // Makes a dummy request using this proxy/generation pair
-    void SyncProxy(const TActorId& proxy, ui64 generation, bool useTransactions = false);
+    void SyncProxy(const TActorId& proxy, ui64 generation, bool useTransactions = false); 
 
     // Registers a proxy/generation pair with the tablet
-    NKikimrKesus::TEvRegisterProxyResult RegisterProxy(const TActorId& proxy, ui64 generation);
-    void MustRegisterProxy(const TActorId& proxy, ui64 generation, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    NKikimrKesus::TEvRegisterProxyResult RegisterProxy(const TActorId& proxy, ui64 generation); 
+    void MustRegisterProxy(const TActorId& proxy, ui64 generation, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
     // Unregisters a proxy/generation pair from the tablet
-    NKikimrKesus::TEvUnregisterProxyResult UnregisterProxy(const TActorId& proxy, ui64 generation);
-    void MustUnregisterProxy(const TActorId& proxy, ui64 generation, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    NKikimrKesus::TEvUnregisterProxyResult UnregisterProxy(const TActorId& proxy, ui64 generation); 
+    void MustUnregisterProxy(const TActorId& proxy, ui64 generation, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
     // Session attachment helpers
     void SendAttachSession(
-        ui64 cookie, const TActorId& proxy, ui64 generation, ui64 sessionId,
+        ui64 cookie, const TActorId& proxy, ui64 generation, ui64 sessionId, 
         ui64 timeoutMillis = 0, const TString& description = TString(), ui64 seqNo = 0,
         const TString& key = TString());
     NKikimrKesus::TEvAttachSessionResult NextAttachSessionResult(
-        ui64 cookie, const TActorId& proxy, ui64 generation);
+        ui64 cookie, const TActorId& proxy, ui64 generation); 
     ui64 ExpectAttachSessionResult(
-        ui64 cookie, const TActorId& proxy, ui64 generation, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+        ui64 cookie, const TActorId& proxy, ui64 generation, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
     NKikimrKesus::TEvAttachSessionResult AttachSession(
-        const TActorId& proxy, ui64 generation, ui64 sessionId,
+        const TActorId& proxy, ui64 generation, ui64 sessionId, 
         ui64 timeoutMillis = 0, const TString& description = TString(), ui64 seqNo = 0,
         const TString& key = TString());
     ui64 MustAttachSession(
-        const TActorId& proxy, ui64 generation, ui64 sessionId,
+        const TActorId& proxy, ui64 generation, ui64 sessionId, 
         ui64 timeoutMillis = 0, const TString& description = TString(), ui64 seqNo = 0,
         const TString& key = TString());
 
     // Session detachment helpers
-    NKikimrKesus::TEvDetachSessionResult DetachSession(const TActorId& proxy, ui64 generation, ui64 sessionId);
-    void MustDetachSession(const TActorId& proxy, ui64 generation, ui64 sessionId, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    NKikimrKesus::TEvDetachSessionResult DetachSession(const TActorId& proxy, ui64 generation, ui64 sessionId); 
+    void MustDetachSession(const TActorId& proxy, ui64 generation, ui64 sessionId, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
     // Session destruction helpers
-    NKikimrKesus::TEvDestroySessionResult DestroySession(const TActorId& proxy, ui64 generation, ui64 sessionId);
-    void MustDestroySession(const TActorId& proxy, ui64 generation, ui64 sessionId, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    NKikimrKesus::TEvDestroySessionResult DestroySession(const TActorId& proxy, ui64 generation, ui64 sessionId); 
+    void MustDestroySession(const TActorId& proxy, ui64 generation, ui64 sessionId, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
     // Lock acquire helpers
     void SendAcquireLock(
-        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
+        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, 
         const TString& lockName, ELockMode mode,
         ui64 timeoutMillis = 0, const TString& data = TString());
-    bool ExpectAcquireLockResult(ui64 reqId, const TActorId& proxy, ui64 generation,
+    bool ExpectAcquireLockResult(ui64 reqId, const TActorId& proxy, ui64 generation, 
         Ydb::StatusIds::StatusCode status);
-    void ExpectAcquireLockResult(ui64 reqId, const TActorId& proxy, ui64 generation, bool acquired = true);
+    void ExpectAcquireLockResult(ui64 reqId, const TActorId& proxy, ui64 generation, bool acquired = true); 
 
     // Lock release helpers
     bool MustReleaseLock(
-        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& lockName,
+        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& lockName, 
         Ydb::StatusIds::StatusCode status);
     void MustReleaseLock(
-        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& lockName, bool released = true);
+        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& lockName, bool released = true); 
 
     // Semaphore helpers
     void CreateSemaphore(
@@ -147,33 +147,33 @@ struct TTestContext {
     }
 
     void SessionCreateSemaphore(
-        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
+        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, 
         const TString& name, ui64 limit, const TString& data, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
 
     void SessionUpdateSemaphore(
-        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
+        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, 
         const TString& name, const TString& data, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
 
     void SessionDeleteSemaphore(
-        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
+        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, 
         const TString& name, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
 
     // Semaphore acquire helpers
     void SendAcquireSemaphore(
-        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
+        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, 
         const TString& name, ui64 count,
         ui64 timeoutMillis = 0, const TString& data = TString());
-    bool ExpectAcquireSemaphoreResult(ui64 reqId, const TActorId& proxy, ui64 generation,
+    bool ExpectAcquireSemaphoreResult(ui64 reqId, const TActorId& proxy, ui64 generation, 
         Ydb::StatusIds::StatusCode status);
-    void ExpectAcquireSemaphoreResult(ui64 reqId, const TActorId& proxy, ui64 generation, bool acquired = true);
-    void ExpectAcquireSemaphorePending(ui64 reqId, const TActorId& proxy, ui64 generation);
+    void ExpectAcquireSemaphoreResult(ui64 reqId, const TActorId& proxy, ui64 generation, bool acquired = true); 
+    void ExpectAcquireSemaphorePending(ui64 reqId, const TActorId& proxy, ui64 generation); 
 
     // Semaphore release helpers
     bool MustReleaseSemaphore(
-        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& name,
+        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& name, 
         Ydb::StatusIds::StatusCode status);
     void MustReleaseSemaphore(
-        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& name, bool released = true);
+        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& name, bool released = true); 
 
     // Describes and verifies info about proxies from the tablet
 
@@ -182,17 +182,17 @@ struct TTestContext {
         THashSet<ui64> AttachedSessions;
     };
 
-    THashMap<TActorId, TSimpleProxyInfo> DescribeProxies();
-    void VerifyProxyRegistered(const TActorId& proxy, ui64 generation);
-    void VerifyProxyNotRegistered(const TActorId& proxy);
-    void VerifyProxyHasSessions(const TActorId& proxy, ui64 generation, const THashSet<ui64>& expectedSessions);
+    THashMap<TActorId, TSimpleProxyInfo> DescribeProxies(); 
+    void VerifyProxyRegistered(const TActorId& proxy, ui64 generation); 
+    void VerifyProxyNotRegistered(const TActorId& proxy); 
+    void VerifyProxyHasSessions(const TActorId& proxy, ui64 generation, const THashSet<ui64>& expectedSessions); 
 
     // Describes and verifies info about sessions on the tablet
 
     struct TSimpleSessionInfo {
         ui64 TimeoutMillis;
         TString Description;
-        TActorId OwnerProxy;
+        TActorId OwnerProxy; 
     };
 
     THashMap<ui64, TSimpleSessionInfo> DescribeSessions();
@@ -235,12 +235,12 @@ struct TTestContext {
     };
 
     void SendSessionDescribeSemaphore(
-        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
+        ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, 
         const TString& name, bool watchData = false, bool watchOwners = false);
     TSimpleSemaphoreDescription ExpectDescribeSemaphoreResult(
-        ui64 reqId, const TActorId& proxy, ui64 generation,
+        ui64 reqId, const TActorId& proxy, ui64 generation, 
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
-    TDescribeSemaphoreChanges ExpectDescribeSemaphoreChanged(ui64 reqId, const TActorId& proxy, ui64 generation);
+    TDescribeSemaphoreChanges ExpectDescribeSemaphoreChanged(ui64 reqId, const TActorId& proxy, ui64 generation); 
 
     // Quoter
     THolder<TEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources(
@@ -305,11 +305,11 @@ struct TTestContext {
         {}
     };
 
-    NKikimrKesus::TEvSubscribeOnResourcesResult SubscribeOnResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceConsumingInfo>& info);
-    NKikimrKesus::TEvSubscribeOnResourcesResult SubscribeOnResource(const TActorId& client, const TActorId& edge, const TString& path, bool startConsuming, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    NKikimrKesus::TEvSubscribeOnResourcesResult SubscribeOnResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceConsumingInfo>& info); 
+    NKikimrKesus::TEvSubscribeOnResourcesResult SubscribeOnResource(const TActorId& client, const TActorId& edge, const TString& path, bool startConsuming, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
-    void UpdateConsumptionState(const TActorId& client, const TActorId& edge, const std::vector<TResourceConsumingInfo>& info);
-    void UpdateConsumptionState(const TActorId& client, const TActorId& edge, ui64 id, bool consume, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    void UpdateConsumptionState(const TActorId& client, const TActorId& edge, const std::vector<TResourceConsumingInfo>& info); 
+    void UpdateConsumptionState(const TActorId& client, const TActorId& edge, ui64 id, bool consume, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
     void AccountResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceAccountInfo>& info);
     void AccountResources(const TActorId& client, const TActorId& edge, ui64 id, TInstant start, TDuration interval, std::vector<double>&& amount);

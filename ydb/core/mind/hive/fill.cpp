@@ -15,7 +15,7 @@ protected:
     ui32 KickInFlight;
     ui32 Movements;
     TNodeId NodeId;
-    TActorId Initiator;
+    TActorId Initiator; 
 
     TString GetLogPrefix() const {
         return Hive->GetLogPrefix();
@@ -83,7 +83,7 @@ public:
         return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR;
     }
 
-    THiveFill(THive* hive, TNodeId nodeId, const TActorId& initiator)
+    THiveFill(THive* hive, TNodeId nodeId, const TActorId& initiator) 
         : Hive(hive)
         , NextKick(Tablets.end())
         , KickInFlight(0)
@@ -128,7 +128,7 @@ public:
     }
 };
 
-void THive::StartHiveFill(TNodeId nodeId, const TActorId& initiator) {
+void THive::StartHiveFill(TNodeId nodeId, const TActorId& initiator) { 
     if (BalancerNodes.emplace(nodeId).second) {
         auto* balancer = new THiveFill(this, nodeId, initiator);
         SubActors.emplace_back(balancer);

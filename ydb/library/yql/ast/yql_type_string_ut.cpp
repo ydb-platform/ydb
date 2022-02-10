@@ -35,20 +35,20 @@ Y_UNIT_TEST_SUITE(TTypeString)
     }
 
     Y_UNIT_TEST(ParseDataTypes) {
-        TestOk("String", "(DataType 'String)");
-        TestOk("Bool", "(DataType 'Bool)");
+        TestOk("String", "(DataType 'String)"); 
+        TestOk("Bool", "(DataType 'Bool)"); 
         TestOk("Uint8", "(DataType 'Uint8)");
         TestOk("Int8", "(DataType 'Int8)");
         TestOk("Uint16", "(DataType 'Uint16)");
         TestOk("Int16", "(DataType 'Int16)");
-        TestOk("Int32", "(DataType 'Int32)");
-        TestOk("Uint32", "(DataType 'Uint32)");
-        TestOk("Int64", "(DataType 'Int64)");
-        TestOk("Uint64", "(DataType 'Uint64)");
-        TestOk("Float", "(DataType 'Float)");
-        TestOk("Double", "(DataType 'Double)");
-        TestOk("Yson", "(DataType 'Yson)");
-        TestOk("Utf8", "(DataType 'Utf8)");
+        TestOk("Int32", "(DataType 'Int32)"); 
+        TestOk("Uint32", "(DataType 'Uint32)"); 
+        TestOk("Int64", "(DataType 'Int64)"); 
+        TestOk("Uint64", "(DataType 'Uint64)"); 
+        TestOk("Float", "(DataType 'Float)"); 
+        TestOk("Double", "(DataType 'Double)"); 
+        TestOk("Yson", "(DataType 'Yson)"); 
+        TestOk("Utf8", "(DataType 'Utf8)"); 
         TestOk("Json", "(DataType 'Json)");
         TestOk("Date", "(DataType 'Date)");
         TestOk("Datetime", "(DataType 'Datetime)");
@@ -59,29 +59,29 @@ Y_UNIT_TEST_SUITE(TTypeString)
         TestOk("TzTimestamp", "(DataType 'TzTimestamp)");
         TestOk("Uuid", "(DataType 'Uuid)");
         TestOk("Decimal(10,2)", "(DataType 'Decimal '10 '2)");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(Multiline) {
-        TestOk(R"(Struct
-        <
-            name : String
-            ,
-            age : Uint32
-        >)", "(StructType "
-                "'('\"age\" (DataType 'Uint32)) "
-                "'('\"name\" (DataType 'String)))");
-    }
-
+        TestOk(R"(Struct 
+        < 
+            name : String 
+            , 
+            age : Uint32 
+        >)", "(StructType " 
+                "'('\"age\" (DataType 'Uint32)) " 
+                "'('\"name\" (DataType 'String)))"); 
+    } 
+ 
     Y_UNIT_TEST(ParseNoArgsWithStringResult) {
         TestOk("()->String", "(CallableType '() '((DataType 'String)))");
-        TestOk("()->Utf8", "(CallableType '() '((DataType 'Utf8)))");
+        TestOk("()->Utf8", "(CallableType '() '((DataType 'Utf8)))"); 
     }
 
     Y_UNIT_TEST(ParseNoArgsWithOptionalStringResult) {
         TestOk("()->String?",
                "(CallableType '() '((OptionalType (DataType 'String))))");
-        TestOk("()->Yson?",
-               "(CallableType '() '((OptionalType (DataType 'Yson))))");
+        TestOk("()->Yson?", 
+               "(CallableType '() '((OptionalType (DataType 'Yson))))"); 
     }
 
     Y_UNIT_TEST(ParseOneArgWithDoubleResult) {
@@ -89,14 +89,14 @@ Y_UNIT_TEST_SUITE(TTypeString)
             "(CallableType '() '((DataType 'Double)) "
                     "'((DataType 'Int32))"
                ")");
-        TestOk("(Yson)->Double",
-            "(CallableType '() '((DataType 'Double)) "
-                    "'((DataType 'Yson))"
-               ")");
-        TestOk("(Utf8)->Double",
-            "(CallableType '() '((DataType 'Double)) "
-                    "'((DataType 'Utf8))"
-               ")");
+        TestOk("(Yson)->Double", 
+            "(CallableType '() '((DataType 'Double)) " 
+                    "'((DataType 'Yson))" 
+               ")"); 
+        TestOk("(Utf8)->Double", 
+            "(CallableType '() '((DataType 'Double)) " 
+                    "'((DataType 'Utf8))" 
+               ")"); 
     }
 
     Y_UNIT_TEST(ParseTwoArgsWithOptionalByteResult) {
@@ -158,60 +158,60 @@ Y_UNIT_TEST_SUITE(TTypeString)
 
     Y_UNIT_TEST(ParseCallableWithNamedArgs) {
         TestOk("(a:Uint8)->Double",
-               "(CallableType '() '((DataType 'Double)) "
+               "(CallableType '() '((DataType 'Double)) " 
                     "'((DataType 'Uint8) 'a)"
-               ")");
+               ")"); 
         TestOk("(List:Uint8)->Double",
-               "(CallableType '() '((DataType 'Double)) "
+               "(CallableType '() '((DataType 'Double)) " 
                     "'((DataType 'Uint8) 'List)"
-               ")");
+               ")"); 
         TestOk("('Dict':Uint8)->Double",
-               "(CallableType '() '((DataType 'Double)) "
+               "(CallableType '() '((DataType 'Double)) " 
                     "'((DataType 'Uint8) '\"Dict\")"
-               ")");
+               ")"); 
         TestOk("(a:Uint8,[b:Int32?])->Double",
-               "(CallableType '('1) '((DataType 'Double)) "
+               "(CallableType '('1) '((DataType 'Double)) " 
                     "'((DataType 'Uint8) 'a) "
-                    "'((OptionalType (DataType 'Int32)) 'b)"
-               ")");
+                    "'((OptionalType (DataType 'Int32)) 'b)" 
+               ")"); 
         TestOk("(Uint8,[b:Int32?])->Double",
-               "(CallableType '('1) '((DataType 'Double)) "
+               "(CallableType '('1) '((DataType 'Double)) " 
                     "'((DataType 'Uint8)) "
-                    "'((OptionalType (DataType 'Int32)) 'b)"
-               ")");
-    }
-
+                    "'((OptionalType (DataType 'Int32)) 'b)" 
+               ")"); 
+    } 
+ 
     Y_UNIT_TEST(ParseCallableWithArgFlags) {
-        TestOk("(Int32{Flags:AutoMap})->Double",
-               "(CallableType '() '((DataType 'Double)) "
-                    "'((DataType 'Int32) '\"\" '1)"
-               ")");
-        TestOk("(Int32?{Flags:AutoMap})->Double",
-               "(CallableType '() '((DataType 'Double)) "
-                    "'((OptionalType (DataType 'Int32)) '\"\" '1)"
-               ")");
-        TestOk("(x:Int32{Flags:AutoMap})->Double",
-               "(CallableType '() '((DataType 'Double)) "
-                    "'((DataType 'Int32) 'x '1)"
-               ")");
-        TestOk("(x:Int32{Flags:AutoMap}, [y:Uint32?{Flags: AutoMap}])->Double",
-               "(CallableType '('1) '((DataType 'Double)) "
-                    "'((DataType 'Int32) 'x '1) "
-                    "'((OptionalType (DataType 'Uint32)) 'y '1)"
-               ")");
-        TestOk("(x:Int32{Flags: AutoMap | AutoMap})->Double",
-               "(CallableType '() '((DataType 'Double)) "
-                    "'((DataType 'Int32) 'x '1)"
-               ")");
-    }
-
+        TestOk("(Int32{Flags:AutoMap})->Double", 
+               "(CallableType '() '((DataType 'Double)) " 
+                    "'((DataType 'Int32) '\"\" '1)" 
+               ")"); 
+        TestOk("(Int32?{Flags:AutoMap})->Double", 
+               "(CallableType '() '((DataType 'Double)) " 
+                    "'((OptionalType (DataType 'Int32)) '\"\" '1)" 
+               ")"); 
+        TestOk("(x:Int32{Flags:AutoMap})->Double", 
+               "(CallableType '() '((DataType 'Double)) " 
+                    "'((DataType 'Int32) 'x '1)" 
+               ")"); 
+        TestOk("(x:Int32{Flags:AutoMap}, [y:Uint32?{Flags: AutoMap}])->Double", 
+               "(CallableType '('1) '((DataType 'Double)) " 
+                    "'((DataType 'Int32) 'x '1) " 
+                    "'((OptionalType (DataType 'Uint32)) 'y '1)" 
+               ")"); 
+        TestOk("(x:Int32{Flags: AutoMap | AutoMap})->Double", 
+               "(CallableType '() '((DataType 'Double)) " 
+                    "'((DataType 'Int32) 'x '1)" 
+               ")"); 
+    } 
+ 
     Y_UNIT_TEST(ParseCallableWithPayload) {
-        TestOk("(Int32)->Double{Payload:MyFunction}",
-               "(CallableType '('0 '\"MyFunction\") '((DataType 'Double)) "
-                    "'((DataType 'Int32))"
-               ")");
-    }
-
+        TestOk("(Int32)->Double{Payload:MyFunction}", 
+               "(CallableType '('0 '\"MyFunction\") '((DataType 'Double)) " 
+                    "'((DataType 'Int32))" 
+               ")"); 
+    } 
+ 
     Y_UNIT_TEST(ParseOptional) {
         TestOk("Uint32?", "(OptionalType (DataType 'Uint32))");
         TestOk("Optional<Uint32>", "(OptionalType (DataType 'Uint32))");
@@ -223,37 +223,37 @@ Y_UNIT_TEST_SUITE(TTypeString)
 
     Y_UNIT_TEST(ParseCallableComplete) {
         TestFail("(Uint32)->", 11, "Expected type");
-        TestFail("(,)->", 2, "Expected type or argument name");
-        TestFail("(Int32 Int32)->Int32", 8, "Expected ','");
+        TestFail("(,)->", 2, "Expected type or argument name"); 
+        TestFail("(Int32 Int32)->Int32", 8, "Expected ','"); 
         TestFail("([],)->Uint32", 4, "Expected ')'");
         TestFail("([)->Uint32", 3, "Expected ']'");
         TestFail("(])->Uint32", 2, "Expected ')'");
-        TestFail("([,)->Uint32", 3, "Expected type or argument name");
-        TestFail("([,])->Uint32", 3, "Expected type or argument name");
-        TestFail("(->Uint32", 2, "Expected type or argument name");
+        TestFail("([,)->Uint32", 3, "Expected type or argument name"); 
+        TestFail("([,])->Uint32", 3, "Expected type or argument name"); 
+        TestFail("(->Uint32", 2, "Expected type or argument name"); 
         TestFail("([Uint32],Uint8)->Uint32", 9, "Optionals are only allowed in the optional arguments");
         TestFail("([Uint32?],Uint8)->Uint32", 11, "Expected ')'");
-        TestFail("Callable<()>", 12, "Expected '->' after arguments");
+        TestFail("Callable<()>", 12, "Expected '->' after arguments"); 
         TestFail("Callable<()->", 14, "Expected type");
         TestFail("Callable<()->Uint32", 20, "Expected '>'");
-        TestFail("(:Uint32)->Uint32", 2, "Expected non empty argument name");
-        TestFail("(a:)->Uint32", 4, "Expected type");
-        TestFail("(:)->Uint32", 2, "Expected non empty argument name");
-        TestFail("(a:Uint32,Uint32)->Uint32", 11, "Expected named argument, because of previous argument(s) was named");
-        TestFail("(Uint32{)->Uint32", 9, "Expected Flags field");
-        TestFail("(Uint32})->Uint32", 8, "Expected ','");
-        TestFail("(Uint32{})->Uint32", 9, "Expected Flags field");
-        TestFail("(Uint32{Flags})->Uint32", 14, "Expected ':'");
-        TestFail("(Uint32{Flags:})->Uint32", 15, "Expected flag name");
-        TestFail("(Uint32{Flags:Map})->Uint32", 15, "Unknown flag name: Map");
-        TestFail("(Uint32{Flags:|})->Uint32", 15, "Expected flag name");
-        TestFail("(Uint32{Flags:AutoMap|})->Uint32", 23, "Expected flag name");
-        TestFail("(Uint32{NonFlags:AutoMap})->Uint32", 9, "Expected Flags field");
-        TestFail("(Uint32)->Uint32{", 18, "Expected Payload field");
-        TestFail("(Uint32)->Uint32{}", 18, "Expected Payload field");
-        TestFail("(Uint32)->Uint32}", 17, "Expected end of string");
-        TestFail("(Uint32)->Uint32{Payload}", 25, "Expected ':'");
-        TestFail("(Uint32)->Uint32{Payload:}", 26, "Expected payload data");
+        TestFail("(:Uint32)->Uint32", 2, "Expected non empty argument name"); 
+        TestFail("(a:)->Uint32", 4, "Expected type"); 
+        TestFail("(:)->Uint32", 2, "Expected non empty argument name"); 
+        TestFail("(a:Uint32,Uint32)->Uint32", 11, "Expected named argument, because of previous argument(s) was named"); 
+        TestFail("(Uint32{)->Uint32", 9, "Expected Flags field"); 
+        TestFail("(Uint32})->Uint32", 8, "Expected ','"); 
+        TestFail("(Uint32{})->Uint32", 9, "Expected Flags field"); 
+        TestFail("(Uint32{Flags})->Uint32", 14, "Expected ':'"); 
+        TestFail("(Uint32{Flags:})->Uint32", 15, "Expected flag name"); 
+        TestFail("(Uint32{Flags:Map})->Uint32", 15, "Unknown flag name: Map"); 
+        TestFail("(Uint32{Flags:|})->Uint32", 15, "Expected flag name"); 
+        TestFail("(Uint32{Flags:AutoMap|})->Uint32", 23, "Expected flag name"); 
+        TestFail("(Uint32{NonFlags:AutoMap})->Uint32", 9, "Expected Flags field"); 
+        TestFail("(Uint32)->Uint32{", 18, "Expected Payload field"); 
+        TestFail("(Uint32)->Uint32{}", 18, "Expected Payload field"); 
+        TestFail("(Uint32)->Uint32}", 17, "Expected end of string"); 
+        TestFail("(Uint32)->Uint32{Payload}", 25, "Expected ':'"); 
+        TestFail("(Uint32)->Uint32{Payload:}", 26, "Expected payload data"); 
     }
 
     Y_UNIT_TEST(ParseCallableWithKeyword) {
@@ -285,25 +285,25 @@ Y_UNIT_TEST_SUITE(TTypeString)
     }
 
     Y_UNIT_TEST(ParseVariantType) {
-        TestOk("Variant<String>",
-                "(VariantType (TupleType "
-                    "(DataType 'String)"
-                "))");
+        TestOk("Variant<String>", 
+                "(VariantType (TupleType " 
+                    "(DataType 'String)" 
+                "))"); 
         TestOk("Variant<String, Uint8>",
-                "(VariantType (TupleType "
-                    "(DataType 'String) "
+                "(VariantType (TupleType " 
+                    "(DataType 'String) " 
                     "(DataType 'Uint8)"
-                "))");
-        TestOk("Variant<Name: String, Age: Int32>",
-                "(VariantType (StructType "
-                    "'('\"Age\" (DataType 'Int32)) "
-                    "'('\"Name\" (DataType 'String))"
-                "))");
-        TestOk("Variant<'Some Name': String, 'Age': Int32>",
-                "(VariantType (StructType "
-                    "'('\"Age\" (DataType 'Int32)) "
-                    "'('\"Some Name\" (DataType 'String))"
-                "))");
+                "))"); 
+        TestOk("Variant<Name: String, Age: Int32>", 
+                "(VariantType (StructType " 
+                    "'('\"Age\" (DataType 'Int32)) " 
+                    "'('\"Name\" (DataType 'String))" 
+                "))"); 
+        TestOk("Variant<'Some Name': String, 'Age': Int32>", 
+                "(VariantType (StructType " 
+                    "'('\"Age\" (DataType 'Int32)) " 
+                    "'('\"Some Name\" (DataType 'String))" 
+                "))"); 
     }
 
     Y_UNIT_TEST(ParseEnumType) {
@@ -380,13 +380,13 @@ Y_UNIT_TEST_SUITE(TTypeString)
     }
 
     Y_UNIT_TEST(ParseVariantComplete) {
-        TestFail("Variant<>", 9, "Expected type");
-        TestFail("Variant<Uint32,>", 16, "Expected type");
-        TestFail("Variant<Uint32", 15, "Expected '>' or ','");
-
-        TestFail("Variant<name:>", 14, "Expected type");
-        TestFail("Variant<name:String,>", 21, "Expected struct member name");
-        TestFail("Variant<name:String", 20, "Expected '>' or ','");
+        TestFail("Variant<>", 9, "Expected type"); 
+        TestFail("Variant<Uint32,>", 16, "Expected type"); 
+        TestFail("Variant<Uint32", 15, "Expected '>' or ','"); 
+ 
+        TestFail("Variant<name:>", 14, "Expected type"); 
+        TestFail("Variant<name:String,>", 21, "Expected struct member name"); 
+        TestFail("Variant<name:String", 20, "Expected '>' or ','"); 
     }
 
     Y_UNIT_TEST(ParseDictOfDictTypes) {
@@ -444,7 +444,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
     Y_UNIT_TEST(ParseStructComplete) {
         TestFail("(Struct<name>)->Uint32", 13, "Expected ':'");
         TestFail("(Struct<name:>)->Uint32", 14, "Expected type");
-        TestFail("(Struct<name:String,>)->Uint32", 21, "Expected struct member name");
+        TestFail("(Struct<name:String,>)->Uint32", 21, "Expected struct member name"); 
         TestFail("(Struct<name:String)->Uint32", 20, "Expected '>' or ','");
     }
 
@@ -457,14 +457,14 @@ Y_UNIT_TEST_SUITE(TTypeString)
     }
 
     Y_UNIT_TEST(ParseVoid) {
-        TestOk("Void", "(VoidType)");
-        TestOk("Void?", "(OptionalType (VoidType))");
-        TestOk("(Void?)->Void",
-               "(CallableType '() '((VoidType)) "
-                    "'((OptionalType (VoidType)))"
-               ")");
-    }
-
+        TestOk("Void", "(VoidType)"); 
+        TestOk("Void?", "(OptionalType (VoidType))"); 
+        TestOk("(Void?)->Void", 
+               "(CallableType '() '((VoidType)) " 
+                    "'((OptionalType (VoidType)))" 
+               ")"); 
+    } 
+ 
     Y_UNIT_TEST(ParseNull) {
         TestOk("Null", "(NullType)");
         TestOk("Null?", "(OptionalType (NullType))");
@@ -493,10 +493,10 @@ Y_UNIT_TEST_SUITE(TTypeString)
     }
 
     Y_UNIT_TEST(UnknownType) {
-        TestFail("(Yson2)->String", 2, "Unknown type: 'Yson2'");
-        TestFail("()->", 5, "Expected type");
-    }
-
+        TestFail("(Yson2)->String", 2, "Unknown type: 'Yson2'"); 
+        TestFail("()->", 5, "Expected type"); 
+    } 
+ 
     Y_UNIT_TEST(ParseTagged) {
         TestOk("Tagged<Uint32, IdTag>", "(TaggedType (DataType 'Uint32) 'IdTag)");
     }
@@ -632,38 +632,38 @@ Y_UNIT_TEST_SUITE(TTypeString)
     }
 
     Y_UNIT_TEST(FormatCallableWithNamedArgs) {
-        TestFormat("((Callable () "
-                   "    ((Data String))"
-                   "    ((Data Uint32) x)"
+        TestFormat("((Callable () " 
+                   "    ((Data String))" 
+                   "    ((Data Uint32) x)" 
                    "    ((Data Uint8) y)"
-                   "))",
+                   "))", 
                    "Callable<('x':Uint32,'y':Uint8)->String>");
-        TestFormat("((Callable () "
-                   "    ((Data String))"
+        TestFormat("((Callable () " 
+                   "    ((Data String))" 
                    "    ((Optional (Data Uint8)) a 1)"
-                   "))",
+                   "))", 
                    "Callable<('a':Uint8?{Flags:AutoMap})->String>");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(FormatCallableWithPayload) {
-        TestFormat("((Callable (0 MyFunction) "
-                   "    ((Data String))"
+        TestFormat("((Callable (0 MyFunction) " 
+                   "    ((Data String))" 
                    "    ((Optional (Data Uint8)))"
-                   "))",
+                   "))", 
                    "Callable<(Uint8?)->String{Payload:MyFunction}>");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(FormatResource) {
         TestFormat("((Resource aaa))", "Resource<'aaa'>");
-        TestFormat("((Resource \"a b\"))", "Resource<'a b'>");
-        TestFormat("((Resource \"a\\t\\n\\x01b\"))", "Resource<'a\\t\\n\\x01b'>");
+        TestFormat("((Resource \"a b\"))", "Resource<'a b'>"); 
+        TestFormat("((Resource \"a\\t\\n\\x01b\"))", "Resource<'a\\t\\n\\x01b'>"); 
         TestFormat("((Optional (Resource aaa)))", "Resource<'aaa'>?");
     }
-
+ 
     Y_UNIT_TEST(FormatTagged) {
         TestFormat("((Tagged (Data String) aaa))", "Tagged<String,'aaa'>");
         TestFormat("((Tagged (Data String) \"a b\"))", "Tagged<String,'a b'>");
         TestFormat("((Tagged (Data String) \"a\\t\\n\\x01b\"))", "Tagged<String,'a\\t\\n\\x01b'>");
-    }
-
+    } 
+ 
 }

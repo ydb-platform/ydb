@@ -38,12 +38,12 @@ class TMessageBusServerProxy : public TActorBootstrapped<TMessageBusServerProxy>
 
     TIntrusivePtr<TMessageBusDbOpsCounters> DbOperationsCounters;
 
-    TActorId SchemeCache;
-    TActorId PqMetaCache;
+    TActorId SchemeCache; 
+    TActorId PqMetaCache; 
 
 public:
-    TActorId SelfID;
-    TActorId TxProxy;
+    TActorId SelfID; 
+    TActorId TxProxy; 
 
 private:
     void Handle(TEvBusProxy::TEvRequest::TPtr &ev, const TActorContext &ctx);

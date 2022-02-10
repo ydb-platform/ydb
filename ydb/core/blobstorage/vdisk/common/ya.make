@@ -4,7 +4,7 @@ OWNER(g:kikimr)
 
 PEERDIR(
     library/cpp/actors/protos
-    library/cpp/monlib/service/pages
+    library/cpp/monlib/service/pages 
     ydb/core/base
     ydb/core/blobstorage/vdisk/hulldb/base
     ydb/core/protos

@@ -36,11 +36,11 @@ IF (MSVC)
 ENDIF()
 
 END()
-
-RECURSE(
+ 
+RECURSE( 
     backpressure
     base
-    crypto
+    crypto 
     dsproxy
     groupinfo
     incrhuge
@@ -51,7 +51,7 @@ RECURSE(
     storagepoolmon
     testload
     vdisk
-)
+) 
 
 RECURSE_FOR_TESTS(
     ut_blobstorage

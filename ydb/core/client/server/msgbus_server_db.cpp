@@ -167,9 +167,9 @@ public:
 
 class TActorInterface {
 private:
-    TActorId HostActor;
+    TActorId HostActor; 
 public:
-    TActorInterface(const TActorId& hostActor)
+    TActorInterface(const TActorId& hostActor) 
         : HostActor(hostActor)
     {}
 
@@ -191,8 +191,8 @@ protected:
     using TBase = TActorBootstrapped<TServerDbOperation<InterfaceBase>>;
     using TTabletId = ui64;
 
-    TActorId TxProxyId;
-    TActorId SchemeCache;
+    TActorId TxProxyId; 
+    TActorId SchemeCache; 
     TIntrusivePtr<TMessageBusDbOpsCounters> DbOperationsCounters;
 
     NMon::THistogramCounterHelper* OperationHistogram;
@@ -296,14 +296,14 @@ protected:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MSGBUS_COMMON; }
 
-    TServerDbOperation(TBusMessageContext& msg, TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters);
+    TServerDbOperation(TBusMessageContext& msg, TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters); 
 
     TServerDbOperation(
-            const TActorId& hostActor,
+            const TActorId& hostActor, 
             NJson::TJsonValue&& jsonValue,
             const TString& SecurityToken,
-            TActorId txProxyId,
-            const TActorId& schemeCache,
+            TActorId txProxyId, 
+            const TActorId& schemeCache, 
             const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters
             );
 
@@ -344,23 +344,23 @@ public:
         TBase::Become(&TThis::StateWaitResolve, ctx, Timeout, new TEvents::TEvWakeup());
     }
 
-    static NMiniKQL::TRuntimeNode NewDataLiteral(NMiniKQL::TKikimrProgramBuilder& pgmBuilder, const NJson::TJsonValue& jsonValue, NScheme::TTypeId typeId) {
+    static NMiniKQL::TRuntimeNode NewDataLiteral(NMiniKQL::TKikimrProgramBuilder& pgmBuilder, const NJson::TJsonValue& jsonValue, NScheme::TTypeId typeId) { 
         // TODO
         auto& builder = static_cast<NMiniKQL::TProgramBuilder&>(pgmBuilder);
         switch (typeId) {
-        case NScheme::NTypeIds::Bool:
+        case NScheme::NTypeIds::Bool: 
             return builder.NewDataLiteral<bool>(jsonValue.GetBoolean());
-        case NScheme::NTypeIds::Float:
+        case NScheme::NTypeIds::Float: 
             return builder.NewDataLiteral<float>(jsonValue.GetDouble());
-        case NScheme::NTypeIds::Double:
+        case NScheme::NTypeIds::Double: 
             return builder.NewDataLiteral(jsonValue.GetDouble());
-        case NScheme::NTypeIds::Int32:
+        case NScheme::NTypeIds::Int32: 
             return builder.NewDataLiteral<i32>(jsonValue.GetInteger());
-        case NScheme::NTypeIds::Int64:
+        case NScheme::NTypeIds::Int64: 
             return builder.NewDataLiteral<i64>(jsonValue.GetInteger());
-        case NScheme::NTypeIds::Uint32:
+        case NScheme::NTypeIds::Uint32: 
             return builder.NewDataLiteral<ui32>(jsonValue.GetUInteger());
-        case NScheme::NTypeIds::Uint64:
+        case NScheme::NTypeIds::Uint64: 
             return builder.NewDataLiteral<ui64>(jsonValue.GetUInteger());
         case NScheme::NTypeIds::Utf8:
             return builder.NewDataLiteral<NUdf::EDataSlot::Utf8>(jsonValue.GetString());
@@ -560,7 +560,7 @@ public:
 
 template <>
 TServerDbOperation<TMessageBusInterface<TBusDbOperation>>::TServerDbOperation(
-        TBusMessageContext& msg, TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters)
+        TBusMessageContext& msg, TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters) 
     : TMessageBusInterface<TBusDbOperation>(msg)
     , TxProxyId(txProxyId)
     , SchemeCache(schemeCache)
@@ -570,11 +570,11 @@ TServerDbOperation<TMessageBusInterface<TBusDbOperation>>::TServerDbOperation(
 
 template <>
 TServerDbOperation<TActorInterface>::TServerDbOperation(
-        const TActorId& hostActor,
+        const TActorId& hostActor, 
         NJson::TJsonValue&& jsonValue,
         const TString& securityToken,
-        TActorId txProxyId,
-        const TActorId& schemeCache,
+        TActorId txProxyId, 
+        const TActorId& schemeCache, 
         const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters
         )
     : TActorInterface(hostActor)
@@ -593,10 +593,10 @@ protected:
     using TBase = TActorBootstrapped<TServerDbSchema<InterfaceBase>>;
     using TTabletId = ui64;
 
-    TActorId TxProxyId;
+    TActorId TxProxyId; 
     TIntrusivePtr<TMessageBusDbOpsCounters> DbOperationsCounters;
     NJson::TJsonValue JSON;
-    THashMap<TTabletId, TActorId> Pipes;
+    THashMap<TTabletId, TActorId> Pipes; 
     TDeque<TAutoPtr<TEvTxUserProxy::TEvProposeTransaction>> Requests;
     THPTimer StartTime;
     TString SecurityToken;
@@ -657,7 +657,7 @@ protected:
         const TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress) {
             TTabletId schemeShardId = msg->Record.GetSchemeShardTabletId();
-            TActorId pipe;
+            TActorId pipe; 
             {
                 auto itPipe = Pipes.find(schemeShardId);
                 if (itPipe == Pipes.end()) {
@@ -731,13 +731,13 @@ public:
         return NKikimrServices::TActivity::MSGBUS_COMMON;
     }
 
-    TServerDbSchema(TBusMessageContext &msg, TActorId txProxyId, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters);
+    TServerDbSchema(TBusMessageContext &msg, TActorId txProxyId, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters); 
 
     TServerDbSchema(
-            const TActorId& hostActor,
+            const TActorId& hostActor, 
             NJson::TJsonValue&& jsonValue,
             const TString& securityToken,
-            TActorId txProxyId,
+            TActorId txProxyId, 
             const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters
             );
 
@@ -882,7 +882,7 @@ public:
 
 template <>
 TServerDbSchema<TMessageBusInterface<TBusDbSchema>>::TServerDbSchema(
-        TBusMessageContext &msg, TActorId txProxyId, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters)
+        TBusMessageContext &msg, TActorId txProxyId, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters) 
     : TMessageBusInterface<TBusDbSchema>(msg)
     , TxProxyId(txProxyId)
     , DbOperationsCounters(dbOperationsCounters)
@@ -890,10 +890,10 @@ TServerDbSchema<TMessageBusInterface<TBusDbSchema>>::TServerDbSchema(
 
 template <>
 TServerDbSchema<TActorInterface>::TServerDbSchema(
-        const TActorId& hostActor,
+        const TActorId& hostActor, 
         NJson::TJsonValue&& jsonValue,
         const TString& securityToken,
-        TActorId txProxyId,
+        TActorId txProxyId, 
         const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters
         )
     : TActorInterface(hostActor)
@@ -910,8 +910,8 @@ protected:
     using TBase = TActorBootstrapped<TServerDbBatch<InterfaceBase>>;
     using TTabletId = ui64;
 
-    TActorId TxProxyId;
-    TActorId SchemeCache;
+    TActorId TxProxyId; 
+    TActorId SchemeCache; 
     TIntrusivePtr<TMessageBusDbOpsCounters> DbOperationsCounters;
     NJson::TJsonValue JSON;
     TDeque<TAutoPtr<IActor>> Operations;
@@ -985,7 +985,7 @@ public:
         return NKikimrServices::TActivity::MSGBUS_COMMON;
     }
 
-    TServerDbBatch(TBusMessageContext &msg, const TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters);
+    TServerDbBatch(TBusMessageContext &msg, const TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters); 
 
     void HandleTimeout(const TActorContext& ctx) {
         return ReplyWithError(MSTATUS_TIMEOUT, "Request timed out", ctx);
@@ -1034,7 +1034,7 @@ public:
 
 template <>
 TServerDbBatch<TMessageBusInterface<TBusDbBatch>>::TServerDbBatch(
-        TBusMessageContext &msg, TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters)
+        TBusMessageContext &msg, TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters) 
     : TMessageBusInterface<TBusDbBatch>(msg)
     , TxProxyId(txProxyId)
     , SchemeCache(schemeCache)

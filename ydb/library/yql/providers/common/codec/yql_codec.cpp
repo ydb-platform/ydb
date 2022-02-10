@@ -93,7 +93,7 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
             case NUdf::TDataType<char*>::Id:
             case NUdf::TDataType<NUdf::TUuid>::Id:
             case NUdf::TDataType<NUdf::TDyNumber>::Id:
-                writer.OnStringScalar(value.AsStringRef());
+                writer.OnStringScalar(value.AsStringRef()); 
                 return;
 
             case NUdf::TDataType<NUdf::TDecimal>::Id: {
@@ -255,12 +255,12 @@ TString WriteYsonValue(const NUdf::TUnboxedValuePod& value, TType* type, const T
 
 TCodecContext::TCodecContext(
     const TTypeEnvironment& env,
-    const IFunctionRegistry& functionRegistry,
-    const NKikimr::NMiniKQL::THolderFactory* holderFactory /* = nullptr */
+    const IFunctionRegistry& functionRegistry, 
+    const NKikimr::NMiniKQL::THolderFactory* holderFactory /* = nullptr */ 
 )
     : Env(env)
     , Builder(Env, functionRegistry)
-    , HolderFactory(holderFactory)
+    , HolderFactory(holderFactory) 
 {
 }
 

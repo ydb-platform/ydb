@@ -6,8 +6,8 @@
 
 namespace {
 
-NActors::TActorId GetLoadNetworkActorID(ui32 myNodeId) noexcept {
-    return NActors::TActorId(myNodeId, "loadnetwork");
+NActors::TActorId GetLoadNetworkActorID(ui32 myNodeId) noexcept { 
+    return NActors::TActorId(myNodeId, "loadnetwork"); 
 }
 
 using NActors::IEventHandle;

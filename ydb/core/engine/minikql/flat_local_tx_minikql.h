@@ -60,7 +60,7 @@ public:
         return NThreading::MakeFuture<TTableResults>(results);
     }
 
-    virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) override {
+    virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) override { 
         Y_UNUSED(tables);
         Y_UNUSED(responseTo);
         Y_FAIL("Not implemented for local resolve.");
@@ -72,7 +72,7 @@ private:
 
 class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     ui64 TabletId = Max<ui64>();
-    const TActorId Sender;
+    const TActorId Sender; 
     const TLocalMiniKQLProgram SourceProgram;
     const TMiniKQLFactory* const Factory;
 
@@ -357,7 +357,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
 
 public:
     TFlatLocalMiniKQL(
-            TActorId sender,
+            TActorId sender, 
             const TLocalMiniKQLProgram &program,
             const TMiniKQLFactory* factory)
         : Sender(sender)

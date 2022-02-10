@@ -467,15 +467,15 @@ namespace {
 
                     return Expr.MakeType<TResourceExprType>(TString(node.GetChild(1)->GetContent()));
                 } else if (content == TStringBuf("Tagged")) {
-                    if (node.GetChildrenCount() != 3 || !node.GetChild(2)->IsAtom()) {
-                        AddError(node, "Bad tagged type annotation");
-                        return nullptr;
-                    }
-
-                    auto type = CompileTypeAnnotationNode(*node.GetChild(1));
-                    if (!type)
-                        return nullptr;
-
+                    if (node.GetChildrenCount() != 3 || !node.GetChild(2)->IsAtom()) { 
+                        AddError(node, "Bad tagged type annotation"); 
+                        return nullptr; 
+                    } 
+ 
+                    auto type = CompileTypeAnnotationNode(*node.GetChild(1)); 
+                    if (!type) 
+                        return nullptr; 
+ 
                     TString tag(node.GetChild(2)->GetContent());
                     auto ann = Expr.MakeType<TTaggedExprType>(type, tag);
                     if (!ann->Validate(node.GetPosition(), Expr)) {

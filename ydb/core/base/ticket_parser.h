@@ -152,9 +152,9 @@ namespace NKikimr {
         };
     };
 
-    inline NActors::TActorId MakeTicketParserID() {
+    inline NActors::TActorId MakeTicketParserID() { 
         const char name[12] = "ticketparse";
-        return NActors::TActorId(0, TStringBuf(name, 12));
+        return NActors::TActorId(0, TStringBuf(name, 12)); 
     }
 }
 

@@ -56,7 +56,7 @@ public:
         }, MtpQueue);
     }
 
-    virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) override {
+    virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) override { 
         Y_UNUSED(tables);
         Y_UNUSED(responseTo);
         ythrow yexception() << "Not implemented";

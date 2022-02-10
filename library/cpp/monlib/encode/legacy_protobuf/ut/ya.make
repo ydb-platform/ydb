@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/monlib/encode/legacy_protobuf)
+UNITTEST_FOR(library/cpp/monlib/encode/legacy_protobuf) 
 
 OWNER(
     g:solomon
@@ -11,8 +11,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/monlib/encode/protobuf
-    library/cpp/monlib/encode/text
+    library/cpp/monlib/encode/protobuf 
+    library/cpp/monlib/encode/text 
 )
 
 END()

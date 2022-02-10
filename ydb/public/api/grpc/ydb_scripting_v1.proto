@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package Ydb.Scripting.V1;
-option java_package = "com.yandex.ydb.scripting.v1";
+option java_package = "com.yandex.ydb.scripting.v1"; 
 
 import "ydb/public/api/protos/ydb_scripting.proto";
 

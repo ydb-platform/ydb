@@ -93,7 +93,7 @@ namespace NKikimr {
             TSelectorParams Params;
             TLevelIndexSnapshot LevelSnap;
             TBarriersSnapshot BarriersSnap;
-            const TActorId RecipientID;
+            const TActorId RecipientID; 
             std::unique_ptr<TCompactionTask> CompactionTask;
 
             void Bootstrap(const TActorContext &ctx) {

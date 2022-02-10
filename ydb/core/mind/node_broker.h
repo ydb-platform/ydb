@@ -195,7 +195,7 @@ inline ui32 NodeIdToDomain(ui32 nodeId, const TDomainsInfo& domains) {
     return NodeIdToDomain(nodeId);
 }
 
-IActor *CreateNodeBroker(const TActorId &tablet, TTabletStorageInfo *info);
+IActor *CreateNodeBroker(const TActorId &tablet, TTabletStorageInfo *info); 
 
 } // NNodeBroker
 } // NKikimr

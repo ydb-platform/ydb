@@ -73,7 +73,7 @@ namespace NKikimr {
 
         TLevelIndexExtremeQueryViaBatcherBase(
                 std::shared_ptr<TQueryCtx> &queryCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barrierSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
@@ -144,7 +144,7 @@ namespace NKikimr {
 
         TLevelIndexExtremeQueryViaBatcherIndexOnly(
                 std::shared_ptr<TQueryCtx> &queryCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barrierSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
@@ -382,7 +382,7 @@ namespace NKikimr {
 
         TLevelIndexExtremeQueryViaBatcherMergeData(
                 std::shared_ptr<TQueryCtx> &queryCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barrierSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
@@ -403,7 +403,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateLevelIndexExtremeQueryActor(
                     std::shared_ptr<TQueryCtx> &queryCtx,
-                    const TActorId &parentId,
+                    const TActorId &parentId, 
                     TLogoBlobsSnapshot &&logoBlobsSnapshot,
                     TBarriersSnapshot &&barrierSnapshot,
                     TEvBlobStorage::TEvVGet::TPtr &ev,

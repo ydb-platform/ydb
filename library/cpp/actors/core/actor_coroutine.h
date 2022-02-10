@@ -24,8 +24,8 @@ namespace NActors {
         TActorContext *ActorContext = nullptr;
 
     protected:
-        TActorIdentity SelfActorId = TActorIdentity(TActorId());
-        TActorId ParentActorId;
+        TActorIdentity SelfActorId = TActorIdentity(TActorId()); 
+        TActorId ParentActorId; 
 
     private:
         template <typename TFirstEvent, typename... TOtherEvents>
@@ -107,12 +107,12 @@ namespace NActors {
         TActorSystem *GetActorSystem() const { return GetActorContext().ExecutorThread.ActorSystem; }
         TInstant Now() const { return GetActorContext().Now(); }
 
-        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) { 
             return GetActorContext().Send(recipient, ev, flags, cookie, std::move(traceId));
         }
 
         template <typename TEvent>
-        bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+        bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) { 
             return GetActorContext().Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
 
@@ -130,7 +130,7 @@ namespace NActors {
             return GetActorContext().Schedule(deadline, ev, cookie);
         }
 
-        TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) {
+        TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) { 
             return GetActorContext().Register(actor, mailboxType, poolId);
         }
 
@@ -159,7 +159,7 @@ namespace NActors {
             , Impl(std::move(impl))
         {}
 
-        TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parent) override {
+        TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parent) override { 
             return new IEventHandle(TEvents::TSystem::Bootstrap, 0, self, parent, {}, 0);
         }
 

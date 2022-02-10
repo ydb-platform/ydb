@@ -28,7 +28,7 @@ namespace NTxMediator {
         // transaction body
         ui64 Moderator;
         TTxId TxId;
-        TActorId AckTo;
+        TActorId AckTo; 
 
         TTx(ui64 moderator, TTxId txid)
             : Moderator(moderator)
@@ -159,9 +159,9 @@ struct TEvTxMediator {
 
     struct TEvRequestLostAcks : public TEventLocal<TEvRequestLostAcks, EvRequestLostAcks> {
         TAutoPtr<NTxMediator::TCoordinatorStep> CoordinatorStep;
-        const TActorId AckTo;
+        const TActorId AckTo; 
 
-        TEvRequestLostAcks(TAutoPtr<NTxMediator::TCoordinatorStep> &cds, const TActorId &ackTo)
+        TEvRequestLostAcks(TAutoPtr<NTxMediator::TCoordinatorStep> &cds, const TActorId &ackTo) 
             : CoordinatorStep(cds)
             , AckTo(ackTo)
         {}
@@ -240,9 +240,9 @@ struct TEvTxMediator {
     };
 
     struct TEvWatchBucket : public TEventLocal<TEvWatchBucket, EvWatchBucket> {
-        const TActorId Source;
+        const TActorId Source; 
 
-        TEvWatchBucket(const TActorId &source)
+        TEvWatchBucket(const TActorId &source) 
             : Source(source)
         {}
 
@@ -282,7 +282,7 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
         TQueueType Queue;
 
         ui64 ActiveCoordinatorGeneration;
-        TActorId AckTo;
+        TActorId AckTo; 
 
         TCoordinatorInfo()
             : KnownPrevStep(0)
@@ -309,7 +309,7 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
     struct TTxUpgrade;
 
     ITransaction* CreateTxInit();
-    ITransaction* CreateTxConfigure(TActorId ackTo, ui64 version, const TVector<TCoordinatorId> &coordinators, ui32 timeCastBuckets);
+    ITransaction* CreateTxConfigure(TActorId ackTo, ui64 version, const TVector<TCoordinatorId> &coordinators, ui32 timeCastBuckets); 
     ITransaction* CreateTxSchema();
     ITransaction* CreateTxUpgrade();
 
@@ -317,9 +317,9 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
     TConfig Config;
     TVolatileState VolatileState;
 
-    TActorId ExecQueue;
+    TActorId ExecQueue; 
 
-    THashMap<TActorId, NKikimrTx::TEvCoordinatorSync> CoordinatorsSyncEnqueued;
+    THashMap<TActorId, NKikimrTx::TEvCoordinatorSync> CoordinatorsSyncEnqueued; 
     TVector<TEvMediatorTimecast::TEvWatch::TPtr> WatchEnqueued;
 
     void Die(const TActorContext &ctx) override;
@@ -336,7 +336,7 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
     void Handle(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx);
 
-    void DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId());
+    void DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId()); 
 
     static ui64 SubjectiveTime();
     void InitSelfState(const TActorContext &ctx);
@@ -344,15 +344,15 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
     void ReplyEnqueuedWatch(const TActorContext &ctx);
 
 
-    void ReplySync(const TActorId &sender, const NKikimrTx::TEvCoordinatorSync &record, const TActorContext &ctx);
-    void ReplyStep(const TActorId &sender, NKikimrTx::TEvCoordinatorStepResult::EStatus status, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx);
+    void ReplySync(const TActorId &sender, const NKikimrTx::TEvCoordinatorSync &record, const TActorContext &ctx); 
+    void ReplyStep(const TActorId &sender, NKikimrTx::TEvCoordinatorStepResult::EStatus status, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx); 
     ui64 FindProgressCandidate();
     void Progress(ui64 to, const TActorContext &ctx);
     void CheckProgress(const TActorContext &ctx);
-    void RequestLostAcks(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx);
+    void RequestLostAcks(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx); 
 
-    void ProcessDomainStep(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, ui64 coordinator, TCoordinatorInfo &info, const TActorContext &ctx);
-    void ProcessForeignStep(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, ui64 coordinator, TCoordinatorInfo &info, const TActorContext &ctx);
+    void ProcessDomainStep(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, ui64 coordinator, TCoordinatorInfo &info, const TActorContext &ctx); 
+    void ProcessForeignStep(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, ui64 coordinator, TCoordinatorInfo &info, const TActorContext &ctx); 
 
 public:
     struct Schema : NIceDb::Schema {
@@ -386,7 +386,7 @@ public:
         return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
     }
 
-    TTxMediator(TTabletStorageInfo *info, const TActorId &tablet);
+    TTxMediator(TTabletStorageInfo *info, const TActorId &tablet); 
 
     // no incomming pipes is allowed in StateInit
     STFUNC_TABLET_INIT(StateInit,
@@ -414,7 +414,7 @@ public:
 };
 }
 
-IActor* CreateTxMediatorTabletQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui64 hashBucket);
-IActor* CreateTxMediatorExecQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui32 timecastBuckets);
+IActor* CreateTxMediatorTabletQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui64 hashBucket); 
+IActor* CreateTxMediatorExecQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui32 timecastBuckets); 
 
 }

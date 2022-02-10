@@ -30,10 +30,10 @@ private:
     static constexpr ui32 DEFAULT_TIMEOUT_SEC = 5*60;
 
     TAutoPtr<TEvReadColumnsRequest> Request;
-    TActorId SchemeCache;
+    TActorId SchemeCache; 
     TActorId LeaderPipeCache;
     TDuration Timeout;
-    TActorId TimeoutTimerActorId;
+    TActorId TimeoutTimerActorId; 
     bool WaitingResolveReply;
     bool Finished;
     Ydb::ClickhouseInternal::ScanResult Result;
@@ -59,7 +59,7 @@ private:
     ui32 ShardRequestCount;
     ui32 ShardReplyCount;
 
-    TActorId SysViewScanActor;
+    TActorId SysViewScanActor; 
     std::unique_ptr<IBlockBuilder> BlockBuilder;
     TVector<NScheme::TTypeId> ValueColumnTypes;
     ui64 SysViewMaxRows;

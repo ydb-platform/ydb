@@ -3,7 +3,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/config_helpers.h>
 
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 namespace NKikimr {
 namespace NTenantSlotBroker {
@@ -1458,7 +1458,7 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     return false;
 }
 
-void TTenantSlotBroker::OnClientDisconnected(TActorId clientId,
+void TTenantSlotBroker::OnClientDisconnected(TActorId clientId, 
                                              const TActorContext &ctx)
 {
     if (KnownPoolPipes.contains(clientId)) {
@@ -1772,14 +1772,14 @@ void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvRegisterPool::TPtr &ev,
     const auto &record = ev->Get()->Record;
     auto nodeId = ev->Sender.NodeId();
 
-    KnownPoolPipes.insert(ActorIdFromProto(record.GetClientId()));
+    KnownPoolPipes.insert(ActorIdFromProto(record.GetClientId())); 
     *Counters->ConnectedPools = KnownPoolPipes.size();
 
     DisconnectNodeSlots(nodeId, ctx);
     ctx.Send(ev->Sender, new TEvTenantPool::TEvTakeOwnership(Generation(), record.GetSeqNo()));
 }
 
-IActor *CreateTenantSlotBroker(const TActorId &tablet,
+IActor *CreateTenantSlotBroker(const TActorId &tablet, 
                                TTabletStorageInfo *info)
 {
     return new TTenantSlotBroker(tablet, info);

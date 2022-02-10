@@ -343,7 +343,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
                 pdisk.SetState(state);
             }
 
-            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateState));
+            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateState)); 
         }
 
     public:
@@ -487,7 +487,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
 
     private:
         TCmsStatePtr State;
-        TActorId Sentinel;
+        TActorId Sentinel; 
 
     }; // TTestEnv
 

@@ -189,14 +189,14 @@ struct TKqpCompileRequest {
         , Deadline(deadline)
         , DbCounters(dbCounters) {}
 
-    TActorId Sender;
+    TActorId Sender; 
     TKqpQueryId Query;
     TString Uid;
     bool KeepInCache = false;
     TString UserToken;
     TInstant Deadline;
     TKqpDbCountersPtr DbCounters;
-    TActorId CompileActor;
+    TActorId CompileActor; 
 };
 
 class TKqpRequestsQueue {
@@ -734,7 +734,7 @@ private:
         ReplyError(sender, uid, Ydb::StatusIds::INTERNAL_ERROR, {issue}, ctx);
     }
 
-    static void LogException(const TString& scope, const TActorId& sender, const std::exception& e,
+    static void LogException(const TString& scope, const TActorId& sender, const std::exception& e, 
         const TActorContext& ctx)
     {
         LOG_CRIT_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Exception"

@@ -51,12 +51,12 @@ std::pair<TString, TString> SplitPath(const TString& path) {
     return {path.substr(0, splitPos), path.substr(splitPos + 1)};
 }
 
-void RefreshToken(const TString& token, const TString& database, const TActorContext& ctx, TActorId from) {
+void RefreshToken(const TString& token, const TString& database, const TActorContext& ctx, TActorId from) { 
     ctx.Send(CreateGRpcRequestProxyId(), new TRefreshTokenImpl(token, database, from));
 }
 
 void TRefreshTokenImpl::ReplyUnauthenticated(const TString&) {
-    TActivationContext::Send(new IEventHandle(From_, TActorId(),
+    TActivationContext::Send(new IEventHandle(From_, TActorId(), 
         new TGRpcRequestProxy::TEvRefreshTokenResponse
             { false, "", false, IssueManager_.GetIssues()}));
 }

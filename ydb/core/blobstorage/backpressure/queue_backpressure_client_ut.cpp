@@ -1,6 +1,6 @@
 #include "queue_backpressure_client.h"
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/executor_pool_io.h>
@@ -21,12 +21,12 @@ public:
     using TFilterFunc = std::function<bool (IEventHandle&, const TActorContext&)>;
 
 private:
-    TActorId QueueId;
-    TActorId VDiskId;
+    TActorId QueueId; 
+    TActorId VDiskId; 
     TFilterFunc FilterFunc;
 
 public:
-    TFilterActor(const TActorId& queueId, const TActorId& vdiskId, TFilterFunc&& filterFunc)
+    TFilterActor(const TActorId& queueId, const TActorId& vdiskId, TFilterFunc&& filterFunc) 
         : QueueId(queueId)
         , VDiskId(vdiskId)
         , FilterFunc(filterFunc)
@@ -71,12 +71,12 @@ class TProxyActor : public TActorBootstrapped<TProxyActor> {
     const TIntrusivePtr<TBlobStorageGroupInfo> Info;
     const TVDiskID VDiskId;
     const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    const TActorId QueueActorId;
+    const TActorId QueueActorId; 
 
 public:
     TProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, const TVDiskID& vdiskId,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-            const TActorId& queueActorId)
+            const TActorId& queueActorId) 
         : Info(std::move(info))
         , VDiskId(vdiskId)
         , Counters(std::move(counters))
@@ -129,13 +129,13 @@ class TQueueTestRuntime {
     ui32 ChunkSize;
     ui64 PDiskGuid;
     NPDisk::TKey PDiskKey;
-    TActorId PDiskId;
+    TActorId PDiskId; 
     std::unique_ptr<TAppData> AppData;
     TVDiskID VDiskId;
-    TActorId VDiskActorId;
-    TActorId QueueActorId;
-    TActorId FilterActorId;
-    TActorId ProxyActorId;
+    TActorId VDiskActorId; 
+    TActorId QueueActorId; 
+    TActorId FilterActorId; 
+    TActorId ProxyActorId; 
     TProxyActor *Proxy;
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
 
@@ -175,12 +175,12 @@ public:
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // BlobStorage group info
-        FilterActorId = TActorId{1, "filter"};
-        QueueActorId = TActorId{1, "queue"};
-        ProxyActorId = TActorId{1, "proxy"};
-        VDiskActorId = TActorId{1, "vdisk"};
+        FilterActorId = TActorId{1, "filter"}; 
+        QueueActorId = TActorId{1, "queue"}; 
+        ProxyActorId = TActorId{1, "proxy"}; 
+        VDiskActorId = TActorId{1, "vdisk"}; 
 
-        TVector<TActorId> actorIds{
+        TVector<TActorId> actorIds{ 
             {FilterActorId} // actor id for our single VDisk that will be used by queue
         };
 
@@ -217,7 +217,7 @@ public:
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // LOGGER
-        NActors::TActorId loggerActorId{1, "logger"};
+        NActors::TActorId loggerActorId{1, "logger"}; 
         TIntrusivePtr<NActors::NLog::TSettings> logSettings{new NActors::NLog::TSettings{loggerActorId,
             NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0}};
         logSettings->Append(
@@ -268,11 +268,11 @@ public:
         ActorSystem->Send(ev.release());
     }
 
-    const TActorId& GetProxyActorId() const {
+    const TActorId& GetProxyActorId() const { 
         return ProxyActorId;
     }
 
-    const TActorId& GetQueueActorId() const {
+    const TActorId& GetQueueActorId() const { 
         return QueueActorId;
     }
 

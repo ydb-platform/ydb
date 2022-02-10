@@ -60,16 +60,16 @@ class TStateStorageWarden : public TActorBootstrapped<TStateStorageWarden> {
 
                 // should kill?
                 if (ringIdx < current->Rings.size() && replicaIdx < current->Rings[ringIdx].Replicas.size()) {
-                    const TActorId outdated = current->Rings[ringSz].Replicas[replicaIdx];
+                    const TActorId outdated = current->Rings[ringSz].Replicas[replicaIdx]; 
                     if (outdated.NodeId() == selfNode) {
-                        sys->RegisterLocalService(outdated, TActorId());
+                        sys->RegisterLocalService(outdated, TActorId()); 
                         Send(outdated, new TEvents::TEvPoison());
                     }
                 }
 
                 // must start?
                 if (replicas[replicaIdx].NodeId() == selfNode) {
-                    const TActorId replicaActorId = Register(createFunc(updated.Get(), index), TMailboxType::ReadAsFilled, sysPoolId);
+                    const TActorId replicaActorId = Register(createFunc(updated.Get(), index), TMailboxType::ReadAsFilled, sysPoolId); 
                     sys->RegisterLocalService(replicas[replicaIdx], replicaActorId);
                 }
             }

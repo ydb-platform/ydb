@@ -2,7 +2,7 @@
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <library/cpp/grpc/server/grpc_server.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -20,7 +20,7 @@ public:
         , Port(PortManager->GetPort(2134))
         , GrpcPort(PortManager->GetPort(2135))
         , ServerSettings(NKikimr::NPersQueueTests::PQSettings(Port).SetGrpcPort(GrpcPort))
-        , GrpcServerOptions(NGrpc::TServerOptions().SetHost("[::1]").SetPort(GrpcPort))
+        , GrpcServerOptions(NGrpc::TServerOptions().SetHost("[::1]").SetPort(GrpcPort)) 
     {
         if (start) {
             StartServer();
@@ -100,7 +100,7 @@ public:
 
     THolder<NKikimr::Tests::TServer> CleverServer;
     NKikimr::Tests::TServerSettings ServerSettings;
-    NGrpc::TServerOptions GrpcServerOptions;
+    NGrpc::TServerOptions GrpcServerOptions; 
     THolder<TTempFileHandle> NetDataFile;
 
     THolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> AnnoyingClient;

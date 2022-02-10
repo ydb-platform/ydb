@@ -1,7 +1,7 @@
-#include "counters.h"
-
-#include <library/cpp/monlib/service/pages/templates.h>
-
+#include "counters.h" 
+ 
+#include <library/cpp/monlib/service/pages/templates.h> 
+ 
 #include <util/generic/cast.h>
 
 using namespace NMonitoring;
@@ -45,14 +45,14 @@ namespace {
 }
 
 static constexpr TStringBuf INDENT = "    ";
-
+ 
 TDynamicCounters::TDynamicCounters(EVisibility vis)
 {
     Visibility_ = vis;
-}
+} 
 
-TDynamicCounters::~TDynamicCounters() {
-}
+TDynamicCounters::~TDynamicCounters() { 
+} 
 
 TDynamicCounters::TCounterPtr TDynamicCounters::GetExpiringCounter(const TString& value, bool derivative, EVisibility vis) {
     return GetExpiringNamedCounter("sensor", value, derivative, vis);
@@ -72,20 +72,20 @@ TDynamicCounters::TCounterPtr TDynamicCounters::GetNamedCounter(const TString& n
 
 THistogramPtr TDynamicCounters::GetHistogram(const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
     return GetNamedHistogram("sensor", value, std::move(collector), derivative, vis);
-}
-
+} 
+ 
 THistogramPtr TDynamicCounters::GetNamedHistogram(const TString& name, const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
     return AsHistogramRef(GetNamedCounterImpl<false, THistogramCounter>(name, value, std::move(collector), derivative, vis));
 }
-
+ 
 THistogramPtr TDynamicCounters::GetExpiringHistogram(const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
     return GetExpiringNamedHistogram("sensor", value, std::move(collector), derivative, vis);
 }
-
+ 
 THistogramPtr TDynamicCounters::GetExpiringNamedHistogram(const TString& name, const TString& value, IHistogramCollectorPtr collector, bool derivative, EVisibility vis) {
     return AsHistogramRef(GetNamedCounterImpl<true, TExpiringHistogramCounter>(name, value, std::move(collector), derivative, vis));
-}
-
+} 
+ 
 TDynamicCounters::TCounterPtr TDynamicCounters::FindCounter(const TString& value) const {
     return FindNamedCounter("sensor", value);
 }
@@ -113,7 +113,7 @@ void TDynamicCounters::RemoveNamedCounter(const TString& name, const TString &va
     }
 }
 
-TIntrusivePtr<TDynamicCounters> TDynamicCounters::GetSubgroup(const TString& name, const TString& value) {
+TIntrusivePtr<TDynamicCounters> TDynamicCounters::GetSubgroup(const TString& name, const TString& value) { 
     auto res = FindSubgroup(name, value);
     if (!res) {
         auto g = LockForUpdate("GetSubgroup", name, value);
@@ -128,7 +128,7 @@ TIntrusivePtr<TDynamicCounters> TDynamicCounters::GetSubgroup(const TString& nam
     return res;
 }
 
-TIntrusivePtr<TDynamicCounters> TDynamicCounters::FindSubgroup(const TString& name, const TString& value) const {
+TIntrusivePtr<TDynamicCounters> TDynamicCounters::FindSubgroup(const TString& name, const TString& value) const { 
     TReadGuard g(Lock);
     const auto it = Counters.find({name, value});
     return it != Counters.end() ? AsDynamicCounters(it->second) : nullptr;
@@ -183,7 +183,7 @@ void TDynamicCounters::RegisterSubgroup(const TString& name, const TString& valu
     RegisterCountable(name, value, subgroup);
 }
 
-void TDynamicCounters::OutputHtml(IOutputStream& os) const {
+void TDynamicCounters::OutputHtml(IOutputStream& os) const { 
     HTML(os) {
         PRE() {
             OutputPlainText(os);
@@ -191,7 +191,7 @@ void TDynamicCounters::OutputHtml(IOutputStream& os) const {
     }
 }
 
-void TDynamicCounters::EnumerateSubgroups(const std::function<void(const TString& name, const TString& value)>& output) const {
+void TDynamicCounters::EnumerateSubgroups(const std::function<void(const TString& name, const TString& value)>& output) const { 
     TReadGuard g(Lock);
     for (const auto& [key, value] : Counters) {
         if (AsDynamicCounters(value)) {
@@ -209,29 +209,29 @@ void TDynamicCounters::OutputPlainText(IOutputStream& os, const TString& indent)
 
     for (const auto& [key, value] : snap) {
         if (const auto counter = AsCounter(value)) {
-            os << indent
+            os << indent 
                << key.LabelName << '=' << key.LabelValue
-               << ": " << counter->Val()
+               << ": " << counter->Val() 
                << outputVisibilityMarker(counter->Visibility())
-               << '\n';
+               << '\n'; 
         } else if (const auto histogram = AsHistogram(value)) {
-            os << indent
+            os << indent 
                << key.LabelName << '=' << key.LabelValue
                << ":"
                << outputVisibilityMarker(histogram->Visibility())
                << "\n";
-
-            auto snapshot = histogram->Snapshot();
-            for (ui32 i = 0, count = snapshot->Count(); i < count; i++) {
+ 
+            auto snapshot = histogram->Snapshot(); 
+            for (ui32 i = 0, count = snapshot->Count(); i < count; i++) { 
                 os << indent << INDENT << TStringBuf("bin=");
-                TBucketBound bound = snapshot->UpperBound(i);
-                if (bound == Max<TBucketBound>()) {
+                TBucketBound bound = snapshot->UpperBound(i); 
+                if (bound == Max<TBucketBound>()) { 
                     os << TStringBuf("inf");
-                } else {
-                   os << bound;
-                }
-                os << ": " << snapshot->Value(i) << '\n';
-            }
+                } else { 
+                   os << bound; 
+                } 
+                os << ": " << snapshot->Value(i) << '\n'; 
+            } 
         }
     }
 
@@ -239,22 +239,22 @@ void TDynamicCounters::OutputPlainText(IOutputStream& os, const TString& indent)
         if (const auto subgroup = AsDynamicCounters(value)) {
             os << "\n";
             os << indent << key.LabelName << "=" << key.LabelValue << ":\n";
-            subgroup->OutputPlainText(os, indent + INDENT);
+            subgroup->OutputPlainText(os, indent + INDENT); 
         }
     }
 }
 
-void TDynamicCounters::Accept(const TString& labelName, const TString& labelValue, ICountableConsumer& consumer) const {
+void TDynamicCounters::Accept(const TString& labelName, const TString& labelValue, ICountableConsumer& consumer) const { 
     if (!IsVisible(Visibility(), consumer.Visibility())) {
         return;
     }
 
-    consumer.OnGroupBegin(labelName, labelValue, this);
+    consumer.OnGroupBegin(labelName, labelValue, this); 
     for (auto& [key, value] : ReadSnapshot()) {
         value->Accept(key.LabelName, key.LabelValue, consumer);
-    }
-    consumer.OnGroupEnd(labelName, labelValue, this);
-}
+    } 
+    consumer.OnGroupEnd(labelName, labelValue, this); 
+} 
 
 void TDynamicCounters::RemoveExpired() const {
     if (AtomicGet(ExpiringCount) == 0) {

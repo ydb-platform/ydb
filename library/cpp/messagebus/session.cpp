@@ -124,7 +124,7 @@ TBusClientSessionPtr TBusClientSession::Create(TBusProtocol* proto, IBusClientHa
 TBusServerSessionPtr TBusServerSession::Create(TBusProtocol* proto, IBusServerHandler* handler, const TBusServerSessionConfig& config, TBusMessageQueuePtr queue) {
     return queue->CreateDestination(proto, handler, config);
 }
-
+ 
 TBusServerSessionPtr TBusServerSession::Create(TBusProtocol* proto, IBusServerHandler* handler, const TBusServerSessionConfig& config, TBusMessageQueuePtr queue, const TVector<TBindResult>& bindTo) {
-    return queue->CreateDestination(proto, handler, config, bindTo);
-}
+    return queue->CreateDestination(proto, handler, config, bindTo); 
+} 

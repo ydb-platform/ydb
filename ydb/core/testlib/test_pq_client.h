@@ -722,7 +722,7 @@ public:
     }
 
     void RestartSchemeshard(TTestActorRuntime* runtime) {
-        TActorId sender = runtime->AllocateEdgeActor();
+        TActorId sender = runtime->AllocateEdgeActor(); 
         const ui64 schemeRoot = GetPatchedSchemeRoot(Tests::SchemeRoot, Settings.Domain, Settings.SupportsRedirect);
         ForwardToTablet(*runtime, schemeRoot, sender, new TEvents::TEvPoisonPill(), 0);
         TDispatchOptions options;
@@ -774,7 +774,7 @@ public:
         TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls("/Root/PQ/" + topic);
         Cerr << res->Record << "\n";
         const ui64 tablet = res->Record.GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
-        TActorId sender = runtime->AllocateEdgeActor();
+        TActorId sender = runtime->AllocateEdgeActor(); 
         ForwardToTablet(*runtime, tablet, sender, new TEvents::TEvPoisonPill(), 0);
         TDispatchOptions options;
         runtime->DispatchEvents(options);
@@ -789,7 +789,7 @@ public:
         for (ui32 i = 0; i < pq.PartitionsSize(); ++i) {
             tablets.insert(pq.GetPartitions(i).GetTabletId());
         }
-        TActorId sender = runtime->AllocateEdgeActor();
+        TActorId sender = runtime->AllocateEdgeActor(); 
         for (auto & tablet : tablets) {
             ForwardToTablet(*runtime, tablet, sender, new TEvents::TEvPoisonPill(), 0);
             TDispatchOptions options;

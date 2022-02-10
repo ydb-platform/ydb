@@ -56,7 +56,7 @@ TTenantTestConfig DefaultConsoleTestConfig()
 NKikimrConsole::TConfigItem ITEM_DOMAIN_LOG_1;
 NKikimrConsole::TConfigItem ITEM_DOMAIN_LOG_2;
 
-TActorId InitConfigsDispatcher(TTenantTestRuntime &runtime)
+TActorId InitConfigsDispatcher(TTenantTestRuntime &runtime) 
 {
     ITEM_DOMAIN_LOG_1
         = MakeConfigItem(NKikimrConsole::TConfigItem::LogConfigItem,
@@ -153,7 +153,7 @@ struct TEvPrivate {
 
 class TTestSubscriber : public TActorBootstrapped<TTestSubscriber> {
 public:
-    TTestSubscriber(TActorId sink, TVector<ui32> kinds, bool hold)
+    TTestSubscriber(TActorId sink, TVector<ui32> kinds, bool hold) 
         : Sink(sink)
         , Kinds(std::move(kinds))
         , HoldResponse(hold)
@@ -244,13 +244,13 @@ public:
     }
 
 private:
-    TActorId Sink;
+    TActorId Sink; 
     TVector<ui32> Kinds;
     bool HoldResponse;
     TDeque<TAutoPtr<IEventHandle>> EventsQueue;
 };
 
-TActorId AddSubscriber(TTenantTestRuntime &runtime, TVector<ui32> kinds, bool hold = false)
+TActorId AddSubscriber(TTenantTestRuntime &runtime, TVector<ui32> kinds, bool hold = false) 
 {
     auto aid = runtime.Register(new TTestSubscriber(runtime.Sender, std::move(kinds), hold));
     runtime.EnableScheduleForActor(aid, true);
@@ -266,19 +266,19 @@ NKikimrConfig::TAppConfig GetConfig(TTenantTestRuntime &runtime, TVector<ui32> k
     return *runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetConfigResponse>(handle)->Config;
 }
 
-void HoldSubscriber(TTenantTestRuntime &runtime, TActorId aid)
+void HoldSubscriber(TTenantTestRuntime &runtime, TActorId aid) 
 {
     TAutoPtr<IEventHandle> handle;
     runtime.Send(new IEventHandle(aid, runtime.Sender, new TEvPrivate::TEvHoldResponse(true)));
     runtime.GrabEdgeEventRethrow<TEvPrivate::TEvComplete>(handle);
 }
 
-void UnholdSubscriber(TTenantTestRuntime &runtime, TActorId aid)
+void UnholdSubscriber(TTenantTestRuntime &runtime, TActorId aid) 
 {
     runtime.Send(new IEventHandle(aid, runtime.Sender, new TEvPrivate::TEvHoldResponse(false)));
 }
 
-void SetSubscriptions(TTenantTestRuntime &runtime, TActorId aid, TVector<ui32> kinds)
+void SetSubscriptions(TTenantTestRuntime &runtime, TActorId aid, TVector<ui32> kinds) 
 {
     runtime.Send(new IEventHandle(aid, runtime.Sender, new TEvPrivate::TEvSetSubscription(kinds)));
 }
@@ -517,7 +517,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         InitConfigsDispatcher(runtime);
 
         ui64 notifications = 0;
-        TActorId subscriber;
+        TActorId subscriber; 
         auto observer = [&notifications,&subscriber,recipient=runtime.Sender](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
             if (ev->Recipient == recipient && ev->Sender == subscriber) {
                 switch (ev->GetTypeRewrite()) {

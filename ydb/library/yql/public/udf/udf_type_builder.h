@@ -1,19 +1,19 @@
-#pragma once
-
+#pragma once 
+ 
 #include "udf_counter.h"
-#include "udf_types.h"
-#include "udf_ptr.h"
+#include "udf_types.h" 
+#include "udf_ptr.h" 
 #include "udf_string_ref.h"
 #include "udf_value.h"
-
+ 
 #include <type_traits>
-
+ 
 namespace NYql {
-namespace NUdf {
-
-class TStringRef;
-class IBoxedValue;
-
+namespace NUdf { 
+ 
+class TStringRef; 
+class IBoxedValue; 
+ 
 ///////////////////////////////////////////////////////////////////////////////
 // ISecureParamsProvider
 ///////////////////////////////////////////////////////////////////////////////
@@ -24,95 +24,95 @@ public:
     virtual bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const = 0;
 };
 
-template <typename T>
+template <typename T> 
 struct TAutoMap { using ItemType = T; };
 
 template <typename T>
-struct TOptional { using ItemType = T; };
-
+struct TOptional { using ItemType = T; }; 
+ 
 template <typename T, const char* Name>
 struct TNamedArg { using ItemType = T; };
 
-template <typename T>
+template <typename T> 
 struct TListType { using ItemType = T; };
-
-template <typename TKey, typename TValue>
-struct TDict {
-    using KeyType = TKey;
-    using ValueType = TValue;
-};
-
-template <typename... TArgs>
-struct TTuple;
-
+ 
+template <typename TKey, typename TValue> 
+struct TDict { 
+    using KeyType = TKey; 
+    using ValueType = TValue; 
+}; 
+ 
+template <typename... TArgs> 
+struct TTuple; 
+ 
 template <const char* Tag>
 struct TResource {};
 
 template <typename... TArgs>
 struct TVariant;
-
+ 
 template <typename T>
 struct TStream { using ItemType = T; };
-
+ 
 template <typename T, const char* Tag>
 struct TTagged { using BaseType = T; };
 
-//////////////////////////////////////////////////////////////////////////////
-// ITypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class ITypeBuilder
-{
-public:
-    virtual ~ITypeBuilder() = default;
-
-    virtual TType* Build() const = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(ITypeBuilder, 8);
-
-//////////////////////////////////////////////////////////////////////////////
-// IOptionalTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class IOptionalTypeBuilder: public ITypeBuilder
-{
-public:
-    using TPtr = TUniquePtr<IOptionalTypeBuilder>;
-
-public:
+////////////////////////////////////////////////////////////////////////////// 
+// ITypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class ITypeBuilder 
+{ 
+public: 
+    virtual ~ITypeBuilder() = default; 
+ 
+    virtual TType* Build() const = 0; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(ITypeBuilder, 8); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// IOptionalTypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class IOptionalTypeBuilder: public ITypeBuilder 
+{ 
+public: 
+    using TPtr = TUniquePtr<IOptionalTypeBuilder>; 
+ 
+public: 
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
-    inline IOptionalTypeBuilder& Item() {
+    inline IOptionalTypeBuilder& Item() { 
         return Item(TDataType<T>::Id);
-    }
-
+    } 
+ 
     virtual IOptionalTypeBuilder& Item(TDataTypeId type) = 0;
-    virtual IOptionalTypeBuilder& Item(const TType* type) = 0;
-    virtual IOptionalTypeBuilder& Item(const ITypeBuilder& type) = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(IOptionalTypeBuilder, 8);
-
-//////////////////////////////////////////////////////////////////////////////
-// IListTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class IListTypeBuilder: public ITypeBuilder
-{
-public:
-    using TPtr = TUniquePtr<IListTypeBuilder>;
-
-public:
+    virtual IOptionalTypeBuilder& Item(const TType* type) = 0; 
+    virtual IOptionalTypeBuilder& Item(const ITypeBuilder& type) = 0; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(IOptionalTypeBuilder, 8); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// IListTypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class IListTypeBuilder: public ITypeBuilder 
+{ 
+public: 
+    using TPtr = TUniquePtr<IListTypeBuilder>; 
+ 
+public: 
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
-    inline IListTypeBuilder& Item() {
+    inline IListTypeBuilder& Item() { 
         return Item(TDataType<T>::Id);
-    }
-
+    } 
+ 
     virtual IListTypeBuilder& Item(TDataTypeId type) = 0;
-    virtual IListTypeBuilder& Item(const TType* type) = 0;
-    virtual IListTypeBuilder& Item(const ITypeBuilder& type) = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(IListTypeBuilder, 8);
-
-//////////////////////////////////////////////////////////////////////////////
+    virtual IListTypeBuilder& Item(const TType* type) = 0; 
+    virtual IListTypeBuilder& Item(const ITypeBuilder& type) = 0; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(IListTypeBuilder, 8); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
 // IVariantTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
 class IVariantTypeBuilder : public ITypeBuilder
@@ -121,7 +121,7 @@ public:
     using TPtr = TUniquePtr<IVariantTypeBuilder>;
 
 public:
-    // type must be either tuple or struct
+    // type must be either tuple or struct 
     virtual IVariantTypeBuilder& Over(const TType* type) = 0;
     virtual IVariantTypeBuilder& Over(const ITypeBuilder& type) = 0;
 };
@@ -150,36 +150,36 @@ public:
 UDF_ASSERT_TYPE_SIZE(IStreamTypeBuilder, 8);
 
 //////////////////////////////////////////////////////////////////////////////
-// IDictTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class IDictTypeBuilder: public ITypeBuilder
-{
-public:
-    using TPtr = TUniquePtr<IDictTypeBuilder>;
-
-public:
+// IDictTypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class IDictTypeBuilder: public ITypeBuilder 
+{ 
+public: 
+    using TPtr = TUniquePtr<IDictTypeBuilder>; 
+ 
+public: 
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
-    inline IDictTypeBuilder& Key() {
+    inline IDictTypeBuilder& Key() { 
         return Key(TDataType<T>::Id);
-    }
-
+    } 
+ 
     virtual IDictTypeBuilder& Key(TDataTypeId type) = 0;
-    virtual IDictTypeBuilder& Key(const TType* type) = 0;
-    virtual IDictTypeBuilder& Key(const ITypeBuilder& type) = 0;
-
+    virtual IDictTypeBuilder& Key(const TType* type) = 0; 
+    virtual IDictTypeBuilder& Key(const ITypeBuilder& type) = 0; 
+ 
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
-    inline IDictTypeBuilder& Value() {
+    inline IDictTypeBuilder& Value() { 
         return Value(TDataType<T>::Id);
-    }
-
+    } 
+ 
     virtual IDictTypeBuilder& Value(TDataTypeId type) = 0;
-    virtual IDictTypeBuilder& Value(const TType* type) = 0;
-    virtual IDictTypeBuilder& Value(const ITypeBuilder& type) = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(IDictTypeBuilder, 8);
-
-//////////////////////////////////////////////////////////////////////////////
+    virtual IDictTypeBuilder& Value(const TType* type) = 0; 
+    virtual IDictTypeBuilder& Value(const ITypeBuilder& type) = 0; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(IDictTypeBuilder, 8); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
 // ISetTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
 class ISetTypeBuilder: public ITypeBuilder
@@ -201,36 +201,36 @@ public:
 UDF_ASSERT_TYPE_SIZE(ISetTypeBuilder, 8);
 
 //////////////////////////////////////////////////////////////////////////////
-// IStructTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class IStructTypeBuilder: public ITypeBuilder
-{
-public:
-    using TPtr = TUniquePtr<IStructTypeBuilder>;
-
-public:
+// IStructTypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class IStructTypeBuilder: public ITypeBuilder 
+{ 
+public: 
+    using TPtr = TUniquePtr<IStructTypeBuilder>; 
+ 
+public: 
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
-    inline IStructTypeBuilder& AddField(
-            const TStringRef& name, ui32* index)
-    {
+    inline IStructTypeBuilder& AddField( 
+            const TStringRef& name, ui32* index) 
+    { 
         return AddField(name, TDataType<T>::Id, index);
-    }
-
-    virtual IStructTypeBuilder& AddField(
+    } 
+ 
+    virtual IStructTypeBuilder& AddField( 
             const TStringRef& name, TDataTypeId type, ui32* index) = 0;
-
-    virtual IStructTypeBuilder& AddField(
-            const TStringRef& name, const TType* type, ui32* index) = 0;
-
-    virtual IStructTypeBuilder& AddField(
-            const TStringRef& name,
-            const ITypeBuilder& typeBuilder,
-            ui32* index) = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(IStructTypeBuilder, 8);
-
-//////////////////////////////////////////////////////////////////////////////
+ 
+    virtual IStructTypeBuilder& AddField( 
+            const TStringRef& name, const TType* type, ui32* index) = 0; 
+ 
+    virtual IStructTypeBuilder& AddField( 
+            const TStringRef& name, 
+            const ITypeBuilder& typeBuilder, 
+            ui32* index) = 0; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(IStructTypeBuilder, 8); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
 // IEnumTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
 class IEnumTypeBuilder: public ITypeBuilder
@@ -246,102 +246,102 @@ public:
 UDF_ASSERT_TYPE_SIZE(IEnumTypeBuilder, 8);
 
 //////////////////////////////////////////////////////////////////////////////
-// ITupleTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class ITupleTypeBuilder: public ITypeBuilder
-{
-public:
-    using TPtr = TUniquePtr<ITupleTypeBuilder>;
-
-public:
+// ITupleTypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class ITupleTypeBuilder: public ITypeBuilder 
+{ 
+public: 
+    using TPtr = TUniquePtr<ITupleTypeBuilder>; 
+ 
+public: 
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
-    ITupleTypeBuilder& Add() {
+    ITupleTypeBuilder& Add() { 
         return Add(TDataType<T>::Id);
-    }
-
+    } 
+ 
     virtual ITupleTypeBuilder& Add(TDataTypeId type) = 0;
-    virtual ITupleTypeBuilder& Add(const TType* type) = 0;
-    virtual ITupleTypeBuilder& Add(const ITypeBuilder& typeBuilder) = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(ITupleTypeBuilder, 8);
-
-//////////////////////////////////////////////////////////////////////////////
-// ICallableTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class ICallableTypeBuilder: public ITypeBuilder
-{
-public:
-    using TPtr = TUniquePtr<ICallableTypeBuilder>;
-
-public:
+    virtual ITupleTypeBuilder& Add(const TType* type) = 0; 
+    virtual ITupleTypeBuilder& Add(const ITypeBuilder& typeBuilder) = 0; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(ITupleTypeBuilder, 8); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// ICallableTypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class ICallableTypeBuilder: public ITypeBuilder 
+{ 
+public: 
+    using TPtr = TUniquePtr<ICallableTypeBuilder>; 
+ 
+public: 
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
-    ICallableTypeBuilder& Returns() {
+    ICallableTypeBuilder& Returns() { 
         return Returns(TDataType<T>::Id);
-    }
-
+    } 
+ 
     virtual ICallableTypeBuilder& Returns(TDataTypeId type) = 0;
-    virtual ICallableTypeBuilder& Returns(const TType* type) = 0;
-    virtual ICallableTypeBuilder& Returns(const ITypeBuilder& typeBuilder) = 0;
-
+    virtual ICallableTypeBuilder& Returns(const TType* type) = 0; 
+    virtual ICallableTypeBuilder& Returns(const ITypeBuilder& typeBuilder) = 0; 
+ 
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
-    ICallableTypeBuilder& Arg() {
+    ICallableTypeBuilder& Arg() { 
         return Arg(TDataType<T>::Id);
-    }
-
+    } 
+ 
     virtual ICallableTypeBuilder& Arg(TDataTypeId type) = 0;
-    virtual ICallableTypeBuilder& Arg(const TType* type) = 0;
-    virtual ICallableTypeBuilder& Arg(const ITypeBuilder& typeBuilder) = 0;
-
-    virtual ICallableTypeBuilder& OptionalArgs(ui32 optionalArgs) = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(ICallableTypeBuilder, 8);
-
-class IFunctionTypeInfoBuilder;
-
-//////////////////////////////////////////////////////////////////////////////
-// IFunctionArgTypesBuilder
-//////////////////////////////////////////////////////////////////////////////
-class IFunctionArgTypesBuilder
-{
-public:
-    using TPtr = TUniquePtr<IFunctionArgTypesBuilder>;
-
-public:
-    IFunctionArgTypesBuilder(IFunctionTypeInfoBuilder& parent)
-        : Parent_(parent)
-    {
-    }
-
-    virtual ~IFunctionArgTypesBuilder() = default;
-
+    virtual ICallableTypeBuilder& Arg(const TType* type) = 0; 
+    virtual ICallableTypeBuilder& Arg(const ITypeBuilder& typeBuilder) = 0; 
+ 
+    virtual ICallableTypeBuilder& OptionalArgs(ui32 optionalArgs) = 0; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(ICallableTypeBuilder, 8); 
+ 
+class IFunctionTypeInfoBuilder; 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// IFunctionArgTypesBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class IFunctionArgTypesBuilder 
+{ 
+public: 
+    using TPtr = TUniquePtr<IFunctionArgTypesBuilder>; 
+ 
+public: 
+    IFunctionArgTypesBuilder(IFunctionTypeInfoBuilder& parent) 
+        : Parent_(parent) 
+    { 
+    } 
+ 
+    virtual ~IFunctionArgTypesBuilder() = default; 
+ 
     template <typename T>
     inline IFunctionArgTypesBuilder& Add();
-
+ 
     virtual IFunctionArgTypesBuilder& Add(TDataTypeId type) = 0;
-    virtual IFunctionArgTypesBuilder& Add(const TType* type) = 0;
-    virtual IFunctionArgTypesBuilder& Add(const ITypeBuilder& typeBuilder) = 0;
+    virtual IFunctionArgTypesBuilder& Add(const TType* type) = 0; 
+    virtual IFunctionArgTypesBuilder& Add(const ITypeBuilder& typeBuilder) = 0; 
     // sets name for the last added argument
     virtual IFunctionArgTypesBuilder& Name(const TStringRef& name) = 0;
     // sets flags for the last added argument, see ICallablePayload::TArgumentFlags
     virtual IFunctionArgTypesBuilder& Flags(ui64 flags) = 0;
-
-    inline IFunctionTypeInfoBuilder& Done() const {
-        return Parent_;
-    }
-
-    inline IFunctionTypeInfoBuilder& Parent() const {
-        return Parent_;
-    }
-
-private:
-    IFunctionTypeInfoBuilder& Parent_;
-};
-
-UDF_ASSERT_TYPE_SIZE(IFunctionArgTypesBuilder, 16);
-
-//////////////////////////////////////////////////////////////////////////////
+ 
+    inline IFunctionTypeInfoBuilder& Done() const { 
+        return Parent_; 
+    } 
+ 
+    inline IFunctionTypeInfoBuilder& Parent() const { 
+        return Parent_; 
+    } 
+ 
+private: 
+    IFunctionTypeInfoBuilder& Parent_; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(IFunctionArgTypesBuilder, 16); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
 // IRefCounted
 //////////////////////////////////////////////////////////////////////////////
 class IRefCounted {
@@ -409,18 +409,18 @@ public:
 UDF_ASSERT_TYPE_SIZE(ICompare, 16);
 
 //////////////////////////////////////////////////////////////////////////////
-// IFunctionTypeInfoBuilder
-//////////////////////////////////////////////////////////////////////////////
-namespace NImpl {
-
-template <typename T> struct TSimpleSignatureHelper;
-template <typename T> struct TTypeBuilderHelper;
-template <typename... TArgs> struct TArgsHelper;
-template <typename... TArgs> struct TTupleHelper;
-template <typename... TArgs> struct TCallableArgsHelper;
-
-} // namspace NImpl
-
+// IFunctionTypeInfoBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+namespace NImpl { 
+ 
+template <typename T> struct TSimpleSignatureHelper; 
+template <typename T> struct TTypeBuilderHelper; 
+template <typename... TArgs> struct TArgsHelper; 
+template <typename... TArgs> struct TTupleHelper; 
+template <typename... TArgs> struct TCallableArgsHelper; 
+ 
+} // namspace NImpl 
+ 
 struct TSourcePosition {
     TSourcePosition(ui32 row = 0, ui32 column = 0, TStringRef file = {})
         : Row_(row)
@@ -441,46 +441,46 @@ inline IOutputStream& operator<<(IOutputStream& os, const TSourcePosition& pos) 
 }
 
 class IFunctionTypeInfoBuilder1
-{
-public:
+{ 
+public: 
     virtual ~IFunctionTypeInfoBuilder1() = default;
-
-    // function implementation
+ 
+    // function implementation 
     virtual IFunctionTypeInfoBuilder1& ImplementationImpl(
-            TUniquePtr<IBoxedValue> impl) = 0;
-
+            TUniquePtr<IBoxedValue> impl) = 0; 
+ 
     virtual IFunctionTypeInfoBuilder1& ReturnsImpl(TDataTypeId type) = 0;
     virtual IFunctionTypeInfoBuilder1& ReturnsImpl(const TType* type) = 0;
     virtual IFunctionTypeInfoBuilder1& ReturnsImpl(const ITypeBuilder& typeBuilder) = 0;
-
-    // function argument types
-    virtual TUniquePtr<IFunctionArgTypesBuilder> Args(ui32 expectedItem = 10) = 0;
+ 
+    // function argument types 
+    virtual TUniquePtr<IFunctionArgTypesBuilder> Args(ui32 expectedItem = 10) = 0; 
     virtual IFunctionTypeInfoBuilder1& OptionalArgsImpl(ui32 optionalArgs) = 0;
-
+ 
     virtual IFunctionTypeInfoBuilder1& RunConfigImpl(TDataTypeId type) = 0;
     virtual IFunctionTypeInfoBuilder1& RunConfigImpl(const TType* type) = 0;
     virtual IFunctionTypeInfoBuilder1& RunConfigImpl(const ITypeBuilder& typeBuilder) = 0;
-
-    // errors
-    virtual void SetError(const TStringRef& error) = 0;
-
-    // primitive types
+ 
+    // errors 
+    virtual void SetError(const TStringRef& error) = 0; 
+ 
+    // primitive types 
     virtual TType* Primitive(TDataTypeId typeId) const = 0;
-
-    // complex types builders
-    virtual IOptionalTypeBuilder::TPtr Optional() const = 0;
-    virtual IListTypeBuilder::TPtr List() const = 0;
-    virtual IDictTypeBuilder::TPtr Dict() const = 0;
-    virtual IStructTypeBuilder::TPtr Struct(ui32 expectedItems = 10) const = 0;
-    virtual ITupleTypeBuilder::TPtr Tuple(ui32 expectedItems = 10) const = 0;
-    virtual ICallableTypeBuilder::TPtr Callable(ui32 expectedArgs = 10) const = 0;
-
-    // special types
-    virtual TType* Void() const = 0;
+ 
+    // complex types builders 
+    virtual IOptionalTypeBuilder::TPtr Optional() const = 0; 
+    virtual IListTypeBuilder::TPtr List() const = 0; 
+    virtual IDictTypeBuilder::TPtr Dict() const = 0; 
+    virtual IStructTypeBuilder::TPtr Struct(ui32 expectedItems = 10) const = 0; 
+    virtual ITupleTypeBuilder::TPtr Tuple(ui32 expectedItems = 10) const = 0; 
+    virtual ICallableTypeBuilder::TPtr Callable(ui32 expectedArgs = 10) const = 0; 
+ 
+    // special types 
+    virtual TType* Void() const = 0; 
     virtual TType* Resource(const TStringRef& tag) const = 0;
-
-    // type info
-    virtual ITypeInfoHelper::TPtr TypeInfoHelper() const = 0;
+ 
+    // type info 
+    virtual ITypeInfoHelper::TPtr TypeInfoHelper() const = 0; 
 
     // 1.2
     virtual IFunctionTypeInfoBuilder1& PayloadImpl(const TStringRef& payload) = 0;
@@ -721,31 +721,31 @@ public:
         return *this;
     }
 #endif
-};
-
-UDF_ASSERT_TYPE_SIZE(IFunctionTypeInfoBuilder, 8);
-
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(IFunctionTypeInfoBuilder, 8); 
+ 
 using IFunctionTypeInfoBuilderPtr = TUniquePtr<IFunctionTypeInfoBuilder>;
 
-namespace NImpl {
-
-template <typename T>
-struct TTypeBuilderHelper {
-    static TType* Build(
-            const IFunctionTypeInfoBuilder& builder,
+namespace NImpl { 
+ 
+template <typename T> 
+struct TTypeBuilderHelper { 
+    static TType* Build( 
+            const IFunctionTypeInfoBuilder& builder, 
             std::enable_if_t<TKnownDataType<T>::Result>* = nullptr)
-    {
+    { 
         return builder.Primitive(TDataType<T>::Id);
-    }
-};
-
-template <>
-struct TTypeBuilderHelper<void> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
-        return builder.Void();
-    }
-};
-
+    } 
+}; 
+ 
+template <> 
+struct TTypeBuilderHelper<void> { 
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) { 
+        return builder.Void(); 
+    } 
+}; 
+ 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
 template <ui8 Precision, ui8 Scale>
 struct TTypeBuilderHelper<TDecimalDataType<Precision, Scale>> {
@@ -762,34 +762,34 @@ struct TTypeBuilderHelper<TResource<Tag>> {
     }
 };
 
-template <typename T>
+template <typename T> 
 struct TTypeBuilderHelper<TListType<T>> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
-        return builder.List()->
-                Item(TTypeBuilderHelper<T>::Build(builder))
-                .Build();
-    }
-};
-
-template <typename T>
-struct TTypeBuilderHelper<TOptional<T>> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
-        return builder.Optional()->
-                Item(TTypeBuilderHelper<T>::Build(builder))
-                .Build();
-    }
-};
-
-template <typename TKey, typename TValue>
-struct TTypeBuilderHelper<TDict<TKey, TValue>> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
-        return builder.Dict()->
-                Key(TTypeBuilderHelper<TKey>::Build(builder))
-                .Value(TTypeBuilderHelper<TValue>::Build(builder))
-                .Build();
-    }
-};
-
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) { 
+        return builder.List()-> 
+                Item(TTypeBuilderHelper<T>::Build(builder)) 
+                .Build(); 
+    } 
+}; 
+ 
+template <typename T> 
+struct TTypeBuilderHelper<TOptional<T>> { 
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) { 
+        return builder.Optional()-> 
+                Item(TTypeBuilderHelper<T>::Build(builder)) 
+                .Build(); 
+    } 
+}; 
+ 
+template <typename TKey, typename TValue> 
+struct TTypeBuilderHelper<TDict<TKey, TValue>> { 
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) { 
+        return builder.Dict()-> 
+                Key(TTypeBuilderHelper<TKey>::Build(builder)) 
+                .Value(TTypeBuilderHelper<TValue>::Build(builder)) 
+                .Build(); 
+    } 
+}; 
+ 
 template <typename T>
 struct TTypeBuilderHelper<TStream<T>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
@@ -798,7 +798,7 @@ struct TTypeBuilderHelper<TStream<T>> {
                 .Build();
     }
 };
-
+ 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 template <typename T, const char* Tag>
 struct TTypeBuilderHelper<TTagged<T, Tag>> {
@@ -809,67 +809,67 @@ struct TTypeBuilderHelper<TTagged<T, Tag>> {
 };
 #endif
 
-template <>
-struct TCallableArgsHelper<> {
-    static void Arg(
-            ICallableTypeBuilder& callableBuilder,
-            const IFunctionTypeInfoBuilder& builder)
-    {
+template <> 
+struct TCallableArgsHelper<> { 
+    static void Arg( 
+            ICallableTypeBuilder& callableBuilder, 
+            const IFunctionTypeInfoBuilder& builder) 
+    { 
         Y_UNUSED(callableBuilder); Y_UNUSED(builder);
-    }
-};
-
-template <typename TArg, typename... TArgs>
-struct TCallableArgsHelper<TArg, TArgs...> {
-    static void Arg(
-            ICallableTypeBuilder& callableBuilder,
-            const IFunctionTypeInfoBuilder& builder)
-    {
-        callableBuilder.Arg(TTypeBuilderHelper<TArg>::Build(builder));
-        TCallableArgsHelper<TArgs...>::Arg(callableBuilder, builder);
-    }
-};
-
-template <typename TReturn, typename... TArgs>
-struct TTypeBuilderHelper<TReturn(*)(TArgs...)> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
-        auto callableBuilder = builder.Callable(sizeof...(TArgs));
-        callableBuilder->Returns(TTypeBuilderHelper<TReturn>::Build(builder));
-        TCallableArgsHelper<TArgs...>::Arg(*callableBuilder, builder);
-        return callableBuilder->Build();
-    }
-};
-
-template <typename TArg, typename... TArgs>
-struct TTupleHelper<TArg, TArgs...> {
-    static void Add(
-            ITupleTypeBuilder& tupleBuilder,
-            const IFunctionTypeInfoBuilder& builder)
-    {
-        tupleBuilder.Add(TTypeBuilderHelper<TArg>::Build(builder));
-        TTupleHelper<TArgs...>::Add(tupleBuilder, builder);
-    }
-};
-
-template <>
-struct TTupleHelper<> {
-    static void Add(
-            ITupleTypeBuilder& tupleBuilder,
-            const IFunctionTypeInfoBuilder& builder)
-    {
+    } 
+}; 
+ 
+template <typename TArg, typename... TArgs> 
+struct TCallableArgsHelper<TArg, TArgs...> { 
+    static void Arg( 
+            ICallableTypeBuilder& callableBuilder, 
+            const IFunctionTypeInfoBuilder& builder) 
+    { 
+        callableBuilder.Arg(TTypeBuilderHelper<TArg>::Build(builder)); 
+        TCallableArgsHelper<TArgs...>::Arg(callableBuilder, builder); 
+    } 
+}; 
+ 
+template <typename TReturn, typename... TArgs> 
+struct TTypeBuilderHelper<TReturn(*)(TArgs...)> { 
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) { 
+        auto callableBuilder = builder.Callable(sizeof...(TArgs)); 
+        callableBuilder->Returns(TTypeBuilderHelper<TReturn>::Build(builder)); 
+        TCallableArgsHelper<TArgs...>::Arg(*callableBuilder, builder); 
+        return callableBuilder->Build(); 
+    } 
+}; 
+ 
+template <typename TArg, typename... TArgs> 
+struct TTupleHelper<TArg, TArgs...> { 
+    static void Add( 
+            ITupleTypeBuilder& tupleBuilder, 
+            const IFunctionTypeInfoBuilder& builder) 
+    { 
+        tupleBuilder.Add(TTypeBuilderHelper<TArg>::Build(builder)); 
+        TTupleHelper<TArgs...>::Add(tupleBuilder, builder); 
+    } 
+}; 
+ 
+template <> 
+struct TTupleHelper<> { 
+    static void Add( 
+            ITupleTypeBuilder& tupleBuilder, 
+            const IFunctionTypeInfoBuilder& builder) 
+    { 
         Y_UNUSED(tupleBuilder); Y_UNUSED(builder);
-    }
-};
-
-template <typename... TArgs>
-struct TTypeBuilderHelper<TTuple<TArgs...>> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
-        auto tupleBuilder = builder.Tuple(sizeof...(TArgs));
-        TTupleHelper<TArgs...>::Add(*tupleBuilder, builder);
-        return tupleBuilder->Build();
-    }
-};
-
+    } 
+}; 
+ 
+template <typename... TArgs> 
+struct TTypeBuilderHelper<TTuple<TArgs...>> { 
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) { 
+        auto tupleBuilder = builder.Tuple(sizeof...(TArgs)); 
+        TTupleHelper<TArgs...>::Add(*tupleBuilder, builder); 
+        return tupleBuilder->Build(); 
+    } 
+}; 
+ 
 template <typename... TArgs>
 struct TTypeBuilderHelper<NUdf::TVariant<TArgs...>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
@@ -878,17 +878,17 @@ struct TTypeBuilderHelper<NUdf::TVariant<TArgs...>> {
         return builder.Variant()->Over(*tupleBuilder).Build();
     }
 };
-
-template <>
-struct TArgsHelper<> {
+ 
+template <> 
+struct TArgsHelper<> { 
     static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) {
         Y_UNUSED(builder);
         Y_UNUSED(name);
         Y_UNUSED(flags);
-    }
-};
-
-template <typename TArg, typename... TArgs>
+    } 
+}; 
+ 
+template <typename TArg, typename... TArgs> 
 struct TArgsHelper<TAutoMap<TArg>, TArgs...> {
    static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) {
        TArgsHelper<TArg>::Add(builder, name, flags | ICallablePayload::TArgumentFlags::AutoMap);
@@ -906,26 +906,26 @@ struct TArgsHelper<TNamedArg<TArg, Name>, TArgs...> {
 };
 
 template <typename TArg, typename... TArgs>
-struct TArgsHelper<TArg, TArgs...> {
+struct TArgsHelper<TArg, TArgs...> { 
     static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) {
         builder.Add(TTypeBuilderHelper<TArg>::Build(builder.Parent())).Flags(flags);
         if (name) {
             builder.Name(TStringRef(name, std::strlen(name)));
         }
-        TArgsHelper<TArgs...>::Add(builder);
-    }
-};
-
-template <typename TReturn, typename... TArgs>
-struct TSimpleSignatureHelper<TReturn(TArgs...)> {
-    static void Register(IFunctionTypeInfoBuilder& builder) {
-        builder.Returns(TTypeBuilderHelper<TReturn>::Build(builder));
-        TArgsHelper<TArgs...>::Add(*builder.Args());
-    }
-};
-
-} // namspace NImpl
-
+        TArgsHelper<TArgs...>::Add(builder); 
+    } 
+}; 
+ 
+template <typename TReturn, typename... TArgs> 
+struct TSimpleSignatureHelper<TReturn(TArgs...)> { 
+    static void Register(IFunctionTypeInfoBuilder& builder) { 
+        builder.Returns(TTypeBuilderHelper<TReturn>::Build(builder)); 
+        TArgsHelper<TArgs...>::Add(*builder.Args()); 
+    } 
+}; 
+ 
+} // namspace NImpl 
+ 
 template <typename T>
 inline IFunctionArgTypesBuilder& IFunctionArgTypesBuilder::Add()
 {
@@ -933,5 +933,5 @@ inline IFunctionArgTypesBuilder& IFunctionArgTypesBuilder::Add()
     return *this;
 }
 
-} // namespace NUdf
+} // namespace NUdf 
 } // namespace NYql

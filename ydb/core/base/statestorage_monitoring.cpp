@@ -2,7 +2,7 @@
 #include "tabletid.h"
 #include <ydb/core/protos/services.pb.h>
 #include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -11,7 +11,7 @@ namespace NKikimr {
 
 class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMonitoringActor> {
     struct TReplicaInfo {
-        TActorId ActorID;
+        TActorId ActorID; 
         TInstant ReplyTime;
 
         TActorId CurrentLeader;
@@ -22,7 +22,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
         bool Locked;
         ui64 LockedFor;
 
-        TReplicaInfo(const TActorId &x)
+        TReplicaInfo(const TActorId &x) 
             : ActorID(x)
             , ReplyTime(TInstant::MicroSeconds(Max<ui64>()))
             , CurrentLeader()
@@ -35,7 +35,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
     };
 
     const ui64 TabletID;
-    const TActorId Sender;
+    const TActorId Sender; 
     const TString Query;
 
     TInstant BeginMoment;
@@ -126,7 +126,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr &ev, const TActorContext &ctx) {
-        const TVector<TActorId> &replicasList = ev->Get()->Replicas;
+        const TVector<TActorId> &replicasList = ev->Get()->Replicas; 
 
         if (replicasList.empty())
             return Reply("empty replica list", ctx);
@@ -138,7 +138,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
 
         ReplicasInfo.reserve(replicasList.size());
         for (ui64 cookie = 0, e = replicasList.size(); cookie < e; ++cookie) {
-            const TActorId &replica = replicasList[cookie];
+            const TActorId &replica = replicasList[cookie]; 
             ReplicasInfo.push_back(replica);
             ctx.Send(replica, new TEvStateStorage::TEvReplicaLookup(TabletID, cookie));
         }
@@ -202,7 +202,7 @@ public:
         return NKikimrServices::TActivity::SS_MON;
     }
 
-    TStateStorageMonitoringActor(ui64 tabletId, const TActorId &sender, const TString &query)
+    TStateStorageMonitoringActor(ui64 tabletId, const TActorId &sender, const TString &query) 
         : TabletID(tabletId)
         , Sender(sender)
         , Query(query)
@@ -213,7 +213,7 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         // try to send monitoring request to proxy
         const ui64 stateStorageGroup = StateStorageGroupFromTabletID(TabletID);
-        const TActorId proxyActorID = MakeStateStorageProxyID(stateStorageGroup);
+        const TActorId proxyActorID = MakeStateStorageProxyID(stateStorageGroup); 
 
         BeginMoment = ctx.Now();
 
@@ -239,7 +239,7 @@ public:
     }
 };
 
-IActor* CreateStateStorageMonitoringActor(ui64 targetTablet, const TActorId &sender, const TString &query) {
+IActor* CreateStateStorageMonitoringActor(ui64 targetTablet, const TActorId &sender, const TString &query) { 
     return new TStateStorageMonitoringActor(targetTablet, sender, query);
 }
 

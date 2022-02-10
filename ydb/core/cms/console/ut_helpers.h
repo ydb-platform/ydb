@@ -175,7 +175,7 @@ inline void CollectSubscriptions(THashMap<ui64, TSubscription> &)
 
 inline void CollectSubscriptions(THashMap<ui64, TSubscription> &subscriptions,
                                  ui64 id, ui32 nodeId, const TString &host, const TString &tenant,
-                                 const TString &nodeType, ui64 tabletId, TActorId serviceId,
+                                 const TString &nodeType, ui64 tabletId, TActorId serviceId, 
                                  TVector<ui32> kinds)
 {
     TSubscription subscription;
@@ -194,7 +194,7 @@ inline void CollectSubscriptions(THashMap<ui64, TSubscription> &subscriptions,
 template <typename ...Ts>
 void CollectSubscriptions(THashMap<ui64, TSubscription> &subscriptions,
                           ui64 id, ui32 nodeId, const TString &host, const TString &tenant,
-                          const TString &nodeType, ui64 tabletId, TActorId serviceId,
+                          const TString &nodeType, ui64 tabletId, TActorId serviceId, 
                           TVector<ui32> kinds, Ts ...args)
 {
     CollectSubscriptions(subscriptions, id, nodeId, host, tenant, nodeType, tabletId, serviceId, kinds);
@@ -203,7 +203,7 @@ void CollectSubscriptions(THashMap<ui64, TSubscription> &subscriptions,
 
 template <typename ...Ts>
 void CheckListConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code,
-                                  ui64 tabletId, TActorId serviceId, Ts ...args)
+                                  ui64 tabletId, TActorId serviceId, Ts ...args) 
 {
     THashMap<ui64, TSubscription> subscriptions;
     CollectSubscriptions(subscriptions, args...);
@@ -212,7 +212,7 @@ void CheckListConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::S
     if (tabletId)
         event->Record.MutableSubscriber()->SetTabletId(tabletId);
     else if (serviceId)
-        ActorIdToProto(serviceId, event->Record.MutableSubscriber()->MutableServiceId());
+        ActorIdToProto(serviceId, event->Record.MutableSubscriber()->MutableServiceId()); 
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);

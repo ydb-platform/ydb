@@ -1,12 +1,12 @@
-UNITTEST_FOR(library/cpp/monlib/encode/text)
-
+UNITTEST_FOR(library/cpp/monlib/encode/text) 
+ 
 OWNER(
     g:solomon
     jamel
 )
-
-SRCS(
-    text_encoder_ut.cpp
-)
-
-END()
+ 
+SRCS( 
+    text_encoder_ut.cpp 
+) 
+ 
+END() 

@@ -886,12 +886,12 @@ public:
     }
 };
 
-struct TArgumentFlags {
-    enum {
-        AutoMap = 0x01,
-    };
-};
-
+struct TArgumentFlags { 
+    enum { 
+        AutoMap = 0x01, 
+    }; 
+}; 
+ 
 class TCallableExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Callable;

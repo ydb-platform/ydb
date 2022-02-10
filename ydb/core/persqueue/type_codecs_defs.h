@@ -11,8 +11,8 @@
 
 #include <string.h>
 
-namespace NKikimr {
-namespace NScheme {
+namespace NKikimr { 
+namespace NScheme { 
 
 class TDataRef;
 class TTypeCodecs;
@@ -320,7 +320,7 @@ private:
  ******************************************************************************/
 class TTypeCodecs {
 public:
-    TTypeCodecs(TTypeId typeId = 0);
+    TTypeCodecs(TTypeId typeId = 0); 
 
     template <bool IsNullable>
     const ICodec* GetDefaultCodec() const {
@@ -387,5 +387,5 @@ inline IChunkDecoder::TPtr IChunkDecoder::ReadChunk(const TDataRef& data, const 
     return codec->ReadChunk(data);
 }
 
-} // namespace NScheme
-} // namespace NKikimr
+} // namespace NScheme 
+} // namespace NKikimr 

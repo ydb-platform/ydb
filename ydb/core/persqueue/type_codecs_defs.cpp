@@ -3,8 +3,8 @@
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <util/generic/typetraits.h>
 
-namespace NKikimr {
-namespace NScheme {
+namespace NKikimr { 
+namespace NScheme { 
 
 void InitDefaults(TTypeCodecs* codecs, TCodecType type) {
     auto nullable = TCodecSig(type, true);
@@ -63,47 +63,47 @@ void AddIntCodecs(TTypeCodecs* codecs) {
     }
 }
 
-
-TTypeCodecs::TTypeCodecs(TTypeId typeId) {
+ 
+TTypeCodecs::TTypeCodecs(TTypeId typeId) { 
     using namespace NScheme;
     AddCodec<TVarLenCodec<true>>();
     AddCodec<TVarLenCodec<false>>();
 
     switch (typeId) {
-    case NTypeIds::Int32:
+    case NTypeIds::Int32: 
         AddFixedLen<TInt32>(this);
         AddIntCodecs<TInt32>(this);
         break;
-    case NTypeIds::Uint32:
+    case NTypeIds::Uint32: 
         AddFixedLen<TUint32>(this);
         AddIntCodecs<TUint32>(this);
         break;
-    case NTypeIds::Int64:
+    case NTypeIds::Int64: 
         AddFixedLen<TInt64>(this);
         AddIntCodecs<TInt64>(this);
         break;
-    case NTypeIds::Uint64:
+    case NTypeIds::Uint64: 
         AddFixedLen<TUint64>(this);
         AddIntCodecs<TUint64>(this);
         break;
-    case NTypeIds::Byte:
+    case NTypeIds::Byte: 
         AddFixedLen<TUint8>(this);
         break;
-    case NTypeIds::Bool:
+    case NTypeIds::Bool: 
         AddFixedLen<TBool>(this, false);
         AddCodec<TBoolCodec<true>>();
         AddCodec<TBoolCodec<false>>();
         InitDefaults(this, TCodecType::Bool);
         break;
 
-    case NTypeIds::Double:
+    case NTypeIds::Double: 
         AddFixedLen<TDouble>(this);
         break;
-    case NTypeIds::Float:
+    case NTypeIds::Float: 
         AddFixedLen<TFloat>(this);
         break;
 
-    case NTypeIds::PairUi64Ui64:
+    case NTypeIds::PairUi64Ui64: 
         AddFixedLen<TPairUi64Ui64>(this);
         break;
 
@@ -117,10 +117,10 @@ TTypeCodecs::TTypeCodecs(TTypeId typeId) {
         InitDefaults(this, TCodecType::VarLen);
         break;
 
-    case NTypeIds::ActorId:
-        AddFixedLen<TActorId>(this);
+    case NTypeIds::ActorId: 
+        AddFixedLen<TActorId>(this); 
         break;
-    case NTypeIds::StepOrderId:
+    case NTypeIds::StepOrderId: 
         AddFixedLen<TStepOrderId>(this);
         break;
     case NTypeIds::Decimal:
@@ -142,5 +142,5 @@ TTypeCodecs::TTypeCodecs(TTypeId typeId) {
     }
 }
 
-} // namespace NScheme
-} // namespace NKikimr
+} // namespace NScheme 
+} // namespace NKikimr 

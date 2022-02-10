@@ -56,7 +56,7 @@ namespace NKikimr {
 
     class TProducerTablet : public TActor<TProducerTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
-        TProducerTablet(const TActorId &tablet, TTabletStorageInfo *info)
+        TProducerTablet(const TActorId &tablet, TTabletStorageInfo *info) 
             : TActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , HasData(false)
@@ -128,7 +128,7 @@ namespace NKikimr {
                     Send(ctx);
                 }
             } else if (ClientId == ev->Get()->ClientId) {
-                ClientId = TActorId();
+                ClientId = TActorId(); 
             }
         }
 
@@ -177,7 +177,7 @@ namespace NKikimr {
         }
 
     private:
-        TActorId ClientId;
+        TActorId ClientId; 
         bool HasData;
         bool IsOpened;
         bool IsShutdown;
@@ -208,7 +208,7 @@ namespace NKikimr {
 
     class TConsumerTablet : public TActor<TConsumerTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
-        TConsumerTablet(const TActorId &tablet, TTabletStorageInfo *info)
+        TConsumerTablet(const TActorId &tablet, TTabletStorageInfo *info) 
             : TActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , PipeConnectAcceptor(NTabletPipe::CreateConnectAcceptor(TabletID()))
@@ -328,14 +328,14 @@ namespace NKikimr {
 
         THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
         bool RejectAll;
-        TActorId LastServerId;
+        TActorId LastServerId; 
         ui32 ServerPipesOpened;
         ui32 ServerPipesClosed;
     };
 
     class TConsumerTabletWithoutAcceptor : public TActor<TConsumerTabletWithoutAcceptor>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
-        TConsumerTabletWithoutAcceptor(const TActorId &tablet, TTabletStorageInfo *info)
+        TConsumerTabletWithoutAcceptor(const TActorId &tablet, TTabletStorageInfo *info) 
             : TActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
         {
@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
@@ -444,7 +444,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
@@ -473,7 +473,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         runtime.SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         });
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         i32 i = 3;
         while (i --> 0) {
             auto client = NTabletPipe::CreateClient(sender, TTestTxConfig::TxTablet1, config);
-            TActorId clientId = runtime.Register(client);
+            TActorId clientId = runtime.Register(client); 
 
             // We want to close the client right after it has sent EvConnect to the target tablet but before
             // the client received the EvConnectResult
@@ -515,7 +515,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
@@ -542,7 +542,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
@@ -575,7 +575,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
@@ -625,7 +625,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
@@ -659,7 +659,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
@@ -719,7 +719,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
 
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
@@ -770,7 +770,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
@@ -797,7 +797,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
 
-        TActorId sender1 = runtime.AllocateEdgeActor(0);
+        TActorId sender1 = runtime.AllocateEdgeActor(0); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         }, 0);
@@ -830,7 +830,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
 
-        TActorId sender1 = runtime.AllocateEdgeActor(0);
+        TActorId sender1 = runtime.AllocateEdgeActor(0); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         }, 0);
@@ -851,7 +851,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
             runtime.DispatchEvents(options);
         }
 
-        TActorId proxy = runtime.GetInterconnectProxy(0, 1);
+        TActorId proxy = runtime.GetInterconnectProxy(0, 1); 
         Y_VERIFY(proxy);
         runtime.Send(new IEventHandle(proxy, sender1, new TEvInterconnect::TEvConnectNode), 0);
         TAutoPtr<IEventHandle> handle;
@@ -877,7 +877,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
     Y_UNIT_TEST(TestSendBeforeBootTarget) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
@@ -935,7 +935,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
 
-        TActorId sender1 = runtime.AllocateEdgeActor(0);
+        TActorId sender1 = runtime.AllocateEdgeActor(0); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         }, 0);
@@ -985,8 +985,8 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
         runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
 
-        TActorId sender1 = runtime.AllocateEdgeActor(0);
-        TActorId sender2 = runtime.AllocateEdgeActor(1);
+        TActorId sender1 = runtime.AllocateEdgeActor(0); 
+        TActorId sender2 = runtime.AllocateEdgeActor(1); 
 
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
@@ -1041,8 +1041,8 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
 
-        TActorId edge1 = runtime.AllocateEdgeActor(0);
-        TActorId edge2 = runtime.AllocateEdgeActor(1);
+        TActorId edge1 = runtime.AllocateEdgeActor(0); 
+        TActorId edge2 = runtime.AllocateEdgeActor(1); 
 
         // Make an event that is from edge1 to edge2, but rewritten for edge1
         auto event = new IEventHandle(edge2, edge1, new TEvents::TEvWakeup());

@@ -7,7 +7,7 @@
 #include <library/cpp/actors/core/log_settings.h>
 #include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <library/cpp/actors/util/should_continue.h>
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <library/cpp/grpc/server/grpc_server.h> 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/scheme_types/scheme_types.h>
@@ -20,7 +20,7 @@
 #include <ydb/core/ymq/http/http.h>
 #include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 
 namespace NKikimr {
 
@@ -57,7 +57,7 @@ protected:
     TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
     TIntrusivePtr<NMonitoring::TBusNgMonPage> BusMonPage;
 
-    TVector<std::pair<TString, TAutoPtr<NGrpc::TGRpcServer>>> GRpcServers;
+    TVector<std::pair<TString, TAutoPtr<NGrpc::TGRpcServer>>> GRpcServers; 
 
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
     std::shared_ptr<TLogBackend> LogBackend;

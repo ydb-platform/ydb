@@ -15,7 +15,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 package Ydb.Table;
-option java_package = "com.yandex.ydb.table";
+option java_package = "com.yandex.ydb.table"; 
 
 // Create new session
 message CreateSessionRequest {

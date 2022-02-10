@@ -97,7 +97,7 @@ public:
             Response.SetScopePathId(rec.GetScopePathId());
         }
 
-        const TActorId nameserviceId = GetNameserviceActorId();
+        const TActorId nameserviceId = GetNameserviceActorId(); 
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
     }
 
@@ -167,7 +167,7 @@ public:
 private:
     NKikimrClient::TNodeRegistrationRequest Request;
     NKikimrClient::TNodeRegistrationResponse Response;
-    TActorId NodeBrokerPipe;
+    TActorId NodeBrokerPipe; 
 };
 
 } // namespace

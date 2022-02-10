@@ -12,7 +12,7 @@
 
 #include <library/cpp/actors/core/actorid.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 
 #include <util/generic/guid.h>
 #include <util/generic/ptr.h>
@@ -160,7 +160,7 @@ private:
     bool IsFifoQueue_ = false;
     TString QueueId_;
     ui64 QueueVersion_ = 0;
-    TActorId SchemeCache_;
+    TActorId SchemeCache_; 
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
     TLocalRateLimiterResource SendMessageQuoterResource_;
     TLocalRateLimiterResource ReceiveMessageQuoterResource_;
@@ -414,10 +414,10 @@ private:
     TMessageDelayStatistics DelayStatistics_;
 
     // background actors
-    TActorId DeduplicationCleanupActor_;
-    TActorId ReadsCleanupActor_;
-    TActorId RetentionActor_;
-    TActorId PurgeActor_;
+    TActorId DeduplicationCleanupActor_; 
+    TActorId ReadsCleanupActor_; 
+    TActorId RetentionActor_; 
+    TActorId PurgeActor_; 
 
     struct TSendMessageBatchRequestProcessing {
         TSendMessageBatchRequestProcessing(TSqsEvents::TEvSendMessageBatch::TPtr&& ev);

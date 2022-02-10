@@ -30,7 +30,7 @@ namespace NKikimr {
 class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTabletBootstrapper> {
     const ui64 TabletId;
     const ::NKikimrConfig::TBootstrap::TTablet DefaultConfig;
-    TActorId BootstrapperInstance;
+    TActorId BootstrapperInstance; 
     TString CurrentConfig;
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev) {
@@ -58,8 +58,8 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
 
         if (BootstrapperInstance) {
             Send(BootstrapperInstance, new TEvents::TEvPoisonPill());
-            TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(MakeBootstrapperID(TabletId, SelfId().NodeId()), TActorId());
-            BootstrapperInstance = TActorId();
+            TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(MakeBootstrapperID(TabletId, SelfId().NodeId()), TActorId()); 
+            BootstrapperInstance = TActorId(); 
         }
 
         CurrentConfig = x;

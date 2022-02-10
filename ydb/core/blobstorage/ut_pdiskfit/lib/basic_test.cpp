@@ -11,7 +11,7 @@ class TFakeVDisk
     , public TObjectWithState
 {
     const TVDiskID VDiskId;
-    const TActorId PDiskServiceId;
+    const TActorId PDiskServiceId; 
     const ui64 PDiskGuid;
     TStateManager *StateManager;
     TIntrusivePtr<TPDiskParams> PDiskParams;

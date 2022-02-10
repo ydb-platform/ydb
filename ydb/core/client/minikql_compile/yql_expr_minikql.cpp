@@ -986,7 +986,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                 }
             }
 
-            TTableRangeOptions options = mkqlContext->PgmBuilder->GetDefaultTableRangeOptions();
+            TTableRangeOptions options = mkqlContext->PgmBuilder->GetDefaultTableRangeOptions(); 
             TVector<ui32> keyTypes(Max(fromComponents, toComponents));
             TVector<TRuntimeNode> from(fromComponents);
             TVector<TRuntimeNode> to(toComponents);
@@ -1085,7 +1085,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                 keyTypes[i] = column->Type;
             }
 
-            auto update = mkqlContext->PgmBuilder->GetUpdateRowBuilder();
+            auto update = mkqlContext->PgmBuilder->GetUpdateRowBuilder(); 
             auto updateTuple = node.Child(2);
             for (ui32 i = 0; i < updateTuple->ChildrenSize(); ++i) {
                 auto child = updateTuple->Child(i);
@@ -1107,7 +1107,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                 }
             }
 
-            TRuntimeNode result = mkqlContext->PgmBuilder->UpdateRow(*lookup->TableId, keyTypes, row, update);
+            TRuntimeNode result = mkqlContext->PgmBuilder->UpdateRow(*lookup->TableId, keyTypes, row, update); 
             return result;
         });
 
@@ -1136,7 +1136,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
                 keyTypes[i] = column->Type;
             }
 
-            TRuntimeNode result = mkqlContext->PgmBuilder->EraseRow(*lookup->TableId, keyTypes, row);
+            TRuntimeNode result = mkqlContext->PgmBuilder->EraseRow(*lookup->TableId, keyTypes, row); 
             return result;
         });
 
@@ -1324,7 +1324,7 @@ void CollectKeys(const TExprNode* root, TContext::TPtr ctx) {
 
 TFuture<TConvertResult>
 ConvertToMiniKQL(TExprContainer::TPtr expr,
-                 const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+                 const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
                  const NKikimr::NMiniKQL::TTypeEnvironment* typeEnv,
                  IDbSchemeResolver* dbSchemeResolver)
 {
@@ -1429,7 +1429,7 @@ public:
     TMiniKQLCompileActor(const TString& program,
                          const NKikimr::NMiniKQL::TTypeEnvironment* typeEnv,
                          IDbSchemeResolver* dbSchemeResolver,
-                         TActorId responseTo,
+                         TActorId responseTo, 
                          THashMap<TString, ui64> &&resolveRefreshCookies,
                          bool forceCacheRefresh)
         : TypeEnv(typeEnv)
@@ -1613,7 +1613,7 @@ private:
     TString Program;
     TContext::TPtr CompileCtx;
     IDbSchemeResolver* DbSchemeResolver;
-    TActorId ResponseTo;
+    TActorId ResponseTo; 
     TExprContainer::TPtr Expr;
     TIntrusivePtr<NCommon::IMkqlCallableCompiler> Compiler;
     THashMap<TString, ui64> ResolveRefreshCookies;
@@ -1623,7 +1623,7 @@ NActors::IActor*
 CreateCompileActor(const TString& program,
                    const NKikimr::NMiniKQL::TTypeEnvironment* typeEnv,
                    IDbSchemeResolver* dbSchemeResolver,
-                   TActorId responseTo,
+                   TActorId responseTo, 
                    THashMap<TString, ui64> &&resolveRefreshCookies,
                    bool forceCacheRefresh)
 {

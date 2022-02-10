@@ -37,7 +37,7 @@ public:
         Info = info;
     }
 
-    TActorId GetActorId() {
+    TActorId GetActorId() { 
         return Info->GetActorId(Info->GetOrderNumber(VDiskId));
     }
 

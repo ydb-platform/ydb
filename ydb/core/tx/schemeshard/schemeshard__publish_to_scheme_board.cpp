@@ -201,7 +201,7 @@ private:
         return paths.empty();
     }
 
-    void Notify(TTxId txId, const THashSet<TActorId>& subscribers, const TActorContext& ctx) {
+    void Notify(TTxId txId, const THashSet<TActorId>& subscribers, const TActorContext& ctx) { 
         for (const auto& subscriber : subscribers) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "TTxAckPublishToSchemeBoard Notify"

@@ -8,8 +8,8 @@ class TTxDeleteTabletResult : public TTransactionBase<THive> {
     TEvTabletBase::TEvDeleteTabletResult::TPtr Result;
     TTabletId TabletId;
     TLeaderTabletInfo* Tablet = nullptr;
-    TVector<TActorId> StorageInfoSubscribers;
-    TActorId UnlockedFromActor;
+    TVector<TActorId> StorageInfoSubscribers; 
+    TActorId UnlockedFromActor; 
 
 public:
     TTxDeleteTabletResult(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev, THive* hive)
@@ -65,7 +65,7 @@ public:
                 ctx.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateDeleteStorage(Tablet->Id));
             }
         }
-        for (const TActorId& subscriber : StorageInfoSubscribers) {
+        for (const TActorId& subscriber : StorageInfoSubscribers) { 
             ctx.Send(
                 subscriber,
                 new TEvHive::TEvGetTabletStorageInfoResult(TabletId, NKikimrProto::ERROR, "Tablet deleted"));

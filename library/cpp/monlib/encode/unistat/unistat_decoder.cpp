@@ -1,10 +1,10 @@
 #include "unistat.h"
 
-#include <library/cpp/monlib/metrics/histogram_collector.h>
-#include <library/cpp/monlib/metrics/labels.h>
-#include <library/cpp/monlib/metrics/metric_type.h>
-#include <library/cpp/monlib/metrics/metric_value.h>
-#include <library/cpp/monlib/metrics/metric_consumer.h>
+#include <library/cpp/monlib/metrics/histogram_collector.h> 
+#include <library/cpp/monlib/metrics/labels.h> 
+#include <library/cpp/monlib/metrics/metric_type.h> 
+#include <library/cpp/monlib/metrics/metric_value.h> 
+#include <library/cpp/monlib/metrics/metric_consumer.h> 
 
 #include <library/cpp/json/json_reader.h>
 
@@ -86,7 +86,7 @@ namespace NMonitoring {
         class TDecoderUnistat {
         private:
         public:
-            explicit TDecoderUnistat(IMetricConsumer* consumer, IInputStream* is, TInstant ts)
+            explicit TDecoderUnistat(IMetricConsumer* consumer, IInputStream* is, TInstant ts) 
                 : Consumer_{consumer}
                 , Timestamp_{ts} {
                 ReadJsonTree(is, &Json_, /* throw */ true);
@@ -120,19 +120,19 @@ namespace NMonitoring {
         private:
             void OnScalar(const TJsonValue& jsonValue) {
                 if (MetricContext_.IsDeriv) {
-                    MetricContext_.Type = EMetricType::RATE;
-                    MetricContext_.Value = TMetricValue{ExtractUi64(jsonValue)};
+                    MetricContext_.Type = EMetricType::RATE; 
+                    MetricContext_.Value = TMetricValue{ExtractUi64(jsonValue)}; 
                 } else {
-                    MetricContext_.Type = EMetricType::GAUGE;
-                    MetricContext_.Value = TMetricValue{ExtractDouble(jsonValue)};
+                    MetricContext_.Type = EMetricType::GAUGE; 
+                    MetricContext_.Value = TMetricValue{ExtractDouble(jsonValue)}; 
                 }
             }
 
             void OnHistogram(const TJsonValue& jsonHist) {
                 if (MetricContext_.IsDeriv) {
-                    MetricContext_.Type = EMetricType::HIST_RATE;
+                    MetricContext_.Type = EMetricType::HIST_RATE; 
                 } else {
-                    MetricContext_.Type = EMetricType::HIST;
+                    MetricContext_.Type = EMetricType::HIST; 
                 }
 
                 auto histogramBuilder = THistogramBuilder();
@@ -147,7 +147,7 @@ namespace NMonitoring {
                 }
 
                 MetricContext_.Histogram = histogramBuilder.Finalize();
-                MetricContext_.Value = TMetricValue{MetricContext_.Histogram.Get()};
+                MetricContext_.Value = TMetricValue{MetricContext_.Histogram.Get()}; 
             }
 
             bool IsDeriv(TStringBuf name) {
@@ -190,7 +190,7 @@ namespace NMonitoring {
 
         private:
             void WriteValue() {
-                Consumer_->OnMetricBegin(MetricContext_.Type);
+                Consumer_->OnMetricBegin(MetricContext_.Type); 
 
                 Consumer_->OnLabelsBegin();
                 Consumer_->OnLabel("sensor", TString{MetricContext_.Name});
@@ -200,37 +200,37 @@ namespace NMonitoring {
 
                 Consumer_->OnLabelsEnd();
 
-                switch (MetricContext_.Type) {
-                    case EMetricType::GAUGE:
+                switch (MetricContext_.Type) { 
+                    case EMetricType::GAUGE: 
                         Consumer_->OnDouble(Timestamp_, MetricContext_.Value.AsDouble());
                         break;
-                    case EMetricType::RATE:
+                    case EMetricType::RATE: 
                         Consumer_->OnUint64(Timestamp_, MetricContext_.Value.AsUint64());
                         break;
-                    case EMetricType::HIST:
-                    case EMetricType::HIST_RATE:
+                    case EMetricType::HIST: 
+                    case EMetricType::HIST_RATE: 
                         Consumer_->OnHistogram(Timestamp_, MetricContext_.Value.AsHistogram());
                         break;
                     case EMetricType::LOGHIST:
-                    case EMetricType::DSUMMARY:
-                    case EMetricType::IGAUGE:
-                    case EMetricType::COUNTER:
-                    case EMetricType::UNKNOWN:
-                        ythrow yexception() << "Unexpected metric type: " << MetricContext_.Type;
+                    case EMetricType::DSUMMARY: 
+                    case EMetricType::IGAUGE: 
+                    case EMetricType::COUNTER: 
+                    case EMetricType::UNKNOWN: 
+                        ythrow yexception() << "Unexpected metric type: " << MetricContext_.Type; 
                 }
 
-                Consumer_->OnMetricEnd();
+                Consumer_->OnMetricEnd(); 
             }
 
         private:
-            IMetricConsumer* Consumer_;
+            IMetricConsumer* Consumer_; 
             NJson::TJsonValue Json_;
             TInstant Timestamp_;
 
             struct {
                 TStringBuf Name;
-                EMetricType Type{EMetricType::UNKNOWN};
-                TMetricValue Value;
+                EMetricType Type{EMetricType::UNKNOWN}; 
+                TMetricValue Value; 
                 bool IsDeriv{false};
                 TLabels Labels;
                 IHistogramSnapshotPtr Histogram;
@@ -239,13 +239,13 @@ namespace NMonitoring {
 
     }
 
-    void DecodeUnistat(TStringBuf data, IMetricConsumer* c, TInstant ts) {
+    void DecodeUnistat(TStringBuf data, IMetricConsumer* c, TInstant ts) { 
         c->OnStreamBegin();
         DecodeUnistatToStream(data, c, ts);
         c->OnStreamEnd();
     }
 
-    void DecodeUnistatToStream(TStringBuf data, IMetricConsumer* c, TInstant ts) {
+    void DecodeUnistatToStream(TStringBuf data, IMetricConsumer* c, TInstant ts) { 
         TMemoryInput in{data.data(), data.size()};
         TDecoderUnistat decoder(c, &in, ts);
         decoder.Decode();

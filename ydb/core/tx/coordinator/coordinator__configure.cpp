@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NFlatTxCoordinator {
 
 struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
-    TActorId AckTo;
+    TActorId AckTo; 
     ui64 Version;
     ui64 Resolution;
     TVector<TTabletId> Mediators;
@@ -12,7 +12,7 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
     TAutoPtr<TEvSubDomain::TEvConfigureStatus> Respond;
     bool ConfigurationApplied;
 
-    TTxConfigure(TSelf *coordinator, TActorId ackTo,
+    TTxConfigure(TSelf *coordinator, TActorId ackTo, 
                  ui64 version, ui64 resolution, const TVector<TTabletId>& mediators,
                  const NKikimrSubDomains::TProcessingParams& config)
         : TBase(coordinator)

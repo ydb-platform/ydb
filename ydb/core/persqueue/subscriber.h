@@ -110,7 +110,7 @@ private:
 
 class TSubscriber : public TNonCopyable {
 public:
-    TSubscriber(const ui32 partition, TTabletCountersBase& counters, const TActorId& tablet);
+    TSubscriber(const ui32 partition, TTabletCountersBase& counters, const TActorId& tablet); 
 
     //will wait for new data or timeout for this read and set timer for timeout ms
     void AddSubscription(TReadInfo&& info, const ui32 timeout, const ui64 cookie, const TActorContext& ctx);
@@ -125,7 +125,7 @@ private:
     TSubscriberLogic Subscriber;
     const ui32 Partition;
     TTabletCountersBase& Counters;
-    TActorId Tablet;
+    TActorId Tablet; 
 };
 
 

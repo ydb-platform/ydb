@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
         }
 
     public:
-        TDateTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info)
+        TDateTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info) 
             : TActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , Sender(sender)
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
         }
 
     private:
-        TActorId Sender;
+        TActorId Sender; 
     };
 
     struct TDateEnvProfiles : public NFake::TRunner {
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
 
         void Run()
         {
-            FireTablet(Edge, Tablet, [this](const TActorId &tablet, TTabletStorageInfo *info) {
+            FireTablet(Edge, Tablet, [this](const TActorId &tablet, TTabletStorageInfo *info) { 
                 return new TDateTestFlatTablet(Edge, tablet, info);
             });
 
@@ -343,7 +343,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
         }
 
         const ui32 Tablet = MakeTabletID(0, 0, 1);
-        const TActorId Edge;
+        const TActorId Edge; 
     };
 
     Y_UNIT_TEST(TestDate) {

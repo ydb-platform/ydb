@@ -269,16 +269,16 @@ namespace NKikimr {
                 Record.SetTabletID(tabletId);
             }
 
-            TEvStopTablet(ui64 tabletId, const TActorId &actorToNotify) {
+            TEvStopTablet(ui64 tabletId, const TActorId &actorToNotify) { 
                 Record.SetTabletID(tabletId);
-                ActorIdToProto(actorToNotify, Record.MutableActorToNotify());
+                ActorIdToProto(actorToNotify, Record.MutableActorToNotify()); 
             }
 
             TString ToString() const {
                 TStringStream str;
                 str << "{EvStopTablet TabletID: " << Record.GetTabletID();
                 if (Record.HasActorToNotify()) {
-                    str << " ActorToNotify: " << ActorIdFromProto(Record.GetActorToNotify()).ToString();
+                    str << " ActorToNotify: " << ActorIdFromProto(Record.GetActorToNotify()).ToString(); 
                 }
                 str << "}";
                 return str.Str();
@@ -806,5 +806,5 @@ namespace NKikimr {
         };
     };
 
-    IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);
+    IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info); 
 }

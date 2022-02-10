@@ -9,8 +9,8 @@ namespace NMonitoring {
     // - memOnly;
     // - dropHost/ignorePath
 
-    void DecodeLegacyProto(const NProtoBuf::Message& data, class IMetricConsumer* c, TInstant ts = TInstant::Zero());
+    void DecodeLegacyProto(const NProtoBuf::Message& data, class IMetricConsumer* c, TInstant ts = TInstant::Zero()); 
 
     /// Does not open/close consumer stream unlike the above function.
-    void DecodeLegacyProtoToStream(const NProtoBuf::Message& data, class IMetricConsumer* c, TInstant ts = TInstant::Zero());
+    void DecodeLegacyProtoToStream(const NProtoBuf::Message& data, class IMetricConsumer* c, TInstant ts = TInstant::Zero()); 
 }

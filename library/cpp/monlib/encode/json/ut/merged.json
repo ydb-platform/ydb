@@ -5,7 +5,7 @@
         "kind":"RATE",
         "labels":
           {
-            "metric":"hello",
+            "metric":"hello", 
             "label":"world"
           },
         "value":1

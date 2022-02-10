@@ -6,7 +6,7 @@
 #include <ydb/library/yql/core/sql_types/simple_types.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-
+ 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/charset/ci_string.h>
 #include <util/generic/hash_set.h>
@@ -2176,8 +2176,8 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
 
     bool doubleQuoted = (str.StartsWith('"') && str.EndsWith('"'));
     bool singleQuoted = !doubleQuoted && (str.StartsWith('\'') && str.EndsWith('\''));
-
-    if (str.size() >= 2 && (doubleQuoted || singleQuoted)) {
+ 
+    if (str.size() >= 2 && (doubleQuoted || singleQuoted)) { 
         result.Flags = NYql::TNodeFlags::ArbitraryContent;
         if (ctx.Settings.AnsiLexer) {
             YQL_ENSURE(singleQuoted);
@@ -2194,7 +2194,7 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
         TString s = str.substr(2, str.length() - 4);
         SubstGlobal(s, "@@@@", "@@");
         result.Content.swap(s);
-    } else {
+    } else { 
         ctx.Error(pos) << "Invalid string literal: " << EscapeC(str);
         return {};
     }

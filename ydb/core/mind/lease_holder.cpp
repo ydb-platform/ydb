@@ -8,7 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 #include <util/random/random.h>
 
@@ -101,7 +101,7 @@ private:
     void OnPipeDestroyedIdle(const TActorContext &ctx)
     {
         NTabletPipe::CloseClient(ctx, NodeBrokerPipe);
-        NodeBrokerPipe = TActorId();
+        NodeBrokerPipe = TActorId(); 
     }
 
     void HandleIdle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
@@ -122,7 +122,7 @@ private:
     void OnPipeDestroyed(const TActorContext &ctx)
     {
         NTabletPipe::CloseClient(ctx, NodeBrokerPipe);
-        NodeBrokerPipe = TActorId();
+        NodeBrokerPipe = TActorId(); 
 
         Ping(ctx);
     }
@@ -244,7 +244,7 @@ private:
     }
 
 private:
-    TActorId NodeBrokerPipe;
+    TActorId NodeBrokerPipe; 
     ui64 LastPingEpoch;
     TInstant EpochEnd;
     TInstant Expire;

@@ -56,7 +56,7 @@ private:
     }
 
     void HandleQueueDeleted(TSqsEvents::TEvQueueDeleted::TPtr& ev) {
-        SchemaActor_ = TActorId();
+        SchemaActor_ = TActorId(); 
         if (!ev->Get()->Success) {
             MakeError(Response_.MutableDeleteQueue(), NErrors::INTERNAL_FAILURE, ev->Get()->Message);
         }
@@ -67,7 +67,7 @@ private:
     void PassAway() override {
         if (SchemaActor_) {
             Send(SchemaActor_, new TEvPoisonPill());
-            SchemaActor_ = TActorId();
+            SchemaActor_ = TActorId(); 
         }
         TActionActor<TDeleteQueueActor>::PassAway();
     }
@@ -77,7 +77,7 @@ private:
     }
 
 private:
-    TActorId SchemaActor_;
+    TActorId SchemaActor_; 
 };
 
 class TDeleteQueueBatchActor

@@ -83,7 +83,7 @@ class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTab
     void PassAway() override {
         if (SSPipeClient) {
             NTabletPipe::CloseClient(SelfId(), SSPipeClient);
-            SSPipeClient = TActorId();
+            SSPipeClient = TActorId(); 
         }
         IActor::PassAway();
     }
@@ -528,11 +528,11 @@ private:
     }
     ui64 TxId = 0;
     ui64 SchemeshardId = 0;
-    TActorId SchemeCache;
+    TActorId SchemeCache; 
     TString DatabaseName;
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
     TString LogPrefix;
-    TActorId SSPipeClient;
+    TActorId SSPipeClient; 
     THolder<const NACLib::TUserToken> UserToken;
     TTableProfiles Profiles;
 };

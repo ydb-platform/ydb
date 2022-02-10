@@ -43,7 +43,7 @@ namespace NKikimr {
                 TReadQueryKeepChecker &&keepChecker,
                 const TActorContext &ctx,
                 THullDsSnap &&fullSnap,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TEvBlobStorage::TEvVGet::TPtr &ev,
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
                 TActorId replSchedulerId);
@@ -60,7 +60,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateLevelIndexBarrierQueryActor(
                 TIntrusivePtr<THullCtx> &hullCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TBarriersSnapshot &&barriersSnap,
                 TEvBlobStorage::TEvVGetBarrier::TPtr &ev,
                 std::unique_ptr<TEvBlobStorage::TEvVGetBarrierResult> result);
@@ -81,7 +81,7 @@ namespace NKikimr {
             const std::shared_ptr<THugeBlobCtx> &hugeBlobCtx,
             const TActorContext &ctx,
             THullDsSnap &&fullSnap,
-            const TActorId &parentId,
+            const TActorId &parentId, 
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
             std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result,
             const IActor& actor);

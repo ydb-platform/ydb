@@ -93,14 +93,14 @@ namespace NKikimr {
             TSyncState SyncState;
             TVDiskID SourceVDiskID;
             TVDiskID TargetVDiskID;
-            TActorId Recipient;
+            TActorId Recipient; 
             const TInstant Now;
             ui32 Channel;
 
             TEvSyncLogRead(const TSyncState &syncState,
                            const TVDiskID &sourceVDisk,
                            const TVDiskID &targetVDisk,
-                           const TActorId &recipient,
+                           const TActorId &recipient, 
                            const TInstant &now,
                            ui32 channel)
                 : SyncState(syncState)
@@ -140,8 +140,8 @@ namespace NKikimr {
             const TIntrusivePtr<TVDiskContext> VCtx;
             const TIntrusivePtr<TLsnMngr> LsnMngr;
             const TPDiskCtxPtr PDiskCtx;
-            const TActorId LoggerID;
-            const TActorId LogCutterID;
+            const TActorId LoggerID; 
+            const TActorId LogCutterID; 
 
             const ui64 SyncLogMaxDiskAmount;
             const ui64 SyncLogMaxEntryPointSize;
@@ -155,8 +155,8 @@ namespace NKikimr {
             TSyncLogCtx(TIntrusivePtr<TVDiskContext> vctx,
                     TIntrusivePtr<TLsnMngr> lsnMngr,
                     TPDiskCtxPtr pdiskCtx,
-                    const TActorId &loggerId,
-                    const TActorId &logCutterId,
+                    const TActorId &loggerId, 
+                    const TActorId &logCutterId, 
                     ui64 syncLogMaxDiskAmount,
                     ui64 syncLogMaxEntryPointSize,
                     ui64 syncLogMaxMemAmount,

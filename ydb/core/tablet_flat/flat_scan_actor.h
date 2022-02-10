@@ -342,7 +342,7 @@ namespace NOps {
             Y_FAIL("Scan actor got an unexpected EScan value");
         }
 
-        void Registered(TActorSystem *sys, const TActorId &owner) override
+        void Registered(TActorSystem *sys, const TActorId &owner) override 
         {
             Owner = owner;
             Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_OPS_HOST);
@@ -726,7 +726,7 @@ namespace NOps {
         const ui64 Serial = 0;
         const NOps::TConf Args;
         TAutoPtr<NUtil::ILogger> Logger;
-        TActorId Owner;
+        TActorId Owner; 
 
         THolder<TScanSnapshot> Snapshot;
         TAutoPtr<TEnv> Cache;       /* NFwd scan read ahead cache   */

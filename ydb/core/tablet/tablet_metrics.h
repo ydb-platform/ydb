@@ -68,7 +68,7 @@ protected:
 
     const ui64 TabletId;
     const ui32 FollowerId;
-    const TActorId Launcher;
+    const TActorId Launcher; 
     ui32 LevelCPU = 0;
     ui32 LevelMemory = 0;
     ui32 LevelNetwork = 0;

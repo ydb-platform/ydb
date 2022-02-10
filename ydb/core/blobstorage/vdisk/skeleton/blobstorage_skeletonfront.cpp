@@ -22,7 +22,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 #include <util/generic/set.h>
 #include <util/generic/maybe.h>
@@ -592,7 +592,7 @@ namespace NKikimr {
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         TVDiskID SelfVDiskId;
-        TActorId SkeletonId;
+        TActorId SkeletonId; 
         TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskCounters;
         TIntrusivePtr<NMonitoring::TDynamicCounters> SkeletonFrontGroup;
         NMonitoring::TDynamicCounters::TCounterPtr AccessDeniedMessages;
@@ -621,7 +621,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // NOTIFICATIONS
         ////////////////////////////////////////////////////////////////////////
-        using TNotificationIDs = TSet<TActorId>;
+        using TNotificationIDs = TSet<TActorId>; 
         TNotificationIDs NotificationIDs;
 
         template <class T>

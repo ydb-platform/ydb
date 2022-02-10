@@ -38,9 +38,9 @@ struct TEvWhiteboardReportResult :
 
 struct TEvHttpInfoResult : public TEventLocal<TEvHttpInfoResult, TEvBlobStorage::EvHttpInfoResult> {
     TAutoPtr<NMon::TEvHttpInfoRes> HttpInfoRes;
-    const TActorId EndCustomer;
+    const TActorId EndCustomer; 
 
-    TEvHttpInfoResult(const TActorId &endCustomer)
+    TEvHttpInfoResult(const TActorId &endCustomer) 
         : HttpInfoRes(nullptr)
         , EndCustomer(endCustomer)
     {}

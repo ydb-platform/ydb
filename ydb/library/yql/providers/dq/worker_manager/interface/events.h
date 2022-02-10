@@ -32,7 +32,7 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
                             TDqResManEvents::ES_ALLOCATE_WORKERS_RESPONSE> {
         TEvAllocateWorkersResponse();
         explicit TEvAllocateWorkersResponse(const TString& error, NYql::NDqProto::EErrorCode code = NYql::NDqProto::EUNKNOWN);
-        explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<NActors::TActorId>& ids);
+        explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<NActors::TActorId>& ids); 
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<TWorkerInfo::TPtr>& workerInfos);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<ui32>& nodes);
     };
@@ -152,9 +152,9 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         TEvConfigureFailureInjectorResponse() = default;
     };
 
-    inline NActors::TActorId MakeWorkerManagerActorID(ui32 nodeId) {
+    inline NActors::TActorId MakeWorkerManagerActorID(ui32 nodeId) { 
         char x[12] = {'r', 'e', 's', 'm', 'a', 'n'};
         memcpy(x + 7, &nodeId, sizeof(ui32));
-        return NActors::TActorId(nodeId, TStringBuf(x, 12));
+        return NActors::TActorId(nodeId, TStringBuf(x, 12)); 
     }
 }

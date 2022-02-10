@@ -36,7 +36,7 @@ public:
 
     void Subscribe() {
         auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>();
-        ActorIdToProto(SelfId(), req->Record.MutableActorID());
+        ActorIdToProto(SelfId(), req->Record.MutableActorID()); 
         req->Record.MutableResources()->Reserve(State->Options.ResourcesCount);
 
         //const double amount = State->Options.MaxUnitsPerSecond * State->Options.TestTime.Seconds() * 2.0;
@@ -92,6 +92,6 @@ public:
 private:
     TIntrusivePtr<TTestState> State;
     TInstant StartSessionTime;
-    TActorId TabletPipe;
+    TActorId TabletPipe; 
     std::vector<TTestState::TResourceState> ResState;
 };

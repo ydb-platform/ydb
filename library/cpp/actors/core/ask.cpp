@@ -19,7 +19,7 @@ namespace NActors {
         public:
             TAskActor(
                     TMaybe<ui32> expectedEventType,
-                    TActorId recipient,
+                    TActorId recipient, 
                     THolder<IEventBase> event,
                     TDuration timeout,
                     const NThreading::TPromise<THolder<IEventBase>>& promise)
@@ -55,7 +55,7 @@ namespace NActors {
 
         public:
             TMaybe<ui32> ExpectedEventType_;
-            TActorId Recipient_;
+            TActorId Recipient_; 
             THolder<IEventBase> Event_;
             TDuration Timeout_;
             NThreading::TPromise<THolder<IEventBase>> Promise_;
@@ -64,7 +64,7 @@ namespace NActors {
 
     THolder<IActor> MakeAskActor(
             TMaybe<ui32> expectedEventType,
-            TActorId recipient,
+            TActorId recipient, 
             THolder<IEventBase> event,
             TDuration timeout,
             const NThreading::TPromise<THolder<IEventBase>>& promise)

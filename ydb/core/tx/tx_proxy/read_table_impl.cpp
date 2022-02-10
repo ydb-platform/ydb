@@ -231,23 +231,23 @@ private:
         ui64 ReadTxId = 0;
         ui64 ExpectedSeqNo = 1;
 
-        TActorId ClearanceActor;
+        TActorId ClearanceActor; 
         ui64 ClearanceCookie = 0;
 
-        TActorId QuotaActor;
+        TActorId QuotaActor; 
         size_t QuotaRequests = 0;
         ui64 QuotaReserved = 0;
 
         ui64 Retries = 0;
         ui64 RetrySeqNo = 0;
-        TActorId RetryTimer;
+        TActorId RetryTimer; 
         TInstant RetryingSince;
         TDuration LastRetryDelay;
         bool AllowInstantRetry = true;
 
         ESnapshotState SnapshotState = ESnapshotState::Unknown;
         ui64 RefreshSeqNo = 0;
-        TActorId RefreshTimer;
+        TActorId RefreshTimer; 
         TDuration LastRefreshDelay;
 
         explicit TShardState(ui64 shardId)
@@ -1402,7 +1402,7 @@ private:
         dataTransaction.SetStreamResponse(true);
         dataTransaction.SetImmediate(true);
         dataTransaction.SetReadOnly(true);
-        ActorIdToProto(SelfId(), dataTransaction.MutableSink());
+        ActorIdToProto(SelfId(), dataTransaction.MutableSink()); 
 
         auto &tx = *dataTransaction.MutableReadTableTransaction();
         tx.MutableTableId()->SetOwnerId(TableId.PathId.OwnerId);
@@ -2344,7 +2344,7 @@ private:
         // Avoid setting DomainOwnerId to reduce possible races with schemeshard migration
         request->DatabaseName = Settings.DatabaseName;
         request->ResultSet.emplace_back(std::move(updatedKeyDesc));
-        ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, TActorId()));
+        ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, TActorId())); 
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         ResolveInProgress = true;
     }
@@ -2690,7 +2690,7 @@ private:
     void TryToInvalidateTable(TTableId tableId, const TActorContext& ctx) {
         const bool notYetInvalidated = InvalidatedTables.insert(tableId).second;
         if (notYetInvalidated) {
-            ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(tableId, TActorId()));
+            ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(tableId, TActorId())); 
         }
     }
 

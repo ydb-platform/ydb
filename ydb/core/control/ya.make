@@ -7,7 +7,7 @@ OWNER(
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/monlib/dynamic_counters
+    library/cpp/monlib/dynamic_counters 
     util
     ydb/core/base
     ydb/core/mon

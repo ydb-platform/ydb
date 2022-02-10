@@ -1,26 +1,26 @@
-#pragma once
-
+#pragma once 
+ 
 #include "mkql_computation_node_holders.h"
 
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/public/udf/udf_validate.h>
-
-#include <util/generic/noncopyable.h>
+ 
+#include <util/generic/noncopyable.h> 
 #include <util/memory/pool.h>
-
+ 
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_terminator.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
-///////////////////////////////////////////////////////////////////////////////
-// TDefaultValueBuilder
-///////////////////////////////////////////////////////////////////////////////
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
+/////////////////////////////////////////////////////////////////////////////// 
+// TDefaultValueBuilder 
+/////////////////////////////////////////////////////////////////////////////// 
 class TDefaultValueBuilder final: public NUdf::IValueBuilder, private TNonCopyable, public ITerminator,
     public NUdf::IDateBuilder
-{
-public:
+{ 
+public: 
     TDefaultValueBuilder(const THolderFactory& holderFactory, NUdf::EValidatePolicy policy = NUdf::EValidatePolicy::Fail);
 
     void SetSecureParamsProvider(const NUdf::ISecureParamsProvider* provider);
@@ -93,6 +93,6 @@ private:
     const NUdf::TSourcePosition** CalleePositionPtr_ = nullptr;
     mutable bool Rethrow_ = false;
 };
-
+ 
 } // namespace NMiniKQL
 } // namespace Nkikimr

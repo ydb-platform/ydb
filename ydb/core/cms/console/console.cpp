@@ -8,7 +8,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/validators/registry.h>
 
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 namespace NKikimr {
 namespace NConsole {
@@ -182,7 +182,7 @@ void TConsole::Handle(TEvents::TEvPoisonPill::TPtr &ev,
     ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
 }
 
-IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info)
+IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info) 
 {
     return new TConsole(tablet, info);
 }

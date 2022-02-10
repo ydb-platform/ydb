@@ -191,7 +191,7 @@ namespace NKikimr {
             }
         }
 
-        void OnRegistration(TTestActorRuntime& runtime, const TActorId& parentId, const TActorId& actorId) {
+        void OnRegistration(TTestActorRuntime& runtime, const TActorId& parentId, const TActorId& actorId) { 
             Y_UNUSED(runtime);
             auto it = TabletRelatedActors.find(parentId);
             if (it != TabletRelatedActors.end()) {
@@ -256,7 +256,7 @@ namespace NKikimr {
 
     protected:
         TMap<ui64, TActorId> TabletLeaders;
-        TMap<TActorId, ui64> TabletRelatedActors;
+        TMap<TActorId, ui64> TabletRelatedActors; 
         TSet<ui64> DeletedTablets;
         bool& TracingActive;
         const TVector<ui64> TabletIds;
@@ -279,7 +279,7 @@ namespace NKikimr {
         TTestActorRuntime::EEventAction OnEvent(TTestActorRuntime& runtime, TAutoPtr<IEventHandle>& event) {
             TTabletTracer::OnEvent(runtime, event);
 
-            TActorId actor = event->Recipient;
+            TActorId actor = event->Recipient; 
             if (KillOnCommit && IsCommitResult(event) && HideCommitsFrom.contains(actor)) {
                 // We dropped one of the previous TEvCommitResult coming to this Executore actor
                 // after that we must drop all TEvCommitResult until this Executor dies
@@ -315,7 +315,7 @@ namespace NKikimr {
 
             TActorId targetActorId = TabletLeaders[TabletId];
 
-            if (targetActorId == TActorId()) {
+            if (targetActorId == TActorId()) { 
                 if (ENABLE_REBOOT_DISPATCH_LOG)
                     Cerr << "!IGNORE " << TabletId << " event " << eventType << " becouse actor is null!\n";
 
@@ -326,7 +326,7 @@ namespace NKikimr {
                 Cerr << "!Reboot " << TabletId << " (actor " << targetActorId << ") on event " << eventType << " !\n";
 
             // Wait for the tablet to boot or to become deleted
-            runtime.Send(new IEventHandle(targetActorId, TActorId(), new TEvents::TEvPoisonPill()));
+            runtime.Send(new IEventHandle(targetActorId, TActorId(), new TEvents::TEvPoisonPill())); 
             TDispatchOptions rebootOptions;
             rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
             rebootOptions.CustomFinalCondition = [this]() -> bool {
@@ -359,7 +359,7 @@ namespace NKikimr {
         const bool KillOnCommit;    // Kill tablet after log is committed but before Complete() is called for Tx's
         ui32 CurrentEventCount;
         bool HasReboot0;
-        TSet<TActorId> HideCommitsFrom;
+        TSet<TActorId> HideCommitsFrom; 
     };
 
     // Breaks pipe after the specified number of events
@@ -396,8 +396,8 @@ namespace NKikimr {
                 Cerr << "!Reset pipe\n";
 
             // Replace the event with PoisonPill in order to kill PipeClient or PipeServer
-            TActorId targetActorId = event->GetRecipientRewrite();
-            runtime.Send(new IEventHandle(targetActorId, TActorId(), new TEvents::TEvPoisonPill()));
+            TActorId targetActorId = event->GetRecipientRewrite(); 
+            runtime.Send(new IEventHandle(targetActorId, TActorId(), new TEvents::TEvPoisonPill())); 
 
             return TTestActorRuntime::EEventAction::DROP;
         }
@@ -592,8 +592,8 @@ namespace NKikimr {
     }
 
     void InvalidateTabletResolverCache(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex) {
-        runtime.Send(new IEventHandle(MakeTabletResolverID(), TActorId(),
-            new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())), nodeIndex);
+        runtime.Send(new IEventHandle(MakeTabletResolverID(), TActorId(), 
+            new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())), nodeIndex); 
     }
 
     void RebootTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex, bool sysTablet) {
@@ -703,12 +703,12 @@ namespace NKikimr {
         app.SetChannels(std::move(channelProfiles));
     }
 
-    void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 domainId, ui32 nGroups) {
+    void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 domainId, ui32 nGroups) { 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
 
         //get NodesInfo, nodes hostname and port are interested
-        runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
+        runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes)); 
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
         auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
@@ -765,7 +765,7 @@ namespace NKikimr {
                         return TTestActorRuntime::EEventAction::PROCESS;
                     });
 
-                    runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+                    runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) { 
                         tabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
                     });
 
@@ -821,7 +821,7 @@ namespace NKikimr {
                                 return rebootingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                             });
 
-                            runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+                            runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) { 
                                 rebootingObserver.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
                             });
 
@@ -865,7 +865,7 @@ namespace NKikimr {
                     return TTestActorRuntime::EEventAction::PROCESS;
                 });
 
-                runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+                runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) { 
                     tabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
                 });
 
@@ -912,7 +912,7 @@ namespace NKikimr {
                         return pipeResetingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                     });
 
-                    runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+                    runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) { 
                         pipeResetingObserver.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
                     });
 
@@ -961,7 +961,7 @@ namespace NKikimr {
                         return delayingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                     });
 
-                    runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+                    runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) { 
                         delayingObserver.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
                     });
 
@@ -988,7 +988,7 @@ namespace NKikimr {
 
     class TTabletScheduledEventsGuard : public ITabletScheduledEventsGuard {
     public:
-        TTabletScheduledEventsGuard(const TVector<ui64>& tabletIds, TTestActorRuntime& runtime, const TActorId& sender)
+        TTabletScheduledEventsGuard(const TVector<ui64>& tabletIds, TTestActorRuntime& runtime, const TActorId& sender) 
             : Runtime(runtime)
             , Sender(sender)
             , TracingActive(true)
@@ -1001,7 +1001,7 @@ namespace NKikimr {
             });
 
             PrevRegistrationObserverFunc = Runtime.SetRegistrationObserverFunc(
-                [&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+                [&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) { 
                 TabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
             });
 
@@ -1027,7 +1027,7 @@ namespace NKikimr {
 
     private:
         TTestActorRuntime& Runtime;
-        const TActorId Sender;
+        const TActorId Sender; 
         bool TracingActive;
         TTabletTracer TabletTracer;
         TTabletScheduledFilter ScheduledFilter;
@@ -1038,12 +1038,12 @@ namespace NKikimr {
         TTestActorRuntime::TRegistrationObserver PrevRegistrationObserverFunc;
     };
 
-    TAutoPtr<ITabletScheduledEventsGuard> CreateTabletScheduledEventsGuard(const TVector<ui64>& tabletIds, TTestActorRuntime& runtime, const TActorId& sender) {
+    TAutoPtr<ITabletScheduledEventsGuard> CreateTabletScheduledEventsGuard(const TVector<ui64>& tabletIds, TTestActorRuntime& runtime, const TActorId& sender) { 
         return TAutoPtr<ITabletScheduledEventsGuard>(new TTabletScheduledEventsGuard(tabletIds, runtime, sender));
     }
 
-    ui64 GetFreePDiskSize(TTestActorRuntime& runtime, const TActorId& sender) {
-        TActorId pdiskServiceId = MakeBlobStoragePDiskID(runtime.GetNodeId(0), 0);
+    ui64 GetFreePDiskSize(TTestActorRuntime& runtime, const TActorId& sender) { 
+        TActorId pdiskServiceId = MakeBlobStoragePDiskID(runtime.GetNodeId(0), 0); 
         runtime.Send(new IEventHandle(pdiskServiceId, sender, nullptr));
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
@@ -1069,7 +1069,7 @@ namespace NKikimr {
         return pipeConfig;
     }
 
-    void WaitScheduledEvents(TTestActorRuntime &runtime, TDuration delay, const TActorId &sender, ui32 nodeIndex) {
+    void WaitScheduledEvents(TTestActorRuntime &runtime, TDuration delay, const TActorId &sender, ui32 nodeIndex) { 
         runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), delay, nodeIndex);
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
@@ -1077,7 +1077,7 @@ namespace NKikimr {
 
     class TFakeHive : public TActor<TFakeHive>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
-        static std::function<IActor* (const TActorId &, TTabletStorageInfo*)> DefaultGetTabletCreationFunc(ui32 type) {
+        static std::function<IActor* (const TActorId &, TTabletStorageInfo*)> DefaultGetTabletCreationFunc(ui32 type) { 
             Y_UNUSED(type);
             return nullptr;
         }
@@ -1089,7 +1089,7 @@ namespace NKikimr {
             return NKikimrServices::TActivity::HIVE_ACTOR;
         }
 
-        TFakeHive(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state,
+        TFakeHive(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state, 
                   TGetTabletCreationFunc getTabletCreationFunc)
             : TActor<TFakeHive>(&TFakeHive::StateInit)
             , NTabletFlatExecutor::TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -1154,7 +1154,7 @@ namespace NKikimr {
             const auto bootMode = ev->Get()->Record.GetTabletBootMode();
             auto it = State->Tablets.find(key);
             const auto& defaultTabletTypes = AppData(ctx)->DefaultTabletTypes;
-            TActorId bootstrapperActorId;
+            TActorId bootstrapperActorId; 
             if (it == State->Tablets.end()) {
                 if (bootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
                     // don't boot anything
@@ -1180,7 +1180,7 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &NKesus::CreateKesusTablet, DataGroupErasure);
                 } else if (type == defaultTabletTypes.Hive) {
                     TFakeHiveState::TPtr state = State->AllocateSubHive();
-                    bootstrapperActorId = Boot(ctx, type, [=](const TActorId& tablet, TTabletStorageInfo* info) {
+                    bootstrapperActorId = Boot(ctx, type, [=](const TActorId& tablet, TTabletStorageInfo* info) { 
                                                    return new TFakeHive(tablet, info, state, &TFakeHive::DefaultGetTabletCreationFunc);
                                                }, DataGroupErasure);
                 } else if (type == defaultTabletTypes.SysViewProcessor) {
@@ -1293,10 +1293,10 @@ namespace NKikimr {
             ctx.Send(ctx.SelfID, new TEvFakeHive::TEvNotifyTabletDeleted(tabletInfo.TabletId));
 
             // Kill the tablet and don't restart it
-            TActorId bootstrapperActorId = tabletInfo.BootstrapperActorId;
+            TActorId bootstrapperActorId = tabletInfo.BootstrapperActorId; 
             ctx.Send(bootstrapperActorId, new TEvBootstrapper::TEvStandBy());
 
-            for (TActorId waiter : tabletInfo.DeletionWaiters) {
+            for (TActorId waiter : tabletInfo.DeletionWaiters) { 
                 SendDeletionNotification(it->second.TabletId, waiter, ctx);
             }
             State->TabletIdToOwner.erase(it->second.TabletId);
@@ -1393,7 +1393,7 @@ namespace NKikimr {
             }
         }
 
-        void SendDeletionNotification(ui64 tabletId, TActorId waiter, const TActorContext& ctx) {
+        void SendDeletionNotification(ui64 tabletId, TActorId waiter, const TActorContext& ctx) { 
             TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();
             FillTabletInfo(response->Record, tabletId, nullptr);
             ctx.Send(waiter, response.Release());
@@ -1406,7 +1406,7 @@ namespace NKikimr {
         }
 
     private:
-        TActorId Boot(const TActorContext& ctx, TTabletTypes::EType tabletType, std::function<IActor* (const TActorId &, TTabletStorageInfo *)> op,
+        TActorId Boot(const TActorContext& ctx, TTabletTypes::EType tabletType, std::function<IActor* (const TActorId &, TTabletStorageInfo *)> op, 
             TBlobStorageGroupType::EErasureSpecies erasure) {
             TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
                 TMailboxType::Simple, 0)));

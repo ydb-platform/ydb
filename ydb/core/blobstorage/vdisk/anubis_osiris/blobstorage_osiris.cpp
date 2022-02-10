@@ -137,9 +137,9 @@ namespace NKikimr {
 
         TIntrusivePtr<THullCtx> HullCtx;
         const ui64 ConfirmedLsn;
-        const TActorId NotifyId;
-        const TActorId ParentId;
-        const TActorId SkeletonId;
+        const TActorId NotifyId; 
+        const TActorId ParentId; 
+        const TActorId SkeletonId; 
         std::shared_ptr<TLogoBlobFilterForOsiris> LogoBlobFilter;
         TSaviour<TLogoBlobFilterForOsiris> Saviour;
         ui64 InFly = 0;

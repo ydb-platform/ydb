@@ -23,10 +23,10 @@ protected:
     static const bool WithRetry = false;
     using TThis = TBrowseTable;
     using TBase = TBrowseTabletsCommon;
-    TActorId TxProxy = MakeTxProxyID();
+    TActorId TxProxy = MakeTxProxyID(); 
 
 public:
-    TBrowseTable(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
+    TBrowseTable(const TActorId& owner, const IViewer::TBrowseContext& browseContext) 
         : TBrowseTabletsCommon(owner, browseContext)
     {}
 
@@ -66,7 +66,7 @@ public:
     void SendTabletRequests(const TVector<TTabletId>& tablets, const TActorContext& ctx) {
         TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
         for (auto tabletId : tablets) {
-            TActorId pipeClient = GetTabletPipe(tabletId, ctx);
+            TActorId pipeClient = GetTabletPipe(tabletId, ctx); 
             NTabletPipe::SendData(ctx, pipeClient, new TEvTablet::TEvGetCounters(), tabletId);
             ++Requests;
             ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(TxProxy, tabletId, TEvTablet::EvGetCounters));

@@ -62,12 +62,12 @@ inline TFakeTableCell FromVal(NScheme::TTypeId t, i64 val) {
     TFakeTableCell c;
     ui32 sz = sizeof(val);
     switch (t) {
-    case NScheme::NTypeIds::Byte:
-    case NScheme::NTypeIds::Bool:
+    case NScheme::NTypeIds::Byte: 
+    case NScheme::NTypeIds::Bool: 
         sz = 1;
         break;
-    case NScheme::NTypeIds::Int32:
-    case NScheme::NTypeIds::Uint32:
+    case NScheme::NTypeIds::Int32: 
+    case NScheme::NTypeIds::Uint32: 
         sz = 4;
         break;
     }

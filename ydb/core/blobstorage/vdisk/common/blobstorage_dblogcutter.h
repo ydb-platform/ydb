@@ -44,7 +44,7 @@ namespace NKikimr {
         TPDiskCtxPtr PDiskCtx;
         TIntrusivePtr<TLsnMngr> LsnMngr;
         TIntrusivePtr<TVDiskConfig> Config;
-        TActorId LoggerId;
+        TActorId LoggerId; 
     };
 
     IActor* CreateRecoveryLogCutter(TLogCutterCtx &&logCutterCtx);

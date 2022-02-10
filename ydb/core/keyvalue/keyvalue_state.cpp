@@ -11,8 +11,8 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/util/stlog.h>
-#include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/json/writer/json_value.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/json/writer/json_value.h> 
 #include <util/string/escape.h>
 #include <util/charset/utf8.h>
 
@@ -90,7 +90,7 @@ void TKeyValueState::Clear() {
     UsedChannels.reset();
 
     TabletId = 0;
-    KeyValueActorId = TActorId();
+    KeyValueActorId = TActorId(); 
     ExecutorGeneration = 0;
 
     Queue.clear();
@@ -480,7 +480,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
     }
 }
 
-void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 executorGeneration,
+void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 executorGeneration, 
         ISimpleDb &db, const TActorContext &ctx, const TTabletStorageInfo *info) {
     Y_UNUSED(info);
     Y_VERIFY(IsEmptyDbStart || IsStatePresent);
@@ -560,9 +560,9 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
                 PerGenerationCounter, channel, generation, step, TInstant::Max());
             ++PerGenerationCounter;
 
-            const TActorId nodeWarden = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId());
-            const TActorId proxy = MakeBlobStorageProxyID(group);
-            ctx.ExecutorThread.Send(new IEventHandle(proxy, TActorId(), ev.Release(),
+            const TActorId nodeWarden = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()); 
+            const TActorId proxy = MakeBlobStorageProxyID(group); 
+            ctx.ExecutorThread.Send(new IEventHandle(proxy, TActorId(), ev.Release(), 
                 IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden));
         }
     }
@@ -625,8 +625,8 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
                     nullptr /*doNotKeep*/, TInstant::Max(), false /*isMultiCollectAllowed*/, false /*hard*/);
             ++PerGenerationCounter;
 
-            const TActorId nodeWarden = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId());
-            const TActorId proxy = MakeBlobStorageProxyID(group);
+            const TActorId nodeWarden = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()); 
+            const TActorId proxy = MakeBlobStorageProxyID(group); 
             ctx.ExecutorThread.Send(new IEventHandle(proxy, KeyValueActorId, ev.Release(),
                 IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden));
         }
@@ -733,7 +733,7 @@ void TKeyValueState::SendCutHistory(const TActorContext &ctx) {
             record.SetTabletID(TabletId);
             record.SetChannel(channel);
             record.SetFromGeneration(fromGeneration);
-            TActorId localActorId = MakeLocalID(ctx.SelfID.NodeId());
+            TActorId localActorId = MakeLocalID(ctx.SelfID.NodeId()); 
             ctx.Send(localActorId, ev.Release());
         }
     }

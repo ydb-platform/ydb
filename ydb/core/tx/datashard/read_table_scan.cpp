@@ -271,8 +271,8 @@ public:
     }
 
     TReadTableScan(ui64 txId, ui64 shardId, TUserTable::TCPtr tableInfo,
-                   const NKikimrTxDataShard::TReadTableTransaction &tx, TActorId sink,
-                   TActorId dataShard)
+                   const NKikimrTxDataShard::TReadTableTransaction &tx, TActorId sink, 
+                   TActorId dataShard) 
         : TActor(&TThis::StateWork)
         , Sink(sink)
         , DataShard(dataShard)
@@ -594,8 +594,8 @@ private:
 
 private:
     TVector<ui32> Tags;
-    TActorId Sink;
-    TActorId DataShard;
+    TActorId Sink; 
+    TActorId DataShard; 
     ui64 TxId;
     ui64 ShardId;
     IDriver *Driver;
@@ -618,8 +618,8 @@ TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId,
                                         ui64 shardId,
                                         TUserTable::TCPtr tableInfo,
                                         const NKikimrTxDataShard::TReadTableTransaction &tx,
-                                        TActorId sink,
-                                        TActorId dataShard)
+                                        TActorId sink, 
+                                        TActorId dataShard) 
 {
     return new TReadTableScan(txId, shardId, tableInfo, tx, sink, dataShard);
 }

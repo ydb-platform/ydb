@@ -9,14 +9,14 @@
 namespace NKikimr {
 
 IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
+    const TActorId& owner, 
     const TString& path,
     const ui64 stateStorageGroup,
     const ui64 domainOwnerId
 );
 
 IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
+    const TActorId& owner, 
     const TPathId& pathId,
     const ui64 stateStorageGroup,
     const ui64 domainOwnerId
@@ -30,14 +30,14 @@ enum class ESchemeBoardSubscriberDeletionPolicy {
 };
 
 IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
+    const TActorId& owner, 
     const TString& path,
     const ui64 stateStorageGroup,
     const ESchemeBoardSubscriberDeletionPolicy deletionPolicy
 );
 
 IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
+    const TActorId& owner, 
     const TPathId& pathId,
     const ui64 stateStorageGroup,
     const ESchemeBoardSubscriberDeletionPolicy deletionPolicy

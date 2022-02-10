@@ -6,7 +6,7 @@
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/interconnect_channels.h>
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 namespace NKikimr {
 
@@ -24,14 +24,14 @@ namespace NKikimr {
             struct TEvTryToCollect : public TEventLocal<TEvTryToCollect, EvTryToCollect>
             {};
 
-            const TActorId ParentActorId;
+            const TActorId ParentActorId; 
             const ui64 Tag;
 
             const TIntrusivePtr<TBlobStorageGroupInfo> Info;
             const TVDiskID VDiskId;
-            const TActorId VDiskActorId;
+            const TActorId VDiskActorId; 
             const TBlobStorageGroupType GType;
-            TActorId QueueActorId;
+            TActorId QueueActorId; 
 
             const ui64 TabletId;
             const ui32 Channel;
@@ -76,7 +76,7 @@ namespace NKikimr {
             }
 
             TVDiskLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TVDiskLoadStart& cmd,
-                    const NActors::TActorId& parent, ui64 tag)
+                    const NActors::TActorId& parent, ui64 tag) 
                 : ParentActorId(parent)
                 , Tag(tag)
                 , Info(TBlobStorageGroupInfo::Parse(cmd.GetGroupInfo(), nullptr, nullptr))
@@ -340,7 +340,7 @@ namespace NKikimr {
     } // <anonymous>
 
     IActor *CreateVDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TVDiskLoadStart& cmd,
-            const NActors::TActorId& parent, ui64 tag) {
+            const NActors::TActorId& parent, ui64 tag) { 
         return new TVDiskLoadActor(cmd, parent, tag);
     }
 

@@ -44,7 +44,7 @@ struct TResource;
 NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets();
 
 struct TRequest {
-    TActorId Source = TActorId();
+    TActorId Source = TActorId(); 
     ui64 EventCookie = 0;
 
     TInstant StartTime;
@@ -65,13 +65,13 @@ struct TRequest {
 class TReqState {
 private:
     TVector<TRequest> Requests;
-    THashMap<TActorId, ui32> ByOwner;
+    THashMap<TActorId, ui32> ByOwner; 
     TVector<ui32> Unused;
 public:
     ui32 Idx(TRequest &request);
     TRequest& Get(ui32 idx);
-    ui32 HeadByOwner(TActorId ownerId);
-    ui32 Allocate(TActorId source, ui64 eventCookie);
+    ui32 HeadByOwner(TActorId ownerId); 
+    ui32 Allocate(TActorId source, ui64 eventCookie); 
     void Free(ui32 idx);
 };
 
@@ -190,7 +190,7 @@ struct TScheduleTick {
 
 struct TQuoterState {
     const TString QuoterName;
-    TActorId ProxyId;
+    TActorId ProxyId; 
 
     THashMap<ui64, THolder<TResource>> Resources;
     THashMap<TString, ui64> ResourcesIndex;

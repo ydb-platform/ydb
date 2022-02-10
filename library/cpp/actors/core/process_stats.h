@@ -3,10 +3,10 @@
 #include "defs.h"
 #include "actor.h"
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 
 namespace NMonitoring {
-    class TMetricRegistry;
+    class TMetricRegistry; 
 }
 
 namespace NActors {
@@ -62,5 +62,5 @@ namespace NActors {
     };
 
     IActor* CreateProcStatCollector(ui32 intervalSec, NMonitoring::TDynamicCounterPtr counters);
-    IActor* CreateProcStatCollector(TDuration interval, NMonitoring::TMetricRegistry& registry);
+    IActor* CreateProcStatCollector(TDuration interval, NMonitoring::TMetricRegistry& registry); 
 }

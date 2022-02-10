@@ -228,8 +228,8 @@ protected:
         config.Opts->AddLongOption('r', "restarts-count-file", "State for restarts monitoring counter,\nuse empty string to disable\n")
                 .OptionalArgument("PATH").DefaultValue(RestartsCountFile).StoreResult(&RestartsCountFile);
         config.Opts->AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
-        config.Opts->AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths);
-        config.Opts->AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
+        config.Opts->AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths); 
+        config.Opts->AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir); 
         config.Opts->AddLongOption("node-type", "Type of the node")
                 .RequiredArgument("NAME").StoreResult(&NodeType);
         config.Opts->AddLongOption("ignore-cms-configs", "Don't load configs from CMS")
@@ -513,7 +513,7 @@ protected:
                 AppConfig.AddUDFsPaths(path);
             }
         }
-
+ 
         if (!AppConfig.HasMonitoringConfig())
             AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(MonitoringThreads);
         if (!AppConfig.HasRestartsCountConfig() && RestartsCountFile)
@@ -530,7 +530,7 @@ protected:
             auto& conf = *AppConfig.MutableGRpcConfig();
             conf.SetStartGRpcProxy(true);
             conf.SetPort(GRpcPort);
-        }
+        } 
         if (GRpcsPort) {
             auto& conf = *AppConfig.MutableGRpcConfig();
             conf.SetStartGRpcProxy(true);

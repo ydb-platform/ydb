@@ -1,16 +1,16 @@
 #include "scheme_type_registry.h"
 #include "scheme_types.h"
 #include "scheme_types_defs.h"
-
+ 
 #include <util/digest/murmur.h>
-#include <util/generic/algorithm.h>
+#include <util/generic/algorithm.h> 
 
 
 #define REGISTER_TYPE(name, size, ...) RegisterType<T##name>();
 
-namespace NKikimr {
-namespace NScheme {
-
+namespace NKikimr { 
+namespace NScheme { 
+ 
 TTypeRegistry::TTypeRegistry()
 {
     // move to 'init defaults?'
@@ -40,6 +40,6 @@ TTypeRegistry::TTypeRegistry()
 
 void TTypeRegistry::CalculateMetadataEtag() {
 }
-
-} // namespace NScheme
-} // namespace NKikimr
+ 
+} // namespace NScheme 
+} // namespace NKikimr 

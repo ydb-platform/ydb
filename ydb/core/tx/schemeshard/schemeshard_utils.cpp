@@ -133,7 +133,7 @@ void TShardDeleter::ShardDeleted(TShardIdx shardIdx, const NActors::TActorContex
     }
 }
 
-bool TShardDeleter::Has(TTabletId hiveTabletId, TActorId pipeClientActorId) const {
+bool TShardDeleter::Has(TTabletId hiveTabletId, TActorId pipeClientActorId) const { 
     return PerHiveDeletions.contains(hiveTabletId) && PerHiveDeletions.at(hiveTabletId).PipeToHive == pipeClientActorId;
 }
 

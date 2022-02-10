@@ -27,7 +27,7 @@ using namespace Tests;
 
 Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
-    static void DoBuildIndex(Tests::TServer::TPtr server, TActorId sender,
+    static void DoBuildIndex(Tests::TServer::TPtr server, TActorId sender, 
                              const TString& tableFrom, const TString& tableTo,
                              const TRowVersion& snapshot,
                              const NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus& expected) {
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
     }
 
     static void CreateShardedTableForIndex(
-        Tests::TServer::TPtr server, TActorId sender,
+        Tests::TServer::TPtr server, TActorId sender, 
         const TString &root, const TString &name,
         ui64 shards, bool enableOutOfOrder)
     {

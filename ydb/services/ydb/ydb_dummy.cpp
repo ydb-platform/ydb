@@ -16,7 +16,7 @@ using namespace Draft::Dummy;
 
 using TEvInfiniteRequest = TGRpcRequestWrapper<0, InfiniteRequest, InfiniteResponse, true>;
 
-static void HandlePing(NGrpc::IRequestContextBase* ctx) {
+static void HandlePing(NGrpc::IRequestContextBase* ctx) { 
     auto req = static_cast<const PingRequest*>(ctx->GetRequest());
     auto resp = google::protobuf::Arena::CreateMessage<PingResponse>(ctx->GetArena());
     if (req->copy()) {
@@ -59,7 +59,7 @@ private:
 
 class TBiStreamPingRequestRPC : public TActorBootstrapped<TBiStreamPingRequestRPC> {
     using TBase = TActorBootstrapped<TBiStreamPingRequestRPC>;
-    using IContext = NGRpcServer::IGRpcStreamingContext<
+    using IContext = NGRpcServer::IGRpcStreamingContext< 
         TEvBiStreamPingRequest::TRequest,
         TEvBiStreamPingRequest::TResponse>;
 
@@ -144,11 +144,11 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Draft::Dummy::IN, Draft::Dummy::OUT, TGRpcYdbDummyService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Draft::Dummy::DummyService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("dummy", #NAME))->Run();
+        #NAME, logger, getCounterBlock("dummy", #NAME))->Run(); 
 
     ADD_REQUEST(Ping, PingRequest, PingResponse, {
         HandlePing(ctx);

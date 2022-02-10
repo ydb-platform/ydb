@@ -524,7 +524,7 @@ private:
     NActors::TActorId ResolveEndpoint(const TEndpoint& ep) {
         switch (ep.GetEndpointTypeCase()) {
             case TEndpoint::kActorId:
-                return NActors::ActorIdFromProto(ep.GetActorId());
+                return NActors::ActorIdFromProto(ep.GetActorId()); 
             case TEndpoint::kUri:
                 Y_ENSURE(false, "kUri is not supported");
             case TEndpoint::kTabletId:

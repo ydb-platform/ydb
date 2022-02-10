@@ -37,7 +37,7 @@ static bool IsGoodStatusCode(ui32 code) {
 
 TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
                                                      const TCreateQueueRequest& req,
-                                                     const TActorId& sender,
+                                                     const TActorId& sender, 
                                                      const TString& requestId,
                                                      const TString& customQueueName,
                                                      const TString& folderId,
@@ -490,7 +490,7 @@ void TCreateQueueSchemaActorV2::CreateComponents() {
                 auto* cmd = ev->Record.MutableTransaction()->MutableModifyScheme()->MutableCreateTable();
                 cmd->MutablePartitionConfig()->MutablePipelineConfig()->SetEnableOutOfOrder(Request_.GetEnableOutOfOrderTransactionsExecution());
 
-                const TActorId actorId = Register(new TMiniKqlExecutionActor(
+                const TActorId actorId = Register(new TMiniKqlExecutionActor( 
                     SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 
                 if (table.HasLeaderTablet && !CreateTableWithLeaderTabletActorId_) {
@@ -700,7 +700,7 @@ void TCreateQueueSchemaActorV2::AddRPSQuota() {
 }
 
 void TCreateQueueSchemaActorV2::HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev) {
-    AddQuoterResourceActor_ = TActorId();
+    AddQuoterResourceActor_ = TActorId(); 
     auto status = ev->Get()->Record.GetError().GetStatus();
     if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::ALREADY_EXISTS) {
         RLOG_SQS_DEBUG("Successfully added quoter resource. Id: " << ev->Get()->Record.GetResourceId());
@@ -1233,13 +1233,13 @@ void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr&
 void TCreateQueueSchemaActorV2::PassAway() {
     if (AddQuoterResourceActor_) {
         Send(AddQuoterResourceActor_, new TEvPoisonPill());
-        AddQuoterResourceActor_ = TActorId();
+        AddQuoterResourceActor_ = TActorId(); 
     }
     TActorBootstrapped<TCreateQueueSchemaActorV2>::PassAway();
 }
 
 TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
-                                                     const TActorId& sender,
+                                                     const TActorId& sender, 
                                                      const TString& requestId,
                                                      TIntrusivePtr<TUserCounters> userCounters)
     : QueuePath_(path)
@@ -1251,7 +1251,7 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
 }
 
 TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
-                                                     const TActorId& sender,
+                                                     const TActorId& sender, 
                                                      const TString& requestId,
                                                      TIntrusivePtr<TUserCounters> userCounters,
                                                      const ui64 advisedQueueVersion,
@@ -1493,7 +1493,7 @@ void TDeleteQueueSchemaActorV2::DeleteRPSQuota() {
 }
 
 void TDeleteQueueSchemaActorV2::HandleDeleteQuoterResource(NKesus::TEvKesus::TEvDeleteQuoterResourceResult::TPtr& ev) {
-    DeleteQuoterResourceActor_ = TActorId();
+    DeleteQuoterResourceActor_ = TActorId(); 
     auto status = ev->Get()->Record.GetError().GetStatus();
     if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::NOT_FOUND) {
         RLOG_SQS_DEBUG("Successfully deleted quoter resource");
@@ -1511,7 +1511,7 @@ void TDeleteQueueSchemaActorV2::HandleDeleteQuoterResource(NKesus::TEvKesus::TEv
 void TDeleteQueueSchemaActorV2::PassAway() {
     if (DeleteQuoterResourceActor_) {
         Send(DeleteQuoterResourceActor_, new TEvPoisonPill());
-        DeleteQuoterResourceActor_ = TActorId();
+        DeleteQuoterResourceActor_ = TActorId(); 
     }
     TActorBootstrapped<TDeleteQueueSchemaActorV2>::PassAway();
 }

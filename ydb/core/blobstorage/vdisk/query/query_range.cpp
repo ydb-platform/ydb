@@ -52,7 +52,7 @@ namespace NKikimr {
 
         TLevelIndexRangeQueryViaBatcherBase(
                 std::shared_ptr<TQueryCtx> &queryCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barriersSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
@@ -143,7 +143,7 @@ namespace NKikimr {
 
         TLevelIndexRangeQueryViaBatcherIndexOnly(
                 std::shared_ptr<TQueryCtx> &queryCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TLogoBlobsSnapshot &&logoBlobsSnapshot,
                 TBarriersSnapshot &&barriersSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
@@ -163,7 +163,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateLevelIndexRangeQueryActor(
                     std::shared_ptr<TQueryCtx> &queryCtx,
-                    const TActorId &parentId,
+                    const TActorId &parentId, 
                     TLogoBlobsSnapshot &&logoBlobsSnapshot,
                     TBarriersSnapshot &&barriersSnapshot,
                     TEvBlobStorage::TEvVGet::TPtr &ev,

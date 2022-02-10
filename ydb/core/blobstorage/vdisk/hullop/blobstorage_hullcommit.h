@@ -19,14 +19,14 @@ namespace NKikimr {
         TPDiskCtxPtr PDiskCtx;
         THullCtxPtr HullCtx;
         TIntrusivePtr<TLsnMngr> LsnMngr;
-        const TActorId LoggerId;
-        const TActorId HugeKeeperId;
+        const TActorId LoggerId; 
+        const TActorId HugeKeeperId; 
 
         THullDbCommitterCtx(
                 TPDiskCtxPtr pdiskCtx,
                 THullCtxPtr hullCtx,
                 TIntrusivePtr<TLsnMngr> lsnMngr,
-                const TActorId &loggerId,
+                const TActorId &loggerId, 
                 const TActorId hugeKeeperId)
             : PDiskCtx(std::move(pdiskCtx))
             , HullCtx(std::move(hullCtx))
@@ -88,8 +88,8 @@ namespace NKikimr {
         std::shared_ptr<THullLogCtx> HullLogCtx;
         THullDbCommitterCtxPtr Ctx;
         TIntrusivePtr<TLevelIndex> LevelIndex;
-        TActorId NotifyID;
-        TActorId SecondNotifyID;
+        TActorId NotifyID; 
+        TActorId SecondNotifyID; 
         THullCommitMeta Metadata;
         std::unique_ptr<NPDisk::TEvLog> CommitMsg;
         TLsnSeg LsnSeg;
@@ -274,8 +274,8 @@ namespace NKikimr {
                 std::shared_ptr<THullLogCtx> hullLogCtx,
                 THullDbCommitterCtxPtr ctx,
                 TIntrusivePtr<TLevelIndex> levelIndex,
-                const TActorId& notifyID,
-                const TActorId& secondNotifyID,
+                const TActorId& notifyID, 
+                const TActorId& secondNotifyID, 
                 THullCommitMeta&& metadata,
                 const TString &callerInfo)
             : HullLogCtx(std::move(hullLogCtx))
@@ -305,13 +305,13 @@ namespace NKikimr {
                     std::shared_ptr<THullLogCtx> hullLogCtx,
                     THullDbCommitterCtxPtr ctx,
                     TIntrusivePtr<typename TBase::TLevelIndex> levelIndex,
-                    const TActorId &notifyID,
+                    const TActorId &notifyID, 
                     const TString &callerInfo)
             : TBase(std::move(hullLogCtx),
                     std::move(ctx),
                     std::move(levelIndex),
                     notifyID,
-                    TActorId(),
+                    TActorId(), 
                     typename TBase::THullCommitMeta(TVector<ui32>(), TVector<ui32>(), TDiskPartVec()),
                     callerInfo)
         {}
@@ -336,7 +336,7 @@ namespace NKikimr {
                 std::shared_ptr<THullLogCtx> hullLogCtx,
                 THullDbCommitterCtxPtr ctx,
                 TIntrusivePtr<typename TBase::TLevelIndex> levelIndex,
-                const TActorId& notifyID,
+                const TActorId& notifyID, 
                 TVector<ui32>&& chunksAdded,
                 TVector<ui32>&& chunksDeleted,
                 TDiskPartVec&& removedHugeBlobs,
@@ -345,7 +345,7 @@ namespace NKikimr {
                     std::move(ctx),
                     std::move(levelIndex),
                     notifyID,
-                    TActorId(),
+                    TActorId(), 
                     typename TBase::THullCommitMeta(std::move(chunksAdded),
                                                     std::move(chunksDeleted),
                                                     std::move(removedHugeBlobs)),
@@ -400,7 +400,7 @@ namespace NKikimr {
                 std::shared_ptr<THullLogCtx> hullLogCtx,
                 THullDbCommitterCtxPtr ctx,
                 TIntrusivePtr<typename TBase::TLevelIndex> levelIndex,
-                const TActorId& notifyID,
+                const TActorId& notifyID, 
                 TVector<ui32>&& chunksAdded,
                 TVector<ui32>&& chunksDeleted,
                 TDiskPartVec&& removedHugeBlobs,
@@ -409,7 +409,7 @@ namespace NKikimr {
                     std::move(ctx),
                     std::move(levelIndex),
                     notifyID,
-                    TActorId(),
+                    TActorId(), 
                     typename TBase::THullCommitMeta(std::move(chunksAdded),
                                                     std::move(chunksDeleted),
                                                     std::move(removedHugeBlobs)),
@@ -439,12 +439,12 @@ namespace NKikimr {
                 std::shared_ptr<THullLogCtx> hullLogCtx,
                 THullDbCommitterCtxPtr ctx,
                 TIntrusivePtr<typename TBase::TLevelIndex> levelIndex,
-                const TActorId& notifyID,
+                const TActorId& notifyID, 
                 TVector<ui32>&& chunksAdded,
                 TVector<ui32>&& chunksDeleted,
                 TIntrusivePtr<TLevelSegment> replSst,
                 ui32 numRecoveredBlobs,
-                const TActorId& secondNotifyID)
+                const TActorId& secondNotifyID) 
             : TBase(std::move(hullLogCtx),
                     std::move(ctx),
                     std::move(levelIndex),

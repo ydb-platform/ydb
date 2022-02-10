@@ -8,6 +8,6 @@
 
 namespace NKikimr {
 
-IActor* CreateKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info);
+IActor* CreateKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info); 
 
 } //NKikimr

@@ -2212,7 +2212,7 @@ struct TReplicationInfo : public TSimpleRefCount<TReplicationInfo> {
 
 struct TPublicationInfo {
     TSet<std::pair<TPathId, ui64>> Paths;
-    THashSet<TActorId> Subscribers;
+    THashSet<TActorId> Subscribers; 
 };
 
 // namespace NExport {
@@ -2282,7 +2282,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TDeque<ui32> PendingItems;
     TDeque<ui32> PendingDropItems;
 
-    TSet<TActorId> Subscribers;
+    TSet<TActorId> Subscribers; 
 
     explicit TExportInfo(
             const ui64 id,
@@ -2346,7 +2346,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     }
 
     bool AllItemsAreDropped() const;
-    void AddNotifySubscriber(const TActorId& actorId);
+    void AddNotifySubscriber(const TActorId& actorId); 
 
     TString ToString() const;
 
@@ -2512,7 +2512,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Rejected = 550
     };
 
-    TActorId CreateSender;
+    TActorId CreateSender; 
     ui64 SenderCookie = 0;
 
     TIndexBuildId Id;
@@ -2532,7 +2532,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     EState State = EState::Invalid;
     TString Issue;
 
-    TSet<TActorId> Subscribers;
+    TSet<TActorId> Subscribers; 
 
     bool CancelRequested = false;
 
@@ -2625,7 +2625,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return IsDone() || IsCancelled();
     }
 
-    void AddNotifySubscriber(const TActorId& actorID) {
+    void AddNotifySubscriber(const TActorId& actorID) { 
         Y_VERIFY(!IsFinished());
         Subscribers.insert(actorID);
     }

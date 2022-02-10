@@ -35,8 +35,8 @@ struct TKeyBoundary {
 };
 
 class TReadColumnsScan : public INoTxScan {
-    const TActorId ReplyTo;
-    const TActorId DatashardActorId;
+    const TActorId ReplyTo; 
+    const TActorId DatashardActorId; 
     const TString TableName;
     const ui64 TabletId;
     const TKeyBoundary From;
@@ -66,8 +66,8 @@ public:
                      std::unique_ptr<IBlockBuilder>&& blockBuilder,
                      ui64 rowsLimit, ui64 bytesLimit,
                      const TKeyBoundary& shardEnd,
-                     const TActorId& replyTo,
-                     const TActorId& datashardActorId,
+                     const TActorId& replyTo, 
+                     const TActorId& datashardActorId, 
                      TMaybe<TSnapshotKey> snapshotKey,
                      const TString& tableName,
                      ui64 tabletId)
@@ -152,7 +152,7 @@ public:
             Result->Record.SetErrorDescription("Scan aborted");
         }
 
-        TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), Result.Release()));
+        TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), Result.Release())); 
         TlsActivationContext->Send(new IEventHandle(DatashardActorId, TActorId(), new TDataShard::TEvPrivate::TEvScanStats(Rows, Bytes)));
 
         return this;

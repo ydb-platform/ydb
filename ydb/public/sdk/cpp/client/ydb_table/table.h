@@ -932,12 +932,12 @@ public:
     //! Returns number of active sessions given via session pool
     i64 GetActiveSessionCount() const;
 
-    //! Returns the maximum number of sessions in session pool
-    i64 GetActiveSessionsLimit() const;
-
-    //! Returns the size of session pool
-    i64 GetCurrentPoolSize() const;
-
+    //! Returns the maximum number of sessions in session pool 
+    i64 GetActiveSessionsLimit() const; 
+ 
+    //! Returns the size of session pool 
+    i64 GetCurrentPoolSize() const; 
+ 
     //! Returns new table builder
     TTableBuilder GetTableBuilder();
     //! Returns new params builder

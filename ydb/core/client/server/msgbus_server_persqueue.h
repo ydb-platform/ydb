@@ -72,7 +72,7 @@ protected:
         {
         }
 
-        TActorId ActorId;
+        TActorId ActorId; 
         TSchemeEntry TopicEntry;
         NKikimrClient::TResponse Response;
         bool ActorAnswered = false;
@@ -143,7 +143,7 @@ protected:
     THashSet<TString> TopicsToRequest; // Topics that we need to request. If this set id empty, we are interested in all existing topics.
 
     const TActorId PqMetaCache;
-    THashMap<TActorId, THolder<TPerTopicInfo>> Children;
+    THashMap<TActorId, THolder<TPerTopicInfo>> Children; 
     size_t ChildrenAnswered = 0;
     THolder<NSchemeCache::TSchemeCacheNavigate> SchemeCacheResponse;
 
@@ -169,7 +169,7 @@ protected:
     STFUNC(StateFunc);
 
 protected:
-    TActorId SchemeCache;
+    TActorId SchemeCache; 
     TSchemeEntry SchemeEntry;
     TString Name;
     TProcessingResult ProcessingResult;
@@ -185,7 +185,7 @@ template <class TBase>
 class TReplierToParent : public TBase {
 public:
     template <class... T>
-    explicit TReplierToParent(const TActorId& parent, T&&... t)
+    explicit TReplierToParent(const TActorId& parent, T&&... t) 
         : TBase(std::forward<T>(t)...)
         , Parent(parent)
     {
@@ -209,7 +209,7 @@ protected:
     }
 
 protected:
-    const TActorId Parent;
+    const TActorId Parent; 
 };
 
 // Pipe client helpers
@@ -222,7 +222,7 @@ protected:
     {
     }
 
-    TActorId CreatePipe(ui64 tabletId, const TActorContext& ctx) {
+    TActorId CreatePipe(ui64 tabletId, const TActorContext& ctx) { 
         NTabletPipe::TClientConfig clientConfig;
         const TActorId pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
         Y_VERIFY(Pipes.emplace(tabletId, pipe).second);
@@ -234,8 +234,8 @@ protected:
     }
 
     template <class TEventPtr>
-    TActorId CreatePipeAndSend(ui64 tabletId, const TActorContext& ctx, TEventPtr ev) {
-        const TActorId pipe = CreatePipe(tabletId, ctx);
+    TActorId CreatePipeAndSend(ui64 tabletId, const TActorContext& ctx, TEventPtr ev) { 
+        const TActorId pipe = CreatePipe(tabletId, ctx); 
         NTabletPipe::SendData(ctx, pipe, ev.Release());
         return pipe;
     }
@@ -364,7 +364,7 @@ protected:
     }
 
 protected:
-    THashMap<ui64, TActorId> Pipes; // Tablet id -> pipe
+    THashMap<ui64, TActorId> Pipes; // Tablet id -> pipe 
     THashMap<ui64, typename TPipeEvent::TPtr> PipeAnswers; // Mapped by tablet id
 };
 

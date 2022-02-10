@@ -115,7 +115,7 @@ void TBlobStorageQueue::SetItemQueue(TItem& item, EItemQueue newQueue) {
     }
 }
 
-void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, IActor *actor) {
+void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, IActor *actor) { 
     const TInstant now = ctx.Now();
 
     const bool sendMeCostSettings = now >= CostSettingsUpdate;
@@ -220,7 +220,7 @@ bool TBlobStorageQueue::Expecting(ui64 msgId, ui64 sequenceId) const {
     return InFlightLookup.count(std::make_pair(sequenceId, msgId));
 }
 
-bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TActorId *outSender, ui64 *outCookie,
+bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TActorId *outSender, ui64 *outCookie, 
         TDuration *processingTime) {
     const auto lookupIt = InFlightLookup.find(std::make_pair(sequenceId, msgId));
     Y_VERIFY(lookupIt != InFlightLookup.end());
@@ -328,7 +328,7 @@ TBlobStorageQueue::TItemList::iterator TBlobStorageQueue::EraseItem(TItemList& q
     return nextIter;
 }
 
-void TBlobStorageQueue::Prune(const TActorId& sender) {
+void TBlobStorageQueue::Prune(const TActorId& sender) { 
     TSenderMap::TIterator it = SenderToItems.LowerBound(sender);
     while (it != SenderToItems.End()) {
         TItem& item = static_cast<TItem&>(*it++);

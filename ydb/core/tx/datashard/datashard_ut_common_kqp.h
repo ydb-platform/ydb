@@ -94,7 +94,7 @@ namespace NKqpHelpers {
 
     inline void SendRequest(
             TTestActorRuntime& runtime,
-            TActorId sender,
+            TActorId sender, 
             THolder<NKqp::TEvKqp::TEvQueryRequest> request)
     {
         runtime.Send(
@@ -104,7 +104,7 @@ namespace NKqpHelpers {
 
     inline NKqp::TEvKqp::TEvQueryResponse::TPtr ExecRequest(
             TTestActorRuntime& runtime,
-            TActorId sender,
+            TActorId sender, 
             THolder<NKqp::TEvKqp::TEvQueryRequest> request)
     {
         SendRequest(runtime, sender, std::move(request));
@@ -125,7 +125,7 @@ namespace NKqpHelpers {
     }
 
     inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeStreamRequest(
-        const TActorId sender,
+        const TActorId sender, 
         const TString& sql,
         const bool collectStats = false)
     {
@@ -135,7 +135,7 @@ namespace NKqpHelpers {
         request->Record.MutableRequest()->SetKeepSession(false);
         request->Record.MutableRequest()->SetQuery(sql);
         request->Record.MutableRequest()->SetProfile(collectStats);
-        ActorIdToProto(sender, request->Record.MutableRequestActorId());
+        ActorIdToProto(sender, request->Record.MutableRequestActorId()); 
         return request;
     }
 

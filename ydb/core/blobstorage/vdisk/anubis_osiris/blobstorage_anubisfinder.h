@@ -82,7 +82,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateAnubisCandidatesFinder(
                 const TIntrusivePtr<THullCtx> &hullCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 const TLogoBlobID &pos,
                 TLogoBlobsSnapshot &&logoBlobsSnap,
                 TBarriersSnapshot &&barriersSnap);

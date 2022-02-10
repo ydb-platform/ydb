@@ -37,44 +37,44 @@ private:
 // PDisk Put status handlers
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 using TPDiskPutStatusHandler = bool (*)(const NActors::TActorContext &,
-                                        const NActors::TActorId &notifyId,
+                                        const NActors::TActorId &notifyId, 
                                         NKikimr::TEvBlobStorage::TEvVPutResult::TPtr &);
 
 bool PDiskPutStatusHandlerDefault(const NActors::TActorContext &ctx,
-                                  const NActors::TActorId &notifyId,
+                                  const NActors::TActorId &notifyId, 
                                   NKikimr::TEvBlobStorage::TEvVPutResult::TPtr &ev);
 
 bool PDiskPutStatusHandlerErrorAware(const NActors::TActorContext &ctx,
-                                     const NActors::TActorId &notifyId,
+                                     const NActors::TActorId &notifyId, 
                                      NKikimr::TEvBlobStorage::TEvVPutResult::TPtr &ev);
 
 bool PDiskPutStatusHandlerYellowMoveZone(const NActors::TActorContext &ctx,
-                                     const NActors::TActorId &notifyId,
+                                     const NActors::TActorId &notifyId, 
                                      NKikimr::TEvBlobStorage::TEvVPutResult::TPtr &ev);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PDisk Get status handlers
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 using TPDiskGetStatusHandler = bool (*)(const NActors::TActorContext &,
-                                        const NActors::TActorId &notifyId,
+                                        const NActors::TActorId &notifyId, 
                                         NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &);
 
 bool PDiskGetStatusHandlerDefault(const NActors::TActorContext &ctx,
-                                  const NActors::TActorId &notifyId,
+                                  const NActors::TActorId &notifyId, 
                                   NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev);
 
 bool PDiskGetStatusHandlerErrorAware(const NActors::TActorContext &ctx,
-                                     const NActors::TActorId &notifyId,
+                                     const NActors::TActorId &notifyId, 
                                      NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev);
 
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-NActors::IActor *CreateRangeGet(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
+NActors::IActor *CreateRangeGet(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, 
                                 const NKikimr::TLogoBlobID &readFrom, const NKikimr::TLogoBlobID &readTo,
                                 bool indexOnly, ui32 maxResults);
 
-NActors::IActor *CreateManyPuts(TConfiguration *conf, const NActors::TActorId &notifyID,
+NActors::IActor *CreateManyPuts(TConfiguration *conf, const NActors::TActorId &notifyID, 
                                 const TAllVDisks::TVDiskInstance &vdiskInfo,
                                 ui32 msgDataSize, ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen,
                                 std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps,
@@ -95,40 +95,40 @@ struct TMsgPackInfo {
 };
 
 
-NActors::IActor *CreateManyPuts(TConfiguration *conf, const NActors::TActorId &notifyID,
+NActors::IActor *CreateManyPuts(TConfiguration *conf, const NActors::TActorId &notifyID, 
                                 const TAllVDisks::TVDiskInstance &vdiskInfo,
                                 std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, ui64 tabletId, ui32 channel, ui32 gen,
                                 std::shared_ptr<IPutHandleClassGenerator> cls, std::shared_ptr<TSet<ui32>> badSteps,
                                 TDuration requestTimeout);
 
-NActors::IActor *CreateManyMultiPuts(TConfiguration *conf, const NActors::TActorId &notifyID,
+NActors::IActor *CreateManyMultiPuts(TConfiguration *conf, const NActors::TActorId &notifyID, 
                                      const TAllVDisks::TVDiskInstance &vdiskInfo,
                                      ui32 msgDataSize, ui32 msgNum, ui32 batchSize,
                                      ui64 tabletId, ui32 channel, ui32 gen,
                                      std::shared_ptr<IPutHandleClassGenerator> cls,
                                      std::shared_ptr<TSet<ui32>> badSteps, TDuration requestTimeout);
 
-NActors::IActor *CreateManyGets(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
+NActors::IActor *CreateManyGets(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, 
                                 ui32 msgDataSize, ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen,
                                 std::shared_ptr<TSet<ui32>> badSteps);
 
-NActors::IActor *CreateGet(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
+NActors::IActor *CreateGet(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, 
                            ui32 msgDataSize, ui32 msgNum, ui64 tabletId, ui32 channel, ui32 gen, ui64 shift,
                            bool withErrorResponse);
 
-NActors::IActor *CreateGet(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
+NActors::IActor *CreateGet(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, 
                            std::shared_ptr<TVector<TMsgPackInfo>> msgPacks, ui64 tabletId, ui32 channel, ui32 gen,
                            ui64 shift, bool withErrorResponse);
 
-NActors::IActor *CreatePutGC(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
+NActors::IActor *CreatePutGC(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, 
                              ui64 tabletID, ui32 recGen, ui32 recGenCounter, ui32 channel, bool collect, ui32 collectGen,
                              ui32 collectStep, TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep,
                              TAutoPtr<TVector<NKikimr::TLogoBlobID>> doNotKeep);
 
-NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo);
-NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, TConfiguration *conf);
-NActors::IActor *CreateWaitForSync(const NActors::TActorId &notifyID, TConfiguration *conf);
-NActors::IActor *CreateCheckDbEmptyness(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
+NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo); 
+NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, TConfiguration *conf); 
+NActors::IActor *CreateWaitForSync(const NActors::TActorId &notifyID, TConfiguration *conf); 
+NActors::IActor *CreateCheckDbEmptyness(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, 
                                         bool expectEmpty);
 NActors::IActor *CreateDefrag(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
     bool full, std::function<void(NKikimr::TEvBlobStorage::TEvVDefragResult::TPtr &)> check);
@@ -136,14 +136,14 @@ NActors::IActor *CreateDefrag(const NActors::TActorId &notifyID, TConfiguration 
     bool full, std::function<void(NKikimr::TEvBlobStorage::TEvVDefragResult::TPtr &)> check);
 
 template <class TRequestFunc, class TCheckResponseFunc>
-NActors::IActor *CreateOneGet(const NActors::TActorId &notifyID, TRequestFunc req, TCheckResponseFunc check);
+NActors::IActor *CreateOneGet(const NActors::TActorId &notifyID, TRequestFunc req, TCheckResponseFunc check); 
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-NActors::IActor *ManyPutsToOneVDisk(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
+NActors::IActor *ManyPutsToOneVDisk(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, 
                                     const IDataSet *dataSet, ui8 partId, NKikimrBlobStorage::EPutHandleClass cls);
 
-NActors::IActor *ManyPutsToCorrespondingVDisks(const NActors::TActorId &notifyID,
+NActors::IActor *ManyPutsToCorrespondingVDisks(const NActors::TActorId &notifyID, 
                                                TConfiguration *conf,
                                                const IDataSet *dataSet,
                                                TPDiskPutStatusHandler hndl = PDiskPutStatusHandlerDefault,
@@ -158,12 +158,12 @@ struct TGCSettings {
     ui32 CollectGen;
     ui32 CollectStep;
 };
-NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, TConfiguration *conf, ui64 tabletID,
+NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, TConfiguration *conf, ui64 tabletID, 
                                             ui32 recGen, ui32 recGenCounter, ui32 channel, bool collect,
                                             ui32 collectGen, ui32 collectStep,
                                             TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep,
                                             TAutoPtr<TVector<NKikimr::TLogoBlobID>> doNotKeep);
-NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, TConfiguration *conf,
+NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, TConfiguration *conf, 
                                             const TGCSettings &settings,
                                             TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep,
                                             TAutoPtr<TVector<NKikimr::TLogoBlobID>> doNotKeep);
@@ -174,7 +174,7 @@ NActors::IActor *PutGCToCorrespondingVDisks(const NActors::TActorId &notifyID, T
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void PutLogoBlobToVDisk(const NActors::TActorContext &ctx, const NActors::TActorId &actorID,
+void PutLogoBlobToVDisk(const NActors::TActorContext &ctx, const NActors::TActorId &actorID, 
                         const NKikimr::TVDiskID &vdiskID, const NKikimr::TLogoBlobID &id, const TString &data,
                         NKikimrBlobStorage::EPutHandleClass cls);
 
@@ -195,12 +195,12 @@ class TDataSnapshot : public TThrRefBase {
 public:
     struct TItem {
         NKikimr::TVDiskID VDiskID;
-        NKikimr::TActorId ServiceID;
+        NKikimr::TActorId ServiceID; 
         NKikimr::TLogoBlobID Id; // exact part
         TString Data;
         NKikimr::TIngress Ingress;
 
-        TItem(const NKikimr::TVDiskID &vdisk, const NKikimr::TActorId &service, const NKikimr::TLogoBlobID &id,
+        TItem(const NKikimr::TVDiskID &vdisk, const NKikimr::TActorId &service, const NKikimr::TLogoBlobID &id, 
               const TString &data, const NKikimr::TIngress &ingress);
     };
 
@@ -210,7 +210,7 @@ public:
     typedef TData::iterator TIterator;
 
     TDataSnapshot(TIntrusivePtr<NKikimr::TBlobStorageGroupInfo> info);
-    void PutExact(const NKikimr::TVDiskID &vdisk, const NKikimr::TActorId &service, const NKikimr::TLogoBlobID &id,
+    void PutExact(const NKikimr::TVDiskID &vdisk, const NKikimr::TActorId &service, const NKikimr::TLogoBlobID &id, 
                   const TString &data, const NKikimr::TIngress &ingress = NKikimr::TIngress(0)); // must provide exact partId
     void PutCorresponding(const NKikimr::TLogoBlobID &id, const TString &data);
     void SortAndCheck();
@@ -225,10 +225,10 @@ private:
 typedef TIntrusivePtr<TDataSnapshot> TDataSnapshotPtr;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-NActors::IActor *CreateLoadDataSnapshot(const NActors::TActorId &notifyID, TConfiguration *conf,
+NActors::IActor *CreateLoadDataSnapshot(const NActors::TActorId &notifyID, TConfiguration *conf, 
                                         TDataSnapshotPtr dataPtr, NKikimrBlobStorage::EPutHandleClass cls,
                                         TPDiskPutStatusHandler hndl = &PDiskPutStatusHandlerDefault);
-NActors::IActor *CreateCheckDataSnapshot(const NActors::TActorId &notifyID, TConfiguration *conf, TDataSnapshotPtr dataPtr,
+NActors::IActor *CreateCheckDataSnapshot(const NActors::TActorId &notifyID, TConfiguration *conf, TDataSnapshotPtr dataPtr, 
                                          TPDiskGetStatusHandler hndl = &PDiskGetStatusHandlerDefault);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -292,13 +292,13 @@ public:
     };
 
     TSyncRunner(NActors::TActorSystem *system, TConfiguration *conf);
-    NActors::TActorId NotifyID() const;
+    NActors::TActorId NotifyID() const; 
     // returns pair<Id, Status>
     TReturnValue Run(const NActors::TActorContext &ctx, TAutoPtr<NActors::IActor> actor);
 
 private:
     NActors::TActorSystem *ActorSystem;
-    NActors::TActorId WorkerID;
+    NActors::TActorId WorkerID; 
     std::shared_ptr<TSystemEvent> _Event;
     std::shared_ptr<TReturnValue> ReturnValue;
     TConfiguration *Conf;

@@ -963,11 +963,11 @@ Y_UNIT_TEST_SUITE(ClientLib) {
             auto begin = shardRange.MutableType()->MutableStruct()->AddMember();
             begin->SetName("Begin");
             begin->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            begin->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint32);
+            begin->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint32); 
             auto end = shardRange.MutableType()->MutableStruct()->AddMember();
             end->SetName("End");
             end->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            end->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint32);
+            end->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint32); 
         }
         {
             //set value

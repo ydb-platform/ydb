@@ -1,10 +1,10 @@
-#pragma once
+#pragma once 
 #include "udf_version.h"
 #include <util/system/types.h>
 #include <new>
 #include <cstddef>
 #include <limits>
-
+ 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
 extern "C" void* UdfAllocateWithSize(ui64 size);
 extern "C" void UdfFreeWithSize(const void* mem, ui64 size);
@@ -22,8 +22,8 @@ extern "C" void UdfFree(const void* mem);
 #endif
 
 namespace NYql {
-namespace NUdf {
-
+namespace NUdf { 
+ 
 template <typename Type>
 struct TStdAllocatorForUdf
 {
@@ -99,7 +99,7 @@ struct TWithUdfAllocator {
     }
 #endif
 };
-
-} // namespace NUdf
+ 
+} // namespace NUdf 
 } // namespace NYql
 

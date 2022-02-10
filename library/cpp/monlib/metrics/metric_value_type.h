@@ -3,7 +3,7 @@
 
 namespace NMonitoring {
 
-enum class EMetricValueType {
+enum class EMetricValueType { 
     UNKNOWN,
     DOUBLE,
     INT64,

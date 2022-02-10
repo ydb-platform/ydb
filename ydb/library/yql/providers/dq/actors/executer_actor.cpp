@@ -133,7 +133,7 @@ private:
         Y_VERIFY(!ResultId);
         YQL_LOG(DEBUG) << "TDqExecuter::OnGraph";
         ControlId = NActors::ActorIdFromProto(ev->Get()->Record.GetControlId());
-        ResultId = NActors::ActorIdFromProto(ev->Get()->Record.GetResultId());
+        ResultId = NActors::ActorIdFromProto(ev->Get()->Record.GetResultId()); 
         CheckPointCoordinatorId = NActors::ActorIdFromProto(ev->Get()->Record.GetCheckPointCoordinatorId());
         // These actors will be killed at exit.
         AddChild(ControlId);
@@ -324,9 +324,9 @@ private:
         auto& workerGroup = response.GetWorkers();
         ResourceId = workerGroup.GetResourceId();
         YQL_LOG(DEBUG) << "Allocated resource " << ResourceId;
-        TVector<NActors::TActorId> workers;
+        TVector<NActors::TActorId> workers; 
         for (const auto& actorIdProto : workerGroup.GetWorkerActor()) {
-            workers.emplace_back(NActors::ActorIdFromProto(actorIdProto));
+            workers.emplace_back(NActors::ActorIdFromProto(actorIdProto)); 
         }
 
         auto tasks = ExecutionPlanner->GetTasks(workers);
@@ -447,7 +447,7 @@ private:
     TDqConfiguration::TPtr Settings;
 
     NActors::TActorId ControlId;
-    NActors::TActorId ResultId;
+    NActors::TActorId ResultId; 
     NActors::TActorId CheckPointCoordinatorId;
     TExprNode::TPtr ExprRoot;
     THolder<IDqsExecutionPlanner> ExecutionPlanner;

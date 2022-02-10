@@ -104,7 +104,7 @@ void DbgPrintValue(TString &res, const TCell &r, ui32 type) {
             res += ToString(r.AsValue<double>());
             break;
         case NScheme::NTypeIds::ActorId:
-            res += ToString(r.AsValue<TActorId>());
+            res += ToString(r.AsValue<TActorId>()); 
             break;
         default:
             res += EscapeC(r.Data(), r.Size());

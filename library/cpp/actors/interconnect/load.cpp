@@ -72,7 +72,7 @@ namespace NInterconnect {
     };
 
     class TLoadResponderMasterActor : public TActorBootstrapped<TLoadResponderMasterActor> {
-        TVector<TActorId> Slaves;
+        TVector<TActorId> Slaves; 
         ui32 SlaveIndex = 0;
 
         STRICT_STFUNC(StateFunc,
@@ -93,7 +93,7 @@ namespace NInterconnect {
         }
 
         void Die(const TActorContext& ctx) override {
-            for (const TActorId& actorId : Slaves) {
+            for (const TActorId& actorId : Slaves) { 
                 ctx.Send(actorId, new TEvents::TEvPoisonPill);
             }
             TActorBootstrapped::Die(ctx);
@@ -122,9 +122,9 @@ namespace NInterconnect {
         return new TLoadResponderMasterActor();
     }
 
-    TActorId MakeLoadResponderActorId(ui32 nodeId) {
+    TActorId MakeLoadResponderActorId(ui32 nodeId) { 
         char x[12] = {'I', 'C', 'L', 'o', 'a', 'd', 'R', 'e', 's', 'p', 'A', 'c'};
-        return TActorId(nodeId, TStringBuf(x, 12));
+        return TActorId(nodeId, TStringBuf(x, 12)); 
     }
 
     class TLoadActor: public TActorBootstrapped<TLoadActor> {
@@ -144,8 +144,8 @@ namespace NInterconnect {
         TInstant NextMessageTimestamp;
         THashMap<TString, TMessageInfo> InFly;
         ui64 NextId = 1;
-        TVector<TActorId> Hops;
-        TActorId FirstHop;
+        TVector<TActorId> Hops; 
+        TActorId FirstHop; 
         ui64 NumDropped = 0;
         std::shared_ptr<std::atomic_uint64_t> Traffic;
 
@@ -167,7 +167,7 @@ namespace NInterconnect {
             Traffic = std::move(ev->Get()->Traffic);
 
             for (const ui32 nodeId : Params.NodeHops) {
-                const TActorId& actorId = nodeId ? MakeLoadResponderActorId(nodeId) : TActorId();
+                const TActorId& actorId = nodeId ? MakeLoadResponderActorId(nodeId) : TActorId(); 
                 if (!FirstHop) {
                     FirstHop = actorId;
                 } else {

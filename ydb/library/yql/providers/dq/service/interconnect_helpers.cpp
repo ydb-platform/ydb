@@ -28,7 +28,7 @@
 namespace NYql::NDqs {
     using namespace NActors;
     using namespace NActors::NDnsResolver;
-    using namespace NGrpc;
+    using namespace NGrpc; 
 
     class TYqlLogBackend: public TLogBackend {
         void WriteData(const TLogRecord& rec) override {
@@ -156,7 +156,7 @@ namespace NYql::NDqs {
         InitSelfPingActor(setup.Get(), counters);
 
         TIntrusivePtr<TInterconnectProxyCommon> icCommon = new TInterconnectProxyCommon();
-        icCommon->NameserviceId = GetNameserviceActorId();
+        icCommon->NameserviceId = GetNameserviceActorId(); 
         Y_UNUSED(counters);
         //icCommon->MonCounters = counters->GetSubgroup("counters", "interconnect");
         icCommon->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();

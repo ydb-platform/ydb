@@ -9,7 +9,7 @@
 namespace NKikimr {
 namespace NKesus {
 
-TKesusTablet::TKesusTablet(const TActorId& tablet, TTabletStorageInfo* info)
+TKesusTablet::TKesusTablet(const TActorId& tablet, TTabletStorageInfo* info) 
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
@@ -163,7 +163,7 @@ void TKesusTablet::Handle(TEvKesus::TEvDescribeProxies::TPtr& ev) {
     for (const auto& kv : Proxies) {
         const auto* proxy = &kv.second;
         auto* proxyInfo = event->Record.AddProxies();
-        ActorIdToProto(proxy->ActorID, proxyInfo->MutableActorID());
+        ActorIdToProto(proxy->ActorID, proxyInfo->MutableActorID()); 
         proxyInfo->SetGeneration(proxy->Generation);
         for (ui64 sessionId : proxy->AttachedSessions) {
             proxyInfo->AddAttachedSessions(sessionId);

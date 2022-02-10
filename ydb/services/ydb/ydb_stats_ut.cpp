@@ -7,7 +7,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/monlib/encode/encoder.h>
-#include <library/cpp/monlib/encode/json/json.h>
+#include <library/cpp/monlib/encode/json/json.h> 
 
 #include <util/generic/ptr.h>
 #include <util/system/valgrind.h>
@@ -32,7 +32,7 @@ struct TStatCounters {
     ui64 RetryOperationDueAborted = 0;
 };
 
-class TMetricEncoder: public NMonitoring::IMetricEncoder {
+class TMetricEncoder: public NMonitoring::IMetricEncoder { 
 public:
 
     enum class ECounterType: size_t {
@@ -66,8 +66,8 @@ public:
 
     void OnCommonTime(TInstant) override { }
 
-    void OnMetricBegin(NMonitoring::EMetricType) override { }
-    void OnMetricEnd() override { }
+    void OnMetricBegin(NMonitoring::EMetricType) override { } 
+    void OnMetricEnd() override { } 
 
     void OnLabelsBegin() override { }
     void OnLabelsEnd() override { }
@@ -178,13 +178,13 @@ public:
     TCountersExtractExtension(const TParams& params, IApi* api);
 
     TStatCounters Pull() {
-        TMetricEncoder extractor;
+        TMetricEncoder extractor; 
         Api_->Accept(&extractor);
         return extractor.Counters;
     }
 
 private:
-    std::shared_ptr<NMonitoring::TMetricRegistry> MetricRegistry_;
+    std::shared_ptr<NMonitoring::TMetricRegistry> MetricRegistry_; 
     IApi* Api_ = nullptr;
 };
 
@@ -203,10 +203,10 @@ private:
 };
 
 TCountersExtractExtension::TCountersExtractExtension(const TParams& params, IApi* api)
-    : MetricRegistry_(new NMonitoring::TMetricRegistry())
+    : MetricRegistry_(new NMonitoring::TMetricRegistry()) 
     , Api_(api)
 {
-    api->SetMetricRegistry(MetricRegistry_.get());
+    api->SetMetricRegistry(MetricRegistry_.get()); 
     params.Extractor->Register(this);
 }
 
@@ -334,14 +334,14 @@ Y_UNIT_TEST_SUITE(ClientStatsCollector) {
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST(ExternalMetricRegistryByRawPtr) {
-        NMonitoring::TMetricRegistry sensorsRegistry;
+    Y_UNIT_TEST(ExternalMetricRegistryByRawPtr) { 
+        NMonitoring::TMetricRegistry sensorsRegistry; 
         NYdb::TKikimrWithGrpcAndRootSchema server;
 
         auto endpoint = TStringBuilder() << "localhost:" << server.GetPort();
         NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(endpoint));
 
-        NSolomonStatExtension::AddMetricRegistry(driver, &sensorsRegistry);
+        NSolomonStatExtension::AddMetricRegistry(driver, &sensorsRegistry); 
         {
             NYdb::NTable::TTableClient client(driver);
 
@@ -350,21 +350,21 @@ Y_UNIT_TEST_SUITE(ClientStatsCollector) {
             UNIT_ASSERT(SimpleSelect(session, "SELECT 1;").IsSuccess());
 
             TStringStream out;
-            NMonitoring::IMetricEncoderPtr encoder = NMonitoring::EncoderJson(&out);
+            NMonitoring::IMetricEncoderPtr encoder = NMonitoring::EncoderJson(&out); 
             sensorsRegistry.Accept(TInstant::Zero(), encoder.Get());
         }
         driver.Stop(true);
     }
 
     template<template<typename...> class TPointer>
-    void TestExternalMetricRegistry() {
-        TPointer<NMonitoring::TMetricRegistry> sensorsRegistry(new NMonitoring::TMetricRegistry());
+    void TestExternalMetricRegistry() { 
+        TPointer<NMonitoring::TMetricRegistry> sensorsRegistry(new NMonitoring::TMetricRegistry()); 
         NYdb::TKikimrWithGrpcAndRootSchema server;
 
         auto endpoint = TStringBuilder() << "localhost:" << server.GetPort();
         NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(endpoint));
 
-        NSolomonStatExtension::AddMetricRegistry(driver, sensorsRegistry);
+        NSolomonStatExtension::AddMetricRegistry(driver, sensorsRegistry); 
         {
             NYdb::NTable::TTableClient client(driver);
 
@@ -373,13 +373,13 @@ Y_UNIT_TEST_SUITE(ClientStatsCollector) {
             UNIT_ASSERT(SimpleSelect(session, "SELECT 1;").IsSuccess());
 
             TStringStream out;
-            NMonitoring::IMetricEncoderPtr encoder = NMonitoring::EncoderJson(&out);
+            NMonitoring::IMetricEncoderPtr encoder = NMonitoring::EncoderJson(&out); 
             sensorsRegistry->Accept(TInstant::Zero(), encoder.Get());
         }
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST(ExternalMetricRegistryStdSharedPtr) {
-        TestExternalMetricRegistry<std::shared_ptr>();
+    Y_UNIT_TEST(ExternalMetricRegistryStdSharedPtr) { 
+        TestExternalMetricRegistry<std::shared_ptr>(); 
     }
 }

@@ -49,13 +49,13 @@ TExprNode::TPtr NodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode
 struct TCodecContext {
     const NKikimr::NMiniKQL::TTypeEnvironment& Env;
     NKikimr::NMiniKQL::TProgramBuilder Builder;
-    const NKikimr::NMiniKQL::THolderFactory* HolderFactory; // lazy initialized
+    const NKikimr::NMiniKQL::THolderFactory* HolderFactory; // lazy initialized 
     std::list<std::vector<size_t>> StructReorders;
 
     TCodecContext(
         const NKikimr::NMiniKQL::TTypeEnvironment& env,
-        const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-        const NKikimr::NMiniKQL::THolderFactory* holderFactory = nullptr
+        const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, 
+        const NKikimr::NMiniKQL::THolderFactory* holderFactory = nullptr 
     );
 };
 

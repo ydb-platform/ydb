@@ -15,7 +15,7 @@ struct TGroupCollector {
 };
 
 class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
-    TActorId KeyValueActorId;
+    TActorId KeyValueActorId; 
     TIntrusivePtr<TCollectOperation> CollectOperation;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     ui32 RecordGeneration;
@@ -30,7 +30,7 @@ public:
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
     }
 
-    TKeyValueCollector(const TActorId &keyValueActorId, TIntrusivePtr<TCollectOperation> &collectOperation,
+    TKeyValueCollector(const TActorId &keyValueActorId, TIntrusivePtr<TCollectOperation> &collectOperation, 
             const TTabletStorageInfo *tabletInfo, ui32 recordGeneration, ui32 perGenerationCounter,
             bool isSpringCleanup)
         : KeyValueActorId(keyValueActorId)
@@ -191,7 +191,7 @@ public:
     }
 };
 
-IActor* CreateKeyValueCollector(const TActorId &keyValueActorId, TIntrusivePtr<TCollectOperation> &collectOperation,
+IActor* CreateKeyValueCollector(const TActorId &keyValueActorId, TIntrusivePtr<TCollectOperation> &collectOperation, 
         const TTabletStorageInfo *tabletInfo, ui32 recordGeneration, ui32 perGenerationCounter, bool isSpringCleanup) {
     return new TKeyValueCollector(keyValueActorId, collectOperation, tabletInfo, recordGeneration,
         perGenerationCounter, isSpringCleanup);

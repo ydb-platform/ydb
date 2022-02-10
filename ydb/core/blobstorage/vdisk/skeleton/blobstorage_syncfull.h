@@ -9,9 +9,9 @@ namespace NKikimr {
     IActor *CreateHullSyncFullActor(
             const TIntrusivePtr<TVDiskConfig> &config,
             const TIntrusivePtr<THullCtx> &hullCtx,
-            const TActorId &parentId,
+            const TActorId &parentId, 
             const TVDiskID &sourceVDisk,
-            const TActorId &recipient,
+            const TActorId &recipient, 
             THullDsSnap &&fullSnap,
             const TKeyLogoBlob &keyLogoBlob,
             const TKeyBlock &keyBlock,

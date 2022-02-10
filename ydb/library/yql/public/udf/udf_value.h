@@ -1,30 +1,30 @@
-#pragma once
-
+#pragma once 
+ 
 #include "udf_allocator.h"
-#include "udf_string.h"
+#include "udf_string.h" 
 #include "udf_terminator.h"
 #include "udf_version.h"
-
+ 
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
-#include <util/system/yassert.h> // FAIL, VERIFY_DEBUG
-#include <util/generic/utility.h> // Min, Max
+#include <util/system/yassert.h> // FAIL, VERIFY_DEBUG 
+#include <util/generic/utility.h> // Min, Max 
 #include <util/generic/yexception.h> // Y_ENSURE
 #include <util/system/compiler.h> // Y_FORCE_INLINE
 
 #include <algorithm>
 #include <type_traits>
-
+ 
 class IOutputStream;
 
 namespace NYql {
-namespace NUdf {
-
-class TUnboxedValue;
+namespace NUdf { 
+ 
+class TUnboxedValue; 
 class TUnboxedValuePod;
 class TOpaqueListRepresentation;
 class IValueBuilder;
-
+ 
 enum class EFetchStatus : ui32 {
     Ok,
     Finish,
@@ -41,7 +41,7 @@ constexpr ui32 PreferredBlockRows = 65536;
 constexpr ui32 PreferredBlockBytes = 1000000;
 #endif
 
-///////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////// 
 // IApplyContext
 ///////////////////////////////////////////////////////////////////////////////
 class IApplyContext {
@@ -61,22 +61,22 @@ typedef bool(*TBlockCallback)(TBlock& block, void* context);
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
-// IBoxedValue
-///////////////////////////////////////////////////////////////////////////////
+// IBoxedValue 
+/////////////////////////////////////////////////////////////////////////////// 
 class IBoxedValue;
 using IBoxedValuePtr = TRefCountedPtr<IBoxedValue>;
 
 class IBoxedValue1
-{
+{ 
 friend struct TBoxedValueAccessor;
 friend class TBlock;
-public:
+public: 
     inline bool IsCompatibleTo(ui16 compatibilityVersion) const {
         return AbiCompatibility_ >= compatibilityVersion;
     }
 
     virtual ~IBoxedValue1() = default;
-
+ 
 private:
     // List accessors
     virtual bool HasFastListLength() const = 0;
@@ -1111,11 +1111,11 @@ private:
     TResourceData ResourceData_;
 };
 
-#define INCLUDE_UDF_VALUE_INL_H
-#include "udf_value_inl.h"
-#undef INCLUDE_UDF_VALUE_INL_H
-
-} // namespace NUdf
+#define INCLUDE_UDF_VALUE_INL_H 
+#include "udf_value_inl.h" 
+#undef INCLUDE_UDF_VALUE_INL_H 
+ 
+} // namespace NUdf 
 } // namespace NYql
 
 template<>

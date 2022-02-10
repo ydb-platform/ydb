@@ -36,8 +36,8 @@ namespace NKikimr {
         TObtainVDiskGuidProxy(TIntrusivePtr<TVDiskContext> vctx,
                               const TVDiskID &selfVDiskId,
                               const TVDiskID &targetVDiskId,
-                              const TActorId &targetServiceId,
-                              const TActorId &notifyId)
+                              const TActorId &targetServiceId, 
+                              const TActorId &notifyId) 
             : TVDiskGuidProxyBase(std::move(vctx), selfVDiskId, targetVDiskId, targetServiceId, notifyId)
         {}
     };
@@ -49,8 +49,8 @@ namespace NKikimr {
     IActor* CreateProxyForObtainingVDiskGuid(TIntrusivePtr<TVDiskContext> vctx,
                                              const TVDiskID &selfVDiskId,
                                              const TVDiskID &targetVDiskId,
-                                             const TActorId &targetServiceId,
-                                             const TActorId &notifyId) {
+                                             const TActorId &targetServiceId, 
+                                             const TActorId &notifyId) { 
         return new TObtainVDiskGuidProxy(std::move(vctx), selfVDiskId, targetVDiskId,
                                          targetServiceId, notifyId);
     }

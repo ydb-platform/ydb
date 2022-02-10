@@ -86,7 +86,7 @@ namespace NYql::NDqs {
                                                const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
                                                NYql::TExprNode::TPtr dqExprRoot,
                                                NActors::TActorId executerID,
-                                               NActors::TActorId resultID)
+                                               NActors::TActorId resultID) 
         : TypeContext(std::move(typeContext))
         , ExprContext(exprContext)
         , FunctionRegistry(functionRegistry)
@@ -303,9 +303,9 @@ namespace NYql::NDqs {
     TVector<TDqTask>& TDqsExecutionPlanner::GetTasks() {
         if (Tasks.empty()) {
             auto workerCount = TasksGraph.GetTasks().size();
-            TVector<NActors::TActorId> workers;
+            TVector<NActors::TActorId> workers; 
             for (unsigned int i = 0; i < workerCount; ++i) {
-                NActors::TActorId fakeActorId(i+1, 0, 0, 0);
+                NActors::TActorId fakeActorId(i+1, 0, 0, 0); 
                 workers.emplace_back(fakeActorId);
             }
             Tasks = GetTasks(workers);
@@ -333,7 +333,7 @@ namespace NYql::NDqs {
             Yql::DqsProto::TTaskMeta taskMeta;
             TDqTask taskDesc;
             taskDesc.SetId(task.Id);
-            NActors::ActorIdToProto(ExecuterID, taskDesc.MutableExecuter()->MutableActorId());
+            NActors::ActorIdToProto(ExecuterID, taskDesc.MutableExecuter()->MutableActorId()); 
             auto& taskParams = *taskMeta.MutableTaskParams();
             for (const auto& [k, v]: task.Meta.TaskParams) {
                 taskParams[k] = v;
@@ -379,7 +379,7 @@ namespace NYql::NDqs {
         return plan;
     }
 
-    NActors::TActorId TDqsExecutionPlanner::GetSourceID() const {
+    NActors::TActorId TDqsExecutionPlanner::GetSourceID() const { 
         if (SourceID) {
             return *SourceID;
         } else {
@@ -567,18 +567,18 @@ namespace NYql::NDqs {
         channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
 
         if (channel.SrcTask) {
-            NActors::ActorIdToProto(TasksGraph.GetTask(channel.SrcTask).ComputeActorId,
+            NActors::ActorIdToProto(TasksGraph.GetTask(channel.SrcTask).ComputeActorId, 
                                         channelDesc.MutableSrcEndpoint()->MutableActorId());
         }
 
         if (channel.DstTask) {
-            NActors::ActorIdToProto(TasksGraph.GetTask(channel.DstTask).ComputeActorId,
+            NActors::ActorIdToProto(TasksGraph.GetTask(channel.DstTask).ComputeActorId, 
                                         channelDesc.MutableDstEndpoint()->MutableActorId());
         } else {
             auto& stageInfo = TasksGraph.GetStageInfo(TasksGraph.GetTask(channel.SrcTask).StageId);
             YQL_ENSURE(stageInfo.Tasks.size() == 1);
             YQL_ENSURE(!SourceID);
-            ActorIdToProto(ResultID, channelDesc.MutableDstEndpoint()->MutableActorId());
+            ActorIdToProto(ResultID, channelDesc.MutableDstEndpoint()->MutableActorId()); 
             SourceID = TasksGraph.GetTask(channel.SrcTask).ComputeActorId;
         }
     }
@@ -689,7 +689,7 @@ namespace NYql::NDqs {
         task.SetStageId(1);
         task.MutableMeta()->PackFrom(taskMeta);
 
-        NActors::ActorIdToProto(ExecuterID, task.MutableExecuter()->MutableActorId());
+        NActors::ActorIdToProto(ExecuterID, task.MutableExecuter()->MutableActorId()); 
         auto& program = *task.MutableProgram();
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(Program);
@@ -702,15 +702,15 @@ namespace NYql::NDqs {
         channelDesc->SetSrcTaskId(2);
         channelDesc->SetDstTaskId(1);
 
-        NActors::ActorIdToProto(ExecuterID, channelDesc->MutableSrcEndpoint()->MutableActorId());
-        NActors::ActorIdToProto(ResultID, channelDesc->MutableDstEndpoint()->MutableActorId());
+        NActors::ActorIdToProto(ExecuterID, channelDesc->MutableSrcEndpoint()->MutableActorId()); 
+        NActors::ActorIdToProto(ResultID, channelDesc->MutableDstEndpoint()->MutableActorId()); 
 
         SourceID = worker;
 
         return {task};
     }
 
-    NActors::TActorId TDqsSingleExecutionPlanner::GetSourceID() const
+    NActors::TActorId TDqsSingleExecutionPlanner::GetSourceID() const 
     {
         if (SourceID) {
             return *SourceID;
@@ -742,8 +742,8 @@ namespace NYql::NDqs {
         const TVector<TDqTask>& tasks,
         ui64 sourceId,
         const TString& resultType,
-        NActors::TActorId executerID,
-        NActors::TActorId resultID)
+        NActors::TActorId executerID, 
+        NActors::TActorId resultID) 
         : Tasks(tasks)
         , SourceId(sourceId)
         , ResultType(resultType)
@@ -761,18 +761,18 @@ namespace NYql::NDqs {
 
         auto setActorId = [&](NYql::NDqProto::TEndpoint* endpoint) {
             if (endpoint->GetEndpointTypeCase() == NYql::NDqProto::TEndpoint::kActorId) {
-                NActors::TActorId fakeId = NActors::ActorIdFromProto(endpoint->GetActorId());
+                NActors::TActorId fakeId = NActors::ActorIdFromProto(endpoint->GetActorId()); 
                 if (fakeId.NodeId() > 0) {
-                    NActors::TActorId realId = fakeId.LocalId() == 0
+                    NActors::TActorId realId = fakeId.LocalId() == 0 
                         ? workers[fakeId.NodeId()-1]
                         : ResultID;
-                    NActors::ActorIdToProto(realId, endpoint->MutableActorId());
+                    NActors::ActorIdToProto(realId, endpoint->MutableActorId()); 
                 }
             }
         };
 
         for (auto& taskDesc : Tasks) {
-            NActors::ActorIdToProto(ExecuterID, taskDesc.MutableExecuter()->MutableActorId());
+            NActors::ActorIdToProto(ExecuterID, taskDesc.MutableExecuter()->MutableActorId()); 
 
             for (auto& inputDesc : *taskDesc.MutableInputs()) {
                 for (auto& channelDesc : *inputDesc.MutableChannels()) {
@@ -792,7 +792,7 @@ namespace NYql::NDqs {
         return Tasks;
     }
 
-    NActors::TActorId TGraphExecutionPlanner::GetSourceID() const
+    NActors::TActorId TGraphExecutionPlanner::GetSourceID() const 
     {
         if (SourceID) {
             return *SourceID;

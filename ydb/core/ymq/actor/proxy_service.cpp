@@ -44,7 +44,7 @@ struct TSqsProxyService::TProxyRequestInfo : public TAtomicRefCount<TProxyReques
     }
 
     TString  RequestId;
-    TActorId ProxyActorId;
+    TActorId ProxyActorId; 
     TSqsEvents::TEvProxySqsRequest::TPtr ProxyRequest;
 };
 

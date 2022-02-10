@@ -2,15 +2,15 @@
 #include "defs.h"
 #include "immediate_control_board_impl.h"
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr {
 
-inline NActors::TActorId MakeIcbId(ui32 node) {
+inline NActors::TActorId MakeIcbId(ui32 node) { 
     char x[12] = {'i','c','b','_','a','c','t','o','r'};
-    return NActors::TActorId(node, TStringBuf(x, 12));
+    return NActors::TActorId(node, TStringBuf(x, 12)); 
 }
 
 class TImmediateControlActor;

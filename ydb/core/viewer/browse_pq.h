@@ -21,14 +21,14 @@ using namespace NActors;
 
 class TBrowseRoot : public TActorBootstrapped<TBrowseRoot> {
     using TBase = TActorBootstrapped<TBrowseRoot>;
-    TActorId Owner;
+    TActorId Owner; 
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TBrowseRoot(const TActorId& owner, const IViewer::TBrowseContext&)
+    TBrowseRoot(const TActorId& owner, const IViewer::TBrowseContext&) 
         : Owner(owner)
     {}
 
@@ -59,10 +59,10 @@ protected:
     THashMap<TString, NKikimrViewer::TMetaTopicConsumerInfo> ConsumerInfo;
     TString FilterTopic;
     TString FilterConsumer;
-    TActorId TxProxy = MakeTxProxyID();
+    TActorId TxProxy = MakeTxProxyID(); 
 
 public:
-    TBrowseCommon(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
+    TBrowseCommon(const TActorId& owner, const IViewer::TBrowseContext& browseContext) 
         : TBrowseTabletsCommon(owner, browseContext)
         , PQ_ROOT_PATH("/Root/PQ") // TODO(xenoxeno)
     {}
@@ -130,7 +130,7 @@ public:
     void SendTabletRequests(const TVector<TTabletId>& tablets, const TActorContext& ctx) {
         TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
         for (auto tabletId : tablets) {
-            TActorId pipeClient = GetTabletPipe(tabletId, ctx);
+            TActorId pipeClient = GetTabletPipe(tabletId, ctx); 
             const auto& range = TabletPartitions.equal_range(tabletId);
             if (range.first != range.second) {
                 TAutoPtr<TEvPersQueue::TEvPartitionClientInfo> request = new TEvPersQueue::TEvPartitionClientInfo();
@@ -287,7 +287,7 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TBrowseConsumers(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
+    TBrowseConsumers(const TActorId& owner, const IViewer::TBrowseContext& browseContext) 
         : TBrowseCommon(owner, browseContext)
     {}
 
@@ -308,7 +308,7 @@ public:
 
 class TBrowseConsumer : public TBrowseCommon {
 public:
-    TBrowseConsumer(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
+    TBrowseConsumer(const TActorId& owner, const IViewer::TBrowseContext& browseContext) 
         : TBrowseCommon(owner, browseContext)
     {
         FilterConsumer = BrowseContext.GetMyName();
@@ -356,7 +356,7 @@ public:
 
 class TBrowseTopic : public TBrowseCommon {
 public:
-    TBrowseTopic(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
+    TBrowseTopic(const TActorId& owner, const IViewer::TBrowseContext& browseContext) 
         : TBrowseCommon(owner, browseContext)
     {
         FilterTopic = BrowseContext.GetMyName();

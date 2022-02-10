@@ -111,7 +111,7 @@ PEERDIR(
     library/cpp/json/writer
     library/cpp/logger
     library/cpp/lwtrace
-    library/cpp/monlib/dynamic_counters
+    library/cpp/monlib/dynamic_counters 
     library/cpp/svnversion
     library/cpp/threading/future
 )

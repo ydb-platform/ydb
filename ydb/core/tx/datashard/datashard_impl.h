@@ -386,14 +386,14 @@ class TDataShard
         struct TEvPersistScanStateAck : public TEventLocal<TEvPersistScanStateAck, EvPersistScanStateAck> {};
 
         struct TEvConditionalEraseRowsRegistered : public TEventLocal<TEvConditionalEraseRowsRegistered, EvConditionalEraseRowsRegistered> {
-            explicit TEvConditionalEraseRowsRegistered(ui64 txId, const TActorId& actorId)
+            explicit TEvConditionalEraseRowsRegistered(ui64 txId, const TActorId& actorId) 
                 : TxId(txId)
                 , ActorId(actorId)
             {
             }
 
             const ui64 TxId;
-            const TActorId ActorId;
+            const TActorId ActorId; 
         };
 
         struct TEvAsyncJobComplete : public TEventLocal<TEvAsyncJobComplete, EvAsyncJobComplete> {
@@ -440,9 +440,9 @@ class TDataShard
 
     struct Schema : NIceDb::Schema {
         struct Sys : Table<1> {
-            struct Id :             Column<1, NScheme::NTypeIds::Uint64> {};
+            struct Id :             Column<1, NScheme::NTypeIds::Uint64> {}; 
             struct Bytes :          Column<2, NScheme::NTypeIds::String> {};
-            struct Uint64 :         Column<3, NScheme::NTypeIds::Uint64> {};
+            struct Uint64 :         Column<3, NScheme::NTypeIds::Uint64> {}; 
 
             using TKey = TableKey<Id>;
             using TColumns = TableColumns<Id, Bytes, Uint64>;
@@ -450,8 +450,8 @@ class TDataShard
 
         // Note that table UserTablesStats must be always updated with this one
         struct UserTables : Table<2> {
-            struct Tid :            Column<1, NScheme::NTypeIds::Uint64> {};
-            struct LocalTid :       Column<2, NScheme::NTypeIds::Uint32> {};
+            struct Tid :            Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct LocalTid :       Column<2, NScheme::NTypeIds::Uint32> {}; 
             struct Path :           Column<3, NScheme::NTypeIds::String> {};
             struct Name :           Column<4, NScheme::NTypeIds::String> {};
             struct Schema :         Column<5, NScheme::NTypeIds::String> { using Type = TString; };
@@ -462,12 +462,12 @@ class TDataShard
         };
 
         struct TxMain : Table<3> {
-            struct TxId :           Column<1, NScheme::NTypeIds::Uint64> {};
+            struct TxId :           Column<1, NScheme::NTypeIds::Uint64> {}; 
             struct Kind :           Column<2, NScheme::NTypeIds::Uint32> { using Type = EOperationKind; };
-            struct Flags :          Column<3, NScheme::NTypeIds::Uint32> {};
-            struct State :          Column<4, NScheme::NTypeIds::Uint32> {};
-            struct InRSRemain :     Column<5, NScheme::NTypeIds::Uint64> {};
-            struct MaxStep :        Column<6, NScheme::NTypeIds::Uint64> {};
+            struct Flags :          Column<3, NScheme::NTypeIds::Uint32> {}; 
+            struct State :          Column<4, NScheme::NTypeIds::Uint32> {}; 
+            struct InRSRemain :     Column<5, NScheme::NTypeIds::Uint64> {}; 
+            struct MaxStep :        Column<6, NScheme::NTypeIds::Uint64> {}; 
             struct ReceivedAt :     Column<7, NScheme::NTypeIds::Uint64> {};
             struct Flags64 :        Column<8, NScheme::NTypeIds::Uint64> {};
             struct Source :         Column<9, NScheme::NTypeIds::ActorId> {};
@@ -478,21 +478,21 @@ class TDataShard
         };
 
         struct TxDetails : Table<4> {
-            struct TxId :           Column<1, NScheme::NTypeIds::Uint64> {};
-            struct Origin :         Column<2, NScheme::NTypeIds::Uint64> {};
-            struct InReadSetState : Column<3, NScheme::NTypeIds::Uint64> {}; // Not used
+            struct TxId :           Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct Origin :         Column<2, NScheme::NTypeIds::Uint64> {}; 
+            struct InReadSetState : Column<3, NScheme::NTypeIds::Uint64> {}; // Not used 
             struct Body :           Column<4, NScheme::NTypeIds::String> { using Type = TString; };
-            struct Source :         Column<5, NScheme::NTypeIds::ActorId> {};
+            struct Source :         Column<5, NScheme::NTypeIds::ActorId> {}; 
 
             using TKey = TableKey<TxId, Origin>;
             using TColumns = TableColumns<TxId, Origin, InReadSetState, Body, Source>;
         };
 
         struct InReadSets : Table<5> {
-            struct TxId :           Column<1, NScheme::NTypeIds::Uint64> {};
-            struct Origin :         Column<2, NScheme::NTypeIds::Uint64> {};
-            struct From :           Column<3, NScheme::NTypeIds::Uint64> {};
-            struct To :             Column<4, NScheme::NTypeIds::Uint64> {};
+            struct TxId :           Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct Origin :         Column<2, NScheme::NTypeIds::Uint64> {}; 
+            struct From :           Column<3, NScheme::NTypeIds::Uint64> {}; 
+            struct To :             Column<4, NScheme::NTypeIds::Uint64> {}; 
             struct Body :           Column<5, NScheme::NTypeIds::String> { using Type = TString; };
             struct BalanceTrackList :      Column<6, NScheme::NTypeIds::String> { using Type = TString; };
 
@@ -501,12 +501,12 @@ class TDataShard
         };
 
         struct OutReadSets : Table<6> {
-            struct Seqno :          Column<1, NScheme::NTypeIds::Uint64> {};
-            struct Step :           Column<2, NScheme::NTypeIds::Uint64> {};
-            struct TxId :           Column<3, NScheme::NTypeIds::Uint64> {};
-            struct Origin :         Column<4, NScheme::NTypeIds::Uint64> {};
-            struct From :           Column<5, NScheme::NTypeIds::Uint64> {};
-            struct To :             Column<6, NScheme::NTypeIds::Uint64> {};
+            struct Seqno :          Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct Step :           Column<2, NScheme::NTypeIds::Uint64> {}; 
+            struct TxId :           Column<3, NScheme::NTypeIds::Uint64> {}; 
+            struct Origin :         Column<4, NScheme::NTypeIds::Uint64> {}; 
+            struct From :           Column<5, NScheme::NTypeIds::Uint64> {}; 
+            struct To :             Column<6, NScheme::NTypeIds::Uint64> {}; 
             struct Body :           Column<7, NScheme::NTypeIds::String> { using Type = TString; };
             struct SplitTraj :      Column<8, NScheme::NTypeIds::String> { using Type = TString; };
 
@@ -515,16 +515,16 @@ class TDataShard
         };
 
         struct PlanQueue : Table<7> {
-            struct Step :           Column<1, NScheme::NTypeIds::Uint64> {};
-            struct TxId :           Column<2, NScheme::NTypeIds::Uint64> {};
+            struct Step :           Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct TxId :           Column<2, NScheme::NTypeIds::Uint64> {}; 
 
             using TKey = TableKey<Step, TxId>;
             using TColumns = TableColumns<Step, TxId>;
         };
 
         struct DeadlineQueue : Table<8> {
-            struct MaxStep :        Column<1, NScheme::NTypeIds::Uint64> {};
-            struct TxId :           Column<2, NScheme::NTypeIds::Uint64> {};
+            struct MaxStep :        Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct TxId :           Column<2, NScheme::NTypeIds::Uint64> {}; 
 
             using TKey = TableKey<MaxStep, TxId>;
             using TColumns = TableColumns<MaxStep, TxId>;
@@ -1080,7 +1080,7 @@ public:
     void SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const;
     void SendResult(const TActorContext &ctx,
                     TOutputOpData::TResultPtr &result,
-                    const TActorId &target,
+                    const TActorId &target, 
                     ui64 step,
                     ui64 txId);
     void FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks);
@@ -1447,7 +1447,7 @@ private:
     ///
     class TLoanReturnTracker {
         struct TLoanReturnInfo {
-            TActorId PipeToOwner;
+            TActorId PipeToOwner; 
             THashSet<TLogoBlobID> PartMeta;
         };
 
@@ -1545,7 +1545,7 @@ private:
             }
         }
 
-        bool Has(ui64 ownerTabletId, TActorId pipeClientActorId) const {
+        bool Has(ui64 ownerTabletId, TActorId pipeClientActorId) const { 
             return LoanReturns.contains(ownerTabletId) && LoanReturns.FindPtr(ownerTabletId)->PipeToOwner == pipeClientActorId;
         }
 
@@ -1624,7 +1624,7 @@ private:
             return !DataToSend.contains(dstTabletId);
         }
 
-        bool Has(ui64 dstTabletId, TActorId pipeClientActorId) const {
+        bool Has(ui64 dstTabletId, TActorId pipeClientActorId) const { 
             return PipesToDstShards.contains(dstTabletId) && *PipesToDstShards.FindPtr(dstTabletId) == pipeClientActorId;
         }
 
@@ -1638,7 +1638,7 @@ private:
         TDataShard* Self;
         THashSet<ui64> Dst;
         THashMap<ui64, TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot>> DataToSend;
-        THashMap<ui64, TActorId> PipesToDstShards;
+        THashMap<ui64, TActorId> PipesToDstShards; 
     };
 
     ///
@@ -1890,8 +1890,8 @@ private:
     THolder<NTabletPipe::IClientCache> PipeClientCache;
     TPipeTracker ResendReadSetPipeTracker;
     NTabletPipe::TClientRetryPolicy SchemeShardPipeRetryPolicy;
-    TActorId SchemeShardPipe;   // For notifications about schema changes
-    TActorId StateReportPipe;   // For notifications about shard state changes
+    TActorId SchemeShardPipe;   // For notifications about schema changes 
+    TActorId StateReportPipe;   // For notifications about shard state changes 
     ui64 PathOwnerId; // TabletID of the schmemeshard that allocated the TPathId(ownerId,localId)
     ui64 CurrentSchemeShardId; // TabletID of SchemeShard wich manages the path right now
     ui64 LastKnownMediator;
@@ -1902,8 +1902,8 @@ private:
     TInstant LastDbStatsReportTime;
     TInstant LastCpuWarnTime;
     TInstant LastDataSizeWarnTime;
-    TActorId DbStatsReportPipe;
-    TActorId TableResolvePipe;
+    TActorId DbStatsReportPipe; 
+    TActorId TableResolvePipe; 
     ui64 StatsReportRound = 0;
 
     TActorId FindSubDomainPathIdActor;
@@ -1912,7 +1912,7 @@ private:
     std::optional<TPathId> WatchingSubDomainPathId;
     bool SubDomainOutOfSpace = false;
 
-    THashSet<TActorId> Actors;
+    THashSet<TActorId> Actors; 
     TLoanReturnTracker LoanReturnTracker;
     TFollowerState FollowerState;
 
@@ -1926,7 +1926,7 @@ private:
     bool DstSplitSchemaInitialized = false;
     std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> DstSplitDescription;
     std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> SrcSplitDescription;
-    THashSet<TActorId> SrcAckSplitTo;
+    THashSet<TActorId> SrcAckSplitTo; 
     THashMap<TActorId, THashSet<ui64>> SrcAckPartitioningChangedTo;
     const ui32 SysTablesToTransferAtSplit[4] = {
             Schema::TxMain::TableId,
@@ -2002,7 +2002,7 @@ private:
     struct TInFlightCondErase {
         ui64 TxId;
         ui64 ScanId;
-        TActorId ActorId;
+        TActorId ActorId; 
         ui32 Condition;
 
         TInFlightCondErase() {
@@ -2012,7 +2012,7 @@ private:
         void Clear() {
             TxId = 0;
             ScanId = 0;
-            ActorId = TActorId();
+            ActorId = TActorId(); 
             Condition = 0;
         }
 
@@ -2282,7 +2282,7 @@ protected:
             InvokeOtherActor(*ReplicationSourceOffsetsServer, &TReplicationSourceOffsetsServer::PassAway);
         }
 
-        for (const TActorId& actorId : Actors) {
+        for (const TActorId& actorId : Actors) { 
             Send(actorId, new TEvents::TEvPoison);
         }
         Actors.clear();

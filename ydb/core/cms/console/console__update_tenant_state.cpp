@@ -8,7 +8,7 @@ public:
     TTxUpdateTenantState(TTenantsManager *self,
                          const TString &path,
                          TTenant::EState state,
-                         TActorId worker)
+                         TActorId worker) 
         : TBase(self)
         , Path(path)
         , State(state)
@@ -47,7 +47,7 @@ public:
 
         if (Tenant && PrevState != State) {
             if (Tenant->Worker == Worker)
-                Tenant->Worker = TActorId();
+                Tenant->Worker = TActorId(); 
             Self->ChangeTenantState(Tenant, State, ctx);
             Self->ProcessTenantActions(Tenant, ctx);
         }
@@ -60,12 +60,12 @@ private:
     TString Path;
     TTenant::EState State;
     TTenant::EState PrevState;
-    TActorId Worker;
+    TActorId Worker; 
 };
 
 ITransaction *TTenantsManager::CreateTxUpdateTenantState(const TString &path,
                                                          TTenant::EState state,
-                                                         TActorId worker)
+                                                         TActorId worker) 
 {
     return new TTxUpdateTenantState(this, path, state, worker);
 }

@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         ui16 SendFlags;
 
     public:
-        TSenderActor(const TActorId& recipientActorId, ui16 sendFlags)
+        TSenderActor(const TActorId& recipientActorId, ui16 sendFlags) 
             : TSenderBaseActor(recipientActorId, 32)
             , SendFlags(sendFlags)
         {
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         TTestICCluster testCluster(numNodes, TChannelsConfig(), &interrupterSettings);
 
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
-        const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
+        const TActorId recipient = testCluster.RegisterActor(receiverActor, 2); 
         TSenderActor* senderActor = new TSenderActor(recipient, flags);
         testCluster.RegisterActor(senderActor, 1);
 
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         TTestICCluster testCluster(numNodes, TChannelsConfig(), &interrupterSettings);
 
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
-        const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
+        const TActorId recipient = testCluster.RegisterActor(receiverActor, 2); 
         TSenderActor* senderActor = new TSenderActor(recipient, flags);
         testCluster.RegisterActor(senderActor, 1);
 

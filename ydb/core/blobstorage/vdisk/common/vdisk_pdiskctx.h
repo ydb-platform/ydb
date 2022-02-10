@@ -17,9 +17,9 @@ namespace NKikimr {
         // PDisk related constants
         const TIntrusivePtr<TPDiskParams> Dsk;
         // PDisk Actor id
-        const TActorId PDiskId;
+        const TActorId PDiskId; 
 
-        TPDiskCtx(TIntrusivePtr<TPDiskParams> dsk, TActorId pDiskId)
+        TPDiskCtx(TIntrusivePtr<TPDiskParams> dsk, TActorId pDiskId) 
             : Dsk(std::move(dsk))
             , PDiskId(pDiskId)
         {}

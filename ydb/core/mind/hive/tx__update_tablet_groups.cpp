@@ -213,7 +213,7 @@ public:
 
             if (tablet->IsBootingSuppressed()) {
                 // Tablet will never boot, so will notify about creation right after commit
-                for (const TActorId& actor : tablet->ActorsToNotify) {
+                for (const TActorId& actor : tablet->ActorsToNotify) { 
                     Notifications.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
                 }
                 tablet->ActorsToNotify.clear();

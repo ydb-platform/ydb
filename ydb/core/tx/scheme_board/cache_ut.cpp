@@ -100,7 +100,7 @@ protected:
     void CreateAndMigrateWithoutDecision(ui64& txId);
 
 private:
-    TActorId SchemeCache;
+    TActorId SchemeCache; 
 
 }; // TCacheTest
 
@@ -156,7 +156,7 @@ void TCacheTest::List() {
 }
 
 void TCacheTest::Recreate() {
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
     ui64 txId = 100;
 
     TestMkDir(*Context, ++txId, "/Root", "DirA");
@@ -378,7 +378,7 @@ TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavi
         request->UserToken = new NACLib::TUserToken(sid, {});
     }
 
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
     Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, 0, 0, true);
     auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
 
@@ -434,7 +434,7 @@ TResolve::TEntry TCacheTest::TestResolve(const TTableId& tableId, TResolve::ESta
         request->UserToken = new NACLib::TUserToken(sid, {});
     }
 
-    const TActorId edge = Context->AllocateEdgeActor();
+    const TActorId edge = Context->AllocateEdgeActor(); 
     Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvResolveKeySet(request.Release()), 0, 0, 0, true);
     auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvResolveKeySetResult>(edge);
 

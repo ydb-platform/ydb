@@ -7,18 +7,18 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-TGRpcOperationService::TGRpcOperationService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
+TGRpcOperationService::TGRpcOperationService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id) 
     : ActorSystem_(system)
     , Counters_(counters)
     , GRpcRequestProxyId_(id)
 { }
 
-void TGRpcOperationService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcOperationService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) { 
     CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
+    SetupIncomingRequests(std::move(logger)); 
 }
 
-void TGRpcOperationService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) {
+void TGRpcOperationService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) { 
     Limiter_ = limiter;
 }
 
@@ -31,18 +31,18 @@ void TGRpcOperationService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcOperationService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcOperationService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Operations::IN, Ydb::Operations::OUT, TGRpcOperationService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Operation::V1::OperationService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("operation", #NAME))->Run();
+        #NAME, logger, getCounterBlock("operation", #NAME))->Run(); 
 
     ADD_REQUEST(GetOperation, GetOperationRequest, GetOperationResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvGetOperationRequest(ctx));

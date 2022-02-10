@@ -25,7 +25,7 @@ private:
 
 private:
     TAtomic Counter;
-    TActorId Receiver;
+    TActorId Receiver; 
 
     std::function<void(void)> Action;
 
@@ -36,7 +36,7 @@ public:
         , Action(action)
     {}
 
-    void Start(TActorId receiver, size_t count)
+    void Start(TActorId receiver, size_t count) 
     {
         AtomicSet(Counter, count);
         Receiver = receiver;
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
 
         executorPool->SetThreadCount(halfSize);
         TTestSenderActor* actors[size];
-        TActorId actorIds[size];
+        TActorId actorIds[size]; 
         for (size_t i = 0; i < size; ++i) {
             actors[i] = new TTestSenderActor();
             actorIds[i] = actorSystem.Register(actors[i]);
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         executorPool->SetThreadCount(halfSize);
 
         TTestSenderActor* actors[size];
-        TActorId actorIds[size];
+        TActorId actorIds[size]; 
         for (size_t i = 0; i < size; ++i) {
             actors[i] = new TTestSenderActor();
             actorIds[i] = actorSystem.Register(actors[i]);
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
                 counter = 0;
             }
         });
-        TActorId changerActorId = actorSystem.Register(changerActor);
+        TActorId changerActorId = actorSystem.Register(changerActor); 
         changerActor->Start(changerActorId, msgCount);
         actorSystem.Send(changerActorId, new TEvMsg());
 
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         auto begin = TInstant::Now();
 
         TTestSenderActor* actors[size];
-        TActorId actorIds[size];
+        TActorId actorIds[size]; 
 
         for (size_t i = 0; i < size; ++i) {
             actors[i] = new TTestSenderActor();
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         auto begin = TInstant::Now();
 
         TTestSenderActor* actors[actorsCount];
-        TActorId actorIds[actorsCount];
+        TActorId actorIds[actorsCount]; 
 
         for (size_t i = 0; i < actorsCount; ++i) {
             actors[i] = new TTestSenderActor();
@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         auto begin = TInstant::Now();
 
         TTestSenderActor* actors[actorsCount];
-        TActorId actorIds[actorsCount];
+        TActorId actorIds[actorsCount]; 
 
         for (size_t i = 0; i < actorsCount; ++i) {
             actors[i] = new TTestSenderActor();

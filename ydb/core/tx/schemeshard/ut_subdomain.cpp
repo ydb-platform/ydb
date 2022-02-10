@@ -1351,7 +1351,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(0)});
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
@@ -1378,7 +1378,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "TimeCastBucketsPerMediator: 2 "
                             "Name: \"USER_0\"");
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         env.TestWaitNotification(runtime, 100);
@@ -1493,7 +1493,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
 
         {
-            TActorId sender = runtime.AllocateEdgeActor();
+            TActorId sender = runtime.AllocateEdgeActor(); 
             RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
         }
 
@@ -1501,7 +1501,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
 
         {
-            TActorId sender = runtime.AllocateEdgeActor();
+            TActorId sender = runtime.AllocateEdgeActor(); 
             RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
         }
 

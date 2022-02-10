@@ -17,7 +17,7 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <library/cpp/grpc/server/grpc_server.h> 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/protos/kesus.pb.h>
@@ -217,7 +217,7 @@ namespace Tests {
         TServer& operator =(TServer&& server) = default;
         virtual ~TServer();
 
-        void EnableGRpc(const NGrpc::TServerOptions& options);
+        void EnableGRpc(const NGrpc::TServerOptions& options); 
         void EnableGRpc(ui16 port);
 
         void SetupDefaultProfiles();
@@ -256,7 +256,7 @@ namespace Tests {
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;
         const NBus::TBusServerSessionConfig BusServerSessionConfig; //BusServer hold const & on config
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
-        std::unique_ptr<NGrpc::TGRpcServer> GRpcServer;
+        std::unique_ptr<NGrpc::TGRpcServer> GRpcServer; 
         TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
     };
 
@@ -283,7 +283,7 @@ namespace Tests {
         bool LoadTypes();
         const NScheme::TTypeRegistry& GetTypeRegistry() const;
         const NScheme::TTypeMetadataRegistry& GetTypeMetadataRegistry() const;
-        const NMiniKQL::IFunctionRegistry& GetFunctionRegistry() const;
+        const NMiniKQL::IFunctionRegistry& GetFunctionRegistry() const; 
 
         template <typename T>
         void PrepareRequest(TAutoPtr<T>&) {}
@@ -511,13 +511,13 @@ namespace Tests {
         const TString DomainName;
         const bool SupportsRedirect;
         const TStoragePoolKinds StoragePoolTypes;
-        NScheme::TKikimrTypeRegistry TypeRegistry;
-        TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
+        NScheme::TKikimrTypeRegistry TypeRegistry; 
+        TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry; 
         NMsgBusProxy::TMsgBusClientConfig ClientConfig;
         std::shared_ptr<NMsgBusProxy::TMsgBusClient> Client;
         TMaybe<ui64> TypesEtag;
         NScheme::TTypeMetadataRegistry LoadedTypeMetadataRegistry;
-        TIntrusivePtr<NMiniKQL::IFunctionRegistry> LoadedFunctionRegistry;
+        TIntrusivePtr<NMiniKQL::IFunctionRegistry> LoadedFunctionRegistry; 
         TString SecurityToken;
     };
 

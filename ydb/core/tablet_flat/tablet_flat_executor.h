@@ -435,9 +435,9 @@ namespace NFlatExecutorSetup {
         TTabletStorageInfo* Info() const { return TabletInfo.Get(); }
         ui64 TabletID() const { return TabletInfo->TabletID; }
         TTabletTypes::EType TabletType() const { return TabletInfo->TabletType; }
-        const TActorId& Tablet() const { return TabletActorID; }
-        const TActorId& ExecutorID() const { return ExecutorActorID; }
-        const TActorId& LauncherID() const { return LauncherActorID; }
+        const TActorId& Tablet() const { return TabletActorID; } 
+        const TActorId& ExecutorID() const { return ExecutorActorID; } 
+        const TActorId& LauncherID() const { return LauncherActorID; } 
 
         virtual void SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx); // would be FAIL in default implementation
         virtual void CompletedLoansChanged(const TActorContext &ctx); // would be no-op in default implementation
@@ -454,18 +454,18 @@ namespace NFlatExecutorSetup {
 
         // create transaction?
     protected:
-        ITablet(TTabletStorageInfo *info, const TActorId &tablet)
+        ITablet(TTabletStorageInfo *info, const TActorId &tablet) 
             : TabletActorID(tablet)
             , TabletInfo(info)
         {
             Y_VERIFY(TTabletTypes::TYPE_INVALID != TabletInfo->TabletType);
         }
 
-        TActorId ExecutorActorID;
-        TActorId TabletActorID;
-        TActorId LauncherActorID;
+        TActorId ExecutorActorID; 
+        TActorId TabletActorID; 
+        TActorId LauncherActorID; 
 
-        void UpdateTabletInfo(TIntrusivePtr<TTabletStorageInfo> info, const TActorId& launcherID = {});
+        void UpdateTabletInfo(TIntrusivePtr<TTabletStorageInfo> info, const TActorId& launcherID = {}); 
     private:
         TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     };

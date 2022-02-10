@@ -180,16 +180,16 @@ namespace NKikimr {
 
         // helper function used to construct incremental huge blob keeper's actod id on a local pdisk with specific
         // identifier
-        inline NActors::TActorId MakeIncrHugeKeeperId(ui32 pdiskId) {
+        inline NActors::TActorId MakeIncrHugeKeeperId(ui32 pdiskId) { 
             char x[12] = {'b', 's', 'I', 'n', 'c', 'r', 'H', 'K', 0, 0, 0, 0};
             x[8] = pdiskId;
             x[9] = pdiskId >> 8;
             x[10] = pdiskId >> 16;
             x[11] = pdiskId >> 24;
-            return NActors::TActorId(0, TStringBuf(x, 12));
+            return NActors::TActorId(0, TStringBuf(x, 12)); 
         }
 
-        inline ui32 PDiskIdFromIncrHugeKeeperId(const TActorId& keeperId) {
+        inline ui32 PDiskIdFromIncrHugeKeeperId(const TActorId& keeperId) { 
             ui64 raw2 = keeperId.RawX2();
             Y_VERIFY(raw2 < (ui64(1) << 32));
             ui32 pdiskId = raw2;

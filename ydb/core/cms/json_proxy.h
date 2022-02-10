@@ -182,7 +182,7 @@ protected:
     }
 
     NMon::TEvHttpInfo::TPtr RequestEvent;
-    TActorId Pipe;
+    TActorId Pipe; 
 };
 
 template <typename TRequestEvent, typename TResponseEvent>

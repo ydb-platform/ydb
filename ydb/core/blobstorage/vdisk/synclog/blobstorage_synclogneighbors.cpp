@@ -29,7 +29,7 @@ namespace NKikimr {
                             auto vd = GInfo.GetVDiskId(it->VDiskIdShort);
                             str << "VDiskId: " << vd.ToStringWOGeneration() << "<br>";
                             // output node info
-                            TActorId aid = GInfo.GetActorId(it->VDiskIdShort);
+                            TActorId aid = GInfo.GetActorId(it->VDiskIdShort); 
                             ui32 nodeId = aid.NodeId();
                             using TNodeInfo = TEvInterconnect::TNodeInfo;
                             const TNodeInfo *info = NodesInfo->Get()->GetNodeInfo(nodeId);

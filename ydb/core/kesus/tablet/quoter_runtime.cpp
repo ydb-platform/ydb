@@ -14,7 +14,7 @@ namespace NKesus {
 
 class TKesusTablet::TQuoterResourceSink : public IResourceSink {
 public:
-    TQuoterResourceSink(const TActorId& actor, TKesusTablet* kesus)
+    TQuoterResourceSink(const TActorId& actor, TKesusTablet* kesus) 
         : Actor(actor)
         , Kesus(kesus)
     {
@@ -34,11 +34,11 @@ public:
     }
 
 private:
-    TActorId Actor;
+    TActorId Actor; 
     TKesusTablet* Kesus;
 };
 
-void TKesusTablet::TQuoterResourceSessionsAccumulator::Accumulate(const TActorId& recipient, ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props) {
+void TKesusTablet::TQuoterResourceSessionsAccumulator::Accumulate(const TActorId& recipient, ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props) { 
     TSendInfo& info = SendInfos[recipient];
     if (!info.Event) {
         info.Event = MakeHolder<TEvKesus::TEvResourcesAllocated>();
@@ -63,7 +63,7 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::Accumulate(const TActorId
 
 void TKesusTablet::TQuoterResourceSessionsAccumulator::SendAll(const TActorContext& ctx, ui64 tabletId) {
     for (auto infoIter = SendInfos.begin(), infoEnd = SendInfos.end(); infoIter != infoEnd; ++infoIter) {
-        const TActorId& recipientId = infoIter->first;
+        const TActorId& recipientId = infoIter->first; 
         auto& info = infoIter->second;
         TRACE_LOG_EVENT(tabletId, "TEvResourcesAllocated", info.Event->Record, recipientId, 0);
         ctx.Send(recipientId, std::move(info.Event));
@@ -73,8 +73,8 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::SendAll(const TActorConte
 
 void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
     THolder<TEvKesus::TEvSubscribeOnResourcesResult> reply = MakeHolder<TEvKesus::TEvSubscribeOnResourcesResult>();
-    const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
-    const TActorId pipeServerId = ev->Recipient;
+    const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID()); 
+    const TActorId pipeServerId = ev->Recipient; 
     reply->Record.MutableResults()->Reserve(ev->Get()->Record.ResourcesSize());
     IResourceSink::TPtr sink = new TQuoterResourceSink(ev->Sender, this);
     const TInstant now = TActivationContext::Now();
@@ -88,7 +88,7 @@ void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
             ++subscriptions;
             TQuoterSession* session = QuoterResources.GetOrCreateSession(clientId, resourceTree);
             session->SetResourceSink(sink);
-            const NActors::TActorId prevPipeServerId = session->SetPipeServerId(pipeServerId);
+            const NActors::TActorId prevPipeServerId = session->SetPipeServerId(pipeServerId); 
             QuoterResources.SetPipeServerId(TQuoterSessionId(clientId, resourceTree->GetResourceId()), prevPipeServerId, pipeServerId);
             session->UpdateConsumptionState(resource.GetStartConsuming(), resource.GetInitialAmount(), queue, now);
 
@@ -119,7 +119,7 @@ void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
 
 void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
     THolder<TEvKesus::TEvResourcesAllocated> errors;
-    const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
+    const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID()); 
     const TInstant now = TActivationContext::Now();
     IResourceSink::TPtr sink = new TQuoterResourceSink(ev->Sender, this);
     TTickProcessorQueue queue;

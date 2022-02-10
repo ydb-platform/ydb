@@ -258,14 +258,14 @@ protected:
     THolder<TChannelBalancer::TWeightManager> WeightManager;
 
     ui64 TabletId;
-    TActorId KeyValueActorId;
+    TActorId KeyValueActorId; 
     ui32 ExecutorGeneration;
     bool IsStatePresent;
     bool IsEmptyDbStart;
     bool IsDamaged;
     bool IsTabletYellowMove;
     bool IsTabletYellowStop;
-    TActorId ChannelBalancerActorId;
+    TActorId ChannelBalancerActorId; 
     ui64 InitialCollectsSent = 0;
 
     TDeque<TAutoPtr<TIntermediate>> Queue;
@@ -310,7 +310,7 @@ public:
 
     void Terminate(const TActorContext& ctx);
     void Load(const TString &key, const TString& value);
-    void InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 executorGeneration, ISimpleDb &db,
+    void InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 executorGeneration, ISimpleDb &db, 
         const TActorContext &ctx, const TTabletStorageInfo *info);
     void RegisterInitialCollectResult(const TActorContext &ctx);
     void SendCutHistory(const TActorContext &ctx);

@@ -4,7 +4,7 @@ using namespace NMonitoring;
 
 void TResourceMonPage::Output(NMonitoring::IMonHttpRequest& request) {
     IOutputStream& out = request.Output();
-    switch (ResourceType) {
+    switch (ResourceType) { 
         case TEXT:
             out << HTTPOKTEXT;
             break;

@@ -53,7 +53,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     TIntrusivePtr<TBootstrapperInfo> BootstrapperInfo;
 
-    TActorId LookOnActorID;
+    TActorId LookOnActorID; 
     TActorId FollowerActorID;
 
     ui64 RoundCounter;
@@ -64,13 +64,13 @@ class TBootstrapper : public TActor<TBootstrapper> {
     // we watch someone and do not act w/o shutdown
     struct TWatch {
         struct TWatched {
-            TActorId ActorID;
+            TActorId ActorID; 
             bool Owner;
 
             TWatched()
                 : Owner(false)
             {}
-            TWatched(const TActorId &actorID, bool owner)
+            TWatched(const TActorId &actorID, bool owner) 
                 : ActorID(actorID)
                 , Owner(owner)
             {}
@@ -94,7 +94,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
             return Watched.empty();
         }
 
-        bool RemoveAlien(const TActorId &alien) {
+        bool RemoveAlien(const TActorId &alien) { 
             for (ui32 i = 0, e = Watched.size(); i != e; ++i) {
                 if (Watched[i].ActorID == alien)
                     return RemoveAlienEntry(i);
@@ -116,20 +116,20 @@ class TBootstrapper : public TActor<TBootstrapper> {
     // we are under watch, must notify on error
     struct TWatched {
         struct TWatcher {
-            TActorId ActorID;
+            TActorId ActorID; 
             ui64 Round;
 
             TWatcher()
                 : ActorID()
                 , Round()
             {}
-            TWatcher(const TActorId &actorID, ui64 round)
+            TWatcher(const TActorId &actorID, ui64 round) 
                 : ActorID(actorID)
                 , Round(round)
             {}
         };
 
-        void AddWatcher(const TActorId &actorId, ui64 round) {
+        void AddWatcher(const TActorId &actorId, ui64 round) { 
             for (TWatcher &x : Watchers) {
                 if (actorId.NodeId() == x.ActorID.NodeId()) {
                     x.ActorID = actorId;
@@ -236,7 +236,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
             LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, tablet dead",
                      TabletInfo->TabletID, GetTabletTypeName());
 
-            LookOnActorID = TActorId();
+            LookOnActorID = TActorId(); 
             NotifyAndRound(ctx);
         }
     }
@@ -244,7 +244,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
     void Stop() {
         if (LookOnActorID) {
             Send(LookOnActorID, new TEvents::TEvPoisonPill());
-            LookOnActorID = TActorId();
+            LookOnActorID = TActorId(); 
         }
 
         if (FollowerActorID) {
@@ -268,7 +268,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
         Become(&TThis::StateStandBy);
     }
 
-    void BecomeWatch(const TActorId &watchOn, bool owner, const TActorContext &ctx) {
+    void BecomeWatch(const TActorId &watchOn, bool owner, const TActorContext &ctx) { 
         Y_UNUSED(ctx);
 
         BootDelayedUntil = { };
@@ -294,7 +294,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
         Become(&TThis::StateWatch);
     }
 
-    bool ApplyAlienState(const TActorId &alien, NKikimrBootstrapper::TEvWatchResult::EState state, ui64 seed, const TActorContext &ctx) {
+    bool ApplyAlienState(const TActorId &alien, NKikimrBootstrapper::TEvWatchResult::EState state, ui64 seed, const TActorContext &ctx) { 
         const ui32 alienNodeIdx = AlienIndex(alien.NodeId());
         if (alienNodeIdx == Max<ui32>())
             return true;
@@ -366,10 +366,10 @@ class TBootstrapper : public TActor<TBootstrapper> {
                     TabletInfo->TabletID, GetTabletTypeName(), online, total, quorum);
 
         const ui64 wx = BootstrapperInfo->WatchThreshold.MicroSeconds();
-        const auto sleepDuration = TDuration::MicroSeconds(wx / 2 + wx * (SelfSeed % 0x10000) / 0x20000);
+        const auto sleepDuration = TDuration::MicroSeconds(wx / 2 + wx * (SelfSeed % 0x10000) / 0x20000); 
 
         ctx.ExecutorThread.ActorSystem->Schedule(
-            Min(sleepDuration, BootDelayedUntil - now),
+            Min(sleepDuration, BootDelayedUntil - now), 
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(), 0, RoundCounter));
         Become(&TThis::StateSleep);
         return false;
@@ -410,7 +410,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
                       TabletInfo->TabletID, GetTabletTypeName());
 
             const ui64 wx = BootstrapperInfo->WatchThreshold.MicroSeconds();
-            const auto sleepDuration = TDuration::MicroSeconds(wx / 2 + wx * (SelfSeed % 0x10000) / 0x20000);
+            const auto sleepDuration = TDuration::MicroSeconds(wx / 2 + wx * (SelfSeed % 0x10000) / 0x20000); 
 
             Become(&TThis::StateSleep);
             ctx.ExecutorThread.ActorSystem->Schedule(sleepDuration, new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(), 0, RoundCounter));
@@ -469,7 +469,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
         LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, disconnected from %" PRIu32,
                     TabletInfo->TabletID, GetTabletTypeName(), node);
 
-        if (ApplyAlienState(TActorId(node, 0, 0, 0), NKikimrBootstrapper::TEvWatchResult::DISCONNECTED, Max<ui64>(), ctx))
+        if (ApplyAlienState(TActorId(node, 0, 0, 0), NKikimrBootstrapper::TEvWatchResult::DISCONNECTED, Max<ui64>(), ctx)) 
             return;
 
         CheckRoundCompletion(ctx);
@@ -483,7 +483,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
     }
 
     void HandleWatch(TEvBootstrapper::TEvNotify::TPtr &ev, const TActorContext &ctx) {
-        const TActorId alien = ev->Sender;
+        const TActorId alien = ev->Sender; 
         if (Watches->RemoveAlien(alien)) {
             NotifyAndRound(ctx);
         }
@@ -566,7 +566,7 @@ public:
         Y_VERIFY(TTabletTypes::TYPE_INVALID != TabletInfo->TabletType);
     }
 
-    TAutoPtr<IEventHandle> AfterRegister(const TActorId &selfId, const TActorId &parentId) override {
+    TAutoPtr<IEventHandle> AfterRegister(const TActorId &selfId, const TActorId &parentId) override { 
         Y_UNUSED(parentId);
         return new IEventHandle(selfId, selfId, new TEvents::TEvBootstrap());
     }
@@ -629,10 +629,10 @@ IActor* CreateBootstrapper(TTabletStorageInfo *tabletInfo, TBootstrapperInfo *bo
     return new TBootstrapper(tabletInfo, bootstrapperInfo, standby);
 }
 
-TActorId MakeBootstrapperID(ui64 tablet, ui32 node) {
+TActorId MakeBootstrapperID(ui64 tablet, ui32 node) { 
     char x[12] ={'b', 'o', 'o', 't'};
     memcpy(x + 4, &tablet, sizeof(ui64));
-    return TActorId(node, TStringBuf(x, x + 12));
+    return TActorId(node, TStringBuf(x, x + 12)); 
 }
 
 }

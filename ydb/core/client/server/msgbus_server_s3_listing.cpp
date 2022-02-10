@@ -26,10 +26,10 @@ private:
     const NKikimrClient::TS3ListingRequest* Request;
     THolder<const NACLib::TUserToken> UserToken;
     ui32 MaxKeys;
-    TActorId SchemeCache;
+    TActorId SchemeCache; 
     TActorId LeaderPipeCache;
     TDuration Timeout;
-    TActorId TimeoutTimerActorId;
+    TActorId TimeoutTimerActorId; 
     TAutoPtr<TKeyDesc> KeyRange;
     bool WaitingResolveReply;
     bool Finished;
@@ -51,7 +51,7 @@ public:
         return acitvityType;
     }
 
-    TS3ListingRequestBase(TActorId schemeCache, THolder<const NACLib::TUserToken>&& userToken)
+    TS3ListingRequestBase(TActorId schemeCache, THolder<const NACLib::TUserToken>&& userToken) 
         : Request(nullptr)
         , UserToken(std::move(userToken))
         , MaxKeys(DEFAULT_MAX_KEYS)
@@ -427,7 +427,7 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
         // Invalidate scheme cache in case of partitioning change
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(KeyRange->TableId, TActorId()));
+        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(KeyRange->TableId, TActorId())); 
         ReplyWithError(MSTATUS_NOTREADY, NTxProxy::TResultStatus::EStatus::ProxyShardNotAvailable, "Failed to connect to shard", ctx);
     }
 
@@ -451,7 +451,7 @@ private:
 
         if (shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE) {
             // Invalidate scheme cache in case of partitioning change
-            ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(KeyRange->TableId, TActorId()));
+            ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(KeyRange->TableId, TActorId())); 
             ReplyWithError(MSTATUS_NOTREADY, NTxProxy::TResultStatus::EStatus::ProxyShardNotAvailable, shardResponse.GetErrorDescription(), ctx);
             return;
         }
@@ -573,7 +573,7 @@ private:
     TAutoPtr<TBusS3ListingRequest> RequestHolder;
 
 public:
-    TS3ListingRequestMsgbus(NMsgBusProxy::TBusMessageContext& msgCtx, TActorId schemeCache)
+    TS3ListingRequestMsgbus(NMsgBusProxy::TBusMessageContext& msgCtx, TActorId schemeCache) 
         : TMessageBusSessionIdentHolder(msgCtx)
         , TS3ListingRequestBase(schemeCache, nullptr)
         , RequestHolder(static_cast<TBusS3ListingRequest*>(msgCtx.ReleaseMessage()))
@@ -593,7 +593,7 @@ protected:
 };
 
 IActor* CreateMessageBusS3ListingRequest(TBusMessageContext& msg) {
-    TActorId schemeCache = MakeSchemeCacheID();
+    TActorId schemeCache = MakeSchemeCacheID(); 
     return new TS3ListingRequestMsgbus(msg, schemeCache);
 }
 
@@ -716,7 +716,7 @@ private:
     NKikimrClient::TS3ListingRequest MsgbusRequest;
 
 public:
-    TS3ListingRequestGrpc(TAutoPtr<TEvS3ListingRequest> request, TActorId schemeCache)
+    TS3ListingRequestGrpc(TAutoPtr<TEvS3ListingRequest> request, TActorId schemeCache) 
         : TS3ListingRequestBase(schemeCache,
                                 THolder<const NACLib::TUserToken>(request->GetInternalToken() ? new NACLib::TUserToken(request->GetInternalToken()) : nullptr))
         , GrpcRequest(request)
@@ -754,7 +754,7 @@ protected:
 
 
 IActor* CreateGrpcS3ListingRequest(TAutoPtr<TEvS3ListingRequest> request) {
-    TActorId schemeCache = MakeSchemeCacheID();
+    TActorId schemeCache = MakeSchemeCacheID(); 
     return new TS3ListingRequestGrpc(request, schemeCache);
 }
 

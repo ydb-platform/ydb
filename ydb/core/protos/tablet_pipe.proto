@@ -10,22 +10,22 @@ enum EFeature {
 
 message TEvConnect {
     optional uint64 TabletId = 1;
-    optional NActorsProto.TActorId ClientId = 2;
+    optional NActorsProto.TActorId ClientId = 2; 
     optional uint32 Features = 3;
 };
 
 message TEvConnectResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional uint64 TabletId = 2;
-    optional NActorsProto.TActorId ClientId = 3;
-    optional NActorsProto.TActorId ServerId = 4;
+    optional NActorsProto.TActorId ClientId = 3; 
+    optional NActorsProto.TActorId ServerId = 4; 
     optional bool Leader = 5 [default = true];
 };
 
 message TEvPush {
     optional uint64 TabletId = 1;
     optional uint32 Type = 2;
-    optional NActorsProto.TActorId Sender = 3;
+    optional NActorsProto.TActorId Sender = 3; 
     optional bytes Buffer = 4;
     optional uint64 Cookie = 5;
     optional bool ExtendedFormat = 6;
@@ -34,8 +34,8 @@ message TEvPush {
 
 message TEvPeerClosed {
     optional uint64 TabletId = 1;
-    optional NActorsProto.TActorId ClientId = 2;
-    optional NActorsProto.TActorId ServerId = 3;
+    optional NActorsProto.TActorId ClientId = 2; 
+    optional NActorsProto.TActorId ServerId = 3; 
 };
 
 message TEvPeerShutdown {

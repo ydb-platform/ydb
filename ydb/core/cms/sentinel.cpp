@@ -303,7 +303,7 @@ public:
     }
 
 protected:
-    const TActorId Parent;
+    const TActorId Parent; 
     TCmsStatePtr CmsState;
     const TCmsSentinelConfig& Config;
 
@@ -485,7 +485,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
     }
 
     void RequestPDiskState(ui32 nodeId) {
-        const TActorId wbId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
+        const TActorId wbId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId); 
         const ui32 flags = IEventHandle::FlagTrackDelivery;
 
         LOG_D("Request pdisks state"
@@ -688,7 +688,7 @@ public:
     }
 
     explicit TStatusChanger(
-            const TActorId& parent,
+            const TActorId& parent, 
             TCmsStatePtr state,
             const TPDiskID& id,
             NKikimrBlobStorage::EDriveStatus status)
@@ -749,7 +749,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     };
 
     struct TUpdaterInfo {
-        TActorId Id;
+        TActorId Id; 
         TInstant StartedAt;
         bool Delayed;
 
@@ -757,14 +757,14 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             Clear();
         }
 
-        void Start(const TActorId& id, const TInstant& now) {
+        void Start(const TActorId& id, const TInstant& now) { 
             Id = id;
             StartedAt = now;
             Delayed = false;
         }
 
         void Clear() {
-            Id = TActorId();
+            Id = TActorId(); 
             StartedAt = TInstant::Zero();
             Delayed = false;
         }
@@ -979,32 +979,32 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             (*Counters->PDisksChanged)++;
         }
 
-        it->second.StatusChanger = TActorId();
+        it->second.StatusChanger = TActorId(); 
     }
 
     void OnPipeDisconnected() {
-        if (const TActorId& actor = ConfigUpdater.Id) {
+        if (const TActorId& actor = ConfigUpdater.Id) { 
             Send(actor, new TEvSentinel::TEvBSCPipeDisconnected());
         }
 
         for (const auto& pdisk : SentinelState->PDisks) {
-            if (const TActorId& actor = pdisk.second.StatusChanger) {
+            if (const TActorId& actor = pdisk.second.StatusChanger) { 
                 Send(actor, new TEvSentinel::TEvBSCPipeDisconnected());
             }
         }
     }
 
     void PassAway() override {
-        if (const TActorId& actor = ConfigUpdater.Id) {
+        if (const TActorId& actor = ConfigUpdater.Id) { 
             Send(actor, new TEvents::TEvPoisonPill());
         }
 
-        if (const TActorId& actor = StateUpdater.Id) {
+        if (const TActorId& actor = StateUpdater.Id) { 
             Send(actor, new TEvents::TEvPoisonPill());
         }
 
         for (const auto& pdisk : SentinelState->PDisks) {
-            if (const TActorId& actor = pdisk.second.StatusChanger) {
+            if (const TActorId& actor = pdisk.second.StatusChanger) { 
                 Send(actor, new TEvents::TEvPoisonPill());
             }
         }

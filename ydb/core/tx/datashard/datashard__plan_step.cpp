@@ -36,7 +36,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
 
         txIds.push_back(tx.GetTxId());
 
-        TActorId txOwner = ActorIdFromProto(tx.GetAckTo());
+        TActorId txOwner = ActorIdFromProto(tx.GetAckTo()); 
         TxByAck[txOwner].push_back(tx.GetTxId());
     }
 

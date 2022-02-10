@@ -11,7 +11,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
@@ -22,7 +22,7 @@ namespace NKikimr::NSQS {
 // Can either send TEvExecute to queue leader or create execution actor.
 class TExecutorBuilder {
 public:
-    explicit TExecutorBuilder(TActorId parent, const TString& requestId);
+    explicit TExecutorBuilder(TActorId parent, const TString& requestId); 
 
     TExecutorBuilder& User(const TString& user) {
         UserName_ = user;
@@ -129,7 +129,7 @@ private:
     const char* GetQueryById(size_t idx);
 
 private:
-    const TActorId Parent_;
+    const TActorId Parent_; 
     TString RequestId_;
     THolder<TEvTxUserProxy::TEvProposeTransaction> ProposeTransactionRequest_;
     TMaybe<TParameters> Parameters_;
@@ -153,7 +153,7 @@ class TMiniKqlExecutionActor
 
 public:
     TMiniKqlExecutionActor(
-        const TActorId sender,
+        const TActorId sender, 
         TString requestId,
         THolder<TRequest> req,
         bool retryOnTimeout,
@@ -221,7 +221,7 @@ private:
     };
 
 private:
-    const TActorId Sender_;
+    const TActorId Sender_; 
     const TString RequestId_;
     const TSqsEvents::TExecutedCallback Cb_;
     THolder<TRequest> Request_;
@@ -242,7 +242,7 @@ private:
 
     // Waiting for transaction to complete
     TResponse::TPtr ResponseEvent_;
-    TActorId TabletPipeClient_;
+    TActorId TabletPipeClient_; 
 };
 
 } // namespace NKikimr::NSQS

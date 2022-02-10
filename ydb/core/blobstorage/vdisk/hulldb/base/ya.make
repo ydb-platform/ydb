@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(fomichev)
 
 PEERDIR(
-    library/cpp/monlib/service/pages
+    library/cpp/monlib/service/pages 
     ydb/core/base
     ydb/core/blobstorage/pdisk
 )

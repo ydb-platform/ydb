@@ -2,7 +2,7 @@
 
 namespace NKikimr {
 
-IActor* CreateKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info) {
+IActor* CreateKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info) { 
     return new NKeyValue::TKeyValueFlat(tablet, info);
 }
 

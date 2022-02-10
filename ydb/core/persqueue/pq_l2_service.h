@@ -8,10 +8,10 @@
 namespace NKikimr {
 namespace NPQ {
 
-inline TActorId MakePersQueueL2CacheID() {
-    static_assert(TActorId::MaxServiceIDLength == 12, "Unexpected actor id length");
+inline TActorId MakePersQueueL2CacheID() { 
+    static_assert(TActorId::MaxServiceIDLength == 12, "Unexpected actor id length"); 
     const char x[12] = "pq_l2_cache";
-    return TActorId(0, TStringBuf(x, 12));
+    return TActorId(0, TStringBuf(x, 12)); 
 }
 
 struct TCacheL2Parameters {
@@ -27,7 +27,7 @@ struct TCacheValue : TNonCopyable {
     using TPtr = std::shared_ptr<TCacheValue>;
     using TWeakPtr = std::weak_ptr<TCacheValue>;
 
-    TCacheValue(TString value, TActorId owner, TInstant accessTime)
+    TCacheValue(TString value, TActorId owner, TInstant accessTime) 
         : Value(value)
         , Owner(owner)
         , AccessTime(accessTime.TimeT())
@@ -55,13 +55,13 @@ struct TCacheValue : TNonCopyable {
         return Value.size();
     }
 
-    const TActorId& GetOwner() const {
+    const TActorId& GetOwner() const { 
         return Owner;
     }
 
 private:
     const TString Value;
-    const TActorId Owner;
+    const TActorId Owner; 
     std::atomic<ui64> AccessTime;
     std::atomic<ui32> AccessCount;
 };

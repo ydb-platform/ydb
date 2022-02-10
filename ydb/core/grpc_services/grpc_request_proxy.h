@@ -152,11 +152,11 @@ protected:
     void Handle(TEvDataStreamsStartStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataStreamsStopStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx);
 
-    TActorId DiscoveryCacheActorID;
+    TActorId DiscoveryCacheActorID; 
 };
 
-inline TActorId CreateGRpcRequestProxyId() {
-    const auto actorId = TActorId(0, "GRpcReqProxy");
+inline TActorId CreateGRpcRequestProxyId() { 
+    const auto actorId = TActorId(0, "GRpcReqProxy"); 
     return actorId;
 }
 

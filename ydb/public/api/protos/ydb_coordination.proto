@@ -3,7 +3,7 @@ option cc_enable_arenas = true;
 
 package Ydb.Coordination;
 
-option java_package = "com.yandex.ydb.coordination";
+option java_package = "com.yandex.ydb.coordination"; 
 option java_outer_classname = "CoordinationProtos";
 option java_multiple_files = true;
 

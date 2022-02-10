@@ -16,12 +16,12 @@ TGRpcYdbLongTxService::TGRpcYdbLongTxService(NActors::TActorSystem* system,
     , GRpcRequestProxyId_(id)
 {}
 
-void TGRpcYdbLongTxService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
+void TGRpcYdbLongTxService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) { 
     CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
+    SetupIncomingRequests(std::move(logger)); 
 }
 
-void TGRpcYdbLongTxService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcYdbLongTxService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
     Limiter_ = limiter;
 }
 
@@ -34,7 +34,7 @@ void TGRpcYdbLongTxService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcYdbLongTxService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbLongTxService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef ADD_REQUEST
@@ -42,11 +42,11 @@ void TGRpcYdbLongTxService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::LongTx::IN, Ydb::LongTx::OUT, TGRpcYdbLongTxService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::LongTx::V1::LongTxService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("long_tx", #NAME))->Run();
+        #NAME, logger, getCounterBlock("long_tx", #NAME))->Run(); 
 
     ADD_REQUEST(BeginTx, BeginTransactionRequest, BeginTransactionResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvLongTxBeginRequest(ctx));

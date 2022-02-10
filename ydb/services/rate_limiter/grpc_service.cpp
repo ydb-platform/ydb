@@ -6,7 +6,7 @@
 
 namespace NKikimr::NQuoter {
 
-TRateLimiterGRpcService::TRateLimiterGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
+TRateLimiterGRpcService::TRateLimiterGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId) 
     : ActorSystem(actorSystem)
     , Counters(std::move(counters))
     , GRpcRequestProxyId(grpcRequestProxyId)
@@ -15,12 +15,12 @@ TRateLimiterGRpcService::TRateLimiterGRpcService(NActors::TActorSystem* actorSys
 
 TRateLimiterGRpcService::~TRateLimiterGRpcService() = default;
 
-void TRateLimiterGRpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
+void TRateLimiterGRpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) { 
     CQ = cq;
-    SetupIncomingRequests(std::move(logger));
+    SetupIncomingRequests(std::move(logger)); 
 }
 
-void TRateLimiterGRpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TRateLimiterGRpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
     Limiter = limiter;
 }
 
@@ -32,7 +32,7 @@ void TRateLimiterGRpcService::DecRequest() {
     Limiter->Dec();
 }
 
-void TRateLimiterGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TRateLimiterGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
 #ifdef SETUP_METHOD
@@ -48,13 +48,13 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         this,                                                                                \
         &Service_,                                                                           \
         CQ,                                                                                  \
-        [this](NGrpc::IRequestContextBase* reqCtx) {                                   \
+        [this](NGrpc::IRequestContextBase* reqCtx) {                                   \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());               \
             ActorSystem->Send(GRpcRequestProxyId, new NGRpcService::event(reqCtx));          \
         },                                                                                   \
         &Ydb::RateLimiter::V1::RateLimiterService::AsyncService::Y_CAT(Request, methodName), \
         "RateLimiter/" Y_STRINGIZE(methodName),                                              \
-        logger,                                                                              \
+        logger,                                                                              \ 
         getCounterBlock("rate_limiter", Y_STRINGIZE(methodName))                             \
     )->Run()
 

@@ -28,7 +28,7 @@ NBoot::TLoadBlobs::TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeG
     Logic->LoadEntry(this);
 }
 
-TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, TTabletStorageInfo *info, ui64 maxBytesInFly)
+TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, TTabletStorageInfo *info, ui64 maxBytesInFly) 
     : Ops(ops)
     , SelfId(self)
     , Info(info)

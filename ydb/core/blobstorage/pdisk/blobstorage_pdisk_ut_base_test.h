@@ -48,7 +48,7 @@ public:
     }
 
 protected:
-    const TActorId Yard;
+    const TActorId Yard; 
     const TVDiskID VDiskID;
     int TestStep;
 

@@ -3,7 +3,7 @@
 #include "queue_backpressure_common.h"
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/base/blobstorage.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 
 namespace NKikimr {
 
@@ -96,7 +96,7 @@ namespace NKikimr {
                 TStatPtr GlobalStatPtr;
             public:
                 const TClientId ClientId;
-                const TActorId ActorId;
+                const TActorId ActorId; 
             private:
                 TMessageId ExpectedMsgId;
                 ui64 Cost;
@@ -143,7 +143,7 @@ namespace NKikimr {
                 }
 
             public:
-                TWindow(TStatPtr globalStatPtr, const TClientId &clientId, const TActorId& actorId,
+                TWindow(TStatPtr globalStatPtr, const TClientId &clientId, const TActorId& actorId, 
                         ui64 percentThreshold, ui64 defLowWatermark, ui64 defHighWatermark, ui64 costChangeUntilFrozen,
                         ui64 costChangeUntilDeath, TDuration windowTimeout, TInstant now)
                     : GlobalStatPtr(globalStatPtr)
@@ -413,7 +413,7 @@ namespace NKikimr {
                 }
             }
 
-            TFeedback Push(const TClientId& clientId, const TActorId& actorId, const TMessageId &msgId, ui64 cost, TInstant now) {
+            TFeedback Push(const TClientId& clientId, const TActorId& actorId, const TMessageId &msgId, ui64 cost, TInstant now) { 
                 Y_VERIFY(actorId);
                 ClearRecalculateCache();
 

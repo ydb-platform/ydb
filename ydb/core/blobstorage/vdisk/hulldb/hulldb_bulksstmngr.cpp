@@ -25,9 +25,9 @@ namespace NKikimr {
 
             TVDiskContextPtr VCtx;
             TPDiskCtxPtr PDiskCtx;
-            const TActorId LocalRecoveryActorId;
+            const TActorId LocalRecoveryActorId; 
             TQueue<TBulkSegmentLoadQueueItem> BulkSegmentLoadQueue;
-            THashMap<TActorId, TBulkSegmentLoadQueueItem> BulkSegmentLoadInFlight;
+            THashMap<TActorId, TBulkSegmentLoadQueueItem> BulkSegmentLoadInFlight; 
             TVector<TLevelSegmentPtr> Segments;
             TActiveActors ActiveActors;
 
@@ -36,7 +36,7 @@ namespace NKikimr {
                 return NKikimrServices::TActivity::BS_BULK_SST_LOADER;
             }
 
-            TLoaderActor(TVDiskContextPtr &&vctx, TPDiskCtxPtr &&pdiskCtx, const TActorId& localRecoveryActorId)
+            TLoaderActor(TVDiskContextPtr &&vctx, TPDiskCtxPtr &&pdiskCtx, const TActorId& localRecoveryActorId) 
                 : VCtx(std::move(vctx))
                 , PDiskCtx(std::move(pdiskCtx))
                 , LocalRecoveryActorId(localRecoveryActorId)
@@ -147,7 +147,7 @@ namespace NKikimr {
     IActor *TBulkFormedSstInfoSet::CreateLoaderActor(TVDiskContextPtr vctx,
             TPDiskCtxPtr pdiskCtx,
             ui64 syncLogMaxLsnStored,
-            const TActorId& localRecoveryActorId) {
+            const TActorId& localRecoveryActorId) { 
         auto loader = std::make_unique<NLoaderActor::TLoaderActor>(std::move(vctx), std::move(pdiskCtx),
                 localRecoveryActorId);
 

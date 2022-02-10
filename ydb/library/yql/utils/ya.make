@@ -1,15 +1,15 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     g:yql
     g:yql_ydb_core
 )
-
-SRCS(
+ 
+SRCS( 
     bind_in_range.cpp
     bind_in_range.h
     cast.h
-    debug_info.cpp
+    debug_info.cpp 
     debug_info.h
     future_action.cpp
     future_action.h
@@ -35,15 +35,15 @@ SRCS(
     yql_paths.cpp
     yql_paths.h
     utf8.cpp
-)
-
+) 
+ 
 PEERDIR(
     library/cpp/digest/md5
     library/cpp/threading/future
     library/cpp/messagebus
 )
 
-END()
+END() 
 
 RECURSE(
     actors

@@ -114,7 +114,7 @@ public:
         return NKikimrServices::TActivity::TEST_ACTOR_RUNTIME;
     }
 
-    TDummyFlatTablet(const TActorId &tablet, TTabletStorageInfo *info)
+    TDummyFlatTablet(const TActorId &tablet, TTabletStorageInfo *info) 
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     {}
@@ -141,7 +141,7 @@ public:
 
 } // namespace
 
-IActor* CreateFlatDummyTablet(const TActorId &tablet, TTabletStorageInfo *info) {
+IActor* CreateFlatDummyTablet(const TActorId &tablet, TTabletStorageInfo *info) { 
     return new TDummyFlatTablet(tablet, info);
 
 }}

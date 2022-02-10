@@ -25,8 +25,8 @@ namespace NActors {
 
         struct TInitialPacket {
             struct {
-                TActorId SelfVirtualId;
-                TActorId PeerVirtualId;
+                TActorId SelfVirtualId; 
+                TActorId PeerVirtualId; 
                 ui64 NextPacket;
                 ui64 Version;
             } Header;
@@ -34,7 +34,7 @@ namespace NActors {
 
             TInitialPacket() = default;
 
-            TInitialPacket(const TActorId& self, const TActorId& peer, ui64 nextPacket, ui64 version) {
+            TInitialPacket(const TActorId& self, const TActorId& peer, ui64 nextPacket, ui64 version) { 
                 Header.SelfVirtualId = self;
                 Header.PeerVirtualId = peer;
                 Header.NextPacket = nextPacket;
@@ -79,8 +79,8 @@ namespace NActors {
 
     private:
         TInterconnectProxyCommon::TPtr Common;
-        TActorId SelfVirtualId;
-        TActorId PeerVirtualId;
+        TActorId SelfVirtualId; 
+        TActorId PeerVirtualId; 
         ui32 PeerNodeId = 0;
         ui64 NextPacketToPeer = 0;
         TMaybe<ui64> NextPacketFromPeer; // will be obtained from incoming initial packet
@@ -102,7 +102,7 @@ namespace NActors {
             return IActor::INTERCONNECT_HANDSHAKE;
         }
 
-        THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
+        THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer, 
                         ui32 nodeId, ui64 nextPacket, TString peerHostName, TSessionParams params)
             : TActorCoroImpl(StackSize, true, true) // allow unhandled poison pills and dtors
             , Common(std::move(common))
@@ -377,7 +377,7 @@ namespace NActors {
 
             // set up virtual self id to ensure peer will not drop our connection
             char buf[12] = {'c', 'o', 'o', 'k', 'i', 'e', ' ', 'c', 'h', 'e', 'c', 'k'};
-            SelfVirtualId = TActorId(SelfActorId.NodeId(), TStringBuf(buf, 12));
+            SelfVirtualId = TActorId(SelfActorId.NodeId(), TStringBuf(buf, 12)); 
 
             bool success = true;
             try {
@@ -401,7 +401,7 @@ namespace NActors {
                 request.SetProgramStartTime(0);
                 request.SetSerial(0);
                 request.SetReceiverNodeId(0);
-                request.SetSenderActorId(TString());
+                request.SetSenderActorId(TString()); 
                 request.SetCookie(cookie);
                 request.SetDoCheckCookie(true);
                 SendExBlock(request, "SendExBlockDoCheckCookie");
@@ -419,7 +419,7 @@ namespace NActors {
             }
 
             // restore state
-            SelfVirtualId = TActorId();
+            SelfVirtualId = TActorId(); 
             std::swap(tempSocket, Socket);
             std::swap(tempPollerToken, PollerToken);
             return success;
@@ -455,7 +455,7 @@ namespace NActors {
                 request.SetProgramStartTime(Common->StartTime);
                 request.SetSerial(SelfVirtualId.LocalId());
                 request.SetReceiverNodeId(PeerNodeId);
-                request.SetSenderActorId(SelfVirtualId.ToString());
+                request.SetSenderActorId(SelfVirtualId.ToString()); 
                 request.SetSenderHostName(Common->TechnicalSelfHostName);
                 request.SetReceiverHostName(PeerHostName);
 
@@ -519,7 +519,7 @@ namespace NActors {
                 ValidateClusterUUID(success, generateError);
                 ValidateVersionTag(success, generateError);
 
-                const auto& s = success.GetSenderActorId();
+                const auto& s = success.GetSenderActorId(); 
                 PeerVirtualId.Parse(s.data(), s.size());
 
                 // recover flags
@@ -599,8 +599,8 @@ namespace NActors {
                 SendInitialPacket();
             } else {
                 // peer wants a new session, clear fields and send initial packet
-                SelfVirtualId = TActorId();
-                PeerVirtualId = TActorId();
+                SelfVirtualId = TActorId(); 
+                PeerVirtualId = TActorId(); 
                 NextPacketToPeer = 0;
                 SendInitialPacket();
 
@@ -637,7 +637,7 @@ namespace NActors {
                 PeerHostName = request.GetSenderHostName();
 
                 // parse peer virtual id
-                const auto& str = request.GetSenderActorId();
+                const auto& str = request.GetSenderActorId(); 
                 PeerVirtualId.Parse(str.data(), str.size());
 
                 // validate request
@@ -709,7 +709,7 @@ namespace NActors {
                     SendExBlock(record, "ExReply");
 
                     // extract sender actor id (self virtual id)
-                    const auto& str = success.GetSenderActorId();
+                    const auto& str = success.GetSenderActorId(); 
                     SelfVirtualId.Parse(str.data(), str.size());
                 } else if (auto ev = reply->CastAsLocal<TEvHandshakeReplyError>()) {
                     // in case of error just send reply to the peer and terminate handshake
@@ -981,8 +981,8 @@ namespace NActors {
         }
     };
 
-    IActor* CreateOutgoingHandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self,
-                                         const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,
+    IActor* CreateOutgoingHandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, 
+                                         const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName, 
                                          TSessionParams params) {
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), self, peer, nodeId, nextPacket,
             std::move(peerHostName), std::move(params)));

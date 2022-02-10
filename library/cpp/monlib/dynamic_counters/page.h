@@ -1,9 +1,9 @@
 #pragma once
 
-#include "counters.h"
-
-#include <library/cpp/monlib/service/pages/pre_mon_page.h>
-
+#include "counters.h" 
+ 
+#include <library/cpp/monlib/service/pages/pre_mon_page.h> 
+ 
 #include <util/generic/ptr.h>
 
 #include <functional>
@@ -28,7 +28,7 @@ namespace NMonitoring {
 
     public:
         TDynamicCountersPage(const TString& path,
-                             const TString& title,
+                             const TString& title, 
                              TIntrusivePtr<TDynamicCounters> counters,
                              TOutputCallback outputCallback = nullptr)
             : TPreMonPage(path, title)

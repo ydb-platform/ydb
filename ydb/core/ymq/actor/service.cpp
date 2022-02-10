@@ -188,10 +188,10 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     ui64 LeaderTabletId_ = 0;
     TIntrusivePtr<TQueueCounters> Counters_;
     TIntrusivePtr<TUserCounters> UserCounters_;
-    TActorId PipeClient_;
+    TActorId PipeClient_; 
     TActorId LeaderPipeServer_;
     TActorId LocalLeader_;
-    TActorId SchemeCache_;
+    TActorId SchemeCache_; 
     ui64 LocalLeaderRefCount_ = 0;
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResourcesForUser_;
 

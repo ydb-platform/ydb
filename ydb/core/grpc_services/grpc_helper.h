@@ -5,7 +5,7 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/counters/counters.h>
 
-#include <library/cpp/grpc/server/grpc_request.h>
+#include <library/cpp/grpc/server/grpc_request.h> 
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -14,14 +14,14 @@ class TInFlightLimiterRegistry : public TThrRefBase {
 private:
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TMutex Lock;
-    THashMap<TString, NGrpc::IGRpcRequestLimiterPtr> PerTypeLimiters;
+    THashMap<TString, NGrpc::IGRpcRequestLimiterPtr> PerTypeLimiters; 
 
 public:
     explicit TInFlightLimiterRegistry(TIntrusivePtr<NKikimr::TControlBoard> icb)
         : Icb(icb)
     {}
 
-    NGrpc::IGRpcRequestLimiterPtr RegisterRequestType(TString name, i64 limit);
+    NGrpc::IGRpcRequestLimiterPtr RegisterRequestType(TString name, i64 limit); 
 };
 
 class TCreateLimiterCB {
@@ -30,7 +30,7 @@ public:
         : LimiterRegistry(limiterRegistry)
     {}
 
-    NGrpc::IGRpcRequestLimiterPtr operator()(const char* serviceName, const char* requestName, i64 limit) const;
+    NGrpc::IGRpcRequestLimiterPtr operator()(const char* serviceName, const char* requestName, i64 limit) const; 
 
 private:
     TIntrusivePtr<TInFlightLimiterRegistry> LimiterRegistry;

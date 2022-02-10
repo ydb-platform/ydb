@@ -17,7 +17,7 @@ namespace NKikimr {
     IActor* CreateSyncerGuidPropagator(TIntrusivePtr<TVDiskContext> vctx,
                                        const TVDiskID &selfVDiskId,
                                        const TVDiskID &targetVDiskId,
-                                       const TActorId &targetServiceId,
+                                       const TActorId &targetServiceId, 
                                        NKikimrBlobStorage::TSyncGuidInfo::EState state,
                                        TVDiskEternalGuid guid);
 

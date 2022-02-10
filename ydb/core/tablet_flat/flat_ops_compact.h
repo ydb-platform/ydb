@@ -89,7 +89,7 @@ namespace NTabletFlatExecutor {
         }
 
     private:
-        void Registered(TActorSystem *sys, const TActorId&) override
+        void Registered(TActorSystem *sys, const TActorId&) override 
         {
             Logger = new NUtil::TLogger(sys, NKikimrServices::OPS_COMPACT);
         }
@@ -511,7 +511,7 @@ namespace NTabletFlatExecutor {
 
     private:
         const TLogoBlobID Mask;
-        const TActorId Owner;
+        const TActorId Owner; 
         TAutoPtr<NUtil::ILogger> Logger;
         IDriver * Driver = nullptr;
         THolder<TCompactCfg> Conf;

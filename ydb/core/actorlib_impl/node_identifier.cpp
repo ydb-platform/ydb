@@ -137,7 +137,7 @@ class TNodeIdentifier : public TActorBootstrapped<TNodeIdentifier> {
         catch (const std::exception&) {
         }
 
-        TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
+        TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()); 
         ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(systemStateInfo));
     }
 

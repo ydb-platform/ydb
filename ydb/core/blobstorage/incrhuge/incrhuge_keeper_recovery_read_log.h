@@ -11,7 +11,7 @@
 namespace NKikimr {
     namespace NIncrHuge {
 
-        NActors::IActor *CreateRecoveryReadLogActor(const NActors::TActorId& pdiskActorId, ui8 owner,
+        NActors::IActor *CreateRecoveryReadLogActor(const NActors::TActorId& pdiskActorId, ui8 owner, 
                 NPDisk::TOwnerRound ownerRound, TMaybe<ui64> chunksEntrypointLsn, TMaybe<ui64> deletesEntrypointLsn);
 
     } // NIncrHuge

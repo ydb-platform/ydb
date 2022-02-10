@@ -21,7 +21,7 @@
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
-#include <library/cpp/grpc/server/grpc_counters.h>
+#include <library/cpp/grpc/server/grpc_counters.h> 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
@@ -40,9 +40,9 @@ namespace NYql::NDqs {
     using namespace NActors;
 
     namespace {
-        NGrpc::ICounterBlockPtr BuildCB(TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const TString& name) {
+        NGrpc::ICounterBlockPtr BuildCB(TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const TString& name) { 
             auto grpcCB = counters->GetSubgroup("rpc_name", name);
-            return MakeIntrusive<NGrpc::TCounterBlock>(
+            return MakeIntrusive<NGrpc::TCounterBlock>( 
                 grpcCB->GetCounter("total", true),
                 grpcCB->GetCounter("infly", true),
                 grpcCB->GetCounter("notOkReq", true),
@@ -61,7 +61,7 @@ namespace NYql::NDqs {
             static constexpr char ActorName[] = "SERVICE_PROXY";
 
             explicit TServiceProxyActor(
-                NGrpc::IRequestContextBase* ctx,
+                NGrpc::IRequestContextBase* ctx, 
                 const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
                 const TString& traceId, const TString& username)
                 : TSynchronizableRichActor<TServiceProxyActor<RequestType, ResponseType>>(&TServiceProxyActor::Handler)
@@ -90,7 +90,7 @@ namespace NYql::NDqs {
                 SFunc(TEvents::TEvBootstrap, DoBootstrap)
             })
 
-            TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
+            TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override { 
                 return new IEventHandle(self, parentId, new TEvents::TEvBootstrap(), 0);
             }
 
@@ -110,9 +110,9 @@ namespace NYql::NDqs {
                 if (!CtxSubscribed) {
                     auto selfId = ctx.SelfID;
                     auto* actorSystem = ctx.ExecutorThread.ActorSystem;
-                    Ctx->GetFinishFuture().Subscribe([selfId, actorSystem](const NGrpc::IRequestContextBase::TAsyncFinishResult& future) {
+                    Ctx->GetFinishFuture().Subscribe([selfId, actorSystem](const NGrpc::IRequestContextBase::TAsyncFinishResult& future) { 
                         Y_VERIFY(future.HasValue());
-                        if (future.GetValue() == NGrpc::IRequestContextBase::EFinishStatus::CANCEL) {
+                        if (future.GetValue() == NGrpc::IRequestContextBase::EFinishStatus::CANCEL) { 
                             actorSystem->Send(selfId, new TEvents::TEvPoison());
                         }
                     });
@@ -219,7 +219,7 @@ namespace NYql::NDqs {
             }
 
         private:
-            NGrpc::IRequestContextBase* Ctx;
+            NGrpc::IRequestContextBase* Ctx; 
             bool CtxSubscribed = false;
             ResponseType ResponseBuffer;
 
@@ -254,7 +254,7 @@ namespace NYql::NDqs {
         class TExecuteGraphProxyActor: public TServiceProxyActor<Yql::DqsProto::ExecuteGraphRequest, Yql::DqsProto::ExecuteGraphResponse> {
         public:
             using TBase = TServiceProxyActor<Yql::DqsProto::ExecuteGraphRequest, Yql::DqsProto::ExecuteGraphResponse>;
-            TExecuteGraphProxyActor(NGrpc::IRequestContextBase* ctx,
+            TExecuteGraphProxyActor(NGrpc::IRequestContextBase* ctx, 
                 const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
                 const TString& traceId, const TString& username,
                 const NActors::TActorId& graphExecutionEventsActorId)
@@ -454,7 +454,7 @@ namespace NYql::NDqs {
             ->Run();                                                    \
     } while (0)
 
-    void TDqsGrpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
+    void TDqsGrpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) { 
         using namespace google::protobuf;
 
         CQ = cq;
@@ -603,7 +603,7 @@ namespace NYql::NDqs {
                 },
                 TDuration::MilliSeconds(2000));
 
-            TActorId callbackId = ActorSystem.Register(callback.Release());
+            TActorId callbackId = ActorSystem.Register(callback.Release()); 
 
             ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release(), IEventHandle::FlagTrackDelivery));
         });
@@ -680,7 +680,7 @@ namespace NYql::NDqs {
                 },
                 TDuration::MilliSeconds(5000));
 
-            TActorId callbackId = ActorSystem.Register(callback.Release());
+            TActorId callbackId = ActorSystem.Register(callback.Release()); 
 
             ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release(), IEventHandle::FlagTrackDelivery));
         });
@@ -698,7 +698,7 @@ namespace NYql::NDqs {
                         ctx->Reply(result, Ydb::StatusIds::SUCCESS);
                     });
 
-            TActorId callbackId = ActorSystem.Register(callback.Release());
+            TActorId callbackId = ActorSystem.Register(callback.Release()); 
 
             ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, requestEvent.Release()));
         });
@@ -716,7 +716,7 @@ namespace NYql::NDqs {
                         ctx->Reply(result, Ydb::StatusIds::SUCCESS);
                     });
 
-            TActorId callbackId = ActorSystem.Register(callback.Release());
+            TActorId callbackId = ActorSystem.Register(callback.Release()); 
 
             ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, requestEvent.Release()));
         });
@@ -799,7 +799,7 @@ namespace NYql::NDqs {
 */
     }
 
-    void TDqsGrpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+    void TDqsGrpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
         Limiter = limiter;
     }
 

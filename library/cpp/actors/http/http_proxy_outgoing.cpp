@@ -8,18 +8,18 @@ class TOutgoingConnectionActor : public NActors::TActor<TOutgoingConnectionActor
 public:
     using TBase = NActors::TActor<TOutgoingConnectionActor<TSocketImpl>>;
     using TSelf = TOutgoingConnectionActor<TSocketImpl>;
-    const TActorId Owner;
-    const TActorId Poller;
+    const TActorId Owner; 
+    const TActorId Poller; 
     SocketAddressType Address;
     TString Host;
-    TActorId RequestOwner;
+    TActorId RequestOwner; 
     THttpOutgoingRequestPtr Request;
     THttpIncomingResponsePtr Response;
     TInstant LastActivity;
     TDuration ConnectionTimeout = CONNECTION_TIMEOUT;
     NActors::TPollerToken::TPtr PollerToken;
 
-    TOutgoingConnectionActor(const TActorId& owner, const TString& host, const TActorId& poller)
+    TOutgoingConnectionActor(const TActorId& owner, const TString& host, const TActorId& poller) 
         : TBase(&TSelf::StateWaiting)
         , Owner(owner)
         , Poller(poller)
@@ -38,7 +38,7 @@ public:
     void ReplyAndDie(const NActors::TActorContext& ctx) {
         LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << Response->Status << " " << Response->Message << ")");
         ctx.Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
-        RequestOwner = TActorId();
+        RequestOwner = TActorId(); 
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
         ctx.Send(Owner, sensors.Release());
         LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed");
@@ -49,7 +49,7 @@ public:
         LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed with error: " << error);
         if (RequestOwner) {
             ctx.Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, error));
-            RequestOwner = TActorId();
+            RequestOwner = TActorId(); 
             THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
             ctx.Send(Owner, sensors.Release());
             Die(ctx);
@@ -287,7 +287,7 @@ protected:
     }
 };
 
-NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, const TString& host, bool secure, const TActorId& poller) {
+NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, const TString& host, bool secure, const TActorId& poller) { 
     if (secure) {
         return new TOutgoingConnectionActor<TSecureSocketImpl>(owner, host, poller);
     } else {

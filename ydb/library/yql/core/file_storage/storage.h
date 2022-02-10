@@ -9,45 +9,45 @@
 
 namespace NYql {
 
-class TFileLink: public TThrRefBase {
-public:
+class TFileLink: public TThrRefBase { 
+public: 
     TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy = true);
     ~TFileLink();
-
+ 
     const TString& GetStorageFileName() const { return StorageFileName; }
-    const TFsPath& GetPath() const { return Path; }
-    ui64 GetSize() const { return Size; }
+    const TFsPath& GetPath() const { return Path; } 
+    ui64 GetSize() const { return Size; } 
     const TString& GetMd5() const { return Md5; }
-
-private:
+ 
+private: 
     const TFsPath Path;
     const TString StorageFileName;
     const ui64 Size;
     const TString Md5;
     const bool DeleteOnDestroy;
-};
-
-using TFileLinkPtr = TIntrusivePtr<TFileLink>;
-
+}; 
+ 
+using TFileLinkPtr = TIntrusivePtr<TFileLink>; 
+ 
 TFileLinkPtr CreateFakeFileLink(const TFsPath& path, const TString& md5 = "", bool deleteOnDestroy = false);
 
 /* File cache with limits by count and by occupied size.
-   The same file can be added multiple times.
-   It is safe to add the same file from multiple threads/processes simultaneously.
-   Only first thread will do the actual work. Other threads will wait and reuse the result.
+   The same file can be added multiple times. 
+   It is safe to add the same file from multiple threads/processes simultaneously. 
+   Only first thread will do the actual work. Other threads will wait and reuse the result. 
 */
 class TStorage {
 public:
     // This function is called by the storage to transfer user data to the provided temporary file path
     // Returns content size and md5
     using TDataPuller = std::function<std::pair<ui64, TString> (const TFsPath& dstPath)>;
-
+ 
     /* Constructs the storage with the specified limits.
        storagePath can be empty - a temporary directory will be used in this case.
     */
     TStorage(size_t maxFiles, ui64 maxSize, const TString& storagePath = {});
     ~TStorage();
-
+ 
     // Returns root storage directory
     TFsPath GetRoot() const;
     // Returns temp storage directory
@@ -68,7 +68,7 @@ public:
     TString GetTempName();
 
 private:
-    class TImpl;
+    class TImpl; 
     THolder<TImpl> Impl;
 };
 

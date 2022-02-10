@@ -6,7 +6,7 @@ namespace NHive {
 
 class TTxUpdateTabletStatus : public TTransactionBase<THive> {
     const TTabletId TabletId;
-    const TActorId Local;
+    const TActorId Local; 
     const TEvLocal::TEvTabletStatus::EStatus Status;
     const TEvTablet::TEvTabletDead::EReason Reason;
     ui32 Generation;
@@ -16,7 +16,7 @@ class TTxUpdateTabletStatus : public TTransactionBase<THive> {
 public:
     TTxUpdateTabletStatus(
             TTabletId tabletId,
-            const TActorId &local,
+            const TActorId &local, 
             ui32 generation,
             TFollowerId followerId,
             TEvLocal::TEvTabletStatus::EStatus status,
@@ -117,7 +117,7 @@ public:
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(Local.NodeId()),
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics));
                 }
-                for (const TActorId& actor : tablet->ActorsToNotify) {
+                for (const TActorId& actor : tablet->ActorsToNotify) { 
                     Notifications.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
                 }
                 tablet->ActorsToNotify.clear();
@@ -198,7 +198,7 @@ public:
 
 ITransaction* THive::CreateUpdateTabletStatus(
         TTabletId tabletId,
-        const TActorId &local,
+        const TActorId &local, 
         ui32 generation,
         TFollowerId followerId,
         TEvLocal::TEvTabletStatus::EStatus status,

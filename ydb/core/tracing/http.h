@@ -1,5 +1,5 @@
 #pragma once
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 #include <ydb/core/base/tracing.h>
 
 #define COLLAPSED_REF_CONTENT(target, text) \

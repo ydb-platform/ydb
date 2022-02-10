@@ -2,12 +2,12 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <library/cpp/monlib/encode/legacy_protobuf/ut/test_cases.pb.h>
-#include <library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.pb.h>
+#include <library/cpp/monlib/encode/legacy_protobuf/ut/test_cases.pb.h> 
+#include <library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.pb.h> 
 
-#include <library/cpp/monlib/encode/protobuf/protobuf.h>
-#include <library/cpp/monlib/encode/text/text.h>
-#include <library/cpp/monlib/metrics/labels.h>
+#include <library/cpp/monlib/encode/protobuf/protobuf.h> 
+#include <library/cpp/monlib/encode/text/text.h> 
+#include <library/cpp/monlib/metrics/labels.h> 
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
@@ -24,7 +24,7 @@ TSimple MakeSimpleMessage() {
     return msg;
 }
 
-IMetricEncoderPtr debugPrinter = EncoderText(&Cerr);
+IMetricEncoderPtr debugPrinter = EncoderText(&Cerr); 
 
 namespace NMonitoring {
     inline bool operator<(const TLabel& lhs, const TLabel& rhs) {
@@ -34,20 +34,20 @@ namespace NMonitoring {
 
 }
 
-void SetLabelValue(NMonProto::TExtraLabelMetrics::TValue& val, TString s) {
+void SetLabelValue(NMonProto::TExtraLabelMetrics::TValue& val, TString s) { 
     val.SetlabelValue(s);
 }
 
-void SetLabelValue(NMonProto::TExtraLabelMetrics::TValue& val, ui64 u) {
+void SetLabelValue(NMonProto::TExtraLabelMetrics::TValue& val, ui64 u) { 
     val.SetlabelValueUint(u);
 }
 
 template <typename T, typename V>
-NMonProto::TExtraLabelMetrics MakeExtra(TString labelName, V labelValue, T value, bool isDeriv) {
-    NMonProto::TExtraLabelMetrics metric;
-    auto* val = metric.Addvalues();
+NMonProto::TExtraLabelMetrics MakeExtra(TString labelName, V labelValue, T value, bool isDeriv) { 
+    NMonProto::TExtraLabelMetrics metric; 
+    auto* val = metric.Addvalues(); 
 
-    metric.SetlabelName(labelName);
+    metric.SetlabelName(labelName); 
     SetLabelValue(*val, labelValue);
 
     if (isDeriv) {
@@ -56,7 +56,7 @@ NMonProto::TExtraLabelMetrics MakeExtra(TString labelName, V labelValue, T value
         val->SetdoubleValue(value);
     }
 
-    return metric;
+    return metric; 
 }
 
 void AssertLabels(const TLabels& expected, const NProto::TMultiSample& actual) {
@@ -100,13 +100,13 @@ void AssertSimpleMessage(const NProto::TMultiSamplesList& samples, TString pathP
         UNIT_ASSERT(expectedValues.contains(labelVal));
 
         if (labelVal == pathPrefix + "Foo") {
-            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE); 
             UNIT_ASSERT_DOUBLES_EQUAL(s.GetPoints(0).GetFloat64(), 1, 1e-6);
         } else if (labelVal == pathPrefix + "Bar") {
-            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE); 
             UNIT_ASSERT_DOUBLES_EQUAL(s.GetPoints(0).GetFloat64(), 2, 1e-6);
         } else if (labelVal == pathPrefix + "Baz") {
-            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::RATE);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::RATE); 
             UNIT_ASSERT_EQUAL(s.GetPoints(0).GetUint64(), 42);
         }
     }
@@ -115,7 +115,7 @@ void AssertSimpleMessage(const NProto::TMultiSamplesList& samples, TString pathP
 Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
     Y_UNIT_TEST(SimpleProto) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         auto msg = MakeSimpleMessage();
         DecodeLegacyProto(msg, e.Get());
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
 
     Y_UNIT_TEST(RepeatedProto) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         auto simple = MakeSimpleMessage();
         TRepeated msg;
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
 
     Y_UNIT_TEST(RepeatedProtoWithPath) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         auto simple = MakeSimpleMessage();
         TRepeatedWithPath msg;
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
 
     Y_UNIT_TEST(DeepNesting) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         auto simple = MakeSimpleMessage();
         TRepeatedWithPath internal;
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
 
     Y_UNIT_TEST(Keys) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         auto simple = MakeSimpleMessage();
         simple.SetLabel("my_label_value");
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
 
     Y_UNIT_TEST(NonStringKeys) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         TNonStringKeys msg;
         msg.SetFoo(42);
@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
 
     Y_UNIT_TEST(KeysFromNonLeafNodes) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         auto simple = MakeSimpleMessage();
         simple.SetLabel("label_value");
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
 
     Y_UNIT_TEST(SpacesAreGetReplaced) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         auto simple = MakeSimpleMessage();
         simple.SetLabel("my label_value");
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
 
     Y_UNIT_TEST(ExtraLabels) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         TExtraLabels msg;
         msg.MutableExtraAsIs()->CopyFrom(MakeExtra("label", "foo", 42, false));
@@ -318,14 +318,14 @@ Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
 
     Y_UNIT_TEST(NestedExtraLabels) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         TExtraLabels msg;
         auto extra = MakeExtra("label", "foo", 42, false);
         auto* val = extra.Mutablevalues(0);
         {
             auto child = MakeExtra("child1", "label1", 24, true);
-            child.Mutablevalues(0)->Settype(NMonProto::EMetricType::RATE);
+            child.Mutablevalues(0)->Settype(NMonProto::EMetricType::RATE); 
             val->Addchildren()->CopyFrom(child);
         }
 
@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
 
     Y_UNIT_TEST(RobotLabels) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         TNamedCounter responses;
         responses.SetName("responses");
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(TLegacyProtoDecoderTest) {
 
     Y_UNIT_TEST(ZoraLabels) {
         NProto::TMultiSamplesList samples;
-        IMetricEncoderPtr e = EncoderProtobuf(&samples);
+        IMetricEncoderPtr e = EncoderProtobuf(&samples); 
 
         TTimeLogHist hist;
         hist.AddBuckets(42);

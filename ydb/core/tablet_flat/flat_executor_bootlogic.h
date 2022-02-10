@@ -70,7 +70,7 @@ private:
     bool Restored = false;
 
     IOps * const Ops = nullptr;
-    const TActorId SelfId;
+    const TActorId SelfId; 
     TAutoPtr<NBoot::TBack> State_;
     TAutoPtr<NBoot::TResult> Result_;
     TAutoPtr<NBoot::TRoot> Steps;
@@ -102,7 +102,7 @@ private:
     inline NBoot::TBack& State() const noexcept { return *State_; }
 
 public:
-    TExecutorBootLogic(IOps*, const TActorId&, TTabletStorageInfo *info, ui64 maxBytesInFly);
+    TExecutorBootLogic(IOps*, const TActorId&, TTabletStorageInfo *info, ui64 maxBytesInFly); 
     ~TExecutorBootLogic();
 
     void Describe(IOutputStream&) const noexcept;

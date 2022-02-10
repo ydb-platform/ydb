@@ -2583,7 +2583,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         auto t1 = DescribePath(runtime, "/MyRoot/Table1");
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         auto t2 = DescribePath(runtime, "/MyRoot/Table1");
@@ -2609,7 +2609,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         auto t1 = DescribePath(runtime, "/MyRoot/Table2");
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         auto t2 = DescribePath(runtime, "/MyRoot/Table2");
@@ -5966,7 +5966,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::PathVersionEqual(1),
                             NLs::NotFinished});
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         env.TestWaitNotification(runtime, txId);
@@ -6078,7 +6078,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::ShardsInsideDomain(41)});
 
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         env.TestWaitNotification(runtime, txId-1);
@@ -6427,7 +6427,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         env.TestWaitNotification(runtime, {txId, txId-1, txId-2});
@@ -6824,7 +6824,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncMkDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "BBB");
         AsyncMkDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "CCC");
 
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -6862,7 +6862,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             "KeyColumnNames: [\"RowId\"]");
         // Set ReadOnly
         SetSchemeshardReadOnlyMode(runtime, true);
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         // Verify that table creation successfully finished

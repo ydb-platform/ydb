@@ -20,19 +20,19 @@ namespace NKikimr::NBsController {
     };
 
     class TReassignerActor : public TActorBootstrapped<TReassignerActor> {
-        const TActorId ControllerId;
-        TActorId SelfHealId; // filled on bootstrap
+        const TActorId ControllerId; 
+        TActorId SelfHealId; // filled on bootstrap 
         const TGroupId GroupId;
         const TEvControllerUpdateSelfHealInfo::TGroupContent Group;
         const TVDiskID VDiskToReplace;
         TBlobStorageGroupInfo::TTopology Topology;
         THolder<TBlobStorageGroupInfo::TGroupVDisks> FailedGroupDisks;
         THashSet<TVDiskID> PendingVDisks;
-        THashMap<TActorId, TVDiskID> ActorToDiskMap;
+        THashMap<TActorId, TVDiskID> ActorToDiskMap; 
         THashMap<TNodeId, TVector<TVDiskID>> NodeToDiskMap;
 
     public:
-        TReassignerActor(TActorId controllerId, TGroupId groupId, TEvControllerUpdateSelfHealInfo::TGroupContent group,
+        TReassignerActor(TActorId controllerId, TGroupId groupId, TEvControllerUpdateSelfHealInfo::TGroupContent group, 
                 TVDiskID vdiskToReplace)
             : ControllerId(controllerId)
             , GroupId(groupId)
@@ -41,7 +41,7 @@ namespace NKikimr::NBsController {
             , Topology(Group.Type)
         {}
 
-        void Bootstrap(const TActorId& parent) {
+        void Bootstrap(const TActorId& parent) { 
             SelfHealId = parent;
             Become(&TThis::StateFunc, TDuration::Seconds(60), new TEvents::TEvWakeup);
 
@@ -83,7 +83,7 @@ namespace NKikimr::NBsController {
 
                 // send TEvVStatus message to disk
                 const auto& l = vdisk.Location;
-                const TActorId& vdiskActorId = MakeBlobStorageVDiskID(l.NodeId, l.PDiskId, l.VSlotId);
+                const TActorId& vdiskActorId = MakeBlobStorageVDiskID(l.NodeId, l.PDiskId, l.VSlotId); 
                 Send(vdiskActorId, new TEvBlobStorage::TEvVStatus(vdiskId), IEventHandle::MakeFlags(0,
                     IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
                 ActorToDiskMap.emplace(vdiskActorId, vdiskId);
@@ -210,14 +210,14 @@ namespace NKikimr::NBsController {
 
         struct TGroupRecord {
             TEvControllerUpdateSelfHealInfo::TGroupContent Content;
-            TActorId ReassignerActorId; // reassigner in flight
+            TActorId ReassignerActorId; // reassigner in flight 
             TDuration RetryTimeout = MinRetryTimeout;
             TInstant NextRetryTimestamp = TInstant::Zero();
             THashMap<TVDiskID, TVDiskStatusTracker> VDiskStatus;
         };
 
         const ui64 TabletId;
-        TActorId ControllerId;
+        TActorId ControllerId; 
         THashMap<TGroupId, TGroupRecord> Groups;
         TSet<TGroupId> GroupsWithFaultyDisks;
         std::shared_ptr<std::atomic_uint64_t> UnreassignableGroups;
@@ -228,7 +228,7 @@ namespace NKikimr::NBsController {
             , UnreassignableGroups(std::move(unreassignableGroups))
         {}
 
-        void Bootstrap(const TActorId& parentId) {
+        void Bootstrap(const TActorId& parentId) { 
             ControllerId = parentId;
             Become(&TThis::StateFunc);
             HandleWakeup();

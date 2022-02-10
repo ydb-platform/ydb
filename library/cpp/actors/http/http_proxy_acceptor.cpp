@@ -7,15 +7,15 @@ namespace NHttp {
 class TAcceptorActor : public NActors::TActor<TAcceptorActor>, public THttpConfig {
 public:
     using TBase = NActors::TActor<TAcceptorActor>;
-    const TActorId Owner;
-    const TActorId Poller;
+    const TActorId Owner; 
+    const TActorId Poller; 
     TIntrusivePtr<TSocketDescriptor> Socket;
     NActors::TPollerToken::TPtr PollerToken;
-    THashSet<TActorId> Connections;
+    THashSet<TActorId> Connections; 
     TDeque<THttpIncomingRequestPtr> RecycledRequests;
     TEndpointInfo Endpoint;
 
-    TAcceptorActor(const TActorId& owner, const TActorId& poller)
+    TAcceptorActor(const TActorId& owner, const TActorId& poller) 
         : NActors::TActor<TAcceptorActor>(&TAcceptorActor::StateInit)
         , Owner(owner)
         , Poller(poller)
@@ -77,12 +77,12 @@ protected:
             }
         }
         LOG_WARN_S(ctx, HttpLog, "Failed to listen on " << bindAddress.ToString() << " - retrying...");
-        ctx.ExecutorThread.Schedule(TDuration::Seconds(1), event.Release());
+        ctx.ExecutorThread.Schedule(TDuration::Seconds(1), event.Release()); 
     }
 
     void Die(const NActors::TActorContext& ctx) override {
         ctx.Send(Owner, new TEvHttpProxy::TEvHttpAcceptorClosed(ctx.SelfID));
-        for (const NActors::TActorId& connection : Connections) {
+        for (const NActors::TActorId& connection : Connections) { 
             ctx.Send(connection, new NActors::TEvents::TEvPoisonPill());
         }
     }
@@ -104,7 +104,7 @@ protected:
                 connectionSocket = CreateIncomingConnectionActor(Endpoint, socket, addr, std::move(RecycledRequests.front()));
                 RecycledRequests.pop_front();
             }
-            NActors::TActorId connectionId = ctx.Register(connectionSocket);
+            NActors::TActorId connectionId = ctx.Register(connectionSocket); 
             ctx.Send(Poller, new NActors::TEvPollerRegister(socket, connectionId, connectionId));
             Connections.emplace(connectionId);
             socket = new TSocketDescriptor();
@@ -128,7 +128,7 @@ protected:
     }
 };
 
-NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner, const TActorId& poller) {
+NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner, const TActorId& poller) { 
     return new TAcceptorActor(owner, poller);
 }
 

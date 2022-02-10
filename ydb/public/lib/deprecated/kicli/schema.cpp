@@ -40,13 +40,13 @@ TType::TType(NScheme::TTypeId typeId)
     , TypeId(typeId)
 {}
 
-const TType TType::Int64(NScheme::NTypeIds::Int64);
-const TType TType::Uint64(NScheme::NTypeIds::Uint64);
-const TType TType::Int32(NScheme::NTypeIds::Int32);
-const TType TType::Uint32(NScheme::NTypeIds::Uint32);
-const TType TType::Bool(NScheme::NTypeIds::Bool);
-const TType TType::Double(NScheme::NTypeIds::Double);
-const TType TType::Float(NScheme::NTypeIds::Float);
+const TType TType::Int64(NScheme::NTypeIds::Int64); 
+const TType TType::Uint64(NScheme::NTypeIds::Uint64); 
+const TType TType::Int32(NScheme::NTypeIds::Int32); 
+const TType TType::Uint32(NScheme::NTypeIds::Uint32); 
+const TType TType::Bool(NScheme::NTypeIds::Bool); 
+const TType TType::Double(NScheme::NTypeIds::Double); 
+const TType TType::Float(NScheme::NTypeIds::Float); 
 const TType TType::Utf8(NScheme::NTypeIds::Utf8);
 const TType TType::String(NScheme::NTypeIds::String);
 const TType TType::String4k(NScheme::NTypeIds::String4k);

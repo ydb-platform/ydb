@@ -199,7 +199,7 @@ namespace NActors {
         typedef std::function<void(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue)> TScheduledEventsSelector;
         typedef std::function<bool(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event)> TEventFilter;
         typedef std::function<bool(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline)> TScheduledEventFilter;
-        typedef std::function<void(TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId)> TRegistrationObserver;
+        typedef std::function<void(TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId)> TRegistrationObserver; 
 
 
         TTestActorRuntimeBase(THeSingleSystemEnv);
@@ -213,7 +213,7 @@ namespace NActors {
         static void CollapsedTimeScheduledEventsSelector(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue);
         static bool DefaultFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
         static bool NopFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
-        static void DefaultRegistrationObserver(TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId);
+        static void DefaultRegistrationObserver(TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId); 
         TEventObserver SetObserverFunc(TEventObserver observerFunc);
         TScheduledEventsSelector SetScheduledEventsSelectorFunc(TScheduledEventsSelector scheduledEventsSelectorFunc);
         TEventFilter SetEventFilter(TEventFilter filterFunc);
@@ -232,20 +232,20 @@ namespace NActors {
         TInstant GetCurrentTime() const;
         void UpdateCurrentTime(TInstant newTime);
         void AdvanceCurrentTime(TDuration duration);
-        void AddLocalService(const TActorId& actorId, const TActorSetupCmd& cmd, ui32 nodeIndex = 0);
+        void AddLocalService(const TActorId& actorId, const TActorSetupCmd& cmd, ui32 nodeIndex = 0); 
         virtual void Initialize();
         ui32 GetNodeId(ui32 index = 0) const;
         ui32 GetNodeCount() const;
         ui64 AllocateLocalId();
         ui32 InterconnectPoolId() const;
         TString GetTempDir();
-        TActorId Register(IActor* actor, ui32 nodeIndex = 0, ui32 poolId = 0,
+        TActorId Register(IActor* actor, ui32 nodeIndex = 0, ui32 poolId = 0, 
             TMailboxType::EType mailboxType = TMailboxType::Simple, ui64 revolvingCounter = 0,
-            const TActorId& parentid = TActorId());
-        TActorId Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailboxHeader *mailbox, ui32 hint,
-            const TActorId& parentid = TActorId());
-        TActorId RegisterService(const TActorId& serviceId, const TActorId& actorId, ui32 nodeIndex = 0);
-        TActorId AllocateEdgeActor(ui32 nodeIndex = 0);
+            const TActorId& parentid = TActorId()); 
+        TActorId Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailboxHeader *mailbox, ui32 hint, 
+            const TActorId& parentid = TActorId()); 
+        TActorId RegisterService(const TActorId& serviceId, const TActorId& actorId, ui32 nodeIndex = 0); 
+        TActorId AllocateEdgeActor(ui32 nodeIndex = 0); 
         TEventsList CaptureEvents();
         TEventsList CaptureMailboxEvents(ui32 hint, ui32 nodeId);
         TScheduledEventsList CaptureScheduledEvents();
@@ -260,13 +260,13 @@ namespace NActors {
         void Schedule(IEventHandle* ev, const TDuration& duration, ui32 nodeIndex = 0);
         void ClearCounters();
         ui64 GetCounter(ui32 evType) const;
-        TActorId GetLocalServiceId(const TActorId& serviceId, ui32 nodeIndex = 0);
-        void WaitForEdgeEvents(TEventFilter filter, const TSet<TActorId>& edgeFilter = {}, TDuration simTimeout = TDuration::Max());
-        TActorId GetInterconnectProxy(ui32 nodeIndexFrom, ui32 nodeIndexTo);
-        void BlockOutputForActor(const TActorId& actorId);
-        IActor* FindActor(const TActorId& actorId, ui32 nodeIndex = Max<ui32>()) const;
-        void EnableScheduleForActor(const TActorId& actorId, bool allow = true);
-        bool IsScheduleForActorEnabled(const TActorId& actorId) const;
+        TActorId GetLocalServiceId(const TActorId& serviceId, ui32 nodeIndex = 0); 
+        void WaitForEdgeEvents(TEventFilter filter, const TSet<TActorId>& edgeFilter = {}, TDuration simTimeout = TDuration::Max()); 
+        TActorId GetInterconnectProxy(ui32 nodeIndexFrom, ui32 nodeIndexTo); 
+        void BlockOutputForActor(const TActorId& actorId); 
+        IActor* FindActor(const TActorId& actorId, ui32 nodeIndex = Max<ui32>()) const; 
+        void EnableScheduleForActor(const TActorId& actorId, bool allow = true); 
+        bool IsScheduleForActorEnabled(const TActorId& actorId) const; 
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);
         void SetupMonitoring();
 
@@ -317,7 +317,7 @@ namespace NActors {
 
         template<class TEvent>
         typename TEvent::TPtr GrabEdgeEventIf(
-                const TSet<TActorId>& edgeFilter,
+                const TSet<TActorId>& edgeFilter, 
                 const std::function<bool(const typename TEvent::TPtr&)>& predicate,
                 TDuration simTimeout = TDuration::Max())
         {
@@ -345,11 +345,11 @@ namespace NActors {
 
         template<class TEvent>
         typename TEvent::TPtr GrabEdgeEventIf(
-                const TActorId& edgeActor,
+                const TActorId& edgeActor, 
                 const std::function<bool(const typename TEvent::TPtr&)>& predicate,
                 TDuration simTimeout = TDuration::Max())
         {
-            TSet<TActorId> edgeFilter{edgeActor};
+            TSet<TActorId> edgeFilter{edgeActor}; 
             return GrabEdgeEventIf<TEvent>(edgeFilter, predicate, simTimeout);
         }
 
@@ -368,13 +368,13 @@ namespace NActors {
         }
 
         template<class TEvent>
-        typename TEvent::TPtr GrabEdgeEvent(const TSet<TActorId>& edgeFilter, TDuration simTimeout = TDuration::Max()) {
+        typename TEvent::TPtr GrabEdgeEvent(const TSet<TActorId>& edgeFilter, TDuration simTimeout = TDuration::Max()) { 
             return GrabEdgeEventIf<TEvent>(edgeFilter, [](const typename TEvent::TPtr&) { return true; }, simTimeout);
         }
 
         template<class TEvent>
-        typename TEvent::TPtr GrabEdgeEvent(const TActorId& edgeActor, TDuration simTimeout = TDuration::Max()) {
-            TSet<TActorId> edgeFilter{edgeActor};
+        typename TEvent::TPtr GrabEdgeEvent(const TActorId& edgeActor, TDuration simTimeout = TDuration::Max()) { 
+            TSet<TActorId> edgeFilter{edgeActor}; 
             return GrabEdgeEvent<TEvent>(edgeFilter, simTimeout);
         }
 
@@ -409,7 +409,7 @@ namespace NActors {
         }
 
         template<class TEvent>
-        typename TEvent::TPtr GrabEdgeEventRethrow(const TSet<TActorId>& edgeFilter, TDuration simTimeout = TDuration::Max()) {
+        typename TEvent::TPtr GrabEdgeEventRethrow(const TSet<TActorId>& edgeFilter, TDuration simTimeout = TDuration::Max()) { 
             try {
                 return GrabEdgeEvent<TEvent>(edgeFilter, simTimeout);
             } catch (...) {
@@ -418,7 +418,7 @@ namespace NActors {
         }
 
         template<class TEvent>
-        typename TEvent::TPtr GrabEdgeEventRethrow(const TActorId& edgeActor, TDuration simTimeout = TDuration::Max()) {
+        typename TEvent::TPtr GrabEdgeEventRethrow(const TActorId& edgeActor, TDuration simTimeout = TDuration::Max()) { 
             try {
                 return GrabEdgeEvent<TEvent>(edgeActor, simTimeout);
             } catch (...) {
@@ -462,7 +462,7 @@ namespace NActors {
         }
 
         void SetDispatcherRandomSeed(TInstant time, ui64 iteration);
-        TString GetActorName(const TActorId& actorId) const;
+        TString GetActorName(const TActorId& actorId) const; 
 
         const TVector<ui64>& GetTxAllocatorTabletIds() const { return TxAllocatorTabletIds; }
         void SetTxAllocatorTabletIds(const TVector<ui64>& ids) { TxAllocatorTabletIds = ids; }
@@ -493,7 +493,7 @@ namespace NActors {
         }
 
    private:
-        IActor* FindActor(const TActorId& actorId, TNodeDataBase* node) const;
+        IActor* FindActor(const TActorId& actorId, TNodeDataBase* node) const; 
         void SendInternal(IEventHandle* ev, ui32 nodeIndex, bool viaActorSystem);
         TEventMailBox& GetMailbox(ui32 nodeId, ui32 hint);
         void ClearMailbox(ui32 nodeId, ui32 hint);
@@ -526,7 +526,7 @@ namespace NActors {
         ui64 DispatchCyclesCount;
         ui64 DispatchedEventsCount;
         ui64 DispatchedEventsLimit = 2'500'000;
-        TActorId CurrentRecipient;
+        TActorId CurrentRecipient; 
         ui64 DispatcherRandomSeed;
         TIntrusivePtr<IRandomProvider> DispatcherRandomProvider;
         TAutoPtr<TLogBackend> LogBackend;
@@ -559,9 +559,9 @@ namespace NActors {
             TIntrusivePtr<NInterconnect::TPollerThreads> Poller;
             volatile ui64* ActorSystemTimestamp;
             volatile ui64* ActorSystemMonotonic;
-            TVector<std::pair<TActorId, TActorSetupCmd> > LocalServices;
-            TMap<TActorId, IActor*> LocalServicesActors;
-            TMap<IActor*, TActorId> ActorToActorId;
+            TVector<std::pair<TActorId, TActorSetupCmd> > LocalServices; 
+            TMap<TActorId, IActor*> LocalServicesActors; 
+            TMap<IActor*, TActorId> ActorToActorId; 
             THolder<TMailboxTable> MailboxTable;
             std::shared_ptr<void> AppData0;
             THolder<TActorSystem> ActorSystem;
@@ -613,8 +613,8 @@ namespace NActors {
         TProgramShouldContinue ShouldContinue;
         TMap<ui32, TIntrusivePtr<TNodeDataBase>> Nodes;
         ui64 CurrentTimestamp;
-        TSet<TActorId> EdgeActors;
-        THashMap<TEventMailboxId, TActorId, TEventMailboxId::THash> EdgeActorByMailbox;
+        TSet<TActorId> EdgeActors; 
+        THashMap<TEventMailboxId, TActorId, TEventMailboxId::THash> EdgeActorByMailbox; 
         TDuration DispatchTimeout;
         TDuration ReschedulingDelay;
         TEventObserver ObserverFunc;
@@ -622,10 +622,10 @@ namespace NActors {
         TEventFilter EventFilterFunc;
         TScheduledEventFilter ScheduledEventFilterFunc;
         TRegistrationObserver RegistrationObserver;
-        TSet<TActorId> BlockedOutput;
-        TSet<TActorId> ScheduleWhiteList;
-        THashMap<TActorId, TActorId> ScheduleWhiteListParent;
-        THashMap<TActorId, TString> ActorNames;
+        TSet<TActorId> BlockedOutput; 
+        TSet<TActorId> ScheduleWhiteList; 
+        THashMap<TActorId, TActorId> ScheduleWhiteListParent; 
+        THashMap<TActorId, TString> ActorNames; 
         TDispatchContext* CurrentDispatchContext;
         TVector<ui64> TxAllocatorTabletIds;
 
@@ -686,7 +686,7 @@ namespace NActors {
     class IStrandingDecoratorFactory {
     public:
         virtual ~IStrandingDecoratorFactory() {}
-        virtual IActor* Wrap(const TActorId& delegatee, bool isSync, const TVector<TActorId>& additionalActors) = 0;
+        virtual IActor* Wrap(const TActorId& delegatee, bool isSync, const TVector<TActorId>& additionalActors) = 0; 
     };
 
     struct IReplyChecker {

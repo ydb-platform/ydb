@@ -49,7 +49,7 @@ class TLogReader : public TLogReaderBase {
     bool IsInitial;
     TPDisk * const PDisk;
     TActorSystem * const ActorSystem;
-    const TActorId ReplyTo;
+    const TActorId ReplyTo; 
 
     TOwner Owner;
     TLogPosition OwnerLogStartPosition;

@@ -37,7 +37,7 @@ namespace NFake {
         }
 
     private:
-        void Registered(TActorSystem *sys, const TActorId &owner) override
+        void Registered(TActorSystem *sys, const TActorId &owner) override 
         {
             Sys = sys, Owner = owner;
 

@@ -106,7 +106,7 @@ namespace NKikimr {
         const TVDiskContextPtr VCtx;
         const TPDiskCtxPtr PDiskCtx;
         TLevelSegment *LevelSegment;
-        TActorId Recipient;
+        TActorId Recipient; 
         TString Origin;
         bool FirstRead;
         ui32 RestToReadIndex;
@@ -302,7 +302,7 @@ namespace NKikimr {
                 const TVDiskContextPtr &vctx,
                 const TPDiskCtxPtr &pdiskCtx,
                 TLevelSegment *levelSegment,
-                const TActorId &recipient,
+                const TActorId &recipient, 
                 const TString &origin)
             : TActorBootstrapped<TThis>()
             , VCtx(vctx)
@@ -359,7 +359,7 @@ namespace NKikimr {
         const TVDiskContextPtr VCtx;
         const TPDiskCtxPtr PDiskCtx;
         TOrderedLevelSegments *Segs;
-        TActorId Recipient;
+        TActorId Recipient; 
         ui32 Pos;
         ui32 Size;
         TActiveActors ActiveActors;
@@ -370,7 +370,7 @@ namespace NKikimr {
             if (Pos < Size) {
                 std::unique_ptr<TLevelSegmentLoader> actor(new TLevelSegmentLoader(VCtx, PDiskCtx,
                         Segs->Segments[Pos].Get(), ctx.SelfID, "OrderedLevelSegmentsLoader"));
-                NActors::TActorId aid = ctx.Register(actor.Release());
+                NActors::TActorId aid = ctx.Register(actor.Release()); 
                 ActiveActors.Insert(aid);
                 ++Pos;
             } else {
@@ -410,7 +410,7 @@ namespace NKikimr {
                 const TVDiskContextPtr vctx,
                 const TPDiskCtxPtr pdiskCtx,
                 TOrderedLevelSegments *levelSegmentVec,
-                const TActorId &recipient)
+                const TActorId &recipient) 
             : TActorBootstrapped<TThis>()
             , VCtx(vctx)
             , PDiskCtx(pdiskCtx)
@@ -440,7 +440,7 @@ namespace NKikimr {
         const TVDiskContextPtr VCtx;
         const TPDiskCtxPtr PDiskCtx;
         TUnorderedLevelSegments *Segs;
-        TActorId Recipient;
+        TActorId Recipient; 
         TIterator Pos;
         TIterator End;
         TActiveActors ActiveActors;
@@ -450,7 +450,7 @@ namespace NKikimr {
         void Process(const TActorContext &ctx) {
             if (Pos != End) {
                 std::unique_ptr<TLevelSegmentLoader> actor(new TLevelSegmentLoader(VCtx, PDiskCtx, Pos->Get(), ctx.SelfID));
-                NActors::TActorId aid = ctx.Register(actor.Release());
+                NActors::TActorId aid = ctx.Register(actor.Release()); 
                 ActiveActors.Insert(aid);
             } else {
                 ctx.Send(Recipient, new THullSegmentsLoaded(Segs));
@@ -488,7 +488,7 @@ namespace NKikimr {
         TUnorderedLevelSegmentsLoader(
                 const TVDiskContextPtr &vctx,
                 const TPDiskCtxPtr &pdiskCtx,
-                TUnorderedLevelSegments *segs, const TActorId &recipient)
+                TUnorderedLevelSegments *segs, const TActorId &recipient) 
             : TActorBootstrapped<TThis>()
             , VCtx(vctx)
             , PDiskCtx(pdiskCtx)
@@ -528,7 +528,7 @@ namespace NKikimr {
         const TVDiskContextPtr VCtx;
         const TPDiskCtxPtr PDiskCtx;
         TLevelIndex *LevelIndex;
-        TActorId Recipient;
+        TActorId Recipient; 
         TSstIterator It;
         TActiveActors ActiveActors;
 
@@ -581,7 +581,7 @@ namespace NKikimr {
                 const TVDiskContextPtr vctx,
                 const TPDiskCtxPtr pdiskCtx,
                 TLevelIndex *levelIndex,
-                const TActorId &recipient)
+                const TActorId &recipient) 
             : TActorBootstrapped<TThis>()
             , VCtx(vctx)
             , PDiskCtx(pdiskCtx)

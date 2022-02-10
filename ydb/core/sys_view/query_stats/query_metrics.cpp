@@ -33,7 +33,7 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TQueryMetricsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TQueryMetricsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId, 
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
     {
@@ -163,7 +163,7 @@ private:
     NKikimrSysView::TEvGetQueryMetricsRequest Request;
 };
 
-THolder<IActor> CreateQueryMetricsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<IActor> CreateQueryMetricsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId, 
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     return MakeHolder<TQueryMetricsScan>(ownerId, scanId, tableId, tableRange, columns);

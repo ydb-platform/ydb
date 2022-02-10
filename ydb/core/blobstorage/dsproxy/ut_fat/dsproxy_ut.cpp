@@ -136,8 +136,8 @@ struct TTestArgs {
 struct TTestEnvironment : public TThrRefBase {
     ui32 VDiskCount;
     ui64 DeadVDisksMask;
-    TVector<TActorId> VDisks;
-    TVector<TActorId> PDisks;
+    TVector<TActorId> VDisks; 
+    TVector<TActorId> PDisks; 
     TVector<TVDiskID> VDiskIds;
 
     bool ShouldBeUnwritable;
@@ -148,8 +148,8 @@ struct TTestEnvironment : public TThrRefBase {
     ui32 FailedDiskCount;
     TBlobStorageGroupType GroupType;
 
-    TActorId ProxyId;
-    TActorId ProxyTestId;
+    TActorId ProxyId; 
+    TActorId ProxyTestId; 
 
     TSystemEvent DoneEvent;
     yexception LastException;
@@ -237,7 +237,7 @@ protected:
         ui32 BlockedGeneration;
         bool LogoBlobsCompacted;
         TStorageStatusFlags StatusFlags;
-        TActorId Sender;
+        TActorId Sender; 
         TVDiskID VDiskId;
         bool IsConnected;
         TIntrusivePtr<TGroupQueues> GroupQueues;
@@ -261,12 +261,12 @@ protected:
             BlockedGeneration = 0;
             LogoBlobsCompacted = false;
             StatusFlags.Raw = 0;
-            Sender = TActorId();
+            Sender = TActorId(); 
         }
     };
 
     TResponseData LastResponse;
-    const TActorId Proxy;
+    const TActorId Proxy; 
     const TBlobStorageGroupType::EErasureSpecies ErasureSpecies;
     TIntrusivePtr<TBlobStorageGroupInfo> BsInfo;
     int TestStep;
@@ -615,7 +615,7 @@ protected:
     }
 
 public:
-    TTestBlobStorageProxy(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxy(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TActor(&TThis::StateRegister)
         , Proxy(proxy)
@@ -675,7 +675,7 @@ class TTestBlobStorageProxyBlockSet : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyBlockSet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyBlockSet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -726,7 +726,7 @@ class TTestBlobStorageProxyBlockCheck : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyBlockCheck(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyBlockCheck(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -761,7 +761,7 @@ class TTestIterativePut: public TTestBlobStorageProxy {
     }
 
 public:
-    TTestIterativePut(const TActorId& proxy, const TIntrusivePtr<TBlobStorageGroupInfo>& bsInfo,
+    TTestIterativePut(const TActorId& proxy, const TIntrusivePtr<TBlobStorageGroupInfo>& bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {
@@ -798,7 +798,7 @@ class TTestInFlightPuts: public TTestBlobStorageProxy {
     }
 
 public:
-    TTestInFlightPuts(const TActorId& proxy, const TIntrusivePtr<TBlobStorageGroupInfo>& bsInfo,
+    TTestInFlightPuts(const TActorId& proxy, const TIntrusivePtr<TBlobStorageGroupInfo>& bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {
@@ -847,7 +847,7 @@ class TTestOrderGet: public TTestBlobStorageProxy {
     }
 
 public:
-    TTestOrderGet(const TActorId& proxy, const TIntrusivePtr<TBlobStorageGroupInfo>& bsInfo,
+    TTestOrderGet(const TActorId& proxy, const TIntrusivePtr<TBlobStorageGroupInfo>& bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {
@@ -887,7 +887,7 @@ class TTestRangeGet: public TTestBlobStorageProxy {
     }
 
 public:
-    TTestRangeGet(const TActorId& proxy, const TIntrusivePtr<TBlobStorageGroupInfo>& bsInfo,
+    TTestRangeGet(const TActorId& proxy, const TIntrusivePtr<TBlobStorageGroupInfo>& bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {
@@ -998,7 +998,7 @@ class TTestBlobStorageProxyBlock : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyBlock(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyBlock(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1036,7 +1036,7 @@ class TTestBlobStorageProxyPut : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyPut(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyPut(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1074,7 +1074,7 @@ class TTestBlobStorageProxyPutInvalidSize : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyPutInvalidSize(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyPutInvalidSize(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1109,7 +1109,7 @@ class TTestBlobStorageProxyPutFail : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyPutFail(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyPutFail(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1146,7 +1146,7 @@ class TTestBlobStorageProxyGet : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1181,7 +1181,7 @@ class TTestBlobStorageProxyGetFail : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyGetFail(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyGetFail(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1216,7 +1216,7 @@ class TTestBlobStorageProxyGetTimeout : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyGetTimeout(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyGetTimeout(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1271,7 +1271,7 @@ class TTestBlobStorageProxyPutGetMany: public TTestBlobStorageProxy {
         ++TestStep;
     }
 public:
-    TTestBlobStorageProxyPutGetMany(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyPutGetMany(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1364,7 +1364,7 @@ class TTestBlobStorageProxyPutGetStatus: public TTestBlobStorageProxy {
         ++TestStep;
     }
 public:
-    TTestBlobStorageProxyPutGetStatus(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyPutGetStatus(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1433,7 +1433,7 @@ class TTestBlobStorageProxyVPutVGet : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyVPutVGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyVPutVGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1530,7 +1530,7 @@ class TTestBlobStorageProxyVPutVGetLimit : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyVPutVGetLimit(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyVPutVGetLimit(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
         , Iteration(0)
@@ -1644,7 +1644,7 @@ private:
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyVPut(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyVPut(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1727,7 +1727,7 @@ class TTestBlobStorageProxyVGet : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyVGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyVGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1814,7 +1814,7 @@ class TTestBlobStorageProxyVGetFail : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyVGetFail(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyVGetFail(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1898,7 +1898,7 @@ class TTestBlobStorageProxyVBlockVPutVGet : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyVBlockVPutVGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyVBlockVPutVGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1937,7 +1937,7 @@ class TTestBlobStorageProxyGarbageMark : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyGarbageMark(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyGarbageMark(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -1974,7 +1974,7 @@ class TTestBlobStorageProxyGarbageUnmark : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyGarbageUnmark(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyGarbageUnmark(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -2007,7 +2007,7 @@ class TTestBlobStorageProxyGarbageCollect : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyGarbageCollect(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyGarbageCollect(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -2054,7 +2054,7 @@ class TTestBlobStorageProxyGarbageCollectHuge : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyGarbageCollectHuge(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyGarbageCollectHuge(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -2097,7 +2097,7 @@ class TTestBlobStorageProxyEmptyGet : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyEmptyGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyEmptyGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -2230,7 +2230,7 @@ class TTestBlobStorageProxyGarbageCollectComplex : public TTestBlobStorageProxy 
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyGarbageCollectComplex(const TActorId &proxy,
+    TTestBlobStorageProxyGarbageCollectComplex(const TActorId &proxy, 
             const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
@@ -2296,7 +2296,7 @@ class TTestBlobStorageProxyGarbageCollectAfterLargeData : public TTestBlobStorag
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyGarbageCollectAfterLargeData(const TActorId &proxy,
+    TTestBlobStorageProxyGarbageCollectAfterLargeData(const TActorId &proxy, 
             const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
@@ -2358,7 +2358,7 @@ class TTestBlobStorageProxySimpleDiscover : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxySimpleDiscover(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxySimpleDiscover(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -2414,7 +2414,7 @@ class TTestBlobStorageProxyDiscover : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyDiscover(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyDiscover(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -2450,7 +2450,7 @@ class TTestBlobStorageProxyDiscoverFail : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyDiscoverFail(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyDiscoverFail(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -2486,7 +2486,7 @@ class TTestBlobStorageProxyDiscoverEmpty : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyDiscoverEmpty(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyDiscoverEmpty(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -2522,7 +2522,7 @@ class TTestBlobStorageProxyDiscoverTimeout : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyDiscoverTimeout(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyDiscoverTimeout(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -2675,7 +2675,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyLongTailDiscoverPut(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyLongTailDiscoverPut(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
         , MsgIdx(0)
@@ -2720,7 +2720,7 @@ class TTestBlobStorageProxyLongTailDiscover : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyLongTailDiscover(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyLongTailDiscover(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -2774,7 +2774,7 @@ class TTestBlobStorageProxyPartialGet : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyPartialGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyPartialGet(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -2808,7 +2808,7 @@ class TTestEmptyRange : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestEmptyRange(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestEmptyRange(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -3155,7 +3155,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyBasic1(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyBasic1(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -3202,7 +3202,7 @@ class TTestGetMultipart : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestGetMultipart(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestGetMultipart(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -3253,7 +3253,7 @@ class TTestVDiskCompacted : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestVDiskCompacted(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestVDiskCompacted(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -3337,7 +3337,7 @@ class TTestBlobStorageProxyVPutVCollectVGetRace : public TTestBlobStorageProxy {
         TestStep += 10;
     }
 public:
-    TTestBlobStorageProxyVPutVCollectVGetRace(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
+    TTestBlobStorageProxyVPutVCollectVGetRace(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo, 
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
     {}
@@ -4074,11 +4074,11 @@ public:
 
         ui64 nodeCount = nameserverTable->StaticNodeTable.size() + 1;
         setup->LocalServices.emplace_back(
-            GetNameserviceActorId(),
+            GetNameserviceActorId(), 
             TActorSetupCmd(CreateNameserverTable(nameserverTable), TMailboxType::ReadAsFilled, 0)
         );
         TIntrusivePtr<TInterconnectProxyCommon> icCommon = new TInterconnectProxyCommon();
-        icCommon->NameserviceId = GetNameserviceActorId();
+        icCommon->NameserviceId = GetNameserviceActorId(); 
         icCommon->MonCounters = counters.GetSubgroup("counters", "interconnect");
         icCommon->TechnicalSelfHostName = "127.0.0.1";
         setup->Interconnect.ProxyActors.resize(nodeCount);
@@ -4092,11 +4092,11 @@ public:
         }
 
         TActorSetupCmd profilerSetup(CreateProfilerActor(nullptr, "."), TMailboxType::Simple, 0);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeProfilerID(nodeId), profilerSetup));
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeProfilerID(nodeId), profilerSetup)); 
 
-        const TActorId nameserviceId = GetNameserviceActorId();
+        const TActorId nameserviceId = GetNameserviceActorId(); 
         TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup));
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup)); 
 
         return setup;
     }
@@ -4104,7 +4104,7 @@ public:
     TIntrusivePtr<NActors::NLog::TSettings> AddLoggerActor(THolder<TActorSystemSetup> &setup,
             NMonitoring::TDynamicCounters &counters) {
 
-        NActors::TActorId loggerActorId = NActors::TActorId(setup->NodeId, "logger");
+        NActors::TActorId loggerActorId = NActors::TActorId(setup->NodeId, "logger"); 
         TIntrusivePtr<NActors::NLog::TSettings> logSettings(
             new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER,
                 IsVerbose ? NLog::PRI_ERROR : NLog::PRI_CRIT,
@@ -4140,7 +4140,7 @@ public:
                 NActors::CreateStderrBackend(),
                 counters.GetSubgroup("counters", "utils"));
         NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 2);
-        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd);
+        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd); 
         setup->LocalServices.push_back(loggerActorPair);
 
         return logSettings;
@@ -4191,7 +4191,7 @@ public:
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
             dsProxyNodeMon, TIntrusivePtr(storagePoolCounters), args.EnablePutBatching, DefaultEnableVPatch)};
         TActorSetupCmd bsproxySetup(proxyActor.release(), TMailboxType::Revolving, 3);
-        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyId, bsproxySetup));
+        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyId, bsproxySetup)); 
 
         TTempDir tempDir;
         NPDisk::TKey mainKey = 123;
@@ -4212,7 +4212,7 @@ public:
                 ui32 chunkSize = 32 << 20;
                 ui64 diskSizeBytes = 32ull << 30ull;
                 ui64 pDiskCategory = 0;
-                TActorId pdiskId = env->PDisks[i];
+                TActorId pdiskId = env->PDisks[i]; 
                 TString filePath = databaseDirectory + "/pdisk.dat";
                 if (!SectorMapByPath[filePath]) {
                     SectorMapByPath[filePath].Reset(new NPDisk::TSectorMap(diskSizeBytes));
@@ -4230,7 +4230,7 @@ public:
                 TActorSetupCmd pDiskSetup(
                     CreatePDisk(pDiskConfig.Get(), mainKey, counters),
                     TMailboxType::Revolving, 0);
-                setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pdiskId, pDiskSetup));
+                setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pdiskId, pDiskSetup)); 
 
                 TVDiskConfig::TBaseInfo baseInfo(
                     env->VDiskIds[i],
@@ -4254,13 +4254,13 @@ public:
 
                 IActor* vDisk = CreateVDisk(vDiskConfig, bsInfo, counters);
                 TActorSetupCmd vDiskSetup(vDisk, TMailboxType::Revolving, 0);
-                setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->VDisks[i], vDiskSetup));
+                setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->VDisks[i], vDiskSetup)); 
             }
         }
 
         TActorSetupCmd proxyTestSetup(new T(env->ProxyId, bsInfo.Get(), env, args.Parametrs),
                 TMailboxType::Revolving, 0);
-        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyTestId, proxyTestSetup));
+        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyTestId, proxyTestSetup)); 
 
         //////////////////////////////////////////////////////////////////////////////
         GetServiceCounters(counters, "utils");
@@ -4277,7 +4277,7 @@ public:
         EnableActorCallstack();
         try {
             VERBOSE_COUT("Sending TEvBoot to testproxy");
-            actorSystem1->Send(env->ProxyTestId, new TEvTablet::TEvBoot(MakeTabletID(0, 0, 1), 0, nullptr, TActorId(),
+            actorSystem1->Send(env->ProxyTestId, new TEvTablet::TEvBoot(MakeTabletID(0, 0, 1), 0, nullptr, TActorId(), 
                         nullptr));
             VERBOSE_COUT("Done");
 

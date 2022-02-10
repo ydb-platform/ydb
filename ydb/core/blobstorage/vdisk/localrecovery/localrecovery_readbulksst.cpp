@@ -16,7 +16,7 @@ namespace NKikimr {
 
         const TVDiskContextPtr VCtx;
         const TPDiskCtxPtr PDiskCtx;
-        TActorId Recipient;
+        TActorId Recipient; 
         const ui64 RecoveryLogRecLsn;
         const TString Origin;
         // Index of sst being loaded
@@ -78,7 +78,7 @@ namespace NKikimr {
                 const TPDiskCtxPtr &pdiskCtx,
                 const google::protobuf::RepeatedPtrField<
                     NKikimrVDiskData::TAddBulkSstRecoveryLogRec_TSstAndRecsNum> &proto,
-                const TActorId &recipient,
+                const TActorId &recipient, 
                 const ui64 recoveryLogRecLsn,
                 const TString &origin)
             : TActorBootstrapped<TThis>()
@@ -108,7 +108,7 @@ namespace NKikimr {
         // Recovery Log Record
         NKikimrVDiskData::TAddBulkSstRecoveryLogRec Proto;
         // Reply to Recipient
-        TActorId Recipient;
+        TActorId Recipient; 
         // We handle recovery log record with this lsn
         const ui64 RecoveryLogRecLsn;
         // Number of databases/actors run
@@ -191,7 +191,7 @@ namespace NKikimr {
                 const TVDiskContextPtr &vctx,
                 const TPDiskCtxPtr &pdiskCtx,
                 const NKikimrVDiskData::TAddBulkSstRecoveryLogRec &proto,
-                const TActorId &recipient,
+                const TActorId &recipient, 
                 const ui64 recoveryLogRecLsn,
                 bool loadLogoBlobs,
                 bool loadBlocks,
@@ -215,7 +215,7 @@ namespace NKikimr {
             const TVDiskContextPtr &vctx,
             const TPDiskCtxPtr &pdiskCtx,
             const NKikimrVDiskData::TAddBulkSstRecoveryLogRec &proto,
-            const TActorId &recipient,
+            const TActorId &recipient, 
             const ui64 recoveryLogRecLsn,
             bool loadLogoBlobs,
             bool loadBlocks,

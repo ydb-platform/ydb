@@ -18,8 +18,8 @@ class TAddColumnActor : public TActorBootstrapped<TAddColumnActor> {
 public:
     TAddColumnActor(const TString& userName,
                     const TString& queueName,
-                    const TActorId& parent,
-                    const TActorId& schemeCache,
+                    const TActorId& parent, 
+                    const TActorId& schemeCache, 
                     TIntrusivePtr<TQueueCounters> counters,
                     const TString& tablePath,
                     const TString& columnName,
@@ -52,15 +52,15 @@ private:
     const TString TablePath;
     const TString ColumnName;
     const NScheme::TTypeId ColumnType;
-    const TActorId Parent;
-    const TActorId SchemeCache;
+    const TActorId Parent; 
+    const TActorId SchemeCache; 
     TIntrusivePtr<TQueueCounters> Counters;
 };
 
 TAddColumnActor::TAddColumnActor(const TString& userName,
                                  const TString& queueName,
-                                 const TActorId& parent,
-                                 const TActorId& schemeCache,
+                                 const TActorId& parent, 
+                                 const TActorId& schemeCache, 
                                  TIntrusivePtr<TQueueCounters> counters,
                                  const TString& tablePath,
                                  const TString& columnName,

@@ -10,13 +10,13 @@ namespace NKikimr {
 namespace NFlatTxCoordinator {
 
 class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMediatorQueue> {
-    const TActorId Owner;
+    const TActorId Owner; 
 
     const ui64 Coordinator;
     const ui64 Mediator;
     const ui64 CoordinatorGeneration;
 
-    TActorId PipeClient;
+    TActorId PipeClient; 
     ui64 GenCookie;
 
     ui64 PrevStep;
@@ -26,7 +26,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
     void Die(const TActorContext &ctx) override {
         if (PipeClient) {
             NTabletPipe::CloseClient(ctx, PipeClient);
-            PipeClient = TActorId();
+            PipeClient = TActorId(); 
         }
         return IActor::Die(ctx);
     }
@@ -36,7 +36,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
         if (PipeClient) {
             NTabletPipe::CloseClient(ctx, PipeClient);
-            PipeClient = TActorId();
+            PipeClient = TActorId(); 
         }
 
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, Mediator));
@@ -138,7 +138,7 @@ public:
         return NKikimrServices::TActivity::TX_COORDINATOR_MEDIATORQ_ACTOR;
     }
 
-    TTxCoordinatorMediatorQueue(const TActorId &owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration)
+    TTxCoordinatorMediatorQueue(const TActorId &owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration) 
         : Owner(owner)
         , Coordinator(coordinator)
         , Mediator(mediator)
@@ -172,7 +172,7 @@ public:
     }
 };
 
-IActor* CreateTxCoordinatorMediatorQueue(const TActorId &owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration) {
+IActor* CreateTxCoordinatorMediatorQueue(const TActorId &owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration) { 
     return new NFlatTxCoordinator::TTxCoordinatorMediatorQueue(owner, coordinator, mediator, coordinatorGeneration);
 }
 

@@ -1,12 +1,12 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:yql)
-
-SRCS(
-    yql_facade.cpp
-)
-
-PEERDIR(
+ 
+SRCS( 
+    yql_facade.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/deprecated/split
     library/cpp/random_provider
     library/cpp/string_utils/base64
@@ -27,8 +27,8 @@ PEERDIR(
     ydb/library/yql/providers/common/udf_resolve
     ydb/library/yql/providers/config
     ydb/library/yql/providers/result/provider
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-END()
+END() 

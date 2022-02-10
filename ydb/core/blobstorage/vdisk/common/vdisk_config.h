@@ -18,7 +18,7 @@ namespace NKikimr {
         // Base info provided while constructing TVDiskConfig
         struct TBaseInfo {
             TVDiskIdShort VDiskIdShort;
-            TActorId PDiskActorID;
+            TActorId PDiskActorID; 
             ui64 InitOwnerRound = 0;
             ui64 PDiskGuid = 0;
             ui32 PDiskId = 0;
@@ -42,7 +42,7 @@ namespace NKikimr {
 
             TBaseInfo(
                     const TVDiskIdShort &vDiskIdShort,
-                    const TActorId &pDiskActorId,
+                    const TActorId &pDiskActorId, 
                     ui64 pDiskGuid,
                     ui32 pdiskId,
                     TPDiskCategory::EDeviceType deviceType,

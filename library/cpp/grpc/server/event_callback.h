@@ -2,7 +2,7 @@
 
 #include "grpc_server.h"
 
-namespace NGrpc {
+namespace NGrpc { 
 
 enum class EQueueEventStatus {
     OK,
@@ -10,7 +10,7 @@ enum class EQueueEventStatus {
 };
 
 template<class TCallback>
-class TQueueEventCallback: public IQueueEvent {
+class TQueueEventCallback: public IQueueEvent { 
 public:
     TQueueEventCallback(const TCallback& callback)
         : Callback(callback)
@@ -33,9 +33,9 @@ private:
     TCallback Callback;
 };
 
-// Implementation of IQueueEvent that reduces allocations
+// Implementation of IQueueEvent that reduces allocations 
 template<class TSelf>
-class TQueueFixedEvent: private IQueueEvent {
+class TQueueFixedEvent: private IQueueEvent { 
     using TCallback = void (TSelf::*)(EQueueEventStatus);
 
 public:
@@ -44,7 +44,7 @@ public:
         , Callback(callback)
     { }
 
-    IQueueEvent* Prepare() {
+    IQueueEvent* Prepare() { 
         Self->Ref();
         return this;
     }
@@ -65,16 +65,16 @@ private:
 };
 
 template<class TCallback>
-inline IQueueEvent* MakeQueueEventCallback(TCallback&& callback) {
+inline IQueueEvent* MakeQueueEventCallback(TCallback&& callback) { 
     return new TQueueEventCallback<TCallback>(std::forward<TCallback>(callback));
 }
 
 template<class T>
-inline IQueueEvent* MakeQueueEventCallback(T* self, void (T::*method)(EQueueEventStatus)) {
+inline IQueueEvent* MakeQueueEventCallback(T* self, void (T::*method)(EQueueEventStatus)) { 
     using TPtr = TIntrusivePtr<T>;
     return MakeQueueEventCallback([self = TPtr(self), method] (EQueueEventStatus status) {
         ((*self).*method)(status);
     });
 }
 
-} // namespace NGrpc
+} // namespace NGrpc 

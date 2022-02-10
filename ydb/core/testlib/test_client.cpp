@@ -1,5 +1,5 @@
 #include "test_client.h"
-
+ 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
@@ -73,7 +73,7 @@
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kesus/proxy/proxy.h>
 #include <ydb/core/kesus/tablet/tablet.h>
@@ -88,10 +88,10 @@
 #include <ydb/library/folder_service/mock/mock_folder_service.h>
 
 #include <ydb/core/client/server/msgbus_server_tracer.h>
-
+ 
 #include <library/cpp/actors/interconnect/interconnect.h>
 
-#include <library/cpp/grpc/server/actors/logger.h>
+#include <library/cpp/grpc/server/actors/logger.h> 
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
@@ -169,7 +169,7 @@ namespace Tests {
         Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
 
         if (!Settings->UseRealThreads)
-            Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId&, const TActorId& actorId) {
+            Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId&, const TActorId& actorId) { 
                     runtime.EnableScheduleForActor(actorId);
                 });
 
@@ -244,8 +244,8 @@ namespace Tests {
         }
     }
 
-    void TServer::EnableGRpc(const NGrpc::TServerOptions& options) {
-        GRpcServer.reset(new NGrpc::TGRpcServer(options));
+    void TServer::EnableGRpc(const NGrpc::TServerOptions& options) { 
+        GRpcServer.reset(new NGrpc::TGRpcServer(options)); 
         auto grpcService = new NGRpcProxy::TGRpcService();
 
         auto system(Runtime->GetAnyNodeActorSystem());
@@ -337,7 +337,7 @@ namespace Tests {
         EnableGRpc(NGrpc::TServerOptions()
             .SetHost("localhost")
             .SetPort(port)
-            .SetLogger(NGrpc::CreateActorSystemLogger(*Runtime->GetAnyNodeActorSystem(), NKikimrServices::GRPC_SERVER))
+            .SetLogger(NGrpc::CreateActorSystemLogger(*Runtime->GetAnyNodeActorSystem(), NKikimrServices::GRPC_SERVER)) 
         );
     }
 
@@ -375,13 +375,13 @@ namespace Tests {
     }
 
     void TServer::SetupStorage() {
-        TActorId sender = Runtime->AllocateEdgeActor();
+        TActorId sender = Runtime->AllocateEdgeActor(); 
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
 
         //get NodesInfo, nodes hostname and port are interested
-        Runtime->Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes));
+        Runtime->Send(new IEventHandle(GetNameserviceActorId(), sender, new TEvInterconnect::TEvListNodes)); 
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = Runtime->GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
@@ -488,8 +488,8 @@ namespace Tests {
 
     void TServer::DestroyDynamicLocalService(ui32 nodeIdx) {
         Y_VERIFY(nodeIdx >= StaticNodes());
-        TActorId local = MakeLocalID(Runtime->GetNodeId(nodeIdx)); // MakeTenantPoolRootID?
-        Runtime->Send(new IEventHandle(local, TActorId(), new TEvents::TEvPoisonPill()));
+        TActorId local = MakeLocalID(Runtime->GetNodeId(nodeIdx)); // MakeTenantPoolRootID? 
+        Runtime->Send(new IEventHandle(local, TActorId(), new TEvents::TEvPoisonPill())); 
     }
 
     void TServer::SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData) {
@@ -570,7 +570,7 @@ namespace Tests {
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
         auto sysViewService = NSysView::CreateSysViewServiceForTests();
-        TActorId sysViewServiceId = Runtime->Register(sysViewService.Release(), nodeIdx);
+        TActorId sysViewServiceId = Runtime->Register(sysViewService.Release(), nodeIdx); 
         Runtime->RegisterService(NSysView::MakeSysViewServiceID(Runtime->GetNodeId(nodeIdx)), sysViewServiceId, nodeIdx);
 
         auto tenantPublisher = CreateTenantNodeEnumerationPublisher();
@@ -587,7 +587,7 @@ namespace Tests {
         Runtime->SetTxAllocatorTabletIds({ChangeStateStorage(TxAllocator, Settings->Domain)});
         {
             IActor* ticketParser = Settings->CreateTicketParser(Settings->AuthConfig);
-            TActorId ticketParserId = Runtime->Register(ticketParser, nodeIdx);
+            TActorId ticketParserId = Runtime->Register(ticketParser, nodeIdx); 
             Runtime->RegisterService(MakeTicketParserID(), ticketParserId, nodeIdx);
         }
 
@@ -608,19 +608,19 @@ namespace Tests {
                                                                   Settings->AppConfig.GetTableServiceConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
                                                                   nullptr);
-            TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);
+            TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx); 
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
         }
 
         {
             IActor* txProxy = CreateTxProxy(Runtime->GetTxAllocatorTabletIds());
-            TActorId txProxyId = Runtime->Register(txProxy, nodeIdx);
+            TActorId txProxyId = Runtime->Register(txProxy, nodeIdx); 
             Runtime->RegisterService(MakeTxProxyID(), txProxyId, nodeIdx);
         }
 
         {
             IActor* compileService = CreateMiniKQLCompileService(100000);
-            TActorId compileServiceId = Runtime->Register(compileService, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId, TMailboxType::Revolving, 0);
+            TActorId compileServiceId = Runtime->Register(compileService, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId, TMailboxType::Revolving, 0); 
             Runtime->RegisterService(MakeMiniKQLCompileServiceID(), compileServiceId, nodeIdx);
         }
 
@@ -639,14 +639,14 @@ namespace Tests {
         if (BusServer && nodeIdx == 0) { // MsgBus and GRPC are run now only on first node
             {
                 IActor* proxy = BusServer->CreateProxy();
-                TActorId proxyId = Runtime->Register(proxy, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId, TMailboxType::Revolving, 0);
+                TActorId proxyId = Runtime->Register(proxy, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId, TMailboxType::Revolving, 0); 
                 Runtime->RegisterService(NMsgBusProxy::CreateMsgBusProxyId(), proxyId, nodeIdx);
             }
 
             {
                 IActor* traceService = BusServer->CreateMessageBusTraceService();
                 if (traceService) {
-                    TActorId traceServiceId = Runtime->Register(traceService, nodeIdx, Runtime->GetAppData(nodeIdx).IOPoolId, TMailboxType::Simple, 0);
+                    TActorId traceServiceId = Runtime->Register(traceService, nodeIdx, Runtime->GetAppData(nodeIdx).IOPoolId, TMailboxType::Simple, 0); 
                     Runtime->RegisterService(NMessageBusTracer::MakeMessageBusTraceServiceID(), traceServiceId, nodeIdx);
                 }
             }
@@ -689,19 +689,19 @@ namespace Tests {
 
         {
             IActor* kesusService = NKesus::CreateKesusProxyService();
-            TActorId kesusServiceId = Runtime->Register(kesusService, nodeIdx);
+            TActorId kesusServiceId = Runtime->Register(kesusService, nodeIdx); 
             Runtime->RegisterService(NKesus::MakeKesusProxyServiceId(), kesusServiceId, nodeIdx);
         }
 
         {
             IActor* pqClusterTracker = NPQ::NClusterTracker::CreateClusterTracker();
-            TActorId pqClusterTrackerId = Runtime->Register(pqClusterTracker, nodeIdx);
+            TActorId pqClusterTrackerId = Runtime->Register(pqClusterTracker, nodeIdx); 
             Runtime->RegisterService(NPQ::NClusterTracker::MakeClusterTrackerID(), pqClusterTrackerId, nodeIdx);
         }
 
         {
             IActor* netClassifier = NNetClassifier::CreateNetClassifier();
-            TActorId netClassifierId = Runtime->Register(netClassifier, nodeIdx);
+            TActorId netClassifierId = Runtime->Register(netClassifier, nodeIdx); 
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
         }
 
@@ -861,15 +861,15 @@ namespace Tests {
     TTestActorRuntime* TServer::GetRuntime() const {
         return Runtime.Get();
     }
-
+ 
     const TServerSettings &TServer::GetSettings() const {
         return *Settings;
     }
 
     const NScheme::TTypeRegistry* TServer::GetTypeRegistry() {
         return Runtime->GetAppData().TypeRegistry;
-    }
-
+    } 
+ 
     const NMiniKQL::IFunctionRegistry* TServer::GetFunctionRegistry() {
         return Runtime->GetAppData().FunctionRegistry;
     }
@@ -950,8 +950,8 @@ namespace Tests {
             return false;
         }
 
-        UNIT_ASSERT(response.HasTypeMetadata() && response.HasFunctionMetadata());
-        DeserializeMetadata(response.GetTypeMetadata(), &LoadedTypeMetadataRegistry);
+        UNIT_ASSERT(response.HasTypeMetadata() && response.HasFunctionMetadata()); 
+        DeserializeMetadata(response.GetTypeMetadata(), &LoadedTypeMetadataRegistry); 
         DeserializeMetadata(response.GetFunctionMetadata(), *LoadedFunctionRegistry->GetBuiltins());
         TypesEtag = response.GetETag();
         return true;
@@ -964,11 +964,11 @@ namespace Tests {
         return TypeRegistry.GetTypeMetadataRegistry();
     }
 
-    const NMiniKQL::IFunctionRegistry& TClient::GetFunctionRegistry() const {
+    const NMiniKQL::IFunctionRegistry& TClient::GetFunctionRegistry() const { 
         if (TypesEtag.Defined())
-            return *LoadedFunctionRegistry;
+            return *LoadedFunctionRegistry; 
 
-        return *FunctionRegistry;
+        return *FunctionRegistry; 
     }
 
     ui64 TClient::GetPatchedSchemeRoot(ui64 schemeRoot, ui32 domain, bool supportsRedirect) {
@@ -1587,7 +1587,7 @@ namespace Tests {
         TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
         request->Record.SetPath(path);
         const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
-        TActorId sender = runtime->AllocateEdgeActor(0);
+        TActorId sender = runtime->AllocateEdgeActor(0); 
         ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
@@ -1658,7 +1658,7 @@ namespace Tests {
     }
 
     void TClient::RefreshPathCache(TTestActorRuntime* runtime, const TString& path, ui32 nodeIdx) {
-        TActorId sender = runtime->AllocateEdgeActor(nodeIdx);
+        TActorId sender = runtime->AllocateEdgeActor(nodeIdx); 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath(path);
@@ -2006,7 +2006,7 @@ namespace Tests {
     }
 
     TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query) {
-        TActorId sender = runtime->AllocateEdgeActor(0);
+        TActorId sender = runtime->AllocateEdgeActor(0); 
         ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(query), 0);
         TAutoPtr<IEventHandle> handle;
         // Timeout for DEBUG purposes only
@@ -2039,12 +2039,12 @@ namespace Tests {
     }
 
     bool TClient::WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {
-        TActorId edge = runtime->AllocateEdgeActor();
+        TActorId edge = runtime->AllocateEdgeActor(); 
         NTabletPipe::TClientConfig clientConfig;
         clientConfig.AllowFollower = !leader;
         clientConfig.ForceFollower = !leader;
         clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        TActorId pipeClient = runtime->Register(NTabletPipe::CreateClient(edge, tabletId, clientConfig));
+        TActorId pipeClient = runtime->Register(NTabletPipe::CreateClient(edge, tabletId, clientConfig)); 
         TAutoPtr<IEventHandle> handle;
         const TInstant deadline = TInstant::Now() + timeout;
         bool res = false;
@@ -2062,12 +2062,12 @@ namespace Tests {
             }
         } catch (TEmptyEventQueueException &) {}
 
-        runtime->Send(new IEventHandle(pipeClient, TActorId(), new TEvents::TEvPoisonPill()));
+        runtime->Send(new IEventHandle(pipeClient, TActorId(), new TEvents::TEvPoisonPill())); 
         return res;
     }
 
     bool TClient::WaitForTabletDown(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {
-        TActorId edge = runtime->AllocateEdgeActor();
+        TActorId edge = runtime->AllocateEdgeActor(); 
         NTabletPipe::TClientConfig clientConfig;
         clientConfig.AllowFollower = !leader;
         clientConfig.ForceFollower = !leader;
@@ -2077,7 +2077,7 @@ namespace Tests {
             .MaxRetryTime = TDuration::Seconds(1),
             .BackoffMultiplier = 2,
         };
-        TActorId pipeClient = runtime->Register(NTabletPipe::CreateClient(edge, tabletId, clientConfig));
+        TActorId pipeClient = runtime->Register(NTabletPipe::CreateClient(edge, tabletId, clientConfig)); 
         TInstant deadline = TInstant::Now() + timeout;
 
         bool res = false;
@@ -2117,7 +2117,7 @@ namespace Tests {
         ev->Record.SetReturnFollowers(returnFollowers);
 
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
-        TActorId edge = runtime->AllocateEdgeActor();
+        TActorId edge = runtime->AllocateEdgeActor(); 
         runtime->SendToPipe(hive, edge, ev.Release());
         TAutoPtr<IEventHandle> handle;
         TEvHive::TEvResponseHiveInfo* response = runtime->GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
@@ -2156,7 +2156,7 @@ namespace Tests {
         TAutoPtr<TEvHive::TEvGetTabletStorageInfo> ev(new TEvHive::TEvGetTabletStorageInfo(tabletId));
 
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
-        TActorId edge = runtime->AllocateEdgeActor();
+        TActorId edge = runtime->AllocateEdgeActor(); 
         runtime->SendToPipe(hive, edge, ev.Release());
         TAutoPtr<IEventHandle> handle;
         TEvHive::TEvGetTabletStorageInfoResult* response = runtime->GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
@@ -2242,7 +2242,7 @@ namespace Tests {
         request->Record.MutableResource()->SetResourcePath(resourcePath);
         *request->Record.MutableResource()->MutableHierarhicalDRRResourceConfig() = props;
 
-        TActorId sender = runtime->AllocateEdgeActor(0);
+        TActorId sender = runtime->AllocateEdgeActor(0); 
         ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;
@@ -2254,7 +2254,7 @@ namespace Tests {
     THolder<NKesus::TEvKesus::TEvGetConfigResult> TClient::GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath) {
         THolder<NKesus::TEvKesus::TEvGetConfig> request = MakeHolder<NKesus::TEvKesus::TEvGetConfig>();
 
-        TActorId sender = runtime->AllocateEdgeActor(0);
+        TActorId sender = runtime->AllocateEdgeActor(0); 
         ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);
 
         TAutoPtr<IEventHandle> handle;

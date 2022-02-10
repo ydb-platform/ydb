@@ -8,7 +8,7 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 
-#include <library/cpp/grpc/server/grpc_request.h>
+#include <library/cpp/grpc/server/grpc_request.h> 
 
 
 namespace NKikimr::NGRpcService {
@@ -26,19 +26,19 @@ TGRpcPQClusterDiscoveryService::TGRpcPQClusterDiscoveryService(
     }
 }
 
-void TGRpcPQClusterDiscoveryService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcPQClusterDiscoveryService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) { 
     CQ_ = cq;
 
     if (ActorSystem_->AppData<TAppData>()->PQClusterDiscoveryConfig.GetEnabled()) {
         IActor* actor = NPQ::NClusterDiscovery::CreateClusterDiscoveryService(GetServiceCounters(Counters_, "persqueue")->GetSubgroup("subsystem", "cluster_discovery"));
-        TActorId clusterDiscoveryServiceId = ActorSystem_->Register(actor, TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
+        TActorId clusterDiscoveryServiceId = ActorSystem_->Register(actor, TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId); 
         ActorSystem_->RegisterLocalService(NPQ::NClusterDiscovery::MakeClusterDiscoveryServiceID(), clusterDiscoveryServiceId);
 
-        SetupIncomingRequests(std::move(logger));
+        SetupIncomingRequests(std::move(logger)); 
     }
 }
 
-void TGRpcPQClusterDiscoveryService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter*) {
+void TGRpcPQClusterDiscoveryService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter*) { 
 }
 
 bool TGRpcPQClusterDiscoveryService::IncRequest() {
@@ -54,7 +54,7 @@ void TGRpcPQClusterDiscoveryService::DecRequest() {
     }
 }
 
-void TGRpcPQClusterDiscoveryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcPQClusterDiscoveryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef ADD_REQUEST
@@ -62,11 +62,11 @@ void TGRpcPQClusterDiscoveryService::SetupIncomingRequests(NGrpc::TLoggerPtr log
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::PersQueue::ClusterDiscovery::IN, Ydb::PersQueue::ClusterDiscovery::OUT, TGRpcPQClusterDiscoveryService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase* ctx) { \
+        [this](NGrpc::IRequestContextBase* ctx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::PersQueue::V1::ClusterDiscoveryService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("pq_cluster_discovery", #NAME))->Run();
+        #NAME, logger, getCounterBlock("pq_cluster_discovery", #NAME))->Run(); 
 
         ADD_REQUEST(DiscoverClusters, DiscoverClustersRequest, DiscoverClustersResponse, {
             ActorSystem_->Send(GRpcRequestProxyId_, new TEvDiscoverPQClustersRequest(ctx));

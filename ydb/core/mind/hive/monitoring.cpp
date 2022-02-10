@@ -1,4 +1,4 @@
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <util/string/vector.h>
@@ -22,7 +22,7 @@ public:
     };
 
     struct TNodeInfo {
-        TActorId Local;
+        TActorId Local; 
         ui64 TabletsOn;
 
         TNodeInfo()
@@ -30,12 +30,12 @@ public:
         {}
     };
 
-    const TActorId Source;
+    const TActorId Source; 
 
     TMap<ui64, TTabletInfo> TabletInfo;
     TMap<ui32, TNodeInfo> NodeInfo;
 
-    TTxMonEvent_DbState(const TActorId &source, TSelf *hive)
+    TTxMonEvent_DbState(const TActorId &source, TSelf *hive) 
         : TBase(hive)
         , Source(source)
     {}
@@ -72,7 +72,7 @@ public:
                 return false;
             while (rowset.IsValid()) {
                 const ui32 nodeId = rowset.GetValue<Schema::Node::ID>();
-                const TActorId local = rowset.GetValue<Schema::Node::Local>();
+                const TActorId local = rowset.GetValue<Schema::Node::Local>(); 
 
                 NodeInfo[nodeId].Local = local;
                 if (!rowset.Next())
@@ -177,14 +177,14 @@ public:
 
 class TTxMonEvent_MemStateTablets : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     THolder<NMon::TEvRemoteHttpInfo> Event;
     bool BadOnly = false;
     bool WaitingOnly = false;
     ui64 MaxCount = 0;
     TString Sort;
 
-    TTxMonEvent_MemStateTablets(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+    TTxMonEvent_MemStateTablets(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive) 
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())
@@ -303,12 +303,12 @@ public:
 
 class TTxMonEvent_MemStateNodes : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     THolder<NMon::TEvRemoteHttpInfo> Event;
     bool BadOnly = false;
     ui64 MaxCount = 0;
 
-    TTxMonEvent_MemStateNodes(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+    TTxMonEvent_MemStateNodes(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive) 
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())
@@ -440,10 +440,10 @@ TString GetDurationString(TDuration duration) {
 
 class TTxMonEvent_Resources : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
 
-    TTxMonEvent_Resources(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+    TTxMonEvent_Resources(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive) 
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())
@@ -590,11 +590,11 @@ public:
 
 class TTxMonEvent_Settings : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     bool ChangeRequest = false;
 
-    TTxMonEvent_Settings(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+    TTxMonEvent_Settings(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive) 
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())
@@ -1032,11 +1032,11 @@ public:
 
 class TTxMonEvent_Landing : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     TCgiParameters Cgi;
 
-    TTxMonEvent_Landing(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+    TTxMonEvent_Landing(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive) 
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())
@@ -1718,11 +1718,11 @@ public:
 
 class TTxMonEvent_LandingData : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     TCgiParameters Cgi;
 
-    TTxMonEvent_LandingData(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+    TTxMonEvent_LandingData(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive) 
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())
@@ -1861,12 +1861,12 @@ public:
 
 class TTxMonEvent_SetDown : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     const TNodeId NodeId;
     const bool Down;
     TString Response;
 
-    TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive)
+    TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive) 
         : TBase(hive)
         , Source(source)
         , NodeId(nodeId)
@@ -1896,12 +1896,12 @@ public:
 
 class TTxMonEvent_SetFreeze : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     const TNodeId NodeId;
     const bool Freeze;
     TString Response;
 
-    TTxMonEvent_SetFreeze(const TActorId& source, TNodeId nodeId, bool freeze, TSelf* hive)
+    TTxMonEvent_SetFreeze(const TActorId& source, TNodeId nodeId, bool freeze, TSelf* hive) 
         : TBase(hive)
         , Source(source)
         , NodeId(nodeId)
@@ -1931,11 +1931,11 @@ public:
 
 class TTxMonEvent_KickNode : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     const TNodeId NodeId;
     TString Response;
 
-    TTxMonEvent_KickNode(const TActorId& source, TNodeId nodeId, TSelf* hive)
+    TTxMonEvent_KickNode(const TActorId& source, TNodeId nodeId, TSelf* hive) 
         : TBase(hive)
         , Source(source)
         , NodeId(nodeId)
@@ -2045,7 +2045,7 @@ public:
 
 class TTxMonEvent_Rebalance : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     int MaxMovements = 1000;
 
     TTxMonEvent_Rebalance(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
@@ -2069,7 +2069,7 @@ public:
 
 class TReassignTabletWaitActor : public TActor<TReassignTabletWaitActor>, public ISubActor {
 public:
-    TActorId Source;
+    TActorId Source; 
     ui32 TabletsTotal = std::numeric_limits<ui32>::max();
     ui32 TabletsDone = 0;
     THive* Hive;
@@ -2078,7 +2078,7 @@ public:
         return NKikimrServices::TActivity::HIVE_MON_REQUEST;
     }
 
-    TReassignTabletWaitActor(const TActorId& source, THive* hive)
+    TReassignTabletWaitActor(const TActorId& source, THive* hive) 
         : TActor(&TReassignTabletWaitActor::StateWork)
         , Source(source)
         , Hive(hive)
@@ -2112,7 +2112,7 @@ public:
 class TTxMonEvent_ReassignTablet : public TTransactionBase<THive> {
 public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
-    const TActorId Source;
+    const TActorId Source; 
     TTabletId TabletId = 0;
     TTabletTypes::EType TabletType = TTabletTypes::TYPE_INVALID;
     TVector<ui32> TabletChannels;
@@ -2122,7 +2122,7 @@ public:
     TString Error;
     bool Wait = true;
 
-    TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+    TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive) 
         : TBase(hive)
         , Event(ev->Release())
         , Source(source)
@@ -2186,7 +2186,7 @@ public:
             tablets.resize(tablets.size() * TabletPercent / 100);
         }
         TVector<THolder<TEvHive::TEvReassignTablet>> operations;
-        TActorId waitActorId;
+        TActorId waitActorId; 
         TReassignTabletWaitActor* waitActor = nullptr;
         if (Wait) {
             waitActor = new TReassignTabletWaitActor(Source, Self);
@@ -2551,7 +2551,7 @@ public:
 class TTxMonEvent_FindTablet : public TTransactionBase<THive> {
 public:
     THolder<NMon::TEvRemoteHttpInfo> Event;
-    const TActorId Source;
+    const TActorId Source; 
     TTabletId TabletId = 0;
     TTabletTypes::EType TabletType = TTabletTypes::TYPE_INVALID;
     ui32 ChannelFrom = 0;
@@ -2562,7 +2562,7 @@ public:
     int TabletPercent = 100;
     NJson::TJsonValue Result;
 
-    TTxMonEvent_FindTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+    TTxMonEvent_FindTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive) 
         : TBase(hive)
         , Event(ev->Release())
         , Source(source)
@@ -2870,7 +2870,7 @@ public:
 class TTxMonEvent_ResetTablet : public TTransactionBase<THive> {
     class TResetter : public TActorBootstrapped<TResetter> {
         TIntrusivePtr<TTabletStorageInfo> Info;
-        const TActorId Source;
+        const TActorId Source; 
         const ui32 KnownGeneration;
 
     public:
@@ -2878,7 +2878,7 @@ class TTxMonEvent_ResetTablet : public TTransactionBase<THive> {
             return NKikimrServices::TActivity::HIVE_MON_REQUEST;
         }
 
-        TResetter(TIntrusivePtr<TTabletStorageInfo> info, TActorId source, ui32 knownGeneration)
+        TResetter(TIntrusivePtr<TTabletStorageInfo> info, TActorId source, ui32 knownGeneration) 
             : Info(std::move(info))
             , Source(source)
             , KnownGeneration(knownGeneration)
@@ -2900,13 +2900,13 @@ class TTxMonEvent_ResetTablet : public TTransactionBase<THive> {
     };
 
 public:
-    const TActorId Source;
+    const TActorId Source; 
     TTabletId TabletId = 0;
     TString Error;
     TIntrusivePtr<TTabletStorageInfo> Info;
     ui32 KnownGeneration = 0;
 
-    TTxMonEvent_ResetTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+    TTxMonEvent_ResetTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive) 
         : TBase(hive)
         , Source(source)
     {
@@ -2942,15 +2942,15 @@ public:
 
 class TUpdateResourcesActor : public TActorBootstrapped<TUpdateResourcesActor> {
 public:
-    TActorId Source;
-    TActorId Hive;
+    TActorId Source; 
+    TActorId Hive; 
     NKikimrHive::TTabletMetrics Metrics;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::HIVE_MON_REQUEST;
     }
 
-    TUpdateResourcesActor(const TActorId& source, const TActorId& hive, const NKikimrHive::TTabletMetrics& metrics)
+    TUpdateResourcesActor(const TActorId& source, const TActorId& hive, const NKikimrHive::TTabletMetrics& metrics) 
         : Source(source)
         , Hive(hive)
         , Metrics(metrics)
@@ -2985,7 +2985,7 @@ public:
 
 class TCreateTabletActor : public TActorBootstrapped<TCreateTabletActor> {
 public:
-    TActorId Source;
+    TActorId Source; 
     TAutoPtr<TEvHive::TEvCreateTablet> Event;
     THive* Hive;
 
@@ -3043,11 +3043,11 @@ private:
     ui64 FAKE_TXID = -1;
 
 public:
-    TActorId Source;
+    TActorId Source; 
     TAutoPtr<TEvHive::TEvDeleteTablet> Event;
     THive* Hive;
 
-    TDeleteTabletActor(const TActorId& source, ui64 owner, ui64 ownerIdx, THive* hive)
+    TDeleteTabletActor(const TActorId& source, ui64 owner, ui64 ownerIdx, THive* hive) 
         : Source(source)
         , Event(new TEvHive::TEvDeleteTablet())
         , Hive(hive)
@@ -3061,7 +3061,7 @@ public:
         return NKikimrServices::TActivity::HIVE_MON_REQUEST;
     }
 
-    TDeleteTabletActor(const TActorId& source, ui64 tabletId, THive* hive)
+    TDeleteTabletActor(const TActorId& source, ui64 tabletId, THive* hive) 
         : Source(source)
         , Event(new TEvHive::TEvDeleteTablet())
         , Hive(hive)
@@ -3110,10 +3110,10 @@ public:
 
 class TTxMonEvent_Groups : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
 
-    TTxMonEvent_Groups(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+    TTxMonEvent_Groups(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive) 
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())
@@ -3192,9 +3192,9 @@ public:
 
 class TTxMonEvent_NotReady : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
 
-    TTxMonEvent_NotReady(const TActorId& source, TSelf* hive)
+    TTxMonEvent_NotReady(const TActorId& source, TSelf* hive) 
         : TBase(hive)
         , Source(source)
     {}
@@ -3211,11 +3211,11 @@ public:
 
 class TTxMonEvent_Storage : public TTransactionBase<THive> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     THolder<NMon::TEvRemoteHttpInfo> Event;
     bool Kinds = true;
 
-    TTxMonEvent_Storage(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+    TTxMonEvent_Storage(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive) 
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())

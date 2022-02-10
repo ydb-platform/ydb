@@ -10,18 +10,18 @@ namespace NGRpcService {
 TGRpcYdbClickhouseInternalService::TGRpcYdbClickhouseInternalService(NActors::TActorSystem *system,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
     TIntrusivePtr<TInFlightLimiterRegistry> inFlightLimiterRegistry,
-    NActors::TActorId id)
+    NActors::TActorId id) 
     : ActorSystem_(system)
     , Counters_(counters)
     , LimiterRegistry_(inFlightLimiterRegistry)
     , GRpcRequestProxyId_(id) {}
 
-void TGRpcYdbClickhouseInternalService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcYdbClickhouseInternalService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) { 
     CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
+    SetupIncomingRequests(std::move(logger)); 
 }
 
-void TGRpcYdbClickhouseInternalService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcYdbClickhouseInternalService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
     Limiter_ = limiter;
 }
 
@@ -34,7 +34,7 @@ void TGRpcYdbClickhouseInternalService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
     auto getLimiter = CreateLimiterCb(LimiterRegistry_);
 
@@ -43,11 +43,11 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NGrpc::TLoggerPtr 
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::ClickhouseInternal::IN, Ydb::ClickhouseInternal::OUT, TGRpcYdbClickhouseInternalService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("clickhouse_internal", #NAME), getLimiter("ClickhouseInternal", #NAME, DEFAULT_MAX_IN_FLIGHT))->Run();
+        #NAME, logger, getCounterBlock("clickhouse_internal", #NAME), getLimiter("ClickhouseInternal", #NAME, DEFAULT_MAX_IN_FLIGHT))->Run(); 
 
     ADD_REQUEST(Scan, ScanRequest, ScanResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvReadColumnsRequest(ctx));

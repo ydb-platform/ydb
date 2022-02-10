@@ -17,21 +17,21 @@ namespace NKikimr {
     namespace {
 
         struct TPeerState {
-            TActorId ProxyId;
+            TActorId ProxyId; 
             // We keep NSyncer::TPeerSyncState to facilitate standard Full Sync Job,
             // that we use in Syncer
             NSyncer::TPeerSyncState PeerSyncState;
 
             void FullSyncDone() {
-                ProxyId = TActorId();
+                ProxyId = TActorId(); 
             }
 
-            void SetProxyId(const TActorId &aid) {
+            void SetProxyId(const TActorId &aid) { 
                 ProxyId = aid;
             }
 
             bool IsFinished() const {
-                return ProxyId == TActorId();
+                return ProxyId == TActorId(); 
             }
         };
 
@@ -100,8 +100,8 @@ namespace NKikimr {
         TIntrusivePtr<TSyncerContext> SyncerCtx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TSyncFullRecoverState State;
-        const TActorId CommitterId;
-        const TActorId NotifyId;
+        const TActorId CommitterId; 
+        const TActorId NotifyId; 
         const TVDiskEternalGuid Guid;
         ui64 DbBirthLsn = 0;
         std::shared_ptr<TSjCtx> JobCtx;
@@ -269,8 +269,8 @@ namespace NKikimr {
 
         TSyncerRecoverLostDataActor(const TIntrusivePtr<TSyncerContext> &sc,
                                     const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-                                    const TActorId &committerId,
-                                    const TActorId &notifyId,
+                                    const TActorId &committerId, 
+                                    const TActorId &notifyId, 
                                     TVDiskEternalGuid guid)
             : TActorBootstrapped<TSyncerRecoverLostDataActor>()
             , SyncerCtx(sc)
@@ -289,8 +289,8 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateSyncerRecoverLostDataActor(const TIntrusivePtr<TSyncerContext> &sc,
                                              const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-                                             const TActorId &committerId,
-                                             const TActorId &notifyId,
+                                             const TActorId &committerId, 
+                                             const TActorId &notifyId, 
                                              TVDiskEternalGuid guid) {
         return new TSyncerRecoverLostDataActor(sc, info, committerId, notifyId, guid);
     }

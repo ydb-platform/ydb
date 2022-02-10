@@ -79,7 +79,7 @@ namespace NKikimr {
             TAtomic EarlyDiscardCounter;
             TVDiskID SelfVDiskID;
             TVDiskID TargetVDiskID;
-            TActorId ProxyID;
+            TActorId ProxyID; 
             ui32 MaxBytes;
             bool Initialized;
 

@@ -45,7 +45,7 @@ protected:
         Runtime->SetObserverFunc([this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
             return EventsObserver(event);
         });
-        Runtime->SetRegistrationObserverFunc([this](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+        Runtime->SetRegistrationObserverFunc([this](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) { 
             TTestActorRuntime::DefaultRegistrationObserver(runtime, parentId, actorId);
             return RegistrationObserver(parentId, actorId);
         });
@@ -72,8 +72,8 @@ protected:
         MockPQMetaCache = nullptr;
         Actor = nullptr;
         TestMainActorHasAnswered = false;
-        EdgeActorId = TActorId();
-        TestMainActorId = TActorId();
+        EdgeActorId = TActorId(); 
+        TestMainActorId = TActorId(); 
         EdgeEventHandle.Reset();
         LoadedFakeSchemeShard = false;
         TestActors.clear();
@@ -121,7 +121,7 @@ protected:
         return request;
     }
 
-    TActorId StartBalancer(ui64 balancerTabletId) {
+    TActorId StartBalancer(ui64 balancerTabletId) { 
         TActorId id = CreateTestBootstrapper(*Runtime,
                                        CreateTestTabletInfo(balancerTabletId, TTabletTypes::PERSQUEUE_READ_BALANCER, TErasureType::ErasureNone),
                                        &CreatePersQueueReadBalancer);
@@ -132,9 +132,9 @@ protected:
         return id;
     }
 
-    TActorId PrepareBalancer(const TString& topic, ui64 balancerTabletId, const TVector<std::pair<ui32, ui64>>& partitionsToTablets, const ui64 schemeShardId = 123) {
+    TActorId PrepareBalancer(const TString& topic, ui64 balancerTabletId, const TVector<std::pair<ui32, ui64>>& partitionsToTablets, const ui64 schemeShardId = 123) { 
         EnsureHasFakeSchemeShard();
-        TActorId id = StartBalancer(balancerTabletId);
+        TActorId id = StartBalancer(balancerTabletId); 
 
         THolder<TEvPersQueue::TEvUpdateBalancerConfig> request = MakeUpdateBalancerConfigRequest(topic, partitionsToTablets, schemeShardId);
 
@@ -179,7 +179,7 @@ protected:
         return request;
     }
 
-    TActorId StartPQTablet(ui64 tabletId) {
+    TActorId StartPQTablet(ui64 tabletId) { 
         TActorId id = CreateTestBootstrapper(*Runtime,
                                        CreateTestTabletInfo(tabletId, TTabletTypes::PERSQUEUE, TErasureType::ErasureNone),
                                        &CreatePersQueue);
@@ -190,9 +190,9 @@ protected:
         return id;
     }
 
-    TActorId PreparePQTablet(const TString& topic, ui64 tabletId, const TVector<size_t>& partitions) {
+    TActorId PreparePQTablet(const TString& topic, ui64 tabletId, const TVector<size_t>& partitions) { 
         EnsureHasFakeSchemeShard();
-        TActorId id = StartPQTablet(tabletId);
+        TActorId id = StartPQTablet(tabletId); 
 
         TAutoPtr<IEventHandle> handle;
         {
@@ -364,7 +364,7 @@ protected:
         return TTestActorRuntime::EEventAction::PROCESS;
     }
 
-    void RegistrationObserver(const TActorId& parentId, const TActorId& actorId) {
+    void RegistrationObserver(const TActorId& parentId, const TActorId& actorId) { 
         if (IsIn(TestActors, parentId)) {
             IActor* child = Runtime->FindActor(actorId);
             UNIT_ASSERT(child);
@@ -375,13 +375,13 @@ protected:
     // TODO: move this code to test actor runtime
     void AssertTestActorsDestroyed() {
         auto events = Runtime->CaptureEvents();
-        THashSet<TActorId> destroyedActors;
+        THashSet<TActorId> destroyedActors; 
         for (const auto& event : events) {
             if (event->Type == TEvents::TSystem::PoisonPill) {
                 destroyedActors.insert(event->Recipient);
             }
         }
-        for (const TActorId& actorId : TestActors) {
+        for (const TActorId& actorId : TestActors) { 
             IActor* actor = Runtime->FindActor(actorId);
             if (actor != nullptr) {
                 const bool isPipe = actor->ActivityType == NKikimrServices::TActivity::TABLET_PIPE_CLIENT;
@@ -418,14 +418,14 @@ protected:
     }
 
 protected:
-    TActorId EdgeActorId;
+    TActorId EdgeActorId; 
     IActor* Actor = nullptr;
-    TActorId TestMainActorId;
+    TActorId TestMainActorId; 
     bool TestMainActorHasAnswered = false;
     TMockPQMetaCache* MockPQMetaCache = nullptr;
     TAutoPtr<IEventHandle> EdgeEventHandle;
     bool LoadedFakeSchemeShard = false;
-    THashSet<TActorId> TestActors; // Actor and its children
+    THashSet<TActorId> TestActors; // Actor and its children 
     THashSet<ui64> PausedEventTypes;
     std::list<TAutoPtr<IEventHandle>> PausedEvents;
     THolder<TTestActorRuntime> Runtime;

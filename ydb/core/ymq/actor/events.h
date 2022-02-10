@@ -18,7 +18,7 @@
 
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
@@ -198,7 +198,7 @@ struct TSqsEvents {
 
         // Common info
         TString RootUrl;
-        TActorId SchemeCache;
+        TActorId SchemeCache; 
         TActorId QueueLeader;
     };
 
@@ -207,7 +207,7 @@ struct TSqsEvents {
 
     struct TEvExecute : public NActors::TEventLocal<TEvExecute, EvExecute> {
         /// Query sender
-        TActorId Sender;
+        TActorId Sender; 
         // User request id this query belongs to
         TString RequestId;
         /// Queue path in the catalog
@@ -229,7 +229,7 @@ struct TSqsEvents {
 
         TEvExecute(const TEvExecute& other) = default;
 
-        TEvExecute(const TActorId& sender, TString requestId, const TQueuePath& path, const EQueryId idx, const ui64 shard = 0)
+        TEvExecute(const TActorId& sender, TString requestId, const TQueuePath& path, const EQueryId idx, const ui64 shard = 0) 
             : Sender(sender)
             , RequestId(std::move(requestId))
             , QueuePath(path)

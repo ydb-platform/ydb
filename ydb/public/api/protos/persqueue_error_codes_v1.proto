@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package Ydb.PersQueue.ErrorCode;
-option java_package = "com.yandex.ydb.persqueue.errorcode";
+option java_package = "com.yandex.ydb.persqueue.errorcode"; 
 
 //500000..500999
 enum ErrorCode {

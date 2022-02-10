@@ -8,18 +8,18 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-TGRpcYdbSchemeService::TGRpcYdbSchemeService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
+TGRpcYdbSchemeService::TGRpcYdbSchemeService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id) 
     : ActorSystem_(system)
     , Counters_(counters)
     , GRpcRequestProxyId_(id)
 { }
 
-void TGRpcYdbSchemeService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcYdbSchemeService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) { 
     CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
+    SetupIncomingRequests(std::move(logger)); 
 }
 
-void TGRpcYdbSchemeService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcYdbSchemeService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
     Limiter_ = limiter;
 }
 
@@ -32,7 +32,7 @@ void TGRpcYdbSchemeService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcYdbSchemeService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbSchemeService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef ADD_REQUEST

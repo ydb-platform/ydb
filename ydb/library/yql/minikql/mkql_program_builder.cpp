@@ -1,13 +1,13 @@
 #include "mkql_program_builder.h"
-#include "mkql_opt_literal.h"
+#include "mkql_opt_literal.h" 
 #include "mkql_node_visitor.h"
-#include "mkql_node_cast.h"
+#include "mkql_node_cast.h" 
 #include "mkql_runtime_version.h"
 #include "ydb/library/yql/minikql/mkql_node_printer.h"
 #include "ydb/library/yql/minikql/mkql_function_registry.h"
 #include "ydb/library/yql/minikql/mkql_utils.h"
 #include "ydb/library/yql/minikql/mkql_type_builder.h"
-
+ 
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <array>
@@ -17,46 +17,46 @@ using namespace std::string_view_literals;
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace {
-
-struct TDataFunctionFlags {
-    enum {
-        HasBooleanResult = 0x01,
-        RequiresBooleanArgs = 0x02,
-        HasOptionalResult = 0x04,
-        AllowOptionalArgs = 0x08,
-        HasUi32Result = 0x10,
-        RequiresCompare = 0x20,
-        HasStringResult = 0x40,
-        RequiresStringArgs = 0x80,
-        RequiresHash = 0x100,
+namespace { 
+ 
+struct TDataFunctionFlags { 
+    enum { 
+        HasBooleanResult = 0x01, 
+        RequiresBooleanArgs = 0x02, 
+        HasOptionalResult = 0x04, 
+        AllowOptionalArgs = 0x08, 
+        HasUi32Result = 0x10, 
+        RequiresCompare = 0x20, 
+        HasStringResult = 0x40, 
+        RequiresStringArgs = 0x80, 
+        RequiresHash = 0x100, 
         RequiresEquals = 0x200,
         AllowNull = 0x400,
         CommonOptionalResult = 0x800,
         SupportsTuple = 0x1000,
         SameOptionalArgs = 0x2000,
-        Default = 0x00
-    };
-};
-
-#define MKQL_BAD_TYPE_VISIT(NodeType, ScriptName) \
-    void Visit(NodeType& node) override { \
+        Default = 0x00 
+    }; 
+}; 
+ 
+#define MKQL_BAD_TYPE_VISIT(NodeType, ScriptName) \ 
+    void Visit(NodeType& node) override { \ 
         Y_UNUSED(node); \
-        MKQL_ENSURE(false, "Can't convert " #NodeType " to " ScriptName " object"); \
-    }
+        MKQL_ENSURE(false, "Can't convert " #NodeType " to " ScriptName " object"); \ 
+    } 
 
 class TPythonTypeChecker : public TExploringNodeVisitor {
     using TExploringNodeVisitor::Visit;
     MKQL_BAD_TYPE_VISIT(TAnyType, "Python");
 };
-
+ 
 class TLuaTypeChecker : public TExploringNodeVisitor {
     using TExploringNodeVisitor::Visit;
     MKQL_BAD_TYPE_VISIT(TVoidType, "Lua");
     MKQL_BAD_TYPE_VISIT(TAnyType, "Lua");
     MKQL_BAD_TYPE_VISIT(TVariantType, "Lua");
 };
-
+ 
 class TJavascriptTypeChecker : public TExploringNodeVisitor {
     using TExploringNodeVisitor::Visit;
     MKQL_BAD_TYPE_VISIT(TAnyType, "Javascript");
@@ -85,9 +85,9 @@ void EnsureScriptSpecificTypes(
             return TJavascriptTypeChecker().Walk(funcType, env);
     default:
         MKQL_ENSURE(false, "Unknown script type " << static_cast<ui32>(scriptType));
-    }
-}
-
+    } 
+} 
+ 
 ui32 GetNumericSchemeTypeLevel(NUdf::TDataTypeId typeId) {
     switch (typeId) {
     case NUdf::TDataType<ui8>::Id:
@@ -226,32 +226,32 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
 }
 
 } // namespace
-
+ 
 std::string_view ScriptTypeAsStr(EScriptType type) {
-    switch (type) {
+    switch (type) { 
 #define MKQL_SCRIPT_TYPE_CASE(name, value, ...) \
     case EScriptType::name: return std::string_view(#name);
 
-        MKQL_SCRIPT_TYPES(MKQL_SCRIPT_TYPE_CASE)
-
-#undef MKQL_SCRIPT_TYPE_CASE
-    } // switch
-
+        MKQL_SCRIPT_TYPES(MKQL_SCRIPT_TYPE_CASE) 
+ 
+#undef MKQL_SCRIPT_TYPE_CASE 
+    } // switch 
+ 
     return std::string_view("Unknown");
-}
-
+} 
+ 
 EScriptType ScriptTypeFromStr(std::string_view str) {
     TString lowerStr = TString(str);
     lowerStr.to_lower();
 #define MKQL_SCRIPT_TYPE_FROM_STR(name, value, lowerName) \
     if (lowerStr == #lowerName) return EScriptType::name;
-
-    MKQL_SCRIPT_TYPES(MKQL_SCRIPT_TYPE_FROM_STR)
-#undef MKQL_SCRIPT_TYPE_FROM_STR
-
-    return EScriptType::Unknown;
-}
-
+ 
+    MKQL_SCRIPT_TYPES(MKQL_SCRIPT_TYPE_FROM_STR) 
+#undef MKQL_SCRIPT_TYPE_FROM_STR 
+ 
+    return EScriptType::Unknown; 
+} 
+ 
 bool IsCustomPython(EScriptType type) {
     return type == EScriptType::CustomPython ||
         type == EScriptType::CustomPython2 ||
@@ -284,8 +284,8 @@ const TTypeEnvironment& TProgramBuilder::GetTypeEnvironment() const {
     return Env;
 }
 
-const IFunctionRegistry& TProgramBuilder::GetFunctionRegistry() const {
-    return FunctionRegistry;
+const IFunctionRegistry& TProgramBuilder::GetFunctionRegistry() const { 
+    return FunctionRegistry; 
 }
 
 TType* TProgramBuilder::ChooseCommonType(TType* type1, TType* type2) {
@@ -364,7 +364,7 @@ TRuntimeNode TProgramBuilder::Element(TRuntimeNode structObj, const std::string_
 
 TRuntimeNode TProgramBuilder::AddMember(TRuntimeNode structObj, const std::string_view& memberName, TRuntimeNode memberValue) {
     auto oldType = structObj.GetStaticType();
-    MKQL_ENSURE(oldType->IsStruct(), "Expected struct");
+    MKQL_ENSURE(oldType->IsStruct(), "Expected struct"); 
 
     const auto& oldTypeDetailed = static_cast<const TStructType&>(*oldType);
     TStructTypeBuilder newTypeBuilder(Env);
@@ -503,7 +503,7 @@ TRuntimeNode TProgramBuilder::Fold(TRuntimeNode list, TRuntimeNode state, const 
     const auto stateNodeArg = Arg(state.GetStaticType());
     const auto itemArg = Arg(itemType);
     const auto newState = handler(itemArg, stateNodeArg);
-    MKQL_ENSURE(newState.GetStaticType()->IsSameType(*state.GetStaticType()), "State type is changed by the handler");
+    MKQL_ENSURE(newState.GetStaticType()->IsSameType(*state.GetStaticType()), "State type is changed by the handler"); 
 
     TCallableBuilder callableBuilder(Env, __func__, state.GetStaticType());
     callableBuilder.Add(list);
@@ -550,13 +550,13 @@ TRuntimeNode TProgramBuilder::Reduce(TRuntimeNode list, TRuntimeNode state1,
     const auto state3NodeArg = Arg(state3.GetStaticType());
     const auto itemArg = Arg(itemType);
     const auto newState1 = handler1(itemArg, state1NodeArg);
-    MKQL_ENSURE(newState1.GetStaticType()->IsSameType(*state1.GetStaticType()), "State 1 type is changed by the handler");
+    MKQL_ENSURE(newState1.GetStaticType()->IsSameType(*state1.GetStaticType()), "State 1 type is changed by the handler"); 
 
     const auto newState2 = handler2(state1NodeArg);
     TRuntimeNode itemState2Arg = Arg(newState2.GetStaticType());
 
     const auto newState3 = handler3(itemState2Arg, state3NodeArg);
-    MKQL_ENSURE(newState3.GetStaticType()->IsSameType(*state3.GetStaticType()), "State 3 type is changed by the handler");
+    MKQL_ENSURE(newState3.GetStaticType()->IsSameType(*state3.GetStaticType()), "State 3 type is changed by the handler"); 
 
     TCallableBuilder callableBuilder(Env, __func__, newState3.GetStaticType());
     callableBuilder.Add(list);
@@ -858,7 +858,7 @@ TRuntimeNode TProgramBuilder::Chain1Map(TRuntimeNode list, const TUnarySplitLamb
 
 TRuntimeNode TProgramBuilder::ToList(TRuntimeNode optional) {
     const auto optionalType = optional.GetStaticType();
-    MKQL_ENSURE(optionalType->IsOptional(), "Expected optional");
+    MKQL_ENSURE(optionalType->IsOptional(), "Expected optional"); 
 
     const auto& optionalDetailedType = static_cast<const TOptionalType&>(*optionalType);
     const auto itemType = optionalDetailedType.GetItemType();
@@ -1792,7 +1792,7 @@ TRuntimeNode TProgramBuilder::Append(TRuntimeNode list, TRuntimeNode item) {
 
     const auto& listDetailedType = static_cast<const TListType&>(*listType);
     auto itemType = item.GetStaticType();
-    MKQL_ENSURE(itemType->IsSameType(*listDetailedType.GetItemType()), "Types of list and item are different");
+    MKQL_ENSURE(itemType->IsSameType(*listDetailedType.GetItemType()), "Types of list and item are different"); 
 
     TCallableBuilder callableBuilder(Env, __func__, listType);
     callableBuilder.Add(list);
@@ -1806,7 +1806,7 @@ TRuntimeNode TProgramBuilder::Prepend(TRuntimeNode item, TRuntimeNode list) {
 
     const auto& listDetailedType = static_cast<const TListType&>(*listType);
     auto itemType = item.GetStaticType();
-    MKQL_ENSURE(itemType->IsSameType(*listDetailedType.GetItemType()), "Types of list and item are different");
+    MKQL_ENSURE(itemType->IsSameType(*listDetailedType.GetItemType()), "Types of list and item are different"); 
 
     TCallableBuilder callableBuilder(Env, __func__, listType);
     callableBuilder.Add(item);
@@ -1920,7 +1920,7 @@ TRuntimeNode TProgramBuilder::NewEmptyListOfVoid() {
 }
 
 TRuntimeNode TProgramBuilder::NewEmptyOptional(TType* optionalType) {
-    MKQL_ENSURE(optionalType->IsOptional(), "Expected optional type");
+    MKQL_ENSURE(optionalType->IsOptional(), "Expected optional type"); 
 
     return TRuntimeNode(TOptionalLiteral::Create(static_cast<TOptionalType*>(optionalType), Env), true);
 }
@@ -1938,7 +1938,7 @@ TType* TProgramBuilder::NewEmptyStructType() {
 }
 
 TType* TProgramBuilder::NewStructType(TType* baseStructType, const std::string_view& memberName, TType* memberType) {
-    MKQL_ENSURE(baseStructType->IsStruct(), "Expected struct type");
+    MKQL_ENSURE(baseStructType->IsStruct(), "Expected struct type"); 
 
     const auto& detailedBaseStructType = static_cast<const TStructType&>(*baseStructType);
     TStructTypeBuilder builder(Env);
@@ -2051,7 +2051,7 @@ TType* TProgramBuilder::NewDictType(TType* keyType, TType* payloadType, bool mul
 }
 
 TRuntimeNode TProgramBuilder::NewDict(TType* dictType, const TArrayRef<const std::pair<TRuntimeNode, TRuntimeNode>>& items) {
-    MKQL_ENSURE(dictType->IsDict(), "Expected dict type");
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict type"); 
 
     return TRuntimeNode(TDictLiteral::Create(items.size(), items.data(), static_cast<TDictType*>(dictType), Env), true);
 }
@@ -2120,7 +2120,7 @@ TRuntimeNode TProgramBuilder::Coalesce(TRuntimeNode data, TRuntimeNode defaultDa
     if (!dataType->IsSameType(*defaultData.GetStaticType())) {
         bool isOptionalDefault;
         const auto defaultDataType = UnpackOptional(defaultData, isOptionalDefault);
-        MKQL_ENSURE(dataType->IsSameType(*defaultDataType), "Mismatch operand types");
+        MKQL_ENSURE(dataType->IsSameType(*defaultDataType), "Mismatch operand types"); 
     }
 
     TCallableBuilder callableBuilder(Env, __func__, defaultData.GetStaticType());
@@ -3037,15 +3037,15 @@ TRuntimeNode TProgramBuilder::UnaryDataFunction(TRuntimeNode data, const std::st
     bool isOptional;
     auto type = UnpackOptionalData(data, isOptional);
     if (!(flags & TDataFunctionFlags::AllowOptionalArgs)) {
-        MKQL_ENSURE(!isOptional, "Optional data is not allowed");
+        MKQL_ENSURE(!isOptional, "Optional data is not allowed"); 
     }
 
     auto schemeType = type->GetSchemeType();
-    if (flags & TDataFunctionFlags::RequiresBooleanArgs) {
+    if (flags & TDataFunctionFlags::RequiresBooleanArgs) { 
         MKQL_ENSURE(schemeType == NUdf::TDataType<bool>::Id, "Boolean data is required");
-    } else if (flags & TDataFunctionFlags::RequiresStringArgs) {
+    } else if (flags & TDataFunctionFlags::RequiresStringArgs) { 
         MKQL_ENSURE(schemeType == NUdf::TDataType<char*>::Id, "String data is required");
-    }
+    } 
 
     if (!schemeType) {
         MKQL_ENSURE((flags & TDataFunctionFlags::AllowNull) != 0, "Null is not allowed");
@@ -3075,7 +3075,7 @@ TRuntimeNode TProgramBuilder::UnaryDataFunction(TRuntimeNode data, const std::st
 
 TRuntimeNode TProgramBuilder::ToDict(TRuntimeNode list, bool multi, const TUnaryLambda& keySelector,
     const TUnaryLambda& payloadSelector, std::string_view callableName, bool isCompact, ui64 itemsCountHint)
-{
+{ 
     bool isOptional;
     const auto type = UnpackOptional(list, isOptional);
     MKQL_ENSURE(type->IsList(), "Expected list.");
@@ -3695,26 +3695,26 @@ TRuntimeNode TProgramBuilder::Invoke(const std::string_view& funcName, TType* re
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::Udf(
+TRuntimeNode TProgramBuilder::Udf( 
     const std::string_view& funcName,
     TRuntimeNode runConfig,
     TType* userType,
     const std::string_view& typeConfig
 )
-{
+{ 
     TRuntimeNode userTypeNode = userType ? TRuntimeNode(userType, true) : TRuntimeNode(Env.GetVoid()->GetType(), true);
     const ui32 flags = NUdf::IUdfModule::TFlags::TypesOnly;
-
+ 
     if (!TypeInfoHelper) {
         TypeInfoHelper = new TTypeInfoHelper();
     }
 
-    TFunctionTypeInfo funcInfo;
-    TStatus status = FunctionRegistry.FindFunctionTypeInfo(
+    TFunctionTypeInfo funcInfo; 
+    TStatus status = FunctionRegistry.FindFunctionTypeInfo( 
         Env, TypeInfoHelper, nullptr, funcName, userType, typeConfig, flags, {}, nullptr, &funcInfo);
-    MKQL_ENSURE(status.IsOk(), status.GetError());
-
-    auto runConfigType = funcInfo.RunConfigType;
+    MKQL_ENSURE(status.IsOk(), status.GetError()); 
+ 
+    auto runConfigType = funcInfo.RunConfigType; 
     if (runConfig) {
         bool typesMatch = runConfigType->IsSameType(*runConfig.GetStaticType());
         MKQL_ENSURE(typesMatch, "RunConfig type mismatch");
@@ -3726,19 +3726,19 @@ TRuntimeNode TProgramBuilder::Udf(
             runConfig = NewEmptyOptional(const_cast<TType*>(runConfigType));
         }
     }
-
+ 
     auto funNameNode = NewDataLiteral<NUdf::EDataSlot::String>(funcName);
     auto typeConfigNode = NewDataLiteral<NUdf::EDataSlot::String>(typeConfig);
-
+ 
     TCallableBuilder callableBuilder(Env, __func__, funcInfo.FunctionType);
-    callableBuilder.Add(funNameNode);
+    callableBuilder.Add(funNameNode); 
     callableBuilder.Add(userTypeNode);
-    callableBuilder.Add(typeConfigNode);
+    callableBuilder.Add(typeConfigNode); 
     callableBuilder.Add(runConfig);
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TProgramBuilder::TypedUdf(
     const std::string_view& funcName,
     TType* funcType,
@@ -3765,80 +3765,80 @@ TRuntimeNode TProgramBuilder::TypedUdf(
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::ScriptUdf(
-        EScriptType scriptType,
+TRuntimeNode TProgramBuilder::ScriptUdf( 
+        EScriptType scriptType, 
         const std::string_view& funcName,
-        TType* funcType,
+        TType* funcType, 
         TRuntimeNode script,
         const std::string_view& file,
         ui32 row,
         ui32 column)
-{
+{ 
     MKQL_ENSURE(funcType, "UDF callable type must not be empty");
-    MKQL_ENSURE(funcType->IsCallable(), "type must be callable");
-    EnsureScriptSpecificTypes(scriptType, static_cast<TCallableType*>(funcType), Env);
-
+    MKQL_ENSURE(funcType->IsCallable(), "type must be callable"); 
+    EnsureScriptSpecificTypes(scriptType, static_cast<TCallableType*>(funcType), Env); 
+ 
     auto scriptTypeStr = ScriptTypeAsStr(CanonizeScriptType(scriptType));
-
-    TStringBuilder name;
+ 
+    TStringBuilder name; 
     name.reserve(scriptTypeStr.size() + funcName.size() + 1);
-    name << scriptTypeStr << '.' << funcName;
+    name << scriptTypeStr << '.' << funcName; 
     auto funcNameNode = NewDataLiteral<NUdf::EDataSlot::String>(name);
     TRuntimeNode userTypeNode(funcType, true);
     auto typeConfigNode = NewDataLiteral<NUdf::EDataSlot::String>("");
-
+ 
     TCallableBuilder callableBuilder(Env, __func__, funcType);
-    callableBuilder.Add(funcNameNode);
+    callableBuilder.Add(funcNameNode); 
     callableBuilder.Add(userTypeNode);
-    callableBuilder.Add(typeConfigNode);
-    callableBuilder.Add(script);
+    callableBuilder.Add(typeConfigNode); 
+    callableBuilder.Add(script); 
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
     callableBuilder.Add(NewDataLiteral(row));
     callableBuilder.Add(NewDataLiteral(column));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TProgramBuilder::Apply(TRuntimeNode callableNode, const TArrayRef<const TRuntimeNode>& args,
          const std::string_view& file, ui32 row, ui32 column, ui32 dependentCount) {
     MKQL_ENSURE(dependentCount <= args.size(), "Too many dependent nodes");
     ui32 usedArgs = args.size() - dependentCount;
-    MKQL_ENSURE(!callableNode.IsImmediate() && callableNode.GetNode()->GetType()->IsCallable(),
-            "Expected callable");
-
-    auto callable = static_cast<TCallable*>(callableNode.GetNode());
-    TType* returnType = callable->GetType()->GetReturnType();
-    MKQL_ENSURE(returnType->IsCallable(), "Expected callable as return type");
-
-    auto callableType = static_cast<TCallableType*>(returnType);
+    MKQL_ENSURE(!callableNode.IsImmediate() && callableNode.GetNode()->GetType()->IsCallable(), 
+            "Expected callable"); 
+ 
+    auto callable = static_cast<TCallable*>(callableNode.GetNode()); 
+    TType* returnType = callable->GetType()->GetReturnType(); 
+    MKQL_ENSURE(returnType->IsCallable(), "Expected callable as return type"); 
+ 
+    auto callableType = static_cast<TCallableType*>(returnType); 
     MKQL_ENSURE(usedArgs <= callableType->GetArgumentsCount(), "Too many arguments");
     MKQL_ENSURE(usedArgs >= callableType->GetArgumentsCount() - callableType->GetOptionalArgumentsCount(), "Too few arguments");
-
+ 
     for (ui32 i = 0; i < usedArgs; i++) {
         TType* argType = callableType->GetArgumentType(i);
-        TRuntimeNode arg = args[i];
+        TRuntimeNode arg = args[i]; 
         MKQL_ENSURE(arg.GetStaticType()->IsConvertableTo(*argType),
                     "Argument type mismatch for argument " << i << ": runtime " << argType->GetKindAsStr()
                                    << " with static " << arg.GetStaticType()->GetKindAsStr());
-    }
-
+    } 
+ 
     TCallableBuilder callableBuilder(Env, RuntimeVersion >= 8 ? "Apply2" : "Apply", callableType->GetReturnType());
-    callableBuilder.Add(callableNode);
+    callableBuilder.Add(callableNode); 
     callableBuilder.Add(NewDataLiteral<ui32>(dependentCount));
-
+ 
     if constexpr (RuntimeVersion >= 8) {
         callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
         callableBuilder.Add(NewDataLiteral(row));
         callableBuilder.Add(NewDataLiteral(column));
     }
 
-    for (const auto& arg: args) {
-        callableBuilder.Add(arg);
-    }
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+    for (const auto& arg: args) { 
+        callableBuilder.Add(arg); 
+    } 
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TProgramBuilder::Apply(
         TRuntimeNode callableNode,
         const TArrayRef<const TRuntimeNode>& args,

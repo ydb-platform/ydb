@@ -16,7 +16,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/mon.h>
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 #include <util/generic/queue.h>
 #include <util/generic/hash.h>
@@ -112,8 +112,8 @@ struct TTenantSlotBrokerInfo {
     ui64 TabletId = 0;
     ui64 Generation = 0;
     ui64 SeqNo = 0;
-    TActorId ActorId;
-    TActorId Pipe;
+    TActorId ActorId; 
+    TActorId Pipe; 
 };
 
 class TDomainTenantPool : public TActorBootstrapped<TDomainTenantPool> {
@@ -121,12 +121,12 @@ class TDomainTenantPool : public TActorBootstrapped<TDomainTenantPool> {
 
     TString DomainName;
     TString LogPrefix;
-    TActorId LocalID;
+    TActorId LocalID; 
     TTenantSlotBrokerInfo TenantSlotBroker;
     TTenantPoolConfig::TPtr Config;
     THashMap<TString, TDynamicSlotInfo::TPtr> DynamicSlots;
     THashMap<TString, TTenantInfo::TPtr> Tenants;
-    THashSet<TActorId> StatusSubscribers;
+    THashSet<TActorId> StatusSubscribers; 
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -134,7 +134,7 @@ public:
         return NKikimrServices::TActivity::TENANT_POOL_ACTOR;
     }
 
-    TDomainTenantPool(const TString &domain, TActorId localID, TTenantPoolConfig::TPtr config)
+    TDomainTenantPool(const TString &domain, TActorId localID, TTenantPoolConfig::TPtr config) 
         : DomainName(domain)
         , LocalID(localID)
         , Config(config)
@@ -171,7 +171,7 @@ public:
         TenantSlotBroker.Pipe = ctx.ExecutorThread.RegisterActor(pipe);
 
         auto request = MakeHolder<TEvTenantSlotBroker::TEvRegisterPool>();
-        ActorIdToProto(TenantSlotBroker.Pipe, request->Record.MutableClientId());
+        ActorIdToProto(TenantSlotBroker.Pipe, request->Record.MutableClientId()); 
         request->Record.SetSeqNo(++TenantSlotBroker.SeqNo);
         NTabletPipe::SendData(ctx, TenantSlotBroker.Pipe, request.Release());
 
@@ -788,8 +788,8 @@ public:
 
 class TTenantPool : public TActorBootstrapped<TTenantPool> {
     TTenantPoolConfig::TPtr Config;
-    TActorId LocalID;
-    THashMap<TString, TActorId> DomainTenantPools;
+    TActorId LocalID; 
+    THashMap<TString, TActorId> DomainTenantPools; 
     const TString DomainPrefix;
 
 public:

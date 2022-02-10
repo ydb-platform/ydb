@@ -107,9 +107,9 @@ namespace {
 
                 input->SetState(TExprNode::EState::ExecutionComplete);
                 input->SetResult(ctx.NewWorld(input->Pos()));
-                return TStatus::Ok;
-            }
-
+                return TStatus::Ok; 
+            } 
+ 
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Failed to execute node: " << input->Content()));
             return TStatus::Error;
         }
@@ -129,7 +129,7 @@ namespace {
         };
 
         TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TAllowSettingPolicy& policy)
-            : Types(types)
+            : Types(types) 
             , CoreConfig(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
             , Policy(policy)
         {}
@@ -163,32 +163,32 @@ namespace {
             return true;
         }
 
-        bool MatchCategory(const TExprNode& node) {
+        bool MatchCategory(const TExprNode& node) { 
             return (node.Child(1)->Child(0)->Content() == ConfigProviderName);
-        }
-
+        } 
+ 
         bool CanParse(const TExprNode& node) override {
             if (ConfigProviderFunctions().contains(node.Content()) ||
                 node.Content() == ConfigureName)
-            {
-                return MatchCategory(node);
-            }
-
-            return false;
+            { 
+                return MatchCategory(node); 
+            } 
+ 
+            return false; 
         }
 
         IGraphTransformer& GetConfigurationTransformer() override {
             if (ConfigurationTransformer) {
                 return *ConfigurationTransformer;
-            }
-
+            } 
+ 
             ConfigurationTransformer = CreateFunctorTransformer(
                 [this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                 output = input;
                 if (ctx.Step.IsDone(TExprStep::Configure)) {
                     return IGraphTransformer::TStatus::Ok;
                 }
-
+ 
                 bool hasPendingEvaluations = false;
                 TOptimizeExprSettings settings(nullptr);
                 settings.VisitChanges = true;
@@ -197,12 +197,12 @@ namespace {
                     if (!hasPendingEvaluations && node->Content() == ConfigureName) {
                         if (!EnsureMinArgsCount(*node, 2, ctx)) {
                             return {};
-                        }
-
+                        } 
+ 
                         if (!node->Child(1)->IsCallable("DataSource")) {
                             return node;
-                        }
-
+                        } 
+ 
                         if (node->Child(1)->Child(0)->Content() != ConfigProviderName) {
                             return node;
                         }
@@ -237,11 +237,11 @@ namespace {
                                 res = ctx.ChangeChild(*node, 3, ctx.RenameNode(*node->Child(3), Types.PureResultDataSource));
                             }
                         }
-                    }
-
+                    } 
+ 
                     return res;
                 }, ctx, settings);
-
+ 
                 return status;
             });
 
@@ -327,13 +327,13 @@ namespace {
                     }
                     else if (input->Content() == ConfigureName) {
                         if (!EnsureWorldType(*input->Child(0), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
                         input->SetTypeAnn(input->Child(0)->GetTypeAnn());
-                        return IGraphTransformer::TStatus::Ok;
-                    }
-
+                        return IGraphTransformer::TStatus::Ok; 
+                    } 
+ 
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Config) Unsupported function: " << input->Content()));
                     return IGraphTransformer::TStatus::Error;
                 });
@@ -352,7 +352,7 @@ namespace {
                 YQL_ENSURE(false, "Expected Read!");
             }
 
-            YQL_CLOG(INFO, ProviderConfig) << "RewriteIO";
+            YQL_CLOG(INFO, ProviderConfig) << "RewriteIO"; 
             auto newRead = ctx.RenameNode(*read, newName);
             auto retChildren = node->ChildrenList();
             retChildren[0] = newRead;
@@ -375,8 +375,8 @@ namespace {
         bool CanExecute(const TExprNode& node) override {
             if (ConfigProviderFunctions().contains(node.Content()) ||
                 node.Content() == ConfigureName)
-            {
-                return MatchCategory(node);
+            { 
+                return MatchCategory(node); 
             }
 
             return false;

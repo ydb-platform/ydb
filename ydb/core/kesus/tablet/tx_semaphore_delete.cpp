@@ -4,13 +4,13 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
-    const TActorId Sender;
+    const TActorId Sender; 
     const ui64 Cookie;
     const NKikimrKesus::TEvDeleteSemaphore Record;
 
     TVector<TDelayedEvent> Events;
 
-    TTxSemaphoreDelete(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDeleteSemaphore& record)
+    TTxSemaphoreDelete(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDeleteSemaphore& record) 
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)

@@ -4,12 +4,12 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
-    const TActorId Sender;
+    const TActorId Sender; 
     const ui64 Cookie;
 
     THolder<TEvKesus::TEvDescribeSessionsResult> Reply;
 
-    TTxSessionsDescribe(TSelf* self, const TActorId& sender, ui64 cookie)
+    TTxSessionsDescribe(TSelf* self, const TActorId& sender, ui64 cookie) 
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)
@@ -35,7 +35,7 @@ struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
             sessionInfo->SetTimeoutMillis(session->TimeoutMillis);
             sessionInfo->SetDescription(session->Description);
             if (session->OwnerProxy) {
-                ActorIdToProto(session->OwnerProxy->ActorID, sessionInfo->MutableOwnerProxy());
+                ActorIdToProto(session->OwnerProxy->ActorID, sessionInfo->MutableOwnerProxy()); 
             }
         }
 

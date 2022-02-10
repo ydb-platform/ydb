@@ -9,7 +9,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 #include <util/generic/set.h>
 
@@ -940,7 +940,7 @@ void TNodeBroker::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
     ProcessTx(CreateTxUpdateEpoch(), ctx);
 }
 
-IActor *CreateNodeBroker(const TActorId &tablet,
+IActor *CreateNodeBroker(const TActorId &tablet, 
                          TTabletStorageInfo *info)
 {
     return new TNodeBroker(tablet, info);

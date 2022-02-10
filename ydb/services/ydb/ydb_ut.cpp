@@ -1745,7 +1745,7 @@ partitioning_settings {
             request.mutable_query()->set_yql_text("SELECT 1 as a, 'qwerty' as b, 43.5 as c UNION ALL SELECT 11 as a, 'asdfgg' as b, Null as c;");
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST);
@@ -1784,7 +1784,7 @@ partitioning_settings {
             request.set_session_id(sessionId);
             Ydb::Table::KeepAliveResponse response;
             auto status = Stub_->KeepAlive(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
@@ -1801,7 +1801,7 @@ partitioning_settings {
             request.mutable_tx_control()->set_commit_tx(true);
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
@@ -1925,7 +1925,7 @@ partitioning_settings {
             request.mutable_tx_control()->set_commit_tx(true);
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
@@ -2011,7 +2011,7 @@ tx_meta {
             Ydb::Table::ExecuteDataQueryResponse response;
             grpc::ClientContext context;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             NYql::TIssues issues;
@@ -2045,7 +2045,7 @@ tx_meta {
             Ydb::Table::ExecuteDataQueryResponse response;
             grpc::ClientContext context;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             NYql::TIssues issues;
@@ -2127,7 +2127,7 @@ tx_meta {
             request.set_session_id(sessionId);
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
@@ -2180,7 +2180,7 @@ tx_meta {
             request.set_session_id(sessionId);
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
@@ -2255,7 +2255,7 @@ tx_meta {
 
             Ydb::Table::ExecuteSchemeQueryResponse response;
             auto status = Stub_->ExecuteSchemeQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
 
             UNIT_ASSERT(deferred.ready() == true);
@@ -2276,7 +2276,7 @@ tx_meta {
 
             Ydb::Table::ExplainDataQueryResponse response;
             auto status = Stub_->ExplainDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
 
             UNIT_ASSERT(deferred.ready() == true);
@@ -2301,7 +2301,7 @@ tx_meta {
 
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
 
             UNIT_ASSERT(deferred.ready() == true);
@@ -2332,7 +2332,7 @@ tx_meta {
 
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
 
             UNIT_ASSERT(deferred.ready() == true);
@@ -2392,7 +2392,7 @@ tx_meta {
 
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
 
             UNIT_ASSERT(deferred.ready() == true);
@@ -2441,7 +2441,7 @@ tx_meta {
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
             auto deferred = response.operation();
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             UNIT_ASSERT(deferred.ready() == true);
         }
         {
@@ -2456,7 +2456,7 @@ tx_meta {
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
             auto deferred = response.operation();
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SCHEME_ERROR);
             NYql::TIssues issues;
@@ -2609,14 +2609,14 @@ tx_meta {
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
             auto deferred = response.operation();
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             UNIT_ASSERT(deferred.ready() == true);
 
             Ydb::Table::ExecuteQueryResult result;
             deferred.result().UnpackTo(&result);
             UNIT_ASSERT(result.has_query_meta());
             queryId = result.query_meta().id();
-            UNIT_ASSERT(!queryId.empty());
+            UNIT_ASSERT(!queryId.empty()); 
             UNIT_ASSERT(!result.query_meta().parameters_types().empty());
         }
 
@@ -2715,7 +2715,7 @@ tx_meta {
             request.mutable_tx_control()->set_commit_tx(true);
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
@@ -2730,7 +2730,7 @@ tx_meta {
             request.set_yql_text("SELECT COUNT(*) FROM [Root/TheTable];");
             Ydb::Table::ExplainDataQueryResponse response;
             auto status = Stub_->ExplainDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
@@ -2840,7 +2840,7 @@ tx_meta {
             request.mutable_tx_control()->set_commit_tx(true);
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
@@ -2856,7 +2856,7 @@ tx_meta {
             request.mutable_tx_control()->set_commit_tx(true);
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
@@ -2940,7 +2940,7 @@ tx_meta {
             request.mutable_tx_control()->set_commit_tx(true);
             Ydb::Table::ExecuteDataQueryResponse response;
             auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
@@ -3133,7 +3133,7 @@ tx_meta {
             request.set_session_id(sessionId);
             Ydb::Table::KeepAliveResponse response;
             auto status = Stub_->KeepAlive(&context, request, &response);
-            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT(status.ok()); 
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
             UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
@@ -4737,7 +4737,7 @@ void ExecSchemeYql(std::shared_ptr<grpc::Channel> channel, const TString &sessio
 
     Ydb::Table::ExecuteSchemeQueryResponse response;
     auto status = stub->ExecuteSchemeQuery(&context, request, &response);
-    UNIT_ASSERT(status.ok());
+    UNIT_ASSERT(status.ok()); 
         auto deferred = response.operation();
 
     UNIT_ASSERT(deferred.ready() == true);

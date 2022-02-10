@@ -106,7 +106,7 @@ bool RemoveEmptyMessages(MigrationStreamingReadServerMessage::DataBatch& data) {
 
 class TPartitionActor : public NActors::TActorBootstrapped<TPartitionActor> {
 public:
-     TPartitionActor(const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie, const TString& session, const TPartitionId& partition, ui32 generation, ui32 step,
+     TPartitionActor(const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie, const TString& session, const TPartitionId& partition, ui32 generation, ui32 step, 
                         const ui64 tabletID, const TReadSessionActor::TTopicCounters& counters, const bool commitsDisabled, const TString& clientDC);
     ~TPartitionActor();
 
@@ -171,7 +171,7 @@ private:
 
 
 private:
-    const TActorId ParentId;
+    const TActorId ParentId; 
     const TString ClientId;
     const TString ClientPath;
     const ui64 Cookie;
@@ -203,7 +203,7 @@ private:
     bool StartReading;
     bool AllPrepareInited;
     bool FirstInit;
-    TActorId PipeClient;
+    TActorId PipeClient; 
     ui32 PipeGeneration;
     bool RequestInfly;
     NKikimrClient::TPersQueueRequest CurrentRequest;
@@ -786,7 +786,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
 }
 
 
-void TReadSessionActor::RegisterSession(const TActorId& pipe, const TString& topic, const TVector<ui32>& groups, const TActorContext& ctx)
+void TReadSessionActor::RegisterSession(const TActorId& pipe, const TString& topic, const TVector<ui32>& groups, const TActorContext& ctx) 
 {
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " register session to " << topic);
@@ -795,7 +795,7 @@ void TReadSessionActor::RegisterSession(const TActorId& pipe, const TString& top
     auto& req = request->Record;
     req.SetSession(Session);
     req.SetClientNode(PeerName);
-    ActorIdToProto(pipe, req.MutablePipeClient());
+    ActorIdToProto(pipe, req.MutablePipeClient()); 
     req.SetClientId(ClientId);
 
     for (ui32 i = 0; i < groups.size(); ++i) {
@@ -893,7 +893,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAct
             PQ_LOG_PREFIX << " auth ok, got " << ev->Get()->TopicAndTablets.size() << " topics, init done " << InitDone
     );
 
-    AuthInitActor = TActorId();
+    AuthInitActor = TActorId(); 
 
     if (!InitDone) {
         ui32 initBorder = AppData(ctx)->PQConfig.GetReadInitLatencyBigMs();
@@ -980,7 +980,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     Y_VERIFY(record.GetSession() == Session);
     Y_VERIFY(record.GetClientId() == ClientId);
 
-    TActorId pipe = ActorIdFromProto(record.GetPipeClient());
+    TActorId pipe = ActorIdFromProto(record.GetPipeClient()); 
     auto converterIter = FullPathToConverter.find(NPersQueue::NormalizeFullPath(record.GetPath()));
 
     if (converterIter.IsEnd()) {
@@ -1019,7 +1019,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     IActor* partitionActor = new TPartitionActor(ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
                                                     record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC);
 
-    TActorId actorId = ctx.Register(partitionActor);
+    TActorId actorId = ctx.Register(partitionActor); 
     PartsPerSession.DecFor(Partitions.size(), 1);
     Y_VERIFY(record.GetGeneration() > 0);
     auto pp = Partitions.insert(std::make_pair(assignId, TPartitionActorInfo{actorId, partitionId, ctx}));
@@ -1156,7 +1156,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
     Y_VERIFY(!it.IsEnd());
     auto& converter = it->second.TopicNameConverter;
 
-    TActorId pipe = ActorIdFromProto(record.GetPipeClient());
+    TActorId pipe = ActorIdFromProto(record.GetPipeClient()); 
 
     if (pipe != it->second.PipeClient) { //this is message from old version of pipe
         return;
@@ -1165,7 +1165,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
     for (ui32 c = 0; c < record.GetCount(); ++c) {
         Y_VERIFY(!Partitions.empty());
 
-        TActorId actorId = TActorId{};
+        TActorId actorId = TActorId{}; 
         auto jt = Partitions.begin();
         ui32 i = 0;
         for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
@@ -1223,7 +1223,7 @@ void TReadSessionActor::InformBalancerAboutRelease(const THashMap<ui64, TPartiti
     Y_VERIFY(jt != Topics.end());
 
     req.SetSession(Session);
-    ActorIdToProto(jt->second.PipeClient, req.MutablePipeClient());
+    ActorIdToProto(jt->second.PipeClient, req.MutablePipeClient()); 
     req.SetClientId(ClientId);
     req.SetTopic(converter->GetPrimaryPath());
     req.SetPartition(it->second.Partition.Partition);
@@ -1291,7 +1291,7 @@ void TReadSessionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, cons
     }
 }
 
-bool TReadSessionActor::ActualPartitionActor(const TActorId& part) {
+bool TReadSessionActor::ActualPartitionActor(const TActorId& part) { 
     return ActualPartitionActors.contains(part);
 }
 
@@ -1421,7 +1421,7 @@ i64 TReadSessionActor::TFormedReadResponse::ApplyResponse(MigrationStreamingRead
 }
 
 void TReadSessionActor::Handle(TEvPQProxy::TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
-    TActorId sender = ev->Sender;
+    TActorId sender = ev->Sender; 
     if (!ActualPartitionActor(sender))
         return;
 
@@ -1515,7 +1515,7 @@ void TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
         }
     }
 
-    for (const TActorId& p : formedResponse->PartitionsTookPartInRead) {
+    for (const TActorId& p : formedResponse->PartitionsTookPartInRead) { 
         PartitionToReadResponse.erase(p);
     }
 
@@ -1669,7 +1669,7 @@ void TReadSessionActor::HandleWakeup(const TActorContext& ctx) {
 
 ////////////////// PARTITION ACTOR
 
-TPartitionActor::TPartitionActor(const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie, const TString& session,
+TPartitionActor::TPartitionActor(const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie, const TString& session, 
                                     const TPartitionId& partition, const ui32 generation, const ui32 step, const ui64 tabletID,
                                     const TReadSessionActor::TTopicCounters& counters, bool commitsDisabled, const TString& clientDC)
     : ParentId(parentId)
@@ -1817,7 +1817,7 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
 
     Y_VERIFY(PipeClient);
 
-    ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
+    ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient()); 
     auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
     commit->SetClientId(ClientId);
     commit->SetOffset(offset);
@@ -1842,7 +1842,7 @@ void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reaso
     Counters.Errors.Inc();
 
     NTabletPipe::CloseClient(ctx, PipeClient);
-    PipeClient = TActorId{};
+    PipeClient = TActorId{}; 
     if (errorCode != NPersQueue::NErrorCode::OVERLOAD)
         ++PipeGeneration;
 
@@ -1884,7 +1884,7 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
         TAutoPtr<TEvPersQueue::TEvRequest> event(new TEvPersQueue::TEvRequest);
         event->Record = CurrentRequest;
 
-        ActorIdToProto(PipeClient, event->Record.MutablePartitionRequest()->MutablePipeClient());
+        ActorIdToProto(PipeClient, event->Record.MutablePartitionRequest()->MutablePipeClient()); 
 
         NTabletPipe::SendData(ctx, PipeClient, event.Release());
     }
@@ -2322,7 +2322,7 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
         request.MutablePartitionRequest()->SetPartition(Partition.Partition);
         request.MutablePartitionRequest()->SetCookie(INIT_COOKIE);
 
-        ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
+        ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient()); 
 
         auto cmd = request.MutablePartitionRequest()->MutableCmdCreateSession();
         cmd->SetClientId(ClientId);
@@ -2443,7 +2443,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     request.MutablePartitionRequest()->SetPartition(Partition.Partition);
     request.MutablePartitionRequest()->SetCookie((ui64)ReadOffset);
 
-    ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
+    ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient()); 
     auto read = request.MutablePartitionRequest()->MutableCmdRead();
     read->SetClientId(ClientId);
     read->SetClientDC(ClientDC);

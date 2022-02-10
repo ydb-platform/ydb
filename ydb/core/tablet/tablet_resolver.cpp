@@ -191,7 +191,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     }
 
     void ResolveRequest(ui64 tabletId, const TActorContext &ctx) {
-        const TActorId ssproxy = MakeStateStorageProxyID(StateStorageGroupFromTabletID(tabletId));
+        const TActorId ssproxy = MakeStateStorageProxyID(StateStorageGroupFromTabletID(tabletId)); 
         ctx.Send(ssproxy, new TEvStateStorage::TEvLookup(tabletId, 0), IEventHandle::FlagTrackDelivery, tabletId);
 
         InFlyResolveCounter->Inc();
@@ -204,7 +204,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         return true;
     }
 
-    std::pair<TActorId, TActorId> SelectForward(const TActorContext& ctx, const TEntry& entry, TResolveInfo& info, ui64 tabletId)
+    std::pair<TActorId, TActorId> SelectForward(const TActorContext& ctx, const TEntry& entry, TResolveInfo& info, ui64 tabletId) 
     {
         const ui32 selfNode = ctx.SelfID.NodeId();
         const std::optional<TString> selfDc = FindNodeDc(selfNode);
@@ -303,13 +303,13 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         SelectedNone->Inc();
 
-        return std::make_pair(TActorId(), TActorId());
+        return std::make_pair(TActorId(), TActorId()); 
     }
 
-    bool SendForward(const TActorId &sender, const TEntry &entry, TEvTabletResolver::TEvForward *msg,
+    bool SendForward(const TActorId &sender, const TEntry &entry, TEvTabletResolver::TEvForward *msg, 
                      const TActorContext &ctx, bool * needFollowerUpdate = nullptr) {
         TResolveInfo info(*msg, ctx.Now() - entry.LastResolved, needFollowerUpdate); // fills needFollowerUpdate in dtor
-        const std::pair<TActorId, TActorId> endpoint = SelectForward(ctx, entry, info, msg->TabletID);
+        const std::pair<TActorId, TActorId> endpoint = SelectForward(ctx, entry, info, msg->TabletID); 
         if (endpoint.first) {
             ctx.Send(sender, new TEvTabletResolver::TEvForwardResult(msg->TabletID, endpoint.second, endpoint.first, LastCacheEpoch));
             if (!!msg->Ev)
@@ -796,7 +796,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     }
 
     void RefreshNodes(const TActorContext &ctx) {
-        ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+        ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes()); 
     }
 
 public:
@@ -872,9 +872,9 @@ IActor* CreateTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config)
     return new TTabletResolver(config);
 }
 
-TActorId MakeTabletResolverID() {
+TActorId MakeTabletResolverID() { 
     const char x[12] = "TabletProxy";
-    return TActorId(0, TStringBuf(x, 12));
+    return TActorId(0, TStringBuf(x, 12)); 
 }
 
 }

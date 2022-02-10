@@ -1,7 +1,7 @@
 #pragma once
 
 #include "grpc_request_base.h"
-#include "logger.h"
+#include "logger.h" 
 
 #include <library/cpp/threading/future/future.h>
 
@@ -17,7 +17,7 @@
 
 #include <grpc++/grpc++.h>
 
-namespace NGrpc {
+namespace NGrpc { 
 
 constexpr ui64 DEFAULT_GRPC_MESSAGE_SIZE_LIMIT = 64000000;
 
@@ -95,9 +95,9 @@ struct TServerOptions {
 
     DECLARE_FIELD(ExternalListener, IExternalListener::TPtr, nullptr);
 
-    //! Logger which will be used to write logs about requests handling (iff appropriate log level is enabled).
-    DECLARE_FIELD(Logger, TLoggerPtr, nullptr);
-
+    //! Logger which will be used to write logs about requests handling (iff appropriate log level is enabled). 
+    DECLARE_FIELD(Logger, TLoggerPtr, nullptr); 
+ 
 #undef DECLARE_FIELD
 };
 
@@ -161,11 +161,11 @@ private:
 using TGlobalLimiter = TInFlightLimiterImpl<i64>;
 
 
-class IGRpcService: public TThrRefBase {
+class IGRpcService: public TThrRefBase { 
 public:
     virtual grpc::Service* GetService() = 0;
     virtual void StopService() noexcept = 0;
-    virtual void InitService(grpc::ServerCompletionQueue* cq, TLoggerPtr logger) = 0;
+    virtual void InitService(grpc::ServerCompletionQueue* cq, TLoggerPtr logger) = 0; 
     virtual void SetGlobalLimiterHandle(TGlobalLimiter* limiter) = 0;
     virtual bool IsUnsafeToShutdown() const = 0;
     virtual size_t RequestsInProgress() const = 0;
@@ -178,7 +178,7 @@ public:
 };
 
 template<typename T>
-class TGrpcServiceBase: public IGRpcService {
+class TGrpcServiceBase: public IGRpcService { 
 public:
     class TShutdownGuard {
         using TOwner = TGrpcServiceBase<T>;
@@ -353,4 +353,4 @@ private:
     TGlobalLimiter Limiter_;
 };
 
-} // namespace NGrpc
+} // namespace NGrpc 

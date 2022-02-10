@@ -289,7 +289,7 @@ message TSubscriber {
         uint64 TabletId = 1;
         // Subscriber is an actor, it should be registered as
         // a service and use its service id.
-        NActorsProto.TActorId ServiceId = 2;
+        NActorsProto.TActorId ServiceId = 2; 
     }
 }
 

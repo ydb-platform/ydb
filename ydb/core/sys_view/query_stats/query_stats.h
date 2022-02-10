@@ -17,7 +17,7 @@ struct TQueryStatsBucketRange {
     explicit TQueryStatsBucketRange(const TSerializedTableRange& range, const TDuration& bucketSize);
 };
 
-THolder<IActor> CreateQueryStatsScan(const TActorId& ownerId, ui32 scanId,
+THolder<IActor> CreateQueryStatsScan(const TActorId& ownerId, ui32 scanId, 
     const TTableId& tableId, const TStringBuf viewName,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns);
 

@@ -15,7 +15,7 @@ namespace NKikimr {
         typedef ::NKikimr::TIndexRecordMerger<TKeyBarrier, TMemRecBarrier> TIndexRecordMerger;
 
         TIntrusivePtr<THullCtx> HullCtx;
-        const TActorId ParentId;
+        const TActorId ParentId; 
         TBarriersSnapshot BarriersSnap;
         TEvBlobStorage::TEvVGetBarrier::TPtr Ev;
         NKikimrBlobStorage::TEvVGetBarrier &Record;
@@ -60,7 +60,7 @@ namespace NKikimr {
 
         TLevelIndexBarrierQuery(
                 TIntrusivePtr<THullCtx> &hullCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TBarriersSnapshot &&barriersSnap,
                 TEvBlobStorage::TEvVGetBarrier::TPtr &ev,
                 std::unique_ptr<TEvBlobStorage::TEvVGetBarrierResult> result)
@@ -79,7 +79,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateLevelIndexBarrierQueryActor(
                 TIntrusivePtr<THullCtx> &hullCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TBarriersSnapshot &&barriersSnap,
                 TEvBlobStorage::TEvVGetBarrier::TPtr &ev,
                 std::unique_ptr<TEvBlobStorage::TEvVGetBarrierResult> result) {

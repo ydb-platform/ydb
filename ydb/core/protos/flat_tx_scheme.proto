@@ -92,7 +92,7 @@ message TEvCancelTxResult {
 }
 
 message TEvUpdateConfig {
-    optional NActorsProto.TActorId Source = 1;
+    optional NActorsProto.TActorId Source = 1; 
     optional TConfig Config = 2;
 }
 

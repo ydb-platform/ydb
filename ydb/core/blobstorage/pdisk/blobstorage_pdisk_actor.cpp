@@ -28,7 +28,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/mon.h>
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 #include <util/generic/algorithm.h>
 #include <util/random/entropy.h>
@@ -49,8 +49,8 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
         TOwnerRound OwnerRound;
         TVDiskID VDisk;
         ui64 PDiskGuid;
-        TActorId Sender;
-        TActorId CutLogId;
+        TActorId Sender; 
+        TActorId CutLogId; 
         TActorId WhiteboardProxyId;
         ui32 SlotId;
 
@@ -78,8 +78,8 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     bool IsFormattingNow = false;
     std::function<void()> PendingRestartResponse;
 
-    TActorId NodeWhiteboardServiceId;
-    TActorId NodeWardenServiceId;
+    TActorId NodeWhiteboardServiceId; 
+    TActorId NodeWardenServiceId; 
 
     THolder<IEventHandle> ControledStartResult;
 
@@ -340,13 +340,13 @@ public:
             LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId << PDisk->ErrorStr);
 
             // Is used to pass parameters into formatting thread, because TThread can pass only void*
-            using TCookieType = std::tuple<TPDiskActor*, TActorSystem*, TActorId>;
+            using TCookieType = std::tuple<TPDiskActor*, TActorSystem*, TActorId>; 
             FormattingThread.Reset(new TThread(
                     [] (void *cookie) -> void* {
                         auto params = static_cast<TCookieType*>(cookie);
                         TPDiskActor *actor = std::get<0>(*params);
                         TActorSystem *actorSystem = std::get<1>(*params);
-                        TActorId pDiskActor = std::get<2>(*params);
+                        TActorId pDiskActor = std::get<2>(*params); 
                         delete params;
 
                         NPDisk::TKey chunkKey;
@@ -1084,9 +1084,9 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &
 
 void TRealPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
         const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &mainKey, ui32 poolId, ui32 nodeId) {
-    TActorId actorId = ctx.ExecutorThread.RegisterActor(
+    TActorId actorId = ctx.ExecutorThread.RegisterActor( 
         CreatePDisk(cfg, mainKey, AppData(ctx)->Counters), TMailboxType::ReadAsFilled, poolId);
-    TActorId pDiskServiceId = MakeBlobStoragePDiskID(nodeId, pDiskID);
+    TActorId pDiskServiceId = MakeBlobStoragePDiskID(nodeId, pDiskID); 
     ctx.ExecutorThread.ActorSystem->RegisterLocalService(pDiskServiceId, actorId);
 }
 

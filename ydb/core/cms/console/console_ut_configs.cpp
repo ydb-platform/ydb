@@ -430,7 +430,7 @@ void IncGeneration(NKikimrConsole::TConfigItem &item, Ts&... args)
 
 ui64 CheckAddConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code,
                                 ui32 nodeId, const TString &host, const TString &tenant,
-                                const TString &nodeType, ui64 tabletId, TActorId serviceId,
+                                const TString &nodeType, ui64 tabletId, TActorId serviceId, 
                                 TVector<ui32> kinds, ui64 id = 0)
 {
     auto *event = new TEvConsole::TEvAddConfigSubscriptionRequest;
@@ -438,7 +438,7 @@ ui64 CheckAddConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::Sta
     if (tabletId)
         event->Record.MutableSubscription()->MutableSubscriber()->SetTabletId(tabletId);
     else if (serviceId)
-        ActorIdToProto(serviceId, event->Record.MutableSubscription()->MutableSubscriber()->MutableServiceId());
+        ActorIdToProto(serviceId, event->Record.MutableSubscription()->MutableSubscriber()->MutableServiceId()); 
     event->Record.MutableSubscription()->MutableOptions()->SetNodeId(nodeId);
     event->Record.MutableSubscription()->MutableOptions()->SetHost(host);
     event->Record.MutableSubscription()->MutableOptions()->SetTenant(tenant);
@@ -458,7 +458,7 @@ ui64 CheckAddConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::Sta
 
 ui64 CheckReplaceConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code,
                                      ui32 nodeId, const TString &host, const TString &tenant,
-                                     const TString &nodeType, ui64 tabletId, TActorId serviceId,
+                                     const TString &nodeType, ui64 tabletId, TActorId serviceId, 
                                      TVector<ui32> kinds, ui64 id = 0)
 {
     auto *event = new TEvConsole::TEvReplaceConfigSubscriptionsRequest;
@@ -466,7 +466,7 @@ ui64 CheckReplaceConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds
     if (tabletId)
         event->Record.MutableSubscription()->MutableSubscriber()->SetTabletId(tabletId);
     else if (serviceId)
-        ActorIdToProto(serviceId, event->Record.MutableSubscription()->MutableSubscriber()->MutableServiceId());
+        ActorIdToProto(serviceId, event->Record.MutableSubscription()->MutableSubscriber()->MutableServiceId()); 
     event->Record.MutableSubscription()->MutableOptions()->SetNodeId(nodeId);
     event->Record.MutableSubscription()->MutableOptions()->SetHost(host);
     event->Record.MutableSubscription()->MutableOptions()->SetTenant(tenant);
@@ -486,7 +486,7 @@ ui64 CheckReplaceConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds
 
 void CheckGetConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code,
                                 ui64 id, ui32 nodeId = 0, const TString &host = "", const TString &tenant = "",
-                                const TString &nodeType = "", ui64 tabletId = 0, TActorId serviceId = {},
+                                const TString &nodeType = "", ui64 tabletId = 0, TActorId serviceId = {}, 
                                 TVector<ui32> kinds = {})
 {
     auto *event = new TEvConsole::TEvGetConfigSubscriptionRequest;
@@ -501,7 +501,7 @@ void CheckGetConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::Sta
         THashSet<ui32> k(kinds.begin(), kinds.end());
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetSubscription().GetId(), id);
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetSubscription().GetSubscriber().GetTabletId(), tabletId);
-        UNIT_ASSERT_VALUES_EQUAL(ActorIdFromProto(reply->Record.GetSubscription().GetSubscriber().GetServiceId()), serviceId);
+        UNIT_ASSERT_VALUES_EQUAL(ActorIdFromProto(reply->Record.GetSubscription().GetSubscriber().GetServiceId()), serviceId); 
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetSubscription().GetOptions().GetNodeId(), nodeId);
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetSubscription().GetOptions().GetHost(), host);
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetSubscription().GetOptions().GetTenant(), tenant);
@@ -526,13 +526,13 @@ void CheckRemoveConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::
 }
 
 void CheckRemoveConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code,
-                                    ui64 tabletId, TActorId serviceId)
+                                    ui64 tabletId, TActorId serviceId) 
 {
     auto *event = new TEvConsole::TEvRemoveConfigSubscriptionsRequest;
     if (tabletId)
         event->Record.MutableSubscriber()->SetTabletId(tabletId);
     else if (serviceId)
-        ActorIdToProto(serviceId, event->Record.MutableSubscriber()->MutableServiceId());
+        ActorIdToProto(serviceId, event->Record.MutableSubscriber()->MutableServiceId()); 
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
@@ -2378,7 +2378,7 @@ class TConfigProxy : public TActor<TConfigProxy>, public TTabletExecutedFlat {
     }
 
 public:
-    TConfigProxy(const TActorId &tablet, TTabletStorageInfo *info, TActorId sink)
+    TConfigProxy(const TActorId &tablet, TTabletStorageInfo *info, TActorId sink) 
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
         , Sink(sink)
@@ -2401,12 +2401,12 @@ public:
         }
     }
 private:
-    TActorId Sink;
+    TActorId Sink; 
 };
 
 class TConfigProxyService : public TActorBootstrapped<TConfigProxyService> {
 public:
-    TConfigProxyService(TActorId sink)
+    TConfigProxyService(TActorId sink) 
         : Sink(sink)
     {
     }
@@ -2429,7 +2429,7 @@ public:
     }
 
 private:
-    TActorId Sink;
+    TActorId Sink; 
 };
 
 const ui64 CONFIG_PROXY_TABLET_ID = 0x0000000000840103;
@@ -2443,7 +2443,7 @@ void StartConfigProxy(TTenantTestRuntime &runtime)
     runtime.EnableScheduleForActor(actorId, true);
 
     auto aid = runtime.Register(new TConfigProxyService(runtime.Sender));
-    runtime.RegisterService(TActorId(runtime.GetNodeId(0), "configproxy"), aid, 0);
+    runtime.RegisterService(TActorId(runtime.GetNodeId(0), "configproxy"), aid, 0); 
 
     TAutoPtr<IEventHandle> handle;
     runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(handle);
@@ -2459,11 +2459,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         ui32 nodeId = runtime.GetNodeId(0);
         ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               1, "host1", "tenant-1", "type1",
-                                              1, TActorId(), {{1, 2, 3}});
+                                              1, TActorId(), {{1, 2, 3}}); 
         // OK subscription for service
         ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host2", "tenant-2", "type2",
-                                              0, TActorId(nodeId, "service"), {{4, 5, 6}});
+                                              0, TActorId(nodeId, "service"), {{4, 5, 6}}); 
 
         runtime.Register(CreateTabletKiller(MakeConsoleID(0)));
         TDispatchOptions options;
@@ -2473,34 +2473,34 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         // OK subscription for service
         ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               3, "host3", "tenant-3", "type3",
-                                              0, TActorId(nodeId, "service"), {{1, 1, 2}});
+                                              0, TActorId(nodeId, "service"), {{1, 1, 2}}); 
 
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id1,
                                    1, "host1", "tenant-1", "type1",
-                                   1, TActorId(), {{1, 2, 3}});
+                                   1, TActorId(), {{1, 2, 3}}); 
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id2,
                                    2, "host2", "tenant-2", "type2",
-                                   0, TActorId(nodeId, "service"), {{4, 5, 6}});
+                                   0, TActorId(nodeId, "service"), {{4, 5, 6}}); 
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3,
                                    3, "host3", "tenant-3", "type3",
-                                   0, TActorId(nodeId, "service"), {{1, 2}});
+                                   0, TActorId(nodeId, "service"), {{1, 2}}); 
 
         // non-zero subscription id
         CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST,
                                    1, "host1", "tenant-1", "type1",
-                                   1, TActorId(), {{1, 2, 3}}, 1);
+                                   1, TActorId(), {{1, 2, 3}}, 1); 
         // no subscriber
         CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST,
                                    1, "host1", "tenant-1", "type1",
-                                   0, TActorId(), {{1, 2, 3}});
+                                   0, TActorId(), {{1, 2, 3}}); 
         // wrong service id
         CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST,
                                    1, "host1", "tenant-1", "type1",
-                                   0, TActorId(1, 0, 0, 0), {{1, 2, 3}});
+                                   0, TActorId(1, 0, 0, 0), {{1, 2, 3}}); 
         // no kinds
         CheckAddConfigSubscription(runtime, Ydb::StatusIds::BAD_REQUEST,
                                    1, "host1", "tenant-1", "type1",
-                                   1, TActorId(), {});
+                                   1, TActorId(), {}); 
     }
 
     Y_UNIT_TEST(TestRemoveConfigSubscription) {
@@ -2510,15 +2510,15 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         ui32 nodeId = runtime.GetNodeId(0);
         ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               1, "host1", "tenant-1", "type1",
-                                              1, TActorId(), {{1, 2, 3}});
+                                              1, TActorId(), {{1, 2, 3}}); 
         // OK subscription for tablet
         ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host1", "tenant-1", "type1",
-                                              1, TActorId(), {{1, 2, 3}});
+                                              1, TActorId(), {{1, 2, 3}}); 
         // OK subscription for service
         ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host2", "tenant-2", "type2",
-                                              0, TActorId(nodeId, "service"), {{4, 5, 6}});
+                                              0, TActorId(nodeId, "service"), {{4, 5, 6}}); 
 
         CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id2);
         CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id2);
@@ -2530,11 +2530,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
 
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id1,
                                    1, "host1", "tenant-1", "type1",
-                                   1, TActorId(), {{1, 2, 3}});
+                                   1, TActorId(), {{1, 2, 3}}); 
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id2);
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3,
                                    2, "host2", "tenant-2", "type2",
-                                   0, TActorId(nodeId, "service"), {{4, 5, 6}});
+                                   0, TActorId(nodeId, "service"), {{4, 5, 6}}); 
 
         CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id1);
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id1);
@@ -2547,28 +2547,28 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         ui32 nodeId = runtime.GetNodeId(0);
         ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               1, "host1", "tenant-1", "type1",
-                                              1, TActorId(), {{1, 2, 3}});
+                                              1, TActorId(), {{1, 2, 3}}); 
         // OK subscription for tablet
         ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host1", "tenant-1", "type1",
-                                              1, TActorId(), {{1, 2, 3}});
+                                              1, TActorId(), {{1, 2, 3}}); 
         // OK subscription for service
         ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host2", "tenant-2", "type2",
-                                              0, TActorId(nodeId, "service"), {{4, 5, 6}});
+                                              0, TActorId(nodeId, "service"), {{4, 5, 6}}); 
         // OK subscription for service
         ui64 id4 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               3, "host2", "tenant-2", "type2",
-                                              0, TActorId(nodeId, "service"), {{4, 5, 6}});
+                                              0, TActorId(nodeId, "service"), {{4, 5, 6}}); 
 
         CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
-                                       1, TActorId());
+                                       1, TActorId()); 
         CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
-                                       1, TActorId());
+                                       1, TActorId()); 
         CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
-                                       2, TActorId());
+                                       2, TActorId()); 
         CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
-                                       0, TActorId());
+                                       0, TActorId()); 
 
         runtime.Register(CreateTabletKiller(MakeConsoleID(0)));
         TDispatchOptions options;
@@ -2579,13 +2579,13 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id2);
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3,
                                    2, "host2", "tenant-2", "type2",
-                                   0, TActorId(nodeId, "service"), {{4, 5, 6}});
+                                   0, TActorId(nodeId, "service"), {{4, 5, 6}}); 
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id4,
                                    3, "host2", "tenant-2", "type2",
-                                   0, TActorId(nodeId, "service"), {{4, 5, 6}});
+                                   0, TActorId(nodeId, "service"), {{4, 5, 6}}); 
 
         CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
-                                       0, TActorId(nodeId, "service"));
+                                       0, TActorId(nodeId, "service")); 
 
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id3);
         CheckGetConfigSubscription(runtime, Ydb::StatusIds::NOT_FOUND, id4);
@@ -2598,65 +2598,65 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         ui32 nodeId = runtime.GetNodeId(0);
         ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               1, "host1", "tenant-1", "type1",
-                                              1, TActorId(), {{1, 2}});
+                                              1, TActorId(), {{1, 2}}); 
         // OK subscription for tablet
         ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               1, "host1", "tenant-1", "type1",
-                                              1, TActorId(), {{3, 4}});
+                                              1, TActorId(), {{3, 4}}); 
         // OK subscription for service
         ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host2", "tenant-2", "type2",
-                                              0, TActorId(nodeId, "service"), {{4, 5}});
+                                              0, TActorId(nodeId, "service"), {{4, 5}}); 
         // OK subscription for service
         ui64 id4 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               2, "host2", "tenant-2", "type2",
-                                              0, TActorId(nodeId, "service"), {{6, 7}});
+                                              0, TActorId(nodeId, "service"), {{6, 7}}); 
 
         // List 1 2
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 1, TActorId(),
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 1, TActorId(), 
                                      id1, 1, "host1", "tenant-1", "type1",
-                                     1, TActorId(), TVector<ui32>({1, 2}),
+                                     1, TActorId(), TVector<ui32>({1, 2}), 
                                      id2, 1, "host1", "tenant-1", "type1",
-                                     1, TActorId(), TVector<ui32>({3, 4}));
+                                     1, TActorId(), TVector<ui32>({3, 4})); 
         // List 3 4
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"),
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"), 
                                      id3, 2, "host2", "tenant-2", "type2",
-                                     0, TActorId(nodeId, "service"), TVector<ui32>({4, 5}),
+                                     0, TActorId(nodeId, "service"), TVector<ui32>({4, 5}), 
                                      id4, 2, "host2", "tenant-2", "type2",
-                                     0, TActorId(nodeId, "service"), TVector<ui32>({6, 7}));
+                                     0, TActorId(nodeId, "service"), TVector<ui32>({6, 7})); 
         // List 1 2 3 4
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(),
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(), 
                                      id1, 1, "host1", "tenant-1", "type1",
-                                     1, TActorId(), TVector<ui32>({1, 2}),
+                                     1, TActorId(), TVector<ui32>({1, 2}), 
                                      id2, 1, "host1", "tenant-1", "type1",
-                                     1, TActorId(), TVector<ui32>({3, 4}),
+                                     1, TActorId(), TVector<ui32>({3, 4}), 
                                      id3, 2, "host2", "tenant-2", "type2",
-                                     0, TActorId(nodeId, "service"), TVector<ui32>({4, 5}),
+                                     0, TActorId(nodeId, "service"), TVector<ui32>({4, 5}), 
                                      id4, 2, "host2", "tenant-2", "type2",
-                                     0, TActorId(nodeId, "service"), TVector<ui32>({6, 7}));
+                                     0, TActorId(nodeId, "service"), TVector<ui32>({6, 7})); 
         // Empty list
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 2, TActorId());
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 2, TActorId()); 
         // Empty list
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service1"));
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service1")); 
         // Empty list
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId + 1, "service"));
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId + 1, "service")); 
 
         // Remove 1 2
         CheckRemoveConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
-                                       1, TActorId());
+                                       1, TActorId()); 
         // Remove 3
         CheckRemoveConfigSubscription(runtime, Ydb::StatusIds::SUCCESS, id3);
 
         // Empty list
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 1, TActorId());
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 1, TActorId()); 
         // List 4
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"),
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"), 
                                      id4, 2, "host2", "tenant-2", "type2",
-                                     0, TActorId(nodeId, "service"), TVector<ui32>({6, 7}));
+                                     0, TActorId(nodeId, "service"), TVector<ui32>({6, 7})); 
         // List 4
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(),
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(), 
                                      id4, 2, "host2", "tenant-2", "type2",
-                                     0, TActorId(nodeId, "service"), TVector<ui32>({6, 7}));
+                                     0, TActorId(nodeId, "service"), TVector<ui32>({6, 7})); 
     }
 
     Y_UNIT_TEST(TestReplaceConfigSubscriptions) {
@@ -2665,32 +2665,32 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         ui32 nodeId = runtime.GetNodeId(0);
         ui64 id1 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    1, "host1", "tenant-1", "type1",
-                                                   1, TActorId(), {{1, 2, 3}});
+                                                   1, TActorId(), {{1, 2, 3}}); 
         ui64 id2 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    2, "host2", "tenant-2", "type2",
-                                                   0, TActorId(nodeId, "service"), {{4, 5, 6}});
+                                                   0, TActorId(nodeId, "service"), {{4, 5, 6}}); 
 
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 1, TActorId(),
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 1, TActorId(), 
                                      id1, 1, "host1", "tenant-1", "type1",
-                                     1, TActorId(), TVector<ui32>({1, 2, 3}));
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"),
+                                     1, TActorId(), TVector<ui32>({1, 2, 3})); 
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"), 
                                      id2, 2, "host2", "tenant-2", "type2",
-                                     0, TActorId(nodeId, "service"), TVector<ui32>({4, 5, 6}));
+                                     0, TActorId(nodeId, "service"), TVector<ui32>({4, 5, 6})); 
 
         CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                    1, "host1", "tenant-1", "type1",
-                                   1, TActorId(), {{1, 2}});
+                                   1, TActorId(), {{1, 2}}); 
         CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                    2, "host2", "tenant-2", "type2",
-                                   0, TActorId(nodeId, "service"), {{4, 5}});
+                                   0, TActorId(nodeId, "service"), {{4, 5}}); 
 
         ui64 id5 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    1, "host1", "tenant-1", "type1",
-                                                   1, TActorId(), {{1, 2, 3}});
+                                                   1, TActorId(), {{1, 2, 3}}); 
         UNIT_ASSERT_VALUES_EQUAL(id1, id5);
         ui64 id6 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    2, "host2", "tenant-2", "type2",
-                                                   0, TActorId(nodeId, "service"), {{4, 5, 6}});
+                                                   0, TActorId(nodeId, "service"), {{4, 5, 6}}); 
         UNIT_ASSERT_VALUES_EQUAL(id2, id6);
 
         runtime.Register(CreateTabletKiller(MakeConsoleID(0)));
@@ -2698,28 +2698,28 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         options.FinalEvents.emplace_back(&IsTabletActiveEvent, 1);
         runtime.DispatchEvents(options);
 
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 1, TActorId(),
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 1, TActorId(), 
                                      id1, 1, "host1", "tenant-1", "type1",
-                                     1, TActorId(), TVector<ui32>({1, 2, 3}));
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"),
+                                     1, TActorId(), TVector<ui32>({1, 2, 3})); 
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"), 
                                      id2, 2, "host2", "tenant-2", "type2",
-                                     0, TActorId(nodeId, "service"), TVector<ui32>({4, 5, 6}));
+                                     0, TActorId(nodeId, "service"), TVector<ui32>({4, 5, 6})); 
 
         ui64 id7 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    1, "host1", "tenant-1", "type1",
-                                                   1, TActorId(), {{1, 2}});
+                                                   1, TActorId(), {{1, 2}}); 
         UNIT_ASSERT(id1 != id7);
         ui64 id8 = CheckReplaceConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS,
                                                    2, "host2", "tenant-2", "type2",
-                                                   0, TActorId(nodeId, "service"), {{4, 5}});
+                                                   0, TActorId(nodeId, "service"), {{4, 5}}); 
         UNIT_ASSERT(id2 != id8);
 
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 1, TActorId(),
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 1, TActorId(), 
                                      id7, 1, "host1", "tenant-1", "type1",
-                                     1, TActorId(), TVector<ui32>({1, 2}));
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"),
+                                     1, TActorId(), TVector<ui32>({1, 2})); 
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"), 
                                      id8, 2, "host2", "tenant-2", "type2",
-                                     0, TActorId(nodeId, "service"), TVector<ui32>({4, 5}));
+                                     0, TActorId(nodeId, "service"), TVector<ui32>({4, 5})); 
     }
 
     void TestNotificationForNewSubscriptionBase(bool useService)
@@ -2728,11 +2728,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
 
         if (useService)
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
         else
             tabletId = CONFIG_PROXY_TABLET_ID;
 
@@ -2761,11 +2761,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
 
         if (useService)
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
         else
             tabletId = CONFIG_PROXY_TABLET_ID;
 
@@ -2854,11 +2854,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
 
         if (useService)
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
         else
             tabletId = CONFIG_PROXY_TABLET_ID;
 
@@ -2973,11 +2973,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
 
         if (useService)
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
         else
             tabletId = CONFIG_PROXY_TABLET_ID;
 
@@ -3135,11 +3135,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
 
         if (useService)
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
         else
             tabletId = CONFIG_PROXY_TABLET_ID;
 
@@ -3234,11 +3234,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
 
         if (useService)
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
         else
             tabletId = CONFIG_PROXY_TABLET_ID;
 
@@ -3293,11 +3293,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
 
         if (useService)
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
         else
             tabletId = CONFIG_PROXY_TABLET_ID;
 
@@ -3330,11 +3330,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
 
         if (useService)
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
         else
             tabletId = CONFIG_PROXY_TABLET_ID;
 
@@ -3377,11 +3377,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
 
         if (useService)
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
         else
             tabletId = CONFIG_PROXY_TABLET_ID;
 
@@ -3432,7 +3432,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
 
         CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                    100, "host100", "tenant-100", "type100",
-                                   0, TActorId(100, "service"),
+                                   0, TActorId(100, "service"), 
                                    TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
 
         ui32 undelivered = 0;
@@ -3483,23 +3483,23 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         ui32 nodeId = runtime.GetNodeId(0);
         ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               nodeId, "host1", "tenant-1", "type1",
-                                              0, TActorId(nodeId, "service"), TVector<ui32>({1}));
+                                              0, TActorId(nodeId, "service"), TVector<ui32>({1})); 
         ui64 id2 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               100, "host100", "tenant-100", "type100",
-                                              0, TActorId(100, "service"), TVector<ui32>({1}));
+                                              0, TActorId(100, "service"), TVector<ui32>({1})); 
         ui64 id3 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               100, "host100", "tenant-100", "type100",
-                                              100, TActorId(), TVector<ui32>({1}));
+                                              100, TActorId(), TVector<ui32>({1})); 
 
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"),
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"), 
                                      id1, nodeId, "host1", "tenant-1", "type1",
-                                     0, TActorId(nodeId, "service"), TVector<ui32>({1}));
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(100, "service"),
+                                     0, TActorId(nodeId, "service"), TVector<ui32>({1})); 
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(100, "service"), 
                                      id2, 100, "host100", "tenant-100", "type100",
-                                     0, TActorId(100, "service"), TVector<ui32>({1}));
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 100, TActorId(),
+                                     0, TActorId(100, "service"), TVector<ui32>({1})); 
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 100, TActorId(), 
                                      id3, 100, "host100", "tenant-100", "type100",
-                                     100, TActorId(), TVector<ui32>({1}));
+                                     100, TActorId(), TVector<ui32>({1})); 
 
         TDispatchOptions options;
         options.FinalEvents.emplace_back([&](IEventHandle &ev) -> bool {
@@ -3513,15 +3513,15 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
 
         CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                    nodeId + 1, "host2", "tenant-2", "type2",
-                                   0, TActorId(nodeId + 1, "service"), TVector<ui32>({1}));
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"),
+                                   0, TActorId(nodeId + 1, "service"), TVector<ui32>({1})); 
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(nodeId, "service"), 
                                      id1, nodeId, "host1", "tenant-1", "type1",
-                                     0, TActorId(nodeId, "service"), TVector<ui32>({1}));
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(100, "service"));
+                                     0, TActorId(nodeId, "service"), TVector<ui32>({1})); 
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(100, "service")); 
 
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 100, TActorId(),
+        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 100, TActorId(), 
                                      id3, 100, "host100", "tenant-100", "type100",
-                                     100, TActorId(), TVector<ui32>({1}));
+                                     100, TActorId(), TVector<ui32>({1})); 
     }
 }
 
@@ -3805,12 +3805,12 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
         IActor *subscriber;
 
         if (useService)
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
         else
             tabletId = CONFIG_PROXY_TABLET_ID;
 
@@ -3886,12 +3886,12 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
         IActor *subscriber;
 
         if (useService) {
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
             subscriber = CreateConfigSubscriber(serviceId,
                                                 TVector<ui32>({1, 2}),
                                                 runtime.Sender);
@@ -3923,12 +3923,12 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
         IActor *subscriber;
 
         if (useService) {
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
             subscriber = CreateConfigSubscriber(serviceId,
                                                 TVector<ui32>({1, 2}),
                                                 runtime.Sender);
@@ -3960,12 +3960,12 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
         InitializeTestConfigItems();
         StartConfigProxy(runtime);
         TAutoPtr<IEventHandle> handle;
-        TActorId serviceId;
+        TActorId serviceId; 
         ui64 tabletId = 0;
         IActor *subscriber;
 
         if (useService) {
-            serviceId = TActorId(runtime.GetNodeId(0), "configproxy");
+            serviceId = TActorId(runtime.GetNodeId(0), "configproxy"); 
             subscriber = CreateConfigSubscriber(serviceId,
                                                 TVector<ui32>({1, 2}),
                                                 runtime.Sender);
@@ -3999,7 +3999,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
 
         ui64 id1 = CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                               1, "host1", "tenant-1", "type1",
-                                              CONFIG_PROXY_TABLET_ID, TActorId(), {{1, 2, 3}});
+                                              CONFIG_PROXY_TABLET_ID, TActorId(), {{1, 2, 3}}); 
 
         auto *eraser = CreateSubscriptionEraser(id1, runtime.Sender, 123);
         runtime.Register(eraser, 0);

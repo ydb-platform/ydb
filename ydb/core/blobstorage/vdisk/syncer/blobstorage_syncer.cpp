@@ -12,7 +12,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 #include <library/cpp/actors/core/mon.h>
 
 using namespace NKikimrServices;
@@ -55,7 +55,7 @@ namespace NKikimr {
 
     private:
         struct TItemAndSeq {
-            TActorId ActorId;
+            TActorId ActorId; 
             std::unique_ptr<TItem> Item;
             ui64 SeqNum;
 
@@ -79,15 +79,15 @@ namespace NKikimr {
     class TSyncerHttpInfoActor : public TActorBootstrapped<TSyncerHttpInfoActor> {
         TIntrusivePtr<TSyncerContext> SyncerCtx;
         NMon::TEvHttpInfo::TPtr Ev;
-        const TActorId ReplyId;
-        const TActorId NotifyId;
-        const TActorId SchedulerId;
+        const TActorId ReplyId; 
+        const TActorId NotifyId; 
+        const TActorId SchedulerId; 
         const TString LogAndPhase;
 
         friend class TActorBootstrapped<TSyncerHttpInfoActor>;
 
         void Bootstrap(const TActorContext &ctx) {
-            if (SchedulerId == TActorId()) {
+            if (SchedulerId == TActorId()) { 
                 RenderHtmlAndReply(ctx, TString());
             } else {
                 Become(&TThis::StateFunc);
@@ -137,8 +137,8 @@ namespace NKikimr {
 
         TSyncerHttpInfoActor(TIntrusivePtr<TSyncerContext> &sc,
                              NMon::TEvHttpInfo::TPtr &ev,
-                             const TActorId &notifyId,
-                             const TActorId &schedulerId,
+                             const TActorId &notifyId, 
+                             const TActorId &schedulerId, 
                              const TString &logAndPhase)
             : TActorBootstrapped<TSyncerHttpInfoActor>()
             , SyncerCtx(sc)
@@ -169,11 +169,11 @@ namespace NKikimr {
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TIntrusivePtr<TSyncerData> SyncerData;
         TLocalSyncerState LocalSyncerState;
-        TActorId CommitterId;
-        TActorId SchedulerId;
-        TActorId GuidRecoveryId;
-        TActorId RecoverLostDataId;
-        TVector<TActorId> PropagatorIds;
+        TActorId CommitterId; 
+        TActorId SchedulerId; 
+        TActorId GuidRecoveryId; 
+        TActorId RecoverLostDataId; 
+        TVector<TActorId> PropagatorIds; 
         EPhase Phase = TPhaseVal::PhaseNone;
         TActiveActors ActiveActors;
         std::unique_ptr<NSyncer::TOutcome> GuidRecovOutcome;
@@ -203,7 +203,7 @@ namespace NKikimr {
             PropagatorIds.reserve(SyncerCtx->VCtx->Top->GetTotalVDisksNum());
             for (auto &x : neighbors) {
                 const TVDiskID vd = GInfo->GetVDiskId(x.OrderNumber);
-                const TActorId va = GInfo->GetActorId(x.OrderNumber);
+                const TActorId va = GInfo->GetActorId(x.OrderNumber); 
                 auto aid = ctx.Register(CreateSyncerGuidPropagator(SyncerCtx->VCtx,
                                                                    selfVDiskId,
                                                                    vd,
@@ -228,7 +228,7 @@ namespace NKikimr {
 
         void Handle(TEvVDiskGuidRecovered::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
-            GuidRecoveryId = TActorId();
+            GuidRecoveryId = TActorId(); 
             GuidRecovOutcome = std::make_unique<NSyncer::TOutcome>(std::move(ev->Get()->Outcome));
 
             switch (GuidRecovOutcome->Decision) {
@@ -295,7 +295,7 @@ namespace NKikimr {
 
         void Handle(TEvSyncerLostDataRecovered::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
-            RecoverLostDataId = TActorId();
+            RecoverLostDataId = TActorId(); 
             LocalSyncerState = ev->Get()->LocalSyncerState;
             StandardMode(ctx);
         }
@@ -431,7 +431,7 @@ namespace NKikimr {
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
             Y_VERIFY(ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
-            TActorId schId;
+            TActorId schId; 
             switch (Phase) {
                 case TPhaseVal::PhaseStandardMode: {
                     schId = SchedulerId;
@@ -515,7 +515,7 @@ namespace NKikimr {
 
             GInfo = msg->NewInfo;
             // reconfigure guid recovery actor
-            Y_VERIFY(GuidRecoveryId != TActorId());
+            Y_VERIFY(GuidRecoveryId != TActorId()); 
             ctx.Send(GuidRecoveryId, msg->Clone());
         }
 
@@ -538,7 +538,7 @@ namespace NKikimr {
             GInfo = msg->NewInfo;
 
             // reconfigure guid recovery actor
-            Y_VERIFY(RecoverLostDataId != TActorId());
+            Y_VERIFY(RecoverLostDataId != TActorId()); 
             ctx.Send(RecoverLostDataId, msg->Clone());
         }
 

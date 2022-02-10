@@ -37,9 +37,9 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     MakeRemoveDirectoryEvent(const TString& root, const TString& name);
 
 // Create actor that calls AddQuoterResource and handles pipe errors and retries
-TActorId RunAddQuoterResource(ui64 quoterSchemeShardId, ui64 quoterPathId, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId);
-TActorId RunAddQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId);
-TActorId RunDeleteQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvDeleteQuoterResource& cmd, const TString& requestId);
+TActorId RunAddQuoterResource(ui64 quoterSchemeShardId, ui64 quoterPathId, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId); 
+TActorId RunAddQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId); 
+TActorId RunDeleteQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvDeleteQuoterResource& cmd, const TString& requestId); 
 
 inline TIntrusivePtr<TTransactionCounters> GetTransactionCounters(const TIntrusivePtr<TUserCounters>& userCounters) {
     if (userCounters) {
@@ -52,7 +52,7 @@ class TCreateUserSchemaActor
     : public TActorBootstrapped<TCreateUserSchemaActor>
 {
 public:
-    TCreateUserSchemaActor(const TString& root, const TString& userName, const TActorId& sender, const TString& requestId, TIntrusivePtr<TUserCounters> userCounters);
+    TCreateUserSchemaActor(const TString& root, const TString& userName, const TActorId& sender, const TString& requestId, TIntrusivePtr<TUserCounters> userCounters); 
     ~TCreateUserSchemaActor();
 
     void Bootstrap();
@@ -95,20 +95,20 @@ private:
 
     const TString Root_;
     const TString UserName_;
-    const TActorId Sender_;
+    const TActorId Sender_; 
     int SI_;
     const TString RequestId_;
     bool CreateRootSqsDirAttemptWasMade_ = false;
     TIntrusivePtr<TUserCounters> UserCounters_;
     std::pair<ui64, ui64> KesusPathId_ = {}; // SchemeShardTableId, PathId for quoter kesus
-    TActorId AddQuoterResourceActor_;
+    TActorId AddQuoterResourceActor_; 
 };
 
 class TDeleteUserSchemaActor
     : public TActorBootstrapped<TDeleteUserSchemaActor>
 {
 public:
-     TDeleteUserSchemaActor(const TString& root, const TString& name, const TActorId& sender, const TString& requestId, TIntrusivePtr<TUserCounters> userCounters);
+     TDeleteUserSchemaActor(const TString& root, const TString& name, const TActorId& sender, const TString& requestId, TIntrusivePtr<TUserCounters> userCounters); 
     ~TDeleteUserSchemaActor();
 
     void Bootstrap();
@@ -142,7 +142,7 @@ private:
 
     const TString Root_;
     const TString Name_;
-    const TActorId Sender_;
+    const TActorId Sender_; 
     ui32 SI_;
     const TString RequestId_;
     TIntrusivePtr<TUserCounters> UserCounters_;
@@ -152,7 +152,7 @@ class TAtomicCounterActor
     : public TActorBootstrapped<TAtomicCounterActor>
 {
 public:
-     TAtomicCounterActor(const TActorId& sender, const TString& rootPath, const TString& requestId);
+     TAtomicCounterActor(const TActorId& sender, const TString& rootPath, const TString& requestId); 
     ~TAtomicCounterActor();
 
     void Bootstrap();
@@ -171,7 +171,7 @@ private:
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
 
 private:
-    const TActorId Sender_;
+    const TActorId Sender_; 
     const TString RootPath_;
     const TString RequestId_;
 };

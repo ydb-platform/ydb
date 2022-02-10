@@ -11,7 +11,7 @@ namespace NActors {
     // next 11 bits of node-id - pool id
     // next 20 bits - node id itself
 
-    struct TActorId {
+    struct TActorId { 
         static constexpr ui32 MaxServiceIDLength = 12;
         static constexpr ui32 MaxPoolID = 0x000007FF;
         static constexpr ui32 MaxNodeId = 0x000FFFFF;
@@ -37,19 +37,19 @@ namespace NActors {
         } Raw;
 
     public:
-        TActorId() noexcept {
+        TActorId() noexcept { 
             Raw.X.X1 = 0;
             Raw.X.X2 = 0;
         }
 
-        explicit TActorId(ui32 nodeId, ui32 poolId, ui64 localId, ui32 hint) noexcept {
+        explicit TActorId(ui32 nodeId, ui32 poolId, ui64 localId, ui32 hint) noexcept { 
             Y_VERIFY_DEBUG(poolId <= MaxPoolID);
             Raw.N.LocalId = localId;
             Raw.N.Hint = hint;
             Raw.N.NodeId = nodeId | (poolId << PoolIndexShift);
         }
 
-        explicit TActorId(ui32 nodeId, const TStringBuf& x) noexcept {
+        explicit TActorId(ui32 nodeId, const TStringBuf& x) noexcept { 
             Y_VERIFY(x.size() <= MaxServiceIDLength, "service id is too long");
             Raw.N.LocalId = 0;
             Raw.N.Hint = 0;
@@ -57,7 +57,7 @@ namespace NActors {
             memcpy(Raw.Buf, x.data(), x.size());
         }
 
-        explicit TActorId(ui64 x1, ui64 x2) noexcept {
+        explicit TActorId(ui64 x1, ui64 x2) noexcept { 
             Raw.X.X1 = x1;
             Raw.X.X2 = x2;
         }
@@ -103,7 +103,7 @@ namespace NActors {
             return Raw.X.X2;
         }
 
-        bool operator<(const TActorId& x) const noexcept {
+        bool operator<(const TActorId& x) const noexcept { 
             const ui64 s1 = Raw.X.X1;
             const ui64 s2 = Raw.X.X2;
             const ui64 x1 = x.Raw.X.X1;
@@ -112,11 +112,11 @@ namespace NActors {
             return (s1 != x1) ? (s1 < x1) : (s2 < x2);
         }
 
-        bool operator!=(const TActorId& x) const noexcept {
+        bool operator!=(const TActorId& x) const noexcept { 
             return Raw.X.X1 != x.Raw.X.X1 || Raw.X.X2 != x.Raw.X.X2;
         }
 
-        bool operator==(const TActorId& x) const noexcept {
+        bool operator==(const TActorId& x) const noexcept { 
             return !(x != *this);
         }
 
@@ -153,19 +153,19 @@ namespace NActors {
         }
 
         struct THash {
-            ui64 operator()(const TActorId& actorId) const noexcept {
-                return actorId.Hash();
+            ui64 operator()(const TActorId& actorId) const noexcept { 
+                return actorId.Hash(); 
             }
         };
 
         struct THash32 {
-            ui64 operator()(const TActorId& actorId) const noexcept {
-                return actorId.Hash();
+            ui64 operator()(const TActorId& actorId) const noexcept { 
+                return actorId.Hash(); 
             }
         };
 
         struct TOrderedCmp {
-            bool operator()(const TActorId &left, const TActorId &right) const noexcept {
+            bool operator()(const TActorId &left, const TActorId &right) const noexcept { 
                 Y_VERIFY_DEBUG(!left.IsService() && !right.IsService(), "ordered compare works for plain actorids only");
                 const ui32 n1 = left.NodeId();
                 const ui32 n2 = right.NodeId();
@@ -179,18 +179,18 @@ namespace NActors {
         bool Parse(const char* buf, ui32 sz);
     };
 
-    static_assert(sizeof(TActorId) == 16, "expect sizeof(TActorId) == 16");
+    static_assert(sizeof(TActorId) == 16, "expect sizeof(TActorId) == 16"); 
     static_assert(MaxPools < TActorId::MaxPoolID); // current implementation of united pool has limit MaxPools on pool id
 }
 
 template <>
-inline void Out<NActors::TActorId>(IOutputStream& o, const NActors::TActorId& x) {
+inline void Out<NActors::TActorId>(IOutputStream& o, const NActors::TActorId& x) { 
     return x.Out(o);
 }
 
 template <>
-struct THash<NActors::TActorId> {
-    inline ui64 operator()(const NActors::TActorId& x) const {
+struct THash<NActors::TActorId> { 
+    inline ui64 operator()(const NActors::TActorId& x) const { 
         return x.Hash();
     }
 };

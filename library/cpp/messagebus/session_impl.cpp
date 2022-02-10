@@ -485,23 +485,23 @@ void TBusSessionImpl::Act(TConnectionTag) {
 
 void TBusSessionImpl::Listen(int port, TBusMessageQueue* q) {
     Listen(BindOnPort(port, Config.ReusePort).second, q);
-}
-
+} 
+ 
 void TBusSessionImpl::Listen(const TVector<TBindResult>& bindTo, TBusMessageQueue* q) {
     Y_ASSERT(q == Queue);
-    int actualPort = -1;
+    int actualPort = -1; 
 
     for (const TBindResult& br : bindTo) {
-        if (actualPort == -1) {
-            actualPort = br.Addr.GetPort();
+        if (actualPort == -1) { 
+            actualPort = br.Addr.GetPort(); 
         } else {
-            Y_VERIFY(actualPort == br.Addr.GetPort(), "state check");
+            Y_VERIFY(actualPort == br.Addr.GetPort(), "state check"); 
         }
         if (Config.SocketToS >= 0) {
-            SetSocketToS(*br.Socket, &(br.Addr), Config.SocketToS);
+            SetSocketToS(*br.Socket, &(br.Addr), Config.SocketToS); 
         }
 
-        TAcceptorPtr acceptor(new TAcceptor(this, ++LastAcceptorId, br.Socket->Release(), br.Addr));
+        TAcceptorPtr acceptor(new TAcceptor(this, ++LastAcceptorId, br.Socket->Release(), br.Addr)); 
 
         TConnectionsGuard guard(ConnectionsLock);
         InsertAcceptorLockAcquired(acceptor.Get());

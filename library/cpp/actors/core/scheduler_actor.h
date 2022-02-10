@@ -21,9 +21,9 @@ namespace NActors {
 
     IActor* CreateSchedulerActor(const TSchedulerConfig& cfg);
 
-    inline TActorId MakeSchedulerActorId() {
+    inline TActorId MakeSchedulerActorId() { 
         char x[12] = {'s', 'c', 'h', 'e', 'd', 'u', 'l', 'e', 'r', 's', 'e', 'r'};
-        return TActorId(0, TStringBuf(x, 12));
+        return TActorId(0, TStringBuf(x, 12)); 
     }
 
 }

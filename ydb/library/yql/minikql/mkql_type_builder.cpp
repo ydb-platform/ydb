@@ -1,20 +1,20 @@
-#include "mkql_type_builder.h"
-#include "mkql_node_cast.h"
-#include "mkql_node_builder.h"
-
+#include "mkql_type_builder.h" 
+#include "mkql_node_cast.h" 
+#include "mkql_node_builder.h" 
+ 
 #include <ydb/library/yql/public/udf/udf_type_ops.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-
-// TODO: remove const_casts
-
-namespace NKikimr {
-
-namespace {
-
+ 
+// TODO: remove const_casts 
+ 
+namespace NKikimr { 
+ 
+namespace { 
+ 
 static const TString UdfName("UDF");
-
+ 
 class TCallablePayload : public NUdf::ICallablePayload {
 public:
     TCallablePayload(NMiniKQL::TNode* node)
@@ -36,7 +36,7 @@ public:
             ArgsFlags_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(flagsIndex))->AsValue().Get<ui64>());
         }
     }
-
+ 
     NUdf::TStringRef GetPayload() const override {
         return Payload_;
     }
@@ -56,83 +56,83 @@ private:
 };
 
 /////////////////////////////////////////////////////////////////////////////
-// TOptionalTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class TOptionalTypeBuilder: public NUdf::IOptionalTypeBuilder
-{
-public:
-    TOptionalTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
-        : Parent_(parent)
-    {
-    }
-
+// TOptionalTypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class TOptionalTypeBuilder: public NUdf::IOptionalTypeBuilder 
+{ 
+public: 
+    TOptionalTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent) 
+        : Parent_(parent) 
+    { 
+    } 
+ 
     NUdf::IOptionalTypeBuilder& Item(NUdf::TDataTypeId typeId) override {
-        ItemType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
-        return *this;
-    }
-
-    NUdf::IOptionalTypeBuilder& Item(const NUdf::TType* type) override {
-        ItemType_ = static_cast<const NMiniKQL::TType*>(type);
-        return *this;
-    }
-
-    NUdf::IOptionalTypeBuilder& Item(
-            const NUdf::ITypeBuilder& typeBuilder) override
-    {
-        ItemType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
-        return *this;
-    }
-
-    NUdf::TType* Build() const override {
-        return NMiniKQL::TOptionalType::Create(
-                    const_cast<NMiniKQL::TType*>(ItemType_),
+        ItemType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env()); 
+        return *this; 
+    } 
+ 
+    NUdf::IOptionalTypeBuilder& Item(const NUdf::TType* type) override { 
+        ItemType_ = static_cast<const NMiniKQL::TType*>(type); 
+        return *this; 
+    } 
+ 
+    NUdf::IOptionalTypeBuilder& Item( 
+            const NUdf::ITypeBuilder& typeBuilder) override 
+    { 
+        ItemType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
+        return *this; 
+    } 
+ 
+    NUdf::TType* Build() const override { 
+        return NMiniKQL::TOptionalType::Create( 
+                    const_cast<NMiniKQL::TType*>(ItemType_), 
                     Parent_.Env());
-    }
-
-private:
-    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
+    } 
+ 
+private: 
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_; 
     const NMiniKQL::TType* ItemType_ = nullptr;
-};
-
-//////////////////////////////////////////////////////////////////////////////
-// TListTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class TListTypeBuilder: public NUdf::IListTypeBuilder
-{
-public:
-    TListTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
-        : Parent_(parent)
-    {
-    }
-
+}; 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// TListTypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class TListTypeBuilder: public NUdf::IListTypeBuilder 
+{ 
+public: 
+    TListTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent) 
+        : Parent_(parent) 
+    { 
+    } 
+ 
     NUdf::IListTypeBuilder& Item(NUdf::TDataTypeId typeId) override {
-        ItemType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
-        return *this;
-    }
-
-    NUdf::IListTypeBuilder& Item(const NUdf::TType* type) override {
-        ItemType_ = static_cast<const NMiniKQL::TType*>(type);
-        return *this;
-    }
-
-    NUdf::IListTypeBuilder& Item(
-            const NUdf::ITypeBuilder& typeBuilder) override
-    {
-        ItemType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
-        return *this;
-    }
-
-    NUdf::TType* Build() const override {
-        return NMiniKQL::TListType::Create(
+        ItemType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env()); 
+        return *this; 
+    } 
+ 
+    NUdf::IListTypeBuilder& Item(const NUdf::TType* type) override { 
+        ItemType_ = static_cast<const NMiniKQL::TType*>(type); 
+        return *this; 
+    } 
+ 
+    NUdf::IListTypeBuilder& Item( 
+            const NUdf::ITypeBuilder& typeBuilder) override 
+    { 
+        ItemType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
+        return *this; 
+    } 
+ 
+    NUdf::TType* Build() const override { 
+        return NMiniKQL::TListType::Create( 
                     const_cast<NMiniKQL::TType*>(ItemType_), Parent_.Env());
-    }
-
-private:
-    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
+    } 
+ 
+private: 
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_; 
     const NMiniKQL::TType* ItemType_ = nullptr;
-};
-
-//////////////////////////////////////////////////////////////////////////////
+}; 
+ 
+////////////////////////////////////////////////////////////////////////////// 
 // TStreamTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
 class TStreamTypeBuilder : public NUdf::IStreamTypeBuilder
@@ -171,79 +171,79 @@ private:
 };
 
 //////////////////////////////////////////////////////////////////////////////
-// TDictTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class TDictTypeBuilder: public NUdf::IDictTypeBuilder
-{
-public:
-    TDictTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
-        : Parent_(parent)
-    {
-    }
-
+// TDictTypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class TDictTypeBuilder: public NUdf::IDictTypeBuilder 
+{ 
+public: 
+    TDictTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent) 
+        : Parent_(parent) 
+    { 
+    } 
+ 
     NUdf::IDictTypeBuilder& Key(NUdf::TDataTypeId typeId) override {
         auto slot = NUdf::FindDataSlot(typeId);
         Y_VERIFY(slot, "unknown type: %d", (int)typeId);
         Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
-        KeyType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
-        return *this;
-    }
-
-    NUdf::IDictTypeBuilder& Key(const NUdf::TType* type) override {
-        KeyType_ = static_cast<const NMiniKQL::TType*>(type);
-        CheckKeyType();
-        return *this;
-    }
-
-    NUdf::IDictTypeBuilder& Key(
-            const NUdf::ITypeBuilder& typeBuilder) override
-    {
-        KeyType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
-        CheckKeyType();
-        return *this;
-    }
-
+        KeyType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env()); 
+        return *this; 
+    } 
+ 
+    NUdf::IDictTypeBuilder& Key(const NUdf::TType* type) override { 
+        KeyType_ = static_cast<const NMiniKQL::TType*>(type); 
+        CheckKeyType(); 
+        return *this; 
+    } 
+ 
+    NUdf::IDictTypeBuilder& Key( 
+            const NUdf::ITypeBuilder& typeBuilder) override 
+    { 
+        KeyType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
+        CheckKeyType(); 
+        return *this; 
+    } 
+ 
     NUdf::IDictTypeBuilder& Value(NUdf::TDataTypeId typeId) override {
-        ValueType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
-        return *this;
-    }
-
-    NUdf::IDictTypeBuilder& Value(const NUdf::TType* type) override {
-        ValueType_ = static_cast<const NMiniKQL::TType*>(type);
-        return *this;
-    }
-
-    NUdf::IDictTypeBuilder& Value(
-            const NUdf::ITypeBuilder& typeBuilder) override
-    {
-        ValueType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
-        return *this;
-    }
-
-    NUdf::TType* Build() const override {
-        return NMiniKQL::TDictType::Create(
-                    const_cast<NMiniKQL::TType*>(KeyType_),
+        ValueType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env()); 
+        return *this; 
+    } 
+ 
+    NUdf::IDictTypeBuilder& Value(const NUdf::TType* type) override { 
+        ValueType_ = static_cast<const NMiniKQL::TType*>(type); 
+        return *this; 
+    } 
+ 
+    NUdf::IDictTypeBuilder& Value( 
+            const NUdf::ITypeBuilder& typeBuilder) override 
+    { 
+        ValueType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
+        return *this; 
+    } 
+ 
+    NUdf::TType* Build() const override { 
+        return NMiniKQL::TDictType::Create( 
+                    const_cast<NMiniKQL::TType*>(KeyType_), 
                     const_cast<NMiniKQL::TType*>(ValueType_), Parent_.Env());
-    }
-
-private:
-    void CheckKeyType() const {
-        auto t = AS_TYPE(NMiniKQL::TDataType, const_cast<NMiniKQL::TType*>(KeyType_));
+    } 
+ 
+private: 
+    void CheckKeyType() const { 
+        auto t = AS_TYPE(NMiniKQL::TDataType, const_cast<NMiniKQL::TType*>(KeyType_)); 
         auto keySchemeType = t->GetSchemeType();
         auto slot = NUdf::FindDataSlot(keySchemeType);
         Y_VERIFY(slot, "unknown type: %d", (int)keySchemeType);
         Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
-    }
-
-private:
-    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
+    } 
+ 
+private: 
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_; 
     const NMiniKQL::TType* KeyType_ = nullptr;
     const NMiniKQL::TType* ValueType_ = nullptr;
-};
-
-//////////////////////////////////////////////////////////////////////////////
+}; 
+ 
+////////////////////////////////////////////////////////////////////////////// 
 // TSetTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////// 
 class TSetTypeBuilder : public NUdf::ISetTypeBuilder
 {
 public:
@@ -297,60 +297,60 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TStructTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
-class TStructTypeBuilder: public NUdf::IStructTypeBuilder
-{
-public:
-    TStructTypeBuilder(
-            const NMiniKQL::TFunctionTypeInfoBuilder& parent,
-            ui32 itemsCount)
-        : Parent_(parent)
+class TStructTypeBuilder: public NUdf::IStructTypeBuilder 
+{ 
+public: 
+    TStructTypeBuilder( 
+            const NMiniKQL::TFunctionTypeInfoBuilder& parent, 
+            ui32 itemsCount) 
+        : Parent_(parent) 
         , StructBuilder_(Parent_.Env())
-    {
-        StructBuilder_.Reserve(itemsCount);
-    }
-
-    NUdf::IStructTypeBuilder& AddField(
-            const NUdf::TStringRef& name,
+    { 
+        StructBuilder_.Reserve(itemsCount); 
+    } 
+ 
+    NUdf::IStructTypeBuilder& AddField( 
+            const NUdf::TStringRef& name, 
             NUdf::TDataTypeId typeId,
-            ui32* index) override
-    {
-        auto type = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
-        StructBuilder_.Add(name, type, index);
-        return *this;
-    }
-
-    NUdf::IStructTypeBuilder& AddField(
-            const NUdf::TStringRef& name,
-            const NUdf::TType* type,
-            ui32* index) override
-    {
-        auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
-        StructBuilder_.Add(name, const_cast<NMiniKQL::TType*>(mkqlType), index);
-        return *this;
-    }
-
-    NUdf::IStructTypeBuilder& AddField(
-            const NUdf::TStringRef& name,
-            const NUdf::ITypeBuilder& typeBuilder,
-            ui32* index) override
-    {
-        auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
-        StructBuilder_.Add(name, type, index);
-        return *this;
-    }
-
-    NUdf::TType* Build() const override {
-        auto structType = StructBuilder_.Build();
-        StructBuilder_.FillIndexes();
-        return structType;
-    }
-
-private:
-    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
-    mutable NMiniKQL::TStructTypeBuilder StructBuilder_;
-};
-
-//////////////////////////////////////////////////////////////////////////////
+            ui32* index) override 
+    { 
+        auto type = NMiniKQL::TDataType::Create(typeId, Parent_.Env()); 
+        StructBuilder_.Add(name, type, index); 
+        return *this; 
+    } 
+ 
+    NUdf::IStructTypeBuilder& AddField( 
+            const NUdf::TStringRef& name, 
+            const NUdf::TType* type, 
+            ui32* index) override 
+    { 
+        auto mkqlType = static_cast<const NMiniKQL::TType*>(type); 
+        StructBuilder_.Add(name, const_cast<NMiniKQL::TType*>(mkqlType), index); 
+        return *this; 
+    } 
+ 
+    NUdf::IStructTypeBuilder& AddField( 
+            const NUdf::TStringRef& name, 
+            const NUdf::ITypeBuilder& typeBuilder, 
+            ui32* index) override 
+    { 
+        auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
+        StructBuilder_.Add(name, type, index); 
+        return *this; 
+    } 
+ 
+    NUdf::TType* Build() const override { 
+        auto structType = StructBuilder_.Build(); 
+        StructBuilder_.FillIndexes(); 
+        return structType; 
+    } 
+ 
+private: 
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_; 
+    mutable NMiniKQL::TStructTypeBuilder StructBuilder_; 
+}; 
+ 
+////////////////////////////////////////////////////////////////////////////// 
 // TEnumTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
 class TEnumTypeBuilder : public NUdf::IEnumTypeBuilder
@@ -385,53 +385,53 @@ private:
 };
 
 //////////////////////////////////////////////////////////////////////////////
-// TTupleTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class TTupleTypeBuilder: public NUdf::ITupleTypeBuilder
-{
-public:
-    TTupleTypeBuilder(
-            const NMiniKQL::TFunctionTypeInfoBuilder& parent,
-            ui32 itemsCount)
-        : Parent_(parent)
-    {
-        ElementTypes_.reserve(itemsCount);
-    }
-
+// TTupleTypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class TTupleTypeBuilder: public NUdf::ITupleTypeBuilder 
+{ 
+public: 
+    TTupleTypeBuilder( 
+            const NMiniKQL::TFunctionTypeInfoBuilder& parent, 
+            ui32 itemsCount) 
+        : Parent_(parent) 
+    { 
+        ElementTypes_.reserve(itemsCount); 
+    } 
+ 
     NUdf::ITupleTypeBuilder& Add(NUdf::TDataTypeId typeId) override {
-        auto type = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
-        ElementTypes_.push_back(type);
-        return *this;
-    }
-
-    NUdf::ITupleTypeBuilder& Add(const NUdf::TType* type) override {
-        auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
-        ElementTypes_.push_back(const_cast<NMiniKQL::TType*>(mkqlType));
-        return *this;
-    }
-
-    NUdf::ITupleTypeBuilder& Add(
-            const NUdf::ITypeBuilder& typeBuilder) override
-    {
-        auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
-        ElementTypes_.push_back(type);
-        return *this;
-    }
-
-    NUdf::TType* Build() const override {
-        return NMiniKQL::TTupleType::Create(
+        auto type = NMiniKQL::TDataType::Create(typeId, Parent_.Env()); 
+        ElementTypes_.push_back(type); 
+        return *this; 
+    } 
+ 
+    NUdf::ITupleTypeBuilder& Add(const NUdf::TType* type) override { 
+        auto mkqlType = static_cast<const NMiniKQL::TType*>(type); 
+        ElementTypes_.push_back(const_cast<NMiniKQL::TType*>(mkqlType)); 
+        return *this; 
+    } 
+ 
+    NUdf::ITupleTypeBuilder& Add( 
+            const NUdf::ITypeBuilder& typeBuilder) override 
+    { 
+        auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
+        ElementTypes_.push_back(type); 
+        return *this; 
+    } 
+ 
+    NUdf::TType* Build() const override { 
+        return NMiniKQL::TTupleType::Create( 
                 ElementTypes_.size(), ElementTypes_.data(),
-                Parent_.Env());
-    }
-
-private:
-    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
+                Parent_.Env()); 
+    } 
+ 
+private: 
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_; 
     TVector<NMiniKQL::TType*> ElementTypes_;
-};
-
+}; 
+ 
 /////////////////////////////////////////////////////////////////////////////
 // TVariantTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////// 
 class TVariantTypeBuilder : public NUdf::IVariantTypeBuilder
 {
 public:
@@ -464,125 +464,125 @@ private:
 };
 
 //////////////////////////////////////////////////////////////////////////////
-// TCallableTypeBuilder
-//////////////////////////////////////////////////////////////////////////////
-class TCallableTypeBuilder: public NUdf::ICallableTypeBuilder
-{
-public:
-    TCallableTypeBuilder(
-            const NMiniKQL::TTypeEnvironment& env, ui32 argsCount)
-        : Env_(env)
-        , ReturnType_(nullptr)
-        , OptionalArgs_(0)
-    {
-        ArgsTypes_.reserve(argsCount);
-    }
-
-    NUdf::ICallableTypeBuilder& Returns(
+// TCallableTypeBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class TCallableTypeBuilder: public NUdf::ICallableTypeBuilder 
+{ 
+public: 
+    TCallableTypeBuilder( 
+            const NMiniKQL::TTypeEnvironment& env, ui32 argsCount) 
+        : Env_(env) 
+        , ReturnType_(nullptr) 
+        , OptionalArgs_(0) 
+    { 
+        ArgsTypes_.reserve(argsCount); 
+    } 
+ 
+    NUdf::ICallableTypeBuilder& Returns( 
             NUdf::TDataTypeId typeId) override
-    {
-        ReturnType_ = NMiniKQL::TDataType::Create(typeId, Env_);
-        return *this;
-    }
-
-    NUdf::ICallableTypeBuilder& Returns(
+    { 
+        ReturnType_ = NMiniKQL::TDataType::Create(typeId, Env_); 
+        return *this; 
+    } 
+ 
+    NUdf::ICallableTypeBuilder& Returns( 
             const NUdf::TType* type) override
-    {
-        ReturnType_ = const_cast<NMiniKQL::TType*>(
-                    static_cast<const NMiniKQL::TType*>(type));
-        return *this;
-    }
-
-    NUdf::ICallableTypeBuilder& Returns(
+    { 
+        ReturnType_ = const_cast<NMiniKQL::TType*>( 
+                    static_cast<const NMiniKQL::TType*>(type)); 
+        return *this; 
+    } 
+ 
+    NUdf::ICallableTypeBuilder& Returns( 
             const NUdf::ITypeBuilder& typeBuilder) override
-    {
-        ReturnType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
-        return *this;
-    }
-
+    { 
+        ReturnType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
+        return *this; 
+    } 
+ 
     NUdf::ICallableTypeBuilder& Arg(NUdf::TDataTypeId typeId) override {
-        auto type = NMiniKQL::TDataType::Create(typeId, Env_);
+        auto type = NMiniKQL::TDataType::Create(typeId, Env_); 
         ArgsTypes_.push_back(type);
-        return *this;
-    }
-
-    NUdf::ICallableTypeBuilder& Arg(const NUdf::TType* type) override {
+        return *this; 
+    } 
+ 
+    NUdf::ICallableTypeBuilder& Arg(const NUdf::TType* type) override { 
         auto mkqlType = const_cast<NMiniKQL::TType*>(static_cast<const NMiniKQL::TType*>(type));
         ArgsTypes_.push_back(mkqlType);
-        return *this;
-    }
-
-    NUdf::ICallableTypeBuilder& Arg(
-            const NUdf::ITypeBuilder& typeBuilder) override
-    {
-        auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
+        return *this; 
+    } 
+ 
+    NUdf::ICallableTypeBuilder& Arg( 
+            const NUdf::ITypeBuilder& typeBuilder) override 
+    { 
+        auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
         ArgsTypes_.push_back(type);
-        return *this;
-    }
-
-    ICallableTypeBuilder& OptionalArgs(ui32 optionalArgs) override {
-        OptionalArgs_ = optionalArgs;
-        return *this;
-    }
-
-    NUdf::TType* Build() const override {
+        return *this; 
+    } 
+ 
+    ICallableTypeBuilder& OptionalArgs(ui32 optionalArgs) override { 
+        OptionalArgs_ = optionalArgs; 
+        return *this; 
+    } 
+ 
+    NUdf::TType* Build() const override { 
         Y_VERIFY(ReturnType_, "callable returns type is not configured");
-
-        NMiniKQL::TNode* payload = nullptr;
-
-        auto callableType = NMiniKQL::TCallableType::Create(
+ 
+        NMiniKQL::TNode* payload = nullptr; 
+ 
+        auto callableType = NMiniKQL::TCallableType::Create( 
                     UdfName, ReturnType_,
                     ArgsTypes_.size(), const_cast<NMiniKQL::TType**>(ArgsTypes_.data()),
-                    payload, Env_);
-        callableType->SetOptionalArgumentsCount(OptionalArgs_);
-        return callableType;
-    }
-
-private:
-    const NMiniKQL::TTypeEnvironment& Env_;
-    NMiniKQL::TType* ReturnType_;
+                    payload, Env_); 
+        callableType->SetOptionalArgumentsCount(OptionalArgs_); 
+        return callableType; 
+    } 
+ 
+private: 
+    const NMiniKQL::TTypeEnvironment& Env_; 
+    NMiniKQL::TType* ReturnType_; 
     TVector<NMiniKQL::TType*> ArgsTypes_;
-    ui32 OptionalArgs_;
-};
-
-//////////////////////////////////////////////////////////////////////////////
-// TFunctionArgTypesBuilder
-//////////////////////////////////////////////////////////////////////////////
-class TFunctionArgTypesBuilder: public NUdf::IFunctionArgTypesBuilder
-{
-public:
-    explicit TFunctionArgTypesBuilder(
-            NMiniKQL::TFunctionTypeInfoBuilder& parent,
+    ui32 OptionalArgs_; 
+}; 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// TFunctionArgTypesBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class TFunctionArgTypesBuilder: public NUdf::IFunctionArgTypesBuilder 
+{ 
+public: 
+    explicit TFunctionArgTypesBuilder( 
+            NMiniKQL::TFunctionTypeInfoBuilder& parent, 
             TVector<NMiniKQL::TArgInfo>& args)
-        : NUdf::IFunctionArgTypesBuilder(parent)
-        , Env_(parent.Env())
+        : NUdf::IFunctionArgTypesBuilder(parent) 
+        , Env_(parent.Env()) 
         , Args_(args)
-    {
-    }
-
+    { 
+    } 
+ 
     NUdf::IFunctionArgTypesBuilder& Add(NUdf::TDataTypeId typeId) override {
-        auto type = NMiniKQL::TDataType::Create(typeId, Env_);
+        auto type = NMiniKQL::TDataType::Create(typeId, Env_); 
         Args_.emplace_back();
         Args_.back().Type_ = type;
-        return *this;
-    }
-
-    NUdf::IFunctionArgTypesBuilder& Add(const NUdf::TType* type) override {
-        auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
+        return *this; 
+    } 
+ 
+    NUdf::IFunctionArgTypesBuilder& Add(const NUdf::TType* type) override { 
+        auto mkqlType = static_cast<const NMiniKQL::TType*>(type); 
         Args_.emplace_back();
         Args_.back().Type_ = const_cast<NMiniKQL::TType*>(mkqlType);
-        return *this;
-    }
-
-    NUdf::IFunctionArgTypesBuilder& Add(
-            const NUdf::ITypeBuilder& typeBuilder) override
-    {
-        auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
+        return *this; 
+    } 
+ 
+    NUdf::IFunctionArgTypesBuilder& Add( 
+            const NUdf::ITypeBuilder& typeBuilder) override 
+    { 
+        auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
         Args_.emplace_back();
         Args_.back().Type_ = type;
-        return *this;
-    }
-
+        return *this; 
+    } 
+ 
     NUdf::IFunctionArgTypesBuilder& Name(const NUdf::TStringRef& name) override {
         Args_.back().Name_ = Env_.InternName(name);
         return *this;
@@ -593,11 +593,11 @@ public:
         return *this;
     }
 
-private:
-    const NMiniKQL::TTypeEnvironment& Env_;
+private: 
+    const NMiniKQL::TTypeEnvironment& Env_; 
     TVector<NMiniKQL::TArgInfo>& Args_;
-};
-
+}; 
+ 
 //////////////////////////////////////////////////////////////////////////////
 // THash
 //////////////////////////////////////////////////////////////////////////////
@@ -1233,39 +1233,39 @@ private:
     const NUdf::ICompare::TPtr Compare_;
 };
 
-} // namespace
-
-namespace NMiniKQL {
-
-//////////////////////////////////////////////////////////////////////////////
-// TFunctionTypeInfoBuilder
-//////////////////////////////////////////////////////////////////////////////
-TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
-        const TTypeEnvironment& env,
+} // namespace 
+ 
+namespace NMiniKQL { 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// TFunctionTypeInfoBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder( 
+        const TTypeEnvironment& env, 
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
         const TStringBuf& moduleName,
         NUdf::ICountersProvider* countersProvider,
         const NUdf::TSourcePosition& pos,
         const NUdf::ISecureParamsProvider* provider)
-    : Env_(env)
-    , ReturnType_(nullptr)
-    , RunConfigType_(Env_.GetTypeOfVoid())
+    : Env_(env) 
+    , ReturnType_(nullptr) 
+    , RunConfigType_(Env_.GetTypeOfVoid()) 
     , UserType_(Env_.GetTypeOfVoid())
     , TypeInfoHelper_(typeInfoHelper)
     , ModuleName_(moduleName)
     , CountersProvider_(countersProvider)
     , Pos_(pos)
     , SecureParamsProvider_(provider)
-{
-}
-
+{ 
+} 
+ 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ImplementationImpl(
-        NUdf::TUniquePtr<NUdf::IBoxedValue> impl)
-{
+        NUdf::TUniquePtr<NUdf::IBoxedValue> impl) 
+{ 
     Implementation_ = std::move(impl);
-    return *this;
-}
-
+    return *this; 
+} 
+ 
 NUdf::IFunctionTypeInfoBuilder7& TFunctionTypeInfoBuilder::IRImplementationImpl(
     const NUdf::TStringRef& moduleIR,
     const NUdf::TStringRef& moduleIRUniqId,
@@ -1316,32 +1316,32 @@ bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStrin
 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
         NUdf::TDataTypeId typeId)
-{
-    ReturnType_ = TDataType::Create(typeId, Env_);
-    return *this;
-}
-
+{ 
+    ReturnType_ = TDataType::Create(typeId, Env_); 
+    return *this; 
+} 
+ 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
-        const NUdf::TType* type)
-{
-    ReturnType_ = static_cast<const NMiniKQL::TType*>(type);
-    return *this;
-}
-
+        const NUdf::TType* type) 
+{ 
+    ReturnType_ = static_cast<const NMiniKQL::TType*>(type); 
+    return *this; 
+} 
+ 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
-        const NUdf::ITypeBuilder& typeBuilder)
-{
-    ReturnType_ = static_cast<TType*>(typeBuilder.Build());
-    return *this;
-}
-
-NUdf::IFunctionArgTypesBuilder::TPtr TFunctionTypeInfoBuilder::Args(
-        ui32 expectedItem)
-{
+        const NUdf::ITypeBuilder& typeBuilder) 
+{ 
+    ReturnType_ = static_cast<TType*>(typeBuilder.Build()); 
+    return *this; 
+} 
+ 
+NUdf::IFunctionArgTypesBuilder::TPtr TFunctionTypeInfoBuilder::Args( 
+        ui32 expectedItem) 
+{ 
     Args_.reserve(expectedItem);
     return new TFunctionArgTypesBuilder(*this, Args_);
-}
-
+} 
+ 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::OptionalArgsImpl(ui32 optionalArgs) {
     OptionalArgs_ = optionalArgs;
     return *this;
@@ -1354,25 +1354,25 @@ NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::PayloadImpl(const NUd
 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::RunConfigImpl(
         NUdf::TDataTypeId typeId)
-{
-    RunConfigType_ = TDataType::Create(typeId, Env_);
-    return *this;
-}
-
+{ 
+    RunConfigType_ = TDataType::Create(typeId, Env_); 
+    return *this; 
+} 
+ 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::RunConfigImpl(
-        const NUdf::TType* type)
-{
-    RunConfigType_ = static_cast<const NMiniKQL::TType*>(type);
-    return *this;
-}
-
+        const NUdf::TType* type) 
+{ 
+    RunConfigType_ = static_cast<const NMiniKQL::TType*>(type); 
+    return *this; 
+} 
+ 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::RunConfigImpl(
-        const NUdf::ITypeBuilder& typeBuilder)
-{
-    RunConfigType_ = static_cast<TType*>(typeBuilder.Build());
-    return *this;
-}
-
+        const NUdf::ITypeBuilder& typeBuilder) 
+{ 
+    RunConfigType_ = static_cast<TType*>(typeBuilder.Build()); 
+    return *this; 
+} 
+ 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl(
         NUdf::TDataTypeId typeId)
 {
@@ -1394,16 +1394,16 @@ NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl(
     return *this;
 }
 
-void TFunctionTypeInfoBuilder::SetError(const NUdf::TStringRef& error)
-{
+void TFunctionTypeInfoBuilder::SetError(const NUdf::TStringRef& error) 
+{ 
     if (!Error_) {
         Error_ = error;
     }
-}
-
-void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
-{
-    if (ReturnType_) {
+} 
+ 
+void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo) 
+{ 
+    if (ReturnType_) { 
         TCallableTypeBuilder builder(Env_, UdfName, const_cast<NMiniKQL::TType*>(ReturnType_));
         for (const auto& arg : Args_) {
             builder.Add(arg.Type_);
@@ -1422,65 +1422,65 @@ void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
 
         builder.SetOptionalArgs(OptionalArgs_);
         funcInfo->FunctionType = builder.Build();
-    }
-
-    funcInfo->RunConfigType = RunConfigType_;
+    } 
+ 
+    funcInfo->RunConfigType = RunConfigType_; 
     funcInfo->UserType = UserType_;
     funcInfo->Implementation = std::move(Implementation_);
     funcInfo->ModuleIR = std::move(ModuleIR_);
     funcInfo->ModuleIRUniqID = std::move(ModuleIRUniqID_);
     funcInfo->IRFunctionName = std::move(IRFunctionName_);
     funcInfo->BlockImplementation = std::move(BlockImplementation_);
-}
-
+} 
+ 
 NUdf::TType* TFunctionTypeInfoBuilder::Primitive(NUdf::TDataTypeId typeId) const
-{
-    return TDataType::Create(typeId, Env_);
-}
-
+{ 
+    return TDataType::Create(typeId, Env_); 
+} 
+ 
 NUdf::TType* TFunctionTypeInfoBuilder::Decimal(ui8 precision, ui8 scale) const
 {
     return TDataDecimalType::Create(precision, scale, Env_);
 }
 
-NUdf::IOptionalTypeBuilder::TPtr TFunctionTypeInfoBuilder::Optional() const
-{
-    return new TOptionalTypeBuilder(*this);
-}
-
-NUdf::IListTypeBuilder::TPtr TFunctionTypeInfoBuilder::List() const
-{
-    return new TListTypeBuilder(*this);
-}
-
-NUdf::IDictTypeBuilder::TPtr TFunctionTypeInfoBuilder::Dict() const
-{
-    return new TDictTypeBuilder(*this);
-}
-
-NUdf::IStructTypeBuilder::TPtr TFunctionTypeInfoBuilder::Struct(
-        ui32 expectedItems) const
-{
-    return new NKikimr::TStructTypeBuilder(*this, expectedItems);
-}
-
-NUdf::ITupleTypeBuilder::TPtr TFunctionTypeInfoBuilder::Tuple(
-        ui32 expectedItems) const
-{
-    return new TTupleTypeBuilder(*this, expectedItems);
-}
-
-NUdf::ICallableTypeBuilder::TPtr TFunctionTypeInfoBuilder::Callable(
-        ui32 expectedArgs) const
-{
-    return new NKikimr::TCallableTypeBuilder(Env_, expectedArgs);
-}
-
-NUdf::TType* TFunctionTypeInfoBuilder::Void() const
-{
-    return Env_.GetTypeOfVoid();
-}
-
+NUdf::IOptionalTypeBuilder::TPtr TFunctionTypeInfoBuilder::Optional() const 
+{ 
+    return new TOptionalTypeBuilder(*this); 
+} 
+ 
+NUdf::IListTypeBuilder::TPtr TFunctionTypeInfoBuilder::List() const 
+{ 
+    return new TListTypeBuilder(*this); 
+} 
+ 
+NUdf::IDictTypeBuilder::TPtr TFunctionTypeInfoBuilder::Dict() const 
+{ 
+    return new TDictTypeBuilder(*this); 
+} 
+ 
+NUdf::IStructTypeBuilder::TPtr TFunctionTypeInfoBuilder::Struct( 
+        ui32 expectedItems) const 
+{ 
+    return new NKikimr::TStructTypeBuilder(*this, expectedItems); 
+} 
+ 
+NUdf::ITupleTypeBuilder::TPtr TFunctionTypeInfoBuilder::Tuple( 
+        ui32 expectedItems) const 
+{ 
+    return new TTupleTypeBuilder(*this, expectedItems); 
+} 
+ 
+NUdf::ICallableTypeBuilder::TPtr TFunctionTypeInfoBuilder::Callable( 
+        ui32 expectedArgs) const 
+{ 
+    return new NKikimr::TCallableTypeBuilder(Env_, expectedArgs); 
+} 
+ 
+NUdf::TType* TFunctionTypeInfoBuilder::Void() const 
+{ 
+    return Env_.GetTypeOfVoid(); 
+} 
+ 
 NUdf::TType* TFunctionTypeInfoBuilder::Resource(const NUdf::TStringRef& tag) const {
     return TResourceType::Create(tag, Env_);
 }
@@ -1493,10 +1493,10 @@ NUdf::IStreamTypeBuilder::TPtr TFunctionTypeInfoBuilder::Stream() const {
     return new TStreamTypeBuilder(*this);
 }
 
-NUdf::ITypeInfoHelper::TPtr TFunctionTypeInfoBuilder::TypeInfoHelper() const {
+NUdf::ITypeInfoHelper::TPtr TFunctionTypeInfoBuilder::TypeInfoHelper() const { 
     return TypeInfoHelper_;
-}
-
+} 
+ 
 NUdf::TCounter TFunctionTypeInfoBuilder::GetCounter(const NUdf::TStringRef& name, bool deriv) {
     if (CountersProvider_) {
         return CountersProvider_->GetCounter(ModuleName_, name, deriv);

@@ -16,8 +16,8 @@
 #include <ydb/core/util/wildcard.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-#include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/monlib/dynamic_counters/encode.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/dynamic_counters/encode.h> 
 
 #include <util/generic/xrange.h>
 #include <util/string/vector.h>
@@ -33,10 +33,10 @@ namespace NKikimr {
 TActorId MakeTabletCountersAggregatorID(ui32 node, bool follower) {
     if (!follower) {
         char x[12] = {'t','a','b','l','c','o','u','n','t','a','g','g'};
-        return TActorId(node, TStringBuf(x, 12));
+        return TActorId(node, TStringBuf(x, 12)); 
     } else {
         char x[12] ={'s','l','a','v','c','o','u','n','t','a','g','g'};
-        return TActorId(node, TStringBuf(x, 12));
+        return TActorId(node, TStringBuf(x, 12)); 
     }
 }
 
@@ -1587,7 +1587,7 @@ private:
     //
     TAutoPtr<TTabletMon> TabletMon;
     TActorId DbWatcherActorId;
-    THashMap<TActorId, std::pair<TActorId, TAutoPtr<NMon::TEvHttpInfo>>> HttpRequestHandlers;
+    THashMap<TActorId, std::pair<TActorId, TAutoPtr<NMon::TEvHttpInfo>>> HttpRequestHandlers; 
     THashSet<ui32> TabletTypeOfReceivedLabeledCounters;
     bool Follower;
 };
@@ -1770,11 +1770,11 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
     bool spack = params.Has("spack");
     if (json) {
         oss << NMonitoring::HTTPOKJSON;
-        auto encoder = NMonitoring::CreateEncoder(&oss, NMonitoring::EFormat::JSON);
-        counters.Accept(TString(), TString(), *encoder);
+        auto encoder = NMonitoring::CreateEncoder(&oss, NMonitoring::EFormat::JSON); 
+        counters.Accept(TString(), TString(), *encoder); 
     } else if (spack) {
         oss.Write(NMonitoring::HTTPOKSPACK);
-        auto encoder = NMonitoring::CreateEncoder(&oss, NMonitoring::EFormat::SPACK);
+        auto encoder = NMonitoring::CreateEncoder(&oss, NMonitoring::EFormat::SPACK); 
         counters.Accept(TString(), TString(), *encoder);
     } else {
         counters.OutputHtml(oss);
@@ -1803,7 +1803,7 @@ TTabletCountersAggregatorActor::HandleWork(NMon::TEvHttpInfo::TPtr &ev, const TA
             continue;
         TString tabletTypeStr = TTabletTypes::TypeToStr((TTabletTypes::EType)tabletType);
         if (tabletTypeStr == reqTabletType) {
-            TActorId handler = CreateClusterLabeledCountersAggregator(ctx.SelfID, (TTabletTypes::EType)tabletType, ctx, 1, "", workers);
+            TActorId handler = CreateClusterLabeledCountersAggregator(ctx.SelfID, (TTabletTypes::EType)tabletType, ctx, 1, "", workers); 
             HttpRequestHandlers.insert(std::make_pair(handler, std::make_pair(ev->Sender, ev->Release())));
             return;
         }
@@ -1894,7 +1894,7 @@ void PreProcessResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse* res
 
 class TClusterLabeledCountersAggregatorActorV1 : public TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1> {
     using TBase = TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1>;
-    TActorId Initiator;
+    TActorId Initiator; 
     TTabletTypes::EType TabletType;
     ui32 NodesRequested;
     ui32 NodesReceived;
@@ -1910,7 +1910,7 @@ public:
     }
 
     //
-    TClusterLabeledCountersAggregatorActorV1(const TActorId& parentActor, const TTabletTypes::EType tabletType, ui32 numWorkers = 0, ui32 workerId = 0)
+    TClusterLabeledCountersAggregatorActorV1(const TActorId& parentActor, const TTabletTypes::EType tabletType, ui32 numWorkers = 0, ui32 workerId = 0) 
         : Initiator(parentActor)
         , TabletType(tabletType)
         , NodesRequested(0)
@@ -1921,7 +1921,7 @@ public:
     }
 
     void SendRequest(ui32 nodeId, const TActorContext &ctx) {
-        TActorId aggregatorServiceId = MakeTabletCountersAggregatorID(nodeId);
+        TActorId aggregatorServiceId = MakeTabletCountersAggregatorID(nodeId); 
         TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersRequest> request(new TEvTabletCounters::TEvTabletLabeledCountersRequest());
         request->Record.SetTabletType(TabletType);
         request->Record.SetVersion(1);
@@ -1940,7 +1940,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         if (NumWorkers > 0) {
-            const TActorId nameserviceId = GetNameserviceActorId();
+            const TActorId nameserviceId = GetNameserviceActorId(); 
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
@@ -2163,7 +2163,7 @@ public:
 
 class TClusterLabeledCountersAggregatorActorV2 : public TActorBootstrapped<TClusterLabeledCountersAggregatorActorV2> {
     using TBase = TActorBootstrapped<TClusterLabeledCountersAggregatorActorV2>;
-    TActorId Initiator;
+    TActorId Initiator; 
     TTabletTypes::EType TabletType;
     ui32 NodesRequested;
     ui32 NodesReceived;
@@ -2184,7 +2184,7 @@ public:
     }
 
     //
-    TClusterLabeledCountersAggregatorActorV2(const TActorId& parentActor, const TTabletTypes::EType tabletType, const TString& group, ui32 numWorkers = 0, ui32 workerId = 0, bool newFormat = false)
+    TClusterLabeledCountersAggregatorActorV2(const TActorId& parentActor, const TTabletTypes::EType tabletType, const TString& group, ui32 numWorkers = 0, ui32 workerId = 0, bool newFormat = false) 
         : Initiator(parentActor)
         , TabletType(tabletType)
         , NodesRequested(0)
@@ -2198,7 +2198,7 @@ public:
     {}
 
     void SendRequest(ui32 nodeId, const TActorContext &ctx) {
-        TActorId aggregatorServiceId = MakeTabletCountersAggregatorID(nodeId);
+        TActorId aggregatorServiceId = MakeTabletCountersAggregatorID(nodeId); 
         TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersRequest> request(new TEvTabletCounters::TEvTabletLabeledCountersRequest());
         request->Record.SetVersion(2);
         request->Record.SetTabletType(TabletType);
@@ -2304,7 +2304,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         if (NumWorkers > 0) {
-            const TActorId nameserviceId = GetNameserviceActorId();
+            const TActorId nameserviceId = GetNameserviceActorId(); 
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
@@ -2433,7 +2433,7 @@ public:
     }
 };
 
-IActor* CreateClusterLabeledCountersAggregatorActor(const TActorId& parentActor, TTabletTypes::EType tabletType, ui32 version, const TString& group, const ui32 totalWorkersCount) {
+IActor* CreateClusterLabeledCountersAggregatorActor(const TActorId& parentActor, TTabletTypes::EType tabletType, ui32 version, const TString& group, const ui32 totalWorkersCount) { 
     switch (version) {
     case 1:
         return new TClusterLabeledCountersAggregatorActorV1(parentActor, tabletType, totalWorkersCount == 0 ? 1 : 0, totalWorkersCount);
@@ -2446,7 +2446,7 @@ IActor* CreateClusterLabeledCountersAggregatorActor(const TActorId& parentActor,
 }
 
 
-TActorId CreateClusterLabeledCountersAggregator(const TActorId& parentActor, TTabletTypes::EType tabletType, const TActorContext& ctx, ui32 version, const TString& group, const ui32 totalWorkersCount) {
+TActorId CreateClusterLabeledCountersAggregator(const TActorId& parentActor, TTabletTypes::EType tabletType, const TActorContext& ctx, ui32 version, const TString& group, const ui32 totalWorkersCount) { 
     return ctx.Register(CreateClusterLabeledCountersAggregatorActor(parentActor, tabletType, version, group, totalWorkersCount), TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
 }
 

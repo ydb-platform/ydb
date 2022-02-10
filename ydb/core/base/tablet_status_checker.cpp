@@ -9,7 +9,7 @@ namespace NKikimr {
 
 class TTabletStatusCheckRequest : public TActorBootstrapped<TTabletStatusCheckRequest> {
 private:
-    const TActorId ReplyTo;
+    const TActorId ReplyTo; 
     TIntrusiveConstPtr<TTabletStorageInfo> Info;
     ui32 RequestsLeft;
     TVector<ui32> LightYellowMoveGroups;
@@ -38,7 +38,7 @@ public:
         return NKikimrServices::TActivity::TABLET_ACTOR;
     }
 
-    TTabletStatusCheckRequest(const TActorId &replyTo, TTabletStorageInfo *info)
+    TTabletStatusCheckRequest(const TActorId &replyTo, TTabletStorageInfo *info) 
         : ReplyTo(replyTo)
         , Info(info)
         , RequestsLeft(0)
@@ -64,7 +64,7 @@ public:
     }
 };
 
-IActor* CreateTabletDSChecker(const TActorId &replyTo, TTabletStorageInfo *info) {
+IActor* CreateTabletDSChecker(const TActorId &replyTo, TTabletStorageInfo *info) { 
     return new TTabletStatusCheckRequest(replyTo, info);
 }
 

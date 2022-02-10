@@ -73,7 +73,7 @@ public:
         return NKikimrServices::TActivity::NAMESERVICE;
     }
 
-    TDynamicNodeResolverBase(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
+    TDynamicNodeResolverBase(TActorId owner, ui32 nodeId, TDynamicConfigPtr config, 
                              TAutoPtr<IEventHandle> origRequest, TInstant deadline)
         : Owner(owner)
         , NodeId(nodeId)
@@ -111,19 +111,19 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
 
 protected:
-    TActorId Owner;
+    TActorId Owner; 
     ui32 NodeId;
     TDynamicConfigPtr Config;
     TAutoPtr<IEventHandle> OrigRequest;
     const TInstant Deadline;
 
 private:
-    TActorId NodeBrokerPipe;
+    TActorId NodeBrokerPipe; 
 };
 
 class TDynamicNodeResolver : public TDynamicNodeResolverBase {
 public:
-    TDynamicNodeResolver(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
+    TDynamicNodeResolver(TActorId owner, ui32 nodeId, TDynamicConfigPtr config, 
                          TAutoPtr<IEventHandle> origRequest, TInstant deadline)
         : TDynamicNodeResolverBase(owner, nodeId, config, origRequest, deadline)
     {
@@ -135,7 +135,7 @@ public:
 
 class TDynamicNodeSearcher : public TDynamicNodeResolverBase {
 public:
-    TDynamicNodeSearcher(TActorId owner, ui32 nodeId, TDynamicConfigPtr config,
+    TDynamicNodeSearcher(TActorId owner, ui32 nodeId, TDynamicConfigPtr config, 
                          TAutoPtr<IEventHandle> origRequest, TInstant deadline)
         : TDynamicNodeResolverBase(owner, nodeId, config, origRequest, deadline)
     {
@@ -241,8 +241,8 @@ private:
 private:
     TIntrusivePtr<TTableNameserverSetup> StaticConfig;
     std::array<TDynamicConfigPtr, DOMAINS_COUNT> DynamicConfigs;
-    TVector<TActorId> ListNodesQueue;
-    std::array<TActorId, DOMAINS_COUNT> NodeBrokerPipes;
+    TVector<TActorId> ListNodesQueue; 
+    std::array<TActorId, DOMAINS_COUNT> NodeBrokerPipes; 
     // When ListNodes requests are sent to NodeBroker tablets this
     // bitmap indicates domains which didn't answer yet.
     TBitMap<DOMAINS_COUNT> PendingRequests;

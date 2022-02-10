@@ -4,19 +4,19 @@
 
 #include <util/string/hex.h>
 #include <util/string/cast.h>
-
+ 
 #include <typeinfo>
 
 
 namespace NKikimr {
-namespace NScheme {
+namespace NScheme { 
 
 ////////////////////////////////////////////////////////
-class ITypeMetadata {
+class ITypeMetadata { 
 public:
-    enum class EFlags {
-        CanBeValueInKey = 0x01,
-        CanCompare = 0x02,
+    enum class EFlags { 
+        CanBeValueInKey = 0x01, 
+        CanCompare = 0x02, 
         CanEquate = 0x04,
         CanHash = 0x08,
         HasDeterministicCompare = 0x10,
@@ -24,29 +24,29 @@ public:
         HasDeterministicToString = 0x40,
         HasDeterministicHash = 0x80,
         HasDeterministicBytes = 0x100,
-    };
-
+    }; 
+ 
     virtual ~ITypeMetadata() {}
 
-    virtual TTypeId GetTypeId() const = 0;
+    virtual TTypeId GetTypeId() const = 0; 
     virtual const char* GetName() const = 0;
 };
 
-class IType : public ITypeMetadata {
+class IType : public ITypeMetadata { 
 friend class ITypeSP;
-friend class TTypeRegistry;
+friend class TTypeRegistry; 
 };
 
 ////////////////////////////////////////////////////////
 class ITypeSP {
 public:
     //
-    ITypeSP(const IType* t = nullptr)
+    ITypeSP(const IType* t = nullptr) 
         : Type(t)
         , TypeId(t ? t->GetTypeId() : 0)
     {}
 
-    ITypeSP(TTypeId typeId)
+    ITypeSP(TTypeId typeId) 
         : Type(nullptr)
         , TypeId(typeId)
     {}
@@ -61,9 +61,9 @@ public:
     const IType* GetType() const noexcept { return Type; }
 
 private:
-    const IType* Type;
-    TTypeId TypeId;
+    const IType* Type; 
+    TTypeId TypeId; 
 };
 
-} // namspace NScheme
-} // namespace NKikimr
+} // namspace NScheme 
+} // namespace NKikimr 

@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-IActor* CreatePersQueue(const TActorId& tablet, TTabletStorageInfo *info);
-IActor* CreatePersQueueReadBalancer(const TActorId& tablet, TTabletStorageInfo *info);
+IActor* CreatePersQueue(const TActorId& tablet, TTabletStorageInfo *info); 
+IActor* CreatePersQueueReadBalancer(const TActorId& tablet, TTabletStorageInfo *info); 
 
 } //NKikimr

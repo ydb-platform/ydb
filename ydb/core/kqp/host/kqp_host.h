@@ -95,7 +95,7 @@ public:
 
     /* Scan queries */
     virtual IAsyncQueryResultPtr ExecuteScanQuery(const TString& query, bool isSql,
-        NKikimrMiniKQL::TParams&& parameters, const NActors::TActorId& target,
+        NKikimrMiniKQL::TParams&& parameters, const NActors::TActorId& target, 
         const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
 
     virtual IAsyncQueryResultPtr ExplainScanQuery(const TString& query, bool isSql) = 0;

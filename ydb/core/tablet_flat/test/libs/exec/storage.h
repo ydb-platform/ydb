@@ -22,7 +22,7 @@ namespace NFake {
         }
 
     private:
-        void Registered(TActorSystem *sys, const TActorId &owner) override
+        void Registered(TActorSystem *sys, const TActorId &owner) override 
         {
             Owner = owner;
 
@@ -96,7 +96,7 @@ namespace NFake {
     private:
         const ui32 Group = NPageCollection::TLargeGlobId::InvalidGroup;
 
-        TActorId Owner;
+        TActorId Owner; 
         TAutoPtr<NUtil::ILogger> Logger;
         TAutoPtr<NFake::TProxyDS> Model;
 

@@ -16,7 +16,7 @@ public:
     }
 
     TWalleCheckTaskAdapter(TEvCms::TEvWalleCheckTaskRequest::TPtr &event,
-                           const TCmsStatePtr state, TActorId cms)
+                           const TCmsStatePtr state, TActorId cms) 
         : RequestEvent(event)
         , State(state)
         , Cms(cms)
@@ -114,12 +114,12 @@ private:
     TEvCms::TEvWalleCheckTaskRequest::TPtr RequestEvent;
     TAutoPtr<TEvCms::TEvWalleCheckTaskResponse> Response;
     const TCmsStatePtr State;
-    TActorId Cms;
+    TActorId Cms; 
 };
 
 
 IActor *CreateWalleAdapter(TEvCms::TEvWalleCheckTaskRequest::TPtr &ev,
-                           const TCmsStatePtr state, TActorId cms)
+                           const TCmsStatePtr state, TActorId cms) 
 {
     return new TWalleCheckTaskAdapter(ev, state, cms);
 }

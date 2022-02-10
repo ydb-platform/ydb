@@ -138,7 +138,7 @@ public:
     }
 
     TBlobStorageGroupRequestActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TGroupQueues> groupQueues,
-            TIntrusivePtr<TBlobStorageGroupProxyMon> mon, const TActorId& source, ui64 cookie, NWilson::TTraceId traceId,
+            TIntrusivePtr<TBlobStorageGroupProxyMon> mon, const TActorId& source, ui64 cookie, NWilson::TTraceId traceId, 
             NKikimrServices::EServiceKikimr logComponent, bool logAccEnabled, TMaybe<TGroupStat::EKind> latencyQueueKind,
             TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters, ui32 restartCounter)
         : Info(std::move(info))
@@ -163,7 +163,7 @@ public:
         Mon->CountEvent(request, ev);
     }
 
-    TActorId GetVDiskActorId(const TVDiskIdShort &shortId) const {
+    TActorId GetVDiskActorId(const TVDiskIdShort &shortId) const { 
         return Info->GetActorId(shortId);
     }
 
@@ -506,7 +506,7 @@ protected:
     const ui32 RestartCounter = 0;
 
 private:
-    const TActorId Source;
+    const TActorId Source; 
     const ui64 Cookie;
     THashMap<TActorId, ui32> InvolvedQueues;
     ui32 RequestsInFlight = 0;

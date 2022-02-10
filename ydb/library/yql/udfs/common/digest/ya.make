@@ -1,5 +1,5 @@
 YQL_UDF(digest_udf)
-
+ 
 YQL_ABI_VERSION(
     2
     9
@@ -7,11 +7,11 @@ YQL_ABI_VERSION(
 )
 
 OWNER(g:yql g:yql_ydb_core)
-
-SRCS(
+ 
+SRCS( 
     digest_udf.cpp
-)
-
+) 
+ 
 PEERDIR(
     contrib/libs/farmhash
     contrib/libs/highwayhash
@@ -26,4 +26,4 @@ PEERDIR(
 
 ADDINCL(contrib/libs/highwayhash)
 
-END()
+END() 

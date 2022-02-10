@@ -60,14 +60,14 @@ Y_UNIT_TEST_SUITE(SchedulerActor) {
             setup->Executors[i] = new TBasicExecutorPool(i, 5, 10, "basic");
         }
         // create poller actor (whether platform supports it)
-        TActorId pollerActorId;
+        TActorId pollerActorId; 
         if (IActor* poller = CreatePollerActor()) {
-            pollerActorId = MakePollerActorId();
+            pollerActorId = MakePollerActorId(); 
             setup->LocalServices.emplace_back(pollerActorId, TActorSetupCmd(poller, TMailboxType::ReadAsFilled, 0));
         }
-        TActorId schedulerActorId;
+        TActorId schedulerActorId; 
         if (IActor* schedulerActor = CreateSchedulerActor(TSchedulerConfig())) {
-            schedulerActorId = MakeSchedulerActorId();
+            schedulerActorId = MakeSchedulerActorId(); 
             setup->LocalServices.emplace_back(schedulerActorId, TActorSetupCmd(schedulerActor, TMailboxType::ReadAsFilled, 0));
         }
         setup->Scheduler = CreateSchedulerThread(TSchedulerConfig());

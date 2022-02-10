@@ -251,7 +251,7 @@ TWriteValue& TWriteValue::Interval(i64 value) {
 
 TWriteValue& TWriteValue::operator =(bool value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Bool);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Bool); 
     Value.SetBool(value);
     return *this;
 }
@@ -286,21 +286,21 @@ TWriteValue& TWriteValue::operator =(i16 value) {
 
 TWriteValue& TWriteValue::operator =(ui64 value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Uint64); 
     Value.SetUint64(value);
     return *this;
 }
 
 TWriteValue& TWriteValue::operator =(i64 value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Int64);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Int64); 
     Value.SetInt64(value);
     return *this;
 }
 
 TWriteValue& TWriteValue::operator =(ui32 value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Uint32);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Uint32); 
     Value.SetUint32(value);
     return *this;
 }
@@ -314,14 +314,14 @@ TWriteValue& TWriteValue::operator =(i32 value) {
 
 TWriteValue& TWriteValue::operator =(double value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Double);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Double); 
     Value.SetDouble(value);
     return *this;
 }
 
 TWriteValue& TWriteValue::operator =(float value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Float);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Float); 
     Value.SetFloat(value);
     return *this;
 }
@@ -377,23 +377,23 @@ NScheme::TTypeId TValue::GetDataType() const {
 TString TValue::GetDataText() const {
     Y_ASSERT(Type.GetKind() == NKikimrMiniKQL::ETypeKind::Data);
     switch (Type.GetData().GetScheme()) {
-    case NScheme::NTypeIds::Bool:
+    case NScheme::NTypeIds::Bool: 
         return Value.GetBool() ? "true" : "false";
-    case NScheme::NTypeIds::Uint64:
+    case NScheme::NTypeIds::Uint64: 
         return ToString(Value.GetUint64());
-    case NScheme::NTypeIds::Int64:
+    case NScheme::NTypeIds::Int64: 
         return ToString(Value.GetInt64());
-    case NScheme::NTypeIds::Uint32:
+    case NScheme::NTypeIds::Uint32: 
     case NScheme::NTypeIds::Uint16:
     case NScheme::NTypeIds::Uint8:
         return ToString(Value.GetUint32());
-    case NScheme::NTypeIds::Int32:
+    case NScheme::NTypeIds::Int32: 
     case NScheme::NTypeIds::Int16:
     case NScheme::NTypeIds::Int8:
         return ToString(Value.GetInt32());
-    case NScheme::NTypeIds::Double:
+    case NScheme::NTypeIds::Double: 
         return ToString(Value.GetDouble());
-    case NScheme::NTypeIds::Float:
+    case NScheme::NTypeIds::Float: 
         return ToString(Value.GetFloat());
     case NScheme::NTypeIds::Utf8:
     case NScheme::NTypeIds::Json:
@@ -874,43 +874,43 @@ TValue TValue::EatOptional() const {
 }
 
 TValue::operator ui64() const {
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Uint64);
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Uint64); 
     Y_ASSERT(Value.HasUint64());
     return Value.GetUint64();
 }
 
 TValue::operator i64() const {
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Int64);
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Int64); 
     Y_ASSERT(Value.HasInt64());
     return Value.GetInt64();
 }
 
 TValue::operator ui32() const {
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Uint32);
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Uint32); 
     Y_ASSERT(Value.HasUint32());
     return Value.GetUint32();
 }
 
 TValue::operator i32() const {
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Int32);
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Int32); 
     Y_ASSERT(Value.HasInt32());
     return Value.GetInt32();
 }
 
 TValue::operator double() const {
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Double);
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Double); 
     Y_ASSERT(Value.HasDouble());
     return Value.GetDouble();
 }
 
 TValue::operator float() const {
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Float);
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Float); 
     Y_ASSERT(Value.HasFloat());
     return Value.GetFloat();
 }
 
 TValue::operator bool() const {
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Bool);
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Bool); 
     Y_ASSERT(Value.HasBool());
     return Value.GetBool();
 }
@@ -944,7 +944,7 @@ TValue::operator TString() const {
             || Type.GetData().GetScheme() == NScheme::NTypeIds::String
             || Type.GetData().GetScheme() == NScheme::NTypeIds::String4k
             || Type.GetData().GetScheme() == NScheme::NTypeIds::String2m
-            || Type.GetData().GetScheme() == NScheme::NTypeIds::Yson
+            || Type.GetData().GetScheme() == NScheme::NTypeIds::Yson 
             || Type.GetData().GetScheme() == NScheme::NTypeIds::Json
             );
     Y_ASSERT(Value.HasText() || Value.HasBytes());

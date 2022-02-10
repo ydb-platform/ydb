@@ -37,13 +37,13 @@ namespace NKikimr {
 
         TIntrusivePtr<TSyncerContext> SyncerCtx;
         const NSyncer::TPeerSyncState PeerSyncState;
-        const TActorId CommitterId;
-        const TActorId NotifyId;
+        const TActorId CommitterId; 
+        const TActorId NotifyId; 
         TActiveActors ActiveActors;
         std::shared_ptr<TSjCtx> JobCtx;
         // Target VDiskId and ActorId are reconfigurable
         TVDiskID TargetVDiskId;
-        TActorId TargetActorId;
+        TActorId TargetActorId; 
 
         void CreateAndRunTask(const TActorContext &ctx) {
             // create task
@@ -175,11 +175,11 @@ namespace NKikimr {
 
         TSyncerRLDFullSyncProxyActor(const TIntrusivePtr<TSyncerContext> &sc,
                                      const TPeerSyncState& peerSyncState,
-                                     const TActorId &committerId,
-                                     const TActorId &notifyId,
+                                     const TActorId &committerId, 
+                                     const TActorId &notifyId, 
                                      const std::shared_ptr<TSjCtx> &jobCtx,
                                      const TVDiskID &targetVDiskId,
-                                     const TActorId &targetActorId)
+                                     const TActorId &targetActorId) 
             : TActorBootstrapped<TSyncerRLDFullSyncProxyActor>()
             , SyncerCtx(sc)
             , PeerSyncState(peerSyncState)
@@ -197,11 +197,11 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateProxyForFullSyncWithPeer(const TIntrusivePtr<TSyncerContext> &sc,
                                            const TPeerSyncState& peerSyncState,
-                                           const TActorId &committerId,
-                                           const TActorId &notifyId,
+                                           const TActorId &committerId, 
+                                           const TActorId &notifyId, 
                                            const std::shared_ptr<TSjCtx> &jobCtx,
                                            const TVDiskID &targetVDiskId,
-                                           const TActorId &targetActorId) {
+                                           const TActorId &targetActorId) { 
         return new TSyncerRLDFullSyncProxyActor(sc, peerSyncState, committerId, notifyId,
                                                 jobCtx, targetVDiskId, targetActorId);
     }

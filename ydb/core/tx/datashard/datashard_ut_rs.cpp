@@ -13,7 +13,7 @@ namespace NKikimr {
 using namespace NSchemeShard;
 using namespace Tests;
 
-ui64 GetRSCount(TTestActorRuntime &runtime, TActorId sender, ui64 shard)
+ui64 GetRSCount(TTestActorRuntime &runtime, TActorId sender, ui64 shard) 
 {
     auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
     TString miniKQL =   R"___((

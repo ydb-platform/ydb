@@ -160,20 +160,20 @@ Y_UNIT_TEST_SUITE(TDowntimeTest) {
         TInstant t7 = t1 + TDuration::Seconds(33);
 
         downtime1.AddDowntime(t2, t4);
-        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t1, TDuration::Seconds(0), TDuration::Seconds(5)));
-        UNIT_ASSERT(downtime1.HasUpcomingDowntime(t1, TDuration::Seconds(3), TDuration::Seconds(5)));
-        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t2, TDuration::Seconds(3), TDuration::Seconds(15)));
-        UNIT_ASSERT(downtime1.HasUpcomingDowntime(t2, TDuration::Seconds(3), TDuration::Seconds(5)));
-        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t3, TDuration::Seconds(3), TDuration::Seconds(15)));
-        UNIT_ASSERT(downtime1.HasUpcomingDowntime(t3, TDuration::Seconds(3), TDuration::Seconds(5)));
-        UNIT_ASSERT(downtime1.HasUpcomingDowntime(t4, TDuration::Seconds(3), TDuration::Seconds(5)));
-        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t5, TDuration::Seconds(3), TDuration::Seconds(5)));
+        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t1, TDuration::Seconds(0), TDuration::Seconds(5))); 
+        UNIT_ASSERT(downtime1.HasUpcomingDowntime(t1, TDuration::Seconds(3), TDuration::Seconds(5))); 
+        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t2, TDuration::Seconds(3), TDuration::Seconds(15))); 
+        UNIT_ASSERT(downtime1.HasUpcomingDowntime(t2, TDuration::Seconds(3), TDuration::Seconds(5))); 
+        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t3, TDuration::Seconds(3), TDuration::Seconds(15))); 
+        UNIT_ASSERT(downtime1.HasUpcomingDowntime(t3, TDuration::Seconds(3), TDuration::Seconds(5))); 
+        UNIT_ASSERT(downtime1.HasUpcomingDowntime(t4, TDuration::Seconds(3), TDuration::Seconds(5))); 
+        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t5, TDuration::Seconds(3), TDuration::Seconds(5))); 
 
         downtime1.AddDowntime(t5, t7);
-        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t1, TDuration::Seconds(0), TDuration::Seconds(10)));
-        UNIT_ASSERT(downtime1.HasUpcomingDowntime(t1, TDuration::Seconds(25), TDuration::Seconds(10)));
-        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t1, TDuration::Seconds(30), TDuration::Seconds(11)));
-        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t6, TDuration::Seconds(0), TDuration::Seconds(11)));
+        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t1, TDuration::Seconds(0), TDuration::Seconds(10))); 
+        UNIT_ASSERT(downtime1.HasUpcomingDowntime(t1, TDuration::Seconds(25), TDuration::Seconds(10))); 
+        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t1, TDuration::Seconds(30), TDuration::Seconds(11))); 
+        UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t6, TDuration::Seconds(0), TDuration::Seconds(11))); 
     }
 
     Y_UNIT_TEST(SetIgnoredDowntimeGap)

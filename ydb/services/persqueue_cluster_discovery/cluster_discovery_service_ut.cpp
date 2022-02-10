@@ -285,7 +285,7 @@ public:
 
     void Run() {
         Server_ = MakeHolder<TServer>(Settings_);
-        Server_->EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(GrpcPort_));
+        Server_->EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(GrpcPort_)); 
     }
 
     NPersQueueTests::TFlatMsgBusPQClient& PQClient() {
@@ -313,7 +313,7 @@ public:
             HttpProxyId_ = ActorSystem().Register(proxy);
         }
 
-        TActorId clientId = ActorSystem().AllocateEdgeActor();
+        TActorId clientId = ActorSystem().AllocateEdgeActor(); 
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(MonPort()) + path);
         ActorSystem().Send(new NActors::IEventHandle(HttpProxyId_, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
 
@@ -379,11 +379,11 @@ private:
     ui16 GrpcPort_;
     TServerSettings Settings_;
 
-    NMonitoring::TMetricRegistry Sensors_;
+    NMonitoring::TMetricRegistry Sensors_; 
     THolder<TServer> Server_;
     THolder<NPersQueueTests::TFlatMsgBusPQClient> PQClient_;
 
-    TActorId HttpProxyId_;
+    TActorId HttpProxyId_; 
 
     THolder<TTempFileHandle> NetDataFile;
 };
@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         auto& actorSystem = server.ActorSystem();
         // check that NetClassifier is up and running
         {
-            const TActorId sender = actorSystem.AllocateEdgeActor();
+            const TActorId sender = actorSystem.AllocateEdgeActor(); 
 
             actorSystem.Send(
                 new IEventHandle(NNetClassifier::MakeNetClassifierID(), sender,
@@ -433,7 +433,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         // check that ClusterTracker is up and running
         {
-            const TActorId sender = actorSystem.AllocateEdgeActor();
+            const TActorId sender = actorSystem.AllocateEdgeActor(); 
 
             actorSystem.Send(
                 new IEventHandle(NPQ::NClusterTracker::MakeClusterTrackerID(), sender,
@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         auto& actorSystem = server.ActorSystem();
         // check that NetClassifier instance is initialized with null
         {
-            const TActorId sender = actorSystem.AllocateEdgeActor();
+            const TActorId sender = actorSystem.AllocateEdgeActor(); 
 
             actorSystem.Send(
                 new IEventHandle(NNetClassifier::MakeNetClassifierID(), sender,

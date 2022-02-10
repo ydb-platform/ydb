@@ -24,7 +24,7 @@ namespace NYql {
             ui32 threads,
             IMetricsRegistryPtr metricsRegistry);
 
-        void AddLocalService(NActors::TActorId actorId, const NActors::TActorSetupCmd& service);
+        void AddLocalService(NActors::TActorId actorId, const NActors::TActorSetupCmd& service); 
         NActors::TActorSystem* StartActorSystem(void* appData = nullptr);
         void StartService(const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories);
 
@@ -41,8 +41,8 @@ namespace NYql {
         THolder<NActors::TActorSystemSetup> Setup;
         TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
         THolder<NActors::TActorSystem> ActorSystem;
-        TVector<NActors::TActorId> ActorIds;
-        THolder<NGrpc::TGRpcServer> Server;
-        TIntrusivePtr<NGrpc::IGRpcService> Service;
+        TVector<NActors::TActorId> ActorIds; 
+        THolder<NGrpc::TGRpcServer> Server; 
+        TIntrusivePtr<NGrpc::IGRpcService> Service; 
     };
 }

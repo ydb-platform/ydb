@@ -51,7 +51,7 @@ NKikimrProto::EReplyStatus TIntermediate::TRead::CumulativeStatus() const {
     }
 }
 
-TIntermediate::TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 channelGeneration, ui64 channelStep,
+TIntermediate::TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 channelGeneration, ui64 channelStep, 
         TRequestType::EType requestType)
     : Cookie(0)
     , Generation(0)

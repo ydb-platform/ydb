@@ -13,7 +13,7 @@ namespace NFlatTxCoordinator {
 
 static constexpr TDuration MaxEmptyPlanDelay = TDuration::Seconds(1);
 
-static void SendTransactionStatus(const TActorId &proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus status,
+static void SendTransactionStatus(const TActorId &proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus status, 
         ui64 txid, ui64 stepId, const TActorContext &ctx, ui64 tabletId) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << tabletId << " txid# " << txid
         << " step# " << stepId << " Status# " << status << " SEND to# " << proxy.ToString() << " Proxy marker# C1");
@@ -21,7 +21,7 @@ static void SendTransactionStatus(const TActorId &proxy, TEvTxProxy::TEvProposeT
 }
 
 static TAutoPtr<TTransactionProposal> MakeTransactionProposal(TEvTxProxy::TEvProposeTransaction::TPtr &ev, NMonitoring::TDynamicCounters::TCounterPtr &counter) {
-    const TActorId &sender = ev->Sender;
+    const TActorId &sender = ev->Sender; 
     const NKikimrTx::TEvProposeTransaction &record = ev->Get()->Record;
 
     const NKikimrTx::TProxyTransaction &txrec = record.GetTransaction();
@@ -47,7 +47,7 @@ static TAutoPtr<TTransactionProposal> MakeTransactionProposal(TEvTxProxy::TEvPro
 
 const ui32 TTxCoordinator::Schema::CurrentVersion = 1;
 
-TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
+TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet) 
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 #ifdef COORDINATOR_LOG_TO_FILE
@@ -268,7 +268,7 @@ void TTxCoordinator::Handle(TEvTxCoordinator::TEvCoordinatorConfirmPlan::TPtr &e
     }
 }
 
-void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo) {
+void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo) { 
     const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record;
 
     if(0 == record.MediatorsSize()) {
@@ -432,7 +432,7 @@ void TTxCoordinator::OnStopGuardComplete(const TActorContext &ctx) {
 
 }
 
-IActor* CreateFlatTxCoordinator(const TActorId &tablet, TTabletStorageInfo *info) {
+IActor* CreateFlatTxCoordinator(const TActorId &tablet, TTabletStorageInfo *info) { 
     return new NFlatTxCoordinator::TTxCoordinator(info, tablet);
 }
 

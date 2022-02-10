@@ -310,7 +310,7 @@ void TNodeInfo::Ping() {
     Hive.SendPing(Local, Id);
 }
 
-void TNodeInfo::SendReconnect(const TActorId& local) {
+void TNodeInfo::SendReconnect(const TActorId& local) { 
     BLOG_D("Node(" << Id << ") Reconnect(" << local << ")");
     Hive.SendReconnect(local);
 }

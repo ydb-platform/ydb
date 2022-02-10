@@ -58,7 +58,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
     };
 
     struct TClientState {
-        TActorId Client;
+        TActorId Client; 
         THashMap<TActorId, ui64> Peers;
         ui64 LastSentSeqNo = 0;
         ui64 MaxForwardedSeqNo = Max<ui64>();
@@ -118,7 +118,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         }
     }
 
-    void UnlinkOne(TActorId peer, ui64 tablet) {
+    void UnlinkOne(TActorId peer, ui64 tablet) { 
         auto *tabletState = FindTablet(tablet);
         if (Y_UNLIKELY(!tabletState))
             return;
@@ -152,7 +152,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         }
     }
 
-    void DropClient(ui64 tablet, TActorId client, bool notDelivered) {
+    void DropClient(ui64 tablet, TActorId client, bool notDelivered) { 
         auto *tabletState = FindTablet(tablet);
         if (Y_UNLIKELY(!tabletState))
             return;
@@ -318,7 +318,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
     void Handle(TEvPipeCache::TEvUnlink::TPtr &ev) {
         TEvPipeCache::TEvUnlink *msg = ev->Get();
         const ui64 tablet = msg->TabletId;
-        const TActorId peer = ev->Sender;
+        const TActorId peer = ev->Sender; 
 
         auto byPeerIt = ByPeer.find(peer);
         if (byPeerIt == ByPeer.end())
@@ -464,7 +464,7 @@ IActor* CreatePipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &confi
 TActorId MakePipePeNodeCacheID(bool allowFollower) {
     char x[12] = "PipeCache";
     x[9] = allowFollower ? 'F' : 'A';
-    return TActorId(0, TStringBuf(x, 12));
+    return TActorId(0, TStringBuf(x, 12)); 
 }
 
 }

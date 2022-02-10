@@ -79,8 +79,8 @@ namespace NActors {
         return true;
     }
 
-    TActorId GetNameserviceActorId() {
-        return TActorId(0, "namesvc");
+    TActorId GetNameserviceActorId() { 
+        return TActorId(0, "namesvc"); 
     }
 
 }

@@ -397,7 +397,7 @@ message TTypeMetadataResponse {
 
     optional uint64 ETag = 2;
     optional bytes TypeMetadata = 3;
-    optional bytes FunctionMetadata = 4;
+    optional bytes FunctionMetadata = 4; 
 }
 
 message TMessageBusTraceRequest {

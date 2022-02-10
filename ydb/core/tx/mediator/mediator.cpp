@@ -34,7 +34,7 @@ namespace NTxMediator {
 
 }
 
-IActor* CreateTxMediator(const TActorId &tablet, TTabletStorageInfo *info) {
+IActor* CreateTxMediator(const TActorId &tablet, TTabletStorageInfo *info) { 
     return new NTxMediator::TTxMediator(info, tablet);
 }
 

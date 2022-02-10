@@ -20,7 +20,7 @@ namespace NActors {
             ES_INTERCONNECT_TCP = 8,
             ES_PROFILER = 9,
             ES_YF = 10,
-            ES_HTTP = 11,
+            ES_HTTP = 11, 
 
             ES_USERSPACE = 4096,
 
@@ -99,7 +99,7 @@ namespace NActors {
                 InvokeQuery,
                 End,
 
-                // Compatibility section
+                // Compatibility section 
                 PoisonPill = Poison,
                 ActorDied = Gone,
             };
@@ -191,17 +191,17 @@ namespace NActors {
         struct TEvCallbackException: public TEventPB<TEvCallbackException,
                                                       NActorsProto::TCallbackException,
                                                       TSystem::CallbackException> {
-            TEvCallbackException(const TActorId& id, const TString& msg) {
-                ActorIdToProto(id, Record.MutableActorId());
+            TEvCallbackException(const TActorId& id, const TString& msg) { 
+                ActorIdToProto(id, Record.MutableActorId()); 
                 Record.SetExceptionMessage(msg);
             }
         };
 
         struct TEvCallbackCompletion: public TEventPB<TEvCallbackCompletion,
-                                                       NActorsProto::TActorId,
+                                                       NActorsProto::TActorId, 
                                                        TSystem::CallbackCompletion> {
-            TEvCallbackCompletion(const TActorId& id) {
-                ActorIdToProto(id, &Record);
+            TEvCallbackCompletion(const TActorId& id) { 
+                ActorIdToProto(id, &Record); 
             }
         };
 

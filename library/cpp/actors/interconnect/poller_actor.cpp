@@ -1,35 +1,35 @@
 #include "poller_actor.h"
 #include "interconnect_common.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/actor_bootstrapped.h> 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/probes.h>
-#include <library/cpp/actors/protos/services_common.pb.h>
+#include <library/cpp/actors/protos/services_common.pb.h> 
 #include <library/cpp/actors/util/funnel_queue.h>
-
+ 
 #include <util/generic/intrlist.h>
 #include <util/system/thread.h>
 #include <util/system/event.h>
 #include <util/system/pipe.h>
 
 #include <variant>
-
+ 
 namespace NActors {
 
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
-    namespace {
+    namespace { 
         int LastSocketError() {
 #if defined(_win_)
             return WSAGetLastError();
 #else
             return errno;
 #endif
-        }
-    }
-
+        } 
+    } 
+ 
     struct TSocketRecord : TThrRefBase {
         const TIntrusivePtr<TSharedDescriptor> Socket;
         const TActorId ReadActorId;
@@ -57,7 +57,7 @@ namespace NActors {
                 : Socket(std::move(socket))
             {}
         };
-
+ 
         using TPollerSyncOperation = std::variant<TPollerExitThread, TPollerWakeup, TPollerUnregisterSocket>;
 
         struct TPollerSyncOperationWrapper {
@@ -149,7 +149,7 @@ namespace NActors {
         bool DrainReadEnd() {
             size_t totalRead = 0;
             char buffer[4096];
-            for (;;) {
+            for (;;) { 
                 ssize_t n = ReadEnd.Read(buffer, sizeof(buffer));
                 if (n < 0) {
                     const int error = LastSocketError();
@@ -157,17 +157,17 @@ namespace NActors {
                         continue;
                     } else if (error == EAGAIN || error == EWOULDBLOCK) {
                         break;
-                    } else {
+                    } else { 
                         Y_FAIL("read() failed with %s", strerror(errno));
-                    }
+                    } 
                 } else {
                     Y_VERIFY(n);
                     totalRead += n;
-                }
+                } 
             }
             return totalRead;
         }
-
+ 
         bool ProcessSyncOpQueue() {
             if (DrainReadEnd()) {
                 Y_VERIFY(!SyncOperationsQ.IsEmpty());
@@ -181,25 +181,25 @@ namespace NActors {
                         return false; // terminate the thread
                     } else if (std::get_if<TPollerWakeup>(&op->Operation)) {
                         op->SignalDone();
-                    } else {
+                    } else { 
                         Y_FAIL();
-                    }
+                    } 
                 } while (SyncOperationsQ.Pop());
-            }
+            } 
             return true;
-        }
-
+        } 
+ 
         void *ThreadProc() override {
             SetCurrentThreadName("network poller");
             while (ProcessSyncOpQueue()) {
                 static_cast<TDerived&>(*this).ProcessEventsInLoop();
-            }
+            } 
             return nullptr;
-        }
+        } 
     };
-
+ 
 } // namespace NActors
-
+ 
 #if defined(_linux_)
 #   include "poller_actor_linux.h"
 #elif defined(_darwin_)
@@ -209,38 +209,38 @@ namespace NActors {
 #else
 #   error "Unsupported platform"
 #endif
-
+ 
 namespace NActors {
-
+ 
     class TPollerToken::TImpl {
         std::weak_ptr<TPollerThread> Thread;
         TIntrusivePtr<TSocketRecord> Record; // valid only when Thread is held locked
-
-    public:
+ 
+    public: 
         TImpl(std::shared_ptr<TPollerThread> thread, TIntrusivePtr<TSocketRecord> record)
             : Thread(thread)
             , Record(std::move(record))
-        {
+        { 
             thread->RegisterSocket(Record);
         }
-
+ 
         ~TImpl() {
             if (auto thread = Thread.lock()) {
                 thread->UnregisterSocket(Record);
-            }
-        }
-
+            } 
+        } 
+ 
         void Request(bool read, bool write) {
             if (auto thread = Thread.lock()) {
                 thread->Request(Record, read, write);
-            }
-        }
+            } 
+        } 
 
         const TIntrusivePtr<TSharedDescriptor>& Socket() const {
             return Record->Socket;
         }
-    };
-
+    }; 
+ 
     class TPollerActor: public TActorBootstrapped<TPollerActor> {
         // poller thread
         std::shared_ptr<TPollerThread> PollerThread;

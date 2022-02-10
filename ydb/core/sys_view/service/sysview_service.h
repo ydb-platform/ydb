@@ -9,9 +9,9 @@
 namespace NKikimr {
 namespace NSysView {
 
-inline TActorId MakeSysViewServiceID(ui32 node) {
+inline TActorId MakeSysViewServiceID(ui32 node) { 
     const char x[12] = "SysViewSvc!";
-    return TActorId(node, TStringBuf(x, 12));
+    return TActorId(node, TStringBuf(x, 12)); 
 }
 
 void CollectQueryStats(const TActorContext& ctx, const NKqpProto::TKqpStatsQuery* queryStats,

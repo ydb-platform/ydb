@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/monlib/deprecated/json)
+UNITTEST_FOR(library/cpp/monlib/deprecated/json) 
 
 OWNER(
     jamel
@@ -6,7 +6,7 @@ OWNER(
 )
 
 SRCS(
-    writer_ut.cpp
+    writer_ut.cpp 
 )
 
 END()

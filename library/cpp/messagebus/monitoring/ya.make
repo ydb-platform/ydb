@@ -3,7 +3,7 @@ PROTO_LIBRARY()
 OWNER(g:messagebus)
 
 PEERDIR(
-    library/cpp/monlib/encode/legacy_protobuf/protos
+    library/cpp/monlib/encode/legacy_protobuf/protos 
 )
 
 SRCS(

@@ -556,12 +556,12 @@ const TExploringNodeVisitor::TNodesVec& TExploringNodeVisitor::GetConsumerNodes(
 template <bool InPlace>
 TRuntimeNode SinglePassVisitCallablesImpl(TRuntimeNode root, TExploringNodeVisitor& explorer,
     const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool& wereChanges)
-{
+{ 
     auto& nodes = explorer.GetNodes();
 
     wereChanges = false;
 
-    for (TNode* exploredNode : nodes) {
+    for (TNode* exploredNode : nodes) { 
         TNode* node;
         if (!InPlace) {
             node = exploredNode->CloneOnCallableWrite(env);
@@ -570,7 +570,7 @@ TRuntimeNode SinglePassVisitCallablesImpl(TRuntimeNode root, TExploringNodeVisit
             node->Freeze(env);
         }
 
-        if (node->GetType()->IsCallable()) {
+        if (node->GetType()->IsCallable()) { 
             auto& callable = static_cast<TCallable&>(*node);
             if (!callable.HasResult()) {
                 const auto& callableType = callable.GetType();

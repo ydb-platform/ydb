@@ -94,7 +94,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxInitScheme::Complete");
-        const TActorId nameserviceId = GetNameserviceActorId();
+        const TActorId nameserviceId = GetNameserviceActorId(); 
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
     }
 };

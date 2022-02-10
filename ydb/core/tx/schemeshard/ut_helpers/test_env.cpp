@@ -27,7 +27,7 @@ using namespace NSchemeShard;
 // BlockStoreVolume mock for testing schemeshard
 class TFakeBlockStoreVolume : public TActor<TFakeBlockStoreVolume>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
-    TFakeBlockStoreVolume(const TActorId& tablet, TTabletStorageInfo* info)
+    TFakeBlockStoreVolume(const TActorId& tablet, TTabletStorageInfo* info) 
         : TActor(&TThis::StateInit)
           , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
@@ -195,9 +195,9 @@ private:
         DoHandleDisconnect(ev->Get()->ClientId, ctx);
     }
 
-    void DoHandleDisconnect(TActorId pipeClient, const TActorContext &ctx) {
+    void DoHandleDisconnect(TActorId pipeClient, const TActorContext &ctx) { 
         if (pipeClient == SchemeShardPipe) {
-            SchemeShardPipe = TActorId();
+            SchemeShardPipe = TActorId(); 
             // Resend all
             for (const auto& w : SchemeTxWaiters) {
                 SendToSchemeshard(w.first, ctx);
@@ -231,7 +231,7 @@ private:
             return;
 
         // Notifify all waiters and forget TxId
-        for (TActorId waiter : SchemeTxWaiters[txId]) {
+        for (TActorId waiter : SchemeTxWaiters[txId]) { 
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "tests -- TTxNotificationSubscriber satisfy subsriber"
                         << ", waiter: " << waiter
@@ -257,8 +257,8 @@ private:
 
 private:
     ui64 SchemeshardTabletId;
-    TActorId SchemeShardPipe;
-    THashMap<ui64, THashSet<TActorId>> SchemeTxWaiters;
+    TActorId SchemeShardPipe; 
+    THashMap<ui64, THashSet<TActorId>> SchemeTxWaiters; 
 };
 
 
@@ -361,9 +361,9 @@ private:
         DoHandleDisconnect(ev->Get()->ClientId, ctx);
     }
 
-    void DoHandleDisconnect(TActorId pipeClient, const TActorContext &ctx) {
+    void DoHandleDisconnect(TActorId pipeClient, const TActorContext &ctx) { 
         if (pipeClient == SchemeShardPipe) {
-            SchemeShardPipe = TActorId();
+            SchemeShardPipe = TActorId(); 
             // Resend all
             for (const auto& w : SchemeTxWaiters) {
                 SendToSchemeshard(w.first, ctx);
@@ -461,9 +461,9 @@ private:
 
 private:
     ui64 SchemeshardTabletId;
-    TActorId SchemeShardPipe;
+    TActorId SchemeShardPipe; 
     THashMap<ui64, TPreSerialisedMessage> OnlineRequests;
-    THashMap<ui64, TActorId> SchemeTxWaiters;
+    THashMap<ui64, TActorId> SchemeTxWaiters; 
 };
 
 
@@ -525,7 +525,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         EnableSchemeshardPipeRetriesGuard = EnableSchemeshardPipeRetries(runtime);
     }
 
-    TActorId sender = runtime.AllocateEdgeActor();
+    TActorId sender = runtime.AllocateEdgeActor(); 
     //CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(TTestTxConfig::DomainUid), TTabletTypes::FLAT_BS_CONTROLLER), &CreateFlatBsController);
     BootSchemeShard(runtime, schemeRoot);
     BootTxAllocator(runtime, txAllocator);
@@ -536,7 +536,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 
     for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
         IActor* txProxy = CreateTxProxy(runtime.GetTxAllocatorTabletIds());
-        TActorId txProxyId = runtime.Register(txProxy, node);
+        TActorId txProxyId = runtime.Register(txProxy, node); 
         runtime.RegisterService(MakeTxProxyID(), txProxyId, node);
     }
 
@@ -645,14 +645,14 @@ TFakeHiveState::TPtr NSchemeShardUT_Private::TTestEnv::GetHiveState() const {
 }
 
 TAutoPtr<ITabletScheduledEventsGuard> NSchemeShardUT_Private::TTestEnv::EnableSchemeshardPipeRetries(TTestActorRuntime &runtime) {
-    TActorId sender = runtime.AllocateEdgeActor();
+    TActorId sender = runtime.AllocateEdgeActor(); 
     TVector<ui64> tabletIds;
     // Add schemeshard tabletId to white list
     tabletIds.push_back((ui64)TTestTxConfig::SchemeShard);
     return CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
 }
 
-NActors::TActorId NSchemeShardUT_Private::CreateNotificationSubscriber(NActors::TTestActorRuntime &runtime, ui64 schemeshardId) {
+NActors::TActorId NSchemeShardUT_Private::CreateNotificationSubscriber(NActors::TTestActorRuntime &runtime, ui64 schemeshardId) { 
     return runtime.Register(new TTxNotificationSubscriber(schemeshardId));
 }
 
@@ -662,9 +662,9 @@ NActors::TActorId NSchemeShardUT_Private::CreateFakeMetering(NActors::TTestActor
     return NMetering::MakeMeteringServiceID();
 }
 
-void NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime &runtime, TSet<ui64> txIds, TActorId subscriberActorId) {
+void NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime &runtime, TSet<ui64> txIds, TActorId subscriberActorId) { 
 
-    TActorId sender = runtime.AllocateEdgeActor();
+    TActorId sender = runtime.AllocateEdgeActor(); 
 
     for (ui64 txId : txIds) {
         Cerr << Endl << "TestWaitNotification wait txId: " << txId << Endl;
@@ -702,7 +702,7 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitNotification(NActors::TTestActorR
 }
 
 void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActorRuntime &runtime, TSet<ui64> tabletIds) {
-    TActorId sender = runtime.AllocateEdgeActor();
+    TActorId sender = runtime.AllocateEdgeActor(); 
 
     for (ui64 tabletId : tabletIds) {
         Cerr << "wait until " << tabletId << " is deleted" << Endl;
@@ -762,10 +762,10 @@ void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime 
     runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
 }
 
-std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStorageInfo *)> NSchemeShardUT_Private::TTestEnv::GetTabletCreationFunc(ui32 type) {
+std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStorageInfo *)> NSchemeShardUT_Private::TTestEnv::GetTabletCreationFunc(ui32 type) { 
     switch (type) {
     case TTabletTypes::BlockStoreVolume:
-        return [](const TActorId& tablet, TTabletStorageInfo* info) {
+        return [](const TActorId& tablet, TTabletStorageInfo* info) { 
             return new TFakeBlockStoreVolume(tablet, info);
         };
     case TTabletTypes::FileStore:

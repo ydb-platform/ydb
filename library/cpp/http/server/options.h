@@ -18,18 +18,18 @@ public:
     using TBindAddresses = TVector<TNetworkAddress>;
     void BindAddresses(TBindAddresses& ret) const;
 
-    inline THttpServerOptions& AddBindAddress(const TString& address, ui16 port) {
+    inline THttpServerOptions& AddBindAddress(const TString& address, ui16 port) { 
         const TAddr addr = {
             address,
             port,
         };
 
         BindSockaddr.push_back(addr);
-        return *this;
+        return *this; 
     }
 
-    inline THttpServerOptions& AddBindAddress(const TString& address) {
-        return AddBindAddress(address, 0);
+    inline THttpServerOptions& AddBindAddress(const TString& address) { 
+        return AddBindAddress(address, 0); 
     }
 
     inline THttpServerOptions& EnableKeepAlive(bool enable) noexcept {

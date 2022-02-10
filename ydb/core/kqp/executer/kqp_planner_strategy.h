@@ -19,7 +19,7 @@ public:
 
     struct TResult {
         ui32 NodeId;
-        NActors::TActorId ResourceManager;
+        NActors::TActorId ResourceManager; 
         TVector<ui64> TaskIds;
     };
 

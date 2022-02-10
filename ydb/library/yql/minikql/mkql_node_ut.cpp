@@ -1,11 +1,11 @@
 #include "mkql_node.h"
 #include "mkql_node_visitor.h"
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/algorithm.h>
-
-
+#include <util/generic/algorithm.h> 
+ 
+ 
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         TTypeEnvironment env(alloc);
         {
             auto type = env.GetTypeOfType();
-            UNIT_ASSERT(type->IsType());
+            UNIT_ASSERT(type->IsType()); 
             UNIT_ASSERT(type->GetType() == type);
             UNIT_ASSERT(type->IsSameType(*type));
         }
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         TTypeEnvironment env(alloc);
         {
             auto type = env.GetTypeOfVoid();
-            UNIT_ASSERT(type->IsVoid());
+            UNIT_ASSERT(type->IsVoid()); 
             UNIT_ASSERT(type->GetType() == env.GetTypeOfType());
             UNIT_ASSERT(type->IsSameType(*type));
         }
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TVoid* voidObj = env.GetVoid();
-        UNIT_ASSERT(voidObj->GetType()->IsVoid());
+        UNIT_ASSERT(voidObj->GetType()->IsVoid()); 
         UNIT_ASSERT(voidObj->GetType() == env.GetTypeOfVoid());
     }
 
@@ -292,13 +292,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(ctype2withPayload2clone->IsSameType(*ctype2withPayload2));
 
         TCallableType* ctype2optArg = TCallableType::Create("c2", env.GetVoid()->GetGenericType(), types.size(), types.data(), nullptr, env);
-
+ 
         ctype2optArg->SetOptionalArgumentsCount(0);
         UNIT_ASSERT(ctype2optArg->IsSameType(*ctype2));
-        UNIT_ASSERT(ctype2optArg->IsConvertableTo(*ctype2));
-        UNIT_ASSERT(ctype2->IsSameType(*ctype2optArg));
-        UNIT_ASSERT(ctype2->IsConvertableTo(*ctype2optArg));
-
+        UNIT_ASSERT(ctype2optArg->IsConvertableTo(*ctype2)); 
+        UNIT_ASSERT(ctype2->IsSameType(*ctype2optArg)); 
+        UNIT_ASSERT(ctype2->IsConvertableTo(*ctype2optArg)); 
+ 
         UNIT_ASSERT_EXCEPTION(ctype2optArg->SetOptionalArgumentsCount(1), yexception);
         UNIT_ASSERT_EXCEPTION(ctype2optArg->SetOptionalArgumentsCount(3), yexception);
     }

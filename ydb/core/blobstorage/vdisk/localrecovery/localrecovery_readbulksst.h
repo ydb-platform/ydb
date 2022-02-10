@@ -35,7 +35,7 @@ namespace NKikimr {
             const TVDiskContextPtr &vctx,
             const TPDiskCtxPtr &pdiskCtx,
             const NKikimrVDiskData::TAddBulkSstRecoveryLogRec &proto,
-            const TActorId &recipient,
+            const TActorId &recipient, 
             const ui64 recoveryLogRecLsn,
             bool loadLogoBlobs,
             bool loadBlocks,

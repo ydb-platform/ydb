@@ -43,7 +43,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_internal_interface.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 #include <util/generic/intrlist.h>
 
@@ -295,14 +295,14 @@ namespace NKikimr {
 
         TLoggedRecVPut* CreateLoggedRec(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id,
                 const TIngress &ingress, TRope &&buffer, std::unique_ptr<TEvBlobStorage::TEvVPutResult> res,
-                const TActorId &sender, ui64 cookie)
+                const TActorId &sender, ui64 cookie) 
         {
             return new TLoggedRecVPut(seg, confirmSyncLogAlso, id, ingress, std::move(buffer), std::move(res), sender, cookie);
         }
 
         TLoggedRecVMultiPutItem* CreateLoggedRec(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id,
                 const TIngress &ingress, TRope &&buffer, std::unique_ptr<TEvVMultiPutItemResult> res,
-                const TActorId &sender, ui64 cookie)
+                const TActorId &sender, ui64 cookie) 
         {
             return new TLoggedRecVMultiPutItem(seg, confirmSyncLogAlso, id, ingress, std::move(buffer), std::move(res),
                     sender, cookie);
@@ -525,7 +525,7 @@ namespace NKikimr {
 
             IActor* vMultiPutActor = CreateSkeletonVMultiPutActor(SelfId(), statuses, oosStatus, ev,
                     SkeletonFrontIDPtr, IFaceMonGroup->MultiPutResMsgsPtr(), Db->GetVDiskIncarnationGuid());
-            NActors::TActorId vMultiPutActorId = ctx.Register(vMultiPutActor);
+            NActors::TActorId vMultiPutActorId = ctx.Register(vMultiPutActor); 
 
             TLsnSeg lsnBatch;
             if (lsnCount) {
@@ -1152,11 +1152,11 @@ namespace NKikimr {
         // STREAM QUERIES
         ////////////////////////////////////////////////////////////////////////
 
-        THashMap<TString, TActorId> MonStreamActors;
+        THashMap<TString, TActorId> MonStreamActors; 
 
         void Handle(TEvBlobStorage::TEvMonStreamQuery::TPtr& ev, const TActorContext& ctx) {
-            TActorId& actorId = MonStreamActors[ev->Get()->StreamId];
-            if (actorId == TActorId()) {
+            TActorId& actorId = MonStreamActors[ev->Get()->StreamId]; 
+            if (actorId == TActorId()) { 
                 actorId = RunInBatchPool(ctx, CreateMonStreamActor(Hull->GetIndexSnapshot(), ev));
                 ActiveActors.insert(actorId);
             }
@@ -1618,7 +1618,7 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvLocalRecoveryDone::TPtr &ev, const TActorContext &ctx) {
             LocalRecovInfo = ev->Get()->RecovInfo;
-            LocalDbRecoveryID = TActorId();
+            LocalDbRecoveryID = TActorId(); 
             ActiveActors.Erase(ev->Sender);
 
             PDiskCtx = ev->Get()->PDiskCtx;
@@ -1678,14 +1678,14 @@ namespace NKikimr {
 
                 // run LogCutter in the same mailbox
                 TLogCutterCtx logCutterCtx = {VCtx, PDiskCtx, Db->LsnMngr, Config,
-                        (TActorId)(Db->LoggerID)};
+                        (TActorId)(Db->LoggerID)}; 
                 Db->LogCutterID.Set(ctx.RegisterWithSameMailbox(CreateRecoveryLogCutter(std::move(logCutterCtx))));
                 ActiveActors.Insert(Db->LogCutterID); // keep forever
 
                 // run HugeBlobKeeper
                 TString localRecovInfoStr = Db->LocalRecoveryInfo ? Db->LocalRecoveryInfo->ToString() : TString("{}");
                 auto hugeKeeperCtx = std::make_shared<THugeKeeperCtx>(VCtx, PDiskCtx, Db->LsnMngr,
-                        ctx.SelfID, (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID),
+                        ctx.SelfID, (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID), 
                         localRecovInfoStr);
                 auto hugeKeeper = CreateHullHugeBlobKeeper(hugeKeeperCtx, ev->Get()->RepairedHuge);
                 Db->HugeKeeperID.Set(ctx.Register(hugeKeeper));
@@ -1856,7 +1856,7 @@ namespace NKikimr {
             switch (auto subrequest = ev->Get()->SubRequestId) {
                 case 0: {
                     // calculate id for the actor who'll tell us about local recovery
-                    TActorId locRecovActor = LocalDbRecoveryID ? LocalDbRecoveryID : ctx.SelfID;
+                    TActorId locRecovActor = LocalDbRecoveryID ? LocalDbRecoveryID : ctx.SelfID; 
                     auto aid = ctx.Register(CreateSkeletonMonRequestHandler(Db, ev, ctx.SelfID, locRecovActor));
                     ActiveActors.Insert(aid);
                     break;
@@ -2414,7 +2414,7 @@ namespace NKikimr {
 
         TSkeleton(TIntrusivePtr<TVDiskConfig> cfg,
                 TIntrusivePtr<TBlobStorageGroupInfo> info,
-                const TActorId &skeletonFrontID,
+                const TActorId &skeletonFrontID, 
                 const TVDiskContextPtr &vctx)
             : TActorBootstrapped<TSkeleton>()
             , Config(cfg)
@@ -2423,7 +2423,7 @@ namespace NKikimr {
             , GInfo(info)
             , Hull()
             , LocalRecovInfo()
-            , SkeletonFrontIDPtr(new TActorId(skeletonFrontID))
+            , SkeletonFrontIDPtr(new TActorId(skeletonFrontID)) 
             , LocalDbRecoveryID()
             , NodeWardenServiceId(MakeBlobStorageNodeWardenID(vctx->NodeId))
             , SelfVDiskId(GInfo->GetVDiskId(VCtx->ShortSelfVDisk))
@@ -2454,8 +2454,8 @@ namespace NKikimr {
         TIntrusivePtr<TLocalRecoveryInfo> LocalRecovInfo; // just info we got after local recovery
         std::unique_ptr<TOverloadHandler> OverloadHandler;
         TActorIDPtr SkeletonFrontIDPtr;
-        TActorId LocalDbRecoveryID;
-        const TActorId NodeWardenServiceId;
+        TActorId LocalDbRecoveryID; 
+        const TActorId NodeWardenServiceId; 
         TVDiskID SelfVDiskId;
         TMaybe<ui64> DbBirthLsn;
         TActiveActors ActiveActors;
@@ -2484,7 +2484,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateVDiskSkeleton(const TIntrusivePtr<TVDiskConfig> &cfg,
                                 const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-                                const TActorId &skeletonFrontID,
+                                const TActorId &skeletonFrontID, 
                                 const TVDiskContextPtr &vctx) {
         return new TSkeleton(cfg, info, skeletonFrontID, vctx);
     }

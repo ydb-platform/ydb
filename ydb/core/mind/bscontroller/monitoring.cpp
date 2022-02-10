@@ -1,7 +1,7 @@
 #include "impl.h"
 
-#include <library/cpp/json/json_writer.h>
-
+#include <library/cpp/json/json_writer.h> 
+ 
 namespace NKikimr {
 namespace NBsController {
 
@@ -25,7 +25,7 @@ static TString PrintMaybe(const TMaybe<T>& m) {
 }
 
 class TBlobStorageController::TTxMonEvent_OperationLog : public TTransactionBase<TBlobStorageController> {
-    const TActorId RespondTo;
+    const TActorId RespondTo; 
     const TCgiParameters Params;
 
 private:
@@ -43,7 +43,7 @@ private:
     ui64 NumRows = 0;
 
 public:
-    TTxMonEvent_OperationLog(const TActorId& sender, TCgiParameters params, TSelf *controller)
+    TTxMonEvent_OperationLog(const TActorId& sender, TCgiParameters params, TSelf *controller) 
         : TBase(controller)
         , RespondTo(sender)
         , Params(std::move(params))
@@ -173,7 +173,7 @@ public:
 class TBlobStorageController::TTxMonEvent_HealthEvents
     : public TTransactionBase<TBlobStorageController>
 {
-    const TActorId RespondTo;
+    const TActorId RespondTo; 
     const bool Json;
     const ui64 Offset = 0;
     const ui64 NumRows = 1000;
@@ -493,13 +493,13 @@ public:
 
 class TBlobStorageController::TTxMonEvent_SetDown : public TTransactionBase<TBlobStorageController> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     const TGroupId GroupId;
     const bool Down;
     const bool Persist;
     TString Response;
 
-    TTxMonEvent_SetDown(const TActorId& source, TGroupId groupId, bool down, bool persist, TSelf* bsc)
+    TTxMonEvent_SetDown(const TActorId& source, TGroupId groupId, bool down, bool persist, TSelf* bsc) 
         : TBase(bsc)
         , Source(source)
         , GroupId(groupId)
@@ -534,11 +534,11 @@ public:
 
 class TBlobStorageController::TTxMonEvent_GetDown : public TTransactionBase<TBlobStorageController> {
 public:
-    const TActorId Source;
+    const TActorId Source; 
     const TGroupId GroupId;
     TString Response;
 
-    TTxMonEvent_GetDown(const TActorId& source, TGroupId groupId, TSelf* bsc)
+    TTxMonEvent_GetDown(const TActorId& source, TGroupId groupId, TSelf* bsc) 
         : TBase(bsc)
         , Source(source)
         , GroupId(groupId)
@@ -584,16 +584,16 @@ public:
 };
 
 class TDisableSelfHealActor : public TActorBootstrapped<TDisableSelfHealActor> {
-    const TActorId MonProxy;
+    const TActorId MonProxy; 
     const TString Url;
 
 public:
-    TDisableSelfHealActor(TActorId monProxy, TString url)
+    TDisableSelfHealActor(TActorId monProxy, TString url) 
         : MonProxy(monProxy)
         , Url(std::move(url))
     {}
 
-    void Bootstrap(const TActorId& parent) {
+    void Bootstrap(const TActorId& parent) { 
         auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
         ev->Record.MutableRequest()->AddCommand()->MutableEnableSelfHeal()->SetEnable(false);
         Send(parent, ev.Release());

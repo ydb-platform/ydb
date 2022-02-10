@@ -63,7 +63,7 @@ private:
         this->PassAway();
     }
 
-    TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId& self, const NActors::TActorId& parentId) override {
+    TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId& self, const NActors::TActorId& parentId) override { 
         return new NActors::IEventHandle(self, parentId, new NActors::TEvents::TEvBootstrap, 0);
     }
 

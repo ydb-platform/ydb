@@ -11,8 +11,8 @@
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/ticket_parser.h>
 
-#include <library/cpp/grpc/server/event_callback.h>
-#include <library/cpp/grpc/server/grpc_async_ctx_base.h>
+#include <library/cpp/grpc/server/event_callback.h> 
+#include <library/cpp/grpc/server/grpc_async_ctx_base.h> 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -593,7 +593,7 @@ private:
     THolder<IContext::TEvReadFinished> StartRequest;
     TString KesusPath;
 
-    TActorId ProxyActor;
+    TActorId ProxyActor; 
     bool ReadAllowed = false;
     bool WriteAllowed = false;
     bool EraseAllowed = false;
@@ -609,7 +609,7 @@ private:
 TKesusGRpcService::TKesusGRpcService(
         NActors::TActorSystem* actorSystem,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-        NActors::TActorId id)
+        NActors::TActorId id) 
     : ActorSystem(actorSystem)
     , Counters(counters)
     , GRpcRequestProxyId(id)
@@ -619,12 +619,12 @@ TKesusGRpcService::~TKesusGRpcService() {
     // empty
 }
 
-void TKesusGRpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
+void TKesusGRpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) { 
     CQ = cq;
-    SetupIncomingRequests(std::move(logger));
+    SetupIncomingRequests(std::move(logger)); 
 }
 
-void TKesusGRpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TKesusGRpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
     Limiter = limiter;
 }
 
@@ -637,7 +637,7 @@ void TKesusGRpcService::DecRequest() {
     Y_ASSERT(Limiter->GetCurrentInFlight() >= 0);
 }
 
-void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
 #ifdef ADD_REQUEST
@@ -649,13 +649,13 @@ void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         this, \
         &Service_, \
         CQ, \
-        [this](NGrpc::IRequestContextBase* reqCtx) { \
+        [this](NGrpc::IRequestContextBase* reqCtx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer()); \
             ACTION; \
         }, \
         &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
-        "Coordination/" #NAME,             \
-        logger, \
+        "Coordination/" #NAME,             \ 
+        logger, \ 
         getCounterBlock("coordination", #NAME))->Run();
 
     ADD_REQUEST(CreateNode, CreateNodeRequest, CreateNodeResponse, {

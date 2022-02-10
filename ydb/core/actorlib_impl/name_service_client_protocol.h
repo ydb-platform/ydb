@@ -22,7 +22,7 @@ public:
         MemLogPrintF("TResolveClientProtocol send name request: %s, %u",
                      msg->Address.data(), (int)msg->Port);
 
-        ctx.Send(GetNameserviceActorId(), msg);
+        ctx.Send(GetNameserviceActorId(), msg); 
 
         orig->template AddMsgProtocol<TEvAddressInfo>(
             &TOrigActor::template CallProtocolStateFunc<

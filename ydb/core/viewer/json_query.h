@@ -24,7 +24,7 @@ class TJsonQuery : public TActorBootstrapped<TJsonQuery> {
     using TBase = TActorBootstrapped<TJsonQuery>;
     IViewer* Viewer;
     TJsonSettings JsonSettings;
-    TActorId Initiator;
+    TActorId Initiator; 
     NMon::TEvHttpInfo::TPtr Event;
     ui32 Timeout = 0;
     TVector<Ydb::ResultSet> ResultSets;

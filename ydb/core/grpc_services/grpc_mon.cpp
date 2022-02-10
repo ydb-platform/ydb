@@ -3,7 +3,7 @@
 #include <ydb/core/base/events.h>
 
 #include <library/cpp/cache/cache.h>
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -104,9 +104,9 @@ private:
     TLRUCache<TString, TPeerInfo> Peers;
 };
 
-TActorId GrpcMonServiceId() {
+TActorId GrpcMonServiceId() { 
     const char x[12] = "GrpcMonSvc!";
-    return TActorId(0, TStringBuf(x, 12));
+    return TActorId(0, TStringBuf(x, 12)); 
 }
 
 IActor* CreateGrpcMonService() {

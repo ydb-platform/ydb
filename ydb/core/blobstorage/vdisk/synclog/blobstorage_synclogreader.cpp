@@ -136,8 +136,8 @@ namespace NKikimr {
             TIntrusivePtr<TSyncLogCtx> SlCtx;
             const TVDiskIncarnationGuid VDiskIncarnationGuid;
             TEvBlobStorage::TEvVSync::TPtr Ev;
-            const TActorId ParentId;
-            const TActorId KeeperId;
+            const TActorId ParentId; 
+            const TActorId KeeperId; 
             const TVDiskID SelfVDiskId;
             const TVDiskID SourceVDisk;
             TSyncLogSnapshotPtr SnapPtr;
@@ -409,8 +409,8 @@ namespace NKikimr {
                     const TIntrusivePtr<TSyncLogCtx> &slCtx,
                     const TVDiskIncarnationGuid vdiskIncarnationGuid,
                     TEvBlobStorage::TEvVSync::TPtr &ev,
-                    const TActorId &parentId,
-                    const TActorId &keeperId,
+                    const TActorId &parentId, 
+                    const TActorId &keeperId, 
                     const TVDiskID &selfVDiskId,
                     const TVDiskID &sourceVDisk,
                     ui64 dbBirthLsn,
@@ -441,8 +441,8 @@ namespace NKikimr {
             const TIntrusivePtr<TSyncLogCtx> &slCtx,
             const TVDiskIncarnationGuid vdiskIncarnationGuid,
             TEvBlobStorage::TEvVSync::TPtr &ev,
-            const TActorId &parentId,
-            const TActorId &keeperId,
+            const TActorId &parentId, 
+            const TActorId &keeperId, 
             const TVDiskID &selfVDiskId,
             const TVDiskID &sourceVDisk,
             ui64 dbBirthLsn,

@@ -22,7 +22,7 @@ class TBrowse : public TActorBootstrapped<TBrowse> {
     static const bool WithRetry = false;
     using TBase = TActorBootstrapped<TBrowse>;
     const IViewer* Viewer;
-    TActorId Owner;
+    TActorId Owner; 
     ui32 Requests = 0;
     ui32 Responses = 0;
     bool Final = false;
@@ -32,8 +32,8 @@ class TBrowse : public TActorBootstrapped<TBrowse> {
     TString CurrentPath; // TStringBuf?
     NKikimrViewer::EObjectType CurrentType;
     THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
-    THashSet<TActorId> Handlers;
-    TActorId TxProxy = MakeTxProxyID();
+    THashSet<TActorId> Handlers; 
+    TActorId TxProxy = MakeTxProxyID(); 
 
 public:
     IViewer::TBrowseContext BrowseContext;
@@ -42,7 +42,7 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TBrowse(const IViewer* viewer, const TActorId& owner, const TString& path, const TString& userToken)
+    TBrowse(const IViewer* viewer, const TActorId& owner, const TString& path, const TString& userToken) 
         : Viewer(viewer)
         , Owner(owner)
         , Path(path)
@@ -327,7 +327,7 @@ public:
     }
 
     void Die(const TActorContext& ctx) override {
-        for (const TActorId& actor : Handlers) {
+        for (const TActorId& actor : Handlers) { 
             ctx.Send(actor, new TEvents::TEvPoisonPill());
         }
         TBase::Die(ctx);
@@ -361,7 +361,7 @@ public:
         if (ev->Get()->SourceType == TEvTxUserProxy::EvNavigate) {
             ++Responses;
             ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(TxProxy, TEvTxUserProxy::EvNavigate));
-            TxProxy = TActorId(); // do not query this TxProxy any more
+            TxProxy = TActorId(); // do not query this TxProxy any more 
             if (Responses == Requests) {
                 NextStep(ctx);
             }
@@ -373,8 +373,8 @@ class TBrowseTabletsCommon : public TActorBootstrapped<TBrowseTabletsCommon> {
 protected:
     static const bool WithRetry = false;
     using TBase = TActorBootstrapped<TBrowseTabletsCommon>;
-    TActorId Owner;
-    THashMap<TTabletId, TActorId> PipeClients;
+    TActorId Owner; 
+    THashMap<TTabletId, TActorId> PipeClients; 
     TSet<TString> Consumers;
     TVector<ui64> Tablets;
     ui32 Requests = 0;
@@ -395,7 +395,7 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TBrowseTabletsCommon(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
+    TBrowseTabletsCommon(const TActorId& owner, const IViewer::TBrowseContext& browseContext) 
         : Owner(owner)
         , Path(browseContext.Path)
         , BrowseContext(browseContext)
@@ -414,7 +414,7 @@ public:
         return clientConfig;
     }
 
-    const TActorId& GetTabletPipe(TTabletId tabletId, const TActorContext& ctx) {
+    const TActorId& GetTabletPipe(TTabletId tabletId, const TActorContext& ctx) { 
         auto it = PipeClients.find(tabletId);
         if (it != PipeClients.end()) {
             return it->second;
@@ -448,7 +448,7 @@ public:
                 ui32 groupId = historyInfo.GetGroupID();
                 if (GroupInfo.emplace(groupId, nullptr).second) {
                     TTabletId bscTabletId = GetBscTabletId(lookupResult->Record.GetTabletID(), ctx);
-                    TActorId pipeClient = GetTabletPipe(bscTabletId, ctx);
+                    TActorId pipeClient = GetTabletPipe(bscTabletId, ctx); 
                     NTabletPipe::SendData(ctx, pipeClient, new TEvBlobStorage::TEvRequestControllerInfo(groupId));
                     ++Requests;
                     ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(pipeClient, TEvBlobStorage::EvRequestControllerInfo));

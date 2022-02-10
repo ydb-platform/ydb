@@ -11,14 +11,14 @@
 namespace NYql {
 namespace NCommon {
 
-void LoadSystemModulePaths(
+void LoadSystemModulePaths( 
         const TString& resolverPath,
         const TString& dir,
-        NKikimr::NMiniKQL::TUdfModulePathsMap* paths);
-
+        NKikimr::NMiniKQL::TUdfModulePathsMap* paths); 
+ 
 IUdfResolver::TPtr CreateOutProcUdfResolver(
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    const TFileStoragePtr& fileStorage,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
+    const TFileStoragePtr& fileStorage, 
     const TString& resolverPath,
     const TString& user,
     const TString& group,

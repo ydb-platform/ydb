@@ -1,20 +1,20 @@
 #include "statestorage_impl.h"
 #include "tabletid.h"
-#include "appdata.h"
+#include "appdata.h" 
 #include "tablet.h"
-
+ 
 #include <ydb/core/protos/services.pb.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
-
+ 
 #include <util/generic/map.h>
 #include <util/generic/hash_set.h>
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
 #error log macro definition clash
 #endif
-
+ 
 #define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE, stream)
 #define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::STATESTORAGE, stream)
 #define BLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::STATESTORAGE, stream)
@@ -51,7 +51,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         TTabletState::ETabletState TabletState;
         TActorId CurrentLeader;
         TActorId CurrentLeaderTablet;
-        TActorId CurrentGuardian;
+        TActorId CurrentGuardian; 
         ui32 CurrentGeneration;
         ui32 CurrentStep;
         ui64 LockedFrom;
@@ -81,7 +81,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         return ok;
     }
 
-    void NotifyWithTabletInfo(const TActorId &recp, ui64 tabletId, ui64 cookie, const TEntry *entry) {
+    void NotifyWithTabletInfo(const TActorId &recp, ui64 tabletId, ui64 cookie, const TEntry *entry) { 
         THolder<TEvStateStorage::TEvReplicaInfo> msg;
         if (entry && entry->CurrentLeader) {
             const bool locked = (entry->TabletState == TTabletState::Locked);
@@ -111,7 +111,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         Send(recp, msg.Release());
     }
 
-    void ReplyWithStatus(const TActorId &recp, ui64 tabletId, ui64 cookie, NKikimrProto::EReplyStatus status) {
+    void ReplyWithStatus(const TActorId &recp, ui64 tabletId, ui64 cookie, NKikimrProto::EReplyStatus status) { 
         THolder<TEvStateStorage::TEvReplicaInfo> msg(new TEvStateStorage::TEvReplicaInfo(tabletId, status));
         msg->Record.SetCookie(cookie);
         msg->Record.SetSignature(Signature());
@@ -299,7 +299,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         BLOG_D("Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
         Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
-        const TActorId &sender = ev->Sender;
+        const TActorId &sender = ev->Sender; 
 
         if (CheckSignature(msg)) {
             TEntry &x = Tablets[tabletId];
@@ -318,7 +318,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
                 x.CurrentStep = 0;
                 x.CurrentLeader = proposedLeader;
                 x.CurrentLeaderTablet = TActorId();
-                x.CurrentGuardian = TActorId();
+                x.CurrentGuardian = TActorId(); 
                 x.TabletState = TTabletState::Locked;
                 x.LockedFrom = TActivationContext::Now().MicroSeconds();
             }

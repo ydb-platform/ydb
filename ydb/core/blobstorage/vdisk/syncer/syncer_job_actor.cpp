@@ -26,7 +26,7 @@ namespace NKikimr {
         TIntrusivePtr<TSyncerContext> SyncerCtx;
         std::unique_ptr<TSyncerJobTask> Task;
         const ui32 NodeId;
-        const TActorId NotifyId;
+        const TActorId NotifyId; 
         const ui64 JobId;       // just unique job id for log readability
 
         friend class TActorBootstrapped<TSyncerJob>;
@@ -191,7 +191,7 @@ namespace NKikimr {
     public:
         TSyncerJob(const TIntrusivePtr<TSyncerContext> &sc,
                    std::unique_ptr<TSyncerJobTask> task,
-                   const TActorId &notifyId)
+                   const TActorId &notifyId) 
             : TActorBootstrapped<TSyncerJob>()
             , SyncerCtx(sc)
             , Task(std::move(task))
@@ -206,7 +206,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateSyncerJob(const TIntrusivePtr<TSyncerContext> &sc,
                             std::unique_ptr<TSyncerJobTask> task,
-                            const TActorId &notifyId) {
+                            const TActorId &notifyId) { 
         return new TSyncerJob(sc, std::move(task), notifyId);
     }
 

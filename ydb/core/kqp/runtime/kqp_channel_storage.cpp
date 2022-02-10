@@ -186,7 +186,7 @@ private:
     const ui64 TxId;
     const ui64 ChannelId;
     IDqChannelStorage::TWakeUpCallback WakeUp;
-    TActorId SpillingActorId;
+    TActorId SpillingActorId; 
 
     TMap<ui64, ui64> WritingBlobs; // blobId -> blobSize
     ui64 WritingBlobsSize = 0;

@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
         hiveStorage->TabletType = TTabletTypes::Hive;
-        THive hive(hiveStorage.Get(), TActorId());
+        THive hive(hiveStorage.Get(), TActorId()); 
         std::unordered_map<ui64, TLeaderTabletInfo> tablets;
         THPTimer timer;
 

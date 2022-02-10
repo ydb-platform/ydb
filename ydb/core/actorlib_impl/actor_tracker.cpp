@@ -12,7 +12,7 @@ namespace NActors {
 
     void TActorTracker::Handle(TEvTrackActor::TPtr& ev, const TActorContext& ctx) {
         // insert newly created actor into registered actors set and ensure it is not duplicate one
-        const TActorId& newSubactorId = ev->Get()->NewSubactorId;
+        const TActorId& newSubactorId = ev->Get()->NewSubactorId; 
         const bool inserted = RegisteredActors.insert(newSubactorId).second;
         Y_VERIFY(inserted);
 
@@ -42,7 +42,7 @@ namespace NActors {
 
         // propagate TEvPoisonPill to all currently registered actors; request delivery tracking as each actor may die
         // before processing TEvPosionPill message
-        for (const TActorId& subactorId : RegisteredActors) {
+        for (const TActorId& subactorId : RegisteredActors) { 
             ctx.Send(subactorId, new TEvents::TEvPoisonPill, IEventHandle::MakeFlags(0, IEventHandle::FlagTrackDelivery));
         }
 
@@ -56,7 +56,7 @@ namespace NActors {
         RemoveActorFromTrackList(ev->Sender, ctx);
     }
 
-    void TActorTracker::RemoveActorFromTrackList(const TActorId& subactorId, const TActorContext& ctx) {
+    void TActorTracker::RemoveActorFromTrackList(const TActorId& subactorId, const TActorContext& ctx) { 
         // erase subactor from set and check if we have finished processing PoisonPill (if we are processing it)
         const ui32 numErased = RegisteredActors.erase(subactorId);
         Y_VERIFY(numErased == 1);
@@ -110,17 +110,17 @@ namespace NActors {
         return true;
     }
 
-    TActorId TActorTracker::RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx,
+    TActorId TActorTracker::RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx, 
             TMailboxType::EType mailboxType, ui32 poolId) {
         if (!PreRegister()) {
-            return TActorId();
+            return TActorId(); 
         }
 
         // bind new actor to this tracker
         subactor->BindToTracker(this);
 
         // we create new actor and register it in pool now
-        TActorId subactorId = ctx.Register(subactor.Release(), mailboxType, poolId);
+        TActorId subactorId = ctx.Register(subactor.Release(), mailboxType, poolId); 
 
         // send TEvTrackActor message to tracker actor
         ctx.Send(ActorId, new TEvTrackActor(subactorId));
@@ -128,9 +128,9 @@ namespace NActors {
         return subactorId;
     }
 
-    TActorId TActorTracker::RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx) {
+    TActorId TActorTracker::RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx) { 
         if (!PreRegister()) {
-            return TActorId();
+            return TActorId(); 
         }
 
         // bind new actor to this tracker
@@ -153,13 +153,13 @@ namespace NActors {
 
 
 
-    TActorId TTrackedActorBase::RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx,
+    TActorId TTrackedActorBase::RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx, 
             TMailboxType::EType mailboxType, ui32 poolId) {
         Y_VERIFY(Tracker);
         return Tracker->RegisterSubactor(std::move(subactor), ctx, mailboxType, poolId);
     }
 
-    TActorId TTrackedActorBase::RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx) {
+    TActorId TTrackedActorBase::RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx) { 
         Y_VERIFY(Tracker);
         return Tracker->RegisterLocalSubactor(std::move(subactor), ctx);
     }
@@ -178,7 +178,7 @@ namespace NActors {
         IActor::Die(ctx);
     }
 
-    TAutoPtr<IEventHandle> TTrackedActorBase::AfterRegister(const TActorId& self, const TActorId& parent) {
+    TAutoPtr<IEventHandle> TTrackedActorBase::AfterRegister(const TActorId& self, const TActorId& parent) { 
         // send TEvBootstrap event locally
         return new IEventHandle(self, parent, new TEvents::TEvBootstrap);
     }

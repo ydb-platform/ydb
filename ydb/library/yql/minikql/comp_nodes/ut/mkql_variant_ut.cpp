@@ -5,7 +5,7 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-
+ 
 Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
     Y_UNIT_TEST_LLVM(TestGuessTuple) {
         TSetup<LLVM> setup;

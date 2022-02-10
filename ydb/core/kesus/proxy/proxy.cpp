@@ -23,10 +23,10 @@ class TKesusProxyService : public TActor<TKesusProxyService> {
     };
 
     struct TResolveReplyInfo {
-        const TActorId Sender;
+        const TActorId Sender; 
         const ui64 Cookie;
 
-        TResolveReplyInfo(const TActorId& sender, ui64 cookie)
+        TResolveReplyInfo(const TActorId& sender, ui64 cookie) 
             : Sender(sender)
             , Cookie(cookie)
         {}
@@ -37,7 +37,7 @@ class TKesusProxyService : public TActor<TKesusProxyService> {
         TVector<TString> KesusPath;
         ui64 TabletId = -1;
         TIntrusivePtr<TSecurityObject> SecurityObject;
-        TActorId ProxyActor;
+        TActorId ProxyActor; 
         NKikimrKesus::TKesusError LastError;
         TVector<TResolveReplyInfo> ResolveSubscribers;
     };
@@ -220,11 +220,11 @@ private:
 
 class TKesusProxyService::TResolveActor : public TActorBootstrapped<TResolveActor> {
 private:
-    const TActorId Owner;
+    const TActorId Owner; 
     const TString KesusPath;
 
 public:
-    TResolveActor(const TActorId& owner, const TString& kesusPath)
+    TResolveActor(const TActorId& owner, const TString& kesusPath) 
         : Owner(owner)
         , KesusPath(kesusPath)
     {}
@@ -268,8 +268,8 @@ IActor* TKesusProxyService::CreateResolveActor(const TString& kesusPath) {
     return new TResolveActor(SelfId(), kesusPath);
 }
 
-TActorId MakeKesusProxyServiceId() {
-    return TActorId(0, "kesus-proxy");
+TActorId MakeKesusProxyServiceId() { 
+    return TActorId(0, "kesus-proxy"); 
 }
 
 IActor* CreateKesusProxyService() {

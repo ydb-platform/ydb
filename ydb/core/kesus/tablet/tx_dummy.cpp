@@ -4,10 +4,10 @@ namespace NKikimr {
 namespace NKesus {
 
 struct TKesusTablet::TTxDummy : public TTxBase {
-    const TActorId Sender;
+    const TActorId Sender; 
     const ui64 Cookie;
 
-    TTxDummy(TSelf* self, const TActorId& sender, ui64 cookie)
+    TTxDummy(TSelf* self, const TActorId& sender, ui64 cookie) 
         : TTxBase(self)
         , Sender(sender)
         , Cookie(cookie)

@@ -7,7 +7,7 @@
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 
 #include <array>
 
@@ -17,9 +17,9 @@ namespace NResourceBroker {
 constexpr size_t LAST_RESOURCE = NKikimrResourceBroker::MEMORY;
 constexpr size_t RESOURCE_COUNT = LAST_RESOURCE + 1;
 
-inline TActorId MakeResourceBrokerID(ui32 node = 0) {
+inline TActorId MakeResourceBrokerID(ui32 node = 0) { 
     char x[12] = {'r','e','s','o','u','r','c','e','b','r','o','k'};
-    return TActorId(node, TStringBuf(x, 12));
+    return TActorId(node, TStringBuf(x, 12)); 
 }
 
 using TResourceValues = std::array<ui64, RESOURCE_COUNT>;

@@ -194,12 +194,12 @@ struct TEvPQ {
     };
 
     struct TEvMonRequest : public TEventLocal<TEvMonRequest, EvMonRequest> {
-        TEvMonRequest(const TActorId& sender, const TString& query)
+        TEvMonRequest(const TActorId& sender, const TString& query) 
         : Sender(sender)
         , Query(query)
         {}
 
-        TActorId Sender;
+        TActorId Sender; 
         TString Query;
     };
 
@@ -281,12 +281,12 @@ struct TEvPQ {
 
 
     struct TEvPartitionOffsets : public TEventLocal<TEvPartitionOffsets, EvPartitionOffsets> {
-        TEvPartitionOffsets(const TActorId& sender, const TString& clientId)
+        TEvPartitionOffsets(const TActorId& sender, const TString& clientId) 
         : Sender(sender)
         , ClientId(clientId)
         {}
 
-        TActorId Sender;
+        TActorId Sender; 
         TString ClientId;
     };
 
@@ -299,12 +299,12 @@ struct TEvPQ {
     };
 
     struct TEvPartitionStatus : public TEventLocal<TEvPartitionStatus, EvPartitionStatus> {
-        explicit TEvPartitionStatus(const TActorId& sender, const TString& clientId)
+        explicit TEvPartitionStatus(const TActorId& sender, const TString& clientId) 
         : Sender(sender)
         , ClientId(clientId)
         {}
 
-        TActorId Sender;
+        TActorId Sender; 
         TString ClientId;
     };
 
@@ -395,7 +395,7 @@ struct TEvPQ {
     };
 
     struct TEvChangeOwner : public TEventLocal<TEvChangeOwner, EvChangeOwner> {
-        explicit TEvChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const TActorId& sender, const bool force)
+        explicit TEvChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const TActorId& sender, const bool force) 
         : Cookie(cookie)
         , Owner(owner)
         , PipeClient(pipeClient)
@@ -405,19 +405,19 @@ struct TEvPQ {
 
         ui64 Cookie;
         TString Owner;
-        TActorId PipeClient;
-        TActorId Sender;
+        TActorId PipeClient; 
+        TActorId Sender; 
         bool Force;
     };
 
     struct TEvPipeDisconnected : public TEventLocal<TEvPipeDisconnected, EvPipeDisconnected> {
-        explicit TEvPipeDisconnected(const TString& owner, const TActorId& pipeClient)
+        explicit TEvPipeDisconnected(const TString& owner, const TActorId& pipeClient) 
         : Owner(owner)
         , PipeClient(pipeClient)
         {}
 
         TString Owner;
-        TActorId PipeClient;
+        TActorId PipeClient; 
     };
 
     struct TEvReserveBytes : public TEventLocal<TEvReserveBytes, EvReserveBytes> {
@@ -504,11 +504,11 @@ struct TEvPQ {
     };
 
     struct TEvGetPartitionClientInfo : TEventLocal<TEvGetPartitionClientInfo, EvGetPartitionClientInfo> {
-        TEvGetPartitionClientInfo(const TActorId& sender)
+        TEvGetPartitionClientInfo(const TActorId& sender) 
             : Sender(sender)
         {}
 
-        TActorId Sender;
+        TActorId Sender; 
     };
 
     struct TEvUpdateAvailableSize : TEventLocal<TEvUpdateAvailableSize, EvUpdateAvailableSize> {

@@ -65,7 +65,7 @@ public:
     void MakeLogEntry(TLogCommit&, TString redo, TArrayRef<const ui32> affects, bool embed);
     void FlushBatchedLog();
 
-    ui64 Confirm(ui32 step, const TActorContext &ctx, const TActorId &ownerId);
+    ui64 Confirm(ui32 step, const TActorContext &ctx, const TActorId &ownerId); 
 
     void CutLog(ui32 table, NTable::TSnapEdge, TGCBlobDelta&);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot&);

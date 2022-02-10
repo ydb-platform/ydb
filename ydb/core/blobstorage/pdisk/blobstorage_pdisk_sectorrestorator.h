@@ -19,7 +19,7 @@ struct TSectorRestorator {
     ui32 RestoredSectorFlags;
     const TDiskFormat &Format;
     TActorSystem *ActorSystem;
-    const TActorId PDiskActorId;
+    const TActorId PDiskActorId; 
     ui32 PDiskId;
     bool IsErasureEncode;
     TPDiskMon *Mon;
@@ -27,7 +27,7 @@ struct TSectorRestorator {
 
     TSectorRestorator(const bool isTrippleCopy, const ui32 erasureDataParts,
             const bool isErasureEncode, const TDiskFormat &format,
-            TActorSystem *actorSystem, const TActorId pDiskActorId, ui32 pDiskId, TPDiskMon *mon,
+            TActorSystem *actorSystem, const TActorId pDiskActorId, ui32 pDiskId, TPDiskMon *mon, 
             TBufferPool *bufferPool);
 
     TSectorRestorator(const bool isTrippleCopy, const ui32 erasureDataParts,

@@ -17,8 +17,8 @@ namespace NPDisk {
 
 void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
     TTempDir tempDir;
-    TVector<TActorId> testIds;
-    TActorId pDiskId;
+    TVector<TActorId> testIds; 
+    TActorId pDiskId; 
     TAppData appData(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
     auto ioContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
     appData.IoContextFactory = ioContext.get();
@@ -55,9 +55,9 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         setup1->Executors[2].Reset(new TIOExecutorPool(2, 10));
         setup1->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 100)));
 
-        const TActorId nameserviceId = GetNameserviceActorId();
+        const TActorId nameserviceId = GetNameserviceActorId(); 
         TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
-        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup));
+        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup)); 
 
         TString dataPath;
         if (!runCfg.TestContext->IsFormatedDiskExpected()) {
@@ -88,12 +88,12 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
 
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
                     NPDisk::YdbDefaultPDiskSequence, mainCounters), TMailboxType::Revolving, 0);
-        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pDiskId, pDiskSetup));
+        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pDiskId, pDiskSetup)); 
 
         for (ui32 i = 0; i < runCfg.Instances; ++i) {
             testIds[i] = MakeBlobStorageProxyID(1 + i);
             TActorSetupCmd testSetup(tests[i], TMailboxType::Revolving, 0);
-            setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(testIds[i], testSetup));
+            setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(testIds[i], testSetup)); 
         }
 
         AtomicSet(doneCounter, 0);
@@ -103,7 +103,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         /////////////////////// LOGGER ///////////////////////////////////////////////
         GetServiceCounters(counters, "utils");
 
-        NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
+        NActors::TActorId loggerActorId = NActors::TActorId(1, "logger"); 
         TIntrusivePtr<NActors::NLog::TSettings> logSettings(
             new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER,
                 NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0));
@@ -130,7 +130,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
             IsLowVerbose ?  NActors::CreateStderrBackend() : NActors::CreateNullBackend(),
             GetServiceCounters(counters, "utils"));
         NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 2);
-        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd);
+        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd); 
         setup1->LocalServices.push_back(loggerActorPair);
         //////////////////////////////////////////////////////////////////////////////
 
@@ -154,7 +154,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         VERBOSE_COUT("Sending TEvBoot to test");
         for (ui32 i = 0; i < runCfg.Instances; ++i) {
             actorSystem1->Send(testIds[i], new TEvTablet::TEvBoot(
-                        MakeTabletID(0, 0, 1), 0, nullptr, TActorId(), nullptr));
+                        MakeTabletID(0, 0, 1), 0, nullptr, TActorId(), nullptr)); 
         }
 
         TAtomicBase doneCount = 0;

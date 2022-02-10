@@ -127,7 +127,7 @@ private:
 
                         if (Reason) {
                             auto evUndelivered = new TEvents::TEvUndelivered(event->GetTypeRewrite(), *Reason);
-                            auto handle = new IEventHandle(event->Sender, TActorId(), evUndelivered, 0, event->Cookie);
+                            auto handle = new IEventHandle(event->Sender, TActorId(), evUndelivered, 0, event->Cookie); 
                             rt.Send(handle, 0, true);
                             ActionDone = true;
                         } else {

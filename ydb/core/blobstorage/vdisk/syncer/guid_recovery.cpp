@@ -214,7 +214,7 @@ namespace NKikimr {
 
 
                 // ActorID of a proxy that communicates with the given VDisk
-                TActorId ProxyId;
+                TActorId ProxyId; 
                 // guid
                 TVDiskEternalGuid Guid = 0;
                 // confidence
@@ -224,7 +224,7 @@ namespace NKikimr {
 
                 TNeighborVDiskState() = default;
 
-                void SetActorID(const TActorId &proxyId) {
+                void SetActorID(const TActorId &proxyId) { 
                     ProxyId = proxyId;
                 }
 
@@ -632,12 +632,12 @@ namespace NKikimr {
 
             TIntrusivePtr<TVDiskContext> VCtx;
             TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
-            const TActorId CommitterId;
-            const TActorId NotifyId;
+            const TActorId CommitterId; 
+            const TActorId NotifyId; 
             TDecisionMaker DecisionMaker;
             std::unique_ptr<TDecision> Decision;
             EPhase Phase = PhaseNotSet;
-            TActorId FirstRunActorId;
+            TActorId FirstRunActorId; 
 
 
             ////////////////////////////////////////////////////////////////////////
@@ -884,8 +884,8 @@ namespace NKikimr {
 
             TVDiskGuidRecoveryActor(TIntrusivePtr<TVDiskContext> vctx,
                                     TIntrusivePtr<TBlobStorageGroupInfo> info,
-                                    const TActorId &committerId,
-                                    const TActorId &notifyId,
+                                    const TActorId &committerId, 
+                                    const TActorId &notifyId, 
                                     const TLocalSyncerState &locallyRecoveredState)
                 : TActorBootstrapped<TVDiskGuidRecoveryActor>()
                 , VCtx(std::move(vctx))
@@ -903,8 +903,8 @@ namespace NKikimr {
 
     IActor *CreateVDiskGuidRecoveryActor(TIntrusivePtr<TVDiskContext> vctx,
                                          TIntrusivePtr<TBlobStorageGroupInfo> info,
-                                         const TActorId &committerId,
-                                         const TActorId &notifyId,
+                                         const TActorId &committerId, 
+                                         const TActorId &notifyId, 
                                          const NSyncer::TLocalSyncerState &localState) {
         return new NSyncer::TVDiskGuidRecoveryActor(std::move(vctx), std::move(info), committerId,
             notifyId, localState);

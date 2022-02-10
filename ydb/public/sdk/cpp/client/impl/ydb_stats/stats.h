@@ -4,8 +4,8 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h>
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
-#include <library/cpp/monlib/metrics/metric_registry.h>
-#include <library/cpp/monlib/metrics/histogram_collector.h>
+#include <library/cpp/monlib/metrics/metric_registry.h> 
+#include <library/cpp/monlib/metrics/histogram_collector.h> 
 
 #include <util/string/builder.h>
 
@@ -161,7 +161,7 @@ private:
 };
 
 struct TStatCollector {
-    using TMetricRegistry = NMonitoring::TMetricRegistry;
+    using TMetricRegistry = NMonitoring::TMetricRegistry; 
 
 public:
 
@@ -200,14 +200,14 @@ public:
 
     struct TClientRetryOperationStatCollector {
 
-        TClientRetryOperationStatCollector() : MetricRegistry_(), Database_() {}
+        TClientRetryOperationStatCollector() : MetricRegistry_(), Database_() {} 
 
         TClientRetryOperationStatCollector(NMonitoring::TMetricRegistry* registry, const TStringType& database)
-        : MetricRegistry_(registry), Database_(database)
+        : MetricRegistry_(registry), Database_(database) 
         { }
 
         void IncSyncRetryOperation(const EStatus& status) {
-            if (auto registry = MetricRegistry_.Get()) {
+            if (auto registry = MetricRegistry_.Get()) { 
                 TString statusName = TStringBuilder() << status;
                 TString sensor = TStringBuilder() << "RetryOperation/" << UnderscoreToUpperCamel(statusName);
                 registry->Rate({ {"database", Database_}, {"sensor", sensor} })->Inc();
@@ -215,7 +215,7 @@ public:
         }
 
         void IncAsyncRetryOperation(const EStatus& status) {
-            if (auto registry = MetricRegistry_.Get()) {
+            if (auto registry = MetricRegistry_.Get()) { 
                 TString statusName = TStringBuilder() << status;
                 TString sensor = TStringBuilder() << "RetryOperation/" << UnderscoreToUpperCamel(statusName);
                 registry->Rate({ {"database", Database_}, {"sensor", sensor} })->Inc();
@@ -223,7 +223,7 @@ public:
         }
 
     private:
-        TAtomicPointer<NMonitoring::TMetricRegistry> MetricRegistry_;
+        TAtomicPointer<NMonitoring::TMetricRegistry> MetricRegistry_; 
         TStringType Database_;
     };
 
@@ -256,13 +256,13 @@ public:
         , DatabaseLabel_({"database", database})
     {
         if (sensorsRegistry) {
-            SetMetricRegistry(sensorsRegistry);
+            SetMetricRegistry(sensorsRegistry); 
         }
     }
 
-    void SetMetricRegistry(TMetricRegistry* sensorsRegistry) {
-        Y_VERIFY(sensorsRegistry, "TMetricRegistry is null in stats collector.");
-        MetricRegistryPtr_.Set(sensorsRegistry);
+    void SetMetricRegistry(TMetricRegistry* sensorsRegistry) { 
+        Y_VERIFY(sensorsRegistry, "TMetricRegistry is null in stats collector."); 
+        MetricRegistryPtr_.Set(sensorsRegistry); 
         DiscoveryDuePessimization_.Set(sensorsRegistry->Rate({ DatabaseLabel_,      {"sensor", "Discovery/TooManyBadEndpoints"} }));
         DiscoveryDueExpiration_.Set(sensorsRegistry->Rate({ DatabaseLabel_,         {"sensor", "Discovery/Regular"} }));
         DiscoveryFailDueTransportError_.Set(sensorsRegistry->Rate({ DatabaseLabel_, {"sensor", "Discovery/FailedTransportError"} }));
@@ -322,7 +322,7 @@ public:
     }
 
     void IncCounter(const TStringType& sensor) {
-        if (auto registry = MetricRegistryPtr_.Get()) {
+        if (auto registry = MetricRegistryPtr_.Get()) { 
             registry->Counter({ {"database", Database_}, {"sensor", sensor} })->Inc();
         }
     }
@@ -340,7 +340,7 @@ public:
     }
 
     TEndpointElectorStatCollector GetEndpointElectorStatCollector() {
-        if (auto registry = MetricRegistryPtr_.Get()) {
+        if (auto registry = MetricRegistryPtr_.Get()) { 
             auto endpointCoint = registry->IntGauge({ {"database", Database_},      {"sensor", "Endpoints/Total"} });
             auto pessimizationRatio = registry->IntGauge({ {"database", Database_}, {"sensor", "Endpoints/BadRatio"} });
             auto activeEndpoints = registry->IntGauge({ {"database", Database_},    {"sensor", "Endpoints/Good"} });
@@ -370,14 +370,14 @@ public:
         if (IsCollecting()) {
             return TClientStatCollector(CacheMiss_.Get(), QuerySize_.Get(), ParamsSize_.Get(),
                 SessionRemovedDueBalancing_.Get(), RequestMigrated_.Get(),
-                TClientRetryOperationStatCollector(MetricRegistryPtr_.Get(), Database_));
+                TClientRetryOperationStatCollector(MetricRegistryPtr_.Get(), Database_)); 
         } else {
             return TClientStatCollector();
         }
     }
 
     bool IsCollecting() {
-        return MetricRegistryPtr_.Get() != nullptr;
+        return MetricRegistryPtr_.Get() != nullptr; 
     }
 
     void IncSessionsOnHost(const TStringType& host);
@@ -392,7 +392,7 @@ public:
 private:
     const TStringType Database_;
     const NMonitoring::TLabel DatabaseLabel_;
-    TAtomicPointer<TMetricRegistry> MetricRegistryPtr_;
+    TAtomicPointer<TMetricRegistry> MetricRegistryPtr_; 
     TAtomicCounter<NMonitoring::TRate> DiscoveryDuePessimization_;
     TAtomicCounter<NMonitoring::TRate> DiscoveryDueExpiration_;
     TAtomicCounter<NMonitoring::TRate> RequestFailDueQueueOverflow_;

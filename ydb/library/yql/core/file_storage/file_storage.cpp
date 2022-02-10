@@ -299,7 +299,7 @@ private:
     TMultiResourceLock MultiResourceLock;
 };
 
-TFileStoragePtr CreateFileStorage(const TFileStorageConfig& params) {
+TFileStoragePtr CreateFileStorage(const TFileStorageConfig& params) { 
     Y_ENSURE(0 != params.GetMaxFiles(), "FileStorage: MaxFiles must be greater than 0");
     Y_ENSURE(0 != params.GetMaxSizeMb(), "FileStorage: MaxSizeMb must be greater than 0");
     return new TFileStorageImpl(params);

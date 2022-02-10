@@ -1,5 +1,5 @@
 package NYql.NIssue.NProto;
-option java_package = "com.yandex.yql.issue.proto";
+option java_package = "com.yandex.yql.issue.proto"; 
 
 message IssueMessage {
     message Position {

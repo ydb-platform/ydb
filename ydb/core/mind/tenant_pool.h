@@ -88,16 +88,16 @@ public:
 
 IActor* CreateTenantPool(TTenantPoolConfig::TPtr config);
 
-inline TActorId MakeTenantPoolID(ui32 node = 0, ui32 domain = 0) {
+inline TActorId MakeTenantPoolID(ui32 node = 0, ui32 domain = 0) { 
     Y_VERIFY(domain < 32);
     char x[12] = { 't', 'e', 'n', 'a', 'n', 't', 'p', 'o', 'o', 'l' };
     x[10] = static_cast<char>(domain);
-    return TActorId(node, TStringBuf(x, 12));
+    return TActorId(node, TStringBuf(x, 12)); 
 }
 
-inline TActorId MakeTenantPoolRootID() {
+inline TActorId MakeTenantPoolRootID() { 
     char x[12] = { 't', 'e', 'n', 'a', 'n', 't', 'p', 'o', 'o', 'l', 'r', 't' };
-    return TActorId(0, TStringBuf(x, 12));
+    return TActorId(0, TStringBuf(x, 12)); 
 }
 
 } // namespace NKikimr

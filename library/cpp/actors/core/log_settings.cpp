@@ -4,7 +4,7 @@
 
 namespace NActors {
     namespace NLog {
-        TSettings::TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
+        TSettings::TSettings(const TActorId& loggerActorId, const EComponent loggerComponent, 
                              EComponent minVal, EComponent maxVal, EComponentToStringFunc func,
                              EPriority defPriority, EPriority defSamplingPriority,
                              ui32 defSamplingRate, ui64 timeThresholdMs)
@@ -27,7 +27,7 @@ namespace NActors {
             Append(minVal, maxVal, func);
         }
 
-        TSettings::TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
+        TSettings::TSettings(const TActorId& loggerActorId, const EComponent loggerComponent, 
                              EPriority defPriority, EPriority defSamplingPriority,
                              ui32 defSamplingRate, ui64 timeThresholdMs)
             : LoggerActorId(loggerActorId)

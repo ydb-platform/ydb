@@ -7,18 +7,18 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-TGRpcYdbTableService::TGRpcYdbTableService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
+TGRpcYdbTableService::TGRpcYdbTableService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id) 
     : ActorSystem_(system)
     , Counters_(counters)
     , GRpcRequestProxyId_(id)
 { }
 
-void TGRpcYdbTableService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcYdbTableService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) { 
     CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
+    SetupIncomingRequests(std::move(logger)); 
 }
 
-void TGRpcYdbTableService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcYdbTableService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
     Limiter_ = limiter;
 }
 
@@ -31,26 +31,26 @@ void TGRpcYdbTableService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("table", #NAME))->Run();
+        #NAME, logger, getCounterBlock("table", #NAME))->Run(); 
 
 #define ADD_BYTES_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("table", #NAME))->Run();
+        #NAME, logger, getCounterBlock("table", #NAME))->Run(); 
 
     ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvCreateSessionRequest(ctx));

@@ -163,7 +163,7 @@ namespace NActors {
     }
 
     bool TMailboxTable::SendTo(TAutoPtr<IEventHandle>& ev, IExecutorPool* executorPool) {
-        const TActorId& recipient = ev->GetRecipientRewrite();
+        const TActorId& recipient = ev->GetRecipientRewrite(); 
         const ui32 hint = recipient.Hint();
 
         // copy-paste from Get to avoid duplicated type-switches

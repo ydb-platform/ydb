@@ -166,7 +166,7 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
 void TFinishProposeUnit::AddDiagnosticsResult(TOutputOpData::TResultPtr &res)
 {
     auto &tabletInfo = *res->Record.MutableTabletInfo();
-    ActorIdToProto(DataShard.SelfId(), tabletInfo.MutableActorId());
+    ActorIdToProto(DataShard.SelfId(), tabletInfo.MutableActorId()); 
 
     tabletInfo.SetTabletId(DataShard.TabletID());
     tabletInfo.SetGeneration(DataShard.Generation());

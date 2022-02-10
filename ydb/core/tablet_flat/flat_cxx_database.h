@@ -62,7 +62,7 @@ public:
         : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), type)
     {}
 
-    TTypeValue(const TActorId& value, NScheme::TTypeId type = NScheme::NTypeIds::ActorId)
+    TTypeValue(const TActorId& value, NScheme::TTypeId type = NScheme::NTypeIds::ActorId) 
         : TRawTypeValue(&value, sizeof(value), type)
     {}
 
@@ -137,13 +137,13 @@ public:
     }
 
     operator ui8() const {
-        Y_VERIFY(Type() == NScheme::NTypeIds::Byte && Size() == sizeof(ui8), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_VERIFY(Type() == NScheme::NTypeIds::Byte && Size() == sizeof(ui8), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
         ui8 value = *reinterpret_cast<const ui8*>(Data());
         return value;
     }
 
     operator bool() const {
-        Y_VERIFY(Type() == NScheme::NTypeIds::Bool && Size() == sizeof(bool), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_VERIFY(Type() == NScheme::NTypeIds::Bool && Size() == sizeof(bool), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
         bool value = *reinterpret_cast<const bool*>(Data());
         return value;
     }
@@ -154,12 +154,12 @@ public:
         return value;
     }
 
-    operator TActorId() const {
+    operator TActorId() const { 
         Y_VERIFY((Type() == NScheme::NTypeIds::ActorId
                || Type() == NScheme::NTypeIds::String
                || Type() == NScheme::NTypeIds::String2m
-               || Type() == NScheme::NTypeIds::String4k) && Size() == sizeof(TActorId), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
-        return *reinterpret_cast<const TActorId*>(Data());
+               || Type() == NScheme::NTypeIds::String4k) && Size() == sizeof(TActorId), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
+        return *reinterpret_cast<const TActorId*>(Data()); 
     }
 
     operator TString() const {
@@ -178,7 +178,7 @@ public:
     }
 
     operator std::pair<ui64, ui64>() const {
-        Y_VERIFY(Type() == NScheme::NTypeIds::PairUi64Ui64 && Size() == sizeof(std::pair<ui64, ui64>), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_VERIFY(Type() == NScheme::NTypeIds::PairUi64Ui64 && Size() == sizeof(std::pair<ui64, ui64>), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
         return *reinterpret_cast<const std::pair<ui64, ui64>*>(Data());
     }
 
@@ -214,17 +214,17 @@ public:
 
 template <NScheme::TTypeId T> struct NSchemeTypeMapper;
 
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Bool> { typedef bool Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Byte> { typedef ui8 Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Uint32> { typedef ui32 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Bool> { typedef bool Type; }; 
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Byte> { typedef ui8 Type; }; 
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Uint32> { typedef ui32 Type; }; 
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Int32> { typedef i32 Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Uint64> { typedef ui64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Uint64> { typedef ui64 Type; }; 
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Int64> { typedef i64 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::String> { typedef TString Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::String4k> : NSchemeTypeMapper<NScheme::NTypeIds::String> {};
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Utf8> { typedef TString Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::ActorId> { typedef TActorId Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::PairUi64Ui64> { typedef std::pair<ui64, ui64> Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::ActorId> { typedef TActorId Type; }; 
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::PairUi64Ui64> { typedef std::pair<ui64, ui64> Type; }; 
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Double> { typedef double Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Decimal> { typedef std::pair<ui64, i64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date> { typedef ui16 Type; };

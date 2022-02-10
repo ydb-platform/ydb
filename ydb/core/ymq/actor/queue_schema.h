@@ -18,7 +18,7 @@ class TCreateQueueSchemaActorV2
 public:
      TCreateQueueSchemaActorV2(const TQueuePath& path,
                                const TCreateQueueRequest& req,
-                               const TActorId& sender,
+                               const TActorId& sender, 
                                const TString& requestId,
                                const TString& customQueueName,
                                const TString& folderId,
@@ -104,7 +104,7 @@ private:
 
     const TQueuePath QueuePath_;
     const TCreateQueueRequest Request_;
-    const TActorId Sender_;
+    const TActorId Sender_; 
     const TString CustomQueueName_;
     const TString FolderId_;
     const TString RequestId_;
@@ -136,7 +136,7 @@ private:
 
     ECreateComponentsStep CurrentCreationStep_ = ECreateComponentsStep::GetTablesFormatSetting;
 
-    TActorId AddQuoterResourceActor_;
+    TActorId AddQuoterResourceActor_; 
 };
 
 class TDeleteQueueSchemaActorV2
@@ -144,12 +144,12 @@ class TDeleteQueueSchemaActorV2
 {
 public:
     TDeleteQueueSchemaActorV2(const TQueuePath& path,
-                              const TActorId& sender,
+                              const TActorId& sender, 
                               const TString& requestId,
                               TIntrusivePtr<TUserCounters> userCounters);
 
     TDeleteQueueSchemaActorV2(const TQueuePath& path,
-                              const TActorId& sender,
+                              const TActorId& sender, 
                               const TString& requestId,
                               TIntrusivePtr<TUserCounters> userCounters,
                               const ui64 advisedQueueVersion,
@@ -196,14 +196,14 @@ private:
     };
 
     const TQueuePath QueuePath_;
-    const TActorId Sender_;
+    const TActorId Sender_; 
     TVector<TTable> Tables_;
     TVector<int> Shards_;
     ui32 SI_;
     const TString RequestId_;
     TIntrusivePtr<TUserCounters> UserCounters_;
     ui64 Version_ = 0;
-    TActorId DeleteQuoterResourceActor_;
+    TActorId DeleteQuoterResourceActor_; 
 };
 
 } // namespace NKikimr::NSQS

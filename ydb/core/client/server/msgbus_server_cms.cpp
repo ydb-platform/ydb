@@ -291,7 +291,7 @@ private:
     NKikimrClient::TCmsRequest Request;
     NKikimrClient::TCmsResponse Response;
     ui32 StateStorageGroup = 0;
-    TActorId CmsPipe;
+    TActorId CmsPipe; 
 };
 
 } // namespace

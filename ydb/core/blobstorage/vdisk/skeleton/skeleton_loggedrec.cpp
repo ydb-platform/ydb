@@ -24,7 +24,7 @@ namespace NKikimr {
             const TIngress &ingress,
             TRope &&buffer,
             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
-            const TActorId &recipient,
+            const TActorId &recipient, 
             ui64 recipientCookie)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
@@ -57,7 +57,7 @@ namespace NKikimr {
             const TIngress &ingress,
             TRope &&buffer,
             std::unique_ptr<TEvVMultiPutItemResult> result,
-            const TActorId &recipient,
+            const TActorId &recipient, 
             ui64 recipientCookie)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
@@ -88,7 +88,7 @@ namespace NKikimr {
     TLoggedRecVPutHuge::TLoggedRecVPutHuge(
             TLsnSeg seg,
             bool confirmSyncLogAlso,
-            const TActorId &hugeKeeperId,
+            const TActorId &hugeKeeperId, 
             TEvHullLogHugeBlob::TPtr ev)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , HugeKeeperId(hugeKeeperId)
@@ -121,7 +121,7 @@ namespace NKikimr {
             ui32 gen,
             ui64 issuerGuid,
             std::unique_ptr<TEvBlobStorage::TEvVBlockResult> result,
-            const TActorId &recipient,
+            const TActorId &recipient, 
             ui64 recipientCookie)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , TabletId(tabletId)
@@ -133,7 +133,7 @@ namespace NKikimr {
     {}
 
     void TLoggedRecVBlock::Replay(THull &hull, const TActorContext &ctx, const IActor& actor) {
-        auto replySender = [&ctx, &actor] (const TActorId &id, ui64 cookie, IEventBase *msg) {
+        auto replySender = [&ctx, &actor] (const TActorId &id, ui64 cookie, IEventBase *msg) { 
             SendVDiskResponse(ctx, id, msg, actor, cookie);
         };
 
@@ -184,7 +184,7 @@ namespace NKikimr {
     {}
 
     void TLoggedRecLocalSyncData::Replay(THull &hull, const TActorContext &ctx, const IActor& actor) {
-        auto replySender = [&ctx, &actor] (const TActorId &id, ui64 cookie, IEventBase *msg) {
+        auto replySender = [&ctx, &actor] (const TActorId &id, ui64 cookie, IEventBase *msg) { 
             SendVDiskResponse(ctx, id, msg, actor, cookie);
         };
 
@@ -240,7 +240,7 @@ namespace NKikimr {
             TLsnSeg seg,
             bool confirmSyncLogAlso,
             std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> result,
-            const TActorId &recipient,
+            const TActorId &recipient, 
             ui64 recipientCookie)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Result(std::move(result))

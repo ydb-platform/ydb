@@ -3,7 +3,7 @@
 
 namespace NKikimr {
 
-IActor* CreateTxAllocator(const TActorId &tablet, TTabletStorageInfo *info) {
+IActor* CreateTxAllocator(const TActorId &tablet, TTabletStorageInfo *info) { 
     return new NTxAllocator::TTxAllocator(tablet, info);
 }
 

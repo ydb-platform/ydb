@@ -1,17 +1,17 @@
 #pragma once
-
+ 
 #include "defs.h"
 #include "mkql_node.h"
 #include "mkql_node_builder.h"
 #include <ydb/library/yql/public/udf/udf_value.h>
-
+ 
 #include <functional>
 
 namespace NKikimr {
-namespace NMiniKQL {
+namespace NMiniKQL { 
 
-class IFunctionRegistry;
-class TBuiltinFunctionRegistry;
+class IFunctionRegistry; 
+class TBuiltinFunctionRegistry; 
 
 constexpr std::string_view RandomMTResource = "MTRand";
 constexpr std::string_view ResourceQueuePrefix = "TResourceQueue:";
@@ -84,7 +84,7 @@ inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
     combined = (EAnyJoinSettings)combinedVal;
 }
 
-#define MKQL_SCRIPT_TYPES(xx) \
+#define MKQL_SCRIPT_TYPES(xx) \ 
     xx(Unknown, 0, unknown) \
     xx(Python, 1, python) \
     xx(Lua, 2, lua) \
@@ -99,16 +99,16 @@ inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
     xx(CustomPython3, 11, custompython3) \
     xx(SystemPython2, 12, systempython2) \
     xx(SystemPython3, 13, systempython3) \
-
-enum class EScriptType {
-    MKQL_SCRIPT_TYPES(ENUM_VALUE_GEN)
-};
-
+ 
+enum class EScriptType { 
+    MKQL_SCRIPT_TYPES(ENUM_VALUE_GEN) 
+}; 
+ 
 std::string_view ScriptTypeAsStr(EScriptType type);
 EScriptType ScriptTypeFromStr(std::string_view str);
 bool IsCustomPython(EScriptType type);
 EScriptType CanonizeScriptType(EScriptType type);
-
+ 
 struct TSwitchInput {
     std::vector<ui32> Indicies;
     TType* InputType = nullptr;
@@ -118,9 +118,9 @@ struct TSwitchInput {
 class TProgramBuilder : private TNonCopyable {
 public:
     TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false);
-
+ 
     const TTypeEnvironment& GetTypeEnvironment() const;
-    const IFunctionRegistry& GetFunctionRegistry() const;
+    const IFunctionRegistry& GetFunctionRegistry() const; 
 
     TRuntimeNode Arg(TType* type) const;
     TRuntimeNode WideFlowArg(TType* type) const;
@@ -239,13 +239,13 @@ public:
 
     TRuntimeNode BlockAdd(TRuntimeNode data1, TRuntimeNode data2);
 
-    // udfs
-    TRuntimeNode Udf(
+    // udfs 
+    TRuntimeNode Udf( 
             const std::string_view& funcName,
             TRuntimeNode runConfig = TRuntimeNode(),
             TType* userType = nullptr,
             const std::string_view& typeConfig = std::string_view(""));
-
+ 
     TRuntimeNode TypedUdf(
         const std::string_view& funcName,
         TType* funcType,
@@ -254,13 +254,13 @@ public:
         const std::string_view& typeConfig = std::string_view(""),
         const std::string_view& file = std::string_view(""), ui32 row = 0, ui32 column = 0);
 
-    TRuntimeNode ScriptUdf(
-            EScriptType scriptType,
+    TRuntimeNode ScriptUdf( 
+            EScriptType scriptType, 
             const std::string_view& funcName,
-            TType* funcType,
+            TType* funcType, 
             TRuntimeNode script,
             const std::string_view& file = std::string_view(""), ui32 row = 0, ui32 column = 0);
-
+ 
     typedef std::function<TRuntimeNode ()> TZeroLambda;
     typedef std::function<TRuntimeNode (TRuntimeNode)> TUnaryLambda;
     typedef std::function<TRuntimeNode (TRuntimeNode, TRuntimeNode)> TBinaryLambda;
@@ -282,7 +282,7 @@ public:
     TRuntimeNode Apply(TRuntimeNode callableNode, const TArrayRef<const TRuntimeNode>& args,
          const std::string_view& file, ui32 row, ui32 column, ui32 dependentCount = 0);
     TRuntimeNode Callable(TType* callableType, const TArrayLambda& handler);
-
+ 
     //-- struct functions
     TRuntimeNode Member(TRuntimeNode structObj, const std::string_view& memberName);
     TRuntimeNode Element(TRuntimeNode tuple, const std::string_view& memberName);
@@ -621,12 +621,12 @@ public:
     typedef TRuntimeNode (TProgramBuilder::*ProcessFunctionMethod)(TRuntimeNode, const TUnaryLambda&);
     typedef TRuntimeNode (TProgramBuilder::*NarrowFunctionMethod)(TRuntimeNode, const TNarrowLambda&);
 
-protected:
+protected: 
     TRuntimeNode Invoke(const std::string_view& funcName, TType* resultType, const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode IfPresent(TRuntimeNode optional, const TUnaryLambda& thenBranch, TRuntimeNode elseBranch);
 
-    void ThrowIfListOfVoid(TType* type);
-
+    void ThrowIfListOfVoid(TType* type); 
+ 
     template <typename ResultType>
     TRuntimeNode BuildContainerProperty(const std::string_view& callableName, TRuntimeNode listOrDict);
     TRuntimeNode Filter(TRuntimeNode list, const TUnaryLambda& handler, TType* resultType);
@@ -662,7 +662,7 @@ private:
         const TNarrowLambda& payloadSelector, std::string_view callableName, bool isCompact, ui64 itemsCountHint);
 
     TRuntimeNode UnaryDataFunction(TRuntimeNode data, const std::string_view& callableName, ui32 flags);
-
+ 
     template<bool IsFilter, bool OnStruct>
     TRuntimeNode BuildFilterNulls(TRuntimeNode list);
     template<bool IsFilter, bool OnStruct>
@@ -729,9 +729,9 @@ private:
     TType* BuildArithmeticCommonType(TType* type1, TType* type2);
 
     bool IsNull(TRuntimeNode arg);
-protected:
+protected: 
     const TTypeEnvironment& Env;
-    const IFunctionRegistry& FunctionRegistry;
+    const IFunctionRegistry& FunctionRegistry; 
     const bool VoidWithEffects;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
     bool UseNullType = true;

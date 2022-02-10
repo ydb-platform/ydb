@@ -25,7 +25,7 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
     using TBase = TViewerPipeClient<TJsonStorage>;
     using TNodeId = ui32;
     IViewer* Viewer;
-    TActorId Initiator;
+    TActorId Initiator; 
     NMon::TEvHttpInfo::TPtr Event;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TMap<ui32, THolder<TEvWhiteboard::TEvVDiskStateResponse>> VDiskInfo;

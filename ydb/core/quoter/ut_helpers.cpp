@@ -45,7 +45,7 @@ void TKesusQuoterTestSetup::SetupLogging() {
 
 void TKesusQuoterTestSetup::RegisterQuoterService() {
     TTestActorRuntime* const runtime = GetServer().GetRuntime();
-    const TActorId quoterServiceActorId = runtime->Register(CreateQuoterService());
+    const TActorId quoterServiceActorId = runtime->Register(CreateQuoterService()); 
     runtime->RegisterService(MakeQuoterServiceID(), quoterServiceActorId);
 }
 
@@ -77,7 +77,7 @@ void TKesusQuoterTestSetup::CreateKesusResource(const TString& kesusPath, const 
     request->Record.MutableResource()->SetResourcePath(resourcePath);
     *request->Record.MutableResource()->MutableHierarhicalDRRResourceConfig() = cfg;
 
-    TActorId sender = GetEdgeActor();
+    TActorId sender = GetEdgeActor(); 
     Cerr << "AddQuoterResource: " << request->Record << Endl;
     ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);
 
@@ -98,7 +98,7 @@ void TKesusQuoterTestSetup::DeleteKesusResource(const TString& kesusPath, const 
     TAutoPtr<NKesus::TEvKesus::TEvDeleteQuoterResource> request(new NKesus::TEvKesus::TEvDeleteQuoterResource());
     request->Record.SetResourcePath(resourcePath);
 
-    TActorId sender = GetEdgeActor();
+    TActorId sender = GetEdgeActor(); 
     Cerr << "DeleteQuoterResource: " << request->Record << Endl;
     ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);
 
@@ -108,7 +108,7 @@ void TKesusQuoterTestSetup::DeleteKesusResource(const TString& kesusPath, const 
     UNIT_ASSERT_VALUES_EQUAL(record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
 }
 
-TActorId TKesusQuoterTestSetup::GetEdgeActor() {
+TActorId TKesusQuoterTestSetup::GetEdgeActor() { 
     if (!EdgeActor) {
         EdgeActor = GetServer().GetRuntime()->AllocateEdgeActor(0);
     }
@@ -153,7 +153,7 @@ THolder<TEvQuota::TEvClearance> TKesusQuoterTestSetup::WaitGetQuotaAnswer() {
 void TKesusQuoterTestSetup::KillKesusTablet(const TString& kesusPath) {
     TTestActorRuntime* const runtime = Server->GetRuntime();
 
-    TActorId sender = GetEdgeActor();
+    TActorId sender = GetEdgeActor(); 
     Cerr << "Kill kesus tablet: " << kesusPath << Endl;
     ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, new TEvents::TEvPoisonPill(), 0);
 }
@@ -215,14 +215,14 @@ void TKesusProxyTestSetup::SetupLogging() {
     Runtime->SetLogPriority(NKikimrServices::QUOTER_PROXY, NActors::NLog::PRI_TRACE);
 }
 
-TActorId TKesusProxyTestSetup::GetEdgeActor() {
+TActorId TKesusProxyTestSetup::GetEdgeActor() { 
     if (!EdgeActor) {
         EdgeActor = Runtime->AllocateEdgeActor(0);
     }
     return EdgeActor;
 }
 
-TActorId TKesusProxyTestSetup::GetPipeEdgeActor() {
+TActorId TKesusProxyTestSetup::GetPipeEdgeActor() { 
     if (!PipeEdgeActor) {
         PipeEdgeActor = Runtime->AllocateEdgeActor(0);
     }
@@ -237,7 +237,7 @@ void TKesusProxyTestSetup::WaitProxyStart() {
 
 void TKesusProxyTestSetup::SendNotConnected(TTestTabletPipeFactory::TTestTabletPipe* pipe) {
     WaitProxyStart();
-    Runtime->Send(new IEventHandle(KesusProxyId, pipe->GetSelfID(), new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::ERROR, pipe->GetSelfID(), TActorId(), true, false)), 0, true);
+    Runtime->Send(new IEventHandle(KesusProxyId, pipe->GetSelfID(), new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::ERROR, pipe->GetSelfID(), TActorId(), true, false)), 0, true); 
 }
 
 void TKesusProxyTestSetup::SendConnected(TTestTabletPipeFactory::TTestTabletPipe* pipe) {
@@ -395,7 +395,7 @@ TKesusProxyTestSetup::TTestTabletPipeFactory::~TTestTabletPipeFactory() {
     PipesExpectedToCreate.clear();
 }
 
-IActor* TKesusProxyTestSetup::TTestTabletPipeFactory::CreateTabletPipe(const NActors::TActorId& owner, ui64 tabletId, const NKikimr::NTabletPipe::TClientConfig&) {
+IActor* TKesusProxyTestSetup::TTestTabletPipeFactory::CreateTabletPipe(const NActors::TActorId& owner, ui64 tabletId, const NKikimr::NTabletPipe::TClientConfig&) { 
     UNIT_ASSERT(owner);
     UNIT_ASSERT_VALUES_EQUAL(owner, Parent->KesusProxyId);
     UNIT_ASSERT(tabletId);
@@ -463,7 +463,7 @@ void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::HandleSend(T
 }
 
 void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::HandleSubscribeOnResources(NKesus::TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
-    const TActorId proxy = ActorIdFromProto(ev->Get()->Record.GetActorID());
+    const TActorId proxy = ActorIdFromProto(ev->Get()->Record.GetActorID()); 
     UNIT_ASSERT_VALUES_EQUAL(proxy, Parent->Parent->KesusProxyId);
 
     OnSubscribeOnResources(ev->Get()->Record, ev->Cookie);
@@ -478,7 +478,7 @@ void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::HandleResour
 }
 
 void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::SendNotConnected() {
-    Send(Parent->Parent->KesusProxyId, new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::ERROR, SelfID, TActorId(), true, false));
+    Send(Parent->Parent->KesusProxyId, new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::ERROR, SelfID, TActorId(), true, false)); 
 }
 
 void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::SendConnected() {

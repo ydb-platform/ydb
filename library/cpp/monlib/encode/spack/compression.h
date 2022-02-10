@@ -1,12 +1,12 @@
-#pragma once
-
-#include "spack_v1.h"
-
-#include <util/stream/input.h>
-#include <util/stream/output.h>
-
-namespace NMonitoring {
-
+#pragma once 
+ 
+#include "spack_v1.h" 
+ 
+#include <util/stream/input.h> 
+#include <util/stream/output.h> 
+ 
+namespace NMonitoring { 
+ 
 class IFramedCompressStream: public IOutputStream {
 public:
     virtual void FlushWithoutEmptyFrame() = 0;

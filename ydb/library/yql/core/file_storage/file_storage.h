@@ -1,7 +1,7 @@
 #pragma once
 
-#include "storage.h"
-
+#include "storage.h" 
+ 
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/uri/http_url.h>
 
@@ -24,7 +24,7 @@ struct IFileStorage: public TThrRefBase {
     };
     using IDownloaderPtr = TIntrusivePtr<IDownloader>;
 
-    virtual ~IFileStorage() = default;
+    virtual ~IFileStorage() = default; 
     virtual void AddDownloader(IDownloaderPtr downloader) = 0;
     virtual TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) = 0;
     virtual TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5 = {}) = 0;
@@ -43,6 +43,6 @@ struct IFileStorage: public TThrRefBase {
 using TFileStoragePtr = TIntrusivePtr<IFileStorage>;
 
 // Will use auto-cleaned temporary directory if storagePath is empty
-TFileStoragePtr CreateFileStorage(const TFileStorageConfig& params);
+TFileStoragePtr CreateFileStorage(const TFileStorageConfig& params); 
 
 } // NYql

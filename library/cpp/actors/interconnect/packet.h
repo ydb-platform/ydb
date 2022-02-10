@@ -18,7 +18,7 @@
 
 using NActors::IEventBase;
 using NActors::IEventHandle;
-using NActors::TActorId;
+using NActors::TActorId; 
 using NActors::TConstIoVec;
 using NActors::TEventSerializedData;
 
@@ -91,8 +91,8 @@ union TTcpPacketBuf {
 struct TEventDescr {
     ui32 Type;
     ui32 Flags;
-    TActorId Recipient;
-    TActorId Sender;
+    TActorId Recipient; 
+    TActorId Sender; 
     ui64 Cookie;
     // wilson trace id is stored as a serialized entity to avoid using complex object with prohibited copy ctor
     NWilson::TTraceId::TSerializedTraceId TraceId;
@@ -102,7 +102,7 @@ struct TEventDescr {
 
 struct TEventHolder : TNonCopyable {
     TEventDescr Descr;
-    TActorId ForwardRecipient;
+    TActorId ForwardRecipient; 
     THolder<IEventBase> Event;
     TIntrusivePtr<TEventSerializedData> Buffer;
     ui64 Serial;

@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
                 auto setPartitioning = MakeHolder<TEvSysView::TEvSetPartitioning>(domainKey, id, "");
                 setPartitioning->ShardIndices.push_back(TShardIdx(ownerId * 3 + pathId, 0));
                 setPartitioning->ShardIndices.push_back(TShardIdx(ownerId * 3 + pathId, 1));
-                runtime.Send(new IEventHandle(collectorId, TActorId(), setPartitioning.Release()));
+                runtime.Send(new IEventHandle(collectorId, TActorId(), setPartitioning.Release())); 
             }
         }
 

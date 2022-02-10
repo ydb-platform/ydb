@@ -470,7 +470,7 @@ IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGr
 
         case TBlobStorageGroupType::ErasureMirror3dc:
             return IBlobToDiskMapper::CreateMirror3dcMapper(topology);
-
+ 
         default:
             Y_FAIL("unexpected erasure type 0x%08" PRIx32, static_cast<ui32>(gtype.GetErasure()));
     }
@@ -554,7 +554,7 @@ TBlobStorageGroupInfo::TDynamicInfo::TDynamicInfo(ui32 groupId, ui32 groupGen)
 // TBlobStorageGroupInfo
 ////////////////////////////////////////////////////////////////////////////
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain,
-        ui32 numFailDomains, ui32 numFailRealms, const TVector<TActorId> *vdiskIds, EEncryptionMode encryptionMode,
+        ui32 numFailDomains, ui32 numFailRealms, const TVector<TActorId> *vdiskIds, EEncryptionMode encryptionMode, 
         ELifeCyclePhase lifeCyclePhase, TCypherKey key)
     : GroupID(0)
     , GroupGeneration(1)
@@ -841,11 +841,11 @@ TVDiskID TBlobStorageGroupInfo::GetVDiskId(const TVDiskIdShort &vd) const {
     return TVDiskID(GroupID, GroupGeneration, vd);
 }
 
-TActorId TBlobStorageGroupInfo::GetActorId(ui32 orderNumber) const {
+TActorId TBlobStorageGroupInfo::GetActorId(ui32 orderNumber) const { 
     return Dynamic.ServiceIdForOrderNumber[orderNumber];
 }
 
-TActorId TBlobStorageGroupInfo::GetActorId(const TVDiskIdShort &vd) const {
+TActorId TBlobStorageGroupInfo::GetActorId(const TVDiskIdShort &vd) const { 
     return GetActorId(Topology->GetOrderNumber(vd));
 }
 

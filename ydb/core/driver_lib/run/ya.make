@@ -53,12 +53,12 @@ PEERDIR(
     library/cpp/getopt/small
     library/cpp/grpc/client
     library/cpp/grpc/server
-    library/cpp/grpc/server/actors
+    library/cpp/grpc/server/actors 
     library/cpp/logger
     library/cpp/malloc/api
     library/cpp/messagebus
-    library/cpp/monlib/dynamic_counters
-    library/cpp/monlib/messagebus
+    library/cpp/monlib/dynamic_counters 
+    library/cpp/monlib/messagebus 
     library/cpp/sighandler
     library/cpp/string_utils/parse_size
     library/cpp/svnversion

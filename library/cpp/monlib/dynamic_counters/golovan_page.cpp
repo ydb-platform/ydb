@@ -1,6 +1,6 @@
-#include "golovan_page.h"
+#include "golovan_page.h" 
 
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 #include <util/string/split.h>
 #include <util/system/tls.h>
@@ -40,8 +40,8 @@ public:
     }
 
     void OnHistogram(const TString&, const TString&, IHistogramSnapshotPtr, bool) override {
-    }
-
+    } 
+ 
     void OnGroupBegin(const TString&, const TString& value, const TDynamicCounters*) override {
         prefix += value;
         if (!value.empty()) {

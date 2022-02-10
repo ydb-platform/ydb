@@ -90,7 +90,7 @@ TActorContext TExecutor::OwnerCtx() const {
     return TActivationContext::ActorContextFor(OwnerActorId);
 }
 
-void TExecutor::Registered(TActorSystem *sys, const TActorId&)
+void TExecutor::Registered(TActorSystem *sys, const TActorId&) 
 {
     Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_EXECUTOR);
     Broker = new TBroker(this, Emitter);

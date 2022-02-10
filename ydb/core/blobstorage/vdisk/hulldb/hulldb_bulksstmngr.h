@@ -134,7 +134,7 @@ namespace NKikimr {
 
         // create actor which loads bulk-formed segments necessary for SyncLog recovery
         IActor *CreateLoaderActor(TVDiskContextPtr vctx, TPDiskCtxPtr pdiskCtx, ui64 syncLogMaxLsnStored,
-            const TActorId& localRecoveryActorId);
+            const TActorId& localRecoveryActorId); 
 
         void SerializeToProto(NKikimrVDiskData::TBulkFormedSstInfoSet &pb) const;
         static bool ConvertToProto(NKikimrVDiskData::TBulkFormedSstInfoSet &pb, const char *begin, const char *end);

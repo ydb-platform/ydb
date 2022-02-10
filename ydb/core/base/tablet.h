@@ -182,7 +182,7 @@ struct TEvTablet {
 
         TIntrusivePtr<TDependencyGraph> DependencyGraph;
 
-        const TActorId Launcher;
+        const TActorId Launcher; 
         TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
         TResourceProfilesPtr ResourceProfiles;
         TSharedQuotaPtr TxCacheQuota;
@@ -194,7 +194,7 @@ struct TEvTablet {
                 ui64 tabletId,
                 ui32 generation,
                 TDependencyGraph *dependencyGraph,
-                const TActorId& launcher,
+                const TActorId& launcher, 
                 TIntrusivePtr<TTabletStorageInfo> info,
                 TResourceProfilesPtr profiles = nullptr,
                 TSharedQuotaPtr txCacheQuota = nullptr,
@@ -216,7 +216,7 @@ struct TEvTablet {
     struct TEvRestored : public TEventLocal<TEvRestored, EvRestored> {
         const ui64 TabletID;
         const ui32 Generation;
-        const TActorId UserTabletActor;
+        const TActorId UserTabletActor; 
         const bool Follower;
 
         TEvRestored(ui64 tabletId, ui32 generation, const TActorId &userTabletActor, bool follower)
@@ -389,7 +389,7 @@ struct TEvTablet {
     struct TEvFollowerUpdateState : public TEventLocal<TEvFollowerUpdateState, EvFollowerUpdateState> {
         const bool IsCandidate;
         const TActorId FollowerActor;
-        const TActorId TabletActor;
+        const TActorId TabletActor; 
 
         TEvFollowerUpdateState(bool isCandidate, TActorId followerActor, TActorId tabletActor)
             : IsCandidate(isCandidate)
@@ -622,7 +622,7 @@ struct TEvTablet {
         const ui32 FollowerID;
         const ui32 Generation;
 
-        const TActorId Launcher;
+        const TActorId Launcher; 
 
         // must be present one of: or loaded graph or snapshot follower update
         TIntrusivePtr<TDependencyGraph> DependencyGraph;
@@ -780,8 +780,8 @@ struct TEvTablet {
 };
 
 IActor* CreateTabletKiller(ui64 tabletId, ui32 nodeId = 0, ui32 maxGeneration = Max<ui32>());
-IActor* CreateTabletDSChecker(const TActorId &replyTo, TTabletStorageInfo *info);
-IActor* CreateTabletReqReset(const TActorId &replyTo, const TIntrusivePtr<TTabletStorageInfo> &tabletStorageInfo, ui32 knownGeneration = 0);
+IActor* CreateTabletDSChecker(const TActorId &replyTo, TTabletStorageInfo *info); 
+IActor* CreateTabletReqReset(const TActorId &replyTo, const TIntrusivePtr<TTabletStorageInfo> &tabletStorageInfo, ui32 knownGeneration = 0); 
 
 }
 

@@ -37,7 +37,7 @@ private:
     void CreateKesusResource(const TString& kesusPath, const TString& resourcePath, TMaybe<double> maxUnitsPerSecond = Nothing());
     void CreateKesusResource(ui64 kesusTabletId, const TString& resourcePath, TMaybe<double> maxUnitsPerSecond = Nothing());
 
-    TActorId GetEdgeActor();
+    TActorId GetEdgeActor(); 
 
     void SetupSettings();
 
@@ -49,7 +49,7 @@ private:
 
     Tests::TServer::TPtr Server;
     THolder <Tests::TClient> Client;
-    TActorId EdgeActor;
+    TActorId EdgeActor; 
 };
 
 } // namespace NKikimr

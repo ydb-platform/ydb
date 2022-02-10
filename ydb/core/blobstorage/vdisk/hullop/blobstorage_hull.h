@@ -61,7 +61,7 @@ namespace NKikimr {
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
             TIntrusivePtr<THandoffDelegate> handoffDelegate,
-            const TActorId skeletonId,
+            const TActorId skeletonId, 
             bool runHandoff,
             THullDbRecovery &&uncond,
             TActorSystem *as,
@@ -77,14 +77,14 @@ namespace NKikimr {
                 TIntrusivePtr<TVDiskConfig> config,
                 std::shared_ptr<THullLogCtx> hullLogCtx,
                 std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep,
-                TActorId loggerId,
-                TActorId logCutterId,
+                TActorId loggerId, 
+                TActorId logCutterId, 
                 const TActorContext &ctx);
 
         // Request from PDisk to cut the recovery log
         void CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg);
 
-        void PostponeReplyUntilCommitted(IEventBase *msg, const TActorId &recipient, ui64 recipientCookie, ui64 lsn);
+        void PostponeReplyUntilCommitted(IEventBase *msg, const TActorId &recipient, ui64 recipientCookie, ui64 lsn); 
 
         ////////////////////////////////////////////////////////////////////////
         // LogoBlobs
@@ -134,7 +134,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // Blocks
         ////////////////////////////////////////////////////////////////////////
-        using TReplySender = std::function<void (const TActorId &, ui64, IEventBase *)>;
+        using TReplySender = std::function<void (const TActorId &, ui64, IEventBase *)>; 
 
         THullCheckStatus CheckBlockCmdAndAllocLsn(
                 ui64 tabletID,

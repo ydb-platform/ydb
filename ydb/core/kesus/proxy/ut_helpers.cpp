@@ -41,14 +41,14 @@ void TTestContext::SetupTabletServices() {
 }
 
 void TTestContext::Sleep(ui64 millis) {
-    TActorId sender = Runtime->AllocateEdgeActor();
+    TActorId sender = Runtime->AllocateEdgeActor(); 
     Runtime->Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), TDuration::MilliSeconds(millis), 0);
     ExpectEdgeEvent<TEvents::TEvWakeup>(sender, 0);
 }
 
 void TTestContext::RebootTablet() {
     ui32 nodeIndex = 0;
-    TActorId sender = Runtime->AllocateEdgeActor(nodeIndex);
+    TActorId sender = Runtime->AllocateEdgeActor(nodeIndex); 
     ForwardToTablet(*Runtime, TabletId, sender, new TEvents::TEvPoisonPill(), nodeIndex);
     {
         TDispatchOptions options;
@@ -58,17 +58,17 @@ void TTestContext::RebootTablet() {
     InvalidateTabletResolverCache(*Runtime, TabletId, nodeIndex);
 }
 
-TActorId TTestContext::GetProxy(ui64 proxyId, ui32 nodeIndex) {
+TActorId TTestContext::GetProxy(ui64 proxyId, ui32 nodeIndex) { 
     auto* pActor = ProxyActors.FindPtr(proxyId);
     if (!pActor) {
         pActor = &ProxyActors[proxyId];
-        *pActor = Runtime->Register(CreateKesusProxyActor(TActorId(), TabletId, ""), nodeIndex);
+        *pActor = Runtime->Register(CreateKesusProxyActor(TActorId(), TabletId, ""), nodeIndex); 
         Runtime->EnableScheduleForActor(*pActor);
     }
     return *pActor;
 }
 
-void TTestContext::SendFromEdge(ui64 proxyId, const TActorId& edge, IEventBase* payload, ui64 cookie) {
+void TTestContext::SendFromEdge(ui64 proxyId, const TActorId& edge, IEventBase* payload, ui64 cookie) { 
     ui32 nodeIndex = edge.NodeId() - Runtime->GetNodeId(0);
     Runtime->Send(
         new IEventHandle(GetProxy(proxyId), edge, payload, 0, cookie),
@@ -76,7 +76,7 @@ void TTestContext::SendFromEdge(ui64 proxyId, const TActorId& edge, IEventBase* 
         true);
 }
 
-void TTestContext::ExpectProxyError(const TActorId& edge, ui64 cookie, Ydb::StatusIds::StatusCode status) {
+void TTestContext::ExpectProxyError(const TActorId& edge, ui64 cookie, Ydb::StatusIds::StatusCode status) { 
     auto result = ExpectEdgeEvent<TEvKesusProxy::TEvProxyError>(edge, cookie);
     UNIT_ASSERT_VALUES_EQUAL(result->Error.GetStatus(), status);
 }
@@ -100,14 +100,14 @@ void TTestContext::DeleteSemaphore(ui64 proxyId, const TString& name, Ydb::Statu
 }
 
 ui64 TTestContext::SendAttachSession(
-    ui64 proxyId, const TActorId& edge, ui64 sessionId, ui64 timeoutMillis, const TString& description, ui64 seqNo)
+    ui64 proxyId, const TActorId& edge, ui64 sessionId, ui64 timeoutMillis, const TString& description, ui64 seqNo) 
 {
     ui64 cookie = RandomNumber<ui64>();
     SendFromEdge(proxyId, edge, new TEvKesus::TEvAttachSession("", 0, sessionId, timeoutMillis, description, seqNo), cookie);
     return cookie;
 }
 
-ui64 TTestContext::ExpectAttachSessionResult(const TActorId& edge, ui64 cookie, Ydb::StatusIds::StatusCode status) {
+ui64 TTestContext::ExpectAttachSessionResult(const TActorId& edge, ui64 cookie, Ydb::StatusIds::StatusCode status) { 
     auto result = ExpectEdgeEvent<TEvKesus::TEvAttachSessionResult>(edge, cookie);
     UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError().GetStatus(), status);
     return result->Record.GetSessionId();
@@ -115,7 +115,7 @@ ui64 TTestContext::ExpectAttachSessionResult(const TActorId& edge, ui64 cookie, 
 
 TTestContext::TSimpleSemaphoreDescription TTestContext::DescribeSemaphore(ui64 proxyId, const TString& name, bool includeWaiters) {
     ui64 cookie = RandomNumber<ui64>();
-    TActorId edge = Runtime->AllocateEdgeActor(1);
+    TActorId edge = Runtime->AllocateEdgeActor(1); 
     auto request = new TEvKesus::TEvDescribeSemaphore("", name);
     request->Record.SetIncludeOwners(true);
     request->Record.SetIncludeWaiters(includeWaiters);
@@ -139,7 +139,7 @@ TTestContext::TSimpleSemaphoreDescription TTestContext::DescribeSemaphore(ui64 p
 
 void TTestContext::VerifySemaphoreNotFound(ui64 proxyId, const TString& name) {
     ui64 cookie = RandomNumber<ui64>();
-    TActorId edge = Runtime->AllocateEdgeActor(1);
+    TActorId edge = Runtime->AllocateEdgeActor(1); 
     SendFromEdge(proxyId, edge, new TEvKesus::TEvDescribeSemaphore("", name), cookie);
     auto event = ExpectEdgeEvent<TEvKesus::TEvDescribeSemaphoreResult>(edge, cookie);
     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetError().GetStatus(), Ydb::StatusIds::NOT_FOUND);

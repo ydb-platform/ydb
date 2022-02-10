@@ -1,11 +1,11 @@
 #include "scheme_types_defs.h"
 
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 
-
-namespace NKikimr {
-namespace NScheme {
-
+ 
+namespace NKikimr { 
+namespace NScheme { 
+ 
 namespace NNames {
     DECLARE_TYPED_TYPE_NAME(Int32);
     DECLARE_TYPED_TYPE_NAME(Uint32);
@@ -33,26 +33,26 @@ namespace NNames {
     DECLARE_TYPED_TYPE_NAME(Interval);
 
     DECLARE_TYPED_TYPE_NAME(DyNumber);
-}
+} 
 
 void WriteEscapedValue(IOutputStream &out, const char *data, size_t size) {
-    static const size_t BUFFER_SIZE = 32;
-    char buffer[BUFFER_SIZE];
-    size_t bufPos = 0;
-
-    for (const char *end = data + size; data != end; ++data) {
-        if (bufPos >= BUFFER_SIZE - 1) {
-            out.Write(buffer, bufPos);
-            bufPos = 0;
-        }
-        const char c = *data;
-        if (c == '#' || c == '/')
-            buffer[bufPos++] = '\\';
-        buffer[bufPos++] = c;
-    }
-    if (bufPos)
-        out.Write(buffer, bufPos);
+    static const size_t BUFFER_SIZE = 32; 
+    char buffer[BUFFER_SIZE]; 
+    size_t bufPos = 0; 
+ 
+    for (const char *end = data + size; data != end; ++data) { 
+        if (bufPos >= BUFFER_SIZE - 1) { 
+            out.Write(buffer, bufPos); 
+            bufPos = 0; 
+        } 
+        const char c = *data; 
+        if (c == '#' || c == '/') 
+            buffer[bufPos++] = '\\'; 
+        buffer[bufPos++] = c; 
+    } 
+    if (bufPos) 
+        out.Write(buffer, bufPos); 
 }
 
-} // namespace NScheme
-} // namespace NKikimr
+} // namespace NScheme 
+} // namespace NKikimr 

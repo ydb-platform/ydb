@@ -61,7 +61,7 @@ TDqComputeActorChannels::TDqComputeActorChannels(TActorId owner, const TTxId& tx
             outputChannel.PeerState.PeerFreeSpace = channelBufferSize;
 
             if (channel.GetDstEndpoint().HasActorId()) {
-                outputChannel.Peer = ActorIdFromProto(channel.GetDstEndpoint().GetActorId());
+                outputChannel.Peer = ActorIdFromProto(channel.GetDstEndpoint().GetActorId()); 
             }
 
             if (Y_UNLIKELY(statsMode >= NDqProto::DQ_STATS_MODE_PROFILE)) {

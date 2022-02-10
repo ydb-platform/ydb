@@ -62,18 +62,18 @@ namespace NKikimr {
 
 
             // ActorID of a proxy that communicates with the given VDisk
-            TActorId ProxyId;
+            TActorId ProxyId; 
             // if we got response from a vdisk
             bool GotResponse = false;
 
             TVDiskState() = default;
 
-            void SetActorID(const TActorId &proxyId) {
+            void SetActorID(const TActorId &proxyId) { 
                 ProxyId = proxyId;
             }
 
             void Clear() {
-                ProxyId = TActorId();
+                ProxyId = TActorId(); 
                 GotResponse = false;
             }
 
@@ -266,8 +266,8 @@ namespace NKikimr {
 
         TIntrusivePtr<TVDiskContext> VCtx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
-        const TActorId CommitterId;
-        const TActorId NotifyId;
+        const TActorId CommitterId; 
+        const TActorId NotifyId; 
         TVDiskGuidFirstRunState FirstRunState;
         EWaitFor WaitFor = WaitNotSet;
 
@@ -550,8 +550,8 @@ namespace NKikimr {
 
         TVDiskGuidFirstRunActor(TIntrusivePtr<TVDiskContext> vctx,
                                 TIntrusivePtr<TBlobStorageGroupInfo> info,
-                                const TActorId &committerId,
-                                const TActorId &notifyId,
+                                const TActorId &committerId, 
+                                const TActorId &notifyId, 
                                 EFirstRunStep startStep,
                                 TVDiskEternalGuid guid)
             : TActorBootstrapped<TVDiskGuidFirstRunActor>()
@@ -565,8 +565,8 @@ namespace NKikimr {
 
     IActor *CreateVDiskGuidFirstRunActor(TIntrusivePtr<TVDiskContext> vctx,
                                          TIntrusivePtr<TBlobStorageGroupInfo> info,
-                                         const TActorId &committerId,
-                                         const TActorId &notifyId,
+                                         const TActorId &committerId, 
+                                         const TActorId &notifyId, 
                                          EFirstRunStep startStep,
                                          TVDiskEternalGuid guid) {
         return new TVDiskGuidFirstRunActor(std::move(vctx), std::move(info), committerId, notifyId, startStep, guid);

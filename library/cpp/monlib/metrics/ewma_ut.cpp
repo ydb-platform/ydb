@@ -1,5 +1,5 @@
 #include "ewma.h"
-#include "metric.h"
+#include "metric.h" 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -15,9 +15,9 @@ void ElapseMinute(IExpMovingAverage& ewma) {
 
 Y_UNIT_TEST_SUITE(TEwmaTest) {
     Y_UNIT_TEST(OneMinute) {
-        TGauge gauge;
+        TGauge gauge; 
 
-        auto ewma = OneMinuteEwma(&gauge);
+        auto ewma = OneMinuteEwma(&gauge); 
         ewma->Update(3);
         ewma->Tick();
 
@@ -47,9 +47,9 @@ Y_UNIT_TEST_SUITE(TEwmaTest) {
     }
 
     Y_UNIT_TEST(FiveMinutes) {
-        TGauge gauge;
+        TGauge gauge; 
 
-        auto ewma = FiveMinuteEwma(&gauge);
+        auto ewma = FiveMinuteEwma(&gauge); 
         ewma->Update(3);
         ewma->Tick();
 
@@ -79,9 +79,9 @@ Y_UNIT_TEST_SUITE(TEwmaTest) {
     }
 
     Y_UNIT_TEST(FiveteenMinutes) {
-        TGauge gauge;
+        TGauge gauge; 
 
-        auto ewma = FiveteenMinuteEwma(&gauge);
+        auto ewma = FiveteenMinuteEwma(&gauge); 
         ewma->Update(3);
         ewma->Tick();
 

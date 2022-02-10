@@ -5,7 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mon.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 
 using namespace NKikimrServices;
@@ -21,8 +21,8 @@ namespace NKikimr {
             TIntrusivePtr<TVDiskContext> VCtx;
             TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
             NMon::TEvHttpInfo::TPtr Ev;
-            const TActorId NotifyId;
-            const TActorId KeeperId;
+            const TActorId NotifyId; 
+            const TActorId KeeperId; 
             TSyncLogNeighborsPtr NeighborsPtr;
             // we must obtain SnapPtr and NodesInfoMsg before calling Finish
             TSyncLogSnapshotPtr SnapPtr;
@@ -37,7 +37,7 @@ namespace NKikimr {
                 const bool introspection = true;
                 ctx.Send(KeeperId, new TEvSyncLogSnapshot(introspection));
                 // obtain nodes list
-                ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+                ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes()); 
             }
 
             void Handle(TEvSyncLogSnapshotResult::TPtr &ev, const TActorContext &ctx) {
@@ -107,8 +107,8 @@ namespace NKikimr {
             TSyncLogGetHttpInfoActor(const TIntrusivePtr<TVDiskContext> &vctx,
                                      const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
                                      NMon::TEvHttpInfo::TPtr &ev,
-                                     const TActorId &notifyId,
-                                     const TActorId &keeperId,
+                                     const TActorId &notifyId, 
+                                     const TActorId &keeperId, 
                                      TSyncLogNeighborsPtr neighborsPtr)
                 : TActorBootstrapped<TSyncLogGetHttpInfoActor>()
                 , VCtx(vctx)
@@ -125,8 +125,8 @@ namespace NKikimr {
         IActor* CreateGetHttpInfoActor(const TIntrusivePtr<TVDiskContext> &vctx,
                                        const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
                                        NMon::TEvHttpInfo::TPtr &ev,
-                                       const TActorId &notifyId,
-                                       const TActorId &keeperId,
+                                       const TActorId &notifyId, 
+                                       const TActorId &keeperId, 
                                        TSyncLogNeighborsPtr neighborsPtr) {
             return new TSyncLogGetHttpInfoActor(vctx, ginfo, ev, notifyId, keeperId, neighborsPtr);
         }

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "counters.h"
+#include "counters.h" 
 
-#include <library/cpp/monlib/service/pages/mon_page.h>
+#include <library/cpp/monlib/service/pages/mon_page.h> 
 
 #include <util/generic/ptr.h>
 
@@ -19,7 +19,7 @@ public:
                          TOutputCallback outputCallback = nullptr);
 
     void Output(NMonitoring::IMonHttpRequest& request) override;
-
+ 
 private:
     TOutputCallback OutputCallback;
 };

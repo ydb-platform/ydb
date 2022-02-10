@@ -77,7 +77,7 @@ namespace NKikimr {
             IHLOG_DEBUG(ctx, "starting ChunkInProgress# %" PRIu32 " efficiency# %.3lf", ChunkInProgress, worstEfficiency);
 
             // create chunk scanner to read index
-            const TActorId actorId = ctx.Register(CreateRecoveryScanActor(ChunkInProgress, true, ChunkInProgressSerNum,
+            const TActorId actorId = ctx.Register(CreateRecoveryScanActor(ChunkInProgress, true, ChunkInProgressSerNum, 
                 static_cast<ui64>(EScanCookie::Defrag), Keeper.State), TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
             const bool inserted = Keeper.State.ChildActors.insert(actorId).second;
             Y_VERIFY(inserted);
@@ -98,7 +98,7 @@ namespace NKikimr {
             }
         }
 
-        void TDefragmenter::ApplyScan(const TActorId& sender, TEvIncrHugeScanResult& msg, const TActorContext& ctx) {
+        void TDefragmenter::ApplyScan(const TActorId& sender, TEvIncrHugeScanResult& msg, const TActorContext& ctx) { 
             const size_t num = Keeper.State.ChildActors.erase(sender);
             Y_VERIFY(num == 1);
 

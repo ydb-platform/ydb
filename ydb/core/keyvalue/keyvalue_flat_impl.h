@@ -16,7 +16,7 @@
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/json_writer.h> 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -40,10 +40,10 @@ constexpr ui64 PeriodicRefreshMs = 15000;
 class TKeyValueFlat : public TActor<TKeyValueFlat>, public NTabletFlatExecutor::TTabletExecutedFlat {
 protected:
     struct TTxInit : public NTabletFlatExecutor::ITransaction {
-        TActorId KeyValueActorId;
+        TActorId KeyValueActorId; 
         TKeyValueFlat &Self;
 
-        TTxInit(TActorId keyValueActorId, TKeyValueFlat &keyValueFlat)
+        TTxInit(TActorId keyValueActorId, TKeyValueFlat &keyValueFlat) 
             : KeyValueActorId(keyValueActorId)
             , Self(keyValueFlat)
         {}
@@ -167,10 +167,10 @@ protected:
 
     struct TTxMonitoring : public NTabletFlatExecutor::ITransaction {
         const THolder<NMon::TEvRemoteHttpInfo> Event;
-        const TActorId RespondTo;
+        const TActorId RespondTo; 
         TKeyValueFlat *Self;
 
-        TTxMonitoring(THolder<NMon::TEvRemoteHttpInfo> event, const TActorId &respondTo, TKeyValueFlat *keyValue)
+        TTxMonitoring(THolder<NMon::TEvRemoteHttpInfo> event, const TActorId &respondTo, TKeyValueFlat *keyValue) 
             : Event(std::move(event))
             , RespondTo(respondTo)
             , Self(keyValue)
@@ -248,7 +248,7 @@ protected:
 
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
-    TActorId CollectorActorId;
+    TActorId CollectorActorId; 
 
     void OnDetach(const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " OnDetach");
@@ -420,7 +420,7 @@ public:
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
     }
 
-    TKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info)
+    TKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info) 
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     {

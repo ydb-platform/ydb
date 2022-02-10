@@ -1,9 +1,9 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/actors/util/rope.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/align.h>
-
+ 
 #include <utility>
 
 class TAlignedBuf {
@@ -11,7 +11,7 @@ class TAlignedBuf {
     ui8 *AlignedBuf;
     size_t BufSize;
     size_t Align;
-
+ 
     void AllocBuf() {
         Buf = new ui8[BufSize + Align];
         AlignedBuf = reinterpret_cast<ui8*>(AlignUp<intptr_t>(intptr_t(Buf), Align));
@@ -96,4 +96,4 @@ void inline Print(const ui8* out, size_t size) {
                 " a[" << i << "]# " << Hex((A)[i], HF_FULL) << " != "   \
                 " b[" << i << "]# " << Hex((B)[i], HF_FULL));           \
         }                                                               \
-    } while (0)
+    } while (0) 

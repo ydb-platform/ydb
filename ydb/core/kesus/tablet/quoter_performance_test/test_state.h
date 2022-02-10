@@ -48,7 +48,7 @@ struct TTestState : public TAtomicRefCount<TTestState> {
     const TOptions& Options;
     ui64 TabletId = 0;
     std::vector<TResourceState> ResourcesState;
-    TActorId EdgeActorId;
+    TActorId EdgeActorId; 
     THashMap<ui64, size_t> ResId2StateIndex;
     TMutex Mutex;
 };

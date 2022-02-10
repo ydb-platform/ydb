@@ -29,7 +29,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg);
 
 template <class T>
 void Run(TTestRunConfig runCfg) {
-    const TActorId pDiskId = MakeBlobStoragePDiskID(1, 1);
+    const TActorId pDiskId = MakeBlobStoragePDiskID(1, 1); 
     TVector<IActor*> tests;
     for (ui32 i = 0; i < runCfg.Instances; ++i) {
         TIntrusivePtr<TTestConfig> testConfig = new TTestConfig(TVDiskID(0, 1, 0, 0, i), pDiskId);

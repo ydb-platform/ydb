@@ -7,7 +7,7 @@ namespace NKikimr {
 
     IActor *CreateReadBatcherActor(
         TReadBatcherCtxPtr ctx,
-        const TActorId notifyID,
+        const TActorId notifyID, 
         std::shared_ptr<TReadBatcherResult> result,
         ui8 priority,
         NWilson::TTraceId traceId,

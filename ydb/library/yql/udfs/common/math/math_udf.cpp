@@ -2,7 +2,7 @@
 
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
-
+ 
 #define MATH_UDF_MAP(XX, XXL)                                                                       \
     XX(Pi, double(), ;)                                                                             \
     XX(E, double(), ;)                                                                              \
@@ -46,7 +46,7 @@
     XX(Mod, TOptional<i64>(TAutoMap<i64>, i64), ;)                                                             \
     XX(Rem, TOptional<i64>(TAutoMap<i64>, i64), ;)                                                             \
     XXL(Round, double(TAutoMap<double>, TPrecision), builder.OptionalArgs(1))
-
+ 
 #define MATH_UDF_IMPL(name, signature, options)                                                             \
     UDF_IMPL(T##name, builder.SimpleSignature<signature>(); options;, ;, ;, "/llvm_bc/Math", #name "IR") {  \
         TUnboxedValuePod res;                                                                               \
@@ -57,9 +57,9 @@
 #define REGISTER_MATH_UDF(udfName, ...)         T##udfName,
 #define REGISTER_MATH_UDF_LAST(udfName, ...)    T##udfName
 
-using namespace NKikimr;
-using namespace NUdf;
-
+using namespace NKikimr; 
+using namespace NUdf; 
+ 
 namespace {
     extern const char epsilon[] = "Epsilon";
     using TEpsilon = TNamedArg<double, epsilon>;

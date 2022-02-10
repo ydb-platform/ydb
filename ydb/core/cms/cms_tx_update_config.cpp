@@ -60,7 +60,7 @@ public:
         } else {
             if (Self->State->Sentinel) {
                 ctx.Send(Self->State->Sentinel, new TEvents::TEvPoisonPill());
-                Self->State->Sentinel = TActorId();
+                Self->State->Sentinel = TActorId(); 
             }
         }
     }

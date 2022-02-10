@@ -25,7 +25,7 @@ namespace NKikimr {
             // Sublog with circle buffer
             TSublog<TCircleBufStringStream<4096>> Sublog;
             // committer actor id, or empty if we don't have commit activity at this moment
-            TActorId CommitterId = {};
+            TActorId CommitterId = {}; 
             // FirstLsnToKeep reported to LogCutter last time
             TMaybe<ui64> LastReportedFirstLsnToKeep;
 
@@ -185,7 +185,7 @@ namespace NKikimr {
                     << " Commit done: message# " << msg->ToString().data() << "\n";
 
                 // commit finished
-                CommitterId = TActorId();
+                CommitterId = TActorId(); 
                 const ui64 firstLsnToKeep = KeepState.ApplyCommitResult(msg);
 
                 // If we have done some work to free up recovery log, the layout

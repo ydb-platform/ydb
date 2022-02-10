@@ -64,7 +64,7 @@ struct TDecimalType {
     ui8 Precision;
     ui8 Scale;
 
-    TDecimalType(ui8 precision, ui8 scale)
+    TDecimalType(ui8 precision, ui8 scale) 
         : Precision(precision)
         , Scale(scale) {}
 };

@@ -20,7 +20,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/monlib/dynamic_counters/encode.h>
+#include <library/cpp/monlib/dynamic_counters/encode.h> 
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
 
@@ -818,9 +818,9 @@ namespace {
 
         ui32 fromDisk = info0.BlobsFromDisk + info16.BlobsFromDisk;
         ui32 fromCache = info0.BlobsFromCache + info16.BlobsFromCache;
-        UNIT_ASSERT(fromDisk > 0);
+        UNIT_ASSERT(fromDisk > 0); 
         UNIT_ASSERT(fromDisk < 5);
-        UNIT_ASSERT(fromCache > 0);
+        UNIT_ASSERT(fromCache > 0); 
         UNIT_ASSERT(fromCache < 5);
     }
 

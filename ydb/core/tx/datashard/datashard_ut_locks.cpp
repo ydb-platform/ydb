@@ -698,7 +698,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
                     return false;
                 }
 
-                TActorId Recipient;
+                TActorId Recipient; 
             };
 
             TDispatchOptions options;

@@ -11,7 +11,7 @@ namespace NKikimr {
     class TOneGetActor : public TActorBootstrapped<TOneGetActor<TRequestFunc, TCheckResponseFunc> > {
     protected:
         typedef TOneGetActor<TRequestFunc, TCheckResponseFunc> TThis;
-        const TActorId NotifyID;
+        const TActorId NotifyID; 
         TRequestFunc RequestFunc;
         TCheckResponseFunc CheckResponseFunc;
 
@@ -35,7 +35,7 @@ namespace NKikimr {
         )
 
     public:
-        TOneGetActor(const TActorId &notifyID, TRequestFunc requestFunc, TCheckResponseFunc checkRespFunc)
+        TOneGetActor(const TActorId &notifyID, TRequestFunc requestFunc, TCheckResponseFunc checkRespFunc) 
             : TActorBootstrapped<TOneGetActor>()
             , NotifyID(notifyID)
             , RequestFunc(requestFunc)
@@ -46,7 +46,7 @@ namespace NKikimr {
 } // NKikimr
 
 template <class TRequestFunc, class TCheckResponseFunc>
-NActors::IActor *CreateOneGet(const NActors::TActorId &notifyID, TRequestFunc req, TCheckResponseFunc check) {
+NActors::IActor *CreateOneGet(const NActors::TActorId &notifyID, TRequestFunc req, TCheckResponseFunc check) { 
     return new NKikimr::TOneGetActor<TRequestFunc, TCheckResponseFunc>(notifyID, req, check);
 }
 

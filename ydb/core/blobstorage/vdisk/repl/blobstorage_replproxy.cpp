@@ -20,7 +20,7 @@ namespace NKikimr {
                 std::shared_ptr<TReplCtx> replCtx,
                 TTrackableVector<TVDiskProxy::TScheduledBlob>&& ids,
                 const TVDiskID& vdiskId,
-                const TActorId& serviceId);
+                const TActorId& serviceId); 
 
         ////////////////////////////////////////////////////////////////////////////
         // TVDiskProxy
@@ -114,7 +114,7 @@ namespace NKikimr {
             TActorId Recipient;
             TTrackableVector<TVDiskProxy::TScheduledBlob> Ids;
             TVDiskID VDiskId;
-            TActorId ServiceId;
+            TActorId ServiceId; 
             TProxyStat Stat;
             ui32 SendIdx;
             ui32 CurPosIdx;
@@ -443,7 +443,7 @@ namespace NKikimr {
                     std::shared_ptr<TReplCtx> replCtx,
                     TTrackableVector<TVDiskProxy::TScheduledBlob>&& ids,
                     const TVDiskID& vdiskId,
-                    const TActorId& serviceId)
+                    const TActorId& serviceId) 
                 : TActorBootstrapped<TVDiskProxyActor>()
                 , ReplCtx(std::move(replCtx))
                 , GType(ReplCtx->VCtx->Top->GType)
@@ -469,7 +469,7 @@ namespace NKikimr {
         IActor *CreateVDiskProxyActor(std::shared_ptr<TReplCtx> replCtx,
                 TTrackableVector<TVDiskProxy::TScheduledBlob>&& ids,
                 const TVDiskID& vdiskId,
-                const TActorId& serviceId) {
+                const TActorId& serviceId) { 
             return new TVDiskProxyActor(std::move(replCtx), std::move(ids), vdiskId, serviceId);
         }
 

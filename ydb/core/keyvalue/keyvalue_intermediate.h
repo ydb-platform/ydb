@@ -132,8 +132,8 @@ struct TIntermediate {
     bool HasGeneration;
     bool HasIncrementGeneration;
 
-    TActorId RespondTo;
-    TActorId KeyValueActorId;
+    TActorId RespondTo; 
+    TActorId KeyValueActorId; 
 
     ui64 TotalSize;
     ui64 TotalSizeLimit;
@@ -157,7 +157,7 @@ struct TIntermediate {
 
     ui32 EvType = 0;
 
-    TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 channelGeneration, ui64 channelStep,
+    TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 channelGeneration, ui64 channelStep, 
             TRequestType::EType requestType);
 
     void UpdateStat();

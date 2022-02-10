@@ -334,7 +334,7 @@ struct TSchemeCacheRequest {
 }; // TSchemeCacheRequest
 
 struct TSchemeCacheRequestContext : TAtomicRefCount<TSchemeCacheRequestContext>, TNonCopyable {
-    TActorId Sender;
+    TActorId Sender; 
     ui64 WaitCounter;
     TAutoPtr<TSchemeCacheRequest> Request;
     const TInstant CreatedAt;
@@ -348,7 +348,7 @@ struct TSchemeCacheRequestContext : TAtomicRefCount<TSchemeCacheRequestContext>,
 };
 
 struct TSchemeCacheNavigateContext : TAtomicRefCount<TSchemeCacheNavigateContext>, TNonCopyable {
-    TActorId Sender;
+    TActorId Sender; 
     ui64 WaitCounter;
     TAutoPtr<TSchemeCacheNavigate> Request;
     const TInstant CreatedAt;
@@ -448,18 +448,18 @@ public:
 
     struct TEvInvalidateTable : public TEventLocal<TEvInvalidateTable, EvInvalidateTable> {
         const TTableId TableId;
-        const TActorId Sender;
+        const TActorId Sender; 
 
-        TEvInvalidateTable(const TTableId& tableId, const TActorId& sender)
+        TEvInvalidateTable(const TTableId& tableId, const TActorId& sender) 
             : TableId(tableId)
             , Sender(sender)
         {}
     };
 
     struct TEvInvalidateTableResult : public TEventLocal<TEvInvalidateTableResult, EvInvalidateTableResult> {
-        const TActorId Sender;
+        const TActorId Sender; 
 
-        TEvInvalidateTableResult(const TActorId& sender)
+        TEvInvalidateTableResult(const TActorId& sender) 
             : Sender(sender)
         {}
     };

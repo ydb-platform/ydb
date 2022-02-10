@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             ctx.Runtime->Send(
                 new IEventHandle(
                     ctx.Runtime->GetInterconnectProxy(0, 1),
-                    TActorId(),
+                    TActorId(), 
                     new TEvInterconnect::TEvDisconnect()),
                 0, true);
             TDispatchOptions options;
@@ -2130,7 +2130,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root1/Res", true, 300);
         UNIT_ASSERT(subscribeResult.GetResults(0).HasEffectiveProps());
 
-        auto WaitAllocated = [&ctx](const TActorId edge, double amount) -> double {
+        auto WaitAllocated = [&ctx](const TActorId edge, double amount) -> double { 
             double allocated = 0.0;
             do {
                 auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
@@ -2190,11 +2190,11 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         cfg.SetMaxUnitsPerSecond(100.0);
         ctx.AddQuoterResource("Root", cfg);
 
-        auto CreateSession = [&]() -> std::pair<TActorId, TActorId> {
-            TActorId edge = ctx.Runtime->AllocateEdgeActor();
-            const TActorId sessionPipe = ctx.Runtime->ConnectToPipe(ctx.TabletId, edge, 0, GetPipeConfigWithRetries());
+        auto CreateSession = [&]() -> std::pair<TActorId, TActorId> { 
+            TActorId edge = ctx.Runtime->AllocateEdgeActor(); 
+            const TActorId sessionPipe = ctx.Runtime->ConnectToPipe(ctx.TabletId, edge, 0, GetPipeConfigWithRetries()); 
             auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>();
-            ActorIdToProto(edge, req->Record.MutableActorID());
+            ActorIdToProto(edge, req->Record.MutableActorID()); 
             auto* reqRes = req->Record.AddResources();
             reqRes->SetResourcePath("Root");
             reqRes->SetStartConsuming(true);
@@ -2210,10 +2210,10 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             return std::make_pair(edge, sessionPipe);
         };
 
-        const std::pair<TActorId, TActorId> edgeAndSession1 = CreateSession();
-        const std::pair<TActorId, TActorId> edgeAndSession2 = CreateSession();
+        const std::pair<TActorId, TActorId> edgeAndSession1 = CreateSession(); 
+        const std::pair<TActorId, TActorId> edgeAndSession2 = CreateSession(); 
 
-        auto WaitAllocation = [&](TActorId edge, double expectedAmount) {
+        auto WaitAllocation = [&](TActorId edge, double expectedAmount) { 
             size_t attempts = 30;
             do {
                 auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);

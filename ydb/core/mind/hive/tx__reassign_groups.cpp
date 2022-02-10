@@ -7,13 +7,13 @@ namespace NHive {
 class TTxReassignGroups : public TTransactionBase<THive> {
 protected:
     TTabletId TabletId;
-    TActorId Sender;
+    TActorId Sender; 
     std::bitset<MAX_TABLET_CHANNELS> ChannelProfileNewGroup;
     bool InitiatedReassignTablet = false;
 
 public:
     TTxReassignGroups(TTabletId tabletId,
-                      const TActorId& sender,
+                      const TActorId& sender, 
                       const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup,
                       THive *hive)
         : TBase(hive)
@@ -69,7 +69,7 @@ public:
 };
 
 ITransaction* THive::CreateReassignGroups(TTabletId tabletId,
-                                          const TActorId& actorToNotify,
+                                          const TActorId& actorToNotify, 
                                           const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup) {
     return new TTxReassignGroups(tabletId, actorToNotify, channelProfileNewGroup, this);
 }

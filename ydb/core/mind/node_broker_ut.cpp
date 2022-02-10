@@ -161,7 +161,7 @@ void SetupServices(TTestActorRuntime &runtime,
 }
 
 void SetConfig(TTestActorRuntime& runtime,
-               TActorId sender,
+               TActorId sender, 
                const NKikimrNodeBroker::TConfig &config)
 {
     auto event = MakeHolder<TEvNodeBroker::TEvSetConfigRequest>();
@@ -174,7 +174,7 @@ void SetConfig(TTestActorRuntime& runtime,
 }
 
 void SetEpochDuration(TTestActorRuntime& runtime,
-                      TActorId sender,
+                      TActorId sender, 
                       TDuration lease)
 {
     NKikimrNodeBroker::TConfig config;
@@ -183,7 +183,7 @@ void SetEpochDuration(TTestActorRuntime& runtime,
 }
 
 void SetBannedIds(TTestActorRuntime& runtime,
-                  TActorId sender,
+                  TActorId sender, 
                   const TVector<std::pair<ui32, ui32>> ids)
 {
     NKikimrNodeBroker::TConfig config;
@@ -252,7 +252,7 @@ MakeRegistrationRequest(const TString &host,
 }
 
 void CheckRegistration(TTestActorRuntime &runtime,
-                       TActorId sender,
+                       TActorId sender, 
                        const TString &host,
                        ui16 port,
                        const TString &resolveHost,
@@ -292,7 +292,7 @@ void CheckRegistration(TTestActorRuntime &runtime,
 }
 
 NKikimrNodeBroker::TEpoch GetEpoch(TTestActorRuntime &runtime,
-                                   TActorId sender)
+                                   TActorId sender) 
 {
     TAutoPtr<TEvNodeBroker::TEvListNodes> event = new TEvNodeBroker::TEvListNodes;
     runtime.SendToPipe(MakeNodeBrokerID(0), sender, event.Release(), 0, GetPipeConfigWithRetries());
@@ -303,7 +303,7 @@ NKikimrNodeBroker::TEpoch GetEpoch(TTestActorRuntime &runtime,
 }
 
 NKikimrNodeBroker::TEpoch WaitForEpochUpdate(TTestActorRuntime &runtime,
-                                             TActorId sender)
+                                             TActorId sender) 
 {
     auto epoch = GetEpoch(runtime, sender);
 
@@ -352,7 +352,7 @@ void CheckNodesListResponse(const NKikimrNodeBroker::TNodesInfo &rec,
 }
 
 NKikimrNodeBroker::TEpoch CheckFilteredNodesList(TTestActorRuntime &runtime,
-                                                 TActorId sender,
+                                                 TActorId sender, 
                                                  TSet<ui64> ids,
                                                  TSet<ui64> expiredIds,
                                                  ui64 minEpoch,
@@ -395,7 +395,7 @@ NKikimrNodeBroker::TEpoch CheckFilteredNodesList(TTestActorRuntime &runtime,
 }
 
 NKikimrNodeBroker::TEpoch CheckNodesList(TTestActorRuntime &runtime,
-                                         TActorId sender,
+                                         TActorId sender, 
                                          TSet<ui64> ids,
                                          TSet<ui64> expiredIds,
                                          ui64 epoch)
@@ -414,7 +414,7 @@ NKikimrNodeBroker::TEpoch CheckNodesList(TTestActorRuntime &runtime,
 }
 
 void CheckNodeInfo(TTestActorRuntime &runtime,
-                   TActorId sender,
+                   TActorId sender, 
                    ui32 nodeId,
                    TStatus::ECode code)
 {
@@ -431,7 +431,7 @@ void CheckNodeInfo(TTestActorRuntime &runtime,
 }
 
 void CheckNodeInfo(TTestActorRuntime &runtime,
-                   TActorId sender,
+                   TActorId sender, 
                    ui32 nodeId,
                    const TString &host,
                    ui16 port,
@@ -466,7 +466,7 @@ void CheckNodeInfo(TTestActorRuntime &runtime,
 }
 
 void CheckLeaseExtension(TTestActorRuntime &runtime,
-                         TActorId sender,
+                         TActorId sender, 
                          ui32 nodeId,
                          TStatus::ECode code,
                          const NKikimrNodeBroker::TEpoch &epoch = {},
@@ -509,12 +509,12 @@ TString AddrToString(const struct sockaddr *sa)
 }
 
 void CheckResolveNode(TTestActorRuntime &runtime,
-                      TActorId sender,
+                      TActorId sender, 
                       ui32 nodeId,
                       const TString &addr)
 {
     TAutoPtr<TEvInterconnect::TEvResolveNode> event = new TEvInterconnect::TEvResolveNode(nodeId);
-    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release())); 
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvLocalNodeInfo>(handle);
@@ -525,11 +525,11 @@ void CheckResolveNode(TTestActorRuntime &runtime,
 }
 
 void CheckResolveUnknownNode(TTestActorRuntime &runtime,
-                             TActorId sender,
+                             TActorId sender, 
                              ui32 nodeId)
 {
     TAutoPtr<TEvInterconnect::TEvResolveNode> event = new TEvInterconnect::TEvResolveNode(nodeId);
-    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release())); 
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvLocalNodeInfo>(handle);
@@ -540,13 +540,13 @@ void CheckResolveUnknownNode(TTestActorRuntime &runtime,
 }
 
 void GetNameserverNodesList(TTestActorRuntime &runtime,
-                            TActorId sender,
+                            TActorId sender, 
                             THashMap<ui32, TEvInterconnect::TNodeInfo> &nodes,
                             bool includeStatic)
 {
     ui32 maxStaticNodeId = runtime.GetAppData().DynamicNameserviceConfig->MaxStaticNodeId;
     TAutoPtr<TEvInterconnect::TEvListNodes> event = new TEvInterconnect::TEvListNodes;
-    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release())); 
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handle);
@@ -558,7 +558,7 @@ void GetNameserverNodesList(TTestActorRuntime &runtime,
 }
 
 void CheckNameserverNodesList(TTestActorRuntime &runtime,
-                              TActorId sender,
+                              TActorId sender, 
                               size_t count)
 {
     THashMap<ui32, TEvInterconnect::TNodeInfo> nodes;
@@ -607,7 +607,7 @@ void CheckNameserverDynamicNodesList(const THashMap<ui32, TEvInterconnect::TNode
 
 template<typename... Ts>
 void CheckNameserverDynamicNodesList(TTestActorRuntime &runtime,
-                                     TActorId sender,
+                                     TActorId sender, 
                                      size_t count,
                                      Ts... args)
 {
@@ -618,12 +618,12 @@ void CheckNameserverDynamicNodesList(TTestActorRuntime &runtime,
 }
 
 void CheckGetNode(TTestActorRuntime &runtime,
-                  TActorId sender,
+                  TActorId sender, 
                   ui32 nodeId,
                   bool exists)
 {
     TAutoPtr<TEvInterconnect::TEvGetNode> event = new TEvInterconnect::TEvGetNode(nodeId);
-    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release())); 
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodeInfo>(handle);
@@ -647,7 +647,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4);
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
 
         // There should be no dynamic nodes initially.
         auto epoch = GetEpoch(runtime, sender);
@@ -723,7 +723,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime);
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
 
         auto epoch = GetEpoch(runtime, sender);
         // Register node 1024 with fixed ID.
@@ -765,7 +765,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 10);
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
 
         WaitForEpochUpdate(runtime, sender);
         WaitForEpochUpdate(runtime, sender);
@@ -791,7 +791,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 10);
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
 
         TVector<TString> hosts =
             { "host1", "host2", "host3", "host4", "host5",
@@ -965,7 +965,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 10);
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
 
         SetBannedIds(runtime, sender, {{1025, 1280}});
 
@@ -1081,7 +1081,7 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime);
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
 
         // Register node 1024.
         SetEpochDuration(runtime, sender, TDuration::Seconds(10));
@@ -1125,7 +1125,7 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
     {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime);
-        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId sender = runtime.AllocateEdgeActor(); 
 
         TVector<NKikimrNodeBroker::TListNodes> listRequests;
         TVector<NKikimrNodeBroker::TResolveNode> resolveRequests;

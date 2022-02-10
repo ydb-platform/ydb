@@ -13,8 +13,8 @@ PEERDIR(
     library/cpp/actors/util
     library/cpp/containers/stack_vector
     library/cpp/lwtrace
-    library/cpp/monlib/dynamic_counters/percentile
-    library/cpp/monlib/service/pages
+    library/cpp/monlib/dynamic_counters/percentile 
+    library/cpp/monlib/service/pages 
     util
     ydb/core/base
     ydb/core/base/services

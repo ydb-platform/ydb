@@ -1,4 +1,4 @@
-#include <library/cpp/monlib/messagebus/mon_messagebus.h>
+#include <library/cpp/monlib/messagebus/mon_messagebus.h> 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include "msgbus_server.h"
@@ -430,7 +430,7 @@ protected:
         }
     }
 
-    TActorId WhiteboardServiceId;
+    TActorId WhiteboardServiceId; 
     NBus::TBusServerSessionPtr Session;
     const NBus::TBusServerSessionConfig &SessionConfig;
 };
@@ -451,7 +451,7 @@ TMessageBusServer::~TMessageBusServer() {
 
 }
 
-void TMessageBusServer::InitSession(TActorSystem *actorSystem, const TActorId &proxy) {
+void TMessageBusServer::InitSession(TActorSystem *actorSystem, const TActorId &proxy) { 
     ActorSystem = actorSystem;
     Proxy = proxy;
     Session = NBus::TBusServerSession::Create(&Protocol, this, SessionConfig, BusQueue);

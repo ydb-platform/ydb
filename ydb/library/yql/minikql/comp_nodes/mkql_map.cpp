@@ -127,8 +127,8 @@ protected:
         }
 
         bool HasFastListLength() const final {
-            return List.HasFastListLength();
-        }
+            return List.HasFastListLength(); 
+        } 
 
         TComputationContext& CompCtx;
         const NUdf::TUnboxedValue List;

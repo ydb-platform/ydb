@@ -60,14 +60,14 @@ ui32 TReqState::Idx(TRequest &request) {
     return idx;
 }
 
-ui32 TReqState::HeadByOwner(TActorId ownerId) {
+ui32 TReqState::HeadByOwner(TActorId ownerId) { 
     if (ui32 *x = ByOwner.FindPtr(ownerId))
         return *x;
     else
         return Max<ui32>();
 }
 
-ui32 TReqState::Allocate(TActorId source, ui64 eventCookie) {
+ui32 TReqState::Allocate(TActorId source, ui64 eventCookie) { 
     ui32 idx;
     if (Unused) {
         idx = Unused.back();
@@ -136,7 +136,7 @@ void TReqState::Free(ui32 idx) {
     x.PrevDeadlineRequest = Max<ui32>();
     x.NextDeadlineRequest = Max<ui32>();
 
-    x.Source = TActorId();
+    x.Source = TActorId(); 
     x.Orbit.Reset();
 
     Unused.push_back(idx);
@@ -798,7 +798,7 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
         auto deadlineIt = ScheduleDeadline.find(request.Deadline);
         if (deadlineIt == ScheduleDeadline.end()) {
             TInstant deadline = request.Deadline; // allocate could invalidate request&
-            deadlineIt = ScheduleDeadline.emplace(deadline, ReqState.Allocate(TActorId(0, "placeholder"), 0)).first;
+            deadlineIt = ScheduleDeadline.emplace(deadline, ReqState.Allocate(TActorId(0, "placeholder"), 0)).first; 
         }
 
         const ui32 placeholderIdx = deadlineIt->second;
@@ -1108,7 +1108,7 @@ void TQuoterService::BreakQuoter(decltype(QuotersIndex)::iterator indexIt, declt
 
     if (quoter.ProxyId) {
         Send(quoter.ProxyId, new TEvents::TEvPoisonPill());
-        quoter.ProxyId = TActorId();
+        quoter.ProxyId = TActorId(); 
     }
 
     TSet<ui32> waitingQueueResolve(std::move(quoter.WaitingQueueResolve));

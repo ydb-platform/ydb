@@ -25,9 +25,9 @@ namespace NMonitoring {
             Merge(logHist);
         }
 
-        bool Collect(double value) {
+        bool Collect(double value) { 
             std::lock_guard guard(Mutex_);
-            return CollectDouble(value);
+            return CollectDouble(value); 
         }
 
         TLogHistogramSnapshotPtr Snapshot() const {
@@ -64,16 +64,16 @@ namespace NMonitoring {
             ++Buckets_[idx];
         }
 
-        bool CollectDouble(double value) {
-            if (Y_UNLIKELY(std::isnan(value) || std::isinf(value))) {
-                return false;
-            }
+        bool CollectDouble(double value) { 
+            if (Y_UNLIKELY(std::isnan(value) || std::isinf(value))) { 
+                return false; 
+            } 
             if (value <= 0.0) {
                 ++CountZero_;
             } else {
                 CollectPositiveDouble(value);
             }
-            return true;
+            return true; 
         }
 
         void Merge(TLogHistogramSnapshot* logHist) {

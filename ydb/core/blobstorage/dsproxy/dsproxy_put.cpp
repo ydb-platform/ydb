@@ -495,7 +495,7 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
             NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
             bool enableRequestMod3x3ForMinLatecy)
-        : TBlobStorageGroupRequestActor(info, state, mon, TActorId(), 0, NWilson::TTraceId(),
+        : TBlobStorageGroupRequestActor(info, state, mon, TActorId(), 0, NWilson::TTraceId(), 
                 NKikimrServices::BS_PROXY_PUT, false, latencyQueueKind, now, storagePoolCounters,
                 MaxRestartCounter(events))
         , PutImpl(info, state, events, mon, handleClass, tactic, enableRequestMod3x3ForMinLatecy)

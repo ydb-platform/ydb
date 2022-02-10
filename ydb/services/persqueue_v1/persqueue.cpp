@@ -24,14 +24,14 @@ TGRpcPersQueueService::TGRpcPersQueueService(NActors::TActorSystem *system, TInt
     , GRpcRequestProxy(grpcRequestProxy)
 { }
 
-void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) { 
     CQ = cq;
     InitNewSchemeCacheActor();
 
     if (ActorSystem->AppData<TAppData>()->PQConfig.GetEnabled()) {
 
         IActor* writeSvc = NGRpcProxy::V1::CreatePQWriteService(SchemeCache, NewSchemeCache,Counters, PersQueueWriteSessionsMaxCount);
-        TActorId actorId = ActorSystem->Register(writeSvc, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+        TActorId actorId = ActorSystem->Register(writeSvc, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId); 
         ActorSystem->RegisterLocalService(NGRpcProxy::V1::GetPQWriteServiceActorID(), actorId);
 
         IActor* readSvc = NGRpcProxy::V1::CreatePQReadService(SchemeCache, NewSchemeCache, Counters, PersQueueReadSessionsMaxCount);
@@ -42,11 +42,11 @@ void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::
         actorId = ActorSystem->Register(schemaSvc, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
         ActorSystem->RegisterLocalService(NGRpcProxy::V1::GetPQSchemaServiceActorID(), actorId);
 
-        SetupIncomingRequests(std::move(logger));
+        SetupIncomingRequests(std::move(logger)); 
     }
 }
 
-void TGRpcPersQueueService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcPersQueueService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
     Limiter = limiter;
 }
 
@@ -66,7 +66,7 @@ void TGRpcPersQueueService::InitNewSchemeCacheActor() {
         TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
 }
 
-void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
 
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
@@ -115,7 +115,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #endif
 #define ADD_REQUEST(NAME, SVC, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::PersQueue::V1::IN, Ydb::PersQueue::V1::OUT, NGRpcService::V1::TGRpcPersQueueService>>(this, this->GetService(), CQ, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::PersQueue::V1::SVC::AsyncService::Request ## NAME, \

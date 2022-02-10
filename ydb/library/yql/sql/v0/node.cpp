@@ -5,7 +5,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-
+ 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/charset/ci_string.h>
 #include <util/generic/hash_set.h>
@@ -1758,10 +1758,10 @@ bool TryStringContent(const TString& str, TString& result, ui32& flags, TString&
 
     bool doubleQuoted = (str.StartsWith('"') && str.EndsWith('"'));
     bool singleQuoted = !doubleQuoted && (str.StartsWith('\'') && str.EndsWith('\''));
-
-    if (str.size() >= 2 && (doubleQuoted || singleQuoted)) {
+ 
+    if (str.size() >= 2 && (doubleQuoted || singleQuoted)) { 
         flags = TNodeFlags::ArbitraryContent;
-        char quoteChar = doubleQuoted ? '"' : '\'';
+        char quoteChar = doubleQuoted ? '"' : '\''; 
         size_t readBytes = 0;
         TStringBuf atom(str);
         TStringOutput sout(result);
@@ -1780,8 +1780,8 @@ bool TryStringContent(const TString& str, TString& result, ui32& flags, TString&
         TString s = str.substr(2, str.length() - 4);
         SubstGlobal(s, "@@@@", "@@");
         result.swap(s);
-    } else {
-        flags = TNodeFlags::Default;
+    } else { 
+        flags = TNodeFlags::Default; 
         result = str;
     }
     return true;

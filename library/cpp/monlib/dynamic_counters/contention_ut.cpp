@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TDynamicCountersContentionTest) {
                 Thread.Join();
             }
 
-            void OnCounter(const TString& /*labelName*/, const TString& /*labelValue*/, const TCounterForPtr* /*counter*/) override {
+            void OnCounter(const TString& /*labelName*/, const TString& /*labelValue*/, const TCounterForPtr* /*counter*/) override { 
                 Ev.Signal();
                 Response.Wait();
             }
@@ -36,10 +36,10 @@ Y_UNIT_TEST_SUITE(TDynamicCountersContentionTest) {
             void OnHistogram(const TString& /*labelName*/, const TString& /*labelValue*/, IHistogramSnapshotPtr /*snapshot*/, bool /*derivative*/) override {
             }
 
-            void OnGroupBegin(const TString& /*labelName*/, const TString& /*labelValue*/, const TDynamicCounters* /*group*/) override {
+            void OnGroupBegin(const TString& /*labelName*/, const TString& /*labelValue*/, const TDynamicCounters* /*group*/) override { 
             }
 
-            void OnGroupEnd(const TString& /*labelName*/, const TString& /*labelValue*/, const TDynamicCounters* /*group*/) override {
+            void OnGroupEnd(const TString& /*labelName*/, const TString& /*labelValue*/, const TDynamicCounters* /*group*/) override { 
             }
 
         private:

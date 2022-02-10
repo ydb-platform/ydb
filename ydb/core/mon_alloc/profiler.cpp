@@ -8,7 +8,7 @@
 #include <library/cpp/actors/prof/tag.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/malloc/api/malloc.h>
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>

@@ -43,7 +43,7 @@ static TString FormNetData() {
            "2a02:6b8:fc00::/48\tSAS";
 }
 
-static TAutoPtr<IEventHandle> GetClassifierUpdate(TServer& server, const TActorId sender) {
+static TAutoPtr<IEventHandle> GetClassifierUpdate(TServer& server, const TActorId sender) { 
     auto& actorSystem = *server.GetRuntime();
 
     actorSystem.Send(
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierTest) {
 
         TServer cleverServer = TServer(settings);
         {
-            const TActorId sender = cleverServer.GetRuntime()->AllocateEdgeActor();
+            const TActorId sender = cleverServer.GetRuntime()->AllocateEdgeActor(); 
             auto handle = GetClassifierUpdate(cleverServer, sender);
             auto* event = handle->Get<TEvNetClassifier::TEvClassifierUpdate>();
 
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierTest) {
 
         TServer cleverServer = TServer(settings);
         {
-            const TActorId sender = cleverServer.GetRuntime()->AllocateEdgeActor();
+            const TActorId sender = cleverServer.GetRuntime()->AllocateEdgeActor(); 
             auto handle = GetClassifierUpdate(cleverServer, sender);
             auto* event = handle->Get<TEvNetClassifier::TEvClassifierUpdate>();
 
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierTest) {
     }
 
     Y_UNIT_TEST(TestInitFromRemoteSource) {
-        NMonitoring::TMetricRegistry sensors;
+        NMonitoring::TMetricRegistry sensors; 
 
         TPortManager pm;
         const ui16 port = pm.GetPort(2134);
@@ -165,16 +165,16 @@ Y_UNIT_TEST_SUITE(TNetClassifierTest) {
         auto& actorSystem = *cleverServer.GetRuntime();
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);
-        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        NActors::TActorId proxyId = actorSystem.Register(proxy); 
 
         actorSystem.Send(
-            new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(netDataSourcePort)), 0, true
+            new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(netDataSourcePort)), 0, true 
         );
 
-        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor(); 
         actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler(uri, serverId)), 0, true);
 
-        const TActorId sender = cleverServer.GetRuntime()->AllocateEdgeActor();
+        const TActorId sender = cleverServer.GetRuntime()->AllocateEdgeActor(); 
 
         // initially classifier's data should be empty
         auto handle = GetClassifierUpdate(cleverServer, sender);

@@ -88,7 +88,7 @@ message TEvReplicaBoardPublish {
     optional bytes Payload = 2;
     optional uint64 TtlMs = 3;
     optional bool Register = 4;
-    optional NActorsProto.TActorId Owner = 5;
+    optional NActorsProto.TActorId Owner = 5; 
 };
 
 message TEvReplicaBoardPublishAck {
@@ -96,7 +96,7 @@ message TEvReplicaBoardPublishAck {
 
 message TEvReplicaBoardLookup {
     optional string Path = 1;
-    optional NActorsProto.TActorId Owner = 2;
+    optional NActorsProto.TActorId Owner = 2; 
     optional bool Subscribe = 3;
 };
 
@@ -104,7 +104,7 @@ message TEvReplicaBoardCleanup {
 };
 
 message TBoardEntryInfo {
-    optional NActorsProto.TActorId Owner = 1;
+    optional NActorsProto.TActorId Owner = 1; 
     optional bytes Payload = 2;
 };
 

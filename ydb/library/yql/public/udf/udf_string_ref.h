@@ -1,33 +1,33 @@
-#pragma once
-
-#include "udf_types.h"
-
-#include <util/generic/strbuf.h>
-
+#pragma once 
+ 
+#include "udf_types.h" 
+ 
+#include <util/generic/strbuf.h> 
+ 
 #include <algorithm>
 #include <string_view>
 #include <type_traits>
 
 namespace NYql {
-namespace NUdf {
-
-//////////////////////////////////////////////////////////////////////////////
+namespace NUdf { 
+ 
+////////////////////////////////////////////////////////////////////////////// 
 // TStringRefBase
-//////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////// 
 template<bool Const>
 class TStringRefBase
-{
-public:
+{ 
+public: 
     typedef std::conditional_t<Const, const char*, char*> TDataType;
-
+ 
 protected:
     inline constexpr TStringRefBase() noexcept = default;
-
+ 
     inline constexpr TStringRefBase(TDataType data, ui32 size) noexcept
-        : Data_(data)
-        , Size_(size)
+        : Data_(data) 
+        , Size_(size) 
     {}
-
+ 
 public:
     inline constexpr operator std::string_view() const noexcept { return { Data_, Size_ }; }
     inline constexpr operator TStringBuf() const noexcept { return { Data_, Size_ }; }
@@ -83,37 +83,37 @@ public:
     inline constexpr TStringRef(const TStringType& buf) noexcept
         : TBase(TGetData<TStringType>::Get(buf), TGetSize<TStringType>::Get(buf))
     {}
-
-    template <size_t size>
+ 
+    template <size_t size> 
     inline static constexpr TStringRef Of(const char(&str)[size]) noexcept {
         return TStringRef(str);
-    }
-
+    } 
+ 
     inline constexpr TStringRef& Trunc(ui32 len) noexcept {
-        if (Size_ > len) {
-            Size_ = len;
-        }
-        return *this;
-    }
-
+        if (Size_ > len) { 
+            Size_ = len; 
+        } 
+        return *this; 
+    } 
+ 
     inline constexpr TStringRef Substring(ui32 start, ui32 count) const noexcept {
         start = std::min(start, Size_);
         count = std::min(count, Size_ - start);
-        return TStringRef(Data_ + start, count);
-    }
-
+        return TStringRef(Data_ + start, count); 
+    } 
+ 
     inline constexpr bool operator==(const TStringRef& rhs) const noexcept {
-        return Compare(*this, rhs) == 0;
-    }
-
+        return Compare(*this, rhs) == 0; 
+    } 
+ 
     inline constexpr bool operator!=(const TStringRef& rhs) const noexcept {
         return Compare(*this, rhs) != 0;
     }
 
     inline constexpr bool operator<(const TStringRef& rhs) const noexcept {
-        return Compare(*this, rhs) < 0;
-    }
-
+        return Compare(*this, rhs) < 0; 
+    } 
+ 
     inline constexpr bool operator<=(const TStringRef& rhs) const noexcept {
         return Compare(*this, rhs) <= 0;
     }
@@ -126,13 +126,13 @@ public:
         return Compare(*this, rhs) >= 0;
     }
 
-private:
+private: 
     inline static constexpr int Compare(const TStringRef& s1, const TStringRef& s2) noexcept {
         auto minSize = std::min(s1.Size(), s2.Size());
         if (const auto result = minSize > 0 ? std::memcmp(s1.Data(), s2.Data(), minSize) : 0)
             return result;
         return int(s1.Size()) - int(s2.Size());
-    }
+    } 
 
     Y_HAS_MEMBER(Data);
     Y_HAS_MEMBER(Size);
@@ -170,9 +170,9 @@ private:
 
     template<typename TStringType>
     using TGetSize = std::conditional_t<THasSize<TStringType>::value, TBySize<TStringType>, TBysize<TStringType>>;
-};
-
-UDF_ASSERT_TYPE_SIZE(TStringRef, 16);
-
-} // namspace NUdf
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(TStringRef, 16); 
+ 
+} // namspace NUdf 
 } // namspace NYql

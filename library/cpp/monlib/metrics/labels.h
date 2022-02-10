@@ -1,19 +1,19 @@
-#pragma once
-
-#include <util/digest/multi.h>
-#include <util/digest/sequence.h>
-#include <util/generic/algorithm.h>
-#include <util/generic/maybe.h>
-#include <util/generic/string.h>
-#include <util/generic/vector.h>
+#pragma once 
+ 
+#include <util/digest/multi.h> 
+#include <util/digest/sequence.h> 
+#include <util/generic/algorithm.h> 
+#include <util/generic/maybe.h> 
+#include <util/generic/string.h> 
+#include <util/generic/vector.h> 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
-
+ 
 #include <optional>
 #include <type_traits>
 
-namespace NMonitoring {
+namespace NMonitoring { 
     struct ILabel {
         virtual ~ILabel() = default;
 
@@ -21,38 +21,38 @@ namespace NMonitoring {
         virtual TStringBuf Value() const noexcept = 0;
     };
 
-    ///////////////////////////////////////////////////////////////////////////
-    // TLabel
-    ///////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////// 
+    // TLabel 
+    /////////////////////////////////////////////////////////////////////////// 
     template <typename TStringBackend>
     class TLabelImpl: public ILabel {
-    public:
+    public: 
         using TStringType = TStringBackend;
 
         TLabelImpl() = default;
-
+ 
         inline TLabelImpl(TStringBuf name, TStringBuf value)
             : Name_{name}
             , Value_{value}
-        {
-        }
-
+        { 
+        } 
+ 
         inline bool operator==(const TLabelImpl& rhs) const noexcept {
-            return Name_ == rhs.Name_ && Value_ == rhs.Value_;
-        }
-
+            return Name_ == rhs.Name_ && Value_ == rhs.Value_; 
+        } 
+ 
         inline bool operator!=(const TLabelImpl& rhs) const noexcept {
-            return !(*this == rhs);
-        }
-
+            return !(*this == rhs); 
+        } 
+ 
         inline TStringBuf Name() const noexcept {
-            return Name_;
-        }
-
+            return Name_; 
+        } 
+ 
         inline TStringBuf Value() const noexcept {
-            return Value_;
-        }
-
+            return Value_; 
+        } 
+ 
         inline const TStringBackend& NameStr() const {
             return Name_;
         }
@@ -61,18 +61,18 @@ namespace NMonitoring {
             return Value_;
         }
 
-        inline size_t Hash() const noexcept {
-            return MultiHash(Name_, Value_);
-        }
-
+        inline size_t Hash() const noexcept { 
+            return MultiHash(Name_, Value_); 
+        } 
+ 
         TStringBackend ToString() const {
             TStringBackend buf = Name_;
             buf += '=';
             buf += Value_;
-
+ 
             return buf;
         }
-
+ 
         static TLabelImpl FromString(TStringBuf str) {
             TStringBuf name, value;
             Y_ENSURE(str.TrySplit('=', name, value),
@@ -107,11 +107,11 @@ namespace NMonitoring {
             return true;
         }
 
-    private:
+    private: 
         TStringBackend Name_;
         TStringBackend Value_;
-    };
-
+    }; 
+ 
     using TLabel = TLabelImpl<TString>;
 
     struct ILabels {
@@ -158,12 +158,12 @@ namespace NMonitoring {
 
         virtual ~ILabels() = default;
 
-        virtual bool Add(TStringBuf name, TStringBuf value) noexcept = 0;
+        virtual bool Add(TStringBuf name, TStringBuf value) noexcept = 0; 
         virtual bool Add(const ILabel& label) noexcept {
             return Add(label.Name(), label.Value());
         }
 
-        virtual bool Has(TStringBuf name) const noexcept = 0;
+        virtual bool Has(TStringBuf name) const noexcept = 0; 
 
         virtual size_t Size() const noexcept = 0;
         virtual bool Empty() const noexcept = 0;
@@ -171,7 +171,7 @@ namespace NMonitoring {
 
         virtual size_t Hash() const noexcept = 0;
 
-        virtual std::optional<const ILabel*> Get(TStringBuf name) const = 0;
+        virtual std::optional<const ILabel*> Get(TStringBuf name) const = 0; 
 
         // NB: there's no guarantee that indices are preserved after any object modification
         virtual const ILabel* Get(size_t idx) const = 0;
@@ -188,16 +188,16 @@ namespace NMonitoring {
     bool TryLoadLabelsFromString(TStringBuf sb, ILabels& labels);
     bool TryLoadLabelsFromString(IInputStream& is, ILabels& labels);
 
-    ///////////////////////////////////////////////////////////////////////////
-    // TLabels
-    ///////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////// 
+    // TLabels 
+    /////////////////////////////////////////////////////////////////////////// 
     template <typename TStringBackend>
     class TLabelsImpl: public ILabels {
-    public:
+    public: 
         using value_type = TLabelImpl<TStringBackend>;
-
+ 
         TLabelsImpl() = default;
-
+ 
         explicit TLabelsImpl(::NDetail::TReserveTag rt)
             : Labels_(std::move(rt))
         {}
@@ -222,13 +222,13 @@ namespace NMonitoring {
 
         inline bool operator==(const TLabelsImpl& rhs) const {
             return Labels_ == rhs.Labels_;
-        }
-
+        } 
+ 
         inline bool operator!=(const TLabelsImpl& rhs) const {
             return Labels_ != rhs.Labels_;
-        }
-
-        bool Add(TStringBuf name, TStringBuf value) noexcept override {
+        } 
+ 
+        bool Add(TStringBuf name, TStringBuf value) noexcept override { 
             if (Has(name)) {
                 return false;
             }
@@ -239,7 +239,7 @@ namespace NMonitoring {
 
         using ILabels::Add;
 
-        bool Has(TStringBuf name) const noexcept override {
+        bool Has(TStringBuf name) const noexcept override { 
             auto it = FindIf(Labels_, [name](const TLabelImpl<TStringBackend>& label) {
                 return name == TStringBuf{label.Name()};
             });
@@ -264,7 +264,7 @@ namespace NMonitoring {
             return *it;
         }
 
-        std::optional<const ILabel*> Get(TStringBuf name) const override {
+        std::optional<const ILabel*> Get(TStringBuf name) const override { 
             auto it = FindIf(Labels_, [name] (auto&& l) {
                 return name == l.Name();
             });
@@ -300,20 +300,20 @@ namespace NMonitoring {
 
         inline size_t Hash() const noexcept override {
             return TSimpleRangeHash()(Labels_);
-        }
-
-        inline TLabel* Data() const noexcept {
+        } 
+ 
+        inline TLabel* Data() const noexcept { 
             return const_cast<TLabel*>(Labels_.data());
-        }
-
+        } 
+ 
         inline size_t Size() const noexcept override {
             return Labels_.size();
-        }
-
+        } 
+ 
         inline bool Empty() const noexcept override {
             return Labels_.empty();
-        }
-
+        } 
+ 
         inline void Clear() noexcept override {
             Labels_.clear();
         };
@@ -391,26 +391,26 @@ namespace NMonitoring {
 
     private:
         TVector<TLabelImpl<TStringBackend>> Labels_;
-    };
+    }; 
 
     using TLabels = TLabelsImpl<TString>;
     using ILabelsPtr = THolder<ILabels>;
-
-    template <typename T>
-    ILabelsPtr MakeLabels() {
-        return MakeHolder<TLabelsImpl<T>>();
-    }
-
-    template <typename T>
-    ILabelsPtr MakeLabels(std::initializer_list<TLabelImpl<T>> labels) {
-        return MakeHolder<TLabelsImpl<T>>(labels);
-    }
-
-    inline ILabelsPtr MakeLabels(TLabels&& labels) {
-        return MakeHolder<TLabels>(std::move(labels));
-    }
-}
-
+ 
+    template <typename T> 
+    ILabelsPtr MakeLabels() { 
+        return MakeHolder<TLabelsImpl<T>>(); 
+    } 
+ 
+    template <typename T> 
+    ILabelsPtr MakeLabels(std::initializer_list<TLabelImpl<T>> labels) { 
+        return MakeHolder<TLabelsImpl<T>>(labels); 
+    } 
+ 
+    inline ILabelsPtr MakeLabels(TLabels&& labels) { 
+        return MakeHolder<TLabels>(std::move(labels)); 
+    } 
+} 
+ 
 template<>
 struct THash<NMonitoring::ILabelsPtr> {
     size_t operator()(const NMonitoring::ILabelsPtr& labels) const noexcept {
@@ -432,14 +432,14 @@ struct THash<NMonitoring::TLabelsImpl<TStringBackend>> {
 template <typename TStringBackend>
 struct THash<NMonitoring::TLabelImpl<TStringBackend>> {
     inline size_t operator()(const NMonitoring::TLabelImpl<TStringBackend>& label) const noexcept {
-        return label.Hash();
-    }
-};
-
+        return label.Hash(); 
+    } 
+}; 
+ 
 inline bool operator==(const NMonitoring::ILabels& lhs, const NMonitoring::ILabels& rhs) {
     if (lhs.Size() != rhs.Size()) {
         return false;
-    }
+    } 
 
     for (auto&& l : lhs) {
         auto rl = rhs.Get(l.Name());
@@ -468,7 +468,7 @@ struct TEqualTo<NMonitoring::ILabelsPtr> {
     bool operator()(const NMonitoring::ILabels& lhs, const NMonitoring::ILabelsPtr& rhs) {
         return lhs == *rhs;
     }
-};
+}; 
 
 #define Y_MONLIB_DEFINE_LABELS_OUT(T) \
 template <> \

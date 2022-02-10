@@ -82,10 +82,10 @@ public:
     }
 
 private:
-    bool HasFastListLength() const override {
+    bool HasFastListLength() const override { 
         return HasLength;
-    }
-
+    } 
+ 
     ui64 GetListLength() const override {
         if (HasLength)
             return Abs(To_ - From_);

@@ -21,16 +21,16 @@ namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     struct TActorSystem::TServiceMap : TNonCopyable {
-        NActors::TServiceMap<TActorId, TActorId, TActorId::THash> LocalMap;
+        NActors::TServiceMap<TActorId, TActorId, TActorId::THash> LocalMap; 
         TTicketLock Lock;
 
-        TActorId RegisterLocalService(const TActorId& serviceId, const TActorId& actorId) {
+        TActorId RegisterLocalService(const TActorId& serviceId, const TActorId& actorId) { 
             TTicketLock::TGuard guard(&Lock);
-            const TActorId old = LocalMap.Update(serviceId, actorId);
+            const TActorId old = LocalMap.Update(serviceId, actorId); 
             return old;
         }
 
-        TActorId LookupLocal(const TActorId& x) {
+        TActorId LookupLocal(const TActorId& x) { 
             return LocalMap.Find(x);
         }
     };
@@ -68,7 +68,7 @@ namespace NActors {
         ev->Callstack.TraceIfEmpty();
 #endif
 
-        TActorId recipient = ev->GetRecipientRewrite();
+        TActorId recipient = ev->GetRecipientRewrite(); 
         const ui32 recpNodeId = recipient.NodeId();
 
         if (recpNodeId != NodeId && recpNodeId != 0) {
@@ -114,13 +114,13 @@ namespace NActors {
         return false;
     }
 
-    bool TActorSystem::Send(const TActorId& recipient, IEventBase* ev, ui32 flags) const {
+    bool TActorSystem::Send(const TActorId& recipient, IEventBase* ev, ui32 flags) const { 
         return this->Send(new IEventHandle(recipient, DefSelfID, ev, flags));
     }
 
-    void TActorSystem::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const {
+    void TActorSystem::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const { 
         Schedule(deadline - Timestamp(), ev, cookie);
-    }
+    } 
 
     void TActorSystem::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const {
         const auto current = Monotonic();
@@ -131,22 +131,22 @@ namespace NActors {
         ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);
     }
 
-    void TActorSystem::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const {
+    void TActorSystem::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) const { 
         const auto deadline = Monotonic() + delta;
-
-        TTicketLock::TGuard guard(&ScheduleLock);
-        ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);
+ 
+        TTicketLock::TGuard guard(&ScheduleLock); 
+        ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie); 
     }
 
-    TActorId TActorSystem::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool, ui64 revolvingCounter,
-                                    const TActorId& parentId) {
+    TActorId TActorSystem::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool, ui64 revolvingCounter, 
+                                    const TActorId& parentId) { 
         Y_VERIFY(executorPool < ExecutorPoolCount, "executorPool# %" PRIu32 ", ExecutorPoolCount# %" PRIu32,
                  (ui32)executorPool, (ui32)ExecutorPoolCount);
         return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
     }
 
     NThreading::TFuture<THolder<IEventBase>> TActorSystem::AskGeneric(TMaybe<ui32> expectedEventType,
-                                                                      TActorId recipient, THolder<IEventBase> event,
+                                                                      TActorId recipient, THolder<IEventBase> event, 
                                                                       TDuration timeout) {
         auto promise = NThreading::NewPromise<THolder<IEventBase>>();
         Register(MakeAskActor(expectedEventType, recipient, std::move(event), timeout, promise).Release());
@@ -173,16 +173,16 @@ namespace NActors {
         return ret;
     }
 
-    TActorId TActorSystem::InterconnectProxy(ui32 destinationNode) const {
+    TActorId TActorSystem::InterconnectProxy(ui32 destinationNode) const { 
         if (destinationNode < InterconnectCount)
             return Interconnect[destinationNode];
         else if (destinationNode != NodeId)
             return MakeInterconnectProxyId(destinationNode);
         else
-            return TActorId();
+            return TActorId(); 
     }
 
-    ui32 TActorSystem::BroadcastToProxies(const std::function<IEventHandle*(const TActorId&)>& eventFabric) {
+    ui32 TActorSystem::BroadcastToProxies(const std::function<IEventHandle*(const TActorId&)>& eventFabric) { 
         // TODO: get rid of this method
         for (ui32 i = 0; i < InterconnectCount; ++i) {
             Send(eventFabric(Interconnect[i]));
@@ -194,9 +194,9 @@ namespace NActors {
         return ServiceMap->LookupLocal(x);
     }
 
-    TActorId TActorSystem::RegisterLocalService(const TActorId& serviceId, const TActorId& actorId) {
-        // TODO: notify old actor about demotion
-        return ServiceMap->RegisterLocalService(serviceId, actorId);
+    TActorId TActorSystem::RegisterLocalService(const TActorId& serviceId, const TActorId& actorId) { 
+        // TODO: notify old actor about demotion 
+        return ServiceMap->RegisterLocalService(serviceId, actorId); 
     }
 
     void TActorSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
@@ -217,7 +217,7 @@ namespace NActors {
         // setup interconnect proxies
         {
             const TInterconnectSetup& setup = SystemSetup->Interconnect;
-            Interconnect.Reset(new TActorId[InterconnectCount + 1]);
+            Interconnect.Reset(new TActorId[InterconnectCount + 1]); 
             for (ui32 i = 0, e = InterconnectCount; i != e; ++i) {
                 const TActorSetupCmd& x = setup.ProxyActors[i];
                 if (x.Actor) {
@@ -231,8 +231,8 @@ namespace NActors {
         // setup local services
         {
             for (ui32 i = 0, e = (ui32)SystemSetup->LocalServices.size(); i != e; ++i) {
-                const std::pair<TActorId, TActorSetupCmd>& x = SystemSetup->LocalServices[i];
-                const TActorId xid = Register(x.second.Actor, x.second.MailboxType, x.second.PoolId, i);
+                const std::pair<TActorId, TActorSetupCmd>& x = SystemSetup->LocalServices[i]; 
+                const TActorId xid = Register(x.second.Actor, x.second.MailboxType, x.second.PoolId, i); 
                 Y_VERIFY(!!xid);
                 if (!!x.first)
                     RegisterLocalService(x.first, xid);

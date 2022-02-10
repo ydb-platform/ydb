@@ -5,7 +5,7 @@
         "kind":"DSUMMARY",
         "labels":
           {
-            "metric":"temperature"
+            "metric":"temperature" 
           },
         "ts":1509843723,
         "summary":

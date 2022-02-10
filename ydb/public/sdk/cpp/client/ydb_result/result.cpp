@@ -108,10 +108,10 @@ public:
         return ResultSet_.ColumnsCount();
     }
 
-    size_t RowsCount() const {
-        return ResultSet_.RowsCount();
-    }
-
+    size_t RowsCount() const { 
+        return ResultSet_.RowsCount(); 
+    } 
+ 
     bool TryNextRow() {
         if (RowIndex_ == ResultSet_.RowsCount()) {
             return false;
@@ -126,11 +126,11 @@ public:
         return true;
     }
 
-    ssize_t ColumnIndex(const TString& columnName) {
-        auto idx = ColumnIndexMap.FindPtr(columnName);
-        return idx ? static_cast<ssize_t>(*idx) : -1;
-    }
-
+    ssize_t ColumnIndex(const TString& columnName) { 
+        auto idx = ColumnIndexMap.FindPtr(columnName); 
+        return idx ? static_cast<ssize_t>(*idx) : -1; 
+    } 
+ 
     TValueParser& ColumnParser(size_t columnIndex) {
         if (columnIndex >= ColumnParsers.size()) {
             FatalError(TStringBuilder() << "Column index out of bounds: " << columnIndex);
@@ -196,18 +196,18 @@ size_t TResultSetParser::ColumnsCount() const {
     return Impl_->ColumnsCount();
 }
 
-size_t TResultSetParser::RowsCount() const {
-    return Impl_->RowsCount();
-}
-
+size_t TResultSetParser::RowsCount() const { 
+    return Impl_->RowsCount(); 
+} 
+ 
 bool TResultSetParser::TryNextRow() {
     return Impl_->TryNextRow();
 }
 
-ssize_t TResultSetParser::ColumnIndex(const TString& columnName) {
-    return Impl_->ColumnIndex(columnName);
-}
-
+ssize_t TResultSetParser::ColumnIndex(const TString& columnName) { 
+    return Impl_->ColumnIndex(columnName); 
+} 
+ 
 TValueParser& TResultSetParser::ColumnParser(size_t columnIndex) {
     return Impl_->ColumnParser(columnIndex);
 }

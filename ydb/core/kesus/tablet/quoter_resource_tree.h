@@ -5,7 +5,7 @@
 #include <ydb/core/protos/kesus.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
@@ -20,8 +20,8 @@ namespace NKikimr {
 
 namespace NKesus {
 
-using TQuoterSessionId = std::pair<NActors::TActorId, ui64>; // client id, resource id
-using TTickProcessorId = std::pair<NActors::TActorId, ui64>; // == TQuoterSessionId for sessions. == ResourceId for resources (with empty actor id).
+using TQuoterSessionId = std::pair<NActors::TActorId, ui64>; // client id, resource id 
+using TTickProcessorId = std::pair<NActors::TActorId, ui64>; // == TQuoterSessionId for sessions. == ResourceId for resources (with empty actor id). 
 class TQuoterResourceTree;
 
 TString CanonizeQuoterResourcePath(const TVector<TString>& path);
@@ -116,7 +116,7 @@ public:
 // Common interface for session to resource.
 class TQuoterSession : public TTickProcessor {
 public:
-    TQuoterSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource);
+    TQuoterSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource); 
 
     virtual ~TQuoterSession() = default;
 
@@ -129,7 +129,7 @@ public:
     }
 
     // Client actor id (remote client: quoter proxy).
-    const NActors::TActorId& GetClientId() const {
+    const NActors::TActorId& GetClientId() const { 
         return ClientId;
     }
 
@@ -167,13 +167,13 @@ public:
         Send(0); // Update props immediately // KIKIMR-8563
     }
 
-    NActors::TActorId SetPipeServerId(const NActors::TActorId& pipeServerId) {
-        const NActors::TActorId prevId = PipeServerId;
+    NActors::TActorId SetPipeServerId(const NActors::TActorId& pipeServerId) { 
+        const NActors::TActorId prevId = PipeServerId; 
         PipeServerId = pipeServerId;
         return prevId;
     }
 
-    NActors::TActorId GetPipeServerId() const {
+    NActors::TActorId GetPipeServerId() const { 
         return PipeServerId;
     }
 
@@ -182,8 +182,8 @@ protected:
 
 protected:
     TQuoterResourceTree* Resource = nullptr;
-    NActors::TActorId ClientId;
-    NActors::TActorId PipeServerId;
+    NActors::TActorId ClientId; 
+    NActors::TActorId PipeServerId; 
     double AmountRequested = 0.0;
     double TotalConsumed = 0.0; // Only for session statistics. Accuracy of this variable will degrade in time.
     bool Active = false;
@@ -245,9 +245,9 @@ public:
     // Runtime algorithm entry points.
     virtual void CalcParameters(); // Recursively calculates all parameters for runtime algorithm.
 
-    virtual THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId) = 0;
+    virtual THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId) = 0; 
 
-    THolder<TQuoterSession> CreateSession(const NActors::TActorId& clientId) {
+    THolder<TQuoterSession> CreateSession(const NActors::TActorId& clientId) { 
         THolder<TQuoterSession> session = DoCreateSession(clientId);
         if (session) {
             Sessions.insert(clientId);
@@ -258,11 +258,11 @@ public:
         return session;
     }
 
-    const THashSet<NActors::TActorId>& GetSessions() const {
+    const THashSet<NActors::TActorId>& GetSessions() const { 
         return Sessions;
     }
 
-    void OnSessionDisconnected(const NActors::TActorId& clientId) {
+    void OnSessionDisconnected(const NActors::TActorId& clientId) { 
         Sessions.erase(clientId);
     }
 
@@ -272,7 +272,7 @@ public:
     }
 
     TTickProcessorId GetTickProcessorId() const override {
-        return {NActors::TActorId(), ResourceId};
+        return {NActors::TActorId(), ResourceId}; 
     }
 
     class TCounters {
@@ -319,7 +319,7 @@ protected:
     size_t ResourceLevel = 0;
     TQuoterResourceTree* Parent = nullptr;
     THashSet<TQuoterResourceTree*> Children;
-    THashSet<NActors::TActorId> Sessions;
+    THashSet<NActors::TActorId> Sessions; 
     NKikimrKesus::TStreamingQuoterResource Props;
     NKikimrKesus::TStreamingQuoterResource EffectiveProps; // Props with actual values taken from Props or from parent's Props or from defaults.
     TCounters Counters;
@@ -370,11 +370,11 @@ public:
 
     void ProcessTick(const TTickProcessorTask& task, TTickProcessorQueue& queue);
 
-    TQuoterSession* GetOrCreateSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource);
-    TQuoterSession* FindSession(const NActors::TActorId& clientId, ui64 resourceId);
-    const TQuoterSession* FindSession(const NActors::TActorId& clientId, ui64 resourceId) const;
-    void DisconnectSession(const NActors::TActorId& pipeServerId);
-    void SetPipeServerId(TQuoterSessionId sessionId, const NActors::TActorId& prevId, const NActors::TActorId& id);
+    TQuoterSession* GetOrCreateSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource); 
+    TQuoterSession* FindSession(const NActors::TActorId& clientId, ui64 resourceId); 
+    const TQuoterSession* FindSession(const NActors::TActorId& clientId, ui64 resourceId) const; 
+    void DisconnectSession(const NActors::TActorId& pipeServerId); 
+    void SetPipeServerId(TQuoterSessionId sessionId, const NActors::TActorId& prevId, const NActors::TActorId& id); 
 
     void OnUpdateResourceProps(TQuoterResourceTree* rootResource);
 
@@ -399,7 +399,7 @@ private:
     THashMap<ui64, THolder<TQuoterResourceTree>> ResourcesById;
     THashMap<TString, TQuoterResourceTree*> ResourcesByPath;
     THashMap<TQuoterSessionId, THolder<TQuoterSession>> Sessions;
-    THashMultiMap<NActors::TActorId, TQuoterSessionId> PipeServerIdToSession;
+    THashMultiMap<NActors::TActorId, TQuoterSessionId> PipeServerIdToSession; 
 
     TCounters Counters;
 };

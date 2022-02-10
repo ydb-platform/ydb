@@ -8,7 +8,7 @@ namespace NKikimr {
 constexpr ui32 MAX_ATTEMPTS = 3;
 
 class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBlockBlobStorageGroup> {
-    const TActorId Owner;
+    const TActorId Owner; 
     const ui64 TabletId;
     const ui32 GroupId;
     const ui32 Generation;
@@ -20,7 +20,7 @@ class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBloc
     }
 
     void SendRequest() {
-        const TActorId proxy = MakeBlobStorageProxyID(GroupId);
+        const TActorId proxy = MakeBlobStorageProxyID(GroupId); 
         THolder<TEvBlobStorage::TEvBlock> event(new TEvBlobStorage::TEvBlock(TabletId, Generation, TInstant::Max()));
         event->IsMonitored = false;
         SendToBSProxy(TlsActivationContext->AsActorContext(), proxy, event.Release());
@@ -69,7 +69,7 @@ public:
         Become(&TThis::StateWait);
     }
 
-    TTabletReqBlockBlobStorageGroup(const TActorId &owner, ui64 tabletId, ui32 groupId, ui32 gen)
+    TTabletReqBlockBlobStorageGroup(const TActorId &owner, ui64 tabletId, ui32 groupId, ui32 gen) 
         : Owner(owner)
         , TabletId(tabletId)
         , GroupId(groupId)
@@ -79,13 +79,13 @@ public:
 };
 
 class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlobStorage> {
-    const TActorId Owner;
+    const TActorId Owner; 
     TIntrusiveConstPtr<TTabletStorageInfo> Info;
     const ui32 Generation;
     const bool BlockPrevEntry;
 
     ui32 Replied = 0;
-    TVector<TActorId> ReqActors;
+    TVector<TActorId> ReqActors; 
 
     void PassAway() override {
         for (auto &x : ReqActors)
@@ -104,7 +104,7 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
         auto *msg = ev->Get();
         auto it = Find(ReqActors, ev->Sender);
         Y_VERIFY(it != ReqActors.end(), "must not get response from unknown actor");
-        *it = TActorId();
+        *it = TActorId(); 
 
         switch (msg->Status) {
         case NKikimrProto::OK:
@@ -116,7 +116,7 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
         }
     }
 public:
-    TTabletReqBlockBlobStorage(TActorId owner, TTabletStorageInfo *info, ui32 generation, bool blockPrevEntry)
+    TTabletReqBlockBlobStorage(TActorId owner, TTabletStorageInfo *info, ui32 generation, bool blockPrevEntry) 
         : Owner(owner)
         , Info(info)
         , Generation(generation)
@@ -157,7 +157,7 @@ public:
     }
 };
 
-IActor* CreateTabletReqBlockBlobStorage(const TActorId &owner, TTabletStorageInfo *info, ui32 generation, bool blockPrevEntry) {
+IActor* CreateTabletReqBlockBlobStorage(const TActorId &owner, TTabletStorageInfo *info, ui32 generation, bool blockPrevEntry) { 
     return new TTabletReqBlockBlobStorage(owner, info, generation, blockPrevEntry);
 }
 

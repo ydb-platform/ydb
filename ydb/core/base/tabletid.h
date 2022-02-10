@@ -87,11 +87,11 @@ namespace NKikimr {
 
     // TODO: think about encoding scheme for sibling group hive
 
-    inline TActorId MakeStateStorageProxyID(ui64 stateStorageGroup) {
+    inline TActorId MakeStateStorageProxyID(ui64 stateStorageGroup) { 
         Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
         char x[12] = { 's', 't', 's', 'p', 'r', 'o', 'x', 'y' };
         x[8] = (char)stateStorageGroup;
-        return TActorId(0, TStringBuf(x, 12));
+        return TActorId(0, TStringBuf(x, 12)); 
     }
 
 }

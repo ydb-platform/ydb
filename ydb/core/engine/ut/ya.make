@@ -16,7 +16,7 @@ SIZE(MEDIUM)
 SRCS(
     mkql_engine_flat_host_ut.cpp
     mkql_engine_flat_ut.cpp
-    kikimr_program_builder_ut.cpp
+    kikimr_program_builder_ut.cpp 
     mkql_proto_ut.cpp
 )
 

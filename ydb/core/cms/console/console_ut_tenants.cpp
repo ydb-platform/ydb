@@ -509,7 +509,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
 
     class TTxTestActor : public TActorBootstrapped<TTxTestActor> {
     public:
-        TTxTestActor(TActorId sink, std::function<void(const TActorContext &)> testFunction)
+        TTxTestActor(TActorId sink, std::function<void(const TActorContext &)> testFunction) 
             : Sink(sink)
             , TestFunction(testFunction)
         {
@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
             ctx.Send(Sink, new TEvents::TEvWakeup);
         }
     private:
-        TActorId Sink;
+        TActorId Sink; 
         std::function<void(const TActorContext &)> TestFunction;
     };
 

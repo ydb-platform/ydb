@@ -68,13 +68,13 @@ public:
         return Code;
     }
 
-    THttpResponse& SetHttpCode(HttpCodes code) {
-        Code = code;
-        return *this;
-    }
-
+    THttpResponse& SetHttpCode(HttpCodes code) { 
+        Code = code; 
+        return *this; 
+    } 
+ 
     void OutTo(IOutputStream& out) const;
-
+ 
 private:
     HttpCodes Code;
     THttpHeaders Headers;

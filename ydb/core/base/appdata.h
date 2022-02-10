@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "defs.h"
 #include "channel_profiles.h"
 #include "domain.h"
@@ -8,7 +8,7 @@
 #include "tablet_types.h"
 #include "resource_profile.h"
 #include "event_filter.h"
-
+ 
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/protos/auth.pb.h>
@@ -24,7 +24,7 @@
 #include <library/cpp/actors/util/should_continue.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 
 namespace NActors {
     class TMon;
@@ -40,14 +40,14 @@ namespace NYdb {
 
 namespace NKikimr {
 
-namespace NScheme {
-    class TTypeRegistry;
-}
-
-namespace NMiniKQL {
-    class IFunctionRegistry;
-}
-
+namespace NScheme { 
+    class TTypeRegistry; 
+} 
+ 
+namespace NMiniKQL { 
+    class IFunctionRegistry; 
+} 
+ 
 namespace NDataShard {
     class IExportFactory;
 }
@@ -86,7 +86,7 @@ struct TAppData {
     const NPQ::IPersQueueMirrorReaderFactory* PersQueueMirrorReaderFactory = nullptr;
     NYdb::TDriver* YdbDriver = nullptr;
     const NPDisk::IIoContextFactory* IoContextFactory = nullptr;
-
+ 
     struct TDefaultTabletTypes {
         TTabletTypes::EType SchemeShard;
         TTabletTypes::EType DataShard;
@@ -171,11 +171,11 @@ struct TAppData {
 
     TKikimrScopeId LocalScopeId;
 
-    TAppData(
-            ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,
+    TAppData( 
+            ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId, 
             TMap<TString, ui32> servicePools,
-            const NScheme::TTypeRegistry* typeRegistry,
-            const NMiniKQL::IFunctionRegistry* functionRegistry,
+            const NScheme::TTypeRegistry* typeRegistry, 
+            const NMiniKQL::IFunctionRegistry* functionRegistry, 
             const TFormatFactory* formatFactory,
             TProgramShouldContinue *kikimrShouldContinue);
 };

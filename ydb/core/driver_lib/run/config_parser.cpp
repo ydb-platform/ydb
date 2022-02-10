@@ -223,8 +223,8 @@ void TRunCommandConfigParser::SetupGlobalOpts(NLastGetopt::TOpts& opts) {
         .DefaultValue("full").OptionalArgument("full|short|json").StoreResult(&GlobalOpts.LogFormat);
     opts.AddLongOption("syslog", "send to syslog instead of stderr").NoArgument();
     opts.AddLongOption("tcp", "start tcp interconnect").NoArgument();
-    opts.AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&GlobalOpts.UDFsPaths);
-    opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&GlobalOpts.UDFsDir);
+    opts.AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&GlobalOpts.UDFsPaths); 
+    opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&GlobalOpts.UDFsDir); 
 }
 
 
@@ -241,7 +241,7 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
     TOpts opts = TOpts::Default();
 
     opts.AddLongOption('n', "node", "Node ID")
-            .RequiredArgument(Sprintf("NUM (0,%d]", NActors::TActorId::MaxNodeId)).Required().StoreResult(&RunOpts.NodeId);
+            .RequiredArgument(Sprintf("NUM (0,%d]", NActors::TActorId::MaxNodeId)).Required().StoreResult(&RunOpts.NodeId); 
     opts.AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&RunOpts.ProxyBindToProxy);
     opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&RunOpts.MonitoringPort);
     opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&RunOpts.MonitoringAddress);
@@ -279,7 +279,7 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
         RunOpts.StartBusProxy = true;
     }
 
-    Y_VERIFY(RunOpts.NodeId > 0 && RunOpts.NodeId <= NActors::TActorId::MaxNodeId);
+    Y_VERIFY(RunOpts.NodeId > 0 && RunOpts.NodeId <= NActors::TActorId::MaxNodeId); 
 }
 
 void TRunCommandConfigParser::ApplyParsedOptions() {
@@ -293,12 +293,12 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
     logConfig->SetFormat(GlobalOpts.LogFormat);
     logConfig->SetClusterName(GlobalOpts.ClusterName);
 
-    // apply options affecting UDF paths
-    Config.AppConfig.SetUDFsDir(GlobalOpts.UDFsDir);
-    for (const auto& path : GlobalOpts.UDFsPaths) {
-        Config.AppConfig.AddUDFsPaths(path);
-    }
-
+    // apply options affecting UDF paths 
+    Config.AppConfig.SetUDFsDir(GlobalOpts.UDFsDir); 
+    for (const auto& path : GlobalOpts.UDFsPaths) { 
+        Config.AppConfig.AddUDFsPaths(path); 
+    } 
+ 
     // apply run options
     Config.NodeId = RunOpts.NodeId;
     auto messageBusConfig = Config.AppConfig.MutableMessageBusConfig();

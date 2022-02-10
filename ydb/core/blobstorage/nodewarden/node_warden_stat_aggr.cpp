@@ -15,7 +15,7 @@ void TNodeWarden::ReportLatencies() {
         auto& record = ev->Record;
         auto *pb = record.AddPerGroupReport();
         pb->SetGroupId(info.GroupId);
-        ActorIdToProto(kv.first, pb->MutableVDiskServiceId());
+        ActorIdToProto(kv.first, pb->MutableVDiskServiceId()); 
         info.Stat.Serialize(pb);
     }
 
@@ -26,7 +26,7 @@ void TNodeWarden::ReportLatencies() {
 
 void TNodeWarden::Handle(TEvGroupStatReport::TPtr ev) {
     TEvGroupStatReport *msg = ev->Get();
-    TActorId vdiskServiceId = msg->GetVDiskServiceId();
+    TActorId vdiskServiceId = msg->GetVDiskServiceId(); 
 
     TGroupStat stat;
     if (RunningVDiskServiceIds.count(vdiskServiceId) && msg->GetStat(stat)) {
@@ -39,7 +39,7 @@ void TNodeWarden::Handle(TEvGroupStatReport::TPtr ev) {
 
 void TNodeWarden::StartAggregator(const TActorId& vdiskServiceId, ui32 groupId) {
     if (RunningVDiskServiceIds.emplace(vdiskServiceId).second) {
-        const TActorId groupStatAggregatorId = MakeGroupStatAggregatorId(vdiskServiceId);
+        const TActorId groupStatAggregatorId = MakeGroupStatAggregatorId(vdiskServiceId); 
         const TActorId actorId = Register(CreateGroupStatAggregatorActor(groupId, vdiskServiceId),
             TMailboxType::Revolving, AppData()->SystemPoolId);
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(groupStatAggregatorId, actorId);
@@ -48,7 +48,7 @@ void TNodeWarden::StartAggregator(const TActorId& vdiskServiceId, ui32 groupId) 
 
 void TNodeWarden::StopAggregator(const TActorId& vdiskServiceId) {
     if (RunningVDiskServiceIds.erase(vdiskServiceId)) {
-        const TActorId groupStatAggregatorId = MakeGroupStatAggregatorId(vdiskServiceId);
+        const TActorId groupStatAggregatorId = MakeGroupStatAggregatorId(vdiskServiceId); 
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, groupStatAggregatorId, {}, nullptr, 0));
         PerAggregatorInfo.erase(groupStatAggregatorId);
     }

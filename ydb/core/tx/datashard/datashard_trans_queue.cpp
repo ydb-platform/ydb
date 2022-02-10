@@ -124,7 +124,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
             return false;
         while (!rowset.EndOfSet()) {
             ui64 txId = rowset.GetValue<Schema::SchemaOperations::TxId>();
-            TActorId source = rowset.GetValue<Schema::SchemaOperations::Source>();
+            TActorId source = rowset.GetValue<Schema::SchemaOperations::Source>(); 
             ui64 tabletId = rowset.GetValueOrDefault<Schema::SchemaOperations::SourceTablet>(0);
             ui32 opType = rowset.GetValue<Schema::SchemaOperations::Operation>();
             ui64 minStep = rowset.GetValue<Schema::SchemaOperations::MinStep>();
@@ -219,7 +219,7 @@ void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& o
     db.NoMoreReadsForTx();
 }
 
-void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId source, const TStringBuf& txBody) {
+void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId source, const TStringBuf& txBody) { 
     using Schema = TDataShard::Schema;
 
     const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask;
@@ -315,7 +315,7 @@ bool TTransQueue::GetNextPlannedTxId(ui64& step, ui64& txId) const {
 
 bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
                                 ui64 txId,
-                                TActorId &target,
+                                TActorId &target, 
                                 TString &txBody,
                                 TVector<TSysTables::TLocksTable::TLock> &locks,
                                 ui64 &artifactFlags) {

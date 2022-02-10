@@ -40,7 +40,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     ui32 SuggestedStep;
     TActorId SuggestedLeader;
     TActorId SuggestedLeaderTablet;
-    TActorId Source;
+    TActorId Source; 
 
     ui32 Replicas;
     THolder<TStateStorageInfo::TSelection> ReplicaSelection;
@@ -600,9 +600,9 @@ public:
 
 class TStateStorageDumpRequest : public TActorBootstrapped<TStateStorageDumpRequest> {
 protected:
-    const TActorId Sender;
+    const TActorId Sender; 
     TIntrusivePtr<TStateStorageInfo> Info;
-    TList<TActorId> AllReplicas;
+    TList<TActorId> AllReplicas; 
     TAutoPtr<TEvStateStorage::TEvResponseReplicasDumps> Response;
     ui64 UndeliveredCount;
 
@@ -611,7 +611,7 @@ public:
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TStateStorageDumpRequest(const TActorId &sender, const TIntrusivePtr<TStateStorageInfo> &info)
+    TStateStorageDumpRequest(const TActorId &sender, const TIntrusivePtr<TStateStorageInfo> &info) 
         : Sender(sender)
         , Info(info)
         , UndeliveredCount(0)
@@ -627,7 +627,7 @@ public:
         AllReplicas = Info->SelectAllReplicas();
         if (!AllReplicas.empty()) {
             Response->ReplicasDumps.reserve(AllReplicas.size());
-            for (const TActorId &replica : AllReplicas) {
+            for (const TActorId &replica : AllReplicas) { 
                 Send(replica, new TEvStateStorage::TEvReplicaDumpRequest(), IEventHandle::FlagTrackDelivery);
             }
             Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
@@ -667,9 +667,9 @@ public:
 
 class TStateStorageDeleteRequest : public TActorBootstrapped<TStateStorageDeleteRequest> {
 protected:
-    const TActorId Sender;
+    const TActorId Sender; 
     TIntrusivePtr<TStateStorageInfo> Info;
-    TList<TActorId> AllReplicas;
+    TList<TActorId> AllReplicas; 
     ui32 Count;
     ui32 UndeliveredCount;
     ui64 TabletID;
@@ -679,7 +679,7 @@ public:
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TStateStorageDeleteRequest(const TActorId &sender, const TIntrusivePtr<TStateStorageInfo> &info, ui64 tabletId)
+    TStateStorageDeleteRequest(const TActorId &sender, const TIntrusivePtr<TStateStorageInfo> &info, ui64 tabletId) 
         : Sender(sender)
         , Info(info)
         , Count(0)
@@ -695,7 +695,7 @@ public:
     void Bootstrap() {
         AllReplicas = Info->SelectAllReplicas();
         if (!AllReplicas.empty()) {
-            for (const TActorId &replica : AllReplicas) {
+            for (const TActorId &replica : AllReplicas) { 
                 Send(replica, new TEvStateStorage::TEvReplicaDelete(TabletID), IEventHandle::FlagTrackDelivery);
             }
             Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
@@ -740,7 +740,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     TIntrusivePtr<TStateStorageInfo> FlowControlledInfo;
 
-    TMap<TActorId, TActorId> ReplicaProbes;
+    TMap<TActorId, TActorId> ReplicaProbes; 
 
     void Handle(TEvStateStorage::TEvRequestReplicasDumps::TPtr &ev) {
         TActivationContext::Register(new TStateStorageDumpRequest(ev->Sender, Info));
@@ -866,8 +866,8 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         ReplicaProbes.clear();
 
         for (auto &ring : Info->Rings)
-            for (const TActorId replicaId : ring.Replicas) {
-                const TActorId probeId = sys->Register(CreateStateStorageReplicaProbe(replicaId));
+            for (const TActorId replicaId : ring.Replicas) { 
+                const TActorId probeId = sys->Register(CreateStateStorageReplicaProbe(replicaId)); 
                 ReplicaProbes.emplace(replicaId, probeId);
             }
     }
@@ -911,7 +911,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
             for (const ui32 srcSize = srcring.Replicas.size(); replicaIdx < srcSize; ++replicaIdx) {
                 if (checkRing && srcring.Replicas[replicaIdx] == oldring->Replicas[replicaIdx]) {
                     ctring.Replicas[replicaIdx] = fcring->Replicas[replicaIdx];
-                    fcring->Replicas[replicaIdx] = TActorId();
+                    fcring->Replicas[replicaIdx] = TActorId(); 
                 } else {
                     if (fcring && replicaIdx < fcring->Replicas.size())
                         Send(fcring->Replicas[replicaIdx], new TEvents::TEvPoison());
@@ -934,7 +934,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         }
         if (FlowControlledInfo) {
             for (const ui32 oldSize = FlowControlledInfo->Rings.size(); ringIdx < oldSize; ++ringIdx) {
-                for (TActorId outdated : FlowControlledInfo->Rings[oldSize].Replicas)
+                for (TActorId outdated : FlowControlledInfo->Rings[oldSize].Replicas) 
                     Send(outdated, new TEvents::TEvPoison());
             }
         }
@@ -942,7 +942,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         FlowControlledInfo = std::move(updated);
     }
 
-    void Registered(TActorSystem* sys, const TActorId&) {
+    void Registered(TActorSystem* sys, const TActorId&) { 
         RegisterDerivedServices(sys, nullptr);
     }
 public:
@@ -992,8 +992,8 @@ class TStateStorageProxyStub : public TActor<TStateStorageProxyStub> {
 
         Send(ev->Sender, new TEvStateStorage::TEvInfo(
             NKikimrProto::ERROR,
-            tabletId, cookie, TActorId(), TActorId(), 0, 0, false, 0,
-            nullptr, 0, TMap<TActorId, TActorId>()));
+            tabletId, cookie, TActorId(), TActorId(), 0, 0, false, 0, 
+            nullptr, 0, TMap<TActorId, TActorId>())); 
     }
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

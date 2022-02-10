@@ -13,7 +13,7 @@ struct TTestGuard: public TTestBase {
     UNIT_TEST(TestSync)
     UNIT_TEST(TestUnguard)
     UNIT_TEST(TestTryReadGuard)
-    UNIT_TEST(TestWithLock)
+    UNIT_TEST(TestWithLock) 
     UNIT_TEST(TestWithLockScope);
     UNIT_TEST_SUITE_END();
 
@@ -119,11 +119,11 @@ struct TTestGuard: public TTestBase {
         {
             TTryGuard<TGuardChecker> guard(checker);
             UNIT_ASSERT(checker.guarded);
-            UNIT_ASSERT(guard.WasAcquired());
-            {
+            UNIT_ASSERT(guard.WasAcquired()); 
+            { 
                 TTryGuard<TGuardChecker> guard2(checker);
                 UNIT_ASSERT(checker.guarded);
-                UNIT_ASSERT(!guard2.WasAcquired());
+                UNIT_ASSERT(!guard2.WasAcquired()); 
             }
             UNIT_ASSERT(checker.guarded);
         }
@@ -152,21 +152,21 @@ struct TTestGuard: public TTestBase {
         TTryReadGuard tryGuard(mutex);
         UNIT_ASSERT(tryGuard.WasAcquired());
     }
-
-    int WithLockIncrement(TGuardChecker& m, int n) {
+ 
+    int WithLockIncrement(TGuardChecker& m, int n) { 
         with_lock (m) {
-            UNIT_ASSERT(m.guarded);
-            return n + 1;
-        }
-    }
-
-    void TestWithLock() {
-        TGuardChecker m;
-        int n = 42;
-        n = WithLockIncrement(m, n);
-        UNIT_ASSERT(!m.guarded);
-        UNIT_ASSERT_EQUAL(n, 43);
-    }
+            UNIT_ASSERT(m.guarded); 
+            return n + 1; 
+        } 
+    } 
+ 
+    void TestWithLock() { 
+        TGuardChecker m; 
+        int n = 42; 
+        n = WithLockIncrement(m, n); 
+        UNIT_ASSERT(!m.guarded); 
+        UNIT_ASSERT_EQUAL(n, 43); 
+    } 
 
     void TestWithLockScope() {
         auto Guard = [](auto) { UNIT_FAIL("Non global Guard used"); return 0; };

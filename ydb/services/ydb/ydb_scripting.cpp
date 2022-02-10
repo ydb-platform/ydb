@@ -9,17 +9,17 @@ namespace NKikimr {
 namespace NGRpcService {
 
 TGRpcYdbScriptingService::TGRpcYdbScriptingService(NActors::TActorSystem *system,
-    TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
+    TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id) 
     : ActorSystem_(system)
     , Counters_(counters)
     , GRpcRequestProxyId_(id) {}
 
-void TGRpcYdbScriptingService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcYdbScriptingService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) { 
     CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
+    SetupIncomingRequests(std::move(logger)); 
 }
 
-void TGRpcYdbScriptingService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcYdbScriptingService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) { 
     Limiter_ = limiter;
 }
 
@@ -32,7 +32,7 @@ void TGRpcYdbScriptingService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcYdbScriptingService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbScriptingService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) { 
     using Ydb::Scripting::ExecuteYqlRequest;
     using Ydb::Scripting::ExecuteYqlResponse;
     using Ydb::Scripting::ExecuteYqlPartialResponse;
@@ -46,11 +46,11 @@ void TGRpcYdbScriptingService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Scripting::IN, Ydb::Scripting::OUT, TGRpcYdbScriptingService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NGrpc::IRequestContextBase *ctx) { \ 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Scripting::V1::ScriptingService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("scripting", #NAME))->Run();
+        #NAME, logger, getCounterBlock("scripting", #NAME))->Run(); 
 
     ADD_REQUEST(ExecuteYql, ExecuteYqlRequest, ExecuteYqlResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_,

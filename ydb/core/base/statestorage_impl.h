@@ -4,11 +4,11 @@
 
 namespace NKikimr {
 
-inline TActorId MakeStateStorageReplicaID(ui32 node, ui64 stateStorageGroup, ui32 replicaIndex) {
+inline TActorId MakeStateStorageReplicaID(ui32 node, ui64 stateStorageGroup, ui32 replicaIndex) { 
     char x[12] = { 's', 't', 's' };
     x[3] = (char)stateStorageGroup;
     memcpy(x + 5, &replicaIndex, sizeof(ui32));
-    return TActorId(node, TStringBuf(x, 12));
+    return TActorId(node, TStringBuf(x, 12)); 
 }
 
 struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvReplicaInfo, NKikimrStateStorage::TEvInfo, TEvStateStorage::EvReplicaInfo> {
@@ -80,33 +80,33 @@ struct TEvStateStorage::TEvUpdateGroupConfig : public TEventLocal<TEvUpdateGroup
 };
 
 struct TEvStateStorage::TEvReplicaProbeSubscribe : public TEventLocal<TEvReplicaProbeSubscribe, EvReplicaProbeSubscribe> {
-    const TActorId ReplicaId;
+    const TActorId ReplicaId; 
 
-    TEvReplicaProbeSubscribe(TActorId replicaId)
+    TEvReplicaProbeSubscribe(TActorId replicaId) 
         : ReplicaId(replicaId)
     {}
 };
 
 struct TEvStateStorage::TEvReplicaProbeUnsubscribe : public TEventLocal<TEvReplicaProbeUnsubscribe, EvReplicaProbeUnsubscribe> {
-    const TActorId ReplicaId;
+    const TActorId ReplicaId; 
 
-    TEvReplicaProbeUnsubscribe(TActorId replicaId)
+    TEvReplicaProbeUnsubscribe(TActorId replicaId) 
         : ReplicaId(replicaId)
     {}
 };
 
 struct TEvStateStorage::TEvReplicaProbeConnected : public TEventLocal<TEvReplicaProbeConnected, EvReplicaProbeConnected> {
-    const TActorId ReplicaId;
+    const TActorId ReplicaId; 
 
-    TEvReplicaProbeConnected(TActorId replicaId)
+    TEvReplicaProbeConnected(TActorId replicaId) 
         : ReplicaId(replicaId)
     {}
 };
 
 struct TEvStateStorage::TEvReplicaProbeDisconnected : public TEventLocal<TEvReplicaProbeDisconnected, EvReplicaProbeDisconnected> {
-    const TActorId ReplicaId;
+    const TActorId ReplicaId; 
 
-    TEvReplicaProbeDisconnected(TActorId replicaId)
+    TEvReplicaProbeDisconnected(TActorId replicaId) 
         : ReplicaId(replicaId)
     {}
 };
@@ -150,7 +150,7 @@ struct TEvStateStorage::TEvResolveSchemeBoard : public TEventLocal<TEvResolveSch
 };
 
 struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveReplicasList, EvResolveReplicasList> {
-    TVector<TActorId> Replicas;
+    TVector<TActorId> Replicas; 
     ui32 ConfigContentHash = Max<ui32>();
 };
 
@@ -267,13 +267,13 @@ struct TEvStateStorage::TEvReplicaBoardPublish : public TEventPB<TEvStateStorage
     TEvReplicaBoardPublish()
     {}
 
-    TEvReplicaBoardPublish(const TString &path, const TString &payload, ui64 ttlMs, bool reg, TActorId owner)
+    TEvReplicaBoardPublish(const TString &path, const TString &payload, ui64 ttlMs, bool reg, TActorId owner) 
     {
         Record.SetPath(path);
         Record.SetPayload(payload);
         Record.SetTtlMs(ttlMs);
         Record.SetRegister(reg);
-        ActorIdToProto(owner, Record.MutableOwner());
+        ActorIdToProto(owner, Record.MutableOwner()); 
     }
 };
 
@@ -281,10 +281,10 @@ struct TEvStateStorage::TEvReplicaBoardLookup : public TEventPB<TEvStateStorage:
     TEvReplicaBoardLookup()
     {}
 
-    TEvReplicaBoardLookup(const TString &path, TActorId owner, bool sub)
+    TEvReplicaBoardLookup(const TString &path, TActorId owner, bool sub) 
     {
         Record.SetPath(path);
-        ActorIdToProto(owner, Record.MutableOwner());
+        ActorIdToProto(owner, Record.MutableOwner()); 
         Record.SetSubscribe(sub);
     }
 };
@@ -310,6 +310,6 @@ struct TEvStateStorage::TEvReplicaBoardInfo : public TEventPB<TEvStateStorage::T
     }
 };
 
-IActor* CreateStateStorageReplicaProbe(TActorId replica);
+IActor* CreateStateStorageReplicaProbe(TActorId replica); 
 
 }

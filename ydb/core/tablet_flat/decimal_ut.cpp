@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDecimals) {
         }
 
     public:
-        TDecimalTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info)
+        TDecimalTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info) 
             : TActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , Sender(sender)
@@ -395,7 +395,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDecimals) {
         }
 
     private:
-        TActorId Sender;
+        TActorId Sender; 
     };
 
     struct TDecimalEnvProfiles : public NFake::TRunner {
@@ -406,7 +406,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDecimals) {
 
         void Run()
         {
-            FireTablet(Edge, Tablet, [this](const TActorId &tablet, TTabletStorageInfo *info) {
+            FireTablet(Edge, Tablet, [this](const TActorId &tablet, TTabletStorageInfo *info) { 
                 return new TDecimalTestFlatTablet(Edge, tablet, info);
             });
 
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDecimals) {
         }
 
         const ui32 Tablet = MakeTabletID(0, 0, 1);
-        const TActorId Edge;
+        const TActorId Edge; 
     };
 
     Y_UNIT_TEST(TestDecimal) {

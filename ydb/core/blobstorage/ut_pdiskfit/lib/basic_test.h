@@ -26,7 +26,7 @@ struct TFakeVDiskParams {
 };
 
 
-IActor *CreateFakeVDisk(const TVDiskID& vdiskId, const TActorId& pdiskServiceId, ui64 pdiskGuid,
+IActor *CreateFakeVDisk(const TVDiskID& vdiskId, const TActorId& pdiskServiceId, ui64 pdiskGuid, 
         TStateManager *stateManager, TFakeVDiskParams params);
 
 class TBasicTest : public TActorBootstrapped<TBasicTest> {
@@ -34,7 +34,7 @@ class TBasicTest : public TActorBootstrapped<TBasicTest> {
     TStateManager *StateManager = nullptr;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<TPDiskConfig> PDiskConfig;
-    TActorId PDiskServiceId;
+    TActorId PDiskServiceId; 
     const ui32 NumVDisks;
     bool InduceLogSplicing;
 
@@ -58,7 +58,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         CreatePDiskActor(ctx);
-        TVector<TActorId> actors;
+        TVector<TActorId> actors; 
         for (ui32 i = 0; i < NumVDisks; ++i) {
             TVDiskID vdiskId(i, 0, 0, 0, 0);
             TFakeVDiskParams params;
@@ -70,11 +70,11 @@ public:
                     params.LogsToBeSent = 100;
                 }
             }
-            TActorId actorId = ctx.ExecutorThread.ActorSystem->Register(CreateFakeVDisk(vdiskId, PDiskServiceId,
+            TActorId actorId = ctx.ExecutorThread.ActorSystem->Register(CreateFakeVDisk(vdiskId, PDiskServiceId, 
                     PDiskConfig->PDiskGuid, StateManager, params));
             actors.push_back(actorId);
         }
-        for (const TActorId& actor : actors) {
+        for (const TActorId& actor : actors) { 
             ctx.Send(actor, new TEvents::TEvBootstrap);
         }
         Become(&TBasicTest::StateFunc);

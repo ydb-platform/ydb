@@ -8,7 +8,7 @@ RESOURCE(
 )
 
 PEERDIR(
-    library/cpp/monlib/dynamic_counters
+    library/cpp/monlib/dynamic_counters 
 )
 
 END()

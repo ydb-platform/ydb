@@ -13,9 +13,9 @@
 ////////////////////////////////////////////
 namespace NKikimr {
 
-TActorId MakeGRpcProxyStatusID(ui32 node) {
+TActorId MakeGRpcProxyStatusID(ui32 node) { 
     char x[12] = {'g','r','p','c','p','r','x','y','s','t','a','t'};
-    return TActorId(node, TStringBuf(x, 12));
+    return TActorId(node, TStringBuf(x, 12)); 
 }
 
 
@@ -31,7 +31,7 @@ const ui32 TIMEOUT_SECONDS = 10;
 class TChooseProxyActorImpl : public TActorBootstrapped<TChooseProxyActorImpl> {
 
     using TBase = TActorBootstrapped<TChooseProxyActorImpl>;
-    TActorId Sender;
+    TActorId Sender; 
     ui32 NodesRequested;
     ui32 NodesReceived;
     THolder<NMsgBusProxy::TBusChooseProxy> Request;
@@ -47,7 +47,7 @@ public:
     }
 
     //
-    TChooseProxyActorImpl(const TActorId& sender)
+    TChooseProxyActorImpl(const TActorId& sender) 
         : Sender(sender)
         , NodesRequested(0)
         , NodesReceived(0)
@@ -59,7 +59,7 @@ public:
 
 
     void SendRequest(ui32 nodeId, const TActorContext &ctx) {
-        TActorId proxyNodeServiceId = MakeGRpcProxyStatusID(nodeId);
+        TActorId proxyNodeServiceId = MakeGRpcProxyStatusID(nodeId); 
         ctx.Send(proxyNodeServiceId, new TEvGRpcProxyStatus::TEvGetStatusRequest(),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
         Nodes.emplace_back(nodeId);
@@ -73,7 +73,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId();
+        const TActorId nameserviceId = GetNameserviceActorId(); 
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         TBase::Become(&TThis::StateRequestedBrowse);
         ctx.Schedule(TDuration::Seconds(TIMEOUT_SECONDS), new TEvents::TEvWakeup());
@@ -196,8 +196,8 @@ private:
     ui32 WriteSessions;
     ui32 ReadSessions;
 
-    TActorId Worker;
-    std::deque<TActorId> Requests;
+    TActorId Worker; 
+    std::deque<TActorId> Requests; 
 
 };
 
@@ -225,7 +225,7 @@ TGRpcProxyStatusActor::Bootstrap(const TActorContext &ctx) {
 void
 TGRpcProxyStatusActor::Handle(TEvGRpcProxyStatus::TEvRequest::TPtr &ev, const TActorContext& ctx) {
     Requests.push_back(ev->Sender);
-    if (Worker == TActorId()) {
+    if (Worker == TActorId()) { 
         Worker = ctx.Register(new TChooseProxyActorImpl(ctx.SelfID));
     }
 }
@@ -242,7 +242,7 @@ TGRpcProxyStatusActor::Handle(TEvGRpcProxyStatus::TEvResponse::TPtr &ev, const T
         ctx.Send(sender, response.Release());
     }
     Requests.clear();
-    Worker = TActorId();
+    Worker = TActorId(); 
 }
 
 

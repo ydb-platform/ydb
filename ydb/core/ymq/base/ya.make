@@ -28,7 +28,7 @@ PEERDIR(
     library/cpp/cgiparam
     library/cpp/ipmath
     library/cpp/lwtrace
-    library/cpp/monlib/dynamic_counters
+    library/cpp/monlib/dynamic_counters 
     library/cpp/scheme
     library/cpp/string_utils/base64
     ydb/core/base

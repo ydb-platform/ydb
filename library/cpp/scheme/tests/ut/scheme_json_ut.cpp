@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TSchemeJsonTest) {
         }
         {
             const char* json = "[a:b]";
-            UNIT_ASSERT(NSc::TValue::FromJson(json).IsNull());
+            UNIT_ASSERT(NSc::TValue::FromJson(json).IsNull()); 
         }
         {
             UNIT_ASSERT_VALUES_EQUAL("{\n    \"a\" : \"b\",\n    \"c\" : \"d\"\n}",

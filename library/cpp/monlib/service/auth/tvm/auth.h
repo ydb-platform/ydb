@@ -8,7 +8,7 @@ namespace NMonitoring {
     struct ITvmManager {
         virtual ~ITvmManager() = default;
         virtual bool IsAllowedClient(NTvmAuth::TTvmId clientId) = 0;
-        virtual NTvmAuth::TCheckedServiceTicket CheckServiceTicket(TStringBuf ticket) = 0;
+        virtual NTvmAuth::TCheckedServiceTicket CheckServiceTicket(TStringBuf ticket) = 0; 
     };
 
     THolder<ITvmManager> CreateDefaultTvmManager(

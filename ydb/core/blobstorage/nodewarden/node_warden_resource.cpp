@@ -10,7 +10,7 @@
 using namespace NKikimr;
 using namespace NStorage;
 
-void TNodeWarden::RegisterPendingActor(const TActorId& actorId) {
+void TNodeWarden::RegisterPendingActor(const TActorId& actorId) { 
     const bool inserted = PendingMessageQ.emplace(actorId, std::deque<std::unique_ptr<IEventHandle>>()).second;
     Y_VERIFY(inserted);
 }
@@ -84,7 +84,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
 }
 
 void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
-    const TActorId keeperId = ev->GetForwardOnNondeliveryRecipient();
+    const TActorId keeperId = ev->GetForwardOnNondeliveryRecipient(); 
     const ui32 pdiskId = NIncrHuge::PDiskIdFromIncrHugeKeeperId(keeperId);
 
     // find local pdisk config to extract GUID

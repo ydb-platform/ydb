@@ -3,7 +3,7 @@
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 
 namespace NKikimr {
     struct IAllocStats {
@@ -12,8 +12,8 @@ namespace NKikimr {
     };
 
     NActors::IActor* CreateMemStatsCollector(
-        ui32 intervalSec,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+        ui32 intervalSec, 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters); 
 
 
     struct IAllocState {

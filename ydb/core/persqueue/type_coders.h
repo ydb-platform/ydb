@@ -8,8 +8,8 @@
 
 #include <util/generic/typetraits.h>
 
-namespace NKikimr {
-namespace NScheme {
+namespace NKikimr { 
+namespace NScheme { 
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -306,6 +306,6 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NScheme
-} // namespace NKikimr
+} // namespace NScheme 
+} // namespace NKikimr 
 

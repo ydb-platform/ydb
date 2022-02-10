@@ -369,7 +369,7 @@ struct TLocalConfig : public TThrRefBase {
 
 IActor* CreateLocal(TLocalConfig *config);
 
-inline TActorId MakeLocalID(ui32 node) {
+inline TActorId MakeLocalID(ui32 node) { 
     char x[12] = { 'l', 'o', 'c', 'l'};
     x[4] = (char)(node & 0xFF);
     x[5] = (char)((node >> 8) & 0xFF);
@@ -379,10 +379,10 @@ inline TActorId MakeLocalID(ui32 node) {
     x[9] = 0;
     x[10] = 0;
     x[11] = 0;
-    return TActorId(node, TStringBuf(x, 12));
+    return TActorId(node, TStringBuf(x, 12)); 
 }
 
-inline TActorId MakeLocalRegistrarID(ui32 node, ui64 hiveId) {
+inline TActorId MakeLocalRegistrarID(ui32 node, ui64 hiveId) { 
     char x[12] = { 'l', 'o', 'c', 'l'};
     x[4] = (char)(node & 0xFF);
     x[5] = (char)((node >> 8) & 0xFF);
@@ -392,7 +392,7 @@ inline TActorId MakeLocalRegistrarID(ui32 node, ui64 hiveId) {
     x[9] = (char)(((hiveId >> 8) & 0xFF) ^ ((hiveId >> 40) & 0xFF));
     x[10] = (char)(((hiveId >> 16) & 0xFF) ^ ((hiveId >> 48) & 0xFF));
     x[11] = (char)(((hiveId >> 24) & 0xFF) ^ ((hiveId >> 56) & 0xFF));
-    return TActorId(node, TStringBuf(x, 12));
+    return TActorId(node, TStringBuf(x, 12)); 
 }
 
 }

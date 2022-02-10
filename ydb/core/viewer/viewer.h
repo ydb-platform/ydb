@@ -13,9 +13,9 @@
 namespace NKikimr {
 namespace NViewer {
 
-inline TActorId MakeViewerID(ui32 node = 0) {
+inline TActorId MakeViewerID(ui32 node = 0) { 
     char x[12] = {'v','i','e','w','e','r'};
-    return TActorId(node, TStringBuf(x, 12));
+    return TActorId(node, TStringBuf(x, 12)); 
 }
 
 IActor* CreateViewer(const TKikimrRunConfig &kikimrRunConfig);
@@ -30,10 +30,10 @@ public:
 
         TString Path;
         TVector<TPathEntry> Paths;
-        TActorId Owner;
+        TActorId Owner; 
         TString UserToken;
 
-        TBrowseContext(const TActorId owner, const TString& userToken)
+        TBrowseContext(const TActorId owner, const TString& userToken) 
             : Owner(owner)
             , UserToken(userToken)
         {}
@@ -69,7 +69,7 @@ public:
         }
     };
 
-    using TVirtualHandlerType = std::function<IActor*(const TActorId& owner, const TBrowseContext& context)>;
+    using TVirtualHandlerType = std::function<IActor*(const TActorId& owner, const TBrowseContext& context)>; 
 
     struct TVirtualHandler {
         IViewer::TVirtualHandlerType BrowseHandler = nullptr;
@@ -100,7 +100,7 @@ public:
         TString Dump() const;
     };
 
-    using TContentHandler = std::function<IActor*(const TActorId&, const TContentRequestContext&)>;
+    using TContentHandler = std::function<IActor*(const TActorId&, const TContentRequestContext&)>; 
 
     virtual const TKikimrRunConfig& GetKikimrRunConfig() const = 0;
     virtual TVector<const TVirtualHandler*> GetVirtualHandlers(NKikimrViewer::EObjectType type, const TString& path) const = 0;

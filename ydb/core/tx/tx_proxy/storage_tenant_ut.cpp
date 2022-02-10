@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
                                                  ui32 nodeIdx = 0) {
         TIntrusivePtr<TTabletStorageInfo> info = TabletStorageInfoFromProto(storageInfo.GetInfo());
 
-        TActorId edge = runtime->AllocateEdgeActor(nodeIdx);
+        TActorId edge = runtime->AllocateEdgeActor(nodeIdx); 
         IActor* x = CreateTabletReqBlockBlobStorage(edge, info.Get(), Max<ui32>(), false);
         runtime->Register(x, nodeIdx);
 
@@ -350,7 +350,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         auto& lastEntry = *channel.GetHistory().rbegin();
         ui32 group = lastEntry.GetGroupID();
 
-        TActorId edge = runtime->AllocateEdgeActor(nodeIdx);
+        TActorId edge = runtime->AllocateEdgeActor(nodeIdx); 
 
         const ui32 generation = Max<ui32>();
         auto event = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(
@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
                     std::numeric_limits<ui32>::max(), // collectStep
                     TInstant::Max());                 // deadline
 
-        TActorId nodeWarden = MakeBlobStorageNodeWardenID(runtime->GetNodeId(nodeIdx));
+        TActorId nodeWarden = MakeBlobStorageNodeWardenID(runtime->GetNodeId(nodeIdx)); 
         runtime->Send(new IEventHandle(MakeBlobStorageProxyID(group), edge, event.Release(),
                                        IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden), nodeIdx);
 

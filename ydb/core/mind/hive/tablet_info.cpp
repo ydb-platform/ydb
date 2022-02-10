@@ -168,7 +168,7 @@ bool TTabletInfo::CanBeAlive() const {
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN); // KIKIMR-12558
 }
 
-bool TTabletInfo::IsAliveOnLocal(const TActorId& local) const {
+bool TTabletInfo::IsAliveOnLocal(const TActorId& local) const { 
     return Node != nullptr
             && Node->Local == local
             && (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
@@ -196,7 +196,7 @@ bool TTabletInfo::InitiateBoot() {
 }
 
 bool TTabletInfo::InitiateStop() {
-    TActorId local;
+    TActorId local; 
     TNodeInfo* node = Node;
     if (node == nullptr && NodeId != 0) {
         node = Hive.FindNode(NodeId);
@@ -293,7 +293,7 @@ bool TTabletInfo::Kick() {
 }
 
 void TTabletInfo::Kill() {
-    TActorId local;
+    TActorId local; 
     TNodeInfo* node = Node;
     if (node == nullptr && NodeId != 0) {
         node = Hive.FindNode(NodeId);
@@ -458,7 +458,7 @@ bool TTabletInfo::InitiateStart(TNodeInfo* node) {
     return false;
 }
 
-void TTabletInfo::SendStopTablet(const TActorId& local, TFullTabletId tabletId) {
+void TTabletInfo::SendStopTablet(const TActorId& local, TFullTabletId tabletId) { 
     if (local) {
         Hive.StopTablet(local, tabletId);
     }

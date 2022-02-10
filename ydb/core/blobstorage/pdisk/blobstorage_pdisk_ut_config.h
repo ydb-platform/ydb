@@ -7,9 +7,9 @@ namespace NKikimr {
 
 struct TTestConfig : public TThrRefBase {
     TVDiskID VDiskID;
-    TActorId YardActorID;
+    TActorId YardActorID; 
 
-    TTestConfig(const TVDiskID &vDiskID, const TActorId &yardActorID)
+    TTestConfig(const TVDiskID &vDiskID, const TActorId &yardActorID) 
         : VDiskID(vDiskID)
         , YardActorID(yardActorID)
     {}

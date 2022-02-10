@@ -130,7 +130,7 @@ message TPersQueuePartitionRequest {
     optional TCmdDeregisterMessageGroup CmdDeregisterMessageGroup = 21;
     optional TCmdSplitMessageGroup CmdSplitMessageGroup = 22;
 
-    optional NActorsProto.TActorId PipeClient = 15;
+    optional NActorsProto.TActorId PipeClient = 15; 
 
     optional uint64 Cookie = 16; //client cookie to be returned in response
 

@@ -5,7 +5,7 @@
 #include <ydb/core/base/path.h>
 
 #include <util/string/builder.h>
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 
 #include <algorithm>
 #include <cmath>
@@ -162,7 +162,7 @@ public:
     void CalcParameters() override;
     void CalcParametersForAccounting();
 
-    THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId) override;
+    THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId) override; 
 
     void AddActiveChild(THierarchicalDRRResourceConsumer* child, TTickProcessorQueue& queue, TInstant now);
     void RemoveActiveChild(THierarchicalDRRResourceConsumer* child);
@@ -246,7 +246,7 @@ THolder<TQuoterResourceTree> CreateResource(ui64 resourceId, ui64 parentId, NAct
 // Session in case of hierarchical DRR algorithm.
 class THierarhicalDRRQuoterSession : public TQuoterSession, public THierarchicalDRRResourceConsumer {
 public:
-    THierarhicalDRRQuoterSession(const NActors::TActorId& clientId, THierarhicalDRRQuoterResourceTree* resource)
+    THierarhicalDRRQuoterSession(const NActors::TActorId& clientId, THierarhicalDRRQuoterResourceTree* resource) 
         : TQuoterSession(clientId, resource)
     {
     }
@@ -431,7 +431,7 @@ void THierarhicalDRRQuoterSession::OnPropsChanged() {
 
 } // anonymous namespace
 
-TQuoterSession::TQuoterSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource)
+TQuoterSession::TQuoterSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource) 
     : Resource(resource)
     , ClientId(clientId)
 {
@@ -925,7 +925,7 @@ void THierarhicalDRRQuoterResourceTree::ScheduleNextTick(TTickProcessorQueue& qu
     Schedule(queue, NextTick(now, TickSize));
 }
 
-THolder<TQuoterSession> THierarhicalDRRQuoterResourceTree::DoCreateSession(const NActors::TActorId& clientId) {
+THolder<TQuoterSession> THierarhicalDRRQuoterResourceTree::DoCreateSession(const NActors::TActorId& clientId) { 
     return MakeHolder<THierarhicalDRRQuoterSession>(clientId, this);
 }
 
@@ -1032,13 +1032,13 @@ bool TQuoterResources::DeleteResource(TQuoterResourceTree* resource, TString& er
     const auto sessions = resource->GetSessions();
     TStringBuilder closeReason;
     closeReason << "Resource \"" << resource->GetPath() << "\" was deleted.";
-    for (const NActors::TActorId& clientId : sessions) {
+    for (const NActors::TActorId& clientId : sessions) { 
         const auto sessionId = TQuoterSessionId{clientId, resource->GetResourceId()};
         const auto sessionIt = Sessions.find(sessionId);
         Y_VERIFY(sessionIt != Sessions.end());
         TQuoterSession* session = sessionIt->second.Get();
         session->CloseSession(Ydb::StatusIds::NOT_FOUND, closeReason);
-        const NActors::TActorId pipeServerId = session->SetPipeServerId({});
+        const NActors::TActorId pipeServerId = session->SetPipeServerId({}); 
         SetPipeServerId(sessionId, pipeServerId, {}); // Erase pipeServerId from index.
         Sessions.erase(sessionIt);
     }
@@ -1117,7 +1117,7 @@ void TQuoterResources::ProcessTick(const TTickProcessorTask& task, TTickProcesso
     }
 }
 
-TQuoterSession* TQuoterResources::GetOrCreateSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource) {
+TQuoterSession* TQuoterResources::GetOrCreateSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource) { 
     const ui64 resourceId = resource->GetResourceId();
     if (TQuoterSession* session = FindSession(clientId, resourceId)) {
         return session;
@@ -1127,19 +1127,19 @@ TQuoterSession* TQuoterResources::GetOrCreateSession(const NActors::TActorId& cl
     }
 }
 
-TQuoterSession* TQuoterResources::FindSession(const NActors::TActorId& clientId, ui64 resourceId) {
+TQuoterSession* TQuoterResources::FindSession(const NActors::TActorId& clientId, ui64 resourceId) { 
     const auto sessionIt = Sessions.find(TQuoterSessionId{clientId, resourceId});
     return sessionIt != Sessions.end() ? sessionIt->second.Get() : nullptr;
 }
 
-const TQuoterSession* TQuoterResources::FindSession(const NActors::TActorId& clientId, ui64 resourceId) const {
+const TQuoterSession* TQuoterResources::FindSession(const NActors::TActorId& clientId, ui64 resourceId) const { 
     const auto sessionIt = Sessions.find(TQuoterSessionId{clientId, resourceId});
     return sessionIt != Sessions.end() ? sessionIt->second.Get() : nullptr;
 }
 
 void TQuoterResources::OnUpdateResourceProps(TQuoterResourceTree* rootResource) {
     const ui64 resId = rootResource->GetResourceId();
-    for (const NActors::TActorId& sessionActor : rootResource->GetSessions()) {
+    for (const NActors::TActorId& sessionActor : rootResource->GetSessions()) { 
         TQuoterSession* session = FindSession(sessionActor, resId);
         Y_VERIFY(session);
         session->OnPropsChanged();
@@ -1199,7 +1199,7 @@ void TQuoterResources::FillCounters(NKikimrKesus::TEvGetQuoterResourceCountersRe
     }
 }
 
-void TQuoterResources::SetPipeServerId(TQuoterSessionId sessionId, const NActors::TActorId& prevId, const NActors::TActorId& id) {
+void TQuoterResources::SetPipeServerId(TQuoterSessionId sessionId, const NActors::TActorId& prevId, const NActors::TActorId& id) { 
     if (prevId) {
         auto [prevIt, prevItEnd] = PipeServerIdToSession.equal_range(prevId);
         for (; prevIt != prevItEnd; ++prevIt) {
@@ -1214,11 +1214,11 @@ void TQuoterResources::SetPipeServerId(TQuoterSessionId sessionId, const NActors
     }
 }
 
-void TQuoterResources::DisconnectSession(const NActors::TActorId& pipeServerId) {
+void TQuoterResources::DisconnectSession(const NActors::TActorId& pipeServerId) { 
     auto [pipeToSessionItBegin, pipeToSessionItEnd] = PipeServerIdToSession.equal_range(pipeServerId);
     for (auto pipeToSessionIt = pipeToSessionItBegin; pipeToSessionIt != pipeToSessionItEnd; ++pipeToSessionIt) {
         const TQuoterSessionId sessionId = pipeToSessionIt->second;
-        const NActors::TActorId sessionClientId = sessionId.first;
+        const NActors::TActorId sessionClientId = sessionId.first; 
 
         {
             const auto sessionIter = Sessions.find(sessionId);

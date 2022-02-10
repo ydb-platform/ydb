@@ -11,7 +11,7 @@ RECURSE(
 IF (NOT SANITIZER_TYPE)
     RECURSE(
         go
-        java
+        java 
     )
 ENDIF()
 

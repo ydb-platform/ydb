@@ -1,5 +1,5 @@
 #include "yql_ast.h"
-#include "yql_ast_escaping.h"
+#include "yql_ast_escaping.h" 
 
 #include <util/string/builder.h>
 #include <util/system/compiler.h>
@@ -306,38 +306,38 @@ namespace {
                     }
                     // hex string starts with 'x"'
                     else if (IsHexStringStart(c)) {
-                        Ctx_.Next(); // skip 'x'
+                        Ctx_.Next(); // skip 'x' 
                         if (Ctx_.AtEnd()) break;
 
                         if (!IsStringStart(Ctx_.Peek())) {
                             continue;
                         }
 
-                        Ctx_.Next(); // skip first '"'
-
-                        size_t readBytes = 0;
-                        TStringStream ss;
-                        TStringBuf atom = Ctx_.Str().SubStr(Ctx_.Offset());
-                        EUnescapeResult unescapeResult = UnescapeBinaryAtom(
-                                atom, '"', &ss, &readBytes);
-
-                        // advance position
-                        while (readBytes-- != 0) {
-                            Ctx_.Next();
-                        }
-
+                        Ctx_.Next(); // skip first '"' 
+ 
+                        size_t readBytes = 0; 
+                        TStringStream ss; 
+                        TStringBuf atom = Ctx_.Str().SubStr(Ctx_.Offset()); 
+                        EUnescapeResult unescapeResult = UnescapeBinaryAtom( 
+                                atom, '"', &ss, &readBytes); 
+ 
+                        // advance position 
+                        while (readBytes-- != 0) { 
+                            Ctx_.Next(); 
+                        } 
+ 
                         if (unescapeResult != EUnescapeResult::OK) {
                             AddError(TString(UnescapeResultToString(unescapeResult)));
                             return nullptr;
                         }
 
-                        Ctx_.Next(); // skip last '"'
+                        Ctx_.Next(); // skip last '"' 
                         if (!Ctx_.IsAtomEnded()) {
                             AddError("Unexpected end of \"");
                             return nullptr;
                         }
 
-                        return TAstNode::NewAtom(resPosition, ss.Str(), Ctx_.Pool(), TNodeFlags::BinaryContent);
+                        return TAstNode::NewAtom(resPosition, ss.Str(), Ctx_.Pool(), TNodeFlags::BinaryContent); 
                     }
                     else if (IsStringStart(c)) {
                         if (Ctx_.Offset() != atomStart) {
@@ -345,19 +345,19 @@ namespace {
                             return nullptr;
                         }
 
-                        Ctx_.Next(); // skip first '"'
-
-                        size_t readBytes = 0;
-                        TStringStream ss;
-                        TStringBuf atom = Ctx_.Str().SubStr(Ctx_.Offset());
-                        EUnescapeResult unescapeResult = UnescapeArbitraryAtom(
-                                atom, '"', &ss, &readBytes);
-
-                        // advance position
-                        while (readBytes-- != 0) {
-                            Ctx_.Next();
-                        }
-
+                        Ctx_.Next(); // skip first '"' 
+ 
+                        size_t readBytes = 0; 
+                        TStringStream ss; 
+                        TStringBuf atom = Ctx_.Str().SubStr(Ctx_.Offset()); 
+                        EUnescapeResult unescapeResult = UnescapeArbitraryAtom( 
+                                atom, '"', &ss, &readBytes); 
+ 
+                        // advance position 
+                        while (readBytes-- != 0) { 
+                            Ctx_.Next(); 
+                        } 
+ 
                         if (unescapeResult != EUnescapeResult::OK) {
                             AddError(TString(UnescapeResultToString(unescapeResult)));
                             return nullptr;
@@ -368,7 +368,7 @@ namespace {
                             return nullptr;
                         }
 
-                        return TAstNode::NewAtom(resPosition, ss.Str(), Ctx_.Pool(), TNodeFlags::ArbitraryContent);
+                        return TAstNode::NewAtom(resPosition, ss.Str(), Ctx_.Pool(), TNodeFlags::ArbitraryContent); 
                     }
                 }
 
@@ -472,9 +472,9 @@ namespace {
     void PrintNode(IOutputStream& out, const TAstNode& node) {
         if (node.GetType() == TAstNode::Atom) {
             if (node.GetFlags() & TNodeFlags::ArbitraryContent) {
-                EscapeArbitraryAtom(node.GetContent(), '"', &out);
+                EscapeArbitraryAtom(node.GetContent(), '"', &out); 
             } else if (node.GetFlags() & TNodeFlags::BinaryContent) {
-                EscapeBinaryAtom(node.GetContent(), '"', &out);
+                EscapeBinaryAtom(node.GetContent(), '"', &out); 
             } else if (node.GetFlags() & TNodeFlags::MultilineContent) {
                 MultilineAtomPrint(out, node.GetContent());
             } else if (node.GetContent().empty()) {
@@ -520,17 +520,17 @@ namespace {
                 {
                     out << node.GetContent();
                 } else {
-                    EscapeArbitraryAtom(node.GetContent(), '"', &out);
+                    EscapeArbitraryAtom(node.GetContent(), '"', &out); 
                 }
             } else if (node.GetFlags() & TNodeFlags::BinaryContent) {
-                EscapeBinaryAtom(node.GetContent(), '"', &out);
+                EscapeBinaryAtom(node.GetContent(), '"', &out); 
             } else if (node.GetFlags() & TNodeFlags::MultilineContent) {
                 MultilineAtomPrint(out, node.GetContent());
             } else {
                 if (((flags & TAstPrintFlags::AdaptArbitraryContent) && NeedEscaping(node.GetContent())) ||
                     node.GetContent().empty())
                 {
-                    EscapeArbitraryAtom(node.GetContent(), '"', &out);
+                    EscapeArbitraryAtom(node.GetContent(), '"', &out); 
                 } else {
                     out << node.GetContent();
                 }

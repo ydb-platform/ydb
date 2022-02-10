@@ -249,7 +249,7 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
 
 TCreateUserSchemaActor::TCreateUserSchemaActor(const TString& root,
                                                const TString& userName,
-                                               const TActorId& sender,
+                                               const TActorId& sender, 
                                                const TString& requestId,
                                                TIntrusivePtr<TUserCounters> userCounters)
     : Root_(root)
@@ -359,7 +359,7 @@ void TCreateUserSchemaActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
 }
 
 void TCreateUserSchemaActor::HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev) {
-    AddQuoterResourceActor_ = TActorId();
+    AddQuoterResourceActor_ = TActorId(); 
     auto status = ev->Get()->Record.GetError().GetStatus();
     if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::ALREADY_EXISTS) {
         RLOG_SQS_DEBUG("Successfully added quoter resource. Id: " << ev->Get()->Record.GetResourceId());
@@ -382,14 +382,14 @@ void TCreateUserSchemaActor::AddRPSQuota() {
 void TCreateUserSchemaActor::PassAway() {
     if (AddQuoterResourceActor_) {
         Send(AddQuoterResourceActor_, new TEvPoisonPill());
-        AddQuoterResourceActor_ = TActorId();
+        AddQuoterResourceActor_ = TActorId(); 
     }
     TActorBootstrapped<TCreateUserSchemaActor>::PassAway();
 }
 
 TDeleteUserSchemaActor::TDeleteUserSchemaActor(const TString& root,
                                                const TString& name,
-                                               const TActorId& sender,
+                                               const TActorId& sender, 
                                                const TString& requestId,
                                                TIntrusivePtr<TUserCounters> userCounters)
     : Root_(root)
@@ -458,7 +458,7 @@ void TDeleteUserSchemaActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     }
 }
 
-TAtomicCounterActor::TAtomicCounterActor(const TActorId& sender, const TString& rootPath, const TString& requestId)
+TAtomicCounterActor::TAtomicCounterActor(const TActorId& sender, const TString& rootPath, const TString& requestId) 
     : Sender_(sender)
     , RootPath_(rootPath)
     , RequestId_(requestId)
@@ -497,7 +497,7 @@ public:
         ui64 quoterPathId,
         const typename TEvCmd::ProtoRecordType& cmd,
         const TString& requestId,
-        const TActorId& parent
+        const TActorId& parent 
     )
         : QuoterSchemeShardId(quoterSchemeShardId)
         , QuoterPathId(quoterPathId)
@@ -511,7 +511,7 @@ public:
         const TString& quoterPath,
         const typename TEvCmd::ProtoRecordType& cmd,
         const TString& requestId,
-        const TActorId& parent
+        const TActorId& parent 
     )
         : QuoterPath(quoterPath)
         , Cmd(cmd)
@@ -579,7 +579,7 @@ private:
     void PassAway() override {
         if (PipeClient) {
             NTabletPipe::CloseClient(this->SelfId(), PipeClient);
-            PipeClient = TActorId();
+            PipeClient = TActorId(); 
         }
         TActorBootstrapped<TQuoterCmdRunner>::PassAway();
     }
@@ -620,12 +620,12 @@ private:
     const TString QuoterPath;
     const typename TEvCmd::ProtoRecordType Cmd;
     const TString RequestId_;
-    const TActorId Parent;
+    const TActorId Parent; 
     ui64 QuoterTabletId = 0;
-    TActorId PipeClient;
+    TActorId PipeClient; 
 };
 
-TActorId RunAddQuoterResource(ui64 quoterSchemeShardId, ui64 quoterPathId, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId) {
+TActorId RunAddQuoterResource(ui64 quoterSchemeShardId, ui64 quoterPathId, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId) { 
     return TActivationContext::Register(
         new TQuoterCmdRunner<NKesus::TEvKesus::TEvAddQuoterResource, NKesus::TEvKesus::TEvAddQuoterResourceResult>(
             quoterSchemeShardId, quoterPathId, cmd, requestId, TActivationContext::AsActorContext().SelfID
@@ -633,7 +633,7 @@ TActorId RunAddQuoterResource(ui64 quoterSchemeShardId, ui64 quoterPathId, const
     );
 }
 
-TActorId RunAddQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId) {
+TActorId RunAddQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvAddQuoterResource& cmd, const TString& requestId) { 
     return TActivationContext::Register(
         new TQuoterCmdRunner<NKesus::TEvKesus::TEvAddQuoterResource, NKesus::TEvKesus::TEvAddQuoterResourceResult>(
             quoterPath, cmd, requestId, TActivationContext::AsActorContext().SelfID
@@ -641,7 +641,7 @@ TActorId RunAddQuoterResource(const TString& quoterPath, const NKikimrKesus::TEv
     );
 }
 
-TActorId RunDeleteQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvDeleteQuoterResource& cmd, const TString& requestId) {
+TActorId RunDeleteQuoterResource(const TString& quoterPath, const NKikimrKesus::TEvDeleteQuoterResource& cmd, const TString& requestId) { 
     return TActivationContext::Register(
         new TQuoterCmdRunner<NKesus::TEvKesus::TEvDeleteQuoterResource, NKesus::TEvKesus::TEvDeleteQuoterResourceResult>(
             quoterPath, cmd, requestId, TActivationContext::AsActorContext().SelfID

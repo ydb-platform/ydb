@@ -197,8 +197,8 @@ public:
         return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;
     }
 
-    TFakeSchemeShard(const TActorId &tablet, TTabletStorageInfo *info,
-                     TActorId sender, const TVector<std::pair<TString, ui64>> &subDomains)
+    TFakeSchemeShard(const TActorId &tablet, TTabletStorageInfo *info, 
+                     TActorId sender, const TVector<std::pair<TString, ui64>> &subDomains) 
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
         , Sender(sender)
@@ -227,7 +227,7 @@ public:
 
     THashMap<TString, ui64> SubDomains;
     THashMap<ui64, TString> Paths;
-    TActorId Sender;
+    TActorId Sender; 
     TVector<TAutoPtr<IEventHandle>> Queue;
     bool HoldResolve;
 };
@@ -249,7 +249,7 @@ class TFakeBSController : public TActor<TFakeBSController>, public TTabletExecut
     }
 
 public:
-    TFakeBSController(const TActorId &tablet, TTabletStorageInfo *info)
+    TFakeBSController(const TActorId &tablet, TTabletStorageInfo *info) 
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
     {
@@ -283,7 +283,7 @@ class TFakeTenantSlotBroker : public TActor<TFakeTenantSlotBroker>, public TTabl
         Die(ctx);
     }
 
-    void SendState(const TString &name, TActorId sender, const TActorContext &ctx)
+    void SendState(const TString &name, TActorId sender, const TActorContext &ctx) 
     {
         auto *resp = new TEvTenantSlotBroker::TEvTenantState;
         resp->Record.SetTenantName(name);
@@ -304,7 +304,7 @@ class TFakeTenantSlotBroker : public TActor<TFakeTenantSlotBroker>, public TTabl
     }
 
 public:
-    TFakeTenantSlotBroker(const TActorId &tablet, TTabletStorageInfo *info)
+    TFakeTenantSlotBroker(const TActorId &tablet, TTabletStorageInfo *info) 
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
     {
@@ -350,7 +350,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
 
     void ResolveKey(TSubDomainKey key, const TActorContext &ctx)
     {
-        TActorId clientId = ctx.Register(NKikimr::NTabletPipe::CreateClient(ctx.SelfID, key.GetSchemeShard()));
+        TActorId clientId = ctx.Register(NKikimr::NTabletPipe::CreateClient(ctx.SelfID, key.GetSchemeShard())); 
         auto *request = new TEvSchemeShard::TEvDescribeScheme(key.GetSchemeShard(), key.GetPathId());
         NTabletPipe::SendData(ctx, clientId, request);
         ctx.Send(clientId, new NKikimr::TEvTabletPipe::TEvShutdown);
@@ -373,7 +373,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
         CheckState(ctx);
     }
 
-    TActorId Boot(const TActorContext& ctx, TTabletTypes::EType tabletType, std::function<IActor* (const TActorId &, TTabletStorageInfo *)> op,
+    TActorId Boot(const TActorContext& ctx, TTabletTypes::EType tabletType, std::function<IActor* (const TActorId &, TTabletStorageInfo *)> op, 
                   TBlobStorageGroupType::EErasureSpecies erasure)
     {
         TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
@@ -381,7 +381,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
         return ctx.ExecutorThread.RegisterActor(CreateBootstrapper(CreateTestTabletInfo(State.NextTabletId, tabletType, erasure), bi.Get()));
     }
 
-    void SendDeletionNotification(ui64 tabletId, TActorId waiter, const TActorContext& ctx)
+    void SendDeletionNotification(ui64 tabletId, TActorId waiter, const TActorContext& ctx) 
     {
         TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();
         FillTabletInfo(response->Record, tabletId, nullptr);
@@ -406,7 +406,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
         const auto bootMode = ev->Get()->Record.GetTabletBootMode();
         auto it = State.Tablets.find(key);
         const auto& defaultTabletTypes = AppData(ctx)->DefaultTabletTypes;
-        TActorId bootstrapperActorId;
+        TActorId bootstrapperActorId; 
         if (it == State.Tablets.end()) {
             if (ev->Get()->Record.AllowedDomainsSize()) {
                 bool found = false;
@@ -476,10 +476,10 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
             if (it != State.Tablets.end()) {
                 ctx.Send(ctx.SelfID, new TEvFakeHive::TEvNotifyTabletDeleted(it->second.TabletId));
 
-                TActorId bootstrapperActorId = it->second.BootstrapperActorId;
+                TActorId bootstrapperActorId = it->second.BootstrapperActorId; 
                 ctx.Send(bootstrapperActorId, new TEvBootstrapper::TEvStandBy());
 
-                for (TActorId waiter : it->second.DeletionWaiters) {
+                for (TActorId waiter : it->second.DeletionWaiters) { 
                     SendDeletionNotification(it->second.TabletId, waiter, ctx);
                 }
                 State.TabletIdToOwner.erase(it->second.TabletId);
@@ -504,10 +504,10 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
             if (it != State.Tablets.end()) {
                 ctx.Send(ctx.SelfID, new TEvFakeHive::TEvNotifyTabletDeleted(it->second.TabletId));
 
-                TActorId bootstrapperActorId = it->second.BootstrapperActorId;
+                TActorId bootstrapperActorId = it->second.BootstrapperActorId; 
                 ctx.Send(bootstrapperActorId, new TEvBootstrapper::TEvStandBy());
 
-                for (TActorId waiter : it->second.DeletionWaiters) {
+                for (TActorId waiter : it->second.DeletionWaiters) { 
                     SendDeletionNotification(it->second.TabletId, waiter, ctx);
                 }
                 State.TabletIdToOwner.erase(it->second.TabletId);
@@ -640,7 +640,7 @@ public:
         return NKikimrServices::TActivity::HIVE_ACTOR;
     }
 
-    TFakeHive(const TActorId &tablet, TTabletStorageInfo *info, TActorId sender,
+    TFakeHive(const TActorId &tablet, TTabletStorageInfo *info, TActorId sender, 
               ui64 hiveId, const THashMap<TSubDomainKey, TString> &subDomainKeys)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
@@ -680,8 +680,8 @@ public:
         }
     }
 
-    THashMap<TActorId, TClientInfo> Clients;
-    TActorId Sender;
+    THashMap<TActorId, TClientInfo> Clients; 
+    TActorId Sender; 
     THashMap<TString, TClientInfo> ExpectedState;
     bool WaitForState;
     ui64 HiveId;
@@ -763,7 +763,7 @@ void TTenantTestRuntime::CreateTenantPool(ui32 nodeIndex, const TTenantTestConfi
     tenantPoolConfig->DynamicSlotLabel = Extension.GetMonitoringConfig().GetDatabaseLabels()
         .GetDynamicSlotLabelValue();
 
-    TActorId actorId = Register(NKikimr::CreateTenantPool(tenantPoolConfig), nodeIndex, 0, TMailboxType::Revolving, 0);
+    TActorId actorId = Register(NKikimr::CreateTenantPool(tenantPoolConfig), nodeIndex, 0, TMailboxType::Revolving, 0); 
     EnableScheduleForActor(actorId, true);
     RegisterService(MakeTenantPoolRootID(), actorId, nodeIndex);
 }
@@ -932,7 +932,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     // Create TxProxy services
     for (size_t i = 0; i< Config.Nodes.size(); ++i) {
         IActor* txProxy = CreateTxProxy(GetTxAllocatorTabletIds());
-        TActorId txProxyId = Register(txProxy, i);
+        TActorId txProxyId = Register(txProxy, i); 
         RegisterService(MakeTxProxyID(), txProxyId, i);
     }
 
@@ -971,7 +971,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
         // Get list of nodes to reveal IC ports.
 
-        Send(new IEventHandle(GetNameserviceActorId(), Sender, new TEvInterconnect::TEvListNodes));
+        Send(new IEventHandle(GetNameserviceActorId(), Sender, new TEvInterconnect::TEvListNodes)); 
         TAutoPtr<IEventHandle> handle;
         auto reply1 = GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handle);
 

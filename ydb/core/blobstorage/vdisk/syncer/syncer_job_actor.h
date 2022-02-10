@@ -28,6 +28,6 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateSyncerJob(const TIntrusivePtr<TSyncerContext> &sc,
                             std::unique_ptr<NSyncer::TSyncerJobTask> task,
-                            const TActorId &notifyId);
+                            const TActorId &notifyId); 
 
 } // NKikimr

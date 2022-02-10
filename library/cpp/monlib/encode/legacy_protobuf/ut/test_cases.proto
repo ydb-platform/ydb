@@ -1,26 +1,26 @@
-import "library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.proto";
+import "library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.proto"; 
 
 message TSimple {
-    optional uint64 Foo = 1       [ (NMonProto.Metric).Type = GAUGE ];
-    optional double Bar = 2        [ (NMonProto.Metric).Type = GAUGE ];
-    optional double Baz = 3        [ (NMonProto.Metric).Type = RATE ];
+    optional uint64 Foo = 1       [ (NMonProto.Metric).Type = GAUGE ]; 
+    optional double Bar = 2        [ (NMonProto.Metric).Type = GAUGE ]; 
+    optional double Baz = 3        [ (NMonProto.Metric).Type = RATE ]; 
     optional string Label = 4;
 }
 
 message TRepeated {
-    repeated TSimple Messages = 1 [ (NMonProto.Metric).Path = false ];
+    repeated TSimple Messages = 1 [ (NMonProto.Metric).Path = false ]; 
 };
 
 message TRepeatedWithPath {
-    repeated TSimple Namespace = 1 [ (NMonProto.Metric).Path = true ];
+    repeated TSimple Namespace = 1 [ (NMonProto.Metric).Path = true ]; 
 };
 
 message TNestedWithKeys {
-    repeated TSimple Namespace = 1 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "my_label:Label fixed_label=fixed_value numbered:#" ];
+    repeated TSimple Namespace = 1 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "my_label:Label fixed_label=fixed_value numbered:#" ]; 
 };
 
 message TDeepNesting {
-    optional TRepeatedWithPath Nested = 1 [ (NMonProto.Metric).Path = false ];
+    optional TRepeatedWithPath Nested = 1 [ (NMonProto.Metric).Path = false ]; 
 };
 
 enum EEnum {
@@ -29,43 +29,43 @@ enum EEnum {
 };
 
 message TNonStringKeys {
-    optional uint32 Foo = 1 [ (NMonProto.Metric).Type = GAUGE ];
+    optional uint32 Foo = 1 [ (NMonProto.Metric).Type = GAUGE ]; 
     optional EEnum Enum = 2;
     optional uint32 Int = 3;
 };
 
 message TRepeatedNonStringKeys {
-    repeated TNonStringKeys Nested = 1 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "enum:Enum int:Int" ];
+    repeated TNonStringKeys Nested = 1 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "enum:Enum int:Int" ]; 
 };
 
 message TExtraLabels {
-    optional NMonProto.TExtraLabelMetrics ExtraAsIs = 1 [ (NMonProto.Metric).Type = GAUGE ];
-    optional NMonProto.TExtraLabelMetrics ExtraDeriv = 2 [ (NMonProto.Metric).Type = RATE ];
+    optional NMonProto.TExtraLabelMetrics ExtraAsIs = 1 [ (NMonProto.Metric).Type = GAUGE ]; 
+    optional NMonProto.TExtraLabelMetrics ExtraDeriv = 2 [ (NMonProto.Metric).Type = RATE ]; 
 };
 
 message TRepeatedWithName {
     optional string Name = 1;
-    repeated TSimple Nested = 2 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "my_label:Label" ];
+    repeated TSimple Nested = 2 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "my_label:Label" ]; 
 };
 
 message TKeysFromNonLeaf {
-    repeated TRepeatedWithName Nested = 1 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "name:Name" ];
+    repeated TRepeatedWithName Nested = 1 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "name:Name" ]; 
 };
 
 
 message TNamedCounter {
     optional string Name = 1;
-    optional uint64 Count = 2 [ (NMonProto.Metric).Type = RATE ];
+    optional uint64 Count = 2 [ (NMonProto.Metric).Type = RATE ]; 
 }
 
 message TCrawlerCounters {
     message TStatusCounters {
-        repeated TNamedCounter ZoraResponses = 3 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "ZoraResponse:Name" ];
-        repeated TNamedCounter FetcherResponses = 4 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "SpiderResponse:Name" ];
-        repeated TNamedCounter RotorResponses = 5 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "SpiderResponse:Name" ];
-        repeated TNamedCounter PDFetchResponses = 6 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "PDFetchResponse:Name" ];
-        repeated TNamedCounter CalcResponses = 7 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "CalcResponse:Name" ];
-        repeated TNamedCounter Responses = 8 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "AggregatedResponse:Name" ];
+        repeated TNamedCounter ZoraResponses = 3 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "ZoraResponse:Name" ]; 
+        repeated TNamedCounter FetcherResponses = 4 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "SpiderResponse:Name" ]; 
+        repeated TNamedCounter RotorResponses = 5 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "SpiderResponse:Name" ]; 
+        repeated TNamedCounter PDFetchResponses = 6 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "PDFetchResponse:Name" ]; 
+        repeated TNamedCounter CalcResponses = 7 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "CalcResponse:Name" ]; 
+        repeated TNamedCounter Responses = 8 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "AggregatedResponse:Name" ]; 
     }
 
     message TPolicyCounters {
@@ -73,18 +73,18 @@ message TCrawlerCounters {
         optional string Name = 2;
         optional string Zone = 3;
 
-        optional TStatusCounters StatusCounters = 4 [ (NMonProto.Metric).Path = true ];
+        optional TStatusCounters StatusCounters = 4 [ (NMonProto.Metric).Path = true ]; 
     }
 
     optional string Component = 1;
-    repeated TPolicyCounters PoliciesCounters = 3 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "SubComponent:SubComponent Policy:Name Zone:Zone" ];
+    repeated TPolicyCounters PoliciesCounters = 3 [ (NMonProto.Metric).Path = true, (NMonProto.Metric).Keys = "SubComponent:SubComponent Policy:Name Zone:Zone" ]; 
 }
 
 message TTimeLogHist {
     optional uint32 MinBucketMillisec = 1;
-    repeated uint64 Buckets = 2 [ (NMonProto.Metric).Type = RATE, (NMonProto.Metric).Keys = "slot:#" ];
+    repeated uint64 Buckets = 2 [ (NMonProto.Metric).Type = RATE, (NMonProto.Metric).Keys = "slot:#" ]; 
 }
 
 message TKiwiCounters {
-    optional TTimeLogHist Times = 22 [ (NMonProto.Metric).Path = true ];
+    optional TTimeLogHist Times = 22 [ (NMonProto.Metric).Path = true ]; 
 }

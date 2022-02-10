@@ -207,14 +207,14 @@ public:
     bool IsAlive() const;
     bool CanBeAlive() const; // IsAlive() + <Unknown>
 
-    bool IsAliveOnLocal(const TActorId& local) const;
+    bool IsAliveOnLocal(const TActorId& local) const; 
     bool IsStopped() const;
     bool InitiateBoot();
     bool BecomeStarting(TNodeId nodeId);
     bool BecomeRunning(TNodeId nodeId);
     bool BecomeStopped();
 
-    void SendStopTablet(const TActorId& local, TFullTabletId tabletId);
+    void SendStopTablet(const TActorId& local, TFullTabletId tabletId); 
 
     bool InitiateStop();
 

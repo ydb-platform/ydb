@@ -3,7 +3,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 #include <util/random/fast.h>
 #include <util/generic/queue.h>
 
@@ -277,7 +277,7 @@ class TPDiskLogWriterTestLoadActor : public TActorBootstrapped<TPDiskLogWriterTe
 
     ui64 WrittenBytes = 0;
 
-    const TActorId Parent;
+    const TActorId Parent; 
     ui64 Tag;
     ui32 DurationSeconds;
     i32 OwnerInitInProgress = 0;
@@ -306,7 +306,7 @@ public:
     }
 
     TPDiskLogWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLogLoadStart& cmd,
-            const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
+            const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) 
         : Parent(parent)
         , Tag(tag)
         , Rng(Now().GetValue())
@@ -694,7 +694,7 @@ public:
 };
 
 IActor *CreatePDiskLogWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLogLoadStart& cmd,
-        const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
+        const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) { 
     return new TPDiskLogWriterTestLoadActor(cmd, parent, counters, index, tag);
 }
 

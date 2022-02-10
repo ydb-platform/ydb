@@ -10,7 +10,7 @@
 #include <ydb/core/blobstorage/base/bufferwithgaps.h>
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 #include <util/generic/map.h>
 
 
@@ -134,7 +134,7 @@ struct TEvYardInit : public TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit>
     TOwnerRound OwnerRound;
     TVDiskID VDisk;
     ui64 PDiskGuid;
-    TActorId CutLogID; // ask this actor about log cut
+    TActorId CutLogID; // ask this actor about log cut 
     TActorId WhiteboardProxyId;
     ui32 SlotId;
 

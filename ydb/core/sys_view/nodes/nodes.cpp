@@ -25,7 +25,7 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TNodesScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TNodesScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId, 
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
     {
@@ -85,7 +85,7 @@ private:
             return;
         }
 
-        const TActorId nameserviceId = GetNameserviceActorId();
+        const TActorId nameserviceId = GetNameserviceActorId(); 
         Send(nameserviceId, new TEvInterconnect::TEvListNodes());
     }
 
@@ -103,7 +103,7 @@ private:
                 nodeId >= NodeIdFrom &&
                 nodeId <= NodeIdTo)
             {
-                TActorId whiteboardId = MakeNodeWhiteboardServiceId(nodeId);
+                TActorId whiteboardId = MakeNodeWhiteboardServiceId(nodeId); 
                 auto request = MakeHolder<TEvWhiteboard::TEvSystemStateRequest>();
 
                 Send(whiteboardId, request.Release(),
@@ -233,7 +233,7 @@ private:
     THashMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> WBSystemInfo;
 };
 
-THolder<IActor> CreateNodesScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<IActor> CreateNodesScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId, 
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     return MakeHolder<TNodesScan>(ownerId, scanId, tableId, tableRange, columns);

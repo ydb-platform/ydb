@@ -315,7 +315,7 @@ private:
             ev->Record.SetTraceId(traceId.GetRef());
         }
 
-        ActorIdToProto(this->SelfId(), ev->Record.MutableRequestActorId());
+        ActorIdToProto(this->SelfId(), ev->Record.MutableRequestActorId()); 
 
         TParseRequestError parseError;
         if (!FillKqpRequest(*req, ev->Record, parseError)) {
@@ -498,7 +498,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext& ctx) {
-        ExecuterActorId_ = ActorIdFromProto(ev->Get()->Record.GetExecuterActorId());
+        ExecuterActorId_ = ActorIdFromProto(ev->Get()->Record.GetExecuterActorId()); 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " ExecuterActorId: " << ExecuterActorId_);
     }
 
@@ -618,7 +618,7 @@ private:
     TSchedulerCookieHolder TimeoutTimerCookieHolder_;
 
     TVector<std::unique_ptr<NYql::NDqProto::TDqExecutionStats>> ExecutionProfiles_;
-    TActorId ExecuterActorId_;
+    TActorId ExecuterActorId_; 
 };
 
 } // namespace

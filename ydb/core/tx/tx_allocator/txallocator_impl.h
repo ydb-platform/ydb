@@ -79,7 +79,7 @@ public:
         return NKikimrServices::TActivity::TX_ALLOCATOR_ACTOR;
     }
 
-    TTxAllocator(const TActorId &tablet, TTabletStorageInfo *info);
+    TTxAllocator(const TActorId &tablet, TTabletStorageInfo *info); 
 
     STFUNC(StateInit) {
         StateInitImpl(ev, ctx);

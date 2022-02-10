@@ -19,7 +19,7 @@ namespace NKikimr {
     const TBlobStorageGroupType::EErasureSpecies DataGroupErasure = TBlobStorageGroupType::ErasureNone;
 
     TActorId FollowerTablet(TTestActorRuntime &runtime, const TActorId &launcher, TTabletStorageInfo *info,
-        std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op);
+        std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op); 
     TActorId ResolveTablet(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex = 0, bool sysTablet = false);
     void ForwardToTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, IEventBase *ev, ui32 nodeIndex = 0, bool sysTablet = false);
     void InvalidateTabletResolverCache(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex = 0);
@@ -37,7 +37,7 @@ namespace NKikimr {
     }
 
     const TChannelsBindings DEFAULT_BINDED_CHANNELS = {GetDefaultChannelBind(), GetDefaultChannelBind(), GetDefaultChannelBind()};
-    void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 domainId = 0, ui32 nGroups = 1);
+    void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 domainId = 0, ui32 nGroups = 1); 
     void SetupChannelProfiles(TAppPrepare &app, ui32 domainId = 0, ui32 nchannels = 3);
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count = 1);
 
@@ -75,15 +75,15 @@ namespace NKikimr {
         virtual ~ITabletScheduledEventsGuard() {}
     };
 
-    TAutoPtr<ITabletScheduledEventsGuard> CreateTabletScheduledEventsGuard(const TVector<ui64>& tabletIds, TTestActorRuntime& runtime, const TActorId& sender);
-    ui64 GetFreePDiskSize(TTestActorRuntime& runtime, const TActorId& sender);
-    void PrintTabletDb(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender);
+    TAutoPtr<ITabletScheduledEventsGuard> CreateTabletScheduledEventsGuard(const TVector<ui64>& tabletIds, TTestActorRuntime& runtime, const TActorId& sender); 
+    ui64 GetFreePDiskSize(TTestActorRuntime& runtime, const TActorId& sender); 
+    void PrintTabletDb(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender); 
 
     NTabletPipe::TClientConfig GetPipeConfigWithRetriesAndFollowers();
 
     IActor* CreateFlatDummyTablet(const TActorId &tablet, TTabletStorageInfo *info);
 
-    void WaitScheduledEvents(TTestActorRuntime &runtime, TDuration delay, const TActorId &sender, ui32 nodeIndex = 0);
+    void WaitScheduledEvents(TTestActorRuntime &runtime, TDuration delay, const TActorId &sender, ui32 nodeIndex = 0); 
 
 
     struct TEvFakeHive {
@@ -112,14 +112,14 @@ namespace NKikimr {
     struct TFakeHiveTabletInfo {
         const TTabletTypes::EType Type;
         const ui64 TabletId;
-        TActorId BootstrapperActorId;
+        TActorId BootstrapperActorId; 
 
         TChannelsBindings BoundChannels;
         ui32 ChannelsProfile;
 
-        THashSet<TActorId> DeletionWaiters;
+        THashSet<TActorId> DeletionWaiters; 
 
-        TFakeHiveTabletInfo(TTabletTypes::EType type, ui64 tabletId, TActorId bootstrapperActorId)
+        TFakeHiveTabletInfo(TTabletTypes::EType type, ui64 tabletId, TActorId bootstrapperActorId) 
             : Type(type)
             , TabletId(tabletId)
             , BootstrapperActorId(bootstrapperActorId)
@@ -162,7 +162,7 @@ namespace NKikimr {
         }
     };
 
-    typedef std::function<std::function<IActor* (const TActorId &, TTabletStorageInfo*)>(ui32 type)> TGetTabletCreationFunc;
+    typedef std::function<std::function<IActor* (const TActorId &, TTabletStorageInfo*)>(ui32 type)> TGetTabletCreationFunc; 
 
     void BootFakeHive(TTestActorRuntime& runtime, ui64 tabletId, TFakeHiveState::TPtr state,
                       TGetTabletCreationFunc getTabletCreationFunc = nullptr);

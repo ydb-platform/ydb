@@ -1,29 +1,29 @@
-#pragma once
-
-#include "mkql_node.h"
-
+#pragma once 
+ 
+#include "mkql_node.h" 
+ 
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
-//////////////////////////////////////////////////////////////////////////////
-// TFunctionTypeInfo
-//////////////////////////////////////////////////////////////////////////////
-struct TFunctionTypeInfo
-{
-    TCallableType* FunctionType = nullptr;
-    const TType* RunConfigType = nullptr;
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// TFunctionTypeInfo 
+////////////////////////////////////////////////////////////////////////////// 
+struct TFunctionTypeInfo 
+{ 
+    TCallableType* FunctionType = nullptr; 
+    const TType* RunConfigType = nullptr; 
     const TType* UserType = nullptr;
-    NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation;
+    NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation; 
     NUdf::TUniquePtr<NUdf::IBoxedValue> BlockImplementation;
     TString ModuleIR;
     TString ModuleIRUniqID;
     TString IRFunctionName;
-    bool Deterministic = true;
-};
-
-//////////////////////////////////////////////////////////////////////////////
+    bool Deterministic = true; 
+}; 
+ 
+////////////////////////////////////////////////////////////////////////////// 
 // TArgInfo
 //////////////////////////////////////////////////////////////////////////////
 struct TArgInfo {
@@ -33,64 +33,64 @@ struct TArgInfo {
 };
 
 //////////////////////////////////////////////////////////////////////////////
-// TFunctionTypeInfoBuilder
-//////////////////////////////////////////////////////////////////////////////
-class TFunctionTypeInfoBuilder: public NUdf::IFunctionTypeInfoBuilder
-{
-public:
-    TFunctionTypeInfoBuilder(
-            const TTypeEnvironment& env,
+// TFunctionTypeInfoBuilder 
+////////////////////////////////////////////////////////////////////////////// 
+class TFunctionTypeInfoBuilder: public NUdf::IFunctionTypeInfoBuilder 
+{ 
+public: 
+    TFunctionTypeInfoBuilder( 
+            const TTypeEnvironment& env, 
             NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
             const TStringBuf& moduleName,
             NUdf::ICountersProvider* countersProvider,
             const NUdf::TSourcePosition& pos,
             const NUdf::ISecureParamsProvider* provider = nullptr);
-
+ 
     NUdf::IFunctionTypeInfoBuilder1& ImplementationImpl(
-            NUdf::TUniquePtr<NUdf::IBoxedValue> impl) override;
-
+            NUdf::TUniquePtr<NUdf::IBoxedValue> impl) override; 
+ 
     NUdf::IFunctionTypeInfoBuilder1& ReturnsImpl(NUdf::TDataTypeId typeId) override;
     NUdf::IFunctionTypeInfoBuilder1& ReturnsImpl(const NUdf::TType* type) override;
     NUdf::IFunctionTypeInfoBuilder1& ReturnsImpl(
-            const NUdf::ITypeBuilder& typeBuilder) override;
-
-    NUdf::IFunctionArgTypesBuilder::TPtr Args(ui32 expectedItem) override;
+            const NUdf::ITypeBuilder& typeBuilder) override; 
+ 
+    NUdf::IFunctionArgTypesBuilder::TPtr Args(ui32 expectedItem) override; 
     NUdf::IFunctionTypeInfoBuilder1& OptionalArgsImpl(ui32 optionalArgs) override;
     NUdf::IFunctionTypeInfoBuilder1& PayloadImpl(const NUdf::TStringRef& payload) override;
-
+ 
     NUdf::IFunctionTypeInfoBuilder1& RunConfigImpl(NUdf::TDataTypeId typeId) override;
     NUdf::IFunctionTypeInfoBuilder1& RunConfigImpl(const NUdf::TType* type) override;
     NUdf::IFunctionTypeInfoBuilder1& RunConfigImpl(
-            const NUdf::ITypeBuilder& typeBuilder) override;
-
+            const NUdf::ITypeBuilder& typeBuilder) override; 
+ 
     NUdf::IFunctionTypeInfoBuilder1& UserTypeImpl(NUdf::TDataTypeId typeId) override;
     NUdf::IFunctionTypeInfoBuilder1& UserTypeImpl(const NUdf::TType* type) override;
     NUdf::IFunctionTypeInfoBuilder1& UserTypeImpl(const NUdf::ITypeBuilder& typeBuilder) override;
 
-    void SetError(const NUdf::TStringRef& error) override;
+    void SetError(const NUdf::TStringRef& error) override; 
     inline bool HasError() const { return !Error_.empty(); }
     inline const TString& GetError() const { return Error_; }
-
-    void Build(TFunctionTypeInfo* funcInfo);
-
+ 
+    void Build(TFunctionTypeInfo* funcInfo); 
+ 
     NUdf::TType* Primitive(NUdf::TDataTypeId typeId) const override;
-    NUdf::IOptionalTypeBuilder::TPtr Optional() const override;
-    NUdf::IListTypeBuilder::TPtr List() const override;
-    NUdf::IDictTypeBuilder::TPtr Dict() const override;
-    NUdf::IStructTypeBuilder::TPtr Struct(ui32 expectedItems) const override;
-    NUdf::ITupleTypeBuilder::TPtr Tuple(ui32 expectedItems) const override;
-    NUdf::ICallableTypeBuilder::TPtr Callable(ui32 expectedArgs) const override;
-
-    NUdf::TType* Void() const override;
+    NUdf::IOptionalTypeBuilder::TPtr Optional() const override; 
+    NUdf::IListTypeBuilder::TPtr List() const override; 
+    NUdf::IDictTypeBuilder::TPtr Dict() const override; 
+    NUdf::IStructTypeBuilder::TPtr Struct(ui32 expectedItems) const override; 
+    NUdf::ITupleTypeBuilder::TPtr Tuple(ui32 expectedItems) const override; 
+    NUdf::ICallableTypeBuilder::TPtr Callable(ui32 expectedArgs) const override; 
+ 
+    NUdf::TType* Void() const override; 
     NUdf::TType* Resource(const NUdf::TStringRef& tag) const override;
     NUdf::IVariantTypeBuilder::TPtr Variant() const override;
-
+ 
     NUdf::IStreamTypeBuilder::TPtr Stream() const override;
 
-    NUdf::ITypeInfoHelper::TPtr TypeInfoHelper() const override;
-
-    const TTypeEnvironment& Env() const { return Env_; }
-
+    NUdf::ITypeInfoHelper::TPtr TypeInfoHelper() const override; 
+ 
+    const TTypeEnvironment& Env() const { return Env_; } 
+ 
     NUdf::TCounter GetCounter(const NUdf::TStringRef& name, bool deriv) override;
     NUdf::TScopedProbe GetScopedProbe(const NUdf::TStringRef& name) override;
     NUdf::TSourcePosition GetSourcePosition() override;
@@ -119,12 +119,12 @@ public:
     NUdf::TType* Tagged(const NUdf::TType* baseType, const NUdf::TStringRef& tag) const override;
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;
 
-private:
-    const TTypeEnvironment& Env_;
-    NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation_;
+private: 
+    const TTypeEnvironment& Env_; 
+    NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation_; 
     NUdf::TUniquePtr<NUdf::IBoxedValue> BlockImplementation_;
-    const TType* ReturnType_;
-    const TType* RunConfigType_;
+    const TType* ReturnType_; 
+    const TType* RunConfigType_; 
     const TType* UserType_;
     TVector<TArgInfo> Args_;
     TString Error_;
@@ -138,8 +138,8 @@ private:
     TString ModuleIR_;
     TString ModuleIRUniqID_;
     TString IRFunctionName_;
-};
-
+}; 
+ 
 class TTypeInfoHelper : public NUdf::ITypeInfoHelper
 {
 public:

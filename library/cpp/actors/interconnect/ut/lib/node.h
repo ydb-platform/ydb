@@ -62,7 +62,7 @@ public:
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(),
             TMailboxType::ReadAsFilled, 0));
 
-        const TActorId loggerActorId(0, "logger");
+        const TActorId loggerActorId(0, "logger"); 
         constexpr ui32 LoggerComponentId = 410; // NKikimrServices::LOGGER
 
         auto loggerSettings = MakeIntrusive<NLog::TSettings>(
@@ -114,7 +114,7 @@ public:
         ActorSystem->Stop();
     }
 
-    bool Send(const TActorId& recipient, IEventBase* ev) {
+    bool Send(const TActorId& recipient, IEventBase* ev) { 
         return ActorSystem->Send(recipient, ev);
     }
 
@@ -127,7 +127,7 @@ public:
     }
 
     void RegisterServiceActor(const TActorId& serviceId, IActor* actor) {
-        const TActorId actorId = ActorSystem->Register(actor);
+        const TActorId actorId = ActorSystem->Register(actor); 
         ActorSystem->RegisterLocalService(serviceId, actorId);
     }
 

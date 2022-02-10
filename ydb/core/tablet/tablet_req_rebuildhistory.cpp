@@ -185,7 +185,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         }
     };
 
-    const TActorId Owner;
+    const TActorId Owner; 
     TIntrusivePtr<TTabletStorageInfo> Info;
     const ui32 BlockedGen;
 

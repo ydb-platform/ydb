@@ -42,7 +42,7 @@ namespace NKikimr {
 
         TLevelIndexStatActor(
                 const TIntrusivePtr<THullCtx> &hullCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 TLevelIndexSnapshot &&snapshot,
                 TEvBlobStorage::TEvVDbStat::TPtr &ev,
                 std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
@@ -56,7 +56,7 @@ namespace NKikimr {
 
     private:
         TIntrusivePtr<THullCtx> HullCtx;
-        const TActorId ParentId;
+        const TActorId ParentId; 
         TLevelIndexSnapshot Snapshot;
         TEvBlobStorage::TEvVDbStat::TPtr Ev;
         std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> Result;

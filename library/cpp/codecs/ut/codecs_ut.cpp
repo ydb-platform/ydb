@@ -914,7 +914,7 @@ private:
                 {
                     TBufferInput bin(buff);
                     c = ICodec::Restore(&bin);
-                    UNIT_ASSERT(c->AlreadyTrained());
+                    UNIT_ASSERT(c->AlreadyTrained()); 
                 }
             }
 
@@ -937,7 +937,7 @@ private:
 
                     UNIT_ASSERT_EQUAL_C(AsStrBuf(inlearn[i]), AsStrBuf(vecl),
                                         PrintError(TStringBuf(inlearn[i].data(), inlearn[i].size()),
-                                                   TStringBuf(vecl.data(), vecl.size()), c->GetName(), i));
+                                                   TStringBuf(vecl.data(), vecl.size()), c->GetName(), i)); 
                 }
             }
         }
@@ -961,7 +961,7 @@ private:
                 c->Decode(AsStrBuf(out), in1);
                 UNIT_ASSERT_EQUAL_C(AsStrBuf(in[i]), AsStrBuf(in1),
                                     PrintError(TStringBuf(in[i].data(), in[i].size()),
-                                               TStringBuf(in1.data(), in1.size()), c->GetName(), i));
+                                               TStringBuf(in1.data(), in1.size()), c->GetName(), i)); 
             }
         }
     }

@@ -75,18 +75,18 @@ PEERDIR(
     contrib/libs/libc_compat
     contrib/libs/openssl
     library/cpp/actors/core
-    library/cpp/actors/dnscachelib
+    library/cpp/actors/dnscachelib 
     library/cpp/actors/dnsresolver
     library/cpp/actors/helpers
     library/cpp/actors/prof
     library/cpp/actors/protos
     library/cpp/actors/util
     library/cpp/digest/crc32c
-    library/cpp/json
+    library/cpp/json 
     library/cpp/lwtrace
-    library/cpp/monlib/dynamic_counters
+    library/cpp/monlib/dynamic_counters 
     library/cpp/monlib/metrics
-    library/cpp/monlib/service/pages/tablesorter
+    library/cpp/monlib/service/pages/tablesorter 
     library/cpp/openssl/init
     library/cpp/packedtypes
 )

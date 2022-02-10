@@ -43,7 +43,7 @@ public:
         return NKikimrServices::TActivity::KQP_COMPILE_ACTOR;
     }
 
-    TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
+    TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings, 
         const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
         TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
         TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine)
@@ -159,7 +159,7 @@ private:
 private:
     void Continue(const TActorContext &ctx) {
         TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
-        TActorId selfId = ctx.SelfID;
+        TActorId selfId = ctx.SelfID; 
 
         auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
             bool finished = future.GetValue();
@@ -369,7 +369,7 @@ private:
     }
 
 private:
-    TActorId Owner;
+    TActorId Owner; 
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
     TString Uid;
@@ -382,7 +382,7 @@ private:
     TInstant StartTime;
     TDuration CompileCpuTime;
     TInstant RecompileStartTime;
-    TActorId TimeoutTimerActorId;
+    TActorId TimeoutTimerActorId; 
     TIntrusivePtr<IKqpGateway> Gateway;
     TIntrusivePtr<IKqpHost> KqpHost;
     TIntrusivePtr<IKqpHost::IAsyncQueryResult> AsyncCompileResult;
@@ -400,7 +400,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     }
 }
 
-IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
+IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings, 
     const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
     TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine)

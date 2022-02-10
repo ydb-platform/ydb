@@ -83,9 +83,9 @@ void SetupServices(TTestBasicRuntime& runtime) {
 
     // setup box and storage pool for testing
     {
-        TActorId edge = runtime.AllocateEdgeActor();
+        TActorId edge = runtime.AllocateEdgeActor(); 
 
-        runtime.Send(new IEventHandle(GetNameserviceActorId(), edge, new TEvInterconnect::TEvListNodes));
+        runtime.Send(new IEventHandle(GetNameserviceActorId(), edge, new TEvInterconnect::TEvListNodes)); 
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
@@ -137,9 +137,9 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
         const ui64 tabletId = MakeBSControllerID(0);
         bool allowConfiguring = false;
 
-        TActorId nodeWardenId;
+        TActorId nodeWardenId; 
         TTestActorRuntimeBase::TRegistrationObserver prevReg = runtime.SetRegistrationObserverFunc(
-                [&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+                [&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) { 
             if (IActor *actor = runtime.FindActor(actorId); dynamic_cast<NKikimr::NStorage::TNodeWarden*>(actor)) {
                 UNIT_ASSERT(!nodeWardenId);
                 nodeWardenId = actorId;
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
             return prevReg(runtime, parentId, actorId);
         });
 
-        TActorId clientId;
+        TActorId clientId; 
         TTestActorRuntimeBase::TEventObserver prev = runtime.SetObserverFunc(
                 [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
             if (auto *msg = ev->CastAsLocal<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()) {
@@ -183,11 +183,11 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
         runtime.DispatchEvents(opts);
 
         // trigger event
-        const TActorId recip = MakeBlobStorageProxyID(groupId);
-        const TActorId sender = runtime.AllocateEdgeActor(0);
-        const TActorId warden = MakeBlobStorageNodeWardenID(runtime.GetNodeId(0));
+        const TActorId recip = MakeBlobStorageProxyID(groupId); 
+        const TActorId sender = runtime.AllocateEdgeActor(0); 
+        const TActorId warden = MakeBlobStorageNodeWardenID(runtime.GetNodeId(0)); 
         Cerr << "=== Breaking pipe ===" << Endl;
-        runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, clientId, TActorId(), {}, 0));
+        runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, clientId, TActorId(), {}, 0)); 
         Cerr << "=== Sending put ===" << Endl;
         runtime.Send(new IEventHandle(recip, sender, new TEvBlobStorage::TEvPut(TLogoBlobID(1, 1, 1, 1, 1, 1), "1", TInstant::Max()),
             IEventHandle::FlagForwardOnNondelivery, 0, &warden), 0, true);

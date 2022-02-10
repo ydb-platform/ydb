@@ -275,7 +275,7 @@ private:
 
     TOperationId OperationId_;
     ui64 RawOperationId_ = 0;
-    TActorId PipeActorId_;
+    TActorId PipeActorId_; 
 };
 
 void TGRpcRequestProxy::Handle(TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx) {

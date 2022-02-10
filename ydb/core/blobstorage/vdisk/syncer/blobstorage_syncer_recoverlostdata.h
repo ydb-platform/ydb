@@ -28,8 +28,8 @@ namespace NKikimr {
     class TBlobStorageGroupInfo;
     IActor *CreateSyncerRecoverLostDataActor(const TIntrusivePtr<TSyncerContext> &sc,
                                              const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-                                             const TActorId &committerId,
-                                             const TActorId &notifyId,
+                                             const TActorId &committerId, 
+                                             const TActorId &notifyId, 
                                              TVDiskEternalGuid guid);
 
 } // NKikimr

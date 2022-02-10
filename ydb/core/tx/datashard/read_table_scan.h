@@ -21,8 +21,8 @@ TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId,
                                         ui64 shardId,
                                         TUserTable::TCPtr tableInfo,
                                         const NKikimrTxDataShard::TReadTableTransaction &tx,
-                                        TActorId sink,
-                                        TActorId dataShard);
+                                        TActorId sink, 
+                                        TActorId dataShard); 
 
 } // namespace NDataShard
 } // namespace NKikimr

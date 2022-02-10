@@ -1,11 +1,11 @@
-#pragma once
-
-#include "udf_version.h"
-#include "udf_types.h"
-#include "udf_ptr.h"
-#include "udf_string.h"
+#pragma once 
+ 
+#include "udf_version.h" 
+#include "udf_types.h" 
+#include "udf_ptr.h" 
+#include "udf_string.h" 
 #include "udf_value.h"
-
+ 
 #include <functional>
 
 #include <stdarg.h>
@@ -19,20 +19,20 @@
 #else
 #  define UDF_API __attribute__ ((visibility("default")))
 #endif
-
+ 
 #ifdef BUILD_UDF
-#define REGISTER_MODULES(...) \
-    extern "C" UDF_API void Register( \
+#define REGISTER_MODULES(...) \ 
+    extern "C" UDF_API void Register( \ 
             ::NYql::NUdf::IRegistrator& registrator, ui32 flags) { \
         Y_UNUSED(flags); \
         ::NYql::NUdf::RegisterHelper<__VA_ARGS__>(registrator); \
-    } \
-    extern "C" UDF_API ui32 AbiVersion() { \
+    } \ 
+    extern "C" UDF_API ui32 AbiVersion() { \ 
         return ::NYql::NUdf::CurrentAbiVersion(); \
     }\
     extern "C" UDF_API void SetBackTraceCallback(::NYql::NUdf::TBackTraceCallback callback) { \
         ::NYql::NUdf::SetBackTraceCallbackImpl(callback); \
-    }
+    } 
 #else
 #define REGISTER_MODULES(...) \
     namespace { \
@@ -45,10 +45,10 @@
 #endif
 
 namespace NYql {
-namespace NUdf {
-
-class IFunctionTypeInfoBuilder;
-
+namespace NUdf { 
+ 
+class IFunctionTypeInfoBuilder; 
+ 
 struct TStaticSymbols {
     void* (*UdfAllocateFunc)(ui64 size);
     void (*UdfFreeFunc)(const void* mem);
@@ -69,9 +69,9 @@ UDF_ASSERT_TYPE_SIZE(TStaticSymbols, 40);
 
 inline TStaticSymbols GetStaticSymbols();
 
-//////////////////////////////////////////////////////////////////////////////
-// IFunctionNamesSink
-//////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////// 
+// IFunctionNamesSink 
+////////////////////////////////////////////////////////////////////////////// 
 class IFunctionDescriptor
 {
 public:
@@ -98,65 +98,65 @@ public:
 UDF_ASSERT_TYPE_SIZE(IFunctionsSink, 8);
 
 typedef IFunctionsSink IFunctionNamesSink;
-
-//////////////////////////////////////////////////////////////////////////////
-// IUdfModule
-//////////////////////////////////////////////////////////////////////////////
-class IUdfModule
-{
-public:
-    struct TFlags {
-        enum {
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// IUdfModule 
+////////////////////////////////////////////////////////////////////////////// 
+class IUdfModule 
+{ 
+public: 
+    struct TFlags { 
+        enum { 
             TypesOnly = 0x01
-        };
-    };
-
-public:
-    virtual ~IUdfModule() = default;
-
+        }; 
+    }; 
+ 
+public: 
+    virtual ~IUdfModule() = default; 
+ 
     virtual void GetAllFunctions(IFunctionsSink& sink) const = 0;
-
-    virtual void BuildFunctionTypeInfo(
-            const TStringRef& name,
+ 
+    virtual void BuildFunctionTypeInfo( 
+            const TStringRef& name, 
             TType* userType,
-            const TStringRef& typeConfig,
-            ui32 flags,
-            IFunctionTypeInfoBuilder& builder) const = 0;
+            const TStringRef& typeConfig, 
+            ui32 flags, 
+            IFunctionTypeInfoBuilder& builder) const = 0; 
 
     virtual void CleanupOnTerminate() const = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(IUdfModule, 8);
-
-//////////////////////////////////////////////////////////////////////////////
-// TRegistrator
-//////////////////////////////////////////////////////////////////////////////
-class IRegistrator
-{
-public:
-    struct TFlags {
-        enum {
-            TypesOnly = 0x01,
-        };
-    };
-
-public:
-    virtual ~IRegistrator() = default;
-
-    virtual void AddModule(
-            const TStringRef& name,
-            TUniquePtr<IUdfModule> module) = 0;
-};
-
-UDF_ASSERT_TYPE_SIZE(IRegistrator, 8);
-
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(IUdfModule, 8); 
+ 
+////////////////////////////////////////////////////////////////////////////// 
+// TRegistrator 
+////////////////////////////////////////////////////////////////////////////// 
+class IRegistrator 
+{ 
+public: 
+    struct TFlags { 
+        enum { 
+            TypesOnly = 0x01, 
+        }; 
+    }; 
+ 
+public: 
+    virtual ~IRegistrator() = default; 
+ 
+    virtual void AddModule( 
+            const TStringRef& name, 
+            TUniquePtr<IUdfModule> module) = 0; 
+}; 
+ 
+UDF_ASSERT_TYPE_SIZE(IRegistrator, 8); 
+ 
 typedef void(*TBackTraceCallback)();
 
-using TRegisterFunctionPtr = void (*)(IRegistrator& registrator, ui32 flags);
-using TAbiVersionFunctionPtr = ui32 (*)();
+using TRegisterFunctionPtr = void (*)(IRegistrator& registrator, ui32 flags); 
+using TAbiVersionFunctionPtr = ui32 (*)(); 
 using TBindSymbolsFunctionPtr = void (*)(const TStaticSymbols& symbols);
 using TSetBackTraceCallbackPtr = void(*)(TBackTraceCallback callback);
-
+ 
 template<typename TModule>
 static inline void RegisterHelper(IRegistrator& registrator) {
     TUniquePtr<TModule> ptr(new TModule());
@@ -193,11 +193,11 @@ static inline void AddToStaticUdfRegistry() {
 }
 
 
-} // namspace NUdf
+} // namspace NUdf 
 } // namspace NYql
 
 extern "C" UDF_API void Register(NYql::NUdf::IRegistrator& registrator, ui32 flags);
-extern "C" UDF_API ui32 AbiVersion();
+extern "C" UDF_API ui32 AbiVersion(); 
 #if defined(_win_) || defined(_darwin_)
 extern "C" UDF_API void BindSymbols(const NYql::NUdf::TStaticSymbols& symbols);
 #endif

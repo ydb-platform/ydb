@@ -6,13 +6,13 @@
 
 #include <ydb/library/yql/providers/dq/actors/execution_helpers.h>
 
-#include <library/cpp/grpc/server/actors/logger.h>
-
+#include <library/cpp/grpc/server/actors/logger.h> 
+ 
 #include <utility>
 
 namespace NYql {
     using namespace NActors;
-    using namespace NGrpc;
+    using namespace NGrpc; 
     using namespace NYql::NDqs;
 
     class TGrpcExternalListener: public IExternalListener {
@@ -95,7 +95,7 @@ namespace NYql {
             Config.ICSettings);
     }
 
-    void TServiceNode::AddLocalService(TActorId actorId, const TActorSetupCmd& service) {
+    void TServiceNode::AddLocalService(TActorId actorId, const TActorSetupCmd& service) { 
         YQL_ENSURE(!ActorSystem);
         Setup->LocalServices.emplace_back(actorId, service);
     }
@@ -145,8 +145,8 @@ namespace NYql {
                            .SetKeepAliveProbeIntervalSec(1)
                            .SetServerBuilderMutator([](grpc::ServerBuilder& builder) {
                                builder.SetOption(std::make_unique<TCustomOption>());
-                           })
-                           .SetLogger(CreateActorSystemLogger(*ActorSystem, 413)); // 413 - NKikimrServices::GRPC_SERVER
+                           }) 
+                           .SetLogger(CreateActorSystemLogger(*ActorSystem, 413)); // 413 - NKikimrServices::GRPC_SERVER 
 
         Server = MakeHolder<TGRpcServer>(options);
         Service = TIntrusivePtr<IGRpcService>(new TDqsGrpcService(*ActorSystem, MetricsRegistry->GetSensors(), dqTaskPreprocessorFactories));

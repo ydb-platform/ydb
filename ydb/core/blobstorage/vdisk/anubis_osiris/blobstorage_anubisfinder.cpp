@@ -127,7 +127,7 @@ namespace NKikimr {
     class TAnubisCandidatesFinderActor : public TActorBootstrapped<TAnubisCandidatesFinderActor> {
         TIntrusivePtr<THullCtx> HullCtx;
         TActiveActors ActiveActors;
-        const TActorId ParentId;
+        const TActorId ParentId; 
         TLogoBlobID Pos; // start position
         TLogoBlobsSnapshot LogoBlobsSnap;
         TBarriersSnapshot BarriersSnap;
@@ -152,7 +152,7 @@ namespace NKikimr {
         }
 
         TAnubisCandidatesFinderActor(const TIntrusivePtr<THullCtx> &hullCtx,
-                                     const TActorId &parentId,
+                                     const TActorId &parentId, 
                                      const TLogoBlobID &pos,
                                      TLogoBlobsSnapshot &&logoBlobsSnap,
                                      TBarriersSnapshot &&barriersSnap)
@@ -170,7 +170,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     IActor *CreateAnubisCandidatesFinder(
                 const TIntrusivePtr<THullCtx> &hullCtx,
-                const TActorId &parentId,
+                const TActorId &parentId, 
                 const TLogoBlobID &pos,
                 TLogoBlobsSnapshot &&logoBlobsSnap,
                 TBarriersSnapshot &&barriersSnap) {

@@ -23,12 +23,12 @@
 #include "huf.h"
 
 
-/*===   Version   ===*/ 
-unsigned FSE_versionNumber(void) { return FSE_VERSION_NUMBER; } 
- 
- 
-/*===   Error Management   ===*/ 
-unsigned FSE_isError(size_t code) { return ERR_isError(code); } 
+/*===   Version   ===*/
+unsigned FSE_versionNumber(void) { return FSE_VERSION_NUMBER; }
+
+
+/*===   Error Management   ===*/
+unsigned FSE_isError(size_t code) { return ERR_isError(code); }
 const char* FSE_getErrorName(size_t code) { return ERR_getErrorName(code); }
 
 unsigned HUF_isError(size_t code) { return ERR_isError(code); }
@@ -158,15 +158,15 @@ size_t FSE_readNCount_body(short* normalizedCounter, unsigned* maxSVPtr, unsigne
         }
         {
             int const max = (2*threshold-1) - remaining;
-            int count; 
+            int count;
 
             if ((bitStream & (threshold-1)) < (U32)max) {
-                count = bitStream & (threshold-1); 
-                bitCount += nbBits-1; 
+                count = bitStream & (threshold-1);
+                bitCount += nbBits-1;
             } else {
-                count = bitStream & (2*threshold-1); 
+                count = bitStream & (2*threshold-1);
                 if (count >= threshold) count -= max;
-                bitCount += nbBits; 
+                bitCount += nbBits;
             }
 
             count--;   /* extra accuracy */
@@ -179,7 +179,7 @@ size_t FSE_readNCount_body(short* normalizedCounter, unsigned* maxSVPtr, unsigne
                 assert(count == -1);
                 remaining += count;
             }
-            normalizedCounter[charnum++] = (short)count; 
+            normalizedCounter[charnum++] = (short)count;
             previous0 = !count;
 
             assert(threshold > 1);

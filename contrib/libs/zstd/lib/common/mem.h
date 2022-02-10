@@ -1,11 +1,11 @@
-/* 
+/*
  * Copyright (c) Yann Collet, Facebook, Inc.
  * All rights reserved.
  *
- * This source code is licensed under both the BSD-style license (found in the 
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
- * in the COPYING file in the root directory of this source tree). 
- * You may select, at your option, one of the above-listed licenses. 
+ * This source code is licensed under both the BSD-style license (found in the
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found
+ * in the COPYING file in the root directory of this source tree).
+ * You may select, at your option, one of the above-listed licenses.
  */
 
 #ifndef MEM_H_MODULE
@@ -50,15 +50,15 @@ extern "C" {
 #  else
 #    include <stdint.h> /* intptr_t */
 #  endif
-  typedef   uint8_t BYTE; 
+  typedef   uint8_t BYTE;
   typedef   uint8_t U8;
   typedef    int8_t S8;
-  typedef  uint16_t U16; 
-  typedef   int16_t S16; 
-  typedef  uint32_t U32; 
-  typedef   int32_t S32; 
-  typedef  uint64_t U64; 
-  typedef   int64_t S64; 
+  typedef  uint16_t U16;
+  typedef   int16_t S16;
+  typedef  uint32_t U32;
+  typedef   int32_t S32;
+  typedef  uint64_t U64;
+  typedef   int64_t S64;
 #else
 # include <limits.h>
 #if CHAR_BIT != 8
@@ -138,11 +138,11 @@ MEM_STATIC size_t MEM_swapST(size_t in);
  * Unfortunately, on some target/compiler combinations, the generated assembly is sub-optimal.
  * The below switch allow to select different access method for improved performance.
  * Method 0 (default) : use `memcpy()`. Safe and portable.
- * Method 1 : `__packed` statement. It depends on compiler extension (i.e., not portable). 
+ * Method 1 : `__packed` statement. It depends on compiler extension (i.e., not portable).
  *            This method is safe if your compiler supports it, and *generally* as fast or faster than `memcpy`.
  * Method 2 : direct access. This method is portable but violate C standard.
  *            It can generate buggy code on targets depending on alignment.
- *            In some circumstances, it's the only known way to get the most performance (i.e. GCC + ARMv6) 
+ *            In some circumstances, it's the only known way to get the most performance (i.e. GCC + ARMv6)
  * See http://fastcompression.blogspot.fr/2015/08/accessing-unaligned-memory.html for details.
  * Prefer these methods in priority order (0 > 1 > 2)
  */
@@ -182,7 +182,7 @@ Only use if no other choice to achieve best performance on target platform */
 MEM_STATIC U16 MEM_read16(const void* memPtr) { return *(const U16*) memPtr; }
 MEM_STATIC U32 MEM_read32(const void* memPtr) { return *(const U32*) memPtr; }
 MEM_STATIC U64 MEM_read64(const void* memPtr) { return *(const U64*) memPtr; }
-MEM_STATIC size_t MEM_readST(const void* memPtr) { return *(const size_t*) memPtr; } 
+MEM_STATIC size_t MEM_readST(const void* memPtr) { return *(const size_t*) memPtr; }
 
 MEM_STATIC void MEM_write16(void* memPtr, U16 value) { *(U16*)memPtr = value; }
 MEM_STATIC void MEM_write32(void* memPtr, U32 value) { *(U32*)memPtr = value; }
@@ -193,27 +193,27 @@ MEM_STATIC void MEM_write64(void* memPtr, U64 value) { *(U64*)memPtr = value; }
 /* __pack instructions are safer, but compiler specific, hence potentially problematic for some compilers */
 /* currently only defined for gcc and icc */
 #if defined(_MSC_VER) || (defined(__INTEL_COMPILER) && defined(WIN32))
-    __pragma( pack(push, 1) ) 
-    typedef struct { U16 v; } unalign16; 
-    typedef struct { U32 v; } unalign32; 
-    typedef struct { U64 v; } unalign64; 
-    typedef struct { size_t v; } unalignArch; 
+    __pragma( pack(push, 1) )
+    typedef struct { U16 v; } unalign16;
+    typedef struct { U32 v; } unalign32;
+    typedef struct { U64 v; } unalign64;
+    typedef struct { size_t v; } unalignArch;
     __pragma( pack(pop) )
 #else
-    typedef struct { U16 v; } __attribute__((packed)) unalign16; 
-    typedef struct { U32 v; } __attribute__((packed)) unalign32; 
-    typedef struct { U64 v; } __attribute__((packed)) unalign64; 
-    typedef struct { size_t v; } __attribute__((packed)) unalignArch; 
+    typedef struct { U16 v; } __attribute__((packed)) unalign16;
+    typedef struct { U32 v; } __attribute__((packed)) unalign32;
+    typedef struct { U64 v; } __attribute__((packed)) unalign64;
+    typedef struct { size_t v; } __attribute__((packed)) unalignArch;
 #endif
 
-MEM_STATIC U16 MEM_read16(const void* ptr) { return ((const unalign16*)ptr)->v; } 
-MEM_STATIC U32 MEM_read32(const void* ptr) { return ((const unalign32*)ptr)->v; } 
-MEM_STATIC U64 MEM_read64(const void* ptr) { return ((const unalign64*)ptr)->v; } 
-MEM_STATIC size_t MEM_readST(const void* ptr) { return ((const unalignArch*)ptr)->v; } 
+MEM_STATIC U16 MEM_read16(const void* ptr) { return ((const unalign16*)ptr)->v; }
+MEM_STATIC U32 MEM_read32(const void* ptr) { return ((const unalign32*)ptr)->v; }
+MEM_STATIC U64 MEM_read64(const void* ptr) { return ((const unalign64*)ptr)->v; }
+MEM_STATIC size_t MEM_readST(const void* ptr) { return ((const unalignArch*)ptr)->v; }
 
-MEM_STATIC void MEM_write16(void* memPtr, U16 value) { ((unalign16*)memPtr)->v = value; } 
-MEM_STATIC void MEM_write32(void* memPtr, U32 value) { ((unalign32*)memPtr)->v = value; } 
-MEM_STATIC void MEM_write64(void* memPtr, U64 value) { ((unalign64*)memPtr)->v = value; } 
+MEM_STATIC void MEM_write16(void* memPtr, U16 value) { ((unalign16*)memPtr)->v = value; }
+MEM_STATIC void MEM_write32(void* memPtr, U32 value) { ((unalign32*)memPtr)->v = value; }
+MEM_STATIC void MEM_write64(void* memPtr, U64 value) { ((unalign64*)memPtr)->v = value; }
 
 #else
 

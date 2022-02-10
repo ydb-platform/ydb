@@ -16,42 +16,42 @@
 extern "C" {
 #endif
 
-#ifndef FSE_H 
-#define FSE_H 
+#ifndef FSE_H
+#define FSE_H
 
- 
+
 /*-*****************************************
 *  Dependencies
 ******************************************/
 #include "zstd_deps.h"    /* size_t, ptrdiff_t */
 
 
-/*-***************************************** 
-*  FSE_PUBLIC_API : control library symbols visibility 
-******************************************/ 
-#if defined(FSE_DLL_EXPORT) && (FSE_DLL_EXPORT==1) && defined(__GNUC__) && (__GNUC__ >= 4) 
-#  define FSE_PUBLIC_API __attribute__ ((visibility ("default"))) 
-#elif defined(FSE_DLL_EXPORT) && (FSE_DLL_EXPORT==1)   /* Visual expected */ 
-#  define FSE_PUBLIC_API __declspec(dllexport) 
-#elif defined(FSE_DLL_IMPORT) && (FSE_DLL_IMPORT==1) 
-#  define FSE_PUBLIC_API __declspec(dllimport) /* It isn't required but allows to generate better code, saving a function pointer load from the IAT and an indirect jump.*/ 
-#else 
-#  define FSE_PUBLIC_API 
-#endif 
- 
-/*------   Version   ------*/ 
-#define FSE_VERSION_MAJOR    0 
-#define FSE_VERSION_MINOR    9 
-#define FSE_VERSION_RELEASE  0 
- 
-#define FSE_LIB_VERSION FSE_VERSION_MAJOR.FSE_VERSION_MINOR.FSE_VERSION_RELEASE 
-#define FSE_QUOTE(str) #str 
-#define FSE_EXPAND_AND_QUOTE(str) FSE_QUOTE(str) 
-#define FSE_VERSION_STRING FSE_EXPAND_AND_QUOTE(FSE_LIB_VERSION) 
- 
-#define FSE_VERSION_NUMBER  (FSE_VERSION_MAJOR *100*100 + FSE_VERSION_MINOR *100 + FSE_VERSION_RELEASE) 
-FSE_PUBLIC_API unsigned FSE_versionNumber(void);   /**< library version number; to be used when checking dll version */ 
- 
+/*-*****************************************
+*  FSE_PUBLIC_API : control library symbols visibility
+******************************************/
+#if defined(FSE_DLL_EXPORT) && (FSE_DLL_EXPORT==1) && defined(__GNUC__) && (__GNUC__ >= 4)
+#  define FSE_PUBLIC_API __attribute__ ((visibility ("default")))
+#elif defined(FSE_DLL_EXPORT) && (FSE_DLL_EXPORT==1)   /* Visual expected */
+#  define FSE_PUBLIC_API __declspec(dllexport)
+#elif defined(FSE_DLL_IMPORT) && (FSE_DLL_IMPORT==1)
+#  define FSE_PUBLIC_API __declspec(dllimport) /* It isn't required but allows to generate better code, saving a function pointer load from the IAT and an indirect jump.*/
+#else
+#  define FSE_PUBLIC_API
+#endif
+
+/*------   Version   ------*/
+#define FSE_VERSION_MAJOR    0
+#define FSE_VERSION_MINOR    9
+#define FSE_VERSION_RELEASE  0
+
+#define FSE_LIB_VERSION FSE_VERSION_MAJOR.FSE_VERSION_MINOR.FSE_VERSION_RELEASE
+#define FSE_QUOTE(str) #str
+#define FSE_EXPAND_AND_QUOTE(str) FSE_QUOTE(str)
+#define FSE_VERSION_STRING FSE_EXPAND_AND_QUOTE(FSE_LIB_VERSION)
+
+#define FSE_VERSION_NUMBER  (FSE_VERSION_MAJOR *100*100 + FSE_VERSION_MINOR *100 + FSE_VERSION_RELEASE)
+FSE_PUBLIC_API unsigned FSE_versionNumber(void);   /**< library version number; to be used when checking dll version */
+
 
 /*-****************************************
 *  FSE simple functions
@@ -64,8 +64,8 @@ FSE_PUBLIC_API unsigned FSE_versionNumber(void);   /**< library version number; 
                      if return == 1, srcData is a single byte symbol * srcSize times. Use RLE compression instead.
                      if FSE_isError(return), compression failed (more details using FSE_getErrorName())
 */
-FSE_PUBLIC_API size_t FSE_compress(void* dst, size_t dstCapacity, 
-                             const void* src, size_t srcSize); 
+FSE_PUBLIC_API size_t FSE_compress(void* dst, size_t dstCapacity,
+                             const void* src, size_t srcSize);
 
 /*! FSE_decompress():
     Decompress FSE data from buffer 'cSrc', of size 'cSrcSize',
@@ -77,18 +77,18 @@ FSE_PUBLIC_API size_t FSE_compress(void* dst, size_t dstCapacity,
     Why ? : making this distinction requires a header.
     Header management is intentionally delegated to the user layer, which can better manage special cases.
 */
-FSE_PUBLIC_API size_t FSE_decompress(void* dst,  size_t dstCapacity, 
-                               const void* cSrc, size_t cSrcSize); 
+FSE_PUBLIC_API size_t FSE_decompress(void* dst,  size_t dstCapacity,
+                               const void* cSrc, size_t cSrcSize);
 
 
 /*-*****************************************
 *  Tool functions
 ******************************************/
-FSE_PUBLIC_API size_t FSE_compressBound(size_t size);       /* maximum compressed size */ 
+FSE_PUBLIC_API size_t FSE_compressBound(size_t size);       /* maximum compressed size */
 
 /* Error Management */
-FSE_PUBLIC_API unsigned    FSE_isError(size_t code);        /* tells if a return value is an error code */ 
-FSE_PUBLIC_API const char* FSE_getErrorName(size_t code);   /* provides error code string (useful for debugging) */ 
+FSE_PUBLIC_API unsigned    FSE_isError(size_t code);        /* tells if a return value is an error code */
+FSE_PUBLIC_API const char* FSE_getErrorName(size_t code);   /* provides error code string (useful for debugging) */
 
 
 /*-*****************************************
@@ -102,7 +102,7 @@ FSE_PUBLIC_API const char* FSE_getErrorName(size_t code);   /* provides error co
                      if return == 1, srcData is a single byte symbol * srcSize times. Use RLE compression.
                      if FSE_isError(return), it's an error code.
 */
-FSE_PUBLIC_API size_t FSE_compress2 (void* dst, size_t dstSize, const void* src, size_t srcSize, unsigned maxSymbolValue, unsigned tableLog); 
+FSE_PUBLIC_API size_t FSE_compress2 (void* dst, size_t dstSize, const void* src, size_t srcSize, unsigned maxSymbolValue, unsigned tableLog);
 
 
 /*-*****************************************
@@ -132,7 +132,7 @@ or to save and provide normalized distribution using external method.
     dynamically downsize 'tableLog' when conditions are met.
     It saves CPU time, by using smaller tables, while preserving or even improving compression ratio.
     @return : recommended tableLog (necessarily <= 'maxTableLog') */
-FSE_PUBLIC_API unsigned FSE_optimalTableLog(unsigned maxTableLog, size_t srcSize, unsigned maxSymbolValue); 
+FSE_PUBLIC_API unsigned FSE_optimalTableLog(unsigned maxTableLog, size_t srcSize, unsigned maxSymbolValue);
 
 /*! FSE_normalizeCount():
     normalize counts so that sum(count[]) == Power_of_2 (2^tableLog)
@@ -151,7 +151,7 @@ FSE_PUBLIC_API size_t FSE_normalizeCount(short* normalizedCounter, unsigned tabl
 /*! FSE_NCountWriteBound():
     Provides the maximum possible size of an FSE normalized table, given 'maxSymbolValue' and 'tableLog'.
     Typically useful for allocation purpose. */
-FSE_PUBLIC_API size_t FSE_NCountWriteBound(unsigned maxSymbolValue, unsigned tableLog); 
+FSE_PUBLIC_API size_t FSE_NCountWriteBound(unsigned maxSymbolValue, unsigned tableLog);
 
 /*! FSE_writeNCount():
     Compactly save 'normalizedCounter' into 'buffer'.
@@ -164,20 +164,20 @@ FSE_PUBLIC_API size_t FSE_writeNCount (void* buffer, size_t bufferSize,
 /*! Constructor and Destructor of FSE_CTable.
     Note that FSE_CTable size depends on 'tableLog' and 'maxSymbolValue' */
 typedef unsigned FSE_CTable;   /* don't allocate that. It's only meant to be more restrictive than void* */
-FSE_PUBLIC_API FSE_CTable* FSE_createCTable (unsigned maxSymbolValue, unsigned tableLog); 
-FSE_PUBLIC_API void        FSE_freeCTable (FSE_CTable* ct); 
+FSE_PUBLIC_API FSE_CTable* FSE_createCTable (unsigned maxSymbolValue, unsigned tableLog);
+FSE_PUBLIC_API void        FSE_freeCTable (FSE_CTable* ct);
 
 /*! FSE_buildCTable():
     Builds `ct`, which must be already allocated, using FSE_createCTable().
     @return : 0, or an errorCode, which can be tested using FSE_isError() */
-FSE_PUBLIC_API size_t FSE_buildCTable(FSE_CTable* ct, const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog); 
+FSE_PUBLIC_API size_t FSE_buildCTable(FSE_CTable* ct, const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog);
 
 /*! FSE_compress_usingCTable():
     Compress `src` using `ct` into `dst` which must be already allocated.
     @return : size of compressed data (<= `dstCapacity`),
               or 0 if compressed data could not fit into `dst`,
               or an errorCode, which can be tested using FSE_isError() */
-FSE_PUBLIC_API size_t FSE_compress_usingCTable (void* dst, size_t dstCapacity, const void* src, size_t srcSize, const FSE_CTable* ct); 
+FSE_PUBLIC_API size_t FSE_compress_usingCTable (void* dst, size_t dstCapacity, const void* src, size_t srcSize, const FSE_CTable* ct);
 
 /*!
 Tutorial :
@@ -244,20 +244,20 @@ FSE_PUBLIC_API size_t FSE_readNCount_bmi2(short* normalizedCounter,
 /*! Constructor and Destructor of FSE_DTable.
     Note that its size depends on 'tableLog' */
 typedef unsigned FSE_DTable;   /* don't allocate that. It's just a way to be more restrictive than void* */
-FSE_PUBLIC_API FSE_DTable* FSE_createDTable(unsigned tableLog); 
-FSE_PUBLIC_API void        FSE_freeDTable(FSE_DTable* dt); 
+FSE_PUBLIC_API FSE_DTable* FSE_createDTable(unsigned tableLog);
+FSE_PUBLIC_API void        FSE_freeDTable(FSE_DTable* dt);
 
 /*! FSE_buildDTable():
     Builds 'dt', which must be already allocated, using FSE_createDTable().
     return : 0, or an errorCode, which can be tested using FSE_isError() */
-FSE_PUBLIC_API size_t FSE_buildDTable (FSE_DTable* dt, const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog); 
+FSE_PUBLIC_API size_t FSE_buildDTable (FSE_DTable* dt, const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog);
 
 /*! FSE_decompress_usingDTable():
     Decompress compressed source `cSrc` of size `cSrcSize` using `dt`
     into `dst` which must be already allocated.
     @return : size of regenerated data (necessarily <= `dstCapacity`),
               or an errorCode, which can be tested using FSE_isError() */
-FSE_PUBLIC_API size_t FSE_decompress_usingDTable(void* dst, size_t dstCapacity, const void* cSrc, size_t cSrcSize, const FSE_DTable* dt); 
+FSE_PUBLIC_API size_t FSE_decompress_usingDTable(void* dst, size_t dstCapacity, const void* cSrc, size_t cSrcSize, const FSE_DTable* dt);
 
 /*!
 Tutorial :
@@ -287,10 +287,10 @@ FSE_decompress_usingDTable() result will tell how many bytes were regenerated (<
 If there is an error, the function will return an error code, which can be tested using FSE_isError(). (ex: dst buffer too small)
 */
 
-#endif  /* FSE_H */ 
+#endif  /* FSE_H */
 
-#if defined(FSE_STATIC_LINKING_ONLY) && !defined(FSE_H_FSE_STATIC_LINKING_ONLY) 
-#define FSE_H_FSE_STATIC_LINKING_ONLY 
+#if defined(FSE_STATIC_LINKING_ONLY) && !defined(FSE_H_FSE_STATIC_LINKING_ONLY)
+#define FSE_H_FSE_STATIC_LINKING_ONLY
 
 /* *** Dependency *** */
 #include "bitstream.h"
@@ -308,11 +308,11 @@ If there is an error, the function will return an error code, which can be teste
 #define FSE_CTABLE_SIZE_U32(maxTableLog, maxSymbolValue)   (1 + (1<<((maxTableLog)-1)) + (((maxSymbolValue)+1)*2))
 #define FSE_DTABLE_SIZE_U32(maxTableLog)                   (1 + (1<<(maxTableLog)))
 
-/* or use the size to malloc() space directly. Pay attention to alignment restrictions though */ 
-#define FSE_CTABLE_SIZE(maxTableLog, maxSymbolValue)   (FSE_CTABLE_SIZE_U32(maxTableLog, maxSymbolValue) * sizeof(FSE_CTable)) 
-#define FSE_DTABLE_SIZE(maxTableLog)                   (FSE_DTABLE_SIZE_U32(maxTableLog) * sizeof(FSE_DTable)) 
+/* or use the size to malloc() space directly. Pay attention to alignment restrictions though */
+#define FSE_CTABLE_SIZE(maxTableLog, maxSymbolValue)   (FSE_CTABLE_SIZE_U32(maxTableLog, maxSymbolValue) * sizeof(FSE_CTable))
+#define FSE_DTABLE_SIZE(maxTableLog)                   (FSE_DTABLE_SIZE_U32(maxTableLog) * sizeof(FSE_DTable))
 
- 
+
 /* *****************************************
  *  FSE advanced API
  ***************************************** */
@@ -361,11 +361,11 @@ size_t FSE_decompress_wksp(void* dst, size_t dstCapacity, const void* cSrc, size
 size_t FSE_decompress_wksp_bmi2(void* dst, size_t dstCapacity, const void* cSrc, size_t cSrcSize, unsigned maxLog, void* workSpace, size_t wkspSize, int bmi2);
 /**< Same as FSE_decompress_wksp() but with dynamic BMI2 support. Pass 1 if your CPU supports BMI2 or 0 if it doesn't. */
 
-typedef enum { 
-   FSE_repeat_none,  /**< Cannot use the previous table */ 
-   FSE_repeat_check, /**< Can use the previous table but it must be checked */ 
+typedef enum {
+   FSE_repeat_none,  /**< Cannot use the previous table */
+   FSE_repeat_check, /**< Can use the previous table but it must be checked */
    FSE_repeat_valid  /**< Can use the previous table and it is assumed to be valid */
- } FSE_repeat; 
+ } FSE_repeat;
 
 /* *****************************************
 *  FSE symbol compression API
@@ -539,9 +539,9 @@ MEM_STATIC void FSE_initCState2(FSE_CState_t* statePtr, const FSE_CTable* ct, U3
 
 MEM_STATIC void FSE_encodeSymbol(BIT_CStream_t* bitC, FSE_CState_t* statePtr, unsigned symbol)
 {
-    FSE_symbolCompressionTransform const symbolTT = ((const FSE_symbolCompressionTransform*)(statePtr->symbolTT))[symbol]; 
+    FSE_symbolCompressionTransform const symbolTT = ((const FSE_symbolCompressionTransform*)(statePtr->symbolTT))[symbol];
     const U16* const stateTable = (const U16*)(statePtr->stateTable);
-    U32 const nbBitsOut  = (U32)((statePtr->value + symbolTT.deltaNbBits) >> 16); 
+    U32 const nbBitsOut  = (U32)((statePtr->value + symbolTT.deltaNbBits) >> 16);
     BIT_addBits(bitC, statePtr->value, nbBitsOut);
     statePtr->value = stateTable[ (statePtr->value >> nbBitsOut) + symbolTT.deltaFindState];
 }

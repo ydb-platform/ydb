@@ -327,9 +327,9 @@
             "description": "Autocheck data inspector tool",
             "visible": false
         },
-        "releaser": { 
-            "description": "Release tool" 
-        }, 
+        "releaser": {
+            "description": "Release tool"
+        },
         "tvmknife": {
             "description": "Tool for debugging and testing with TVM tickets"
         },
@@ -1300,28 +1300,28 @@
                 }
             ]
         },
-        "releaser": { 
-            "tools": { 
-                "releaser": { 
-                    "bottle": "releaser", 
-                    "executable": "releaser" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "releaser": {
+            "tools": {
+                "releaser": {
+                    "bottle": "releaser",
+                    "executable": "releaser"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "tvmknife": {
             "tools": {
                 "tvmknife": {
@@ -5896,19 +5896,19 @@
                 ]
             }
         },
-        "releaser": { 
-            "formula": { 
-                "sandbox_id": [ 
+        "releaser": {
+            "formula": {
+                "sandbox_id": [
                     1026890210
-                ], 
-                "match": "releaser" 
-            }, 
-            "executable": { 
-                "releaser": [ 
-                    "releaser" 
-                ] 
-            } 
-        }, 
+                ],
+                "match": "releaser"
+            },
+            "executable": {
+                "releaser": [
+                    "releaser"
+                ]
+            }
+        },
         "tvmknife": {
             "formula": {
                 "sandbox_id": 1162775119,

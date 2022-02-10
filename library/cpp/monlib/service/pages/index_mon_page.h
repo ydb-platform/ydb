@@ -27,7 +27,7 @@ namespace NMonitoring {
 
         void Register(TMonPagePtr page);
         TIndexMonPage* RegisterIndexPage(const TString& path, const TString& title);
-
+ 
         IMonPage* FindPage(const TString& relativePath);
         TIndexMonPage* FindIndexPage(const TString& relativePath);
 

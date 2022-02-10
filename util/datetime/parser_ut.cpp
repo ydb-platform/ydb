@@ -421,36 +421,36 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
             TInstant::Seconds(1253317023) + TDuration::MicroSeconds(12331));
     }
 
-    Y_UNIT_TEST(TestIso8601FractionsBelowMicro) {
-        UNIT_ASSERT_VALUES_EQUAL(
-            TInstant::ParseIso8601("1970-01-01 00:00:00.0000000+00:00"),
-            TInstant::Seconds(0));
-        UNIT_ASSERT_VALUES_EQUAL(
-            TInstant::ParseIso8601("1970-01-01 00:00:00.0000009+00:00"),
-            TInstant::Seconds(0));
-        UNIT_ASSERT_VALUES_EQUAL(
-            TInstant::ParseIso8601("1970-01-01 00:00:00.000000789+00:00"),
-            TInstant::Seconds(0));
-        UNIT_ASSERT_VALUES_EQUAL(
-            TInstant::ParseIso8601("1970-01-01 00:00:00.1234560+00:00"),
-            TInstant::Seconds(0) + TDuration::MicroSeconds(123456));
-        UNIT_ASSERT_VALUES_EQUAL(
-            TInstant::ParseIso8601("1970-01-01 00:00:00.1234569+00:00"),
-            TInstant::Seconds(0) + TDuration::MicroSeconds(123456));
-        UNIT_ASSERT_VALUES_EQUAL(
-            TInstant::ParseIso8601("1970-01-01 00:00:00.123456789+00:00"),
-            TInstant::Seconds(0) + TDuration::MicroSeconds(123456));
-        UNIT_ASSERT_VALUES_EQUAL(
-            TInstant::ParseIso8601("1970-01-01 00:00:00.9999990+00:00"),
-            TInstant::Seconds(0) + TDuration::MicroSeconds(999999));
-        UNIT_ASSERT_VALUES_EQUAL(
-            TInstant::ParseIso8601("1970-01-01 00:00:00.9999999+00:00"),
-            TInstant::Seconds(0) + TDuration::MicroSeconds(999999));
-        UNIT_ASSERT_VALUES_EQUAL(
-            TInstant::ParseIso8601("1970-01-01 00:00:00.999999789+00:00"),
-            TInstant::Seconds(0) + TDuration::MicroSeconds(999999));
-    }
-
+    Y_UNIT_TEST(TestIso8601FractionsBelowMicro) { 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            TInstant::ParseIso8601("1970-01-01 00:00:00.0000000+00:00"), 
+            TInstant::Seconds(0)); 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            TInstant::ParseIso8601("1970-01-01 00:00:00.0000009+00:00"), 
+            TInstant::Seconds(0)); 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            TInstant::ParseIso8601("1970-01-01 00:00:00.000000789+00:00"), 
+            TInstant::Seconds(0)); 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            TInstant::ParseIso8601("1970-01-01 00:00:00.1234560+00:00"), 
+            TInstant::Seconds(0) + TDuration::MicroSeconds(123456)); 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            TInstant::ParseIso8601("1970-01-01 00:00:00.1234569+00:00"), 
+            TInstant::Seconds(0) + TDuration::MicroSeconds(123456)); 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            TInstant::ParseIso8601("1970-01-01 00:00:00.123456789+00:00"), 
+            TInstant::Seconds(0) + TDuration::MicroSeconds(123456)); 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            TInstant::ParseIso8601("1970-01-01 00:00:00.9999990+00:00"), 
+            TInstant::Seconds(0) + TDuration::MicroSeconds(999999)); 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            TInstant::ParseIso8601("1970-01-01 00:00:00.9999999+00:00"), 
+            TInstant::Seconds(0) + TDuration::MicroSeconds(999999)); 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            TInstant::ParseIso8601("1970-01-01 00:00:00.999999789+00:00"), 
+            TInstant::Seconds(0) + TDuration::MicroSeconds(999999)); 
+    } 
+ 
     Y_UNIT_TEST(TestIso8601BigDate) {
         TVector<std::pair<TString, int>> dates{
             {"2019-01-01", 17897},

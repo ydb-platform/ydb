@@ -299,21 +299,21 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
                     "\"sensors\":[{\"kind\":\"GAUGE\",\"labels\":{\"my\":\"gauge\"},\"value\":12.34}]}");
         }
     }
- 
-    Y_UNIT_TEST(MetricsRegistryClear) { 
-        TMetricRegistry registry; 
-        registry.Gauge({{"some", "label"}})->Add(1); 
- 
-        NProto::TSingleSamplesList samples; 
-        auto encoder = EncoderProtobuf(&samples); 
-        registry.Accept(TInstant::Now(), encoder.Get()); 
- 
-        UNIT_ASSERT(samples.SamplesSize() == 1); 
- 
-        samples = {}; 
-        registry.Clear(); 
-        registry.Accept(TInstant::Now(), encoder.Get()); 
- 
-        UNIT_ASSERT(samples.SamplesSize() == 0); 
-    } 
+
+    Y_UNIT_TEST(MetricsRegistryClear) {
+        TMetricRegistry registry;
+        registry.Gauge({{"some", "label"}})->Add(1);
+
+        NProto::TSingleSamplesList samples;
+        auto encoder = EncoderProtobuf(&samples);
+        registry.Accept(TInstant::Now(), encoder.Get());
+
+        UNIT_ASSERT(samples.SamplesSize() == 1);
+
+        samples = {};
+        registry.Clear();
+        registry.Accept(TInstant::Now(), encoder.Get());
+
+        UNIT_ASSERT(samples.SamplesSize() == 0);
+    }
 }

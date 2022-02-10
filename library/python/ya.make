@@ -77,8 +77,8 @@ RECURSE(
     flask_passport
     fnvhash
     fnvhash/test
-    framing
-    framing/ut
+    framing 
+    framing/ut 
     func
     func/ut
     fs

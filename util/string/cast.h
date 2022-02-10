@@ -339,8 +339,8 @@ inline TInt IntFromString(const TChar* str) {
     return IntFromString<TInt, base>(str, std::char_traits<TChar>::length(str));
 }
 
-template <class TInt, int base, class TStringType>
-inline TInt IntFromString(const TStringType& str) {
+template <class TInt, int base, class TStringType> 
+inline TInt IntFromString(const TStringType& str) { 
     return IntFromString<TInt, base>(str.data(), str.size());
 }
 

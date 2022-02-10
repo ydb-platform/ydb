@@ -59,8 +59,8 @@ public:
     // default constructor
     flatten_iterator() {}
 
-    flatten_iterator(const flatten_iterator& other) = default; 
- 
+    flatten_iterator(const flatten_iterator& other) = default;
+
     // for begin
     flatten_iterator(OuterIterator outer_it, OuterIterator outer_end)
         : m_outer_it(outer_it), m_outer_end(outer_end)

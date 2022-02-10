@@ -248,8 +248,8 @@ namespace boost {
                 m_bEof(Other.m_bEof)
             {}
 
-            split_iterator& operator=(const split_iterator& Other) = default; 
- 
+            split_iterator& operator=(const split_iterator& Other) = default;
+
             //! Constructor
             /*!
                 Construct new split_iterator for a given finder

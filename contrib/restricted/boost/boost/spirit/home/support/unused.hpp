@@ -29,8 +29,8 @@ namespace boost { namespace spirit
         {
         }
 
-        unused_type(const unused_type& a) = default; 
- 
+        unused_type(const unused_type& a) = default;
+
         template <typename T>
         unused_type(T const&)
         {

@@ -95,9 +95,9 @@ class Platform(object):
         self.is_macos = self.os == 'macos'
         self.is_macos_x86_64 = self.is_macos and self.is_x86_64
         self.is_macos_arm64 = self.is_macos and self.is_arm64
-        self.is_iossim = self.os == 'iossim' or (self.os == 'ios' and self.is_intel) 
-        self.is_ios = self.os == 'ios' or self.is_iossim 
-        self.is_apple = self.is_macos or self.is_ios 
+        self.is_iossim = self.os == 'iossim' or (self.os == 'ios' and self.is_intel)
+        self.is_ios = self.os == 'ios' or self.is_iossim
+        self.is_apple = self.is_macos or self.is_ios
 
         self.is_windows = self.os == 'windows'
         self.is_windows_x86_64 = self.is_windows and self.is_x86_64
@@ -141,7 +141,7 @@ class Platform(object):
         if self.is_iossim:
             yield 'IOS'
             yield 'OS_IOS'
-            yield 'OS_IOSSIM' 
+            yield 'OS_IOSSIM'
 
     @property
     def arch_variables(self):
@@ -1129,21 +1129,21 @@ class GnuToolchain(Toolchain):
             for lib_path in build.host.library_path_variables:
                 self.env.setdefault(lib_path, []).append('{}/lib'.format(self.tc.name_marker))
 
-        macos_version_min = '10.11' 
-        macos_arm64_version_min = '11.0' 
-        ios_version_min = '11.0' 
-        # min ios simulator version for Metal App is 13.0 
-        # https://developer.apple.com/documentation/metal/supporting_simulator_in_a_metal_app 
-        # Mapkit (MAPSMOBI_BUILD_TARGET) uses Metal Framework 
-        if preset('MAPSMOBI_BUILD_TARGET') and target.is_iossim and target.is_armv8: 
-            ios_version_min = '13.0' 
- 
+        macos_version_min = '10.11'
+        macos_arm64_version_min = '11.0'
+        ios_version_min = '11.0'
+        # min ios simulator version for Metal App is 13.0
+        # https://developer.apple.com/documentation/metal/supporting_simulator_in_a_metal_app
+        # Mapkit (MAPSMOBI_BUILD_TARGET) uses Metal Framework
+        if preset('MAPSMOBI_BUILD_TARGET') and target.is_iossim and target.is_armv8:
+            ios_version_min = '13.0'
+
         swift_target = select(default=None, selectors=[
-            (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(ios_version_min)), 
-            (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(ios_version_min)), 
-            (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(ios_version_min)), 
-            (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios9'), 
-            (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios9'), 
+            (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(ios_version_min)),
+            (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(ios_version_min)),
+            (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(ios_version_min)),
+            (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios9'),
+            (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios9'),
         ])
         if swift_target:
             self.swift_flags_platform += ['-target', swift_target]
@@ -1151,7 +1151,7 @@ class GnuToolchain(Toolchain):
         if self.tc.is_from_arcadia:
             self.swift_lib_path = select(default=None, selectors=[
                 (host.is_macos and target.is_iossim, '$SWIFT_XCODE_TOOLCHAIN_ROOT_RESOURCE_GLOBAL/usr/lib/swift/iphonesimulator'),
-                (host.is_macos and not target.is_iossim and target.is_ios and (target.is_armv8 or target.is_armv7), '$SWIFT_XCODE_TOOLCHAIN_ROOT_RESOURCE_GLOBAL/usr/lib/swift/iphoneos'), 
+                (host.is_macos and not target.is_iossim and target.is_ios and (target.is_armv8 or target.is_armv7), '$SWIFT_XCODE_TOOLCHAIN_ROOT_RESOURCE_GLOBAL/usr/lib/swift/iphoneos'),
             ])
 
         if self.tc.is_clang:
@@ -1163,7 +1163,7 @@ class GnuToolchain(Toolchain):
                     (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'arm-linux-gnueabihf'),
                     (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'arm-linux-gnueabi'),
                     (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
-                    (target.is_iossim and target.is_arm64, 'arm64-apple-ios{}-simulator'.format(ios_version_min)), 
+                    (target.is_iossim and target.is_arm64, 'arm64-apple-ios{}-simulator'.format(ios_version_min)),
                     (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
                     (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
                     (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
@@ -1233,12 +1233,12 @@ class GnuToolchain(Toolchain):
             if target_flags:
                 self.c_flags_platform.extend(target_flags)
 
-            if target.is_ios: 
+            if target.is_ios:
                 self.c_flags_platform.append('-D__IOS__=1')
 
             if self.tc.is_from_arcadia:
                 if target.is_apple:
-                    if target.is_ios: 
+                    if target.is_ios:
                         self.setup_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
                         self.platform_projects.append('build/platform/macos_system_stl')
                     if target.is_macos:
@@ -1934,8 +1934,8 @@ class LD(Linker):
         self.ld_sdk = select(default=None, selectors=[
             (target.is_macos_arm64, '-Wl,-sdk_version,11.0'),
             (target.is_macos, '-Wl,-sdk_version,10.15'),
-            (not target.is_iossim and target.is_ios, '-Wl,-sdk_version,13.1'), 
-            (target.is_iossim, '-Wl,-sdk_version,14.5'), 
+            (not target.is_iossim and target.is_ios, '-Wl,-sdk_version,13.1'),
+            (target.is_iossim, '-Wl,-sdk_version,14.5'),
         ])
 
         if self.ld_sdk:

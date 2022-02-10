@@ -41,8 +41,8 @@ namespace boost { namespace fusion
         vector_iterator(Vector& in_vec)
             : vec(in_vec) {}
 
-        vector_iterator(const vector_iterator& a) = default; 
- 
+        vector_iterator(const vector_iterator& a) = default;
+
         Vector& vec;
 
         // silence MSVC warning C4512: assignment operator could not be generated

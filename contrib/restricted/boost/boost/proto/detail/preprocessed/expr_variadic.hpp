@@ -49,14 +49,14 @@
         typedef void proto_is_expr_; 
         typedef Arg0 proto_child0; proto_child0 child0;
         typedef void proto_child1; typedef void proto_child2; typedef void proto_child3; typedef void proto_child4; typedef void proto_child5; typedef void proto_child6; typedef void proto_child7; typedef void proto_child8; typedef void proto_child9;
-        expr() = default; 
+        expr() = default;
         
-        expr(const proto_child0& child0): 
-            child0(child0) 
-        {} 
+        expr(const proto_child0& child0):
+            child0(child0)
+        {}
         
-        expr(const expr& a) = default; 
-         
+        expr(const expr& a) = default;
+        
         BOOST_FORCEINLINE
         expr const &proto_base() const
         {
@@ -341,14 +341,14 @@
         typedef void proto_is_expr_; 
         typedef Arg0 proto_child0; proto_child0 child0;
         typedef void proto_child1; typedef void proto_child2; typedef void proto_child3; typedef void proto_child4; typedef void proto_child5; typedef void proto_child6; typedef void proto_child7; typedef void proto_child8; typedef void proto_child9;
-        expr() = default; 
+        expr() = default;
         
-        expr(const proto_child0& child0): 
-            child0(child0) 
-        {} 
+        expr(const proto_child0& child0):
+            child0(child0)
+        {}
         
-        expr(const expr& a) = default; 
-         
+        expr(const expr& a) = default;
+        
         BOOST_FORCEINLINE
         expr const &proto_base() const
         {
@@ -551,15 +551,15 @@
         typedef Arg0 proto_child0; proto_child0 child0; typedef Arg1 proto_child1; proto_child1 child1;
         typedef void proto_child2; typedef void proto_child3; typedef void proto_child4; typedef void proto_child5; typedef void proto_child6; typedef void proto_child7; typedef void proto_child8; typedef void proto_child9;
         
-        expr() = default; 
+        expr() = default;
         
-        expr(const proto_child0& child0, const proto_child1& child1): 
-            child0(child0), 
-            child1(child1) 
-        {} 
-         
-        expr(const expr& a) = default; 
-         
+        expr(const proto_child0& child0, const proto_child1& child1):
+            child0(child0),
+            child1(child1)
+        {}
+        
+        expr(const expr& a) = default;
+        
         BOOST_FORCEINLINE
         expr const &proto_base() const
         {
@@ -749,16 +749,16 @@
         typedef Arg0 proto_child0; proto_child0 child0; typedef Arg1 proto_child1; proto_child1 child1; typedef Arg2 proto_child2; proto_child2 child2;
         typedef void proto_child3; typedef void proto_child4; typedef void proto_child5; typedef void proto_child6; typedef void proto_child7; typedef void proto_child8; typedef void proto_child9;
         
-        expr() = default; 
+        expr() = default;
         
-        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2): 
-            child0(child0), 
-            child1(child1), 
-            child2(child2) 
-        {} 
-         
-        expr(const expr& a) = default; 
-         
+        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2):
+            child0(child0),
+            child1(child1),
+            child2(child2)
+        {}
+        
+        expr(const expr& a) = default;
+        
         BOOST_FORCEINLINE
         expr const &proto_base() const
         {
@@ -948,17 +948,17 @@
         typedef Arg0 proto_child0; proto_child0 child0; typedef Arg1 proto_child1; proto_child1 child1; typedef Arg2 proto_child2; proto_child2 child2; typedef Arg3 proto_child3; proto_child3 child3;
         typedef void proto_child4; typedef void proto_child5; typedef void proto_child6; typedef void proto_child7; typedef void proto_child8; typedef void proto_child9;
         
-        expr() = default; 
+        expr() = default;
         
-        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3): 
-            child0(child0), 
-            child1(child1), 
-            child2(child2), 
-            child3(child3) 
-        {} 
-         
-        expr(const expr& a) = default; 
-         
+        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3):
+            child0(child0),
+            child1(child1),
+            child2(child2),
+            child3(child3)
+        {}
+        
+        expr(const expr& a) = default;
+        
         BOOST_FORCEINLINE
         expr const &proto_base() const
         {
@@ -1148,18 +1148,18 @@
         typedef Arg0 proto_child0; proto_child0 child0; typedef Arg1 proto_child1; proto_child1 child1; typedef Arg2 proto_child2; proto_child2 child2; typedef Arg3 proto_child3; proto_child3 child3; typedef Arg4 proto_child4; proto_child4 child4;
         typedef void proto_child5; typedef void proto_child6; typedef void proto_child7; typedef void proto_child8; typedef void proto_child9;
         
-        expr() = default; 
+        expr() = default;
         
-        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4): 
-            child0(child0), 
-            child1(child1), 
-            child2(child2), 
-            child3(child3), 
-            child4(child4) 
-        {} 
-         
-        expr(const expr& a) = default; 
-         
+        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4):
+            child0(child0),
+            child1(child1),
+            child2(child2),
+            child3(child3),
+            child4(child4)
+        {}
+        
+        expr(const expr& a) = default;
+        
         BOOST_FORCEINLINE
         expr const &proto_base() const
         {
@@ -1349,19 +1349,19 @@
         typedef Arg0 proto_child0; proto_child0 child0; typedef Arg1 proto_child1; proto_child1 child1; typedef Arg2 proto_child2; proto_child2 child2; typedef Arg3 proto_child3; proto_child3 child3; typedef Arg4 proto_child4; proto_child4 child4; typedef Arg5 proto_child5; proto_child5 child5;
         typedef void proto_child6; typedef void proto_child7; typedef void proto_child8; typedef void proto_child9;
         
-        expr() = default; 
+        expr() = default;
         
-        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4, const proto_child5& child5): 
-            child0(child0), 
-            child1(child1), 
-            child2(child2), 
-            child3(child3), 
-            child4(child4), 
-            child5(child5) 
-        {} 
-         
-        expr(const expr& a) = default; 
-         
+        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4, const proto_child5& child5):
+            child0(child0),
+            child1(child1),
+            child2(child2),
+            child3(child3),
+            child4(child4),
+            child5(child5)
+        {}
+        
+        expr(const expr& a) = default;
+        
         BOOST_FORCEINLINE
         expr const &proto_base() const
         {
@@ -1551,20 +1551,20 @@
         typedef Arg0 proto_child0; proto_child0 child0; typedef Arg1 proto_child1; proto_child1 child1; typedef Arg2 proto_child2; proto_child2 child2; typedef Arg3 proto_child3; proto_child3 child3; typedef Arg4 proto_child4; proto_child4 child4; typedef Arg5 proto_child5; proto_child5 child5; typedef Arg6 proto_child6; proto_child6 child6;
         typedef void proto_child7; typedef void proto_child8; typedef void proto_child9;
         
-        expr() = default; 
+        expr() = default;
         
-        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4, const proto_child5& child5, const proto_child6& child6): 
-            child0(child0), 
-            child1(child1), 
-            child2(child2), 
-            child3(child3), 
-            child4(child4), 
-            child5(child5), 
-            child6(child6) 
-        {} 
-         
-        expr(const expr& a) = default; 
-         
+        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4, const proto_child5& child5, const proto_child6& child6):
+            child0(child0),
+            child1(child1),
+            child2(child2),
+            child3(child3),
+            child4(child4),
+            child5(child5),
+            child6(child6)
+        {}
+        
+        expr(const expr& a) = default;
+        
         BOOST_FORCEINLINE
         expr const &proto_base() const
         {
@@ -1754,21 +1754,21 @@
         typedef Arg0 proto_child0; proto_child0 child0; typedef Arg1 proto_child1; proto_child1 child1; typedef Arg2 proto_child2; proto_child2 child2; typedef Arg3 proto_child3; proto_child3 child3; typedef Arg4 proto_child4; proto_child4 child4; typedef Arg5 proto_child5; proto_child5 child5; typedef Arg6 proto_child6; proto_child6 child6; typedef Arg7 proto_child7; proto_child7 child7;
         typedef void proto_child8; typedef void proto_child9;
         
-        expr() = default; 
+        expr() = default;
         
-        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4, const proto_child5& child5, const proto_child6& child6, const proto_child7& child7): 
-            child0(child0), 
-            child1(child1), 
-            child2(child2), 
-            child3(child3), 
-            child4(child4), 
-            child5(child5), 
-            child6(child6), 
-            child7(child7) 
-        {} 
-         
-        expr(const expr& a) = default; 
-         
+        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4, const proto_child5& child5, const proto_child6& child6, const proto_child7& child7):
+            child0(child0),
+            child1(child1),
+            child2(child2),
+            child3(child3),
+            child4(child4),
+            child5(child5),
+            child6(child6),
+            child7(child7)
+        {}
+        
+        expr(const expr& a) = default;
+        
         BOOST_FORCEINLINE
         expr const &proto_base() const
         {
@@ -1958,22 +1958,22 @@
         typedef Arg0 proto_child0; proto_child0 child0; typedef Arg1 proto_child1; proto_child1 child1; typedef Arg2 proto_child2; proto_child2 child2; typedef Arg3 proto_child3; proto_child3 child3; typedef Arg4 proto_child4; proto_child4 child4; typedef Arg5 proto_child5; proto_child5 child5; typedef Arg6 proto_child6; proto_child6 child6; typedef Arg7 proto_child7; proto_child7 child7; typedef Arg8 proto_child8; proto_child8 child8;
         typedef void proto_child9;
         
-        expr() = default; 
+        expr() = default;
         
-        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4, const proto_child5& child5, const proto_child6& child6, const proto_child7& child7, const proto_child8& child8): 
-            child0(child0), 
-            child1(child1), 
-            child2(child2), 
-            child3(child3), 
-            child4(child4), 
-            child5(child5), 
-            child6(child6), 
-            child7(child7), 
-            child8(child8) 
-        {} 
-         
-        expr(const expr& a) = default; 
-         
+        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4, const proto_child5& child5, const proto_child6& child6, const proto_child7& child7, const proto_child8& child8):
+            child0(child0),
+            child1(child1),
+            child2(child2),
+            child3(child3),
+            child4(child4),
+            child5(child5),
+            child6(child6),
+            child7(child7),
+            child8(child8)
+        {}
+        
+        expr(const expr& a) = default;
+        
         BOOST_FORCEINLINE
         expr const &proto_base() const
         {
@@ -2162,23 +2162,23 @@
         typedef void proto_is_expr_; 
         typedef Arg0 proto_child0; proto_child0 child0; typedef Arg1 proto_child1; proto_child1 child1; typedef Arg2 proto_child2; proto_child2 child2; typedef Arg3 proto_child3; proto_child3 child3; typedef Arg4 proto_child4; proto_child4 child4; typedef Arg5 proto_child5; proto_child5 child5; typedef Arg6 proto_child6; proto_child6 child6; typedef Arg7 proto_child7; proto_child7 child7; typedef Arg8 proto_child8; proto_child8 child8; typedef Arg9 proto_child9; proto_child9 child9;
         
-        expr() = default; 
+        expr() = default;
         
-        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4, const proto_child5& child5, const proto_child6& child6, const proto_child7& child7, const proto_child8& child8, const proto_child9& child9): 
-            child0(child0), 
-            child1(child1), 
-            child2(child2), 
-            child3(child3), 
-            child4(child4), 
-            child5(child5), 
-            child6(child6), 
-            child7(child7), 
-            child8(child8), 
-            child9(child9) 
-        {} 
+        expr(const proto_child0& child0, const proto_child1& child1, const proto_child2& child2, const proto_child3& child3, const proto_child4& child4, const proto_child5& child5, const proto_child6& child6, const proto_child7& child7, const proto_child8& child8, const proto_child9& child9):
+            child0(child0),
+            child1(child1),
+            child2(child2),
+            child3(child3),
+            child4(child4),
+            child5(child5),
+            child6(child6),
+            child7(child7),
+            child8(child8),
+            child9(child9)
+        {}
         
-        expr(const expr& a) = default; 
-         
+        expr(const expr& a) = default;
+        
         BOOST_FORCEINLINE
         expr const &proto_base() const
         {

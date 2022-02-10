@@ -21,10 +21,10 @@ static inline TAtomicBase AtomicSub(TAtomic& a, TAtomicBase v) {
     return AtomicAdd(a, -v);
 }
 
-static inline TAtomicBase AtomicGetAndSub(TAtomic& a, TAtomicBase v) { 
-    return AtomicGetAndAdd(a, -v); 
-} 
- 
+static inline TAtomicBase AtomicGetAndSub(TAtomic& a, TAtomicBase v) {
+    return AtomicGetAndAdd(a, -v);
+}
+
 #if defined(USE_GENERIC_SETGET)
 static inline TAtomicBase AtomicGet(const TAtomic& a) {
     return a;

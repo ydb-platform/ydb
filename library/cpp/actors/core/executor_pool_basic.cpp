@@ -4,23 +4,23 @@
 #include <library/cpp/actors/util/affinity.h>
 #include <library/cpp/actors/util/datetime.h>
 
-#ifdef _linux_ 
+#ifdef _linux_
 #include <pthread.h>
-#endif 
- 
+#endif
+
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     constexpr TDuration TBasicExecutorPool::DEFAULT_TIME_PER_MAILBOX;
 
     TBasicExecutorPool::TBasicExecutorPool(
-        ui32 poolId, 
-        ui32 threads, 
-        ui64 spinThreshold, 
+        ui32 poolId,
+        ui32 threads,
+        ui64 spinThreshold,
         const TString& poolName,
         TAffinity* affinity,
-        TDuration timePerMailbox, 
-        ui32 eventsPerMailbox, 
+        TDuration timePerMailbox,
+        ui32 eventsPerMailbox,
         int realtimePriority,
         ui32 maxActivityType)
         : TExecutorPoolBase(poolId, threads, affinity, maxActivityType)
@@ -330,10 +330,10 @@ namespace NActors {
             if (pthread_setschedparam(threadSelf, SCHED_FIFO, &param)) {
                 Y_FAIL("Cannot set realtime priority");
             }
-        } 
-#else 
+        }
+#else
         Y_UNUSED(RealtimePriority);
-#endif 
+#endif
     }
 
     ui32 TBasicExecutorPool::GetThreadCount() const {

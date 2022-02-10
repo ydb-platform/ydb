@@ -74,8 +74,8 @@ public:
     TArrayRef<const char> AsRef() const noexcept
     {
         return { Data(), Size() };
-    } 
- 
+    }
+
     TStringBuf AsBuf() const noexcept
     {
         return { Data(), Size() };

@@ -36,14 +36,14 @@ void NanoSleep(ui64 ns) noexcept;
 
 // GetCycleCount guarantees to return synchronous values on different cores
 // and provide constant rate only on modern Intel and AMD processors
-// NOTE: rdtscp is used to prevent out of order execution 
-// rdtsc can be reordered, while rdtscp cannot be reordered 
-// with preceding instructions 
-// PERFORMANCE: rdtsc - 15 cycles per call , rdtscp - 19 cycles per call 
-// WARNING: following instruction can be executed out-of-order 
+// NOTE: rdtscp is used to prevent out of order execution
+// rdtsc can be reordered, while rdtscp cannot be reordered
+// with preceding instructions
+// PERFORMANCE: rdtsc - 15 cycles per call , rdtscp - 19 cycles per call
+// WARNING: following instruction can be executed out-of-order
 Y_FORCE_INLINE ui64 GetCycleCount() noexcept {
 #if defined(_MSC_VER)
-    // Generates the rdtscp instruction, which returns the processor time stamp. 
+    // Generates the rdtscp instruction, which returns the processor time stamp.
     // The processor time stamp records the number of clock cycles since the last reset.
     extern const bool HaveRdtscp;
 
@@ -82,7 +82,7 @@ Y_FORCE_INLINE ui64 GetCycleCount() noexcept {
 #elif defined(_darwin_)
     return mach_absolute_time();
 #elif defined(__clang__) && !defined(_arm_)
-    return __builtin_readcyclecounter(); 
+    return __builtin_readcyclecounter();
 #elif defined(_arm32_)
     return MicroSeconds();
 #elif defined(_arm64_)

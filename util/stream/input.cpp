@@ -128,21 +128,21 @@ size_t IInputStream::DoSkip(size_t sz) {
         return Load(alloca(sz), sz);
     }
 
-    TTempBuf buf; 
-    size_t total = 0; 
+    TTempBuf buf;
+    size_t total = 0;
 
     while (sz) {
         const size_t lresult = Read(buf.Data(), Min<size_t>(sz, buf.Size()));
 
         if (lresult == 0) {
-            return total; 
+            return total;
         }
 
-        total += lresult; 
-        sz -= lresult; 
+        total += lresult;
+        sz -= lresult;
     }
- 
-    return total; 
+
+    return total;
 }
 
 TString IInputStream::ReadAll() {

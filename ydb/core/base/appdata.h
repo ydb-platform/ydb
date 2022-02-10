@@ -127,8 +127,8 @@ struct TAppData {
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
 
-    TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads; 
- 
+    TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
+
     THolder<NKikimrBlobStorage::TNodeWardenServiceSet> StaticBlobStorageConfig;
     THolder<NKikimrCms::TCmsConfig> DefaultCmsConfig;
 

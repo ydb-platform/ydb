@@ -47,7 +47,7 @@ protected:
 
     THolder<NKqp::TKqpShutdownController> KqpShutdownController;
 
-    TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads; 
+    TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
     TAutoPtr<TAppData> AppData;
 
     NBus::TBusQueueConfig ProxyBusQueueConfig;

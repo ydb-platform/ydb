@@ -1,15 +1,15 @@
 #pragma once
 
 #include "event.h"
-#include "event_load.h" 
- 
+#include "event_load.h"
+
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/arena.h>
 #include <library/cpp/actors/protos/actors.pb.h>
-#include <util/generic/deque.h> 
-#include <util/system/context.h> 
-#include <util/system/filemap.h> 
-#include <array> 
+#include <util/generic/deque.h>
+#include <util/system/context.h>
+#include <util/system/filemap.h>
+#include <array>
 
 namespace NActors {
 
@@ -29,11 +29,11 @@ namespace NActors {
         int64_t ByteCount() const override {
             return TotalByteCount;
         }
- 
+
     private:
         int64_t TotalByteCount = 0;
     };
- 
+
     class TChunkSerializer : public NProtoBuf::io::ZeroCopyOutputStream {
     public:
         TChunkSerializer() = default;
@@ -42,7 +42,7 @@ namespace NActors {
         virtual bool WriteRope(const TRope *rope) = 0;
         virtual bool WriteString(const TString *s) = 0;
     };
- 
+
     class TAllocChunkSerializer final : public TChunkSerializer {
     public:
         bool Next(void** data, int* size) override;
@@ -51,7 +51,7 @@ namespace NActors {
             return Buffers->GetSize();
         }
         bool WriteAliasedRaw(const void* data, int size) override;
- 
+
         // WARNING: these methods require owner to retain ownership and immutability of passed objects
         bool WriteRope(const TRope *rope) override;
         bool WriteString(const TString *s) override;
@@ -62,19 +62,19 @@ namespace NActors {
             }
             return std::move(Buffers);
         }
- 
+
     protected:
         TIntrusivePtr<TEventSerializedData> Buffers = new TEventSerializedData;
         TRope Backup;
     };
- 
+
     class TCoroutineChunkSerializer final : public TChunkSerializer, protected ITrampoLine {
     public:
         using TChunk = std::pair<const char*, size_t>;
 
         TCoroutineChunkSerializer();
         ~TCoroutineChunkSerializer();
- 
+
         void SetSerializingEvent(const IEventBase *event);
         void Abort();
         std::pair<TChunk*, TChunk*> FeedBuf(void* data, size_t size);
@@ -87,7 +87,7 @@ namespace NActors {
         const IEventBase *GetCurrentEvent() const {
             return Event;
         }
- 
+
         bool Next(void** data, int* size) override;
         void BackUp(int count) override;
         int64_t ByteCount() const override {
@@ -95,7 +95,7 @@ namespace NActors {
         }
         bool WriteAliasedRaw(const void* data, int size) override;
         bool AllowsAliasing() const override;
- 
+
         bool WriteRope(const TRope *rope) override;
         bool WriteString(const TString *s) override;
 
@@ -103,7 +103,7 @@ namespace NActors {
         void DoRun() override;
         void Resume();
         bool Produce(const void *data, size_t size);
- 
+
         i64 TotalSerializedDataSize;
         TMappedAllocation Stack;
         TContClosure SelfClosure;
@@ -120,7 +120,7 @@ namespace NActors {
         bool SerializationSuccess;
         bool Finished = false;
     };
- 
+
 #ifdef ACTORLIB_HUGE_PB_SIZE
     static const size_t EventMaxByteSize = 140 << 20; // (140MB)
 #else
@@ -137,9 +137,9 @@ namespace NActors {
 
     public:
         using ProtoRecordType = TRecord;
- 
+
         TEventPBBase() = default;
- 
+
         explicit TEventPBBase(const TRecord& rec)
         {
             Record = rec;
@@ -153,7 +153,7 @@ namespace NActors {
         TString ToStringHeader() const override {
             return Record.GetTypeName();
         }
- 
+
         TString ToString() const override {
             return Record.ShortDebugString();
         }
@@ -274,7 +274,7 @@ namespace NActors {
             ev->CachedByteSize = input->GetSize();
             return ev.Release();
         }
- 
+
         size_t GetCachedByteSize() const {
             if (CachedByteSize == 0) {
                 CachedByteSize = CalculateSerializedSize();

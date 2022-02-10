@@ -56,11 +56,11 @@ struct TEvSchemeShard {
         EvLoginResult,
 
 
-        EvBackupDatashard = EvModifySchemeTransaction + 6 * 512, 
-        EvBackupDatashardResult, 
+        EvBackupDatashard = EvModifySchemeTransaction + 6 * 512,
+        EvBackupDatashardResult,
         EvCancelTx,
         EvCancelTxResult,
- 
+
         EvEnd
     };
 
@@ -96,21 +96,21 @@ struct TEvSchemeShard {
         : public TEventPB<TEvCancelTx,
                           NKikimrScheme::TEvCancelTx,
                           EvCancelTx>
-    { 
-    }; 
- 
+    {
+    };
+
     struct TEvCancelTxResult:
         public TEventPB<TEvCancelTxResult,
                         NKikimrScheme::TEvCancelTxResult,
                         EvCancelTxResult>
-    { 
+    {
         TEvCancelTxResult() = default;
         TEvCancelTxResult(ui64 targetTxId, ui64 txId) {
             Record.SetTargetTxId(targetTxId);
             Record.SetTxId(txId);
-        } 
-    }; 
- 
+        }
+    };
+
     using EStatus = NKikimrScheme::EStatus;
 
     struct TEvModifySchemeTransactionResult : public TEventPB<TEvModifySchemeTransactionResult,

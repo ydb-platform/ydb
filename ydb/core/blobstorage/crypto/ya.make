@@ -22,11 +22,11 @@ ELSE()
     )
 ENDIF()
 
-PEERDIR( 
+PEERDIR(
     contrib/libs/t1ha
     library/cpp/sse
-) 
- 
+)
+
 END()
 
 RECURSE_FOR_TESTS(

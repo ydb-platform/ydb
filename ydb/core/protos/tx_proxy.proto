@@ -274,7 +274,7 @@ message TEvInvalidateTable {
     optional uint64 SchemeShardId = 1;
     optional uint64 TableId = 2;
 }
- 
+
 message TEvExportRequest {
     optional string DatabaseName = 1;
     optional string UserToken = 2;
@@ -285,10 +285,10 @@ message TEvExportRequest {
         NKikimrExport.TForgetExportRequest ForgetExport = 6;
         NKikimrExport.TListExportsRequest ListExports = 7;
     }
-} 
- 
+}
+
 message TEvExportResponse {
-    optional uint32 Status = 1; 
+    optional uint32 Status = 1;
     optional string ErrorDescription = 7;
     oneof Response {
         NKikimrExport.TCreateExportResponse CreateExport = 2;
@@ -297,4 +297,4 @@ message TEvExportResponse {
         NKikimrExport.TForgetExportResponse ForgetExport = 5;
         NKikimrExport.TListExportsResponse ListExports = 6;
     }
-} 
+}

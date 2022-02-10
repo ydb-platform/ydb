@@ -6,7 +6,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
 namespace NKikimr {
- 
+
     class TFakeCoordinator : public TActor<TFakeCoordinator>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         struct TState : TThrRefBase {
@@ -229,4 +229,4 @@ namespace NKikimr {
     };
 
     void BootFakeCoordinator(TTestActorRuntime& runtime, ui64 tabletId, TFakeCoordinator::TState::TPtr state);
-} 
+}

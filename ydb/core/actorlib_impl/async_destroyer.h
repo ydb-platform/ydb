@@ -29,7 +29,7 @@ private:
 template <class TVictim>
 void AsyncDestroy(TAutoPtr<TVictim> victim, const NActors::TActorContext &ctx, ui32 poolId = Max<ui32>()) {
     if (victim)
-        ctx.Register(new TAsyncDestroyer<TVictim>(victim), NActors::TMailboxType::HTSwap, poolId); 
+        ctx.Register(new TAsyncDestroyer<TVictim>(victim), NActors::TMailboxType::HTSwap, poolId);
 }
 
 }

@@ -214,49 +214,49 @@ namespace NActors {
                     return true;
                 case TMailboxType::HTSwap: {
                     THTSwapMailbox* const mailbox = THTSwapMailbox::Get(lineHint, x);
-#if (!defined(_tsan_enabled_)) 
+#if (!defined(_tsan_enabled_))
                     Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
-#endif 
+#endif
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
                         RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());
                         executorPool->ScheduleActivation(hint);
                     }
-                } 
+                }
                     return true;
                 case TMailboxType::ReadAsFilled: {
                     if (lineHint > TReadAsFilledMailbox::MaxMailboxesInLine())
                         return false;
- 
+
                     TReadAsFilledMailbox* const mailbox = TReadAsFilledMailbox::Get(lineHint, x);
-#if (!defined(_tsan_enabled_)) 
+#if (!defined(_tsan_enabled_))
                     Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
-#endif 
+#endif
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
                         RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());
                         executorPool->ScheduleActivation(hint);
                     }
-                } 
+                }
                     return true;
                 case TMailboxType::TinyReadAsFilled: {
                     if (lineHint > TTinyReadAsFilledMailbox::MaxMailboxesInLine())
                         return false;
- 
+
                     TTinyReadAsFilledMailbox* const mailbox = TTinyReadAsFilledMailbox::Get(lineHint, x);
-#if (!defined(_tsan_enabled_)) 
+#if (!defined(_tsan_enabled_))
                     Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
-#endif 
+#endif
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
                         RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());
                         executorPool->ScheduleActivation(hint);
                     }
-                } 
+                }
                     return true;
                 default:
                     Y_FAIL("unknown mailbox type");
-            } 
+            }
         }
 
         return false;

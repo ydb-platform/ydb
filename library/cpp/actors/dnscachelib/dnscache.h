@@ -1,6 +1,6 @@
 #pragma once
 
-#include <contrib/libs/c-ares/ares.h> 
+#include <contrib/libs/c-ares/ares.h>
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
 #include <util/network/address.h>
@@ -28,9 +28,9 @@ public:
 
     /* use with AF_INET, AF_INET6 or AF_UNSPEC */
     NAddr::IRemoteAddrPtr GetAddr(const TString& host,
-                                  int family, 
-                                  TIpPort port = 0, 
-                                  bool cacheOnly = false); 
+                                  int family,
+                                  TIpPort port = 0,
+                                  bool cacheOnly = false);
 
     void GetAllAddresses(const TString& host, TVector<NAddr::IRemoteAddrPtr>&);
 
@@ -68,8 +68,8 @@ private:
 
         TString AddrsV4ToString() const;
         TString AddrsV6ToString() const;
- 
-        bool IsStale(int family, const TDnsCache* ctx) const noexcept; 
+
+        bool IsStale(int family, const TDnsCache* ctx) const noexcept;
     };
 
     typedef TMap<TString, THost> THostCache;
@@ -99,9 +99,9 @@ private:
     typedef TMap<in6_addr, TAddr, TAddrCmp> TAddrCache;
 
     const THost& Resolve(const TString&, int family, bool cacheOnly = false);
- 
+
     const TAddr& ResolveAddr(const in6_addr&, int family);
- 
+
     void WaitTask(TAtomic&);
 
     static void GHBNCallback(void* arg, int status, int timeouts,
@@ -128,21 +128,21 @@ private:
 
     TMutex AresMtx;
     void* Channel;
- 
-    struct TAresLibInit { 
-        TAresLibInit() { 
+
+    struct TAresLibInit {
+        TAresLibInit() {
 #ifdef _win_
-            const auto res = ares_library_init(ARES_LIB_INIT_ALL); 
-            Y_VERIFY(res == 0); 
+            const auto res = ares_library_init(ARES_LIB_INIT_ALL);
+            Y_VERIFY(res == 0);
 #endif
-        } 
- 
-        ~TAresLibInit() { 
+        }
+
+        ~TAresLibInit() {
 #ifdef _win_
-            ares_library_cleanup(); 
+            ares_library_cleanup();
 #endif
-        } 
-    }; 
- 
-    static TAresLibInit InitAresLib; 
+        }
+    };
+
+    static TAresLibInit InitAresLib;
 };

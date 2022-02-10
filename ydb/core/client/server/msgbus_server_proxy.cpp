@@ -91,10 +91,10 @@ public:
             record->SetSchemeshardId(Request->Record.GetSchemeshardId());
             record->SetPathId(Request->Record.GetPathId());
         }
-        if (Request->Record.HasOptions()) { 
-            auto options = record->MutableOptions(); 
-            options->CopyFrom(Request->Record.GetOptions()); 
-        } 
+        if (Request->Record.HasOptions()) {
+            auto options = record->MutableOptions();
+            options->CopyFrom(Request->Record.GetOptions());
+        }
         req->Record.SetUserToken(TBase::GetSerializedToken());
         ctx.Send(MakeTxProxyID(), req.Release());
     }

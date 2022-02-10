@@ -3076,7 +3076,7 @@ function onTreeNodeComplete(result, obj) {
         name.innerHTML = "Life Time";
         value.innerHTML = partitionConfig.LifetimeSeconds + " seconds";
     }
- 
+
     if ((result.PathDescription.Self.PathType === 10 || result.PathDescription.Self.PathType === 4) && result.PathDescription.DomainDescription !== undefined) {
         if (result.PathDescription.DomainDescription.ProcessingParams !== undefined) {
             if (result.PathDescription.DomainDescription.ProcessingParams.Version !== undefined) {
@@ -3123,39 +3123,39 @@ function onTreeNodeComplete(result, obj) {
     }
 
     if (result.PathDescription.BackupProgress !== undefined) {
-        row = tab.insertRow(); 
-        name = row.insertCell(-1); 
-        value = row.insertCell(-1); 
-        name.innerHTML = "Backup progress"; 
- 
-        var total = result.PathDescription.BackupProgress.Total; 
-        var complete = total - 
-            result.PathDescription.BackupProgress.NotCompleteYet; 
-        var procent = Math.round(complete * 100 / total); 
-        value.innerHTML = complete + "/" + total + " (" + procent + "%)"; 
-    } 
- 
-    var backupResultList = result.PathDescription.LastBackupResult; 
+        row = tab.insertRow();
+        name = row.insertCell(-1);
+        value = row.insertCell(-1);
+        name.innerHTML = "Backup progress";
+
+        var total = result.PathDescription.BackupProgress.Total;
+        var complete = total -
+            result.PathDescription.BackupProgress.NotCompleteYet;
+        var procent = Math.round(complete * 100 / total);
+        value.innerHTML = complete + "/" + total + " (" + procent + "%)";
+    }
+
+    var backupResultList = result.PathDescription.LastBackupResult;
     if (backupResultList !== undefined && backupResultList.length > 0) {
-        var backupResult = backupResultList[backupResultList.length - 1]; 
+        var backupResult = backupResultList[backupResultList.length - 1];
         if (backupResult.CompleteTimeStamp !== undefined) {
-            row = tab.insertRow(); 
-            name = row.insertCell(-1); 
-            value = row.insertCell(-1); 
-            name.innerHTML = "Last backup time"; 
-            var timestampMS = backupResult.CompleteTimeStamp * 1000; 
-            var dateObj = new Date(timestampMS); 
-            value.innerHTML = dateObj.toLocaleString(); 
-        } 
- 
+            row = tab.insertRow();
+            name = row.insertCell(-1);
+            value = row.insertCell(-1);
+            name.innerHTML = "Last backup time";
+            var timestampMS = backupResult.CompleteTimeStamp * 1000;
+            var dateObj = new Date(timestampMS);
+            value.innerHTML = dateObj.toLocaleString();
+        }
+
         if (backupResult.ErrorCount !== undefined) {
-            row = tab.insertRow(); 
-            name = row.insertCell(-1); 
-            value = row.insertCell(-1); 
-            name.innerHTML = "Last backup error count"; 
-            value.innerHTML = backupResult.ErrorCount; 
-        } 
-    } 
+            row = tab.insertRow();
+            name = row.insertCell(-1);
+            value = row.insertCell(-1);
+            name.innerHTML = "Last backup error count";
+            value.innerHTML = backupResult.ErrorCount;
+        }
+    }
 }
 
 function onTreeNodeSelected(e, data) {

@@ -837,10 +837,10 @@ static void throw_exception(__cxa_exception *ex)
 	report_failure(err, ex);
 }
 
-typedef void (*cxa_throw_hook_t)(void*, std::type_info*, void(*)(void*)) noexcept; 
+typedef void (*cxa_throw_hook_t)(void*, std::type_info*, void(*)(void*)) noexcept;
 
-__attribute__((weak)) cxa_throw_hook_t cxa_throw_hook = nullptr; 
- 
+__attribute__((weak)) cxa_throw_hook_t cxa_throw_hook = nullptr;
+
 /**
  * ABI function for throwing an exception.  Takes the object to be thrown (the
  * pointer returned by __cxa_allocate_exception()), the type info for the
@@ -850,11 +850,11 @@ extern "C" void __cxa_throw(void *thrown_exception,
                             std::type_info *tinfo,
                             void(*dest)(void*))
 {
-	if (cxa_throw_hook) 
-	{ 
-		cxa_throw_hook(thrown_exception, tinfo, dest); 
-	} 
- 
+	if (cxa_throw_hook)
+	{
+		cxa_throw_hook(thrown_exception, tinfo, dest);
+	}
+
 	__cxa_exception *ex = reinterpret_cast<__cxa_exception*>(thrown_exception) - 1;
 
 	ex->referenceCount = 1;

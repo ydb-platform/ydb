@@ -8,8 +8,8 @@
 #include <ydb/core/base/shared_data.h>
 
 #include <util/generic/string.h>
-#include <util/system/types.h> 
- 
+#include <util/system/types.h>
+
 namespace NKikimr {
 namespace NTable {
 

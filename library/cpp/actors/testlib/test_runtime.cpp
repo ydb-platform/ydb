@@ -74,7 +74,7 @@ namespace NActors {
             ActorSystem->Stop();
 
         ActorSystem.Destroy();
-        Poller.Reset(); 
+        Poller.Reset();
     }
 
     TTestActorRuntimeBase::TNodeDataBase::~TNodeDataBase() {
@@ -909,17 +909,17 @@ namespace NActors {
         case TMailboxType::Revolving:
             UnlockFromExecution((TMailboxTable::TRevolvingMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
             break;
-        case TMailboxType::HTSwap: 
+        case TMailboxType::HTSwap:
             UnlockFromExecution((TMailboxTable::THTSwapMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
-            break; 
-        case TMailboxType::ReadAsFilled: 
+            break;
+        case TMailboxType::ReadAsFilled:
             UnlockFromExecution((TMailboxTable::TReadAsFilledMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
-            break; 
-        case TMailboxType::TinyReadAsFilled: 
+            break;
+        case TMailboxType::TinyReadAsFilled:
             UnlockFromExecution((TMailboxTable::TTinyReadAsFilledMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
-            break; 
+            break;
         default:
-            Y_FAIL("Unsupported mailbox type"); 
+            Y_FAIL("Unsupported mailbox type");
         }
 
         return actorId;
@@ -1645,13 +1645,13 @@ namespace NActors {
         setup->LocalServices = node->LocalServices;
         setup->Interconnect.ProxyActors.resize(FirstNodeId + NodeCount);
         const TActorId nameserviceId = GetNameserviceActorId();
- 
-        TIntrusivePtr<TInterconnectProxyCommon> common; 
-        common.Reset(new TInterconnectProxyCommon); 
-        common->NameserviceId = nameserviceId; 
-        common->MonCounters = interconnectCounters; 
+
+        TIntrusivePtr<TInterconnectProxyCommon> common;
+        common.Reset(new TInterconnectProxyCommon);
+        common->NameserviceId = nameserviceId;
+        common->MonCounters = interconnectCounters;
         common->TechnicalSelfHostName = "::1";
- 
+
         if (!UseRealThreads) {
             common->Settings.DeadPeer = TDuration::Max();
             common->Settings.CloseOnIdle = TDuration::Max();
@@ -1668,7 +1668,7 @@ namespace NActors {
                 continue;
 
             const ui32 peerNodeId = FirstNodeId + proxyNodeIndex;
- 
+
             IActor *proxyActor = UseRealInterconnect
                 ? new TInterconnectProxyTCP(peerNodeId, common)
                 : InterconnectMock.CreateProxyMock(setup->NodeId, peerNodeId, common);

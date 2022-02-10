@@ -195,7 +195,7 @@ namespace NActors {
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
     {
     }
- 
+
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                                std::shared_ptr<TLogBackend> logBackend,
                                std::shared_ptr<NMonitoring::TMetricRegistry> metrics)
@@ -260,8 +260,8 @@ namespace NActors {
                 break;
             default:
                 break;
-        } 
- 
+        }
+
     }
 
     void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {

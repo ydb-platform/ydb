@@ -24,91 +24,91 @@ namespace NFlatTests {
 using namespace Tests;
 using NClient::TValue;
 
-namespace { 
+namespace {
     class TFailingMtpQueue: public TSimpleThreadPool {
-    private: 
-        bool FailOnAdd_ = false; 
-    public: 
-        void SetFailOnAdd(bool fail = true) { 
-            FailOnAdd_ = fail; 
-        } 
+    private:
+        bool FailOnAdd_ = false;
+    public:
+        void SetFailOnAdd(bool fail = true) {
+            FailOnAdd_ = fail;
+        }
         [[nodiscard]] bool Add(IObjectInQueue* pObj) override {
-            if (FailOnAdd_) { 
-                return false; 
-            } 
- 
+            if (FailOnAdd_) {
+                return false;
+            }
+
             return TSimpleThreadPool::Add(pObj);
-        } 
-        TFailingMtpQueue() = default; 
+        }
+        TFailingMtpQueue() = default;
         TFailingMtpQueue(IThreadFactory* pool)
             : TSimpleThreadPool(pool)
-        { 
-        } 
-    }; 
- 
-    using TFailingServerMtpQueue = 
+        {
+        }
+    };
+
+    using TFailingServerMtpQueue =
         TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>;
- 
-    class THTTP200OkServer: public THttpServer::ICallBack { 
-        class TRequest: public THttpClientRequestEx { 
-        public: 
-            inline TRequest(THTTP200OkServer* parent) 
-                : Parent_(parent) 
-            { 
-            } 
- 
-            bool Reply(void* /*tsr*/) override { 
-                if (!ProcessHeaders()) { 
+
+    class THTTP200OkServer: public THttpServer::ICallBack {
+        class TRequest: public THttpClientRequestEx {
+        public:
+            inline TRequest(THTTP200OkServer* parent)
+                : Parent_(parent)
+            {
+            }
+
+            bool Reply(void* /*tsr*/) override {
+                if (!ProcessHeaders()) {
                     return true;
-                } 
- 
+                }
+
                 if (strncmp(RequestString.data(), "GET /hosts HTTP/1.", 18) == 0) {
                     TString list = Sprintf("[\"localhost\"]");
-                    Output() << "HTTP/1.1 200 Ok\r\n"; 
-                    Output() << "Connection: close\r\n"; 
-                    Output() << "X-Server: unit test server\r\n"; 
+                    Output() << "HTTP/1.1 200 Ok\r\n";
+                    Output() << "Connection: close\r\n";
+                    Output() << "X-Server: unit test server\r\n";
                     Output() << "Content-Length: " << list.size() << "\r\n";
-                    Output() << "\r\n"; 
-                    Output() << list; 
-                    return true; 
-                } 
- 
-                Output() << "HTTP/1.1 200 Ok\r\n"; 
+                    Output() << "\r\n";
+                    Output() << list;
+                    return true;
+                }
+
+                Output() << "HTTP/1.1 200 Ok\r\n";
                 if (Buf.Size()) {
-                    Output() << "X-Server: unit test server\r\n"; 
+                    Output() << "X-Server: unit test server\r\n";
                     Output() << "Content-Length: " << Buf.Size() << "\r\n\r\n";
                     Output().Write(Buf.AsCharPtr(), Buf.Size());
-                } else { 
-                    Output() << "X-Server: unit test server\r\n"; 
+                } else {
+                    Output() << "X-Server: unit test server\r\n";
                     Output() << "Content-Length: " << (Parent_->Res_).size()
-                             << "\r\n\r\n"; 
-                    Output() << Parent_->Res_; 
-                } 
-                Output().Finish(); 
- 
-                return true; 
-            } 
- 
-        private: 
-            THTTP200OkServer* Parent_ = nullptr; 
-        }; 
- 
-    public: 
+                             << "\r\n\r\n";
+                    Output() << Parent_->Res_;
+                }
+                Output().Finish();
+
+                return true;
+            }
+
+        private:
+            THTTP200OkServer* Parent_ = nullptr;
+        };
+
+    public:
         inline THTTP200OkServer(TString res)
-            : Res_(std::move(res)) 
-        { 
-        } 
- 
-        TClientRequest* CreateClient() override { 
-            return new TRequest(this); 
-        } 
- 
-    private: 
+            : Res_(std::move(res))
+        {
+        }
+
+        TClientRequest* CreateClient() override {
+            return new TRequest(this);
+        }
+
+    private:
         TString Res_;
-    }; 
-} 
- 
- 
+    };
+}
+
+
 Y_UNIT_TEST_SUITE(TFlatTest) {
 
     Y_UNIT_TEST(Init) {
@@ -2882,7 +2882,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.DeleteTable("/dc-1/Dir", "TableOld");
         annoyingClient.Ls("/dc-1/Dir/TableOld");
     }
- 
+
     Y_UNIT_TEST(AutoSplitBySize) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);

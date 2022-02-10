@@ -76,16 +76,16 @@ class TLockFreeQueue: public TNonCopyable {
     alignas(64) TRootNode* volatile FreePtr;
 
     void TryToFreeAsyncMemory() {
-        TAtomic keepCounter = AtomicAdd(FreeingTaskCounter, 0); 
+        TAtomic keepCounter = AtomicAdd(FreeingTaskCounter, 0);
         TRootNode* current = AtomicGet(FreePtr);
         if (current == nullptr)
             return;
         if (AtomicAdd(FreememCounter, 0) == 1) {
             // we are the last thread, try to cleanup
-            // check if another thread have cleaned up 
-            if (keepCounter != AtomicAdd(FreeingTaskCounter, 0)) { 
-                return; 
-            } 
+            // check if another thread have cleaned up
+            if (keepCounter != AtomicAdd(FreeingTaskCounter, 0)) {
+                return;
+            }
             if (AtomicCas(&FreePtr, (TRootNode*)nullptr, current)) {
                 // free list
                 while (current) {
@@ -94,7 +94,7 @@ class TLockFreeQueue: public TNonCopyable {
                     delete current;
                     current = p;
                 }
-                AtomicAdd(FreeingTaskCounter, 1); 
+                AtomicAdd(FreeingTaskCounter, 1);
             }
         }
     }
@@ -228,7 +228,7 @@ public:
     TLockFreeQueue()
         : JobQueue(new TRootNode)
         , FreememCounter(0)
-        , FreeingTaskCounter(0) 
+        , FreeingTaskCounter(0)
         , FreePtr(nullptr)
     {
     }

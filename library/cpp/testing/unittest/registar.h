@@ -279,8 +279,8 @@ private:                                                   \
     }                                                      \
                                                            \
     virtual void Execute() override {                      \
-        this->AtStart(); 
- 
+        this->AtStart();
+
 #ifndef UT_SKIP_EXCEPTIONS
 #define CATCH_REACTION(FN, e, context) this->AddError(("(" + TypeName(e) + ") " + e.what()).data(), context)
 #define CATCH_REACTION_BT(FN, e, context) this->AddError(("(" + TypeName(e) + ") " + e.what()).data(), (e.BackTrace() ? e.BackTrace()->PrintToString() : TString()), context)

@@ -91,62 +91,62 @@ protected:
         delete entry;
         return next;
     }
- 
-protected: 
-    struct TEntryIter { 
-        TEntry* ptr; 
- 
-        ElementType& operator*() { 
-            return ptr->Data; 
-        } 
- 
-        ElementType* operator->() { 
-            return &ptr->Data; 
-        } 
- 
-        TEntryIter& operator++() { 
-            ptr = AtomicGet(ptr->Next); 
-            return *this; 
-        } 
- 
-        bool operator!=(const TEntryIter& other) const { 
-            return ptr != other.ptr; 
-        } 
- 
-        bool operator==(const TEntryIter& other) const { 
-            return ptr == other.ptr; 
-        } 
-    }; 
- 
-    struct TConstEntryIter { 
-        const TEntry* ptr; 
- 
-        const ElementType& operator*() { 
-            return ptr->Data; 
-        } 
- 
-        const ElementType* operator->() { 
-            return &ptr->Data; 
-        } 
- 
-        TEntryIter& operator++() { 
-            ptr = AtomicGet(ptr->Next); 
-            return *this; 
-        } 
- 
-        bool operator!=(const TConstEntryIter& other) const { 
-            return ptr != other.ptr; 
-        } 
- 
-        bool operator==(const TConstEntryIter& other) const { 
-            return ptr == other.ptr; 
-        } 
-    }; 
- 
-public: 
-    using const_iterator = TConstEntryIter; 
-    using iterator = TEntryIter; 
- 
+
+protected:
+    struct TEntryIter {
+        TEntry* ptr;
+
+        ElementType& operator*() {
+            return ptr->Data;
+        }
+
+        ElementType* operator->() {
+            return &ptr->Data;
+        }
+
+        TEntryIter& operator++() {
+            ptr = AtomicGet(ptr->Next);
+            return *this;
+        }
+
+        bool operator!=(const TEntryIter& other) const {
+            return ptr != other.ptr;
+        }
+
+        bool operator==(const TEntryIter& other) const {
+            return ptr == other.ptr;
+        }
+    };
+
+    struct TConstEntryIter {
+        const TEntry* ptr;
+
+        const ElementType& operator*() {
+            return ptr->Data;
+        }
+
+        const ElementType* operator->() {
+            return &ptr->Data;
+        }
+
+        TEntryIter& operator++() {
+            ptr = AtomicGet(ptr->Next);
+            return *this;
+        }
+
+        bool operator!=(const TConstEntryIter& other) const {
+            return ptr != other.ptr;
+        }
+
+        bool operator==(const TConstEntryIter& other) const {
+            return ptr == other.ptr;
+        }
+    };
+
+public:
+    using const_iterator = TConstEntryIter;
+    using iterator = TEntryIter;
+
     iterator begin() {
         return {AtomicGet(Front)};
     }
@@ -156,7 +156,7 @@ public:
     const_iterator begin() const {
         return {AtomicGet(Front)};
     }
- 
+
     iterator end() {
         return {nullptr};
     }

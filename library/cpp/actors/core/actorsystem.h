@@ -129,7 +129,7 @@ namespace NActors {
 
         virtual void SetRealTimeMode() const {}
     };
- 
+
     // could be proxy to in-pool schedulers (for NUMA-aware executors)
     class ISchedulerThread : TNonCopyable {
     public:
@@ -352,7 +352,7 @@ namespace NActors {
         NLog::TSettings* LoggerSettings() const {
             return LoggerSettings0.Get();
         }
- 
+
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
 
         void DeferPreStop(std::function<void()> fn) {
@@ -360,8 +360,8 @@ namespace NActors {
         }
 
         /* This is the base for memory profiling tags.
-       System sets memory profiling tag for debug version of lfalloc. 
-       The tag is set as "base_tag + actor_activity_type". */ 
+       System sets memory profiling tag for debug version of lfalloc.
+       The tag is set as "base_tag + actor_activity_type". */
         static ui32 MemProfActivityBase;
     };
 }

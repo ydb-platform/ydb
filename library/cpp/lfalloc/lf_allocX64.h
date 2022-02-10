@@ -666,7 +666,7 @@ class TLFAllocFreeList {
 
     TNode* volatile Head;
     TNode* volatile Pending;
-    TAtomic PendingToFreeListCounter; 
+    TAtomic PendingToFreeListCounter;
     TAtomic AllocCount;
     void* Padding;
 
@@ -682,10 +682,10 @@ class TLFAllocFreeList {
         TNode* res;
         for (res = Head; res; res = Head) {
             TNode* keepNext = res->Next;
-            if (DoCas(&Head, keepNext, res) == res) { 
-                //Y_VERIFY(keepNext == res->Next); 
+            if (DoCas(&Head, keepNext, res) == res) {
+                //Y_VERIFY(keepNext == res->Next);
                 break;
-            } 
+            }
         }
         return res;
     }
@@ -712,19 +712,19 @@ public:
             Enqueue(&Pending, newFree);
     }
     Y_FORCE_INLINE void* Alloc() {
-        TAtomic keepCounter = AtomicAdd(PendingToFreeListCounter, 0); 
+        TAtomic keepCounter = AtomicAdd(PendingToFreeListCounter, 0);
         TNode* fl = Pending;
         if (AtomicAdd(AllocCount, 1) == 1) {
-            // No other allocs in progress. 
-            // If (keepCounter == PendingToFreeListCounter) then Pending was not freed by other threads. 
-            // Hence Pending is not used in any concurrent DoAlloc() atm and can be safely moved to FreeList 
+            // No other allocs in progress.
+            // If (keepCounter == PendingToFreeListCounter) then Pending was not freed by other threads.
+            // Hence Pending is not used in any concurrent DoAlloc() atm and can be safely moved to FreeList
             if (fl && keepCounter == AtomicAdd(PendingToFreeListCounter, 0) && DoCas(&Pending, (TNode*)nullptr, fl) == fl) {
                 // pick first element from Pending and return it
                 void* res = fl;
                 fl = fl->Next;
                 // if there are other elements in Pending list, add them to main free list
                 FreeList(fl);
-                AtomicAdd(PendingToFreeListCounter, 1); 
+                AtomicAdd(PendingToFreeListCounter, 1);
                 AtomicAdd(AllocCount, -1);
                 return res;
             }
@@ -1308,7 +1308,7 @@ static void AllocThreadInfo() {
 
 struct TAllocHeader {
     uint64_t Size;
-    int Tag; 
+    int Tag;
     int Cookie;
 };
 
@@ -1331,7 +1331,7 @@ static inline TAllocHeader* GetAllocHeader(void* p) {
 PERTHREAD int AllocationTag;
 extern "C" int SetThreadAllocTag(int tag) {
     int prevTag = AllocationTag;
-    if (tag < DBG_ALLOC_MAX_TAG && tag >= 0) { 
+    if (tag < DBG_ALLOC_MAX_TAG && tag >= 0) {
         AllocationTag = tag;
     }
     return prevTag;
@@ -1417,7 +1417,7 @@ static inline void SampleDeallocation(TAllocHeader* p, int sizeIdx) {
 }
 
 static inline void TrackPerTagAllocation(TAllocHeader* p, int sizeIdx) {
-    if (p->Tag < DBG_ALLOC_MAX_TAG && p->Tag >= 0) { 
+    if (p->Tag < DBG_ALLOC_MAX_TAG && p->Tag >= 0) {
         Y_ASSERT_NOBT(sizeIdx < DBG_ALLOC_NUM_SIZES);
         auto& global = GlobalPerTagAllocCounters[p->Tag][sizeIdx];
 
@@ -1432,7 +1432,7 @@ static inline void TrackPerTagAllocation(TAllocHeader* p, int sizeIdx) {
 }
 
 static inline void TrackPerTagDeallocation(TAllocHeader* p, int sizeIdx) {
-    if (p->Tag < DBG_ALLOC_MAX_TAG && p->Tag >= 0) { 
+    if (p->Tag < DBG_ALLOC_MAX_TAG && p->Tag >= 0) {
         Y_ASSERT_NOBT(sizeIdx < DBG_ALLOC_NUM_SIZES);
         auto& global = GlobalPerTagAllocCounters[p->Tag][sizeIdx];
 
@@ -1609,10 +1609,10 @@ static Y_FORCE_INLINE void LFFree(void* p) {
         return;
     }
 
-#if defined(LFALLOC_DBG) 
-    TrackDeallocation(p, nSizeIdx); 
-#endif 
- 
+#if defined(LFALLOC_DBG)
+    TrackDeallocation(p, nSizeIdx);
+#endif
+
 #ifdef DBG_FILL_MEMORY
     memset(p, 0xfe, nSizeIdxToSize[nSizeIdx]);
 #endif

@@ -738,10 +738,10 @@ void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* 
             afterFork();
         }
 
-        if (envp == nullptr) { 
-            execvp(argv[0], argv); 
+        if (envp == nullptr) {
+            execvp(argv[0], argv);
         } else {
-            execve(argv[0], argv, envp); 
+            execve(argv[0], argv, envp);
         }
         Cerr << "Process was not created: " << LastSystemErrorText() << Endl;
     } catch (const std::exception& error) {
@@ -782,52 +782,52 @@ void TShellCommand::TImpl::Run() {
         ythrow TSystemError() << "Cannot block all signals in parent";
     }
 
-    /* arguments holders */ 
+    /* arguments holders */
     TString shellArg;
     TVector<char*> qargv;
-    /* 
-      Following "const_cast"s are safe: 
-      http://pubs.opengroup.org/onlinepubs/9699919799/functions/exec.html 
-    */ 
-    if (UseShell) { 
-        shellArg = GetQuotedCommand(); 
-        qargv.reserve(4); 
-        qargv.push_back(const_cast<char*>("/bin/sh")); 
-        qargv.push_back(const_cast<char*>("-c")); 
-        // two args for 'sh -c -- ', 
-        // one for program name, and one for NULL at the end 
+    /*
+      Following "const_cast"s are safe:
+      http://pubs.opengroup.org/onlinepubs/9699919799/functions/exec.html
+    */
+    if (UseShell) {
+        shellArg = GetQuotedCommand();
+        qargv.reserve(4);
+        qargv.push_back(const_cast<char*>("/bin/sh"));
+        qargv.push_back(const_cast<char*>("-c"));
+        // two args for 'sh -c -- ',
+        // one for program name, and one for NULL at the end
         qargv.push_back(const_cast<char*>(shellArg.data()));
-    } else { 
-        qargv.reserve(Arguments.size() + 2); 
+    } else {
+        qargv.reserve(Arguments.size() + 2);
         qargv.push_back(const_cast<char*>(Command.data()));
         for (auto& i : Arguments) {
             qargv.push_back(const_cast<char*>(i.data()));
-        } 
-    } 
- 
-    qargv.push_back(nullptr); 
- 
+        }
+    }
+
+    qargv.push_back(nullptr);
+
     TVector<TString> envHolder;
     TVector<char*> envp;
-    if (!Environment.empty()) { 
+    if (!Environment.empty()) {
         for (auto& env : Environment) {
-            envHolder.emplace_back(env.first + '=' + env.second); 
+            envHolder.emplace_back(env.first + '=' + env.second);
             envp.push_back(const_cast<char*>(envHolder.back().data()));
-        } 
-        envp.push_back(nullptr); 
-    } 
- 
+        }
+        envp.push_back(nullptr);
+    }
+
     pid_t pid = fork();
     if (pid == -1) {
         AtomicSet(ExecutionStatus, SHELL_ERROR);
         /// @todo check if pipes are still open
         ythrow TSystemError() << "Cannot fork";
     } else if (pid == 0) { // child
-        if (envp.size() != 0) { 
+        if (envp.size() != 0) {
             OnFork(pipes, oldmask, qargv.data(), envp.data(), FuncAfterFork);
-        } else { 
+        } else {
             OnFork(pipes, oldmask, qargv.data(), nullptr, FuncAfterFork);
-        } 
+        }
     } else { // parent
         // restore signal mask
         if (SigProcMask(SIG_SETMASK, &oldmask, nullptr) != 0) {

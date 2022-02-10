@@ -1,16 +1,16 @@
 UNITTEST_FOR(library/cpp/threading/queue)
- 
+
 OWNER(agri)
- 
-ALLOCATOR(B) 
- 
-SRCS( 
-    basic_ut.cpp 
-    queue_ut.cpp 
-    tune_ut.cpp 
-    unordered_ut.cpp 
-    ut_helpers.cpp 
-    ut_helpers.h 
-) 
- 
-END() 
+
+ALLOCATOR(B)
+
+SRCS(
+    basic_ut.cpp
+    queue_ut.cpp
+    tune_ut.cpp
+    unordered_ut.cpp
+    ut_helpers.cpp
+    ut_helpers.h
+)
+
+END()

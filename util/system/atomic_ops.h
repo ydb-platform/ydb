@@ -40,41 +40,41 @@ inline TEnableIfCastable<T, T> AtomicIncrement(T volatile& target) {
 }
 
 template <typename T>
-inline TEnableIfCastable<T, T> AtomicGetAndIncrement(T volatile& target) { 
-    return static_cast<T>(AtomicGetAndIncrement(*AsAtomicPtr(&target))); 
-} 
- 
-template <typename T> 
+inline TEnableIfCastable<T, T> AtomicGetAndIncrement(T volatile& target) {
+    return static_cast<T>(AtomicGetAndIncrement(*AsAtomicPtr(&target)));
+}
+
+template <typename T>
 inline TEnableIfCastable<T, T> AtomicDecrement(T volatile& target) {
     return static_cast<T>(AtomicDecrement(*AsAtomicPtr(&target)));
 }
 
 template <typename T>
-inline TEnableIfCastable<T, T> AtomicGetAndDecrement(T volatile& target) { 
-    return static_cast<T>(AtomicGetAndDecrement(*AsAtomicPtr(&target))); 
-} 
- 
-template <typename T> 
+inline TEnableIfCastable<T, T> AtomicGetAndDecrement(T volatile& target) {
+    return static_cast<T>(AtomicGetAndDecrement(*AsAtomicPtr(&target)));
+}
+
+template <typename T>
 inline TEnableIfCastable<T, T> AtomicAdd(T volatile& target, TAtomicBase value) {
     return static_cast<T>(AtomicAdd(*AsAtomicPtr(&target), value));
 }
 
 template <typename T>
-inline TEnableIfCastable<T, T> AtomicGetAndAdd(T volatile& target, TAtomicBase value) { 
-    return static_cast<T>(AtomicGetAndAdd(*AsAtomicPtr(&target), value)); 
-} 
- 
-template <typename T> 
+inline TEnableIfCastable<T, T> AtomicGetAndAdd(T volatile& target, TAtomicBase value) {
+    return static_cast<T>(AtomicGetAndAdd(*AsAtomicPtr(&target), value));
+}
+
+template <typename T>
 inline TEnableIfCastable<T, T> AtomicSub(T volatile& target, TAtomicBase value) {
     return static_cast<T>(AtomicSub(*AsAtomicPtr(&target), value));
 }
 
 template <typename T>
-inline TEnableIfCastable<T, T> AtomicGetAndSub(T volatile& target, TAtomicBase value) { 
-    return static_cast<T>(AtomicGetAndSub(*AsAtomicPtr(&target), value)); 
-} 
- 
-template <typename T> 
+inline TEnableIfCastable<T, T> AtomicGetAndSub(T volatile& target, TAtomicBase value) {
+    return static_cast<T>(AtomicGetAndSub(*AsAtomicPtr(&target), value));
+}
+
+template <typename T>
 inline TEnableIfCastable<T, T> AtomicSwap(T volatile* target, TAtomicBase exchange) {
     return static_cast<T>(AtomicSwap(AsAtomicPtr(target), exchange));
 }
@@ -85,11 +85,11 @@ inline TEnableIfCastable<T, bool> AtomicCas(T volatile* target, TAtomicBase exch
 }
 
 template <typename T>
-inline TEnableIfCastable<T, T> AtomicGetAndCas(T volatile* target, TAtomicBase exchange, TAtomicBase compare) { 
-    return static_cast<T>(AtomicGetAndCas(AsAtomicPtr(target), exchange, compare)); 
-} 
- 
-template <typename T> 
+inline TEnableIfCastable<T, T> AtomicGetAndCas(T volatile* target, TAtomicBase exchange, TAtomicBase compare) {
+    return static_cast<T>(AtomicGetAndCas(AsAtomicPtr(target), exchange, compare));
+}
+
+template <typename T>
 inline TEnableIfCastable<T, bool> AtomicTryLock(T volatile* target) {
     return AtomicTryLock(AsAtomicPtr(target));
 }
@@ -154,36 +154,36 @@ inline bool AtomicCas(T* volatile* target, T* exchange, T* compare) {
 }
 
 template <typename T>
-inline T* AtomicGetAndCas(T* volatile* target, T* exchange, T* compare) { 
-    return reinterpret_cast<T*>(AtomicGetAndCas(AsAtomicPtr(target), reinterpret_cast<TAtomicBase>(exchange), reinterpret_cast<TAtomicBase>(compare))); 
-} 
- 
-template <typename T> 
+inline T* AtomicGetAndCas(T* volatile* target, T* exchange, T* compare) {
+    return reinterpret_cast<T*>(AtomicGetAndCas(AsAtomicPtr(target), reinterpret_cast<TAtomicBase>(exchange), reinterpret_cast<TAtomicBase>(compare)));
+}
+
+template <typename T>
 inline bool AtomicCas(T* volatile* target, T* exchange, TNullPtr) {
     return AtomicCas(AsAtomicPtr(target), reinterpret_cast<TAtomicBase>(exchange), 0);
 }
 
 template <typename T>
-inline T* AtomicGetAndCas(T* volatile* target, T* exchange, TNullPtr) { 
-    return reinterpret_cast<T*>(AtomicGetAndCas(AsAtomicPtr(target), reinterpret_cast<TAtomicBase>(exchange), 0)); 
-} 
- 
-template <typename T> 
+inline T* AtomicGetAndCas(T* volatile* target, T* exchange, TNullPtr) {
+    return reinterpret_cast<T*>(AtomicGetAndCas(AsAtomicPtr(target), reinterpret_cast<TAtomicBase>(exchange), 0));
+}
+
+template <typename T>
 inline bool AtomicCas(T* volatile* target, TNullPtr, T* compare) {
     return AtomicCas(AsAtomicPtr(target), 0, reinterpret_cast<TAtomicBase>(compare));
 }
 
 template <typename T>
-inline T* AtomicGetAndCas(T* volatile* target, TNullPtr, T* compare) { 
-    return reinterpret_cast<T*>(AtomicGetAndCas(AsAtomicPtr(target), 0, reinterpret_cast<TAtomicBase>(compare))); 
-} 
- 
-template <typename T> 
+inline T* AtomicGetAndCas(T* volatile* target, TNullPtr, T* compare) {
+    return reinterpret_cast<T*>(AtomicGetAndCas(AsAtomicPtr(target), 0, reinterpret_cast<TAtomicBase>(compare)));
+}
+
+template <typename T>
 inline bool AtomicCas(T* volatile* target, TNullPtr, TNullPtr) {
     return AtomicCas(AsAtomicPtr(target), 0, 0);
 }
- 
-template <typename T> 
-inline T* AtomicGetAndCas(T* volatile* target, TNullPtr, TNullPtr) { 
-    return reinterpret_cast<T*>(AtomicGetAndCas(AsAtomicPtr(target), 0, 0)); 
-} 
+
+template <typename T>
+inline T* AtomicGetAndCas(T* volatile* target, TNullPtr, TNullPtr) {
+    return reinterpret_cast<T*>(AtomicGetAndCas(AsAtomicPtr(target), 0, 0));
+}

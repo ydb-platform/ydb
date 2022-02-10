@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include "ls_checks.h"
 #include "test_env.h"
 
@@ -16,18 +16,18 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 
 #include <functional>
 
-#undef Cdbg 
+#undef Cdbg
 #if 1
     #define Cdbg Cerr
 #else
     #define Cdbg Cnull
 #endif
- 
-namespace NSchemeShardUT_Private { 
+
+namespace NSchemeShardUT_Private {
     using namespace NKikimr;
 
     using TEvTx = TEvSchemeShard::TEvModifySchemeTransaction;
@@ -36,7 +36,7 @@ namespace NSchemeShardUT_Private {
     NKikimrProto::EReplyStatus LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query, NKikimrMiniKQL::TResult& result, TString& err);
     NKikimrMiniKQL::TResult LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query);
     NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId, const TString& schemeChangesStr, bool dryRun, NTabletFlatScheme::TSchemeChanges& scheme, TString& err);
- 
+
     bool CheckLocalRowExists(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn, ui64 keyValue);
 
     ////////// describe options
@@ -62,7 +62,7 @@ namespace NSchemeShardUT_Private {
     TString TestLs(TTestActorRuntime& runtime, const TString& path, bool returnPartitioningInfo = false, NLs::TCheckFunc check = nullptr);
     TString TestLs(TTestActorRuntime& runtime, const TString& path, const NKikimrSchemeOp::TDescribeOptions& opts, NLs::TCheckFunc check = nullptr);
     TString TestLsPathId(TTestActorRuntime& runtime, ui64 pathId, NLs::TCheckFunc check = nullptr);
- 
+
     ////////// modification results
     void CheckExpected(const TVector<TEvSchemeShard::EStatus>& expected, TEvSchemeShard::EStatus result, const TString& reason);
     void CheckExpected(const TVector<Ydb::StatusIds::StatusCode>& expected, Ydb::StatusIds::StatusCode result, const TString& reason);
@@ -465,4 +465,4 @@ namespace NSchemeShardUT_Private {
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime& runtime, TVector<THolder<IEventHandle>>& suppressed, ui32 type);
     void WaitForSuppressed(TTestActorRuntime& runtime, TVector<THolder<IEventHandle>>& suppressed, ui32 count, TTestActorRuntime::TEventObserver prevObserver);
 
-} //NSchemeShardUT_Private 
+} //NSchemeShardUT_Private

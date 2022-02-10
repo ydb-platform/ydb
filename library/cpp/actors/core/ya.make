@@ -32,8 +32,8 @@ SRCS(
     ask.h
     balancer.h
     balancer.cpp
-    buffer.cpp 
-    buffer.h 
+    buffer.cpp
+    buffer.h
     callstack.cpp
     callstack.h
     config.h
@@ -45,7 +45,7 @@ SRCS(
     event.h
     event_load.h
     event_local.h
-    event_pb.cpp 
+    event_pb.cpp
     event_pb.h
     events.h
     events_undelivered.cpp

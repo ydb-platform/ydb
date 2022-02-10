@@ -10,30 +10,30 @@ SRCS(
     actor_tracker.cpp
     actor_tracker.h
     async_destroyer.h
-    connect_socket_protocol.cpp 
-    connect_socket_protocol.h 
+    connect_socket_protocol.cpp
+    connect_socket_protocol.h
     defs.h
     destruct_actor.h
-    http_request_protocol.h 
+    http_request_protocol.h
     load_network.cpp
-    load_network.h 
+    load_network.h
     long_timer.cpp
     long_timer.h
     mad_squirrel.cpp
     mad_squirrel.h
     melancholic_gopher.cpp
-    name_service_client_protocol.cpp 
-    name_service_client_protocol.h 
+    name_service_client_protocol.cpp
+    name_service_client_protocol.h
     node_identifier.cpp
     node_identifier.h
-    proto_ready_actor.h 
-    read_data_protocol.cpp 
-    read_data_protocol.h 
-    read_http_reply_protocol.cpp 
-    read_http_reply_protocol.h 
+    proto_ready_actor.h
+    read_data_protocol.cpp
+    read_data_protocol.h
+    read_http_reply_protocol.cpp
+    read_http_reply_protocol.h
     router_rr.h
-    send_data_protocol.cpp 
-    send_data_protocol.h 
+    send_data_protocol.cpp
+    send_data_protocol.h
 )
 
 PEERDIR(

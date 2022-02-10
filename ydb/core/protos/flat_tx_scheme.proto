@@ -79,18 +79,18 @@ message TEvDescribeSchemeResult {
 
 message TEvCancelTx {
     optional uint64 TargetTxId = 1;
-    optional string Path = 2; 
-    optional string SecurityToken = 3; 
-    optional uint64 TxId = 4; 
-} 
- 
+    optional string Path = 2;
+    optional string SecurityToken = 3;
+    optional uint64 TxId = 4;
+}
+
 message TEvCancelTxResult {
-    optional EStatus Status = 1; 
-    optional string Result = 2; 
+    optional EStatus Status = 1;
+    optional string Result = 2;
     optional uint64 TargetTxId = 3;
     optional uint64 TxId = 4;
-} 
- 
+}
+
 message TEvUpdateConfig {
     optional NActorsProto.TActorId Source = 1;
     optional TConfig Config = 2;

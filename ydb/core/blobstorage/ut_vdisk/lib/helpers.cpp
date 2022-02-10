@@ -1744,7 +1744,7 @@ void PrintDebug(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NActors:
             ingressStr = ingress.ToString(&info->GetTopology(), vdisk, id);
             ingressRaw = ingress.Raw();
         }
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  @@@@@@@@@@ Status=%s LogoBlob=%s Data='%s' Ingress='%s' Raw=0x%lx", 
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  @@@@@@@@@@ Status=%s LogoBlob=%s Data='%s' Ingress='%s' Raw=0x%lx",
                    NKikimrProto::EReplyStatus_Name(q.GetStatus()).data(), id.ToString().data(), LimitData(q.GetBuffer()).data(),
                    ingressStr.data(), ingressRaw);
     }

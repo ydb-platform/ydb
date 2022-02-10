@@ -27,45 +27,45 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
 
     char* s = RequestString.begin();
 
-    enum EMethod { 
-        NotImplemented, 
-        Get, 
-        Post, 
-        Put, 
+    enum EMethod {
+        NotImplemented,
+        Get,
+        Post,
+        Put,
         Patch,
         Delete,
-    }; 
- 
-    enum EMethod foundMethod; 
-    char* urlStart; 
- 
+    };
+
+    enum EMethod foundMethod;
+    char* urlStart;
+
     if (strnicmp(s, "GET ", 4) == 0) {
-        foundMethod = Get; 
-        urlStart = s + 4; 
-    } else if (strnicmp(s, "POST ", 5) == 0) { 
-        foundMethod = Post; 
-        urlStart = s + 5; 
-    } else if (strnicmp(s, "PUT ", 4) == 0) { 
-        foundMethod = Put; 
-        urlStart = s + 4; 
+        foundMethod = Get;
+        urlStart = s + 4;
+    } else if (strnicmp(s, "POST ", 5) == 0) {
+        foundMethod = Post;
+        urlStart = s + 5;
+    } else if (strnicmp(s, "PUT ", 4) == 0) {
+        foundMethod = Put;
+        urlStart = s + 4;
     } else if (strnicmp(s, "PATCH ", 6) == 0) {
         foundMethod = Patch;
         urlStart = s + 6;
     } else if (strnicmp(s, "DELETE ", 7) == 0) {
         foundMethod = Delete;
         urlStart = s + 7;
-    } else { 
-        foundMethod = NotImplemented; 
-    } 
- 
-    switch (foundMethod) { 
+    } else {
+        foundMethod = NotImplemented;
+    }
+
+    switch (foundMethod) {
         case Get:
         case Delete:
             if (!Parse(urlStart, rd)) {
                 return false;
             }
             break;
- 
+
         case Post:
         case Put:
         case Patch:
@@ -91,8 +91,8 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
             } catch (...) {
                 Output() << "HTTP/1.1 400 Bad request\r\n\r\n";
                 return false;
-            } 
- 
+            }
+
             if (!Parse(urlStart, rd)) {
                 return false;
             }

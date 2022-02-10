@@ -2616,10 +2616,10 @@ void TSchemeShard::PersistTxShardStatus(NIceDb::TNiceDb& db, TOperationId opId, 
 }
 
 void TSchemeShard::PersistBackupSettings(
-        NIceDb::TNiceDb& db, 
-        TPathId pathId, 
+        NIceDb::TNiceDb& db,
+        TPathId pathId,
         const NKikimrSchemeOp::TBackupTask& settings)
-{ 
+{
 #define PERSIST_BACKUP_SETTINGS(Kind) \
     if (settings.Has##Kind()) { \
         if (IsLocalId(pathId)) { \
@@ -2640,13 +2640,13 @@ void TSchemeShard::PersistBackupSettings(
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::NumberOfRetries>(settings.GetNumberOfRetries())); \
         } \
     }
- 
+
     PERSIST_BACKUP_SETTINGS(YTSettings)
     PERSIST_BACKUP_SETTINGS(S3Settings)
 
 #undef PERSIST_BACKUP_SETTINGS
-} 
- 
+}
+
 void TSchemeShard::PersistCompletedBackupRestore(NIceDb::TNiceDb& db, TTxId txId, const TTxState& txState, const TTableInfo::TBackupRestoreResult& info, TTableInfo::TBackupRestoreResult::EKind kind) {
     TPathId pathId = txState.TargetPathId;
 
@@ -2684,8 +2684,8 @@ void TSchemeShard::PersistBackupDone(NIceDb::TNiceDb& db, TPathId pathId) {
     }
 
     db.Table<Schema::MigratedBackupSettings>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
-} 
- 
+}
+
 void TSchemeShard::PersistBlockStorePartition(NIceDb::TNiceDb& db, TPathId pathId, ui32 partitionId, TShardIdx shardIdx, ui64 version)
 {
     Y_VERIFY(IsLocalId(pathId));
@@ -2693,7 +2693,7 @@ void TSchemeShard::PersistBlockStorePartition(NIceDb::TNiceDb& db, TPathId pathI
         NIceDb::TUpdate<Schema::BlockStorePartitions::ShardIdx>(shardIdx.GetLocalId()),
         NIceDb::TUpdate<Schema::BlockStorePartitions::AlterVersion>(version));
 }
- 
+
 void TSchemeShard::PersistBlockStoreVolume(NIceDb::TNiceDb& db, TPathId pathId, const TBlockStoreVolumeInfo::TPtr volume)
 {
     Y_VERIFY(IsLocalId(pathId));
@@ -5268,17 +5268,17 @@ void TSchemeShard::Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvCancelTx::TPtr& ev, const TActorContext& ctx) {
-    if (IsReadOnlyMode) { 
+    if (IsReadOnlyMode) {
         LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "Ignoring messgage TEvSchemeShard::TEvCancelTx" <<
                    " reason# schemeshard in readonly" <<
                    " schemeshard# " << TabletID());
-        return; 
-    } 
- 
+        return;
+    }
+
     Execute(CreateTxOperationPropose(ev), ctx);
-} 
- 
+}
+
 void TSchemeShard::Handle(TEvSchemeShard::TEvPublishTenantAsReadOnly::TPtr &ev, const TActorContext &ctx) {
     Execute(CreateTxPublishTenantAsReadOnly(ev), ctx);
 }

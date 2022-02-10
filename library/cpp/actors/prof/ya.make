@@ -1,19 +1,19 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     agri
     g:kikimr
 )
- 
-SRCS( 
-    tag.cpp 
-) 
- 
-PEERDIR( 
+
+SRCS(
+    tag.cpp
+)
+
+PEERDIR(
     library/cpp/charset
     library/cpp/containers/atomizer
-) 
- 
+)
+
 IF (PROFILE_MEMORY_ALLOCATIONS)
     CFLAGS(-DPROFILE_MEMORY_ALLOCATIONS)
     PEERDIR(
@@ -30,4 +30,4 @@ ELSE()
     SRCS(tcmalloc_null.cpp)
 ENDIF()
 
-END() 
+END()

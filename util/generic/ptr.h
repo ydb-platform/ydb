@@ -366,19 +366,19 @@ public:
     inline ~TRefCounted() = default;
 
     inline void Ref(TAtomicBase d) noexcept {
-        auto resultCount = Counter_.Add(d); 
-        Y_ASSERT(resultCount >= d); 
-        (void)resultCount; 
+        auto resultCount = Counter_.Add(d);
+        Y_ASSERT(resultCount >= d);
+        (void)resultCount;
     }
 
     inline void Ref() noexcept {
-        auto resultCount = Counter_.Inc(); 
-        Y_ASSERT(resultCount != 0); 
-        (void)resultCount; 
+        auto resultCount = Counter_.Inc();
+        Y_ASSERT(resultCount != 0);
+        (void)resultCount;
     }
 
     inline void UnRef(TAtomicBase d) noexcept {
-        auto resultCount = Counter_.Sub(d); 
+        auto resultCount = Counter_.Sub(d);
         Y_ASSERT(resultCount >= 0);
         if (resultCount == 0) {
             D::Destroy(static_cast<T*>(this));
@@ -389,14 +389,14 @@ public:
         UnRef(1);
     }
 
-    inline TAtomicBase RefCount() const noexcept { 
+    inline TAtomicBase RefCount() const noexcept {
         return Counter_.Val();
     }
 
     inline void DecRef() noexcept {
-        auto resultCount = Counter_.Dec(); 
-        Y_ASSERT(resultCount >= 0); 
-        (void)resultCount; 
+        auto resultCount = Counter_.Dec();
+        Y_ASSERT(resultCount >= 0);
+        (void)resultCount;
     }
 
     TRefCounted(const TRefCounted&)
@@ -543,11 +543,11 @@ public:
         return *this;
     }
 
-    // Effectively replace both: 
-    // Reset(const TIntrusivePtr&) 
-    // Reset(TIntrusivePtr&&) 
-    inline void Reset(TIntrusivePtr t) noexcept { 
-        Swap(t); 
+    // Effectively replace both:
+    // Reset(const TIntrusivePtr&)
+    // Reset(TIntrusivePtr&&)
+    inline void Reset(TIntrusivePtr t) noexcept {
+        Swap(t);
     }
 
     inline void Reset() noexcept {
@@ -663,11 +663,11 @@ public:
         return *this;
     }
 
-    // Effectively replace both: 
-    // Reset(const TIntrusiveConstPtr&) 
-    // Reset(TIntrusiveConstPtr&&) 
-    inline void Reset(TIntrusiveConstPtr t) noexcept { 
-        Swap(t); 
+    // Effectively replace both:
+    // Reset(const TIntrusiveConstPtr&)
+    // Reset(TIntrusiveConstPtr&&)
+    inline void Reset(TIntrusiveConstPtr t) noexcept {
+        Swap(t);
     }
 
     inline void Reset() noexcept {
@@ -783,11 +783,11 @@ template <typename T, class Ops = TDefaultIntrusivePtrOps<T>, typename... Args>
     return new T{std::forward<Args>(args)...};
 }
 
-template <typename T, class Ops = TDefaultIntrusivePtrOps<T>, typename... Args> 
+template <typename T, class Ops = TDefaultIntrusivePtrOps<T>, typename... Args>
 [[nodiscard]] TIntrusiveConstPtr<T, Ops> MakeIntrusiveConst(Args&&... args) {
-    return new T{std::forward<Args>(args)...}; 
-} 
- 
+    return new T{std::forward<Args>(args)...};
+}
+
 template <class T, class C, class D>
 class TSharedPtr: public TPointerBase<TSharedPtr<T, C, D>, T> {
     template <class TT, class CC, class DD>
@@ -862,11 +862,11 @@ public:
         return *this;
     }
 
-    // Effectively replace both: 
-    // Reset(const TSharedPtr& t) 
-    // Reset(TSharedPtr&& t) 
-    inline void Reset(TSharedPtr t) noexcept { 
-        Swap(t); 
+    // Effectively replace both:
+    // Reset(const TSharedPtr& t)
+    // Reset(TSharedPtr&& t)
+    inline void Reset(TSharedPtr t) noexcept {
+        Swap(t);
     }
 
     inline void Reset() noexcept {

@@ -62,7 +62,7 @@ namespace NActors {
         TAtomic ThreadUtilization;
         TAtomic MaxUtilizationCounter;
         TAtomic MaxUtilizationAccumulator;
- 
+
         TAtomic ThreadCount;
         TMutex ChangeThreadsLock;
 
@@ -81,7 +81,7 @@ namespace NActors {
                            ui32 maxActivityType = 1);
         explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg);
         ~TBasicExecutorPool();
- 
+
         ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;

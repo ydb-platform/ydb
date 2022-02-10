@@ -14,7 +14,7 @@ message TEvNodeInfo {
     optional string Address = 2;
     optional uint32 Port = 3;
 }
- 
+
 extend google.protobuf.FieldOptions {
     optional string PrintName = 50376;
 }
@@ -43,19 +43,19 @@ message TScopeId {
     optional fixed64 X2 = 2;
 }
 
-message THandshakeRequest { 
-    required uint64 Protocol = 1; 
- 
-    required uint64 ProgramPID = 2; 
-    required uint64 ProgramStartTime = 3; 
-    required uint64 Serial = 4; 
- 
-    required uint32 ReceiverNodeId = 5; 
+message THandshakeRequest {
+    required uint64 Protocol = 1;
+
+    required uint64 ProgramPID = 2;
+    required uint64 ProgramStartTime = 3;
+    required uint64 Serial = 4;
+
+    required uint32 ReceiverNodeId = 5;
     required string SenderActorId = 6;
- 
-    optional string SenderHostName = 7; 
-    optional string ReceiverHostName = 8; 
-    optional string UUID = 9; 
+
+    optional string SenderHostName = 7;
+    optional string ReceiverHostName = 8;
+    optional string UUID = 9;
     optional TClusterUUIDs ClusterUUIDs = 13;
 
     optional bytes Ballast = 10;
@@ -72,15 +72,15 @@ message THandshakeRequest {
     optional bool RequestModernFrame = 18;
 
     optional bool RequestAuthOnly = 19;
-} 
- 
-message THandshakeSuccess { 
-    required uint64 Protocol = 1; 
- 
-    required uint64 ProgramPID = 2; 
-    required uint64 ProgramStartTime = 3; 
-    required uint64 Serial = 4; 
- 
+}
+
+message THandshakeSuccess {
+    required uint64 Protocol = 1;
+
+    required uint64 ProgramPID = 2;
+    required uint64 ProgramStartTime = 3;
+    required uint64 Serial = 4;
+
     required string SenderActorId = 5;
 
     optional string VersionTag = 6;
@@ -94,13 +94,13 @@ message THandshakeSuccess {
     optional bool UseModernFrame = 11;
 
     optional bool AuthOnly = 12;
-} 
- 
-message THandshakeReply { 
-    optional THandshakeSuccess Success = 1; 
-    optional string ErrorExplaination = 2; 
+}
+
+message THandshakeReply {
+    optional THandshakeSuccess Success = 1;
+    optional string ErrorExplaination = 2;
     optional bool CookieCheckResult = 3;
-} 
+}
 
 message TEvLoadMessage {
     message THop {

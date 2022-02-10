@@ -207,7 +207,7 @@ public:
         } else {
             TString suite = TString(name).substr(0, colon);
             EnabledSuites_.insert(suite);
-            EnabledSuites_.insert(name); 
+            EnabledSuites_.insert(name);
             EnabledTests_.insert(name);
             EnabledTests_.insert(TString() + name + "::*");
         }

@@ -10,7 +10,7 @@
 #include <library/cpp/threading/queue/mpsc_read_as_filled.h>
 #include <util/generic/hash.h>
 #include <util/system/hp_timer.h>
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 // TODO: clean all broken arcadia atomic stuff and replace with intrinsics
 
 namespace NActors {
@@ -389,52 +389,52 @@ namespace NActors {
             constexpr static ui32 AlignedSize() {
                 return ((sizeof(TRevolvingMailbox) + 63) / 64) * 64;
             }
- 
+
             std::pair<ui32, ui32> CountRevolvingMailboxEvents(ui64 localActorId, ui32 maxTraverse);
             bool CleanupEvents();
         };
- 
+
         static_assert(sizeof(TRevolvingMailbox) == 128, "expect sizeof(TRevolvingMailbox) == 128");
- 
+
         struct THTSwapMailbox: public TMailboxHeader {
             using TQueueType = NThreading::THTSwapQueue<IEventHandle*>;
- 
+
             TQueueType Queue;
             NHPTimer::STime ScheduleMoment;
             char Padding_[16];
- 
+
             THTSwapMailbox()
                 : TMailboxHeader(TMailboxType::HTSwap)
                 , ScheduleMoment(0)
             {
             }
- 
+
             ~THTSwapMailbox() {
                 CleanupEvents();
             }
- 
+
             IEventHandle* Pop() {
                 return Queue.Pop();
             }
- 
+
             IEventHandle* Head() {
                 return Queue.Peek();
             }
- 
+
             static THTSwapMailbox* Get(ui32 hint, void* line) {
                 return (THTSwapMailbox*)((ui8*)line + 64 + (hint - 1) * 64);
             }
- 
+
             constexpr static ui64 MaxMailboxesInLine() {
                 return (LineSize - 64) / AlignedSize();
             }
- 
+
             static const TMailboxType::EType MailboxType = TMailboxType::HTSwap;
- 
+
             constexpr static ui32 AlignedSize() {
                 return ((sizeof(THTSwapMailbox) + 63) / 64) * 64;
             }
- 
+
             bool CleanupEvents() {
                 const bool done = (Queue.Peek() == nullptr);
                 while (IEventHandle* ev = Queue.Pop())
@@ -442,50 +442,50 @@ namespace NActors {
                 return done;
             }
         };
- 
+
         static_assert(sizeof(THTSwapMailbox) == 64,
                       "expect sizeof(THTSwapMailbox) == 64");
- 
+
         struct TReadAsFilledMailbox: public TMailboxHeader {
             using TQueueType = NThreading::TReadAsFilledQueue<IEventHandle>;
- 
+
             TQueueType Queue;
             NHPTimer::STime ScheduleMoment;
             char Padding_[8];
- 
+
             TReadAsFilledMailbox()
                 : TMailboxHeader(TMailboxType::ReadAsFilled)
                 , ScheduleMoment(0)
             {
             }
- 
+
             ~TReadAsFilledMailbox() {
                 CleanupEvents();
             }
- 
+
             IEventHandle* Pop() {
                 return Queue.Pop();
             }
- 
+
             IEventHandle* Head() {
                 return Queue.Peek();
             }
- 
+
             static TReadAsFilledMailbox* Get(ui32 hint, void* line) {
                 return (TReadAsFilledMailbox*)((ui8*)line + 64 + (hint - 1) * 192);
             }
- 
+
             constexpr static ui64 MaxMailboxesInLine() {
                 return (LineSize - 64) / AlignedSize();
             }
- 
+
             static const TMailboxType::EType MailboxType =
                 TMailboxType::ReadAsFilled;
- 
+
             constexpr static ui32 AlignedSize() {
                 return ((sizeof(TReadAsFilledMailbox) + 63) / 64) * 64;
             }
- 
+
             bool CleanupEvents() {
                 const bool done = (Queue.Peek() == nullptr);
                 while (IEventHandle* ev = Queue.Pop())
@@ -493,52 +493,52 @@ namespace NActors {
                 return done;
             }
         };
- 
+
         static_assert(sizeof(TReadAsFilledMailbox) == 192,
                       "expect sizeof(TReadAsFilledMailbox) == 192");
- 
+
         struct TTinyReadAsFilledMailbox: public TMailboxHeader {
             using TQueueType = NThreading::TReadAsFilledQueue<
                 IEventHandle,
                 NThreading::TRaFQueueBunchSize<4>>;
- 
+
             TQueueType Queue;
             NHPTimer::STime ScheduleMoment;
             char Padding_[8];
- 
+
             TTinyReadAsFilledMailbox()
                 : TMailboxHeader(TMailboxType::TinyReadAsFilled)
                 , ScheduleMoment(0)
             {
             }
- 
+
             ~TTinyReadAsFilledMailbox() {
                 CleanupEvents();
             }
- 
+
             IEventHandle* Pop() {
                 return Queue.Pop();
             }
- 
+
             IEventHandle* Head() {
                 return Queue.Peek();
             }
- 
+
             static TTinyReadAsFilledMailbox* Get(ui32 hint, void* line) {
                 return (TTinyReadAsFilledMailbox*)((ui8*)line + 64 + (hint - 1) * 192);
             }
- 
+
             constexpr static ui64 MaxMailboxesInLine() {
                 return (LineSize - 64) / AlignedSize();
             }
- 
+
             static const TMailboxType::EType MailboxType =
                 TMailboxType::TinyReadAsFilled;
- 
+
             constexpr static ui32 AlignedSize() {
                 return ((sizeof(TTinyReadAsFilledMailbox) + 63) / 64) * 64;
             }
- 
+
             bool CleanupEvents() {
                 const bool done = (Queue.Peek() == nullptr);
                 while (IEventHandle* ev = Queue.Pop())
@@ -546,8 +546,8 @@ namespace NActors {
                 return done;
             }
         };
- 
+
         static_assert(sizeof(TTinyReadAsFilledMailbox) == 192,
                       "expect sizeof(TTinyReadAsFilledMailbox) == 192");
-    }; 
+    };
 }

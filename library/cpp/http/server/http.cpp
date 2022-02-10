@@ -67,7 +67,7 @@ public:
     THttpServer::TImpl* HttpServ_ = nullptr;
     bool Reject_ = false;
     TInstant LastUsed;
-    TInstant AcceptMoment; 
+    TInstant AcceptMoment;
     size_t ReceivedRequests = 0;
 };
 
@@ -300,7 +300,7 @@ public:
         ~TListenSocket() override {
         }
 
-        void OnPollEvent(TInstant) override { 
+        void OnPollEvent(TInstant) override {
             SOCKET s = ::accept(S_, nullptr, nullptr);
 
             if (s == INVALID_SOCKET) {
@@ -589,7 +589,7 @@ void TClientConnection::OnPollEvent(TInstant now) {
     }
 
     THolder<TClientRequest> obj(HttpServ_->CreateRequest(this_));
-    AcceptMoment = now; 
+    AcceptMoment = now;
 
     HttpServ_->AddRequest(obj, Reject_);
 }
@@ -776,10 +776,10 @@ NAddr::IRemoteAddrRef TClientRequest::GetListenerSockAddrRef() const noexcept {
     return Conn_->ListenerSockAddrRef_;
 }
 
-TInstant TClientRequest::AcceptMoment() const noexcept { 
-    return Conn_->AcceptMoment; 
-} 
- 
+TInstant TClientRequest::AcceptMoment() const noexcept {
+    return Conn_->AcceptMoment;
+}
+
 /*
  * TRequestReplier
  */

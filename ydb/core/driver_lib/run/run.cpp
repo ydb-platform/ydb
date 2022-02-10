@@ -117,7 +117,7 @@
 #include <library/cpp/actors/core/memory_track.h>
 #include <library/cpp/actors/prof/tag.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
- 
+
 #include <util/folder/dirut.h>
 #include <util/system/file.h>
 #include <util/system/getpid.h>
@@ -837,15 +837,15 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     const ui32 ioPoolId = cfg.GetActorSystemConfig().HasIoExecutor() ? cfg.GetActorSystemConfig().GetIoExecutor() : 0;
     const ui32 batchPoolId = cfg.GetActorSystemConfig().HasBatchExecutor() ? cfg.GetActorSystemConfig().GetBatchExecutor() : 0;
     TMap<TString, ui32> servicePools;
-    for (ui32 i = 0; i < cfg.GetActorSystemConfig().ServiceExecutorSize(); ++i) { 
-        auto item = cfg.GetActorSystemConfig().GetServiceExecutor(i); 
+    for (ui32 i = 0; i < cfg.GetActorSystemConfig().ServiceExecutorSize(); ++i) {
+        auto item = cfg.GetActorSystemConfig().GetServiceExecutor(i);
         const TString service = item.GetServiceName();
-        const ui32 pool = item.GetExecutorId(); 
+        const ui32 pool = item.GetExecutorId();
         servicePools.insert(std::pair<TString, ui32>(service, pool));
-    } 
+    }
 
     AppData.Reset(new TAppData(sysPoolId, userPoolId, ioPoolId, batchPoolId,
-                               servicePools, 
+                               servicePools,
                                TypeRegistry.Get(),
                                FunctionRegistry.Get(),
                                FormatFactory.Get(),
@@ -866,7 +866,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->Counters = Counters;
     AppData->Mon = Monitoring.Get();
     AppData->BusMonPage = BusMonPage.Get();
-    AppData->PollerThreads = PollerThreads; 
+    AppData->PollerThreads = PollerThreads;
     AppData->LocalScopeId = runConfig.ScopeId;
 
     // setup streaming config
@@ -1134,10 +1134,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     using namespace NKikimrServicesInitializers;
     TIntrusivePtr<TServiceInitializersList> sil(new TServiceInitializersList);
 
-    if (serviceMask.EnableMemoryLog) { 
-        sil->AddServiceInitializer(new TMemoryLogInitializer(runConfig)); 
-    } 
- 
+    if (serviceMask.EnableMemoryLog) {
+        sil->AddServiceInitializer(new TMemoryLogInitializer(runConfig));
+    }
+
     if (serviceMask.EnableBasicServices) {
         sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig));
     }
@@ -1262,8 +1262,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TPersQueueLibSharedInstanceInitializer(runConfig));
 
-    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig)); 
- 
+    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig));
+
 #if defined(ENABLE_MEMORY_TRACKING)
     sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig));
 #endif
@@ -1328,25 +1328,25 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     return sil;
 }
 
-void RegisterBaseTagForMemoryProfiling(TActorSystem* as) { 
-    Y_VERIFY(as != nullptr); 
-    if (as->MemProfActivityBase != 0) 
-        return; 
+void RegisterBaseTagForMemoryProfiling(TActorSystem* as) {
+    Y_VERIFY(as != nullptr);
+    if (as->MemProfActivityBase != 0)
+        return;
     TVector<TString> holders;
     TVector<const char*> activityNames;
     for (ui32 i = 0; i < NKikimrServices::TActivity::EType_ARRAYSIZE; ++i) {
         auto current = (NKikimrServices::TActivity::EType)i;
         const char* currName = NKikimrServices::TActivity::EType_Name(current).c_str();
-        if (currName[0] == '\0') { 
-            holders.push_back("EActivityType_" + ToString<ui32>(i)); 
+        if (currName[0] == '\0') {
+            holders.push_back("EActivityType_" + ToString<ui32>(i));
             currName = holders.back().c_str();
-        } 
-        activityNames.push_back(currName); 
-    } 
-    as->MemProfActivityBase = NProfiling::MakeTags(activityNames); 
-    Y_VERIFY(as->MemProfActivityBase != 0); 
-} 
- 
+        }
+        activityNames.push_back(currName);
+    }
+    as->MemProfActivityBase = NProfiling::MakeTags(activityNames);
+    Y_VERIFY(as->MemProfActivityBase != 0);
+}
+
 void TKikimrRunner::KikimrStart() {
 
     if (!!Monitoring) {
@@ -1359,7 +1359,7 @@ void TKikimrRunner::KikimrStart() {
 
     ThreadSigmask(SIG_BLOCK);
     if (ActorSystem) {
-        RegisterBaseTagForMemoryProfiling(ActorSystem.Get()); 
+        RegisterBaseTagForMemoryProfiling(ActorSystem.Get());
         ActorSystem->Start();
     }
 

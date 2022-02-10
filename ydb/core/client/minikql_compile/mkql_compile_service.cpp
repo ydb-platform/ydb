@@ -149,7 +149,7 @@ private:
             std::move(next->CompileResolveCookies),
             next->ForceRefresh);
         auto *appData = AppData(ctx);
-        auto actId = ctx.ExecutorThread.RegisterActor(act, TMailboxType::HTSwap, appData->UserPoolId); 
+        auto actId = ctx.ExecutorThread.RegisterActor(act, TMailboxType::HTSwap, appData->UserPoolId);
         Compiling.insert(TCompilingMap::value_type(actId, next));
         CompileQueue.pop();
     }

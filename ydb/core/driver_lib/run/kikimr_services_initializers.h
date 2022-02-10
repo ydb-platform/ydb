@@ -42,9 +42,9 @@ public:
 
 // base, nameservice, interconnect
 class TBasicServicesInitializer : public IKikimrServicesInitializer {
-    static IExecutorPool* 
+    static IExecutorPool*
     CreateExecutorPool(const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig,
-        const NKikimrConfig::TActorSystemConfig& systemConfig, 
+        const NKikimrConfig::TActorSystemConfig& systemConfig,
         ui32 poolId, ui32 maxActivityType);
 
     static ISchedulerThread* CreateScheduler(const NKikimrConfig::TActorSystemConfig::TScheduler &config);
@@ -357,13 +357,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TMemProfMonitorInitializer : public IKikimrServicesInitializer { 
-public: 
+class TMemProfMonitorInitializer : public IKikimrServicesInitializer {
+public:
     TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig);
- 
+
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-}; 
- 
+};
+
 class TMemoryTrackerInitializer : public IKikimrServicesInitializer {
 public:
     TMemoryTrackerInitializer(const TKikimrRunConfig& runConfig);
@@ -391,12 +391,12 @@ class TMemoryLogInitializer : public IKikimrServicesInitializer {
     size_t LogBufferSize = 0;
     size_t LogGrainSize = 0;
 
-public: 
-    TMemoryLogInitializer(const TKikimrRunConfig& runConfig); 
- 
+public:
+    TMemoryLogInitializer(const TKikimrRunConfig& runConfig);
+
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-}; 
- 
+};
+
 class TCmsServiceInitializer : public IKikimrServicesInitializer {
 public:
     TCmsServiceInitializer(const TKikimrRunConfig& runConfig);

@@ -556,7 +556,7 @@ namespace NActors {
 
             TIntrusivePtr<NMonitoring::TDynamicCounters> DynamicCounters;
             TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
-            TIntrusivePtr<NInterconnect::TPollerThreads> Poller; 
+            TIntrusivePtr<NInterconnect::TPollerThreads> Poller;
             volatile ui64* ActorSystemTimestamp;
             volatile ui64* ActorSystemMonotonic;
             TVector<std::pair<TActorId, TActorSetupCmd> > LocalServices;

@@ -155,19 +155,19 @@ void TDnsCache::GetStats(ui64& a_cache_hits, ui64& a_cache_misses,
 }
 
 bool TDnsCache::THost::IsStale(int family, const TDnsCache* ctx) const noexcept {
-    time_t resolved = family == AF_INET ? ResolvedV4 : ResolvedV6; 
-    time_t notfound = family == AF_INET ? NotFoundV4 : NotFoundV6; 
- 
-    if (TTimeKeeper::GetTime() - resolved < ctx->EntryLifetime) 
-        return false; 
- 
-    if (TTimeKeeper::GetTime() - notfound < ctx->NegativeLifetime) 
-        return false; 
- 
-    return true; 
-} 
- 
-const TDnsCache::THost& 
+    time_t resolved = family == AF_INET ? ResolvedV4 : ResolvedV6;
+    time_t notfound = family == AF_INET ? NotFoundV4 : NotFoundV6;
+
+    if (TTimeKeeper::GetTime() - resolved < ctx->EntryLifetime)
+        return false;
+
+    if (TTimeKeeper::GetTime() - notfound < ctx->NegativeLifetime)
+        return false;
+
+    return true;
+}
+
+const TDnsCache::THost&
 TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
     if (!ValidateHName(hostname)) {
         LWPROBE(ResolveNullHost, hostname, family);
@@ -182,7 +182,7 @@ TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
         TGuard<TMutex> lock(CacheMtx);
         p = HostCache.find(hostname);
         if (p != HostCache.end()) {
-            if (!p->second.IsStale(family, this)) { 
+            if (!p->second.IsStale(family, this)) {
                 /* Recently resolved, just return cached value */
                 ACacheHits += 1;
                 THost& host = p->second;
@@ -199,9 +199,9 @@ TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
         ACacheMisses += 1;
     }
 
-    if (cacheOnly) 
-        return NullHost; 
- 
+    if (cacheOnly)
+        return NullHost;
+
     TAtomic& inprogress = (family == AF_INET ? p->second.InProgressV4 : p->second.InProgressV6);
 
     {
@@ -219,7 +219,7 @@ TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
             ctx->Hostname = hostname;
             ctx->Family = family;
 
-            AtomicSet(inprogress, 1); 
+            AtomicSet(inprogress, 1);
             ares_gethostbyname(chan, hostname.c_str(), family,
                                &TDnsCache::GHBNCallback, ctx);
         }
@@ -269,7 +269,7 @@ const TDnsCache::TAddr& TDnsCache::ResolveAddr(const in6_addr& addr, int family)
             ctx->Owner = this;
             ctx->Addr = addr;
 
-            AtomicSet(p->second.InProgress, 1); 
+            AtomicSet(p->second.InProgress, 1);
             ares_gethostbyaddr(chan, &addr,
                                family == AF_INET ? sizeof(in_addr) : sizeof(in6_addr),
                                family, &TDnsCache::GHBACallback, ctx);
@@ -284,7 +284,7 @@ const TDnsCache::TAddr& TDnsCache::ResolveAddr(const in6_addr& addr, int family)
 void TDnsCache::WaitTask(TAtomic& flag) {
     const TInstant start = TInstant(TTimeKeeper::GetTimeval());
 
-    while (AtomicGet(flag)) { 
+    while (AtomicGet(flag)) {
         ares_channel chan = static_cast<ares_channel>(Channel);
 
         struct pollfd pfd[ARES_GETSOCK_MAXNUM];
@@ -380,7 +380,7 @@ void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
              */
             p->second.ResolvedV4 = TTimeKeeper::GetTime();
             p->second.ResolvedV4 = 0;
-            AtomicSet(p->second.InProgressV4, 0); 
+            AtomicSet(p->second.InProgressV4, 0);
         } else if (info->h_addrtype == AF_INET6) {
             p->second.AddrsV6.clear();
             for (int i = 0; info->h_addr_list[i] != nullptr; i++) {
@@ -395,7 +395,7 @@ void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
         notfound = TTimeKeeper::GetTime();
         resolved = 0;
     }
-    AtomicSet(inprogress, 0); 
+    AtomicSet(inprogress, 0);
 }
 
 void TDnsCache::GHBACallback(void* arg, int status, int, struct hostent* info) {
@@ -413,7 +413,7 @@ void TDnsCache::GHBACallback(void* arg, int status, int, struct hostent* info) {
         p->second.NotFound = TTimeKeeper::GetTime();
         p->second.Resolved = 0;
     }
-    AtomicSet(p->second.InProgress, 0); 
+    AtomicSet(p->second.InProgress, 0);
 }
 
 TString TDnsCache::THost::AddrsV4ToString() const {
@@ -441,5 +441,5 @@ TString TDnsCache::THost::AddrsV6ToString() const {
     }
     return ss.Str();
 }
- 
-TDnsCache::TAresLibInit TDnsCache::InitAresLib; 
+
+TDnsCache::TAresLibInit TDnsCache::InitAresLib;

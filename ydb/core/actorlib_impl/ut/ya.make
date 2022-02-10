@@ -32,7 +32,7 @@ SRCS(
     actor_bootstrapped_ut.cpp
     actor_tracker_ut.cpp
     test_interconnect_ut.cpp
-    test_protocols_ut.cpp 
+    test_protocols_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -189,10 +189,10 @@ enum EServiceKikimr {
 
     // HEALTH section
     HEALTH = 500;
- 
+
     MEMORY_PROFILER = 510;
 
-    DATASHARD_BACKUP = 522; 
+    DATASHARD_BACKUP = 522;
 
     CMS = 523;
 

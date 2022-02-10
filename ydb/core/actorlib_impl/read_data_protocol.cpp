@@ -1,74 +1,74 @@
-#include "read_data_protocol.h" 
- 
+#include "read_data_protocol.h"
+
 #include <ydb/core/base/appdata.h>
-#include <util/system/error.h> 
-#include <util/system/yassert.h> 
- 
-namespace NActors { 
- 
-void TReadDataProtocolImpl::ProtocolFunc( 
-        TAutoPtr<NActors::IEventHandle>& ev, 
-        const TActorContext& ctx) noexcept 
-{ 
-    if (Cancelled) { 
-        return; 
-    } 
- 
-    switch (ev->GetTypeRewrite()) { 
-    case TEvSocketReadyRead::EventType: 
-        TryAgain(ctx); 
-        break; 
- 
-    default: 
-        Y_FAIL("Unknown message type dispatched"); 
-    } 
-} 
- 
- 
-static TDelegate NotifyReadyRead( 
-        const TIntrusivePtr<TSharedDescriptor>& FDPtr, 
-        const TActorContext& ctx) 
-{ 
-    Y_UNUSED(FDPtr); 
-    return [=]() { ctx.Send(ctx.SelfID, new TEvSocketReadyRead); }; 
-} 
- 
- 
-void TReadDataProtocolImpl::TryAgain(const TActorContext& ctx) noexcept { 
-    int recvResult; 
-    for (;;) { 
-        recvResult = Socket->Recv(Data, Len); 
- 
-        if (recvResult > 0) { 
-            Y_VERIFY(Len >= (size_t)recvResult); 
-            Data += recvResult; 
-            Len -= recvResult; 
-            Filled += recvResult; 
-            if (Len == 0) { 
-                /* ResetReadBuf may change Data, Len and Filled here */ 
-                if (Catcher->CatchReadDataComplete(ctx, Filled)) { 
-                    return; 
-                } 
- 
-                if (Cancelled) { 
-                    return; 
-                } 
- 
-                continue; 
-            } 
-        } else { 
+#include <util/system/error.h>
+#include <util/system/yassert.h>
+
+namespace NActors {
+
+void TReadDataProtocolImpl::ProtocolFunc(
+        TAutoPtr<NActors::IEventHandle>& ev,
+        const TActorContext& ctx) noexcept
+{
+    if (Cancelled) {
+        return;
+    }
+
+    switch (ev->GetTypeRewrite()) {
+    case TEvSocketReadyRead::EventType:
+        TryAgain(ctx);
+        break;
+
+    default:
+        Y_FAIL("Unknown message type dispatched");
+    }
+}
+
+
+static TDelegate NotifyReadyRead(
+        const TIntrusivePtr<TSharedDescriptor>& FDPtr,
+        const TActorContext& ctx)
+{
+    Y_UNUSED(FDPtr);
+    return [=]() { ctx.Send(ctx.SelfID, new TEvSocketReadyRead); };
+}
+
+
+void TReadDataProtocolImpl::TryAgain(const TActorContext& ctx) noexcept {
+    int recvResult;
+    for (;;) {
+        recvResult = Socket->Recv(Data, Len);
+
+        if (recvResult > 0) {
+            Y_VERIFY(Len >= (size_t)recvResult);
+            Data += recvResult;
+            Len -= recvResult;
+            Filled += recvResult;
+            if (Len == 0) {
+                /* ResetReadBuf may change Data, Len and Filled here */
+                if (Catcher->CatchReadDataComplete(ctx, Filled)) {
+                    return;
+                }
+
+                if (Cancelled) {
+                    return;
+                }
+
+                continue;
+            }
+        } else {
             if (-recvResult == EAGAIN || -recvResult == EWOULDBLOCK) {
-                if (Filled > 0) { 
-                    if (Catcher->CatchReadDataComplete(ctx, Filled)) { 
-                        return; 
-                    } 
- 
-                    if (Cancelled) { 
-                        return; 
-                    } 
- 
-                    break; 
-                } 
+                if (Filled > 0) {
+                    if (Catcher->CatchReadDataComplete(ctx, Filled)) {
+                        return;
+                    }
+
+                    if (Cancelled) {
+                        return;
+                    }
+
+                    break;
+                }
             } else if (-recvResult == EINTR) {
                 continue;
             } else if (!recvResult) {
@@ -77,11 +77,11 @@ void TReadDataProtocolImpl::TryAgain(const TActorContext& ctx) noexcept {
                 }
                 Catcher->CatchReadDataClosed();
                 return;
-            } 
-            break; 
-        } 
-    } 
- 
+            }
+            break;
+        }
+    }
+
     if (-recvResult == EAGAIN || -recvResult == EWOULDBLOCK) {
         IPoller* poller = NKikimr::AppData(ctx)->PollerThreads.Get();
         poller->StartRead(Socket,
@@ -89,39 +89,39 @@ void TReadDataProtocolImpl::TryAgain(const TActorContext& ctx) noexcept {
         return;
     }
 
-    switch (-recvResult) { 
-    case ECONNRESET: 
+    switch (-recvResult) {
+    case ECONNRESET:
         Catcher->CatchReadDataError("Connection reset by peer");
-        return; 
- 
-    case EPIPE: 
+        return;
+
+    case EPIPE:
         Catcher->CatchReadDataError("Connection is closed");
-        return; 
- 
-    default: 
-        { 
-            char buf[1024]; 
-            LastSystemErrorText(buf, 1024, -recvResult); 
+        return;
+
+    default:
+        {
+            char buf[1024];
+            LastSystemErrorText(buf, 1024, -recvResult);
             Catcher->CatchReadDataError(TString("Socker error: ") + buf);
-            return; 
-        } 
- 
-    case EBADF: 
-    case EFAULT: 
-    case EINVAL: 
-    case ENOTCONN: 
-    case ENOTSOCK: 
-    case EOPNOTSUPP: 
-        { 
-            Y_FAIL("Very bad socket error"); 
-        } 
-    } 
-} 
- 
+            return;
+        }
+
+    case EBADF:
+    case EFAULT:
+    case EINVAL:
+    case ENOTCONN:
+    case ENOTSOCK:
+    case EOPNOTSUPP:
+        {
+            Y_FAIL("Very bad socket error");
+        }
+    }
+}
+
 void TReadDataProtocolImpl::CancelReadData(const TActorContext& /*ctx*/) noexcept {
-    Cancelled = true; 
+    Cancelled = true;
 //    IPoller* poller = NKikimr::AppData(ctx)->PollerThreads.Get();
 //    poller->CancelRead(Socket);
-} 
- 
-} 
+}
+
+}

@@ -303,7 +303,7 @@ namespace NActors {
 
         ExecutorPool->SetRealTimeMode();
         TAffinityGuard affinity(ExecutorPool->Affinity());
- 
+
         NHPTimer::STime hpnow = GetCycleCountFast();
         NHPTimer::STime hpprev = hpnow;
         ui64 execCount = 0;

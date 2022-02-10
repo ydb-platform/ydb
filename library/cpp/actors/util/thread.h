@@ -10,17 +10,17 @@
 inline void SetCurrentThreadName(const TString& name,
                                  const ui32 maxCharsFromProcessName = 8) {
 #if defined(_linux_)
-    // linux limits threadname by 15 + \0 
- 
-    TStringBuf procName(GetExecPath()); 
-    procName = procName.RNextTok('/'); 
-    procName = procName.SubStr(0, maxCharsFromProcessName); 
- 
+    // linux limits threadname by 15 + \0
+
+    TStringBuf procName(GetExecPath());
+    procName = procName.RNextTok('/');
+    procName = procName.SubStr(0, maxCharsFromProcessName);
+
     TStringStream linuxName;
-    linuxName << procName << "." << name; 
+    linuxName << procName << "." << name;
     TThread::SetCurrentThreadName(linuxName.Str().data());
 #else
-    Y_UNUSED(maxCharsFromProcessName); 
+    Y_UNUSED(maxCharsFromProcessName);
     TThread::SetCurrentThreadName(name.data());
 #endif
 }

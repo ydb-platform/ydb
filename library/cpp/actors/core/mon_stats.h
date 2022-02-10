@@ -13,17 +13,17 @@ namespace NActors {
 
         inline void Add(ui64 val, ui64 inc = 1) {
             size_t ind = 0;
-#if defined(__clang__) && __clang_major__ == 3 && __clang_minor__ == 7 
+#if defined(__clang__) && __clang_major__ == 3 && __clang_minor__ == 7
             asm volatile("" ::
                              : "memory");
-#endif 
+#endif
             if (val > 1) {
                 ind = GetValueBitCount(val - 1);
             }
-#if defined(__clang__) && __clang_major__ == 3 && __clang_minor__ == 7 
+#if defined(__clang__) && __clang_major__ == 3 && __clang_minor__ == 7
             asm volatile("" ::
                              : "memory");
-#endif 
+#endif
             RelaxedStore(&TotalSamples, RelaxedLoad(&TotalSamples) + inc);
             RelaxedStore(&Buckets[ind], RelaxedLoad(&Buckets[ind]) + inc);
         }

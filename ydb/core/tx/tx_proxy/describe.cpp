@@ -238,7 +238,7 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
                 auto entry = result->Record.MutablePathDescription()->AddChildren();
                 FillRootDescr(entry, domain.second->Name, domain.second->SchemeRoot);
             }
- 
+
             ctx.Send(Source, result.Release(), 0, SourceCookie);
             return Die(ctx);
         }
@@ -247,7 +247,7 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
     if (!record.GetUserToken().empty()) {
         UserToken = new NACLib::TUserToken(record.GetUserToken());
     }
- 
+
     if (UserToken == nullptr && record.GetDescribePath().HasPathId()) {
         TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> req =
                 new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(
@@ -255,11 +255,11 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
                                       record.GetDescribePath().GetPathId());
 
         const ui64 shardToRequest = record.GetDescribePath().GetSchemeshardId();
-        if (record.GetDescribePath().HasOptions()) { 
-            auto options = req->Record.MutableOptions(); 
-            options->CopyFrom(record.GetDescribePath().GetOptions()); 
-        } 
- 
+        if (record.GetDescribePath().HasOptions()) {
+            auto options = req->Record.MutableOptions();
+            options->CopyFrom(record.GetDescribePath().GetOptions());
+        }
+
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString()
             << " SEND to# " << shardToRequest << " shardToRequest " << req->ToString());
 

@@ -63,7 +63,7 @@ namespace NActors {
 
         // Sets executor for specified pool
         void SetupPool(TPoolId pool, IExecutorPool* executorPool, TMailboxTable* mailboxTable);
- 
+
         // Add activation of newly scheduled mailbox and wake cpu to execute it if required
         void PushActivation(TPoolId pool, ui32 activation, ui64 revolvingCounter);
 
@@ -72,7 +72,7 @@ namespace NActors {
 
         // Try to wake idle cpu waiting for tokens on specified pool
         void TryWake(TPoolId pool);
- 
+
         // Get activation from pool; requires pool's token
         void BeginExecution(TPoolId pool, ui32& activation, ui64 revolvingCounter);
 

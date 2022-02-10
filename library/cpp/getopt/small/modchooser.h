@@ -56,7 +56,7 @@ public:
 
     //! Hidden groups won't be displayed in 'help' block
     void AddGroupModeDescription(const TString& description, bool hidden = false, bool noCompletion = false);
-
+ 
     //! Set default mode (if not specified explicitly)
     void SetDefaultMode(const TString& mode);
 
@@ -71,12 +71,12 @@ public:
     //! Specify handler for '--version' parameter
     void SetVersionHandler(TVersionHandlerPtr handler);
 
-    //! Set description show mode
-    void SetSeparatedMode(bool separated = true);
-
-    //! Set separation string
+    //! Set description show mode 
+    void SetSeparatedMode(bool separated = true); 
+ 
+    //! Set separation string 
     void SetSeparationString(const TString& str);
-
+ 
     //! Set short command representation in Usage block
     void SetPrintShortCommandInUsage(bool printShortCommandInUsage);
 
@@ -110,11 +110,11 @@ public:
         bool NoCompletion;
         TVector<TString> Aliases;
 
-        TMode()
+        TMode() 
             : Main(nullptr)
         {
         }
-
+ 
         TMode(const TString& name, TMainClass* main, const TString& descr, bool hidden, bool noCompletion);
 
         // Full name includes primary name and aliases. Also, will add ANSI colors.
@@ -151,20 +151,20 @@ private:
 
     //! Handler for '--version' parameter
     TVersionHandlerPtr VersionHandler;
-
-    //! When set to true, show descriptions unsorted and display separators
-    bool ShowSeparated;
-
+ 
+    //! When set to true, show descriptions unsorted and display separators 
+    bool ShowSeparated; 
+ 
     //! When set to true, disables --svnrevision option, useful for opensource (git hosted) projects
     bool SvnRevisionOptionDisabled;
 
     //! When true - will print only 'mode name' in 'Usage' block
     bool PrintShortCommandInUsage;
 
-    //! Text string used when displaying each separator
+    //! Text string used when displaying each separator 
     TString SeparationString;
-
-    //! Unsorted list of options
+ 
+    //! Unsorted list of options 
     TVector<THolder<TMode>> UnsortedModes;
 
     //! Mode that generates completions

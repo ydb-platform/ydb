@@ -61,9 +61,9 @@ private:
 };
 
 TModChooser::TMode::TMode(const TString& name, TMainClass* main, const TString& descr, bool hidden, bool noCompletion)
-    : Name(name)
-    , Main(main)
-    , Description(descr)
+    : Name(name) 
+    , Main(main) 
+    , Description(descr) 
     , Hidden(hidden)
     , NoCompletion(noCompletion)
 {
@@ -113,8 +113,8 @@ void TModChooser::AddMode(const TString& mode, TMainClassV* func, const TString&
 
 void TModChooser::AddGroupModeDescription(const TString& description, bool hidden, bool noCompletion) {
     UnsortedModes.push_back(MakeHolder<TMode>(TString(), nullptr, description.data(), hidden, noCompletion));
-}
-
+} 
+ 
 void TModChooser::SetDefaultMode(const TString& mode) {
     DefaultMode = mode;
 }
@@ -140,14 +140,14 @@ void TModChooser::SetVersionHandler(TVersionHandlerPtr handler) {
     VersionHandler = handler;
 }
 
-void TModChooser::SetSeparatedMode(bool separated) {
-    ShowSeparated = separated;
-}
-
+void TModChooser::SetSeparatedMode(bool separated) { 
+    ShowSeparated = separated; 
+} 
+ 
 void TModChooser::SetSeparationString(const TString& str) {
-    SeparationString = str;
-}
-
+    SeparationString = str; 
+} 
+ 
 void TModChooser::SetPrintShortCommandInUsage(bool printShortCommandInUsage = false) {
     PrintShortCommandInUsage = printShortCommandInUsage;
 }
@@ -289,7 +289,7 @@ void TModChooser::PrintHelp(const TString& progName) const {
         maxModeLen = Max(maxModeLen, mode->CalculateFullNameLen());
     }
 
-    if (ShowSeparated) {
+    if (ShowSeparated) { 
         for (const auto& unsortedMode : UnsortedModes)
             if (!unsortedMode->Hidden) {
                 if (unsortedMode->Name.size()) {
@@ -298,8 +298,8 @@ void TModChooser::PrintHelp(const TString& progName) const {
                     Cerr << SeparationString << Endl;
                     Cerr << unsortedMode->Description << Endl;
                 }
-            }
-    } else {
+            } 
+    } else { 
         for (const auto& mode : Modes) {
             if (mode.first != mode.second->Name)
                 continue;  // this is an alias
@@ -308,7 +308,7 @@ void TModChooser::PrintHelp(const TString& progName) const {
                 Cerr << "  " << mode.second->FormatFullName(maxModeLen + 4) << mode.second->Description << Endl;
             }
         }
-    }
+    } 
 
     Cerr << Endl;
     Cerr << "To get help for specific mode type '" << progName << " MODE " << ModesHelpOption << "'" << Endl;

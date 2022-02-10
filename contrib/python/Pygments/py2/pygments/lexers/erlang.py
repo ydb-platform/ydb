@@ -163,7 +163,7 @@ class ErlangShellLexer(Lexer):
     filenames = ['*.erl-sh']
     mimetypes = ['text/x-erl-shellsession']
 
-    _prompt_re = re.compile(r'(?:\([\w@_.]+\))?\d+>(?=\s|\Z)') 
+    _prompt_re = re.compile(r'(?:\([\w@_.]+\))?\d+>(?=\s|\Z)')
 
     def get_tokens_unprocessed(self, text):
         erlexer = ErlangLexer(**self.options)
@@ -495,7 +495,7 @@ class ElixirConsoleLexer(Lexer):
     aliases = ['iex']
     mimetypes = ['text/x-elixir-shellsession']
 
-    _prompt_re = re.compile(r'(iex|\.{3})((?:\([\w@_.]+\))?\d+|\(\d+\))?> ') 
+    _prompt_re = re.compile(r'(iex|\.{3})((?:\([\w@_.]+\))?\d+|\(\d+\))?> ')
 
     def get_tokens_unprocessed(self, text):
         exlexer = ElixirLexer(**self.options)

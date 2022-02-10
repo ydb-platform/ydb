@@ -16,12 +16,12 @@
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/STLExtras.h" 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/SetTheory.h"
-#include <map> 
+#include <map>
 
 namespace llvm {
 
@@ -96,7 +96,7 @@ struct CodeGenSchedRW {
 /// Represent a transition between SchedClasses induced by SchedVariant.
 struct CodeGenSchedTransition {
   unsigned ToClassIdx;
-  unsigned ProcIndex; 
+  unsigned ProcIndex;
   RecVec PredTerm;
 };
 
@@ -141,8 +141,8 @@ struct CodeGenSchedClass {
   // Instructions should be ignored by this class because they have been split
   // off to join another inferred class.
   RecVec InstRWs;
-  // InstRWs processor indices. Filled in inferFromInstRWs 
-  DenseSet<unsigned> InstRWProcIndices; 
+  // InstRWs processor indices. Filled in inferFromInstRWs
+  DenseSet<unsigned> InstRWProcIndices;
 
   CodeGenSchedClass(unsigned Index, std::string Name, Record *ItinClassDef)
     : Index(Index), Name(std::move(Name)), ItinClassDef(ItinClassDef) {}
@@ -362,7 +362,7 @@ public:
   OpcodeGroup(OpcodeGroup &&Other) = default;
 
   void addOpcode(const Record *Opcode) {
-    assert(!llvm::is_contained(Opcodes, Opcode) && "Opcode already in set!"); 
+    assert(!llvm::is_contained(Opcodes, Opcode) && "Opcode already in set!");
     Opcodes.push_back(Opcode);
   }
 
@@ -410,8 +410,8 @@ public:
   ArrayRef<OpcodeGroup> getGroups() const { return Groups; }
 };
 
-using ProcModelMapTy = DenseMap<const Record *, unsigned>; 
- 
+using ProcModelMapTy = DenseMap<const Record *, unsigned>;
+
 /// Top level container for machine model data.
 class CodeGenSchedModels {
   RecordKeeper &Records;
@@ -445,7 +445,7 @@ class CodeGenSchedModels {
   InstClassMapTy InstrClassMap;
 
   std::vector<STIPredicateFunction> STIPredicates;
-  std::vector<unsigned> getAllProcIndices() const; 
+  std::vector<unsigned> getAllProcIndices() const;
 
 public:
   CodeGenSchedModels(RecordKeeper& RK, const CodeGenTarget &TGT);

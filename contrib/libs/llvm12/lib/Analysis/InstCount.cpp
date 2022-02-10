@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Analysis/InstCount.h" 
+#include "llvm/Analysis/InstCount.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/Function.h"
@@ -24,71 +24,71 @@ using namespace llvm;
 
 #define DEBUG_TYPE "instcount"
 
-STATISTIC(TotalInsts, "Number of instructions (of all types)"); 
+STATISTIC(TotalInsts, "Number of instructions (of all types)");
 STATISTIC(TotalBlocks, "Number of basic blocks");
-STATISTIC(TotalFuncs, "Number of non-external functions"); 
+STATISTIC(TotalFuncs, "Number of non-external functions");
 
-#define HANDLE_INST(N, OPCODE, CLASS)                                          \ 
-  STATISTIC(Num##OPCODE##Inst, "Number of " #OPCODE " insts"); 
+#define HANDLE_INST(N, OPCODE, CLASS)                                          \
+  STATISTIC(Num##OPCODE##Inst, "Number of " #OPCODE " insts");
 
 #include "llvm/IR/Instruction.def"
 
 namespace {
-class InstCount : public InstVisitor<InstCount> { 
-  friend class InstVisitor<InstCount>; 
+class InstCount : public InstVisitor<InstCount> {
+  friend class InstVisitor<InstCount>;
 
-  void visitFunction(Function &F) { ++TotalFuncs; } 
-  void visitBasicBlock(BasicBlock &BB) { ++TotalBlocks; } 
+  void visitFunction(Function &F) { ++TotalFuncs; }
+  void visitBasicBlock(BasicBlock &BB) { ++TotalBlocks; }
 
-#define HANDLE_INST(N, OPCODE, CLASS)                                          \ 
-  void visit##OPCODE(CLASS &) {                                                \ 
-    ++Num##OPCODE##Inst;                                                       \ 
-    ++TotalInsts;                                                              \ 
-  } 
+#define HANDLE_INST(N, OPCODE, CLASS)                                          \
+  void visit##OPCODE(CLASS &) {                                                \
+    ++Num##OPCODE##Inst;                                                       \
+    ++TotalInsts;                                                              \
+  }
 
 #include "llvm/IR/Instruction.def"
 
-  void visitInstruction(Instruction &I) { 
-    errs() << "Instruction Count does not know about " << I; 
-    llvm_unreachable(nullptr); 
-  } 
-}; 
-} // namespace 
+  void visitInstruction(Instruction &I) {
+    errs() << "Instruction Count does not know about " << I;
+    llvm_unreachable(nullptr);
+  }
+};
+} // namespace
 
-PreservedAnalyses InstCountPass::run(Function &F, 
-                                     FunctionAnalysisManager &FAM) { 
-  LLVM_DEBUG(dbgs() << "INSTCOUNT: running on function " << F.getName() 
-                    << "\n"); 
-  InstCount().visit(F); 
+PreservedAnalyses InstCountPass::run(Function &F,
+                                     FunctionAnalysisManager &FAM) {
+  LLVM_DEBUG(dbgs() << "INSTCOUNT: running on function " << F.getName()
+                    << "\n");
+  InstCount().visit(F);
 
-  return PreservedAnalyses::all(); 
-} 
+  return PreservedAnalyses::all();
+}
 
-namespace { 
-class InstCountLegacyPass : public FunctionPass { 
-public: 
-  static char ID; // Pass identification, replacement for typeid 
-  InstCountLegacyPass() : FunctionPass(ID) { 
-    initializeInstCountLegacyPassPass(*PassRegistry::getPassRegistry()); 
-  } 
- 
-  bool runOnFunction(Function &F) override { 
-    LLVM_DEBUG(dbgs() << "INSTCOUNT: running on function " << F.getName() 
-                      << "\n"); 
-    InstCount().visit(F); 
-    return false; 
+namespace {
+class InstCountLegacyPass : public FunctionPass {
+public:
+  static char ID; // Pass identification, replacement for typeid
+  InstCountLegacyPass() : FunctionPass(ID) {
+    initializeInstCountLegacyPassPass(*PassRegistry::getPassRegistry());
+  }
+
+  bool runOnFunction(Function &F) override {
+    LLVM_DEBUG(dbgs() << "INSTCOUNT: running on function " << F.getName()
+                      << "\n");
+    InstCount().visit(F);
+    return false;
   };
 
-  void getAnalysisUsage(AnalysisUsage &AU) const override { 
-    AU.setPreservesAll(); 
-  } 
- 
-  void print(raw_ostream &O, const Module *M) const override {} 
-}; 
-} // namespace 
- 
-char InstCountLegacyPass::ID = 0; 
-INITIALIZE_PASS(InstCountLegacyPass, "instcount", 
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.setPreservesAll();
+  }
+
+  void print(raw_ostream &O, const Module *M) const override {}
+};
+} // namespace
+
+char InstCountLegacyPass::ID = 0;
+INITIALIZE_PASS(InstCountLegacyPass, "instcount",
                 "Counts the various types of Instructions", false, true)
 
-FunctionPass *llvm::createInstCountPass() { return new InstCountLegacyPass(); } 
+FunctionPass *llvm::createInstCountPass() { return new InstCountLegacyPass(); }

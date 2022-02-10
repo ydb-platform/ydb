@@ -34,8 +34,8 @@
 #include "llvm/Support/FormatVariadicDetails.h"
 #include "llvm/ADT/Triple.h"
 
-#include <limits> 
- 
+#include <limits>
+
 namespace llvm {
 class StringRef;
 
@@ -127,11 +127,11 @@ enum LocationAtom {
 #include "llvm/BinaryFormat/Dwarf.def"
   DW_OP_lo_user = 0xe0,
   DW_OP_hi_user = 0xff,
-  DW_OP_LLVM_fragment = 0x1000,         ///< Only used in LLVM metadata. 
-  DW_OP_LLVM_convert = 0x1001,          ///< Only used in LLVM metadata. 
-  DW_OP_LLVM_tag_offset = 0x1002,       ///< Only used in LLVM metadata. 
-  DW_OP_LLVM_entry_value = 0x1003,      ///< Only used in LLVM metadata. 
-  DW_OP_LLVM_implicit_pointer = 0x1004, ///< Only used in LLVM metadata. 
+  DW_OP_LLVM_fragment = 0x1000,         ///< Only used in LLVM metadata.
+  DW_OP_LLVM_convert = 0x1001,          ///< Only used in LLVM metadata.
+  DW_OP_LLVM_tag_offset = 0x1002,       ///< Only used in LLVM metadata.
+  DW_OP_LLVM_entry_value = 0x1003,      ///< Only used in LLVM metadata.
+  DW_OP_LLVM_implicit_pointer = 0x1004, ///< Only used in LLVM metadata.
 };
 
 enum TypeKind : uint8_t {
@@ -193,7 +193,7 @@ enum SourceLanguage {
 };
 
 inline bool isCPlusPlus(SourceLanguage S) {
-  bool result = false; 
+  bool result = false;
   // Deliberately enumerate all the language options so we get a warning when
   // new language options are added (-Wswitch) that'll hopefully help keep this
   // switch up-to-date when new C++ versions are added.
@@ -202,8 +202,8 @@ inline bool isCPlusPlus(SourceLanguage S) {
   case DW_LANG_C_plus_plus_03:
   case DW_LANG_C_plus_plus_11:
   case DW_LANG_C_plus_plus_14:
-    result = true; 
-    break; 
+    result = true;
+    break;
   case DW_LANG_C89:
   case DW_LANG_C:
   case DW_LANG_Ada83:
@@ -242,70 +242,70 @@ inline bool isCPlusPlus(SourceLanguage S) {
   case DW_LANG_BORLAND_Delphi:
   case DW_LANG_lo_user:
   case DW_LANG_hi_user:
-    result = false; 
-    break; 
+    result = false;
+    break;
   }
- 
-  return result; 
+
+  return result;
 }
 
-inline bool isFortran(SourceLanguage S) { 
-  bool result = false; 
-  // Deliberately enumerate all the language options so we get a warning when 
-  // new language options are added (-Wswitch) that'll hopefully help keep this 
-  // switch up-to-date when new Fortran versions are added. 
-  switch (S) { 
-  case DW_LANG_Fortran77: 
-  case DW_LANG_Fortran90: 
-  case DW_LANG_Fortran95: 
-  case DW_LANG_Fortran03: 
-  case DW_LANG_Fortran08: 
-    result = true; 
-    break; 
-  case DW_LANG_C89: 
-  case DW_LANG_C: 
-  case DW_LANG_Ada83: 
-  case DW_LANG_C_plus_plus: 
-  case DW_LANG_Cobol74: 
-  case DW_LANG_Cobol85: 
-  case DW_LANG_Pascal83: 
-  case DW_LANG_Modula2: 
-  case DW_LANG_Java: 
-  case DW_LANG_C99: 
-  case DW_LANG_Ada95: 
-  case DW_LANG_PLI: 
-  case DW_LANG_ObjC: 
-  case DW_LANG_ObjC_plus_plus: 
-  case DW_LANG_UPC: 
-  case DW_LANG_D: 
-  case DW_LANG_Python: 
-  case DW_LANG_OpenCL: 
-  case DW_LANG_Go: 
-  case DW_LANG_Modula3: 
-  case DW_LANG_Haskell: 
-  case DW_LANG_C_plus_plus_03: 
-  case DW_LANG_C_plus_plus_11: 
-  case DW_LANG_OCaml: 
-  case DW_LANG_Rust: 
-  case DW_LANG_C11: 
-  case DW_LANG_Swift: 
-  case DW_LANG_Julia: 
-  case DW_LANG_Dylan: 
-  case DW_LANG_C_plus_plus_14: 
-  case DW_LANG_RenderScript: 
-  case DW_LANG_BLISS: 
-  case DW_LANG_Mips_Assembler: 
-  case DW_LANG_GOOGLE_RenderScript: 
-  case DW_LANG_BORLAND_Delphi: 
-  case DW_LANG_lo_user: 
-  case DW_LANG_hi_user: 
-    result = false; 
-    break; 
-  } 
- 
-  return result; 
-} 
- 
+inline bool isFortran(SourceLanguage S) {
+  bool result = false;
+  // Deliberately enumerate all the language options so we get a warning when
+  // new language options are added (-Wswitch) that'll hopefully help keep this
+  // switch up-to-date when new Fortran versions are added.
+  switch (S) {
+  case DW_LANG_Fortran77:
+  case DW_LANG_Fortran90:
+  case DW_LANG_Fortran95:
+  case DW_LANG_Fortran03:
+  case DW_LANG_Fortran08:
+    result = true;
+    break;
+  case DW_LANG_C89:
+  case DW_LANG_C:
+  case DW_LANG_Ada83:
+  case DW_LANG_C_plus_plus:
+  case DW_LANG_Cobol74:
+  case DW_LANG_Cobol85:
+  case DW_LANG_Pascal83:
+  case DW_LANG_Modula2:
+  case DW_LANG_Java:
+  case DW_LANG_C99:
+  case DW_LANG_Ada95:
+  case DW_LANG_PLI:
+  case DW_LANG_ObjC:
+  case DW_LANG_ObjC_plus_plus:
+  case DW_LANG_UPC:
+  case DW_LANG_D:
+  case DW_LANG_Python:
+  case DW_LANG_OpenCL:
+  case DW_LANG_Go:
+  case DW_LANG_Modula3:
+  case DW_LANG_Haskell:
+  case DW_LANG_C_plus_plus_03:
+  case DW_LANG_C_plus_plus_11:
+  case DW_LANG_OCaml:
+  case DW_LANG_Rust:
+  case DW_LANG_C11:
+  case DW_LANG_Swift:
+  case DW_LANG_Julia:
+  case DW_LANG_Dylan:
+  case DW_LANG_C_plus_plus_14:
+  case DW_LANG_RenderScript:
+  case DW_LANG_BLISS:
+  case DW_LANG_Mips_Assembler:
+  case DW_LANG_GOOGLE_RenderScript:
+  case DW_LANG_BORLAND_Delphi:
+  case DW_LANG_lo_user:
+  case DW_LANG_hi_user:
+    result = false;
+    break;
+  }
+
+  return result;
+}
+
 enum CaseSensitivity {
   // Identifier case codes
   DW_ID_case_sensitive = 0x00,
@@ -380,14 +380,14 @@ enum MacroEntryType {
   DW_MACRO_hi_user = 0xff
 };
 
-/// GNU .debug_macro macro information entry type encodings. 
-enum GnuMacroEntryType { 
-#define HANDLE_DW_MACRO_GNU(ID, NAME) DW_MACRO_GNU_##NAME = ID, 
-#include "llvm/BinaryFormat/Dwarf.def" 
-  DW_MACRO_GNU_lo_user = 0xe0, 
-  DW_MACRO_GNU_hi_user = 0xff 
-}; 
- 
+/// GNU .debug_macro macro information entry type encodings.
+enum GnuMacroEntryType {
+#define HANDLE_DW_MACRO_GNU(ID, NAME) DW_MACRO_GNU_##NAME = ID,
+#include "llvm/BinaryFormat/Dwarf.def"
+  DW_MACRO_GNU_lo_user = 0xe0,
+  DW_MACRO_GNU_hi_user = 0xff
+};
+
 /// DWARF v5 range list entry encoding values.
 enum RnglistEntries {
 #define HANDLE_DW_RLE(ID, NAME) DW_RLE_##NAME = ID,
@@ -551,7 +551,7 @@ StringRef LNStandardString(unsigned Standard);
 StringRef LNExtendedString(unsigned Encoding);
 StringRef MacinfoString(unsigned Encoding);
 StringRef MacroString(unsigned Encoding);
-StringRef GnuMacroString(unsigned Encoding); 
+StringRef GnuMacroString(unsigned Encoding);
 StringRef RangeListEncodingString(unsigned Encoding);
 StringRef LocListEncodingString(unsigned Encoding);
 StringRef CallFrameString(unsigned Encoding, Triple::ArchType Arch);
@@ -563,7 +563,7 @@ StringRef GDBIndexEntryLinkageString(GDBIndexEntryLinkage Linkage);
 StringRef IndexString(unsigned Idx);
 StringRef FormatString(DwarfFormat Format);
 StringRef FormatString(bool IsDWARF64);
-StringRef RLEString(unsigned RLE); 
+StringRef RLEString(unsigned RLE);
 /// @}
 
 /// \defgroup DwarfConstantsParsing Dwarf constants parsing functions
@@ -755,11 +755,11 @@ template <> struct EnumTraits<LocationAtom> : public std::true_type {
   static constexpr char Type[3] = "OP";
   static constexpr StringRef (*StringFn)(unsigned) = &OperationEncodingString;
 };
- 
-inline uint64_t computeTombstoneAddress(uint8_t AddressByteSize) { 
-  return std::numeric_limits<uint64_t>::max() >> (8 - AddressByteSize) * 8; 
-} 
- 
+
+inline uint64_t computeTombstoneAddress(uint8_t AddressByteSize) {
+  return std::numeric_limits<uint64_t>::max() >> (8 - AddressByteSize) * 8;
+}
+
 } // End of namespace dwarf
 
 /// Dwarf constants format_provider

@@ -1,1 +1,1 @@
-from jupyter_client.restarter import * 
+from jupyter_client.restarter import *

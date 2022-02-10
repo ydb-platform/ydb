@@ -28,7 +28,7 @@
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
 #include "llvm/MC/MCAsmInfo.h"
-#include "llvm/MC/MCObjectFileInfo.h" 
+#include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Target/TargetOptions.h"
@@ -235,7 +235,7 @@ void X86FrameLowering::emitSPUpdate(MachineBasicBlock &MBB,
     if (isSub && !isEAXLiveIn(MBB))
       Reg = Rax;
     else
-      Reg = TRI->findDeadCallerSavedReg(MBB, MBBI); 
+      Reg = TRI->findDeadCallerSavedReg(MBB, MBBI);
 
     unsigned MovRIOpc = Is64Bit ? X86::MOV64ri : X86::MOV32ri;
     unsigned AddSubRROpc =
@@ -292,7 +292,7 @@ void X86FrameLowering::emitSPUpdate(MachineBasicBlock &MBB,
       // need to find a dead register when using pop.
       unsigned Reg = isSub
         ? (unsigned)(Is64Bit ? X86::RAX : X86::EAX)
-        : TRI->findDeadCallerSavedReg(MBB, MBBI); 
+        : TRI->findDeadCallerSavedReg(MBB, MBBI);
       if (Reg) {
         unsigned Opc = isSub
           ? (Is64Bit ? X86::PUSH64r : X86::PUSH32r)
@@ -437,9 +437,9 @@ void X86FrameLowering::emitCalleeSavedFrameMoves(
   }
   const MachineModuleInfo &MMI = MF.getMMI();
   const MCRegisterInfo *MRI = MMI.getContext().getRegisterInfo();
-  const Register FramePtr = TRI->getFrameRegister(MF); 
-  const Register MachineFramePtr = 
-      STI.isTarget64BitILP32() ? Register(getX86SubSuperRegister(FramePtr, 64)) 
+  const Register FramePtr = TRI->getFrameRegister(MF);
+  const Register MachineFramePtr =
+      STI.isTarget64BitILP32() ? Register(getX86SubSuperRegister(FramePtr, 64))
                                : FramePtr;
   unsigned DwarfReg = MRI->getDwarfRegNum(MachineFramePtr, true);
   // Offset = space for return address + size of the frame pointer itself.
@@ -1690,7 +1690,7 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       assert(Personality == EHPersonality::MSVC_CXX);
       Register FrameReg;
       int FI = MF.getWinEHFuncInfo()->EHRegNodeFrameIndex;
-      int64_t EHRegOffset = getFrameIndexReference(MF, FI, FrameReg).getFixed(); 
+      int64_t EHRegOffset = getFrameIndexReference(MF, FI, FrameReg).getFixed();
       // ESP is the first field, so no extra displacement is needed.
       addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::MOV32mr)), FrameReg,
                    false, EHRegOffset)
@@ -1711,9 +1711,9 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
           if (IsWin64Prologue && IsFunclet)
             Offset = getWin64EHFrameIndexRef(MF, FI, IgnoredFrameReg);
           else
-            Offset = 
-                getFrameIndexReference(MF, FI, IgnoredFrameReg).getFixed() + 
-                SEHFrameOffset; 
+            Offset =
+                getFrameIndexReference(MF, FI, IgnoredFrameReg).getFixed() +
+                SEHFrameOffset;
 
           HasWinCFI = true;
           assert(!NeedsWinFPO && "SEH_SaveXMM incompatible with FPO data");
@@ -1785,8 +1785,8 @@ void X86FrameLowering::emitPrologue(MachineFunction &MF,
       unsigned Opm = Uses64BitFramePtr ? X86::MOV64mr : X86::MOV32mr;
       Register UsedReg;
       int Offset =
-          getFrameIndexReference(MF, X86FI->getSEHFramePtrSaveIndex(), UsedReg) 
-              .getFixed(); 
+          getFrameIndexReference(MF, X86FI->getSEHFramePtrSaveIndex(), UsedReg)
+              .getFixed();
       assert(UsedReg == BasePtr);
       addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(Opm)), UsedReg, true, Offset)
           .addReg(FramePtr)
@@ -1864,8 +1864,8 @@ X86FrameLowering::getPSPSlotOffsetFromSP(const MachineFunction &MF) const {
   const WinEHFuncInfo &Info = *MF.getWinEHFuncInfo();
   Register SPReg;
   int Offset = getFrameIndexReferencePreferSP(MF, Info.PSPSymFrameIdx, SPReg,
-                                              /*IgnoreSPUpdates*/ true) 
-                   .getFixed(); 
+                                              /*IgnoreSPUpdates*/ true)
+                   .getFixed();
   assert(Offset >= 0 && SPReg == TRI->getStackRegister());
   return static_cast<unsigned>(Offset);
 }
@@ -1920,7 +1920,7 @@ void X86FrameLowering::emitEpilogue(MachineFunction &MF,
   // standard x86_64 and NaCl use 64-bit frame/stack pointers, x32 - 32-bit.
   const bool Is64BitILP32 = STI.isTarget64BitILP32();
   Register FramePtr = TRI->getFrameRegister(MF);
-  Register MachineFramePtr = 
+  Register MachineFramePtr =
       Is64BitILP32 ? Register(getX86SubSuperRegister(FramePtr, 64)) : FramePtr;
 
   bool IsWin64Prologue = MF.getTarget().getMCAsmInfo()->usesWindowsCFI();
@@ -2091,16 +2091,16 @@ void X86FrameLowering::emitEpilogue(MachineFunction &MF,
       emitSPUpdate(MBB, Terminator, DL, Offset, /*InEpilogue=*/true);
     }
   }
- 
-  // Emit tilerelease for AMX kernel. 
-  const MachineRegisterInfo &MRI = MF.getRegInfo(); 
-  if (!MRI.reg_nodbg_empty(X86::TMMCFG)) 
-    BuildMI(MBB, Terminator, DL, TII.get(X86::TILERELEASE)); 
+
+  // Emit tilerelease for AMX kernel.
+  const MachineRegisterInfo &MRI = MF.getRegInfo();
+  if (!MRI.reg_nodbg_empty(X86::TMMCFG))
+    BuildMI(MBB, Terminator, DL, TII.get(X86::TILERELEASE));
 }
 
-StackOffset X86FrameLowering::getFrameIndexReference(const MachineFunction &MF, 
-                                                     int FI, 
-                                                     Register &FrameReg) const { 
+StackOffset X86FrameLowering::getFrameIndexReference(const MachineFunction &MF,
+                                                     int FI,
+                                                     Register &FrameReg) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
 
   bool IsFixed = MFI.isFixedObjectIndex(FI);
@@ -2147,7 +2147,7 @@ StackOffset X86FrameLowering::getFrameIndexReference(const MachineFunction &MF,
 
     uint64_t SEHFrameOffset = calculateSetFPREG(NumBytes);
     if (FI && FI == X86FI->getFAIndex())
-      return StackOffset::getFixed(-SEHFrameOffset); 
+      return StackOffset::getFixed(-SEHFrameOffset);
 
     // FPDelta is the offset from the "traditional" FP location of the old base
     // pointer followed by return address and the location required by the
@@ -2163,23 +2163,23 @@ StackOffset X86FrameLowering::getFrameIndexReference(const MachineFunction &MF,
     assert(HasFP && "VLAs and dynamic stack realign, but no FP?!");
     if (FI < 0) {
       // Skip the saved EBP.
-      return StackOffset::getFixed(Offset + SlotSize + FPDelta); 
+      return StackOffset::getFixed(Offset + SlotSize + FPDelta);
     } else {
       assert(isAligned(MFI.getObjectAlign(FI), -(Offset + StackSize)));
-      return StackOffset::getFixed(Offset + StackSize); 
+      return StackOffset::getFixed(Offset + StackSize);
     }
   } else if (TRI->needsStackRealignment(MF)) {
     if (FI < 0) {
       // Skip the saved EBP.
-      return StackOffset::getFixed(Offset + SlotSize + FPDelta); 
+      return StackOffset::getFixed(Offset + SlotSize + FPDelta);
     } else {
       assert(isAligned(MFI.getObjectAlign(FI), -(Offset + StackSize)));
-      return StackOffset::getFixed(Offset + StackSize); 
+      return StackOffset::getFixed(Offset + StackSize);
     }
     // FIXME: Support tail calls
   } else {
     if (!HasFP)
-      return StackOffset::getFixed(Offset + StackSize); 
+      return StackOffset::getFixed(Offset + StackSize);
 
     // Skip the saved EBP.
     Offset += SlotSize;
@@ -2190,7 +2190,7 @@ StackOffset X86FrameLowering::getFrameIndexReference(const MachineFunction &MF,
       Offset -= TailCallReturnAddrDelta;
   }
 
-  return StackOffset::getFixed(Offset + FPDelta); 
+  return StackOffset::getFixed(Offset + FPDelta);
 }
 
 int X86FrameLowering::getWin64EHFrameIndexRef(const MachineFunction &MF, int FI,
@@ -2201,27 +2201,27 @@ int X86FrameLowering::getWin64EHFrameIndexRef(const MachineFunction &MF, int FI,
   const auto it = WinEHXMMSlotInfo.find(FI);
 
   if (it == WinEHXMMSlotInfo.end())
-    return getFrameIndexReference(MF, FI, FrameReg).getFixed(); 
+    return getFrameIndexReference(MF, FI, FrameReg).getFixed();
 
   FrameReg = TRI->getStackRegister();
   return alignDown(MFI.getMaxCallFrameSize(), getStackAlign().value()) +
          it->second;
 }
 
-StackOffset 
-X86FrameLowering::getFrameIndexReferenceSP(const MachineFunction &MF, int FI, 
-                                           Register &FrameReg, 
-                                           int Adjustment) const { 
+StackOffset
+X86FrameLowering::getFrameIndexReferenceSP(const MachineFunction &MF, int FI,
+                                           Register &FrameReg,
+                                           int Adjustment) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   FrameReg = TRI->getStackRegister();
-  return StackOffset::getFixed(MFI.getObjectOffset(FI) - 
-                               getOffsetOfLocalArea() + Adjustment); 
+  return StackOffset::getFixed(MFI.getObjectOffset(FI) -
+                               getOffsetOfLocalArea() + Adjustment);
 }
 
-StackOffset 
-X86FrameLowering::getFrameIndexReferencePreferSP(const MachineFunction &MF, 
-                                                 int FI, Register &FrameReg, 
-                                                 bool IgnoreSPUpdates) const { 
+StackOffset
+X86FrameLowering::getFrameIndexReferencePreferSP(const MachineFunction &MF,
+                                                 int FI, Register &FrameReg,
+                                                 bool IgnoreSPUpdates) const {
 
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   // Does not include any dynamic realign.
@@ -2898,8 +2898,8 @@ static unsigned getHiPELiteral(
 // non-meta instructions between MBBI and MBB.end().
 static bool blockEndIsUnreachable(const MachineBasicBlock &MBB,
                                   MachineBasicBlock::const_iterator MBBI) {
-  return llvm::all_of( 
-             MBB.successors(), 
+  return llvm::all_of(
+             MBB.successors(),
              [](const MachineBasicBlock *Succ) { return Succ->isEHPad(); }) &&
          std::all_of(MBBI, MBB.end(), [](const MachineInstr &MI) {
            return MI.isMetaInstruction();
@@ -3082,8 +3082,8 @@ bool X86FrameLowering::adjustStackWithPops(MachineBasicBlock &MBB,
   unsigned Regs[2];
   unsigned FoundRegs = 0;
 
-  const MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo(); 
-  const MachineOperand &RegMask = Prev->getOperand(1); 
+  const MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+  const MachineOperand &RegMask = Prev->getOperand(1);
 
   auto &RegClass =
       Is64Bit ? X86::GR64_NOREX_NOSPRegClass : X86::GR32_NOREX_NOSPRegClass;
@@ -3269,14 +3269,14 @@ bool X86FrameLowering::canUseAsEpilogue(const MachineBasicBlock &MBB) const {
 bool X86FrameLowering::enableShrinkWrapping(const MachineFunction &MF) const {
   // If we may need to emit frameless compact unwind information, give
   // up as this is currently broken: PR25614.
-  bool CompactUnwind = 
-      MF.getMMI().getContext().getObjectFileInfo()->getCompactUnwindSection() != 
-      nullptr; 
-  return (MF.getFunction().hasFnAttribute(Attribute::NoUnwind) || hasFP(MF) || 
-          !CompactUnwind) && 
-         // The lowering of segmented stack and HiPE only support entry 
-         // blocks as prologue blocks: PR26107. This limitation may be 
-         // lifted if we fix: 
+  bool CompactUnwind =
+      MF.getMMI().getContext().getObjectFileInfo()->getCompactUnwindSection() !=
+      nullptr;
+  return (MF.getFunction().hasFnAttribute(Attribute::NoUnwind) || hasFP(MF) ||
+          !CompactUnwind) &&
+         // The lowering of segmented stack and HiPE only support entry
+         // blocks as prologue blocks: PR26107. This limitation may be
+         // lifted if we fix:
          // - adjustForSegmentedStacks
          // - adjustForHiPEPrologue
          MF.getFunction().getCallingConv() != CallingConv::HiPE &&
@@ -3311,7 +3311,7 @@ MachineBasicBlock::iterator X86FrameLowering::restoreWin32EHStackPointers(
   }
 
   Register UsedReg;
-  int EHRegOffset = getFrameIndexReference(MF, FI, UsedReg).getFixed(); 
+  int EHRegOffset = getFrameIndexReference(MF, FI, UsedReg).getFixed();
   int EndOffset = -EHRegOffset - EHRegSize;
   FuncInfo.EHRegNodeEndOffset = EndOffset;
 
@@ -3334,8 +3334,8 @@ MachineBasicBlock::iterator X86FrameLowering::restoreWin32EHStackPointers(
     // MOV32rm SavedEBPOffset(%esi), %ebp
     assert(X86FI->getHasSEHFramePtrSave());
     int Offset =
-        getFrameIndexReference(MF, X86FI->getSEHFramePtrSaveIndex(), UsedReg) 
-            .getFixed(); 
+        getFrameIndexReference(MF, X86FI->getSEHFramePtrSaveIndex(), UsedReg)
+            .getFixed();
     assert(UsedReg == BasePtr);
     addRegOffset(BuildMI(MBB, MBBI, DL, TII.get(X86::MOV32rm), FramePtr),
                  UsedReg, true, Offset)
@@ -3380,7 +3380,7 @@ struct X86FrameSortingObject {
 // at the end of our list.
 struct X86FrameSortingComparator {
   inline bool operator()(const X86FrameSortingObject &A,
-                         const X86FrameSortingObject &B) const { 
+                         const X86FrameSortingObject &B) const {
     uint64_t DensityAScaled, DensityBScaled;
 
     // For consistency in our comparison, all invalid objects are placed
@@ -3516,21 +3516,21 @@ void X86FrameLowering::processFunctionBeforeFrameFinalized(
   // emitPrologue if it gets called and emits CFI.
   MF.setHasWinCFI(false);
 
-  // If we are using Windows x64 CFI, ensure that the stack is always 8 byte 
-  // aligned. The format doesn't support misaligned stack adjustments. 
-  if (MF.getTarget().getMCAsmInfo()->usesWindowsCFI()) 
-    MF.getFrameInfo().ensureMaxAlignment(Align(SlotSize)); 
- 
+  // If we are using Windows x64 CFI, ensure that the stack is always 8 byte
+  // aligned. The format doesn't support misaligned stack adjustments.
+  if (MF.getTarget().getMCAsmInfo()->usesWindowsCFI())
+    MF.getFrameInfo().ensureMaxAlignment(Align(SlotSize));
+
   // If this function isn't doing Win64-style C++ EH, we don't need to do
   // anything.
-  if (STI.is64Bit() && MF.hasEHFunclets() && 
-      classifyEHPersonality(MF.getFunction().getPersonalityFn()) == 
-          EHPersonality::MSVC_CXX) { 
-    adjustFrameForMsvcCxxEh(MF); 
-  } 
-} 
+  if (STI.is64Bit() && MF.hasEHFunclets() &&
+      classifyEHPersonality(MF.getFunction().getPersonalityFn()) ==
+          EHPersonality::MSVC_CXX) {
+    adjustFrameForMsvcCxxEh(MF);
+  }
+}
 
-void X86FrameLowering::adjustFrameForMsvcCxxEh(MachineFunction &MF) const { 
+void X86FrameLowering::adjustFrameForMsvcCxxEh(MachineFunction &MF) const {
   // Win64 C++ EH needs to allocate the UnwindHelp object at some fixed offset
   // relative to RSP after the prologue.  Find the offset of the last fixed
   // object, so that we can allocate a slot immediately following it. If there

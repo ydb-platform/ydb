@@ -2,9 +2,9 @@
 
 Instead of importing this module directly, import os and refer to
 this module as os.path.  The "os.path" name is an alias for this
-module on Posix systems; on other systems (e.g. Windows), 
+module on Posix systems; on other systems (e.g. Windows),
 os.path provides the same operations in a manner specific to that
-platform, and is an alias to another module (e.g. ntpath). 
+platform, and is an alias to another module (e.g. ntpath).
 
 Some of this can actually be useful on non-Posix systems too, e.g.
 for manipulation of the pathname component of URLs.
@@ -18,7 +18,7 @@ pardir = '..'
 extsep = '.'
 sep = '/'
 pathsep = ':'
-defpath = '/bin:/usr/bin' 
+defpath = '/bin:/usr/bin'
 altsep = None
 devnull = '/dev/null'
 
@@ -51,7 +51,7 @@ def _get_sep(path):
 
 def normcase(s):
     """Normalize case of pathname.  Has no effect under Posix"""
-    return os.fspath(s) 
+    return os.fspath(s)
 
 
 # Return whether a path is absolute.
@@ -165,7 +165,7 @@ def islink(path):
     """Test whether a path is a symbolic link"""
     try:
         st = os.lstat(path)
-    except (OSError, ValueError, AttributeError): 
+    except (OSError, ValueError, AttributeError):
         return False
     return stat.S_ISLNK(st.st_mode)
 
@@ -175,7 +175,7 @@ def lexists(path):
     """Test whether a path exists.  Returns True for broken symbolic links"""
     try:
         os.lstat(path)
-    except (OSError, ValueError): 
+    except (OSError, ValueError):
         return False
     return True
 
@@ -187,7 +187,7 @@ def ismount(path):
     """Test whether a path is a mount point"""
     try:
         s1 = os.lstat(path)
-    except (OSError, ValueError): 
+    except (OSError, ValueError):
         # It doesn't exist -- so not a mount point. :-)
         return False
     else:
@@ -202,7 +202,7 @@ def ismount(path):
     parent = realpath(parent)
     try:
         s2 = os.lstat(parent)
-    except (OSError, ValueError): 
+    except (OSError, ValueError):
         return False
 
     dev1 = s1.st_dev
@@ -349,7 +349,7 @@ def normpath(path):
     initial_slashes = path.startswith(sep)
     # POSIX allows one or two initial slashes, but treats three or more
     # as single slash.
-    # (see http://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap04.html#tag_04_13) 
+    # (see http://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap04.html#tag_04_13)
     if (initial_slashes and
         path.startswith(sep*2) and not path.startswith(sep*3)):
         initial_slashes = 2

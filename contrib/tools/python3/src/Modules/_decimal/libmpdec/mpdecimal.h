@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2020 Stefan Krah. All rights reserved. 
+ * Copyright (c) 2008-2020 Stefan Krah. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,42 +26,42 @@
  */
 
 
-#ifndef LIBMPDEC_MPDECIMAL_H_ 
-#define LIBMPDEC_MPDECIMAL_H_ 
+#ifndef LIBMPDEC_MPDECIMAL_H_
+#define LIBMPDEC_MPDECIMAL_H_
 
 
-#ifndef _MSC_VER 
-  #include "pyconfig.h" 
-#endif 
- 
+#ifndef _MSC_VER
+  #include "pyconfig.h"
+#endif
+
 #ifdef __cplusplus
-  #include <cinttypes> 
-  #include <climits> 
-  #include <cstdint> 
-  #include <cstdio> 
-  #include <cstdlib> 
+  #include <cinttypes>
+  #include <climits>
+  #include <cstdint>
+  #include <cstdio>
+  #include <cstdlib>
 extern "C" {
-#else 
-  #include <inttypes.h> 
-  #include <limits.h> 
-  #include <stdint.h> 
-  #include <stdio.h> 
-  #include <stdlib.h> 
+#else
+  #include <inttypes.h>
+  #include <limits.h>
+  #include <stdint.h>
+  #include <stdio.h>
+  #include <stdlib.h>
 #endif
 
 
-#if (defined(__linux__) || defined(__FreeBSD__) || defined(__APPLE__)) && \ 
-    defined(__GNUC__) && __GNUC__ >= 4 && !defined(__INTEL_COMPILER) 
-  #define MPD_PRAGMA(x) _Pragma(x) 
-  #define MPD_HIDE_SYMBOLS_START "GCC visibility push(hidden)" 
-  #define MPD_HIDE_SYMBOLS_END "GCC visibility pop" 
-#else 
-  #define MPD_PRAGMA(x) 
-  #define MPD_HIDE_SYMBOLS_START 
-  #define MPD_HIDE_SYMBOLS_END 
+#if (defined(__linux__) || defined(__FreeBSD__) || defined(__APPLE__)) && \
+    defined(__GNUC__) && __GNUC__ >= 4 && !defined(__INTEL_COMPILER)
+  #define MPD_PRAGMA(x) _Pragma(x)
+  #define MPD_HIDE_SYMBOLS_START "GCC visibility push(hidden)"
+  #define MPD_HIDE_SYMBOLS_END "GCC visibility pop"
+#else
+  #define MPD_PRAGMA(x)
+  #define MPD_HIDE_SYMBOLS_START
+  #define MPD_HIDE_SYMBOLS_END
 #endif
 
-#if defined(_MSC_VER) 
+#if defined(_MSC_VER)
   #include "vccompat.h"
   #define EXTINLINE extern inline
 #else
@@ -89,10 +89,10 @@ MPD_PRAGMA(MPD_HIDE_SYMBOLS_START)
 /******************************************************************************/
 
 #define MPD_MAJOR_VERSION 2
-#define MPD_MINOR_VERSION 5 
-#define MPD_MICRO_VERSION 0 
+#define MPD_MINOR_VERSION 5
+#define MPD_MICRO_VERSION 0
 
-#define MPD_VERSION "2.5.0" 
+#define MPD_VERSION "2.5.0"
 
 #define MPD_VERSION_HEX ((MPD_MAJOR_VERSION << 24) | \
                          (MPD_MINOR_VERSION << 16) | \
@@ -121,9 +121,9 @@ const char *mpd_version(void);
   #elif defined(__x86_64__)
     #define CONFIG_64
     #define ASM
-  #elif defined(__arm64__) 
-    #define CONFIG_64 
-    #define ANSI 
+  #elif defined(__arm64__)
+    #define CONFIG_64
+    #define ANSI
   #else
     #error "unknown architecture for universal build."
   #endif
@@ -412,7 +412,7 @@ void mpd_print(const mpd_t *dec);
 
 /* assignment from a string */
 void mpd_qset_string(mpd_t *dec, const char *s, const mpd_context_t *ctx, uint32_t *status);
-void mpd_qset_string_exact(mpd_t *dec, const char *s, uint32_t *status); 
+void mpd_qset_string_exact(mpd_t *dec, const char *s, uint32_t *status);
 
 /* set to NaN with error flags */
 void mpd_seterror(mpd_t *result, uint32_t flags, uint32_t *status);
@@ -430,8 +430,8 @@ void mpd_qset_u32(mpd_t *result, uint32_t a, const mpd_context_t *ctx, uint32_t 
 #ifndef LEGACY_COMPILER
 void mpd_qset_i64(mpd_t *result, int64_t a, const mpd_context_t *ctx, uint32_t *status);
 void mpd_qset_u64(mpd_t *result, uint64_t a, const mpd_context_t *ctx, uint32_t *status);
-void mpd_qset_i64_exact(mpd_t *result, int64_t a, uint32_t *status); 
-void mpd_qset_u64_exact(mpd_t *result, uint64_t a, uint32_t *status); 
+void mpd_qset_i64_exact(mpd_t *result, int64_t a, uint32_t *status);
+void mpd_qset_u64_exact(mpd_t *result, uint64_t a, uint32_t *status);
 #endif
 
 /* quietly assign a C integer type to an mpd_t with a static coefficient */
@@ -459,8 +459,8 @@ void mpd_qfinalize(mpd_t *result, const mpd_context_t *ctx, uint32_t *status);
 
 const char *mpd_class(const mpd_t *a, const mpd_context_t *ctx);
 
-int mpd_qcopy(mpd_t *result, const mpd_t *a, uint32_t *status); 
-int mpd_qcopy_cxx(mpd_t *result, const mpd_t *a); 
+int mpd_qcopy(mpd_t *result, const mpd_t *a, uint32_t *status);
+int mpd_qcopy_cxx(mpd_t *result, const mpd_t *a);
 mpd_t *mpd_qncopy(const mpd_t *a);
 int mpd_qcopy_abs(mpd_t *result, const mpd_t *a, uint32_t *status);
 int mpd_qcopy_negate(mpd_t *result, const mpd_t *a, uint32_t *status);
@@ -714,7 +714,7 @@ EXTINLINE mpd_uint_t mpd_lsd(mpd_uint_t word);
 EXTINLINE mpd_ssize_t mpd_digits_to_size(mpd_ssize_t digits);
 /* number of digits in the exponent, undefined for MPD_SSIZE_MIN */
 EXTINLINE int mpd_exp_digits(mpd_ssize_t exp);
-EXTINLINE int mpd_iscanonical(const mpd_t *dec); 
+EXTINLINE int mpd_iscanonical(const mpd_t *dec);
 EXTINLINE int mpd_isfinite(const mpd_t *dec);
 EXTINLINE int mpd_isinfinite(const mpd_t *dec);
 EXTINLINE int mpd_isinteger(const mpd_t *dec);
@@ -830,4 +830,4 @@ MPD_PRAGMA(MPD_HIDE_SYMBOLS_END) /* restore previous scope rules */
 #endif
 
 
-#endif /* LIBMPDEC_MPDECIMAL_H_ */ 
+#endif /* LIBMPDEC_MPDECIMAL_H_ */

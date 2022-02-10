@@ -82,12 +82,12 @@ AliasResult SCEVAAResult::alias(const MemoryLocation &LocA,
   Value *BO = GetBaseValue(BS);
   if ((AO && AO != LocA.Ptr) || (BO && BO != LocB.Ptr))
     if (alias(MemoryLocation(AO ? AO : LocA.Ptr,
-                             AO ? LocationSize::beforeOrAfterPointer() 
-                                : LocA.Size, 
+                             AO ? LocationSize::beforeOrAfterPointer()
+                                : LocA.Size,
                              AO ? AAMDNodes() : LocA.AATags),
               MemoryLocation(BO ? BO : LocB.Ptr,
-                             BO ? LocationSize::beforeOrAfterPointer() 
-                                : LocB.Size, 
+                             BO ? LocationSize::beforeOrAfterPointer()
+                                : LocB.Size,
                              BO ? AAMDNodes() : LocB.AATags),
               AAQI) == NoAlias)
       return NoAlias;

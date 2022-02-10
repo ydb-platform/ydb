@@ -163,7 +163,7 @@ class CodeHandler(unittest.TestCase):
         """
         Converts the code block using ``futurize`` and returns the
         resulting code.
- 
+
         Passing stages=[1] or stages=[2] passes the flag ``--stage1`` or
         ``stage2`` to ``futurize``. Passing both stages runs ``futurize``
         with both stages by default.
@@ -259,10 +259,10 @@ class CodeHandler(unittest.TestCase):
 
         If ignore_imports is True, ignores the presence of any lines
         beginning:
- 
+
             from __future__ import ...
             from future import ...
- 
+
         for the purpose of the comparison.
         """
         output = self.convert(before, stages=stages, all_imports=all_imports,
@@ -272,11 +272,11 @@ class CodeHandler(unittest.TestCase):
         else:
             headers = ''
 
-        reformatted = reformat_code(expected) 
-        if headers in reformatted: 
-            headers = '' 
- 
-        self.compare(output, headers + reformatted, 
+        reformatted = reformat_code(expected)
+        if headers in reformatted:
+            headers = ''
+
+        self.compare(output, headers + reformatted,
                      ignore_imports=ignore_imports)
 
     def unchanged(self, code, **kwargs):
@@ -342,10 +342,10 @@ class CodeHandler(unittest.TestCase):
                         '----\n%s\n----' % f.read(),
                     )
             ErrorClass = (FuturizeError if 'futurize' in script else PasteurizeError)
- 
-            if not hasattr(e, 'output'): 
-                # The attribute CalledProcessError.output doesn't exist on Py2.6 
-                e.output = None 
+
+            if not hasattr(e, 'output'):
+                # The attribute CalledProcessError.output doesn't exist on Py2.6
+                e.output = None
             raise ErrorClass(msg, e.returncode, e.cmd, output=e.output)
         return output
 

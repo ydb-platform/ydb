@@ -1,1 +1,1 @@
-from jupyter_client.channelsabc import * 
+from jupyter_client.channelsabc import *

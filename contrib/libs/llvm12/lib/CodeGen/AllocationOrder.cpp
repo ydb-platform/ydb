@@ -26,15 +26,15 @@ using namespace llvm;
 #define DEBUG_TYPE "regalloc"
 
 // Compare VirtRegMap::getRegAllocPref().
-AllocationOrder AllocationOrder::create(unsigned VirtReg, const VirtRegMap &VRM, 
-                                        const RegisterClassInfo &RegClassInfo, 
-                                        const LiveRegMatrix *Matrix) { 
+AllocationOrder AllocationOrder::create(unsigned VirtReg, const VirtRegMap &VRM,
+                                        const RegisterClassInfo &RegClassInfo,
+                                        const LiveRegMatrix *Matrix) {
   const MachineFunction &MF = VRM.getMachineFunction();
   const TargetRegisterInfo *TRI = &VRM.getTargetRegInfo();
-  auto Order = RegClassInfo.getOrder(MF.getRegInfo().getRegClass(VirtReg)); 
-  SmallVector<MCPhysReg, 16> Hints; 
-  bool HardHints = 
-      TRI->getRegAllocationHints(VirtReg, Order, Hints, MF, &VRM, Matrix); 
+  auto Order = RegClassInfo.getOrder(MF.getRegInfo().getRegClass(VirtReg));
+  SmallVector<MCPhysReg, 16> Hints;
+  bool HardHints =
+      TRI->getRegAllocationHints(VirtReg, Order, Hints, MF, &VRM, Matrix);
 
   LLVM_DEBUG({
     if (!Hints.empty()) {
@@ -49,5 +49,5 @@ AllocationOrder AllocationOrder::create(unsigned VirtReg, const VirtRegMap &VRM,
     assert(is_contained(Order, Hints[I]) &&
            "Target hint is outside allocation order.");
 #endif
-  return AllocationOrder(std::move(Hints), Order, HardHints); 
+  return AllocationOrder(std::move(Hints), Order, HardHints);
 }

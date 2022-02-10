@@ -4,8 +4,8 @@ LICENSE(BSD-3-Clause)
 
 OWNER(g:python-contrib)
 
-VERSION(1.9.0) 
- 
+VERSION(1.9.0)
+
 PEERDIR (
     contrib/python/six
 )
@@ -78,7 +78,7 @@ PY_SRCS(
 NO_LINT()
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    tests 
-) 
+
+RECURSE_FOR_TESTS(
+    tests
+)

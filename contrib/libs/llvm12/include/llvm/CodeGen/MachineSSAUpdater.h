@@ -69,7 +69,7 @@ public:
   /// Initialize - Reset this object to get ready for a new set of SSA
   /// updates.
   void Initialize(Register V);
-  void Initialize(const TargetRegisterClass *RC); 
+  void Initialize(const TargetRegisterClass *RC);
 
   /// AddAvailableValue - Indicate that a rewritten value is available at the
   /// end of the specified block with the specified value.

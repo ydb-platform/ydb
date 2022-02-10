@@ -9,7 +9,7 @@ def insort_right(a, x, lo=0, hi=None):
     slice of a to be searched.
     """
 
-    lo = bisect_right(a, x, lo, hi) 
+    lo = bisect_right(a, x, lo, hi)
     a.insert(lo, x)
 
 def bisect_right(a, x, lo=0, hi=None):
@@ -29,7 +29,7 @@ def bisect_right(a, x, lo=0, hi=None):
         hi = len(a)
     while lo < hi:
         mid = (lo+hi)//2
-        # Use __lt__ to match the logic in list.sort() and in heapq 
+        # Use __lt__ to match the logic in list.sort() and in heapq
         if x < a[mid]: hi = mid
         else: lo = mid+1
     return lo
@@ -43,7 +43,7 @@ def insort_left(a, x, lo=0, hi=None):
     slice of a to be searched.
     """
 
-    lo = bisect_left(a, x, lo, hi) 
+    lo = bisect_left(a, x, lo, hi)
     a.insert(lo, x)
 
 
@@ -64,7 +64,7 @@ def bisect_left(a, x, lo=0, hi=None):
         hi = len(a)
     while lo < hi:
         mid = (lo+hi)//2
-        # Use __lt__ to match the logic in list.sort() and in heapq 
+        # Use __lt__ to match the logic in list.sort() and in heapq
         if a[mid] < x: lo = mid+1
         else: hi = mid
     return lo

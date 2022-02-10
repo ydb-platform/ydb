@@ -15,7 +15,7 @@ from pygments.lexer import RegexLexer, bygroups, default
 from pygments.token import Keyword, Punctuation, String, Number, Operator, Generic, \
     Whitespace, Name, Literal, Comment, Text
 
-__all__ = ['SparqlLexer', 'TurtleLexer', 'ShExCLexer'] 
+__all__ = ['SparqlLexer', 'TurtleLexer', 'ShExCLexer']
 
 
 class SparqlLexer(RegexLexer):
@@ -275,149 +275,149 @@ class TurtleLexer(RegexLexer):
         for t in ('@base ', 'BASE ', '@prefix ', 'PREFIX '):
             if re.search(r'^\s*%s' % t, text):
                 return 0.80
- 
- 
-class ShExCLexer(RegexLexer): 
-    """ 
-    Lexer for `ShExC <https://shex.io/shex-semantics/#shexc>`_ shape expressions language syntax. 
-    """ 
-    name = 'ShExC' 
-    aliases = ['shexc', 'shex'] 
-    filenames = ['*.shex'] 
-    mimetypes = ['text/shex'] 
- 
-    # character group definitions :: 
- 
-    PN_CHARS_BASE_GRP = (u'a-zA-Z' 
-                         u'\u00c0-\u00d6' 
-                         u'\u00d8-\u00f6' 
-                         u'\u00f8-\u02ff' 
-                         u'\u0370-\u037d' 
-                         u'\u037f-\u1fff' 
-                         u'\u200c-\u200d' 
-                         u'\u2070-\u218f' 
-                         u'\u2c00-\u2fef' 
-                         u'\u3001-\ud7ff' 
-                         u'\uf900-\ufdcf' 
-                         u'\ufdf0-\ufffd') 
- 
-    PN_CHARS_U_GRP = (PN_CHARS_BASE_GRP + '_') 
- 
-    PN_CHARS_GRP = (PN_CHARS_U_GRP + 
-                    r'\-' + 
-                    r'0-9' + 
-                    u'\u00b7' + 
-                    u'\u0300-\u036f' + 
-                    u'\u203f-\u2040') 
- 
-    HEX_GRP = '0-9A-Fa-f' 
- 
-    PN_LOCAL_ESC_CHARS_GRP = r"_~.\-!$&'()*+,;=/?#@%" 
- 
-    # terminal productions :: 
- 
-    PN_CHARS_BASE = '[' + PN_CHARS_BASE_GRP + ']' 
- 
-    PN_CHARS_U = '[' + PN_CHARS_U_GRP + ']' 
- 
-    PN_CHARS = '[' + PN_CHARS_GRP + ']' 
- 
-    HEX = '[' + HEX_GRP + ']' 
- 
-    PN_LOCAL_ESC_CHARS = '[' + PN_LOCAL_ESC_CHARS_GRP + ']' 
- 
-    UCHAR_NO_BACKSLASH = '(?:u' + HEX + '{4}|U' + HEX + '{8})' 
- 
-    UCHAR = r'\\' + UCHAR_NO_BACKSLASH 
- 
-    IRIREF = r'<(?:[^\x00-\x20<>"{}|^`\\]|' + UCHAR + ')*>' 
- 
-    BLANK_NODE_LABEL = '_:[0-9' + PN_CHARS_U_GRP + '](?:[' + PN_CHARS_GRP + \ 
-                       '.]*' + PN_CHARS + ')?' 
- 
-    PN_PREFIX = PN_CHARS_BASE + '(?:[' + PN_CHARS_GRP + '.]*' + PN_CHARS + ')?' 
- 
-    PERCENT = '%' + HEX + HEX 
- 
-    PN_LOCAL_ESC = r'\\' + PN_LOCAL_ESC_CHARS 
- 
-    PLX = '(?:' + PERCENT + ')|(?:' + PN_LOCAL_ESC + ')' 
- 
-    PN_LOCAL = ('(?:[' + PN_CHARS_U_GRP + ':0-9' + ']|' + PLX + ')' + 
-                '(?:(?:[' + PN_CHARS_GRP + '.:]|' + PLX + ')*(?:[' + 
-                PN_CHARS_GRP + ':]|' + PLX + '))?') 
- 
-    EXPONENT = r'[eE][+-]?\d+' 
- 
-    # Lexer token definitions :: 
- 
-    tokens = { 
-        'root': [ 
-            (r'\s+', Text), 
-            # keywords :: 
-            (r'(?i)(base|prefix|start|external|' 
-             r'literal|iri|bnode|nonliteral|length|minlength|maxlength|' 
-             r'mininclusive|minexclusive|maxinclusive|maxexclusive|' 
-             r'totaldigits|fractiondigits|' 
-             r'closed|extra)\b', Keyword), 
-            (r'(a)\b', Keyword), 
-            # IRIs :: 
-            ('(' + IRIREF + ')', Name.Label), 
-            # blank nodes :: 
-            ('(' + BLANK_NODE_LABEL + ')', Name.Label), 
-            # prefixed names :: 
-            (r'(' + PN_PREFIX + r')?(\:)(' + PN_LOCAL + ')?', 
-             bygroups(Name.Namespace, Punctuation, Name.Tag)), 
-            # boolean literals :: 
-            (r'(true|false)', Keyword.Constant), 
-            # double literals :: 
-            (r'[+\-]?(\d+\.\d*' + EXPONENT + r'|\.?\d+' + EXPONENT + ')', Number.Float), 
-            # decimal literals :: 
-            (r'[+\-]?(\d+\.\d*|\.\d+)', Number.Float), 
-            # integer literals :: 
-            (r'[+\-]?\d+', Number.Integer), 
-            # operators :: 
-            (r'[@|$&=*+?^\-~]', Operator), 
-            # operator keywords :: 
-            (r'(?i)(and|or|not)\b', Operator.Word), 
-            # punctuation characters :: 
-            (r'[(){}.;,:^\[\]]', Punctuation), 
-            # line comments :: 
-            (r'#[^\n]*', Comment), 
-            # strings :: 
-            (r'"""', String, 'triple-double-quoted-string'), 
-            (r'"', String, 'single-double-quoted-string'), 
-            (r"'''", String, 'triple-single-quoted-string'), 
-            (r"'", String, 'single-single-quoted-string'), 
-        ], 
-        'triple-double-quoted-string': [ 
-            (r'"""', String, 'end-of-string'), 
-            (r'[^\\]+', String), 
-            (r'\\', String, 'string-escape'), 
-        ], 
-        'single-double-quoted-string': [ 
-            (r'"', String, 'end-of-string'), 
-            (r'[^"\\\n]+', String), 
-            (r'\\', String, 'string-escape'), 
-        ], 
-        'triple-single-quoted-string': [ 
-            (r"'''", String, 'end-of-string'), 
-            (r'[^\\]+', String), 
-            (r'\\', String.Escape, 'string-escape'), 
-        ], 
-        'single-single-quoted-string': [ 
-            (r"'", String, 'end-of-string'), 
-            (r"[^'\\\n]+", String), 
-            (r'\\', String, 'string-escape'), 
-        ], 
-        'string-escape': [ 
-            (UCHAR_NO_BACKSLASH, String.Escape, '#pop'), 
-            (r'.', String.Escape, '#pop'), 
-        ], 
-        'end-of-string': [ 
-            (r'(@)([a-zA-Z]+(?:-[a-zA-Z0-9]+)*)', 
-             bygroups(Operator, Name.Function), '#pop:2'), 
-            (r'\^\^', Operator, '#pop:2'), 
-            default('#pop:2'), 
-        ], 
-    } 
+
+
+class ShExCLexer(RegexLexer):
+    """
+    Lexer for `ShExC <https://shex.io/shex-semantics/#shexc>`_ shape expressions language syntax.
+    """
+    name = 'ShExC'
+    aliases = ['shexc', 'shex']
+    filenames = ['*.shex']
+    mimetypes = ['text/shex']
+
+    # character group definitions ::
+
+    PN_CHARS_BASE_GRP = (u'a-zA-Z'
+                         u'\u00c0-\u00d6'
+                         u'\u00d8-\u00f6'
+                         u'\u00f8-\u02ff'
+                         u'\u0370-\u037d'
+                         u'\u037f-\u1fff'
+                         u'\u200c-\u200d'
+                         u'\u2070-\u218f'
+                         u'\u2c00-\u2fef'
+                         u'\u3001-\ud7ff'
+                         u'\uf900-\ufdcf'
+                         u'\ufdf0-\ufffd')
+
+    PN_CHARS_U_GRP = (PN_CHARS_BASE_GRP + '_')
+
+    PN_CHARS_GRP = (PN_CHARS_U_GRP +
+                    r'\-' +
+                    r'0-9' +
+                    u'\u00b7' +
+                    u'\u0300-\u036f' +
+                    u'\u203f-\u2040')
+
+    HEX_GRP = '0-9A-Fa-f'
+
+    PN_LOCAL_ESC_CHARS_GRP = r"_~.\-!$&'()*+,;=/?#@%"
+
+    # terminal productions ::
+
+    PN_CHARS_BASE = '[' + PN_CHARS_BASE_GRP + ']'
+
+    PN_CHARS_U = '[' + PN_CHARS_U_GRP + ']'
+
+    PN_CHARS = '[' + PN_CHARS_GRP + ']'
+
+    HEX = '[' + HEX_GRP + ']'
+
+    PN_LOCAL_ESC_CHARS = '[' + PN_LOCAL_ESC_CHARS_GRP + ']'
+
+    UCHAR_NO_BACKSLASH = '(?:u' + HEX + '{4}|U' + HEX + '{8})'
+
+    UCHAR = r'\\' + UCHAR_NO_BACKSLASH
+
+    IRIREF = r'<(?:[^\x00-\x20<>"{}|^`\\]|' + UCHAR + ')*>'
+
+    BLANK_NODE_LABEL = '_:[0-9' + PN_CHARS_U_GRP + '](?:[' + PN_CHARS_GRP + \
+                       '.]*' + PN_CHARS + ')?'
+
+    PN_PREFIX = PN_CHARS_BASE + '(?:[' + PN_CHARS_GRP + '.]*' + PN_CHARS + ')?'
+
+    PERCENT = '%' + HEX + HEX
+
+    PN_LOCAL_ESC = r'\\' + PN_LOCAL_ESC_CHARS
+
+    PLX = '(?:' + PERCENT + ')|(?:' + PN_LOCAL_ESC + ')'
+
+    PN_LOCAL = ('(?:[' + PN_CHARS_U_GRP + ':0-9' + ']|' + PLX + ')' +
+                '(?:(?:[' + PN_CHARS_GRP + '.:]|' + PLX + ')*(?:[' +
+                PN_CHARS_GRP + ':]|' + PLX + '))?')
+
+    EXPONENT = r'[eE][+-]?\d+'
+
+    # Lexer token definitions ::
+
+    tokens = {
+        'root': [
+            (r'\s+', Text),
+            # keywords ::
+            (r'(?i)(base|prefix|start|external|'
+             r'literal|iri|bnode|nonliteral|length|minlength|maxlength|'
+             r'mininclusive|minexclusive|maxinclusive|maxexclusive|'
+             r'totaldigits|fractiondigits|'
+             r'closed|extra)\b', Keyword),
+            (r'(a)\b', Keyword),
+            # IRIs ::
+            ('(' + IRIREF + ')', Name.Label),
+            # blank nodes ::
+            ('(' + BLANK_NODE_LABEL + ')', Name.Label),
+            # prefixed names ::
+            (r'(' + PN_PREFIX + r')?(\:)(' + PN_LOCAL + ')?',
+             bygroups(Name.Namespace, Punctuation, Name.Tag)),
+            # boolean literals ::
+            (r'(true|false)', Keyword.Constant),
+            # double literals ::
+            (r'[+\-]?(\d+\.\d*' + EXPONENT + r'|\.?\d+' + EXPONENT + ')', Number.Float),
+            # decimal literals ::
+            (r'[+\-]?(\d+\.\d*|\.\d+)', Number.Float),
+            # integer literals ::
+            (r'[+\-]?\d+', Number.Integer),
+            # operators ::
+            (r'[@|$&=*+?^\-~]', Operator),
+            # operator keywords ::
+            (r'(?i)(and|or|not)\b', Operator.Word),
+            # punctuation characters ::
+            (r'[(){}.;,:^\[\]]', Punctuation),
+            # line comments ::
+            (r'#[^\n]*', Comment),
+            # strings ::
+            (r'"""', String, 'triple-double-quoted-string'),
+            (r'"', String, 'single-double-quoted-string'),
+            (r"'''", String, 'triple-single-quoted-string'),
+            (r"'", String, 'single-single-quoted-string'),
+        ],
+        'triple-double-quoted-string': [
+            (r'"""', String, 'end-of-string'),
+            (r'[^\\]+', String),
+            (r'\\', String, 'string-escape'),
+        ],
+        'single-double-quoted-string': [
+            (r'"', String, 'end-of-string'),
+            (r'[^"\\\n]+', String),
+            (r'\\', String, 'string-escape'),
+        ],
+        'triple-single-quoted-string': [
+            (r"'''", String, 'end-of-string'),
+            (r'[^\\]+', String),
+            (r'\\', String.Escape, 'string-escape'),
+        ],
+        'single-single-quoted-string': [
+            (r"'", String, 'end-of-string'),
+            (r"[^'\\\n]+", String),
+            (r'\\', String, 'string-escape'),
+        ],
+        'string-escape': [
+            (UCHAR_NO_BACKSLASH, String.Escape, '#pop'),
+            (r'.', String.Escape, '#pop'),
+        ],
+        'end-of-string': [
+            (r'(@)([a-zA-Z]+(?:-[a-zA-Z0-9]+)*)',
+             bygroups(Operator, Name.Function), '#pop:2'),
+            (r'\^\^', Operator, '#pop:2'),
+            default('#pop:2'),
+        ],
+    }

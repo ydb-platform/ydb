@@ -53,7 +53,7 @@ public:
   const ListEntries &getEntries() const { return Entries; }
   bool empty() const { return Entries.empty(); }
   void clear() { Entries.clear(); }
-  Error extract(DWARFDataExtractor Data, uint64_t HeaderOffset, 
+  Error extract(DWARFDataExtractor Data, uint64_t HeaderOffset,
                 uint64_t *OffsetPtr, StringRef SectionName,
                 StringRef ListStringName);
 };
@@ -117,25 +117,25 @@ public:
     llvm_unreachable("Invalid DWARF format (expected DWARF32 or DWARF64");
   }
 
-  void dump(DataExtractor Data, raw_ostream &OS, 
-            DIDumpOptions DumpOpts = {}) const; 
-  Optional<uint64_t> getOffsetEntry(DataExtractor Data, uint32_t Index) const { 
-    if (Index > HeaderData.OffsetEntryCount) 
-      return None; 
- 
-    return getOffsetEntry(Data, getHeaderOffset() + getHeaderSize(Format), Format, Index); 
+  void dump(DataExtractor Data, raw_ostream &OS,
+            DIDumpOptions DumpOpts = {}) const;
+  Optional<uint64_t> getOffsetEntry(DataExtractor Data, uint32_t Index) const {
+    if (Index > HeaderData.OffsetEntryCount)
+      return None;
+
+    return getOffsetEntry(Data, getHeaderOffset() + getHeaderSize(Format), Format, Index);
   }
 
-  static Optional<uint64_t> getOffsetEntry(DataExtractor Data, 
-                                           uint64_t OffsetTableOffset, 
-                                           dwarf::DwarfFormat Format, 
-                                           uint32_t Index) { 
-    uint8_t OffsetByteSize = Format == dwarf::DWARF64 ? 8 : 4; 
-    uint64_t Offset = OffsetTableOffset + OffsetByteSize * Index; 
-    auto R = Data.getUnsigned(&Offset, OffsetByteSize); 
-    return R; 
-  } 
- 
+  static Optional<uint64_t> getOffsetEntry(DataExtractor Data,
+                                           uint64_t OffsetTableOffset,
+                                           dwarf::DwarfFormat Format,
+                                           uint32_t Index) {
+    uint8_t OffsetByteSize = Format == dwarf::DWARF64 ? 8 : 4;
+    uint64_t Offset = OffsetTableOffset + OffsetByteSize * Index;
+    auto R = Data.getUnsigned(&Offset, OffsetByteSize);
+    return R;
+  }
+
   /// Extract the table header and the array of offsets.
   Error extract(DWARFDataExtractor Data, uint64_t *OffsetPtr);
 
@@ -183,14 +183,14 @@ public:
   uint8_t getAddrSize() const { return Header.getAddrSize(); }
   dwarf::DwarfFormat getFormat() const { return Header.getFormat(); }
 
-  void dump(DWARFDataExtractor Data, raw_ostream &OS, 
+  void dump(DWARFDataExtractor Data, raw_ostream &OS,
             llvm::function_ref<Optional<object::SectionedAddress>(uint32_t)>
                 LookupPooledAddress,
             DIDumpOptions DumpOpts = {}) const;
 
   /// Return the contents of the offset entry designated by a given index.
-  Optional<uint64_t> getOffsetEntry(DataExtractor Data, uint32_t Index) const { 
-    return Header.getOffsetEntry(Data, Index); 
+  Optional<uint64_t> getOffsetEntry(DataExtractor Data, uint32_t Index) const {
+    return Header.getOffsetEntry(Data, Index);
   }
   /// Return the size of the table header including the length but not including
   /// the offsets. This is dependent on the table format, which is unambiguously
@@ -210,18 +210,18 @@ Error DWARFListTableBase<DWARFListType>::extract(DWARFDataExtractor Data,
     return E;
 
   Data.setAddressSize(Header.getAddrSize());
-  Data = DWARFDataExtractor(Data, getHeaderOffset() + Header.length()); 
-  while (Data.isValidOffset(*OffsetPtr)) { 
+  Data = DWARFDataExtractor(Data, getHeaderOffset() + Header.length());
+  while (Data.isValidOffset(*OffsetPtr)) {
     DWARFListType CurrentList;
     uint64_t Off = *OffsetPtr;
-    if (Error E = CurrentList.extract(Data, getHeaderOffset(), OffsetPtr, 
+    if (Error E = CurrentList.extract(Data, getHeaderOffset(), OffsetPtr,
                                       Header.getSectionName(),
                                       Header.getListTypeString()))
       return E;
     ListMap[Off] = CurrentList;
   }
 
-  assert(*OffsetPtr == Data.size() && 
+  assert(*OffsetPtr == Data.size() &&
          "mismatch between expected length of table and length "
          "of extracted data");
   return Error::success();
@@ -229,18 +229,18 @@ Error DWARFListTableBase<DWARFListType>::extract(DWARFDataExtractor Data,
 
 template <typename ListEntryType>
 Error DWARFListType<ListEntryType>::extract(DWARFDataExtractor Data,
-                                            uint64_t HeaderOffset, 
+                                            uint64_t HeaderOffset,
                                             uint64_t *OffsetPtr,
                                             StringRef SectionName,
                                             StringRef ListTypeString) {
-  if (*OffsetPtr < HeaderOffset || *OffsetPtr >= Data.size()) 
+  if (*OffsetPtr < HeaderOffset || *OffsetPtr >= Data.size())
     return createStringError(errc::invalid_argument,
                        "invalid %s list offset 0x%" PRIx64,
                        ListTypeString.data(), *OffsetPtr);
   Entries.clear();
-  while (Data.isValidOffset(*OffsetPtr)) { 
+  while (Data.isValidOffset(*OffsetPtr)) {
     ListEntryType Entry;
-    if (Error E = Entry.extract(Data, OffsetPtr)) 
+    if (Error E = Entry.extract(Data, OffsetPtr))
       return E;
     Entries.push_back(Entry);
     if (Entry.isSentinel())
@@ -254,11 +254,11 @@ Error DWARFListType<ListEntryType>::extract(DWARFDataExtractor Data,
 
 template <typename DWARFListType>
 void DWARFListTableBase<DWARFListType>::dump(
-    DWARFDataExtractor Data, raw_ostream &OS, 
+    DWARFDataExtractor Data, raw_ostream &OS,
     llvm::function_ref<Optional<object::SectionedAddress>(uint32_t)>
         LookupPooledAddress,
     DIDumpOptions DumpOpts) const {
-  Header.dump(Data, OS, DumpOpts); 
+  Header.dump(Data, OS, DumpOpts);
   OS << HeaderString << "\n";
 
   // Determine the length of the longest encoding string we have in the table,
@@ -285,10 +285,10 @@ DWARFListTableBase<DWARFListType>::findList(DWARFDataExtractor Data,
                                             uint64_t Offset) {
   // Extract the list from the section and enter it into the list map.
   DWARFListType List;
-  if (Header.length()) 
-    Data = DWARFDataExtractor(Data, getHeaderOffset() + Header.length()); 
+  if (Header.length())
+    Data = DWARFDataExtractor(Data, getHeaderOffset() + Header.length());
   if (Error E =
-          List.extract(Data, Header.length() ? getHeaderOffset() : 0, &Offset, 
+          List.extract(Data, Header.length() ? getHeaderOffset() : 0, &Offset,
                        Header.getSectionName(), Header.getListTypeString()))
     return std::move(E);
   return List;

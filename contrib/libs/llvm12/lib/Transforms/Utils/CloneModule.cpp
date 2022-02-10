@@ -117,14 +117,14 @@ std::unique_ptr<Module> llvm::CloneModule(
   //
   for (Module::const_global_iterator I = M.global_begin(), E = M.global_end();
        I != E; ++I) {
-    GlobalVariable *GV = cast<GlobalVariable>(VMap[&*I]); 
- 
-    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs; 
-    I->getAllMetadata(MDs); 
-    for (auto MD : MDs) 
-      GV->addMetadata(MD.first, 
-                      *MapMetadata(MD.second, VMap, RF_MoveDistinctMDs)); 
- 
+    GlobalVariable *GV = cast<GlobalVariable>(VMap[&*I]);
+
+    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+    I->getAllMetadata(MDs);
+    for (auto MD : MDs)
+      GV->addMetadata(MD.first,
+                      *MapMetadata(MD.second, VMap, RF_MoveDistinctMDs));
+
     if (I->isDeclaration())
       continue;
 

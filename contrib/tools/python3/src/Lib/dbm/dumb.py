@@ -82,7 +82,7 @@ class _Database(collections.abc.MutableMapping):
             f = _io.open(self._datfile, 'r', encoding="Latin-1")
         except OSError:
             if flag not in ('c', 'n'):
-                raise 
+                raise
             with _io.open(self._datfile, 'w', encoding="Latin-1") as f:
                 self._chmod(self._datfile)
         else:
@@ -90,14 +90,14 @@ class _Database(collections.abc.MutableMapping):
 
     # Read directory file into the in-memory index dict.
     def _update(self, flag):
-        self._modified = False 
+        self._modified = False
         self._index = {}
         try:
             f = _io.open(self._dirfile, 'r', encoding="Latin-1")
         except OSError:
             if flag not in ('c', 'n'):
-                raise 
-            self._modified = True 
+                raise
+            self._modified = True
         else:
             with f:
                 for line in f:
@@ -185,7 +185,7 @@ class _Database(collections.abc.MutableMapping):
 
     def __setitem__(self, key, val):
         if self._readonly:
-            raise error('The database is opened for reading only') 
+            raise error('The database is opened for reading only')
         if isinstance(key, str):
             key = key.encode('utf-8')
         elif not isinstance(key, (bytes, bytearray)):
@@ -222,7 +222,7 @@ class _Database(collections.abc.MutableMapping):
 
     def __delitem__(self, key):
         if self._readonly:
-            raise error('The database is opened for reading only') 
+            raise error('The database is opened for reading only')
         if isinstance(key, str):
             key = key.encode('utf-8')
         self._verify_open()
@@ -278,7 +278,7 @@ class _Database(collections.abc.MutableMapping):
     __del__ = close
 
     def _chmod(self, file):
-        self._os.chmod(file, self._mode) 
+        self._os.chmod(file, self._mode)
 
     def __enter__(self):
         return self
@@ -312,5 +312,5 @@ def open(file, flag='c', mode=0o666):
         # Turn off any bits that are set in the umask
         mode = mode & (~um)
     if flag not in ('r', 'w', 'c', 'n'):
-        raise ValueError("Flag must be one of 'r', 'w', 'c', or 'n'") 
+        raise ValueError("Flag must be one of 'r', 'w', 'c', or 'n'")
     return _Database(file, mode, flag=flag)

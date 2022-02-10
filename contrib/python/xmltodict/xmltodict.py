@@ -15,8 +15,8 @@ except ImportError:  # pragma no cover
     except ImportError:
         from io import StringIO
 
-from collections import OrderedDict 
- 
+from collections import OrderedDict
+
 try:  # pragma no cover
     _basestring = basestring
 except NameError:  # pragma no cover
@@ -27,7 +27,7 @@ except NameError:  # pragma no cover
     _unicode = str
 
 __author__ = 'Martin Blech'
-__version__ = '0.12.0' 
+__version__ = '0.12.0'
 __license__ = 'MIT'
 
 
@@ -66,7 +66,7 @@ class _DictSAXHandler(object):
         self.strip_whitespace = strip_whitespace
         self.namespace_separator = namespace_separator
         self.namespaces = namespaces
-        self.namespace_declarations = OrderedDict() 
+        self.namespace_declarations = OrderedDict()
         self.force_list = force_list
 
     def _build_name(self, full_name):
@@ -87,15 +87,15 @@ class _DictSAXHandler(object):
             return attrs
         return self.dict_constructor(zip(attrs[0::2], attrs[1::2]))
 
-    def startNamespaceDecl(self, prefix, uri): 
-        self.namespace_declarations[prefix or ''] = uri 
- 
+    def startNamespaceDecl(self, prefix, uri):
+        self.namespace_declarations[prefix or ''] = uri
+
     def startElement(self, full_name, attrs):
         name = self._build_name(full_name)
         attrs = self._attrs_to_dict(attrs)
-        if attrs and self.namespace_declarations: 
-            attrs['xmlns'] = self.namespace_declarations 
-            self.namespace_declarations = OrderedDict() 
+        if attrs and self.namespace_declarations:
+            attrs['xmlns'] = self.namespace_declarations
+            self.namespace_declarations = OrderedDict()
         self.path.append((name, attrs or None))
         if len(self.path) > self.item_depth:
             self.stack.append((self.item, self.data))
@@ -176,8 +176,8 @@ class _DictSAXHandler(object):
     def _should_force_list(self, key, value):
         if not self.force_list:
             return False
-        if isinstance(self.force_list, bool): 
-            return self.force_list 
+        if isinstance(self.force_list, bool):
+            return self.force_list
         try:
             return key in self.force_list
         except TypeError:
@@ -185,7 +185,7 @@ class _DictSAXHandler(object):
 
 
 def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
-          namespace_separator=':', disable_entities=True, **kwargs): 
+          namespace_separator=':', disable_entities=True, **kwargs):
     """Parse the given XML input and convert it into a dictionary.
 
     `xml_input` can either be a `string` or a file-like object.
@@ -221,7 +221,7 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
     Streaming example::
 
         >>> def handle(path, item):
-        ...     print('path:%s item:%s' % (path, item)) 
+        ...     print('path:%s item:%s' % (path, item))
         ...     return True
         ...
         >>> xmltodict.parse(\"\"\"
@@ -305,44 +305,44 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
     except AttributeError:
         # Jython's expat does not support ordered_attributes
         pass
-    parser.StartNamespaceDeclHandler = handler.startNamespaceDecl 
+    parser.StartNamespaceDeclHandler = handler.startNamespaceDecl
     parser.StartElementHandler = handler.startElement
     parser.EndElementHandler = handler.endElement
     parser.CharacterDataHandler = handler.characters
     parser.buffer_text = True
-    if disable_entities: 
-        try: 
-            # Attempt to disable DTD in Jython's expat parser (Xerces-J). 
-            feature = "http://apache.org/xml/features/disallow-doctype-decl" 
-            parser._reader.setFeature(feature, True) 
-        except AttributeError: 
-            # For CPython / expat parser. 
-            # Anything not handled ends up here and entities aren't expanded. 
-            parser.DefaultHandler = lambda x: None 
-            # Expects an integer return; zero means failure -> expat.ExpatError. 
-            parser.ExternalEntityRefHandler = lambda *x: 1 
-    if hasattr(xml_input, 'read'): 
+    if disable_entities:
+        try:
+            # Attempt to disable DTD in Jython's expat parser (Xerces-J).
+            feature = "http://apache.org/xml/features/disallow-doctype-decl"
+            parser._reader.setFeature(feature, True)
+        except AttributeError:
+            # For CPython / expat parser.
+            # Anything not handled ends up here and entities aren't expanded.
+            parser.DefaultHandler = lambda x: None
+            # Expects an integer return; zero means failure -> expat.ExpatError.
+            parser.ExternalEntityRefHandler = lambda *x: 1
+    if hasattr(xml_input, 'read'):
         parser.ParseFile(xml_input)
-    else: 
+    else:
         parser.Parse(xml_input, True)
     return handler.item
 
 
-def _process_namespace(name, namespaces, ns_sep=':', attr_prefix='@'): 
-    if not namespaces: 
-        return name 
-    try: 
-        ns, name = name.rsplit(ns_sep, 1) 
-    except ValueError: 
-        pass 
-    else: 
-        ns_res = namespaces.get(ns.strip(attr_prefix)) 
-        name = '{}{}{}{}'.format( 
-            attr_prefix if ns.startswith(attr_prefix) else '', 
-            ns_res, ns_sep, name) if ns_res else name 
-    return name 
- 
- 
+def _process_namespace(name, namespaces, ns_sep=':', attr_prefix='@'):
+    if not namespaces:
+        return name
+    try:
+        ns, name = name.rsplit(ns_sep, 1)
+    except ValueError:
+        pass
+    else:
+        ns_res = namespaces.get(ns.strip(attr_prefix))
+        name = '{}{}{}{}'.format(
+            attr_prefix if ns.startswith(attr_prefix) else '',
+            ns_res, ns_sep, name) if ns_res else name
+    return name
+
+
 def _emit(key, value, content_handler,
           attr_prefix='@',
           cdata_key='#text',
@@ -351,10 +351,10 @@ def _emit(key, value, content_handler,
           pretty=False,
           newl='\n',
           indent='\t',
-          namespace_separator=':', 
-          namespaces=None, 
+          namespace_separator=':',
+          namespaces=None,
           full_document=True):
-    key = _process_namespace(key, namespaces, namespace_separator, attr_prefix) 
+    key = _process_namespace(key, namespaces, namespace_separator, attr_prefix)
     if preprocessor is not None:
         result = preprocessor(key, value)
         if result is None:
@@ -369,11 +369,11 @@ def _emit(key, value, content_handler,
             raise ValueError('document with multiple roots')
         if v is None:
             v = OrderedDict()
-        elif isinstance(v, bool): 
-            if v: 
-                v = _unicode('true') 
-            else: 
-                v = _unicode('false') 
+        elif isinstance(v, bool):
+            if v:
+                v = _unicode('true')
+            else:
+                v = _unicode('false')
         elif not isinstance(v, dict):
             v = _unicode(v)
         if isinstance(v, _basestring):
@@ -386,13 +386,13 @@ def _emit(key, value, content_handler,
                 cdata = iv
                 continue
             if ik.startswith(attr_prefix):
-                ik = _process_namespace(ik, namespaces, namespace_separator, 
-                                        attr_prefix) 
-                if ik == '@xmlns' and isinstance(iv, dict): 
-                    for k, v in iv.items(): 
-                        attr = 'xmlns{}'.format(':{}'.format(k) if k else '') 
-                        attrs[attr] = _unicode(v) 
-                    continue 
+                ik = _process_namespace(ik, namespaces, namespace_separator,
+                                        attr_prefix)
+                if ik == '@xmlns' and isinstance(iv, dict):
+                    for k, v in iv.items():
+                        attr = 'xmlns{}'.format(':{}'.format(k) if k else '')
+                        attrs[attr] = _unicode(v)
+                    continue
                 if not isinstance(iv, _unicode):
                     iv = _unicode(iv)
                 attrs[ik[len(attr_prefix):]] = iv
@@ -406,8 +406,8 @@ def _emit(key, value, content_handler,
         for child_key, child_value in children:
             _emit(child_key, child_value, content_handler,
                   attr_prefix, cdata_key, depth+1, preprocessor,
-                  pretty, newl, indent, namespaces=namespaces, 
-                  namespace_separator=namespace_separator) 
+                  pretty, newl, indent, namespaces=namespaces,
+                  namespace_separator=namespace_separator)
         if cdata is not None:
             content_handler.characters(cdata)
         if pretty and children:
@@ -418,7 +418,7 @@ def _emit(key, value, content_handler,
 
 
 def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
-            short_empty_elements=False, 
+            short_empty_elements=False,
             **kwargs):
     """Emit an XML document for the given `input_dict` (reverse of `parse`).
 
@@ -440,10 +440,10 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
     if output is None:
         output = StringIO()
         must_return = True
-    if short_empty_elements: 
-        content_handler = XMLGenerator(output, encoding, True) 
-    else: 
-        content_handler = XMLGenerator(output, encoding) 
+    if short_empty_elements:
+        content_handler = XMLGenerator(output, encoding, True)
+    else:
+        content_handler = XMLGenerator(output, encoding)
     if full_document:
         content_handler.startDocument()
     for key, value in input_dict.items():
@@ -459,7 +459,7 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
             pass
         return value
 
- 
+
 if __name__ == '__main__':  # pragma: no cover
     import sys
     import marshal

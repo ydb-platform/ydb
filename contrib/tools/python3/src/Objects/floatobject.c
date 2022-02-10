@@ -4,7 +4,7 @@
    for any kind of float exception without losing portability. */
 
 #include "Python.h"
-#include "pycore_dtoa.h" 
+#include "pycore_dtoa.h"
 
 #include <ctype.h>
 #include <float.h>
@@ -44,7 +44,7 @@ static PyTypeObject FloatInfoType;
 PyDoc_STRVAR(floatinfo__doc__,
 "sys.float_info\n\
 \n\
-A named tuple holding information about the float type. It contains low level\n\ 
+A named tuple holding information about the float type. It contains low level\n\
 information about the precision and internal representation. Please study\n\
 your system's :file:`float.h` for more information.");
 
@@ -222,7 +222,7 @@ float_dealloc(PyFloatObject *op)
             return;
         }
         numfree++;
-        Py_SET_TYPE(op, (PyTypeObject *)free_list); 
+        Py_SET_TYPE(op, (PyTypeObject *)free_list);
         free_list = op;
     }
     else
@@ -247,17 +247,17 @@ PyFloat_AsDouble(PyObject *op)
 
     nb = Py_TYPE(op)->tp_as_number;
     if (nb == NULL || nb->nb_float == NULL) {
-        if (nb && nb->nb_index) { 
-            PyObject *res = PyNumber_Index(op); 
-            if (!res) { 
-                return -1; 
-            } 
-            double val = PyLong_AsDouble(res); 
-            Py_DECREF(res); 
-            return val; 
-        } 
+        if (nb && nb->nb_index) {
+            PyObject *res = PyNumber_Index(op);
+            if (!res) {
+                return -1;
+            }
+            double val = PyLong_AsDouble(res);
+            Py_DECREF(res);
+            return val;
+        }
         PyErr_Format(PyExc_TypeError, "must be real number, not %.50s",
-                     Py_TYPE(op)->tp_name); 
+                     Py_TYPE(op)->tp_name);
         return -1;
     }
 
@@ -269,7 +269,7 @@ PyFloat_AsDouble(PyObject *op)
         if (!PyFloat_Check(res)) {
             PyErr_Format(PyExc_TypeError,
                          "%.50s.__float__ returned non-float (type %.50s)",
-                         Py_TYPE(op)->tp_name, Py_TYPE(res)->tp_name); 
+                         Py_TYPE(op)->tp_name, Py_TYPE(res)->tp_name);
             Py_DECREF(res);
             return -1;
         }
@@ -277,7 +277,7 @@ PyFloat_AsDouble(PyObject *op)
                 "%.50s.__float__ returned non-float (type %.50s).  "
                 "The ability to return an instance of a strict subclass of float "
                 "is deprecated, and may be removed in a future version of Python.",
-                Py_TYPE(op)->tp_name, Py_TYPE(res)->tp_name)) { 
+                Py_TYPE(op)->tp_name, Py_TYPE(res)->tp_name)) {
             Py_DECREF(res);
             return -1;
         }
@@ -473,13 +473,13 @@ float_richcompare(PyObject *v, PyObject *w, int op)
                  */
                 PyObject *temp;
 
-                temp = _PyLong_Lshift(ww, 1); 
+                temp = _PyLong_Lshift(ww, 1);
                 if (temp == NULL)
                     goto Error;
                 Py_DECREF(ww);
                 ww = temp;
 
-                temp = _PyLong_Lshift(vv, 1); 
+                temp = _PyLong_Lshift(vv, 1);
                 if (temp == NULL)
                     goto Error;
                 Py_DECREF(vv);
@@ -612,22 +612,22 @@ float_rem(PyObject *v, PyObject *w)
     return PyFloat_FromDouble(mod);
 }
 
-static void 
-_float_div_mod(double vx, double wx, double *floordiv, double *mod) 
+static void
+_float_div_mod(double vx, double wx, double *floordiv, double *mod)
 {
-    double div; 
-    *mod = fmod(vx, wx); 
+    double div;
+    *mod = fmod(vx, wx);
     /* fmod is typically exact, so vx-mod is *mathematically* an
        exact multiple of wx.  But this is fp arithmetic, and fp
        vx - mod is an approximation; the result is that div may
        not be an exact integral value after the division, although
        it will always be very close to one.
     */
-    div = (vx - *mod) / wx; 
-    if (*mod) { 
+    div = (vx - *mod) / wx;
+    if (*mod) {
         /* ensure the remainder has the same sign as the denominator */
-        if ((wx < 0) != (*mod < 0)) { 
-            *mod += wx; 
+        if ((wx < 0) != (*mod < 0)) {
+            *mod += wx;
             div -= 1.0;
         }
     }
@@ -635,49 +635,49 @@ _float_div_mod(double vx, double wx, double *floordiv, double *mod)
         /* the remainder is zero, and in the presence of signed zeroes
            fmod returns different results across platforms; ensure
            it has the same sign as the denominator. */
-        *mod = copysign(0.0, wx); 
+        *mod = copysign(0.0, wx);
     }
     /* snap quotient to nearest integral value */
     if (div) {
-        *floordiv = floor(div); 
-        if (div - *floordiv > 0.5) { 
-            *floordiv += 1.0; 
-        } 
+        *floordiv = floor(div);
+        if (div - *floordiv > 0.5) {
+            *floordiv += 1.0;
+        }
     }
     else {
         /* div is zero - get the same sign as the true quotient */
-        *floordiv = copysign(0.0, vx / wx); /* zero w/ sign of vx/wx */ 
+        *floordiv = copysign(0.0, vx / wx); /* zero w/ sign of vx/wx */
     }
-} 
- 
-static PyObject * 
-float_divmod(PyObject *v, PyObject *w) 
-{ 
-    double vx, wx; 
-    double mod, floordiv; 
-    CONVERT_TO_DOUBLE(v, vx); 
-    CONVERT_TO_DOUBLE(w, wx); 
-    if (wx == 0.0) { 
-        PyErr_SetString(PyExc_ZeroDivisionError, "float divmod()"); 
-        return NULL; 
-    } 
-    _float_div_mod(vx, wx, &floordiv, &mod); 
+}
+
+static PyObject *
+float_divmod(PyObject *v, PyObject *w)
+{
+    double vx, wx;
+    double mod, floordiv;
+    CONVERT_TO_DOUBLE(v, vx);
+    CONVERT_TO_DOUBLE(w, wx);
+    if (wx == 0.0) {
+        PyErr_SetString(PyExc_ZeroDivisionError, "float divmod()");
+        return NULL;
+    }
+    _float_div_mod(vx, wx, &floordiv, &mod);
     return Py_BuildValue("(dd)", floordiv, mod);
 }
 
 static PyObject *
 float_floor_div(PyObject *v, PyObject *w)
 {
-    double vx, wx; 
-    double mod, floordiv; 
-    CONVERT_TO_DOUBLE(v, vx); 
-    CONVERT_TO_DOUBLE(w, wx); 
-    if (wx == 0.0) { 
-        PyErr_SetString(PyExc_ZeroDivisionError, "float floor division by zero"); 
-        return NULL; 
-    } 
-    _float_div_mod(vx, wx, &floordiv, &mod); 
-    return PyFloat_FromDouble(floordiv); 
+    double vx, wx;
+    double mod, floordiv;
+    CONVERT_TO_DOUBLE(v, vx);
+    CONVERT_TO_DOUBLE(w, wx);
+    if (wx == 0.0) {
+        PyErr_SetString(PyExc_ZeroDivisionError, "float floor division by zero");
+        return NULL;
+    }
+    _float_div_mod(vx, wx, &floordiv, &mod);
+    return PyFloat_FromDouble(floordiv);
 }
 
 /* determine whether x is an odd integer or not;  assumes that
@@ -862,37 +862,37 @@ static PyObject *
 float___trunc___impl(PyObject *self)
 /*[clinic end generated code: output=dd3e289dd4c6b538 input=591b9ba0d650fdff]*/
 {
-    return PyLong_FromDouble(PyFloat_AS_DOUBLE(self)); 
-} 
-
-/*[clinic input] 
-float.__floor__ 
- 
-Return the floor as an Integral. 
-[clinic start generated code]*/ 
- 
-static PyObject * 
-float___floor___impl(PyObject *self) 
-/*[clinic end generated code: output=e0551dbaea8c01d1 input=77bb13eb12e268df]*/ 
-{ 
-    double x = PyFloat_AS_DOUBLE(self); 
-    return PyLong_FromDouble(floor(x)); 
+    return PyLong_FromDouble(PyFloat_AS_DOUBLE(self));
 }
 
-/*[clinic input] 
-float.__ceil__ 
- 
-Return the ceiling as an Integral. 
-[clinic start generated code]*/ 
- 
-static PyObject * 
-float___ceil___impl(PyObject *self) 
-/*[clinic end generated code: output=a2fd8858f73736f9 input=79e41ae94aa0a516]*/ 
-{ 
-    double x = PyFloat_AS_DOUBLE(self); 
-    return PyLong_FromDouble(ceil(x)); 
-} 
- 
+/*[clinic input]
+float.__floor__
+
+Return the floor as an Integral.
+[clinic start generated code]*/
+
+static PyObject *
+float___floor___impl(PyObject *self)
+/*[clinic end generated code: output=e0551dbaea8c01d1 input=77bb13eb12e268df]*/
+{
+    double x = PyFloat_AS_DOUBLE(self);
+    return PyLong_FromDouble(floor(x));
+}
+
+/*[clinic input]
+float.__ceil__
+
+Return the ceiling as an Integral.
+[clinic start generated code]*/
+
+static PyObject *
+float___ceil___impl(PyObject *self)
+/*[clinic end generated code: output=a2fd8858f73736f9 input=79e41ae94aa0a516]*/
+{
+    double x = PyFloat_AS_DOUBLE(self);
+    return PyLong_FromDouble(ceil(x));
+}
+
 /* double_round: rounds a finite double to the closest multiple of
    10**-ndigits; here ndigits is within reasonable bounds (typically, -308 <=
    ndigits <= 323).  Returns a Python float, or sets a Python error and
@@ -1012,7 +1012,7 @@ double_round(double x, int ndigits) {
 /*[clinic input]
 float.__round__
 
-    ndigits as o_ndigits: object = None 
+    ndigits as o_ndigits: object = None
     /
 
 Return the Integral closest to x, rounding half toward even.
@@ -1022,13 +1022,13 @@ When an argument is passed, work like built-in round(x, ndigits).
 
 static PyObject *
 float___round___impl(PyObject *self, PyObject *o_ndigits)
-/*[clinic end generated code: output=374c36aaa0f13980 input=fc0fe25924fbc9ed]*/ 
+/*[clinic end generated code: output=374c36aaa0f13980 input=fc0fe25924fbc9ed]*/
 {
     double x, rounded;
     Py_ssize_t ndigits;
 
     x = PyFloat_AsDouble(self);
-    if (o_ndigits == Py_None) { 
+    if (o_ndigits == Py_None) {
         /* single-argument round or with None ndigits:
          * round to nearest integer */
         rounded = round(x);
@@ -1443,8 +1443,8 @@ float_fromhex(PyTypeObject *type, PyObject *string)
        bits lsb, lsb-2, lsb-3, lsb-4, ... is 1. */
     if ((digit & half_eps) != 0) {
         round_up = 0;
-        if ((digit & (3*half_eps-1)) != 0 || (half_eps == 8 && 
-                key_digit+1 < ndigits && (HEX_DIGIT(key_digit+1) & 1) != 0)) 
+        if ((digit & (3*half_eps-1)) != 0 || (half_eps == 8 &&
+                key_digit+1 < ndigits && (HEX_DIGIT(key_digit+1) & 1) != 0))
             round_up = 1;
         else
             for (i = key_digit-1; i >= 0; i--)
@@ -1471,7 +1471,7 @@ float_fromhex(PyTypeObject *type, PyObject *string)
         goto parse_error;
     result = PyFloat_FromDouble(negate ? -x : x);
     if (type != &PyFloat_Type && result != NULL) {
-        Py_SETREF(result, PyObject_CallOneArg((PyObject *)type, result)); 
+        Py_SETREF(result, PyObject_CallOneArg((PyObject *)type, result));
     }
     return result;
 
@@ -1694,8 +1694,8 @@ float___getformat___impl(PyTypeObject *type, const char *typestr)
     case ieee_big_endian_format:
         return PyUnicode_FromString("IEEE, big-endian");
     default:
-        PyErr_SetString(PyExc_RuntimeError, 
-                        "insane float_format or double_format"); 
+        PyErr_SetString(PyExc_RuntimeError,
+                        "insane float_format or double_format");
         return NULL;
     }
 }
@@ -1816,8 +1816,8 @@ float___format___impl(PyObject *self, PyObject *format_spec)
 static PyMethodDef float_methods[] = {
     FLOAT_CONJUGATE_METHODDEF
     FLOAT___TRUNC___METHODDEF
-    FLOAT___FLOOR___METHODDEF 
-    FLOAT___CEIL___METHODDEF 
+    FLOAT___FLOOR___METHODDEF
+    FLOAT___CEIL___METHODDEF
     FLOAT___ROUND___METHODDEF
     FLOAT_AS_INTEGER_RATIO_METHODDEF
     FLOAT_FROMHEX_METHODDEF
@@ -1885,17 +1885,17 @@ PyTypeObject PyFloat_Type = {
     sizeof(PyFloatObject),
     0,
     (destructor)float_dealloc,                  /* tp_dealloc */
-    0,                                          /* tp_vectorcall_offset */ 
+    0,                                          /* tp_vectorcall_offset */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_as_async */ 
+    0,                                          /* tp_as_async */
     (reprfunc)float_repr,                       /* tp_repr */
     &float_as_number,                           /* tp_as_number */
     0,                                          /* tp_as_sequence */
     0,                                          /* tp_as_mapping */
     (hashfunc)float_hash,                       /* tp_hash */
     0,                                          /* tp_call */
-    0,                                          /* tp_str */ 
+    0,                                          /* tp_str */
     PyObject_GenericGetAttr,                    /* tp_getattro */
     0,                                          /* tp_setattro */
     0,                                          /* tp_as_buffer */
@@ -1971,18 +1971,18 @@ _PyFloat_Init(void)
 
     /* Init float info */
     if (FloatInfoType.tp_name == NULL) {
-        if (PyStructSequence_InitType2(&FloatInfoType, &floatinfo_desc) < 0) { 
+        if (PyStructSequence_InitType2(&FloatInfoType, &floatinfo_desc) < 0) {
             return 0;
-        } 
+        }
     }
     return 1;
 }
 
-void 
-_PyFloat_ClearFreeList(void) 
+void
+_PyFloat_ClearFreeList(void)
 {
     PyFloatObject *f = free_list, *next;
-    for (; f; f = next) { 
+    for (; f; f = next) {
         next = (PyFloatObject*) Py_TYPE(f);
         PyObject_FREE(f);
     }
@@ -1991,9 +1991,9 @@ _PyFloat_ClearFreeList(void)
 }
 
 void
-_PyFloat_Fini(void) 
+_PyFloat_Fini(void)
 {
-    _PyFloat_ClearFreeList(); 
+    _PyFloat_ClearFreeList();
 }
 
 /* Print summary info about the state of the optimized allocator */
@@ -2291,7 +2291,7 @@ _PyFloat_Pack8(double x, unsigned char *p, int le)
             flo = 0;
             ++fhi;
             if (fhi >> 28) {
-                /* And it also propagated out of the next 28 bits. */ 
+                /* And it also propagated out of the next 28 bits. */
                 fhi = 0;
                 ++e;
                 if (e >= 2047)

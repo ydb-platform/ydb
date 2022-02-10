@@ -12,17 +12,17 @@ LICENSE(Apache-2.0 WITH LLVM-exception)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12 
-    contrib/libs/llvm12/include 
-    contrib/libs/llvm12/lib/MC 
-    contrib/libs/llvm12/lib/Support 
-    contrib/libs/llvm12/lib/Target/BPF/TargetInfo 
+    contrib/libs/llvm12
+    contrib/libs/llvm12/include
+    contrib/libs/llvm12/lib/MC
+    contrib/libs/llvm12/lib/Support
+    contrib/libs/llvm12/lib/Target/BPF/TargetInfo
 )
 
 ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF 
-    contrib/libs/llvm12/lib/Target/BPF 
-    contrib/libs/llvm12/lib/Target/BPF/MCTargetDesc 
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF
+    contrib/libs/llvm12/lib/Target/BPF
+    contrib/libs/llvm12/lib/Target/BPF/MCTargetDesc
 )
 
 NO_COMPILER_WARNINGS()

@@ -1,34 +1,34 @@
 """Extensions to the 'distutils' for large or complex distributions"""
 
-from fnmatch import fnmatchcase 
-import functools 
+from fnmatch import fnmatchcase
+import functools
 import os
-import re 
- 
-import _distutils_hack.override  # noqa: F401 
- 
+import re
+
+import _distutils_hack.override  # noqa: F401
+
 import distutils.core
-from distutils.errors import DistutilsOptionError 
+from distutils.errors import DistutilsOptionError
 from distutils.util import convert_path
 
-from ._deprecation_warning import SetuptoolsDeprecationWarning 
+from ._deprecation_warning import SetuptoolsDeprecationWarning
 
 import setuptools.version
 from setuptools.extension import Extension
-from setuptools.dist import Distribution 
+from setuptools.dist import Distribution
 from setuptools.depends import Require
 from . import monkey
 
- 
+
 __all__ = [
-    'setup', 
-    'Distribution', 
-    'Command', 
-    'Extension', 
-    'Require', 
-    'SetuptoolsDeprecationWarning', 
-    'find_packages', 
-    'find_namespace_packages', 
+    'setup',
+    'Distribution',
+    'Command',
+    'Extension',
+    'Require',
+    'SetuptoolsDeprecationWarning',
+    'find_packages',
+    'find_namespace_packages',
 ]
 
 __version__ = setuptools.version.__version__
@@ -36,7 +36,7 @@ __version__ = setuptools.version.__version__
 bootstrap_install_from = None
 
 
-class PackageFinder: 
+class PackageFinder:
     """
     Generate a list of all Python packages found within a directory
     """
@@ -59,13 +59,13 @@ class PackageFinder:
         shell style wildcard patterns just like 'exclude'.
         """
 
-        return list( 
-            cls._find_packages_iter( 
-                convert_path(where), 
-                cls._build_filter('ez_setup', '*__pycache__', *exclude), 
-                cls._build_filter(*include), 
-            ) 
-        ) 
+        return list(
+            cls._find_packages_iter(
+                convert_path(where),
+                cls._build_filter('ez_setup', '*__pycache__', *exclude),
+                cls._build_filter(*include),
+            )
+        )
 
     @classmethod
     def _find_packages_iter(cls, where, exclude, include):
@@ -84,7 +84,7 @@ class PackageFinder:
                 package = rel_path.replace(os.path.sep, '.')
 
                 # Skip directory trees that are not valid packages
-                if '.' in dir or not cls._looks_like_package(full_path): 
+                if '.' in dir or not cls._looks_like_package(full_path):
                     continue
 
                 # Should this package be included?
@@ -116,46 +116,46 @@ class PEP420PackageFinder(PackageFinder):
 
 
 find_packages = PackageFinder.find
-find_namespace_packages = PEP420PackageFinder.find 
+find_namespace_packages = PEP420PackageFinder.find
 
 
-def _install_setup_requires(attrs): 
-    # Note: do not use `setuptools.Distribution` directly, as 
-    # our PEP 517 backend patch `distutils.core.Distribution`. 
-    class MinimalDistribution(distutils.core.Distribution): 
-        """ 
-        A minimal version of a distribution for supporting the 
-        fetch_build_eggs interface. 
-        """ 
- 
-        def __init__(self, attrs): 
-            _incl = 'dependency_links', 'setup_requires' 
-            filtered = {k: attrs[k] for k in set(_incl) & set(attrs)} 
-            distutils.core.Distribution.__init__(self, filtered) 
- 
-        def finalize_options(self): 
-            """ 
-            Disable finalize_options to avoid building the working set. 
-            Ref #2158. 
-            """ 
- 
-    dist = MinimalDistribution(attrs) 
- 
-    # Honor setup.cfg's options. 
-    dist.parse_config_files(ignore_option_errors=True) 
-    if dist.setup_requires: 
-        dist.fetch_build_eggs(dist.setup_requires) 
- 
- 
-def setup(**attrs): 
-    # Make sure we have any requirements needed to interpret 'attrs'. 
-    _install_setup_requires(attrs) 
-    return distutils.core.setup(**attrs) 
- 
- 
-setup.__doc__ = distutils.core.setup.__doc__ 
- 
- 
+def _install_setup_requires(attrs):
+    # Note: do not use `setuptools.Distribution` directly, as
+    # our PEP 517 backend patch `distutils.core.Distribution`.
+    class MinimalDistribution(distutils.core.Distribution):
+        """
+        A minimal version of a distribution for supporting the
+        fetch_build_eggs interface.
+        """
+
+        def __init__(self, attrs):
+            _incl = 'dependency_links', 'setup_requires'
+            filtered = {k: attrs[k] for k in set(_incl) & set(attrs)}
+            distutils.core.Distribution.__init__(self, filtered)
+
+        def finalize_options(self):
+            """
+            Disable finalize_options to avoid building the working set.
+            Ref #2158.
+            """
+
+    dist = MinimalDistribution(attrs)
+
+    # Honor setup.cfg's options.
+    dist.parse_config_files(ignore_option_errors=True)
+    if dist.setup_requires:
+        dist.fetch_build_eggs(dist.setup_requires)
+
+
+def setup(**attrs):
+    # Make sure we have any requirements needed to interpret 'attrs'.
+    _install_setup_requires(attrs)
+    return distutils.core.setup(**attrs)
+
+
+setup.__doc__ = distutils.core.setup.__doc__
+
+
 _Command = monkey.get_unpatched(distutils.core.Command)
 
 
@@ -172,38 +172,38 @@ class Command(_Command):
         _Command.__init__(self, dist)
         vars(self).update(kw)
 
-    def _ensure_stringlike(self, option, what, default=None): 
-        val = getattr(self, option) 
-        if val is None: 
-            setattr(self, option, default) 
-            return default 
-        elif not isinstance(val, str): 
-            raise DistutilsOptionError( 
-                "'%s' must be a %s (got `%s`)" % (option, what, val) 
-            ) 
-        return val 
- 
-    def ensure_string_list(self, option): 
-        r"""Ensure that 'option' is a list of strings.  If 'option' is 
-        currently a string, we split it either on /,\s*/ or /\s+/, so 
-        "foo bar baz", "foo,bar,baz", and "foo,   bar baz" all become 
-        ["foo", "bar", "baz"]. 
-        """ 
-        val = getattr(self, option) 
-        if val is None: 
-            return 
-        elif isinstance(val, str): 
-            setattr(self, option, re.split(r',\s*|\s+', val)) 
-        else: 
-            if isinstance(val, list): 
-                ok = all(isinstance(v, str) for v in val) 
-            else: 
-                ok = False 
-            if not ok: 
-                raise DistutilsOptionError( 
-                    "'%s' must be a list of strings (got %r)" % (option, val) 
-                ) 
- 
+    def _ensure_stringlike(self, option, what, default=None):
+        val = getattr(self, option)
+        if val is None:
+            setattr(self, option, default)
+            return default
+        elif not isinstance(val, str):
+            raise DistutilsOptionError(
+                "'%s' must be a %s (got `%s`)" % (option, what, val)
+            )
+        return val
+
+    def ensure_string_list(self, option):
+        r"""Ensure that 'option' is a list of strings.  If 'option' is
+        currently a string, we split it either on /,\s*/ or /\s+/, so
+        "foo bar baz", "foo,bar,baz", and "foo,   bar baz" all become
+        ["foo", "bar", "baz"].
+        """
+        val = getattr(self, option)
+        if val is None:
+            return
+        elif isinstance(val, str):
+            setattr(self, option, re.split(r',\s*|\s+', val))
+        else:
+            if isinstance(val, list):
+                ok = all(isinstance(v, str) for v in val)
+            else:
+                ok = False
+            if not ok:
+                raise DistutilsOptionError(
+                    "'%s' must be a list of strings (got %r)" % (option, val)
+                )
+
     def reinitialize_command(self, command, reinit_subcommands=0, **kw):
         cmd = _Command.reinitialize_command(self, command, reinit_subcommands)
         vars(cmd).update(kw)
@@ -234,9 +234,9 @@ def findall(dir=os.curdir):
     return list(files)
 
 
-class sic(str): 
-    """Treat this string as-is (https://en.wikipedia.org/wiki/Sic)""" 
- 
- 
-# Apply monkey patches 
+class sic(str):
+    """Treat this string as-is (https://en.wikipedia.org/wiki/Sic)"""
+
+
+# Apply monkey patches
 monkey.patch_all()

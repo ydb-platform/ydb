@@ -2,9 +2,9 @@ PY23_LIBRARY()
 
 LICENSE(ISC)
 
-OWNER(g:python-contrib borman) 
+OWNER(g:python-contrib borman)
 
-VERSION(4.8.0) 
+VERSION(4.8.0)
 
 PEERDIR(
     contrib/python/ptyprocess
@@ -37,10 +37,10 @@ IF (PYTHON3)
     )
 ENDIF()
 
-RESOURCE_FILES( 
-    PREFIX contrib/python/pexpect/ 
-    .dist-info/METADATA 
-    .dist-info/top_level.txt 
-) 
+RESOURCE_FILES(
+    PREFIX contrib/python/pexpect/
+    .dist-info/METADATA
+    .dist-info/top_level.txt
+)
 
 END()

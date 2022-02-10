@@ -25,8 +25,8 @@
 #include "llvm/MC/LaneBitmask.h"
 #include <map>
 #include <set>
-#include <unordered_map> 
-#include <unordered_set> 
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace llvm {
@@ -37,32 +37,32 @@ class MachineDominatorTree;
 class MachineRegisterInfo;
 class TargetRegisterInfo;
 
-} // namespace llvm 
- 
-namespace llvm { 
-namespace rdf {
-namespace detail { 
+} // namespace llvm
 
-using NodeRef = std::pair<NodeId, LaneBitmask>; 
- 
-} // namespace detail 
-} // namespace rdf 
-} // namespace llvm 
- 
-namespace std { 
- 
-template <> struct hash<llvm::rdf::detail::NodeRef> { 
-  std::size_t operator()(llvm::rdf::detail::NodeRef R) const { 
-    return std::hash<llvm::rdf::NodeId>{}(R.first) ^ 
-           std::hash<llvm::LaneBitmask::Type>{}(R.second.getAsInteger()); 
-  } 
-}; 
- 
-} // namespace std 
- 
-namespace llvm { 
-namespace rdf { 
- 
+namespace llvm {
+namespace rdf {
+namespace detail {
+
+using NodeRef = std::pair<NodeId, LaneBitmask>;
+
+} // namespace detail
+} // namespace rdf
+} // namespace llvm
+
+namespace std {
+
+template <> struct hash<llvm::rdf::detail::NodeRef> {
+  std::size_t operator()(llvm::rdf::detail::NodeRef R) const {
+    return std::hash<llvm::rdf::NodeId>{}(R.first) ^
+           std::hash<llvm::LaneBitmask::Type>{}(R.second.getAsInteger());
+  }
+};
+
+} // namespace std
+
+namespace llvm {
+namespace rdf {
+
   struct Liveness {
   public:
     // This is really a std::map, except that it provides a non-trivial
@@ -79,9 +79,9 @@ namespace rdf {
       std::map<MachineBasicBlock*,RegisterAggr> Map;
     };
 
-    using NodeRef = detail::NodeRef; 
-    using NodeRefSet = std::unordered_set<NodeRef>; 
-    using RefMap = std::unordered_map<RegisterId, NodeRefSet>; 
+    using NodeRef = detail::NodeRef;
+    using NodeRefSet = std::unordered_set<NodeRef>;
+    using RefMap = std::unordered_map<RegisterId, NodeRefSet>;
 
     Liveness(MachineRegisterInfo &mri, const DataFlowGraph &g)
         : DFG(g), TRI(g.getTRI()), PRI(g.getPRI()), MDT(g.getDT()),
@@ -142,14 +142,14 @@ namespace rdf {
     // Cache of mapping from node ids (for RefNodes) to the containing
     // basic blocks. Not computing it each time for each node reduces
     // the liveness calculation time by a large fraction.
-    DenseMap<NodeId, MachineBasicBlock *> NBMap; 
+    DenseMap<NodeId, MachineBasicBlock *> NBMap;
 
     // Phi information:
     //
     // RealUseMap
     // map: NodeId -> (map: RegisterId -> NodeRefSet)
     //      phi id -> (map: register -> set of reached non-phi uses)
-    DenseMap<NodeId, RefMap> RealUseMap; 
+    DenseMap<NodeId, RefMap> RealUseMap;
 
     // Inverse iterated dominance frontier.
     std::map<MachineBasicBlock*,std::set<MachineBasicBlock*>> IIDF;

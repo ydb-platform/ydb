@@ -4,32 +4,32 @@
 
     Lexers for JavaScript and related languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
 import re
 
-from pygments.lexer import bygroups, combined, default, do_insertions, include, \ 
-    inherit, Lexer, RegexLexer, this, using, words 
+from pygments.lexer import bygroups, combined, default, do_insertions, include, \
+    inherit, Lexer, RegexLexer, this, using, words
 from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
-    Number, Punctuation, Other, Generic 
-from pygments.util import get_bool_opt 
+    Number, Punctuation, Other, Generic
+from pygments.util import get_bool_opt
 import pygments.unistring as uni
 
 __all__ = ['JavascriptLexer', 'KalLexer', 'LiveScriptLexer', 'DartLexer',
            'TypeScriptLexer', 'LassoLexer', 'ObjectiveJLexer',
-           'CoffeeScriptLexer', 'MaskLexer', 'EarlGreyLexer', 'JuttleLexer', 
-           'NodeConsoleLexer'] 
+           'CoffeeScriptLexer', 'MaskLexer', 'EarlGreyLexer', 'JuttleLexer',
+           'NodeConsoleLexer']
 
 JS_IDENT_START = ('(?:[$_' + uni.combine('Lu', 'Ll', 'Lt', 'Lm', 'Lo', 'Nl') +
                   ']|\\\\u[a-fA-F0-9]{4})')
 JS_IDENT_PART = ('(?:[$' + uni.combine('Lu', 'Ll', 'Lt', 'Lm', 'Lo', 'Nl',
                                        'Mn', 'Mc', 'Nd', 'Pc') +
-                 '\u200c\u200d]|\\\\u[a-fA-F0-9]{4})') 
+                 '\u200c\u200d]|\\\\u[a-fA-F0-9]{4})')
 JS_IDENT = JS_IDENT_START + '(?:' + JS_IDENT_PART + ')*'
 
-line_re = re.compile('.*?\n') 
+line_re = re.compile('.*?\n')
 
 class JavascriptLexer(RegexLexer):
     """
@@ -37,8 +37,8 @@ class JavascriptLexer(RegexLexer):
     """
 
     name = 'JavaScript'
-    aliases = ['javascript', 'js'] 
-    filenames = ['*.js', '*.jsm', '*.mjs', '*.cjs'] 
+    aliases = ['javascript', 'js']
+    filenames = ['*.js', '*.jsm', '*.mjs', '*.cjs']
     mimetypes = ['application/javascript', 'application/x-javascript',
                  'text/x-javascript', 'text/javascript']
 
@@ -54,7 +54,7 @@ class JavascriptLexer(RegexLexer):
         'slashstartsregex': [
             include('commentsandwhitespace'),
             (r'/(\\.|[^[/\\\n]|\[(\\.|[^\]\\\n])*])+/'
-             r'([gimuysd]+\b|\B)', String.Regex, '#pop'), 
+             r'([gimuysd]+\b|\B)', String.Regex, '#pop'),
             (r'(?=/)', Text, ('#pop', 'badregex')),
             default('#pop')
         ],
@@ -65,63 +65,63 @@ class JavascriptLexer(RegexLexer):
             (r'\A#! ?/.*?\n', Comment.Hashbang),  # recognized by node.js
             (r'^(?=\s|/|<!--)', Text, 'slashstartsregex'),
             include('commentsandwhitespace'),
- 
-            # Numeric literals 
-            (r'0[bB][01]+n?', Number.Bin), 
-            (r'0[oO]?[0-7]+n?', Number.Oct),  # Browsers support "0o7" and "07" (< ES5) notations 
-            (r'0[xX][0-9a-fA-F]+n?', Number.Hex), 
-            (r'[0-9]+n', Number.Integer),  # Javascript BigInt requires an "n" postfix 
-            # Javascript doesn't have actual integer literals, so every other 
-            # numeric literal is handled by the regex below (including "normal") 
-            # integers 
-            (r'(\.[0-9]+|[0-9]+\.[0-9]*|[0-9]+)([eE][-+]?[0-9]+)?', Number.Float), 
- 
+
+            # Numeric literals
+            (r'0[bB][01]+n?', Number.Bin),
+            (r'0[oO]?[0-7]+n?', Number.Oct),  # Browsers support "0o7" and "07" (< ES5) notations
+            (r'0[xX][0-9a-fA-F]+n?', Number.Hex),
+            (r'[0-9]+n', Number.Integer),  # Javascript BigInt requires an "n" postfix
+            # Javascript doesn't have actual integer literals, so every other
+            # numeric literal is handled by the regex below (including "normal")
+            # integers
+            (r'(\.[0-9]+|[0-9]+\.[0-9]*|[0-9]+)([eE][-+]?[0-9]+)?', Number.Float),
+
             (r'\.\.\.|=>', Punctuation),
-            (r'\+\+|--|~|\?\?=?|\?|:|\\(?=\n)|' 
-             r'(<<|>>>?|==?|!=?|(?:\*\*|\|\||&&|[-<>+*%&|^/]))=?', Operator, 'slashstartsregex'), 
+            (r'\+\+|--|~|\?\?=?|\?|:|\\(?=\n)|'
+             r'(<<|>>>?|==?|!=?|(?:\*\*|\|\||&&|[-<>+*%&|^/]))=?', Operator, 'slashstartsregex'),
             (r'[{(\[;,]', Punctuation, 'slashstartsregex'),
             (r'[})\].]', Punctuation),
- 
-            (r'(typeof|instanceof|in|void|delete|new)\b', Operator.Word, 'slashstartsregex'), 
- 
-            # Match stuff like: constructor 
-            (r'\b(constructor|from|as)\b', Keyword.Reserved), 
- 
+
+            (r'(typeof|instanceof|in|void|delete|new)\b', Operator.Word, 'slashstartsregex'),
+
+            # Match stuff like: constructor
+            (r'\b(constructor|from|as)\b', Keyword.Reserved),
+
             (r'(for|in|while|do|break|return|continue|switch|case|default|if|else|'
-             r'throw|try|catch|finally|yield|await|async|this|of|static|export|' 
-             r'import|debugger|extends|super)\b', Keyword, 'slashstartsregex'), 
-            (r'(var|let|const|with|function|class)\b', Keyword.Declaration, 'slashstartsregex'), 
- 
-            (r'(abstract|boolean|byte|char|double|enum|final|float|goto|' 
-             r'implements|int|interface|long|native|package|private|protected|' 
-             r'public|short|synchronized|throws|transient|volatile)\b', Keyword.Reserved), 
+             r'throw|try|catch|finally|yield|await|async|this|of|static|export|'
+             r'import|debugger|extends|super)\b', Keyword, 'slashstartsregex'),
+            (r'(var|let|const|with|function|class)\b', Keyword.Declaration, 'slashstartsregex'),
+
+            (r'(abstract|boolean|byte|char|double|enum|final|float|goto|'
+             r'implements|int|interface|long|native|package|private|protected|'
+             r'public|short|synchronized|throws|transient|volatile)\b', Keyword.Reserved),
             (r'(true|false|null|NaN|Infinity|undefined)\b', Keyword.Constant),
- 
-            (r'(Array|Boolean|Date|BigInt|Function|Math|ArrayBuffer|' 
-             r'Number|Object|RegExp|String|Promise|Proxy|decodeURI|' 
+
+            (r'(Array|Boolean|Date|BigInt|Function|Math|ArrayBuffer|'
+             r'Number|Object|RegExp|String|Promise|Proxy|decodeURI|'
              r'decodeURIComponent|encodeURI|encodeURIComponent|'
-             r'eval|isFinite|isNaN|parseFloat|parseInt|DataView|' 
-             r'document|window|globalThis|global|Symbol|Intl|' 
-             r'WeakSet|WeakMap|Set|Map|Reflect|JSON|Atomics|' 
-             r'Int(?:8|16|32)Array|BigInt64Array|Float32Array|Float64Array|' 
-             r'Uint8ClampedArray|Uint(?:8|16|32)Array|BigUint64Array)\b', Name.Builtin), 
- 
-            (r'((?:Eval|Internal|Range|Reference|Syntax|Type|URI)?Error)\b', Name.Exception), 
- 
-            # Match stuff like: super(argument, list) 
-            (r'(super)(\s*)(\([\w,?.$\s]+\s*\))', 
-             bygroups(Keyword, Text), 'slashstartsregex'), 
-            # Match stuff like: function() {...} 
-            (r'([a-zA-Z_?.$][\w?.$]*)(?=\(\) \{)', Name.Other, 'slashstartsregex'), 
- 
+             r'eval|isFinite|isNaN|parseFloat|parseInt|DataView|'
+             r'document|window|globalThis|global|Symbol|Intl|'
+             r'WeakSet|WeakMap|Set|Map|Reflect|JSON|Atomics|'
+             r'Int(?:8|16|32)Array|BigInt64Array|Float32Array|Float64Array|'
+             r'Uint8ClampedArray|Uint(?:8|16|32)Array|BigUint64Array)\b', Name.Builtin),
+
+            (r'((?:Eval|Internal|Range|Reference|Syntax|Type|URI)?Error)\b', Name.Exception),
+
+            # Match stuff like: super(argument, list)
+            (r'(super)(\s*)(\([\w,?.$\s]+\s*\))',
+             bygroups(Keyword, Text), 'slashstartsregex'),
+            # Match stuff like: function() {...}
+            (r'([a-zA-Z_?.$][\w?.$]*)(?=\(\) \{)', Name.Other, 'slashstartsregex'),
+
             (JS_IDENT, Name.Other),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double), 
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
             (r'`', String.Backtick, 'interp'),
         ],
         'interp': [
             (r'`', String.Backtick, '#pop'),
-            (r'\\.', String.Backtick), 
+            (r'\\.', String.Backtick),
             (r'\$\{', String.Interpol, 'interp-inside'),
             (r'\$', String.Backtick),
             (r'[^`\\$]+', String.Backtick),
@@ -134,43 +134,43 @@ class JavascriptLexer(RegexLexer):
     }
 
 
-class TypeScriptLexer(JavascriptLexer): 
-    """ 
-    For `TypeScript <http://typescriptlang.org/>`_ source code. 
- 
-    .. versionadded:: 1.6 
-    """ 
- 
-    name = 'TypeScript' 
-    aliases = ['typescript', 'ts'] 
-    filenames = ['*.ts'] 
-    mimetypes = ['application/x-typescript', 'text/x-typescript'] 
- 
-    # Higher priority than the TypoScriptLexer, as TypeScript is far more 
-    # common these days 
-    priority = 0.5 
- 
-    tokens = { 
-        'root': [ 
-            (r'(abstract|implements|private|protected|public|readonly)\b', 
-                Keyword, 'slashstartsregex'), 
-            (r'(enum|interface|override)\b', Keyword.Declaration, 'slashstartsregex'), 
-            (r'\b(declare|type)\b', Keyword.Reserved), 
-            # Match variable type keywords 
-            (r'\b(string|boolean|number)\b', Keyword.Type), 
-            # Match stuff like: module name {...} 
-            (r'\b(module)(\s*)(\s*[\w?.$][\w?.$]*)(\s*)', 
-             bygroups(Keyword.Reserved, Text, Name.Other, Text), 'slashstartsregex'), 
-            # Match stuff like: (function: return type) 
-            (r'([\w?.$][\w?.$]*)(\s*:\s*)([\w?.$][\w?.$]*)', 
-             bygroups(Name.Other, Text, Keyword.Type)), 
-            # Match stuff like: Decorators 
-            (r'@' + JS_IDENT, Keyword.Declaration), 
-            inherit, 
-        ], 
-    } 
- 
- 
+class TypeScriptLexer(JavascriptLexer):
+    """
+    For `TypeScript <http://typescriptlang.org/>`_ source code.
+
+    .. versionadded:: 1.6
+    """
+
+    name = 'TypeScript'
+    aliases = ['typescript', 'ts']
+    filenames = ['*.ts']
+    mimetypes = ['application/x-typescript', 'text/x-typescript']
+
+    # Higher priority than the TypoScriptLexer, as TypeScript is far more
+    # common these days
+    priority = 0.5
+
+    tokens = {
+        'root': [
+            (r'(abstract|implements|private|protected|public|readonly)\b',
+                Keyword, 'slashstartsregex'),
+            (r'(enum|interface|override)\b', Keyword.Declaration, 'slashstartsregex'),
+            (r'\b(declare|type)\b', Keyword.Reserved),
+            # Match variable type keywords
+            (r'\b(string|boolean|number)\b', Keyword.Type),
+            # Match stuff like: module name {...}
+            (r'\b(module)(\s*)(\s*[\w?.$][\w?.$]*)(\s*)',
+             bygroups(Keyword.Reserved, Text, Name.Other, Text), 'slashstartsregex'),
+            # Match stuff like: (function: return type)
+            (r'([\w?.$][\w?.$]*)(\s*:\s*)([\w?.$][\w?.$]*)',
+             bygroups(Name.Other, Text, Keyword.Type)),
+            # Match stuff like: Decorators
+            (r'@' + JS_IDENT, Keyword.Declaration),
+            inherit,
+        ],
+    }
+
+
 class KalLexer(RegexLexer):
     """
     For `Kal`_ source code.
@@ -216,7 +216,7 @@ class KalLexer(RegexLexer):
         'root': [
             include('commentsandwhitespace'),
             (r'/(?! )(\\.|[^[/\\\n]|\[(\\.|[^\]\\\n])*])+/'
-             r'([gimuysd]+\b|\B)', String.Regex), 
+             r'([gimuysd]+\b|\B)', String.Regex),
             (r'\?|:|_(?=\n)|==?|!=|-(?!>)|[<>+*/-]=?',
              Operator),
             (r'\b(and|or|isnt|is|not|but|bitwise|mod|\^|xor|exists|'
@@ -238,11 +238,11 @@ class KalLexer(RegexLexer):
             (r'(?<![.$])(true|false|yes|no|on|off|null|nothing|none|'
              r'NaN|Infinity|undefined)\b',
              Keyword.Constant),
-            (r'(Array|Boolean|Date|Error|Function|Math|' 
-             r'Number|Object|RegExp|String|decodeURI|' 
+            (r'(Array|Boolean|Date|Error|Function|Math|'
+             r'Number|Object|RegExp|String|decodeURI|'
              r'decodeURIComponent|encodeURI|encodeURIComponent|'
              r'eval|isFinite|isNaN|isSafeInteger|parseFloat|parseInt|document|'
-             r'window|globalThis|Symbol|print)\b', Name.Builtin), 
+             r'window|globalThis|Symbol|print)\b', Name.Builtin),
             (r'[$a-zA-Z_][\w.$]*\s*(:|[+\-*/]?\=)?\b', Name.Variable),
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'0x[0-9a-fA-F]+', Number.Hex),
@@ -290,13 +290,13 @@ class LiveScriptLexer(RegexLexer):
     """
     For `LiveScript`_ source code.
 
-    .. _LiveScript: https://livescript.net/ 
+    .. _LiveScript: https://livescript.net/
 
     .. versionadded:: 1.6
     """
 
     name = 'LiveScript'
-    aliases = ['livescript', 'live-script'] 
+    aliases = ['livescript', 'live-script']
     filenames = ['*.ls']
     mimetypes = ['text/livescript']
 
@@ -309,7 +309,7 @@ class LiveScriptLexer(RegexLexer):
         ],
         'multilineregex': [
             include('commentsandwhitespace'),
-            (r'//([gimuysd]+\b|\B)', String.Regex, '#pop'), 
+            (r'//([gimuysd]+\b|\B)', String.Regex, '#pop'),
             (r'/', String.Regex),
             (r'[^/#]+', String.Regex)
         ],
@@ -317,12 +317,12 @@ class LiveScriptLexer(RegexLexer):
             include('commentsandwhitespace'),
             (r'//', String.Regex, ('#pop', 'multilineregex')),
             (r'/(?! )(\\.|[^[/\\\n]|\[(\\.|[^\]\\\n])*])+/'
-             r'([gimuysd]+\b|\B)', String.Regex, '#pop'), 
-            (r'/', Operator, '#pop'), 
+             r'([gimuysd]+\b|\B)', String.Regex, '#pop'),
+            (r'/', Operator, '#pop'),
             default('#pop'),
         ],
         'root': [
-            (r'\A(?=\s|/)', Text, 'slashstartsregex'), 
+            (r'\A(?=\s|/)', Text, 'slashstartsregex'),
             include('commentsandwhitespace'),
             (r'(?:\([^()]+\))?[ ]*[~-]{1,2}>|'
              r'(?:\(?[^()\n]+\)?)?[ ]*<[~-]{1,2}', Name.Function),
@@ -341,11 +341,11 @@ class LiveScriptLexer(RegexLexer):
             (r'(?<![.$])(true|false|yes|no|on|off|'
              r'null|NaN|Infinity|undefined|void)\b',
              Keyword.Constant),
-            (r'(Array|Boolean|Date|Error|Function|Math|' 
-             r'Number|Object|RegExp|String|decodeURI|' 
+            (r'(Array|Boolean|Date|Error|Function|Math|'
+             r'Number|Object|RegExp|String|decodeURI|'
              r'decodeURIComponent|encodeURI|encodeURIComponent|'
-             r'eval|isFinite|isNaN|parseFloat|parseInt|document|window|' 
-             r'globalThis|Symbol|Symbol|BigInt)\b', Name.Builtin), 
+             r'eval|isFinite|isNaN|parseFloat|parseInt|document|window|'
+             r'globalThis|Symbol|Symbol|BigInt)\b', Name.Builtin),
             (r'[$a-zA-Z_][\w.\-:$]*\s*[:=]\s', Name.Variable,
              'slashstartsregex'),
             (r'@[$a-zA-Z_][\w.\-:$]*\s*[:=]\s', Name.Variable.Instance,
@@ -399,7 +399,7 @@ class LiveScriptLexer(RegexLexer):
 
 class DartLexer(RegexLexer):
     """
-    For `Dart <http://dart.dev/>`_ source code. 
+    For `Dart <http://dart.dev/>`_ source code.
 
     .. versionadded:: 1.5
     """
@@ -420,19 +420,19 @@ class DartLexer(RegexLexer):
             (r'[^\S\n]+', Text),
             (r'//.*?\n', Comment.Single),
             (r'/\*.*?\*/', Comment.Multiline),
-            (r'\b(class|extension|mixin)\b(\s+)', 
+            (r'\b(class|extension|mixin)\b(\s+)',
              bygroups(Keyword.Declaration, Text), 'class'),
-            (r'\b(as|assert|break|case|catch|const|continue|default|do|else|finally|' 
-             r'for|if|in|is|new|rethrow|return|super|switch|this|throw|try|while)\b', 
+            (r'\b(as|assert|break|case|catch|const|continue|default|do|else|finally|'
+             r'for|if|in|is|new|rethrow|return|super|switch|this|throw|try|while)\b',
              Keyword),
-            (r'\b(abstract|async|await|const|covariant|extends|external|factory|final|' 
-             r'get|implements|late|native|on|operator|required|set|static|sync|typedef|' 
-             r'var|with|yield)\b', Keyword.Declaration), 
-            (r'\b(bool|double|dynamic|int|num|Function|Never|Null|Object|String|void)\b', 
-             Keyword.Type), 
+            (r'\b(abstract|async|await|const|covariant|extends|external|factory|final|'
+             r'get|implements|late|native|on|operator|required|set|static|sync|typedef|'
+             r'var|with|yield)\b', Keyword.Declaration),
+            (r'\b(bool|double|dynamic|int|num|Function|Never|Null|Object|String|void)\b',
+             Keyword.Type),
             (r'\b(false|null|true)\b', Keyword.Constant),
             (r'[~!%^&*+=|?:<>/-]|as\b', Operator),
-            (r'@[a-zA-Z_$]\w*', Name.Decorator), 
+            (r'@[a-zA-Z_$]\w*', Name.Decorator),
             (r'[a-zA-Z_$]\w*:', Name.Label),
             (r'[a-zA-Z_$]\w*', Name),
             (r'[(){}\[\],.;]', Punctuation),
@@ -449,7 +449,7 @@ class DartLexer(RegexLexer):
         'import_decl': [
             include('string_literal'),
             (r'\s+', Text),
-            (r'\b(as|deferred|show|hide)\b', Keyword), 
+            (r'\b(as|deferred|show|hide)\b', Keyword),
             (r'[a-zA-Z_$]\w*', Name),
             (r'\,', Punctuation),
             (r'\;', Punctuation, '#pop')
@@ -727,9 +727,9 @@ class LassoLexer(RegexLexer):
         self._members = set()
         if self.builtinshighlighting:
             from pygments.lexers._lasso_builtins import BUILTINS, MEMBERS
-            for key, value in BUILTINS.items(): 
+            for key, value in BUILTINS.items():
                 self._builtins.update(value)
-            for key, value in MEMBERS.items(): 
+            for key, value in MEMBERS.items():
                 self._members.update(value)
         RegexLexer.__init__(self, **options)
 
@@ -828,8 +828,8 @@ class ObjectiveJLexer(RegexLexer):
             (r'(L|@)?"', String, 'string'),
             (r"(L|@)?'(\\.|\\[0-7]{1,3}|\\x[a-fA-F0-9]{1,2}|[^\\\'\n])'",
              String.Char),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double), 
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
             (r'(\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+[lL]?', Number.Float),
             (r'(\d+\.\d*|\.\d+|\d+[fF])[fF]?', Number.Float),
             (r'0x[0-9a-fA-F]+[Ll]?', Number.Hex),
@@ -866,11 +866,11 @@ class ObjectiveJLexer(RegexLexer):
              r'MIN|MAX|RAND|SQRT|E|LN2|LN10|LOG2E|LOG10E|PI|PI2|PI_2|SQRT1_2|'
              r'SQRT2)\b', Keyword.Constant),
 
-            (r'(Array|Boolean|Date|Error|Function|Math|' 
-             r'Number|Object|RegExp|String|decodeURI|' 
+            (r'(Array|Boolean|Date|Error|Function|Math|'
+             r'Number|Object|RegExp|String|decodeURI|'
              r'decodeURIComponent|encodeURI|encodeURIComponent|'
              r'Error|eval|isFinite|isNaN|parseFloat|parseInt|document|this|'
-             r'window|globalThis|Symbol)\b', Name.Builtin), 
+             r'window|globalThis|Symbol)\b', Name.Builtin),
 
             (r'([$a-zA-Z_]\w*)(' + _ws + r')(?=\()',
              bygroups(Name.Function, using(this))),
@@ -990,14 +990,14 @@ class CoffeeScriptLexer(RegexLexer):
     """
 
     name = 'CoffeeScript'
-    aliases = ['coffeescript', 'coffee-script', 'coffee'] 
+    aliases = ['coffeescript', 'coffee-script', 'coffee']
     filenames = ['*.coffee']
     mimetypes = ['text/coffeescript']
 
     _operator_re = (
         r'\+\+|~|&&|\band\b|\bor\b|\bis\b|\bisnt\b|\bnot\b|\?|:|'
         r'\|\||\\(?=\n)|'
-        r'(<<|>>>?|==?(?!>)|!=?|=(?!>)|-(?!>)|[<>+*`%&|\^/])=?') 
+        r'(<<|>>>?|==?(?!>)|!=?|=(?!>)|-(?!>)|[<>+*`%&|\^/])=?')
 
     flags = re.DOTALL
     tokens = {
@@ -1008,7 +1008,7 @@ class CoffeeScriptLexer(RegexLexer):
         ],
         'multilineregex': [
             (r'[^/#]+', String.Regex),
-            (r'///([gimuysd]+\b|\B)', String.Regex, '#pop'), 
+            (r'///([gimuysd]+\b|\B)', String.Regex, '#pop'),
             (r'#\{', String.Interpol, 'interpoling_string'),
             (r'[/#]', String.Regex),
         ],
@@ -1016,16 +1016,16 @@ class CoffeeScriptLexer(RegexLexer):
             include('commentsandwhitespace'),
             (r'///', String.Regex, ('#pop', 'multilineregex')),
             (r'/(?! )(\\.|[^[/\\\n]|\[(\\.|[^\]\\\n])*])+/'
-             r'([gimuysd]+\b|\B)', String.Regex, '#pop'), 
+             r'([gimuysd]+\b|\B)', String.Regex, '#pop'),
             # This isn't really guarding against mishighlighting well-formed
             # code, just the ability to infinite-loop between root and
             # slashstartsregex.
-            (r'/', Operator, '#pop'), 
+            (r'/', Operator, '#pop'),
             default('#pop'),
         ],
         'root': [
             include('commentsandwhitespace'),
-            (r'\A(?=\s|/)', Text, 'slashstartsregex'), 
+            (r'\A(?=\s|/)', Text, 'slashstartsregex'),
             (_operator_re, Operator, 'slashstartsregex'),
             (r'(?:\([^()]*\))?\s*[=-]>', Name.Function, 'slashstartsregex'),
             (r'[{(\[;,]', Punctuation, 'slashstartsregex'),
@@ -1038,10 +1038,10 @@ class CoffeeScriptLexer(RegexLexer):
             (r'(?<![.$])(true|false|yes|no|on|off|null|'
              r'NaN|Infinity|undefined)\b',
              Keyword.Constant),
-            (r'(Array|Boolean|Date|Error|Function|Math|' 
-             r'Number|Object|RegExp|String|decodeURI|' 
+            (r'(Array|Boolean|Date|Error|Function|Math|'
+             r'Number|Object|RegExp|String|decodeURI|'
              r'decodeURIComponent|encodeURI|encodeURIComponent|'
-             r'eval|isFinite|isNaN|parseFloat|parseInt|document|window|globalThis|Symbol)\b', 
+             r'eval|isFinite|isNaN|parseFloat|parseInt|document|window|globalThis|Symbol)\b',
              Name.Builtin),
             (r'[$a-zA-Z_][\w.:$]*\s*[:=]\s', Name.Variable,
              'slashstartsregex'),
@@ -1095,7 +1095,7 @@ class CoffeeScriptLexer(RegexLexer):
 
 class MaskLexer(RegexLexer):
     """
-    For `Mask <https://github.com/atmajs/MaskJS>`__ markup. 
+    For `Mask <https://github.com/atmajs/MaskJS>`__ markup.
 
     .. versionadded:: 2.0
     """
@@ -1417,24 +1417,24 @@ class EarlGreyLexer(RegexLexer):
             (r'8r[0-7]+', Number.Oct),
             (r'2r[01]+', Number.Bin),
             (r'16r[a-fA-F0-9]+', Number.Hex),
-            (r'([3-79]|[12][0-9]|3[0-6])r[a-zA-Z\d]+(\.[a-zA-Z\d]+)?', 
-             Number.Radix), 
+            (r'([3-79]|[12][0-9]|3[0-6])r[a-zA-Z\d]+(\.[a-zA-Z\d]+)?',
+             Number.Radix),
             (r'\d+', Number.Integer)
         ],
     }
 
- 
+
 class JuttleLexer(RegexLexer):
     """
     For `Juttle`_ source code.
 
     .. _Juttle: https://github.com/juttle/juttle
 
-    .. versionadded:: 2.2 
+    .. versionadded:: 2.2
     """
 
     name = 'Juttle'
-    aliases = ['juttle'] 
+    aliases = ['juttle']
     filenames = ['*.juttle']
     mimetypes = ['application/juttle', 'application/x-juttle',
                  'text/x-juttle', 'text/juttle']
@@ -1450,7 +1450,7 @@ class JuttleLexer(RegexLexer):
         'slashstartsregex': [
             include('commentsandwhitespace'),
             (r'/(\\.|[^[/\\\n]|\[(\\.|[^\]\\\n])*])+/'
-             r'([gimuysd]+\b|\B)', String.Regex, '#pop'), 
+             r'([gimuysd]+\b|\B)', String.Regex, '#pop'),
             (r'(?=/)', Text, ('#pop', 'badregex')),
             default('#pop')
         ],
@@ -1465,90 +1465,90 @@ class JuttleLexer(RegexLexer):
              r'(\d+(\.\d*)?|\.\d+)(ms|[smhdwMy])?):', String.Moment),
             (r':\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d*)?)?'
              r'(Z|[+-]\d{2}:\d{2}|[+-]\d{4})?:', String.Moment),
-            (r':((\d+(\.\d*)?|\.\d+)[ ]+)?(millisecond|second|minute|hour|' 
-             r'day|week|month|year)[s]?' 
-             r'(([ ]+and[ ]+(\d+[ ]+)?(millisecond|second|minute|hour|' 
-             r'day|week|month|year)[s]?)' 
+            (r':((\d+(\.\d*)?|\.\d+)[ ]+)?(millisecond|second|minute|hour|'
+             r'day|week|month|year)[s]?'
+             r'(([ ]+and[ ]+(\d+[ ]+)?(millisecond|second|minute|hour|'
+             r'day|week|month|year)[s]?)'
              r'|[ ]+(ago|from[ ]+now))*:', String.Moment),
             (r'\+\+|--|~|&&|\?|:|\|\||\\(?=\n)|'
              r'(==?|!=?|[-<>+*%&|^/])=?', Operator, 'slashstartsregex'),
             (r'[{(\[;,]', Punctuation, 'slashstartsregex'),
             (r'[})\].]', Punctuation),
             (r'(import|return|continue|if|else)\b', Keyword, 'slashstartsregex'),
-            (r'(var|const|function|reducer|sub|input)\b', Keyword.Declaration, 
-             'slashstartsregex'), 
+            (r'(var|const|function|reducer|sub|input)\b', Keyword.Declaration,
+             'slashstartsregex'),
             (r'(batch|emit|filter|head|join|keep|pace|pass|put|read|reduce|remove|'
-             r'sequence|skip|sort|split|tail|unbatch|uniq|view|write)\b', 
-             Keyword.Reserved), 
+             r'sequence|skip|sort|split|tail|unbatch|uniq|view|write)\b',
+             Keyword.Reserved),
             (r'(true|false|null|Infinity)\b', Keyword.Constant),
-            (r'(Array|Date|Juttle|Math|Number|Object|RegExp|String)\b', 
-             Name.Builtin), 
+            (r'(Array|Date|Juttle|Math|Number|Object|RegExp|String)\b',
+             Name.Builtin),
             (JS_IDENT, Name.Other),
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'[0-9]+', Number.Integer),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double), 
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
         ]
 
     }
- 
- 
-class NodeConsoleLexer(Lexer): 
-    """ 
-    For parsing within an interactive Node.js REPL, such as: 
- 
-    .. sourcecode:: nodejsrepl 
- 
-        > let a = 3 
-        undefined 
-        > a 
-        3 
-        > let b = '4' 
-        undefined 
-        > b 
-        '4' 
-        > b == a 
-        false 
- 
-    .. versionadded: 2.10 
-    """ 
-    name = 'Node.js REPL console session' 
-    aliases = ['nodejsrepl', ] 
-    mimetypes = ['text/x-nodejsrepl', ] 
- 
-    def get_tokens_unprocessed(self, text): 
-        jslexer = JavascriptLexer(**self.options) 
- 
-        curcode = '' 
-        insertions = [] 
- 
-        for match in line_re.finditer(text): 
-            line = match.group() 
-            if line.startswith('> '): 
-                insertions.append((len(curcode),  
-                    [(0, Generic.Prompt, line[:2])])) 
- 
-                curcode += line[2:] 
-            elif line.startswith('...'): 
-                # node does a nested ... thing depending on depth 
-                code = line.lstrip('.') 
-                lead = len(line) - len(code) 
- 
-                insertions.append((len(curcode),  
-                    [(0, Generic.Prompt, line[:lead])])) 
- 
-                curcode += code 
-            else: 
-                if curcode: 
-                    yield from do_insertions(insertions,  
-                        jslexer.get_tokens_unprocessed(curcode)) 
- 
-                    curcode = '' 
-                    insertions = [] 
- 
-                yield from do_insertions([],  
-                    jslexer.get_tokens_unprocessed(line)) 
- 
-        if curcode: 
-            yield from do_insertions(insertions,  
-                jslexer.get_tokens_unprocessed(curcode)) 
+
+
+class NodeConsoleLexer(Lexer):
+    """
+    For parsing within an interactive Node.js REPL, such as:
+
+    .. sourcecode:: nodejsrepl
+
+        > let a = 3
+        undefined
+        > a
+        3
+        > let b = '4'
+        undefined
+        > b
+        '4'
+        > b == a
+        false
+
+    .. versionadded: 2.10
+    """
+    name = 'Node.js REPL console session'
+    aliases = ['nodejsrepl', ]
+    mimetypes = ['text/x-nodejsrepl', ]
+
+    def get_tokens_unprocessed(self, text):
+        jslexer = JavascriptLexer(**self.options)
+
+        curcode = ''
+        insertions = []
+
+        for match in line_re.finditer(text):
+            line = match.group()
+            if line.startswith('> '):
+                insertions.append((len(curcode), 
+                    [(0, Generic.Prompt, line[:2])]))
+
+                curcode += line[2:]
+            elif line.startswith('...'):
+                # node does a nested ... thing depending on depth
+                code = line.lstrip('.')
+                lead = len(line) - len(code)
+
+                insertions.append((len(curcode), 
+                    [(0, Generic.Prompt, line[:lead])]))
+
+                curcode += code
+            else:
+                if curcode:
+                    yield from do_insertions(insertions, 
+                        jslexer.get_tokens_unprocessed(curcode))
+
+                    curcode = ''
+                    insertions = []
+
+                yield from do_insertions([], 
+                    jslexer.get_tokens_unprocessed(line))
+
+        if curcode:
+            yield from do_insertions(insertions, 
+                jslexer.get_tokens_unprocessed(curcode))

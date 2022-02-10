@@ -94,7 +94,7 @@ namespace orc {
     // GET / SET _maximum
     bool hasMaximum() const { return _hasMaximum; }
 
-    const T & getMaximum() const { return _maximum; } 
+    const T & getMaximum() const { return _maximum; }
 
     void setHasMaximum(bool hasMax) { _hasMaximum = hasMax; }
 
@@ -105,7 +105,7 @@ namespace orc {
 
     void setHasMinimum(bool hasMin) { _hasMinimum = hasMin; }
 
-    const T & getMinimum() const { return _minimum; } 
+    const T & getMinimum() const { return _minimum; }
 
     void setMinimum(T min) { _minimum = min; }
 
@@ -963,24 +963,24 @@ namespace orc {
       _stats.setSum(sum);
     }
 
-    void update(int64_t value, int repetitions) { 
-      _stats.updateMinMax(value); 
+    void update(int64_t value, int repetitions) {
+      _stats.updateMinMax(value);
 
-      if (_stats.hasSum()) { 
-        if (repetitions > 1) { 
-          _stats.setHasSum(multiplyExact(value, repetitions, &value)); 
-        } 
- 
-        if (_stats.hasSum()) { 
-          _stats.setHasSum(addExact(_stats.getSum(), value, &value)); 
- 
-          if (_stats.hasSum()) { 
-            _stats.setSum(value); 
-          } 
-        } 
-      } 
-    } 
- 
+      if (_stats.hasSum()) {
+        if (repetitions > 1) {
+          _stats.setHasSum(multiplyExact(value, repetitions, &value));
+        }
+
+        if (_stats.hasSum()) {
+          _stats.setHasSum(addExact(_stats.getSum(), value, &value));
+
+          if (_stats.hasSum()) {
+            _stats.setSum(value);
+          }
+        }
+      }
+    }
+
     void merge(const MutableColumnStatistics& other) override {
       const IntegerColumnStatisticsImpl& intStats =
         dynamic_cast<const IntegerColumnStatisticsImpl&>(other);
@@ -990,10 +990,10 @@ namespace orc {
       // update sum and check overflow
       _stats.setHasSum(_stats.hasSum() && intStats.hasSum());
       if (_stats.hasSum()) {
-        int64_t value; 
-        _stats.setHasSum(addExact(_stats.getSum(), intStats.getSum(), &value)); 
-        if (_stats.hasSum()) { 
-          _stats.setSum(value); 
+        int64_t value;
+        _stats.setHasSum(addExact(_stats.getSum(), intStats.getSum(), &value));
+        if (_stats.hasSum()) {
+          _stats.setSum(value);
         }
       }
     }
@@ -1093,7 +1093,7 @@ namespace orc {
       _stats.setHasNull(hasNull);
     }
 
-    const std::string & getMinimum() const override { 
+    const std::string & getMinimum() const override {
       if(hasMinimum()){
         return _stats.getMinimum();
       }else{
@@ -1101,7 +1101,7 @@ namespace orc {
       }
     }
 
-    const std::string & getMaximum() const override { 
+    const std::string & getMaximum() const override {
       if(hasMaximum()){
         return _stats.getMaximum();
       }else{

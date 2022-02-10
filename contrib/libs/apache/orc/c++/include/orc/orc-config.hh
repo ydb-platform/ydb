@@ -15,7 +15,7 @@
 #ifndef ORC_CONFIG_HH
 #define ORC_CONFIG_HH
 
-#define ORC_VERSION "1.6.12" 
+#define ORC_VERSION "1.6.12"
 
 #define ORC_CXX_HAS_CSTDINT
 #define ORC_CXX_HAS_INITIALIZER_LIST

@@ -26,7 +26,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/SmallVectorMemoryBuffer.h" 
+#include "llvm/Support/SmallVectorMemoryBuffer.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -286,12 +286,12 @@ static void printNBits(raw_ostream &Out, object::Archive::Kind Kind,
     print<uint32_t>(Out, Kind, Val);
 }
 
-static uint64_t computeSymbolTableSize(object::Archive::Kind Kind, 
-                                       uint64_t NumSyms, uint64_t OffsetSize, 
-                                       StringRef StringTable, 
-                                       uint32_t *Padding = nullptr) { 
-  assert((OffsetSize == 4 || OffsetSize == 8) && "Unsupported OffsetSize"); 
-  uint64_t Size = OffsetSize; // Number of entries 
+static uint64_t computeSymbolTableSize(object::Archive::Kind Kind,
+                                       uint64_t NumSyms, uint64_t OffsetSize,
+                                       StringRef StringTable,
+                                       uint32_t *Padding = nullptr) {
+  assert((OffsetSize == 4 || OffsetSize == 8) && "Unsupported OffsetSize");
+  uint64_t Size = OffsetSize; // Number of entries
   if (isBSDLike(Kind))
     Size += NumSyms * OffsetSize * 2; // Table
   else
@@ -303,15 +303,15 @@ static uint64_t computeSymbolTableSize(object::Archive::Kind Kind,
   // least 4-byte aligned for 32-bit content.  Opt for the larger encoding
   // uniformly.
   // We do this for all bsd formats because it simplifies aligning members.
-  uint32_t Pad = offsetToAlignment(Size, Align(isBSDLike(Kind) ? 8 : 2)); 
+  uint32_t Pad = offsetToAlignment(Size, Align(isBSDLike(Kind) ? 8 : 2));
   Size += Pad;
-  if (Padding) 
-    *Padding = Pad; 
-  return Size; 
-} 
+  if (Padding)
+    *Padding = Pad;
+  return Size;
+}
 
-static void writeSymbolTableHeader(raw_ostream &Out, object::Archive::Kind Kind, 
-                                   bool Deterministic, uint64_t Size) { 
+static void writeSymbolTableHeader(raw_ostream &Out, object::Archive::Kind Kind,
+                                   bool Deterministic, uint64_t Size) {
   if (isBSDLike(Kind)) {
     const char *Name = is64BitKind(Kind) ? "__.SYMDEF_64" : "__.SYMDEF";
     printBSDMemberHeader(Out, Out.tell(), Name, now(Deterministic), 0, 0, 0,
@@ -320,25 +320,25 @@ static void writeSymbolTableHeader(raw_ostream &Out, object::Archive::Kind Kind,
     const char *Name = is64BitKind(Kind) ? "/SYM64" : "";
     printGNUSmallMemberHeader(Out, Name, now(Deterministic), 0, 0, 0, Size);
   }
-} 
+}
 
-static void writeSymbolTable(raw_ostream &Out, object::Archive::Kind Kind, 
-                             bool Deterministic, ArrayRef<MemberData> Members, 
-                             StringRef StringTable) { 
-  // We don't write a symbol table on an archive with no members -- except on 
-  // Darwin, where the linker will abort unless the archive has a symbol table. 
-  if (StringTable.empty() && !isDarwin(Kind)) 
-    return; 
- 
-  unsigned NumSyms = 0; 
-  for (const MemberData &M : Members) 
-    NumSyms += M.Symbols.size(); 
- 
-  uint64_t OffsetSize = is64BitKind(Kind) ? 8 : 4; 
-  uint32_t Pad; 
-  uint64_t Size = computeSymbolTableSize(Kind, NumSyms, OffsetSize, StringTable, &Pad); 
-  writeSymbolTableHeader(Out, Kind, Deterministic, Size); 
- 
+static void writeSymbolTable(raw_ostream &Out, object::Archive::Kind Kind,
+                             bool Deterministic, ArrayRef<MemberData> Members,
+                             StringRef StringTable) {
+  // We don't write a symbol table on an archive with no members -- except on
+  // Darwin, where the linker will abort unless the archive has a symbol table.
+  if (StringTable.empty() && !isDarwin(Kind))
+    return;
+
+  unsigned NumSyms = 0;
+  for (const MemberData &M : Members)
+    NumSyms += M.Symbols.size();
+
+  uint64_t OffsetSize = is64BitKind(Kind) ? 8 : 4;
+  uint32_t Pad;
+  uint64_t Size = computeSymbolTableSize(Kind, NumSyms, OffsetSize, StringTable, &Pad);
+  writeSymbolTableHeader(Out, Kind, Deterministic, Size);
+
   uint64_t Pos = Out.tell() + Size;
 
   if (isBSDLike(Kind))
@@ -372,21 +372,21 @@ getSymbols(MemoryBufferRef Buf, raw_ostream &SymNames, bool &HasObject) {
   // reference to it, thus SymbolicFile should be destroyed first.
   LLVMContext Context;
   std::unique_ptr<object::SymbolicFile> Obj;
- 
-  const file_magic Type = identify_magic(Buf.getBuffer()); 
-  // Treat unsupported file types as having no symbols. 
-  if (!object::SymbolicFile::isSymbolicFile(Type, &Context)) 
-    return Ret; 
-  if (Type == file_magic::bitcode) { 
+
+  const file_magic Type = identify_magic(Buf.getBuffer());
+  // Treat unsupported file types as having no symbols.
+  if (!object::SymbolicFile::isSymbolicFile(Type, &Context))
+    return Ret;
+  if (Type == file_magic::bitcode) {
     auto ObjOrErr = object::SymbolicFile::createSymbolicFile(
         Buf, file_magic::bitcode, &Context);
-    if (!ObjOrErr) 
-      return ObjOrErr.takeError(); 
+    if (!ObjOrErr)
+      return ObjOrErr.takeError();
     Obj = std::move(*ObjOrErr);
   } else {
     auto ObjOrErr = object::SymbolicFile::createSymbolicFile(Buf);
-    if (!ObjOrErr) 
-      return ObjOrErr.takeError(); 
+    if (!ObjOrErr)
+      return ObjOrErr.takeError();
     Obj = std::move(*ObjOrErr);
   }
 
@@ -405,7 +405,7 @@ getSymbols(MemoryBufferRef Buf, raw_ostream &SymNames, bool &HasObject) {
 static Expected<std::vector<MemberData>>
 computeMemberData(raw_ostream &StringTable, raw_ostream &SymNames,
                   object::Archive::Kind Kind, bool Thin, bool Deterministic,
-                  bool NeedSymbols, ArrayRef<NewArchiveMember> NewMembers) { 
+                  bool NeedSymbols, ArrayRef<NewArchiveMember> NewMembers) {
   static char PaddingData[8] = {'\n', '\n', '\n', '\n', '\n', '\n', '\n', '\n'};
 
   // This ignores the symbol table, but we only need the value mod 8 and the
@@ -506,17 +506,17 @@ computeMemberData(raw_ostream &StringTable, raw_ostream &SymNames,
                       ModTime, Size);
     Out.flush();
 
-    std::vector<unsigned> Symbols; 
-    if (NeedSymbols) { 
-      Expected<std::vector<unsigned>> SymbolsOrErr = 
-          getSymbols(Buf, SymNames, HasObject); 
-      if (auto E = SymbolsOrErr.takeError()) 
-        return std::move(E); 
-      Symbols = std::move(*SymbolsOrErr); 
-    } 
+    std::vector<unsigned> Symbols;
+    if (NeedSymbols) {
+      Expected<std::vector<unsigned>> SymbolsOrErr =
+          getSymbols(Buf, SymNames, HasObject);
+      if (auto E = SymbolsOrErr.takeError())
+        return std::move(E);
+      Symbols = std::move(*SymbolsOrErr);
+    }
 
     Pos += Header.size() + Data.size() + Padding.size();
-    Ret.push_back({std::move(Symbols), std::move(Header), Data, Padding}); 
+    Ret.push_back({std::move(Symbols), std::move(Header), Data, Padding});
   }
   // If there are no symbols, emit an empty symbol table, to satisfy Solaris
   // tools, older versions of which expect a symbol table in a non-empty
@@ -569,10 +569,10 @@ Expected<std::string> computeArchiveRelativePath(StringRef From, StringRef To) {
   return std::string(Relative.str());
 }
 
-static Error writeArchiveToStream(raw_ostream &Out, 
-                                  ArrayRef<NewArchiveMember> NewMembers, 
-                                  bool WriteSymtab, object::Archive::Kind Kind, 
-                                  bool Deterministic, bool Thin) { 
+static Error writeArchiveToStream(raw_ostream &Out,
+                                  ArrayRef<NewArchiveMember> NewMembers,
+                                  bool WriteSymtab, object::Archive::Kind Kind,
+                                  bool Deterministic, bool Thin) {
   assert((!Thin || !isBSDLike(Kind)) && "Only the gnu format has a thin mode");
 
   SmallString<0> SymNamesBuf;
@@ -580,9 +580,9 @@ static Error writeArchiveToStream(raw_ostream &Out,
   SmallString<0> StringTableBuf;
   raw_svector_ostream StringTable(StringTableBuf);
 
-  Expected<std::vector<MemberData>> DataOrErr = 
-      computeMemberData(StringTable, SymNames, Kind, Thin, Deterministic, 
-                        WriteSymtab, NewMembers); 
+  Expected<std::vector<MemberData>> DataOrErr =
+      computeMemberData(StringTable, SymNames, Kind, Thin, Deterministic,
+                        WriteSymtab, NewMembers);
   if (Error E = DataOrErr.takeError())
     return E;
   std::vector<MemberData> &Data = *DataOrErr;
@@ -592,28 +592,28 @@ static Error writeArchiveToStream(raw_ostream &Out,
 
   // We would like to detect if we need to switch to a 64-bit symbol table.
   if (WriteSymtab) {
-    uint64_t MaxOffset = 8; // For the file signature. 
+    uint64_t MaxOffset = 8; // For the file signature.
     uint64_t LastOffset = MaxOffset;
-    uint64_t NumSyms = 0; 
+    uint64_t NumSyms = 0;
     for (const auto &M : Data) {
       // Record the start of the member's offset
       LastOffset = MaxOffset;
       // Account for the size of each part associated with the member.
       MaxOffset += M.Header.size() + M.Data.size() + M.Padding.size();
-      NumSyms += M.Symbols.size(); 
+      NumSyms += M.Symbols.size();
     }
 
-    // We assume 32-bit offsets to see if 32-bit symbols are possible or not. 
-    uint64_t SymtabSize = computeSymbolTableSize(Kind, NumSyms, 4, SymNamesBuf); 
-    auto computeSymbolTableHeaderSize = 
-        [=] { 
-          SmallString<0> TmpBuf; 
-          raw_svector_ostream Tmp(TmpBuf); 
-          writeSymbolTableHeader(Tmp, Kind, Deterministic, SymtabSize); 
-          return TmpBuf.size(); 
-        }; 
-    LastOffset += computeSymbolTableHeaderSize() + SymtabSize; 
- 
+    // We assume 32-bit offsets to see if 32-bit symbols are possible or not.
+    uint64_t SymtabSize = computeSymbolTableSize(Kind, NumSyms, 4, SymNamesBuf);
+    auto computeSymbolTableHeaderSize =
+        [=] {
+          SmallString<0> TmpBuf;
+          raw_svector_ostream Tmp(TmpBuf);
+          writeSymbolTableHeader(Tmp, Kind, Deterministic, SymtabSize);
+          return TmpBuf.size();
+        };
+    LastOffset += computeSymbolTableHeaderSize() + SymtabSize;
+
     // The SYM64 format is used when an archive's member offsets are larger than
     // 32-bits can hold. The need for this shift in format is detected by
     // writeArchive. To test this we need to generate a file with a member that
@@ -621,7 +621,7 @@ static Error writeArchiveToStream(raw_ostream &Out,
     // speed the test up we use this environment variable to pretend like the
     // cutoff happens before 32-bits and instead happens at some much smaller
     // value.
-    uint64_t Sym64Threshold = 1ULL << 32; 
+    uint64_t Sym64Threshold = 1ULL << 32;
     const char *Sym64Env = std::getenv("SYM64_THRESHOLD");
     if (Sym64Env)
       StringRef(Sym64Env).getAsInteger(10, Sym64Threshold);
@@ -629,7 +629,7 @@ static Error writeArchiveToStream(raw_ostream &Out,
     // If LastOffset isn't going to fit in a 32-bit varible we need to switch
     // to 64-bit. Note that the file can be larger than 4GB as long as the last
     // member starts before the 4GB offset.
-    if (LastOffset >= Sym64Threshold) { 
+    if (LastOffset >= Sym64Threshold) {
       if (Kind == object::Archive::K_DARWIN)
         Kind = object::Archive::K_DARWIN64;
       else
@@ -649,26 +649,26 @@ static Error writeArchiveToStream(raw_ostream &Out,
     Out << M.Header << M.Data << M.Padding;
 
   Out.flush();
-  return Error::success(); 
-} 
+  return Error::success();
+}
 
-Error writeArchive(StringRef ArcName, ArrayRef<NewArchiveMember> NewMembers, 
-                   bool WriteSymtab, object::Archive::Kind Kind, 
-                   bool Deterministic, bool Thin, 
-                   std::unique_ptr<MemoryBuffer> OldArchiveBuf) { 
-  Expected<sys::fs::TempFile> Temp = 
-      sys::fs::TempFile::create(ArcName + ".temp-archive-%%%%%%%.a"); 
-  if (!Temp) 
-    return Temp.takeError(); 
-  raw_fd_ostream Out(Temp->FD, false); 
- 
-  if (Error E = writeArchiveToStream(Out, NewMembers, WriteSymtab, Kind, 
-                                     Deterministic, Thin)) { 
-    if (Error DiscardError = Temp->discard()) 
-      return joinErrors(std::move(E), std::move(DiscardError)); 
-    return E; 
-  } 
- 
+Error writeArchive(StringRef ArcName, ArrayRef<NewArchiveMember> NewMembers,
+                   bool WriteSymtab, object::Archive::Kind Kind,
+                   bool Deterministic, bool Thin,
+                   std::unique_ptr<MemoryBuffer> OldArchiveBuf) {
+  Expected<sys::fs::TempFile> Temp =
+      sys::fs::TempFile::create(ArcName + ".temp-archive-%%%%%%%.a");
+  if (!Temp)
+    return Temp.takeError();
+  raw_fd_ostream Out(Temp->FD, false);
+
+  if (Error E = writeArchiveToStream(Out, NewMembers, WriteSymtab, Kind,
+                                     Deterministic, Thin)) {
+    if (Error DiscardError = Temp->discard())
+      return joinErrors(std::move(E), std::move(DiscardError));
+    return E;
+  }
+
   // At this point, we no longer need whatever backing memory
   // was used to generate the NewMembers. On Windows, this buffer
   // could be a mapped view of the file we want to replace (if
@@ -684,19 +684,19 @@ Error writeArchive(StringRef ArcName, ArrayRef<NewArchiveMember> NewMembers,
   return Temp->keep(ArcName);
 }
 
-Expected<std::unique_ptr<MemoryBuffer>> 
-writeArchiveToBuffer(ArrayRef<NewArchiveMember> NewMembers, bool WriteSymtab, 
-                     object::Archive::Kind Kind, bool Deterministic, 
-                     bool Thin) { 
-  SmallVector<char, 0> ArchiveBufferVector; 
-  raw_svector_ostream ArchiveStream(ArchiveBufferVector); 
- 
-  if (Error E = writeArchiveToStream(ArchiveStream, NewMembers, WriteSymtab, 
-                                     Kind, Deterministic, Thin)) 
-    return std::move(E); 
- 
-  return std::make_unique<SmallVectorMemoryBuffer>( 
-      std::move(ArchiveBufferVector)); 
-} 
- 
+Expected<std::unique_ptr<MemoryBuffer>>
+writeArchiveToBuffer(ArrayRef<NewArchiveMember> NewMembers, bool WriteSymtab,
+                     object::Archive::Kind Kind, bool Deterministic,
+                     bool Thin) {
+  SmallVector<char, 0> ArchiveBufferVector;
+  raw_svector_ostream ArchiveStream(ArchiveBufferVector);
+
+  if (Error E = writeArchiveToStream(ArchiveStream, NewMembers, WriteSymtab,
+                                     Kind, Deterministic, Thin))
+    return std::move(E);
+
+  return std::make_unique<SmallVectorMemoryBuffer>(
+      std::move(ArchiveBufferVector));
+}
+
 } // namespace llvm

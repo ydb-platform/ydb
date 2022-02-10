@@ -25,7 +25,7 @@
 #include "llvm/Object/ELFTypes.h"
 #include "llvm/Object/Error.h"
 #include "llvm/Object/MachO.h"
-#include "llvm/Object/MachOUniversal.h" 
+#include "llvm/Object/MachOUniversal.h"
 #include "llvm/Object/Wasm.h"
 #include "llvm/Option/Arg.h"
 #include "llvm/Option/ArgList.h"
@@ -57,34 +57,34 @@ namespace objcopy {
 // The name this program was invoked as.
 StringRef ToolName;
 
-ErrorSuccess reportWarning(Error E) { 
+ErrorSuccess reportWarning(Error E) {
   assert(E);
-  WithColor::warning(errs(), ToolName) << toString(std::move(E)) << '\n'; 
-  return Error::success(); 
+  WithColor::warning(errs(), ToolName) << toString(std::move(E)) << '\n';
+  return Error::success();
 }
 
-static Expected<DriverConfig> getDriverConfig(ArrayRef<const char *> Args) { 
-  StringRef Stem = sys::path::stem(ToolName); 
-  auto Is = [=](StringRef Tool) { 
-    // We need to recognize the following filenames: 
-    // 
-    // llvm-objcopy -> objcopy 
-    // strip-10.exe -> strip 
-    // powerpc64-unknown-freebsd13-objcopy -> objcopy 
-    // llvm-install-name-tool -> install-name-tool 
-    auto I = Stem.rfind_lower(Tool); 
-    return I != StringRef::npos && 
-           (I + Tool.size() == Stem.size() || !isAlnum(Stem[I + Tool.size()])); 
-  }; 
+static Expected<DriverConfig> getDriverConfig(ArrayRef<const char *> Args) {
+  StringRef Stem = sys::path::stem(ToolName);
+  auto Is = [=](StringRef Tool) {
+    // We need to recognize the following filenames:
+    //
+    // llvm-objcopy -> objcopy
+    // strip-10.exe -> strip
+    // powerpc64-unknown-freebsd13-objcopy -> objcopy
+    // llvm-install-name-tool -> install-name-tool
+    auto I = Stem.rfind_lower(Tool);
+    return I != StringRef::npos &&
+           (I + Tool.size() == Stem.size() || !isAlnum(Stem[I + Tool.size()]));
+  };
 
-  if (Is("bitcode-strip") || Is("bitcode_strip")) 
-    return parseBitcodeStripOptions(Args); 
-  else if (Is("strip")) 
-    return parseStripOptions(Args, reportWarning); 
-  else if (Is("install-name-tool") || Is("install_name_tool")) 
-    return parseInstallNameToolOptions(Args); 
-  else 
-    return parseObjcopyOptions(Args, reportWarning); 
+  if (Is("bitcode-strip") || Is("bitcode_strip"))
+    return parseBitcodeStripOptions(Args);
+  else if (Is("strip"))
+    return parseStripOptions(Args, reportWarning);
+  else if (Is("install-name-tool") || Is("install_name_tool"))
+    return parseInstallNameToolOptions(Args);
+  else
+    return parseObjcopyOptions(Args, reportWarning);
 }
 
 } // end namespace objcopy
@@ -169,10 +169,10 @@ static Error executeObjcopyOnBinary(CopyConfig &Config, object::Binary &In,
     return coff::executeObjcopyOnBinary(Config, *COFFBinary, Out);
   else if (auto *MachOBinary = dyn_cast<object::MachOObjectFile>(&In))
     return macho::executeObjcopyOnBinary(Config, *MachOBinary, Out);
-  else if (auto *MachOUniversalBinary = 
-               dyn_cast<object::MachOUniversalBinary>(&In)) 
-    return macho::executeObjcopyOnMachOUniversalBinary( 
-        Config, *MachOUniversalBinary, Out); 
+  else if (auto *MachOUniversalBinary =
+               dyn_cast<object::MachOUniversalBinary>(&In))
+    return macho::executeObjcopyOnMachOUniversalBinary(
+        Config, *MachOUniversalBinary, Out);
   else if (auto *WasmBinary = dyn_cast<object::WasmObjectFile>(&In))
     return objcopy::wasm::executeObjcopyOnBinary(Config, *WasmBinary, Out);
   else
@@ -180,11 +180,11 @@ static Error executeObjcopyOnBinary(CopyConfig &Config, object::Binary &In,
                              "unsupported object file format");
 }
 
-namespace llvm { 
-namespace objcopy { 
- 
-Expected<std::vector<NewArchiveMember>> 
-createNewArchiveMembers(CopyConfig &Config, const Archive &Ar) { 
+namespace llvm {
+namespace objcopy {
+
+Expected<std::vector<NewArchiveMember>>
+createNewArchiveMembers(CopyConfig &Config, const Archive &Ar) {
   std::vector<NewArchiveMember> NewArchiveMembers;
   Error Err = Error::success();
   for (const Archive::Child &Child : Ar.children(Err)) {
@@ -199,7 +199,7 @@ createNewArchiveMembers(CopyConfig &Config, const Archive &Ar) {
 
     MemBuffer MB(ChildNameOrErr.get());
     if (Error E = executeObjcopyOnBinary(Config, *ChildOrErr->get(), MB))
-      return std::move(E); 
+      return std::move(E);
 
     Expected<NewArchiveMember> Member =
         NewArchiveMember::getOldMember(Child, Config.DeterministicArchives);
@@ -211,19 +211,19 @@ createNewArchiveMembers(CopyConfig &Config, const Archive &Ar) {
   }
   if (Err)
     return createFileError(Config.InputFilename, std::move(Err));
-  return std::move(NewArchiveMembers); 
-} 
+  return std::move(NewArchiveMembers);
+}
 
-} // end namespace objcopy 
-} // end namespace llvm 
- 
-static Error executeObjcopyOnArchive(CopyConfig &Config, 
-                                     const object::Archive &Ar) { 
-  Expected<std::vector<NewArchiveMember>> NewArchiveMembersOrErr = 
-      createNewArchiveMembers(Config, Ar); 
-  if (!NewArchiveMembersOrErr) 
-    return NewArchiveMembersOrErr.takeError(); 
-  return deepWriteArchive(Config.OutputFilename, *NewArchiveMembersOrErr, 
+} // end namespace objcopy
+} // end namespace llvm
+
+static Error executeObjcopyOnArchive(CopyConfig &Config,
+                                     const object::Archive &Ar) {
+  Expected<std::vector<NewArchiveMember>> NewArchiveMembersOrErr =
+      createNewArchiveMembers(Config, Ar);
+  if (!NewArchiveMembersOrErr)
+    return NewArchiveMembersOrErr.takeError();
+  return deepWriteArchive(Config.OutputFilename, *NewArchiveMembersOrErr,
                           Ar.hasSymbolTable(), Ar.kind(),
                           Config.DeterministicArchives, Ar.isThin());
 }
@@ -353,8 +353,8 @@ int main(int argc, char **argv) {
                           NewArgv);
 
   auto Args = makeArrayRef(NewArgv).drop_front();
-  Expected<DriverConfig> DriverConfig = getDriverConfig(Args); 
- 
+  Expected<DriverConfig> DriverConfig = getDriverConfig(Args);
+
   if (!DriverConfig) {
     logAllUnhandledErrors(DriverConfig.takeError(),
                           WithColor::error(errs(), ToolName));

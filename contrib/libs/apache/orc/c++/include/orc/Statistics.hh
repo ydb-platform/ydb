@@ -282,13 +282,13 @@ namespace orc {
      * Get the minimum value for the column.
      * @return minimum value
      */
-    virtual const std::string & getMinimum() const = 0; 
+    virtual const std::string & getMinimum() const = 0;
 
     /**
      * Get the maximum value for the column.
      * @return maximum value
      */
-    virtual const std::string & getMaximum() const = 0; 
+    virtual const std::string & getMaximum() const = 0;
 
     /**
      * Get the total length of all values.

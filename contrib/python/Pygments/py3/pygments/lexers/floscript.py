@@ -4,7 +4,7 @@
 
     Lexer for FloScript
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -58,7 +58,7 @@ class FloScriptLexer(RegexLexer):
 
             include('name'),
             include('numbers'),
-            (r'#.+$', Comment.Single), 
+            (r'#.+$', Comment.Single),
         ],
         'string': [
             ('[^"]+', String),

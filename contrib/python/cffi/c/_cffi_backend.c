@@ -2,7 +2,7 @@
 #include <Python.h>
 #include "structmember.h"
 
-#define CFFI_VERSION  "1.15.0" 
+#define CFFI_VERSION  "1.15.0"
 
 #ifdef MS_WIN32
 #include <windows.h>
@@ -61,66 +61,66 @@
 #endif
 
 
-/* Define the following macro ONLY if you trust libffi's version of 
- * ffi_closure_alloc() more than the code in malloc_closure.h. 
- * IMPORTANT: DO NOT ENABLE THIS ON LINUX, unless you understand exactly 
- * why I recommend against it and decide that you trust it more than my 
- * analysis below. 
- * 
- * There are two versions of this code: one inside libffi itself, and 
- * one inside malloc_closure.h here.  Both should be fine as long as the 
- * Linux distribution does _not_ enable extra security features.  If it 
- * does, then the code in malloc_closure.h will cleanly crash because 
- * there is no reasonable way to obtain a read-write-execute memory 
- * page.  On the other hand, the code in libffi will appear to 
- * work---but will actually randomly crash after a fork() if the child 
- * does not immediately call exec().  This second crash is of the kind 
- * that can be turned into an attack vector by a motivated attacker. 
- * So, _enabling_ extra security features _opens_ an attack vector. 
- * That sounds like a horribly bad idea to me, and is the reason for why 
- * I prefer CFFI crashing cleanly. 
- * 
- * Currently, we use libffi's ffi_closure_alloc() on NetBSD.  It is 
- * known that on the NetBSD kernel, a different strategy is used which 
- * should not be open to the fork() bug. 
- * 
- * This is also used on macOS, provided we are executing on macOS 10.15 or 
- * above.  It's a mess because it needs runtime checks in that case. 
- */ 
-#ifdef __NetBSD__ 
- 
-# define CFFI_CHECK_FFI_CLOSURE_ALLOC 1 
-# define CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE 1 
-# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC 1 
-# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC_MAYBE 1 
-# define CFFI_CHECK_FFI_PREP_CIF_VAR 0 
-# define CFFI_CHECK_FFI_PREP_CIF_VAR_MAYBE 0 
- 
-#elif defined(__APPLE__) && defined(FFI_AVAILABLE_APPLE) 
- 
-# define CFFI_CHECK_FFI_CLOSURE_ALLOC __builtin_available(macos 10.15, ios 13, watchos 6, tvos 13, *) 
-# define CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE 1 
-# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC __builtin_available(macos 10.15, ios 13, watchos 6, tvos 13, *) 
-# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC_MAYBE 1 
-# define CFFI_CHECK_FFI_PREP_CIF_VAR __builtin_available(macos 10.15, ios 13, watchos 6, tvos 13, *) 
-# define CFFI_CHECK_FFI_PREP_CIF_VAR_MAYBE 1 
- 
-#else 
- 
-# define CFFI_CHECK_FFI_CLOSURE_ALLOC 0 
-# define CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE 0 
-# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC 0 
-# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC_MAYBE 0 
-# define CFFI_CHECK_FFI_PREP_CIF_VAR 0 
-# define CFFI_CHECK_FFI_PREP_CIF_VAR_MAYBE 0 
- 
-#endif 
- 
-/* always includes this, even if it turns out not to be used on NetBSD 
-   because calls are behind "if (0)" */ 
-#include "malloc_closure.h" 
- 
- 
+/* Define the following macro ONLY if you trust libffi's version of
+ * ffi_closure_alloc() more than the code in malloc_closure.h.
+ * IMPORTANT: DO NOT ENABLE THIS ON LINUX, unless you understand exactly
+ * why I recommend against it and decide that you trust it more than my
+ * analysis below.
+ *
+ * There are two versions of this code: one inside libffi itself, and
+ * one inside malloc_closure.h here.  Both should be fine as long as the
+ * Linux distribution does _not_ enable extra security features.  If it
+ * does, then the code in malloc_closure.h will cleanly crash because
+ * there is no reasonable way to obtain a read-write-execute memory
+ * page.  On the other hand, the code in libffi will appear to
+ * work---but will actually randomly crash after a fork() if the child
+ * does not immediately call exec().  This second crash is of the kind
+ * that can be turned into an attack vector by a motivated attacker.
+ * So, _enabling_ extra security features _opens_ an attack vector.
+ * That sounds like a horribly bad idea to me, and is the reason for why
+ * I prefer CFFI crashing cleanly.
+ *
+ * Currently, we use libffi's ffi_closure_alloc() on NetBSD.  It is
+ * known that on the NetBSD kernel, a different strategy is used which
+ * should not be open to the fork() bug.
+ *
+ * This is also used on macOS, provided we are executing on macOS 10.15 or
+ * above.  It's a mess because it needs runtime checks in that case.
+ */
+#ifdef __NetBSD__
+
+# define CFFI_CHECK_FFI_CLOSURE_ALLOC 1
+# define CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE 1
+# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC 1
+# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC_MAYBE 1
+# define CFFI_CHECK_FFI_PREP_CIF_VAR 0
+# define CFFI_CHECK_FFI_PREP_CIF_VAR_MAYBE 0
+
+#elif defined(__APPLE__) && defined(FFI_AVAILABLE_APPLE)
+
+# define CFFI_CHECK_FFI_CLOSURE_ALLOC __builtin_available(macos 10.15, ios 13, watchos 6, tvos 13, *)
+# define CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE 1
+# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC __builtin_available(macos 10.15, ios 13, watchos 6, tvos 13, *)
+# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC_MAYBE 1
+# define CFFI_CHECK_FFI_PREP_CIF_VAR __builtin_available(macos 10.15, ios 13, watchos 6, tvos 13, *)
+# define CFFI_CHECK_FFI_PREP_CIF_VAR_MAYBE 1
+
+#else
+
+# define CFFI_CHECK_FFI_CLOSURE_ALLOC 0
+# define CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE 0
+# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC 0
+# define CFFI_CHECK_FFI_PREP_CLOSURE_LOC_MAYBE 0
+# define CFFI_CHECK_FFI_PREP_CIF_VAR 0
+# define CFFI_CHECK_FFI_PREP_CIF_VAR_MAYBE 0
+
+#endif
+
+/* always includes this, even if it turns out not to be used on NetBSD
+   because calls are behind "if (0)" */
+#include "malloc_closure.h"
+
+
 #if PY_MAJOR_VERSION >= 3
 # define STR_OR_BYTES "bytes"
 # define PyText_Type PyUnicode_Type
@@ -129,11 +129,11 @@
 # define PyText_FromFormat PyUnicode_FromFormat
 # define PyText_AsUTF8 _PyUnicode_AsString   /* PyUnicode_AsUTF8 in Py3.3 */
 # define PyText_AS_UTF8 _PyUnicode_AsString
-# if PY_VERSION_HEX >= 0x03030000 
-#  define PyText_GetSize PyUnicode_GetLength 
-# else 
-#  define PyText_GetSize PyUnicode_GetSize 
-# endif 
+# if PY_VERSION_HEX >= 0x03030000
+#  define PyText_GetSize PyUnicode_GetLength
+# else
+#  define PyText_GetSize PyUnicode_GetSize
+# endif
 # define PyText_FromString PyUnicode_FromString
 # define PyText_FromStringAndSize PyUnicode_FromStringAndSize
 # define PyText_InternInPlace PyUnicode_InternInPlace
@@ -176,50 +176,50 @@
     (PyCObject_FromVoidPtr(pointer, destructor))
 #endif
 
-#if PY_VERSION_HEX < 0x030900a4 
-# define Py_SET_REFCNT(obj, val) (Py_REFCNT(obj) = (val)) 
-#endif 
- 
-#if PY_VERSION_HEX >= 0x03080000 
-# define USE_WRITEUNRAISABLEMSG 
-#endif 
- 
+#if PY_VERSION_HEX < 0x030900a4
+# define Py_SET_REFCNT(obj, val) (Py_REFCNT(obj) = (val))
+#endif
+
+#if PY_VERSION_HEX >= 0x03080000
+# define USE_WRITEUNRAISABLEMSG
+#endif
+
 /************************************************************/
 
 /* base type flag: exactly one of the following: */
-#define CT_PRIMITIVE_SIGNED   0x001   /* signed integer */ 
-#define CT_PRIMITIVE_UNSIGNED 0x002   /* unsigned integer */ 
-#define CT_PRIMITIVE_CHAR     0x004   /* char, wchar_t, charN_t */ 
-#define CT_PRIMITIVE_FLOAT    0x008   /* float, double, long double */ 
-#define CT_POINTER            0x010   /* pointer, excluding ptr-to-func */ 
-#define CT_ARRAY              0x020   /* array */ 
-#define CT_STRUCT             0x040   /* struct */ 
-#define CT_UNION              0x080   /* union */ 
-#define CT_FUNCTIONPTR        0x100   /* pointer to function */ 
-#define CT_VOID               0x200   /* void */ 
-#define CT_PRIMITIVE_COMPLEX  0x400   /* float _Complex, double _Complex */ 
+#define CT_PRIMITIVE_SIGNED   0x001   /* signed integer */
+#define CT_PRIMITIVE_UNSIGNED 0x002   /* unsigned integer */
+#define CT_PRIMITIVE_CHAR     0x004   /* char, wchar_t, charN_t */
+#define CT_PRIMITIVE_FLOAT    0x008   /* float, double, long double */
+#define CT_POINTER            0x010   /* pointer, excluding ptr-to-func */
+#define CT_ARRAY              0x020   /* array */
+#define CT_STRUCT             0x040   /* struct */
+#define CT_UNION              0x080   /* union */
+#define CT_FUNCTIONPTR        0x100   /* pointer to function */
+#define CT_VOID               0x200   /* void */
+#define CT_PRIMITIVE_COMPLEX  0x400   /* float _Complex, double _Complex */
 
 /* other flags that may also be set in addition to the base flag: */
-#define CT_IS_VOIDCHAR_PTR     0x00001000 
-#define CT_PRIMITIVE_FITS_LONG 0x00002000 
-#define CT_IS_OPAQUE           0x00004000 
-#define CT_IS_ENUM             0x00008000 
-#define CT_IS_PTR_TO_OWNED     0x00010000 /* only owned if CDataOwning_Type */ 
-#define CT_CUSTOM_FIELD_POS    0x00020000 
-#define CT_IS_LONGDOUBLE       0x00040000 
-#define CT_IS_BOOL             0x00080000 
-#define CT_IS_FILE             0x00100000 
-#define CT_IS_VOID_PTR         0x00200000 
-#define CT_WITH_VAR_ARRAY      0x00400000 /* with open-ended array, anywhere */ 
-/* unused                      0x00800000 */ 
-#define CT_LAZY_FIELD_LIST     0x01000000 
-#define CT_WITH_PACKED_CHANGE  0x02000000 
-#define CT_IS_SIGNED_WCHAR     0x04000000 
+#define CT_IS_VOIDCHAR_PTR     0x00001000
+#define CT_PRIMITIVE_FITS_LONG 0x00002000
+#define CT_IS_OPAQUE           0x00004000
+#define CT_IS_ENUM             0x00008000
+#define CT_IS_PTR_TO_OWNED     0x00010000 /* only owned if CDataOwning_Type */
+#define CT_CUSTOM_FIELD_POS    0x00020000
+#define CT_IS_LONGDOUBLE       0x00040000
+#define CT_IS_BOOL             0x00080000
+#define CT_IS_FILE             0x00100000
+#define CT_IS_VOID_PTR         0x00200000
+#define CT_WITH_VAR_ARRAY      0x00400000 /* with open-ended array, anywhere */
+/* unused                      0x00800000 */
+#define CT_LAZY_FIELD_LIST     0x01000000
+#define CT_WITH_PACKED_CHANGE  0x02000000
+#define CT_IS_SIGNED_WCHAR     0x04000000
 #define CT_PRIMITIVE_ANY  (CT_PRIMITIVE_SIGNED |        \
                            CT_PRIMITIVE_UNSIGNED |      \
                            CT_PRIMITIVE_CHAR |          \
-                           CT_PRIMITIVE_FLOAT |         \ 
-                           CT_PRIMITIVE_COMPLEX) 
+                           CT_PRIMITIVE_FLOAT |         \
+                           CT_PRIMITIVE_COMPLEX)
 
 typedef struct _ctypedescr {
     PyObject_VAR_HEAD
@@ -274,14 +274,14 @@ static PyTypeObject CField_Type;
 static PyTypeObject CData_Type;
 static PyTypeObject CDataOwning_Type;
 static PyTypeObject CDataOwningGC_Type;
-static PyTypeObject CDataFromBuf_Type; 
+static PyTypeObject CDataFromBuf_Type;
 static PyTypeObject CDataGCP_Type;
 
 #define CTypeDescr_Check(ob)  (Py_TYPE(ob) == &CTypeDescr_Type)
 #define CData_Check(ob)       (Py_TYPE(ob) == &CData_Type ||            \
                                Py_TYPE(ob) == &CDataOwning_Type ||      \
                                Py_TYPE(ob) == &CDataOwningGC_Type ||    \
-                               Py_TYPE(ob) == &CDataFromBuf_Type ||     \ 
+                               Py_TYPE(ob) == &CDataFromBuf_Type ||     \
                                Py_TYPE(ob) == &CDataGCP_Type)
 #define CDataOwn_Check(ob)    (Py_TYPE(ob) == &CDataOwning_Type ||      \
                                Py_TYPE(ob) == &CDataOwningGC_Type)
@@ -314,14 +314,14 @@ typedef struct {
 
 typedef struct {
     CDataObject head;
-    PyObject *structobj;   /* for ffi.new_handle() or ffi.new("struct *") */ 
+    PyObject *structobj;   /* for ffi.new_handle() or ffi.new("struct *") */
 } CDataObject_own_structptr;
 
 typedef struct {
     CDataObject head;
     Py_ssize_t length;     /* same as CDataObject_own_length up to here */
     Py_buffer *bufferview;
-} CDataObject_frombuf; 
+} CDataObject_frombuf;
 
 typedef struct {
     CDataObject head;
@@ -331,11 +331,11 @@ typedef struct {
 } CDataObject_gcp;
 
 typedef struct {
-    CDataObject head; 
-    ffi_closure *closure; 
-} CDataObject_closure; 
- 
-typedef struct { 
+    CDataObject head;
+    ffi_closure *closure;
+} CDataObject_closure;
+
+typedef struct {
     ffi_cif cif;
     /* the following information is used when doing the call:
        - a buffer of size 'exchange_size' is malloced
@@ -363,14 +363,14 @@ typedef struct {
 # include "file_emulator.h"
 #endif
 
-#ifdef PyUnicode_KIND     /* Python >= 3.3 */ 
-# include "wchar_helper_3.h" 
-#else 
+#ifdef PyUnicode_KIND     /* Python >= 3.3 */
+# include "wchar_helper_3.h"
+#else
 # include "wchar_helper.h"
 #endif
 
-#include "../cffi/_cffi_errors.h" 
- 
+#include "../cffi/_cffi_errors.h"
+
 typedef struct _cffi_allocator_s {
     PyObject *ca_alloc, *ca_free;
     int ca_dont_clear;
@@ -439,10 +439,10 @@ ctypedescr_dealloc(CTypeDescrObject *ct)
 
     if (ct->ct_unique_key != NULL) {
         /* revive dead object temporarily for DelItem */
-        Py_SET_REFCNT(ct, 43); 
+        Py_SET_REFCNT(ct, 43);
         PyDict_DelItem(unique_cache, ct->ct_unique_key);
         assert(Py_REFCNT(ct) == 42);
-        Py_SET_REFCNT(ct, 0); 
+        Py_SET_REFCNT(ct, 0);
         Py_DECREF(ct->ct_unique_key);
     }
     Py_XDECREF(ct->ct_itemdescr);
@@ -539,8 +539,8 @@ static PyObject *ctypeget_length(CTypeDescrObject *ct, void *context)
 static PyObject *
 get_field_name(CTypeDescrObject *ct, CFieldObject *cf);   /* forward */
 
-/* returns 0 if the struct ctype is opaque, 1 if it is not, or -1 if 
-   an exception occurs */ 
+/* returns 0 if the struct ctype is opaque, 1 if it is not, or -1 if
+   an exception occurs */
 #define force_lazy_struct(ct)                                           \
     ((ct)->ct_stuff != NULL ? 1 : do_realize_lazy_struct(ct))
 
@@ -688,7 +688,7 @@ static PyMethodDef ctypedescr_methods[] = {
 
 static PyTypeObject CTypeDescr_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "_cffi_backend.CType", 
+    "_cffi_backend.CType",
     offsetof(CTypeDescrObject, ct_name),
     sizeof(char),
     (destructor)ctypedescr_dealloc,             /* tp_dealloc */
@@ -929,21 +929,21 @@ read_raw_unsigned_data(char *target, int size)
     return 0;
 }
 
-#ifdef __GNUC__ 
-/* This is a workaround for what I think is a GCC bug on several 
-   platforms.  See issue #378. */ 
-__attribute__((noinline)) 
-#endif 
-void _cffi_memcpy(char *target, const void *src, size_t size) 
-{ 
-    memcpy(target, src, size); 
-} 
- 
+#ifdef __GNUC__
+/* This is a workaround for what I think is a GCC bug on several
+   platforms.  See issue #378. */
+__attribute__((noinline))
+#endif
+void _cffi_memcpy(char *target, const void *src, size_t size)
+{
+    memcpy(target, src, size);
+}
+
 #define _write_raw_data(type)                           \
     do {                                                \
         if (size == sizeof(type)) {                     \
             type r = (type)source;                      \
-            _cffi_memcpy(target, &r, sizeof(type));           \ 
+            _cffi_memcpy(target, &r, sizeof(type));           \
             return;                                     \
         }                                               \
     } while(0)
@@ -977,26 +977,26 @@ read_raw_longdouble_data(char *target)
     return 0;
 }
 
-static Py_complex 
-read_raw_complex_data(char *target, int size) 
-{ 
-    Py_complex r = {0.0, 0.0}; 
-    if (size == 2*sizeof(float)) { 
-        float real_part, imag_part; 
-        memcpy(&real_part, target + 0,             sizeof(float)); 
-        memcpy(&imag_part, target + sizeof(float), sizeof(float)); 
-        r.real = real_part; 
-        r.imag = imag_part; 
-        return r; 
-    } 
-    if (size == 2*sizeof(double)) { 
-        memcpy(&r, target, 2*sizeof(double)); 
-        return r; 
-    } 
-    Py_FatalError("read_raw_complex_data: bad complex size"); 
-    return r; 
-} 
- 
+static Py_complex
+read_raw_complex_data(char *target, int size)
+{
+    Py_complex r = {0.0, 0.0};
+    if (size == 2*sizeof(float)) {
+        float real_part, imag_part;
+        memcpy(&real_part, target + 0,             sizeof(float));
+        memcpy(&imag_part, target + sizeof(float), sizeof(float));
+        r.real = real_part;
+        r.imag = imag_part;
+        return r;
+    }
+    if (size == 2*sizeof(double)) {
+        memcpy(&r, target, 2*sizeof(double));
+        return r;
+    }
+    Py_FatalError("read_raw_complex_data: bad complex size");
+    return r;
+}
+
 static void
 write_raw_float_data(char *target, double source, int size)
 {
@@ -1012,25 +1012,25 @@ write_raw_longdouble_data(char *target, long double source)
     _write_raw_data(long double);
 }
 
-#define _write_raw_complex_data(type)                      \ 
-    do {                                                   \ 
-        if (size == 2*sizeof(type)) {                      \ 
-            type r = (type)source.real;                    \ 
-            type i = (type)source.imag;                    \ 
-            _cffi_memcpy(target, &r, sizeof(type));              \ 
-            _cffi_memcpy(target+sizeof(type), &i, sizeof(type)); \ 
-            return;                                        \ 
-        }                                                  \ 
-    } while(0) 
- 
-static void 
-write_raw_complex_data(char *target, Py_complex source, int size) 
-{ 
-    _write_raw_complex_data(float); 
-    _write_raw_complex_data(double); 
-    Py_FatalError("write_raw_complex_data: bad complex size"); 
-} 
- 
+#define _write_raw_complex_data(type)                      \
+    do {                                                   \
+        if (size == 2*sizeof(type)) {                      \
+            type r = (type)source.real;                    \
+            type i = (type)source.imag;                    \
+            _cffi_memcpy(target, &r, sizeof(type));              \
+            _cffi_memcpy(target+sizeof(type), &i, sizeof(type)); \
+            return;                                        \
+        }                                                  \
+    } while(0)
+
+static void
+write_raw_complex_data(char *target, Py_complex source, int size)
+{
+    _write_raw_complex_data(float);
+    _write_raw_complex_data(double);
+    Py_FatalError("write_raw_complex_data: bad complex size");
+}
+
 static PyObject *
 new_simple_cdata(char *data, CTypeDescrObject *ct)
 {
@@ -1105,23 +1105,23 @@ convert_to_object(char *data, CTypeDescrObject *ct)
         /*READ(data, ct->ct_size)*/
         value = read_raw_unsigned_data(data, ct->ct_size);
 
-        if (ct->ct_flags & CT_PRIMITIVE_FITS_LONG) { 
-            if (ct->ct_flags & CT_IS_BOOL) { 
-                PyObject *x; 
-                switch ((int)value) { 
-                case 0: x = Py_False; break; 
-                case 1: x = Py_True; break; 
-                default: 
-                    PyErr_Format(PyExc_ValueError, 
-                                 "got a _Bool of value %d, expected 0 or 1", 
-                                 (int)value); 
-                    return NULL; 
-                } 
-                Py_INCREF(x); 
-                return x; 
-            } 
+        if (ct->ct_flags & CT_PRIMITIVE_FITS_LONG) {
+            if (ct->ct_flags & CT_IS_BOOL) {
+                PyObject *x;
+                switch ((int)value) {
+                case 0: x = Py_False; break;
+                case 1: x = Py_True; break;
+                default:
+                    PyErr_Format(PyExc_ValueError,
+                                 "got a _Bool of value %d, expected 0 or 1",
+                                 (int)value);
+                    return NULL;
+                }
+                Py_INCREF(x);
+                return x;
+            }
             return PyInt_FromLong((long)value);
-        } 
+        }
         else
             return PyLong_FromUnsignedLongLong(value);
     }
@@ -1141,19 +1141,19 @@ convert_to_object(char *data, CTypeDescrObject *ct)
     }
     else if (ct->ct_flags & CT_PRIMITIVE_CHAR) {
         /*READ(data, ct->ct_size)*/
-        switch (ct->ct_size) { 
-        case sizeof(char): 
+        switch (ct->ct_size) {
+        case sizeof(char):
             return PyBytes_FromStringAndSize(data, 1);
-        case 2: 
-            return _my_PyUnicode_FromChar16((cffi_char16_t *)data, 1); 
-        case 4: 
-            return _my_PyUnicode_FromChar32((cffi_char32_t *)data, 1); 
-        } 
+        case 2:
+            return _my_PyUnicode_FromChar16((cffi_char16_t *)data, 1);
+        case 4:
+            return _my_PyUnicode_FromChar32((cffi_char32_t *)data, 1);
+        }
     }
-    else if (ct->ct_flags & CT_PRIMITIVE_COMPLEX) { 
-        Py_complex value = read_raw_complex_data(data, ct->ct_size); 
-        return PyComplex_FromCComplex(value); 
-    } 
+    else if (ct->ct_flags & CT_PRIMITIVE_COMPLEX) {
+        Py_complex value = read_raw_complex_data(data, ct->ct_size);
+        return PyComplex_FromCComplex(value);
+    }
 
     PyErr_Format(PyExc_SystemError,
                  "convert_to_object: '%s'", ct->ct_name);
@@ -1227,65 +1227,65 @@ static int _convert_to_char(PyObject *init)
     return -1;
 }
 
-static cffi_char16_t _convert_to_char16_t(PyObject *init) 
+static cffi_char16_t _convert_to_char16_t(PyObject *init)
 {
-    char err_got[80]; 
-    err_got[0] = 0; 
- 
+    char err_got[80];
+    err_got[0] = 0;
+
     if (PyUnicode_Check(init)) {
-        cffi_char16_t ordinal; 
-        if (_my_PyUnicode_AsSingleChar16(init, &ordinal, err_got) == 0) 
+        cffi_char16_t ordinal;
+        if (_my_PyUnicode_AsSingleChar16(init, &ordinal, err_got) == 0)
             return ordinal;
     }
     if (CData_Check(init) &&
            (((CDataObject *)init)->c_type->ct_flags & CT_PRIMITIVE_CHAR) &&
-           (((CDataObject *)init)->c_type->ct_size == 2)) { 
+           (((CDataObject *)init)->c_type->ct_size == 2)) {
         char *data = ((CDataObject *)init)->c_data;
-        /*READ(data, 2)*/ 
-        return *(cffi_char16_t *)data; 
+        /*READ(data, 2)*/
+        return *(cffi_char16_t *)data;
     }
     PyErr_Format(PyExc_TypeError,
-                 "initializer for ctype 'char16_t' must be a unicode string " 
-                 "of length 1, not %.200s", 
-                 err_got[0] == 0 ? Py_TYPE(init)->tp_name : err_got); 
-    return (cffi_char16_t)-1; 
+                 "initializer for ctype 'char16_t' must be a unicode string "
+                 "of length 1, not %.200s",
+                 err_got[0] == 0 ? Py_TYPE(init)->tp_name : err_got);
+    return (cffi_char16_t)-1;
 }
 
-static cffi_char32_t _convert_to_char32_t(PyObject *init) 
-{ 
-    char err_got[80]; 
-    err_got[0] = 0; 
- 
-    if (PyUnicode_Check(init)) { 
-        cffi_char32_t ordinal; 
-        if (_my_PyUnicode_AsSingleChar32(init, &ordinal, err_got) == 0) 
-            return ordinal; 
-    } 
-    if (CData_Check(init) && 
-           (((CDataObject *)init)->c_type->ct_flags & CT_PRIMITIVE_CHAR) && 
-           (((CDataObject *)init)->c_type->ct_size == 4)) { 
-        char *data = ((CDataObject *)init)->c_data; 
-        /*READ(data, 4)*/ 
-        return *(cffi_char32_t *)data; 
-    } 
-    PyErr_Format(PyExc_TypeError, 
-                 "initializer for ctype 'char32_t' must be a unicode string " 
-                 "of length 1, not %.200s", 
-                 err_got[0] == 0 ? Py_TYPE(init)->tp_name : err_got); 
-    return (cffi_char32_t)-1; 
-} 
- 
-static int _convert_error(PyObject *init, CTypeDescrObject *ct, 
+static cffi_char32_t _convert_to_char32_t(PyObject *init)
+{
+    char err_got[80];
+    err_got[0] = 0;
+
+    if (PyUnicode_Check(init)) {
+        cffi_char32_t ordinal;
+        if (_my_PyUnicode_AsSingleChar32(init, &ordinal, err_got) == 0)
+            return ordinal;
+    }
+    if (CData_Check(init) &&
+           (((CDataObject *)init)->c_type->ct_flags & CT_PRIMITIVE_CHAR) &&
+           (((CDataObject *)init)->c_type->ct_size == 4)) {
+        char *data = ((CDataObject *)init)->c_data;
+        /*READ(data, 4)*/
+        return *(cffi_char32_t *)data;
+    }
+    PyErr_Format(PyExc_TypeError,
+                 "initializer for ctype 'char32_t' must be a unicode string "
+                 "of length 1, not %.200s",
+                 err_got[0] == 0 ? Py_TYPE(init)->tp_name : err_got);
+    return (cffi_char32_t)-1;
+}
+
+static int _convert_error(PyObject *init, CTypeDescrObject *ct,
                           const char *expected)
 {
     if (CData_Check(init)) {
-        CTypeDescrObject *ct2 = ((CDataObject *)init)->c_type; 
-        if (strcmp(ct->ct_name, ct2->ct_name) != 0) 
+        CTypeDescrObject *ct2 = ((CDataObject *)init)->c_type;
+        if (strcmp(ct->ct_name, ct2->ct_name) != 0)
             PyErr_Format(PyExc_TypeError,
                          "initializer for ctype '%s' must be a %s, "
                          "not cdata '%s'",
-                         ct->ct_name, expected, ct2->ct_name); 
-        else if (ct != ct2) { 
+                         ct->ct_name, expected, ct2->ct_name);
+        else if (ct != ct2) {
             /* in case we'd give the error message "initializer for
                ctype 'A' must be a pointer to same type, not cdata
                'B'", but with A=B, then give instead a different error
@@ -1294,21 +1294,21 @@ static int _convert_error(PyObject *init, CTypeDescrObject *ct,
                          "initializer for ctype '%s' appears indeed to be '%s',"
                          " but the types are different (check that you are not"
                          " e.g. mixing up different ffi instances)",
-                         ct->ct_name, ct2->ct_name); 
+                         ct->ct_name, ct2->ct_name);
         }
-        else 
-        { 
-            PyErr_Format(PyExc_SystemError, 
-                         "initializer for ctype '%s' is correct, but we get " 
-                         "an internal mismatch--please report a bug", 
-                         ct->ct_name); 
-        } 
+        else
+        {
+            PyErr_Format(PyExc_SystemError,
+                         "initializer for ctype '%s' is correct, but we get "
+                         "an internal mismatch--please report a bug",
+                         ct->ct_name);
+        }
     }
     else
         PyErr_Format(PyExc_TypeError,
                      "initializer for ctype '%s' must be a %s, "
                      "not %.200s",
-                     ct->ct_name, expected, Py_TYPE(init)->tp_name); 
+                     ct->ct_name, expected, Py_TYPE(init)->tp_name);
     return -1;
 }
 
@@ -1318,7 +1318,7 @@ static int    /* forward */
 convert_from_object_bitfield(char *data, CFieldObject *cf, PyObject *init);
 
 static Py_ssize_t
-get_new_array_length(CTypeDescrObject *ctitem, PyObject **pvalue) 
+get_new_array_length(CTypeDescrObject *ctitem, PyObject **pvalue)
 {
     PyObject *value = *pvalue;
 
@@ -1331,24 +1331,24 @@ get_new_array_length(CTypeDescrObject *ctitem, PyObject **pvalue)
     }
     else if (PyUnicode_Check(value)) {
         /* from a unicode, we add the null terminator */
-        int length; 
-        if (ctitem->ct_size == 2) 
-            length = _my_PyUnicode_SizeAsChar16(value); 
-        else 
-            length = _my_PyUnicode_SizeAsChar32(value); 
-        return length + 1; 
+        int length;
+        if (ctitem->ct_size == 2)
+            length = _my_PyUnicode_SizeAsChar16(value);
+        else
+            length = _my_PyUnicode_SizeAsChar32(value);
+        return length + 1;
     }
     else {
         Py_ssize_t explicitlength;
         explicitlength = PyNumber_AsSsize_t(value, PyExc_OverflowError);
         if (explicitlength < 0) {
-            if (PyErr_Occurred()) { 
-                if (PyErr_ExceptionMatches(PyExc_TypeError)) 
-                    PyErr_Format(PyExc_TypeError, 
-                        "expected new array length or list/tuple/str, " 
-                        "not %.200s", Py_TYPE(value)->tp_name); 
-            } 
-            else 
+            if (PyErr_Occurred()) {
+                if (PyErr_ExceptionMatches(PyExc_TypeError))
+                    PyErr_Format(PyExc_TypeError,
+                        "expected new array length or list/tuple/str, "
+                        "not %.200s", Py_TYPE(value)->tp_name);
+            }
+            else
                 PyErr_SetString(PyExc_ValueError, "negative array length");
             return -1;
         }
@@ -1368,46 +1368,46 @@ convert_field_from_object(char *data, CFieldObject *cf, PyObject *value)
 }
 
 static int
-add_varsize_length(Py_ssize_t offset, Py_ssize_t itemsize, 
-                   Py_ssize_t varsizelength, Py_ssize_t *optvarsize) 
-{ 
-    /* update '*optvarsize' to account for an array of 'varsizelength' 
-       elements, each of size 'itemsize', that starts at 'offset'. */ 
-    Py_ssize_t size = ADD_WRAPAROUND(offset, 
-                              MUL_WRAPAROUND(itemsize, varsizelength)); 
-    if (size < 0 || 
-        ((size - offset) / itemsize) != varsizelength) { 
-        PyErr_SetString(PyExc_OverflowError, 
-                        "array size would overflow a Py_ssize_t"); 
-        return -1; 
-    } 
-    if (size > *optvarsize) 
-        *optvarsize = size; 
-    return 0; 
-} 
- 
-static int 
-convert_struct_from_object(char *data, CTypeDescrObject *ct, PyObject *init, 
-                           Py_ssize_t *optvarsize);  /* forward */ 
- 
-static int 
+add_varsize_length(Py_ssize_t offset, Py_ssize_t itemsize,
+                   Py_ssize_t varsizelength, Py_ssize_t *optvarsize)
+{
+    /* update '*optvarsize' to account for an array of 'varsizelength'
+       elements, each of size 'itemsize', that starts at 'offset'. */
+    Py_ssize_t size = ADD_WRAPAROUND(offset,
+                              MUL_WRAPAROUND(itemsize, varsizelength));
+    if (size < 0 ||
+        ((size - offset) / itemsize) != varsizelength) {
+        PyErr_SetString(PyExc_OverflowError,
+                        "array size would overflow a Py_ssize_t");
+        return -1;
+    }
+    if (size > *optvarsize)
+        *optvarsize = size;
+    return 0;
+}
+
+static int
+convert_struct_from_object(char *data, CTypeDescrObject *ct, PyObject *init,
+                           Py_ssize_t *optvarsize);  /* forward */
+
+static int
 convert_vfield_from_object(char *data, CFieldObject *cf, PyObject *value,
                            Py_ssize_t *optvarsize)
 {
     /* a special case for var-sized C99 arrays */
     if ((cf->cf_type->ct_flags & CT_ARRAY) && cf->cf_type->ct_size < 0) {
-        Py_ssize_t varsizelength = get_new_array_length( 
-                                      cf->cf_type->ct_itemdescr, &value); 
+        Py_ssize_t varsizelength = get_new_array_length(
+                                      cf->cf_type->ct_itemdescr, &value);
         if (varsizelength < 0)
             return -1;
         if (optvarsize != NULL) {
             /* in this mode, the only purpose of this function is to compute
                the real size of the structure from a var-sized C99 array */
             assert(data == NULL);
-            return add_varsize_length(cf->cf_offset, 
-                cf->cf_type->ct_itemdescr->ct_size, 
-                varsizelength, 
-                optvarsize); 
+            return add_varsize_length(cf->cf_offset,
+                cf->cf_type->ct_itemdescr->ct_size,
+                varsizelength,
+                optvarsize);
         }
         /* if 'value' was only an integer, get_new_array_length() returns
            it and convert 'value' to be None.  Detect if this was the case,
@@ -1416,44 +1416,44 @@ convert_vfield_from_object(char *data, CFieldObject *cf, PyObject *value,
         if (value == Py_None)
             return 0;
     }
-    if (optvarsize == NULL) { 
+    if (optvarsize == NULL) {
         return convert_field_from_object(data, cf, value);
-    } 
-    else if ((cf->cf_type->ct_flags & CT_WITH_VAR_ARRAY) != 0 && 
-             !CData_Check(value)) { 
-        Py_ssize_t subsize = cf->cf_type->ct_size; 
-        if (convert_struct_from_object(NULL, cf->cf_type, value, &subsize) < 0) 
-            return -1; 
-        return add_varsize_length(cf->cf_offset, 1, subsize, optvarsize); 
-    } 
+    }
+    else if ((cf->cf_type->ct_flags & CT_WITH_VAR_ARRAY) != 0 &&
+             !CData_Check(value)) {
+        Py_ssize_t subsize = cf->cf_type->ct_size;
+        if (convert_struct_from_object(NULL, cf->cf_type, value, &subsize) < 0)
+            return -1;
+        return add_varsize_length(cf->cf_offset, 1, subsize, optvarsize);
+    }
     else
         return 0;
 }
 
 static int
-must_be_array_of_zero_or_one(const char *data, Py_ssize_t n) 
-{ 
-    Py_ssize_t i; 
-    for (i = 0; i < n; i++) { 
-        if (((unsigned char)data[i]) > 1) { 
-            PyErr_SetString(PyExc_ValueError, 
-                "an array of _Bool can only contain \\x00 or \\x01"); 
-            return -1; 
-        } 
-    } 
-    return 0; 
-} 
- 
-static Py_ssize_t 
-get_array_length(CDataObject *cd) 
-{ 
-    if (cd->c_type->ct_length < 0) 
-        return ((CDataObject_own_length *)cd)->length; 
-    else 
-        return cd->c_type->ct_length; 
-} 
- 
-static int 
+must_be_array_of_zero_or_one(const char *data, Py_ssize_t n)
+{
+    Py_ssize_t i;
+    for (i = 0; i < n; i++) {
+        if (((unsigned char)data[i]) > 1) {
+            PyErr_SetString(PyExc_ValueError,
+                "an array of _Bool can only contain \\x00 or \\x01");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static Py_ssize_t
+get_array_length(CDataObject *cd)
+{
+    if (cd->c_type->ct_length < 0)
+        return ((CDataObject_own_length *)cd)->length;
+    else
+        return cd->c_type->ct_length;
+}
+
+static int
 convert_array_from_object(char *data, CTypeDescrObject *ct, PyObject *init)
 {
     /* used by convert_from_object(), and also to decode lists/tuples/unicodes
@@ -1500,9 +1500,9 @@ convert_array_from_object(char *data, CTypeDescrObject *ct, PyObject *init)
             if (n != ct->ct_length)
                 n++;
             srcdata = PyBytes_AS_STRING(init);
-            if (ctitem->ct_flags & CT_IS_BOOL) 
-                if (must_be_array_of_zero_or_one(srcdata, n) < 0) 
-                    return -1; 
+            if (ctitem->ct_flags & CT_IS_BOOL)
+                if (must_be_array_of_zero_or_one(srcdata, n) < 0)
+                    return -1;
             memcpy(data, srcdata, n);
             return 0;
         }
@@ -1512,12 +1512,12 @@ convert_array_from_object(char *data, CTypeDescrObject *ct, PyObject *init)
                 expected = "unicode or list or tuple";
                 goto cannot_convert;
             }
- 
-            if (ctitem->ct_size == 4) 
-                n = _my_PyUnicode_SizeAsChar32(init); 
-            else 
-                n = _my_PyUnicode_SizeAsChar16(init); 
- 
+
+            if (ctitem->ct_size == 4)
+                n = _my_PyUnicode_SizeAsChar32(init);
+            else
+                n = _my_PyUnicode_SizeAsChar16(init);
+
             if (ct->ct_length >= 0 && n > ct->ct_length) {
                 PyErr_Format(PyExc_IndexError,
                              "initializer unicode is too long for '%s' "
@@ -1526,10 +1526,10 @@ convert_array_from_object(char *data, CTypeDescrObject *ct, PyObject *init)
             }
             if (n != ct->ct_length)
                 n++;
-            if (ctitem->ct_size == 4) 
-                return _my_PyUnicode_AsChar32(init, (cffi_char32_t *)data, n); 
-            else 
-                return _my_PyUnicode_AsChar16(init, (cffi_char16_t *)data, n); 
+            if (ctitem->ct_size == 4)
+                return _my_PyUnicode_AsChar32(init, (cffi_char32_t *)data, n);
+            else
+                return _my_PyUnicode_AsChar16(init, (cffi_char16_t *)data, n);
         }
     }
     else {
@@ -1538,24 +1538,24 @@ convert_array_from_object(char *data, CTypeDescrObject *ct, PyObject *init)
     }
 
  cannot_convert:
-    if ((ct->ct_flags & CT_ARRAY) && CData_Check(init)) 
-    { 
-        CDataObject *cd = (CDataObject *)init; 
-        if (cd->c_type == ct) 
-        { 
-            Py_ssize_t n = get_array_length(cd); 
-            memcpy(data, cd->c_data, n * ctitem->ct_size); 
-            return 0; 
-        } 
-    } 
-    return _convert_error(init, ct, expected); 
+    if ((ct->ct_flags & CT_ARRAY) && CData_Check(init))
+    {
+        CDataObject *cd = (CDataObject *)init;
+        if (cd->c_type == ct)
+        {
+            Py_ssize_t n = get_array_length(cd);
+            memcpy(data, cd->c_data, n * ctitem->ct_size);
+            return 0;
+        }
+    }
+    return _convert_error(init, ct, expected);
 }
 
 static int
 convert_struct_from_object(char *data, CTypeDescrObject *ct, PyObject *init,
                            Py_ssize_t *optvarsize)
 {
-    /* does not accept 'init' being already a CData */ 
+    /* does not accept 'init' being already a CData */
     const char *expected;
 
     if (force_lazy_struct(ct) <= 0) {
@@ -1602,7 +1602,7 @@ convert_struct_from_object(char *data, CTypeDescrObject *ct, PyObject *init,
     }
     expected = optvarsize == NULL ? "list or tuple or dict or struct-cdata"
                                   : "list or tuple or dict";
-    return _convert_error(init, ct, expected); 
+    return _convert_error(init, ct, expected);
 }
 
 #ifdef __GNUC__
@@ -1652,8 +1652,8 @@ convert_from_object(char *data, CTypeDescrObject *ct, PyObject *init)
                 /* for backward compatibility, accept "char *" as either
                    source of target.  This is not what C does, though,
                    so emit a warning that will eventually turn into an
-                   error.  The warning is turned off if both types are 
-                   pointers to single bytes. */ 
+                   error.  The warning is turned off if both types are
+                   pointers to single bytes. */
                 char *msg = (ct->ct_flags & CT_IS_VOIDCHAR_PTR ?
                     "implicit cast to 'char *' from a different pointer type: "
                     "will be forbidden in the future (check that the types "
@@ -1663,12 +1663,12 @@ convert_from_object(char *data, CTypeDescrObject *ct, PyObject *init)
                     "will be forbidden in the future (check that the types "
                     "are as you expect; use an explicit ffi.cast() if they "
                     "are correct)");
-                if ((ct->ct_flags & ctinit->ct_flags & CT_POINTER) && 
-                    ct->ct_itemdescr->ct_size == 1 && 
-                    ctinit->ct_itemdescr->ct_size == 1) { 
-                    /* no warning */ 
-                } 
-                else if (PyErr_WarnEx(PyExc_UserWarning, msg, 1)) 
+                if ((ct->ct_flags & ctinit->ct_flags & CT_POINTER) &&
+                    ct->ct_itemdescr->ct_size == 1 &&
+                    ctinit->ct_itemdescr->ct_size == 1) {
+                    /* no warning */
+                }
+                else if (PyErr_WarnEx(PyExc_UserWarning, msg, 1))
                     return -1;
             }
             else {
@@ -1695,15 +1695,15 @@ convert_from_object(char *data, CTypeDescrObject *ct, PyObject *init)
         unsigned PY_LONG_LONG value = _my_PyLong_AsUnsignedLongLong(init, 1);
         if (value == (unsigned PY_LONG_LONG)-1 && PyErr_Occurred())
             return -1;
-        if (ct->ct_flags & CT_IS_BOOL) { 
-            if (value > 1ULL)      /* value != 0 && value != 1 */ 
+        if (ct->ct_flags & CT_IS_BOOL) {
+            if (value > 1ULL)      /* value != 0 && value != 1 */
                 goto overflow;
-        } 
-        else { 
-            write_raw_integer_data(buf, value, ct->ct_size); 
-            if (value != read_raw_unsigned_data(buf, ct->ct_size)) 
-                goto overflow; 
-        } 
+        }
+        else {
+            write_raw_integer_data(buf, value, ct->ct_size);
+            if (value != read_raw_unsigned_data(buf, ct->ct_size))
+                goto overflow;
+        }
         write_raw_integer_data(data, value, ct->ct_size);
         return 0;
     }
@@ -1729,29 +1729,29 @@ convert_from_object(char *data, CTypeDescrObject *ct, PyObject *init)
         return 0;
     }
     if (ct->ct_flags & CT_PRIMITIVE_CHAR) {
-        switch (ct->ct_size) { 
-        case sizeof(char): { 
+        switch (ct->ct_size) {
+        case sizeof(char): {
             int res = _convert_to_char(init);
             if (res < 0)
                 return -1;
             data[0] = res;
             return 0;
         }
-        case 2: { 
-            cffi_char16_t res = _convert_to_char16_t(init); 
-            if (res == (cffi_char16_t)-1 && PyErr_Occurred()) 
+        case 2: {
+            cffi_char16_t res = _convert_to_char16_t(init);
+            if (res == (cffi_char16_t)-1 && PyErr_Occurred())
                 return -1;
-            *(cffi_char16_t *)data = res; 
+            *(cffi_char16_t *)data = res;
             return 0;
         }
-        case 4: { 
-            cffi_char32_t res = _convert_to_char32_t(init); 
-            if (res == (cffi_char32_t)-1 && PyErr_Occurred()) 
-                return -1; 
-            *(cffi_char32_t *)data = res; 
-            return 0; 
-        } 
-        } 
+        case 4: {
+            cffi_char32_t res = _convert_to_char32_t(init);
+            if (res == (cffi_char32_t)-1 && PyErr_Occurred())
+                return -1;
+            *(cffi_char32_t *)data = res;
+            return 0;
+        }
+        }
     }
     if (ct->ct_flags & (CT_STRUCT|CT_UNION)) {
 
@@ -1763,13 +1763,13 @@ convert_from_object(char *data, CTypeDescrObject *ct, PyObject *init)
         }
         return convert_struct_from_object(data, ct, init, NULL);
     }
-    if (ct->ct_flags & CT_PRIMITIVE_COMPLEX) { 
-        Py_complex value = PyComplex_AsCComplex(init); 
-        if (PyErr_Occurred()) 
-            return -1; 
-        write_raw_complex_data(data, value, ct->ct_size); 
-        return 0; 
-    } 
+    if (ct->ct_flags & CT_PRIMITIVE_COMPLEX) {
+        Py_complex value = PyComplex_AsCComplex(init);
+        if (PyErr_Occurred())
+            return -1;
+        write_raw_complex_data(data, value, ct->ct_size);
+        return 0;
+    }
     PyErr_Format(PyExc_SystemError,
                  "convert_from_object: '%s'", ct->ct_name);
     return -1;
@@ -1778,7 +1778,7 @@ convert_from_object(char *data, CTypeDescrObject *ct, PyObject *init)
     return _convert_overflow(init, ct->ct_name);
 
  cannot_convert:
-    return _convert_error(init, ct, expected); 
+    return _convert_error(init, ct, expected);
 }
 
 static int
@@ -1890,7 +1890,7 @@ static void cdataowning_dealloc(CDataObject *cd)
     assert(!(cd->c_type->ct_flags & (CT_IS_VOID_PTR | CT_FUNCTIONPTR)));
 
     if (cd->c_type->ct_flags & CT_IS_PTR_TO_OWNED) {
-        /* for ffi.new("struct *") */ 
+        /* for ffi.new("struct *") */
         Py_DECREF(((CDataObject_own_structptr *)cd)->structobj);
     }
 #if defined(CFFI_MEM_DEBUG) || defined(CFFI_MEM_LEAK)
@@ -1918,31 +1918,31 @@ static void cdataowninggc_dealloc(CDataObject *cd)
         Py_DECREF(x);
     }
     else if (cd->c_type->ct_flags & CT_FUNCTIONPTR) {   /* a callback */
-        ffi_closure *closure = ((CDataObject_closure *)cd)->closure; 
+        ffi_closure *closure = ((CDataObject_closure *)cd)->closure;
         PyObject *args = (PyObject *)(closure->user_data);
         Py_XDECREF(args);
-#if CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE 
-        if (CFFI_CHECK_FFI_CLOSURE_ALLOC) { 
-            ffi_closure_free(closure); 
-        } else 
-#endif 
-            cffi_closure_free(closure); 
+#if CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE
+        if (CFFI_CHECK_FFI_CLOSURE_ALLOC) {
+            ffi_closure_free(closure);
+        } else
+#endif
+            cffi_closure_free(closure);
     }
-    else { 
-        Py_FatalError("cdata CDataOwningGC_Type with unexpected type flags"); 
+    else {
+        Py_FatalError("cdata CDataOwningGC_Type with unexpected type flags");
     }
     cdata_dealloc(cd);
 }
 
-static void cdatafrombuf_dealloc(CDataObject *cd) 
-{ 
-    Py_buffer *view = ((CDataObject_frombuf *)cd)->bufferview; 
-    cdata_dealloc(cd); 
- 
-    PyBuffer_Release(view); 
-    PyObject_Free(view); 
-} 
- 
+static void cdatafrombuf_dealloc(CDataObject *cd)
+{
+    Py_buffer *view = ((CDataObject_frombuf *)cd)->bufferview;
+    cdata_dealloc(cd);
+
+    PyBuffer_Release(view);
+    PyObject_Free(view);
+}
+
 static int cdataowninggc_traverse(CDataObject *cd, visitproc visit, void *arg)
 {
     if (cd->c_type->ct_flags & CT_IS_VOID_PTR) {        /* a handle */
@@ -1950,20 +1950,20 @@ static int cdataowninggc_traverse(CDataObject *cd, visitproc visit, void *arg)
         Py_VISIT(x);
     }
     else if (cd->c_type->ct_flags & CT_FUNCTIONPTR) {   /* a callback */
-        ffi_closure *closure = ((CDataObject_closure *)cd)->closure; 
+        ffi_closure *closure = ((CDataObject_closure *)cd)->closure;
         PyObject *args = (PyObject *)(closure->user_data);
         Py_VISIT(args);
     }
     return 0;
 }
 
-static int cdatafrombuf_traverse(CDataObject *cd, visitproc visit, void *arg) 
-{ 
-    Py_buffer *view = ((CDataObject_frombuf *)cd)->bufferview; 
-    Py_VISIT(view->obj); 
-    return 0; 
-} 
- 
+static int cdatafrombuf_traverse(CDataObject *cd, visitproc visit, void *arg)
+{
+    Py_buffer *view = ((CDataObject_frombuf *)cd)->bufferview;
+    Py_VISIT(view->obj);
+    return 0;
+}
+
 static int cdataowninggc_clear(CDataObject *cd)
 {
     if (cd->c_type->ct_flags & CT_IS_VOID_PTR) {        /* a handle */
@@ -1974,7 +1974,7 @@ static int cdataowninggc_clear(CDataObject *cd)
         Py_DECREF(x);
     }
     else if (cd->c_type->ct_flags & CT_FUNCTIONPTR) {   /* a callback */
-        ffi_closure *closure = ((CDataObject_closure *)cd)->closure; 
+        ffi_closure *closure = ((CDataObject_closure *)cd)->closure;
         PyObject *args = (PyObject *)(closure->user_data);
         closure->user_data = NULL;
         Py_XDECREF(args);
@@ -1982,16 +1982,16 @@ static int cdataowninggc_clear(CDataObject *cd)
     return 0;
 }
 
-static int cdatafrombuf_clear(CDataObject *cd) 
-{ 
-    Py_buffer *view = ((CDataObject_frombuf *)cd)->bufferview; 
-    PyBuffer_Release(view); 
-    return 0; 
-} 
- 
+static int cdatafrombuf_clear(CDataObject *cd)
+{
+    Py_buffer *view = ((CDataObject_frombuf *)cd)->bufferview;
+    PyBuffer_Release(view);
+    return 0;
+}
+
 /* forward */
-static void _my_PyErr_WriteUnraisable(PyObject *t, PyObject *v, PyObject *tb, 
-                                      char *objdescr, PyObject *obj, 
+static void _my_PyErr_WriteUnraisable(PyObject *t, PyObject *v, PyObject *tb,
+                                      char *objdescr, PyObject *obj,
                                       char *extra_error_line);
 
 
@@ -2011,15 +2011,15 @@ static void gcp_finalize(PyObject *destructor, PyObject *origobj)
             Py_DECREF(result);
         }
         else {
-            PyObject *t, *v, *tb; 
-            PyErr_Fetch(&t, &v, &tb); 
-            /* Don't use error capture here, because it is very much 
-             * like errors at __del__(), and these ones are not captured 
-             * either */ 
-            /* ecap = _cffi_start_error_capture(); */ 
-            _my_PyErr_WriteUnraisable(t, v, tb, "From callback for ffi.gc ", 
+            PyObject *t, *v, *tb;
+            PyErr_Fetch(&t, &v, &tb);
+            /* Don't use error capture here, because it is very much
+             * like errors at __del__(), and these ones are not captured
+             * either */
+            /* ecap = _cffi_start_error_capture(); */
+            _my_PyErr_WriteUnraisable(t, v, tb, "From callback for ffi.gc ",
                                       origobj, NULL);
-            /* _cffi_stop_error_capture(ecap); */ 
+            /* _cffi_stop_error_capture(ecap); */
         }
         Py_DECREF(destructor);
 
@@ -2167,35 +2167,35 @@ static Py_ssize_t _cdata_var_byte_size(CDataObject *cd)
     return -1;
 }
 
-static PyObject *_frombuf_repr(CDataObject *cd, const char *cd_type_name) 
-{ 
-    Py_buffer *view = ((CDataObject_frombuf *)cd)->bufferview; 
-    const char *obj_tp_name; 
-    if (view->obj == NULL) { 
-        return PyText_FromFormat( 
-            "<cdata '%s' buffer RELEASED>", 
-            cd_type_name); 
-    } 
- 
-    obj_tp_name = Py_TYPE(view->obj)->tp_name; 
-    if (cd->c_type->ct_flags & CT_ARRAY) 
-    { 
-        Py_ssize_t buflen = get_array_length(cd); 
-        return PyText_FromFormat( 
-            "<cdata '%s' buffer len %zd from '%.200s' object>", 
-            cd_type_name, 
-            buflen, 
-            obj_tp_name); 
-    } 
-    else 
-    { 
-        return PyText_FromFormat( 
-            "<cdata '%s' buffer from '%.200s' object>", 
-            cd_type_name, 
-            obj_tp_name); 
-    } 
-} 
- 
+static PyObject *_frombuf_repr(CDataObject *cd, const char *cd_type_name)
+{
+    Py_buffer *view = ((CDataObject_frombuf *)cd)->bufferview;
+    const char *obj_tp_name;
+    if (view->obj == NULL) {
+        return PyText_FromFormat(
+            "<cdata '%s' buffer RELEASED>",
+            cd_type_name);
+    }
+
+    obj_tp_name = Py_TYPE(view->obj)->tp_name;
+    if (cd->c_type->ct_flags & CT_ARRAY)
+    {
+        Py_ssize_t buflen = get_array_length(cd);
+        return PyText_FromFormat(
+            "<cdata '%s' buffer len %zd from '%.200s' object>",
+            cd_type_name,
+            buflen,
+            obj_tp_name);
+    }
+    else
+    {
+        return PyText_FromFormat(
+            "<cdata '%s' buffer from '%.200s' object>",
+            cd_type_name,
+            obj_tp_name);
+    }
+}
+
 static PyObject *cdataowning_repr(CDataObject *cd)
 {
     Py_ssize_t size = _cdata_var_byte_size(cd);
@@ -2218,21 +2218,21 @@ static PyObject *cdataowninggc_repr(CDataObject *cd)
         return _cdata_repr2(cd, "handle to", x);
     }
     else if (cd->c_type->ct_flags & CT_FUNCTIONPTR) {   /* a callback */
-        ffi_closure *closure = ((CDataObject_closure *)cd)->closure; 
-        PyObject *args = (PyObject *)closure->user_data; 
+        ffi_closure *closure = ((CDataObject_closure *)cd)->closure;
+        PyObject *args = (PyObject *)closure->user_data;
         if (args == NULL)
             return cdata_repr(cd);
         else
             return _cdata_repr2(cd, "calling", PyTuple_GET_ITEM(args, 1));
     }
-    return cdataowning_repr(cd);   /* but should be unreachable */ 
+    return cdataowning_repr(cd);   /* but should be unreachable */
 }
 
-static PyObject *cdatafrombuf_repr(CDataObject *cd) 
-{ 
-    return _frombuf_repr(cd, cd->c_type->ct_name); 
-} 
- 
+static PyObject *cdatafrombuf_repr(CDataObject *cd)
+{
+    return _frombuf_repr(cd, cd->c_type->ct_name);
+}
+
 static int cdata_nonzero(CDataObject *cd)
 {
     if (cd->c_type->ct_flags & CT_PRIMITIVE_ANY) {
@@ -2246,11 +2246,11 @@ static int cdata_nonzero(CDataObject *cd)
                 return read_raw_longdouble_data(cd->c_data) != 0.0;
             return read_raw_float_data(cd->c_data, cd->c_type->ct_size) != 0.0;
         }
-        if (cd->c_type->ct_flags & CT_PRIMITIVE_COMPLEX) { 
-            Py_complex value = read_raw_complex_data(cd->c_data, 
-                                                     cd->c_type->ct_size); 
-            return value.real != 0.0 || value.imag != 0.0; 
-        } 
+        if (cd->c_type->ct_flags & CT_PRIMITIVE_COMPLEX) {
+            Py_complex value = read_raw_complex_data(cd->c_data,
+                                                     cd->c_type->ct_size);
+            return value.real != 0.0 || value.imag != 0.0;
+        }
     }
     return cd->c_data != NULL;
 }
@@ -2267,26 +2267,26 @@ static PyObject *cdata_int(CDataObject *cd)
         return PyInt_FromLong(value);
     }
     if (cd->c_type->ct_flags & (CT_PRIMITIVE_SIGNED|CT_PRIMITIVE_UNSIGNED)) {
-        PyObject *result = convert_to_object(cd->c_data, cd->c_type); 
-        if (result != NULL && PyBool_Check(result)) 
-            result = PyInt_FromLong(PyInt_AsLong(result)); 
-        return result; 
+        PyObject *result = convert_to_object(cd->c_data, cd->c_type);
+        if (result != NULL && PyBool_Check(result))
+            result = PyInt_FromLong(PyInt_AsLong(result));
+        return result;
     }
     else if (cd->c_type->ct_flags & CT_PRIMITIVE_CHAR) {
         /*READ(cd->c_data, cd->c_type->ct_size)*/
-        switch (cd->c_type->ct_size) { 
-        case sizeof(char): 
+        switch (cd->c_type->ct_size) {
+        case sizeof(char):
             return PyInt_FromLong((unsigned char)cd->c_data[0]);
-        case 2: 
-            return PyInt_FromLong((long)*(cffi_char16_t *)cd->c_data); 
-        case 4: 
-            if (cd->c_type->ct_flags & CT_IS_SIGNED_WCHAR) 
-                return PyInt_FromLong((long)*(int32_t *)cd->c_data); 
-            else if (sizeof(long) > 4) 
-                return PyInt_FromLong(*(uint32_t *)cd->c_data); 
-            else 
-                return PyLong_FromUnsignedLong(*(uint32_t *)cd->c_data); 
-        } 
+        case 2:
+            return PyInt_FromLong((long)*(cffi_char16_t *)cd->c_data);
+        case 4:
+            if (cd->c_type->ct_flags & CT_IS_SIGNED_WCHAR)
+                return PyInt_FromLong((long)*(int32_t *)cd->c_data);
+            else if (sizeof(long) > 4)
+                return PyInt_FromLong(*(uint32_t *)cd->c_data);
+            else
+                return PyLong_FromUnsignedLong(*(uint32_t *)cd->c_data);
+        }
     }
     else if (cd->c_type->ct_flags & CT_PRIMITIVE_FLOAT) {
         PyObject *o = cdata_float(cd);
@@ -2336,101 +2336,101 @@ static PyObject *cdata_float(CDataObject *cd)
 
 static PyObject *cdata_richcompare(PyObject *v, PyObject *w, int op)
 {
-    int v_is_ptr, w_is_ptr; 
+    int v_is_ptr, w_is_ptr;
     PyObject *pyres;
 
     assert(CData_Check(v));
- 
-    /* Comparisons involving a primitive cdata work differently than 
-     * comparisons involving a struct/array/pointer. 
-     * 
-     * If v or w is a struct/array/pointer, then the other must be too 
-     * (otherwise we return NotImplemented and leave the case to 
-     * Python).  If both are, then we compare the addresses. 
-     * 
-     * If v and/or w is a primitive cdata, then we convert the cdata(s) 
-     * to regular Python objects and redo the comparison there. 
-     */ 
- 
-    v_is_ptr = !(((CDataObject *)v)->c_type->ct_flags & CT_PRIMITIVE_ANY); 
-    w_is_ptr = CData_Check(w) && 
-                  !(((CDataObject *)w)->c_type->ct_flags & CT_PRIMITIVE_ANY); 
- 
-    if (v_is_ptr && w_is_ptr) { 
-        int res; 
-        char *v_cdata = ((CDataObject *)v)->c_data; 
-        char *w_cdata = ((CDataObject *)w)->c_data; 
- 
-        switch (op) { 
-        case Py_EQ: res = (v_cdata == w_cdata); break; 
-        case Py_NE: res = (v_cdata != w_cdata); break; 
-        case Py_LT: res = (v_cdata <  w_cdata); break; 
-        case Py_LE: res = (v_cdata <= w_cdata); break; 
-        case Py_GT: res = (v_cdata >  w_cdata); break; 
-        case Py_GE: res = (v_cdata >= w_cdata); break; 
-        default: res = -1; 
-        } 
-        pyres = res ? Py_True : Py_False; 
-    } 
-    else if (v_is_ptr || w_is_ptr) { 
+
+    /* Comparisons involving a primitive cdata work differently than
+     * comparisons involving a struct/array/pointer.
+     *
+     * If v or w is a struct/array/pointer, then the other must be too
+     * (otherwise we return NotImplemented and leave the case to
+     * Python).  If both are, then we compare the addresses.
+     *
+     * If v and/or w is a primitive cdata, then we convert the cdata(s)
+     * to regular Python objects and redo the comparison there.
+     */
+
+    v_is_ptr = !(((CDataObject *)v)->c_type->ct_flags & CT_PRIMITIVE_ANY);
+    w_is_ptr = CData_Check(w) &&
+                  !(((CDataObject *)w)->c_type->ct_flags & CT_PRIMITIVE_ANY);
+
+    if (v_is_ptr && w_is_ptr) {
+        int res;
+        char *v_cdata = ((CDataObject *)v)->c_data;
+        char *w_cdata = ((CDataObject *)w)->c_data;
+
+        switch (op) {
+        case Py_EQ: res = (v_cdata == w_cdata); break;
+        case Py_NE: res = (v_cdata != w_cdata); break;
+        case Py_LT: res = (v_cdata <  w_cdata); break;
+        case Py_LE: res = (v_cdata <= w_cdata); break;
+        case Py_GT: res = (v_cdata >  w_cdata); break;
+        case Py_GE: res = (v_cdata >= w_cdata); break;
+        default: res = -1;
+        }
+        pyres = res ? Py_True : Py_False;
+    }
+    else if (v_is_ptr || w_is_ptr) {
         pyres = Py_NotImplemented;
     }
-    else { 
-        PyObject *aa[2]; 
-        int i; 
+    else {
+        PyObject *aa[2];
+        int i;
 
-        aa[0] = v; Py_INCREF(v); 
-        aa[1] = w; Py_INCREF(w); 
-        pyres = NULL; 
+        aa[0] = v; Py_INCREF(v);
+        aa[1] = w; Py_INCREF(w);
+        pyres = NULL;
 
-        for (i = 0; i < 2; i++) { 
-            v = aa[i]; 
-            if (!CData_Check(v)) 
-                continue; 
-            w = convert_to_object(((CDataObject *)v)->c_data, 
-                                  ((CDataObject *)v)->c_type); 
-            if (w == NULL) 
-                goto error; 
-            if (CData_Check(w)) { 
-                Py_DECREF(w); 
-                PyErr_Format(PyExc_NotImplementedError, 
-                             "cannot use <cdata '%s'> in a comparison", 
-                             ((CDataObject *)v)->c_type->ct_name); 
-                goto error; 
-            } 
-            aa[i] = w; 
-            Py_DECREF(v); 
-        } 
-        pyres = PyObject_RichCompare(aa[0], aa[1], op); 
-     error: 
-        Py_DECREF(aa[1]); 
-        Py_DECREF(aa[0]); 
-        return pyres; 
-    } 
+        for (i = 0; i < 2; i++) {
+            v = aa[i];
+            if (!CData_Check(v))
+                continue;
+            w = convert_to_object(((CDataObject *)v)->c_data,
+                                  ((CDataObject *)v)->c_type);
+            if (w == NULL)
+                goto error;
+            if (CData_Check(w)) {
+                Py_DECREF(w);
+                PyErr_Format(PyExc_NotImplementedError,
+                             "cannot use <cdata '%s'> in a comparison",
+                             ((CDataObject *)v)->c_type->ct_name);
+                goto error;
+            }
+            aa[i] = w;
+            Py_DECREF(v);
+        }
+        pyres = PyObject_RichCompare(aa[0], aa[1], op);
+     error:
+        Py_DECREF(aa[1]);
+        Py_DECREF(aa[0]);
+        return pyres;
+    }
 
     Py_INCREF(pyres);
     return pyres;
 }
 
-#if PY_MAJOR_VERSION < 3 
-typedef long Py_hash_t; 
-#endif 
- 
-static Py_hash_t cdata_hash(PyObject *v) 
+#if PY_MAJOR_VERSION < 3
+typedef long Py_hash_t;
+#endif
+
+static Py_hash_t cdata_hash(PyObject *v)
 {
-    if (((CDataObject *)v)->c_type->ct_flags & CT_PRIMITIVE_ANY) { 
-        PyObject *vv = convert_to_object(((CDataObject *)v)->c_data, 
-                                         ((CDataObject *)v)->c_type); 
-        if (vv == NULL) 
-            return -1; 
-        if (!CData_Check(vv)) { 
-            Py_hash_t hash = PyObject_Hash(vv); 
-            Py_DECREF(vv); 
-            return hash; 
-        } 
-        Py_DECREF(vv); 
-    } 
-    return _Py_HashPointer(((CDataObject *)v)->c_data); 
+    if (((CDataObject *)v)->c_type->ct_flags & CT_PRIMITIVE_ANY) {
+        PyObject *vv = convert_to_object(((CDataObject *)v)->c_data,
+                                         ((CDataObject *)v)->c_type);
+        if (vv == NULL)
+            return -1;
+        if (!CData_Check(vv)) {
+            Py_hash_t hash = PyObject_Hash(vv);
+            Py_DECREF(vv);
+            return hash;
+        }
+        Py_DECREF(vv);
+    }
+    return _Py_HashPointer(((CDataObject *)v)->c_data);
 }
 
 static Py_ssize_t
@@ -2472,7 +2472,7 @@ _cdata_get_indexed_ptr(CDataObject *cd, PyObject *key)
     else if (cd->c_type->ct_flags & CT_ARRAY) {
         if (i < 0) {
             PyErr_SetString(PyExc_IndexError,
-                            "negative index"); 
+                            "negative index");
             return NULL;
         }
         if (i >= get_array_length(cd)) {
@@ -2525,7 +2525,7 @@ _cdata_getslicearg(CDataObject *cd, PySliceObject *slice, Py_ssize_t bounds[])
     if (ct->ct_flags & CT_ARRAY) {
         if (start < 0) {
             PyErr_SetString(PyExc_IndexError,
-                            "negative index"); 
+                            "negative index");
             return NULL;
         }
         if (stop > get_array_length(cd)) {
@@ -2813,26 +2813,26 @@ cdata_sub(PyObject *v, PyObject *w)
     return _cdata_add_or_sub(v, w, -1);
 }
 
-static void 
-_cdata_attr_errmsg(char *errmsg, CDataObject *cd, PyObject *attr) 
-{ 
-    const char *text; 
-    if (!PyErr_ExceptionMatches(PyExc_AttributeError)) 
-        return; 
-    PyErr_Clear(); 
-    text = PyText_AsUTF8(attr); 
-    if (text == NULL) 
-        return; 
-    PyErr_Format(PyExc_AttributeError, errmsg, cd->c_type->ct_name, text); 
-} 
- 
+static void
+_cdata_attr_errmsg(char *errmsg, CDataObject *cd, PyObject *attr)
+{
+    const char *text;
+    if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+        return;
+    PyErr_Clear();
+    text = PyText_AsUTF8(attr);
+    if (text == NULL)
+        return;
+    PyErr_Format(PyExc_AttributeError, errmsg, cd->c_type->ct_name, text);
+}
+
 static PyObject *
 cdata_getattro(CDataObject *cd, PyObject *attr)
 {
     CFieldObject *cf;
     CTypeDescrObject *ct = cd->c_type;
-    char *errmsg = "cdata '%s' has no attribute '%s'"; 
-    PyObject *x; 
+    char *errmsg = "cdata '%s' has no attribute '%s'";
+    PyObject *x;
 
     if (ct->ct_flags & CT_POINTER)
         ct = ct->ct_itemdescr;
@@ -2864,19 +2864,19 @@ cdata_getattro(CDataObject *cd, PyObject *attr)
                 return new_simple_cdata(data,
                     (CTypeDescrObject *)cf->cf_type->ct_stuff);
             }
-            errmsg = "cdata '%s' has no field '%s'"; 
+            errmsg = "cdata '%s' has no field '%s'";
             break;
         case -1:
             return NULL;
         default:
-            errmsg = "cdata '%s' points to an opaque type: cannot read fields"; 
+            errmsg = "cdata '%s' points to an opaque type: cannot read fields";
             break;
         }
     }
-    x = PyObject_GenericGetAttr((PyObject *)cd, attr); 
-    if (x == NULL) 
-        _cdata_attr_errmsg(errmsg, cd, attr); 
-    return x; 
+    x = PyObject_GenericGetAttr((PyObject *)cd, attr);
+    if (x == NULL)
+        _cdata_attr_errmsg(errmsg, cd, attr);
+    return x;
 }
 
 static int
@@ -2884,8 +2884,8 @@ cdata_setattro(CDataObject *cd, PyObject *attr, PyObject *value)
 {
     CFieldObject *cf;
     CTypeDescrObject *ct = cd->c_type;
-    char *errmsg = "cdata '%s' has no attribute '%s'"; 
-    int x; 
+    char *errmsg = "cdata '%s' has no attribute '%s'";
+    int x;
 
     if (ct->ct_flags & CT_POINTER)
         ct = ct->ct_itemdescr;
@@ -2905,27 +2905,27 @@ cdata_setattro(CDataObject *cd, PyObject *attr, PyObject *value)
                     return -1;
                 }
             }
-            errmsg = "cdata '%s' has no field '%s'"; 
+            errmsg = "cdata '%s' has no field '%s'";
             break;
         case -1:
             return -1;
         default:
-            errmsg = "cdata '%s' points to an opaque type: cannot write fields"; 
+            errmsg = "cdata '%s' points to an opaque type: cannot write fields";
             break;
         }
     }
-    x = PyObject_GenericSetAttr((PyObject *)cd, attr, value); 
-    if (x < 0) 
-        _cdata_attr_errmsg(errmsg, cd, attr); 
-    return x; 
+    x = PyObject_GenericSetAttr((PyObject *)cd, attr, value);
+    if (x < 0)
+        _cdata_attr_errmsg(errmsg, cd, attr);
+    return x;
 }
 
 static PyObject *
 convert_struct_to_owning_object(char *data, CTypeDescrObject *ct); /*forward*/
 
 static cif_description_t *
-fb_prepare_cif(PyObject *fargs, CTypeDescrObject *, Py_ssize_t, ffi_abi); 
-                                                                   /*forward*/ 
+fb_prepare_cif(PyObject *fargs, CTypeDescrObject *, Py_ssize_t, ffi_abi);
+                                                                   /*forward*/
 
 static PyObject *new_primitive_type(const char *name);             /*forward*/
 
@@ -2968,10 +2968,10 @@ _prepare_pointer_call_argument(CTypeDescrObject *ctptr, PyObject *init,
             length = PyBytes_GET_SIZE(init) + 1;
 #else
             *output_data = PyBytes_AS_STRING(init);
-            if (ctitem->ct_flags & CT_IS_BOOL) 
-                if (must_be_array_of_zero_or_one(*output_data, 
-                                                 PyBytes_GET_SIZE(init)) < 0) 
-                    return -1; 
+            if (ctitem->ct_flags & CT_IS_BOOL)
+                if (must_be_array_of_zero_or_one(*output_data,
+                                                 PyBytes_GET_SIZE(init)) < 0)
+                    return -1;
             return 0;
 #endif
         }
@@ -2983,11 +2983,11 @@ _prepare_pointer_call_argument(CTypeDescrObject *ctptr, PyObject *init,
     }
     else if (PyUnicode_Check(init)) {
         /* from a unicode, we add the null terminator */
-        if (ctitem->ct_size == 2) 
-            length = _my_PyUnicode_SizeAsChar16(init); 
-        else 
-            length = _my_PyUnicode_SizeAsChar32(init); 
-        length += 1; 
+        if (ctitem->ct_size == 2)
+            length = _my_PyUnicode_SizeAsChar16(init);
+        else
+            length = _my_PyUnicode_SizeAsChar32(init);
+        length += 1;
     }
     else if ((ctitem->ct_flags & CT_IS_FILE) && PyFile_Check(init)) {
         *output_data = (char *)PyFile_AsFile(init);
@@ -3028,22 +3028,22 @@ cdata_call(CDataObject *cd, PyObject *args, PyObject *kwds)
     CTypeDescrObject *fresult;
     char *resultdata;
     char *errormsg;
-    struct freeme_s { 
-        struct freeme_s *next; 
-        union_alignment alignment; 
-    } *freeme = NULL; 
+    struct freeme_s {
+        struct freeme_s *next;
+        union_alignment alignment;
+    } *freeme = NULL;
 
     if (!(cd->c_type->ct_flags & CT_FUNCTIONPTR)) {
         PyErr_Format(PyExc_TypeError, "cdata '%s' is not callable",
                      cd->c_type->ct_name);
         return NULL;
     }
-    if (cd->c_data == NULL) { 
-        PyErr_Format(PyExc_RuntimeError, 
-                     "cannot call null pointer pointer from cdata '%s'", 
-                     cd->c_type->ct_name); 
-        return NULL; 
-    } 
+    if (cd->c_data == NULL) {
+        PyErr_Format(PyExc_RuntimeError,
+                     "cannot call null pointer pointer from cdata '%s'",
+                     cd->c_type->ct_name);
+        return NULL;
+    }
     if (kwds != NULL && PyDict_Size(kwds) != 0) {
         PyErr_SetString(PyExc_TypeError,
                 "a cdata function cannot be called with keyword arguments");
@@ -3118,7 +3118,7 @@ cdata_call(CDataObject *cd, PyObject *args, PyObject *kwds)
 #else
         fabi = PyLong_AS_LONG(PyTuple_GET_ITEM(signature, 0));
 #endif
-        cif_descr = fb_prepare_cif(fvarargs, fresult, nargs_declared, fabi); 
+        cif_descr = fb_prepare_cif(fvarargs, fresult, nargs_declared, fabi);
         if (cif_descr == NULL)
             goto error;
     }
@@ -3152,21 +3152,21 @@ cdata_call(CDataObject *cd, PyObject *args, PyObject *kwds)
             else if (datasize < 0)
                 goto error;
             else {
-                if (datasize <= 512) { 
-                    tmpbuf = alloca(datasize); 
-                } 
-                else { 
-                    struct freeme_s *fp = (struct freeme_s *)PyObject_Malloc( 
-                        offsetof(struct freeme_s, alignment) + 
-                        (size_t)datasize); 
-                    if (fp == NULL) { 
-                        PyErr_NoMemory(); 
-                        goto error; 
-                    } 
-                    fp->next = freeme; 
-                    freeme = fp; 
-                    tmpbuf = (char *)&fp->alignment; 
-                } 
+                if (datasize <= 512) {
+                    tmpbuf = alloca(datasize);
+                }
+                else {
+                    struct freeme_s *fp = (struct freeme_s *)PyObject_Malloc(
+                        offsetof(struct freeme_s, alignment) +
+                        (size_t)datasize);
+                    if (fp == NULL) {
+                        PyErr_NoMemory();
+                        goto error;
+                    }
+                    fp->next = freeme;
+                    freeme = fp;
+                    tmpbuf = (char *)&fp->alignment;
+                }
                 memset(tmpbuf, 0, datasize);
                 *(char **)data = tmpbuf;
                 if (convert_array_from_object(tmpbuf, argtype, obj) < 0)
@@ -3211,11 +3211,11 @@ cdata_call(CDataObject *cd, PyObject *args, PyObject *kwds)
     /* fall-through */
 
  error:
-    while (freeme != NULL) { 
-        void *p = (void *)freeme; 
-        freeme = freeme->next; 
-        PyObject_Free(p); 
-    } 
+    while (freeme != NULL) {
+        void *p = (void *)freeme;
+        freeme = freeme->next;
+        PyObject_Free(p);
+    }
     if (buffer)
         PyObject_Free(buffer);
     if (fvarargs != NULL) {
@@ -3247,92 +3247,92 @@ static PyObject *cdata_dir(PyObject *cd, PyObject *noarg)
     }
 }
 
-static PyObject *cdata_complex(PyObject *cd_, PyObject *noarg) 
-{ 
-    CDataObject *cd = (CDataObject *)cd_; 
- 
-    if (cd->c_type->ct_flags & CT_PRIMITIVE_COMPLEX) { 
-        Py_complex value = read_raw_complex_data(cd->c_data, cd->c_type->ct_size); 
-        PyObject *op = PyComplex_FromCComplex(value); 
-        return op; 
-    } 
-    /* <cdata 'float'> or <cdata 'int'> cannot be directly converted by 
-       calling complex(), just like <cdata 'int'> cannot be directly 
-       converted by calling float() */ 
- 
-    PyErr_Format(PyExc_TypeError, "complex() not supported on cdata '%s'", 
-                 cd->c_type->ct_name); 
-    return NULL; 
-} 
- 
-static int explicit_release_case(PyObject *cd) 
-{ 
-    CTypeDescrObject *ct = ((CDataObject *)cd)->c_type; 
-    if (Py_TYPE(cd) == &CDataOwning_Type) { 
-        if ((ct->ct_flags & (CT_POINTER | CT_ARRAY)) != 0)   /* ffi.new() */ 
-            return 0; 
-    } 
-    else if (Py_TYPE(cd) == &CDataFromBuf_Type) { 
-        return 1;    /* ffi.from_buffer() */ 
-    } 
-    else if (Py_TYPE(cd) == &CDataGCP_Type) { 
-        return 2;    /* ffi.gc() */ 
-    } 
-    PyErr_SetString(PyExc_ValueError, 
-        "only 'cdata' object from ffi.new(), ffi.gc(), ffi.from_buffer() " 
-        "or ffi.new_allocator()() can be used with the 'with' keyword or " 
-        "ffi.release()"); 
-    return -1; 
-} 
- 
-static PyObject *cdata_enter(PyObject *cd, PyObject *noarg) 
-{ 
-    if (explicit_release_case(cd) < 0)   /* only to check the ctype */ 
-        return NULL; 
-    Py_INCREF(cd); 
-    return cd; 
-} 
- 
-static PyObject *cdata_exit(PyObject *cd, PyObject *args) 
-{ 
-    /* 'args' ignored */ 
-    CTypeDescrObject *ct; 
-    Py_buffer *view; 
-    switch (explicit_release_case(cd)) 
-    { 
-        case 0:    /* ffi.new() */ 
-            /* no effect on CPython: raw memory is allocated with the 
-               same malloc() as the object itself, so it can't be 
-               released independently.  If we use a custom allocator, 
-               then it's implemented with ffi.gc(). */ 
-            ct = ((CDataObject *)cd)->c_type; 
-            if (ct->ct_flags & CT_IS_PTR_TO_OWNED) { 
-                PyObject *x = ((CDataObject_own_structptr *)cd)->structobj; 
-                if (Py_TYPE(x) == &CDataGCP_Type) { 
-                    /* this is a special case for 
-                       ffi.new_allocator()("struct-or-union *") */ 
-                    cdatagcp_finalize((CDataObject_gcp *)x); 
-                } 
-            } 
-            break; 
- 
-        case 1:    /* ffi.from_buffer() */ 
-            view = ((CDataObject_frombuf *)cd)->bufferview; 
-            PyBuffer_Release(view); 
-            break; 
- 
-        case 2:    /* ffi.gc() or ffi.new_allocator()("not-struct-nor-union") */ 
-            /* call the destructor immediately */ 
-            cdatagcp_finalize((CDataObject_gcp *)cd); 
-            break; 
- 
-        default: 
-            return NULL; 
-    } 
-    Py_INCREF(Py_None); 
-    return Py_None; 
-} 
- 
+static PyObject *cdata_complex(PyObject *cd_, PyObject *noarg)
+{
+    CDataObject *cd = (CDataObject *)cd_;
+
+    if (cd->c_type->ct_flags & CT_PRIMITIVE_COMPLEX) {
+        Py_complex value = read_raw_complex_data(cd->c_data, cd->c_type->ct_size);
+        PyObject *op = PyComplex_FromCComplex(value);
+        return op;
+    }
+    /* <cdata 'float'> or <cdata 'int'> cannot be directly converted by
+       calling complex(), just like <cdata 'int'> cannot be directly
+       converted by calling float() */
+
+    PyErr_Format(PyExc_TypeError, "complex() not supported on cdata '%s'",
+                 cd->c_type->ct_name);
+    return NULL;
+}
+
+static int explicit_release_case(PyObject *cd)
+{
+    CTypeDescrObject *ct = ((CDataObject *)cd)->c_type;
+    if (Py_TYPE(cd) == &CDataOwning_Type) {
+        if ((ct->ct_flags & (CT_POINTER | CT_ARRAY)) != 0)   /* ffi.new() */
+            return 0;
+    }
+    else if (Py_TYPE(cd) == &CDataFromBuf_Type) {
+        return 1;    /* ffi.from_buffer() */
+    }
+    else if (Py_TYPE(cd) == &CDataGCP_Type) {
+        return 2;    /* ffi.gc() */
+    }
+    PyErr_SetString(PyExc_ValueError,
+        "only 'cdata' object from ffi.new(), ffi.gc(), ffi.from_buffer() "
+        "or ffi.new_allocator()() can be used with the 'with' keyword or "
+        "ffi.release()");
+    return -1;
+}
+
+static PyObject *cdata_enter(PyObject *cd, PyObject *noarg)
+{
+    if (explicit_release_case(cd) < 0)   /* only to check the ctype */
+        return NULL;
+    Py_INCREF(cd);
+    return cd;
+}
+
+static PyObject *cdata_exit(PyObject *cd, PyObject *args)
+{
+    /* 'args' ignored */
+    CTypeDescrObject *ct;
+    Py_buffer *view;
+    switch (explicit_release_case(cd))
+    {
+        case 0:    /* ffi.new() */
+            /* no effect on CPython: raw memory is allocated with the
+               same malloc() as the object itself, so it can't be
+               released independently.  If we use a custom allocator,
+               then it's implemented with ffi.gc(). */
+            ct = ((CDataObject *)cd)->c_type;
+            if (ct->ct_flags & CT_IS_PTR_TO_OWNED) {
+                PyObject *x = ((CDataObject_own_structptr *)cd)->structobj;
+                if (Py_TYPE(x) == &CDataGCP_Type) {
+                    /* this is a special case for
+                       ffi.new_allocator()("struct-or-union *") */
+                    cdatagcp_finalize((CDataObject_gcp *)x);
+                }
+            }
+            break;
+
+        case 1:    /* ffi.from_buffer() */
+            view = ((CDataObject_frombuf *)cd)->bufferview;
+            PyBuffer_Release(view);
+            break;
+
+        case 2:    /* ffi.gc() or ffi.new_allocator()("not-struct-nor-union") */
+            /* call the destructor immediately */
+            cdatagcp_finalize((CDataObject_gcp *)cd);
+            break;
+
+        default:
+            return NULL;
+    }
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 static PyObject *cdata_iter(CDataObject *);
 
 static PyNumberMethods CData_as_number = {
@@ -3382,16 +3382,16 @@ static PyMappingMethods CDataOwn_as_mapping = {
 };
 
 static PyMethodDef cdata_methods[] = {
-    {"__dir__",     cdata_dir,      METH_NOARGS}, 
-    {"__complex__", cdata_complex,  METH_NOARGS}, 
-    {"__enter__",   cdata_enter,    METH_NOARGS}, 
-    {"__exit__",    cdata_exit,     METH_VARARGS}, 
-    {NULL,          NULL}           /* sentinel */ 
+    {"__dir__",     cdata_dir,      METH_NOARGS},
+    {"__complex__", cdata_complex,  METH_NOARGS},
+    {"__enter__",   cdata_enter,    METH_NOARGS},
+    {"__exit__",    cdata_exit,     METH_VARARGS},
+    {NULL,          NULL}           /* sentinel */
 };
 
 static PyTypeObject CData_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "_cffi_backend._CDataBase", 
+    "_cffi_backend._CDataBase",
     sizeof(CDataObject),
     0,
     (destructor)cdata_dealloc,                  /* tp_dealloc */
@@ -3403,16 +3403,16 @@ static PyTypeObject CData_Type = {
     &CData_as_number,                           /* tp_as_number */
     0,                                          /* tp_as_sequence */
     &CData_as_mapping,                          /* tp_as_mapping */
-    cdata_hash,                                 /* tp_hash */ 
+    cdata_hash,                                 /* tp_hash */
     (ternaryfunc)cdata_call,                    /* tp_call */
     0,                                          /* tp_str */
     (getattrofunc)cdata_getattro,               /* tp_getattro */
     (setattrofunc)cdata_setattro,               /* tp_setattro */
     0,                                          /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    "The internal base type for CData objects.  Use FFI.CData to access " 
-    "it.  Always check with isinstance(): subtypes are sometimes returned " 
-    "on CPython, for performance reasons.",     /* tp_doc */ 
+    "The internal base type for CData objects.  Use FFI.CData to access "
+    "it.  Always check with isinstance(): subtypes are sometimes returned "
+    "on CPython, for performance reasons.",     /* tp_doc */
     0,                                          /* tp_traverse */
     0,                                          /* tp_clear */
     cdata_richcompare,                          /* tp_richcompare */
@@ -3420,22 +3420,22 @@ static PyTypeObject CData_Type = {
     (getiterfunc)cdata_iter,                    /* tp_iter */
     0,                                          /* tp_iternext */
     cdata_methods,                              /* tp_methods */
-    0,                                          /* tp_members */ 
-    0,                                          /* tp_getset */ 
-    0,                                          /* tp_base */ 
-    0,                                          /* tp_dict */ 
-    0,                                          /* tp_descr_get */ 
-    0,                                          /* tp_descr_set */ 
-    0,                                          /* tp_dictoffset */ 
-    0,                                          /* tp_init */ 
-    0,                                          /* tp_alloc */ 
-    0,                                          /* tp_new */ 
-    PyObject_Del,                               /* tp_free */ 
+    0,                                          /* tp_members */
+    0,                                          /* tp_getset */
+    0,                                          /* tp_base */
+    0,                                          /* tp_dict */
+    0,                                          /* tp_descr_get */
+    0,                                          /* tp_descr_set */
+    0,                                          /* tp_dictoffset */
+    0,                                          /* tp_init */
+    0,                                          /* tp_alloc */
+    0,                                          /* tp_new */
+    PyObject_Del,                               /* tp_free */
 };
 
 static PyTypeObject CDataOwning_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "_cffi_backend.__CDataOwn", 
+    "_cffi_backend.__CDataOwn",
     sizeof(CDataObject),
     0,
     (destructor)cdataowning_dealloc,            /* tp_dealloc */
@@ -3444,42 +3444,42 @@ static PyTypeObject CDataOwning_Type = {
     0,                                          /* tp_setattr */
     0,                                          /* tp_compare */
     (reprfunc)cdataowning_repr,                 /* tp_repr */
-    0,  /* inherited */                         /* tp_as_number */ 
+    0,  /* inherited */                         /* tp_as_number */
     0,                                          /* tp_as_sequence */
     &CDataOwn_as_mapping,                       /* tp_as_mapping */
-    0,  /* inherited */                         /* tp_hash */ 
-    0,  /* inherited */                         /* tp_call */ 
+    0,  /* inherited */                         /* tp_hash */
+    0,  /* inherited */                         /* tp_call */
     0,                                          /* tp_str */
-    0,  /* inherited */                         /* tp_getattro */ 
-    0,  /* inherited */                         /* tp_setattro */ 
+    0,  /* inherited */                         /* tp_getattro */
+    0,  /* inherited */                         /* tp_setattro */
     0,                                          /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_CHECKTYPES, /* tp_flags */
-    "This is an internal subtype of _CDataBase for performance only on " 
-    "CPython.  Check with isinstance(x, ffi.CData).",   /* tp_doc */ 
+    "This is an internal subtype of _CDataBase for performance only on "
+    "CPython.  Check with isinstance(x, ffi.CData).",   /* tp_doc */
     0,                                          /* tp_traverse */
     0,                                          /* tp_clear */
-    0,  /* inherited */                         /* tp_richcompare */ 
-    0,  /* inherited */                         /* tp_weaklistoffset */ 
-    0,  /* inherited */                         /* tp_iter */ 
+    0,  /* inherited */                         /* tp_richcompare */
+    0,  /* inherited */                         /* tp_weaklistoffset */
+    0,  /* inherited */                         /* tp_iter */
     0,                                          /* tp_iternext */
-    0,  /* inherited */                         /* tp_methods */ 
+    0,  /* inherited */                         /* tp_methods */
     0,                                          /* tp_members */
     0,                                          /* tp_getset */
     &CData_Type,                                /* tp_base */
-    0,                                          /* tp_dict */ 
-    0,                                          /* tp_descr_get */ 
-    0,                                          /* tp_descr_set */ 
-    0,                                          /* tp_dictoffset */ 
-    0,                                          /* tp_init */ 
-    0,                                          /* tp_alloc */ 
-    0,                                          /* tp_new */ 
-    free,                                       /* tp_free */ 
+    0,                                          /* tp_dict */
+    0,                                          /* tp_descr_get */
+    0,                                          /* tp_descr_set */
+    0,                                          /* tp_dictoffset */
+    0,                                          /* tp_init */
+    0,                                          /* tp_alloc */
+    0,                                          /* tp_new */
+    free,                                       /* tp_free */
 };
 
 static PyTypeObject CDataOwningGC_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "_cffi_backend.__CDataOwnGC", 
-    sizeof(CDataObject_own_structptr), 
+    "_cffi_backend.__CDataOwnGC",
+    sizeof(CDataObject_own_structptr),
     0,
     (destructor)cdataowninggc_dealloc,          /* tp_dealloc */
     0,                                          /* tp_print */
@@ -3487,86 +3487,86 @@ static PyTypeObject CDataOwningGC_Type = {
     0,                                          /* tp_setattr */
     0,                                          /* tp_compare */
     (reprfunc)cdataowninggc_repr,               /* tp_repr */
-    0,  /* inherited */                         /* tp_as_number */ 
+    0,  /* inherited */                         /* tp_as_number */
     0,                                          /* tp_as_sequence */
-    0,  /* inherited */                         /* tp_as_mapping */ 
-    0,  /* inherited */                         /* tp_hash */ 
-    0,  /* inherited */                         /* tp_call */ 
+    0,  /* inherited */                         /* tp_as_mapping */
+    0,  /* inherited */                         /* tp_hash */
+    0,  /* inherited */                         /* tp_call */
     0,                                          /* tp_str */
-    0,  /* inherited */                         /* tp_getattro */ 
-    0,  /* inherited */                         /* tp_setattro */ 
+    0,  /* inherited */                         /* tp_getattro */
+    0,  /* inherited */                         /* tp_setattro */
     0,                                          /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_CHECKTYPES  /* tp_flags */
                        | Py_TPFLAGS_HAVE_GC,
-    "This is an internal subtype of _CDataBase for performance only on " 
-    "CPython.  Check with isinstance(x, ffi.CData).",   /* tp_doc */ 
+    "This is an internal subtype of _CDataBase for performance only on "
+    "CPython.  Check with isinstance(x, ffi.CData).",   /* tp_doc */
     (traverseproc)cdataowninggc_traverse,       /* tp_traverse */
     (inquiry)cdataowninggc_clear,               /* tp_clear */
-    0,  /* inherited */                         /* tp_richcompare */ 
-    0,  /* inherited */                         /* tp_weaklistoffset */ 
-    0,  /* inherited */                         /* tp_iter */ 
+    0,  /* inherited */                         /* tp_richcompare */
+    0,  /* inherited */                         /* tp_weaklistoffset */
+    0,  /* inherited */                         /* tp_iter */
     0,                                          /* tp_iternext */
-    0,  /* inherited */                         /* tp_methods */ 
+    0,  /* inherited */                         /* tp_methods */
     0,                                          /* tp_members */
     0,                                          /* tp_getset */
     &CDataOwning_Type,                          /* tp_base */
-    0,                                          /* tp_dict */ 
-    0,                                          /* tp_descr_get */ 
-    0,                                          /* tp_descr_set */ 
-    0,                                          /* tp_dictoffset */ 
-    0,                                          /* tp_init */ 
-    0,                                          /* tp_alloc */ 
-    0,                                          /* tp_new */ 
-    PyObject_GC_Del,                            /* tp_free */ 
+    0,                                          /* tp_dict */
+    0,                                          /* tp_descr_get */
+    0,                                          /* tp_descr_set */
+    0,                                          /* tp_dictoffset */
+    0,                                          /* tp_init */
+    0,                                          /* tp_alloc */
+    0,                                          /* tp_new */
+    PyObject_GC_Del,                            /* tp_free */
 };
 
-static PyTypeObject CDataFromBuf_Type = { 
-    PyVarObject_HEAD_INIT(NULL, 0) 
-    "_cffi_backend.__CDataFromBuf", 
-    sizeof(CDataObject_frombuf), 
-    0, 
-    (destructor)cdatafrombuf_dealloc,           /* tp_dealloc */ 
-    0,                                          /* tp_print */ 
-    0,                                          /* tp_getattr */ 
-    0,                                          /* tp_setattr */ 
-    0,                                          /* tp_compare */ 
-    (reprfunc)cdatafrombuf_repr,                /* tp_repr */ 
-    0,  /* inherited */                         /* tp_as_number */ 
-    0,                                          /* tp_as_sequence */ 
-    0,  /* inherited */                         /* tp_as_mapping */ 
-    0,  /* inherited */                         /* tp_hash */ 
-    0,  /* inherited */                         /* tp_call */ 
-    0,                                          /* tp_str */ 
-    0,  /* inherited */                         /* tp_getattro */ 
-    0,  /* inherited */                         /* tp_setattro */ 
-    0,                                          /* tp_as_buffer */ 
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_CHECKTYPES  /* tp_flags */ 
-                       | Py_TPFLAGS_HAVE_GC, 
-    "This is an internal subtype of _CDataBase for performance only on " 
-    "CPython.  Check with isinstance(x, ffi.CData).",   /* tp_doc */ 
-    (traverseproc)cdatafrombuf_traverse,        /* tp_traverse */ 
-    (inquiry)cdatafrombuf_clear,                /* tp_clear */ 
-    0,  /* inherited */                         /* tp_richcompare */ 
-    0,  /* inherited */                         /* tp_weaklistoffset */ 
-    0,  /* inherited */                         /* tp_iter */ 
-    0,                                          /* tp_iternext */ 
-    0,  /* inherited */                         /* tp_methods */ 
-    0,                                          /* tp_members */ 
-    0,                                          /* tp_getset */ 
-    &CData_Type,                                /* tp_base */ 
-    0,                                          /* tp_dict */ 
-    0,                                          /* tp_descr_get */ 
-    0,                                          /* tp_descr_set */ 
-    0,                                          /* tp_dictoffset */ 
-    0,                                          /* tp_init */ 
-    0,                                          /* tp_alloc */ 
-    0,                                          /* tp_new */ 
-    PyObject_GC_Del,                            /* tp_free */ 
-}; 
- 
+static PyTypeObject CDataFromBuf_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "_cffi_backend.__CDataFromBuf",
+    sizeof(CDataObject_frombuf),
+    0,
+    (destructor)cdatafrombuf_dealloc,           /* tp_dealloc */
+    0,                                          /* tp_print */
+    0,                                          /* tp_getattr */
+    0,                                          /* tp_setattr */
+    0,                                          /* tp_compare */
+    (reprfunc)cdatafrombuf_repr,                /* tp_repr */
+    0,  /* inherited */                         /* tp_as_number */
+    0,                                          /* tp_as_sequence */
+    0,  /* inherited */                         /* tp_as_mapping */
+    0,  /* inherited */                         /* tp_hash */
+    0,  /* inherited */                         /* tp_call */
+    0,                                          /* tp_str */
+    0,  /* inherited */                         /* tp_getattro */
+    0,  /* inherited */                         /* tp_setattro */
+    0,                                          /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_CHECKTYPES  /* tp_flags */
+                       | Py_TPFLAGS_HAVE_GC,
+    "This is an internal subtype of _CDataBase for performance only on "
+    "CPython.  Check with isinstance(x, ffi.CData).",   /* tp_doc */
+    (traverseproc)cdatafrombuf_traverse,        /* tp_traverse */
+    (inquiry)cdatafrombuf_clear,                /* tp_clear */
+    0,  /* inherited */                         /* tp_richcompare */
+    0,  /* inherited */                         /* tp_weaklistoffset */
+    0,  /* inherited */                         /* tp_iter */
+    0,                                          /* tp_iternext */
+    0,  /* inherited */                         /* tp_methods */
+    0,                                          /* tp_members */
+    0,                                          /* tp_getset */
+    &CData_Type,                                /* tp_base */
+    0,                                          /* tp_dict */
+    0,                                          /* tp_descr_get */
+    0,                                          /* tp_descr_set */
+    0,                                          /* tp_dictoffset */
+    0,                                          /* tp_init */
+    0,                                          /* tp_alloc */
+    0,                                          /* tp_new */
+    PyObject_GC_Del,                            /* tp_free */
+};
+
 static PyTypeObject CDataGCP_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "_cffi_backend.__CDataGCP", 
+    "_cffi_backend.__CDataGCP",
     sizeof(CDataObject_gcp),
     0,
     (destructor)cdatagcp_dealloc,               /* tp_dealloc */
@@ -3574,30 +3574,30 @@ static PyTypeObject CDataGCP_Type = {
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
     0,                                          /* tp_compare */
-    0,  /* inherited */                         /* tp_repr */ 
-    0,  /* inherited */                         /* tp_as_number */ 
+    0,  /* inherited */                         /* tp_repr */
+    0,  /* inherited */                         /* tp_as_number */
     0,                                          /* tp_as_sequence */
-    0,  /* inherited */                         /* tp_as_mapping */ 
-    0,  /* inherited */                         /* tp_hash */ 
-    0,  /* inherited */                         /* tp_call */ 
+    0,  /* inherited */                         /* tp_as_mapping */
+    0,  /* inherited */                         /* tp_hash */
+    0,  /* inherited */                         /* tp_call */
     0,                                          /* tp_str */
-    0,  /* inherited */                         /* tp_getattro */ 
-    0,  /* inherited */                         /* tp_setattro */ 
+    0,  /* inherited */                         /* tp_getattro */
+    0,  /* inherited */                         /* tp_setattro */
     0,                                          /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_CHECKTYPES  /* tp_flags */
 #ifdef Py_TPFLAGS_HAVE_FINALIZE
                        | Py_TPFLAGS_HAVE_FINALIZE
 #endif
                        | Py_TPFLAGS_HAVE_GC,
-    "This is an internal subtype of _CDataBase for performance only on " 
-    "CPython.  Check with isinstance(x, ffi.CData).",   /* tp_doc */ 
+    "This is an internal subtype of _CDataBase for performance only on "
+    "CPython.  Check with isinstance(x, ffi.CData).",   /* tp_doc */
     (traverseproc)cdatagcp_traverse,            /* tp_traverse */
     0,                                          /* tp_clear */
-    0,  /* inherited */                         /* tp_richcompare */ 
-    0,  /* inherited */                         /* tp_weaklistoffset */ 
-    0,  /* inherited */                         /* tp_iter */ 
+    0,  /* inherited */                         /* tp_richcompare */
+    0,  /* inherited */                         /* tp_weaklistoffset */
+    0,  /* inherited */                         /* tp_iter */
     0,                                          /* tp_iternext */
-    0,  /* inherited */                         /* tp_methods */ 
+    0,  /* inherited */                         /* tp_methods */
     0,                                          /* tp_members */
     0,                                          /* tp_getset */
     &CData_Type,                                /* tp_base */
@@ -3609,7 +3609,7 @@ static PyTypeObject CDataGCP_Type = {
     0,                                          /* tp_init */
     0,                                          /* tp_alloc */
     0,                                          /* tp_new */
-    0,  /* inherited */                         /* tp_free */ 
+    0,  /* inherited */                         /* tp_free */
     0,                                          /* tp_is_gc */
     0,                                          /* tp_bases */
     0,                                          /* tp_mro */
@@ -3651,7 +3651,7 @@ cdataiter_dealloc(CDataIterObject *it)
 
 static PyTypeObject CDataIter_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "_cffi_backend.__CData_iterator",       /* tp_name */ 
+    "_cffi_backend.__CData_iterator",       /* tp_name */
     sizeof(CDataIterObject),                /* tp_basicsize */
     0,                                      /* tp_itemsize */
     /* methods */
@@ -3706,16 +3706,16 @@ cdata_iter(CDataObject *cd)
 /************************************************************/
 
 static CDataObject *allocate_owning_object(Py_ssize_t size,
-                                           CTypeDescrObject *ct, 
-                                           int dont_clear) 
+                                           CTypeDescrObject *ct,
+                                           int dont_clear)
 {
-    /* note: objects with &CDataOwning_Type are always allocated with 
-       either a plain malloc() or calloc(), and freed with free(). */ 
+    /* note: objects with &CDataOwning_Type are always allocated with
+       either a plain malloc() or calloc(), and freed with free(). */
     CDataObject *cd;
-    if (dont_clear) 
-        cd = malloc(size); 
-    else 
-        cd = calloc(size, 1); 
+    if (dont_clear)
+        cd = malloc(size);
+    else
+        cd = calloc(size, 1);
     if (PyObject_Init((PyObject *)cd, &CDataOwning_Type) == NULL)
         return NULL;
 
@@ -3741,9 +3741,9 @@ convert_struct_to_owning_object(char *data, CTypeDescrObject *ct)
     if (ct->ct_flags & CT_WITH_VAR_ARRAY) {
         PyErr_SetString(PyExc_TypeError,
                   "return type is a struct/union with a varsize array member");
-        return NULL; 
+        return NULL;
     }
-    cd = allocate_owning_object(dataoffset + datasize, ct, /*dont_clear=*/1); 
+    cd = allocate_owning_object(dataoffset + datasize, ct, /*dont_clear=*/1);
     if (cd == NULL)
         return NULL;
     cd->c_data = ((char *)cd) + dataoffset;
@@ -3781,8 +3781,8 @@ static CDataObject *allocate_with_allocator(Py_ssize_t basesize,
     CDataObject *cd;
 
     if (allocator->ca_alloc == NULL) {
-        cd = allocate_owning_object(basesize + datasize, ct, 
-                                    allocator->ca_dont_clear); 
+        cd = allocate_owning_object(basesize + datasize, ct,
+                                    allocator->ca_dont_clear);
         if (cd == NULL)
             return NULL;
         cd->c_data = ((char *)cd) + basesize;
@@ -3815,8 +3815,8 @@ static CDataObject *allocate_with_allocator(Py_ssize_t basesize,
 
         cd = allocate_gcp_object(cd, ct, allocator->ca_free);
         Py_DECREF(res);
-        if (!allocator->ca_dont_clear) 
-            memset(cd->c_data, 0, datasize); 
+        if (!allocator->ca_dont_clear)
+            memset(cd->c_data, 0, datasize);
     }
     return cd;
 }
@@ -3864,7 +3864,7 @@ static PyObject *direct_newp(CTypeDescrObject *ct, PyObject *init,
         dataoffset = offsetof(CDataObject_own_nolength, alignment);
         datasize = ct->ct_size;
         if (datasize < 0) {
-            explicitlength = get_new_array_length(ct->ct_itemdescr, &init); 
+            explicitlength = get_new_array_length(ct->ct_itemdescr, &init);
             if (explicitlength < 0)
                 return NULL;
             ctitem = ct->ct_itemdescr;
@@ -3897,8 +3897,8 @@ static PyObject *direct_newp(CTypeDescrObject *ct, PyObject *init,
         if (cds == NULL)
             return NULL;
 
-        cd = allocate_owning_object(sizeof(CDataObject_own_structptr), ct, 
-                                    /*dont_clear=*/1); 
+        cd = allocate_owning_object(sizeof(CDataObject_own_structptr), ct,
+                                    /*dont_clear=*/1);
         if (cd == NULL) {
             Py_DECREF(cds);
             return NULL;
@@ -4035,22 +4035,22 @@ static CDataObject *cast_to_integer_or_char(CTypeDescrObject *ct, PyObject *ob)
     }
 #endif
     else if (PyUnicode_Check(ob)) {
-        char err_buf[80]; 
-        cffi_char32_t ordinal; 
-        if (_my_PyUnicode_AsSingleChar32(ob, &ordinal, err_buf) < 0) { 
+        char err_buf[80];
+        cffi_char32_t ordinal;
+        if (_my_PyUnicode_AsSingleChar32(ob, &ordinal, err_buf) < 0) {
             PyErr_Format(PyExc_TypeError,
-                         "cannot cast %s to ctype '%s'", err_buf, ct->ct_name); 
+                         "cannot cast %s to ctype '%s'", err_buf, ct->ct_name);
             return NULL;
         }
-        /* the types char16_t and char32_t are both unsigned.  However, 
-           wchar_t might be signed.  In theory it does not matter, 
-           because 'ordinal' comes from a regular Python unicode. */ 
-#ifdef HAVE_WCHAR_H 
-        if (ct->ct_flags & CT_IS_SIGNED_WCHAR) 
-            value = (wchar_t)ordinal; 
-        else 
-#endif 
-            value = ordinal; 
+        /* the types char16_t and char32_t are both unsigned.  However,
+           wchar_t might be signed.  In theory it does not matter,
+           because 'ordinal' comes from a regular Python unicode. */
+#ifdef HAVE_WCHAR_H
+        if (ct->ct_flags & CT_IS_SIGNED_WCHAR)
+            value = (wchar_t)ordinal;
+        else
+#endif
+            value = ordinal;
     }
     else if (PyBytes_Check(ob)) {
         int res = _convert_to_char(ob);
@@ -4077,35 +4077,35 @@ static CDataObject *cast_to_integer_or_char(CTypeDescrObject *ct, PyObject *ob)
     return cd;
 }
 
-/* returns -1 if cannot cast, 0 if we don't get a value, 1 if we do */ 
-static int check_bytes_for_float_compatible(PyObject *io, double *out_value) 
-{ 
-    if (PyBytes_Check(io)) { 
-        if (PyBytes_GET_SIZE(io) != 1) 
-            goto error; 
-        *out_value = (unsigned char)PyBytes_AS_STRING(io)[0]; 
-        return 1; 
-    } 
-    else if (PyUnicode_Check(io)) { 
-        char ignored[80]; 
-        cffi_char32_t ordinal; 
-        if (_my_PyUnicode_AsSingleChar32(io, &ordinal, ignored) < 0) 
-            goto error; 
-        /* the signness of the 32-bit version of wide chars should not 
-         * matter here, because 'ordinal' comes from a normal Python 
-         * unicode string */ 
-        *out_value = ordinal; 
-        return 1; 
-    } 
-    *out_value = 0;   /* silence a gcc warning if this function is inlined */ 
-    return 0; 
- 
- error: 
-    Py_DECREF(io); 
-    *out_value = 0;   /* silence a gcc warning if this function is inlined */ 
-    return -1; 
-} 
- 
+/* returns -1 if cannot cast, 0 if we don't get a value, 1 if we do */
+static int check_bytes_for_float_compatible(PyObject *io, double *out_value)
+{
+    if (PyBytes_Check(io)) {
+        if (PyBytes_GET_SIZE(io) != 1)
+            goto error;
+        *out_value = (unsigned char)PyBytes_AS_STRING(io)[0];
+        return 1;
+    }
+    else if (PyUnicode_Check(io)) {
+        char ignored[80];
+        cffi_char32_t ordinal;
+        if (_my_PyUnicode_AsSingleChar32(io, &ordinal, ignored) < 0)
+            goto error;
+        /* the signness of the 32-bit version of wide chars should not
+         * matter here, because 'ordinal' comes from a normal Python
+         * unicode string */
+        *out_value = ordinal;
+        return 1;
+    }
+    *out_value = 0;   /* silence a gcc warning if this function is inlined */
+    return 0;
+
+ error:
+    Py_DECREF(io);
+    *out_value = 0;   /* silence a gcc warning if this function is inlined */
+    return -1;
+}
+
 static PyObject *do_cast(CTypeDescrObject *ct, PyObject *ob)
 {
     CDataObject *cd;
@@ -4147,7 +4147,7 @@ static PyObject *do_cast(CTypeDescrObject *ct, PyObject *ob)
         /* cast to a float */
         double value;
         PyObject *io;
-        int res; 
+        int res;
 
         if (CData_Check(ob)) {
             CDataObject *cdsrc = (CDataObject *)ob;
@@ -4163,22 +4163,22 @@ static PyObject *do_cast(CTypeDescrObject *ct, PyObject *ob)
             Py_INCREF(io);
         }
 
-        res = check_bytes_for_float_compatible(io, &value); 
-        if (res == -1) 
-            goto cannot_cast; 
-        if (res == 0) { 
-            if ((ct->ct_flags & CT_IS_LONGDOUBLE) && 
-                 CData_Check(io) && 
-                 (((CDataObject *)io)->c_type->ct_flags & CT_IS_LONGDOUBLE)) { 
-                long double lvalue; 
-                char *data = ((CDataObject *)io)->c_data; 
-                /*READ(data, sizeof(long double)*/ 
-                lvalue = read_raw_longdouble_data(data); 
+        res = check_bytes_for_float_compatible(io, &value);
+        if (res == -1)
+            goto cannot_cast;
+        if (res == 0) {
+            if ((ct->ct_flags & CT_IS_LONGDOUBLE) &&
+                 CData_Check(io) &&
+                 (((CDataObject *)io)->c_type->ct_flags & CT_IS_LONGDOUBLE)) {
+                long double lvalue;
+                char *data = ((CDataObject *)io)->c_data;
+                /*READ(data, sizeof(long double)*/
+                lvalue = read_raw_longdouble_data(data);
                 Py_DECREF(io);
-                cd = _new_casted_primitive(ct); 
-                if (cd != NULL) 
-                    write_raw_longdouble_data(cd->c_data, lvalue); 
-                return (PyObject *)cd; 
+                cd = _new_casted_primitive(ct);
+                if (cd != NULL)
+                    write_raw_longdouble_data(cd->c_data, lvalue);
+                return (PyObject *)cd;
             }
             value = PyFloat_AsDouble(io);
         }
@@ -4195,45 +4195,45 @@ static PyObject *do_cast(CTypeDescrObject *ct, PyObject *ob)
         }
         return (PyObject *)cd;
     }
-    else if (ct->ct_flags & CT_PRIMITIVE_COMPLEX) { 
-        /* cast to a complex */ 
-        Py_complex value; 
-        PyObject *io; 
-        int res; 
- 
-        if (CData_Check(ob)) { 
-            CDataObject *cdsrc = (CDataObject *)ob; 
- 
-            if (!(cdsrc->c_type->ct_flags & CT_PRIMITIVE_ANY)) 
-                goto cannot_cast; 
-            io = convert_to_object(cdsrc->c_data, cdsrc->c_type); 
-            if (io == NULL) 
-                return NULL; 
-        } 
-        else { 
-            io = ob; 
-            Py_INCREF(io); 
-        } 
- 
-        res = check_bytes_for_float_compatible(io, &value.real); 
-        if (res == -1) 
-            goto cannot_cast; 
-        if (res == 1) { 
-            // got it from string 
-            value.imag = 0.0; 
-        } else { 
-            value = PyComplex_AsCComplex(io); 
-        } 
-        Py_DECREF(io); 
-        if (PyErr_Occurred()) { 
-            return NULL; 
-        } 
-        cd = _new_casted_primitive(ct); 
-        if (cd != NULL) { 
-            write_raw_complex_data(cd->c_data, value, ct->ct_size); 
-        } 
-        return (PyObject *)cd; 
-    } 
+    else if (ct->ct_flags & CT_PRIMITIVE_COMPLEX) {
+        /* cast to a complex */
+        Py_complex value;
+        PyObject *io;
+        int res;
+
+        if (CData_Check(ob)) {
+            CDataObject *cdsrc = (CDataObject *)ob;
+
+            if (!(cdsrc->c_type->ct_flags & CT_PRIMITIVE_ANY))
+                goto cannot_cast;
+            io = convert_to_object(cdsrc->c_data, cdsrc->c_type);
+            if (io == NULL)
+                return NULL;
+        }
+        else {
+            io = ob;
+            Py_INCREF(io);
+        }
+
+        res = check_bytes_for_float_compatible(io, &value.real);
+        if (res == -1)
+            goto cannot_cast;
+        if (res == 1) {
+            // got it from string
+            value.imag = 0.0;
+        } else {
+            value = PyComplex_AsCComplex(io);
+        }
+        Py_DECREF(io);
+        if (PyErr_Occurred()) {
+            return NULL;
+        }
+        cd = _new_casted_primitive(ct);
+        if (cd != NULL) {
+            write_raw_complex_data(cd->c_data, value, ct->ct_size);
+        }
+        return (PyObject *)cd;
+    }
     else {
         PyErr_Format(PyExc_TypeError, "cannot cast to ctype '%s'",
                      ct->ct_name);
@@ -4267,13 +4267,13 @@ typedef struct {
     PyObject_HEAD
     void *dl_handle;
     char *dl_name;
-    int dl_auto_close; 
+    int dl_auto_close;
 } DynLibObject;
 
 static void dl_dealloc(DynLibObject *dlobj)
 {
-    if (dlobj->dl_handle != NULL && dlobj->dl_auto_close) 
-        dlclose(dlobj->dl_handle); 
+    if (dlobj->dl_handle != NULL && dlobj->dl_auto_close)
+        dlclose(dlobj->dl_handle);
     free(dlobj->dl_name);
     PyObject_Del(dlobj);
 }
@@ -4283,17 +4283,17 @@ static PyObject *dl_repr(DynLibObject *dlobj)
     return PyText_FromFormat("<clibrary '%s'>", dlobj->dl_name);
 }
 
-static int dl_check_closed(DynLibObject *dlobj) 
-{ 
-    if (dlobj->dl_handle == NULL) 
-    { 
-        PyErr_Format(PyExc_ValueError, "library '%s' has already been closed", 
-                     dlobj->dl_name); 
-        return -1; 
-    } 
-    return 0; 
-} 
- 
+static int dl_check_closed(DynLibObject *dlobj)
+{
+    if (dlobj->dl_handle == NULL)
+    {
+        PyErr_Format(PyExc_ValueError, "library '%s' has already been closed",
+                     dlobj->dl_name);
+        return -1;
+    }
+    return 0;
+}
+
 static PyObject *dl_load_function(DynLibObject *dlobj, PyObject *args)
 {
     CTypeDescrObject *ct;
@@ -4304,12 +4304,12 @@ static PyObject *dl_load_function(DynLibObject *dlobj, PyObject *args)
                           &CTypeDescr_Type, &ct, &funcname))
         return NULL;
 
-    if (dl_check_closed(dlobj) < 0) 
-        return NULL; 
- 
-    if (!(ct->ct_flags & (CT_FUNCTIONPTR | CT_POINTER | CT_ARRAY))) { 
-        PyErr_Format(PyExc_TypeError, 
-                     "function or pointer or array cdata expected, got '%s'", 
+    if (dl_check_closed(dlobj) < 0)
+        return NULL;
+
+    if (!(ct->ct_flags & (CT_FUNCTIONPTR | CT_POINTER | CT_ARRAY))) {
+        PyErr_Format(PyExc_TypeError,
+                     "function or pointer or array cdata expected, got '%s'",
                      ct->ct_name);
         return NULL;
     }
@@ -4317,15 +4317,15 @@ static PyObject *dl_load_function(DynLibObject *dlobj, PyObject *args)
     funcptr = dlsym(dlobj->dl_handle, funcname);
     if (funcptr == NULL) {
         const char *error = dlerror();
-        PyErr_Format(PyExc_AttributeError, 
-                     "function/symbol '%s' not found in library '%s': %s", 
+        PyErr_Format(PyExc_AttributeError,
+                     "function/symbol '%s' not found in library '%s': %s",
                      funcname, dlobj->dl_name, error);
         return NULL;
     }
 
-    if ((ct->ct_flags & CT_ARRAY) && ct->ct_length < 0) { 
-        ct = (CTypeDescrObject *)ct->ct_stuff; 
-    } 
+    if ((ct->ct_flags & CT_ARRAY) && ct->ct_length < 0) {
+        ct = (CTypeDescrObject *)ct->ct_stuff;
+    }
     return new_simple_cdata(funcptr, ct);
 }
 
@@ -4339,9 +4339,9 @@ static PyObject *dl_read_variable(DynLibObject *dlobj, PyObject *args)
                           &CTypeDescr_Type, &ct, &varname))
         return NULL;
 
-    if (dl_check_closed(dlobj) < 0) 
-        return NULL; 
- 
+    if (dl_check_closed(dlobj) < 0)
+        return NULL;
+
     dlerror();   /* clear error condition */
     data = dlsym(dlobj->dl_handle, varname);
     if (data == NULL) {
@@ -4367,9 +4367,9 @@ static PyObject *dl_write_variable(DynLibObject *dlobj, PyObject *args)
                           &CTypeDescr_Type, &ct, &varname, &value))
         return NULL;
 
-    if (dl_check_closed(dlobj) < 0) 
-        return NULL; 
- 
+    if (dl_check_closed(dlobj) < 0)
+        return NULL;
+
     dlerror();   /* clear error condition */
     data = dlsym(dlobj->dl_handle, varname);
     if (data == NULL) {
@@ -4385,28 +4385,28 @@ static PyObject *dl_write_variable(DynLibObject *dlobj, PyObject *args)
     return Py_None;
 }
 
-static PyObject *dl_close_lib(DynLibObject *dlobj, PyObject *no_args) 
-{ 
-    if (dlobj->dl_handle != NULL) 
-    { 
-        dlclose(dlobj->dl_handle); 
-        dlobj->dl_handle = NULL; 
-    } 
-    Py_INCREF(Py_None); 
-    return Py_None; 
-} 
- 
+static PyObject *dl_close_lib(DynLibObject *dlobj, PyObject *no_args)
+{
+    if (dlobj->dl_handle != NULL)
+    {
+        dlclose(dlobj->dl_handle);
+        dlobj->dl_handle = NULL;
+    }
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 static PyMethodDef dl_methods[] = {
     {"load_function",   (PyCFunction)dl_load_function,  METH_VARARGS},
     {"read_variable",   (PyCFunction)dl_read_variable,  METH_VARARGS},
     {"write_variable",  (PyCFunction)dl_write_variable, METH_VARARGS},
-    {"close_lib",       (PyCFunction)dl_close_lib,      METH_NOARGS}, 
+    {"close_lib",       (PyCFunction)dl_close_lib,      METH_NOARGS},
     {NULL,              NULL}           /* sentinel */
 };
 
 static PyTypeObject dl_type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "_cffi_backend.CLibrary",           /* tp_name */ 
+    "_cffi_backend.CLibrary",           /* tp_name */
     sizeof(DynLibObject),               /* tp_basicsize */
     0,                                  /* tp_itemsize */
     /* methods */
@@ -4436,150 +4436,150 @@ static PyTypeObject dl_type = {
     dl_methods,                         /* tp_methods */
 };
 
-static void *b_do_dlopen(PyObject *args, const char **p_printable_filename, 
-                         PyObject **p_temp, int *auto_close) 
+static void *b_do_dlopen(PyObject *args, const char **p_printable_filename,
+                         PyObject **p_temp, int *auto_close)
 {
-    /* Logic to call the correct version of dlopen().  Returns NULL in case of error. 
-       Otherwise, '*p_printable_filename' will point to a printable char version of 
-       the filename (maybe utf-8-encoded).  '*p_temp' will be set either to NULL or 
-       to a temporary object that must be freed after looking at printable_filename. 
-    */ 
+    /* Logic to call the correct version of dlopen().  Returns NULL in case of error.
+       Otherwise, '*p_printable_filename' will point to a printable char version of
+       the filename (maybe utf-8-encoded).  '*p_temp' will be set either to NULL or
+       to a temporary object that must be freed after looking at printable_filename.
+    */
     void *handle;
-    char *filename_or_null; 
+    char *filename_or_null;
     int flags = 0;
-    *p_temp = NULL; 
-    *auto_close = 1; 
-     
+    *p_temp = NULL;
+    *auto_close = 1;
+    
     if (PyTuple_GET_SIZE(args) == 0 || PyTuple_GET_ITEM(args, 0) == Py_None) {
         PyObject *dummy;
         if (!PyArg_ParseTuple(args, "|Oi:load_library",
                               &dummy, &flags))
             return NULL;
         filename_or_null = NULL;
-        *p_printable_filename = "<None>"; 
+        *p_printable_filename = "<None>";
     }
-    else if (CData_Check(PyTuple_GET_ITEM(args, 0))) 
-    { 
-        CDataObject *cd; 
-        if (!PyArg_ParseTuple(args, "O|i:load_library", &cd, &flags)) 
-            return NULL; 
-        /* 'flags' is accepted but ignored in this case */ 
-        if ((cd->c_type->ct_flags & CT_IS_VOID_PTR) == 0) { 
-            PyErr_Format(PyExc_TypeError, 
-                "dlopen() takes a file name or 'void *' handle, not '%s'", 
-                cd->c_type->ct_name); 
-            return NULL; 
-        } 
-        handle = cd->c_data; 
-        if (handle == NULL) { 
-            PyErr_Format(PyExc_RuntimeError, "cannot call dlopen(NULL)"); 
-            return NULL; 
-        } 
-        *p_temp = PyText_FromFormat("%p", handle); 
-        *p_printable_filename = PyText_AsUTF8(*p_temp); 
-        *auto_close = 0; 
-        return handle; 
-    } 
-    else 
-    { 
-        PyObject *s = PyTuple_GET_ITEM(args, 0); 
-#ifdef MS_WIN32 
-        PyObject *filename_unicode; 
-        if (PyArg_ParseTuple(args, "U|i:load_library", &filename_unicode, &flags)) 
-        { 
-            Py_ssize_t sz1; 
-            wchar_t *w1; 
-#if PY_MAJOR_VERSION < 3 
-            s = PyUnicode_AsUTF8String(s); 
-            if (s == NULL) 
-                return NULL; 
-            *p_temp = s; 
-#endif 
-            *p_printable_filename = PyText_AsUTF8(s); 
-            if (*p_printable_filename == NULL) 
-                return NULL; 
+    else if (CData_Check(PyTuple_GET_ITEM(args, 0)))
+    {
+        CDataObject *cd;
+        if (!PyArg_ParseTuple(args, "O|i:load_library", &cd, &flags))
+            return NULL;
+        /* 'flags' is accepted but ignored in this case */
+        if ((cd->c_type->ct_flags & CT_IS_VOID_PTR) == 0) {
+            PyErr_Format(PyExc_TypeError,
+                "dlopen() takes a file name or 'void *' handle, not '%s'",
+                cd->c_type->ct_name);
+            return NULL;
+        }
+        handle = cd->c_data;
+        if (handle == NULL) {
+            PyErr_Format(PyExc_RuntimeError, "cannot call dlopen(NULL)");
+            return NULL;
+        }
+        *p_temp = PyText_FromFormat("%p", handle);
+        *p_printable_filename = PyText_AsUTF8(*p_temp);
+        *auto_close = 0;
+        return handle;
+    }
+    else
+    {
+        PyObject *s = PyTuple_GET_ITEM(args, 0);
+#ifdef MS_WIN32
+        PyObject *filename_unicode;
+        if (PyArg_ParseTuple(args, "U|i:load_library", &filename_unicode, &flags))
+        {
+            Py_ssize_t sz1;
+            wchar_t *w1;
+#if PY_MAJOR_VERSION < 3
+            s = PyUnicode_AsUTF8String(s);
+            if (s == NULL)
+                return NULL;
+            *p_temp = s;
+#endif
+            *p_printable_filename = PyText_AsUTF8(s);
+            if (*p_printable_filename == NULL)
+                return NULL;
 
-            sz1 = PyUnicode_GetSize(filename_unicode) + 1; 
-            sz1 *= 2;   /* should not be needed, but you never know */ 
-            w1 = alloca(sizeof(wchar_t) * sz1); 
-            sz1 = PyUnicode_AsWideChar((PyUnicodeObject *)filename_unicode, 
-                                       w1, sz1 - 1); 
-            if (sz1 < 0) 
-                return NULL; 
-            w1[sz1] = 0; 
-            handle = dlopenW(w1); 
-            goto got_handle; 
-        } 
-        PyErr_Clear(); 
-#endif 
-        if (!PyArg_ParseTuple(args, "et|i:load_library", 
-                     Py_FileSystemDefaultEncoding, &filename_or_null, &flags)) 
-            return NULL; 
-#if PY_MAJOR_VERSION < 3 
-        if (PyUnicode_Check(s)) 
-        { 
-            s = PyUnicode_AsUTF8String(s); 
-            if (s == NULL) { 
-                PyMem_Free(filename_or_null); 
-                return NULL; 
-            } 
-            *p_temp = s; 
-        } 
-#endif 
-        *p_printable_filename = PyText_AsUTF8(s); 
-        if (*p_printable_filename == NULL) { 
-            PyMem_Free(filename_or_null); 
-            return NULL; 
-        } 
-    } 
+            sz1 = PyUnicode_GetSize(filename_unicode) + 1;
+            sz1 *= 2;   /* should not be needed, but you never know */
+            w1 = alloca(sizeof(wchar_t) * sz1);
+            sz1 = PyUnicode_AsWideChar((PyUnicodeObject *)filename_unicode,
+                                       w1, sz1 - 1);
+            if (sz1 < 0)
+                return NULL;
+            w1[sz1] = 0;
+            handle = dlopenW(w1);
+            goto got_handle;
+        }
+        PyErr_Clear();
+#endif
+        if (!PyArg_ParseTuple(args, "et|i:load_library",
+                     Py_FileSystemDefaultEncoding, &filename_or_null, &flags))
+            return NULL;
+#if PY_MAJOR_VERSION < 3
+        if (PyUnicode_Check(s))
+        {
+            s = PyUnicode_AsUTF8String(s);
+            if (s == NULL) {
+                PyMem_Free(filename_or_null);
+                return NULL;
+            }
+            *p_temp = s;
+        }
+#endif
+        *p_printable_filename = PyText_AsUTF8(s);
+        if (*p_printable_filename == NULL) {
+            PyMem_Free(filename_or_null);
+            return NULL;
+        }
+    }
     if ((flags & (RTLD_NOW | RTLD_LAZY)) == 0)
         flags |= RTLD_NOW;
 
-#ifdef MS_WIN32 
-    if (filename_or_null == NULL) { 
-        PyErr_SetString(PyExc_OSError, "dlopen(None) not supported on Windows"); 
-        return NULL; 
-    } 
-#endif 
- 
-    handle = dlopen(filename_or_null, flags);
-    PyMem_Free(filename_or_null); 
- 
-#ifdef MS_WIN32 
-  got_handle: 
-#endif 
-    if (handle == NULL) {
-        const char *error = dlerror();
-        PyErr_Format(PyExc_OSError, "cannot load library '%s': %s", 
-                     *p_printable_filename, error); 
+#ifdef MS_WIN32
+    if (filename_or_null == NULL) {
+        PyErr_SetString(PyExc_OSError, "dlopen(None) not supported on Windows");
         return NULL;
     }
-    return handle; 
-} 
+#endif
 
-static PyObject *b_load_library(PyObject *self, PyObject *args) 
-{ 
-    const char *printable_filename; 
-    PyObject *temp; 
-    void *handle; 
-    DynLibObject *dlobj = NULL; 
-    int auto_close; 
- 
-    handle = b_do_dlopen(args, &printable_filename, &temp, &auto_close); 
-    if (handle == NULL) 
-        goto error; 
- 
+    handle = dlopen(filename_or_null, flags);
+    PyMem_Free(filename_or_null);
+
+#ifdef MS_WIN32
+  got_handle:
+#endif
+    if (handle == NULL) {
+        const char *error = dlerror();
+        PyErr_Format(PyExc_OSError, "cannot load library '%s': %s",
+                     *p_printable_filename, error);
+        return NULL;
+    }
+    return handle;
+}
+
+static PyObject *b_load_library(PyObject *self, PyObject *args)
+{
+    const char *printable_filename;
+    PyObject *temp;
+    void *handle;
+    DynLibObject *dlobj = NULL;
+    int auto_close;
+
+    handle = b_do_dlopen(args, &printable_filename, &temp, &auto_close);
+    if (handle == NULL)
+        goto error;
+
     dlobj = PyObject_New(DynLibObject, &dl_type);
     if (dlobj == NULL) {
         dlclose(handle);
-        goto error; 
+        goto error;
     }
     dlobj->dl_handle = handle;
     dlobj->dl_name = strdup(printable_filename);
-    dlobj->dl_auto_close = auto_close; 
-  
- error: 
-    Py_XDECREF(temp); 
+    dlobj->dl_auto_close = auto_close;
+ 
+ error:
+    Py_XDECREF(temp);
     return (PyObject *)dlobj;
 }
 
@@ -4631,10 +4631,10 @@ static PyObject *get_unique_type(CTypeDescrObject *x,
 
     assert(x->ct_unique_key == NULL);
     x->ct_unique_key = key; /* the key will be freed in ctypedescr_dealloc() */
-    /* the 'value' in unique_cache doesn't count as 1, but don't use 
-       Py_DECREF(x) here because it will confuse debug builds into thinking 
-       there was an extra DECREF in total. */ 
-    ((PyObject *)x)->ob_refcnt--; 
+    /* the 'value' in unique_cache doesn't count as 1, but don't use
+       Py_DECREF(x) here because it will confuse debug builds into thinking
+       there was an extra DECREF in total. */
+    ((PyObject *)x)->ob_refcnt--;
     return (PyObject *)x;
 
  error:
@@ -4642,11 +4642,11 @@ static PyObject *get_unique_type(CTypeDescrObject *x,
     return NULL;
 }
 
-/* according to the C standard, these types should be equivalent to the 
-   _Complex types for the purposes of storage (not arguments in calls!) */ 
-typedef float cffi_float_complex_t[2]; 
-typedef double cffi_double_complex_t[2]; 
- 
+/* according to the C standard, these types should be equivalent to the
+   _Complex types for the purposes of storage (not arguments in calls!) */
+typedef float cffi_float_complex_t[2];
+typedef double cffi_double_complex_t[2];
+
 static PyObject *new_primitive_type(const char *name)
 {
 #define ENUM_PRIMITIVE_TYPES                                    \
@@ -4664,11 +4664,11 @@ static PyObject *new_primitive_type(const char *name)
        EPTYPE(f, float, CT_PRIMITIVE_FLOAT )                    \
        EPTYPE(d, double, CT_PRIMITIVE_FLOAT )                   \
        EPTYPE(ld, long double, CT_PRIMITIVE_FLOAT | CT_IS_LONGDOUBLE ) \
-       EPTYPE2(fc, "float _Complex", cffi_float_complex_t, CT_PRIMITIVE_COMPLEX ) \ 
-       EPTYPE2(dc, "double _Complex", cffi_double_complex_t, CT_PRIMITIVE_COMPLEX ) \ 
+       EPTYPE2(fc, "float _Complex", cffi_float_complex_t, CT_PRIMITIVE_COMPLEX ) \
+       EPTYPE2(dc, "double _Complex", cffi_double_complex_t, CT_PRIMITIVE_COMPLEX ) \
        ENUM_PRIMITIVE_TYPES_WCHAR                               \
-       EPTYPE2(c16, "char16_t", cffi_char16_t, CT_PRIMITIVE_CHAR ) \ 
-       EPTYPE2(c32, "char32_t", cffi_char32_t, CT_PRIMITIVE_CHAR ) \ 
+       EPTYPE2(c16, "char16_t", cffi_char16_t, CT_PRIMITIVE_CHAR ) \
+       EPTYPE2(c32, "char32_t", cffi_char32_t, CT_PRIMITIVE_CHAR ) \
        EPTYPE(b, _Bool, CT_PRIMITIVE_UNSIGNED | CT_IS_BOOL )    \
      /* the following types are not primitive in the C sense */ \
        EPTYPE(i8, int8_t, CT_PRIMITIVE_SIGNED)                  \
@@ -4705,8 +4705,8 @@ static PyObject *new_primitive_type(const char *name)
 
 #ifdef HAVE_WCHAR_H
 # define ENUM_PRIMITIVE_TYPES_WCHAR                             \
-       EPTYPE(wc, wchar_t, CT_PRIMITIVE_CHAR |                  \ 
-                           (((wchar_t)-1) > 0 ? 0 : CT_IS_SIGNED_WCHAR)) 
+       EPTYPE(wc, wchar_t, CT_PRIMITIVE_CHAR |                  \
+                           (((wchar_t)-1) > 0 ? 0 : CT_IS_SIGNED_WCHAR))
 #else
 # define ENUM_PRIMITIVE_TYPES_WCHAR   /* nothing */
 #endif
@@ -4779,13 +4779,13 @@ static PyObject *new_primitive_type(const char *name)
         else
             goto bad_ffi_type;
     }
-    else if (ptypes->flags & CT_PRIMITIVE_COMPLEX) { 
-        /* As of March 2017, still no libffi support for complex. 
-           It fails silently if we try to use ffi_type_complex_float 
-           or ffi_type_complex_double.  Better not use it at all. 
-         */ 
-        ffitype = NULL; 
-    } 
+    else if (ptypes->flags & CT_PRIMITIVE_COMPLEX) {
+        /* As of March 2017, still no libffi support for complex.
+           It fails silently if we try to use ffi_type_complex_float
+           or ffi_type_complex_double.  Better not use it at all.
+         */
+        ffitype = NULL;
+    }
     else {
         switch (ptypes->size) {
         case 1: ffitype = &ffi_type_uint8; break;
@@ -5046,12 +5046,12 @@ _add_field(PyObject *interned_fields, PyObject *fname, CTypeDescrObject *ftype,
 #define SF_PACKED             0x08
 #define SF_STD_FIELD_POS      0x80
 
-#ifdef MS_WIN32 
-#  define SF_DEFAULT_PACKING     8 
-#else 
-#  define SF_DEFAULT_PACKING   0x40000000   /* a huge power of two */ 
-#endif 
- 
+#ifdef MS_WIN32
+#  define SF_DEFAULT_PACKING     8
+#else
+#  define SF_DEFAULT_PACKING   0x40000000   /* a huge power of two */
+#endif
+
 static int complete_sflags(int sflags)
 {
     /* add one of the SF_xxx_BITFIELDS flags if none is specified */
@@ -5060,9 +5060,9 @@ static int complete_sflags(int sflags)
 #ifdef MS_WIN32
         sflags |= SF_MSVC_BITFIELDS;
 #else
-# if defined(__APPLE__) && defined(__arm64__) 
-        sflags |= SF_GCC_X86_BITFIELDS; 
-# elif defined(__arm__) || defined(__aarch64__) 
+# if defined(__APPLE__) && defined(__arm64__)
+        sflags |= SF_GCC_X86_BITFIELDS;
+# elif defined(__arm__) || defined(__aarch64__)
         sflags |= SF_GCC_ARM_BITFIELDS;
 # else
         sflags |= SF_GCC_X86_BITFIELDS;
@@ -5090,8 +5090,8 @@ static int detect_custom_layout(CTypeDescrObject *ct, int sflags,
         if (sflags & SF_STD_FIELD_POS) {
             PyErr_Format(FFIError,
                          "%s: %s%s%s (cdef says %zd, but C compiler says %zd)."
-                         " fix it or use \"...;\" as the last field in the " 
-                         "cdef for %s to make it flexible", 
+                         " fix it or use \"...;\" as the last field in the "
+                         "cdef for %s to make it flexible",
                          ct->ct_name, msg1, txt, msg2,
                          cdef_value, compiler_value,
                          ct->ct_name);
@@ -5102,37 +5102,37 @@ static int detect_custom_layout(CTypeDescrObject *ct, int sflags,
     return 0;
 }
 
-#define ROUNDUP_BYTES(bytes, bits)    ((bytes) + ((bits) > 0)) 
- 
+#define ROUNDUP_BYTES(bytes, bits)    ((bytes) + ((bits) > 0))
+
 static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
 {
     CTypeDescrObject *ct;
     PyObject *fields, *interned_fields, *ignored;
     int is_union, alignment;
-    Py_ssize_t byteoffset, i, nb_fields, byteoffsetmax, alignedsize; 
-    int bitoffset; 
-    Py_ssize_t byteoffsetorg; 
+    Py_ssize_t byteoffset, i, nb_fields, byteoffsetmax, alignedsize;
+    int bitoffset;
+    Py_ssize_t byteoffsetorg;
     Py_ssize_t totalsize = -1;
     int totalalignment = -1;
     CFieldObject **previous;
     int prev_bitfield_size, prev_bitfield_free;
     int sflags = 0, fflags;
-    int pack = 0; 
+    int pack = 0;
 
-    if (!PyArg_ParseTuple(args, "O!O!|Oniii:complete_struct_or_union", 
+    if (!PyArg_ParseTuple(args, "O!O!|Oniii:complete_struct_or_union",
                           &CTypeDescr_Type, &ct,
                           &PyList_Type, &fields,
-                          &ignored, &totalsize, &totalalignment, &sflags, 
-                          &pack)) 
+                          &ignored, &totalsize, &totalalignment, &sflags,
+                          &pack))
         return NULL;
 
     sflags = complete_sflags(sflags);
-    if (sflags & SF_PACKED) 
-        pack = 1; 
-    else if (pack <= 0) 
-        pack = SF_DEFAULT_PACKING; 
-    else 
-        sflags |= SF_PACKED; 
+    if (sflags & SF_PACKED)
+        pack = 1;
+    else if (pack <= 0)
+        pack = SF_DEFAULT_PACKING;
+    else
+        sflags |= SF_PACKED;
 
     if ((ct->ct_flags & (CT_STRUCT|CT_IS_OPAQUE)) ==
                         (CT_STRUCT|CT_IS_OPAQUE)) {
@@ -5147,12 +5147,12 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
                   "first arg must be a non-initialized struct or union ctype");
         return NULL;
     }
-    ct->ct_flags &= ~(CT_CUSTOM_FIELD_POS | CT_WITH_PACKED_CHANGE); 
+    ct->ct_flags &= ~(CT_CUSTOM_FIELD_POS | CT_WITH_PACKED_CHANGE);
 
     alignment = 1;
-    byteoffset = 0;     /* the real value is 'byteoffset+bitoffset*8', which */ 
-    bitoffset = 0;      /* counts the offset in bits */ 
-    byteoffsetmax = 0; /* the maximum value of byteoffset-rounded-up-to-byte */ 
+    byteoffset = 0;     /* the real value is 'byteoffset+bitoffset*8', which */
+    bitoffset = 0;      /* counts the offset in bits */
+    byteoffsetmax = 0; /* the maximum value of byteoffset-rounded-up-to-byte */
     prev_bitfield_size = 0;
     prev_bitfield_free = 0;
     nb_fields = PyList_GET_SIZE(fields);
@@ -5165,7 +5165,7 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
     for (i=0; i<nb_fields; i++) {
         PyObject *fname;
         CTypeDescrObject *ftype;
-        int fbitsize = -1, falign, falignorg, do_align; 
+        int fbitsize = -1, falign, falignorg, do_align;
         Py_ssize_t foffset = -1;
 
         if (!PyArg_ParseTuple(PyList_GET_ITEM(fields, i), "O!O!|in:list item",
@@ -5187,29 +5187,29 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
                 goto error;
             }
         }
-        else if (ftype->ct_flags & (CT_STRUCT|CT_UNION)) { 
-            if (force_lazy_struct(ftype) < 0)   /* for CT_WITH_VAR_ARRAY */ 
-                return NULL; 
+        else if (ftype->ct_flags & (CT_STRUCT|CT_UNION)) {
+            if (force_lazy_struct(ftype) < 0)   /* for CT_WITH_VAR_ARRAY */
+                return NULL;
 
-            /* GCC (or maybe C99) accepts var-sized struct fields that are not 
-               the last field of a larger struct.  That's why there is no 
-               check here for "last field": we propagate the flag 
-               CT_WITH_VAR_ARRAY to any struct that contains either an open- 
-               ended array or another struct that recursively contains an 
-               open-ended array. */ 
-            if (ftype->ct_flags & CT_WITH_VAR_ARRAY) 
-                ct->ct_flags |= CT_WITH_VAR_ARRAY; 
-        } 
- 
+            /* GCC (or maybe C99) accepts var-sized struct fields that are not
+               the last field of a larger struct.  That's why there is no
+               check here for "last field": we propagate the flag
+               CT_WITH_VAR_ARRAY to any struct that contains either an open-
+               ended array or another struct that recursively contains an
+               open-ended array. */
+            if (ftype->ct_flags & CT_WITH_VAR_ARRAY)
+                ct->ct_flags |= CT_WITH_VAR_ARRAY;
+        }
+
         if (is_union)
-            byteoffset = bitoffset = 0;   /* reset each field at offset 0 */ 
+            byteoffset = bitoffset = 0;   /* reset each field at offset 0 */
 
         /* update the total alignment requirement, but skip it if the
            field is an anonymous bitfield or if SF_PACKED */
-        falignorg = get_alignment(ftype); 
-        if (falignorg < 0) 
+        falignorg = get_alignment(ftype);
+        if (falignorg < 0)
             goto error;
-        falign = (pack < falignorg) ? pack : falignorg; 
+        falign = (pack < falignorg) ? pack : falignorg;
 
         do_align = 1;
         if (!(sflags & SF_GCC_ARM_BITFIELDS) && fbitsize >= 0) {
@@ -5238,25 +5238,25 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
 
             /* align this field to its own 'falign' by inserting padding */
 
-            /* first, pad to the next byte, 
-             * then pad to 'falign' or 'falignorg' bytes */ 
-            byteoffset = ROUNDUP_BYTES(byteoffset, bitoffset); 
-            bitoffset = 0; 
-            byteoffsetorg = (byteoffset + falignorg-1) & ~(falignorg-1); 
-            byteoffset = (byteoffset + falign-1) & ~(falign-1); 
- 
-            if (byteoffsetorg != byteoffset) { 
-                ct->ct_flags |= CT_WITH_PACKED_CHANGE; 
-            } 
- 
+            /* first, pad to the next byte,
+             * then pad to 'falign' or 'falignorg' bytes */
+            byteoffset = ROUNDUP_BYTES(byteoffset, bitoffset);
+            bitoffset = 0;
+            byteoffsetorg = (byteoffset + falignorg-1) & ~(falignorg-1);
+            byteoffset = (byteoffset + falign-1) & ~(falign-1);
+
+            if (byteoffsetorg != byteoffset) {
+                ct->ct_flags |= CT_WITH_PACKED_CHANGE;
+            }
+
             if (foffset >= 0) {
                 /* a forced field position: ignore the offset just computed,
                    except to know if we must set CT_CUSTOM_FIELD_POS */
-                if (detect_custom_layout(ct, sflags, byteoffset, foffset, 
+                if (detect_custom_layout(ct, sflags, byteoffset, foffset,
                                          "wrong offset for field '",
                                          PyText_AS_UTF8(fname), "'") < 0)
                     goto error;
-                byteoffset = foffset; 
+                byteoffset = foffset;
             }
 
             if (PyText_GetSize(fname) == 0 &&
@@ -5270,7 +5270,7 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
                     *previous = _add_field(interned_fields,
                                            get_field_name(ftype, cfsrc),
                                            cfsrc->cf_type,
-                                           byteoffset + cfsrc->cf_offset, 
+                                           byteoffset + cfsrc->cf_offset,
                                            cfsrc->cf_bitshift,
                                            cfsrc->cf_bitsize,
                                            cfsrc->cf_flags | fflags);
@@ -5283,13 +5283,13 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
             }
             else {
                 *previous = _add_field(interned_fields, fname, ftype,
-                                       byteoffset, bs_flag, -1, fflags); 
+                                       byteoffset, bs_flag, -1, fflags);
                 if (*previous == NULL)
                     goto error;
                 previous = &(*previous)->cf_next;
             }
             if (ftype->ct_size >= 0)
-                byteoffset += ftype->ct_size; 
+                byteoffset += ftype->ct_size;
             prev_bitfield_size = 0;
         }
         else {
@@ -5326,7 +5326,7 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
             /* compute the starting position of the theoretical field
                that covers a complete 'ftype', inside of which we will
                locate the real bitfield */
-            field_offset_bytes = byteoffset; 
+            field_offset_bytes = byteoffset;
             field_offset_bytes &= ~(falign - 1);
 
             if (fbitsize == 0) {
@@ -5339,13 +5339,13 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
                 if (!(sflags & SF_MSVC_BITFIELDS)) {
                     /* GCC's notion of "ftype :0;" */
 
-                    /* pad byteoffset to a value aligned for "ftype" */ 
-                    if (ROUNDUP_BYTES(byteoffset, bitoffset) > field_offset_bytes) { 
+                    /* pad byteoffset to a value aligned for "ftype" */
+                    if (ROUNDUP_BYTES(byteoffset, bitoffset) > field_offset_bytes) {
                         field_offset_bytes += falign;
-                        assert(byteoffset < field_offset_bytes); 
+                        assert(byteoffset < field_offset_bytes);
                     }
-                    byteoffset = field_offset_bytes; 
-                    bitoffset = 0; 
+                    byteoffset = field_offset_bytes;
+                    bitoffset = 0;
                 }
                 else {
                     /* MSVC's notion of "ftype :0;" */
@@ -5362,8 +5362,8 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
 
                     /* Can the field start at the offset given by 'boffset'?  It
                        can if it would entirely fit into an aligned ftype field. */
-                    bits_already_occupied = (byteoffset-field_offset_bytes) * 8 
-                        + bitoffset; 
+                    bits_already_occupied = (byteoffset-field_offset_bytes) * 8
+                        + bitoffset;
 
                     if (bits_already_occupied + fbitsize > 8 * ftype->ct_size) {
                         /* it would not fit, we need to start at the next
@@ -5377,18 +5377,18 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
                             goto error;
                         }
                         field_offset_bytes += falign;
-                        assert(byteoffset < field_offset_bytes); 
-                        byteoffset = field_offset_bytes; 
-                        bitoffset = 0; 
+                        assert(byteoffset < field_offset_bytes);
+                        byteoffset = field_offset_bytes;
+                        bitoffset = 0;
                         bitshift = 0;
                     }
                     else {
                         bitshift = bits_already_occupied;
                         assert(bitshift >= 0);
                     }
-                    bitoffset += fbitsize; 
-                    byteoffset += (bitoffset >> 3); 
-                    bitoffset &= 7; 
+                    bitoffset += fbitsize;
+                    byteoffset += (bitoffset >> 3);
+                    bitoffset &= 7;
                 }
                 else {
                     /* MSVC's algorithm */
@@ -5404,43 +5404,43 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
                     }
                     else {
                         /* no: start a new full field */
-                        byteoffset = ROUNDUP_BYTES(byteoffset, bitoffset); 
-                        bitoffset = 0; 
-                        /* align */ 
-                        byteoffset = (byteoffset + falign-1) & ~(falign-1); 
-                        byteoffset += ftype->ct_size; 
+                        byteoffset = ROUNDUP_BYTES(byteoffset, bitoffset);
+                        bitoffset = 0;
+                        /* align */
+                        byteoffset = (byteoffset + falign-1) & ~(falign-1);
+                        byteoffset += ftype->ct_size;
                         bitshift = 0;
                         prev_bitfield_size = ftype->ct_size;
                         prev_bitfield_free = 8 * prev_bitfield_size;
                     }
                     prev_bitfield_free -= fbitsize;
-                    field_offset_bytes = byteoffset - ftype->ct_size; 
+                    field_offset_bytes = byteoffset - ftype->ct_size;
                 }
                 if (sflags & SF_GCC_BIG_ENDIAN)
                     bitshift = 8 * ftype->ct_size - fbitsize - bitshift;
 
-                if (PyText_GetSize(fname) > 0) { 
- 
-                    *previous = _add_field(interned_fields, fname, ftype, 
+                if (PyText_GetSize(fname) > 0) {
+
+                    *previous = _add_field(interned_fields, fname, ftype,
                                        field_offset_bytes, bitshift, fbitsize,
                                        fflags);
-                    if (*previous == NULL) 
-                        goto error; 
-                    previous = &(*previous)->cf_next; 
-                } 
+                    if (*previous == NULL)
+                        goto error;
+                    previous = &(*previous)->cf_next;
+                }
             }
         }
 
-        assert(bitoffset == (bitoffset & 7)); 
-        if (ROUNDUP_BYTES(byteoffset, bitoffset) > byteoffsetmax) 
-            byteoffsetmax = ROUNDUP_BYTES(byteoffset, bitoffset); 
+        assert(bitoffset == (bitoffset & 7));
+        if (ROUNDUP_BYTES(byteoffset, bitoffset) > byteoffsetmax)
+            byteoffsetmax = ROUNDUP_BYTES(byteoffset, bitoffset);
     }
     *previous = NULL;
 
     /* Like C, if the size of this structure would be zero, we compute it
        as 1 instead.  But for ctypes support, we allow the manually-
        specified totalsize to be zero in this case. */
-    alignedsize = (byteoffsetmax + alignment - 1) & ~(alignment-1); 
+    alignedsize = (byteoffsetmax + alignment - 1) & ~(alignment-1);
     if (alignedsize == 0)
         alignedsize = 1;
 
@@ -5451,10 +5451,10 @@ static PyObject *b_complete_struct_or_union(PyObject *self, PyObject *args)
         if (detect_custom_layout(ct, sflags, alignedsize,
                                  totalsize, "wrong total size", "", "") < 0)
             goto error;
-        if (totalsize < byteoffsetmax) { 
+        if (totalsize < byteoffsetmax) {
             PyErr_Format(PyExc_TypeError,
                          "%s cannot be of size %zd: there are fields at least "
-                         "up to %zd", ct->ct_name, totalsize, byteoffsetmax); 
+                         "up to %zd", ct->ct_name, totalsize, byteoffsetmax);
             goto error;
         }
     }
@@ -5503,28 +5503,28 @@ static void *fb_alloc(struct funcbuilder_s *fb, Py_ssize_t size)
     }
 }
 
-#define SUPPORTED_IN_API_MODE                                            \ 
-        " are only supported as %s if the function is "                  \ 
-        "'API mode' and non-variadic (i.e. declared inside ffibuilder"   \ 
-        ".cdef()+ffibuilder.set_source() and not taking a final '...' "  \ 
-        "argument)" 
- 
-static ffi_type *fb_unsupported(CTypeDescrObject *ct, const char *place, 
-                                const char *detail) 
-{ 
-    PyErr_Format(PyExc_NotImplementedError, 
-        "ctype '%s' not supported as %s.  %s.  " 
-        "Such structs" SUPPORTED_IN_API_MODE, 
-        ct->ct_name, place, detail, place); 
-    return NULL; 
-} 
- 
+#define SUPPORTED_IN_API_MODE                                            \
+        " are only supported as %s if the function is "                  \
+        "'API mode' and non-variadic (i.e. declared inside ffibuilder"   \
+        ".cdef()+ffibuilder.set_source() and not taking a final '...' "  \
+        "argument)"
+
+static ffi_type *fb_unsupported(CTypeDescrObject *ct, const char *place,
+                                const char *detail)
+{
+    PyErr_Format(PyExc_NotImplementedError,
+        "ctype '%s' not supported as %s.  %s.  "
+        "Such structs" SUPPORTED_IN_API_MODE,
+        ct->ct_name, place, detail, place);
+    return NULL;
+}
+
 static ffi_type *fb_fill_type(struct funcbuilder_s *fb, CTypeDescrObject *ct,
                               int is_result_type)
 {
     const char *place = is_result_type ? "return value" : "argument";
 
-    if (ct->ct_flags & (CT_PRIMITIVE_ANY & ~CT_PRIMITIVE_COMPLEX)) { 
+    if (ct->ct_flags & (CT_PRIMITIVE_ANY & ~CT_PRIMITIVE_COMPLEX)) {
         return (ffi_type *)ct->ct_extra;
     }
     else if (ct->ct_flags & (CT_POINTER|CT_FUNCTIONPTR)) {
@@ -5558,26 +5558,26 @@ static ffi_type *fb_fill_type(struct funcbuilder_s *fb, CTypeDescrObject *ct,
            Another reason for CT_CUSTOM_FIELD_POS would be anonymous
            nested structures: we lost the information about having it
            here, so better safe (and forbid it) than sorry (and maybe
-           crash).  Note: it seems we only get in this case with 
-           ffi.verify(). 
+           crash).  Note: it seems we only get in this case with
+           ffi.verify().
         */
         if (force_lazy_struct(ct) < 0)
             return NULL;
         if (ct->ct_flags & CT_CUSTOM_FIELD_POS) {
             /* these NotImplementedErrors may be caught and ignored until
                a real call is made to a function of this type */
-            return fb_unsupported(ct, place, 
-                "It is a struct declared with \"...;\", but the C " 
-                "calling convention may depend on the missing fields; " 
-                "or, it contains anonymous struct/unions"); 
+            return fb_unsupported(ct, place,
+                "It is a struct declared with \"...;\", but the C "
+                "calling convention may depend on the missing fields; "
+                "or, it contains anonymous struct/unions");
         }
-        /* Another reason: __attribute__((packed)) is not supported by libffi. 
-        */ 
-        if (ct->ct_flags & CT_WITH_PACKED_CHANGE) { 
-            return fb_unsupported(ct, place, 
-                "It is a 'packed' structure, with a different layout than " 
-                "expected by libffi"); 
-        } 
+        /* Another reason: __attribute__((packed)) is not supported by libffi.
+        */
+        if (ct->ct_flags & CT_WITH_PACKED_CHANGE) {
+            return fb_unsupported(ct, place,
+                "It is a 'packed' structure, with a different layout than "
+                "expected by libffi");
+        }
 
         n = PyDict_Size(ct->ct_stuff);
         nflat = 0;
@@ -5590,9 +5590,9 @@ static ffi_type *fb_fill_type(struct funcbuilder_s *fb, CTypeDescrObject *ct,
             CTypeDescrObject *ct1;
             assert(cf != NULL);
             if (cf->cf_bitshift >= 0) {
-                return fb_unsupported(ct, place, 
-                    "It is a struct with bit fields, which libffi does not " 
-                    "support"); 
+                return fb_unsupported(ct, place,
+                    "It is a struct with bit fields, which libffi does not "
+                    "support");
             }
             flat = 1;
             ct1 = cf->cf_type;
@@ -5601,9 +5601,9 @@ static ffi_type *fb_fill_type(struct funcbuilder_s *fb, CTypeDescrObject *ct,
                 ct1 = ct1->ct_itemdescr;
             }
             if (flat <= 0) {
-                return fb_unsupported(ct, place, 
-                    "It is a struct with a zero-length array, which libffi " 
-                    "does not support"); 
+                return fb_unsupported(ct, place,
+                    "It is a struct with a zero-length array, which libffi "
+                    "does not support");
             }
             nflat += flat;
             cf = cf->cf_next;
@@ -5642,24 +5642,24 @@ static ffi_type *fb_fill_type(struct funcbuilder_s *fb, CTypeDescrObject *ct,
         }
         return ffistruct;
     }
-    else if (ct->ct_flags & CT_UNION) { 
-        PyErr_Format(PyExc_NotImplementedError, 
-                     "ctype '%s' not supported as %s by libffi.  " 
-                     "Unions" SUPPORTED_IN_API_MODE, 
-                     ct->ct_name, place, place); 
-        return NULL; 
-    } 
-    else {
-        char *extra = ""; 
-        if (ct->ct_flags & CT_PRIMITIVE_COMPLEX) 
-            extra = " (the support for complex types inside libffi " 
-                    "is mostly missing at this point, so CFFI only " 
-                    "supports complex types as arguments or return " 
-                    "value in API-mode functions)"; 
- 
+    else if (ct->ct_flags & CT_UNION) {
         PyErr_Format(PyExc_NotImplementedError,
-                     "ctype '%s' (size %zd) not supported as %s%s", 
-                     ct->ct_name, ct->ct_size, place, extra); 
+                     "ctype '%s' not supported as %s by libffi.  "
+                     "Unions" SUPPORTED_IN_API_MODE,
+                     ct->ct_name, place, place);
+        return NULL;
+    }
+    else {
+        char *extra = "";
+        if (ct->ct_flags & CT_PRIMITIVE_COMPLEX)
+            extra = " (the support for complex types inside libffi "
+                    "is mostly missing at this point, so CFFI only "
+                    "supports complex types as arguments or return "
+                    "value in API-mode functions)";
+
+        PyErr_Format(PyExc_NotImplementedError,
+                     "ctype '%s' (size %zd) not supported as %s%s",
+                     ct->ct_name, ct->ct_size, place, extra);
         return NULL;
     }
 }
@@ -5850,14 +5850,14 @@ static CTypeDescrObject *fb_prepare_ctype(struct funcbuilder_s *fb,
 
 static cif_description_t *fb_prepare_cif(PyObject *fargs,
                                          CTypeDescrObject *fresult,
-                                         Py_ssize_t variadic_nargs_declared, 
+                                         Py_ssize_t variadic_nargs_declared,
                                          ffi_abi fabi)
- 
+
 {
     char *buffer;
     cif_description_t *cif_descr;
     struct funcbuilder_s funcbuffer;
-    ffi_status status = (ffi_status)-1; 
+    ffi_status status = (ffi_status)-1;
 
     funcbuffer.nb_bytes = 0;
     funcbuffer.bufferp = NULL;
@@ -5880,24 +5880,24 @@ static cif_description_t *fb_prepare_cif(PyObject *fargs,
     assert(funcbuffer.bufferp == buffer + funcbuffer.nb_bytes);
 
     cif_descr = (cif_description_t *)buffer;
- 
-    /* use `ffi_prep_cif_var` if necessary and available */ 
-#if CFFI_CHECK_FFI_PREP_CIF_VAR_MAYBE 
-    if (variadic_nargs_declared >= 0) { 
-        if (CFFI_CHECK_FFI_PREP_CIF_VAR) { 
-            status = ffi_prep_cif_var(&cif_descr->cif, fabi, 
-                                      variadic_nargs_declared, funcbuffer.nargs, 
-                                      funcbuffer.rtype, funcbuffer.atypes); 
-        } 
-    } 
-#endif 
- 
-    if (status == (ffi_status)-1) { 
-        status = ffi_prep_cif(&cif_descr->cif, fabi, funcbuffer.nargs, 
-                              funcbuffer.rtype, funcbuffer.atypes); 
-    } 
- 
-    if (status != FFI_OK) { 
+
+    /* use `ffi_prep_cif_var` if necessary and available */
+#if CFFI_CHECK_FFI_PREP_CIF_VAR_MAYBE
+    if (variadic_nargs_declared >= 0) {
+        if (CFFI_CHECK_FFI_PREP_CIF_VAR) {
+            status = ffi_prep_cif_var(&cif_descr->cif, fabi,
+                                      variadic_nargs_declared, funcbuffer.nargs,
+                                      funcbuffer.rtype, funcbuffer.atypes);
+        }
+    }
+#endif
+
+    if (status == (ffi_status)-1) {
+        status = ffi_prep_cif(&cif_descr->cif, fabi, funcbuffer.nargs,
+                              funcbuffer.rtype, funcbuffer.atypes);
+    }
+
+    if (status != FFI_OK) {
         PyErr_SetString(PyExc_SystemError,
                         "libffi failed to build this function type");
         goto error;
@@ -5941,7 +5941,7 @@ static PyObject *new_function_type(PyObject *fargs,   /* tuple */
            is computed here. */
         cif_description_t *cif_descr;
 
-        cif_descr = fb_prepare_cif(fargs, fresult, -1, fabi); 
+        cif_descr = fb_prepare_cif(fargs, fresult, -1, fabi);
         if (cif_descr == NULL) {
             if (PyErr_ExceptionMatches(PyExc_NotImplementedError)) {
                 PyErr_Clear();   /* will get the exception if we see an
@@ -6046,14 +6046,14 @@ static int convert_from_object_fficallback(char *result,
             return 0;
         }
         else if (ctype->ct_flags & (CT_PRIMITIVE_CHAR | CT_PRIMITIVE_SIGNED |
-                                    CT_PRIMITIVE_UNSIGNED | 
-                                    CT_POINTER | CT_FUNCTIONPTR)) { 
+                                    CT_PRIMITIVE_UNSIGNED |
+                                    CT_POINTER | CT_FUNCTIONPTR)) {
             /* zero extension: fill the '*result' with zeros, and (on big-
-               endian machines) correct the 'result' pointer to write to. 
-               We also do that for pointers, even though we're normally not 
-               in this branch because ctype->ct_size == sizeof(ffi_arg) for 
-               pointers---except on some architectures like x32 (issue #372). 
-             */ 
+               endian machines) correct the 'result' pointer to write to.
+               We also do that for pointers, even though we're normally not
+               in this branch because ctype->ct_size == sizeof(ffi_arg) for
+               pointers---except on some architectures like x32 (issue #372).
+             */
             memset(result, 0, sizeof(ffi_arg));
 #ifdef WORDS_BIGENDIAN
             result += (sizeof(ffi_arg) - ctype->ct_size);
@@ -6064,49 +6064,49 @@ static int convert_from_object_fficallback(char *result,
     return convert_from_object(result, ctype, pyobj);
 }
 
-static void _my_PyErr_WriteUnraisable(PyObject *t, PyObject *v, PyObject *tb, 
-                                      char *objdescr, PyObject *obj, 
+static void _my_PyErr_WriteUnraisable(PyObject *t, PyObject *v, PyObject *tb,
+                                      char *objdescr, PyObject *obj,
                                       char *extra_error_line)
 {
     /* like PyErr_WriteUnraisable(), but write a full traceback */
-#ifdef USE_WRITEUNRAISABLEMSG 
- 
-    /* PyErr_WriteUnraisable actually writes the full traceback anyway 
-       from Python 3.4, but we can't really get the formatting of the 
-       custom text to be what we want.  We can do better from Python 
-       3.8 by calling the new _PyErr_WriteUnraisableMsg(). 
-       Luckily it's also Python 3.8 that adds new functionality that 
-       people might want: the new sys.unraisablehook(). 
-    */ 
-    PyObject *s; 
-    int first_char; 
-    assert(objdescr != NULL && objdescr[0] != 0);   /* non-empty */ 
-    first_char = objdescr[0]; 
-    if (first_char >= 'A' && first_char <= 'Z') 
-        first_char += 'a' - 'A';    /* lower() the very first character */ 
-    if (extra_error_line == NULL) 
-        extra_error_line = ""; 
- 
-    if (obj != NULL) 
-        s = PyUnicode_FromFormat("%c%s%R%s", 
-            first_char, objdescr + 1, obj, extra_error_line); 
-    else 
-        s = PyUnicode_FromFormat("%c%s%s", 
-            first_char, objdescr + 1, extra_error_line); 
- 
-    PyErr_Restore(t, v, tb); 
-    if (s != NULL) { 
-        _PyErr_WriteUnraisableMsg(PyText_AS_UTF8(s), NULL); 
-        Py_DECREF(s); 
-    } 
-    else 
-        PyErr_WriteUnraisable(obj);   /* best effort */ 
-    PyErr_Clear(); 
- 
-#else 
- 
-    /* version for Python 2.7 and < 3.8 */ 
-    PyObject *f; 
+#ifdef USE_WRITEUNRAISABLEMSG
+
+    /* PyErr_WriteUnraisable actually writes the full traceback anyway
+       from Python 3.4, but we can't really get the formatting of the
+       custom text to be what we want.  We can do better from Python
+       3.8 by calling the new _PyErr_WriteUnraisableMsg().
+       Luckily it's also Python 3.8 that adds new functionality that
+       people might want: the new sys.unraisablehook().
+    */
+    PyObject *s;
+    int first_char;
+    assert(objdescr != NULL && objdescr[0] != 0);   /* non-empty */
+    first_char = objdescr[0];
+    if (first_char >= 'A' && first_char <= 'Z')
+        first_char += 'a' - 'A';    /* lower() the very first character */
+    if (extra_error_line == NULL)
+        extra_error_line = "";
+
+    if (obj != NULL)
+        s = PyUnicode_FromFormat("%c%s%R%s",
+            first_char, objdescr + 1, obj, extra_error_line);
+    else
+        s = PyUnicode_FromFormat("%c%s%s",
+            first_char, objdescr + 1, extra_error_line);
+
+    PyErr_Restore(t, v, tb);
+    if (s != NULL) {
+        _PyErr_WriteUnraisableMsg(PyText_AS_UTF8(s), NULL);
+        Py_DECREF(s);
+    }
+    else
+        PyErr_WriteUnraisable(obj);   /* best effort */
+    PyErr_Clear();
+
+#else
+
+    /* version for Python 2.7 and < 3.8 */
+    PyObject *f;
 #if PY_MAJOR_VERSION >= 3
     /* jump through hoops to ensure the tb is attached to v, on Python 3 */
     PyErr_NormalizeException(&t, &v, &tb);
@@ -6130,8 +6130,8 @@ static void _my_PyErr_WriteUnraisable(PyObject *t, PyObject *v, PyObject *tb,
     Py_XDECREF(t);
     Py_XDECREF(v);
     Py_XDECREF(tb);
- 
-#endif 
+
+#endif
 }
 
 static void general_invoke_callback(int decode_args_from_libffi,
@@ -6181,11 +6181,11 @@ static void general_invoke_callback(int decode_args_from_libffi,
         goto error;
     if (convert_from_object_fficallback(result, SIGNATURE(1), py_res,
                                         decode_args_from_libffi) < 0) {
-#ifdef USE_WRITEUNRAISABLEMSG 
-        extra_error_line = ", trying to convert the result back to C"; 
-#else 
+#ifdef USE_WRITEUNRAISABLEMSG
+        extra_error_line = ", trying to convert the result back to C";
+#else
         extra_error_line = "Trying to convert the result back to C:\n";
-#endif 
+#endif
         goto error;
     }
  done:
@@ -6202,12 +6202,12 @@ static void general_invoke_callback(int decode_args_from_libffi,
     }
     onerror_cb = PyTuple_GET_ITEM(cb_args, 3);
     if (onerror_cb == Py_None) {
-        PyObject *ecap, *t, *v, *tb; 
-        PyErr_Fetch(&t, &v, &tb); 
-        ecap = _cffi_start_error_capture(); 
-        _my_PyErr_WriteUnraisable(t, v, tb, "From cffi callback ", py_ob, 
+        PyObject *ecap, *t, *v, *tb;
+        PyErr_Fetch(&t, &v, &tb);
+        ecap = _cffi_start_error_capture();
+        _my_PyErr_WriteUnraisable(t, v, tb, "From cffi callback ", py_ob,
                                   extra_error_line);
-        _cffi_stop_error_capture(ecap); 
+        _cffi_stop_error_capture(ecap);
     }
     else {
         PyObject *exc1, *val1, *tb1, *res1, *exc2, *val2, *tb2;
@@ -6231,23 +6231,23 @@ static void general_invoke_callback(int decode_args_from_libffi,
         }
         else {
             /* double exception! print a double-traceback... */
-            PyObject *ecap; 
+            PyObject *ecap;
             PyErr_Fetch(&exc2, &val2, &tb2);
-            ecap = _cffi_start_error_capture(); 
-            _my_PyErr_WriteUnraisable(exc1, val1, tb1, 
-                                      "From cffi callback ", py_ob, 
+            ecap = _cffi_start_error_capture();
+            _my_PyErr_WriteUnraisable(exc1, val1, tb1,
+                                      "From cffi callback ", py_ob,
                                       extra_error_line);
-#ifdef USE_WRITEUNRAISABLEMSG 
-            _my_PyErr_WriteUnraisable(exc2, val2, tb2, 
-                 "during handling of the above exception by 'onerror'", 
-                 NULL, NULL); 
-#else 
+#ifdef USE_WRITEUNRAISABLEMSG
+            _my_PyErr_WriteUnraisable(exc2, val2, tb2,
+                 "during handling of the above exception by 'onerror'",
+                 NULL, NULL);
+#else
             extra_error_line = ("\nDuring the call to 'onerror', "
                                 "another exception occurred:\n\n");
-            _my_PyErr_WriteUnraisable(exc2, val2, tb2, 
-                                      NULL, NULL, extra_error_line); 
-#endif 
-            _cffi_stop_error_capture(ecap); 
+            _my_PyErr_WriteUnraisable(exc2, val2, tb2,
+                                      NULL, NULL, extra_error_line);
+#endif
+            _cffi_stop_error_capture(ecap);
         }
     }
     goto done;
@@ -6314,38 +6314,38 @@ static PyObject *prepare_callback_info_tuple(CTypeDescrObject *ct,
     infotuple = Py_BuildValue("OOOO", ct, ob, py_rawerr, onerror_ob);
     Py_DECREF(py_rawerr);
 
-#if defined(WITH_THREAD) && PY_VERSION_HEX < 0x03070000 
+#if defined(WITH_THREAD) && PY_VERSION_HEX < 0x03070000
     /* We must setup the GIL here, in case the callback is invoked in
-       some other non-Pythonic thread.  This is the same as ctypes. 
-       But PyEval_InitThreads() is always a no-op from CPython 3.7 
-       (the call from ctypes was removed some time later I think). */ 
+       some other non-Pythonic thread.  This is the same as ctypes.
+       But PyEval_InitThreads() is always a no-op from CPython 3.7
+       (the call from ctypes was removed some time later I think). */
     PyEval_InitThreads();
 #endif
 
     return infotuple;
 }
 
-/* messily try to silence a gcc/clang deprecation warning for 
-   ffi_prep_closure.  Don't miss the "pragma pop" after the function. 
-   This is done around the whole function because very old GCCs don't 
-   support it inside a function. */ 
-#if defined(__clang__) 
-#  pragma clang diagnostic push 
-#  pragma clang diagnostic ignored "-Wdeprecated-declarations" 
-#elif defined(__GNUC__) 
-#  pragma GCC diagnostic push 
-#  pragma GCC diagnostic ignored "-Wdeprecated-declarations" 
-#endif 
+/* messily try to silence a gcc/clang deprecation warning for
+   ffi_prep_closure.  Don't miss the "pragma pop" after the function.
+   This is done around the whole function because very old GCCs don't
+   support it inside a function. */
+#if defined(__clang__)
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__GNUC__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 static PyObject *b_callback(PyObject *self, PyObject *args)
 {
     CTypeDescrObject *ct;
-    CDataObject_closure *cd; 
+    CDataObject_closure *cd;
     PyObject *ob, *error_ob = Py_None, *onerror_ob = Py_None;
     PyObject *infotuple;
     cif_description_t *cif_descr;
     ffi_closure *closure;
-    ffi_status status; 
-    void *closure_exec; 
+    ffi_status status;
+    void *closure_exec;
 
     if (!PyArg_ParseTuple(args, "O!O|OO:callback", &CTypeDescr_Type, &ct, &ob,
                           &error_ob, &onerror_ob))
@@ -6355,34 +6355,34 @@ static PyObject *b_callback(PyObject *self, PyObject *args)
     if (infotuple == NULL)
         return NULL;
 
-#if CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE 
-    if (CFFI_CHECK_FFI_CLOSURE_ALLOC) { 
-        closure = ffi_closure_alloc(sizeof(ffi_closure), &closure_exec); 
-    } else 
-#endif 
-    { 
-        closure = cffi_closure_alloc(); 
-        closure_exec = closure; 
-    } 
- 
-    if (closure == NULL) { 
-        Py_DECREF(infotuple); 
-        PyErr_SetString(PyExc_MemoryError, 
-            "Cannot allocate write+execute memory for ffi.callback(). " 
-            "You might be running on a system that prevents this. " 
-            "For more information, see " 
-            "https://cffi.readthedocs.io/en/latest/using.html#callbacks"); 
-        return NULL; 
-    } 
-    cd = PyObject_GC_New(CDataObject_closure, &CDataOwningGC_Type); 
+#if CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE
+    if (CFFI_CHECK_FFI_CLOSURE_ALLOC) {
+        closure = ffi_closure_alloc(sizeof(ffi_closure), &closure_exec);
+    } else
+#endif
+    {
+        closure = cffi_closure_alloc();
+        closure_exec = closure;
+    }
+
+    if (closure == NULL) {
+        Py_DECREF(infotuple);
+        PyErr_SetString(PyExc_MemoryError,
+            "Cannot allocate write+execute memory for ffi.callback(). "
+            "You might be running on a system that prevents this. "
+            "For more information, see "
+            "https://cffi.readthedocs.io/en/latest/using.html#callbacks");
+        return NULL;
+    }
+    cd = PyObject_GC_New(CDataObject_closure, &CDataOwningGC_Type);
     if (cd == NULL)
         goto error;
     Py_INCREF(ct);
-    cd->head.c_type = ct; 
-    cd->head.c_data = (char *)closure_exec; 
-    cd->head.c_weakreflist = NULL; 
-    closure->user_data = NULL; 
-    cd->closure = closure; 
+    cd->head.c_type = ct;
+    cd->head.c_data = (char *)closure_exec;
+    cd->head.c_weakreflist = NULL;
+    closure->user_data = NULL;
+    cd->closure = closure;
 
     cif_descr = (cif_description_t *)ct->ct_extra;
     if (cif_descr == NULL) {
@@ -6391,30 +6391,30 @@ static PyObject *b_callback(PyObject *self, PyObject *args)
                      "return type or with '...'", ct->ct_name);
         goto error;
     }
- 
-#if CFFI_CHECK_FFI_PREP_CLOSURE_LOC_MAYBE 
-    if (CFFI_CHECK_FFI_PREP_CLOSURE_LOC) { 
-        status = ffi_prep_closure_loc(closure, &cif_descr->cif, 
-                                      invoke_callback, infotuple, closure_exec); 
-    } 
-    else 
-#endif 
-    { 
-#if defined(__APPLE__) && defined(FFI_AVAILABLE_APPLE) && !FFI_LEGACY_CLOSURE_API 
-        PyErr_Format(PyExc_SystemError, "ffi_prep_closure_loc() is missing"); 
-        goto error; 
-#else 
-        status = ffi_prep_closure(closure, &cif_descr->cif, 
-                                  invoke_callback, infotuple); 
-#endif 
-    } 
- 
-    if (status != FFI_OK) { 
+
+#if CFFI_CHECK_FFI_PREP_CLOSURE_LOC_MAYBE
+    if (CFFI_CHECK_FFI_PREP_CLOSURE_LOC) {
+        status = ffi_prep_closure_loc(closure, &cif_descr->cif,
+                                      invoke_callback, infotuple, closure_exec);
+    }
+    else
+#endif
+    {
+#if defined(__APPLE__) && defined(FFI_AVAILABLE_APPLE) && !FFI_LEGACY_CLOSURE_API
+        PyErr_Format(PyExc_SystemError, "ffi_prep_closure_loc() is missing");
+        goto error;
+#else
+        status = ffi_prep_closure(closure, &cif_descr->cif,
+                                  invoke_callback, infotuple);
+#endif
+    }
+
+    if (status != FFI_OK) {
         PyErr_SetString(PyExc_SystemError,
                         "libffi failed to build this callback");
         goto error;
     }
- 
+
     if (closure->user_data != infotuple) {
         /* Issue #266.  Should not occur, but could, if we are using
            at runtime a version of libffi compiled with a different
@@ -6429,30 +6429,30 @@ static PyObject *b_callback(PyObject *self, PyObject *args)
             "different from the 'ffi.h' file seen at compile-time)");
         goto error;
     }
-    PyObject_GC_Track(cd); 
+    PyObject_GC_Track(cd);
     return (PyObject *)cd;
 
  error:
     closure->user_data = NULL;
-    if (cd == NULL) { 
-#if CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE 
-        if (CFFI_CHECK_FFI_CLOSURE_ALLOC) { 
-            ffi_closure_free(closure); 
-        } 
-        else 
-#endif 
-            cffi_closure_free(closure); 
-    } 
+    if (cd == NULL) {
+#if CFFI_CHECK_FFI_CLOSURE_ALLOC_MAYBE
+        if (CFFI_CHECK_FFI_CLOSURE_ALLOC) {
+            ffi_closure_free(closure);
+        }
+        else
+#endif
+            cffi_closure_free(closure);
+    }
     else
         Py_DECREF(cd);
     Py_XDECREF(infotuple);
     return NULL;
 }
-#if defined(__clang__) 
-#  pragma clang diagnostic pop 
-#elif defined(__GNUC__) 
-#  pragma GCC diagnostic pop 
-#endif 
+#if defined(__clang__)
+#  pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#  pragma GCC diagnostic pop
+#endif
 
 static PyObject *b_new_enum_type(PyObject *self, PyObject *args)
 {
@@ -6498,7 +6498,7 @@ static PyObject *b_new_enum_type(PyObject *self, PyObject *args)
         if (!PyText_Check(tmpkey)) {
 #if PY_MAJOR_VERSION < 3
             if (PyUnicode_Check(tmpkey)) {
-                const char *text = PyText_AsUTF8(tmpkey); 
+                const char *text = PyText_AsUTF8(tmpkey);
                 if (text == NULL)
                     goto error;
                 Py_DECREF(tmpkey);
@@ -6758,8 +6758,8 @@ static PyObject *b_string(PyObject *self, PyObject *args, PyObject *kwds)
     if (cd->c_type->ct_itemdescr != NULL &&
         cd->c_type->ct_itemdescr->ct_flags & (CT_PRIMITIVE_CHAR |
                                               CT_PRIMITIVE_SIGNED |
-                                              CT_PRIMITIVE_UNSIGNED) && 
-        !(cd->c_type->ct_itemdescr->ct_flags & CT_IS_BOOL)) { 
+                                              CT_PRIMITIVE_UNSIGNED) &&
+        !(cd->c_type->ct_itemdescr->ct_flags & CT_IS_BOOL)) {
         Py_ssize_t length = maxlen;
         if (cd->c_data == NULL) {
             PyObject *s = cdata_repr(cd);
@@ -6791,44 +6791,44 @@ static PyObject *b_string(PyObject *self, PyObject *args, PyObject *kwds)
             return PyBytes_FromStringAndSize(start, length);
         }
         else if (cd->c_type->ct_itemdescr->ct_flags & CT_PRIMITIVE_CHAR) {
-            switch (cd->c_type->ct_itemdescr->ct_size) { 
-            case 2: { 
-                const cffi_char16_t *start = (cffi_char16_t *)cd->c_data; 
-                if (length < 0) { 
-                    /*READ(start, 2)*/ 
-                    length = 0; 
-                    while (start[length]) 
-                        length++; 
-                    /*READ(start, 2 * length)*/ 
-                } 
-                else { 
-                    /*READ(start, 2 * length)*/ 
-                    maxlen = length; 
-                    length = 0; 
-                    while (length < maxlen && start[length]) 
-                        length++; 
-                } 
-                return _my_PyUnicode_FromChar16(start, length); 
+            switch (cd->c_type->ct_itemdescr->ct_size) {
+            case 2: {
+                const cffi_char16_t *start = (cffi_char16_t *)cd->c_data;
+                if (length < 0) {
+                    /*READ(start, 2)*/
+                    length = 0;
+                    while (start[length])
+                        length++;
+                    /*READ(start, 2 * length)*/
+                }
+                else {
+                    /*READ(start, 2 * length)*/
+                    maxlen = length;
+                    length = 0;
+                    while (length < maxlen && start[length])
+                        length++;
+                }
+                return _my_PyUnicode_FromChar16(start, length);
             }
-            case 4: { 
-                const cffi_char32_t *start = (cffi_char32_t *)cd->c_data; 
-                if (length < 0) { 
-                    /*READ(start, 4)*/ 
-                    length = 0; 
-                    while (start[length]) 
-                        length++; 
-                    /*READ(start, 4 * length)*/ 
-                } 
-                else { 
-                    /*READ(start, 4 * length)*/ 
-                    maxlen = length; 
-                    length = 0; 
-                    while (length < maxlen && start[length]) 
-                        length++; 
-                } 
-                return _my_PyUnicode_FromChar32(start, length); 
+            case 4: {
+                const cffi_char32_t *start = (cffi_char32_t *)cd->c_data;
+                if (length < 0) {
+                    /*READ(start, 4)*/
+                    length = 0;
+                    while (start[length])
+                        length++;
+                    /*READ(start, 4 * length)*/
+                }
+                else {
+                    /*READ(start, 4 * length)*/
+                    maxlen = length;
+                    length = 0;
+                    while (length < maxlen && start[length])
+                        length++;
+                }
+                return _my_PyUnicode_FromChar32(start, length);
             }
-            } 
+            }
         }
     }
     else if (cd->c_type->ct_flags & CT_IS_ENUM) {
@@ -6844,12 +6844,12 @@ static PyObject *b_string(PyObject *self, PyObject *args, PyObject *kwds)
         if (cd->c_type->ct_size == sizeof(char))
             return PyBytes_FromStringAndSize(cd->c_data, 1);
         else if (cd->c_type->ct_flags & CT_PRIMITIVE_CHAR) {
-            switch (cd->c_type->ct_size) { 
-            case 2: 
-                return _my_PyUnicode_FromChar16((cffi_char16_t *)cd->c_data, 1); 
-            case 4: 
-                return _my_PyUnicode_FromChar32((cffi_char32_t *)cd->c_data, 1); 
-            } 
+            switch (cd->c_type->ct_size) {
+            case 2:
+                return _my_PyUnicode_FromChar16((cffi_char16_t *)cd->c_data, 1);
+            case 4:
+                return _my_PyUnicode_FromChar32((cffi_char32_t *)cd->c_data, 1);
+            }
         }
     }
     PyErr_Format(PyExc_TypeError, "string(): unexpected cdata '%s' argument",
@@ -6895,14 +6895,14 @@ static PyObject *b_unpack(PyObject *self, PyObject *args, PyObject *kwds)
     /* byte- and unicode strings */
     ctitem = cd->c_type->ct_itemdescr;
     if (ctitem->ct_flags & CT_PRIMITIVE_CHAR) {
-        switch (ctitem->ct_size) { 
-        case sizeof(char): 
+        switch (ctitem->ct_size) {
+        case sizeof(char):
             return PyBytes_FromStringAndSize(cd->c_data, length);
-        case 2: 
-            return _my_PyUnicode_FromChar16((cffi_char16_t *)cd->c_data,length); 
-        case 4: 
-            return _my_PyUnicode_FromChar32((cffi_char32_t *)cd->c_data,length); 
-        } 
+        case 2:
+            return _my_PyUnicode_FromChar16((cffi_char16_t *)cd->c_data,length);
+        case 4:
+            return _my_PyUnicode_FromChar32((cffi_char32_t *)cd->c_data,length);
+        }
     }
 
     /* else, the result is a list.  This implementation should be
@@ -6918,7 +6918,7 @@ static PyObject *b_unpack(PyObject *self, PyObject *args, PyObject *kwds)
     src = cd->c_data;
     itemsize = ctitem->ct_size;
     if (itemsize < 0) {
-        Py_DECREF(result); 
+        Py_DECREF(result);
         PyErr_Format(PyExc_ValueError, "'%s' points to items of unknown size",
                      cd->c_type->ct_name);
         return NULL;
@@ -6951,8 +6951,8 @@ static PyObject *b_unpack(PyObject *self, PyObject *args, PyObject *kwds)
             /* Note: we never pick case 6 if sizeof(int) == sizeof(long),
                so that case 6 below can assume that the 'unsigned int' result
                would always fit in a 'signed long'. */
-            if (ctitem->ct_flags & CT_IS_BOOL)           casenum = 11; 
-            else if (itemsize == sizeof(unsigned long))  casenum = 7; 
+            if (ctitem->ct_flags & CT_IS_BOOL)           casenum = 11;
+            else if (itemsize == sizeof(unsigned long))  casenum = 7;
             else if (itemsize == sizeof(unsigned int))   casenum = 6;
             else if (itemsize == sizeof(unsigned short)) casenum = 5;
             else if (itemsize == sizeof(unsigned char))  casenum = 4;
@@ -6985,13 +6985,13 @@ static PyObject *b_unpack(PyObject *self, PyObject *args, PyObject *kwds)
         case 8: x = PyFloat_FromDouble(*(float *)src); break;
         case 9: x = PyFloat_FromDouble(*(double *)src); break;
         case 10: x = new_simple_cdata(*(char **)src, ctitem); break;
-        case 11: 
-            switch (*(unsigned char *)src) { 
-            case 0: x = Py_False; Py_INCREF(x); break; 
-            case 1: x = Py_True;  Py_INCREF(x); break; 
-            default: x = convert_to_object(src, ctitem); /* error */ 
-            } 
-            break; 
+        case 11:
+            switch (*(unsigned char *)src) {
+            case 0: x = Py_False; Py_INCREF(x); break;
+            case 1: x = Py_True;  Py_INCREF(x); break;
+            default: x = convert_to_object(src, ctitem); /* error */
+            }
+            break;
         }
         if (x == NULL) {
             Py_DECREF(result);
@@ -7003,10 +7003,10 @@ static PyObject *b_unpack(PyObject *self, PyObject *args, PyObject *kwds)
     return result;
 }
 
-static PyObject * 
-b_buffer_new(PyTypeObject *type, PyObject *args, PyObject *kwds) 
+static PyObject *
+b_buffer_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
-    /* this is the constructor of the type implemented in minibuffer.h */ 
+    /* this is the constructor of the type implemented in minibuffer.h */
     CDataObject *cd;
     Py_ssize_t size = -1;
     static char *keywords[] = {"cdata", "size", NULL};
@@ -7074,7 +7074,7 @@ static PyObject *newp_handle(CTypeDescrObject *ct_voidp, PyObject *x)
                                                       &CDataOwningGC_Type);
     if (cd == NULL)
         return NULL;
-    Py_INCREF(ct_voidp);        /* must be "void *" */ 
+    Py_INCREF(ct_voidp);        /* must be "void *" */
     cd->head.c_type = ct_voidp;
     cd->head.c_data = (char *)cd;
     cd->head.c_weakreflist = NULL;
@@ -7187,27 +7187,27 @@ static int _my_PyObject_GetContiguousBuffer(PyObject *x, Py_buffer *view,
     return 0;
 }
 
-static PyObject *direct_from_buffer(CTypeDescrObject *ct, PyObject *x, 
-                                    int require_writable) 
+static PyObject *direct_from_buffer(CTypeDescrObject *ct, PyObject *x,
+                                    int require_writable)
 {
-    CDataObject *cd; 
-    Py_buffer *view; 
-    Py_ssize_t arraylength, minimumlength = 0; 
+    CDataObject *cd;
+    Py_buffer *view;
+    Py_ssize_t arraylength, minimumlength = 0;
 
-    if (!(ct->ct_flags & (CT_ARRAY | CT_POINTER))) { 
-        PyErr_Format(PyExc_TypeError, 
-                     "expected a pointer or array ctype, got '%s'", 
-                     ct->ct_name); 
-        return NULL; 
+    if (!(ct->ct_flags & (CT_ARRAY | CT_POINTER))) {
+        PyErr_Format(PyExc_TypeError,
+                     "expected a pointer or array ctype, got '%s'",
+                     ct->ct_name);
+        return NULL;
     }
 
-    /* PyPy 5.7 can obtain buffers for string (python 2) 
-       or bytes (python 3). from_buffer(u"foo") is disallowed. 
-     */ 
-    if (PyUnicode_Check(x)) { 
+    /* PyPy 5.7 can obtain buffers for string (python 2)
+       or bytes (python 3). from_buffer(u"foo") is disallowed.
+     */
+    if (PyUnicode_Check(x)) {
         PyErr_SetString(PyExc_TypeError,
-                        "from_buffer() cannot return the address " 
-                        "of a unicode object"); 
+                        "from_buffer() cannot return the address "
+                        "of a unicode object");
         return NULL;
     }
 
@@ -7216,54 +7216,54 @@ static PyObject *direct_from_buffer(CTypeDescrObject *ct, PyObject *x,
         PyErr_NoMemory();
         return NULL;
     }
-    if (_my_PyObject_GetContiguousBuffer(x, view, require_writable) < 0) 
+    if (_my_PyObject_GetContiguousBuffer(x, view, require_writable) < 0)
         goto error1;
 
-    if (ct->ct_flags & CT_POINTER) 
-    { 
-        arraylength = view->len;   /* number of bytes, not used so far */ 
-    } 
-    else { 
-        /* ct->ct_flags & CT_ARRAY */ 
-        if (ct->ct_length >= 0) { 
-            /* it's an array with a fixed length; make sure that the 
-               buffer contains enough bytes. */ 
-            minimumlength = ct->ct_size; 
-            arraylength = ct->ct_length; 
-        } 
-        else { 
-            /* it's an open 'array[]' */ 
-            if (ct->ct_itemdescr->ct_size == 1) { 
-                /* fast path, performance only */ 
-                arraylength = view->len; 
-            } 
-            else if (ct->ct_itemdescr->ct_size > 0) { 
-                /* give it as many items as fit the buffer.  Ignore a 
-                   partial last element. */ 
-                arraylength = view->len / ct->ct_itemdescr->ct_size; 
-            } 
-            else { 
-                /* it's an array 'empty[]'.  Unsupported obscure case: 
-                   the problem is that setting the length of the result 
-                   to anything large (like SSIZE_T_MAX) is dangerous, 
-                   because if someone tries to loop over it, it will 
-                   turn effectively into an infinite loop. */ 
-                PyErr_Format(PyExc_ZeroDivisionError, 
-                    "from_buffer('%s', ..): the actual length of the array " 
-                    "cannot be computed", ct->ct_name); 
-                goto error2; 
-            } 
-        } 
-    } 
-    if (view->len < minimumlength) { 
-        PyErr_Format(PyExc_ValueError, 
-            "buffer is too small (%zd bytes) for '%s' (%zd bytes)", 
-            view->len, ct->ct_name, minimumlength); 
-        goto error2; 
-    } 
- 
-    cd = (CDataObject *)PyObject_GC_New(CDataObject_frombuf, 
-                                        &CDataFromBuf_Type); 
+    if (ct->ct_flags & CT_POINTER)
+    {
+        arraylength = view->len;   /* number of bytes, not used so far */
+    }
+    else {
+        /* ct->ct_flags & CT_ARRAY */
+        if (ct->ct_length >= 0) {
+            /* it's an array with a fixed length; make sure that the
+               buffer contains enough bytes. */
+            minimumlength = ct->ct_size;
+            arraylength = ct->ct_length;
+        }
+        else {
+            /* it's an open 'array[]' */
+            if (ct->ct_itemdescr->ct_size == 1) {
+                /* fast path, performance only */
+                arraylength = view->len;
+            }
+            else if (ct->ct_itemdescr->ct_size > 0) {
+                /* give it as many items as fit the buffer.  Ignore a
+                   partial last element. */
+                arraylength = view->len / ct->ct_itemdescr->ct_size;
+            }
+            else {
+                /* it's an array 'empty[]'.  Unsupported obscure case:
+                   the problem is that setting the length of the result
+                   to anything large (like SSIZE_T_MAX) is dangerous,
+                   because if someone tries to loop over it, it will
+                   turn effectively into an infinite loop. */
+                PyErr_Format(PyExc_ZeroDivisionError,
+                    "from_buffer('%s', ..): the actual length of the array "
+                    "cannot be computed", ct->ct_name);
+                goto error2;
+            }
+        }
+    }
+    if (view->len < minimumlength) {
+        PyErr_Format(PyExc_ValueError,
+            "buffer is too small (%zd bytes) for '%s' (%zd bytes)",
+            view->len, ct->ct_name, minimumlength);
+        goto error2;
+    }
+
+    cd = (CDataObject *)PyObject_GC_New(CDataObject_frombuf,
+                                        &CDataFromBuf_Type);
     if (cd == NULL)
         goto error2;
 
@@ -7271,8 +7271,8 @@ static PyObject *direct_from_buffer(CTypeDescrObject *ct, PyObject *x,
     cd->c_type = ct;
     cd->c_data = view->buf;
     cd->c_weakreflist = NULL;
-    ((CDataObject_frombuf *)cd)->length = arraylength; 
-    ((CDataObject_frombuf *)cd)->bufferview = view; 
+    ((CDataObject_frombuf *)cd)->length = arraylength;
+    ((CDataObject_frombuf *)cd)->bufferview = view;
     PyObject_GC_Track(cd);
     return (PyObject *)cd;
 
@@ -7287,13 +7287,13 @@ static PyObject *b_from_buffer(PyObject *self, PyObject *args)
 {
     CTypeDescrObject *ct;
     PyObject *x;
-    int require_writable = 0; 
+    int require_writable = 0;
 
-    if (!PyArg_ParseTuple(args, "O!O|i", &CTypeDescr_Type, &ct, &x, 
-                          &require_writable)) 
+    if (!PyArg_ParseTuple(args, "O!O|i", &CTypeDescr_Type, &ct, &x,
+                          &require_writable))
         return NULL;
 
-    return direct_from_buffer(ct, x, require_writable); 
+    return direct_from_buffer(ct, x, require_writable);
 }
 
 static int _fetch_as_buffer(PyObject *x, Py_buffer *view, int writable_only)
@@ -7360,12 +7360,12 @@ static PyObject *b_gcp(PyObject *self, PyObject *args, PyObject *kwds)
     CDataObject *cd;
     CDataObject *origobj;
     PyObject *destructor;
-    Py_ssize_t ignored;   /* for pypy */ 
-    static char *keywords[] = {"cdata", "destructor", "size", NULL}; 
+    Py_ssize_t ignored;   /* for pypy */
+    static char *keywords[] = {"cdata", "destructor", "size", NULL};
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!O|n:gc", keywords, 
-                                     &CData_Type, &origobj, &destructor, 
-                                     &ignored)) 
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!O|n:gc", keywords,
+                                     &CData_Type, &origobj, &destructor,
+                                     &ignored))
         return NULL;
 
     if (destructor == Py_None) {
@@ -7383,15 +7383,15 @@ static PyObject *b_gcp(PyObject *self, PyObject *args, PyObject *kwds)
     return (PyObject *)cd;
 }
 
-static PyObject *b_release(PyObject *self, PyObject *arg) 
-{ 
-    if (!CData_Check(arg)) { 
-        PyErr_SetString(PyExc_TypeError, "expected a 'cdata' object"); 
-        return NULL; 
-    } 
-    return cdata_exit(arg, NULL); 
-} 
- 
+static PyObject *b_release(PyObject *self, PyObject *arg)
+{
+    if (!CData_Check(arg)) {
+        PyErr_SetString(PyExc_TypeError, "expected a 'cdata' object");
+        return NULL;
+    }
+    return cdata_exit(arg, NULL);
+}
+
 /************************************************************/
 
 static char _testfunc0(char a, char b)
@@ -7566,20 +7566,20 @@ static int _testfunc23(char *p)
     return -42;
 }
 
-#if 0   /* libffi doesn't properly support complexes currently */ 
-        /* also, MSVC might not support _Complex... */ 
-        /* if this is enabled one day, remember to also add _Complex 
-         * arguments in addition to return values. */ 
-static float _Complex _testfunc24(float a, float b) 
-{ 
-    return a + I*2.0*b; 
-} 
-static double _Complex _testfunc25(double a, double b) 
-{ 
-    return a + I*2.0*b; 
-} 
-#endif 
- 
+#if 0   /* libffi doesn't properly support complexes currently */
+        /* also, MSVC might not support _Complex... */
+        /* if this is enabled one day, remember to also add _Complex
+         * arguments in addition to return values. */
+static float _Complex _testfunc24(float a, float b)
+{
+    return a + I*2.0*b;
+}
+static double _Complex _testfunc25(double a, double b)
+{
+    return a + I*2.0*b;
+}
+#endif
+
 static PyObject *b__testfunc(PyObject *self, PyObject *args)
 {
     /* for testing only */
@@ -7612,10 +7612,10 @@ static PyObject *b__testfunc(PyObject *self, PyObject *args)
     case 21: f = &_testfunc21; break;
     case 22: f = &_testfunc22; break;
     case 23: f = &_testfunc23; break;
-#if 0 
-    case 24: f = &_testfunc24; break; 
-    case 25: f = &_testfunc25; break; 
-#endif 
+#if 0
+    case 24: f = &_testfunc24; break;
+    case 25: f = &_testfunc25; break;
+#endif
     default:
         PyErr_SetNone(PyExc_ValueError);
         return NULL;
@@ -7717,7 +7717,7 @@ static PyMethodDef FFIBackendMethods[] = {
     {"from_buffer", b_from_buffer, METH_VARARGS},
     {"memmove", (PyCFunction)b_memmove, METH_VARARGS | METH_KEYWORDS},
     {"gcp", (PyCFunction)b_gcp, METH_VARARGS | METH_KEYWORDS},
-    {"release", b_release, METH_O}, 
+    {"release", b_release, METH_O},
 #ifdef MS_WIN32
     {"getwinerror", (PyCFunction)b_getwinerror, METH_VARARGS | METH_KEYWORDS},
 #endif
@@ -7832,51 +7832,51 @@ static PyObject *_cffi_from_c_char(char x) {
     return PyBytes_FromStringAndSize(&x, 1);
 }
 
-/* backward-compatibility hack: instead of _cffi_to_c_char16_t() and 
- * _cffi_to_c_char32_t(), we have _cffi_to_c_wchar_t() handling whatever 
- * size is wchar_t, and _cffi_to_c_wchar3216_t() handling the opposite. 
- */ 
+/* backward-compatibility hack: instead of _cffi_to_c_char16_t() and
+ * _cffi_to_c_char32_t(), we have _cffi_to_c_wchar_t() handling whatever
+ * size is wchar_t, and _cffi_to_c_wchar3216_t() handling the opposite.
+ */
 #ifdef HAVE_WCHAR_H
-typedef wchar_t cffi_wchar_t; 
-#else 
-typedef uint16_t cffi_wchar_t;   /* random pick... */ 
+typedef wchar_t cffi_wchar_t;
+#else
+typedef uint16_t cffi_wchar_t;   /* random pick... */
 #endif
 
-static cffi_wchar_t _cffi_to_c_wchar_t(PyObject *init) 
-{ 
-    if (sizeof(cffi_wchar_t) == 2) 
-        return (cffi_wchar_t)_convert_to_char16_t(init); 
-    else 
-        return (cffi_wchar_t)_convert_to_char32_t(init); 
-} 
-static PyObject *_cffi_from_c_wchar_t(cffi_wchar_t x) { 
-    if (sizeof(cffi_wchar_t) == 2) { 
-        cffi_char16_t input = x; 
-        return _my_PyUnicode_FromChar16(&input, 1); 
-    } 
-    else { 
-        cffi_char32_t input = x; 
-        return _my_PyUnicode_FromChar32(&input, 1); 
-    } 
-} 
-static int _cffi_to_c_wchar3216_t(PyObject *init) 
-{ 
-    if (sizeof(cffi_wchar_t) == 4) 
-        return (int)_convert_to_char16_t(init); 
-    else 
-        return (int)_convert_to_char32_t(init); 
-} 
-static PyObject *_cffi_from_c_wchar3216_t(int x) { 
-    if (sizeof(cffi_wchar_t) == 4) { 
-        cffi_char16_t input = x; 
-        return _my_PyUnicode_FromChar16(&input, 1); 
-    } 
-    else { 
-        cffi_char32_t input = x; 
-        return _my_PyUnicode_FromChar32(&input, 1); 
-    } 
-} 
- 
+static cffi_wchar_t _cffi_to_c_wchar_t(PyObject *init)
+{
+    if (sizeof(cffi_wchar_t) == 2)
+        return (cffi_wchar_t)_convert_to_char16_t(init);
+    else
+        return (cffi_wchar_t)_convert_to_char32_t(init);
+}
+static PyObject *_cffi_from_c_wchar_t(cffi_wchar_t x) {
+    if (sizeof(cffi_wchar_t) == 2) {
+        cffi_char16_t input = x;
+        return _my_PyUnicode_FromChar16(&input, 1);
+    }
+    else {
+        cffi_char32_t input = x;
+        return _my_PyUnicode_FromChar32(&input, 1);
+    }
+}
+static int _cffi_to_c_wchar3216_t(PyObject *init)
+{
+    if (sizeof(cffi_wchar_t) == 4)
+        return (int)_convert_to_char16_t(init);
+    else
+        return (int)_convert_to_char32_t(init);
+}
+static PyObject *_cffi_from_c_wchar3216_t(int x) {
+    if (sizeof(cffi_wchar_t) == 4) {
+        cffi_char16_t input = x;
+        return _my_PyUnicode_FromChar16(&input, 1);
+    }
+    else {
+        cffi_char32_t input = x;
+        return _my_PyUnicode_FromChar32(&input, 1);
+    }
+}
+
 struct _cffi_externpy_s;      /* forward declaration */
 static void cffi_call_python(struct _cffi_externpy_s *, char *args);
 
@@ -7900,15 +7900,15 @@ static void *cffi_exports[] = {
     convert_to_object,
     convert_from_object,
     convert_struct_to_owning_object,
-    _cffi_to_c_wchar_t, 
+    _cffi_to_c_wchar_t,
     _cffi_from_c_wchar_t,
     _cffi_to_c_long_double,
     _cffi_to_c__Bool,
     _prepare_pointer_call_argument,
     convert_array_from_object,
     cffi_call_python,
-    _cffi_to_c_wchar3216_t, 
-    _cffi_from_c_wchar3216_t, 
+    _cffi_to_c_wchar3216_t,
+    _cffi_from_c_wchar3216_t,
 };
 
 static struct { const char *name; int value; } all_dlopen_flags[] = {
@@ -7962,22 +7962,22 @@ init_cffi_backend(void)
     PyObject *m, *v;
     int i;
     static char init_done = 0;
-    static PyTypeObject *all_types[] = { 
-        &dl_type, 
-        &CTypeDescr_Type, 
-        &CField_Type, 
-        &CData_Type, 
-        &CDataOwning_Type, 
-        &CDataOwningGC_Type, 
-        &CDataFromBuf_Type, 
-        &CDataGCP_Type, 
-        &CDataIter_Type, 
-        &MiniBuffer_Type, 
-        &FFI_Type, 
-        &Lib_Type, 
-        &GlobSupport_Type, 
-        NULL 
-    }; 
+    static PyTypeObject *all_types[] = {
+        &dl_type,
+        &CTypeDescr_Type,
+        &CField_Type,
+        &CData_Type,
+        &CDataOwning_Type,
+        &CDataOwningGC_Type,
+        &CDataFromBuf_Type,
+        &CDataGCP_Type,
+        &CDataIter_Type,
+        &MiniBuffer_Type,
+        &FFI_Type,
+        &Lib_Type,
+        &GlobSupport_Type,
+        NULL
+    };
 
     v = PySys_GetObject("version");
     if (v == NULL || !PyText_Check(v) ||
@@ -8003,23 +8003,23 @@ init_cffi_backend(void)
             INITERROR;
     }
 
-    /* readify all types and add them to the module */ 
-    for (i = 0; all_types[i] != NULL; i++) { 
-        PyTypeObject *tp = all_types[i]; 
-        PyObject *tpo = (PyObject *)tp; 
-        if (strncmp(tp->tp_name, "_cffi_backend.", 14) != 0) { 
-            PyErr_Format(PyExc_ImportError, 
-                         "'%s' is an ill-formed type name", tp->tp_name); 
-            INITERROR; 
-        } 
-        if (PyType_Ready(tp) < 0) 
-            INITERROR; 
+    /* readify all types and add them to the module */
+    for (i = 0; all_types[i] != NULL; i++) {
+        PyTypeObject *tp = all_types[i];
+        PyObject *tpo = (PyObject *)tp;
+        if (strncmp(tp->tp_name, "_cffi_backend.", 14) != 0) {
+            PyErr_Format(PyExc_ImportError,
+                         "'%s' is an ill-formed type name", tp->tp_name);
+            INITERROR;
+        }
+        if (PyType_Ready(tp) < 0)
+            INITERROR;
 
-        Py_INCREF(tpo); 
-        if (PyModule_AddObject(m, tp->tp_name + 14, tpo) < 0) 
-            INITERROR; 
-    } 
- 
+        Py_INCREF(tpo);
+        if (PyModule_AddObject(m, tp->tp_name + 14, tpo) < 0)
+            INITERROR;
+    }
+
     if (!init_done) {
         v = PyText_FromString("_cffi_backend");
         if (v == NULL || PyDict_SetItemString(CData_Type.tp_dict,
@@ -8067,9 +8067,9 @@ init_cffi_backend(void)
     init_cffi_tls();
     if (PyErr_Occurred())
         INITERROR;
-    init_cffi_tls_zombie(); 
-    if (PyErr_Occurred()) 
-        INITERROR; 
+    init_cffi_tls_zombie();
+    if (PyErr_Occurred())
+        INITERROR;
 
     if (init_ffi_lib(m) < 0)
         INITERROR;

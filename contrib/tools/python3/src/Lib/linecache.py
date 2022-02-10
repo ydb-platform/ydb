@@ -10,7 +10,7 @@ import sys
 import os
 import tokenize
 
-__all__ = ["getline", "clearcache", "checkcache", "lazycache"] 
+__all__ = ["getline", "clearcache", "checkcache", "lazycache"]
 
 
 # The cache. Maps filenames to either a thunk which will provide source code,
@@ -20,19 +20,19 @@ cache = {}
 
 def clearcache():
     """Clear the cache entirely."""
-    cache.clear() 
+    cache.clear()
 
 
-def getline(filename, lineno, module_globals=None): 
-    """Get a line for a Python source file from the cache. 
-    Update the cache if it doesn't contain an entry for this file already.""" 
+def getline(filename, lineno, module_globals=None):
+    """Get a line for a Python source file from the cache.
+    Update the cache if it doesn't contain an entry for this file already."""
 
-    lines = getlines(filename, module_globals) 
-    if 1 <= lineno <= len(lines): 
-        return lines[lineno - 1] 
-    return '' 
- 
- 
+    lines = getlines(filename, module_globals)
+    if 1 <= lineno <= len(lines):
+        return lines[lineno - 1]
+    return ''
+
+
 def getlines(filename, module_globals=None):
     """Get the lines for a Python source file from the cache.
     Update the cache if it doesn't contain an entry for this file already."""
@@ -55,10 +55,10 @@ def checkcache(filename=None):
 
     if filename is None:
         filenames = list(cache.keys())
-    elif filename in cache: 
-        filenames = [filename] 
+    elif filename in cache:
+        filenames = [filename]
     else:
-        return 
+        return
 
     for filename in filenames:
         entry = cache[filename]
@@ -71,10 +71,10 @@ def checkcache(filename=None):
         try:
             stat = os.stat(fullname)
         except OSError:
-            cache.pop(filename, None) 
+            cache.pop(filename, None)
             continue
         if size != stat.st_size or mtime != stat.st_mtime:
-            cache.pop(filename, None) 
+            cache.pop(filename, None)
 
 
 def updatecache(filename, module_globals=None):
@@ -84,7 +84,7 @@ def updatecache(filename, module_globals=None):
 
     if filename in cache:
         if len(cache[filename]) != 1:
-            cache.pop(filename, None) 
+            cache.pop(filename, None)
     if not filename or (filename.startswith('<') and filename.endswith('>')):
         return []
 
@@ -119,10 +119,10 @@ def updatecache(filename, module_globals=None):
                     # for this module.
                     return []
                 cache[filename] = (
-                    len(data), 
-                    None, 
-                    [line + '\n' for line in data.splitlines()], 
-                    fullname 
+                    len(data),
+                    None,
+                    [line + '\n' for line in data.splitlines()],
+                    fullname
                 )
                 return cache[filename][2]
 
@@ -166,7 +166,7 @@ def lazycache(filename, module_globals):
 
     :return: True if a lazy load is registered in the cache,
         otherwise False. To register such a load a module loader with a
-        get_source method must be found, the filename must be a cacheable 
+        get_source method must be found, the filename must be a cacheable
         filename, and the filename must not be already cached.
     """
     if filename in cache:

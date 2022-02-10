@@ -9,11 +9,11 @@
     TODO: perl/python script in Asymptote SVN similar to asy-list.pl but only
     for function and variable names.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
-ASYFUNCNAME = { 
+ASYFUNCNAME = {
     'AND',
     'Arc',
     'ArcArrow',
@@ -1037,9 +1037,9 @@ ASYFUNCNAME = {
     'ztick',
     'ztick3',
     'ztrans'
-} 
+}
 
-ASYVARNAME = { 
+ASYVARNAME = {
     'AliceBlue',
     'Align',
     'Allow',
@@ -1641,4 +1641,4 @@ ASYVARNAME = {
     'ylabelwidth',
     'zerotickfuzz',
     'zerowinding'
-} 
+}

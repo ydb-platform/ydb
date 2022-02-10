@@ -10,12 +10,12 @@
 # License: BSD
 #-----------------------------------------------------------------
 
-# Insert '.' and '..' as first entries to the search path for modules. 
-# Restricted environments like embeddable python do not include the 
-# current working directory on startup. 
-import sys 
-sys.path[0:0] = ['.', '..'] 
- 
+# Insert '.' and '..' as first entries to the search path for modules.
+# Restricted environments like embeddable python do not include the
+# current working directory on startup.
+import sys
+sys.path[0:0] = ['.', '..']
+
 # Generate c_ast.py
 from _ast_gen import ASTCodeGenerator
 ast_gen = ASTCodeGenerator('_c_ast.cfg')

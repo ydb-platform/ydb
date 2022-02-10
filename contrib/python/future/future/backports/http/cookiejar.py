@@ -33,7 +33,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 from future.builtins import filter, int, map, open, str
-from future.utils import as_native_str, PY2 
+from future.utils import as_native_str, PY2
 
 __all__ = ['Cookie', 'CookieJar', 'CookiePolicy', 'DefaultCookiePolicy',
            'FileCookieJar', 'LWPCookieJar', 'LoadError', 'MozillaCookieJar']
@@ -41,8 +41,8 @@ __all__ = ['Cookie', 'CookieJar', 'CookiePolicy', 'DefaultCookiePolicy',
 import copy
 import datetime
 import re
-if PY2: 
-    re.ASCII = 0 
+if PY2:
+    re.ASCII = 0
 import time
 from future.backports.urllib.parse import urlparse, urlsplit, quote
 from future.backports.http.client import HTTP_PORT

@@ -36,27 +36,27 @@ class FreeFemLexer(CppLexer):
     mimetypes = ['text/x-freefem']
 
     # Language operators
-    operators = {'+', '-', '*', '.*', '/', './', '%', '^', '^-1', ':', '\''} 
+    operators = {'+', '-', '*', '.*', '/', './', '%', '^', '^-1', ':', '\''}
 
     # types
-    types = {'bool', 'border', 'complex', 'dmatrix', 'fespace', 'func', 'gslspline', 
-             'ifstream', 'int', 'macro', 'matrix', 'mesh', 'mesh3', 'mpiComm', 
-             'mpiGroup', 'mpiRequest', 'NewMacro', 'EndMacro', 'ofstream', 'Pmmap', 
-             'problem', 'Psemaphore', 'real', 'solve', 'string', 'varf'} 
+    types = {'bool', 'border', 'complex', 'dmatrix', 'fespace', 'func', 'gslspline',
+             'ifstream', 'int', 'macro', 'matrix', 'mesh', 'mesh3', 'mpiComm',
+             'mpiGroup', 'mpiRequest', 'NewMacro', 'EndMacro', 'ofstream', 'Pmmap',
+             'problem', 'Psemaphore', 'real', 'solve', 'string', 'varf'}
 
     # finite element spaces
-    fespaces = {'BDM1', 'BDM1Ortho', 'Edge03d', 'Edge13d', 'Edge23d', 'FEQF', 'HCT', 
-                'P0', 'P03d', 'P0Edge', 'P1', 'P13d', 'P1b', 'P1b3d', 'P1bl', 'P1bl3d', 
-                'P1dc', 'P1Edge', 'P1nc', 'P2', 'P23d', 'P2b', 'P2BR', 'P2dc', 'P2Edge', 
-                'P2h', 'P2Morley', 'P2pnc', 'P3', 'P3dc', 'P3Edge', 'P4', 'P4dc', 
-                'P4Edge', 'P5Edge', 'RT0', 'RT03d', 'RT0Ortho', 'RT1', 'RT1Ortho', 
-                'RT2', 'RT2Ortho'} 
+    fespaces = {'BDM1', 'BDM1Ortho', 'Edge03d', 'Edge13d', 'Edge23d', 'FEQF', 'HCT',
+                'P0', 'P03d', 'P0Edge', 'P1', 'P13d', 'P1b', 'P1b3d', 'P1bl', 'P1bl3d',
+                'P1dc', 'P1Edge', 'P1nc', 'P2', 'P23d', 'P2b', 'P2BR', 'P2dc', 'P2Edge',
+                'P2h', 'P2Morley', 'P2pnc', 'P3', 'P3dc', 'P3Edge', 'P4', 'P4dc',
+                'P4Edge', 'P5Edge', 'RT0', 'RT03d', 'RT0Ortho', 'RT1', 'RT1Ortho',
+                'RT2', 'RT2Ortho'}
 
     # preprocessor
-    preprocessor = {'ENDIFMACRO', 'include', 'IFMACRO', 'load'} 
+    preprocessor = {'ENDIFMACRO', 'include', 'IFMACRO', 'load'}
 
     # Language keywords
-    keywords = { 
+    keywords = {
                 'adj',
                 'append',
                 'area',
@@ -169,10 +169,10 @@ class FreeFemLexer(CppLexer):
                 'x',
                 'y',
                 'z'
-    } 
+    }
 
     # Language shipped functions and class ( )
-    functions = { 
+    functions = {
                 'abs',
                 'acos',
                 'acosh',
@@ -702,10 +702,10 @@ class FreeFemLexer(CppLexer):
                 'y0',
                 'y1',
                 'yn'
-    } 
+    }
 
     # function parameters
-    parameters = { 
+    parameters = {
                 'A',
                 'A1',
                 'abserror',
@@ -849,13 +849,13 @@ class FreeFemLexer(CppLexer):
                 'WindowIndex',
                 'which',
                 'zbound'
-    } 
+    }
 
     # deprecated
-    deprecated = {'fixeborder'} 
+    deprecated = {'fixeborder'}
 
     # do not highlight
-    suppress_highlight = { 
+    suppress_highlight = {
                 'alignof',
                 'asm',
                 'constexpr',
@@ -874,7 +874,7 @@ class FreeFemLexer(CppLexer):
                 'typeid',
                 'typename',
                 'using'
-    } 
+    }
 
     def get_tokens_unprocessed(self, text):
         for index, token, value in CppLexer.get_tokens_unprocessed(self, text):

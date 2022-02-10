@@ -4,7 +4,7 @@
 
     Lexers for data file format.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -20,7 +20,7 @@ class YamlLexerContext(LexerContext):
     """Indentation context for the YAML lexer."""
 
     def __init__(self, *args, **kwds):
-        super().__init__(*args, **kwds) 
+        super().__init__(*args, **kwds)
         self.indent_stack = []
         self.indent = -1
         self.next_indent = 0
@@ -230,7 +230,7 @@ class YamlLexer(ExtendedRegexLexer):
             # whitespaces separating tokens
             (r'[ ]+', Whitespace),
             # key with colon
-            (r'''([^#,:?\[\]{}"'\n]+)(:)(?=[ ]|$)''', 
+            (r'''([^#,:?\[\]{}"'\n]+)(:)(?=[ ]|$)''',
              bygroups(Name.Tag, set_indent(Punctuation, implicit=True))),
             # tags, anchors and aliases,
             include('descriptors'),
@@ -430,10 +430,10 @@ class YamlLexer(ExtendedRegexLexer):
     def get_tokens_unprocessed(self, text=None, context=None):
         if context is None:
             context = YamlLexerContext(text, 0)
-        return super().get_tokens_unprocessed(text, context) 
+        return super().get_tokens_unprocessed(text, context)
 
 
-class JsonLexer(Lexer): 
+class JsonLexer(Lexer):
     """
     For JSON data structures.
 
@@ -441,154 +441,154 @@ class JsonLexer(Lexer):
     """
 
     name = 'JSON'
-    aliases = ['json', 'json-object'] 
-    filenames = ['*.json', 'Pipfile.lock'] 
-    mimetypes = ['application/json', 'application/json-object'] 
+    aliases = ['json', 'json-object']
+    filenames = ['*.json', 'Pipfile.lock']
+    mimetypes = ['application/json', 'application/json-object']
 
-    # No validation of integers, floats, or constants is done. 
-    # As long as the characters are members of the following 
-    # sets, the token will be considered valid. For example, 
-    # 
-    #     "--1--" is parsed as an integer 
-    #     "1...eee" is parsed as a float 
-    #     "trustful" is parsed as a constant 
-    # 
-    integers = set('-0123456789') 
-    floats = set('.eE+') 
-    constants = set('truefalsenull')  # true|false|null 
-    hexadecimals = set('0123456789abcdefABCDEF') 
-    punctuations = set('{}[],') 
-    whitespaces = {'\u0020', '\u000a', '\u000d', '\u0009'} 
+    # No validation of integers, floats, or constants is done.
+    # As long as the characters are members of the following
+    # sets, the token will be considered valid. For example,
+    #
+    #     "--1--" is parsed as an integer
+    #     "1...eee" is parsed as a float
+    #     "trustful" is parsed as a constant
+    #
+    integers = set('-0123456789')
+    floats = set('.eE+')
+    constants = set('truefalsenull')  # true|false|null
+    hexadecimals = set('0123456789abcdefABCDEF')
+    punctuations = set('{}[],')
+    whitespaces = {'\u0020', '\u000a', '\u000d', '\u0009'}
 
-    def get_tokens_unprocessed(self, text): 
-        """Parse JSON data.""" 
+    def get_tokens_unprocessed(self, text):
+        """Parse JSON data."""
 
-        in_string = False 
-        in_escape = False 
-        in_unicode_escape = 0 
-        in_whitespace = False 
-        in_constant = False 
-        in_number = False 
-        in_float = False 
-        in_punctuation = False 
+        in_string = False
+        in_escape = False
+        in_unicode_escape = 0
+        in_whitespace = False
+        in_constant = False
+        in_number = False
+        in_float = False
+        in_punctuation = False
 
-        start = 0 
+        start = 0
 
-        # The queue is used to store data that may need to be tokenized 
-        # differently based on what follows. In particular, JSON object 
-        # keys are tokenized differently than string values, but cannot 
-        # be distinguished until punctuation is encountered outside the 
-        # string. 
-        # 
-        # A ":" character after the string indicates that the string is 
-        # an object key; any other character indicates the string is a 
-        # regular string value. 
-        # 
-        # The queue holds tuples that contain the following data: 
-        # 
-        #     (start_index, token_type, text) 
-        # 
-        # By default the token type of text in double quotes is 
-        # String.Double. The token type will be replaced if a colon 
-        # is encountered after the string closes. 
-        # 
-        queue = [] 
+        # The queue is used to store data that may need to be tokenized
+        # differently based on what follows. In particular, JSON object
+        # keys are tokenized differently than string values, but cannot
+        # be distinguished until punctuation is encountered outside the
+        # string.
+        #
+        # A ":" character after the string indicates that the string is
+        # an object key; any other character indicates the string is a
+        # regular string value.
+        #
+        # The queue holds tuples that contain the following data:
+        #
+        #     (start_index, token_type, text)
+        #
+        # By default the token type of text in double quotes is
+        # String.Double. The token type will be replaced if a colon
+        # is encountered after the string closes.
+        #
+        queue = []
 
-        for stop, character in enumerate(text): 
-            if in_string: 
-                if in_unicode_escape: 
-                    if character in self.hexadecimals: 
-                        in_unicode_escape -= 1 
-                        if not in_unicode_escape: 
-                            in_escape = False 
-                    else: 
-                        in_unicode_escape = 0 
-                        in_escape = False 
+        for stop, character in enumerate(text):
+            if in_string:
+                if in_unicode_escape:
+                    if character in self.hexadecimals:
+                        in_unicode_escape -= 1
+                        if not in_unicode_escape:
+                            in_escape = False
+                    else:
+                        in_unicode_escape = 0
+                        in_escape = False
 
-                elif in_escape: 
-                    if character == 'u': 
-                        in_unicode_escape = 4 
-                    else: 
-                        in_escape = False 
+                elif in_escape:
+                    if character == 'u':
+                        in_unicode_escape = 4
+                    else:
+                        in_escape = False
 
-                elif character == '\\': 
-                    in_escape = True 
+                elif character == '\\':
+                    in_escape = True
 
-                elif character == '"': 
-                    queue.append((start, String.Double, text[start:stop + 1])) 
-                    in_string = False 
-                    in_escape = False 
-                    in_unicode_escape = 0 
+                elif character == '"':
+                    queue.append((start, String.Double, text[start:stop + 1]))
+                    in_string = False
+                    in_escape = False
+                    in_unicode_escape = 0
 
-                continue 
+                continue
 
-            elif in_whitespace: 
-                if character in self.whitespaces: 
-                    continue 
+            elif in_whitespace:
+                if character in self.whitespaces:
+                    continue
 
-                if queue: 
+                if queue:
                     queue.append((start, Whitespace, text[start:stop]))
-                else: 
+                else:
                     yield start, Whitespace, text[start:stop]
-                in_whitespace = False 
-                # Fall through so the new character can be evaluated. 
+                in_whitespace = False
+                # Fall through so the new character can be evaluated.
 
-            elif in_constant: 
-                if character in self.constants: 
-                    continue 
+            elif in_constant:
+                if character in self.constants:
+                    continue
 
-                yield start, Keyword.Constant, text[start:stop] 
-                in_constant = False 
-                # Fall through so the new character can be evaluated. 
- 
-            elif in_number: 
-                if character in self.integers: 
-                    continue 
-                elif character in self.floats: 
-                    in_float = True 
-                    continue 
- 
-                if in_float: 
-                    yield start, Number.Float, text[start:stop] 
-                else: 
-                    yield start, Number.Integer, text[start:stop] 
-                in_number = False 
-                in_float = False 
-                # Fall through so the new character can be evaluated. 
- 
-            elif in_punctuation: 
-                if character in self.punctuations: 
-                    continue 
- 
-                yield start, Punctuation, text[start:stop] 
-                in_punctuation = False 
-                # Fall through so the new character can be evaluated. 
- 
-            start = stop 
- 
-            if character == '"': 
-                in_string = True 
- 
-            elif character in self.whitespaces: 
-                in_whitespace = True 
- 
-            elif character in {'f', 'n', 't'}:  # The first letters of true|false|null 
-                # Exhaust the queue. Accept the existing token types. 
-                yield from queue 
-                queue.clear() 
- 
-                in_constant = True 
- 
-            elif character in self.integers: 
-                # Exhaust the queue. Accept the existing token types. 
-                yield from queue 
-                queue.clear() 
- 
-                in_number = True 
- 
-            elif character == ':': 
-                # Yield from the queue. Replace string token types. 
-                for _start, _token, _text in queue: 
+                yield start, Keyword.Constant, text[start:stop]
+                in_constant = False
+                # Fall through so the new character can be evaluated.
+
+            elif in_number:
+                if character in self.integers:
+                    continue
+                elif character in self.floats:
+                    in_float = True
+                    continue
+
+                if in_float:
+                    yield start, Number.Float, text[start:stop]
+                else:
+                    yield start, Number.Integer, text[start:stop]
+                in_number = False
+                in_float = False
+                # Fall through so the new character can be evaluated.
+
+            elif in_punctuation:
+                if character in self.punctuations:
+                    continue
+
+                yield start, Punctuation, text[start:stop]
+                in_punctuation = False
+                # Fall through so the new character can be evaluated.
+
+            start = stop
+
+            if character == '"':
+                in_string = True
+
+            elif character in self.whitespaces:
+                in_whitespace = True
+
+            elif character in {'f', 'n', 't'}:  # The first letters of true|false|null
+                # Exhaust the queue. Accept the existing token types.
+                yield from queue
+                queue.clear()
+
+                in_constant = True
+
+            elif character in self.integers:
+                # Exhaust the queue. Accept the existing token types.
+                yield from queue
+                queue.clear()
+
+                in_number = True
+
+            elif character == ':':
+                # Yield from the queue. Replace string token types.
+                for _start, _token, _text in queue:
                     # There can be only two types of tokens before a ':':
                     # Whitespace, or a quoted string. If it's a quoted string
                     # we emit Name.Tag, otherwise, we yield the whitespace
@@ -596,65 +596,65 @@ class JsonLexer(Lexer):
                     # allows for things like '"foo" "bar": "baz"' but we're not
                     # a validating JSON lexer so it's acceptable
                     if _token is Whitespace:
-                        yield _start, _token, _text 
-                    elif _token is String.Double: 
-                        yield _start, Name.Tag, _text 
-                    else: 
-                        yield _start, Error, _text 
-                queue.clear() 
- 
-                in_punctuation = True 
- 
-            elif character in self.punctuations: 
-                # Exhaust the queue. Accept the existing token types. 
-                yield from queue 
-                queue.clear() 
- 
-                in_punctuation = True 
- 
-            else: 
-                # Exhaust the queue. Accept the existing token types. 
-                yield from queue 
-                queue.clear() 
- 
-                yield start, Error, character 
- 
-        # Yield any remaining text. 
-        yield from queue 
-        if in_string: 
-            yield start, Error, text[start:] 
-        elif in_float: 
-            yield start, Number.Float, text[start:] 
-        elif in_number: 
-            yield start, Number.Integer, text[start:] 
-        elif in_constant: 
-            yield start, Keyword.Constant, text[start:] 
-        elif in_whitespace: 
+                        yield _start, _token, _text
+                    elif _token is String.Double:
+                        yield _start, Name.Tag, _text
+                    else:
+                        yield _start, Error, _text
+                queue.clear()
+
+                in_punctuation = True
+
+            elif character in self.punctuations:
+                # Exhaust the queue. Accept the existing token types.
+                yield from queue
+                queue.clear()
+
+                in_punctuation = True
+
+            else:
+                # Exhaust the queue. Accept the existing token types.
+                yield from queue
+                queue.clear()
+
+                yield start, Error, character
+
+        # Yield any remaining text.
+        yield from queue
+        if in_string:
+            yield start, Error, text[start:]
+        elif in_float:
+            yield start, Number.Float, text[start:]
+        elif in_number:
+            yield start, Number.Integer, text[start:]
+        elif in_constant:
+            yield start, Keyword.Constant, text[start:]
+        elif in_whitespace:
             yield start, Whitespace, text[start:]
-        elif in_punctuation: 
-            yield start, Punctuation, text[start:] 
- 
- 
+        elif in_punctuation:
+            yield start, Punctuation, text[start:]
+
+
 class JsonBareObjectLexer(JsonLexer):
     """
     For JSON data structures (with missing object curly braces).
 
     .. versionadded:: 2.2
- 
-    .. deprecated:: 2.8.0 
- 
-       Behaves the same as `JsonLexer` now. 
+
+    .. deprecated:: 2.8.0
+
+       Behaves the same as `JsonLexer` now.
     """
 
     name = 'JSONBareObject'
-    aliases = [] 
+    aliases = []
     filenames = []
-    mimetypes = [] 
+    mimetypes = []
 
 
 class JsonLdLexer(JsonLexer):
     """
-    For `JSON-LD <https://json-ld.org/>`_ linked data. 
+    For `JSON-LD <https://json-ld.org/>`_ linked data.
 
     .. versionadded:: 2.0
     """
@@ -664,38 +664,38 @@ class JsonLdLexer(JsonLexer):
     filenames = ['*.jsonld']
     mimetypes = ['application/ld+json']
 
-    json_ld_keywords = { 
-        '"@%s"' % keyword 
-        for keyword in ( 
-            'base', 
-            'container', 
-            'context', 
-            'direction', 
-            'graph', 
-            'id', 
-            'import', 
-            'included', 
-            'index', 
-            'json', 
-            'language', 
-            'list', 
-            'nest', 
-            'none', 
-            'prefix', 
-            'propagate', 
-            'protected', 
-            'reverse', 
-            'set', 
-            'type', 
-            'value', 
-            'version', 
-            'vocab', 
-        ) 
+    json_ld_keywords = {
+        '"@%s"' % keyword
+        for keyword in (
+            'base',
+            'container',
+            'context',
+            'direction',
+            'graph',
+            'id',
+            'import',
+            'included',
+            'index',
+            'json',
+            'language',
+            'list',
+            'nest',
+            'none',
+            'prefix',
+            'propagate',
+            'protected',
+            'reverse',
+            'set',
+            'type',
+            'value',
+            'version',
+            'vocab',
+        )
     }
- 
-    def get_tokens_unprocessed(self, text): 
-        for start, token, value in super().get_tokens_unprocessed(text): 
-            if token is Name.Tag and value in self.json_ld_keywords: 
-                yield start, Name.Decorator, value 
-            else: 
-                yield start, token, value 
+
+    def get_tokens_unprocessed(self, text):
+        for start, token, value in super().get_tokens_unprocessed(text):
+            if token is Name.Tag and value in self.json_ld_keywords:
+                yield start, Name.Decorator, value
+            else:
+                yield start, token, value

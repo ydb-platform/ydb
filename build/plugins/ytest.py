@@ -559,8 +559,8 @@ def onadd_check(unit, *args):
     ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
 
     if check_type in ["flake8.py2", "flake8.py3"]:
-        script_rel_path = check_type 
-        fork_mode = unit.get('TEST_FORK_MODE') or '' 
+        script_rel_path = check_type
+        fork_mode = unit.get('TEST_FORK_MODE') or ''
     elif check_type == "JAVA_STYLE":
         if ymake_java_test and not unit.get('ALL_SRCDIRS') or '':
             return
@@ -671,7 +671,7 @@ def onadd_check_py_imports(unit, *args):
         'SOURCE-FOLDER-PATH': test_dir,
         'CUSTOM-DEPENDENCIES': '',
         'TEST-DATA': '',
-        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")), 
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
         'SPLIT-FACTOR': '',
         'TEST_PARTITION': 'SEQUENTIAL',
         'FORK-MODE': '',

@@ -45,19 +45,19 @@ template <class IRBuilderTy> class MatrixBuilder {
                                                          Value *RHS) {
     assert((LHS->getType()->isVectorTy() || RHS->getType()->isVectorTy()) &&
            "One of the operands must be a matrix (embedded in a vector)");
-    if (LHS->getType()->isVectorTy() && !RHS->getType()->isVectorTy()) { 
-      assert(!isa<ScalableVectorType>(LHS->getType()) && 
-             "LHS Assumed to be fixed width"); 
+    if (LHS->getType()->isVectorTy() && !RHS->getType()->isVectorTy()) {
+      assert(!isa<ScalableVectorType>(LHS->getType()) &&
+             "LHS Assumed to be fixed width");
       RHS = B.CreateVectorSplat(
-          cast<VectorType>(LHS->getType())->getElementCount(), RHS, 
+          cast<VectorType>(LHS->getType())->getElementCount(), RHS,
           "scalar.splat");
-    } else if (!LHS->getType()->isVectorTy() && RHS->getType()->isVectorTy()) { 
-      assert(!isa<ScalableVectorType>(RHS->getType()) && 
-             "RHS Assumed to be fixed width"); 
+    } else if (!LHS->getType()->isVectorTy() && RHS->getType()->isVectorTy()) {
+      assert(!isa<ScalableVectorType>(RHS->getType()) &&
+             "RHS Assumed to be fixed width");
       LHS = B.CreateVectorSplat(
-          cast<VectorType>(RHS->getType())->getElementCount(), LHS, 
+          cast<VectorType>(RHS->getType())->getElementCount(), LHS,
           "scalar.splat");
-    } 
+    }
     return {LHS, RHS};
   }
 
@@ -167,19 +167,19 @@ public:
   /// matrixes.
   Value *CreateAdd(Value *LHS, Value *RHS) {
     assert(LHS->getType()->isVectorTy() || RHS->getType()->isVectorTy());
-    if (LHS->getType()->isVectorTy() && !RHS->getType()->isVectorTy()) { 
-      assert(!isa<ScalableVectorType>(LHS->getType()) && 
-             "LHS Assumed to be fixed width"); 
+    if (LHS->getType()->isVectorTy() && !RHS->getType()->isVectorTy()) {
+      assert(!isa<ScalableVectorType>(LHS->getType()) &&
+             "LHS Assumed to be fixed width");
       RHS = B.CreateVectorSplat(
-          cast<VectorType>(LHS->getType())->getElementCount(), RHS, 
+          cast<VectorType>(LHS->getType())->getElementCount(), RHS,
           "scalar.splat");
-    } else if (!LHS->getType()->isVectorTy() && RHS->getType()->isVectorTy()) { 
-      assert(!isa<ScalableVectorType>(RHS->getType()) && 
-             "RHS Assumed to be fixed width"); 
+    } else if (!LHS->getType()->isVectorTy() && RHS->getType()->isVectorTy()) {
+      assert(!isa<ScalableVectorType>(RHS->getType()) &&
+             "RHS Assumed to be fixed width");
       LHS = B.CreateVectorSplat(
-          cast<VectorType>(RHS->getType())->getElementCount(), LHS, 
+          cast<VectorType>(RHS->getType())->getElementCount(), LHS,
           "scalar.splat");
-    } 
+    }
 
     return cast<VectorType>(LHS->getType())
                    ->getElementType()
@@ -192,19 +192,19 @@ public:
   /// point matrixes.
   Value *CreateSub(Value *LHS, Value *RHS) {
     assert(LHS->getType()->isVectorTy() || RHS->getType()->isVectorTy());
-    if (LHS->getType()->isVectorTy() && !RHS->getType()->isVectorTy()) { 
-      assert(!isa<ScalableVectorType>(LHS->getType()) && 
-             "LHS Assumed to be fixed width"); 
+    if (LHS->getType()->isVectorTy() && !RHS->getType()->isVectorTy()) {
+      assert(!isa<ScalableVectorType>(LHS->getType()) &&
+             "LHS Assumed to be fixed width");
       RHS = B.CreateVectorSplat(
-          cast<VectorType>(LHS->getType())->getElementCount(), RHS, 
+          cast<VectorType>(LHS->getType())->getElementCount(), RHS,
           "scalar.splat");
-    } else if (!LHS->getType()->isVectorTy() && RHS->getType()->isVectorTy()) { 
-      assert(!isa<ScalableVectorType>(RHS->getType()) && 
-             "RHS Assumed to be fixed width"); 
+    } else if (!LHS->getType()->isVectorTy() && RHS->getType()->isVectorTy()) {
+      assert(!isa<ScalableVectorType>(RHS->getType()) &&
+             "RHS Assumed to be fixed width");
       LHS = B.CreateVectorSplat(
-          cast<VectorType>(RHS->getType())->getElementCount(), LHS, 
+          cast<VectorType>(RHS->getType())->getElementCount(), LHS,
           "scalar.splat");
-    } 
+    }
 
     return cast<VectorType>(LHS->getType())
                    ->getElementType()

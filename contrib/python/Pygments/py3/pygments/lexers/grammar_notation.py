@@ -2,9 +2,9 @@
     pygments.lexers.grammar_notation
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    Lexers for grammar notations like BNF. 
+    Lexers for grammar notations like BNF.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -14,12 +14,12 @@ from pygments.lexer import RegexLexer, bygroups, include, this, using, words
 from pygments.token import Comment, Keyword, Literal, Name, Number, \
     Operator, Punctuation, String, Text, Whitespace
 
-__all__ = ['BnfLexer', 'AbnfLexer', 'JsgfLexer', 'PegLexer'] 
+__all__ = ['BnfLexer', 'AbnfLexer', 'JsgfLexer', 'PegLexer']
 
 
 class BnfLexer(RegexLexer):
     """
-    This lexer is for grammar notations which are similar to 
+    This lexer is for grammar notations which are similar to
     original BNF.
 
     In order to maximize a number of targets of this lexer,
@@ -210,60 +210,60 @@ class JsgfLexer(RegexLexer):
             (r'.', Comment.Multiline),
         ],
     }
- 
- 
-class PegLexer(RegexLexer): 
-    """ 
-    This lexer is for `Parsing Expression Grammars 
-    <https://bford.info/pub/lang/peg.pdf>`_ (PEG). 
- 
-    Various implementations of PEG have made different decisions 
-    regarding the syntax, so let's try to be accommodating: 
- 
-    * `<-`, `←`, `:`, and `=` are all accepted as rule operators. 
- 
-    * Both `|` and `/` are choice operators. 
- 
-    * `^`, `↑`, and `~` are cut operators. 
- 
-    * A single `a-z` character immediately before a string, or 
-      multiple `a-z` characters following a string, are part of the 
-      string (e.g., `r"..."` or `"..."ilmsuxa`). 
- 
-    .. versionadded:: 2.6 
-    """ 
- 
-    name = 'PEG' 
-    aliases = ['peg'] 
-    filenames = ['*.peg'] 
-    mimetypes = ['text/x-peg'] 
- 
-    tokens = { 
-        'root': [ 
-            # Comments 
+
+
+class PegLexer(RegexLexer):
+    """
+    This lexer is for `Parsing Expression Grammars
+    <https://bford.info/pub/lang/peg.pdf>`_ (PEG).
+
+    Various implementations of PEG have made different decisions
+    regarding the syntax, so let's try to be accommodating:
+
+    * `<-`, `←`, `:`, and `=` are all accepted as rule operators.
+
+    * Both `|` and `/` are choice operators.
+
+    * `^`, `↑`, and `~` are cut operators.
+
+    * A single `a-z` character immediately before a string, or
+      multiple `a-z` characters following a string, are part of the
+      string (e.g., `r"..."` or `"..."ilmsuxa`).
+
+    .. versionadded:: 2.6
+    """
+
+    name = 'PEG'
+    aliases = ['peg']
+    filenames = ['*.peg']
+    mimetypes = ['text/x-peg']
+
+    tokens = {
+        'root': [
+            # Comments
             (r'#.*$', Comment.Single),
- 
-            # All operators 
-            (r'<-|[←:=/|&!?*+^↑~]', Operator), 
- 
-            # Other punctuation 
-            (r'[()]', Punctuation), 
- 
-            # Keywords 
-            (r'\.', Keyword), 
- 
-            # Character classes 
-            (r'(\[)([^\]]*(?:\\.[^\]\\]*)*)(\])', 
-             bygroups(Punctuation, String, Punctuation)), 
- 
-            # Single and double quoted strings (with optional modifiers) 
-            (r'[a-z]?"[^"\\]*(?:\\.[^"\\]*)*"[a-z]*', String.Double), 
-            (r"[a-z]?'[^'\\]*(?:\\.[^'\\]*)*'[a-z]*", String.Single), 
- 
-            # Nonterminals are not whitespace, operators, or punctuation 
-            (r'[^\s<←:=/|&!?*+\^↑~()\[\]"\'#]+', Name.Class), 
- 
-            # Fallback 
-            (r'.', Text), 
-        ], 
-    } 
+
+            # All operators
+            (r'<-|[←:=/|&!?*+^↑~]', Operator),
+
+            # Other punctuation
+            (r'[()]', Punctuation),
+
+            # Keywords
+            (r'\.', Keyword),
+
+            # Character classes
+            (r'(\[)([^\]]*(?:\\.[^\]\\]*)*)(\])',
+             bygroups(Punctuation, String, Punctuation)),
+
+            # Single and double quoted strings (with optional modifiers)
+            (r'[a-z]?"[^"\\]*(?:\\.[^"\\]*)*"[a-z]*', String.Double),
+            (r"[a-z]?'[^'\\]*(?:\\.[^'\\]*)*'[a-z]*", String.Single),
+
+            # Nonterminals are not whitespace, operators, or punctuation
+            (r'[^\s<←:=/|&!?*+\^↑~()\[\]"\'#]+', Name.Class),
+
+            # Fallback
+            (r'.', Text),
+        ],
+    }

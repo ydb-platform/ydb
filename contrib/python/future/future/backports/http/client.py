@@ -83,11 +83,11 @@ from future.backports.urllib.parse import urlsplit
 import warnings
 from array import array
 
-if PY2: 
-    from collections import Iterable 
-else: 
-    from collections.abc import Iterable 
- 
+if PY2:
+    from collections import Iterable
+else:
+    from collections.abc import Iterable
+
 __all__ = ["HTTPResponse", "HTTPConnection",
            "HTTPException", "NotConnected", "UnknownProtocol",
            "UnknownTransferEncoding", "UnimplementedFileMode",
@@ -700,19 +700,19 @@ class HTTPResponse(io.RawIOBase):
         while total_bytes < len(b):
             if MAXAMOUNT < len(mvb):
                 temp_mvb = mvb[0:MAXAMOUNT]
-                if PY2: 
-                    data = self.fp.read(len(temp_mvb)) 
-                    n = len(data) 
-                    temp_mvb[:n] = data 
-                else: 
-                    n = self.fp.readinto(temp_mvb) 
+                if PY2:
+                    data = self.fp.read(len(temp_mvb))
+                    n = len(data)
+                    temp_mvb[:n] = data
+                else:
+                    n = self.fp.readinto(temp_mvb)
             else:
-                if PY2: 
-                    data = self.fp.read(len(mvb)) 
-                    n = len(data) 
-                    mvb[:n] = data 
-                else: 
-                    n = self.fp.readinto(mvb) 
+                if PY2:
+                    data = self.fp.read(len(mvb))
+                    n = len(data)
+                    mvb[:n] = data
+                else:
+                    n = self.fp.readinto(mvb)
             if not n:
                 raise IncompleteRead(bytes(mvb[0:total_bytes]), len(b))
             mvb = mvb[n:]
@@ -906,7 +906,7 @@ class HTTPConnection(object):
         try:
             self.sock.sendall(data)
         except TypeError:
-            if isinstance(data, Iterable): 
+            if isinstance(data, Iterable):
                 for d in data:
                     self.sock.sendall(d)
             else:

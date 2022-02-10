@@ -33,9 +33,9 @@
 namespace llvm {
 
 class AsmPrinter;
-class DIE; 
-class DIELoc; 
-class DIEValueList; 
+class DIE;
+class DIELoc;
+class DIEValueList;
 class DwarfFile;
 class GlobalVariable;
 class MCExpr;
@@ -57,7 +57,7 @@ class DwarfCompileUnit final : public DwarfUnit {
   DwarfCompileUnit *Skeleton = nullptr;
 
   /// The start of the unit within its section.
-  MCSymbol *LabelBegin = nullptr; 
+  MCSymbol *LabelBegin = nullptr;
 
   /// The start of the unit macro info within macro section.
   MCSymbol *MacroLabelBegin;
@@ -289,8 +289,8 @@ public:
     return DwarfUnit::getHeaderSize() + DWOIdSize;
   }
   unsigned getLength() {
-    return Asm->getUnitLengthFieldByteSize() + // Length field 
-           getHeaderSize() + getUnitDie().getSize(); 
+    return Asm->getUnitLengthFieldByteSize() + // Length field
+           getHeaderSize() + getUnitDie().getSize();
   }
 
   void emitHeader(bool UseOffsets) override;
@@ -299,7 +299,7 @@ public:
   void addAddrTableBase();
 
   MCSymbol *getLabelBegin() const {
-    assert(LabelBegin && "LabelBegin is not initialized"); 
+    assert(LabelBegin && "LabelBegin is not initialized");
     return LabelBegin;
   }
 

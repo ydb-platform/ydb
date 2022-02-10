@@ -13,7 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/SetVector.h" 
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/CallGraph.h"
@@ -28,10 +28,10 @@
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
-#include "llvm/Transforms/Utils/CallGraphUpdater.h" 
+#include "llvm/Transforms/Utils/CallGraphUpdater.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include <algorithm>
- 
+
 using namespace llvm;
 
 #define DEBUG_TYPE "prune-eh"
@@ -50,8 +50,8 @@ namespace {
     bool runOnSCC(CallGraphSCC &SCC) override;
   };
 }
-static bool SimplifyFunction(Function *F, CallGraphUpdater &CGU); 
-static void DeleteBasicBlock(BasicBlock *BB, CallGraphUpdater &CGU); 
+static bool SimplifyFunction(Function *F, CallGraphUpdater &CGU);
+static void DeleteBasicBlock(BasicBlock *BB, CallGraphUpdater &CGU);
 
 char PruneEH::ID = 0;
 INITIALIZE_PASS_BEGIN(PruneEH, "prune-eh",
@@ -62,17 +62,17 @@ INITIALIZE_PASS_END(PruneEH, "prune-eh",
 
 Pass *llvm::createPruneEHPass() { return new PruneEH(); }
 
-static bool runImpl(CallGraphUpdater &CGU, SetVector<Function *> &Functions) { 
-#ifndef NDEBUG 
-  for (auto *F : Functions) 
-    assert(F && "null Function"); 
-#endif 
+static bool runImpl(CallGraphUpdater &CGU, SetVector<Function *> &Functions) {
+#ifndef NDEBUG
+  for (auto *F : Functions)
+    assert(F && "null Function");
+#endif
   bool MadeChange = false;
 
   // First pass, scan all of the functions in the SCC, simplifying them
   // according to what we know.
-  for (Function *F : Functions) 
-    MadeChange |= SimplifyFunction(F, CGU); 
+  for (Function *F : Functions)
+    MadeChange |= SimplifyFunction(F, CGU);
 
   // Next, check to see if any callees might throw or if there are any external
   // functions in this SCC: if so, we cannot prune any functions in this SCC.
@@ -82,8 +82,8 @@ static bool runImpl(CallGraphUpdater &CGU, SetVector<Function *> &Functions) {
   // obviously the SCC might throw.
   //
   bool SCCMightUnwind = false, SCCMightReturn = false;
-  for (Function *F : Functions) { 
-    if (!F->hasExactDefinition()) { 
+  for (Function *F : Functions) {
+    if (!F->hasExactDefinition()) {
       SCCMightUnwind |= !F->doesNotThrow();
       SCCMightReturn |= !F->doesNotReturn();
     } else {
@@ -121,7 +121,7 @@ static bool runImpl(CallGraphUpdater &CGU, SetVector<Function *> &Functions) {
               if (Function *Callee = CI->getCalledFunction()) {
                 // If the callee is outside our current SCC then we may throw
                 // because it might.  If it is inside, do nothing.
-                if (Functions.contains(Callee)) 
+                if (Functions.contains(Callee))
                   InstMightUnwind = false;
               }
             }
@@ -133,7 +133,7 @@ static bool runImpl(CallGraphUpdater &CGU, SetVector<Function *> &Functions) {
                 if (IA->hasSideEffects())
                   SCCMightReturn = true;
         }
-      } 
+      }
         if (SCCMightUnwind && SCCMightReturn)
           break;
     }
@@ -141,7 +141,7 @@ static bool runImpl(CallGraphUpdater &CGU, SetVector<Function *> &Functions) {
 
   // If the SCC doesn't unwind or doesn't throw, note this fact.
   if (!SCCMightUnwind || !SCCMightReturn)
-    for (Function *F : Functions) { 
+    for (Function *F : Functions) {
       if (!SCCMightUnwind && !F->hasFnAttribute(Attribute::NoUnwind)) {
         F->addFnAttr(Attribute::NoUnwind);
         MadeChange = true;
@@ -153,11 +153,11 @@ static bool runImpl(CallGraphUpdater &CGU, SetVector<Function *> &Functions) {
       }
     }
 
-  for (Function *F : Functions) { 
+  for (Function *F : Functions) {
     // Convert any invoke instructions to non-throwing functions in this node
     // into call instructions with a branch.  This makes the exception blocks
     // dead.
-    MadeChange |= SimplifyFunction(F, CGU); 
+    MadeChange |= SimplifyFunction(F, CGU);
   }
 
   return MadeChange;
@@ -166,22 +166,22 @@ static bool runImpl(CallGraphUpdater &CGU, SetVector<Function *> &Functions) {
 bool PruneEH::runOnSCC(CallGraphSCC &SCC) {
   if (skipSCC(SCC))
     return false;
-  SetVector<Function *> Functions; 
-  for (auto &N : SCC) { 
-    if (auto *F = N->getFunction()) 
-      Functions.insert(F); 
-  } 
+  SetVector<Function *> Functions;
+  for (auto &N : SCC) {
+    if (auto *F = N->getFunction())
+      Functions.insert(F);
+  }
   CallGraph &CG = getAnalysis<CallGraphWrapperPass>().getCallGraph();
-  CallGraphUpdater CGU; 
-  CGU.initialize(CG, SCC); 
-  return runImpl(CGU, Functions); 
+  CallGraphUpdater CGU;
+  CGU.initialize(CG, SCC);
+  return runImpl(CGU, Functions);
 }
 
 
 // SimplifyFunction - Given information about callees, simplify the specified
 // function if we have invokes to non-unwinding functions or code after calls to
 // no-return functions.
-static bool SimplifyFunction(Function *F, CallGraphUpdater &CGU) { 
+static bool SimplifyFunction(Function *F, CallGraphUpdater &CGU) {
   bool MadeChange = false;
   for (Function::iterator BB = F->begin(), E = F->end(); BB != E; ++BB) {
     if (InvokeInst *II = dyn_cast<InvokeInst>(BB->getTerminator()))
@@ -191,7 +191,7 @@ static bool SimplifyFunction(Function *F, CallGraphUpdater &CGU) {
 
         // If the unwind block is now dead, nuke it.
         if (pred_empty(UnwindBlock))
-          DeleteBasicBlock(UnwindBlock, CGU); // Delete the new BB. 
+          DeleteBasicBlock(UnwindBlock, CGU); // Delete the new BB.
 
         ++NumRemoved;
         MadeChange = true;
@@ -211,7 +211,7 @@ static bool SimplifyFunction(Function *F, CallGraphUpdater &CGU) {
           BB->getInstList().pop_back();
           new UnreachableInst(BB->getContext(), &*BB);
 
-          DeleteBasicBlock(New, CGU); // Delete the new BB. 
+          DeleteBasicBlock(New, CGU); // Delete the new BB.
           MadeChange = true;
           ++NumUnreach;
           break;
@@ -224,7 +224,7 @@ static bool SimplifyFunction(Function *F, CallGraphUpdater &CGU) {
 /// DeleteBasicBlock - remove the specified basic block from the program,
 /// updating the callgraph to reflect any now-obsolete edges due to calls that
 /// exist in the BB.
-static void DeleteBasicBlock(BasicBlock *BB, CallGraphUpdater &CGU) { 
+static void DeleteBasicBlock(BasicBlock *BB, CallGraphUpdater &CGU) {
   assert(pred_empty(BB) && "BB is not dead!");
 
   Instruction *TokenInst = nullptr;
@@ -240,9 +240,9 @@ static void DeleteBasicBlock(BasicBlock *BB, CallGraphUpdater &CGU) {
     if (auto *Call = dyn_cast<CallBase>(&*I)) {
       const Function *Callee = Call->getCalledFunction();
       if (!Callee || !Intrinsic::isLeaf(Callee->getIntrinsicID()))
-        CGU.removeCallSite(*Call); 
+        CGU.removeCallSite(*Call);
       else if (!Callee->isIntrinsic())
-        CGU.removeCallSite(*Call); 
+        CGU.removeCallSite(*Call);
     }
 
     if (!I->use_empty())

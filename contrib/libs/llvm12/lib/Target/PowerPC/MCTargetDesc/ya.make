@@ -15,18 +15,18 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12 
-    contrib/libs/llvm12/include 
-    contrib/libs/llvm12/lib/BinaryFormat 
-    contrib/libs/llvm12/lib/MC 
-    contrib/libs/llvm12/lib/Support 
-    contrib/libs/llvm12/lib/Target/PowerPC/TargetInfo 
+    contrib/libs/llvm12
+    contrib/libs/llvm12/include
+    contrib/libs/llvm12/lib/BinaryFormat
+    contrib/libs/llvm12/lib/MC
+    contrib/libs/llvm12/lib/Support
+    contrib/libs/llvm12/lib/Target/PowerPC/TargetInfo
 )
 
 ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC 
-    contrib/libs/llvm12/lib/Target/PowerPC 
-    contrib/libs/llvm12/lib/Target/PowerPC/MCTargetDesc 
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC
+    contrib/libs/llvm12/lib/Target/PowerPC
+    contrib/libs/llvm12/lib/Target/PowerPC/MCTargetDesc
 )
 
 NO_COMPILER_WARNINGS()

@@ -67,7 +67,7 @@ import re
 import socket
 import collections
 import datetime
-import sys 
+import sys
 
 try:
     import ssl
@@ -293,7 +293,7 @@ if _have_ssl:
 
 
 # The classes themselves
-class NNTP: 
+class NNTP:
     # UTF-8 is the character set for all NNTP commands and responses: they
     # are automatically encoded (when sending) and decoded (and receiving)
     # by this class.
@@ -309,18 +309,18 @@ class NNTP:
     encoding = 'utf-8'
     errors = 'surrogateescape'
 
-    def __init__(self, host, port=NNTP_PORT, user=None, password=None, 
-                 readermode=None, usenetrc=False, 
-                 timeout=_GLOBAL_DEFAULT_TIMEOUT): 
+    def __init__(self, host, port=NNTP_PORT, user=None, password=None,
+                 readermode=None, usenetrc=False,
+                 timeout=_GLOBAL_DEFAULT_TIMEOUT):
         """Initialize an instance.  Arguments:
-        - host: hostname to connect to 
-        - port: port to connect to (default the standard NNTP port) 
-        - user: username to authenticate with 
-        - password: password to use with username 
+        - host: hostname to connect to
+        - port: port to connect to (default the standard NNTP port)
+        - user: username to authenticate with
+        - password: password to use with username
         - readermode: if true, send 'mode reader' command after
                       connecting.
-        - usenetrc: allow loading username and password from ~/.netrc file 
-                    if not specified explicitly 
+        - usenetrc: allow loading username and password from ~/.netrc file
+                    if not specified explicitly
         - timeout: timeout (in seconds) used for socket connections
 
         readermode is sometimes necessary if you are connecting to an
@@ -330,24 +330,24 @@ class NNTP:
         readermode.
         """
         self.host = host
-        self.port = port 
-        self.sock = self._create_socket(timeout) 
-        self.file = None 
-        try: 
-            self.file = self.sock.makefile("rwb") 
-            self._base_init(readermode) 
-            if user or usenetrc: 
-                self.login(user, password, usenetrc) 
-        except: 
-            if self.file: 
-                self.file.close() 
-            self.sock.close() 
-            raise 
- 
-    def _base_init(self, readermode): 
-        """Partial initialization for the NNTP protocol. 
-        This instance method is extracted for supporting the test code. 
-        """ 
+        self.port = port
+        self.sock = self._create_socket(timeout)
+        self.file = None
+        try:
+            self.file = self.sock.makefile("rwb")
+            self._base_init(readermode)
+            if user or usenetrc:
+                self.login(user, password, usenetrc)
+        except:
+            if self.file:
+                self.file.close()
+            self.sock.close()
+            raise
+
+    def _base_init(self, readermode):
+        """Partial initialization for the NNTP protocol.
+        This instance method is extracted for supporting the test code.
+        """
         self.debugging = 0
         self.welcome = self._getresp()
 
@@ -392,12 +392,12 @@ class NNTP:
                 if is_connected():
                     self._close()
 
-    def _create_socket(self, timeout): 
-        if timeout is not None and not timeout: 
-            raise ValueError('Non-blocking socket (timeout=0) is not supported') 
-        sys.audit("nntplib.connect", self, self.host, self.port) 
-        return socket.create_connection((self.host, self.port), timeout) 
- 
+    def _create_socket(self, timeout):
+        if timeout is not None and not timeout:
+            raise ValueError('Non-blocking socket (timeout=0) is not supported')
+        sys.audit("nntplib.connect", self, self.host, self.port)
+        return socket.create_connection((self.host, self.port), timeout)
+
     def getwelcome(self):
         """Get the welcome message from the server
         (this is read and squirreled away by __init__()).
@@ -441,7 +441,7 @@ class NNTP:
     def _putline(self, line):
         """Internal: send one line to the server, appending CRLF.
         The `line` must be a bytes-like object."""
-        sys.audit("nntplib.putline", self, line) 
+        sys.audit("nntplib.putline", self, line)
         line = line + _CRLF
         if self.debugging > 1: print('*put*', repr(line))
         self.file.write(line)
@@ -916,12 +916,12 @@ class NNTP:
         return self._post('IHAVE {0}'.format(message_id), data)
 
     def _close(self):
-        try: 
-            if self.file: 
-                self.file.close() 
-                del self.file 
-        finally: 
-            self.sock.close() 
+        try:
+            if self.file:
+                self.file.close()
+                del self.file
+        finally:
+            self.sock.close()
 
     def quit(self):
         """Process a QUIT command and close the socket.  Returns:
@@ -1012,7 +1012,7 @@ class NNTP:
 
 
 if _have_ssl:
-    class NNTP_SSL(NNTP): 
+    class NNTP_SSL(NNTP):
 
         def __init__(self, host, port=NNTP_SSL_PORT,
                     user=None, password=None, ssl_context=None,
@@ -1021,19 +1021,19 @@ if _have_ssl:
             """This works identically to NNTP.__init__, except for the change
             in default port and the `ssl_context` argument for SSL connections.
             """
-            self.ssl_context = ssl_context 
-            super().__init__(host, port, user, password, readermode, 
-                             usenetrc, timeout) 
- 
-        def _create_socket(self, timeout): 
-            sock = super()._create_socket(timeout) 
+            self.ssl_context = ssl_context
+            super().__init__(host, port, user, password, readermode,
+                             usenetrc, timeout)
+
+        def _create_socket(self, timeout):
+            sock = super()._create_socket(timeout)
             try:
-                sock = _encrypt_on(sock, self.ssl_context, self.host) 
+                sock = _encrypt_on(sock, self.ssl_context, self.host)
             except:
-                sock.close() 
+                sock.close()
                 raise
-            else: 
-                return sock 
+            else:
+                return sock
 
     __all__.append("NNTP_SSL")
 
@@ -1046,7 +1046,7 @@ if __name__ == '__main__':
         nntplib built-in demo - display the latest articles in a newsgroup""")
     parser.add_argument('-g', '--group', default='gmane.comp.python.general',
                         help='group to fetch messages from (default: %(default)s)')
-    parser.add_argument('-s', '--server', default='news.gmane.io', 
+    parser.add_argument('-s', '--server', default='news.gmane.io',
                         help='NNTP server hostname (default: %(default)s)')
     parser.add_argument('-p', '--port', default=-1, type=int,
                         help='NNTP port number (default: %s / %s)' % (NNTP_PORT, NNTP_SSL_PORT))

@@ -1,1 +1,1 @@
-from jupyter_client.kernelspecapp import * 
+from jupyter_client.kernelspecapp import *

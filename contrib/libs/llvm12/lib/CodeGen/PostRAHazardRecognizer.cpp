@@ -82,9 +82,9 @@ bool PostRAHazardRecognizer::runOnMachineFunction(MachineFunction &Fn) {
     for (MachineInstr &MI : MBB) {
       // If we need to emit noops prior to this instruction, then do so.
       unsigned NumPreNoops = HazardRec->PreEmitNoops(&MI);
-      HazardRec->EmitNoops(NumPreNoops); 
-      TII->insertNoops(MBB, MachineBasicBlock::iterator(MI), NumPreNoops); 
-      NumNoops += NumPreNoops; 
+      HazardRec->EmitNoops(NumPreNoops);
+      TII->insertNoops(MBB, MachineBasicBlock::iterator(MI), NumPreNoops);
+      NumNoops += NumPreNoops;
 
       HazardRec->EmitInstruction(&MI);
       if (HazardRec->atIssueLimit()) {

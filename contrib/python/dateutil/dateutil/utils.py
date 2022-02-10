@@ -28,7 +28,7 @@ def today(tzinfo=None):
 
 def default_tzinfo(dt, tzinfo):
     """
-    Sets the ``tzinfo`` parameter on naive datetimes only 
+    Sets the ``tzinfo`` parameter on naive datetimes only
 
     This is useful for example when you are provided a datetime that may have
     either an implicit or explicit time zone, such as when parsing a time zone
@@ -63,7 +63,7 @@ def default_tzinfo(dt, tzinfo):
 
 def within_delta(dt1, dt2, delta):
     """
-    Useful for comparing two datetimes that may have a negligible difference 
+    Useful for comparing two datetimes that may have a negligible difference
     to be considered equal.
     """
     delta = abs(delta)

@@ -267,37 +267,37 @@ void CallGraphNode::replaceCallEdge(CallBase &Call, CallBase &NewCall,
       I->second = NewNode;
       NewNode->AddRef();
 
-      // Refresh callback references. Do not resize CalledFunctions if the 
-      // number of callbacks is the same for new and old call sites. 
-      SmallVector<CallGraphNode *, 4u> OldCBs; 
-      SmallVector<CallGraphNode *, 4u> NewCBs; 
-      forEachCallbackFunction(Call, [this, &OldCBs](Function *CB) { 
-        OldCBs.push_back(CG->getOrInsertFunction(CB)); 
+      // Refresh callback references. Do not resize CalledFunctions if the
+      // number of callbacks is the same for new and old call sites.
+      SmallVector<CallGraphNode *, 4u> OldCBs;
+      SmallVector<CallGraphNode *, 4u> NewCBs;
+      forEachCallbackFunction(Call, [this, &OldCBs](Function *CB) {
+        OldCBs.push_back(CG->getOrInsertFunction(CB));
       });
-      forEachCallbackFunction(NewCall, [this, &NewCBs](Function *CB) { 
-        NewCBs.push_back(CG->getOrInsertFunction(CB)); 
+      forEachCallbackFunction(NewCall, [this, &NewCBs](Function *CB) {
+        NewCBs.push_back(CG->getOrInsertFunction(CB));
       });
-      if (OldCBs.size() == NewCBs.size()) { 
-        for (unsigned N = 0; N < OldCBs.size(); ++N) { 
-          CallGraphNode *OldNode = OldCBs[N]; 
-          CallGraphNode *NewNode = NewCBs[N]; 
-          for (auto J = CalledFunctions.begin();; ++J) { 
-            assert(J != CalledFunctions.end() && 
-                   "Cannot find callsite to update!"); 
-            if (!J->first && J->second == OldNode) { 
-              J->second = NewNode; 
-              OldNode->DropRef(); 
-              NewNode->AddRef(); 
-              break; 
-            } 
-          } 
-        } 
-      } else { 
-        for (auto *CGN : OldCBs) 
-          removeOneAbstractEdgeTo(CGN); 
-        for (auto *CGN : NewCBs) 
-          addCalledFunction(nullptr, CGN); 
-      } 
+      if (OldCBs.size() == NewCBs.size()) {
+        for (unsigned N = 0; N < OldCBs.size(); ++N) {
+          CallGraphNode *OldNode = OldCBs[N];
+          CallGraphNode *NewNode = NewCBs[N];
+          for (auto J = CalledFunctions.begin();; ++J) {
+            assert(J != CalledFunctions.end() &&
+                   "Cannot find callsite to update!");
+            if (!J->first && J->second == OldNode) {
+              J->second = NewNode;
+              OldNode->DropRef();
+              NewNode->AddRef();
+              break;
+            }
+          }
+        }
+      } else {
+        for (auto *CGN : OldCBs)
+          removeOneAbstractEdgeTo(CGN);
+        for (auto *CGN : NewCBs)
+          addCalledFunction(nullptr, CGN);
+      }
       return;
     }
   }

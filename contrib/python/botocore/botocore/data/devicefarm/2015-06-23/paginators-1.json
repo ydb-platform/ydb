@@ -72,39 +72,39 @@
       "input_token": "nextToken",
       "output_token": "nextToken",
       "result_key": "offerings"
-    }, 
-    "ListDeviceInstances": { 
-      "input_token": "nextToken", 
-      "limit_key": "maxResults", 
-      "output_token": "nextToken", 
-      "result_key": "deviceInstances" 
-    }, 
-    "ListInstanceProfiles": { 
-      "input_token": "nextToken", 
-      "limit_key": "maxResults", 
-      "output_token": "nextToken", 
-      "result_key": "instanceProfiles" 
-    }, 
-    "ListNetworkProfiles": { 
-      "input_token": "nextToken", 
-      "output_token": "nextToken", 
-      "result_key": "networkProfiles" 
-    }, 
-    "ListOfferingPromotions": { 
-      "input_token": "nextToken", 
-      "output_token": "nextToken", 
-      "result_key": "offeringPromotions" 
-    }, 
-    "ListRemoteAccessSessions": { 
-      "input_token": "nextToken", 
-      "output_token": "nextToken", 
-      "result_key": "remoteAccessSessions" 
-    }, 
-    "ListVPCEConfigurations": { 
-      "input_token": "nextToken", 
-      "limit_key": "maxResults", 
-      "output_token": "nextToken", 
-      "result_key": "vpceConfigurations" 
+    },
+    "ListDeviceInstances": {
+      "input_token": "nextToken",
+      "limit_key": "maxResults",
+      "output_token": "nextToken",
+      "result_key": "deviceInstances"
+    },
+    "ListInstanceProfiles": {
+      "input_token": "nextToken",
+      "limit_key": "maxResults",
+      "output_token": "nextToken",
+      "result_key": "instanceProfiles"
+    },
+    "ListNetworkProfiles": {
+      "input_token": "nextToken",
+      "output_token": "nextToken",
+      "result_key": "networkProfiles"
+    },
+    "ListOfferingPromotions": {
+      "input_token": "nextToken",
+      "output_token": "nextToken",
+      "result_key": "offeringPromotions"
+    },
+    "ListRemoteAccessSessions": {
+      "input_token": "nextToken",
+      "output_token": "nextToken",
+      "result_key": "remoteAccessSessions"
+    },
+    "ListVPCEConfigurations": {
+      "input_token": "nextToken",
+      "limit_key": "maxResults",
+      "output_token": "nextToken",
+      "result_key": "vpceConfigurations"
     }
   }
 }

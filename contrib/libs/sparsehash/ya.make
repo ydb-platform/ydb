@@ -9,7 +9,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 OWNER(g:cpp-contrib)
 
 VERSION(2.0.4)
- 
+
 ADDINCL(
     GLOBAL contrib/libs/sparsehash/src
 )

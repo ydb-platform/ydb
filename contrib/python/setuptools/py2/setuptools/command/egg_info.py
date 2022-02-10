@@ -16,8 +16,8 @@ import warnings
 import time
 import collections
 
-from setuptools.extern import six 
-from setuptools.extern.six.moves import map 
+from setuptools.extern import six
+from setuptools.extern.six.moves import map
 
 from setuptools import Command
 from setuptools.command.sdist import sdist
@@ -30,8 +30,8 @@ from pkg_resources import (
 import setuptools.unicode_utils as unicode_utils
 from setuptools.glob import glob
 
-from setuptools.extern import packaging 
-from setuptools import SetuptoolsDeprecationWarning 
+from setuptools.extern import packaging
+from setuptools import SetuptoolsDeprecationWarning
 
 def translate_pattern(glob):
     """
@@ -112,37 +112,37 @@ def translate_pattern(glob):
         if not last_chunk:
             pat += sep
 
-    pat += r'\Z' 
-    return re.compile(pat, flags=re.MULTILINE|re.DOTALL) 
+    pat += r'\Z'
+    return re.compile(pat, flags=re.MULTILINE|re.DOTALL)
 
 
-class InfoCommon: 
-    tag_build = None 
-    tag_date = None 
- 
-    @property 
-    def name(self): 
-        return safe_name(self.distribution.get_name()) 
- 
-    def tagged_version(self): 
-        version = self.distribution.get_version() 
-        # egg_info may be called more than once for a distribution, 
-        # in which case the version string already contains all tags. 
-        if self.vtags and version.endswith(self.vtags): 
-            return safe_version(version) 
-        return safe_version(version + self.vtags) 
- 
-    def tags(self): 
-        version = '' 
-        if self.tag_build: 
-            version += self.tag_build 
-        if self.tag_date: 
-            version += time.strftime("-%Y%m%d") 
-        return version 
-    vtags = property(tags) 
- 
- 
-class egg_info(InfoCommon, Command): 
+class InfoCommon:
+    tag_build = None
+    tag_date = None
+
+    @property
+    def name(self):
+        return safe_name(self.distribution.get_name())
+
+    def tagged_version(self):
+        version = self.distribution.get_version()
+        # egg_info may be called more than once for a distribution,
+        # in which case the version string already contains all tags.
+        if self.vtags and version.endswith(self.vtags):
+            return safe_version(version)
+        return safe_version(version + self.vtags)
+
+    def tags(self):
+        version = ''
+        if self.tag_build:
+            version += self.tag_build
+        if self.tag_date:
+            version += time.strftime("-%Y%m%d")
+        return version
+    vtags = property(tags)
+
+
+class egg_info(InfoCommon, Command):
     description = "create a distribution's .egg-info directory"
 
     user_options = [
@@ -159,9 +159,9 @@ class egg_info(InfoCommon, Command):
     }
 
     def initialize_options(self):
-        self.egg_base = None 
+        self.egg_base = None
         self.egg_name = None
-        self.egg_info = None 
+        self.egg_info = None
         self.egg_version = None
         self.broken_egg_info = False
 
@@ -183,7 +183,7 @@ class egg_info(InfoCommon, Command):
         build tag. Install build keys in a deterministic order
         to avoid arbitrary reordering on subsequent builds.
         """
-        egg_info = collections.OrderedDict() 
+        egg_info = collections.OrderedDict()
         # follow the order these keys would have been added
         # when PYTHONHASHSEED=0
         egg_info['tag_build'] = self.tags()
@@ -191,11 +191,11 @@ class egg_info(InfoCommon, Command):
         edit_config(filename, dict(egg_info=egg_info))
 
     def finalize_options(self):
-        # Note: we need to capture the current value returned 
-        # by `self.tagged_version()`, so we can later update 
-        # `self.distribution.metadata.version` without 
-        # repercussions. 
-        self.egg_name = self.name 
+        # Note: we need to capture the current value returned
+        # by `self.tagged_version()`, so we can later update
+        # `self.distribution.metadata.version` without
+        # repercussions.
+        self.egg_name = self.name
         self.egg_version = self.tagged_version()
         parsed_version = parse_version(self.egg_version)
 
@@ -266,7 +266,7 @@ class egg_info(InfoCommon, Command):
         to the file.
         """
         log.info("writing %s to %s", what, filename)
-        if not six.PY2: 
+        if not six.PY2:
             data = data.encode("utf-8")
         if not self.dry_run:
             f = open(filename, 'wb')
@@ -281,7 +281,7 @@ class egg_info(InfoCommon, Command):
 
     def run(self):
         self.mkpath(self.egg_info)
-        os.utime(self.egg_info, None) 
+        os.utime(self.egg_info, None)
         installer = self.distribution.fetch_build_egg
         for ep in iter_entry_points('egg_info.writers'):
             ep.require(installer=installer)
@@ -568,7 +568,7 @@ class manifest_maker(sdist):
 
     def add_defaults(self):
         sdist.add_defaults(self)
-        self.check_license() 
+        self.check_license()
         self.filelist.append(self.template)
         self.filelist.append(self.manifest)
         rcfiles = list(walk_revctrl())
@@ -576,12 +576,12 @@ class manifest_maker(sdist):
             self.filelist.extend(rcfiles)
         elif os.path.exists(self.manifest):
             self.read_manifest()
- 
-        if os.path.exists("setup.py"): 
-            # setup.py should be included by default, even if it's not 
-            # the script called to create the sdist 
-            self.filelist.append("setup.py") 
- 
+
+        if os.path.exists("setup.py"):
+            # setup.py should be included by default, even if it's not
+            # the script called to create the sdist
+            self.filelist.append("setup.py")
+
         ei_cmd = self.get_finalized_command('egg_info')
         self.filelist.graft(ei_cmd.egg_info)
 
@@ -614,7 +614,7 @@ def write_pkg_info(cmd, basename, filename):
         metadata = cmd.distribution.metadata
         metadata.version, oldver = cmd.egg_version, metadata.version
         metadata.name, oldname = cmd.egg_name, metadata.name
- 
+
         try:
             # write unescaped data to PKG-INFO, so older pkg_resources
             # can still parse it
@@ -654,7 +654,7 @@ def write_requirements(cmd, basename, filename):
 
 
 def write_setup_requirements(cmd, basename, filename):
-    data = io.StringIO() 
+    data = io.StringIO()
     _write_requirements(data, cmd.distribution.setup_requires)
     cmd.write_or_delete_file("setup-requirements", filename, data.getvalue())
 
@@ -703,7 +703,7 @@ def get_pkg_info_revision():
     Get a -r### off of PKG-INFO Version in case this is an sdist of
     a subversion revision.
     """
-    warnings.warn("get_pkg_info_revision is deprecated.", EggInfoDeprecationWarning) 
+    warnings.warn("get_pkg_info_revision is deprecated.", EggInfoDeprecationWarning)
     if os.path.exists('PKG-INFO'):
         with io.open('PKG-INFO') as f:
             for line in f:
@@ -711,7 +711,7 @@ def get_pkg_info_revision():
                 if match:
                     return int(match.group(1))
     return 0
- 
- 
-class EggInfoDeprecationWarning(SetuptoolsDeprecationWarning): 
-    """Class for warning about deprecations in eggInfo in setupTools. Not ignored by default, unlike DeprecationWarning.""" 
+
+
+class EggInfoDeprecationWarning(SetuptoolsDeprecationWarning):
+    """Class for warning about deprecations in eggInfo in setupTools. Not ignored by default, unlike DeprecationWarning."""

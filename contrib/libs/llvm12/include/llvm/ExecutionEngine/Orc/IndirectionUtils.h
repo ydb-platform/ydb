@@ -69,33 +69,33 @@ public:
       JITTargetAddress TrampolineAddr,
       NotifyLandingResolvedFunction OnLandingResolved) const>;
 
-  virtual ~TrampolinePool(); 
+  virtual ~TrampolinePool();
 
   /// Get an available trampoline address.
   /// Returns an error if no trampoline can be created.
-  Expected<JITTargetAddress> getTrampoline() { 
-    std::lock_guard<std::mutex> Lock(TPMutex); 
-    if (AvailableTrampolines.empty()) { 
-      if (auto Err = grow()) 
-        return std::move(Err); 
-    } 
-    assert(!AvailableTrampolines.empty() && "Failed to grow trampoline pool"); 
-    auto TrampolineAddr = AvailableTrampolines.back(); 
-    AvailableTrampolines.pop_back(); 
-    return TrampolineAddr; 
-  } 
+  Expected<JITTargetAddress> getTrampoline() {
+    std::lock_guard<std::mutex> Lock(TPMutex);
+    if (AvailableTrampolines.empty()) {
+      if (auto Err = grow())
+        return std::move(Err);
+    }
+    assert(!AvailableTrampolines.empty() && "Failed to grow trampoline pool");
+    auto TrampolineAddr = AvailableTrampolines.back();
+    AvailableTrampolines.pop_back();
+    return TrampolineAddr;
+  }
 
-  /// Returns the given trampoline to the pool for re-use. 
-  void releaseTrampoline(JITTargetAddress TrampolineAddr) { 
-    std::lock_guard<std::mutex> Lock(TPMutex); 
-    AvailableTrampolines.push_back(TrampolineAddr); 
-  } 
- 
-protected: 
-  virtual Error grow() = 0; 
- 
-  std::mutex TPMutex; 
-  std::vector<JITTargetAddress> AvailableTrampolines; 
+  /// Returns the given trampoline to the pool for re-use.
+  void releaseTrampoline(JITTargetAddress TrampolineAddr) {
+    std::lock_guard<std::mutex> Lock(TPMutex);
+    AvailableTrampolines.push_back(TrampolineAddr);
+  }
+
+protected:
+  virtual Error grow() = 0;
+
+  std::mutex TPMutex;
+  std::vector<JITTargetAddress> AvailableTrampolines;
 };
 
 /// A trampoline pool for trampolines within the current process.
@@ -160,8 +160,8 @@ private:
     }
   }
 
-  Error grow() override { 
-    assert(AvailableTrampolines.empty() && "Growing prematurely?"); 
+  Error grow() override {
+    assert(AvailableTrampolines.empty() && "Growing prematurely?");
 
     std::error_code EC;
     auto TrampolineBlock =
@@ -181,7 +181,7 @@ private:
         pointerToJITTargetAddress(ResolverBlock.base()), NumTrampolines);
 
     for (unsigned I = 0; I < NumTrampolines; ++I)
-      AvailableTrampolines.push_back(pointerToJITTargetAddress( 
+      AvailableTrampolines.push_back(pointerToJITTargetAddress(
           TrampolineMem + (I * ORCABI::TrampolineSize)));
 
     if (auto EC = sys::Memory::protectMappedMemory(

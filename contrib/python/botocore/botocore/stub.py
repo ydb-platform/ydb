@@ -16,8 +16,8 @@ from pprint import pformat
 
 from botocore.validate import validate_parameters
 from botocore.exceptions import ParamValidationError, \
-    StubResponseError, StubAssertionError, UnStubbedResponseError 
-from botocore.awsrequest import AWSResponse 
+    StubResponseError, StubAssertionError, UnStubbedResponseError
+from botocore.awsrequest import AWSResponse
 
 
 class _ANY(object):
@@ -116,9 +116,9 @@ class Stubber(object):
         assert service_response == response
 
 
-    If you have an input parameter that is a randomly generated value, or you 
-    otherwise don't care about its value, you can use ``stub.ANY`` to ignore 
-    it in validation. 
+    If you have an input parameter that is a randomly generated value, or you
+    otherwise don't care about its value, you can use ``stub.ANY`` to ignore
+    it in validation.
 
     **Example:**
     ::
@@ -233,7 +233,7 @@ class Stubber(object):
                 % (self.client.meta.service_model.service_name, method))
 
         # Create a successful http response
-        http_response = AWSResponse(None, 200, {}, None) 
+        http_response = AWSResponse(None, 200, {}, None)
 
         operation_name = self.client.meta.method_to_api_mapping.get(method)
         self._validate_response(operation_name, service_response)
@@ -248,8 +248,8 @@ class Stubber(object):
 
     def add_client_error(self, method, service_error_code='',
                          service_message='', http_status_code=400,
-                         service_error_meta=None, expected_params=None, 
-                         response_meta=None): 
+                         service_error_meta=None, expected_params=None,
+                         response_meta=None):
         """
         Adds a ``ClientError`` to the response queue.
 
@@ -277,13 +277,13 @@ class Stubber(object):
             any of the parameters differ a ``StubResponseError`` is thrown.
             You can use stub.ANY to indicate a particular parameter to ignore
             in validation.
- 
-        :param response_meta: Additional keys to be added to the 
-            response's ResponseMetadata 
-        :type response_meta: dict 
- 
+
+        :param response_meta: Additional keys to be added to the
+            response's ResponseMetadata
+        :type response_meta: dict
+
         """
-        http_response = AWSResponse(None, http_status_code, {}, None) 
+        http_response = AWSResponse(None, http_status_code, {}, None)
 
         # We don't look to the model to build this because the caller would
         # need to know the details of what the HTTP body would need to
@@ -299,9 +299,9 @@ class Stubber(object):
         if service_error_meta is not None:
             parsed_response['Error'].update(service_error_meta)
 
-        if response_meta is not None: 
-            parsed_response['ResponseMetadata'].update(response_meta) 
- 
+        if response_meta is not None:
+            parsed_response['ResponseMetadata'].update(response_meta)
+
         operation_name = self.client.meta.method_to_api_mapping.get(method)
         # Note that we do not allow for expected_params while
         # adding errors into the queue yet.
@@ -323,13 +323,13 @@ class Stubber(object):
 
     def _assert_expected_call_order(self, model, params):
         if not self._queue:
-            raise UnStubbedResponseError( 
+            raise UnStubbedResponseError(
                 operation_name=model.name,
-                reason=( 
-                        'Unexpected API Call: A call was made but no additional calls expected. ' 
-                        'Either the API Call was not stubbed or it was called multiple times.' 
-                        ) 
-            ) 
+                reason=(
+                        'Unexpected API Call: A call was made but no additional calls expected. '
+                        'Either the API Call was not stubbed or it was called multiple times.'
+                        )
+            )
 
         name = self._queue[0]['operation_name']
         if name != model.name:
@@ -337,14 +337,14 @@ class Stubber(object):
                 operation_name=model.name,
                 reason='Operation mismatch: found response for %s.' % name)
 
-    def _get_response_handler(self, model, params, context, **kwargs): 
+    def _get_response_handler(self, model, params, context, **kwargs):
         self._assert_expected_call_order(model, params)
         # Pop off the entire response once everything has been validated
         return self._queue.popleft()['response']
 
-    def _assert_expected_params(self, model, params, context, **kwargs): 
-        if self._should_not_stub(context): 
-            return 
+    def _assert_expected_params(self, model, params, context, **kwargs):
+        if self._should_not_stub(context):
+            return
         self._assert_expected_call_order(model, params)
         expected_params = self._queue[0]['expected_params']
         if expected_params is None:
@@ -365,13 +365,13 @@ class Stubber(object):
                 reason='Expected parameters:\n%s,\nbut received:\n%s' % (
                     pformat(expected_params), pformat(params)))
 
-    def _should_not_stub(self, context): 
-        # Do not include presign requests when processing stubbed client calls 
-        # as a presign request will never have an HTTP request sent over the 
-        # wire for it and therefore not receive a response back. 
-        if context and context.get('is_presign_request'): 
-            return True 
- 
+    def _should_not_stub(self, context):
+        # Do not include presign requests when processing stubbed client calls
+        # as a presign request will never have an HTTP request sent over the
+        # wire for it and therefore not receive a response back.
+        if context and context.get('is_presign_request'):
+            return True
+
     def _validate_response(self, operation_name, service_response):
         service_model = self.client.meta.service_model
         operation_model = service_model.operation_model(operation_name)

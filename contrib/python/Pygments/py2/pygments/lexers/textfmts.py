@@ -11,14 +11,14 @@
 
 import re
 
-from pygments.lexers import guess_lexer, get_lexer_by_name 
-from pygments.lexer import RegexLexer, bygroups, default, do_insertions 
+from pygments.lexers import guess_lexer, get_lexer_by_name
+from pygments.lexer import RegexLexer, bygroups, default, do_insertions
 from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
-    Number, Generic, Literal, Punctuation 
+    Number, Generic, Literal, Punctuation
 from pygments.util import ClassNotFound
 
-__all__ = ['IrcLogsLexer', 'TodotxtLexer', 'HttpLexer', 'GettextLexer', 
-           'NotmuchLexer'] 
+__all__ = ['IrcLogsLexer', 'TodotxtLexer', 'HttpLexer', 'GettextLexer',
+           'NotmuchLexer']
 
 
 class IrcLogsLexer(RegexLexer):
@@ -297,86 +297,86 @@ class TodotxtLexer(RegexLexer):
             (r'\s+', IncompleteTaskText),
         ],
     }
- 
- 
-class NotmuchLexer(RegexLexer): 
-    """ 
-    For `Notmuch <https://notmuchmail.org/>`_ email text format. 
- 
-    .. versionadded:: 2.5 
- 
-    Additional options accepted: 
- 
-    `body_lexer` 
-        If given, highlight the contents of the message body with the specified 
-        lexer, else guess it according to the body content (default: ``None``). 
-    """ 
- 
-    name = 'Notmuch' 
-    aliases = ['notmuch'] 
- 
-    def _highlight_code(self, match): 
-        code = match.group(1) 
- 
-        try: 
-            if self.body_lexer: 
-                lexer = get_lexer_by_name(self.body_lexer) 
-            else: 
-                lexer = guess_lexer(code.strip()) 
-        except ClassNotFound: 
-            lexer = get_lexer_by_name('text') 
- 
-        for item in lexer.get_tokens_unprocessed(code): 
-            yield item 
- 
-    tokens = { 
-        'root': [ 
-            (r'\fmessage{\s*', Keyword, ('message', 'message-attr')), 
-        ], 
-        'message-attr': [ 
-            (r'(\s*id:\s*)([^\s]+)', bygroups(Name.Attribute, String)), 
-            (r'(\s*(?:depth|match|excluded):\s*)(\d+)', 
-             bygroups(Name.Attribute, Number.Integer)), 
-            (r'(\s*filename:\s*)(.+\n)', 
-             bygroups(Name.Attribute, String)), 
-            default('#pop'), 
-        ], 
-        'message': [ 
-            (r'\fmessage}\n', Keyword, '#pop'), 
-            (r'\fheader{\n', Keyword, 'header'), 
-            (r'\fbody{\n', Keyword, 'body'), 
-        ], 
-        'header': [ 
-            (r'\fheader}\n', Keyword, '#pop'), 
-            (r'((?:Subject|From|To|Cc|Date):\s*)(.*\n)', 
-             bygroups(Name.Attribute, String)), 
-            (r'(.*)(\s*\(.*\))(\s*\(.*\)\n)', 
-             bygroups(Generic.Strong, Literal, Name.Tag)), 
-        ], 
-        'body': [ 
-            (r'\fpart{\n', Keyword, 'part'), 
-            (r'\f(part|attachment){\s*', Keyword, ('part', 'part-attr')), 
-            (r'\fbody}\n', Keyword, '#pop'), 
-        ], 
-        'part-attr': [ 
-            (r'(ID:\s*)(\d+)', bygroups(Name.Attribute, Number.Integer)), 
-            (r'(,\s*)((?:Filename|Content-id):\s*)([^,]+)', 
-             bygroups(Punctuation, Name.Attribute, String)), 
-            (r'(,\s*)(Content-type:\s*)(.+\n)', 
-             bygroups(Punctuation, Name.Attribute, String)), 
-            default('#pop'), 
-        ], 
-        'part': [ 
-            (r'\f(?:part|attachment)}\n', Keyword, '#pop'), 
-            (r'\f(?:part|attachment){\s*', Keyword, ('#push', 'part-attr')), 
-            (r'^Non-text part: .*\n', Comment), 
-            (r'(?s)(.*?(?=\f(?:part|attachment)}\n))', _highlight_code), 
-        ], 
-    } 
- 
-    def analyse_text(text): 
-        return 1.0 if text.startswith('\fmessage{') else 0.0 
- 
-    def __init__(self, **options): 
-        self.body_lexer = options.get('body_lexer', None) 
-        RegexLexer.__init__(self, **options) 
+
+
+class NotmuchLexer(RegexLexer):
+    """
+    For `Notmuch <https://notmuchmail.org/>`_ email text format.
+
+    .. versionadded:: 2.5
+
+    Additional options accepted:
+
+    `body_lexer`
+        If given, highlight the contents of the message body with the specified
+        lexer, else guess it according to the body content (default: ``None``).
+    """
+
+    name = 'Notmuch'
+    aliases = ['notmuch']
+
+    def _highlight_code(self, match):
+        code = match.group(1)
+
+        try:
+            if self.body_lexer:
+                lexer = get_lexer_by_name(self.body_lexer)
+            else:
+                lexer = guess_lexer(code.strip())
+        except ClassNotFound:
+            lexer = get_lexer_by_name('text')
+
+        for item in lexer.get_tokens_unprocessed(code):
+            yield item
+
+    tokens = {
+        'root': [
+            (r'\fmessage{\s*', Keyword, ('message', 'message-attr')),
+        ],
+        'message-attr': [
+            (r'(\s*id:\s*)([^\s]+)', bygroups(Name.Attribute, String)),
+            (r'(\s*(?:depth|match|excluded):\s*)(\d+)',
+             bygroups(Name.Attribute, Number.Integer)),
+            (r'(\s*filename:\s*)(.+\n)',
+             bygroups(Name.Attribute, String)),
+            default('#pop'),
+        ],
+        'message': [
+            (r'\fmessage}\n', Keyword, '#pop'),
+            (r'\fheader{\n', Keyword, 'header'),
+            (r'\fbody{\n', Keyword, 'body'),
+        ],
+        'header': [
+            (r'\fheader}\n', Keyword, '#pop'),
+            (r'((?:Subject|From|To|Cc|Date):\s*)(.*\n)',
+             bygroups(Name.Attribute, String)),
+            (r'(.*)(\s*\(.*\))(\s*\(.*\)\n)',
+             bygroups(Generic.Strong, Literal, Name.Tag)),
+        ],
+        'body': [
+            (r'\fpart{\n', Keyword, 'part'),
+            (r'\f(part|attachment){\s*', Keyword, ('part', 'part-attr')),
+            (r'\fbody}\n', Keyword, '#pop'),
+        ],
+        'part-attr': [
+            (r'(ID:\s*)(\d+)', bygroups(Name.Attribute, Number.Integer)),
+            (r'(,\s*)((?:Filename|Content-id):\s*)([^,]+)',
+             bygroups(Punctuation, Name.Attribute, String)),
+            (r'(,\s*)(Content-type:\s*)(.+\n)',
+             bygroups(Punctuation, Name.Attribute, String)),
+            default('#pop'),
+        ],
+        'part': [
+            (r'\f(?:part|attachment)}\n', Keyword, '#pop'),
+            (r'\f(?:part|attachment){\s*', Keyword, ('#push', 'part-attr')),
+            (r'^Non-text part: .*\n', Comment),
+            (r'(?s)(.*?(?=\f(?:part|attachment)}\n))', _highlight_code),
+        ],
+    }
+
+    def analyse_text(text):
+        return 1.0 if text.startswith('\fmessage{') else 0.0
+
+    def __init__(self, **options):
+        self.body_lexer = options.get('body_lexer', None)
+        RegexLexer.__init__(self, **options)

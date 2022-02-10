@@ -18,17 +18,17 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/DIE.h"
-#include <string> 
+#include <string>
 
 namespace llvm {
 
-class ConstantFP; 
+class ConstantFP;
 class ConstantInt;
 class DbgVariable;
 class DwarfCompileUnit;
-class MachineOperand; 
-class MCDwarfDwoLineTable; 
-class MCSymbol; 
+class MachineOperand;
+class MCDwarfDwoLineTable;
+class MCSymbol;
 
 //===----------------------------------------------------------------------===//
 /// This dwarf writer support class manages information associated with a
@@ -82,7 +82,7 @@ public:
   MCSymbol *getEndLabel() const { return EndLabel; }
   uint16_t getLanguage() const { return CUNode->getSourceLanguage(); }
   const DICompileUnit *getCUNode() const { return CUNode; }
-  DwarfDebug &getDwarfDebug() const { return *DD; } 
+  DwarfDebug &getDwarfDebug() const { return *DD; }
 
   /// Return true if this compile unit has something to write out.
   bool hasContent() const { return getUnitDie().hasChildren(); }
@@ -248,9 +248,9 @@ public:
   /// Compute the size of a header for this unit, not including the initial
   /// length field.
   virtual unsigned getHeaderSize() const {
-    return sizeof(int16_t) +               // DWARF version number 
-           Asm->getDwarfOffsetByteSize() + // Offset Into Abbrev. Section 
-           sizeof(int8_t) +                // Pointer Size (in bytes) 
+    return sizeof(int16_t) +               // DWARF version number
+           Asm->getDwarfOffsetByteSize() + // Offset Into Abbrev. Section
+           sizeof(int8_t) +                // Pointer Size (in bytes)
            (DD->getDwarfVersion() >= 5 ? sizeof(int8_t)
                                        : 0); // DWARF v5 unit type
   }
@@ -295,12 +295,12 @@ protected:
 
 private:
   void constructTypeDIE(DIE &Buffer, const DIBasicType *BTy);
-  void constructTypeDIE(DIE &Buffer, const DIStringType *BTy); 
+  void constructTypeDIE(DIE &Buffer, const DIStringType *BTy);
   void constructTypeDIE(DIE &Buffer, const DIDerivedType *DTy);
   void constructTypeDIE(DIE &Buffer, const DISubroutineType *CTy);
   void constructSubrangeDIE(DIE &Buffer, const DISubrange *SR, DIE *IndexTy);
-  void constructGenericSubrangeDIE(DIE &Buffer, const DIGenericSubrange *SR, 
-                                   DIE *IndexTy); 
+  void constructGenericSubrangeDIE(DIE &Buffer, const DIGenericSubrange *SR,
+                                   DIE *IndexTy);
   void constructArrayTypeDIE(DIE &Buffer, const DICompositeType *CTy);
   void constructEnumTypeDIE(DIE &Buffer, const DICompositeType *CTy);
   DIE &constructMemberDIE(DIE &Buffer, const DIDerivedType *DT);
@@ -353,7 +353,7 @@ public:
   void emitHeader(bool UseOffsets) override;
   unsigned getHeaderSize() const override {
     return DwarfUnit::getHeaderSize() + sizeof(uint64_t) + // Type Signature
-           Asm->getDwarfOffsetByteSize();                  // Type DIE Offset 
+           Asm->getDwarfOffsetByteSize();                  // Type DIE Offset
   }
   void addGlobalName(StringRef Name, const DIE &Die,
                      const DIScope *Context) override;

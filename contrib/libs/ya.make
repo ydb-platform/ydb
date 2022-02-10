@@ -31,8 +31,8 @@ RECURSE(
     cereal
     ceres-solver
     chromaprint
-    clang12 
-    clang12-rt 
+    clang12
+    clang12-rt
     clapack
     cld2
     cnpy
@@ -148,7 +148,7 @@ RECURSE(
     libevent
     libexslt
     libfdk-aac
-    libfuzzer12 
+    libfuzzer12
     libgeotiff
     libgit2
     libgraphqlparser
@@ -207,7 +207,7 @@ RECURSE(
     linuxvdso
     liquidfun
     llvm11
-    llvm12 
+    llvm12
     llvm8
     lmdbxx
     lmdbxx/check

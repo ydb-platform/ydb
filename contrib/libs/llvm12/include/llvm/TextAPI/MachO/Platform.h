@@ -36,8 +36,8 @@ enum class PlatformKind : unsigned {
   macCatalyst = MachO::PLATFORM_MACCATALYST,
   iOSSimulator = MachO::PLATFORM_IOSSIMULATOR,
   tvOSSimulator = MachO::PLATFORM_TVOSSIMULATOR,
-  watchOSSimulator = MachO::PLATFORM_WATCHOSSIMULATOR, 
-  driverKit = MachO::PLATFORM_DRIVERKIT, 
+  watchOSSimulator = MachO::PLATFORM_WATCHOSSIMULATOR,
+  driverKit = MachO::PLATFORM_DRIVERKIT,
 };
 
 using PlatformSet = SmallSet<PlatformKind, 3>;
@@ -51,7 +51,7 @@ StringRef getPlatformName(PlatformKind Platform);
 } // end namespace llvm.
 
 #endif // LLVM_TEXTAPI_MACHO_PLATFORM_H
- 
+
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif

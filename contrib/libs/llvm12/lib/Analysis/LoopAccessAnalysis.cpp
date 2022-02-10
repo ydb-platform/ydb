@@ -149,23 +149,23 @@ const SCEV *llvm::replaceSymbolicStrideSCEV(PredicatedScalarEvolution &PSE,
   // symbolic stride replaced by one.
   ValueToValueMap::const_iterator SI =
       PtrToStride.find(OrigPtr ? OrigPtr : Ptr);
-  if (SI == PtrToStride.end()) 
-    // For a non-symbolic stride, just return the original expression. 
-    return OrigSCEV; 
+  if (SI == PtrToStride.end())
+    // For a non-symbolic stride, just return the original expression.
+    return OrigSCEV;
 
-  Value *StrideVal = stripIntegerCast(SI->second); 
+  Value *StrideVal = stripIntegerCast(SI->second);
 
-  ScalarEvolution *SE = PSE.getSE(); 
-  const auto *U = cast<SCEVUnknown>(SE->getSCEV(StrideVal)); 
-  const auto *CT = 
-    static_cast<const SCEVConstant *>(SE->getOne(StrideVal->getType())); 
+  ScalarEvolution *SE = PSE.getSE();
+  const auto *U = cast<SCEVUnknown>(SE->getSCEV(StrideVal));
+  const auto *CT =
+    static_cast<const SCEVConstant *>(SE->getOne(StrideVal->getType()));
 
-  PSE.addPredicate(*SE->getEqualPredicate(U, CT)); 
-  auto *Expr = PSE.getSCEV(Ptr); 
+  PSE.addPredicate(*SE->getEqualPredicate(U, CT));
+  auto *Expr = PSE.getSCEV(Ptr);
 
-  LLVM_DEBUG(dbgs() << "LAA: Replacing SCEV: " << *OrigSCEV 
-	     << " by: " << *Expr << "\n"); 
-  return Expr; 
+  LLVM_DEBUG(dbgs() << "LAA: Replacing SCEV: " << *OrigSCEV
+	     << " by: " << *Expr << "\n");
+  return Expr;
 }
 
 RuntimeCheckingPtrGroup::RuntimeCheckingPtrGroup(
@@ -223,10 +223,10 @@ void RuntimePointerChecking::insert(Loop *Lp, Value *Ptr, bool WritePtr,
       ScEnd = SE->getUMaxExpr(AR->getStart(), ScEnd);
     }
     // Add the size of the pointed element to ScEnd.
-    auto &DL = Lp->getHeader()->getModule()->getDataLayout(); 
-    Type *IdxTy = DL.getIndexType(Ptr->getType()); 
-    const SCEV *EltSizeSCEV = 
-        SE->getStoreSizeOfExpr(IdxTy, Ptr->getType()->getPointerElementType()); 
+    auto &DL = Lp->getHeader()->getModule()->getDataLayout();
+    Type *IdxTy = DL.getIndexType(Ptr->getType());
+    const SCEV *EltSizeSCEV =
+        SE->getStoreSizeOfExpr(IdxTy, Ptr->getType()->getPointerElementType());
     ScEnd = SE->getAddExpr(ScEnd, EltSizeSCEV);
   }
 
@@ -505,16 +505,16 @@ public:
   typedef PointerIntPair<Value *, 1, bool> MemAccessInfo;
   typedef SmallVector<MemAccessInfo, 8> MemAccessInfoList;
 
-  AccessAnalysis(Loop *TheLoop, AAResults *AA, LoopInfo *LI, 
-                 MemoryDepChecker::DepCandidates &DA, 
+  AccessAnalysis(Loop *TheLoop, AAResults *AA, LoopInfo *LI,
+                 MemoryDepChecker::DepCandidates &DA,
                  PredicatedScalarEvolution &PSE)
-      : TheLoop(TheLoop), AST(*AA), LI(LI), DepCands(DA), 
+      : TheLoop(TheLoop), AST(*AA), LI(LI), DepCands(DA),
         IsRTCheckAnalysisNeeded(false), PSE(PSE) {}
 
   /// Register a load  and whether it is only read from.
   void addLoad(MemoryLocation &Loc, bool IsReadOnly) {
     Value *Ptr = const_cast<Value*>(Loc.Ptr);
-    AST.add(Ptr, LocationSize::beforeOrAfterPointer(), Loc.AATags); 
+    AST.add(Ptr, LocationSize::beforeOrAfterPointer(), Loc.AATags);
     Accesses.insert(MemAccessInfo(Ptr, false));
     if (IsReadOnly)
       ReadOnlyPtr.insert(Ptr);
@@ -523,7 +523,7 @@ public:
   /// Register a store.
   void addStore(MemoryLocation &Loc) {
     Value *Ptr = const_cast<Value*>(Loc.Ptr);
-    AST.add(Ptr, LocationSize::beforeOrAfterPointer(), Loc.AATags); 
+    AST.add(Ptr, LocationSize::beforeOrAfterPointer(), Loc.AATags);
     Accesses.insert(MemAccessInfo(Ptr, true));
   }
 
@@ -727,7 +727,7 @@ bool AccessAnalysis::canCheckPtrAtRT(RuntimePointerChecking &RtCheck,
     // First, count how many write and read accesses are in the alias set. Also
     // collect MemAccessInfos for later.
     SmallVector<MemAccessInfo, 4> AccessInfos;
-    for (const auto &A : AS) { 
+    for (const auto &A : AS) {
       Value *Ptr = A.getValue();
       bool IsWrite = Accesses.count(MemAccessInfo(Ptr, true));
 
@@ -861,7 +861,7 @@ void AccessAnalysis::processMemAccesses() {
   // compatibility and potential for underlying-object overlap. As a result, we
   // only need to check for potential pointer dependencies within each alias
   // set.
-  for (const auto &AS : AST) { 
+  for (const auto &AS : AST) {
     // Note that both the alias-set tracker and the alias sets themselves used
     // linked lists internally and so the iteration order here is deterministic
     // (matching the original instruction order within each set).
@@ -881,12 +881,12 @@ void AccessAnalysis::processMemAccesses() {
       bool UseDeferred = SetIteration > 0;
       PtrAccessSet &S = UseDeferred ? DeferredAccesses : Accesses;
 
-      for (const auto &AV : AS) { 
+      for (const auto &AV : AS) {
         Value *Ptr = AV.getValue();
 
         // For a single memory access in AliasSetTracker, Accesses may contain
         // both read and write, and they both need to be handled for CheckDeps.
-        for (const auto &AC : S) { 
+        for (const auto &AC : S) {
           if (AC.getPointer() != Ptr)
             continue;
 
@@ -933,7 +933,7 @@ void AccessAnalysis::processMemAccesses() {
           typedef SmallVector<const Value *, 16> ValueVector;
           ValueVector TempObjects;
 
-          getUnderlyingObjects(Ptr, TempObjects, LI); 
+          getUnderlyingObjects(Ptr, TempObjects, LI);
           LLVM_DEBUG(dbgs()
                      << "Underlying objects for pointer " << *Ptr << "\n");
           for (const Value *UnderlyingObj : TempObjects) {
@@ -987,7 +987,7 @@ static bool isNoWrapAddRec(Value *Ptr, const SCEVAddRecExpr *AR,
 
   // Make sure there is only one non-const index and analyze that.
   Value *NonConstIndex = nullptr;
-  for (Value *Index : GEP->indices()) 
+  for (Value *Index : GEP->indices())
     if (!isa<ConstantInt>(Index)) {
       if (NonConstIndex)
         return false;
@@ -1137,7 +1137,7 @@ bool llvm::sortPtrAccesses(ArrayRef<Value *> VL, const DataLayout &DL,
   // first pointer in the array.
   Value *Ptr0 = VL[0];
   const SCEV *Scev0 = SE.getSCEV(Ptr0);
-  Value *Obj0 = getUnderlyingObject(Ptr0); 
+  Value *Obj0 = getUnderlyingObject(Ptr0);
 
   llvm::SmallSet<int64_t, 4> Offsets;
   for (auto *Ptr : VL) {
@@ -1148,7 +1148,7 @@ bool llvm::sortPtrAccesses(ArrayRef<Value *> VL, const DataLayout &DL,
       return false;
     // If a pointer refers to a different underlying object, bail - the
     // pointers are by definition incomparable.
-    Value *CurrObj = getUnderlyingObject(Ptr); 
+    Value *CurrObj = getUnderlyingObject(Ptr);
     if (CurrObj != Obj0)
       return false;
 
@@ -1338,7 +1338,7 @@ bool MemoryDepChecker::couldPreventStoreLoadForward(uint64_t Distance,
     // If the number of vector iteration between the store and the load are
     // small we could incur conflicts.
     if (Distance % VF && Distance / VF < NumItersForStoreLoadThroughMemory) {
-      MaxVFWithoutSLForwardIssues = (VF >> 1); 
+      MaxVFWithoutSLForwardIssues = (VF >> 1);
       break;
     }
   }
@@ -1654,7 +1654,7 @@ MemoryDepChecker::isDependent(const MemAccessInfo &A, unsigned AIdx,
   LLVM_DEBUG(dbgs() << "LAA: Positive distance " << Val.getSExtValue()
                     << " with max VF = " << MaxVF << '\n');
   uint64_t MaxVFInBits = MaxVF * TypeByteSize * 8;
-  MaxSafeVectorWidthInBits = std::min(MaxSafeVectorWidthInBits, MaxVFInBits); 
+  MaxSafeVectorWidthInBits = std::min(MaxSafeVectorWidthInBits, MaxVFInBits);
   return Dependence::BackwardVectorizable;
 }
 
@@ -1766,7 +1766,7 @@ bool LoopAccessInfo::canAnalyzeLoop() {
                     << TheLoop->getHeader()->getName() << '\n');
 
   // We can only analyze innermost loops.
-  if (!TheLoop->isInnermost()) { 
+  if (!TheLoop->isInnermost()) {
     LLVM_DEBUG(dbgs() << "LAA: loop is not the innermost loop\n");
     recordAnalysis("NotInnerMostLoop") << "loop is not the innermost loop";
     return false;
@@ -1783,7 +1783,7 @@ bool LoopAccessInfo::canAnalyzeLoop() {
 
   // ScalarEvolution needs to be able to find the exit count.
   const SCEV *ExitCount = PSE->getBackedgeTakenCount();
-  if (isa<SCEVCouldNotCompute>(ExitCount)) { 
+  if (isa<SCEVCouldNotCompute>(ExitCount)) {
     recordAnalysis("CantComputeNumberOfIterations")
         << "could not determine number of loop iterations";
     LLVM_DEBUG(dbgs() << "LAA: SCEV could not compute the loop exit count.\n");
@@ -1922,9 +1922,9 @@ void LoopAccessInfo::analyzeLoop(AAResults *AA, LoopInfo *LI,
   }
 
   MemoryDepChecker::DepCandidates DependentAccesses;
-  AccessAnalysis Accesses(TheLoop, AA, LI, DependentAccesses, *PSE); 
+  AccessAnalysis Accesses(TheLoop, AA, LI, DependentAccesses, *PSE);
 
-  // Holds the analyzed pointers. We don't want to call getUnderlyingObjects 
+  // Holds the analyzed pointers. We don't want to call getUnderlyingObjects
   // multiple times on the same object. If the ptr is accessed twice, once
   // for read and once for write, it will only appear once (on the write
   // list). This is okay, since we are going to check for conflicts between
@@ -2126,8 +2126,8 @@ bool LoopAccessInfo::isUniform(Value *V) const {
 }
 
 void LoopAccessInfo::collectStridedAccess(Value *MemAccess) {
-  Value *Ptr = getLoadStorePointerOperand(MemAccess); 
-  if (!Ptr) 
+  Value *Ptr = getLoadStorePointerOperand(MemAccess);
+  if (!Ptr)
     return;
 
   Value *Stride = getStrideFromPointer(Ptr, PSE->getSE(), TheLoop);

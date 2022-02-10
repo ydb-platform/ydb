@@ -34,8 +34,8 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/Analysis/InstructionPrecedenceTracking.h"
-#include "llvm/IR/PassManager.h" 
-#include "llvm/Support/raw_ostream.h" 
+#include "llvm/IR/PassManager.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
 
@@ -550,23 +550,23 @@ private:
   MustBeExecutedIterator EndIterator;
 };
 
-class MustExecutePrinterPass : public PassInfoMixin<MustExecutePrinterPass> { 
-  raw_ostream &OS; 
- 
-public: 
-  MustExecutePrinterPass(raw_ostream &OS) : OS(OS) {} 
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM); 
-}; 
- 
-class MustBeExecutedContextPrinterPass 
-    : public PassInfoMixin<MustBeExecutedContextPrinterPass> { 
-  raw_ostream &OS; 
- 
-public: 
-  MustBeExecutedContextPrinterPass(raw_ostream &OS) : OS(OS) {} 
-  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM); 
-}; 
- 
+class MustExecutePrinterPass : public PassInfoMixin<MustExecutePrinterPass> {
+  raw_ostream &OS;
+
+public:
+  MustExecutePrinterPass(raw_ostream &OS) : OS(OS) {}
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+};
+
+class MustBeExecutedContextPrinterPass
+    : public PassInfoMixin<MustBeExecutedContextPrinterPass> {
+  raw_ostream &OS;
+
+public:
+  MustBeExecutedContextPrinterPass(raw_ostream &OS) : OS(OS) {}
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+};
+
 } // namespace llvm
 
 #endif

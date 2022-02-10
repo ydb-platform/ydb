@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 """
 this is a place where we put datastructures used by legacy apis
 we hope ot remove
@@ -46,15 +46,15 @@ class KeywordMapping(object):
                 mapped_names.add(item.name)
 
         # Add the names added as extra keywords to current or parent items
-        mapped_names.update(item.listextrakeywords()) 
+        mapped_names.update(item.listextrakeywords())
 
         # Add the names attached to the current function through direct assignment
         if hasattr(item, "function"):
-            mapped_names.update(item.function.__dict__) 
+            mapped_names.update(item.function.__dict__)
 
-        # add the markers to the keywords as we no longer handle them correctly 
-        mapped_names.update(mark.name for mark in item.iter_markers()) 
- 
+        # add the markers to the keywords as we no longer handle them correctly
+        mapped_names.update(mark.name for mark in item.iter_markers())
+
         return cls(mapped_names)
 
     def __getitem__(self, subname):

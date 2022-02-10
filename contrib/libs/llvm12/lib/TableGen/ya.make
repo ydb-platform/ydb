@@ -12,8 +12,8 @@ LICENSE(Apache-2.0 WITH LLVM-exception)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12 
-    contrib/libs/llvm12/lib/Support 
+    contrib/libs/llvm12
+    contrib/libs/llvm12/lib/Support
 )
 
 ADDINCL(
@@ -25,7 +25,7 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 SRCS(
-    DetailedRecordsBackend.cpp 
+    DetailedRecordsBackend.cpp
     Error.cpp
     JSONBackend.cpp
     Main.cpp
@@ -35,7 +35,7 @@ SRCS(
     TGLexer.cpp
     TGParser.cpp
     TableGenBackend.cpp
-    TableGenBackendSkeleton.cpp 
+    TableGenBackendSkeleton.cpp
 )
 
 END()

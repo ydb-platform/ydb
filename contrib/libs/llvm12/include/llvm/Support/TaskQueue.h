@@ -105,7 +105,7 @@ public:
         IsTaskInFlight = true;
       }
     }
-    return F; 
+    return F;
   }
 
 private:

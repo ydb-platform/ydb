@@ -1,10 +1,10 @@
 {
   "pagination": {
     "ListGroups": {
-      "result_key": [ 
-        "GroupIdentifiers", 
-        "Groups" 
-      ], 
+      "result_key": [
+        "GroupIdentifiers",
+        "Groups"
+      ],
       "output_token": "NextToken",
       "input_token": "NextToken",
       "limit_key": "MaxResults"
@@ -16,10 +16,10 @@
       "limit_key": "MaxResults"
     },
     "ListGroupResources": {
-      "result_key": [ 
-        "ResourceIdentifiers", 
-        "Resources" 
-      ], 
+      "result_key": [
+        "ResourceIdentifiers",
+        "Resources"
+      ],
       "output_token": "NextToken",
       "input_token": "NextToken",
       "limit_key": "MaxResults"

@@ -12,14 +12,14 @@ LICENSE(Apache-2.0 WITH LLVM-exception)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12 
-    contrib/libs/llvm12/include 
-    contrib/libs/llvm12/lib/Analysis 
-    contrib/libs/llvm12/lib/IR 
-    contrib/libs/llvm12/lib/Support 
-    contrib/libs/llvm12/lib/Transforms/AggressiveInstCombine 
-    contrib/libs/llvm12/lib/Transforms/InstCombine 
-    contrib/libs/llvm12/lib/Transforms/Utils 
+    contrib/libs/llvm12
+    contrib/libs/llvm12/include
+    contrib/libs/llvm12/lib/Analysis
+    contrib/libs/llvm12/lib/IR
+    contrib/libs/llvm12/lib/Support
+    contrib/libs/llvm12/lib/Transforms/AggressiveInstCombine
+    contrib/libs/llvm12/lib/Transforms/InstCombine
+    contrib/libs/llvm12/lib/Transforms/Utils
 )
 
 ADDINCL(
@@ -33,11 +33,11 @@ NO_UTIL()
 SRCS(
     ADCE.cpp
     AlignmentFromAssumptions.cpp
-    AnnotationRemarks.cpp 
+    AnnotationRemarks.cpp
     BDCE.cpp
     CallSiteSplitting.cpp
     ConstantHoisting.cpp
-    ConstraintElimination.cpp 
+    ConstraintElimination.cpp
     CorrelatedValuePropagation.cpp
     DCE.cpp
     DeadStoreElimination.cpp
@@ -60,7 +60,7 @@ SRCS(
     LoopDataPrefetch.cpp
     LoopDeletion.cpp
     LoopDistribute.cpp
-    LoopFlatten.cpp 
+    LoopFlatten.cpp
     LoopFuse.cpp
     LoopIdiomRecognize.cpp
     LoopInstSimplify.cpp
@@ -97,7 +97,7 @@ SRCS(
     SCCP.cpp
     SROA.cpp
     Scalar.cpp
-    ScalarizeMaskedMemIntrin.cpp 
+    ScalarizeMaskedMemIntrin.cpp
     Scalarizer.cpp
     SeparateConstOffsetFromGEP.cpp
     SimpleLoopUnswitch.cpp

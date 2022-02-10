@@ -279,9 +279,9 @@ class FrameSummary:
         return "<FrameSummary file {filename}, line {lineno} in {name}>".format(
             filename=self.filename, lineno=self.lineno, name=self.name)
 
-    def __len__(self): 
-        return 4 
- 
+    def __len__(self):
+        return 4
+
     @property
     def line(self):
         if self._line is None:
@@ -476,37 +476,37 @@ class TracebackException:
         _seen.add(id(exc_value))
         # Gracefully handle (the way Python 2.4 and earlier did) the case of
         # being called with no type or value (None, None, None).
-        self._truncated = False 
-        try: 
-            if (exc_value and exc_value.__cause__ is not None 
-                and id(exc_value.__cause__) not in _seen): 
-                cause = TracebackException( 
-                    type(exc_value.__cause__), 
-                    exc_value.__cause__, 
-                    exc_value.__cause__.__traceback__, 
-                    limit=limit, 
-                    lookup_lines=False, 
-                    capture_locals=capture_locals, 
-                    _seen=_seen) 
-            else: 
-                cause = None 
-            if (exc_value and exc_value.__context__ is not None 
-                and id(exc_value.__context__) not in _seen): 
-                context = TracebackException( 
-                    type(exc_value.__context__), 
-                    exc_value.__context__, 
-                    exc_value.__context__.__traceback__, 
-                    limit=limit, 
-                    lookup_lines=False, 
-                    capture_locals=capture_locals, 
-                    _seen=_seen) 
-            else: 
-                context = None 
-        except RecursionError: 
-            # The recursive call to the constructors above 
-            # may result in a stack overflow for long exception chains, 
-            # so we must truncate. 
-            self._truncated = True 
+        self._truncated = False
+        try:
+            if (exc_value and exc_value.__cause__ is not None
+                and id(exc_value.__cause__) not in _seen):
+                cause = TracebackException(
+                    type(exc_value.__cause__),
+                    exc_value.__cause__,
+                    exc_value.__cause__.__traceback__,
+                    limit=limit,
+                    lookup_lines=False,
+                    capture_locals=capture_locals,
+                    _seen=_seen)
+            else:
+                cause = None
+            if (exc_value and exc_value.__context__ is not None
+                and id(exc_value.__context__) not in _seen):
+                context = TracebackException(
+                    type(exc_value.__context__),
+                    exc_value.__context__,
+                    exc_value.__context__.__traceback__,
+                    limit=limit,
+                    lookup_lines=False,
+                    capture_locals=capture_locals,
+                    _seen=_seen)
+            else:
+                context = None
+        except RecursionError:
+            # The recursive call to the constructors above
+            # may result in a stack overflow for long exception chains,
+            # so we must truncate.
+            self._truncated = True
             cause = None
             context = None
         self.__cause__ = cause
@@ -524,8 +524,8 @@ class TracebackException:
         if exc_type and issubclass(exc_type, SyntaxError):
             # Handle SyntaxError's specially
             self.filename = exc_value.filename
-            lno = exc_value.lineno 
-            self.lineno = str(lno) if lno is not None else None 
+            lno = exc_value.lineno
+            self.lineno = str(lno) if lno is not None else None
             self.text = exc_value.text
             self.offset = exc_value.offset
             self.msg = exc_value.msg
@@ -547,9 +547,9 @@ class TracebackException:
             self.__cause__._load_lines()
 
     def __eq__(self, other):
-        if isinstance(other, TracebackException): 
-            return self.__dict__ == other.__dict__ 
-        return NotImplemented 
+        if isinstance(other, TracebackException):
+            return self.__dict__ == other.__dict__
+        return NotImplemented
 
     def __str__(self):
         return self._str
@@ -560,7 +560,7 @@ class TracebackException:
         The return value is a generator of strings, each ending in a newline.
 
         Normally, the generator emits a single string; however, for
-        SyntaxError exceptions, it emits several lines that (when 
+        SyntaxError exceptions, it emits several lines that (when
         printed) display detailed information about where the syntax
         error occurred.
 
@@ -574,42 +574,42 @@ class TracebackException:
         stype = self.exc_type.__qualname__
         smod = self.exc_type.__module__
         if smod not in ("__main__", "builtins"):
-            if not isinstance(smod, str): 
-                smod = "<unknown>" 
+            if not isinstance(smod, str):
+                smod = "<unknown>"
             stype = smod + '.' + stype
 
         if not issubclass(self.exc_type, SyntaxError):
             yield _format_final_exc_line(stype, self._str)
-        else: 
-            yield from self._format_syntax_error(stype) 
+        else:
+            yield from self._format_syntax_error(stype)
 
-    def _format_syntax_error(self, stype): 
-        """Format SyntaxError exceptions (internal helper).""" 
-        # Show exactly where the problem was found. 
-        filename_suffix = '' 
-        if self.lineno is not None: 
-            yield '  File "{}", line {}\n'.format( 
-                self.filename or "<string>", self.lineno) 
-        elif self.filename is not None: 
-            filename_suffix = ' ({})'.format(self.filename) 
+    def _format_syntax_error(self, stype):
+        """Format SyntaxError exceptions (internal helper)."""
+        # Show exactly where the problem was found.
+        filename_suffix = ''
+        if self.lineno is not None:
+            yield '  File "{}", line {}\n'.format(
+                self.filename or "<string>", self.lineno)
+        elif self.filename is not None:
+            filename_suffix = ' ({})'.format(self.filename)
 
-        text = self.text 
-        if text is not None: 
-            # text  = "   foo\n" 
-            # rtext = "   foo" 
-            # ltext =    "foo" 
-            rtext = text.rstrip('\n') 
-            ltext = rtext.lstrip(' \n\f') 
-            spaces = len(rtext) - len(ltext) 
-            yield '    {}\n'.format(ltext) 
-            # Convert 1-based column offset to 0-based index into stripped text 
-            caret = (self.offset or 0) - 1 - spaces 
-            if caret >= 0: 
+        text = self.text
+        if text is not None:
+            # text  = "   foo\n"
+            # rtext = "   foo"
+            # ltext =    "foo"
+            rtext = text.rstrip('\n')
+            ltext = rtext.lstrip(' \n\f')
+            spaces = len(rtext) - len(ltext)
+            yield '    {}\n'.format(ltext)
+            # Convert 1-based column offset to 0-based index into stripped text
+            caret = (self.offset or 0) - 1 - spaces
+            if caret >= 0:
                 # non-space whitespace (likes tabs) must be kept for alignment
-                caretspace = ((c if c.isspace() else ' ') for c in ltext[:caret]) 
+                caretspace = ((c if c.isspace() else ' ') for c in ltext[:caret])
                 yield '    {}^\n'.format(''.join(caretspace))
         msg = self.msg or "<no detail available>"
-        yield "{}: {}{}\n".format(stype, msg, filename_suffix) 
+        yield "{}: {}{}\n".format(stype, msg, filename_suffix)
 
     def format(self, *, chain=True):
         """Format the exception.
@@ -631,11 +631,11 @@ class TracebackException:
                 not self.__suppress_context__):
                 yield from self.__context__.format(chain=chain)
                 yield _context_message
-            if self._truncated: 
-                yield ( 
-                    'Chained exceptions have been truncated to avoid ' 
-                    'stack overflow in traceback formatting:\n') 
-        if self.stack: 
+            if self._truncated:
+                yield (
+                    'Chained exceptions have been truncated to avoid '
+                    'stack overflow in traceback formatting:\n')
+        if self.stack:
             yield 'Traceback (most recent call last):\n'
-            yield from self.stack.format() 
+            yield from self.stack.format()
         yield from self.format_exception_only()

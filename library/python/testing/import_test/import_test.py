@@ -101,16 +101,16 @@ def main():
     skip_names = sys.argv[1:]
 
     os.environ['Y_PYTHON_IMPORT_TEST'] = ''
- 
-    # We should initialize Django before importing any applications 
-    if os.getenv('DJANGO_SETTINGS_MODULE'): 
+
+    # We should initialize Django before importing any applications
+    if os.getenv('DJANGO_SETTINGS_MODULE'):
         try:
             import django
         except ImportError:
             pass
         else:
             django.setup()
- 
+
     py_main = __res.find('PY_MAIN')
 
     if py_main:

@@ -1,4 +1,4 @@
-# Copyright 2001-2021 by Vinay Sajip. All Rights Reserved. 
+# Copyright 2001-2021 by Vinay Sajip. All Rights Reserved.
 #
 # Permission to use, copy, modify, and distribute this software and its
 # documentation for any purpose and without fee is hereby granted,
@@ -18,7 +18,7 @@
 Additional handlers for the logging package for Python. The core package is
 based on PEP 282 and comments thereto in comp.lang.python.
 
-Copyright (C) 2001-2021 Vinay Sajip. All Rights Reserved. 
+Copyright (C) 2001-2021 Vinay Sajip. All Rights Reserved.
 
 To use, simply 'import logging.handlers' and log away!
 """
@@ -27,7 +27,7 @@ import logging, socket, os, pickle, struct, time, re
 from stat import ST_DEV, ST_INO, ST_MTIME
 import queue
 import threading
-import copy 
+import copy
 
 #
 # Some constants...
@@ -48,19 +48,19 @@ class BaseRotatingHandler(logging.FileHandler):
     Not meant to be instantiated directly.  Instead, use RotatingFileHandler
     or TimedRotatingFileHandler.
     """
-    namer = None 
-    rotator = None 
- 
-    def __init__(self, filename, mode, encoding=None, delay=False, errors=None): 
+    namer = None
+    rotator = None
+
+    def __init__(self, filename, mode, encoding=None, delay=False, errors=None):
         """
         Use the specified filename for streamed logging
         """
-        logging.FileHandler.__init__(self, filename, mode=mode, 
-                                     encoding=encoding, delay=delay, 
-                                     errors=errors) 
+        logging.FileHandler.__init__(self, filename, mode=mode,
+                                     encoding=encoding, delay=delay,
+                                     errors=errors)
         self.mode = mode
         self.encoding = encoding
-        self.errors = errors 
+        self.errors = errors
 
     def emit(self, record):
         """
@@ -121,8 +121,8 @@ class RotatingFileHandler(BaseRotatingHandler):
     Handler for logging to a set of files, which switches from one file
     to the next when the current file reaches a certain size.
     """
-    def __init__(self, filename, mode='a', maxBytes=0, backupCount=0, 
-                 encoding=None, delay=False, errors=None): 
+    def __init__(self, filename, mode='a', maxBytes=0, backupCount=0,
+                 encoding=None, delay=False, errors=None):
         """
         Open the specified file and use it as the stream for logging.
 
@@ -150,8 +150,8 @@ class RotatingFileHandler(BaseRotatingHandler):
         # on each run.
         if maxBytes > 0:
             mode = 'a'
-        BaseRotatingHandler.__init__(self, filename, mode, encoding=encoding, 
-                                     delay=delay, errors=errors) 
+        BaseRotatingHandler.__init__(self, filename, mode, encoding=encoding,
+                                     delay=delay, errors=errors)
         self.maxBytes = maxBytes
         self.backupCount = backupCount
 
@@ -185,17 +185,17 @@ class RotatingFileHandler(BaseRotatingHandler):
         Basically, see if the supplied record would cause the file to exceed
         the size limit we have.
         """
-        # See bpo-45401: Never rollover anything other than regular files 
-        if os.path.exists(self.baseFilename) and not os.path.isfile(self.baseFilename): 
-            return False 
+        # See bpo-45401: Never rollover anything other than regular files
+        if os.path.exists(self.baseFilename) and not os.path.isfile(self.baseFilename):
+            return False
         if self.stream is None:                 # delay was set...
             self.stream = self._open()
         if self.maxBytes > 0:                   # are we rolling over?
             msg = "%s\n" % self.format(record)
             self.stream.seek(0, 2)  #due to non-posix-compliant Windows feature
             if self.stream.tell() + len(msg) >= self.maxBytes:
-                return True 
-        return False 
+                return True
+        return False
 
 class TimedRotatingFileHandler(BaseRotatingHandler):
     """
@@ -205,11 +205,11 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
     If backupCount is > 0, when rollover is done, no more than backupCount
     files are kept - the oldest ones are deleted.
     """
-    def __init__(self, filename, when='h', interval=1, backupCount=0, 
-                 encoding=None, delay=False, utc=False, atTime=None, 
-                 errors=None): 
-        BaseRotatingHandler.__init__(self, filename, 'a', encoding=encoding, 
-                                     delay=delay, errors=errors) 
+    def __init__(self, filename, when='h', interval=1, backupCount=0,
+                 encoding=None, delay=False, utc=False, atTime=None,
+                 errors=None):
+        BaseRotatingHandler.__init__(self, filename, 'a', encoding=encoding,
+                                     delay=delay, errors=errors)
         self.when = when.upper()
         self.backupCount = backupCount
         self.utc = utc
@@ -345,13 +345,13 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
         record is not used, as we are just comparing times, but it is needed so
         the method signatures are the same
         """
-        # See bpo-45401: Never rollover anything other than regular files 
-        if os.path.exists(self.baseFilename) and not os.path.isfile(self.baseFilename): 
-            return False 
+        # See bpo-45401: Never rollover anything other than regular files
+        if os.path.exists(self.baseFilename) and not os.path.isfile(self.baseFilename):
+            return False
         t = int(time.time())
         if t >= self.rolloverAt:
-            return True 
-        return False 
+            return True
+        return False
 
     def getFilesToDelete(self):
         """
@@ -362,32 +362,32 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
         dirName, baseName = os.path.split(self.baseFilename)
         fileNames = os.listdir(dirName)
         result = []
-        # See bpo-44753: Don't use the extension when computing the prefix. 
-        n, e = os.path.splitext(baseName) 
-        prefix = n + '.' 
+        # See bpo-44753: Don't use the extension when computing the prefix.
+        n, e = os.path.splitext(baseName)
+        prefix = n + '.'
         plen = len(prefix)
         for fileName in fileNames:
-            if self.namer is None: 
-                # Our files will always start with baseName 
-                if not fileName.startswith(baseName): 
-                    continue 
-            else: 
-                # Our files could be just about anything after custom naming, but 
-                # likely candidates are of the form 
-                # foo.log.DATETIME_SUFFIX or foo.DATETIME_SUFFIX.log 
-                if (not fileName.startswith(baseName) and fileName.endswith(e) and 
-                    len(fileName) > (plen + 1) and not fileName[plen+1].isdigit()): 
-                    continue 
- 
+            if self.namer is None:
+                # Our files will always start with baseName
+                if not fileName.startswith(baseName):
+                    continue
+            else:
+                # Our files could be just about anything after custom naming, but
+                # likely candidates are of the form
+                # foo.log.DATETIME_SUFFIX or foo.DATETIME_SUFFIX.log
+                if (not fileName.startswith(baseName) and fileName.endswith(e) and
+                    len(fileName) > (plen + 1) and not fileName[plen+1].isdigit()):
+                    continue
+
             if fileName[:plen] == prefix:
                 suffix = fileName[plen:]
-                # See bpo-45628: The date/time suffix could be anywhere in the 
-                # filename 
-                parts = suffix.split('.') 
-                for part in parts: 
-                    if self.extMatch.match(part): 
-                        result.append(os.path.join(dirName, fileName)) 
-                        break 
+                # See bpo-45628: The date/time suffix could be anywhere in the
+                # filename
+                parts = suffix.split('.')
+                for part in parts:
+                    if self.extMatch.match(part):
+                        result.append(os.path.join(dirName, fileName))
+                        break
         if len(result) < self.backupCount:
             result = []
         else:
@@ -465,11 +465,11 @@ class WatchedFileHandler(logging.FileHandler):
     This handler is based on a suggestion and patch by Chad J.
     Schroeder.
     """
-    def __init__(self, filename, mode='a', encoding=None, delay=False, 
-                 errors=None): 
-        logging.FileHandler.__init__(self, filename, mode=mode, 
-                                     encoding=encoding, delay=delay, 
-                                     errors=errors) 
+    def __init__(self, filename, mode='a', encoding=None, delay=False,
+                 errors=None):
+        logging.FileHandler.__init__(self, filename, mode=mode,
+                                     encoding=encoding, delay=delay,
+                                     errors=errors)
         self.dev, self.ino = -1, -1
         self._statstream()
 
@@ -767,10 +767,10 @@ class SysLogHandler(logging.Handler):
     LOG_CRON      = 9       #  clock daemon
     LOG_AUTHPRIV  = 10      #  security/authorization messages (private)
     LOG_FTP       = 11      #  FTP daemon
-    LOG_NTP       = 12      #  NTP subsystem 
-    LOG_SECURITY  = 13      #  Log audit 
-    LOG_CONSOLE   = 14      #  Log alert 
-    LOG_SOLCRON   = 15      #  Scheduling daemon (Solaris) 
+    LOG_NTP       = 12      #  NTP subsystem
+    LOG_SECURITY  = 13      #  Log audit
+    LOG_CONSOLE   = 14      #  Log alert
+    LOG_SOLCRON   = 15      #  Scheduling daemon (Solaris)
 
     #  other codes through 15 reserved for system use
     LOG_LOCAL0    = 16      #  reserved for local use
@@ -798,30 +798,30 @@ class SysLogHandler(logging.Handler):
         }
 
     facility_names = {
-        "auth":         LOG_AUTH, 
-        "authpriv":     LOG_AUTHPRIV, 
-        "console":      LOG_CONSOLE, 
-        "cron":         LOG_CRON, 
-        "daemon":       LOG_DAEMON, 
-        "ftp":          LOG_FTP, 
-        "kern":         LOG_KERN, 
-        "lpr":          LOG_LPR, 
-        "mail":         LOG_MAIL, 
-        "news":         LOG_NEWS, 
-        "ntp":          LOG_NTP, 
-        "security":     LOG_SECURITY, 
-        "solaris-cron": LOG_SOLCRON, 
-        "syslog":       LOG_SYSLOG, 
-        "user":         LOG_USER, 
-        "uucp":         LOG_UUCP, 
-        "local0":       LOG_LOCAL0, 
-        "local1":       LOG_LOCAL1, 
-        "local2":       LOG_LOCAL2, 
-        "local3":       LOG_LOCAL3, 
-        "local4":       LOG_LOCAL4, 
-        "local5":       LOG_LOCAL5, 
-        "local6":       LOG_LOCAL6, 
-        "local7":       LOG_LOCAL7, 
+        "auth":         LOG_AUTH,
+        "authpriv":     LOG_AUTHPRIV,
+        "console":      LOG_CONSOLE,
+        "cron":         LOG_CRON,
+        "daemon":       LOG_DAEMON,
+        "ftp":          LOG_FTP,
+        "kern":         LOG_KERN,
+        "lpr":          LOG_LPR,
+        "mail":         LOG_MAIL,
+        "news":         LOG_NEWS,
+        "ntp":          LOG_NTP,
+        "security":     LOG_SECURITY,
+        "solaris-cron": LOG_SOLCRON,
+        "syslog":       LOG_SYSLOG,
+        "user":         LOG_USER,
+        "uucp":         LOG_UUCP,
+        "local0":       LOG_LOCAL0,
+        "local1":       LOG_LOCAL1,
+        "local2":       LOG_LOCAL2,
+        "local3":       LOG_LOCAL3,
+        "local4":       LOG_LOCAL4,
+        "local5":       LOG_LOCAL5,
+        "local6":       LOG_LOCAL6,
+        "local7":       LOG_LOCAL7,
         }
 
     #The map below appears to be trivially lowercasing the key. However,
@@ -1198,20 +1198,20 @@ class HTTPHandler(logging.Handler):
         """
         return record.__dict__
 
-    def getConnection(self, host, secure): 
-        """ 
-        get a HTTP[S]Connection. 
- 
-        Override when a custom connection is required, for example if 
-        there is a proxy. 
-        """ 
-        import http.client 
-        if secure: 
-            connection = http.client.HTTPSConnection(host, context=self.context) 
-        else: 
-            connection = http.client.HTTPConnection(host) 
-        return connection 
- 
+    def getConnection(self, host, secure):
+        """
+        get a HTTP[S]Connection.
+
+        Override when a custom connection is required, for example if
+        there is a proxy.
+        """
+        import http.client
+        if secure:
+            connection = http.client.HTTPSConnection(host, context=self.context)
+        else:
+            connection = http.client.HTTPConnection(host)
+        return connection
+
     def emit(self, record):
         """
         Emit a record.
@@ -1219,9 +1219,9 @@ class HTTPHandler(logging.Handler):
         Send the record to the Web server as a percent-encoded dictionary
         """
         try:
-            import urllib.parse 
+            import urllib.parse
             host = self.host
-            h = self.getConnection(host, self.secure) 
+            h = self.getConnection(host, self.secure)
             url = self.url
             data = urllib.parse.urlencode(self.mapLogRecord(record))
             if self.method == "GET":
@@ -1297,7 +1297,7 @@ class BufferingHandler(logging.Handler):
         """
         self.acquire()
         try:
-            self.buffer.clear() 
+            self.buffer.clear()
         finally:
             self.release()
 
@@ -1349,11 +1349,11 @@ class MemoryHandler(BufferingHandler):
         """
         Set the target handler for this handler.
         """
-        self.acquire() 
-        try: 
-            self.target = target 
-        finally: 
-            self.release() 
+        self.acquire()
+        try:
+            self.target = target
+        finally:
+            self.release()
 
     def flush(self):
         """
@@ -1368,7 +1368,7 @@ class MemoryHandler(BufferingHandler):
             if self.target:
                 for record in self.buffer:
                     self.target.handle(record)
-                self.buffer.clear() 
+                self.buffer.clear()
         finally:
             self.release()
 
@@ -1437,8 +1437,8 @@ class QueueHandler(logging.Handler):
         # exc_info and exc_text attributes, as they are no longer
         # needed and, if not None, will typically not be pickleable.
         msg = self.format(record)
-        # bpo-35726: make copy of record to avoid affecting other handlers in the chain. 
-        record = copy.copy(record) 
+        # bpo-35726: make copy of record to avoid affecting other handlers in the chain.
+        record = copy.copy(record)
         record.message = msg
         record.msg = msg
         record.args = None
@@ -1496,7 +1496,7 @@ class QueueListener(object):
         t.daemon = True
         t.start()
 
-    def prepare(self, record): 
+    def prepare(self, record):
         """
         Prepare a record for handling.
 
@@ -1536,8 +1536,8 @@ class QueueListener(object):
             try:
                 record = self.dequeue(True)
                 if record is self._sentinel:
-                    if has_task_done: 
-                        q.task_done() 
+                    if has_task_done:
+                        q.task_done()
                     break
                 self.handle(record)
                 if has_task_done:

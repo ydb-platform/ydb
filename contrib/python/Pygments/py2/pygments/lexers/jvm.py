@@ -26,7 +26,7 @@ __all__ = ['JavaLexer', 'ScalaLexer', 'GosuLexer', 'GosuTemplateLexer',
 
 class JavaLexer(RegexLexer):
     """
-    For `Java <https://www.oracle.com/technetwork/java/>`_ source code. 
+    For `Java <https://www.oracle.com/technetwork/java/>`_ source code.
     """
 
     name = 'Java'
@@ -50,7 +50,7 @@ class JavaLexer(RegexLexer):
             (r'((?:(?:[^\W\d]|\$)[\w.\[\]$<>]*\s+)+?)'  # return arguments
              r'((?:[^\W\d]|\$)[\w$]*)'                  # method name
              r'(\s*)(\()',                              # signature start
-             bygroups(using(this), Name.Function, Text, Punctuation)), 
+             bygroups(using(this), Name.Function, Text, Punctuation)),
             (r'@[^\W\d][\w.]*', Name.Decorator),
             (r'(abstract|const|enum|extends|final|implements|native|private|'
              r'protected|public|static|strictfp|super|synchronized|throws|'
@@ -61,14 +61,14 @@ class JavaLexer(RegexLexer):
             (r'(true|false|null)\b', Keyword.Constant),
             (r'(class|interface)(\s+)', bygroups(Keyword.Declaration, Text),
              'class'),
-            (r'(var)(\s+)', bygroups(Keyword.Declaration, Text), 
-             'var'), 
+            (r'(var)(\s+)', bygroups(Keyword.Declaration, Text),
+             'var'),
             (r'(import(?:\s+static)?)(\s+)', bygroups(Keyword.Namespace, Text),
              'import'),
             (r'"(\\\\|\\"|[^"])*"', String),
             (r"'\\.'|'[^\\]'|'\\u[0-9a-fA-F]{4}'", String.Char),
-            (r'(\.)((?:[^\W\d]|\$)[\w$]*)', bygroups(Punctuation, 
-                                                     Name.Attribute)), 
+            (r'(\.)((?:[^\W\d]|\$)[\w$]*)', bygroups(Punctuation,
+                                                     Name.Attribute)),
             (r'^\s*([^\W\d]|\$)[\w$]*:', Name.Label),
             (r'([^\W\d]|\$)[\w$]*', Name),
             (r'([0-9][0-9_]*\.([0-9][0-9_]*)?|'
@@ -83,16 +83,16 @@ class JavaLexer(RegexLexer):
             (r'0[bB][01][01_]*[lL]?', Number.Bin),
             (r'0[0-7_]+[lL]?', Number.Oct),
             (r'0|[1-9][0-9_]*[lL]?', Number.Integer),
-            (r'[~^*!%&\[\]<>|+=/?-]', Operator), 
-            (r'[{}();:.,]', Punctuation), 
+            (r'[~^*!%&\[\]<>|+=/?-]', Operator),
+            (r'[{}();:.,]', Punctuation),
             (r'\n', Text)
         ],
         'class': [
             (r'([^\W\d]|\$)[\w$]*', Name.Class, '#pop')
         ],
-        'var': [ 
-            (r'([^\W\d]|\$)[\w$]*', Name, '#pop') 
-        ], 
+        'var': [
+            (r'([^\W\d]|\$)[\w$]*', Name, '#pop')
+        ],
         'import': [
             (r'[\w.]+\*?', Name.Namespace, '#pop')
         ],
@@ -111,7 +111,7 @@ class AspectJLexer(JavaLexer):
     filenames = ['*.aj']
     mimetypes = ['text/x-aspectj']
 
-    aj_keywords = { 
+    aj_keywords = {
         'aspect', 'pointcut', 'privileged', 'call', 'execution',
         'initialization', 'preinitialization', 'handler', 'get', 'set',
         'staticinitialization', 'target', 'args', 'within', 'withincode',
@@ -121,9 +121,9 @@ class AspectJLexer(JavaLexer):
         'thisJoinPointStaticPart', 'thisEnclosingJoinPointStaticPart',
         'issingleton', 'perthis', 'pertarget', 'percflow', 'percflowbelow',
         'pertypewithin', 'lock', 'unlock', 'thisAspectInstance'
-    } 
-    aj_inter_type = {'parents:', 'warning:', 'error:', 'soft:', 'precedence:'} 
-    aj_inter_type_annotation = {'@type', '@method', '@constructor', '@field'} 
+    }
+    aj_inter_type = {'parents:', 'warning:', 'error:', 'soft:', 'precedence:'}
+    aj_inter_type_annotation = {'@type', '@method', '@constructor', '@field'}
 
     def get_tokens_unprocessed(self, text):
         for index, token, value in JavaLexer.get_tokens_unprocessed(self, text):
@@ -271,7 +271,7 @@ class ScalaLexer(RegexLexer):
             # method names
             (r'(class|trait|object)(\s+)', bygroups(Keyword, Text), 'class'),
             (r'[^\S\n]+', Text),
-            include('comments'), 
+            include('comments'),
             (u'@%s' % idrest, Name.Decorator),
             (u'(abstract|ca(?:se|tch)|d(?:ef|o)|e(?:lse|xtends)|'
              u'f(?:inal(?:ly)?|or(?:Some)?)|i(?:f|mplicit)|'
@@ -306,17 +306,17 @@ class ScalaLexer(RegexLexer):
         ],
         'class': [
             (u'(%s|%s|`[^`]+`)(\\s*)(\\[)' % (idrest, op),
-             bygroups(Name.Class, Text, Operator), ('#pop', 'typeparam')), 
+             bygroups(Name.Class, Text, Operator), ('#pop', 'typeparam')),
             (r'\s+', Text),
-            include('comments'), 
+            include('comments'),
             (r'\{', Operator, '#pop'),
             (r'\(', Operator, '#pop'),
             (u'%s|%s|`[^`]+`' % (idrest, op), Name.Class, '#pop'),
         ],
         'type': [
             (r'\s+', Text),
-            include('comments'), 
-            (r'<[%:]|>:|[#_]|\bforSome\b|\btype\b', Keyword), 
+            include('comments'),
+            (r'<[%:]|>:|[#_]|\bforSome\b|\btype\b', Keyword),
             (u'([,);}]|=>|=|\u21d2)(\\s*)', bygroups(Operator, Text), '#pop'),
             (r'[({]', Operator, '#push'),
             (u'((?:%s|%s|`[^`]+`)(?:\\.(?:%s|%s|`[^`]+`))*)(\\s*)(\\[)' %
@@ -328,18 +328,18 @@ class ScalaLexer(RegexLexer):
             (u'\\.|%s|%s|`[^`]+`' % (idrest, op), Keyword.Type)
         ],
         'typeparam': [
-            (r'\s+', Text), 
-            include('comments'), 
-            (r',+', Punctuation), 
-            (u'<[%:]|=>|>:|[#_\u21D2]|\bforSome\b|\btype\b', Keyword), 
+            (r'\s+', Text),
+            include('comments'),
+            (r',+', Punctuation),
+            (u'<[%:]|=>|>:|[#_\u21D2]|\bforSome\b|\btype\b', Keyword),
             (r'([\])}])', Operator, '#pop'),
             (r'[(\[{]', Operator, '#push'),
             (u'\\.|%s|%s|`[^`]+`' % (idrest, op), Keyword.Type)
         ],
-        'comments': [ 
-            (r'//.*?\n', Comment.Single), 
-            (r'/\*', Comment.Multiline, 'comment'), 
-        ], 
+        'comments': [
+            (r'//.*?\n', Comment.Single),
+            (r'/\*', Comment.Multiline, 'comment'),
+        ],
         'comment': [
             (r'[^/*]+', Comment.Multiline),
             (r'/\*', Comment.Multiline, '#push'),

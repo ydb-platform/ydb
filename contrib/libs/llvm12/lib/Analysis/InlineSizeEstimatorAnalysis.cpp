@@ -88,32 +88,32 @@ public:
 // consecutive instructions (in the IR layout available at inline time) as
 // features improves the model performance. We want to move away from manual
 // feature selection.
-// The array is given in opcode pairs rather than labels because 1) labels 
-// weren't readily available, and 2) the successions were hand - extracted. 
-// 
-// This array must be sorted. 
-static const std::array<std::pair<size_t, size_t>, 137> 
-    ImportantInstructionSuccessions{ 
-        {{1, 1},   {1, 4},   {1, 5},   {1, 7},   {1, 8},   {1, 9},   {1, 11}, 
-         {1, 12},  {1, 13},  {1, 14},  {1, 18},  {1, 20},  {1, 22},  {1, 24}, 
-         {1, 25},  {1, 26},  {1, 27},  {1, 28},  {1, 29},  {1, 30},  {1, 31}, 
-         {1, 32},  {1, 33},  {1, 34},  {1, 39},  {1, 40},  {1, 42},  {1, 45}, 
-         {2, 1},   {2, 2},   {2, 13},  {2, 28},  {2, 29},  {2, 32},  {2, 33}, 
-         {2, 34},  {2, 38},  {2, 48},  {2, 49},  {2, 53},  {2, 55},  {2, 56}, 
-         {13, 2},  {13, 13}, {13, 26}, {13, 33}, {13, 34}, {13, 56}, {15, 27}, 
-         {28, 2},  {28, 48}, {28, 53}, {29, 2},  {29, 33}, {29, 56}, {31, 31}, 
-         {31, 33}, {31, 34}, {31, 49}, {32, 1},  {32, 2},  {32, 13}, {32, 15}, 
-         {32, 28}, {32, 29}, {32, 32}, {32, 33}, {32, 34}, {32, 39}, {32, 40}, 
-         {32, 48}, {32, 49}, {32, 53}, {32, 56}, {33, 1},  {33, 2},  {33, 32}, 
-         {33, 33}, {33, 34}, {33, 49}, {33, 53}, {33, 56}, {34, 1},  {34, 2}, 
-         {34, 32}, {34, 33}, {34, 34}, {34, 49}, {34, 53}, {34, 56}, {38, 34}, 
-         {39, 57}, {40, 34}, {47, 15}, {47, 49}, {48, 2},  {48, 34}, {48, 56}, 
-         {49, 1},  {49, 2},  {49, 28}, {49, 32}, {49, 33}, {49, 34}, {49, 39}, 
-         {49, 49}, {49, 56}, {53, 1},  {53, 2},  {53, 28}, {53, 34}, {53, 53}, 
-         {53, 57}, {55, 1},  {55, 28}, {55, 34}, {55, 53}, {55, 55}, {55, 56}, 
-         {56, 1},  {56, 2},  {56, 7},  {56, 13}, {56, 32}, {56, 33}, {56, 34}, 
-         {56, 49}, {56, 53}, {56, 56}, {56, 64}, {57, 34}, {57, 56}, {57, 57}, 
-         {64, 1},  {64, 64}, {65, 1},  {65, 65}}}; 
+// The array is given in opcode pairs rather than labels because 1) labels
+// weren't readily available, and 2) the successions were hand - extracted.
+//
+// This array must be sorted.
+static const std::array<std::pair<size_t, size_t>, 137>
+    ImportantInstructionSuccessions{
+        {{1, 1},   {1, 4},   {1, 5},   {1, 7},   {1, 8},   {1, 9},   {1, 11},
+         {1, 12},  {1, 13},  {1, 14},  {1, 18},  {1, 20},  {1, 22},  {1, 24},
+         {1, 25},  {1, 26},  {1, 27},  {1, 28},  {1, 29},  {1, 30},  {1, 31},
+         {1, 32},  {1, 33},  {1, 34},  {1, 39},  {1, 40},  {1, 42},  {1, 45},
+         {2, 1},   {2, 2},   {2, 13},  {2, 28},  {2, 29},  {2, 32},  {2, 33},
+         {2, 34},  {2, 38},  {2, 48},  {2, 49},  {2, 53},  {2, 55},  {2, 56},
+         {13, 2},  {13, 13}, {13, 26}, {13, 33}, {13, 34}, {13, 56}, {15, 27},
+         {28, 2},  {28, 48}, {28, 53}, {29, 2},  {29, 33}, {29, 56}, {31, 31},
+         {31, 33}, {31, 34}, {31, 49}, {32, 1},  {32, 2},  {32, 13}, {32, 15},
+         {32, 28}, {32, 29}, {32, 32}, {32, 33}, {32, 34}, {32, 39}, {32, 40},
+         {32, 48}, {32, 49}, {32, 53}, {32, 56}, {33, 1},  {33, 2},  {33, 32},
+         {33, 33}, {33, 34}, {33, 49}, {33, 53}, {33, 56}, {34, 1},  {34, 2},
+         {34, 32}, {34, 33}, {34, 34}, {34, 49}, {34, 53}, {34, 56}, {38, 34},
+         {39, 57}, {40, 34}, {47, 15}, {47, 49}, {48, 2},  {48, 34}, {48, 56},
+         {49, 1},  {49, 2},  {49, 28}, {49, 32}, {49, 33}, {49, 34}, {49, 39},
+         {49, 49}, {49, 56}, {53, 1},  {53, 2},  {53, 28}, {53, 34}, {53, 53},
+         {53, 57}, {55, 1},  {55, 28}, {55, 34}, {55, 53}, {55, 55}, {55, 56},
+         {56, 1},  {56, 2},  {56, 7},  {56, 13}, {56, 32}, {56, 33}, {56, 34},
+         {56, 49}, {56, 53}, {56, 56}, {56, 64}, {57, 34}, {57, 56}, {57, 57},
+         {64, 1},  {64, 64}, {65, 1},  {65, 65}}};
 
 // We have: 9 calculated features (the features here); 1 feature for each
 // instruction opcode; and 1 feature for each manually-identified sequence.
@@ -123,15 +123,15 @@ static const std::array<std::pair<size_t, size_t>, 137>
 // Note that instruction opcodes start from 1. For convenience, we also have an
 // always 0 feature for the '0' opcode, hence the extra 1.
 const size_t IRToNativeSizeLearning::FunctionFeatures::FeatureCount =
-    ImportantInstructionSuccessions.size() + getMaxInstructionID() + 1 + 
-    IRToNativeSizeLearning::NumNamedFeatures; 
+    ImportantInstructionSuccessions.size() + getMaxInstructionID() + 1 +
+    IRToNativeSizeLearning::NumNamedFeatures;
 
 size_t getSize(Function &F, TargetTransformInfo &TTI) {
   size_t Ret = 0;
-  for (const auto &BB : F) 
-    for (const auto &I : BB) 
-      Ret += *(TTI.getInstructionCost( 
-          &I, TargetTransformInfo::TargetCostKind::TCK_CodeSize).getValue()); 
+  for (const auto &BB : F)
+    for (const auto &I : BB)
+      Ret += *(TTI.getInstructionCost(
+          &I, TargetTransformInfo::TargetCostKind::TCK_CodeSize).getValue());
   return Ret;
 }
 
@@ -143,8 +143,8 @@ size_t getSize(Function &F, FunctionAnalysisManager &FAM) {
 unsigned getMaxDominatorTreeDepth(const Function &F,
                                   const DominatorTree &Tree) {
   unsigned Ret = 0;
-  for (const auto &BB : F) 
-    if (const auto *TN = Tree.getNode(&BB)) 
+  for (const auto &BB : F)
+    if (const auto *TN = Tree.getNode(&BB))
       Ret = std::max(Ret, TN->getLevel());
   return Ret;
 }
@@ -153,37 +153,37 @@ unsigned getMaxDominatorTreeDepth(const Function &F,
 IRToNativeSizeLearning::FunctionFeatures
 IRToNativeSizeLearning::getFunctionFeatures(Function &F,
                                             FunctionAnalysisManager &FAM) {
-  assert(llvm::is_sorted(ImportantInstructionSuccessions) && 
-         "expected function features are sorted"); 
+  assert(llvm::is_sorted(ImportantInstructionSuccessions) &&
+         "expected function features are sorted");
 
   auto &DomTree = FAM.getResult<DominatorTreeAnalysis>(F);
   FunctionFeatures FF;
   size_t InstrCount = getMaxInstructionID() + 1;
   FF.InstructionHistogram.resize(InstrCount);
 
-  FF.InstructionPairHistogram.resize(ImportantInstructionSuccessions.size()); 
+  FF.InstructionPairHistogram.resize(ImportantInstructionSuccessions.size());
 
-  int StartID = 0; 
-  int LastID = StartID; 
+  int StartID = 0;
+  int LastID = StartID;
   auto getPairIndex = [](size_t a, size_t b) {
-    auto I = llvm::find(ImportantInstructionSuccessions, std::make_pair(a, b)); 
-    if (I == ImportantInstructionSuccessions.end()) 
+    auto I = llvm::find(ImportantInstructionSuccessions, std::make_pair(a, b));
+    if (I == ImportantInstructionSuccessions.end())
       return -1;
-    return static_cast<int>( 
-        std::distance(ImportantInstructionSuccessions.begin(), I)); 
+    return static_cast<int>(
+        std::distance(ImportantInstructionSuccessions.begin(), I));
   };
 
   // We don't want debug calls, because they'd just add noise.
-  for (const auto &BB : F) { 
-    for (const auto &I : BB.instructionsWithoutDebug()) { 
-      auto ID = I.getOpcode(); 
+  for (const auto &BB : F) {
+    for (const auto &I : BB.instructionsWithoutDebug()) {
+      auto ID = I.getOpcode();
 
       ++FF.InstructionHistogram[ID];
       int PairIndex = getPairIndex(LastID, ID);
       if (PairIndex >= 0)
         ++FF.InstructionPairHistogram[PairIndex];
       LastID = ID;
-      if (isa<CallBase>(I)) 
+      if (isa<CallBase>(I))
         ++FF[NamedFeatureIndex::Calls];
     }
   }
@@ -221,14 +221,14 @@ InlineSizeEstimatorAnalysis::InlineSizeEstimatorAnalysis() {
   if (!isEvaluatorRequested()) {
     return;
   }
-  std::vector<TensorSpec> InputSpecs{TensorSpec::createSpec<int32_t>( 
-      "serving_default_input_1", 
-      {1, static_cast<int64_t>( 
-              IRToNativeSizeLearning::FunctionFeatures::FeatureCount)})}; 
-  std::vector<TensorSpec> OutputSpecs{ 
-      TensorSpec::createSpec<float>("StatefulPartitionedCall", {1})}; 
+  std::vector<TensorSpec> InputSpecs{TensorSpec::createSpec<int32_t>(
+      "serving_default_input_1",
+      {1, static_cast<int64_t>(
+              IRToNativeSizeLearning::FunctionFeatures::FeatureCount)})};
+  std::vector<TensorSpec> OutputSpecs{
+      TensorSpec::createSpec<float>("StatefulPartitionedCall", {1})};
   Evaluator = std::make_unique<TFModelEvaluator>(
-      TFIR2NativeModelPath.getValue().c_str(), InputSpecs, OutputSpecs); 
+      TFIR2NativeModelPath.getValue().c_str(), InputSpecs, OutputSpecs);
   if (!Evaluator || !Evaluator->isValid()) {
     Evaluator.reset();
     return;
@@ -272,12 +272,12 @@ InlineSizeEstimatorAnalysis::run(const Function &F,
   return None;
 }
 bool InlineSizeEstimatorAnalysis::isEvaluatorRequested() { return false; }
-#endif 
- 
-PreservedAnalyses 
-InlineSizeEstimatorAnalysisPrinterPass::run(Function &F, 
-                                            FunctionAnalysisManager &AM) { 
-  OS << "[InlineSizeEstimatorAnalysis] size estimate for " << F.getName() 
-     << ": " << AM.getResult<InlineSizeEstimatorAnalysis>(F) << "\n"; 
-  return PreservedAnalyses::all(); 
-} 
+#endif
+
+PreservedAnalyses
+InlineSizeEstimatorAnalysisPrinterPass::run(Function &F,
+                                            FunctionAnalysisManager &AM) {
+  OS << "[InlineSizeEstimatorAnalysis] size estimate for " << F.getName()
+     << ": " << AM.getResult<InlineSizeEstimatorAnalysis>(F) << "\n";
+  return PreservedAnalyses::all();
+}

@@ -24,8 +24,8 @@ static cl::opt<TargetLibraryInfoImpl::VectorLibrary> ClVectorLibrary(
                           "No vector functions library"),
                clEnumValN(TargetLibraryInfoImpl::Accelerate, "Accelerate",
                           "Accelerate framework"),
-               clEnumValN(TargetLibraryInfoImpl::LIBMVEC_X86, "LIBMVEC-X86", 
-                          "GLIBC Vector Math library"), 
+               clEnumValN(TargetLibraryInfoImpl::LIBMVEC_X86, "LIBMVEC-X86",
+                          "GLIBC Vector Math library"),
                clEnumValN(TargetLibraryInfoImpl::MASSV, "MASSV",
                           "IBM MASS vector library"),
                clEnumValN(TargetLibraryInfoImpl::SVML, "SVML",
@@ -551,14 +551,14 @@ static void initialize(TargetLibraryInfoImpl &TLI, const Triple &T,
     TLI.setUnavailable(LibFunc_nvvm_reflect);
   }
 
-  // These vec_malloc/free routines are only available on AIX. 
-  if (!T.isOSAIX()) { 
-    TLI.setUnavailable(LibFunc_vec_calloc); 
-    TLI.setUnavailable(LibFunc_vec_malloc); 
-    TLI.setUnavailable(LibFunc_vec_realloc); 
-    TLI.setUnavailable(LibFunc_vec_free); 
-  } 
- 
+  // These vec_malloc/free routines are only available on AIX.
+  if (!T.isOSAIX()) {
+    TLI.setUnavailable(LibFunc_vec_calloc);
+    TLI.setUnavailable(LibFunc_vec_malloc);
+    TLI.setUnavailable(LibFunc_vec_realloc);
+    TLI.setUnavailable(LibFunc_vec_free);
+  }
+
   TLI.addVectorizableFunctionsFromVecLib(ClVectorLibrary);
 }
 
@@ -646,7 +646,7 @@ bool TargetLibraryInfoImpl::isValidProtoForLibFunc(const FunctionType &FTy,
                                                    const DataLayout *DL) const {
   LLVMContext &Ctx = FTy.getContext();
   Type *PCharTy = Type::getInt8PtrTy(Ctx);
-  Type *SizeTTy = DL ? DL->getIntPtrType(Ctx, /*AddressSpace=*/0) : nullptr; 
+  Type *SizeTTy = DL ? DL->getIntPtrType(Ctx, /*AddressSpace=*/0) : nullptr;
   auto IsSizeTTy = [SizeTTy](Type *Ty) {
     return SizeTTy ? Ty == SizeTTy : Ty->isIntegerTy();
   };
@@ -839,7 +839,7 @@ bool TargetLibraryInfoImpl::isValidProtoForLibFunc(const FunctionType &FTy,
   case LibFunc_system:
     return (NumParams == 1 && FTy.getParamType(0)->isPointerTy());
   case LibFunc_malloc:
-  case LibFunc_vec_malloc: 
+  case LibFunc_vec_malloc:
     return (NumParams == 1 && FTy.getReturnType()->isPointerTy());
   case LibFunc_memcmp:
     return (NumParams == 3 && FTy.getReturnType()->isIntegerTy(32) &&
@@ -858,7 +858,7 @@ bool TargetLibraryInfoImpl::isValidProtoForLibFunc(const FunctionType &FTy,
     return (NumParams >= 2 && FTy.getParamType(1)->isPointerTy());
 
   case LibFunc_memcpy_chk:
-  case LibFunc_mempcpy_chk: 
+  case LibFunc_mempcpy_chk:
   case LibFunc_memmove_chk:
     --NumParams;
     if (!IsSizeTTy(FTy.getParamType(NumParams)))
@@ -894,7 +894,7 @@ bool TargetLibraryInfoImpl::isValidProtoForLibFunc(const FunctionType &FTy,
     return (FTy.getReturnType()->isPointerTy());
   case LibFunc_realloc:
   case LibFunc_reallocf:
-  case LibFunc_vec_realloc: 
+  case LibFunc_vec_realloc:
     return (NumParams == 2 && FTy.getReturnType() == PCharTy &&
             FTy.getParamType(0) == FTy.getReturnType() &&
             IsSizeTTy(FTy.getParamType(1)));
@@ -922,7 +922,7 @@ bool TargetLibraryInfoImpl::isValidProtoForLibFunc(const FunctionType &FTy,
   case LibFunc_bzero:
     return (NumParams == 2 && FTy.getParamType(0)->isPointerTy());
   case LibFunc_calloc:
-  case LibFunc_vec_calloc: 
+  case LibFunc_vec_calloc:
     return (NumParams == 2 && FTy.getReturnType()->isPointerTy());
 
   case LibFunc_atof:
@@ -973,7 +973,7 @@ bool TargetLibraryInfoImpl::isValidProtoForLibFunc(const FunctionType &FTy,
   case LibFunc_mkdir:
   case LibFunc_mktime:
   case LibFunc_times:
-  case LibFunc_vec_free: 
+  case LibFunc_vec_free:
     return (NumParams != 0 && FTy.getParamType(0)->isPointerTy());
 
   case LibFunc_fopen:
@@ -1243,15 +1243,15 @@ bool TargetLibraryInfoImpl::isValidProtoForLibFunc(const FunctionType &FTy,
   case LibFunc_ZdaPvmSt11align_val_t:
     return (NumParams == 3 && FTy.getParamType(0)->isPointerTy());
 
-  // void __atomic_load(size_t, void *, void *, int) 
-  case LibFunc_atomic_load: 
-  // void __atomic_store(size_t, void *, void *, int) 
-  case LibFunc_atomic_store: 
-    return (NumParams == 4 && FTy.getParamType(0)->isIntegerTy() && 
-            FTy.getParamType(1)->isPointerTy() && 
-            FTy.getParamType(2)->isPointerTy() && 
-            FTy.getParamType(3)->isIntegerTy()); 
- 
+  // void __atomic_load(size_t, void *, void *, int)
+  case LibFunc_atomic_load:
+  // void __atomic_store(size_t, void *, void *, int)
+  case LibFunc_atomic_store:
+    return (NumParams == 4 && FTy.getParamType(0)->isIntegerTy() &&
+            FTy.getParamType(1)->isPointerTy() &&
+            FTy.getParamType(2)->isPointerTy() &&
+            FTy.getParamType(3)->isIntegerTy());
+
   case LibFunc_memset_pattern16:
     return (!FTy.isVarArg() && NumParams == 3 &&
             FTy.getParamType(0)->isPointerTy() &&
@@ -1555,10 +1555,10 @@ static bool compareWithVectorFnName(const VecDesc &LHS, StringRef S) {
 }
 
 void TargetLibraryInfoImpl::addVectorizableFunctions(ArrayRef<VecDesc> Fns) {
-  llvm::append_range(VectorDescs, Fns); 
+  llvm::append_range(VectorDescs, Fns);
   llvm::sort(VectorDescs, compareByScalarFnName);
 
-  llvm::append_range(ScalarDescs, Fns); 
+  llvm::append_range(ScalarDescs, Fns);
   llvm::sort(ScalarDescs, compareByVectorFnName);
 }
 
@@ -1573,14 +1573,14 @@ void TargetLibraryInfoImpl::addVectorizableFunctionsFromVecLib(
     addVectorizableFunctions(VecFuncs);
     break;
   }
-  case LIBMVEC_X86: { 
-    const VecDesc VecFuncs[] = { 
-    #define TLI_DEFINE_LIBMVEC_X86_VECFUNCS 
-    #include "llvm/Analysis/VecFuncs.def" 
-    }; 
-    addVectorizableFunctions(VecFuncs); 
-    break; 
-  } 
+  case LIBMVEC_X86: {
+    const VecDesc VecFuncs[] = {
+    #define TLI_DEFINE_LIBMVEC_X86_VECFUNCS
+    #include "llvm/Analysis/VecFuncs.def"
+    };
+    addVectorizableFunctions(VecFuncs);
+    break;
+  }
   case MASSV: {
     const VecDesc VecFuncs[] = {
     #define TLI_DEFINE_MASSV_VECFUNCS

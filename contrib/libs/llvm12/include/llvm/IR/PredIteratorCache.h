@@ -51,7 +51,7 @@ private:
     if (Entry)
       return Entry;
 
-    SmallVector<BasicBlock *, 32> PredCache(predecessors(BB)); 
+    SmallVector<BasicBlock *, 32> PredCache(predecessors(BB));
     PredCache.push_back(nullptr); // null terminator.
 
     BlockToPredCountMap[BB] = PredCache.size() - 1;
@@ -65,7 +65,7 @@ private:
     auto Result = BlockToPredCountMap.find(BB);
     if (Result != BlockToPredCountMap.end())
       return Result->second;
-    return BlockToPredCountMap[BB] = pred_size(BB); 
+    return BlockToPredCountMap[BB] = pred_size(BB);
   }
 
 public:

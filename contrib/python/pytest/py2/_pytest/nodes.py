@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -103,18 +103,18 @@ class Node(object):
         return self.session.gethookproxy(self.fspath)
 
     def __repr__(self):
-        return "<%s %s>" % (self.__class__.__name__, getattr(self, "name", None)) 
+        return "<%s %s>" % (self.__class__.__name__, getattr(self, "name", None))
 
-    def warn(self, warning): 
+    def warn(self, warning):
         """Issue a warning for this item.
 
-        Warnings will be displayed after the test session, unless explicitly suppressed 
+        Warnings will be displayed after the test session, unless explicitly suppressed
 
-        :param Warning warning: the warning instance to issue. Must be a subclass of PytestWarning. 
+        :param Warning warning: the warning instance to issue. Must be a subclass of PytestWarning.
 
-        :raise ValueError: if ``warning`` instance is not a subclass of PytestWarning. 
+        :raise ValueError: if ``warning`` instance is not a subclass of PytestWarning.
 
-        Example usage: 
+        Example usage:
 
         .. code-block:: python
 
@@ -249,7 +249,7 @@ class Node(object):
         if excinfo.errisinstance(fm.FixtureLookupError):
             return excinfo.value.formatrepr()
         tbfilter = True
-        if self.config.getoption("fulltrace", False): 
+        if self.config.getoption("fulltrace", False):
             style = "long"
         else:
             tb = _pytest._code.Traceback([excinfo.traceback[-1]])
@@ -261,12 +261,12 @@ class Node(object):
                 style = "long"
         # XXX should excinfo.getrepr record all data and toterminal() process it?
         if style is None:
-            if self.config.getoption("tbstyle", "auto") == "short": 
+            if self.config.getoption("tbstyle", "auto") == "short":
                 style = "short"
             else:
                 style = "long"
 
-        if self.config.getoption("verbose", 0) > 1: 
+        if self.config.getoption("verbose", 0) > 1:
             truncate_locals = False
         else:
             truncate_locals = True
@@ -280,7 +280,7 @@ class Node(object):
         return excinfo.getrepr(
             funcargs=True,
             abspath=abspath,
-            showlocals=self.config.getoption("showlocals", False), 
+            showlocals=self.config.getoption("showlocals", False),
             style=style,
             tbfilter=tbfilter,
             truncate_locals=truncate_locals,
@@ -327,14 +327,14 @@ class Collector(Node):
             exc = excinfo.value
             return str(exc.args[0])
 
-        # Respect explicit tbstyle option, but default to "short" 
-        # (None._repr_failure_py defaults to "long" without "fulltrace" option). 
-        tbstyle = self.config.getoption("tbstyle", "auto") 
-        if tbstyle == "auto": 
-            tbstyle = "short" 
- 
-        return self._repr_failure_py(excinfo, style=tbstyle) 
- 
+        # Respect explicit tbstyle option, but default to "short"
+        # (None._repr_failure_py defaults to "long" without "fulltrace" option).
+        tbstyle = self.config.getoption("tbstyle", "auto")
+        if tbstyle == "auto":
+            tbstyle = "short"
+
+        return self._repr_failure_py(excinfo, style=tbstyle)
+
     def _prunetraceback(self, excinfo):
         if hasattr(self, "fspath"):
             traceback = excinfo.traceback

@@ -81,7 +81,7 @@ namespace llvm {
     /// \param   InlinedAt    The new outermost inlined-at in the chain.
     static DebugLoc appendInlinedAt(const DebugLoc &DL, DILocation *InlinedAt,
                                     LLVMContext &Ctx,
-                                    DenseMap<const MDNode *, MDNode *> &Cache); 
+                                    DenseMap<const MDNode *, MDNode *> &Cache);
 
     unsigned getLine() const;
     unsigned getCol() const;

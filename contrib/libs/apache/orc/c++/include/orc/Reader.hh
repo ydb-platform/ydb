@@ -272,12 +272,12 @@ namespace orc {
     virtual uint64_t getNumberOfRows() const = 0;
 
     /**
-     * Get the software instance and version that wrote this file. 
-     * @return a user-facing string that specifies the software version 
-     */ 
-    virtual std::string getSoftwareVersion() const = 0; 
- 
-    /** 
+     * Get the software instance and version that wrote this file.
+     * @return a user-facing string that specifies the software version
+     */
+    virtual std::string getSoftwareVersion() const = 0;
+
+    /**
      * Get the user metadata keys.
      * @return the set of user metadata keys
      */

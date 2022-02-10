@@ -206,15 +206,15 @@ public:
   /// returns Intrinsic::not_intrinsic!
   bool isIntrinsic() const { return HasLLVMReservedName; }
 
-  /// isTargetIntrinsic - Returns true if IID is an intrinsic specific to a 
-  /// certain target. If it is a generic intrinsic false is returned. 
-  static bool isTargetIntrinsic(Intrinsic::ID IID); 
- 
-  /// isTargetIntrinsic - Returns true if this function is an intrinsic and the 
-  /// intrinsic is specific to a certain target. If this is not an intrinsic 
-  /// or a generic intrinsic, false is returned. 
-  bool isTargetIntrinsic() const; 
- 
+  /// isTargetIntrinsic - Returns true if IID is an intrinsic specific to a
+  /// certain target. If it is a generic intrinsic false is returned.
+  static bool isTargetIntrinsic(Intrinsic::ID IID);
+
+  /// isTargetIntrinsic - Returns true if this function is an intrinsic and the
+  /// intrinsic is specific to a certain target. If this is not an intrinsic
+  /// or a generic intrinsic, false is returned.
+  bool isTargetIntrinsic() const;
+
   /// Returns true if the function is one of the "Constrained Floating-Point
   /// Intrinsics". Returns false if not, and returns false when
   /// getIntrinsicID() returns Intrinsic::not_intrinsic.
@@ -275,12 +275,12 @@ public:
         getContext(), AttributeList::FunctionIndex, Kind));
   }
 
-  /// A function will have the "coroutine.presplit" attribute if it's 
-  /// a coroutine and has not gone through full CoroSplit pass. 
-  bool isPresplitCoroutine() const { 
-    return hasFnAttribute("coroutine.presplit"); 
-  } 
- 
+  /// A function will have the "coroutine.presplit" attribute if it's
+  /// a coroutine and has not gone through full CoroSplit pass.
+  bool isPresplitCoroutine() const {
+    return hasFnAttribute("coroutine.presplit");
+  }
+
   enum ProfileCountType { PCT_Invalid, PCT_Real, PCT_Synthetic };
 
   /// Class to represent profile counts.
@@ -394,9 +394,9 @@ public:
   void setGC(std::string Str);
   void clearGC();
 
-  /// Returns true if the function has ssp, sspstrong, or sspreq fn attrs. 
-  bool hasStackProtectorFnAttr() const; 
- 
+  /// Returns true if the function has ssp, sspstrong, or sspreq fn attrs.
+  bool hasStackProtectorFnAttr() const;
+
   /// adds the attribute to the list of attributes.
   void addAttribute(unsigned i, Attribute::AttrKind Kind);
 
@@ -488,19 +488,19 @@ public:
 
   /// Extract the byval type for a parameter.
   Type *getParamByValType(unsigned ArgNo) const {
-    return AttributeSets.getParamByValType(ArgNo); 
+    return AttributeSets.getParamByValType(ArgNo);
   }
 
-  /// Extract the sret type for a parameter. 
-  Type *getParamStructRetType(unsigned ArgNo) const { 
-    return AttributeSets.getParamStructRetType(ArgNo); 
-  } 
- 
-  /// Extract the byref type for a parameter. 
-  Type *getParamByRefType(unsigned ArgNo) const { 
-    return AttributeSets.getParamByRefType(ArgNo); 
-  } 
- 
+  /// Extract the sret type for a parameter.
+  Type *getParamStructRetType(unsigned ArgNo) const {
+    return AttributeSets.getParamStructRetType(ArgNo);
+  }
+
+  /// Extract the byref type for a parameter.
+  Type *getParamByRefType(unsigned ArgNo) const {
+    return AttributeSets.getParamByRefType(ArgNo);
+  }
+
   /// Extract the number of dereferenceable bytes for a call or
   /// parameter (0=unknown).
   /// @param i AttributeList index, referring to a return value or argument.
@@ -640,17 +640,17 @@ public:
     addFnAttr(Attribute::NoRecurse);
   }
 
-  /// Determine if the function is required to make forward progress. 
-  bool mustProgress() const { 
-    return hasFnAttribute(Attribute::MustProgress) || 
-           hasFnAttribute(Attribute::WillReturn); 
-  } 
-  void setMustProgress() { addFnAttr(Attribute::MustProgress); } 
- 
-  /// Determine if the function will return. 
-  bool willReturn() const { return hasFnAttribute(Attribute::WillReturn); } 
-  void setWillReturn() { addFnAttr(Attribute::WillReturn); } 
- 
+  /// Determine if the function is required to make forward progress.
+  bool mustProgress() const {
+    return hasFnAttribute(Attribute::MustProgress) ||
+           hasFnAttribute(Attribute::WillReturn);
+  }
+  void setMustProgress() { addFnAttr(Attribute::MustProgress); }
+
+  /// Determine if the function will return.
+  bool willReturn() const { return hasFnAttribute(Attribute::WillReturn); }
+  void setWillReturn() { addFnAttr(Attribute::WillReturn); }
+
   /// True if the ABI mandates (or the user requested) that this
   /// function be in a unwind table.
   bool hasUWTable() const {
@@ -693,10 +693,10 @@ public:
     return hasFnAttribute(Attribute::OptimizeForSize) || hasMinSize();
   }
 
-  /// Returns the denormal handling type for the default rounding mode of the 
-  /// function. 
-  DenormalMode getDenormalMode(const fltSemantics &FPType) const; 
- 
+  /// Returns the denormal handling type for the default rounding mode of the
+  /// function.
+  DenormalMode getDenormalMode(const fltSemantics &FPType) const;
+
   /// copyAttributesFrom - copy all additional attributes (those not needed to
   /// create a Function) from the Function Src to this one.
   void copyAttributesFrom(const Function *Src);

@@ -141,7 +141,7 @@ RECURSE(
     pymain
     pyscopg2
     pytest
-    pytest-mongodb 
+    pytest-mongodb
     pytest/allure
     pytest/empty
     pytest/plugins
@@ -164,7 +164,7 @@ RECURSE(
     runtime_py3/test
     runtime_test
     sanitizers
-    sdms_api 
+    sdms_api
     sfx
     selenium_ui_test
     sendmsg

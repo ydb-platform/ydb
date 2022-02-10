@@ -1,4 +1,4 @@
-PY3_PROGRAM(cffigen) 
+PY3_PROGRAM(cffigen)
 
 OWNER(orivej)
 

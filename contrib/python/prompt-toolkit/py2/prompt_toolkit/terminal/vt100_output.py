@@ -28,48 +28,48 @@ FG_ANSI_COLORS = {
     'ansidefault': 39,
 
     # Low intensity.
-    'ansiblack':       30, 
+    'ansiblack':       30,
     'ansidarkred':     31,
     'ansidarkgreen':   32,
     'ansibrown':       33,
     'ansidarkblue':    34,
     'ansipurple':      35,
     'ansiteal':        36,
-    'ansilightgray':   37, 
+    'ansilightgray':   37,
 
     # High intensity.
-    'ansidarkgray':    90, 
+    'ansidarkgray':    90,
     'ansired':         91,
     'ansigreen':       92,
     'ansiyellow':      93,
     'ansiblue':        94,
     'ansifuchsia':     95,
     'ansiturquoise':   96,
-    'ansiwhite':       97, 
+    'ansiwhite':       97,
 }
 
 BG_ANSI_COLORS = {
     'ansidefault':     49,
 
     # Low intensity.
-    'ansiblack':       40, 
+    'ansiblack':       40,
     'ansidarkred':     41,
     'ansidarkgreen':   42,
     'ansibrown':       43,
     'ansidarkblue':    44,
     'ansipurple':      45,
     'ansiteal':        46,
-    'ansilightgray':   47, 
+    'ansilightgray':   47,
 
     # High intensity.
-    'ansidarkgray':    100, 
+    'ansidarkgray':    100,
     'ansired':         101,
     'ansigreen':       102,
     'ansiyellow':      103,
     'ansiblue':        104,
     'ansifuchsia':     105,
     'ansiturquoise':   106,
-    'ansiwhite':       107, 
+    'ansiwhite':       107,
 }
 
 
@@ -424,9 +424,9 @@ class Vt100_Output(Output):
         assert stdout.isatty()
         def get_size():
             rows, columns = _get_size(stdout.fileno())
-            # If terminal (incorrectly) reports its size as 0, pick a reasonable default. 
-            # See https://github.com/ipython/ipython/issues/10071 
-            return Size(rows=(rows or 24), columns=(columns or 80)) 
+            # If terminal (incorrectly) reports its size as 0, pick a reasonable default.
+            # See https://github.com/ipython/ipython/issues/10071
+            return Size(rows=(rows or 24), columns=(columns or 80))
 
         return cls(stdout, get_size, true_color=true_color,
                    ansi_colors_only=ansi_colors_only, term=term)

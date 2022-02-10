@@ -13,8 +13,8 @@
 from decimal import Decimal, Context, Clamped
 from decimal import Overflow, Inexact, Underflow, Rounded
 
-from boto3.compat import collections_abc 
- 
+from boto3.compat import collections_abc
+
 from botocore.compat import six
 
 
@@ -65,9 +65,9 @@ class Binary(object):
     def __str__(self):
         return self.value
 
-    def __bytes__(self): 
-        return self.value 
- 
+    def __bytes__(self):
+        return self.value
+
     def __hash__(self):
         return hash(self.value)
 
@@ -136,7 +136,7 @@ class TypeSerializer(object):
         elif self._is_map(value):
             dynamodb_type = MAP
 
-        elif self._is_listlike(value): 
+        elif self._is_listlike(value):
             dynamodb_type = LIST
 
         else:
@@ -178,7 +178,7 @@ class TypeSerializer(object):
         return False
 
     def _is_set(self, value):
-        if isinstance(value, collections_abc.Set): 
+        if isinstance(value, collections_abc.Set):
             return True
         return False
 
@@ -189,12 +189,12 @@ class TypeSerializer(object):
         return False
 
     def _is_map(self, value):
-        if isinstance(value, collections_abc.Mapping): 
+        if isinstance(value, collections_abc.Mapping):
             return True
         return False
 
-    def _is_listlike(self, value): 
-        if isinstance(value, (list, tuple)): 
+    def _is_listlike(self, value):
+        if isinstance(value, (list, tuple)):
             return True
         return False
 

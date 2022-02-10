@@ -3,12 +3,12 @@
   "metadata":{
     "apiVersion":"2013-01-01",
     "endpointPrefix":"cloudsearch",
-    "protocol":"query", 
+    "protocol":"query",
     "serviceFullName":"Amazon CloudSearch",
     "serviceId":"CloudSearch",
     "signatureVersion":"v4",
-    "uid":"cloudsearch-2013-01-01", 
-    "xmlNamespace":"http://cloudsearch.amazonaws.com/doc/2013-01-01/" 
+    "uid":"cloudsearch-2013-01-01",
+    "xmlNamespace":"http://cloudsearch.amazonaws.com/doc/2013-01-01/"
   },
   "operations":{
     "BuildSuggesters":{
@@ -17,15 +17,15 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"BuildSuggestersRequest"}, 
+      "input":{"shape":"BuildSuggestersRequest"},
       "output":{
         "shape":"BuildSuggestersResponse",
         "resultWrapper":"BuildSuggestersResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Indexes the search suggestions. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/getting-suggestions.html#configuring-suggesters\">Configuring Suggesters</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -35,17 +35,17 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"CreateDomainRequest"}, 
+      "input":{"shape":"CreateDomainRequest"},
       "output":{
         "shape":"CreateDomainResponse",
         "resultWrapper":"CreateDomainResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"ResourceAlreadyExistsException"}, 
-        {"shape":"ValidationException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceAlreadyExistsException"},
+        {"shape":"ValidationException"}
       ],
       "documentation":"<p>Creates a new search domain. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/creating-domains.html\" target=\"_blank\">Creating a Search Domain</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -55,17 +55,17 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DefineAnalysisSchemeRequest"}, 
+      "input":{"shape":"DefineAnalysisSchemeRequest"},
       "output":{
         "shape":"DefineAnalysisSchemeResponse",
         "resultWrapper":"DefineAnalysisSchemeResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"InvalidTypeException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"InvalidTypeException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Configures an analysis scheme that can be applied to a <code>text</code> or <code>text-array</code> field to define language-specific text processing options. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-analysis-schemes.html\" target=\"_blank\">Configuring Analysis Schemes</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -75,17 +75,17 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DefineExpressionRequest"}, 
+      "input":{"shape":"DefineExpressionRequest"},
       "output":{
         "shape":"DefineExpressionResponse",
         "resultWrapper":"DefineExpressionResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"InvalidTypeException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"InvalidTypeException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Configures an <code><a>Expression</a></code> for the search domain. Used to create new expressions and modify existing ones. If the expression exists, the new configuration replaces the old one. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-expressions.html\" target=\"_blank\">Configuring Expressions</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -95,17 +95,17 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DefineIndexFieldRequest"}, 
+      "input":{"shape":"DefineIndexFieldRequest"},
       "output":{
         "shape":"DefineIndexFieldResponse",
         "resultWrapper":"DefineIndexFieldResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"InvalidTypeException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"InvalidTypeException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Configures an <code><a>IndexField</a></code> for the search domain. Used to create new fields and modify existing ones. You must specify the name of the domain you are configuring and an index field configuration. The index field configuration specifies a unique name, the index field type, and the options you want to configure for the field. The options you can specify depend on the <code><a>IndexFieldType</a></code>. If the field exists, the new configuration replaces the old one. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-index-fields.html\" target=\"_blank\">Configuring Index Fields</a> in the <i>Amazon CloudSearch Developer Guide</i>. </p>"
     },
@@ -115,17 +115,17 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DefineSuggesterRequest"}, 
+      "input":{"shape":"DefineSuggesterRequest"},
       "output":{
         "shape":"DefineSuggesterResponse",
         "resultWrapper":"DefineSuggesterResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"InvalidTypeException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"InvalidTypeException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Configures a suggester for a domain. A suggester enables you to display possible matches before users finish typing their queries. When you configure a suggester, you must specify the name of the text field you want to search for possible matches and a unique name for the suggester. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/getting-suggestions.html\" target=\"_blank\">Getting Search Suggestions</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -135,16 +135,16 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DeleteAnalysisSchemeRequest"}, 
+      "input":{"shape":"DeleteAnalysisSchemeRequest"},
       "output":{
         "shape":"DeleteAnalysisSchemeResponse",
         "resultWrapper":"DeleteAnalysisSchemeResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"InvalidTypeException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"InvalidTypeException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Deletes an analysis scheme. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-analysis-schemes.html\" target=\"_blank\">Configuring Analysis Schemes</a> in the <i>Amazon CloudSearch Developer Guide</i>. </p>"
     },
@@ -154,14 +154,14 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DeleteDomainRequest"}, 
+      "input":{"shape":"DeleteDomainRequest"},
       "output":{
         "shape":"DeleteDomainResponse",
         "resultWrapper":"DeleteDomainResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"}
       ],
       "documentation":"<p>Permanently deletes a search domain and all of its data. Once a domain has been deleted, it cannot be recovered. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/deleting-domains.html\" target=\"_blank\">Deleting a Search Domain</a> in the <i>Amazon CloudSearch Developer Guide</i>. </p>"
     },
@@ -171,16 +171,16 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DeleteExpressionRequest"}, 
+      "input":{"shape":"DeleteExpressionRequest"},
       "output":{
         "shape":"DeleteExpressionResponse",
         "resultWrapper":"DeleteExpressionResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"InvalidTypeException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"InvalidTypeException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Removes an <code><a>Expression</a></code> from the search domain. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-expressions.html\" target=\"_blank\">Configuring Expressions</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -190,16 +190,16 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DeleteIndexFieldRequest"}, 
+      "input":{"shape":"DeleteIndexFieldRequest"},
       "output":{
         "shape":"DeleteIndexFieldResponse",
         "resultWrapper":"DeleteIndexFieldResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"InvalidTypeException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"InvalidTypeException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Removes an <code><a>IndexField</a></code> from the search domain. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-index-fields.html\" target=\"_blank\">Configuring Index Fields</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -209,16 +209,16 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DeleteSuggesterRequest"}, 
+      "input":{"shape":"DeleteSuggesterRequest"},
       "output":{
         "shape":"DeleteSuggesterResponse",
         "resultWrapper":"DeleteSuggesterResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"InvalidTypeException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"InvalidTypeException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Deletes a suggester. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/getting-suggestions.html\" target=\"_blank\">Getting Search Suggestions</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -228,15 +228,15 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DescribeAnalysisSchemesRequest"}, 
+      "input":{"shape":"DescribeAnalysisSchemesRequest"},
       "output":{
         "shape":"DescribeAnalysisSchemesResponse",
         "resultWrapper":"DescribeAnalysisSchemesResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Gets the analysis schemes configured for a domain. An analysis scheme defines language-specific text processing options for a <code>text</code> field. Can be limited to specific analysis schemes by name. By default, shows all analysis schemes and includes any pending changes to the configuration. Set the <code>Deployed</code> option to <code>true</code> to show the active configuration and exclude pending changes. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-analysis-schemes.html\" target=\"_blank\">Configuring Analysis Schemes</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -246,55 +246,55 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DescribeAvailabilityOptionsRequest"}, 
+      "input":{"shape":"DescribeAvailabilityOptionsRequest"},
       "output":{
         "shape":"DescribeAvailabilityOptionsResponse",
         "resultWrapper":"DescribeAvailabilityOptionsResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"InvalidTypeException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"DisabledOperationException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"InvalidTypeException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"DisabledOperationException"}
       ],
       "documentation":"<p>Gets the availability options configured for a domain. By default, shows the configuration with any pending changes. Set the <code>Deployed</code> option to <code>true</code> to show the active configuration and exclude pending changes. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-availability-options.html\" target=\"_blank\">Configuring Availability Options</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
-    "DescribeDomainEndpointOptions":{ 
-      "name":"DescribeDomainEndpointOptions", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"DescribeDomainEndpointOptionsRequest"}, 
-      "output":{ 
-        "shape":"DescribeDomainEndpointOptionsResponse", 
-        "resultWrapper":"DescribeDomainEndpointOptionsResult" 
-      }, 
-      "errors":[ 
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"DisabledOperationException"} 
-      ], 
-      "documentation":"<p>Returns the domain's endpoint options, specifically whether all requests to the domain must arrive over HTTPS. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-domain-endpoint-options.html\" target=\"_blank\">Configuring Domain Endpoint Options</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>" 
-    }, 
+    "DescribeDomainEndpointOptions":{
+      "name":"DescribeDomainEndpointOptions",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DescribeDomainEndpointOptionsRequest"},
+      "output":{
+        "shape":"DescribeDomainEndpointOptionsResponse",
+        "resultWrapper":"DescribeDomainEndpointOptionsResult"
+      },
+      "errors":[
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"DisabledOperationException"}
+      ],
+      "documentation":"<p>Returns the domain's endpoint options, specifically whether all requests to the domain must arrive over HTTPS. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-domain-endpoint-options.html\" target=\"_blank\">Configuring Domain Endpoint Options</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
+    },
     "DescribeDomains":{
       "name":"DescribeDomains",
       "http":{
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DescribeDomainsRequest"}, 
+      "input":{"shape":"DescribeDomainsRequest"},
       "output":{
         "shape":"DescribeDomainsResponse",
         "resultWrapper":"DescribeDomainsResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"}
       ],
       "documentation":"<p>Gets information about the search domains owned by this account. Can be limited to specific domains. Shows all domains by default. To get the number of searchable documents in a domain, use the console or submit a <code>matchall</code> request to your domain's search endpoint: <code>q=matchall&amp;amp;q.parser=structured&amp;amp;size=0</code>. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/getting-domain-info.html\" target=\"_blank\">Getting Information about a Search Domain</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -304,15 +304,15 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DescribeExpressionsRequest"}, 
+      "input":{"shape":"DescribeExpressionsRequest"},
       "output":{
         "shape":"DescribeExpressionsResponse",
         "resultWrapper":"DescribeExpressionsResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Gets the expressions configured for the search domain. Can be limited to specific expressions by name. By default, shows all expressions and includes any pending changes to the configuration. Set the <code>Deployed</code> option to <code>true</code> to show the active configuration and exclude pending changes. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-expressions.html\" target=\"_blank\">Configuring Expressions</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -322,15 +322,15 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DescribeIndexFieldsRequest"}, 
+      "input":{"shape":"DescribeIndexFieldsRequest"},
       "output":{
         "shape":"DescribeIndexFieldsResponse",
         "resultWrapper":"DescribeIndexFieldsResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Gets information about the index fields configured for the search domain. Can be limited to specific fields by name. By default, shows all fields and includes any pending changes to the configuration. Set the <code>Deployed</code> option to <code>true</code> to show the active configuration and exclude pending changes. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/getting-domain-info.html\" target=\"_blank\">Getting Domain Information</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -340,15 +340,15 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DescribeScalingParametersRequest"}, 
+      "input":{"shape":"DescribeScalingParametersRequest"},
       "output":{
         "shape":"DescribeScalingParametersResponse",
         "resultWrapper":"DescribeScalingParametersResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Gets the scaling parameters configured for a domain. A domain's scaling parameters specify the desired search instance type and replication count. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-scaling-options.html\" target=\"_blank\">Configuring Scaling Options</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -358,15 +358,15 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DescribeServiceAccessPoliciesRequest"}, 
+      "input":{"shape":"DescribeServiceAccessPoliciesRequest"},
       "output":{
         "shape":"DescribeServiceAccessPoliciesResponse",
         "resultWrapper":"DescribeServiceAccessPoliciesResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Gets information about the access policies that control access to the domain's document and search endpoints. By default, shows the configuration with any pending changes. Set the <code>Deployed</code> option to <code>true</code> to show the active configuration and exclude pending changes. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-access.html\" target=\"_blank\">Configuring Access for a Search Domain</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -376,15 +376,15 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"DescribeSuggestersRequest"}, 
+      "input":{"shape":"DescribeSuggestersRequest"},
       "output":{
         "shape":"DescribeSuggestersResponse",
         "resultWrapper":"DescribeSuggestersResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Gets the suggesters configured for a domain. A suggester enables you to display possible matches before users finish typing their queries. Can be limited to specific suggesters by name. By default, shows all suggesters and includes any pending changes to the configuration. Set the <code>Deployed</code> option to <code>true</code> to show the active configuration and exclude pending changes. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/getting-suggestions.html\" target=\"_blank\">Getting Search Suggestions</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
@@ -394,15 +394,15 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"IndexDocumentsRequest"}, 
+      "input":{"shape":"IndexDocumentsRequest"},
       "output":{
         "shape":"IndexDocumentsResponse",
         "resultWrapper":"IndexDocumentsResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"ResourceNotFoundException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Tells the search domain to start indexing its documents using the latest indexing options. This operation must be invoked to activate options whose <a>OptionStatus</a> is <code>RequiresIndexDocuments</code>.</p>"
     },
@@ -417,7 +417,7 @@
         "resultWrapper":"ListDomainNamesResult"
       },
       "errors":[
-        {"shape":"BaseException"} 
+        {"shape":"BaseException"}
       ],
       "documentation":"<p>Lists all search domains owned by an account.</p>"
     },
@@ -427,61 +427,61 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"UpdateAvailabilityOptionsRequest"}, 
+      "input":{"shape":"UpdateAvailabilityOptionsRequest"},
       "output":{
         "shape":"UpdateAvailabilityOptionsResponse",
         "resultWrapper":"UpdateAvailabilityOptionsResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"InvalidTypeException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"DisabledOperationException"}, 
-        {"shape":"ValidationException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"InvalidTypeException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"DisabledOperationException"},
+        {"shape":"ValidationException"}
       ],
       "documentation":"<p>Configures the availability options for a domain. Enabling the Multi-AZ option expands an Amazon CloudSearch domain to an additional Availability Zone in the same Region to increase fault tolerance in the event of a service disruption. Changes to the Multi-AZ option can take about half an hour to become active. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-availability-options.html\" target=\"_blank\">Configuring Availability Options</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
     },
-    "UpdateDomainEndpointOptions":{ 
-      "name":"UpdateDomainEndpointOptions", 
-      "http":{ 
-        "method":"POST", 
-        "requestUri":"/" 
-      }, 
-      "input":{"shape":"UpdateDomainEndpointOptionsRequest"}, 
-      "output":{ 
-        "shape":"UpdateDomainEndpointOptionsResponse", 
-        "resultWrapper":"UpdateDomainEndpointOptionsResult" 
-      }, 
-      "errors":[ 
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"InvalidTypeException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"DisabledOperationException"}, 
-        {"shape":"ValidationException"} 
-      ], 
-      "documentation":"<p>Updates the domain's endpoint options, specifically whether all requests to the domain must arrive over HTTPS. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-domain-endpoint-options.html\" target=\"_blank\">Configuring Domain Endpoint Options</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>" 
-    }, 
+    "UpdateDomainEndpointOptions":{
+      "name":"UpdateDomainEndpointOptions",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"UpdateDomainEndpointOptionsRequest"},
+      "output":{
+        "shape":"UpdateDomainEndpointOptionsResponse",
+        "resultWrapper":"UpdateDomainEndpointOptionsResult"
+      },
+      "errors":[
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"InvalidTypeException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"DisabledOperationException"},
+        {"shape":"ValidationException"}
+      ],
+      "documentation":"<p>Updates the domain's endpoint options, specifically whether all requests to the domain must arrive over HTTPS. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-domain-endpoint-options.html\" target=\"_blank\">Configuring Domain Endpoint Options</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>"
+    },
     "UpdateScalingParameters":{
       "name":"UpdateScalingParameters",
       "http":{
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"UpdateScalingParametersRequest"}, 
+      "input":{"shape":"UpdateScalingParametersRequest"},
       "output":{
         "shape":"UpdateScalingParametersResponse",
         "resultWrapper":"UpdateScalingParametersResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"InvalidTypeException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InvalidTypeException"}
       ],
       "documentation":"<p>Configures scaling parameters for a domain. A domain's scaling parameters specify the desired search instance type and replication count. Amazon CloudSearch will still automatically scale your domain based on the volume of data and traffic, but not below the desired instance type and replication count. If the Multi-AZ option is enabled, these values control the resources used per Availability Zone. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-scaling-options.html\" target=\"_blank\">Configuring Scaling Options</a> in the <i>Amazon CloudSearch Developer Guide</i>. </p>"
     },
@@ -491,17 +491,17 @@
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"UpdateServiceAccessPoliciesRequest"}, 
+      "input":{"shape":"UpdateServiceAccessPoliciesRequest"},
       "output":{
         "shape":"UpdateServiceAccessPoliciesResponse",
         "resultWrapper":"UpdateServiceAccessPoliciesResult"
       },
       "errors":[
-        {"shape":"BaseException"}, 
-        {"shape":"InternalException"}, 
-        {"shape":"LimitExceededException"}, 
-        {"shape":"ResourceNotFoundException"}, 
-        {"shape":"InvalidTypeException"} 
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InvalidTypeException"}
       ],
       "documentation":"<p>Configures the access rules that control access to the domain's document and search endpoints. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-access.html\" target=\"_blank\"> Configuring Access for an Amazon CloudSearch Domain</a>.</p>"
     }
@@ -577,7 +577,7 @@
     },
     "AnalysisSchemeLanguage":{
       "type":"string",
-      "documentation":"<p>An <a href=\"http://tools.ietf.org/html/rfc4646\" target=\"_blank\">IETF RFC 4646</a> language code or <code>mul</code> for multiple languages.</p>", 
+      "documentation":"<p>An <a href=\"http://tools.ietf.org/html/rfc4646\" target=\"_blank\">IETF RFC 4646</a> language code or <code>mul</code> for multiple languages.</p>",
       "enum":[
         "ar",
         "bg",
@@ -614,7 +614,7 @@
         "tr",
         "zh-Hans",
         "zh-Hant"
-      ] 
+      ]
     },
     "AnalysisSchemeStatus":{
       "type":"structure",
@@ -654,8 +654,8 @@
         "Code":{"shape":"ErrorCode"},
         "Message":{"shape":"ErrorMessage"}
       },
-      "documentation":"<p>An error occurred while processing the request.</p>", 
-      "exception":true 
+      "documentation":"<p>An error occurred while processing the request.</p>",
+      "exception":true
     },
     "Boolean":{"type":"boolean"},
     "BuildSuggestersRequest":{
@@ -1004,31 +1004,31 @@
       },
       "documentation":"<p>The result of a <code>DescribeAvailabilityOptions</code> request. Indicates whether or not the Multi-AZ option is enabled for the domain specified in the request. </p>"
     },
-    "DescribeDomainEndpointOptionsRequest":{ 
-      "type":"structure", 
-      "required":["DomainName"], 
-      "members":{ 
-        "DomainName":{ 
-          "shape":"DomainName", 
-          "documentation":"<p>A string that represents the name of a domain.</p>" 
-        }, 
-        "Deployed":{ 
-          "shape":"Boolean", 
-          "documentation":"<p>Whether to retrieve the latest configuration (which might be in a Processing state) or the current, active configuration. Defaults to <code>false</code>.</p>" 
-        } 
-      }, 
-      "documentation":"<p>Container for the parameters to the <code><a>DescribeDomainEndpointOptions</a></code> operation. Specify the name of the domain you want to describe. To show the active configuration and exclude any pending changes, set the Deployed option to <code>true</code>.</p>" 
-    }, 
-    "DescribeDomainEndpointOptionsResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "DomainEndpointOptions":{ 
-          "shape":"DomainEndpointOptionsStatus", 
-          "documentation":"<p>The status and configuration of a search domain's endpoint options.</p>" 
-        } 
-      }, 
-      "documentation":"<p>The result of a <code>DescribeDomainEndpointOptions</code> request. Contains the status and configuration of a search domain's endpoint options. </p>" 
-    }, 
+    "DescribeDomainEndpointOptionsRequest":{
+      "type":"structure",
+      "required":["DomainName"],
+      "members":{
+        "DomainName":{
+          "shape":"DomainName",
+          "documentation":"<p>A string that represents the name of a domain.</p>"
+        },
+        "Deployed":{
+          "shape":"Boolean",
+          "documentation":"<p>Whether to retrieve the latest configuration (which might be in a Processing state) or the current, active configuration. Defaults to <code>false</code>.</p>"
+        }
+      },
+      "documentation":"<p>Container for the parameters to the <code><a>DescribeDomainEndpointOptions</a></code> operation. Specify the name of the domain you want to describe. To show the active configuration and exclude any pending changes, set the Deployed option to <code>true</code>.</p>"
+    },
+    "DescribeDomainEndpointOptionsResponse":{
+      "type":"structure",
+      "members":{
+        "DomainEndpointOptions":{
+          "shape":"DomainEndpointOptionsStatus",
+          "documentation":"<p>The status and configuration of a search domain's endpoint options.</p>"
+        }
+      },
+      "documentation":"<p>The result of a <code>DescribeDomainEndpointOptions</code> request. Contains the status and configuration of a search domain's endpoint options. </p>"
+    },
     "DescribeDomainsRequest":{
       "type":"structure",
       "members":{
@@ -1183,13 +1183,13 @@
       "type":"structure",
       "members":{
       },
-      "documentation":"<p>The request was rejected because it attempted an operation which is not enabled.</p>", 
+      "documentation":"<p>The request was rejected because it attempted an operation which is not enabled.</p>",
       "error":{
         "code":"DisabledAction",
         "httpStatusCode":409,
         "senderFault":true
       },
-      "exception":true 
+      "exception":true
     },
     "DocumentSuggesterOptions":{
       "type":"structure",
@@ -1210,50 +1210,50 @@
       },
       "documentation":"<p>Options for a search suggester.</p>"
     },
-    "DomainEndpointOptions":{ 
-      "type":"structure", 
-      "members":{ 
-        "EnforceHTTPS":{ 
-          "shape":"Boolean", 
-          "documentation":"<p>Whether the domain is HTTPS only enabled.</p>" 
-        }, 
-        "TLSSecurityPolicy":{ 
-          "shape":"TLSSecurityPolicy", 
-          "documentation":"<p>The minimum required TLS version</p>" 
-        } 
-      }, 
-      "documentation":"<p>The domain's endpoint options.</p>" 
-    }, 
-    "DomainEndpointOptionsStatus":{ 
-      "type":"structure", 
-      "required":[ 
-        "Options", 
-        "Status" 
-      ], 
-      "members":{ 
-        "Options":{ 
-          "shape":"DomainEndpointOptions", 
-          "documentation":"<p>The domain endpoint options configured for the domain.</p>" 
-        }, 
-        "Status":{ 
-          "shape":"OptionStatus", 
-          "documentation":"<p>The status of the configured domain endpoint options.</p>" 
-        } 
-      }, 
-      "documentation":"<p>The configuration and status of the domain's endpoint options.</p>" 
-    }, 
+    "DomainEndpointOptions":{
+      "type":"structure",
+      "members":{
+        "EnforceHTTPS":{
+          "shape":"Boolean",
+          "documentation":"<p>Whether the domain is HTTPS only enabled.</p>"
+        },
+        "TLSSecurityPolicy":{
+          "shape":"TLSSecurityPolicy",
+          "documentation":"<p>The minimum required TLS version</p>"
+        }
+      },
+      "documentation":"<p>The domain's endpoint options.</p>"
+    },
+    "DomainEndpointOptionsStatus":{
+      "type":"structure",
+      "required":[
+        "Options",
+        "Status"
+      ],
+      "members":{
+        "Options":{
+          "shape":"DomainEndpointOptions",
+          "documentation":"<p>The domain endpoint options configured for the domain.</p>"
+        },
+        "Status":{
+          "shape":"OptionStatus",
+          "documentation":"<p>The status of the configured domain endpoint options.</p>"
+        }
+      },
+      "documentation":"<p>The configuration and status of the domain's endpoint options.</p>"
+    },
     "DomainId":{
       "type":"string",
-      "documentation":"<p>An internally generated unique identifier for a domain.</p>", 
+      "documentation":"<p>An internally generated unique identifier for a domain.</p>",
       "max":64,
-      "min":1 
+      "min":1
     },
     "DomainName":{
       "type":"string",
-      "documentation":"<p>A string that represents the name of a domain. Domain names are unique across the domains owned by an account within an AWS region. Domain names start with a letter or number and can contain the following characters: a-z (lowercase), 0-9, and - (hyphen).</p>", 
-      "max":28, 
+      "documentation":"<p>A string that represents the name of a domain. Domain names are unique across the domains owned by an account within an AWS region. Domain names start with a letter or number and can contain the following characters: a-z (lowercase), 0-9, and - (hyphen).</p>",
+      "max":28,
       "min":3,
-      "pattern":"[a-z][a-z0-9\\-]+" 
+      "pattern":"[a-z][a-z0-9\\-]+"
     },
     "DomainNameList":{
       "type":"list",
@@ -1381,7 +1381,7 @@
     },
     "DynamicFieldName":{
       "type":"string",
-      "max":64, 
+      "max":64,
       "min":1,
       "pattern":"([a-z][a-z0-9_]*\\*?|\\*[a-z0-9_]*)"
     },
@@ -1431,16 +1431,16 @@
     },
     "ExpressionValue":{
       "type":"string",
-      "documentation":"<p>The expression to evaluate for sorting while processing a search request. The <code>Expression</code> syntax is based on JavaScript expressions. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-expressions.html\" target=\"_blank\">Configuring Expressions</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>", 
+      "documentation":"<p>The expression to evaluate for sorting while processing a search request. The <code>Expression</code> syntax is based on JavaScript expressions. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-expressions.html\" target=\"_blank\">Configuring Expressions</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>",
       "max":10240,
-      "min":1 
+      "min":1
     },
     "FieldName":{
       "type":"string",
-      "documentation":"<p>A string that represents the name of an index field. CloudSearch supports regular index fields as well as dynamic fields. A dynamic field's name defines a pattern that begins or ends with a wildcard. Any document fields that don't map to a regular index field but do match a dynamic field's pattern are configured with the dynamic field's indexing options. </p> <p>Regular field names begin with a letter and can contain the following characters: a-z (lowercase), 0-9, and _ (underscore). Dynamic field names must begin or end with a wildcard (*). The wildcard can also be the only character in a dynamic field name. Multiple wildcards, and wildcards embedded within a string are not supported. </p> <p>The name <code>score</code> is reserved and cannot be used as a field name. To reference a document's ID, you can use the name <code>_id</code>. </p>", 
-      "max":64, 
+      "documentation":"<p>A string that represents the name of an index field. CloudSearch supports regular index fields as well as dynamic fields. A dynamic field's name defines a pattern that begins or ends with a wildcard. Any document fields that don't map to a regular index field but do match a dynamic field's pattern are configured with the dynamic field's indexing options. </p> <p>Regular field names begin with a letter and can contain the following characters: a-z (lowercase), 0-9, and _ (underscore). Dynamic field names must begin or end with a wildcard (*). The wildcard can also be the only character in a dynamic field name. Multiple wildcards, and wildcards embedded within a string are not supported. </p> <p>The name <code>score</code> is reserved and cannot be used as a field name. To reference a document's ID, you can use the name <code>_id</code>. </p>",
+      "max":64,
       "min":1,
-      "pattern":"[a-z][a-z0-9_]*" 
+      "pattern":"[a-z][a-z0-9_]*"
     },
     "FieldNameCommaList":{
       "type":"string",
@@ -1453,9 +1453,9 @@
     },
     "FieldValue":{
       "type":"string",
-      "documentation":"<p>The value of a field attribute.</p>", 
+      "documentation":"<p>The value of a field attribute.</p>",
       "max":1024,
-      "min":0 
+      "min":0
     },
     "IndexDocumentsRequest":{
       "type":"structure",
@@ -1520,7 +1520,7 @@
     },
     "IndexFieldType":{
       "type":"string",
-      "documentation":"<p>The type of field. The valid options for a field depend on the field type. For more information about the supported field types, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-index-fields.html\" target=\"_blank\">Configuring Index Fields</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>", 
+      "documentation":"<p>The type of field. The valid options for a field depend on the field type. For more information about the supported field types, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-index-fields.html\" target=\"_blank\">Configuring Index Fields</a> in the <i>Amazon CloudSearch Developer Guide</i>.</p>",
       "enum":[
         "int",
         "double",
@@ -1533,7 +1533,7 @@
         "literal-array",
         "text-array",
         "date-array"
-      ] 
+      ]
     },
     "InstanceCount":{
       "type":"integer",
@@ -1599,24 +1599,24 @@
       "type":"structure",
       "members":{
       },
-      "documentation":"<p>An internal error occurred while processing the request. If this problem persists, report an issue from the <a href=\"http://status.aws.amazon.com/\" target=\"_blank\">Service Health Dashboard</a>.</p>", 
+      "documentation":"<p>An internal error occurred while processing the request. If this problem persists, report an issue from the <a href=\"http://status.aws.amazon.com/\" target=\"_blank\">Service Health Dashboard</a>.</p>",
       "error":{
         "code":"InternalException",
         "httpStatusCode":500
       },
-      "exception":true 
+      "exception":true
     },
     "InvalidTypeException":{
       "type":"structure",
       "members":{
       },
-      "documentation":"<p>The request was rejected because it specified an invalid type definition.</p>", 
+      "documentation":"<p>The request was rejected because it specified an invalid type definition.</p>",
       "error":{
         "code":"InvalidType",
         "httpStatusCode":409,
         "senderFault":true
       },
-      "exception":true 
+      "exception":true
     },
     "LatLonOptions":{
       "type":"structure",
@@ -1649,13 +1649,13 @@
       "type":"structure",
       "members":{
       },
-      "documentation":"<p>The request was rejected because a resource limit has already been met.</p>", 
+      "documentation":"<p>The request was rejected because a resource limit has already been met.</p>",
       "error":{
         "code":"LimitExceeded",
         "httpStatusCode":409,
         "senderFault":true
       },
-      "exception":true 
+      "exception":true
     },
     "Limits":{
       "type":"structure",
@@ -1743,13 +1743,13 @@
     "MultiAZ":{"type":"boolean"},
     "OptionState":{
       "type":"string",
-      "documentation":"<p>The state of processing a change to an option. One of:</p> <ul> <li>RequiresIndexDocuments: The option's latest value will not be deployed until <a>IndexDocuments</a> has been called and indexing is complete.</li> <li>Processing: The option's latest value is in the process of being activated.</li> <li>Active: The option's latest value is fully deployed. </li> <li>FailedToValidate: The option value is not compatible with the domain's data and cannot be used to index the data. You must either modify the option value or update or remove the incompatible documents.</li> </ul>", 
+      "documentation":"<p>The state of processing a change to an option. One of:</p> <ul> <li>RequiresIndexDocuments: The option's latest value will not be deployed until <a>IndexDocuments</a> has been called and indexing is complete.</li> <li>Processing: The option's latest value is in the process of being activated.</li> <li>Active: The option's latest value is fully deployed. </li> <li>FailedToValidate: The option value is not compatible with the domain's data and cannot be used to index the data. You must either modify the option value or update or remove the incompatible documents.</li> </ul>",
       "enum":[
         "RequiresIndexDocuments",
         "Processing",
         "Active",
         "FailedToValidate"
-      ] 
+      ]
     },
     "OptionStatus":{
       "type":"structure",
@@ -1773,7 +1773,7 @@
         },
         "State":{
           "shape":"OptionState",
-          "documentation":"<p>The state of processing a change to an option. Possible values:</p><ul> <li><code>RequiresIndexDocuments</code>: the option's latest value will not be deployed until <a>IndexDocuments</a> has been called and indexing is complete.</li> <li><code>Processing</code>: the option's latest value is in the process of being activated. </li> <li><code>Active</code>: the option's latest value is completely deployed.</li> <li><code>FailedToValidate</code>: the option value is not compatible with the domain's data and cannot be used to index the data. You must either modify the option value or update or remove the incompatible documents.</li> </ul>" 
+          "documentation":"<p>The state of processing a change to an option. Possible values:</p><ul> <li><code>RequiresIndexDocuments</code>: the option's latest value will not be deployed until <a>IndexDocuments</a> has been called and indexing is complete.</li> <li><code>Processing</code>: the option's latest value is in the process of being activated. </li> <li><code>Active</code>: the option's latest value is completely deployed.</li> <li><code>FailedToValidate</code>: the option value is not compatible with the domain's data and cannot be used to index the data. You must either modify the option value or update or remove the incompatible documents.</li> </ul>"
         },
         "PendingDeletion":{
           "shape":"Boolean",
@@ -1784,12 +1784,12 @@
     },
     "PartitionCount":{
       "type":"integer",
-      "documentation":"<p>The number of partitions used to hold the domain's index.</p>", 
-      "min":1 
+      "documentation":"<p>The number of partitions used to hold the domain's index.</p>",
+      "min":1
     },
     "PartitionInstanceType":{
       "type":"string",
-      "documentation":"<p>The instance type (such as <code>search.m1.small</code>) on which an index partition is hosted.</p>", 
+      "documentation":"<p>The instance type (such as <code>search.m1.small</code>) on which an index partition is hosted.</p>",
       "enum":[
         "search.m1.small",
         "search.m1.large",
@@ -1798,45 +1798,45 @@
         "search.m3.medium",
         "search.m3.large",
         "search.m3.xlarge",
-        "search.m3.2xlarge", 
-        "search.small", 
-        "search.medium", 
-        "search.large", 
-        "search.xlarge", 
-        "search.2xlarge", 
-        "search.previousgeneration.small", 
-        "search.previousgeneration.large", 
-        "search.previousgeneration.xlarge", 
-        "search.previousgeneration.2xlarge" 
-      ] 
+        "search.m3.2xlarge",
+        "search.small",
+        "search.medium",
+        "search.large",
+        "search.xlarge",
+        "search.2xlarge",
+        "search.previousgeneration.small",
+        "search.previousgeneration.large",
+        "search.previousgeneration.xlarge",
+        "search.previousgeneration.2xlarge"
+      ]
     },
     "PolicyDocument":{
       "type":"string",
       "documentation":"<p>Access rules for a domain's document or search service endpoints. For more information, see <a href=\"http://docs.aws.amazon.com/cloudsearch/latest/developerguide/configuring-access.html\" target=\"_blank\">Configuring Access for a Search Domain</a> in the <i>Amazon CloudSearch Developer Guide</i>. The maximum size of a policy document is 100 KB.</p>"
     },
-    "ResourceAlreadyExistsException":{ 
-      "type":"structure", 
-      "members":{ 
-      }, 
-      "documentation":"<p>The request was rejected because it attempted to create a resource that already exists.</p>", 
-      "error":{ 
-        "code":"ResourceAlreadyExists", 
-        "httpStatusCode":409, 
-        "senderFault":true 
-      }, 
-      "exception":true 
-    }, 
+    "ResourceAlreadyExistsException":{
+      "type":"structure",
+      "members":{
+      },
+      "documentation":"<p>The request was rejected because it attempted to create a resource that already exists.</p>",
+      "error":{
+        "code":"ResourceAlreadyExists",
+        "httpStatusCode":409,
+        "senderFault":true
+      },
+      "exception":true
+    },
     "ResourceNotFoundException":{
       "type":"structure",
       "members":{
       },
-      "documentation":"<p>The request was rejected because it attempted to reference a resource that does not exist.</p>", 
+      "documentation":"<p>The request was rejected because it attempted to reference a resource that does not exist.</p>",
       "error":{
         "code":"ResourceNotFound",
         "httpStatusCode":409,
         "senderFault":true
       },
-      "exception":true 
+      "exception":true
     },
     "ScalingParameters":{
       "type":"structure",
@@ -1885,10 +1885,10 @@
     },
     "StandardName":{
       "type":"string",
-      "documentation":"<p>Names must begin with a letter and can contain the following characters: a-z (lowercase), 0-9, and _ (underscore).</p>", 
-      "max":64, 
+      "documentation":"<p>Names must begin with a letter and can contain the following characters: a-z (lowercase), 0-9, and _ (underscore).</p>",
+      "max":64,
       "min":1,
-      "pattern":"[a-z][a-z0-9_]*" 
+      "pattern":"[a-z][a-z0-9_]*"
     },
     "StandardNameList":{
       "type":"list",
@@ -1932,14 +1932,14 @@
       "member":{"shape":"SuggesterStatus"},
       "documentation":"<p>Contains the status of multiple suggesters.</p>"
     },
-    "TLSSecurityPolicy":{ 
-      "type":"string", 
-      "documentation":"<p>The minimum required TLS version.</p>", 
-      "enum":[ 
-        "Policy-Min-TLS-1-0-2019-07", 
-        "Policy-Min-TLS-1-2-2019-07" 
-      ] 
-    }, 
+    "TLSSecurityPolicy":{
+      "type":"string",
+      "documentation":"<p>The minimum required TLS version.</p>",
+      "enum":[
+        "Policy-Min-TLS-1-0-2019-07",
+        "Policy-Min-TLS-1-2-2019-07"
+      ]
+    },
     "TextArrayOptions":{
       "type":"structure",
       "members":{
@@ -2022,34 +2022,34 @@
       },
       "documentation":"<p>The result of a <code>UpdateAvailabilityOptions</code> request. Contains the status of the domain's availability options. </p>"
     },
-    "UpdateDomainEndpointOptionsRequest":{ 
-      "type":"structure", 
-      "required":[ 
-        "DomainName", 
-        "DomainEndpointOptions" 
-      ], 
-      "members":{ 
-        "DomainName":{ 
-          "shape":"DomainName", 
-          "documentation":"<p>A string that represents the name of a domain.</p>" 
-        }, 
-        "DomainEndpointOptions":{ 
-          "shape":"DomainEndpointOptions", 
-          "documentation":"<p>Whether to require that all requests to the domain arrive over HTTPS. We recommend Policy-Min-TLS-1-2-2019-07 for TLSSecurityPolicy. For compatibility with older clients, the default is Policy-Min-TLS-1-0-2019-07. </p>" 
-        } 
-      }, 
-      "documentation":"<p>Container for the parameters to the <code><a>UpdateDomainEndpointOptions</a></code> operation. Specifies the name of the domain you want to update and the domain endpoint options.</p>" 
-    }, 
-    "UpdateDomainEndpointOptionsResponse":{ 
-      "type":"structure", 
-      "members":{ 
-        "DomainEndpointOptions":{ 
-          "shape":"DomainEndpointOptionsStatus", 
-          "documentation":"<p>The newly-configured domain endpoint options.</p>" 
-        } 
-      }, 
-      "documentation":"<p>The result of a <code>UpdateDomainEndpointOptions</code> request. Contains the configuration and status of the domain's endpoint options. </p>" 
-    }, 
+    "UpdateDomainEndpointOptionsRequest":{
+      "type":"structure",
+      "required":[
+        "DomainName",
+        "DomainEndpointOptions"
+      ],
+      "members":{
+        "DomainName":{
+          "shape":"DomainName",
+          "documentation":"<p>A string that represents the name of a domain.</p>"
+        },
+        "DomainEndpointOptions":{
+          "shape":"DomainEndpointOptions",
+          "documentation":"<p>Whether to require that all requests to the domain arrive over HTTPS. We recommend Policy-Min-TLS-1-2-2019-07 for TLSSecurityPolicy. For compatibility with older clients, the default is Policy-Min-TLS-1-0-2019-07. </p>"
+        }
+      },
+      "documentation":"<p>Container for the parameters to the <code><a>UpdateDomainEndpointOptions</a></code> operation. Specifies the name of the domain you want to update and the domain endpoint options.</p>"
+    },
+    "UpdateDomainEndpointOptionsResponse":{
+      "type":"structure",
+      "members":{
+        "DomainEndpointOptions":{
+          "shape":"DomainEndpointOptionsStatus",
+          "documentation":"<p>The newly-configured domain endpoint options.</p>"
+        }
+      },
+      "documentation":"<p>The result of a <code>UpdateDomainEndpointOptions</code> request. Contains the configuration and status of the domain's endpoint options. </p>"
+    },
     "UpdateScalingParametersRequest":{
       "type":"structure",
       "required":[
@@ -2097,17 +2097,17 @@
       "documentation":"<p>The result of an <code>UpdateServiceAccessPolicies</code> request. Contains the new access policies.</p>"
     },
     "UpdateTimestamp":{"type":"timestamp"},
-    "ValidationException":{ 
-      "type":"structure", 
-      "members":{ 
-      }, 
-      "documentation":"<p>The request was rejected because it has invalid parameters.</p>", 
-      "exception":true 
-    }, 
+    "ValidationException":{
+      "type":"structure",
+      "members":{
+      },
+      "documentation":"<p>The request was rejected because it has invalid parameters.</p>",
+      "exception":true
+    },
     "Word":{
       "type":"string",
       "pattern":"[\\S]+"
     }
-  }, 
-  "documentation":"<fullname>Amazon CloudSearch Configuration Service</fullname> <p>You use the Amazon CloudSearch configuration service to create, configure, and manage search domains. Configuration service requests are submitted using the AWS Query protocol. AWS Query requests are HTTP or HTTPS requests submitted via HTTP GET or POST with a query parameter named Action.</p> <p>The endpoint for configuration service requests is region-specific: cloudsearch.<i>region</i>.amazonaws.com. For example, cloudsearch.us-east-1.amazonaws.com. For a current list of supported regions and endpoints, see <a href=\"http://docs.aws.amazon.com/general/latest/gr/rande.html#cloudsearch_region\" target=\"_blank\">Regions and Endpoints</a>.</p>" 
+  },
+  "documentation":"<fullname>Amazon CloudSearch Configuration Service</fullname> <p>You use the Amazon CloudSearch configuration service to create, configure, and manage search domains. Configuration service requests are submitted using the AWS Query protocol. AWS Query requests are HTTP or HTTPS requests submitted via HTTP GET or POST with a query parameter named Action.</p> <p>The endpoint for configuration service requests is region-specific: cloudsearch.<i>region</i>.amazonaws.com. For example, cloudsearch.us-east-1.amazonaws.com. For a current list of supported regions and endpoints, see <a href=\"http://docs.aws.amazon.com/general/latest/gr/rande.html#cloudsearch_region\" target=\"_blank\">Regions and Endpoints</a>.</p>"
 }

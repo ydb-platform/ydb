@@ -26,13 +26,13 @@ namespace llvm {
 
 
 namespace llvm {
-  namespace AArch64DBnXS { 
-#define GET_DBNXS_IMPL 
-#include "AArch64GenSystemOperands.inc" 
-  } 
-} 
- 
-namespace llvm { 
+  namespace AArch64DBnXS {
+#define GET_DBNXS_IMPL
+#include "AArch64GenSystemOperands.inc"
+  }
+}
+
+namespace llvm {
   namespace AArch64DB {
 #define GET_DB_IMPL
 #include "AArch64GenSystemOperands.inc"
@@ -165,7 +165,7 @@ std::string AArch64SysReg::genericRegisterString(uint32_t Bits) {
 
 namespace llvm {
   namespace AArch64TLBI {
-#define GET_TLBITable_IMPL 
+#define GET_TLBITable_IMPL
 #include "AArch64GenSystemOperands.inc"
   }
 }

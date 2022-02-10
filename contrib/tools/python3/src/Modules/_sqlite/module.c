@@ -83,7 +83,7 @@ static PyObject* module_connect(PyObject* self, PyObject* args, PyObject*
         factory = (PyObject*)&pysqlite_ConnectionType;
     }
 
-    return PyObject_Call(factory, args, kwargs); 
+    return PyObject_Call(factory, args, kwargs);
 }
 
 PyDoc_STRVAR(module_connect_doc,
@@ -97,7 +97,7 @@ RAM instead of on disk.");
 static PyObject* module_complete(PyObject* self, PyObject* args, PyObject*
         kwargs)
 {
-    static char *kwlist[] = {"statement", NULL}; 
+    static char *kwlist[] = {"statement", NULL};
     char* statement;
 
     PyObject* result;
@@ -127,7 +127,7 @@ Checks if a string contains a complete SQL statement. Non-standard.");
 static PyObject* module_enable_shared_cache(PyObject* self, PyObject* args, PyObject*
         kwargs)
 {
-    static char *kwlist[] = {"do_enable", NULL}; 
+    static char *kwlist[] = {"do_enable", NULL};
     int do_enable;
     int rc;
 
@@ -195,7 +195,7 @@ static PyObject* module_register_converter(PyObject* self, PyObject* args)
     }
 
     /* convert the name to upper case */
-    name = _PyObject_CallMethodIdNoArgs(orig_name, &PyId_upper); 
+    name = _PyObject_CallMethodIdNoArgs(orig_name, &PyId_upper);
     if (!name) {
         goto error;
     }
@@ -241,12 +241,12 @@ static void converters_init(PyObject* dict)
 }
 
 static PyMethodDef module_methods[] = {
-    {"connect",  (PyCFunction)(void(*)(void))module_connect, 
+    {"connect",  (PyCFunction)(void(*)(void))module_connect,
      METH_VARARGS | METH_KEYWORDS, module_connect_doc},
-    {"complete_statement",  (PyCFunction)(void(*)(void))module_complete, 
+    {"complete_statement",  (PyCFunction)(void(*)(void))module_complete,
      METH_VARARGS | METH_KEYWORDS, module_complete_doc},
 #ifdef HAVE_SHARED_CACHE
-    {"enable_shared_cache",  (PyCFunction)(void(*)(void))module_enable_shared_cache, 
+    {"enable_shared_cache",  (PyCFunction)(void(*)(void))module_enable_shared_cache,
      METH_VARARGS | METH_KEYWORDS, module_enable_shared_cache_doc},
 #endif
     {"register_adapter", (PyCFunction)module_register_adapter,
@@ -338,14 +338,14 @@ static struct PyModuleDef _sqlite3module = {
         NULL
 };
 
-#define ADD_TYPE(module, type)                 \ 
-do {                                           \ 
-    if (PyModule_AddType(module, &type) < 0) { \ 
-        Py_DECREF(module);                     \ 
-        return NULL;                           \ 
-    }                                          \ 
-} while (0) 
- 
+#define ADD_TYPE(module, type)                 \
+do {                                           \
+    if (PyModule_AddType(module, &type) < 0) { \
+        Py_DECREF(module);                     \
+        return NULL;                           \
+    }                                          \
+} while (0)
+
 PyMODINIT_FUNC PyInit__sqlite3(void)
 {
     PyObject *module, *dict;
@@ -366,10 +366,10 @@ PyMODINIT_FUNC PyInit__sqlite3(void)
         return NULL;
     }
 
-    ADD_TYPE(module, pysqlite_ConnectionType); 
-    ADD_TYPE(module, pysqlite_CursorType); 
-    ADD_TYPE(module, pysqlite_PrepareProtocolType); 
-    ADD_TYPE(module, pysqlite_RowType); 
+    ADD_TYPE(module, pysqlite_ConnectionType);
+    ADD_TYPE(module, pysqlite_CursorType);
+    ADD_TYPE(module, pysqlite_PrepareProtocolType);
+    ADD_TYPE(module, pysqlite_RowType);
 
     if (!(dict = PyModule_GetDict(module))) {
         goto error;

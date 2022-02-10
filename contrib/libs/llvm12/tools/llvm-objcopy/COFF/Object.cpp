@@ -31,23 +31,23 @@ void Object::updateSymbols() {
 }
 
 const Symbol *Object::findSymbol(size_t UniqueId) const {
-  return SymbolMap.lookup(UniqueId); 
+  return SymbolMap.lookup(UniqueId);
 }
 
-Error Object::removeSymbols( 
-    function_ref<Expected<bool>(const Symbol &)> ToRemove) { 
-  Error Errs = Error::success(); 
-  llvm::erase_if(Symbols, [ToRemove, &Errs](const Symbol &Sym) { 
-    Expected<bool> ShouldRemove = ToRemove(Sym); 
-    if (!ShouldRemove) { 
-      Errs = joinErrors(std::move(Errs), ShouldRemove.takeError()); 
-      return false; 
-    } 
-    return *ShouldRemove; 
-  }); 
- 
+Error Object::removeSymbols(
+    function_ref<Expected<bool>(const Symbol &)> ToRemove) {
+  Error Errs = Error::success();
+  llvm::erase_if(Symbols, [ToRemove, &Errs](const Symbol &Sym) {
+    Expected<bool> ShouldRemove = ToRemove(Sym);
+    if (!ShouldRemove) {
+      Errs = joinErrors(std::move(Errs), ShouldRemove.takeError());
+      return false;
+    }
+    return *ShouldRemove;
+  });
+
   updateSymbols();
-  return Errs; 
+  return Errs;
 }
 
 Error Object::markSymbols() {
@@ -83,34 +83,34 @@ void Object::updateSections() {
 }
 
 const Section *Object::findSection(ssize_t UniqueId) const {
-  return SectionMap.lookup(UniqueId); 
+  return SectionMap.lookup(UniqueId);
 }
 
 void Object::removeSections(function_ref<bool(const Section &)> ToRemove) {
   DenseSet<ssize_t> AssociatedSections;
   auto RemoveAssociated = [&AssociatedSections](const Section &Sec) {
-    return AssociatedSections.contains(Sec.UniqueId); 
+    return AssociatedSections.contains(Sec.UniqueId);
   };
   do {
     DenseSet<ssize_t> RemovedSections;
-    llvm::erase_if(Sections, [ToRemove, &RemovedSections](const Section &Sec) { 
-      bool Remove = ToRemove(Sec); 
-      if (Remove) 
-        RemovedSections.insert(Sec.UniqueId); 
-      return Remove; 
-    }); 
+    llvm::erase_if(Sections, [ToRemove, &RemovedSections](const Section &Sec) {
+      bool Remove = ToRemove(Sec);
+      if (Remove)
+        RemovedSections.insert(Sec.UniqueId);
+      return Remove;
+    });
     // Remove all symbols referring to the removed sections.
     AssociatedSections.clear();
-    llvm::erase_if( 
-        Symbols, [&RemovedSections, &AssociatedSections](const Symbol &Sym) { 
-          // If there are sections that are associative to a removed 
-          // section, 
-          // remove those as well as nothing will include them (and we can't 
-          // leave them dangling). 
-          if (RemovedSections.count(Sym.AssociativeComdatTargetSectionId) == 1) 
-            AssociatedSections.insert(Sym.TargetSectionId); 
-          return RemovedSections.contains(Sym.TargetSectionId); 
-        }); 
+    llvm::erase_if(
+        Symbols, [&RemovedSections, &AssociatedSections](const Symbol &Sym) {
+          // If there are sections that are associative to a removed
+          // section,
+          // remove those as well as nothing will include them (and we can't
+          // leave them dangling).
+          if (RemovedSections.count(Sym.AssociativeComdatTargetSectionId) == 1)
+            AssociatedSections.insert(Sym.TargetSectionId);
+          return RemovedSections.contains(Sym.TargetSectionId);
+        });
     ToRemove = RemoveAssociated;
   } while (!AssociatedSections.empty());
   updateSections();

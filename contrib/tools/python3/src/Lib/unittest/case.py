@@ -9,7 +9,7 @@ import warnings
 import collections
 import contextlib
 import traceback
-import types 
+import types
 
 from . import result
 from .util import (strclass, safe_repr, _count_diff_all_purpose,
@@ -84,30 +84,30 @@ class _Outcome(object):
 def _id(obj):
     return obj
 
- 
-_module_cleanups = [] 
-def addModuleCleanup(function, /, *args, **kwargs): 
-    """Same as addCleanup, except the cleanup items are called even if 
-    setUpModule fails (unlike tearDownModule).""" 
-    _module_cleanups.append((function, args, kwargs)) 
- 
- 
-def doModuleCleanups(): 
-    """Execute all module cleanup functions. Normally called for you after 
-    tearDownModule.""" 
-    exceptions = [] 
-    while _module_cleanups: 
-        function, args, kwargs = _module_cleanups.pop() 
-        try: 
-            function(*args, **kwargs) 
-        except Exception as exc: 
-            exceptions.append(exc) 
-    if exceptions: 
-        # Swallows all but first exception. If a multi-exception handler 
-        # gets written we should use that here instead. 
-        raise exceptions[0] 
- 
- 
+
+_module_cleanups = []
+def addModuleCleanup(function, /, *args, **kwargs):
+    """Same as addCleanup, except the cleanup items are called even if
+    setUpModule fails (unlike tearDownModule)."""
+    _module_cleanups.append((function, args, kwargs))
+
+
+def doModuleCleanups():
+    """Execute all module cleanup functions. Normally called for you after
+    tearDownModule."""
+    exceptions = []
+    while _module_cleanups:
+        function, args, kwargs = _module_cleanups.pop()
+        try:
+            function(*args, **kwargs)
+        except Exception as exc:
+            exceptions.append(exc)
+    if exceptions:
+        # Swallows all but first exception. If a multi-exception handler
+        # gets written we should use that here instead.
+        raise exceptions[0]
+
+
 def skip(reason):
     """
     Unconditionally skip a test.
@@ -122,10 +122,10 @@ def skip(reason):
         test_item.__unittest_skip__ = True
         test_item.__unittest_skip_why__ = reason
         return test_item
-    if isinstance(reason, types.FunctionType): 
-        test_item = reason 
-        reason = '' 
-        return decorator(test_item) 
+    if isinstance(reason, types.FunctionType):
+        test_item = reason
+        reason = ''
+        return decorator(test_item)
     return decorator
 
 def skipIf(condition, reason):
@@ -188,8 +188,8 @@ class _AssertRaisesBaseContext(_BaseTestCaseContext):
             if not args:
                 self.msg = kwargs.pop('msg', None)
                 if kwargs:
-                    raise TypeError('%r is an invalid keyword argument for ' 
-                                    'this function' % (next(iter(kwargs)),)) 
+                    raise TypeError('%r is an invalid keyword argument for '
+                                    'this function' % (next(iter(kwargs)),))
                 return self
 
             callable_obj, *args = args
@@ -240,9 +240,9 @@ class _AssertRaisesContext(_AssertRaisesBaseContext):
                      expected_regex.pattern, str(exc_value)))
         return True
 
-    __class_getitem__ = classmethod(types.GenericAlias) 
+    __class_getitem__ = classmethod(types.GenericAlias)
 
- 
+
 class _AssertWarnsContext(_AssertRaisesBaseContext):
     """A context manager used to implement TestCase.assertWarns* methods."""
 
@@ -252,7 +252,7 @@ class _AssertWarnsContext(_AssertRaisesBaseContext):
     def __enter__(self):
         # The __warningregistry__'s need to be in a pristine state for tests
         # to work properly.
-        for v in list(sys.modules.values()): 
+        for v in list(sys.modules.values()):
             if getattr(v, '__warningregistry__', None):
                 v.__warningregistry__ = {}
         self.warnings_manager = warnings.catch_warnings(record=True)
@@ -353,8 +353,8 @@ class TestCase(object):
 
     _classSetupFailed = False
 
-    _class_cleanups = [] 
- 
+    _class_cleanups = []
+
     def __init__(self, methodName='runTest'):
         """Create an instance of the class that will use the named test
            method when executed. Raises a ValueError if the instance does
@@ -402,7 +402,7 @@ class TestCase(object):
         """
         self._type_equality_funcs[typeobj] = function
 
-    def addCleanup(self, function, /, *args, **kwargs): 
+    def addCleanup(self, function, /, *args, **kwargs):
         """Add a function, with arguments, to be called when the test is
         completed. Functions added are called on a LIFO basis and are
         called after tearDown on test failure or success.
@@ -410,12 +410,12 @@ class TestCase(object):
         Cleanup items are called even if setUp fails (unlike tearDown)."""
         self._cleanups.append((function, args, kwargs))
 
-    @classmethod 
-    def addClassCleanup(cls, function, /, *args, **kwargs): 
-        """Same as addCleanup, except the cleanup items are called even if 
-        setUpClass fails (unlike tearDownClass).""" 
-        cls._class_cleanups.append((function, args, kwargs)) 
- 
+    @classmethod
+    def addClassCleanup(cls, function, /, *args, **kwargs):
+        """Same as addCleanup, except the cleanup items are called even if
+        setUpClass fails (unlike tearDownClass)."""
+        cls._class_cleanups.append((function, args, kwargs))
+
     def setUp(self):
         "Hook method for setting up the test fixture before exercising it."
         pass
@@ -446,7 +446,7 @@ class TestCase(object):
         the specified test method's docstring.
         """
         doc = self._testMethodDoc
-        return doc.strip().split("\n")[0].strip() if doc else None 
+        return doc.strip().split("\n")[0].strip() if doc else None
 
 
     def id(self):
@@ -543,84 +543,84 @@ class TestCase(object):
         else:
             addUnexpectedSuccess(self)
 
-    def _callSetUp(self): 
-        self.setUp() 
- 
-    def _callTestMethod(self, method): 
-        method() 
- 
-    def _callTearDown(self): 
-        self.tearDown() 
- 
-    def _callCleanup(self, function, /, *args, **kwargs): 
-        function(*args, **kwargs) 
- 
+    def _callSetUp(self):
+        self.setUp()
+
+    def _callTestMethod(self, method):
+        method()
+
+    def _callTearDown(self):
+        self.tearDown()
+
+    def _callCleanup(self, function, /, *args, **kwargs):
+        function(*args, **kwargs)
+
     def run(self, result=None):
         if result is None:
             result = self.defaultTestResult()
             startTestRun = getattr(result, 'startTestRun', None)
-            stopTestRun = getattr(result, 'stopTestRun', None) 
+            stopTestRun = getattr(result, 'stopTestRun', None)
             if startTestRun is not None:
                 startTestRun()
-        else: 
-            stopTestRun = None 
+        else:
+            stopTestRun = None
 
         result.startTest(self)
-        try: 
-            testMethod = getattr(self, self._testMethodName) 
-            if (getattr(self.__class__, "__unittest_skip__", False) or 
-                getattr(testMethod, "__unittest_skip__", False)): 
-                # If the class or method was skipped. 
+        try:
+            testMethod = getattr(self, self._testMethodName)
+            if (getattr(self.__class__, "__unittest_skip__", False) or
+                getattr(testMethod, "__unittest_skip__", False)):
+                # If the class or method was skipped.
                 skip_why = (getattr(self.__class__, '__unittest_skip_why__', '')
                             or getattr(testMethod, '__unittest_skip_why__', ''))
                 self._addSkip(result, self, skip_why)
-                return result 
+                return result
 
-            expecting_failure = ( 
-                getattr(self, "__unittest_expecting_failure__", False) or 
-                getattr(testMethod, "__unittest_expecting_failure__", False) 
-            ) 
-            outcome = _Outcome(result) 
-            try: 
-                self._outcome = outcome 
- 
+            expecting_failure = (
+                getattr(self, "__unittest_expecting_failure__", False) or
+                getattr(testMethod, "__unittest_expecting_failure__", False)
+            )
+            outcome = _Outcome(result)
+            try:
+                self._outcome = outcome
+
                 with outcome.testPartExecutor(self):
-                    self._callSetUp() 
-                if outcome.success: 
-                    outcome.expecting_failure = expecting_failure 
-                    with outcome.testPartExecutor(self, isTest=True): 
-                        self._callTestMethod(testMethod) 
-                    outcome.expecting_failure = False 
-                    with outcome.testPartExecutor(self): 
-                        self._callTearDown() 
+                    self._callSetUp()
+                if outcome.success:
+                    outcome.expecting_failure = expecting_failure
+                    with outcome.testPartExecutor(self, isTest=True):
+                        self._callTestMethod(testMethod)
+                    outcome.expecting_failure = False
+                    with outcome.testPartExecutor(self):
+                        self._callTearDown()
 
-                self.doCleanups() 
-                for test, reason in outcome.skipped: 
-                    self._addSkip(result, test, reason) 
-                self._feedErrorsToResult(result, outcome.errors) 
-                if outcome.success: 
-                    if expecting_failure: 
-                        if outcome.expectedFailure: 
-                            self._addExpectedFailure(result, outcome.expectedFailure) 
-                        else: 
-                            self._addUnexpectedSuccess(result) 
+                self.doCleanups()
+                for test, reason in outcome.skipped:
+                    self._addSkip(result, test, reason)
+                self._feedErrorsToResult(result, outcome.errors)
+                if outcome.success:
+                    if expecting_failure:
+                        if outcome.expectedFailure:
+                            self._addExpectedFailure(result, outcome.expectedFailure)
+                        else:
+                            self._addUnexpectedSuccess(result)
                     else:
-                        result.addSuccess(self) 
-                return result 
-            finally: 
-                # explicitly break reference cycles: 
-                # outcome.errors -> frame -> outcome -> outcome.errors 
-                # outcome.expectedFailure -> frame -> outcome -> outcome.expectedFailure 
-                outcome.errors.clear() 
-                outcome.expectedFailure = None 
- 
-                # clear the outcome, no more needed 
-                self._outcome = None 
- 
+                        result.addSuccess(self)
+                return result
+            finally:
+                # explicitly break reference cycles:
+                # outcome.errors -> frame -> outcome -> outcome.errors
+                # outcome.expectedFailure -> frame -> outcome -> outcome.expectedFailure
+                outcome.errors.clear()
+                outcome.expectedFailure = None
+
+                # clear the outcome, no more needed
+                self._outcome = None
+
         finally:
             result.stopTest(self)
-            if stopTestRun is not None: 
-                stopTestRun() 
+            if stopTestRun is not None:
+                stopTestRun()
 
     def doCleanups(self):
         """Execute all cleanup functions. Normally called for you after
@@ -629,43 +629,43 @@ class TestCase(object):
         while self._cleanups:
             function, args, kwargs = self._cleanups.pop()
             with outcome.testPartExecutor(self):
-                self._callCleanup(function, *args, **kwargs) 
+                self._callCleanup(function, *args, **kwargs)
 
         # return this for backwards compatibility
-        # even though we no longer use it internally 
+        # even though we no longer use it internally
         return outcome.success
 
-    @classmethod 
-    def doClassCleanups(cls): 
-        """Execute all class cleanup functions. Normally called for you after 
-        tearDownClass.""" 
-        cls.tearDown_exceptions = [] 
-        while cls._class_cleanups: 
-            function, args, kwargs = cls._class_cleanups.pop() 
-            try: 
-                function(*args, **kwargs) 
-            except Exception: 
-                cls.tearDown_exceptions.append(sys.exc_info()) 
- 
+    @classmethod
+    def doClassCleanups(cls):
+        """Execute all class cleanup functions. Normally called for you after
+        tearDownClass."""
+        cls.tearDown_exceptions = []
+        while cls._class_cleanups:
+            function, args, kwargs = cls._class_cleanups.pop()
+            try:
+                function(*args, **kwargs)
+            except Exception:
+                cls.tearDown_exceptions.append(sys.exc_info())
+
     def __call__(self, *args, **kwds):
         return self.run(*args, **kwds)
 
     def debug(self):
         """Run the test without collecting errors in a TestResult"""
-        testMethod = getattr(self, self._testMethodName) 
-        if (getattr(self.__class__, "__unittest_skip__", False) or 
-            getattr(testMethod, "__unittest_skip__", False)): 
-            # If the class or method was skipped. 
-            skip_why = (getattr(self.__class__, '__unittest_skip_why__', '') 
-                        or getattr(testMethod, '__unittest_skip_why__', '')) 
-            raise SkipTest(skip_why) 
- 
-        self._callSetUp() 
-        self._callTestMethod(testMethod) 
-        self._callTearDown() 
+        testMethod = getattr(self, self._testMethodName)
+        if (getattr(self.__class__, "__unittest_skip__", False) or
+            getattr(testMethod, "__unittest_skip__", False)):
+            # If the class or method was skipped.
+            skip_why = (getattr(self.__class__, '__unittest_skip_why__', '')
+                        or getattr(testMethod, '__unittest_skip_why__', ''))
+            raise SkipTest(skip_why)
+
+        self._callSetUp()
+        self._callTestMethod(testMethod)
+        self._callTearDown()
         while self._cleanups:
-            function, args, kwargs = self._cleanups.pop() 
-            self._callCleanup(function, *args, **kwargs) 
+            function, args, kwargs = self._cleanups.pop()
+            self._callCleanup(function, *args, **kwargs)
 
     def skipTest(self, reason):
         """Skip this test."""
@@ -792,8 +792,8 @@ class TestCase(object):
             self.assertEqual(cm.output, ['INFO:foo:first message',
                                          'ERROR:foo.bar:second message'])
         """
-        # Lazy import to avoid importing logging if it is not needed. 
-        from ._log import _AssertLogsContext 
+        # Lazy import to avoid importing logging if it is not needed.
+        from ._log import _AssertLogsContext
         return _AssertLogsContext(self, logger, level)
 
     def _getAssertEqualityFunc(self, first, second):
@@ -1165,8 +1165,8 @@ class TestCase(object):
 
 
     def assertCountEqual(self, first, second, msg=None):
-        """Asserts that two iterables have the same elements, the same number of 
-        times, without regard to order. 
+        """Asserts that two iterables have the same elements, the same number of
+        times, without regard to order.
 
             self.assertEqual(Counter(list(first)),
                              Counter(list(second)))

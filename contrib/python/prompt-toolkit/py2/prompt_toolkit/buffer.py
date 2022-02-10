@@ -12,7 +12,7 @@ from .enums import IncrementalSearchDirection
 from .filters import to_simple_filter
 from .history import History, InMemoryHistory
 from .search_state import SearchState
-from .selection import SelectionType, SelectionState, PasteMode 
+from .selection import SelectionType, SelectionState, PasteMode
 from .utils import Event
 from .cache import FastDictCache
 from .validation import ValidationError
@@ -21,7 +21,7 @@ from six.moves import range
 
 import os
 import re
-import shlex 
+import shlex
 import six
 import subprocess
 import tempfile
@@ -87,27 +87,27 @@ class AcceptAction(object):
 
 
 def _return_document_handler(cli, buffer):
-    # Set return value. 
+    # Set return value.
     cli.set_return_value(buffer.document)
 
-    # Make sure that if we run this UI again, that we reset this buffer, next 
-    # time. 
-    def reset_this_buffer(): 
-        buffer.reset() 
-    cli.pre_run_callables.append(reset_this_buffer) 
+    # Make sure that if we run this UI again, that we reset this buffer, next
+    # time.
+    def reset_this_buffer():
+        buffer.reset()
+    cli.pre_run_callables.append(reset_this_buffer)
 
- 
+
 AcceptAction.RETURN_DOCUMENT = AcceptAction(_return_document_handler)
 AcceptAction.IGNORE = AcceptAction(handler=None)
 
 
-class ValidationState(object): 
-    " The validation state of a buffer. This is set after the validation. " 
-    VALID = 'VALID' 
-    INVALID = 'INVALID' 
-    UNKNOWN = 'UNKNOWN' 
- 
- 
+class ValidationState(object):
+    " The validation state of a buffer. This is set after the validation. "
+    VALID = 'VALID'
+    INVALID = 'INVALID'
+    UNKNOWN = 'UNKNOWN'
+
+
 class CompletionState(object):
     """
     Immutable class that contains a completion state.
@@ -285,7 +285,7 @@ class Buffer(object):
 
         # `ValidationError` instance. (Will be set when the input is wrong.)
         self.validation_error = None
-        self.validation_state = ValidationState.UNKNOWN 
+        self.validation_state = ValidationState.UNKNOWN
 
         # State of the selection.
         self.selection_state = None
@@ -304,10 +304,10 @@ class Buffer(object):
         # State of Emacs yank-nth-arg completion.
         self.yank_nth_arg_state = None  # for yank-nth-arg.
 
-        # Remember the document that we had *right before* the last paste 
-        # operation. This is used for rotating through the kill ring. 
-        self.document_before_paste = None 
- 
+        # Remember the document that we had *right before* the last paste
+        # operation. This is used for rotating through the kill ring.
+        self.document_before_paste = None
+
         # Current suggestion.
         self.suggestion = None
 
@@ -413,10 +413,10 @@ class Buffer(object):
     def _text_changed(self):
         # Remove any validation errors and complete state.
         self.validation_error = None
-        self.validation_state = ValidationState.UNKNOWN 
+        self.validation_state = ValidationState.UNKNOWN
         self.complete_state = None
         self.yank_nth_arg_state = None
-        self.document_before_paste = None 
+        self.document_before_paste = None
         self.selection_state = None
         self.suggestion = None
         self.preferred_column = None
@@ -427,10 +427,10 @@ class Buffer(object):
     def _cursor_position_changed(self):
         # Remove any validation errors and complete state.
         self.validation_error = None
-        self.validation_state = ValidationState.UNKNOWN 
+        self.validation_state = ValidationState.UNKNOWN
         self.complete_state = None
         self.yank_nth_arg_state = None
-        self.document_before_paste = None 
+        self.document_before_paste = None
 
         # Unset preferred_column. (Will be set after the cursor movement, if
         # required.)
@@ -849,7 +849,7 @@ class Buffer(object):
         """ Set `history_search_text`. """
         if self.enable_history_search():
             if self.history_search_text is None:
-                self.history_search_text = self.document.text_before_cursor 
+                self.history_search_text = self.document.text_before_cursor
         else:
             self.history_search_text = None
 
@@ -986,20 +986,20 @@ class Buffer(object):
         """
         return self.copy_selection(_cut=True)
 
-    def paste_clipboard_data(self, data, paste_mode=PasteMode.EMACS, count=1): 
+    def paste_clipboard_data(self, data, paste_mode=PasteMode.EMACS, count=1):
         """
         Insert the data from the clipboard.
         """
         assert isinstance(data, ClipboardData)
-        assert paste_mode in (PasteMode.VI_BEFORE, PasteMode.VI_AFTER, PasteMode.EMACS) 
+        assert paste_mode in (PasteMode.VI_BEFORE, PasteMode.VI_AFTER, PasteMode.EMACS)
 
-        original_document = self.document 
-        self.document = self.document.paste_clipboard_data(data, paste_mode=paste_mode, count=count) 
- 
-        # Remember original document. This assignment should come at the end, 
-        # because assigning to 'document' will erase it. 
-        self.document_before_paste = original_document 
- 
+        original_document = self.document
+        self.document = self.document.paste_clipboard_data(data, paste_mode=paste_mode, count=count)
+
+        # Remember original document. This assignment should come at the end,
+        # because assigning to 'document' will erase it.
+        self.document_before_paste = original_document
+
     def newline(self, copy_margin=True):
         """
         Insert a line ending at the current position.
@@ -1093,10 +1093,10 @@ class Buffer(object):
         """
         Returns `True` if valid.
         """
-        # Don't call the validator again, if it was already called for the 
-        # current input. 
-        if self.validation_state != ValidationState.UNKNOWN: 
-            return self.validation_state == ValidationState.VALID 
+        # Don't call the validator again, if it was already called for the
+        # current input.
+        if self.validation_state != ValidationState.UNKNOWN:
+            return self.validation_state == ValidationState.VALID
 
         # Validate first. If not valid, set validation exception.
         if self.validator:
@@ -1107,12 +1107,12 @@ class Buffer(object):
                 cursor_position = e.cursor_position
                 self.cursor_position = min(max(0, cursor_position), len(self.text))
 
-                self.validation_state = ValidationState.INVALID 
+                self.validation_state = ValidationState.INVALID
                 self.validation_error = e
                 return False
 
-        self.validation_state = ValidationState.VALID 
-        self.validation_error = None 
+        self.validation_state = ValidationState.VALID
+        self.validation_error = None
         return True
 
     def append_to_history(self):
@@ -1297,13 +1297,13 @@ class Buffer(object):
 
         Return True when we received a zero return code.
         """
-        # If the 'VISUAL' or 'EDITOR' environment variable has been set, use that. 
+        # If the 'VISUAL' or 'EDITOR' environment variable has been set, use that.
         # Otherwise, fall back to the first available editor that we can find.
-        visual = os.environ.get('VISUAL') 
+        visual = os.environ.get('VISUAL')
         editor = os.environ.get('EDITOR')
 
         editors = [
-            visual, 
+            visual,
             editor,
 
             # Order of preference.
@@ -1317,9 +1317,9 @@ class Buffer(object):
         for e in editors:
             if e:
                 try:
-                    # Use 'shlex.split()', because $VISUAL can contain spaces 
-                    # and quotes. 
-                    returncode = subprocess.call(shlex.split(e) + [filename]) 
+                    # Use 'shlex.split()', because $VISUAL can contain spaces
+                    # and quotes.
+                    returncode = subprocess.call(shlex.split(e) + [filename])
                     return returncode == 0
 
                 except OSError:

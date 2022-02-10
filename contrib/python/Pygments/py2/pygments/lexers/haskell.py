@@ -325,10 +325,10 @@ class AgdaLexer(RegexLexer):
             #  Identifiers
             (r'\b(%s)(?!\')\b' % '|'.join(reserved), Keyword.Reserved),
             (r'(import|module)(\s+)', bygroups(Keyword.Reserved, Text), 'module'),
-            (u'\\b(Set|Prop)[\u2080-\u2089]*\\b', Keyword.Type), 
+            (u'\\b(Set|Prop)[\u2080-\u2089]*\\b', Keyword.Type),
             #  Special Symbols
             (r'(\(|\)|\{|\})', Operator),
-            (u'(\\.{1,3}|\\||\u03BB|\u2200|\u2192|:|=|->)', Operator.Word), 
+            (u'(\\.{1,3}|\\||\u03BB|\u2200|\u2192|:|=|->)', Operator.Word),
             #  Numbers
             (r'\d+[eE][+-]?\d+', Number.Float),
             (r'\d+\.\d+([eE][+-]?\d+)?', Number.Float),
@@ -481,10 +481,10 @@ class CryptolLexer(RegexLexer):
         ],
     }
 
-    EXTRA_KEYWORDS = {'join', 'split', 'reverse', 'transpose', 'width', 
-                      'length', 'tail', '<<', '>>', '<<<', '>>>', 'const', 
-                      'reg', 'par', 'seq', 'ASSERT', 'undefined', 'error', 
-                      'trace'} 
+    EXTRA_KEYWORDS = {'join', 'split', 'reverse', 'transpose', 'width',
+                      'length', 'tail', '<<', '>>', '<<<', '>>>', 'const',
+                      'reg', 'par', 'seq', 'ASSERT', 'undefined', 'error',
+                      'trace'}
 
     def get_tokens_unprocessed(self, text):
         stack = ['root']

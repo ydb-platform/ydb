@@ -12,7 +12,7 @@
 # language governing permissions and limitations under the License.
 import copy
 
-from boto3.compat import collections_abc 
+from boto3.compat import collections_abc
 from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
 from boto3.dynamodb.conditions import ConditionBase
 from boto3.dynamodb.conditions import ConditionExpressionBuilder
@@ -198,11 +198,11 @@ class TransformationInjector(object):
 
     def inject_attribute_value_output(self, parsed, model, **kwargs):
         """Injects DynamoDB deserialization into responses"""
-        if model.output_shape is not None: 
-            self._transformer.transform( 
-                parsed, model.output_shape, self._deserializer.deserialize, 
-                'AttributeValue' 
-            ) 
+        if model.output_shape is not None:
+            self._transformer.transform(
+                parsed, model.output_shape, self._deserializer.deserialize,
+                'AttributeValue'
+            )
 
 
 class ConditionExpressionTransformation(object):
@@ -262,7 +262,7 @@ class ParameterTransformer(object):
 
     def _transform_structure(self, model, params, transformation,
                              target_shape):
-        if not isinstance(params, collections_abc.Mapping): 
+        if not isinstance(params, collections_abc.Mapping):
             return
         for param in params:
             if param in model.members:
@@ -276,7 +276,7 @@ class ParameterTransformer(object):
                         target_shape)
 
     def _transform_map(self, model, params, transformation, target_shape):
-        if not isinstance(params, collections_abc.Mapping): 
+        if not isinstance(params, collections_abc.Mapping):
             return
         value_model = model.value
         value_shape = value_model.name
@@ -288,7 +288,7 @@ class ParameterTransformer(object):
                     value_model, params[key], transformation, target_shape)
 
     def _transform_list(self, model, params, transformation, target_shape):
-        if not isinstance(params, collections_abc.MutableSequence): 
+        if not isinstance(params, collections_abc.MutableSequence):
             return
         member_model = model.member
         member_shape = member_model.name

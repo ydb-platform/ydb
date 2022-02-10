@@ -104,16 +104,16 @@ bool AArch64PreLegalizerCombinerInfo::combine(GISelChangeObserver &Observer,
     return Helper.tryCombineConcatVectors(MI);
   case TargetOpcode::G_SHUFFLE_VECTOR:
     return Helper.tryCombineShuffleVector(MI);
-  case TargetOpcode::G_MEMCPY: 
-  case TargetOpcode::G_MEMMOVE: 
-  case TargetOpcode::G_MEMSET: { 
-    // If we're at -O0 set a maxlen of 32 to inline, otherwise let the other 
-    // heuristics decide. 
-    unsigned MaxLen = EnableOpt ? 0 : 32; 
-    // Try to inline memcpy type calls if optimizations are enabled. 
-    return !EnableMinSize ? Helper.tryCombineMemCpyFamily(MI, MaxLen) : false; 
+  case TargetOpcode::G_MEMCPY:
+  case TargetOpcode::G_MEMMOVE:
+  case TargetOpcode::G_MEMSET: {
+    // If we're at -O0 set a maxlen of 32 to inline, otherwise let the other
+    // heuristics decide.
+    unsigned MaxLen = EnableOpt ? 0 : 32;
+    // Try to inline memcpy type calls if optimizations are enabled.
+    return !EnableMinSize ? Helper.tryCombineMemCpyFamily(MI, MaxLen) : false;
   }
-  } 
+  }
 
   return false;
 }
@@ -188,7 +188,7 @@ INITIALIZE_PASS_END(AArch64PreLegalizerCombiner, DEBUG_TYPE,
 
 
 namespace llvm {
-FunctionPass *createAArch64PreLegalizerCombiner(bool IsOptNone) { 
+FunctionPass *createAArch64PreLegalizerCombiner(bool IsOptNone) {
   return new AArch64PreLegalizerCombiner(IsOptNone);
 }
 } // end namespace llvm

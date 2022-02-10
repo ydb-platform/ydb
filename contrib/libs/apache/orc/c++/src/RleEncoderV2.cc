@@ -123,7 +123,7 @@ void RleEncoderV2::write(int64_t val) {
             numLiterals = MIN_REPEAT;
         }
 
-        if (fixedRunLength == MAX_LITERAL_SIZE) { 
+        if (fixedRunLength == MAX_LITERAL_SIZE) {
             determineEncoding(option);
             writeValues(option);
         }
@@ -696,7 +696,7 @@ void RleEncoderV2::writeInts(int64_t* input, uint32_t offset, size_t len, uint32
   if (getClosestAlignedFixedBits(bitSize) == bitSize) {
     uint32_t numBytes;
     uint32_t endOffSet = static_cast<uint32_t>(offset + len);
-    if (bitSize < 8 ) { 
+    if (bitSize < 8 ) {
       char bitMask = static_cast<char>((1 << bitSize) - 1);
       uint32_t numHops = 8 / bitSize;
       uint32_t remainder = static_cast<uint32_t>(len % numHops);

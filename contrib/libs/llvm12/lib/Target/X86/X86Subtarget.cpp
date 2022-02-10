@@ -166,10 +166,10 @@ unsigned char X86Subtarget::classifyGlobalReference(const GlobalValue *GV,
     return X86II::MO_DARWIN_NONLAZY_PIC_BASE;
   }
 
-  // 32-bit ELF references GlobalAddress directly in static relocation model. 
-  // We cannot use MO_GOT because EBX may not be set up. 
-  if (TM.getRelocationModel() == Reloc::Static) 
-    return X86II::MO_NO_FLAG; 
+  // 32-bit ELF references GlobalAddress directly in static relocation model.
+  // We cannot use MO_GOT because EBX may not be set up.
+  if (TM.getRelocationModel() == Reloc::Static)
+    return X86II::MO_NO_FLAG;
   return X86II::MO_GOT;
 }
 
@@ -206,9 +206,9 @@ X86Subtarget::classifyGlobalFunctionReference(const GlobalValue *GV,
          (!F && M.getRtLibUseGOT())) &&
         is64Bit())
        return X86II::MO_GOTPCREL;
-    // Reference ExternalSymbol directly in static relocation model. 
-    if (!is64Bit() && !GV && TM.getRelocationModel() == Reloc::Static) 
-      return X86II::MO_NO_FLAG; 
+    // Reference ExternalSymbol directly in static relocation model.
+    if (!is64Bit() && !GV && TM.getRelocationModel() == Reloc::Static)
+      return X86II::MO_NO_FLAG;
     return X86II::MO_PLT;
   }
 
@@ -234,22 +234,22 @@ bool X86Subtarget::isLegalToCallImmediateAddr() const {
   return isTargetELF() || TM.getRelocationModel() == Reloc::Static;
 }
 
-void X86Subtarget::initSubtargetFeatures(StringRef CPU, StringRef TuneCPU, 
-                                         StringRef FS) { 
-  if (CPU.empty()) 
-    CPU = "generic"; 
+void X86Subtarget::initSubtargetFeatures(StringRef CPU, StringRef TuneCPU,
+                                         StringRef FS) {
+  if (CPU.empty())
+    CPU = "generic";
 
-  if (TuneCPU.empty()) 
-    TuneCPU = "i586"; // FIXME: "generic" is more modern than llc tests expect. 
+  if (TuneCPU.empty())
+    TuneCPU = "i586"; // FIXME: "generic" is more modern than llc tests expect.
 
-  std::string FullFS = X86_MC::ParseX86Triple(TargetTriple); 
-  assert(!FullFS.empty() && "Failed to parse X86 triple"); 
+  std::string FullFS = X86_MC::ParseX86Triple(TargetTriple);
+  assert(!FullFS.empty() && "Failed to parse X86 triple");
 
-  if (!FS.empty()) 
-    FullFS = (Twine(FullFS) + "," + FS).str(); 
+  if (!FS.empty())
+    FullFS = (Twine(FullFS) + "," + FS).str();
 
   // Parse features string and set the CPU.
-  ParseSubtargetFeatures(CPU, TuneCPU, FullFS); 
+  ParseSubtargetFeatures(CPU, TuneCPU, FullFS);
 
   // All CPUs that implement SSE4.2 or SSE4A support unaligned accesses of
   // 16-bytes and under that are reasonably fast. These features were
@@ -265,13 +265,13 @@ void X86Subtarget::initSubtargetFeatures(StringRef CPU, StringRef TuneCPU,
     report_fatal_error("64-bit code requested on a subtarget that doesn't "
                        "support it!");
 
-  // Stack alignment is 16 bytes on Darwin, Linux, kFreeBSD and for all 
-  // 64-bit targets.  On Solaris (32-bit), stack alignment is 4 bytes 
-  // following the i386 psABI, while on Illumos it is always 16 bytes. 
+  // Stack alignment is 16 bytes on Darwin, Linux, kFreeBSD and for all
+  // 64-bit targets.  On Solaris (32-bit), stack alignment is 4 bytes
+  // following the i386 psABI, while on Illumos it is always 16 bytes.
   if (StackAlignOverride)
     stackAlignment = *StackAlignOverride;
-  else if (isTargetDarwin() || isTargetLinux() || isTargetKFreeBSD() || 
-           In64BitMode) 
+  else if (isTargetDarwin() || isTargetLinux() || isTargetKFreeBSD() ||
+           In64BitMode)
     stackAlignment = Align(16);
 
   // Consume the vector width attribute or apply any target specific limit.
@@ -284,24 +284,24 @@ void X86Subtarget::initSubtargetFeatures(StringRef CPU, StringRef TuneCPU,
 }
 
 X86Subtarget &X86Subtarget::initializeSubtargetDependencies(StringRef CPU,
-                                                            StringRef TuneCPU, 
+                                                            StringRef TuneCPU,
                                                             StringRef FS) {
-  initSubtargetFeatures(CPU, TuneCPU, FS); 
+  initSubtargetFeatures(CPU, TuneCPU, FS);
   return *this;
 }
 
-X86Subtarget::X86Subtarget(const Triple &TT, StringRef CPU, StringRef TuneCPU, 
-                           StringRef FS, const X86TargetMachine &TM, 
+X86Subtarget::X86Subtarget(const Triple &TT, StringRef CPU, StringRef TuneCPU,
+                           StringRef FS, const X86TargetMachine &TM,
                            MaybeAlign StackAlignOverride,
                            unsigned PreferVectorWidthOverride,
                            unsigned RequiredVectorWidth)
-    : X86GenSubtargetInfo(TT, CPU, TuneCPU, FS), 
-      PICStyle(PICStyles::Style::None), TM(TM), TargetTriple(TT), 
-      StackAlignOverride(StackAlignOverride), 
+    : X86GenSubtargetInfo(TT, CPU, TuneCPU, FS),
+      PICStyle(PICStyles::Style::None), TM(TM), TargetTriple(TT),
+      StackAlignOverride(StackAlignOverride),
       PreferVectorWidthOverride(PreferVectorWidthOverride),
       RequiredVectorWidth(RequiredVectorWidth),
-      InstrInfo(initializeSubtargetDependencies(CPU, TuneCPU, FS)), 
-      TLInfo(TM, *this), FrameLowering(*this, getStackAlignment()) { 
+      InstrInfo(initializeSubtargetDependencies(CPU, TuneCPU, FS)),
+      TLInfo(TM, *this), FrameLowering(*this, getStackAlignment()) {
   // Determine the PICStyle based on the target selected.
   if (!isPositionIndependent())
     setPICStyle(PICStyles::Style::None);

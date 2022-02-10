@@ -100,10 +100,10 @@ static PyObject *b_getwinerror(PyObject *self, PyObject *args, PyObject *kwds)
             s_buf[--len] = L'\0';
         message = PyUnicode_FromWideChar(s_buf, len);
     }
-    if (message != NULL) { 
+    if (message != NULL) {
         v = Py_BuildValue("(iO)", err, message);
-        Py_DECREF(message); 
-    } 
+        Py_DECREF(message);
+    }
     else
         v = NULL;
     LocalFree(s_buf);
@@ -169,14 +169,14 @@ static PyObject *b_getwinerror(PyObject *self, PyObject *args, PyObject *kwds)
 
 static void *dlopen(const char *filename, int flag)
 {
-    return (void *)LoadLibraryA(filename); 
+    return (void *)LoadLibraryA(filename);
 }
 
-static void *dlopenW(const wchar_t *filename) 
-{ 
-    return (void *)LoadLibraryW(filename); 
-} 
- 
+static void *dlopenW(const wchar_t *filename)
+{
+    return (void *)LoadLibraryW(filename);
+}
+
 static void *dlsym(void *handle, const char *symbol)
 {
     void *address = GetProcAddress((HMODULE)handle, symbol);

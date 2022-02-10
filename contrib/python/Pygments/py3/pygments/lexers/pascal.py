@@ -4,7 +4,7 @@
 
     Lexers for Pascal family languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -67,29 +67,29 @@ class DelphiLexer(Lexer):
         'dispose', 'exit', 'false', 'new', 'true'
     )
 
-    BLOCK_KEYWORDS = { 
+    BLOCK_KEYWORDS = {
         'begin', 'class', 'const', 'constructor', 'destructor', 'end',
         'finalization', 'function', 'implementation', 'initialization',
         'label', 'library', 'operator', 'procedure', 'program', 'property',
         'record', 'threadvar', 'type', 'unit', 'uses', 'var'
-    } 
+    }
 
-    FUNCTION_MODIFIERS = { 
+    FUNCTION_MODIFIERS = {
         'alias', 'cdecl', 'export', 'inline', 'interrupt', 'nostackframe',
         'pascal', 'register', 'safecall', 'softfloat', 'stdcall',
         'varargs', 'name', 'dynamic', 'near', 'virtual', 'external',
         'override', 'assembler'
-    } 
+    }
 
     # XXX: those aren't global. but currently we know no way for defining
     #      them just for the type context.
-    DIRECTIVES = { 
+    DIRECTIVES = {
         'absolute', 'abstract', 'assembler', 'cppdecl', 'default', 'far',
         'far16', 'forward', 'index', 'oldfpccall', 'private', 'protected',
         'published', 'public'
-    } 
+    }
 
-    BUILTIN_TYPES = { 
+    BUILTIN_TYPES = {
         'ansichar', 'ansistring', 'bool', 'boolean', 'byte', 'bytebool',
         'cardinal', 'char', 'comp', 'currency', 'double', 'dword',
         'extended', 'int64', 'integer', 'iunknown', 'longbool', 'longint',
@@ -103,7 +103,7 @@ class DelphiLexer(Lexer):
         'shortstring', 'single', 'smallint', 'string', 'tclass', 'tdate',
         'tdatetime', 'textfile', 'thandle', 'tobject', 'ttime', 'variant',
         'widechar', 'widestring', 'word', 'wordbool'
-    } 
+    }
 
     BUILTIN_UNITS = {
         'System': (
@@ -245,7 +245,7 @@ class DelphiLexer(Lexer):
         )
     }
 
-    ASM_REGISTERS = { 
+    ASM_REGISTERS = {
         'ah', 'al', 'ax', 'bh', 'bl', 'bp', 'bx', 'ch', 'cl', 'cr0',
         'cr1', 'cr2', 'cr3', 'cr4', 'cs', 'cx', 'dh', 'di', 'dl', 'dr0',
         'dr1', 'dr2', 'dr3', 'dr4', 'dr5', 'dr6', 'dr7', 'ds', 'dx',
@@ -254,9 +254,9 @@ class DelphiLexer(Lexer):
         'mm7', 'si', 'sp', 'ss', 'st0', 'st1', 'st2', 'st3', 'st4', 'st5',
         'st6', 'st7', 'xmm0', 'xmm1', 'xmm2', 'xmm3', 'xmm4', 'xmm5',
         'xmm6', 'xmm7'
-    } 
+    }
 
-    ASM_INSTRUCTIONS = { 
+    ASM_INSTRUCTIONS = {
         'aaa', 'aad', 'aam', 'aas', 'adc', 'add', 'and', 'arpl', 'bound',
         'bsf', 'bsr', 'bswap', 'bt', 'btc', 'btr', 'bts', 'call', 'cbw',
         'cdq', 'clc', 'cld', 'cli', 'clts', 'cmc', 'cmova', 'cmovae',
@@ -295,7 +295,7 @@ class DelphiLexer(Lexer):
         'sysret', 'test', 'ud1', 'ud2', 'umov', 'verr', 'verw', 'wait',
         'wbinvd', 'wrmsr', 'wrshr', 'xadd', 'xbts', 'xchg', 'xlat',
         'xlatb', 'xor'
-    } 
+    }
 
     def __init__(self, **options):
         Lexer.__init__(self, **options)
@@ -562,9 +562,9 @@ class AdaLexer(RegexLexer):
                 'exception', 'exit', 'interface', 'for', 'goto', 'if', 'is', 'limited',
                 'loop', 'new', 'null', 'of', 'or', 'others', 'out', 'overriding',
                 'pragma', 'protected', 'raise', 'range', 'record', 'renames', 'requeue',
-                'return', 'reverse', 'select', 'separate', 'some', 'subtype', 
-                'synchronized', 'task', 'tagged', 'terminate', 'then', 'type', 'until', 
-                'when', 'while', 'xor'), prefix=r'\b', suffix=r'\b'), 
+                'return', 'reverse', 'select', 'separate', 'some', 'subtype',
+                'synchronized', 'task', 'tagged', 'terminate', 'then', 'type', 'until',
+                'when', 'while', 'xor'), prefix=r'\b', suffix=r'\b'),
              Keyword.Reserved),
             (r'"[^"]*"', String),
             include('attribute'),
@@ -576,7 +576,7 @@ class AdaLexer(RegexLexer):
             (r'\n+', Text),
         ],
         'numbers': [
-            (r'[0-9_]+#[0-9a-f_\.]+#', Number.Hex), 
+            (r'[0-9_]+#[0-9a-f_\.]+#', Number.Hex),
             (r'[0-9_]+\.[0-9_]*', Number.Float),
             (r'[0-9_]+', Number.Integer),
         ],

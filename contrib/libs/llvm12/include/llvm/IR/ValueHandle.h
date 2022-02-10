@@ -265,13 +265,13 @@ template <> struct simplify_type<const WeakTrackingVH> {
 /// class turns into a trivial wrapper around a pointer.
 template <typename ValueTy>
 class AssertingVH
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS 
-    : public ValueHandleBase 
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+    : public ValueHandleBase
 #endif
-{ 
+{
   friend struct DenseMapInfo<AssertingVH<ValueTy>>;
 
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS 
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
   Value *getRawValPtr() const { return ValueHandleBase::getValPtr(); }
   void setRawValPtr(Value *P) { ValueHandleBase::operator=(P); }
 #else
@@ -287,14 +287,14 @@ class AssertingVH
   void setValPtr(ValueTy *P) { setRawValPtr(GetAsValue(P)); }
 
 public:
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS 
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
   AssertingVH() : ValueHandleBase(Assert) {}
   AssertingVH(ValueTy *P) : ValueHandleBase(Assert, GetAsValue(P)) {}
   AssertingVH(const AssertingVH &RHS) : ValueHandleBase(Assert, RHS) {}
 #else
   AssertingVH() : ThePtr(nullptr) {}
   AssertingVH(ValueTy *P) : ThePtr(GetAsValue(P)) {}
-  AssertingVH(const AssertingVH &) = default; 
+  AssertingVH(const AssertingVH &) = default;
 #endif
 
   operator ValueTy*() const {
@@ -449,9 +449,9 @@ public:
 /// PoisoningVH's as it moves. This is required because in non-assert mode this
 /// class turns into a trivial wrapper around a pointer.
 template <typename ValueTy>
-class PoisoningVH final 
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS 
-    : public CallbackVH 
+class PoisoningVH final
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+    : public CallbackVH
 #endif
 {
   friend struct DenseMapInfo<PoisoningVH<ValueTy>>;
@@ -460,7 +460,7 @@ class PoisoningVH final
   static Value *GetAsValue(Value *V) { return V; }
   static Value *GetAsValue(const Value *V) { return const_cast<Value *>(V); }
 
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS 
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
   /// A flag tracking whether this value has been poisoned.
   ///
   /// On delete and RAUW, we leave the value pointer alone so that as a raw
@@ -485,7 +485,7 @@ class PoisoningVH final
     Poisoned = true;
     RemoveFromUseList();
   }
-#else // LLVM_ENABLE_ABI_BREAKING_CHECKS 
+#else // LLVM_ENABLE_ABI_BREAKING_CHECKS
   Value *ThePtr = nullptr;
 
   Value *getRawValPtr() const { return ThePtr; }
@@ -493,16 +493,16 @@ class PoisoningVH final
 #endif
 
   ValueTy *getValPtr() const {
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS 
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
     assert(!Poisoned && "Accessed a poisoned value handle!");
-#endif 
+#endif
     return static_cast<ValueTy *>(getRawValPtr());
   }
   void setValPtr(ValueTy *P) { setRawValPtr(GetAsValue(P)); }
 
 public:
   PoisoningVH() = default;
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS 
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
   PoisoningVH(ValueTy *P) : CallbackVH(GetAsValue(P)) {}
   PoisoningVH(const PoisoningVH &RHS)
       : CallbackVH(RHS), Poisoned(RHS.Poisoned) {}

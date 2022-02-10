@@ -4,7 +4,7 @@
 
     Lexers for Xorg configs.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -28,7 +28,7 @@ class XorgLexer(RegexLexer):
 
             (r'((?:Sub)?Section)(\s+)("\w+")',
              bygroups(String.Escape, Text, String.Escape)),
-            (r'(End(?:Sub)?Section)', String.Escape), 
+            (r'(End(?:Sub)?Section)', String.Escape),
 
             (r'(\w+)(\s+)([^\n#]+)',
              bygroups(Name.Builtin, Text, Name.Constant)),

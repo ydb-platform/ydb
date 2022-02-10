@@ -56,8 +56,8 @@ import copy
 import distutils.log
 import textwrap
 
-IO_ENCODING = sys.getfilesystemencoding() 
-IS_PY2 = sys.version_info[0] < 3 
+IO_ENCODING = sys.getfilesystemencoding()
+IS_PY2 = sys.version_info[0] < 3
 
 try:
     reload
@@ -102,14 +102,14 @@ PGO_CONFIG = {
 PGO_CONFIG['mingw32'] = PGO_CONFIG['gcc']
 
 
-if IS_PY2: 
-    def encode_fs(name): 
-        return name if isinstance(name, bytes) else name.encode(IO_ENCODING) 
-else: 
-    def encode_fs(name): 
-        return name 
- 
- 
+if IS_PY2:
+    def encode_fs(name):
+        return name if isinstance(name, bytes) else name.encode(IO_ENCODING)
+else:
+    def encode_fs(name):
+        return name
+
+
 @magics_class
 class CythonMagics(Magics):
 
@@ -315,7 +315,7 @@ class CythonMagics(Magics):
             key += (time.time(),)
 
         if args.name:
-            module_name = str(args.name)  # no-op in Py3 
+            module_name = str(args.name)  # no-op in Py3
         else:
             module_name = "_cython_magic_" + hashlib.md5(str(key).encode('utf-8')).hexdigest()
         html_file = os.path.join(lib_dir, module_name + '.html')
@@ -331,9 +331,9 @@ class CythonMagics(Magics):
         extension = None
         if need_cythonize:
             extensions = self._cythonize(module_name, code, lib_dir, args, quiet=args.quiet)
-            if extensions is None: 
-                # Compilation failed and printed error message 
-                return None 
+            if extensions is None:
+                # Compilation failed and printed error message
+                return None
             assert len(extensions) == 1
             extension = extensions[0]
             self._code_cache[key] = module_name
@@ -341,12 +341,12 @@ class CythonMagics(Magics):
             if args.pgo:
                 self._profile_pgo_wrapper(extension, lib_dir)
 
-        try: 
-            self._build_extension(extension, lib_dir, pgo_step_name='use' if args.pgo else None, 
-                                  quiet=args.quiet) 
-        except distutils.errors.CompileError: 
-            # Build failed and printed error message 
-            return None 
+        try:
+            self._build_extension(extension, lib_dir, pgo_step_name='use' if args.pgo else None,
+                                  quiet=args.quiet)
+        except distutils.errors.CompileError:
+            # Build failed and printed error message
+            return None
 
         module = imp.load_dynamic(module_name, module_path)
         self._import_all(module)
@@ -415,7 +415,7 @@ class CythonMagics(Magics):
 
     def _cythonize(self, module_name, code, lib_dir, args, quiet=True):
         pyx_file = os.path.join(lib_dir, module_name + '.pyx')
-        pyx_file = encode_fs(pyx_file) 
+        pyx_file = encode_fs(pyx_file)
 
         c_include_dirs = args.include
         c_src_files = list(map(str, args.src))
@@ -535,10 +535,10 @@ class CythonMagics(Magics):
         build_extension = _build_ext(dist)
         build_extension.finalize_options()
         if temp_dir:
-            temp_dir = encode_fs(temp_dir) 
+            temp_dir = encode_fs(temp_dir)
             build_extension.build_temp = temp_dir
         if lib_dir:
-            lib_dir = encode_fs(lib_dir) 
+            lib_dir = encode_fs(lib_dir)
             build_extension.build_lib = lib_dir
         if extension is not None:
             build_extension.extensions = [extension]

@@ -300,7 +300,7 @@ class ApacheConfLexer(RegexLexer):
     tokens = {
         'root': [
             (r'\s+', Text),
-            (r'#(.*\\\n)+.*$|(#.*?)$', Comment), 
+            (r'#(.*\\\n)+.*$|(#.*?)$', Comment),
             (r'(<[^\s>]+)(?:(\s+)(.*))?(>)',
              bygroups(Name.Tag, Text, String, Name.Tag)),
             (r'([a-z]\w*)(\s+)',
@@ -319,7 +319,7 @@ class ApacheConfLexer(RegexLexer):
              r'os|productonly|full|emerg|alert|crit|error|warn|'
              r'notice|info|debug|registry|script|inetd|standalone|'
              r'user|group)\b', Keyword),
-            (r'"([^"\\]*(?:\\(.|[\n])[^"\\]*)*)"', String.Double), 
+            (r'"([^"\\]*(?:\\(.|[\n])[^"\\]*)*)"', String.Double),
             (r'[^\s"\\]+', Text)
         ],
     }
@@ -540,16 +540,16 @@ class DockerLexer(RegexLexer):
     filenames = ['Dockerfile', '*.docker']
     mimetypes = ['text/x-dockerfile-config']
 
-    _keywords = (r'(?:MAINTAINER|EXPOSE|WORKDIR|USER|STOPSIGNAL)') 
+    _keywords = (r'(?:MAINTAINER|EXPOSE|WORKDIR|USER|STOPSIGNAL)')
     _bash_keywords = (r'(?:RUN|CMD|ENTRYPOINT|ENV|ARG|LABEL|ADD|COPY)')
-    _lb = r'(?:\s*\\?\s*)'  # dockerfile line break regex 
+    _lb = r'(?:\s*\\?\s*)'  # dockerfile line break regex
     flags = re.IGNORECASE | re.MULTILINE
 
     tokens = {
         'root': [
             (r'#.*', Comment),
-            (r'(FROM)([ \t]*)(\S*)([ \t]*)(?:(AS)([ \t]*)(\S*))?', 
-             bygroups(Keyword, Text, String, Text, Keyword, Text, String)), 
+            (r'(FROM)([ \t]*)(\S*)([ \t]*)(?:(AS)([ \t]*)(\S*))?',
+             bygroups(Keyword, Text, String, Text, Keyword, Text, String)),
             (r'(ONBUILD)(%s)' % (_lb,), bygroups(Keyword, using(BashLexer))),
             (r'(HEALTHCHECK)((%s--\w+=\w+%s)*)' % (_lb, _lb),
                 bygroups(Keyword, using(BashLexer))),
@@ -576,35 +576,35 @@ class TerraformLexer(RegexLexer):
     filenames = ['*.tf']
     mimetypes = ['application/x-tf', 'application/x-terraform']
 
-    embedded_keywords = ('ingress', 'egress', 'listener', 'default', 
-                         'connection', 'alias', 'terraform', 'tags', 'vars', 
-                         'config', 'lifecycle', 'timeouts') 
+    embedded_keywords = ('ingress', 'egress', 'listener', 'default',
+                         'connection', 'alias', 'terraform', 'tags', 'vars',
+                         'config', 'lifecycle', 'timeouts')
 
     tokens = {
         'root': [
-            include('string'), 
-            include('punctuation'), 
-            include('curly'), 
-            include('basic'), 
-            include('whitespace'), 
-            (r'[0-9]+', Number), 
+            include('string'),
+            include('punctuation'),
+            include('curly'),
+            include('basic'),
+            include('whitespace'),
+            (r'[0-9]+', Number),
         ],
         'basic': [
-            (words(('true', 'false'), prefix=r'\b', suffix=r'\b'), Keyword.Type), 
-            (r'\s*/\*', Comment.Multiline, 'comment'), 
-            (r'\s*#.*\n', Comment.Single), 
-            (r'(.*?)(\s*)(=)', bygroups(Name.Attribute, Text, Operator)), 
-            (words(('variable', 'resource', 'provider', 'provisioner', 'module', 
-                    'backend', 'data', 'output'), prefix=r'\b', suffix=r'\b'), 
-             Keyword.Reserved, 'function'), 
-            (words(embedded_keywords, prefix=r'\b', suffix=r'\b'), 
-             Keyword.Declaration), 
-            (r'\$\{', String.Interpol, 'var_builtin'), 
+            (words(('true', 'false'), prefix=r'\b', suffix=r'\b'), Keyword.Type),
+            (r'\s*/\*', Comment.Multiline, 'comment'),
+            (r'\s*#.*\n', Comment.Single),
+            (r'(.*?)(\s*)(=)', bygroups(Name.Attribute, Text, Operator)),
+            (words(('variable', 'resource', 'provider', 'provisioner', 'module',
+                    'backend', 'data', 'output'), prefix=r'\b', suffix=r'\b'),
+             Keyword.Reserved, 'function'),
+            (words(embedded_keywords, prefix=r'\b', suffix=r'\b'),
+             Keyword.Declaration),
+            (r'\$\{', String.Interpol, 'var_builtin'),
         ],
         'function': [
-            (r'(\s+)(".*")(\s+)', bygroups(Text, String, Text)), 
-            include('punctuation'), 
-            include('curly'), 
+            (r'(\s+)(".*")(\s+)', bygroups(Text, String, Text)),
+            include('punctuation'),
+            include('curly'),
         ],
         'var_builtin': [
             (r'\$\{', String.Interpol, '#push'),

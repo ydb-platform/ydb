@@ -39,21 +39,21 @@ static bool supportsX86_64(uint64_t Type) {
   }
 }
 
-static uint64_t resolveX86_64(uint64_t Type, uint64_t Offset, uint64_t S, 
-                              uint64_t LocData, int64_t Addend) { 
-  switch (Type) { 
+static uint64_t resolveX86_64(uint64_t Type, uint64_t Offset, uint64_t S,
+                              uint64_t LocData, int64_t Addend) {
+  switch (Type) {
   case ELF::R_X86_64_NONE:
-    return LocData; 
+    return LocData;
   case ELF::R_X86_64_64:
   case ELF::R_X86_64_DTPOFF32:
   case ELF::R_X86_64_DTPOFF64:
-    return S + Addend; 
+    return S + Addend;
   case ELF::R_X86_64_PC32:
   case ELF::R_X86_64_PC64:
-    return S + Addend - Offset; 
+    return S + Addend - Offset;
   case ELF::R_X86_64_32:
   case ELF::R_X86_64_32S:
-    return (S + Addend) & 0xFFFFFFFF; 
+    return (S + Addend) & 0xFFFFFFFF;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -71,17 +71,17 @@ static bool supportsAArch64(uint64_t Type) {
   }
 }
 
-static uint64_t resolveAArch64(uint64_t Type, uint64_t Offset, uint64_t S, 
-                               uint64_t /*LocData*/, int64_t Addend) { 
-  switch (Type) { 
+static uint64_t resolveAArch64(uint64_t Type, uint64_t Offset, uint64_t S,
+                               uint64_t /*LocData*/, int64_t Addend) {
+  switch (Type) {
   case ELF::R_AARCH64_ABS32:
-    return (S + Addend) & 0xFFFFFFFF; 
+    return (S + Addend) & 0xFFFFFFFF;
   case ELF::R_AARCH64_ABS64:
-    return S + Addend; 
+    return S + Addend;
   case ELF::R_AARCH64_PREL32:
-    return (S + Addend - Offset) & 0xFFFFFFFF; 
+    return (S + Addend - Offset) & 0xFFFFFFFF;
   case ELF::R_AARCH64_PREL64:
-    return S + Addend - Offset; 
+    return S + Addend - Offset;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -97,13 +97,13 @@ static bool supportsBPF(uint64_t Type) {
   }
 }
 
-static uint64_t resolveBPF(uint64_t Type, uint64_t Offset, uint64_t S, 
-                           uint64_t LocData, int64_t /*Addend*/) { 
-  switch (Type) { 
+static uint64_t resolveBPF(uint64_t Type, uint64_t Offset, uint64_t S,
+                           uint64_t LocData, int64_t /*Addend*/) {
+  switch (Type) {
   case ELF::R_BPF_64_32:
-    return (S + LocData) & 0xFFFFFFFF; 
+    return (S + LocData) & 0xFFFFFFFF;
   case ELF::R_BPF_64_64:
-    return S + LocData; 
+    return S + LocData;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -121,17 +121,17 @@ static bool supportsMips64(uint64_t Type) {
   }
 }
 
-static uint64_t resolveMips64(uint64_t Type, uint64_t Offset, uint64_t S, 
-                              uint64_t /*LocData*/, int64_t Addend) { 
-  switch (Type) { 
+static uint64_t resolveMips64(uint64_t Type, uint64_t Offset, uint64_t S,
+                              uint64_t /*LocData*/, int64_t Addend) {
+  switch (Type) {
   case ELF::R_MIPS_32:
-    return (S + Addend) & 0xFFFFFFFF; 
+    return (S + Addend) & 0xFFFFFFFF;
   case ELF::R_MIPS_64:
-    return S + Addend; 
+    return S + Addend;
   case ELF::R_MIPS_TLS_DTPREL64:
-    return S + Addend - 0x8000; 
+    return S + Addend - 0x8000;
   case ELF::R_MIPS_PC32:
-    return S + Addend - Offset; 
+    return S + Addend - Offset;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -147,13 +147,13 @@ static bool supportsMSP430(uint64_t Type) {
   }
 }
 
-static uint64_t resolveMSP430(uint64_t Type, uint64_t Offset, uint64_t S, 
-                              uint64_t /*LocData*/, int64_t Addend) { 
-  switch (Type) { 
+static uint64_t resolveMSP430(uint64_t Type, uint64_t Offset, uint64_t S,
+                              uint64_t /*LocData*/, int64_t Addend) {
+  switch (Type) {
   case ELF::R_MSP430_32:
-    return (S + Addend) & 0xFFFFFFFF; 
+    return (S + Addend) & 0xFFFFFFFF;
   case ELF::R_MSP430_16_BYTE:
-    return (S + Addend) & 0xFFFF; 
+    return (S + Addend) & 0xFFFF;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -171,17 +171,17 @@ static bool supportsPPC64(uint64_t Type) {
   }
 }
 
-static uint64_t resolvePPC64(uint64_t Type, uint64_t Offset, uint64_t S, 
-                             uint64_t /*LocData*/, int64_t Addend) { 
-  switch (Type) { 
+static uint64_t resolvePPC64(uint64_t Type, uint64_t Offset, uint64_t S,
+                             uint64_t /*LocData*/, int64_t Addend) {
+  switch (Type) {
   case ELF::R_PPC64_ADDR32:
-    return (S + Addend) & 0xFFFFFFFF; 
+    return (S + Addend) & 0xFFFFFFFF;
   case ELF::R_PPC64_ADDR64:
-    return S + Addend; 
+    return S + Addend;
   case ELF::R_PPC64_REL32:
-    return (S + Addend - Offset) & 0xFFFFFFFF; 
+    return (S + Addend - Offset) & 0xFFFFFFFF;
   case ELF::R_PPC64_REL64:
-    return S + Addend - Offset; 
+    return S + Addend - Offset;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -197,13 +197,13 @@ static bool supportsSystemZ(uint64_t Type) {
   }
 }
 
-static uint64_t resolveSystemZ(uint64_t Type, uint64_t Offset, uint64_t S, 
-                               uint64_t /*LocData*/, int64_t Addend) { 
-  switch (Type) { 
+static uint64_t resolveSystemZ(uint64_t Type, uint64_t Offset, uint64_t S,
+                               uint64_t /*LocData*/, int64_t Addend) {
+  switch (Type) {
   case ELF::R_390_32:
-    return (S + Addend) & 0xFFFFFFFF; 
+    return (S + Addend) & 0xFFFFFFFF;
   case ELF::R_390_64:
-    return S + Addend; 
+    return S + Addend;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -221,14 +221,14 @@ static bool supportsSparc64(uint64_t Type) {
   }
 }
 
-static uint64_t resolveSparc64(uint64_t Type, uint64_t Offset, uint64_t S, 
-                               uint64_t /*LocData*/, int64_t Addend) { 
-  switch (Type) { 
+static uint64_t resolveSparc64(uint64_t Type, uint64_t Offset, uint64_t S,
+                               uint64_t /*LocData*/, int64_t Addend) {
+  switch (Type) {
   case ELF::R_SPARC_32:
   case ELF::R_SPARC_64:
   case ELF::R_SPARC_UA32:
   case ELF::R_SPARC_UA64:
-    return S + Addend; 
+    return S + Addend;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -244,12 +244,12 @@ static bool supportsAmdgpu(uint64_t Type) {
   }
 }
 
-static uint64_t resolveAmdgpu(uint64_t Type, uint64_t Offset, uint64_t S, 
-                              uint64_t /*LocData*/, int64_t Addend) { 
-  switch (Type) { 
+static uint64_t resolveAmdgpu(uint64_t Type, uint64_t Offset, uint64_t S,
+                              uint64_t /*LocData*/, int64_t Addend) {
+  switch (Type) {
   case ELF::R_AMDGPU_ABS32:
   case ELF::R_AMDGPU_ABS64:
-    return S + Addend; 
+    return S + Addend;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -266,15 +266,15 @@ static bool supportsX86(uint64_t Type) {
   }
 }
 
-static uint64_t resolveX86(uint64_t Type, uint64_t Offset, uint64_t S, 
-                           uint64_t LocData, int64_t /*Addend*/) { 
-  switch (Type) { 
+static uint64_t resolveX86(uint64_t Type, uint64_t Offset, uint64_t S,
+                           uint64_t LocData, int64_t /*Addend*/) {
+  switch (Type) {
   case ELF::R_386_NONE:
-    return LocData; 
+    return LocData;
   case ELF::R_386_32:
-    return S + LocData; 
+    return S + LocData;
   case ELF::R_386_PC32:
-    return S - Offset + LocData; 
+    return S - Offset + LocData;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -290,35 +290,35 @@ static bool supportsPPC32(uint64_t Type) {
   }
 }
 
-static uint64_t resolvePPC32(uint64_t Type, uint64_t Offset, uint64_t S, 
-                             uint64_t /*LocData*/, int64_t Addend) { 
-  switch (Type) { 
+static uint64_t resolvePPC32(uint64_t Type, uint64_t Offset, uint64_t S,
+                             uint64_t /*LocData*/, int64_t Addend) {
+  switch (Type) {
   case ELF::R_PPC_ADDR32:
-    return (S + Addend) & 0xFFFFFFFF; 
+    return (S + Addend) & 0xFFFFFFFF;
   case ELF::R_PPC_REL32:
-    return (S + Addend - Offset) & 0xFFFFFFFF; 
+    return (S + Addend - Offset) & 0xFFFFFFFF;
   }
   llvm_unreachable("Invalid relocation type");
 }
 
 static bool supportsARM(uint64_t Type) {
-  switch (Type) { 
-  case ELF::R_ARM_ABS32: 
-  case ELF::R_ARM_REL32: 
-    return true; 
-  default: 
-    return false; 
-  } 
+  switch (Type) {
+  case ELF::R_ARM_ABS32:
+  case ELF::R_ARM_REL32:
+    return true;
+  default:
+    return false;
+  }
 }
 
-static uint64_t resolveARM(uint64_t Type, uint64_t Offset, uint64_t S, 
-                           uint64_t LocData, int64_t /*Addend*/) { 
-  switch (Type) { 
-  case ELF::R_ARM_ABS32: 
-    return (S + LocData) & 0xFFFFFFFF; 
-  case ELF::R_ARM_REL32: 
-    return (S + LocData - Offset) & 0xFFFFFFFF; 
-  } 
+static uint64_t resolveARM(uint64_t Type, uint64_t Offset, uint64_t S,
+                           uint64_t LocData, int64_t /*Addend*/) {
+  switch (Type) {
+  case ELF::R_ARM_ABS32:
+    return (S + LocData) & 0xFFFFFFFF;
+  case ELF::R_ARM_REL32:
+    return (S + LocData - Offset) & 0xFFFFFFFF;
+  }
   llvm_unreachable("Invalid relocation type");
 }
 
@@ -332,13 +332,13 @@ static bool supportsAVR(uint64_t Type) {
   }
 }
 
-static uint64_t resolveAVR(uint64_t Type, uint64_t Offset, uint64_t S, 
-                           uint64_t /*LocData*/, int64_t Addend) { 
-  switch (Type) { 
+static uint64_t resolveAVR(uint64_t Type, uint64_t Offset, uint64_t S,
+                           uint64_t /*LocData*/, int64_t Addend) {
+  switch (Type) {
   case ELF::R_AVR_16:
-    return (S + Addend) & 0xFFFF; 
+    return (S + Addend) & 0xFFFF;
   case ELF::R_AVR_32:
-    return (S + Addend) & 0xFFFFFFFF; 
+    return (S + Addend) & 0xFFFFFFFF;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -348,10 +348,10 @@ static bool supportsLanai(uint64_t Type) {
   return Type == ELF::R_LANAI_32;
 }
 
-static uint64_t resolveLanai(uint64_t Type, uint64_t Offset, uint64_t S, 
-                             uint64_t /*LocData*/, int64_t Addend) { 
-  if (Type == ELF::R_LANAI_32) 
-    return (S + Addend) & 0xFFFFFFFF; 
+static uint64_t resolveLanai(uint64_t Type, uint64_t Offset, uint64_t S,
+                             uint64_t /*LocData*/, int64_t Addend) {
+  if (Type == ELF::R_LANAI_32)
+    return (S + Addend) & 0xFFFFFFFF;
   llvm_unreachable("Invalid relocation type");
 }
 
@@ -365,13 +365,13 @@ static bool supportsMips32(uint64_t Type) {
   }
 }
 
-static uint64_t resolveMips32(uint64_t Type, uint64_t Offset, uint64_t S, 
-                              uint64_t LocData, int64_t /*Addend*/) { 
+static uint64_t resolveMips32(uint64_t Type, uint64_t Offset, uint64_t S,
+                              uint64_t LocData, int64_t /*Addend*/) {
   // FIXME: Take in account implicit addends to get correct results.
-  if (Type == ELF::R_MIPS_32) 
-    return (S + LocData) & 0xFFFFFFFF; 
-  if (Type == ELF::R_MIPS_TLS_DTPREL32) 
-    return (S + LocData) & 0xFFFFFFFF; 
+  if (Type == ELF::R_MIPS_32)
+    return (S + LocData) & 0xFFFFFFFF;
+  if (Type == ELF::R_MIPS_TLS_DTPREL32)
+    return (S + LocData) & 0xFFFFFFFF;
   llvm_unreachable("Invalid relocation type");
 }
 
@@ -385,21 +385,21 @@ static bool supportsSparc32(uint64_t Type) {
   }
 }
 
-static uint64_t resolveSparc32(uint64_t Type, uint64_t Offset, uint64_t S, 
-                               uint64_t LocData, int64_t Addend) { 
-  if (Type == ELF::R_SPARC_32 || Type == ELF::R_SPARC_UA32) 
-    return S + Addend; 
-  return LocData; 
+static uint64_t resolveSparc32(uint64_t Type, uint64_t Offset, uint64_t S,
+                               uint64_t LocData, int64_t Addend) {
+  if (Type == ELF::R_SPARC_32 || Type == ELF::R_SPARC_UA32)
+    return S + Addend;
+  return LocData;
 }
 
 static bool supportsHexagon(uint64_t Type) {
   return Type == ELF::R_HEX_32;
 }
 
-static uint64_t resolveHexagon(uint64_t Type, uint64_t Offset, uint64_t S, 
-                               uint64_t /*LocData*/, int64_t Addend) { 
-  if (Type == ELF::R_HEX_32) 
-    return S + Addend; 
+static uint64_t resolveHexagon(uint64_t Type, uint64_t Offset, uint64_t S,
+                               uint64_t /*LocData*/, int64_t Addend) {
+  if (Type == ELF::R_HEX_32)
+    return S + Addend;
   llvm_unreachable("Invalid relocation type");
 }
 
@@ -425,17 +425,17 @@ static bool supportsRISCV(uint64_t Type) {
   }
 }
 
-static uint64_t resolveRISCV(uint64_t Type, uint64_t Offset, uint64_t S, 
-                             uint64_t LocData, int64_t Addend) { 
-  int64_t RA = Addend; 
-  uint64_t A = LocData; 
-  switch (Type) { 
+static uint64_t resolveRISCV(uint64_t Type, uint64_t Offset, uint64_t S,
+                             uint64_t LocData, int64_t Addend) {
+  int64_t RA = Addend;
+  uint64_t A = LocData;
+  switch (Type) {
   case ELF::R_RISCV_NONE:
-    return LocData; 
+    return LocData;
   case ELF::R_RISCV_32:
     return (S + RA) & 0xFFFFFFFF;
   case ELF::R_RISCV_32_PCREL:
-    return (S + RA - Offset) & 0xFFFFFFFF; 
+    return (S + RA - Offset) & 0xFFFFFFFF;
   case ELF::R_RISCV_64:
     return S + RA;
   case ELF::R_RISCV_SET6:
@@ -473,12 +473,12 @@ static bool supportsCOFFX86(uint64_t Type) {
   }
 }
 
-static uint64_t resolveCOFFX86(uint64_t Type, uint64_t Offset, uint64_t S, 
-                               uint64_t LocData, int64_t /*Addend*/) { 
-  switch (Type) { 
+static uint64_t resolveCOFFX86(uint64_t Type, uint64_t Offset, uint64_t S,
+                               uint64_t LocData, int64_t /*Addend*/) {
+  switch (Type) {
   case COFF::IMAGE_REL_I386_SECREL:
   case COFF::IMAGE_REL_I386_DIR32:
-    return (S + LocData) & 0xFFFFFFFF; 
+    return (S + LocData) & 0xFFFFFFFF;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -494,13 +494,13 @@ static bool supportsCOFFX86_64(uint64_t Type) {
   }
 }
 
-static uint64_t resolveCOFFX86_64(uint64_t Type, uint64_t Offset, uint64_t S, 
-                                  uint64_t LocData, int64_t /*Addend*/) { 
-  switch (Type) { 
+static uint64_t resolveCOFFX86_64(uint64_t Type, uint64_t Offset, uint64_t S,
+                                  uint64_t LocData, int64_t /*Addend*/) {
+  switch (Type) {
   case COFF::IMAGE_REL_AMD64_SECREL:
-    return (S + LocData) & 0xFFFFFFFF; 
+    return (S + LocData) & 0xFFFFFFFF;
   case COFF::IMAGE_REL_AMD64_ADDR64:
-    return S + LocData; 
+    return S + LocData;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -516,12 +516,12 @@ static bool supportsCOFFARM(uint64_t Type) {
   }
 }
 
-static uint64_t resolveCOFFARM(uint64_t Type, uint64_t Offset, uint64_t S, 
-                               uint64_t LocData, int64_t /*Addend*/) { 
-  switch (Type) { 
+static uint64_t resolveCOFFARM(uint64_t Type, uint64_t Offset, uint64_t S,
+                               uint64_t LocData, int64_t /*Addend*/) {
+  switch (Type) {
   case COFF::IMAGE_REL_ARM_SECREL:
   case COFF::IMAGE_REL_ARM_ADDR32:
-    return (S + LocData) & 0xFFFFFFFF; 
+    return (S + LocData) & 0xFFFFFFFF;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -537,13 +537,13 @@ static bool supportsCOFFARM64(uint64_t Type) {
   }
 }
 
-static uint64_t resolveCOFFARM64(uint64_t Type, uint64_t Offset, uint64_t S, 
-                                 uint64_t LocData, int64_t /*Addend*/) { 
-  switch (Type) { 
+static uint64_t resolveCOFFARM64(uint64_t Type, uint64_t Offset, uint64_t S,
+                                 uint64_t LocData, int64_t /*Addend*/) {
+  switch (Type) {
   case COFF::IMAGE_REL_ARM64_SECREL:
-    return (S + LocData) & 0xFFFFFFFF; 
+    return (S + LocData) & 0xFFFFFFFF;
   case COFF::IMAGE_REL_ARM64_ADDR64:
-    return S + LocData; 
+    return S + LocData;
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -553,9 +553,9 @@ static bool supportsMachOX86_64(uint64_t Type) {
   return Type == MachO::X86_64_RELOC_UNSIGNED;
 }
 
-static uint64_t resolveMachOX86_64(uint64_t Type, uint64_t Offset, uint64_t S, 
-                                   uint64_t LocData, int64_t /*Addend*/) { 
-  if (Type == MachO::X86_64_RELOC_UNSIGNED) 
+static uint64_t resolveMachOX86_64(uint64_t Type, uint64_t Offset, uint64_t S,
+                                   uint64_t LocData, int64_t /*Addend*/) {
+  if (Type == MachO::X86_64_RELOC_UNSIGNED)
     return S;
   llvm_unreachable("Invalid relocation type");
 }
@@ -574,7 +574,7 @@ static bool supportsWasm32(uint64_t Type) {
   case wasm::R_WASM_SECTION_OFFSET_I32:
   case wasm::R_WASM_EVENT_INDEX_LEB:
   case wasm::R_WASM_GLOBAL_INDEX_I32:
-  case wasm::R_WASM_TABLE_NUMBER_LEB: 
+  case wasm::R_WASM_TABLE_NUMBER_LEB:
     return true;
   default:
     return false;
@@ -586,18 +586,18 @@ static bool supportsWasm64(uint64_t Type) {
   case wasm::R_WASM_MEMORY_ADDR_LEB64:
   case wasm::R_WASM_MEMORY_ADDR_SLEB64:
   case wasm::R_WASM_MEMORY_ADDR_I64:
-  case wasm::R_WASM_TABLE_INDEX_SLEB64: 
-  case wasm::R_WASM_TABLE_INDEX_I64: 
-  case wasm::R_WASM_FUNCTION_OFFSET_I64: 
+  case wasm::R_WASM_TABLE_INDEX_SLEB64:
+  case wasm::R_WASM_TABLE_INDEX_I64:
+  case wasm::R_WASM_FUNCTION_OFFSET_I64:
     return true;
   default:
     return supportsWasm32(Type);
   }
 }
 
-static uint64_t resolveWasm32(uint64_t Type, uint64_t Offset, uint64_t S, 
-                              uint64_t LocData, int64_t /*Addend*/) { 
-  switch (Type) { 
+static uint64_t resolveWasm32(uint64_t Type, uint64_t Offset, uint64_t S,
+                              uint64_t LocData, int64_t /*Addend*/) {
+  switch (Type) {
   case wasm::R_WASM_FUNCTION_INDEX_LEB:
   case wasm::R_WASM_TABLE_INDEX_SLEB:
   case wasm::R_WASM_TABLE_INDEX_I32:
@@ -610,31 +610,31 @@ static uint64_t resolveWasm32(uint64_t Type, uint64_t Offset, uint64_t S,
   case wasm::R_WASM_SECTION_OFFSET_I32:
   case wasm::R_WASM_EVENT_INDEX_LEB:
   case wasm::R_WASM_GLOBAL_INDEX_I32:
-  case wasm::R_WASM_TABLE_NUMBER_LEB: 
+  case wasm::R_WASM_TABLE_NUMBER_LEB:
     // For wasm section, its offset at 0 -- ignoring Value
-    return LocData; 
+    return LocData;
   default:
     llvm_unreachable("Invalid relocation type");
   }
 }
 
-static uint64_t resolveWasm64(uint64_t Type, uint64_t Offset, uint64_t S, 
-                              uint64_t LocData, int64_t Addend) { 
-  switch (Type) { 
+static uint64_t resolveWasm64(uint64_t Type, uint64_t Offset, uint64_t S,
+                              uint64_t LocData, int64_t Addend) {
+  switch (Type) {
   case wasm::R_WASM_MEMORY_ADDR_LEB64:
   case wasm::R_WASM_MEMORY_ADDR_SLEB64:
   case wasm::R_WASM_MEMORY_ADDR_I64:
-  case wasm::R_WASM_TABLE_INDEX_SLEB64: 
-  case wasm::R_WASM_TABLE_INDEX_I64: 
-  case wasm::R_WASM_FUNCTION_OFFSET_I64: 
+  case wasm::R_WASM_TABLE_INDEX_SLEB64:
+  case wasm::R_WASM_TABLE_INDEX_I64:
+  case wasm::R_WASM_FUNCTION_OFFSET_I64:
     // For wasm section, its offset at 0 -- ignoring Value
-    return LocData; 
+    return LocData;
   default:
-    return resolveWasm32(Type, Offset, S, LocData, Addend); 
+    return resolveWasm32(Type, Offset, S, LocData, Addend);
   }
 }
 
-std::pair<SupportsRelocation, RelocationResolver> 
+std::pair<SupportsRelocation, RelocationResolver>
 getRelocationResolver(const ObjectFile &Obj) {
   if (Obj.isCOFF()) {
     switch (Obj.getArch()) {
@@ -687,7 +687,7 @@ getRelocationResolver(const ObjectFile &Obj) {
     switch (Obj.getArch()) {
     case Triple::x86:
       return {supportsX86, resolveX86};
-    case Triple::ppcle: 
+    case Triple::ppcle:
     case Triple::ppc:
       return {supportsPPC32, resolvePPC32};
     case Triple::arm:
@@ -726,38 +726,38 @@ getRelocationResolver(const ObjectFile &Obj) {
   llvm_unreachable("Invalid object file");
 }
 
-uint64_t resolveRelocation(RelocationResolver Resolver, const RelocationRef &R, 
-                           uint64_t S, uint64_t LocData) { 
-  if (const ObjectFile *Obj = R.getObject()) { 
-    int64_t Addend = 0; 
-    if (Obj->isELF()) { 
-      auto GetRelSectionType = [&]() -> unsigned { 
-        if (auto *Elf32LEObj = dyn_cast<ELF32LEObjectFile>(Obj)) 
-          return Elf32LEObj->getRelSection(R.getRawDataRefImpl())->sh_type; 
-        if (auto *Elf64LEObj = dyn_cast<ELF64LEObjectFile>(Obj)) 
-          return Elf64LEObj->getRelSection(R.getRawDataRefImpl())->sh_type; 
-        if (auto *Elf32BEObj = dyn_cast<ELF32BEObjectFile>(Obj)) 
-          return Elf32BEObj->getRelSection(R.getRawDataRefImpl())->sh_type; 
-        auto *Elf64BEObj = cast<ELF64BEObjectFile>(Obj); 
-        return Elf64BEObj->getRelSection(R.getRawDataRefImpl())->sh_type; 
-      }; 
- 
-      if (GetRelSectionType() == ELF::SHT_RELA) 
-        Addend = getELFAddend(R); 
-    } 
- 
-    return Resolver(R.getType(), R.getOffset(), S, LocData, Addend); 
-  } 
- 
-  // Sometimes the caller might want to use its own specific implementation of 
-  // the resolver function. E.g. this is used by LLD when it resolves debug 
-  // relocations and assumes that all of them have the same computation (S + A). 
-  // The relocation R has no owner object in this case and we don't need to 
-  // provide Type and Offset fields. It is also assumed the DataRefImpl.p 
-  // contains the addend, provided by the caller. 
-  return Resolver(/*Type=*/0, /*Offset=*/0, S, LocData, 
-                  R.getRawDataRefImpl().p); 
-} 
- 
+uint64_t resolveRelocation(RelocationResolver Resolver, const RelocationRef &R,
+                           uint64_t S, uint64_t LocData) {
+  if (const ObjectFile *Obj = R.getObject()) {
+    int64_t Addend = 0;
+    if (Obj->isELF()) {
+      auto GetRelSectionType = [&]() -> unsigned {
+        if (auto *Elf32LEObj = dyn_cast<ELF32LEObjectFile>(Obj))
+          return Elf32LEObj->getRelSection(R.getRawDataRefImpl())->sh_type;
+        if (auto *Elf64LEObj = dyn_cast<ELF64LEObjectFile>(Obj))
+          return Elf64LEObj->getRelSection(R.getRawDataRefImpl())->sh_type;
+        if (auto *Elf32BEObj = dyn_cast<ELF32BEObjectFile>(Obj))
+          return Elf32BEObj->getRelSection(R.getRawDataRefImpl())->sh_type;
+        auto *Elf64BEObj = cast<ELF64BEObjectFile>(Obj);
+        return Elf64BEObj->getRelSection(R.getRawDataRefImpl())->sh_type;
+      };
+
+      if (GetRelSectionType() == ELF::SHT_RELA)
+        Addend = getELFAddend(R);
+    }
+
+    return Resolver(R.getType(), R.getOffset(), S, LocData, Addend);
+  }
+
+  // Sometimes the caller might want to use its own specific implementation of
+  // the resolver function. E.g. this is used by LLD when it resolves debug
+  // relocations and assumes that all of them have the same computation (S + A).
+  // The relocation R has no owner object in this case and we don't need to
+  // provide Type and Offset fields. It is also assumed the DataRefImpl.p
+  // contains the addend, provided by the caller.
+  return Resolver(/*Type=*/0, /*Offset=*/0, S, LocData,
+                  R.getRawDataRefImpl().p);
+}
+
 } // namespace object
 } // namespace llvm

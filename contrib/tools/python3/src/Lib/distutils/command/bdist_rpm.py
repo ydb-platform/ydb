@@ -308,7 +308,7 @@ class bdist_rpm(Command):
 
         # build package
         log.info("building RPMs")
-        rpm_cmd = ['rpmbuild'] 
+        rpm_cmd = ['rpmbuild']
 
         if self.source_only: # what kind of RPMs?
             rpm_cmd.append('-bs')
@@ -533,8 +533,8 @@ class bdist_rpm(Command):
                     '',
                     '%' + rpm_opt,])
                 if val:
-                    with open(val) as f: 
-                        spec_file.extend(f.read().split('\n')) 
+                    with open(val) as f:
+                        spec_file.extend(f.read().split('\n'))
                 else:
                     spec_file.append(default)
 

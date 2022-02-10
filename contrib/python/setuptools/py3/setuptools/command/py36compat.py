@@ -130,5 +130,5 @@ class sdist_add_defaults:
 
 if hasattr(sdist.sdist, '_add_defaults_standards'):
     # disable the functionality already available upstream
-    class sdist_add_defaults:  # noqa 
+    class sdist_add_defaults:  # noqa
         pass

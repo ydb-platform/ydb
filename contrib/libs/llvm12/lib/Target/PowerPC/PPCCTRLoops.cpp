@@ -1,4 +1,4 @@
-//===-- PPCCTRLoops.cpp - Verify CTR loops -----------------===// 
+//===-- PPCCTRLoops.cpp - Verify CTR loops -----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,45 +6,45 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This pass verifies that all bdnz/bdz instructions are dominated by a loop 
-// mtctr before any other instructions that might clobber the ctr register. 
+// This pass verifies that all bdnz/bdz instructions are dominated by a loop
+// mtctr before any other instructions that might clobber the ctr register.
 //
 //===----------------------------------------------------------------------===//
 
-// CTR loops are produced by the HardwareLoops pass and this pass is simply a 
-// verification that no invalid CTR loops are produced. As such, it isn't 
-// something that needs to be run (or even defined) for Release builds so the 
-// entire file is guarded by NDEBUG. 
-#ifndef NDEBUG 
-#include <vector> 
- 
-#include "MCTargetDesc/PPCMCTargetDesc.h" 
+// CTR loops are produced by the HardwareLoops pass and this pass is simply a
+// verification that no invalid CTR loops are produced. As such, it isn't
+// something that needs to be run (or even defined) for Release builds so the
+// entire file is guarded by NDEBUG.
+#ifndef NDEBUG
+#include <vector>
+
+#include "MCTargetDesc/PPCMCTargetDesc.h"
 #include "PPC.h"
-#include "llvm/ADT/SmallSet.h" 
-#include "llvm/ADT/SmallVector.h" 
-#include "llvm/ADT/StringRef.h" 
-#include "llvm/ADT/ilist_iterator.h" 
-#include "llvm/CodeGen/MachineBasicBlock.h" 
-#include "llvm/CodeGen/MachineDominators.h" 
-#include "llvm/CodeGen/MachineFunction.h" 
-#include "llvm/CodeGen/MachineFunctionPass.h" 
-#include "llvm/CodeGen/MachineInstr.h" 
-#include "llvm/CodeGen/MachineInstrBundleIterator.h" 
-#include "llvm/CodeGen/MachineOperand.h" 
-#include "llvm/CodeGen/Register.h" 
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/ilist_iterator.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineDominators.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineInstrBundleIterator.h"
+#include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/Register.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
-#include "llvm/PassRegistry.h" 
-#include "llvm/Support/CodeGen.h" 
+#include "llvm/PassRegistry.h"
+#include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/ErrorHandling.h" 
-#include "llvm/Support/GenericDomTreeConstruction.h" 
-#include "llvm/Support/Printable.h" 
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/GenericDomTreeConstruction.h"
+#include "llvm/Support/Printable.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
-#define DEBUG_TYPE "ppc-ctrloops-verify" 
+#define DEBUG_TYPE "ppc-ctrloops-verify"
 
 namespace {
 
@@ -148,7 +148,7 @@ queue_preds:
       return false;
     }
 
-    append_range(Preds, MBB->predecessors()); 
+    append_range(Preds, MBB->predecessors());
   }
 
   do {

@@ -124,17 +124,17 @@ int FunctionComparator::cmpAttrs(const AttributeList L,
 
         Type *TyL = LA.getValueAsType();
         Type *TyR = RA.getValueAsType();
-        if (TyL && TyR) { 
-          if (int Res = cmpTypes(TyL, TyR)) 
-            return Res; 
-          continue; 
-        } 
+        if (TyL && TyR) {
+          if (int Res = cmpTypes(TyL, TyR))
+            return Res;
+          continue;
+        }
 
         // Two pointers, at least one null, so the comparison result is
         // independent of the value of a real pointer.
-        if (int Res = cmpNumbers((uint64_t)TyL, (uint64_t)TyR)) 
-          return Res; 
-        continue; 
+        if (int Res = cmpNumbers((uint64_t)TyL, (uint64_t)TyR))
+          return Res;
+        continue;
       }
       if (LA < RA)
         return -1;
@@ -291,7 +291,7 @@ int FunctionComparator::cmpConstants(const Constant *L,
 
   switch (L->getValueID()) {
   case Value::UndefValueVal:
-  case Value::PoisonValueVal: 
+  case Value::PoisonValueVal:
   case Value::ConstantTokenNoneVal:
     return TypesRes;
   case Value::ConstantIntVal: {
@@ -494,13 +494,13 @@ int FunctionComparator::cmpTypes(Type *TyL, Type *TyR) const {
   case Type::ScalableVectorTyID: {
     auto *STyL = cast<VectorType>(TyL);
     auto *STyR = cast<VectorType>(TyR);
-    if (STyL->getElementCount().isScalable() != 
-        STyR->getElementCount().isScalable()) 
-      return cmpNumbers(STyL->getElementCount().isScalable(), 
-                        STyR->getElementCount().isScalable()); 
-    if (STyL->getElementCount() != STyR->getElementCount()) 
-      return cmpNumbers(STyL->getElementCount().getKnownMinValue(), 
-                        STyR->getElementCount().getKnownMinValue()); 
+    if (STyL->getElementCount().isScalable() !=
+        STyR->getElementCount().isScalable())
+      return cmpNumbers(STyL->getElementCount().isScalable(),
+                        STyR->getElementCount().isScalable());
+    if (STyL->getElementCount() != STyR->getElementCount())
+      return cmpNumbers(STyL->getElementCount().getKnownMinValue(),
+                        STyR->getElementCount().getKnownMinValue());
     return cmpTypes(STyL->getElementType(), STyR->getElementType());
   }
   }

@@ -419,10 +419,10 @@ public:
     return ArgStrings[Index];
   }
 
-  void replaceArgString(unsigned Index, const Twine &S) { 
-    ArgStrings[Index] = MakeArgString(S); 
-  } 
- 
+  void replaceArgString(unsigned Index, const Twine &S) {
+    ArgStrings[Index] = MakeArgString(S);
+  }
+
   unsigned getNumInputArgStrings() const override {
     return NumInputArgStrings;
   }

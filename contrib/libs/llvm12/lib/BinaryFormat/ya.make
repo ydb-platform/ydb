@@ -15,8 +15,8 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12 
-    contrib/libs/llvm12/lib/Support 
+    contrib/libs/llvm12
+    contrib/libs/llvm12/lib/Support
 )
 
 ADDINCL(

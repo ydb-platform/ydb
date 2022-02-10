@@ -373,11 +373,11 @@ void AArch64MachObjectWriter::recordRelocation(
        Type == MachO::ARM64_RELOC_PAGE21 ||
        Type == MachO::ARM64_RELOC_PAGEOFF12) &&
       Value) {
-    if (!isInt<24>(Value)) { 
-      Asm.getContext().reportError(Fixup.getLoc(), 
-                                   "addend too big for relocation"); 
-      return; 
-    } 
+    if (!isInt<24>(Value)) {
+      Asm.getContext().reportError(Fixup.getLoc(),
+                                   "addend too big for relocation");
+      return;
+    }
 
     MachO::any_relocation_info MRE;
     MRE.r_word0 = FixupOffset;

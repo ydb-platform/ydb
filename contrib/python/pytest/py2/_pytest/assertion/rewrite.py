@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 """Rewrite assertion AST to produce nice error messages"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import warnings 
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="_pytest.assertion.rewrite") 
- 
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="_pytest.assertion.rewrite")
+
 import ast
 import errno
 import imp
@@ -23,11 +23,11 @@ import atomicwrites
 import py
 import six
 
-from _pytest._io.saferepr import saferepr 
+from _pytest._io.saferepr import saferepr
 from _pytest.assertion import util
-from _pytest.assertion.util import (  # noqa: F401 
-    format_explanation as _format_explanation, 
-) 
+from _pytest.assertion.util import (  # noqa: F401
+    format_explanation as _format_explanation,
+)
 from _pytest.compat import spec_from_file_location
 from _pytest.pathlib import fnmatch_ex
 from _pytest.pathlib import PurePath
@@ -64,10 +64,10 @@ class AssertionRewritingHook(object):
 
     def __init__(self, config):
         self.config = config
-        try: 
-            self.fnpats = config.getini("python_files") 
-        except ValueError: 
-            self.fnpats = ["test_*.py", "*_test.py"] 
+        try:
+            self.fnpats = config.getini("python_files")
+        except ValueError:
+            self.fnpats = ["test_*.py", "*_test.py"]
         self.session = None
         self.modules = {}
         self._rewritten_names = set()
@@ -274,14 +274,14 @@ class AssertionRewritingHook(object):
         self._marked_for_rewrite_cache.clear()
 
     def _warn_already_imported(self, name):
-        from _pytest.warning_types import PytestAssertRewriteWarning 
-        from _pytest.warnings import _issue_warning_captured 
+        from _pytest.warning_types import PytestAssertRewriteWarning
+        from _pytest.warnings import _issue_warning_captured
 
-        _issue_warning_captured( 
-            PytestAssertRewriteWarning( 
-                "Module already imported so cannot be rewritten: %s" % name 
-            ), 
-            self.config.hook, 
+        _issue_warning_captured(
+            PytestAssertRewriteWarning(
+                "Module already imported so cannot be rewritten: %s" % name
+            ),
+            self.config.hook,
             stacklevel=5,
         )
 
@@ -304,7 +304,7 @@ class AssertionRewritingHook(object):
             mod.__loader__ = self
             # Normally, this attribute is 3.4+
             mod.__spec__ = spec_from_file_location(name, co.co_filename, loader=self)
-            exec(co, mod.__dict__) 
+            exec(co, mod.__dict__)
         except:  # noqa
             if name in sys.modules:
                 del sys.modules[name]
@@ -337,11 +337,11 @@ def _write_pyc(state, co, source_stat, pyc):
     try:
         with atomicwrites.atomic_write(pyc, mode="wb", overwrite=True) as fp:
             fp.write(imp.get_magic())
-            # as of now, bytecode header expects 32-bit numbers for size and mtime (#4903) 
-            mtime = int(source_stat.mtime) & 0xFFFFFFFF 
+            # as of now, bytecode header expects 32-bit numbers for size and mtime (#4903)
+            mtime = int(source_stat.mtime) & 0xFFFFFFFF
             size = source_stat.size & 0xFFFFFFFF
-            # "<LL" stands for 2 unsigned longs, little-ending 
-            fp.write(struct.pack("<LL", mtime, size)) 
+            # "<LL" stands for 2 unsigned longs, little-ending
+            fp.write(struct.pack("<LL", mtime, size))
             fp.write(marshal.dumps(co))
     except EnvironmentError as e:
         state.trace("error writing pyc file at %s: errno=%s" % (pyc, e.errno))
@@ -436,7 +436,7 @@ def _read_pyc(source, pyc, trace=lambda x: None):
         if (
             len(data) != 12
             or data[:4] != imp.get_magic()
-            or struct.unpack("<LL", data[4:]) != (mtime & 0xFFFFFFFF, size & 0xFFFFFFFF) 
+            or struct.unpack("<LL", data[4:]) != (mtime & 0xFFFFFFFF, size & 0xFFFFFFFF)
         ):
             trace("_read_pyc(%s): invalid or out of date pyc" % source)
             return None
@@ -467,7 +467,7 @@ def _saferepr(obj):
     JSON reprs.
 
     """
-    r = saferepr(obj) 
+    r = saferepr(obj)
     # only occurs in python2.x, repr must return text in python3+
     if isinstance(r, bytes):
         # Represent unprintable bytes as `\x##`
@@ -483,7 +483,7 @@ def _format_assertmsg(obj):
 
     For strings this simply replaces newlines with '\n~' so that
     util.format_explanation() will preserve them instead of escaping
-    newlines.  For other objects saferepr() is used first. 
+    newlines.  For other objects saferepr() is used first.
 
     """
     # reprlib appears to have a bug which means that if a string
@@ -492,7 +492,7 @@ def _format_assertmsg(obj):
     # However in either case we want to preserve the newline.
     replaces = [(u"\n", u"\n~"), (u"%", u"%%")]
     if not isinstance(obj, six.string_types):
-        obj = saferepr(obj) 
+        obj = saferepr(obj)
         replaces.append((u"\\n", u"\n~"))
 
     if isinstance(obj, bytes):
@@ -505,15 +505,15 @@ def _format_assertmsg(obj):
 
 
 def _should_repr_global_name(obj):
-    if callable(obj): 
-        return False 
+    if callable(obj):
+        return False
 
-    try: 
-        return not hasattr(obj, "__name__") 
-    except Exception: 
-        return True 
+    try:
+        return not hasattr(obj, "__name__")
+    except Exception:
+        return True
 
- 
+
 def _format_boolop(explanations, is_or):
     explanation = "(" + (is_or and " or " or " and ").join(explanations) + ")"
     if isinstance(explanation, six.text_type):
@@ -658,7 +658,7 @@ class AssertionRewriter(ast.NodeVisitor):
         # Insert some special imports at the top of the module but after any
         # docstrings and __future__ imports.
         aliases = [
-            ast.alias(six.moves.builtins.__name__, "@py_builtins"), 
+            ast.alias(six.moves.builtins.__name__, "@py_builtins"),
             ast.alias("_pytest.assertion.rewrite", "@pytest_ar"),
         ]
         doc = getattr(mod, "docstring", None)
@@ -733,13 +733,13 @@ class AssertionRewriter(ast.NodeVisitor):
         return ast.Name(name, ast.Load())
 
     def display(self, expr):
-        """Call saferepr on the expression.""" 
-        return self.helper("_saferepr", expr) 
+        """Call saferepr on the expression."""
+        return self.helper("_saferepr", expr)
 
     def helper(self, name, *args):
         """Call a helper in this module."""
         py_name = ast.Name("@pytest_ar", ast.Load())
-        attr = ast.Attribute(py_name, name, ast.Load()) 
+        attr = ast.Attribute(py_name, name, ast.Load())
         return ast_Call(attr, list(args), [])
 
     def builtin(self, name):
@@ -809,13 +809,13 @@ class AssertionRewriter(ast.NodeVisitor):
 
         """
         if isinstance(assert_.test, ast.Tuple) and len(assert_.test.elts) >= 1:
-            from _pytest.warning_types import PytestAssertRewriteWarning 
+            from _pytest.warning_types import PytestAssertRewriteWarning
             import warnings
 
             warnings.warn_explicit(
-                PytestAssertRewriteWarning( 
-                    "assertion is always true, perhaps remove parentheses?" 
-                ), 
+                PytestAssertRewriteWarning(
+                    "assertion is always true, perhaps remove parentheses?"
+                ),
                 category=None,
                 filename=str(self.module_path),
                 lineno=assert_.lineno,
@@ -829,26 +829,26 @@ class AssertionRewriter(ast.NodeVisitor):
         self.push_format_context()
         # Rewrite assert into a bunch of statements.
         top_condition, explanation = self.visit(assert_.test)
-        # If in a test module, check if directly asserting None, in order to warn [Issue #3191] 
-        if self.module_path is not None: 
-            self.statements.append( 
-                self.warn_about_none_ast( 
-                    top_condition, module_path=self.module_path, lineno=assert_.lineno 
-                ) 
-            ) 
+        # If in a test module, check if directly asserting None, in order to warn [Issue #3191]
+        if self.module_path is not None:
+            self.statements.append(
+                self.warn_about_none_ast(
+                    top_condition, module_path=self.module_path, lineno=assert_.lineno
+                )
+            )
         # Create failure message.
         body = self.on_failure
         negation = ast.UnaryOp(ast.Not(), top_condition)
         self.statements.append(ast.If(negation, body, []))
         if assert_.msg:
-            assertmsg = self.helper("_format_assertmsg", assert_.msg) 
+            assertmsg = self.helper("_format_assertmsg", assert_.msg)
             explanation = "\n>assert " + explanation
         else:
             assertmsg = ast.Str("")
             explanation = "assert " + explanation
         template = ast.BinOp(assertmsg, ast.Add(), ast.Str(explanation))
         msg = self.pop_format_context(template)
-        fmt = self.helper("_format_explanation", msg) 
+        fmt = self.helper("_format_explanation", msg)
         err_name = ast.Name("AssertionError", ast.Load())
         exc = ast_Call(err_name, [fmt], [])
         if sys.version_info[0] >= 3:
@@ -866,39 +866,39 @@ class AssertionRewriter(ast.NodeVisitor):
             set_location(stmt, assert_.lineno, assert_.col_offset)
         return self.statements
 
-    def warn_about_none_ast(self, node, module_path, lineno): 
-        """ 
-        Returns an AST issuing a warning if the value of node is `None`. 
-        This is used to warn the user when asserting a function that asserts 
-        internally already. 
-        See issue #3191 for more details. 
-        """ 
- 
-        # Using parse because it is different between py2 and py3. 
-        AST_NONE = ast.parse("None").body[0].value 
-        val_is_none = ast.Compare(node, [ast.Is()], [AST_NONE]) 
-        send_warning = ast.parse( 
-            """ 
-from _pytest.warning_types import PytestAssertRewriteWarning 
-from warnings import warn_explicit 
-warn_explicit( 
-    PytestAssertRewriteWarning('asserting the value None, please use "assert is None"'), 
-    category=None, 
-    filename={filename!r}, 
-    lineno={lineno}, 
-) 
-            """.format( 
-                filename=module_path.strpath, lineno=lineno 
-            ) 
-        ).body 
-        return ast.If(val_is_none, send_warning, []) 
- 
+    def warn_about_none_ast(self, node, module_path, lineno):
+        """
+        Returns an AST issuing a warning if the value of node is `None`.
+        This is used to warn the user when asserting a function that asserts
+        internally already.
+        See issue #3191 for more details.
+        """
+
+        # Using parse because it is different between py2 and py3.
+        AST_NONE = ast.parse("None").body[0].value
+        val_is_none = ast.Compare(node, [ast.Is()], [AST_NONE])
+        send_warning = ast.parse(
+            """
+from _pytest.warning_types import PytestAssertRewriteWarning
+from warnings import warn_explicit
+warn_explicit(
+    PytestAssertRewriteWarning('asserting the value None, please use "assert is None"'),
+    category=None,
+    filename={filename!r},
+    lineno={lineno},
+)
+            """.format(
+                filename=module_path.strpath, lineno=lineno
+            )
+        ).body
+        return ast.If(val_is_none, send_warning, [])
+
     def visit_Name(self, name):
         # Display the repr of the name if it's a local variable or
         # _should_repr_global_name() thinks it's acceptable.
         locs = ast_Call(self.builtin("locals"), [], [])
         inlocs = ast.Compare(ast.Str(name.id), [ast.In()], [locs])
-        dorepr = self.helper("_should_repr_global_name", name) 
+        dorepr = self.helper("_should_repr_global_name", name)
         test = ast.BoolOp(ast.Or(), [inlocs, dorepr])
         expr = ast.IfExp(test, self.display(name), ast.Str(name.id))
         return name, self.explanation_param(expr)
@@ -934,7 +934,7 @@ warn_explicit(
                 self.statements = body = inner
         self.statements = save
         self.on_failure = fail_save
-        expl_template = self.helper("_format_boolop", expl_list, ast.Num(is_or)) 
+        expl_template = self.helper("_format_boolop", expl_list, ast.Num(is_or))
         expl = self.pop_format_context(expl_template)
         return ast.Name(res_var, ast.Load()), self.explanation_param(expl)
 
@@ -1059,7 +1059,7 @@ warn_explicit(
             left_res, left_expl = next_res, next_expl
         # Use pytest.assertion.util._reprcompare if that's available.
         expl_call = self.helper(
-            "_call_reprcompare", 
+            "_call_reprcompare",
             ast.Tuple(syms, ast.Load()),
             ast.Tuple(load_names, ast.Load()),
             ast.Tuple(expls, ast.Load()),

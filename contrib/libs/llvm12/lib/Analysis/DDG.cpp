@@ -49,7 +49,7 @@ bool DDGNode::collectInstructions(
       assert(!isa<PiBlockDDGNode>(PN) && "Nested PiBlocks are not supported.");
       SmallVector<Instruction *, 8> TmpIList;
       PN->collectInstructions(Pred, TmpIList);
-      llvm::append_range(IList, TmpIList); 
+      llvm::append_range(IList, TmpIList);
     }
   } else
     llvm_unreachable("unimplemented type of node");
@@ -190,7 +190,7 @@ DataDependenceGraph::DataDependenceGraph(Function &F, DependenceInfo &D)
   // directions.
   BasicBlockListType BBList;
   for (auto &SCC : make_range(scc_begin(&F), scc_end(&F)))
-    append_range(BBList, SCC); 
+    append_range(BBList, SCC);
   std::reverse(BBList.begin(), BBList.end());
   DDGBuilder(*this, D, BBList).populate();
 }
@@ -206,7 +206,7 @@ DataDependenceGraph::DataDependenceGraph(Loop &L, LoopInfo &LI,
   LoopBlocksDFS DFS(&L);
   DFS.perform(&LI);
   BasicBlockListType BBList;
-  append_range(BBList, make_range(DFS.beginRPO(), DFS.endRPO())); 
+  append_range(BBList, make_range(DFS.beginRPO(), DFS.endRPO()));
   DDGBuilder(*this, D, BBList).populate();
 }
 

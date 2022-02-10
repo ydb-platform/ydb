@@ -212,10 +212,10 @@ public:
 //
 // The characters '{' and '}' are reserved and cannot appear anywhere within a
 // replacement sequence.  Outside of a replacement sequence, in order to print
-// a literal '{' it must be doubled as "{{". 
+// a literal '{' it must be doubled as "{{".
 //
 // ===Parameter Indexing===
-// 
+//
 // `index` specifies the index of the parameter in the parameter pack to format
 // into the output.  Note that it is possible to refer to the same parameter
 // index multiple times in a given format string.  This makes it possible to

@@ -32,7 +32,7 @@ PyAPI_DATA(PyTypeObject) PyBytesIter_Type;
 
 #define PyBytes_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_BYTES_SUBCLASS)
-#define PyBytes_CheckExact(op) Py_IS_TYPE(op, &PyBytes_Type) 
+#define PyBytes_CheckExact(op) Py_IS_TYPE(op, &PyBytes_Type)
 
 PyAPI_FUNC(PyObject *) PyBytes_FromStringAndSize(const char *, Py_ssize_t);
 PyAPI_FUNC(PyObject *) PyBytes_FromString(const char *);
@@ -71,10 +71,10 @@ PyAPI_FUNC(int) PyBytes_AsStringAndSize(
 #define F_ZERO  (1<<4)
 
 #ifndef Py_LIMITED_API
-#  define Py_CPYTHON_BYTESOBJECT_H 
-#  include  "cpython/bytesobject.h" 
-#  undef Py_CPYTHON_BYTESOBJECT_H 
-#endif 
+#  define Py_CPYTHON_BYTESOBJECT_H
+#  include  "cpython/bytesobject.h"
+#  undef Py_CPYTHON_BYTESOBJECT_H
+#endif
 
 #ifdef __cplusplus
 }

@@ -6,7 +6,7 @@
     "protocol":"ec2",
     "serviceAbbreviation":"Amazon EC2",
     "serviceFullName":"Amazon Elastic Compute Cloud",
-    "serviceId":"EC2", 
+    "serviceId":"EC2",
     "signatureVersion":"v4",
     "xmlNamespace":"http://ec2.amazonaws.com/doc/2016-04-01"
   },

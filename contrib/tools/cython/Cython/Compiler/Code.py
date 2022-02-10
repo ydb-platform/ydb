@@ -280,7 +280,7 @@ class UtilityCodeBase(object):
         _, ext = os.path.splitext(path)
         if ext in ('.pyx', '.py', '.pxd', '.pxi'):
             comment = '#'
-            strip_comments = partial(re.compile(r'^\s*#(?!\s*cython\s*:).*').sub, '') 
+            strip_comments = partial(re.compile(r'^\s*#(?!\s*cython\s*:).*').sub, '')
             rstrip = StringEncoding._unicode.rstrip
         else:
             comment = '/'
@@ -501,11 +501,11 @@ class UtilityCode(UtilityCodeBase):
 
     def specialize(self, pyrex_type=None, **data):
         # Dicts aren't hashable...
-        name = self.name 
+        name = self.name
         if pyrex_type is not None:
             data['type'] = pyrex_type.empty_declaration_code()
             data['type_name'] = pyrex_type.specialization_name()
-            name = "%s[%s]" % (name, data['type_name']) 
+            name = "%s[%s]" % (name, data['type_name'])
         key = tuple(sorted(data.items()))
         try:
             return self._cache[key]
@@ -521,9 +521,9 @@ class UtilityCode(UtilityCodeBase):
                 self.none_or_sub(self.init, data),
                 self.none_or_sub(self.cleanup, data),
                 requires,
-                self.proto_block, 
-                name, 
-            ) 
+                self.proto_block,
+                name,
+            )
 
             self.specialize_list.append(s)
             return s
@@ -547,7 +547,7 @@ class UtilityCode(UtilityCodeBase):
 
         impl = re.sub(r'PY(IDENT|UNICODE)\("([^"]+)"\)', externalise, impl)
         assert 'PYIDENT(' not in impl and 'PYUNICODE(' not in impl
-        return True, impl 
+        return True, impl
 
     def inject_unbound_methods(self, impl, output):
         """Replace 'UNBOUND_METHOD(type, "name")' by a constant Python identifier cname.
@@ -570,7 +570,7 @@ class UtilityCode(UtilityCodeBase):
             r'\)', externalise, impl)
         assert 'CALL_UNBOUND_METHOD(' not in impl
 
-        return True, impl 
+        return True, impl
 
     def wrap_c_strings(self, impl):
         """Replace CSTRING('''xyz''') by a C compatible string
@@ -722,10 +722,10 @@ class FunctionState(object):
         self.can_trace = False
         self.gil_owned = True
 
-        self.temps_allocated = []  # of (name, type, manage_ref, static) 
-        self.temps_free = {}  # (type, manage_ref) -> list of free vars with same type/managed status 
-        self.temps_used_type = {}  # name -> (type, manage_ref) 
-        self.zombie_temps = set()  # temps that must not be reused after release 
+        self.temps_allocated = []  # of (name, type, manage_ref, static)
+        self.temps_free = {}  # (type, manage_ref) -> list of free vars with same type/managed status
+        self.temps_used_type = {}  # name -> (type, manage_ref)
+        self.zombie_temps = set()  # temps that must not be reused after release
         self.temp_counter = 0
         self.closure_temps = None
 
@@ -740,20 +740,20 @@ class FunctionState(object):
         self.should_declare_error_indicator = False
         self.uses_error_indicator = False
 
-    # safety checks 
- 
-    def validate_exit(self): 
-        # validate that all allocated temps have been freed 
-        if self.temps_allocated: 
-            leftovers = self.temps_in_use() 
-            if leftovers: 
-                msg = "TEMPGUARD: Temps left over at end of '%s': %s" % (self.scope.name, ', '.join([ 
-                    '%s [%s]' % (name, ctype) 
-                    for name, ctype, is_pytemp in sorted(leftovers)]), 
-                ) 
-                #print(msg) 
-                raise RuntimeError(msg) 
- 
+    # safety checks
+
+    def validate_exit(self):
+        # validate that all allocated temps have been freed
+        if self.temps_allocated:
+            leftovers = self.temps_in_use()
+            if leftovers:
+                msg = "TEMPGUARD: Temps left over at end of '%s': %s" % (self.scope.name, ', '.join([
+                    '%s [%s]' % (name, ctype)
+                    for name, ctype, is_pytemp in sorted(leftovers)]),
+                )
+                #print(msg)
+                raise RuntimeError(msg)
+
     # labels
 
     def new_label(self, name=None):
@@ -823,7 +823,7 @@ class FunctionState(object):
 
     # temp handling
 
-    def allocate_temp(self, type, manage_ref, static=False, reusable=True): 
+    def allocate_temp(self, type, manage_ref, static=False, reusable=True):
         """
         Allocates a temporary (which may create a new one or get a previously
         allocated and released one of the same type). Type is simply registered
@@ -842,24 +842,24 @@ class FunctionState(object):
         This is only used when allocating backing store for a module-level
         C array literals.
 
-        if reusable=False, the temp will not be reused after release. 
- 
+        if reusable=False, the temp will not be reused after release.
+
         A C string referring to the variable is returned.
         """
         if type.is_const and not type.is_reference:
             type = type.const_base_type
         elif type.is_reference and not type.is_fake_reference:
             type = type.ref_base_type
-        elif type.is_cfunction: 
-            from . import PyrexTypes 
-            type = PyrexTypes.c_ptr_type(type)  # A function itself isn't an l-value 
+        elif type.is_cfunction:
+            from . import PyrexTypes
+            type = PyrexTypes.c_ptr_type(type)  # A function itself isn't an l-value
         if not type.is_pyobject and not type.is_memoryviewslice:
             # Make manage_ref canonical, so that manage_ref will always mean
             # a decref is needed.
             manage_ref = False
 
         freelist = self.temps_free.get((type, manage_ref))
-        if reusable and freelist is not None and freelist[0]: 
+        if reusable and freelist is not None and freelist[0]:
             result = freelist[0].pop()
             freelist[1].remove(result)
         else:
@@ -868,11 +868,11 @@ class FunctionState(object):
                 result = "%s%d" % (Naming.codewriter_temp_prefix, self.temp_counter)
                 if result not in self.names_taken: break
             self.temps_allocated.append((result, type, manage_ref, static))
-            if not reusable: 
-                self.zombie_temps.add(result) 
+            if not reusable:
+                self.zombie_temps.add(result)
         self.temps_used_type[result] = (type, manage_ref)
         if DebugFlags.debug_temp_code_comments:
-            self.owner.putln("/* %s allocated (%s)%s */" % (result, type, "" if reusable else " - zombie")) 
+            self.owner.putln("/* %s allocated (%s)%s */" % (result, type, "" if reusable else " - zombie"))
 
         if self.collect_temps_stack:
             self.collect_temps_stack[-1].add((result, type))
@@ -891,12 +891,12 @@ class FunctionState(object):
             self.temps_free[(type, manage_ref)] = freelist
         if name in freelist[1]:
             raise RuntimeError("Temp %s freed twice!" % name)
-        if name not in self.zombie_temps: 
-            freelist[0].append(name) 
+        if name not in self.zombie_temps:
+            freelist[0].append(name)
         freelist[1].add(name)
         if DebugFlags.debug_temp_code_comments:
-            self.owner.putln("/* %s released %s*/" % ( 
-                name, " - zombie" if name in self.zombie_temps else "")) 
+            self.owner.putln("/* %s released %s*/" % (
+                name, " - zombie" if name in self.zombie_temps else ""))
 
     def temps_in_use(self):
         """Return a list of (cname,type,manage_ref) tuples of temp names and their type
@@ -2366,18 +2366,18 @@ class CCodeWriter(object):
         self.funcstate.should_declare_error_indicator = True
         if used:
             self.funcstate.uses_error_indicator = True
-        return "__PYX_MARK_ERR_POS(%s, %s)" % ( 
+        return "__PYX_MARK_ERR_POS(%s, %s)" % (
             self.lookup_filename(pos[0]),
-            pos[1]) 
+            pos[1])
 
-    def error_goto(self, pos, used=True): 
+    def error_goto(self, pos, used=True):
         lbl = self.funcstate.error_label
         self.funcstate.use_label(lbl)
         if pos is None:
             return 'goto %s;' % lbl
-        self.funcstate.should_declare_error_indicator = True 
-        if used: 
-            self.funcstate.uses_error_indicator = True 
+        self.funcstate.should_declare_error_indicator = True
+        if used:
+            self.funcstate.uses_error_indicator = True
         return "__PYX_ERR(%s, %s, %s)" % (
             self.lookup_filename(pos[0]),
             pos[1],

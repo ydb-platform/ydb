@@ -7,7 +7,7 @@ OWNER(
     g:cpp-contrib
 )
 
-VERSION(12.0.1) 
+VERSION(12.0.1)
 
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/llvm-12.0.1.src.tar.xz)
 
@@ -19,8 +19,8 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 ADDINCL(
-    GLOBAL ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/include 
-    GLOBAL contrib/libs/llvm12/include 
+    GLOBAL ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/include
+    GLOBAL contrib/libs/llvm12/include
 )
 
 END()
@@ -51,17 +51,17 @@ RECURSE(
     lib/ExecutionEngine/JITLink
     lib/ExecutionEngine/MCJIT
     lib/ExecutionEngine/Orc
-    lib/ExecutionEngine/Orc/Shared 
-    lib/ExecutionEngine/Orc/TargetProcess 
+    lib/ExecutionEngine/Orc/Shared
+    lib/ExecutionEngine/Orc/TargetProcess
     lib/ExecutionEngine/RuntimeDyld
     lib/Extensions
-    lib/FileCheck 
+    lib/FileCheck
     lib/Frontend/OpenACC
     lib/Frontend/OpenMP
     lib/FuzzMutate
     lib/IR
     lib/IRReader
-    lib/InterfaceStub 
+    lib/InterfaceStub
     lib/LTO
     lib/LineEditor
     lib/Linker
@@ -109,13 +109,13 @@ RECURSE(
     lib/Target/X86/Disassembler
     lib/Target/X86/MCTargetDesc
     lib/Target/X86/TargetInfo
-    lib/TextAPI/MachO 
+    lib/TextAPI/MachO
     lib/ToolDrivers/llvm-dlltool
     lib/ToolDrivers/llvm-lib
     lib/Transforms/AggressiveInstCombine
     lib/Transforms/CFGuard
     lib/Transforms/Coroutines
-    lib/Transforms/HelloNew 
+    lib/Transforms/HelloNew
     lib/Transforms/IPO
     lib/Transforms/InstCombine
     lib/Transforms/Instrumentation
@@ -156,8 +156,8 @@ RECURSE(
     tools/llvm-gsymutil
     tools/llvm-ifs
     tools/llvm-jitlink
-    tools/llvm-jitlink/llvm-jitlink-executor 
-    tools/llvm-libtool-darwin 
+    tools/llvm-jitlink/llvm-jitlink-executor
+    tools/llvm-libtool-darwin
     tools/llvm-link
     tools/llvm-lipo
     tools/llvm-lto
@@ -173,7 +173,7 @@ RECURSE(
     tools/llvm-opt-report
     tools/llvm-pdbutil
     tools/llvm-profdata
-    tools/llvm-profgen 
+    tools/llvm-profgen
     tools/llvm-rc
     tools/llvm-readobj
     tools/llvm-reduce
@@ -194,7 +194,7 @@ RECURSE(
     tools/remarks-shlib
     tools/sancov
     tools/sanstats
-    tools/split-file 
+    tools/split-file
     tools/verify-uselistorder
     tools/yaml2obj
     utils/TableGen

@@ -1565,10 +1565,10 @@ bool PPCFastISel::fastLowerCall(CallLoweringInfo &CLI) {
   if (IsVarArg)
     return false;
 
-  // If this is a PC-Rel function, let SDISel handle the call. 
-  if (Subtarget->isUsingPCRelativeCalls()) 
-    return false; 
- 
+  // If this is a PC-Rel function, let SDISel handle the call.
+  if (Subtarget->isUsingPCRelativeCalls())
+    return false;
+
   // Handle simple calls for now, with legal return types and
   // those that can be extended.
   Type *RetTy = CLI.RetTy;
@@ -1624,10 +1624,10 @@ bool PPCFastISel::fastLowerCall(CallLoweringInfo &CLI) {
     if (!isTypeLegal(ArgTy, ArgVT) && ArgVT != MVT::i16 && ArgVT != MVT::i8)
       return false;
 
-    // FIXME: FastISel cannot handle non-simple types yet, including 128-bit FP 
-    // types, which is passed through vector register. Skip these types and 
-    // fallback to default SelectionDAG based selection. 
-    if (ArgVT.isVector() || ArgVT == MVT::f128) 
+    // FIXME: FastISel cannot handle non-simple types yet, including 128-bit FP
+    // types, which is passed through vector register. Skip these types and
+    // fallback to default SelectionDAG based selection.
+    if (ArgVT.isVector() || ArgVT == MVT::f128)
       return false;
 
     unsigned Arg = getRegForValue(ArgValue);
@@ -1996,10 +1996,10 @@ bool PPCFastISel::fastSelectInstruction(const Instruction *I) {
 // Materialize a floating-point constant into a register, and return
 // the register number (or zero if we failed to handle it).
 unsigned PPCFastISel::PPCMaterializeFP(const ConstantFP *CFP, MVT VT) {
-  // If this is a PC-Rel function, let SDISel handle constant pool. 
-  if (Subtarget->isUsingPCRelativeCalls()) 
-    return false; 
- 
+  // If this is a PC-Rel function, let SDISel handle constant pool.
+  if (Subtarget->isUsingPCRelativeCalls())
+    return false;
+
   // No plans to handle long double here.
   if (VT != MVT::f32 && VT != MVT::f64)
     return 0;
@@ -2064,10 +2064,10 @@ unsigned PPCFastISel::PPCMaterializeFP(const ConstantFP *CFP, MVT VT) {
 // Materialize the address of a global value into a register, and return
 // the register number (or zero if we failed to handle it).
 unsigned PPCFastISel::PPCMaterializeGV(const GlobalValue *GV, MVT VT) {
-  // If this is a PC-Rel function, let SDISel handle GV materialization. 
-  if (Subtarget->isUsingPCRelativeCalls()) 
-    return false; 
- 
+  // If this is a PC-Rel function, let SDISel handle GV materialization.
+  if (Subtarget->isUsingPCRelativeCalls())
+    return false;
+
   assert(VT == MVT::i64 && "Non-address!");
   const TargetRegisterClass *RC = &PPC::G8RC_and_G8RC_NOX0RegClass;
   unsigned DestReg = createResultReg(RC);

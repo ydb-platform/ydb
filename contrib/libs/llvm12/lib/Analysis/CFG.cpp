@@ -14,18 +14,18 @@
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/Dominators.h"
-#include "llvm/Support/CommandLine.h" 
+#include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
 
-// The max number of basic blocks explored during reachability analysis between 
-// two basic blocks. This is kept reasonably small to limit compile time when 
-// repeatedly used by clients of this analysis (such as captureTracking). 
-static cl::opt<unsigned> DefaultMaxBBsToExplore( 
-    "dom-tree-reachability-max-bbs-to-explore", cl::Hidden, 
-    cl::desc("Max number of BBs to explore for reachability analysis"), 
-    cl::init(32)); 
- 
+// The max number of basic blocks explored during reachability analysis between
+// two basic blocks. This is kept reasonably small to limit compile time when
+// repeatedly used by clients of this analysis (such as captureTracking).
+static cl::opt<unsigned> DefaultMaxBBsToExplore(
+    "dom-tree-reachability-max-bbs-to-explore", cl::Hidden,
+    cl::desc("Max number of BBs to explore for reachability analysis"),
+    cl::init(32));
+
 /// FindFunctionBackedges - Analyze the specified function to find all of the
 /// loop backedges in the function and return them.  This is a relatively cheap
 /// (compared to computing dominators and loop info) analysis.
@@ -103,7 +103,7 @@ bool llvm::isCriticalEdge(const Instruction *TI, const BasicBlock *Dest,
   assert(TI->isTerminator() && "Must be a terminator to have successors!");
   if (TI->getNumSuccessors() == 1) return false;
 
-  assert(is_contained(predecessors(Dest), TI->getParent()) && 
+  assert(is_contained(predecessors(Dest), TI->getParent()) &&
          "No edge between TI's block and Dest.");
 
   const_pred_iterator I = pred_begin(Dest), E = pred_end(Dest);
@@ -161,7 +161,7 @@ bool llvm::isPotentiallyReachableFromMany(
 
   const Loop *StopLoop = LI ? getOutermostLoop(LI, StopBB) : nullptr;
 
-  unsigned Limit = DefaultMaxBBsToExplore; 
+  unsigned Limit = DefaultMaxBBsToExplore;
   SmallPtrSet<const BasicBlock*, 32> Visited;
   do {
     BasicBlock *BB = Worklist.pop_back_val();

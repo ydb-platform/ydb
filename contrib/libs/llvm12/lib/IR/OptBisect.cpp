@@ -54,5 +54,5 @@ bool OptBisect::checkPass(const StringRef PassName,
   printPassMessage(PassName, CurBisectNum, TargetDesc, ShouldRun);
   return ShouldRun;
 }
- 
-ManagedStatic<OptBisect> llvm::OptBisector; 
+
+ManagedStatic<OptBisect> llvm::OptBisector;

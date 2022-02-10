@@ -71,7 +71,7 @@ class olddict(with_metaclass(BaseOldDict, _builtin_dict)):
     #         in the keyword argument list.  For example:  dict(one=1, two=2)
 
     #     """
-    # 
+    #
     #     if len(args) == 0:
     #         return super(olddict, cls).__new__(cls)
     #     # Was: elif isinstance(args[0], newbytes):
@@ -85,7 +85,7 @@ class olddict(with_metaclass(BaseOldDict, _builtin_dict)):
     #     else:
     #         value = args[0]
     #     return super(olddict, cls).__new__(cls, value)
- 
+
     def __native__(self):
         """
         Hook for the past.utils.native() function

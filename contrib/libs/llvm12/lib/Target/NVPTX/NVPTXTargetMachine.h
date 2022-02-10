@@ -62,8 +62,8 @@ public:
   }
 
   void adjustPassManager(PassManagerBuilder &) override;
-  void registerPassBuilderCallbacks(PassBuilder &PB, 
-                                    bool DebugPassManager) override; 
+  void registerPassBuilderCallbacks(PassBuilder &PB,
+                                    bool DebugPassManager) override;
 
   TargetTransformInfo getTargetTransformInfo(const Function &F) override;
 

@@ -27,24 +27,24 @@ PyAPI_FUNC(void) Py_EndInterpreter(PyThreadState *);
  */
 PyAPI_FUNC(int) Py_AtExit(void (*func)(void));
 
-PyAPI_FUNC(void) _Py_NO_RETURN Py_Exit(int); 
+PyAPI_FUNC(void) _Py_NO_RETURN Py_Exit(int);
 
 /* Bootstrap __main__ (defined in Modules/main.c) */
 PyAPI_FUNC(int) Py_Main(int argc, wchar_t **argv);
 
-PyAPI_FUNC(int) Py_FrozenMain(int argc, char **argv); 
- 
-PyAPI_FUNC(int) Py_BytesMain(int argc, char **argv); 
- 
-/* In pathconfig.c */ 
-PyAPI_FUNC(void) Py_SetProgramName(const wchar_t *); 
-PyAPI_FUNC(wchar_t *) Py_GetProgramName(void); 
- 
-PyAPI_FUNC(void) Py_SetPythonHome(const wchar_t *); 
-PyAPI_FUNC(wchar_t *) Py_GetPythonHome(void); 
- 
+PyAPI_FUNC(int) Py_FrozenMain(int argc, char **argv);
+
+PyAPI_FUNC(int) Py_BytesMain(int argc, char **argv);
+
+/* In pathconfig.c */
+PyAPI_FUNC(void) Py_SetProgramName(const wchar_t *);
+PyAPI_FUNC(wchar_t *) Py_GetProgramName(void);
+
+PyAPI_FUNC(void) Py_SetPythonHome(const wchar_t *);
+PyAPI_FUNC(wchar_t *) Py_GetPythonHome(void);
+
 PyAPI_FUNC(wchar_t *) Py_GetProgramFullPath(void);
- 
+
 PyAPI_FUNC(wchar_t *) Py_GetPrefix(void);
 PyAPI_FUNC(wchar_t *) Py_GetExecPrefix(void);
 PyAPI_FUNC(wchar_t *) Py_GetPath(void);
@@ -66,9 +66,9 @@ PyAPI_FUNC(PyOS_sighandler_t) PyOS_getsig(int);
 PyAPI_FUNC(PyOS_sighandler_t) PyOS_setsig(int, PyOS_sighandler_t);
 
 #ifndef Py_LIMITED_API
-#  define Py_CPYTHON_PYLIFECYCLE_H 
-#  include  "cpython/pylifecycle.h" 
-#  undef Py_CPYTHON_PYLIFECYCLE_H 
+#  define Py_CPYTHON_PYLIFECYCLE_H
+#  include  "cpython/pylifecycle.h"
+#  undef Py_CPYTHON_PYLIFECYCLE_H
 #endif
 
 #ifdef __cplusplus

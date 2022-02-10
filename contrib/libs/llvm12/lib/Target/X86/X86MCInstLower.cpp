@@ -977,24 +977,24 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
 void X86AsmPrinter::LowerTlsAddr(X86MCInstLower &MCInstLowering,
                                  const MachineInstr &MI) {
   NoAutoPaddingScope NoPadScope(*OutStreamer);
-  bool Is64Bits = MI.getOpcode() != X86::TLS_addr32 && 
-                  MI.getOpcode() != X86::TLS_base_addr32; 
-  bool Is64BitsLP64 = MI.getOpcode() == X86::TLS_addr64 || 
-                      MI.getOpcode() == X86::TLS_base_addr64; 
+  bool Is64Bits = MI.getOpcode() != X86::TLS_addr32 &&
+                  MI.getOpcode() != X86::TLS_base_addr32;
+  bool Is64BitsLP64 = MI.getOpcode() == X86::TLS_addr64 ||
+                      MI.getOpcode() == X86::TLS_base_addr64;
   MCContext &Ctx = OutStreamer->getContext();
 
   MCSymbolRefExpr::VariantKind SRVK;
   switch (MI.getOpcode()) {
   case X86::TLS_addr32:
   case X86::TLS_addr64:
-  case X86::TLS_addrX32: 
+  case X86::TLS_addrX32:
     SRVK = MCSymbolRefExpr::VK_TLSGD;
     break;
   case X86::TLS_base_addr32:
     SRVK = MCSymbolRefExpr::VK_TLSLDM;
     break;
   case X86::TLS_base_addr64:
-  case X86::TLS_base_addrX32: 
+  case X86::TLS_base_addrX32:
     SRVK = MCSymbolRefExpr::VK_TLSLD;
     break;
   default:
@@ -1014,7 +1014,7 @@ void X86AsmPrinter::LowerTlsAddr(X86MCInstLower &MCInstLowering,
 
   if (Is64Bits) {
     bool NeedsPadding = SRVK == MCSymbolRefExpr::VK_TLSGD;
-    if (NeedsPadding && Is64BitsLP64) 
+    if (NeedsPadding && Is64BitsLP64)
       EmitAndCountInstruction(MCInstBuilder(X86::DATA16_PREFIX));
     EmitAndCountInstruction(MCInstBuilder(X86::LEA64r)
                                 .addReg(X86::RDI)
@@ -1087,26 +1087,26 @@ void X86AsmPrinter::LowerTlsAddr(X86MCInstLower &MCInstLowering,
 /// bytes.  Return the size of nop emitted.
 static unsigned emitNop(MCStreamer &OS, unsigned NumBytes,
                         const X86Subtarget *Subtarget) {
-  // Determine the longest nop which can be efficiently decoded for the given 
-  // target cpu.  15-bytes is the longest single NOP instruction, but some 
-  // platforms can't decode the longest forms efficiently. 
-  unsigned MaxNopLength = 1; 
-  if (Subtarget->is64Bit()) { 
-    // FIXME: We can use NOOPL on 32-bit targets with FeatureNOPL, but the 
-    // IndexReg/BaseReg below need to be updated. 
-    if (Subtarget->hasFeature(X86::FeatureFast7ByteNOP)) 
-      MaxNopLength = 7; 
-    else if (Subtarget->hasFeature(X86::FeatureFast15ByteNOP)) 
-      MaxNopLength = 15; 
-    else if (Subtarget->hasFeature(X86::FeatureFast11ByteNOP)) 
-      MaxNopLength = 11; 
-    else 
-      MaxNopLength = 10; 
-  } if (Subtarget->is32Bit()) 
-    MaxNopLength = 2; 
- 
+  // Determine the longest nop which can be efficiently decoded for the given
+  // target cpu.  15-bytes is the longest single NOP instruction, but some
+  // platforms can't decode the longest forms efficiently.
+  unsigned MaxNopLength = 1;
+  if (Subtarget->is64Bit()) {
+    // FIXME: We can use NOOPL on 32-bit targets with FeatureNOPL, but the
+    // IndexReg/BaseReg below need to be updated.
+    if (Subtarget->hasFeature(X86::FeatureFast7ByteNOP))
+      MaxNopLength = 7;
+    else if (Subtarget->hasFeature(X86::FeatureFast15ByteNOP))
+      MaxNopLength = 15;
+    else if (Subtarget->hasFeature(X86::FeatureFast11ByteNOP))
+      MaxNopLength = 11;
+    else
+      MaxNopLength = 10;
+  } if (Subtarget->is32Bit())
+    MaxNopLength = 2;
+
   // Cap a single nop emission at the profitable value for the target
-  NumBytes = std::min(NumBytes, MaxNopLength); 
+  NumBytes = std::min(NumBytes, MaxNopLength);
 
   unsigned NopSize;
   unsigned Opc, BaseReg, ScaleVal, IndexReg, Displacement, SegmentReg;
@@ -1334,7 +1334,7 @@ void X86AsmPrinter::LowerPATCHABLE_OP(const MachineInstr &MI,
 
   MCInst MCI;
   MCI.setOpcode(Opcode);
-  for (auto &MO : drop_begin(MI.operands(), 2)) 
+  for (auto &MO : drop_begin(MI.operands(), 2))
     if (auto MaybeOperand = MCIL.LowerMachineOperand(&MI, MO))
       MCI.addOperand(MaybeOperand.getValue());
 
@@ -1710,7 +1710,7 @@ void X86AsmPrinter::LowerPATCHABLE_RET(const MachineInstr &MI,
   unsigned OpCode = MI.getOperand(0).getImm();
   MCInst Ret;
   Ret.setOpcode(OpCode);
-  for (auto &MO : drop_begin(MI.operands())) 
+  for (auto &MO : drop_begin(MI.operands()))
     if (auto MaybeOperand = MCIL.LowerMachineOperand(&MI, MO))
       Ret.addOperand(MaybeOperand.getValue());
   OutStreamer->emitInstruction(Ret, getSubtargetInfo());
@@ -1749,7 +1749,7 @@ void X86AsmPrinter::LowerPATCHABLE_TAIL_CALL(const MachineInstr &MI,
   // Before emitting the instruction, add a comment to indicate that this is
   // indeed a tail call.
   OutStreamer->AddComment("TAILCALL");
-  for (auto &MO : drop_begin(MI.operands())) 
+  for (auto &MO : drop_begin(MI.operands()))
     if (auto MaybeOperand = MCIL.LowerMachineOperand(&MI, MO))
       TC.addOperand(MaybeOperand.getValue());
   OutStreamer->emitInstruction(TC, getSubtargetInfo());
@@ -1784,7 +1784,7 @@ static const Constant *getConstantFromPool(const MachineInstr &MI,
   if (ConstantEntry.isMachineConstantPoolEntry())
     return nullptr;
 
-  return ConstantEntry.Val.ConstVal; 
+  return ConstantEntry.Val.ConstVal;
 }
 
 static std::string getShuffleComment(const MachineInstr *MI, unsigned SrcOp1Idx,
@@ -2446,10 +2446,10 @@ void X86AsmPrinter::emitInstruction(const MachineInstr *MI) {
 
   case X86::TLS_addr32:
   case X86::TLS_addr64:
-  case X86::TLS_addrX32: 
+  case X86::TLS_addrX32:
   case X86::TLS_base_addr32:
   case X86::TLS_base_addr64:
-  case X86::TLS_base_addrX32: 
+  case X86::TLS_base_addrX32:
     return LowerTlsAddr(MCInstLowering, *MI);
 
   case X86::MOVPC32r: {
@@ -2598,15 +2598,15 @@ void X86AsmPrinter::emitInstruction(const MachineInstr *MI) {
     }
     return;
   }
-  case X86::UBSAN_UD1: 
-    EmitAndCountInstruction(MCInstBuilder(X86::UD1Lm) 
-                                .addReg(X86::EAX) 
-                                .addReg(X86::EAX) 
-                                .addImm(1) 
-                                .addReg(X86::NoRegister) 
-                                .addImm(MI->getOperand(0).getImm()) 
-                                .addReg(X86::NoRegister)); 
-    return; 
+  case X86::UBSAN_UD1:
+    EmitAndCountInstruction(MCInstBuilder(X86::UD1Lm)
+                                .addReg(X86::EAX)
+                                .addReg(X86::EAX)
+                                .addImm(1)
+                                .addReg(X86::NoRegister)
+                                .addImm(MI->getOperand(0).getImm())
+                                .addReg(X86::NoRegister));
+    return;
   }
 
   MCInst TmpInst;

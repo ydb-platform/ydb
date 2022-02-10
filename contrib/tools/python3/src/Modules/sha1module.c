@@ -74,7 +74,7 @@ typedef struct {
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@gmail.com, https://www.libtom.net 
+ * Tom St Denis, tomstdenis@gmail.com, https://www.libtom.net
  */
 
 /* rotate the hard way (platform optimizations could be done) */
@@ -269,7 +269,7 @@ sha1_done(struct sha1_state *sha1, unsigned char *out)
         sha1->curlen = 0;
     }
 
-    /* pad up to 56 bytes of zeroes */ 
+    /* pad up to 56 bytes of zeroes */
     while (sha1->curlen < 56) {
         sha1->buf[sha1->curlen++] = (unsigned char)0;
     }
@@ -446,10 +446,10 @@ static PyTypeObject SHA1type = {
     0,                  /*tp_itemsize*/
     /* methods */
     SHA1_dealloc,       /*tp_dealloc*/
-    0,                  /*tp_vectorcall_offset*/ 
+    0,                  /*tp_vectorcall_offset*/
     0,                  /*tp_getattr*/
     0,                  /*tp_setattr*/
-    0,                  /*tp_as_async*/ 
+    0,                  /*tp_as_async*/
     0,                  /*tp_repr*/
     0,                  /*tp_as_number*/
     0,                  /*tp_as_sequence*/
@@ -480,15 +480,15 @@ static PyTypeObject SHA1type = {
 _sha1.sha1
 
     string: object(c_default="NULL") = b''
-    * 
-    usedforsecurity: bool = True 
+    *
+    usedforsecurity: bool = True
 
 Return a new SHA1 hash object; optionally initialized with a string.
 [clinic start generated code]*/
 
 static PyObject *
-_sha1_sha1_impl(PyObject *module, PyObject *string, int usedforsecurity) 
-/*[clinic end generated code: output=6f8b3af05126e18e input=bd54b68e2bf36a8a]*/ 
+_sha1_sha1_impl(PyObject *module, PyObject *string, int usedforsecurity)
+/*[clinic end generated code: output=6f8b3af05126e18e input=bd54b68e2bf36a8a]*/
 {
     SHA1object *new;
     Py_buffer buf;
@@ -546,15 +546,15 @@ PyInit__sha1(void)
 {
     PyObject *m;
 
-    Py_SET_TYPE(&SHA1type, &PyType_Type); 
-    if (PyType_Ready(&SHA1type) < 0) { 
+    Py_SET_TYPE(&SHA1type, &PyType_Type);
+    if (PyType_Ready(&SHA1type) < 0) {
         return NULL;
-    } 
+    }
 
     m = PyModule_Create(&_sha1module);
-    if (m == NULL) { 
+    if (m == NULL) {
         return NULL;
-    } 
+    }
 
     Py_INCREF((PyObject *)&SHA1type);
     PyModule_AddObject(m, "SHA1Type", (PyObject *)&SHA1type);

@@ -87,8 +87,8 @@ Error BinaryHolder::ArchiveEntry::load(IntrusiveRefCntPtr<vfs::FileSystem> VFS,
 }
 
 Error BinaryHolder::ObjectEntry::load(IntrusiveRefCntPtr<vfs::FileSystem> VFS,
-                                      StringRef Filename, TimestampTy Timestamp, 
-                                      bool Verbose) { 
+                                      StringRef Filename, TimestampTy Timestamp,
+                                      bool Verbose) {
   // Try to load regular binary and force it to be memory mapped.
   auto ErrOrBuff = (Filename == "-")
                        ? MemoryBuffer::getSTDIN()
@@ -96,18 +96,18 @@ Error BinaryHolder::ObjectEntry::load(IntrusiveRefCntPtr<vfs::FileSystem> VFS,
   if (auto Err = ErrOrBuff.getError())
     return errorCodeToError(Err);
 
-  if (Filename != "-" && Timestamp != sys::TimePoint<>()) { 
-    llvm::ErrorOr<vfs::Status> Stat = VFS->status(Filename); 
-    if (!Stat) 
-      return errorCodeToError(Stat.getError()); 
-    if (Timestamp != std::chrono::time_point_cast<std::chrono::seconds>( 
-                         Stat->getLastModificationTime())) 
-      WithColor::warning() << Filename 
-                           << ": timestamp mismatch between object file (" 
-                           << Stat->getLastModificationTime() 
-                           << ") and debug map (" << Timestamp << ")\n"; 
-  } 
- 
+  if (Filename != "-" && Timestamp != sys::TimePoint<>()) {
+    llvm::ErrorOr<vfs::Status> Stat = VFS->status(Filename);
+    if (!Stat)
+      return errorCodeToError(Stat.getError());
+    if (Timestamp != std::chrono::time_point_cast<std::chrono::seconds>(
+                         Stat->getLastModificationTime()))
+      WithColor::warning() << Filename
+                           << ": timestamp mismatch between object file ("
+                           << Stat->getLastModificationTime()
+                           << ") and debug map (" << Timestamp << ")\n";
+  }
+
   MemBuffer = std::move(*ErrOrBuff);
 
   if (Verbose)
@@ -193,14 +193,14 @@ BinaryHolder::ArchiveEntry::getObjectEntry(StringRef Filename,
             return ModTimeOrErr.takeError();
 
           if (Timestamp != sys::TimePoint<>() &&
-              Timestamp != std::chrono::time_point_cast<std::chrono::seconds>( 
-                               ModTimeOrErr.get())) { 
+              Timestamp != std::chrono::time_point_cast<std::chrono::seconds>(
+                               ModTimeOrErr.get())) {
             if (Verbose)
-              WithColor::warning() 
-                  << *NameOrErr 
-                  << ": timestamp mismatch between archive member (" 
-                  << ModTimeOrErr.get() << ") and debug map (" << Timestamp 
-                  << ")\n"; 
+              WithColor::warning()
+                  << *NameOrErr
+                  << ": timestamp mismatch between archive member ("
+                  << ModTimeOrErr.get() << ") and debug map (" << Timestamp
+                  << ")\n";
             continue;
           }
 
@@ -264,7 +264,7 @@ BinaryHolder::getObjectEntry(StringRef Filename, TimestampTy Timestamp) {
   std::lock_guard<std::mutex> Lock(ObjectCacheMutex);
   if (!ObjectCache.count(Filename)) {
     ObjectEntry &OE = ObjectCache[Filename];
-    auto Err = OE.load(VFS, Filename, Timestamp, Verbose); 
+    auto Err = OE.load(VFS, Filename, Timestamp, Verbose);
     if (Err) {
       ObjectCache.erase(Filename);
       return std::move(Err);

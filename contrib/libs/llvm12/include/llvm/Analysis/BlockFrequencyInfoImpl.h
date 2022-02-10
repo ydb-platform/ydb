@@ -176,7 +176,7 @@ inline raw_ostream &operator<<(raw_ostream &OS, BlockMass X) {
 /// algorithms for BlockFrequencyInfoImplBase.  Only algorithms that depend on
 /// the block type (or that call such algorithms) are skipped here.
 ///
-/// Nevertheless, the majority of the overall algorithm documentation lives with 
+/// Nevertheless, the majority of the overall algorithm documentation lives with
 /// BlockFrequencyInfoImpl.  See there for details.
 class BlockFrequencyInfoImplBase {
 public:
@@ -465,7 +465,7 @@ public:
 
   /// Analyze irreducible SCCs.
   ///
-  /// Separate irreducible SCCs from \c G, which is an explicit graph of \c 
+  /// Separate irreducible SCCs from \c G, which is an explicit graph of \c
   /// OuterLoop (or the top-level function, if \c OuterLoop is \c nullptr).
   /// Insert them into \a Loops before \c Insert.
   ///
@@ -713,7 +713,7 @@ void IrreducibleGraph::addEdges(const BlockNode &Node,
 ///
 /// In addition to loops, this algorithm has limited support for irreducible
 /// SCCs, which are SCCs with multiple entry blocks.  Irreducible SCCs are
-/// discovered on the fly, and modelled as loops with multiple headers. 
+/// discovered on the fly, and modelled as loops with multiple headers.
 ///
 /// The headers of irreducible sub-SCCs consist of its entry blocks and all
 /// nodes that are targets of a backedge within it (excluding backedges within
@@ -1253,7 +1253,7 @@ bool BlockFrequencyInfoImpl<BT>::computeMassInLoop(LoopData &Loop) {
       }
     }
     // As a heuristic, if some headers don't have a weight, give them the
-    // minimum weight seen (not to disrupt the existing trends too much by 
+    // minimum weight seen (not to disrupt the existing trends too much by
     // using a weight that's in the general range of the other headers' weights,
     // and the minimum seems to perform better than the average.)
     // FIXME: better update in the passes that drop the header weight.
@@ -1456,8 +1456,8 @@ void BlockFrequencyInfoImpl<BT>::verifyMatch(
       BlockNode Node = Entry.second;
       if (OtherValidNodes.count(BB)) {
         BlockNode OtherNode = OtherValidNodes[BB];
-        const auto &Freq = Freqs[Node.Index]; 
-        const auto &OtherFreq = Other.Freqs[OtherNode.Index]; 
+        const auto &Freq = Freqs[Node.Index];
+        const auto &OtherFreq = Other.Freqs[OtherNode.Index];
         if (Freq.Integer != OtherFreq.Integer) {
           Match = false;
           dbgs() << "Freq mismatch: " << bfi_detail::getBlockName(BB) << " "

@@ -180,8 +180,8 @@ class BandwidthLimitedStream(object):
         """Signal that data being read is not being transferred to S3"""
         self.disable_bandwidth_limiting()
 
-    def seek(self, where, whence=0): 
-        self._fileobj.seek(where, whence) 
+    def seek(self, where, whence=0):
+        self._fileobj.seek(where, whence)
 
     def tell(self):
         return self._fileobj.tell()
@@ -403,7 +403,7 @@ class BandwidthRateTracker(object):
     def _calculate_rate(self, amt, time_at_consumption):
         time_delta = time_at_consumption - self._last_time
         if time_delta <= 0:
-            # While it is really unlikely to see this in an actual transfer, 
+            # While it is really unlikely to see this in an actual transfer,
             # we do not want to be returning back a negative rate or try to
             # divide the amount by zero. So instead return back an infinite
             # rate as the time delta is infinitesimally small.

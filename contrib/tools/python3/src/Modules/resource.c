@@ -224,11 +224,11 @@ resource_setrlimit_impl(PyObject *module, int resource, PyObject *limits)
         return NULL;
     }
 
-    if (PySys_Audit("resource.setrlimit", "iO", resource, 
-                    limits ? limits : Py_None) < 0) { 
-        return NULL; 
-    } 
- 
+    if (PySys_Audit("resource.setrlimit", "iO", resource,
+                    limits ? limits : Py_None) < 0) {
+        return NULL;
+    }
+
     if (py2rlimit(limits, &rl) < 0) {
         return NULL;
     }
@@ -274,11 +274,11 @@ resource_prlimit_impl(PyObject *module, pid_t pid, int resource,
         return NULL;
     }
 
-    if (PySys_Audit("resource.prlimit", "iiO", pid, resource, 
-                    limits ? limits : Py_None) < 0) { 
-        return NULL; 
-    } 
- 
+    if (PySys_Audit("resource.prlimit", "iiO", pid, resource,
+                    limits ? limits : Py_None) < 0) {
+        return NULL;
+    }
+
     if (group_right_1) {
         if (py2rlimit(limits, &new_limit) < 0) {
             return NULL;
@@ -340,174 +340,174 @@ resource_methods[] = {
 /* Module initialization */
 
 
-static int 
-resource_exec(PyObject *module) 
+static int
+resource_exec(PyObject *module)
 {
-#define ADD_INT(module, value)                                    \ 
-    do {                                                          \ 
-        if (PyModule_AddIntConstant(module, #value, value) < 0) { \ 
-            return -1;                                            \ 
-        }                                                         \ 
-    } while (0) 
+#define ADD_INT(module, value)                                    \
+    do {                                                          \
+        if (PyModule_AddIntConstant(module, #value, value) < 0) { \
+            return -1;                                            \
+        }                                                         \
+    } while (0)
 
     /* Add some symbolic constants to the module */
     Py_INCREF(PyExc_OSError);
-    if (PyModule_AddObject(module, "error", PyExc_OSError) < 0) { 
-        Py_DECREF(PyExc_OSError); 
-        return -1; 
-    } 
+    if (PyModule_AddObject(module, "error", PyExc_OSError) < 0) {
+        Py_DECREF(PyExc_OSError);
+        return -1;
+    }
     if (!initialized) {
         if (PyStructSequence_InitType2(&StructRUsageType,
                                        &struct_rusage_desc) < 0)
-            return -1; 
+            return -1;
     }
 
-    if(PyModule_AddType(module, &StructRUsageType) < 0) { 
-        return -1; 
-    } 
+    if(PyModule_AddType(module, &StructRUsageType) < 0) {
+        return -1;
+    }
 
     /* insert constants */
 #ifdef RLIMIT_CPU
-    ADD_INT(module, RLIMIT_CPU); 
+    ADD_INT(module, RLIMIT_CPU);
 #endif
 
 #ifdef RLIMIT_FSIZE
-    ADD_INT(module, RLIMIT_FSIZE); 
+    ADD_INT(module, RLIMIT_FSIZE);
 #endif
 
 #ifdef RLIMIT_DATA
-    ADD_INT(module, RLIMIT_DATA); 
+    ADD_INT(module, RLIMIT_DATA);
 #endif
 
 #ifdef RLIMIT_STACK
-    ADD_INT(module, RLIMIT_STACK); 
+    ADD_INT(module, RLIMIT_STACK);
 #endif
 
 #ifdef RLIMIT_CORE
-    ADD_INT(module, RLIMIT_CORE); 
+    ADD_INT(module, RLIMIT_CORE);
 #endif
 
 #ifdef RLIMIT_NOFILE
-    ADD_INT(module, RLIMIT_NOFILE); 
+    ADD_INT(module, RLIMIT_NOFILE);
 #endif
 
 #ifdef RLIMIT_OFILE
-    ADD_INT(module, RLIMIT_OFILE); 
+    ADD_INT(module, RLIMIT_OFILE);
 #endif
 
 #ifdef RLIMIT_VMEM
-    ADD_INT(module, RLIMIT_VMEM); 
+    ADD_INT(module, RLIMIT_VMEM);
 #endif
 
 #ifdef RLIMIT_AS
-    ADD_INT(module, RLIMIT_AS); 
+    ADD_INT(module, RLIMIT_AS);
 #endif
 
 #ifdef RLIMIT_RSS
-    ADD_INT(module, RLIMIT_RSS); 
+    ADD_INT(module, RLIMIT_RSS);
 #endif
 
 #ifdef RLIMIT_NPROC
-    ADD_INT(module, RLIMIT_NPROC); 
+    ADD_INT(module, RLIMIT_NPROC);
 #endif
 
 #ifdef RLIMIT_MEMLOCK
-    ADD_INT(module, RLIMIT_MEMLOCK); 
+    ADD_INT(module, RLIMIT_MEMLOCK);
 #endif
 
 #ifdef RLIMIT_SBSIZE
-    ADD_INT(module, RLIMIT_SBSIZE); 
+    ADD_INT(module, RLIMIT_SBSIZE);
 #endif
 
 /* Linux specific */
 #ifdef RLIMIT_MSGQUEUE
-    ADD_INT(module, RLIMIT_MSGQUEUE); 
+    ADD_INT(module, RLIMIT_MSGQUEUE);
 #endif
 
 #ifdef RLIMIT_NICE
-    ADD_INT(module, RLIMIT_NICE); 
+    ADD_INT(module, RLIMIT_NICE);
 #endif
 
 #ifdef RLIMIT_RTPRIO
-    ADD_INT(module, RLIMIT_RTPRIO); 
+    ADD_INT(module, RLIMIT_RTPRIO);
 #endif
 
 #ifdef RLIMIT_RTTIME
-    ADD_INT(module, RLIMIT_RTTIME); 
+    ADD_INT(module, RLIMIT_RTTIME);
 #endif
 
 #ifdef RLIMIT_SIGPENDING
-    ADD_INT(module, RLIMIT_SIGPENDING); 
+    ADD_INT(module, RLIMIT_SIGPENDING);
 #endif
 
 /* target */
 #ifdef RUSAGE_SELF
-    ADD_INT(module, RUSAGE_SELF); 
+    ADD_INT(module, RUSAGE_SELF);
 #endif
 
 #ifdef RUSAGE_CHILDREN
-    ADD_INT(module, RUSAGE_CHILDREN); 
+    ADD_INT(module, RUSAGE_CHILDREN);
 #endif
 
 #ifdef RUSAGE_BOTH
-    ADD_INT(module, RUSAGE_BOTH); 
+    ADD_INT(module, RUSAGE_BOTH);
 #endif
 
 #ifdef RUSAGE_THREAD
-    ADD_INT(module, RUSAGE_THREAD); 
+    ADD_INT(module, RUSAGE_THREAD);
 #endif
 
 /* FreeBSD specific */
 
 #ifdef RLIMIT_SWAP
-    ADD_INT(module, RLIMIT_SWAP); 
+    ADD_INT(module, RLIMIT_SWAP);
 #endif
 
 #ifdef RLIMIT_SBSIZE
-    ADD_INT(module, RLIMIT_SBSIZE); 
+    ADD_INT(module, RLIMIT_SBSIZE);
 #endif
 
 #ifdef RLIMIT_NPTS
-    ADD_INT(module, RLIMIT_NPTS); 
+    ADD_INT(module, RLIMIT_NPTS);
 #endif
 
-    PyObject *v; 
+    PyObject *v;
     if (sizeof(RLIM_INFINITY) > sizeof(long)) {
         v = PyLong_FromLongLong((long long) RLIM_INFINITY);
     } else
     {
         v = PyLong_FromLong((long) RLIM_INFINITY);
     }
-    if (!v) { 
-        return -1; 
+    if (!v) {
+        return -1;
     }
- 
-    if (PyModule_AddObject(module, "RLIM_INFINITY", v) < 0) { 
-        Py_DECREF(v); 
-        return -1; 
-    } 
- 
+
+    if (PyModule_AddObject(module, "RLIM_INFINITY", v) < 0) {
+        Py_DECREF(v);
+        return -1;
+    }
+
     initialized = 1;
-    return 0; 
- 
-#undef ADD_INT 
+    return 0;
+
+#undef ADD_INT
 }
- 
-static struct PyModuleDef_Slot resource_slots[] = { 
-    {Py_mod_exec, resource_exec}, 
-    {0, NULL} 
-}; 
- 
-static struct PyModuleDef resourcemodule = { 
-    PyModuleDef_HEAD_INIT, 
-    .m_name = "resource", 
-    .m_size = 0, 
-    .m_methods = resource_methods, 
-    .m_slots = resource_slots, 
-}; 
- 
-PyMODINIT_FUNC 
-PyInit_resource(void) 
-{ 
-    return PyModuleDef_Init(&resourcemodule); 
-} 
+
+static struct PyModuleDef_Slot resource_slots[] = {
+    {Py_mod_exec, resource_exec},
+    {0, NULL}
+};
+
+static struct PyModuleDef resourcemodule = {
+    PyModuleDef_HEAD_INIT,
+    .m_name = "resource",
+    .m_size = 0,
+    .m_methods = resource_methods,
+    .m_slots = resource_slots,
+};
+
+PyMODINIT_FUNC
+PyInit_resource(void)
+{
+    return PyModuleDef_Init(&resourcemodule);
+}

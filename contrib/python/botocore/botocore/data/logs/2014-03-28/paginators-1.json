@@ -38,24 +38,24 @@
         "events",
         "searchedLogStreams"
       ]
-    }, 
-    "DescribeExportTasks": { 
-      "input_token": "nextToken", 
-      "limit_key": "limit", 
-      "output_token": "nextToken", 
-      "result_key": "exportTasks" 
-    }, 
-    "DescribeQueries": { 
-      "input_token": "nextToken", 
-      "limit_key": "maxResults", 
-      "output_token": "nextToken", 
-      "result_key": "queries" 
-    }, 
-    "DescribeResourcePolicies": { 
-      "input_token": "nextToken", 
-      "limit_key": "limit", 
-      "output_token": "nextToken", 
-      "result_key": "resourcePolicies" 
+    },
+    "DescribeExportTasks": {
+      "input_token": "nextToken",
+      "limit_key": "limit",
+      "output_token": "nextToken",
+      "result_key": "exportTasks"
+    },
+    "DescribeQueries": {
+      "input_token": "nextToken",
+      "limit_key": "maxResults",
+      "output_token": "nextToken",
+      "result_key": "queries"
+    },
+    "DescribeResourcePolicies": {
+      "input_token": "nextToken",
+      "limit_key": "limit",
+      "output_token": "nextToken",
+      "result_key": "resourcePolicies"
     }
   }
 }

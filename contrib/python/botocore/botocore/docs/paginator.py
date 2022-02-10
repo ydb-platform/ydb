@@ -108,10 +108,10 @@ def document_paginate_method(section, paginator_name, event_emitter,
             'will be provided in the output that you can use to '
             'resume pagination.</p>'))
 
-    if paginator_config.get('limit_key', None): 
-        pagination_config_members['PageSize'] = DocumentedShape( 
-            name='PageSize', type_name='integer', 
-            documentation='<p>The size of each page.<p>') 
+    if paginator_config.get('limit_key', None):
+        pagination_config_members['PageSize'] = DocumentedShape(
+            name='PageSize', type_name='integer',
+            documentation='<p>The size of each page.<p>')
 
     pagination_config_members['StartingToken'] = DocumentedShape(
         name='StartingToken', type_name='string',

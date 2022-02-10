@@ -50,20 +50,20 @@ MachineSSAUpdater::~MachineSSAUpdater() {
 }
 
 /// Initialize - Reset this object to get ready for a new set of SSA
-/// updates. 
-void MachineSSAUpdater::Initialize(const TargetRegisterClass *RC) { 
+/// updates.
+void MachineSSAUpdater::Initialize(const TargetRegisterClass *RC) {
   if (!AV)
     AV = new AvailableValsTy();
   else
     getAvailableVals(AV).clear();
 
-  VRC = RC; 
+  VRC = RC;
 }
 
-void MachineSSAUpdater::Initialize(Register V) { 
-  Initialize(MRI->getRegClass(V)); 
-} 
- 
+void MachineSSAUpdater::Initialize(Register V) {
+  Initialize(MRI->getRegClass(V));
+}
+
 /// HasValueForBlock - Return true if the MachineSSAUpdater already has a value for
 /// the specified block.
 bool MachineSSAUpdater::HasValueForBlock(MachineBasicBlock *BB) const {

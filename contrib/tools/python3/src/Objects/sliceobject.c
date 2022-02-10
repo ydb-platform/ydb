@@ -14,9 +14,9 @@ this type and there is exactly one in existence.
 */
 
 #include "Python.h"
-#include "pycore_abstract.h"      // _PyIndex_Check() 
-#include "pycore_object.h" 
-#include "structmember.h"         // PyMemberDef 
+#include "pycore_abstract.h"      // _PyIndex_Check()
+#include "pycore_object.h"
+#include "structmember.h"         // PyMemberDef
 
 static PyObject *
 ellipsis_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
@@ -36,13 +36,13 @@ ellipsis_repr(PyObject *op)
 }
 
 static PyObject *
-ellipsis_reduce(PyObject *op, PyObject *Py_UNUSED(ignored)) 
+ellipsis_reduce(PyObject *op, PyObject *Py_UNUSED(ignored))
 {
     return PyUnicode_FromString("Ellipsis");
 }
 
 static PyMethodDef ellipsis_methods[] = {
-    {"__reduce__", ellipsis_reduce, METH_NOARGS, NULL}, 
+    {"__reduce__", ellipsis_reduce, METH_NOARGS, NULL},
     {NULL, NULL}
 };
 
@@ -52,10 +52,10 @@ PyTypeObject PyEllipsis_Type = {
     0,                                  /* tp_basicsize */
     0,                                  /* tp_itemsize */
     0, /*never called*/                 /* tp_dealloc */
-    0,                                  /* tp_vectorcall_offset */ 
+    0,                                  /* tp_vectorcall_offset */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_as_async */ 
+    0,                                  /* tp_as_async */
     ellipsis_repr,                      /* tp_repr */
     0,                                  /* tp_as_number */
     0,                                  /* tp_as_sequence */
@@ -99,8 +99,8 @@ PyObject _Py_EllipsisObject = {
  * created and then deleted again
  */
 static PySliceObject *slice_cache = NULL;
- 
-void _PySlice_Fini(void) 
+
+void _PySlice_Fini(void)
 {
     PySliceObject *obj = slice_cache;
     if (obj != NULL) {
@@ -353,7 +353,7 @@ static PyMemberDef slice_members[] = {
 static PyObject*
 evaluate_slice_index(PyObject *v)
 {
-    if (_PyIndex_Check(v)) { 
+    if (_PyIndex_Check(v)) {
         return PyNumber_Index(v);
     }
     else {
@@ -547,7 +547,7 @@ S. Out of bounds indices are clipped in a manner consistent with the\n\
 handling of normal slices.");
 
 static PyObject *
-slice_reduce(PySliceObject* self, PyObject *Py_UNUSED(ignored)) 
+slice_reduce(PySliceObject* self, PyObject *Py_UNUSED(ignored))
 {
     return Py_BuildValue("O(OOO)", Py_TYPE(self), self->start, self->stop, self->step);
 }
@@ -625,10 +625,10 @@ PyTypeObject PySlice_Type = {
     sizeof(PySliceObject),      /* Basic object size */
     0,                          /* Item size for varobject */
     (destructor)slice_dealloc,                  /* tp_dealloc */
-    0,                                          /* tp_vectorcall_offset */ 
+    0,                                          /* tp_vectorcall_offset */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_as_async */ 
+    0,                                          /* tp_as_async */
     (reprfunc)slice_repr,                       /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */

@@ -4,7 +4,7 @@
 
     Lexers for various shells.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -19,8 +19,8 @@ from pygments.util import shebang_matches
 
 __all__ = ['BashLexer', 'BashSessionLexer', 'TcshLexer', 'BatchLexer',
            'SlurmBashLexer', 'MSDOSSessionLexer', 'PowerShellLexer',
-           'PowerShellSessionLexer', 'TcshSessionLexer', 'FishShellLexer', 
-           'ExeclineLexer'] 
+           'PowerShellSessionLexer', 'TcshSessionLexer', 'FishShellLexer',
+           'ExeclineLexer']
 
 line_re = re.compile('.*?\n')
 
@@ -57,7 +57,7 @@ class BashLexer(RegexLexer):
             (r'\$', Text),
         ],
         'basic': [
-            (r'\b(if|fi|else|while|in|do|done|for|then|return|function|case|' 
+            (r'\b(if|fi|else|while|in|do|done|for|then|return|function|case|'
              r'select|continue|until|esac|elif)(\s*)\b',
              bygroups(Keyword, Text)),
             (r'\b(alias|bg|bind|break|builtin|caller|cd|command|compgen|'
@@ -149,16 +149,16 @@ class SlurmBashLexer(BashLexer):
             else:
                 yield index, token, value
 
- 
+
 class ShellSessionBaseLexer(Lexer):
     """
-    Base lexer for shell sessions. 
+    Base lexer for shell sessions.
 
     .. versionadded:: 2.1
     """
- 
-    _venv = re.compile(r'^(\([^)]*\))(\s*)') 
- 
+
+    _venv = re.compile(r'^(\([^)]*\))(\s*)')
+
     def get_tokens_unprocessed(self, text):
         innerlexer = self._innerLexerCls(**self.options)
 
@@ -169,20 +169,20 @@ class ShellSessionBaseLexer(Lexer):
 
         for match in line_re.finditer(text):
             line = match.group()
- 
-            venv_match = self._venv.match(line) 
-            if venv_match: 
-                venv = venv_match.group(1) 
-                venv_whitespace = venv_match.group(2) 
-                insertions.append((len(curcode), 
-                    [(0, Generic.Prompt.VirtualEnv, venv)])) 
-                if venv_whitespace: 
-                    insertions.append((len(curcode), 
-                        [(0, Text, venv_whitespace)])) 
-                line = line[venv_match.end():] 
- 
-            m = self._ps1rgx.match(line) 
-            if m: 
+
+            venv_match = self._venv.match(line)
+            if venv_match:
+                venv = venv_match.group(1)
+                venv_whitespace = venv_match.group(2)
+                insertions.append((len(curcode),
+                    [(0, Generic.Prompt.VirtualEnv, venv)]))
+                if venv_whitespace:
+                    insertions.append((len(curcode),
+                        [(0, Text, venv_whitespace)]))
+                line = line[venv_match.end():]
+
+            m = self._ps1rgx.match(line)
+            if m:
                 # To support output lexers (say diff output), the output
                 # needs to be broken by prompts whenever the output lexer
                 # changes.
@@ -193,13 +193,13 @@ class ShellSessionBaseLexer(Lexer):
                                    [(0, Generic.Prompt, m.group(1))]))
                 curcode += m.group(2)
                 backslash_continuation = curcode.endswith('\\\n')
-            elif backslash_continuation: 
-                if line.startswith(self._ps2): 
-                    insertions.append((len(curcode), 
-                                    [(0, Generic.Prompt, line[:len(self._ps2)])])) 
-                    curcode += line[len(self._ps2):] 
-                else: 
-                    curcode += line 
+            elif backslash_continuation:
+                if line.startswith(self._ps2):
+                    insertions.append((len(curcode),
+                                    [(0, Generic.Prompt, line[:len(self._ps2)])]))
+                    curcode += line[len(self._ps2):]
+                else:
+                    curcode += line
                 backslash_continuation = curcode.endswith('\\\n')
             else:
                 if insertions:
@@ -217,8 +217,8 @@ class ShellSessionBaseLexer(Lexer):
 
 class BashSessionLexer(ShellSessionBaseLexer):
     """
-    Lexer for Bash shell sessions, i.e. command lines, including a 
-    prompt, interspersed with output. 
+    Lexer for Bash shell sessions, i.e. command lines, including a
+    prompt, interspersed with output.
 
     .. versionadded:: 1.1
     """
@@ -229,10 +229,10 @@ class BashSessionLexer(ShellSessionBaseLexer):
     mimetypes = ['application/x-shell-session', 'application/x-sh-session']
 
     _innerLexerCls = BashLexer
-    _ps1rgx = re.compile( 
+    _ps1rgx = re.compile(
         r'^((?:(?:\[.*?\])|(?:\(\S+\))?(?:| |sh\S*?|\w+\S+[@:]\S+(?:\s+\S+)' \
-        r'?|\[\S+[@:][^\n]+\].+))\s*[$#%]\s*)(.*\n?)') 
-    _ps2 = '> ' 
+        r'?|\[\S+[@:][^\n]+\].+))\s*[$#%]\s*)(.*\n?)')
+    _ps2 = '> '
 
 
 class BatchLexer(RegexLexer):
@@ -242,7 +242,7 @@ class BatchLexer(RegexLexer):
     .. versionadded:: 0.7
     """
     name = 'Batchfile'
-    aliases = ['batch', 'bat', 'dosbatch', 'winbatch'] 
+    aliases = ['batch', 'bat', 'dosbatch', 'winbatch']
     filenames = ['*.bat', '*.cmd']
     mimetypes = ['application/x-dos-batch']
 
@@ -251,14 +251,14 @@ class BatchLexer(RegexLexer):
     _nl = r'\n\x1a'
     _punct = r'&<>|'
     _ws = r'\t\v\f\r ,;=\xa0'
-    _nlws = r'\s\x1a\xa0,;=' 
+    _nlws = r'\s\x1a\xa0,;='
     _space = r'(?:(?:(?:\^[%s])?[%s])+)' % (_nl, _ws)
     _keyword_terminator = (r'(?=(?:\^[%s]?)?[%s+./:[\\\]]|[%s%s(])' %
                            (_nl, _ws, _nl, _punct))
     _token_terminator = r'(?=\^?[%s]|[%s%s])' % (_ws, _punct, _nl)
     _start_label = r'((?:(?<=^[^:])|^[^:]?)[%s]*)(:)' % _ws
-    _label = r'(?:(?:[^%s%s+:^]|\^[%s]?[\w\W])*)' % (_nlws, _punct, _nl) 
-    _label_compound = r'(?:(?:[^%s%s+:^)]|\^[%s]?[^)])*)' % (_nlws, _punct, _nl) 
+    _label = r'(?:(?:[^%s%s+:^]|\^[%s]?[\w\W])*)' % (_nlws, _punct, _nl)
+    _label_compound = r'(?:(?:[^%s%s+:^)]|\^[%s]?[^)])*)' % (_nlws, _punct, _nl)
     _number = r'(?:-?(?:0[0-7]+|0x[\da-f]+|\d+)%s)' % _token_terminator
     _opword = r'(?:equ|geq|gtr|leq|lss|neq)'
     _string = r'(?:"[^%s"]*(?:"|(?=[%s])))' % (_nl, _nl)
@@ -268,8 +268,8 @@ class BatchLexer(RegexLexer):
                  r'(?:\^?![^!:%s]+(?::(?:~(?:-?\d+)?(?:,(?:-?\d+)?)?|(?:'
                  r'[^!%s^]|\^[^!%s])[^=%s]*=(?:[^!%s^]|\^[^!%s])*)?)?\^?!))' %
                  (_nl, _nl, _nl, _nl, _nl, _nl, _nl, _nl, _nl, _nl, _nl, _nl))
-    _core_token = r'(?:(?:(?:\^[%s]?)?[^"%s%s])+)' % (_nl, _nlws, _punct) 
-    _core_token_compound = r'(?:(?:(?:\^[%s]?)?[^"%s%s)])+)' % (_nl, _nlws, _punct) 
+    _core_token = r'(?:(?:(?:\^[%s]?)?[^"%s%s])+)' % (_nl, _nlws, _punct)
+    _core_token_compound = r'(?:(?:(?:\^[%s]?)?[^"%s%s)])+)' % (_nl, _nlws, _punct)
     _token = r'(?:[%s]+|%s)' % (_punct, _core_token)
     _token_compound = r'(?:[%s]+|%s)' % (_punct, _core_token_compound)
     _stoken = (r'(?:[%s]+|(?:%s|%s|%s)+)' %
@@ -380,8 +380,8 @@ class BatchLexer(RegexLexer):
         return state
 
     def _make_arithmetic_state(compound, _nl=_nl, _punct=_punct,
-                               _string=_string, _variable=_variable, 
-                               _ws=_ws, _nlws=_nlws): 
+                               _string=_string, _variable=_variable,
+                               _ws=_ws, _nlws=_nlws):
         op = r'=+\-*/!~'
         state = []
         if compound:
@@ -392,8 +392,8 @@ class BatchLexer(RegexLexer):
             (r'\d+', Number.Integer),
             (r'[(),]+', Punctuation),
             (r'([%s]|%%|\^\^)+' % op, Operator),
-            (r'(%s|%s|(\^[%s]?)?[^()%s%%\^"%s%s]|\^[%s]?%s)+' % 
-             (_string, _variable, _nl, op, _nlws, _punct, _nlws, 
+            (r'(%s|%s|(\^[%s]?)?[^()%s%%\^"%s%s]|\^[%s]?%s)+' %
+             (_string, _variable, _nl, op, _nlws, _punct, _nlws,
               r'[^)]' if compound else r'[\w\W]'),
              using(this, state='variable')),
             (r'(?=[\x00|&])', Text, '#pop'),
@@ -427,15 +427,15 @@ class BatchLexer(RegexLexer):
                              _core_token_compound=_core_token_compound,
                              _nl=_nl, _punct=_punct, _stoken=_stoken,
                              _string=_string, _space=_space,
-                             _variable=_variable, _nlws=_nlws): 
+                             _variable=_variable, _nlws=_nlws):
         stoken_compound = (r'(?:[%s]+|(?:%s|%s|%s)+)' %
                            (_punct, _string, _variable, _core_token_compound))
         return [
-            (r'((?:(?<=[%s])\d)?)(>>?&|<&)([%s]*)(\d)' % 
-             (_nlws, _nlws), 
+            (r'((?:(?<=[%s])\d)?)(>>?&|<&)([%s]*)(\d)' %
+             (_nlws, _nlws),
              bygroups(Number.Integer, Punctuation, Text, Number.Integer)),
-            (r'((?:(?<=[%s])(?<!\^[%s])\d)?)(>>?|<)(%s?%s)' % 
-             (_nlws, _nl, _space, stoken_compound if compound else _stoken), 
+            (r'((?:(?<=[%s])(?<!\^[%s])\d)?)(>>?|<)(%s?%s)' %
+             (_nlws, _nl, _space, stoken_compound if compound else _stoken),
              bygroups(Number.Integer, Punctuation, using(this, state='text')))
         ]
 
@@ -474,7 +474,7 @@ class BatchLexer(RegexLexer):
         'text': [
             (r'"', String.Double, 'string'),
             include('variable-or-escape'),
-            (r'[^"%%^%s%s\d)]+|.' % (_nlws, _punct), Text) 
+            (r'[^"%%^%s%s\d)]+|.' % (_nlws, _punct), Text)
         ],
         'variable': [
             (r'"', String.Double, 'string'),
@@ -495,13 +495,13 @@ class BatchLexer(RegexLexer):
             include('follow')
         ],
         'for/f': [
-            (r'(")((?:%s|[^"])*?")([%s]*)(\))' % (_variable, _nlws), 
+            (r'(")((?:%s|[^"])*?")([%s]*)(\))' % (_variable, _nlws),
              bygroups(String.Double, using(this, state='string'), Text,
                       Punctuation)),
             (r'"', String.Double, ('#pop', 'for2', 'string')),
-            (r"('(?:%%%%|%s|[\w\W])*?')([%s]*)(\))" % (_variable, _nlws), 
+            (r"('(?:%%%%|%s|[\w\W])*?')([%s]*)(\))" % (_variable, _nlws),
              bygroups(using(this, state='sqstring'), Text, Punctuation)),
-            (r'(`(?:%%%%|%s|[\w\W])*?`)([%s]*)(\))' % (_variable, _nlws), 
+            (r'(`(?:%%%%|%s|[\w\W])*?`)([%s]*)(\))' % (_variable, _nlws),
              bygroups(using(this, state='bqstring'), Text, Punctuation)),
             include('for2')
         ],
@@ -547,8 +547,8 @@ class BatchLexer(RegexLexer):
 
 class MSDOSSessionLexer(ShellSessionBaseLexer):
     """
-    Lexer for MS DOS shell sessions, i.e. command lines, including a 
-    prompt, interspersed with output. 
+    Lexer for MS DOS shell sessions, i.e. command lines, including a
+    prompt, interspersed with output.
 
     .. versionadded:: 2.1
     """
@@ -559,7 +559,7 @@ class MSDOSSessionLexer(ShellSessionBaseLexer):
     mimetypes = []
 
     _innerLexerCls = BatchLexer
-    _ps1rgx = re.compile(r'^([^>]*>)(.*\n?)') 
+    _ps1rgx = re.compile(r'^([^>]*>)(.*\n?)')
     _ps2 = 'More? '
 
 
@@ -633,8 +633,8 @@ class TcshLexer(RegexLexer):
 
 class TcshSessionLexer(ShellSessionBaseLexer):
     """
-    Lexer for Tcsh sessions, i.e. command lines, including a 
-    prompt, interspersed with output. 
+    Lexer for Tcsh sessions, i.e. command lines, including a
+    prompt, interspersed with output.
 
     .. versionadded:: 2.1
     """
@@ -645,7 +645,7 @@ class TcshSessionLexer(ShellSessionBaseLexer):
     mimetypes = []
 
     _innerLexerCls = TcshLexer
-    _ps1rgx = re.compile(r'^([^>]+>)(.*\n?)') 
+    _ps1rgx = re.compile(r'^([^>]+>)(.*\n?)')
     _ps2 = '? '
 
 
@@ -656,7 +656,7 @@ class PowerShellLexer(RegexLexer):
     .. versionadded:: 1.5
     """
     name = 'PowerShell'
-    aliases = ['powershell', 'pwsh', 'posh', 'ps1', 'psm1'] 
+    aliases = ['powershell', 'pwsh', 'posh', 'ps1', 'psm1']
     filenames = ['*.ps1', '*.psm1']
     mimetypes = ['text/x-powershell']
 
@@ -734,7 +734,7 @@ class PowerShellLexer(RegexLexer):
             (r'\[[a-z_\[][\w. `,\[\]]*\]', Name.Constant),  # .net [type]s
             (r'-[a-z_]\w*', Name),
             (r'\w+', Name),
-            (r'[.,;:@{}\[\]$()=+*/\\&%!~?^`|<>-]', Punctuation), 
+            (r'[.,;:@{}\[\]$()=+*/\\&%!~?^`|<>-]', Punctuation),
         ],
         'child': [
             (r'\)', Punctuation, '#pop'),
@@ -765,19 +765,19 @@ class PowerShellLexer(RegexLexer):
 
 class PowerShellSessionLexer(ShellSessionBaseLexer):
     """
-    Lexer for PowerShell sessions, i.e. command lines, including a 
-    prompt, interspersed with output. 
+    Lexer for PowerShell sessions, i.e. command lines, including a
+    prompt, interspersed with output.
 
     .. versionadded:: 2.1
     """
 
     name = 'PowerShell Session'
-    aliases = ['pwsh-session', 'ps1con'] 
+    aliases = ['pwsh-session', 'ps1con']
     filenames = []
     mimetypes = []
 
     _innerLexerCls = PowerShellLexer
-    _ps1rgx = re.compile(r'^((?:\[[^]]+\]: )?PS[^>]*> ?)(.*\n?)') 
+    _ps1rgx = re.compile(r'^((?:\[[^]]+\]: )?PS[^>]*> ?)(.*\n?)')
     _ps2 = '>> '
 
 
@@ -852,62 +852,62 @@ class FishShellLexer(RegexLexer):
             include('root'),
         ],
     }
- 
-class ExeclineLexer(RegexLexer): 
-    """ 
-    Lexer for Laurent Bercot's execline language 
-    (https://skarnet.org/software/execline). 
- 
-    .. versionadded:: 2.7 
-    """ 
- 
-    name = 'execline' 
-    aliases = ['execline'] 
-    filenames = ['*.exec'] 
- 
-    tokens = { 
-        'root': [ 
-            include('basic'), 
-            include('data'), 
-            include('interp') 
-        ], 
-        'interp': [ 
-            (r'\$\{', String.Interpol, 'curly'), 
-            (r'\$[\w@#]+', Name.Variable),  # user variable 
-            (r'\$', Text), 
-        ], 
-        'basic': [ 
-            (r'\b(background|backtick|cd|define|dollarat|elgetopt|' 
-             r'elgetpositionals|elglob|emptyenv|envfile|exec|execlineb|' 
-             r'exit|export|fdblock|fdclose|fdmove|fdreserve|fdswap|' 
-             r'forbacktickx|foreground|forstdin|forx|getcwd|getpid|heredoc|' 
-             r'homeof|if|ifelse|ifte|ifthenelse|importas|loopwhilex|' 
-             r'multidefine|multisubstitute|pipeline|piperw|posix-cd|' 
-             r'redirfd|runblock|shift|trap|tryexec|umask|unexport|wait|' 
-             r'withstdinas)\b', Name.Builtin), 
-            (r'\A#!.+\n', Comment.Hashbang), 
-            (r'#.*\n', Comment.Single), 
-            (r'[{}]', Operator) 
-        ], 
-        'data': [ 
-            (r'(?s)"(\\.|[^"\\$])*"', String.Double), 
-            (r'"', String.Double, 'string'), 
-            (r'\s+', Text), 
-            (r'[^\s{}$"\\]+', Text) 
-        ], 
-        'string': [ 
-            (r'"', String.Double, '#pop'), 
-            (r'(?s)(\\\\|\\.|[^"\\$])+', String.Double), 
-            include('interp'), 
-        ], 
-        'curly': [ 
-            (r'\}', String.Interpol, '#pop'), 
-            (r'[\w#@]+', Name.Variable), 
-            include('root') 
-        ] 
- 
-    } 
- 
-    def analyse_text(text): 
-        if shebang_matches(text, r'execlineb'): 
-            return 1 
+
+class ExeclineLexer(RegexLexer):
+    """
+    Lexer for Laurent Bercot's execline language
+    (https://skarnet.org/software/execline).
+
+    .. versionadded:: 2.7
+    """
+
+    name = 'execline'
+    aliases = ['execline']
+    filenames = ['*.exec']
+
+    tokens = {
+        'root': [
+            include('basic'),
+            include('data'),
+            include('interp')
+        ],
+        'interp': [
+            (r'\$\{', String.Interpol, 'curly'),
+            (r'\$[\w@#]+', Name.Variable),  # user variable
+            (r'\$', Text),
+        ],
+        'basic': [
+            (r'\b(background|backtick|cd|define|dollarat|elgetopt|'
+             r'elgetpositionals|elglob|emptyenv|envfile|exec|execlineb|'
+             r'exit|export|fdblock|fdclose|fdmove|fdreserve|fdswap|'
+             r'forbacktickx|foreground|forstdin|forx|getcwd|getpid|heredoc|'
+             r'homeof|if|ifelse|ifte|ifthenelse|importas|loopwhilex|'
+             r'multidefine|multisubstitute|pipeline|piperw|posix-cd|'
+             r'redirfd|runblock|shift|trap|tryexec|umask|unexport|wait|'
+             r'withstdinas)\b', Name.Builtin),
+            (r'\A#!.+\n', Comment.Hashbang),
+            (r'#.*\n', Comment.Single),
+            (r'[{}]', Operator)
+        ],
+        'data': [
+            (r'(?s)"(\\.|[^"\\$])*"', String.Double),
+            (r'"', String.Double, 'string'),
+            (r'\s+', Text),
+            (r'[^\s{}$"\\]+', Text)
+        ],
+        'string': [
+            (r'"', String.Double, '#pop'),
+            (r'(?s)(\\\\|\\.|[^"\\$])+', String.Double),
+            include('interp'),
+        ],
+        'curly': [
+            (r'\}', String.Interpol, '#pop'),
+            (r'[\w#@]+', Name.Variable),
+            include('root')
+        ]
+
+    }
+
+    def analyse_text(text):
+        if shebang_matches(text, r'execlineb'):
+            return 1

@@ -75,12 +75,12 @@ _blake2.blake2b.__new__ as py_blake2b_new
     person: Py_buffer(c_default="NULL", py_default="b''") = None
     fanout: int = 1
     depth: int = 1
-    leaf_size: unsigned_long = 0 
-    node_offset: unsigned_long_long = 0 
+    leaf_size: unsigned_long = 0
+    node_offset: unsigned_long_long = 0
     node_depth: int = 0
     inner_size: int = 0
     last_node: bool = False
-    usedforsecurity: bool = True 
+    usedforsecurity: bool = True
 
 Return a new BLAKE2b hash object.
 [clinic start generated code]*/
@@ -88,10 +88,10 @@ Return a new BLAKE2b hash object.
 static PyObject *
 py_blake2b_new_impl(PyTypeObject *type, PyObject *data, int digest_size,
                     Py_buffer *key, Py_buffer *salt, Py_buffer *person,
-                    int fanout, int depth, unsigned long leaf_size, 
-                    unsigned long long node_offset, int node_depth, 
-                    int inner_size, int last_node, int usedforsecurity) 
-/*[clinic end generated code: output=32bfd8f043c6896f input=b947312abff46977]*/ 
+                    int fanout, int depth, unsigned long leaf_size,
+                    unsigned long long node_offset, int node_depth,
+                    int inner_size, int last_node, int usedforsecurity)
+/*[clinic end generated code: output=32bfd8f043c6896f input=b947312abff46977]*/
 {
     BLAKE2bObject *self = NULL;
     Py_buffer buf;
@@ -150,9 +150,9 @@ py_blake2b_new_impl(PyTypeObject *type, PyObject *data, int digest_size,
     }
     self->param.depth = (uint8_t)depth;
 
-    if (leaf_size > 0xFFFFFFFFU) { 
-        PyErr_SetString(PyExc_OverflowError, "leaf_size is too large"); 
-        goto error; 
+    if (leaf_size > 0xFFFFFFFFU) {
+        PyErr_SetString(PyExc_OverflowError, "leaf_size is too large");
+        goto error;
     }
     // NB: Simple assignment here would be incorrect on big endian platforms.
     store32(&(self->param.leaf_length), leaf_size);
@@ -401,10 +401,10 @@ PyTypeObject PyBlake2_BLAKE2bType = {
     sizeof(BLAKE2bObject),    /* tp_basicsize       */
     0,                        /* tp_itemsize        */
     py_blake2b_dealloc,       /* tp_dealloc         */
-    0,                        /*tp_vectorcall_offset*/ 
+    0,                        /*tp_vectorcall_offset*/
     0,                        /* tp_getattr         */
     0,                        /* tp_setattr         */
-    0,                        /* tp_as_async        */ 
+    0,                        /* tp_as_async        */
     0,                        /* tp_repr            */
     0,                        /* tp_as_number       */
     0,                        /* tp_as_sequence     */

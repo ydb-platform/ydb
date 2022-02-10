@@ -4,7 +4,7 @@
 
     Lexers for Haxe and related stuff.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -26,7 +26,7 @@ class HaxeLexer(ExtendedRegexLexer):
     """
 
     name = 'Haxe'
-    aliases = ['haxe', 'hxsl', 'hx'] 
+    aliases = ['haxe', 'hxsl', 'hx']
     filenames = ['*.hx', '*.hxsl']
     mimetypes = ['text/haxe', 'text/x-haxe', 'text/x-hx']
 
@@ -78,7 +78,7 @@ class HaxeLexer(ExtendedRegexLexer):
         if proc in ['error']:
             ctx.stack.append('preproc-error')
 
-        yield match.start(), Comment.Preproc, '#' + proc 
+        yield match.start(), Comment.Preproc, '#' + proc
         ctx.pos = match.end()
 
     tokens = {
@@ -466,7 +466,7 @@ class HaxeLexer(ExtendedRegexLexer):
             (r'"', String.Double, ('#pop', 'expr-chain', 'string-double')),
 
             # EReg
-            (r'~/(\\\\|\\[^\\]|[^/\\\n])*/[gimsu]*', String.Regex, ('#pop', 'expr-chain')), 
+            (r'~/(\\\\|\\[^\\]|[^/\\\n])*/[gimsu]*', String.Regex, ('#pop', 'expr-chain')),
 
             # Array
             (r'\[', Punctuation, ('#pop', 'expr-chain', 'array-decl')),
@@ -721,7 +721,7 @@ class HaxeLexer(ExtendedRegexLexer):
             (r'"', String.Double, ('#pop', 'string-double')),
 
             # EReg
-            (r'~/(\\\\|\\[^\\]|[^/\\\n])*/[gim]*', String.Regex, '#pop'), 
+            (r'~/(\\\\|\\[^\\]|[^/\\\n])*/[gim]*', String.Regex, '#pop'),
 
             # Array
             (r'\[', Operator, ('#pop', 'array-decl')),

@@ -45,17 +45,17 @@ class Installer:
         "p = os.path.join(%(root)s, *%(pth)r)",
         "importlib = has_mfs and __import__('importlib.util')",
         "has_mfs and __import__('importlib.machinery')",
-        ( 
-            "m = has_mfs and " 
+        (
+            "m = has_mfs and "
             "sys.modules.setdefault(%(pkg)r, "
-            "importlib.util.module_from_spec(" 
-            "importlib.machinery.PathFinder.find_spec(%(pkg)r, " 
-            "[os.path.dirname(p)])))" 
-        ), 
-        ( 
-            "m = m or " 
-            "sys.modules.setdefault(%(pkg)r, types.ModuleType(%(pkg)r))" 
-        ), 
+            "importlib.util.module_from_spec("
+            "importlib.machinery.PathFinder.find_spec(%(pkg)r, "
+            "[os.path.dirname(p)])))"
+        ),
+        (
+            "m = m or "
+            "sys.modules.setdefault(%(pkg)r, types.ModuleType(%(pkg)r))"
+        ),
         "mp = (m or []) and m.__dict__.setdefault('__path__',[])",
         "(p not in mp) and mp.append(p)",
     )

@@ -8,9 +8,9 @@ This module contains the set of Requests' exceptions.
 """
 from urllib3.exceptions import HTTPError as BaseHTTPError
 
-from .compat import JSONDecodeError as CompatJSONDecodeError 
+from .compat import JSONDecodeError as CompatJSONDecodeError
 
- 
+
 class RequestException(IOError):
     """There was an ambiguous exception that occurred while handling your
     request.
@@ -27,14 +27,14 @@ class RequestException(IOError):
         super(RequestException, self).__init__(*args, **kwargs)
 
 
-class InvalidJSONError(RequestException): 
-    """A JSON error occurred.""" 
- 
- 
-class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError): 
-    """Couldn't decode the text into json""" 
- 
- 
+class InvalidJSONError(RequestException):
+    """A JSON error occurred."""
+
+
+class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):
+    """Couldn't decode the text into json"""
+
+
 class HTTPError(RequestException):
     """An HTTP error occurred."""
 
@@ -80,11 +80,11 @@ class TooManyRedirects(RequestException):
 
 
 class MissingSchema(RequestException, ValueError):
-    """The URL scheme (e.g. http or https) is missing.""" 
+    """The URL scheme (e.g. http or https) is missing."""
 
 
 class InvalidSchema(RequestException, ValueError):
-    """The URL scheme provided is either invalid or unsupported.""" 
+    """The URL scheme provided is either invalid or unsupported."""
 
 
 class InvalidURL(RequestException, ValueError):
@@ -95,20 +95,20 @@ class InvalidHeader(RequestException, ValueError):
     """The header value provided was somehow invalid."""
 
 
-class InvalidProxyURL(InvalidURL): 
-    """The proxy URL provided is invalid.""" 
- 
- 
+class InvalidProxyURL(InvalidURL):
+    """The proxy URL provided is invalid."""
+
+
 class ChunkedEncodingError(RequestException):
     """The server declared chunked encoding but sent an invalid chunk."""
 
 
 class ContentDecodingError(RequestException, BaseHTTPError):
-    """Failed to decode response content.""" 
+    """Failed to decode response content."""
 
 
 class StreamConsumedError(RequestException, TypeError):
-    """The content for this response was already consumed.""" 
+    """The content for this response was already consumed."""
 
 
 class RetryError(RequestException):
@@ -116,7 +116,7 @@ class RetryError(RequestException):
 
 
 class UnrewindableBodyError(RequestException):
-    """Requests encountered an error when trying to rewind a body.""" 
+    """Requests encountered an error when trying to rewind a body."""
 
 # Warnings
 

@@ -1,7 +1,7 @@
 from __future__ import unicode_literals
 
 from ctypes import windll, byref, ArgumentError, c_char, c_long, c_ulong, c_uint, pointer
-from ctypes.wintypes import DWORD, HANDLE 
+from ctypes.wintypes import DWORD, HANDLE
 
 from prompt_toolkit.renderer import Output
 from prompt_toolkit.styles import ANSI_COLOR_NAMES
@@ -70,7 +70,7 @@ class Win32Output(Output):
 
         self._buffer = []
         self.stdout = stdout
-        self.hconsole = HANDLE(windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)) 
+        self.hconsole = HANDLE(windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE))
 
         self._in_alternate_screen = False
 
@@ -141,31 +141,31 @@ class Win32Output(Output):
         """
         Return Screen buffer info.
         """
-        # NOTE: We don't call the `GetConsoleScreenBufferInfo` API through 
-        #     `self._winapi`. Doing so causes Python to crash on certain 64bit 
-        #     Python versions. (Reproduced with 64bit Python 2.7.6, on Windows 
-        #     10). It is not clear why. Possibly, it has to do with passing 
-        #     these objects as an argument, or through *args. 
- 
-        # The Python documentation contains the following - possibly related - warning: 
-        #     ctypes does not support passing unions or structures with 
-        #     bit-fields to functions by value. While this may work on 32-bit 
-        #     x86, it's not guaranteed by the library to work in the general 
-        #     case. Unions and structures with bit-fields should always be 
-        #     passed to functions by pointer. 
- 
-        # Also see: 
-        #    - https://github.com/ipython/ipython/issues/10070 
-        #    - https://github.com/jonathanslenders/python-prompt-toolkit/issues/406 
-        #    - https://github.com/jonathanslenders/python-prompt-toolkit/issues/86 
- 
-        self.flush() 
+        # NOTE: We don't call the `GetConsoleScreenBufferInfo` API through
+        #     `self._winapi`. Doing so causes Python to crash on certain 64bit
+        #     Python versions. (Reproduced with 64bit Python 2.7.6, on Windows
+        #     10). It is not clear why. Possibly, it has to do with passing
+        #     these objects as an argument, or through *args.
+
+        # The Python documentation contains the following - possibly related - warning:
+        #     ctypes does not support passing unions or structures with
+        #     bit-fields to functions by value. While this may work on 32-bit
+        #     x86, it's not guaranteed by the library to work in the general
+        #     case. Unions and structures with bit-fields should always be
+        #     passed to functions by pointer.
+
+        # Also see:
+        #    - https://github.com/ipython/ipython/issues/10070
+        #    - https://github.com/jonathanslenders/python-prompt-toolkit/issues/406
+        #    - https://github.com/jonathanslenders/python-prompt-toolkit/issues/86
+
+        self.flush()
         sbinfo = CONSOLE_SCREEN_BUFFER_INFO()
-        success = windll.kernel32.GetConsoleScreenBufferInfo(self.hconsole, byref(sbinfo)) 
- 
-        # success = self._winapi(windll.kernel32.GetConsoleScreenBufferInfo, 
-        #                        self.hconsole, byref(sbinfo)) 
- 
+        success = windll.kernel32.GetConsoleScreenBufferInfo(self.hconsole, byref(sbinfo))
+
+        # success = self._winapi(windll.kernel32.GetConsoleScreenBufferInfo,
+        #                        self.hconsole, byref(sbinfo))
+
         if success:
             return sbinfo
         else:
@@ -346,8 +346,8 @@ class Win32Output(Output):
             GENERIC_WRITE = 0x40000000
 
             # Create a new console buffer and activate that one.
-            handle = HANDLE(self._winapi(windll.kernel32.CreateConsoleScreenBuffer, GENERIC_READ|GENERIC_WRITE, 
-                                         DWORD(0), None, DWORD(1), None)) 
+            handle = HANDLE(self._winapi(windll.kernel32.CreateConsoleScreenBuffer, GENERIC_READ|GENERIC_WRITE,
+                                         DWORD(0), None, DWORD(1), None))
 
             self._winapi(windll.kernel32.SetConsoleActiveScreenBuffer, handle)
             self.hconsole = handle
@@ -358,7 +358,7 @@ class Win32Output(Output):
         Make stdout again the active buffer.
         """
         if self._in_alternate_screen:
-            stdout = HANDLE(self._winapi(windll.kernel32.GetStdHandle, STD_OUTPUT_HANDLE)) 
+            stdout = HANDLE(self._winapi(windll.kernel32.GetStdHandle, STD_OUTPUT_HANDLE))
             self._winapi(windll.kernel32.SetConsoleActiveScreenBuffer, stdout)
             self._winapi(windll.kernel32.CloseHandle, self.hconsole)
             self.hconsole = stdout
@@ -366,7 +366,7 @@ class Win32Output(Output):
 
     def enable_mouse_support(self):
         ENABLE_MOUSE_INPUT = 0x10
-        handle = HANDLE(windll.kernel32.GetStdHandle(STD_INPUT_HANDLE)) 
+        handle = HANDLE(windll.kernel32.GetStdHandle(STD_INPUT_HANDLE))
 
         original_mode = DWORD()
         self._winapi(windll.kernel32.GetConsoleMode, handle, pointer(original_mode))
@@ -374,7 +374,7 @@ class Win32Output(Output):
 
     def disable_mouse_support(self):
         ENABLE_MOUSE_INPUT = 0x10
-        handle = HANDLE(windll.kernel32.GetStdHandle(STD_INPUT_HANDLE)) 
+        handle = HANDLE(windll.kernel32.GetStdHandle(STD_INPUT_HANDLE))
 
         original_mode = DWORD()
         self._winapi(windll.kernel32.GetConsoleMode, handle, pointer(original_mode))
@@ -396,7 +396,7 @@ class Win32Output(Output):
         to a bug in the Windows Console. Sending a repaint request solves it.
         """
         # Get console handle
-        handle = HANDLE(windll.kernel32.GetConsoleWindow()) 
+        handle = HANDLE(windll.kernel32.GetConsoleWindow())
 
         RDW_INVALIDATE = 0x0001
         windll.user32.RedrawWindow(handle, None, None, c_uint(RDW_INVALIDATE))

@@ -4,8 +4,8 @@ LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2017-06-26-23eecfbe7e84ebf2e229bd02248f431c36e12f1a) 
- 
+VERSION(2017-06-26-23eecfbe7e84ebf2e229bd02248f431c36e12f1a)
+
 OWNER(somov)
 
 ADDINCL(GLOBAL contrib/libs/farmhash/include)

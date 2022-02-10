@@ -56,7 +56,7 @@
 
 namespace llvm {
 
-class AAResults; 
+class AAResults;
 class NodeSet;
 class SMSchedule;
 
@@ -98,7 +98,7 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
-  void getAnalysisUsage(AnalysisUsage &AU) const override; 
+  void getAnalysisUsage(AnalysisUsage &AU) const override;
 
 private:
   void preprocessPhiNodes(MachineBasicBlock &B);
@@ -283,7 +283,7 @@ public:
   static bool classof(const ScheduleDAGInstrs *DAG) { return true; }
 
 private:
-  void addLoopCarriedDependences(AAResults *AA); 
+  void addLoopCarriedDependences(AAResults *AA);
   void updatePhiDependences();
   void changeDependences();
   unsigned calculateResMII();
@@ -302,7 +302,7 @@ private:
   void checkValidNodeOrder(const NodeSetType &Circuits) const;
   bool schedulePipeline(SMSchedule &Schedule);
   bool computeDelta(MachineInstr &MI, unsigned &Delta);
-  MachineInstr *findDefInLoop(Register Reg); 
+  MachineInstr *findDefInLoop(Register Reg);
   bool canUseLastOffsetValue(MachineInstr *MI, unsigned &BasePos,
                              unsigned &OffsetPos, unsigned &NewBase,
                              int64_t &NewOffset);

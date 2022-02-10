@@ -3,7 +3,7 @@
 /* much code borrowed from mathmodule.c */
 
 #include "Python.h"
-#include "pycore_dtoa.h" 
+#include "pycore_dtoa.h"
 #include "_math.h"
 /* we need DBL_MAX, DBL_MIN, DBL_EPSILON, DBL_MANT_DIG and FLT_RADIX from
    float.h.  We assume that FLT_RADIX is either 2 or 16. */
@@ -18,7 +18,7 @@ module cmath
 /*[python input]
 class Py_complex_protected_converter(Py_complex_converter):
     def modify(self):
-        return 'errno = 0;' 
+        return 'errno = 0;'
 
 
 class Py_complex_protected_return_converter(CReturnConverter):
@@ -40,7 +40,7 @@ else {
 }
 """.strip())
 [python start generated code]*/
-/*[python end generated code: output=da39a3ee5e6b4b0d input=8b27adb674c08321]*/ 
+/*[python end generated code: output=da39a3ee5e6b4b0d input=8b27adb674c08321]*/
 
 #if (FLT_RADIX != 2 && FLT_RADIX != 16)
 #error "Modules/cmathmodule.c expects FLT_RADIX to be 2 or 16"
@@ -944,18 +944,18 @@ cmath_tanh_impl(PyObject *module, Py_complex z)
 /*[clinic input]
 cmath.log
 
-    z as x: Py_complex 
-    base as y_obj: object = NULL 
+    z as x: Py_complex
+    base as y_obj: object = NULL
     /
 
-log(z[, base]) -> the logarithm of z to the given base. 
+log(z[, base]) -> the logarithm of z to the given base.
 
 If the base not specified, returns the natural logarithm (base e) of z.
 [clinic start generated code]*/
 
 static PyObject *
 cmath_log_impl(PyObject *module, Py_complex x, PyObject *y_obj)
-/*[clinic end generated code: output=4effdb7d258e0d94 input=230ed3a71ecd000a]*/ 
+/*[clinic end generated code: output=4effdb7d258e0d94 input=230ed3a71ecd000a]*/
 {
     Py_complex y;
 
@@ -1224,8 +1224,8 @@ cmath_isclose_impl(PyObject *module, Py_complex a, Py_complex b,
 }
 
 PyDoc_STRVAR(module_doc,
-"This module provides access to mathematical functions for complex\n" 
-"numbers."); 
+"This module provides access to mathematical functions for complex\n"
+"numbers.");
 
 static PyMethodDef cmath_methods[] = {
     CMATH_ACOS_METHODDEF

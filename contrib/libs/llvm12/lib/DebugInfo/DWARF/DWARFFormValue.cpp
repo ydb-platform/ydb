@@ -168,7 +168,7 @@ bool DWARFFormValue::skipValue(dwarf::Form Form, DataExtractor DebugInfoData,
     case DW_FORM_line_strp:
     case DW_FORM_GNU_ref_alt:
     case DW_FORM_GNU_strp_alt:
-    case DW_FORM_implicit_const: 
+    case DW_FORM_implicit_const:
       if (Optional<uint8_t> FixedSize =
               dwarf::getFixedFormByteSize(Form, Params)) {
         *OffsetPtr += *FixedSize;
@@ -346,9 +346,9 @@ bool DWARFFormValue::extractValue(const DWARFDataExtractor &Data,
     case DW_FORM_ref_sig8:
       Value.uval = Data.getU64(OffsetPtr, &Err);
       break;
-    case DW_FORM_implicit_const: 
-      // Value has been already set by DWARFFormValue::createFromSValue. 
-      break; 
+    case DW_FORM_implicit_const:
+      // Value has been already set by DWARFFormValue::createFromSValue.
+      break;
     default:
       // DWARFFormValue::skipValue() will have caught this and caused all
       // DWARF DIEs to fail to be parsed, so this code is not be reachable.
@@ -362,16 +362,16 @@ bool DWARFFormValue::extractValue(const DWARFDataExtractor &Data,
   return !errorToBool(std::move(Err));
 }
 
-void DWARFFormValue::dumpAddress(raw_ostream &OS, uint8_t AddressSize, 
-                                 uint64_t Address) { 
-  uint8_t HexDigits = AddressSize * 2; 
-  OS << format("0x%*.*" PRIx64, HexDigits, HexDigits, Address); 
-} 
- 
+void DWARFFormValue::dumpAddress(raw_ostream &OS, uint8_t AddressSize,
+                                 uint64_t Address) {
+  uint8_t HexDigits = AddressSize * 2;
+  OS << format("0x%*.*" PRIx64, HexDigits, HexDigits, Address);
+}
+
 void DWARFFormValue::dumpSectionedAddress(raw_ostream &OS,
                                           DIDumpOptions DumpOpts,
                                           object::SectionedAddress SA) const {
-  dumpAddress(OS, U->getAddressByteSize(), SA.Address); 
+  dumpAddress(OS, U->getAddressByteSize(), SA.Address);
   dumpAddressSection(U->getContext().getDWARFObj(), OS, DumpOpts,
                      SA.SectionIndex);
 }
@@ -486,7 +486,7 @@ void DWARFFormValue::dump(raw_ostream &OS, DIDumpOptions DumpOpts) const {
     break;
 
   case DW_FORM_sdata:
-  case DW_FORM_implicit_const: 
+  case DW_FORM_implicit_const:
     OS << Value.sval;
     break;
   case DW_FORM_udata:

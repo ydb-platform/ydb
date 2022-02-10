@@ -53,7 +53,7 @@ public:
                                                *vfs::getRealFileSystem());
   }
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
-  static bool isRequired() { return true; } 
+  static bool isRequired() { return true; }
 
 private:
   SanitizerCoverageOptions Options;

@@ -4,7 +4,7 @@
 
     Lexer for Praat
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -54,7 +54,7 @@ class PraatLexer(RegexLexer):
         'exitScript', 'exp', 'extractNumber', 'fileReadable', 'fisherP', 'fisherQ',
         'floor', 'gaussP', 'gaussQ', 'hertzToBark', 'hertzToErb', 'hertzToMel',
         'hertzToSemitones', 'imax', 'imin', 'incompleteBeta', 'incompleteGammaP', 'index',
-        'index_regex', 'integer', 'invBinomialP', 'invBinomialQ', 'invChiSquareQ', 'invFisherQ', 
+        'index_regex', 'integer', 'invBinomialP', 'invBinomialQ', 'invChiSquareQ', 'invFisherQ',
         'invGaussQ', 'invSigmoid', 'invStudentQ', 'length', 'ln', 'lnBeta', 'lnGamma',
         'log10', 'log2', 'max', 'melToHertz', 'min', 'minusObject', 'natural', 'number',
         'numberOfColumns', 'numberOfRows', 'numberOfSelected', 'objectsAreIdentical',
@@ -62,9 +62,9 @@ class PraatLexer(RegexLexer):
         'positive', 'randomBinomial', 'randomGauss', 'randomInteger', 'randomPoisson',
         'randomUniform', 'real', 'readFile', 'removeObject', 'rindex', 'rindex_regex',
         'round', 'runScript', 'runSystem', 'runSystem_nocheck', 'selectObject',
-        'selected', 'semitonesToHertz', 'sentence', 'sentencetext', 'sigmoid', 'sin', 'sinc', 
+        'selected', 'semitonesToHertz', 'sentence', 'sentencetext', 'sigmoid', 'sin', 'sinc',
         'sincpi', 'sinh', 'soundPressureToPhon', 'sqrt', 'startsWith', 'studentP',
-        'studentQ', 'tan', 'tanh', 'text', 'variableExists', 'word', 'writeFile', 'writeFileLine', 
+        'studentQ', 'tan', 'tanh', 'text', 'variableExists', 'word', 'writeFile', 'writeFileLine',
         'writeInfo', 'writeInfoLine',
     )
 
@@ -89,9 +89,9 @@ class PraatLexer(RegexLexer):
         'KNN', 'KlattGrid', 'KlattTable', 'LFCC', 'LPC', 'Label', 'LegendreSeries',
         'LinearRegression', 'LogisticRegression', 'LongSound', 'Ltas', 'MFCC', 'MSpline',
         'ManPages', 'Manipulation', 'Matrix', 'MelFilter', 'MelSpectrogram',
-        'MixingMatrix', 'Movie', 'Network', 'Object', 'OTGrammar', 'OTHistory', 'OTMulti', 
-        'PCA', 'PairDistribution', 'ParamCurve', 'Pattern', 'Permutation', 'Photo', 
-        'Pitch', 'PitchModeler', 'PitchTier', 'PointProcess', 'Polygon', 'Polynomial', 
+        'MixingMatrix', 'Movie', 'Network', 'Object', 'OTGrammar', 'OTHistory', 'OTMulti',
+        'PCA', 'PairDistribution', 'ParamCurve', 'Pattern', 'Permutation', 'Photo',
+        'Pitch', 'PitchModeler', 'PitchTier', 'PointProcess', 'Polygon', 'Polynomial',
         'PowerCepstrogram', 'PowerCepstrum', 'Procrustes', 'RealPoint', 'RealTier',
         'ResultsMFC', 'Roots', 'SPINET', 'SSCP', 'SVD', 'Salience', 'ScalarProduct',
         'Similarity', 'SimpleString', 'SortedSetOfString', 'Sound', 'Speaker',
@@ -111,10 +111,10 @@ class PraatLexer(RegexLexer):
         'defaultDirectory',
     )
 
-    object_attributes = ( 
-        'ncol', 'nrow', 'xmin', 'ymin', 'xmax', 'ymax', 'nx', 'ny', 'dx', 'dy', 
-    ) 
- 
+    object_attributes = (
+        'ncol', 'nrow', 'xmin', 'ymin', 'xmax', 'ymax', 'nx', 'ny', 'dx', 'dy',
+    )
+
     tokens = {
         'root': [
             (r'(\s+)(#.*?$)',  bygroups(Text, Comment.Single)),
@@ -151,9 +151,9 @@ class PraatLexer(RegexLexer):
         ],
         'command': [
             (r'( ?[\w()-]+ ?)', Keyword),
- 
-            include('string_interpolated'), 
- 
+
+            include('string_interpolated'),
+
             (r'\.{3}', Keyword, ('#pop', 'old_arguments')),
             (r':', Keyword, ('#pop', 'comma_list')),
             (r'\s', Text, '#pop'),
@@ -212,39 +212,39 @@ class PraatLexer(RegexLexer):
             (r'\n', Text, '#pop'),
             (r'\b\d+(\.\d*)?([eE][-+]?\d+)?%?', Number),
         ],
-        'object_reference': [ 
-            include('string_interpolated'), 
-            (r'([a-z][a-zA-Z0-9_]*|\d+)', Name.Builtin), 
- 
-            (words(object_attributes, prefix=r'\.'), Name.Builtin, '#pop'), 
- 
-            (r'\$', Name.Builtin), 
-            (r'\[', Text, '#pop'), 
+        'object_reference': [
+            include('string_interpolated'),
+            (r'([a-z][a-zA-Z0-9_]*|\d+)', Name.Builtin),
+
+            (words(object_attributes, prefix=r'\.'), Name.Builtin, '#pop'),
+
+            (r'\$', Name.Builtin),
+            (r'\[', Text, '#pop'),
         ],
         'variable_name': [
             include('operator'),
             include('number'),
 
             (words(variables_string,  suffix=r'\$'), Name.Variable.Global),
-            (words(variables_numeric, 
-             suffix=r'(?=[^a-zA-Z0-9_."\'$#\[:(]|\s|^|$)'), 
-             Name.Variable.Global), 
+            (words(variables_numeric,
+             suffix=r'(?=[^a-zA-Z0-9_."\'$#\[:(]|\s|^|$)'),
+             Name.Variable.Global),
 
-            (words(objects, prefix=r'\b', suffix=r"(_)"), 
-             bygroups(Name.Builtin, Name.Builtin), 
-             'object_reference'), 
+            (words(objects, prefix=r'\b', suffix=r"(_)"),
+             bygroups(Name.Builtin, Name.Builtin),
+             'object_reference'),
 
             (r'\.?_?[a-z][\w.]*(\$|#)?', Text),
             (r'[\[\]]', Punctuation, 'comma_list'),
- 
-            include('string_interpolated'), 
+
+            include('string_interpolated'),
         ],
         'operator': [
             (r'([+\/*<>=!-]=?|[&*|][&*|]?|\^|<>)',       Operator),
             (r'(?<![\w.])(and|or|not|div|mod)(?![\w.])', Operator.Word),
         ],
         'string_interpolated': [
-            (r'\'[_a-z][^\[\]\'":]*(\[([\d,]+|"[\w,]+")\])?(:[0-9]+)?\'', 
+            (r'\'[_a-z][^\[\]\'":]*(\[([\d,]+|"[\w,]+")\])?(:[0-9]+)?\'',
              String.Interpol),
         ],
         'string_unquoted': [
@@ -252,9 +252,9 @@ class PraatLexer(RegexLexer):
 
             (r'\n',       Text,            '#pop'),
             (r'\s',       Text),
- 
-            include('string_interpolated'), 
- 
+
+            include('string_interpolated'),
+
             (r"'",        String),
             (r"[^'\n]+",  String),
         ],
@@ -262,14 +262,14 @@ class PraatLexer(RegexLexer):
             (r'(\n\s*)(\.{3})', bygroups(Text, Punctuation)),
 
             (r'"',          String,          '#pop'),
- 
-            include('string_interpolated'), 
- 
+
+            include('string_interpolated'),
+
             (r"'",          String),
             (r'[^\'"\n]+',  String),
         ],
         'old_form': [
-            (r'(\s+)(#.*?$)',  bygroups(Text, Comment.Single)), 
+            (r'(\s+)(#.*?$)',  bygroups(Text, Comment.Single)),
             (r'\s+', Text),
 
             (r'(optionmenu|choice)([ \t]+\S+:[ \t]+)',

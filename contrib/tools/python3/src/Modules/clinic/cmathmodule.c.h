@@ -21,12 +21,12 @@ cmath_acos(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_acos_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -63,12 +63,12 @@ cmath_acosh(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_acosh_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -105,12 +105,12 @@ cmath_asin(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_asin_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -147,12 +147,12 @@ cmath_asinh(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_asinh_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -189,12 +189,12 @@ cmath_atan(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_atan_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -231,12 +231,12 @@ cmath_atanh(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_atanh_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -273,12 +273,12 @@ cmath_cos(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_cos_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -315,12 +315,12 @@ cmath_cosh(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_cosh_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -357,12 +357,12 @@ cmath_exp(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_exp_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -399,12 +399,12 @@ cmath_log10(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_log10_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -441,12 +441,12 @@ cmath_sin(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_sin_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -483,12 +483,12 @@ cmath_sinh(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_sinh_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -525,12 +525,12 @@ cmath_sqrt(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_sqrt_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -567,12 +567,12 @@ cmath_tan(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_tan_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -609,12 +609,12 @@ cmath_tanh(PyObject *module, PyObject *arg)
     Py_complex z;
     Py_complex _return_value;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     /* modifications for z */
-    errno = 0; 
+    errno = 0;
     _return_value = cmath_tanh_impl(module, z);
     if (errno == EDOM) {
         PyErr_SetString(PyExc_ValueError, "math domain error");
@@ -633,15 +633,15 @@ exit:
 }
 
 PyDoc_STRVAR(cmath_log__doc__,
-"log($module, z, base=<unrepresentable>, /)\n" 
+"log($module, z, base=<unrepresentable>, /)\n"
 "--\n"
 "\n"
-"log(z[, base]) -> the logarithm of z to the given base.\n" 
+"log(z[, base]) -> the logarithm of z to the given base.\n"
 "\n"
 "If the base not specified, returns the natural logarithm (base e) of z.");
 
 #define CMATH_LOG_METHODDEF    \
-    {"log", (PyCFunction)(void(*)(void))cmath_log, METH_FASTCALL, cmath_log__doc__}, 
+    {"log", (PyCFunction)(void(*)(void))cmath_log, METH_FASTCALL, cmath_log__doc__},
 
 static PyObject *
 cmath_log_impl(PyObject *module, Py_complex x, PyObject *y_obj);
@@ -653,18 +653,18 @@ cmath_log(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     Py_complex x;
     PyObject *y_obj = NULL;
 
-    if (!_PyArg_CheckPositional("log", nargs, 1, 2)) { 
+    if (!_PyArg_CheckPositional("log", nargs, 1, 2)) {
         goto exit;
     }
-    x = PyComplex_AsCComplex(args[0]); 
-    if (PyErr_Occurred()) { 
-        goto exit; 
-    } 
-    if (nargs < 2) { 
-        goto skip_optional; 
-    } 
-    y_obj = args[1]; 
-skip_optional: 
+    x = PyComplex_AsCComplex(args[0]);
+    if (PyErr_Occurred()) {
+        goto exit;
+    }
+    if (nargs < 2) {
+        goto skip_optional;
+    }
+    y_obj = args[1];
+skip_optional:
     return_value = cmath_log_impl(module, x, y_obj);
 
 exit:
@@ -689,8 +689,8 @@ cmath_phase(PyObject *module, PyObject *arg)
     PyObject *return_value = NULL;
     Py_complex z;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     return_value = cmath_phase_impl(module, z);
@@ -719,8 +719,8 @@ cmath_polar(PyObject *module, PyObject *arg)
     PyObject *return_value = NULL;
     Py_complex z;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     return_value = cmath_polar_impl(module, z);
@@ -736,7 +736,7 @@ PyDoc_STRVAR(cmath_rect__doc__,
 "Convert from polar coordinates to rectangular coordinates.");
 
 #define CMATH_RECT_METHODDEF    \
-    {"rect", (PyCFunction)(void(*)(void))cmath_rect, METH_FASTCALL, cmath_rect__doc__}, 
+    {"rect", (PyCFunction)(void(*)(void))cmath_rect, METH_FASTCALL, cmath_rect__doc__},
 
 static PyObject *
 cmath_rect_impl(PyObject *module, double r, double phi);
@@ -748,29 +748,29 @@ cmath_rect(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     double r;
     double phi;
 
-    if (!_PyArg_CheckPositional("rect", nargs, 2, 2)) { 
+    if (!_PyArg_CheckPositional("rect", nargs, 2, 2)) {
         goto exit;
     }
-    if (PyFloat_CheckExact(args[0])) { 
-        r = PyFloat_AS_DOUBLE(args[0]); 
-    } 
-    else 
-    { 
-        r = PyFloat_AsDouble(args[0]); 
-        if (r == -1.0 && PyErr_Occurred()) { 
-            goto exit; 
-        } 
-    } 
-    if (PyFloat_CheckExact(args[1])) { 
-        phi = PyFloat_AS_DOUBLE(args[1]); 
-    } 
-    else 
-    { 
-        phi = PyFloat_AsDouble(args[1]); 
-        if (phi == -1.0 && PyErr_Occurred()) { 
-            goto exit; 
-        } 
-    } 
+    if (PyFloat_CheckExact(args[0])) {
+        r = PyFloat_AS_DOUBLE(args[0]);
+    }
+    else
+    {
+        r = PyFloat_AsDouble(args[0]);
+        if (r == -1.0 && PyErr_Occurred()) {
+            goto exit;
+        }
+    }
+    if (PyFloat_CheckExact(args[1])) {
+        phi = PyFloat_AS_DOUBLE(args[1]);
+    }
+    else
+    {
+        phi = PyFloat_AsDouble(args[1]);
+        if (phi == -1.0 && PyErr_Occurred()) {
+            goto exit;
+        }
+    }
     return_value = cmath_rect_impl(module, r, phi);
 
 exit:
@@ -795,8 +795,8 @@ cmath_isfinite(PyObject *module, PyObject *arg)
     PyObject *return_value = NULL;
     Py_complex z;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     return_value = cmath_isfinite_impl(module, z);
@@ -823,8 +823,8 @@ cmath_isnan(PyObject *module, PyObject *arg)
     PyObject *return_value = NULL;
     Py_complex z;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     return_value = cmath_isnan_impl(module, z);
@@ -851,8 +851,8 @@ cmath_isinf(PyObject *module, PyObject *arg)
     PyObject *return_value = NULL;
     Py_complex z;
 
-    z = PyComplex_AsCComplex(arg); 
-    if (PyErr_Occurred()) { 
+    z = PyComplex_AsCComplex(arg);
+    if (PyErr_Occurred()) {
         goto exit;
     }
     return_value = cmath_isinf_impl(module, z);
@@ -883,7 +883,7 @@ PyDoc_STRVAR(cmath_isclose__doc__,
 "not close to anything, even itself. inf and -inf are only close to themselves.");
 
 #define CMATH_ISCLOSE_METHODDEF    \
-    {"isclose", (PyCFunction)(void(*)(void))cmath_isclose, METH_FASTCALL|METH_KEYWORDS, cmath_isclose__doc__}, 
+    {"isclose", (PyCFunction)(void(*)(void))cmath_isclose, METH_FASTCALL|METH_KEYWORDS, cmath_isclose__doc__},
 
 static int
 cmath_isclose_impl(PyObject *module, Py_complex a, Py_complex b,
@@ -894,56 +894,56 @@ cmath_isclose(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
 {
     PyObject *return_value = NULL;
     static const char * const _keywords[] = {"a", "b", "rel_tol", "abs_tol", NULL};
-    static _PyArg_Parser _parser = {NULL, _keywords, "isclose", 0}; 
-    PyObject *argsbuf[4]; 
-    Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 2; 
+    static _PyArg_Parser _parser = {NULL, _keywords, "isclose", 0};
+    PyObject *argsbuf[4];
+    Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 2;
     Py_complex a;
     Py_complex b;
     double rel_tol = 1e-09;
     double abs_tol = 0.0;
     int _return_value;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 2, 2, 0, argsbuf); 
-    if (!args) { 
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 2, 2, 0, argsbuf);
+    if (!args) {
         goto exit;
     }
-    a = PyComplex_AsCComplex(args[0]); 
-    if (PyErr_Occurred()) { 
-        goto exit; 
-    } 
-    b = PyComplex_AsCComplex(args[1]); 
-    if (PyErr_Occurred()) { 
-        goto exit; 
-    } 
-    if (!noptargs) { 
-        goto skip_optional_kwonly; 
-    } 
-    if (args[2]) { 
-        if (PyFloat_CheckExact(args[2])) { 
-            rel_tol = PyFloat_AS_DOUBLE(args[2]); 
-        } 
-        else 
-        { 
-            rel_tol = PyFloat_AsDouble(args[2]); 
-            if (rel_tol == -1.0 && PyErr_Occurred()) { 
-                goto exit; 
-            } 
-        } 
-        if (!--noptargs) { 
-            goto skip_optional_kwonly; 
-        } 
-    } 
-    if (PyFloat_CheckExact(args[3])) { 
-        abs_tol = PyFloat_AS_DOUBLE(args[3]); 
-    } 
-    else 
-    { 
-        abs_tol = PyFloat_AsDouble(args[3]); 
-        if (abs_tol == -1.0 && PyErr_Occurred()) { 
-            goto exit; 
-        } 
-    } 
-skip_optional_kwonly: 
+    a = PyComplex_AsCComplex(args[0]);
+    if (PyErr_Occurred()) {
+        goto exit;
+    }
+    b = PyComplex_AsCComplex(args[1]);
+    if (PyErr_Occurred()) {
+        goto exit;
+    }
+    if (!noptargs) {
+        goto skip_optional_kwonly;
+    }
+    if (args[2]) {
+        if (PyFloat_CheckExact(args[2])) {
+            rel_tol = PyFloat_AS_DOUBLE(args[2]);
+        }
+        else
+        {
+            rel_tol = PyFloat_AsDouble(args[2]);
+            if (rel_tol == -1.0 && PyErr_Occurred()) {
+                goto exit;
+            }
+        }
+        if (!--noptargs) {
+            goto skip_optional_kwonly;
+        }
+    }
+    if (PyFloat_CheckExact(args[3])) {
+        abs_tol = PyFloat_AS_DOUBLE(args[3]);
+    }
+    else
+    {
+        abs_tol = PyFloat_AsDouble(args[3]);
+        if (abs_tol == -1.0 && PyErr_Occurred()) {
+            goto exit;
+        }
+    }
+skip_optional_kwonly:
     _return_value = cmath_isclose_impl(module, a, b, rel_tol, abs_tol);
     if ((_return_value == -1) && PyErr_Occurred()) {
         goto exit;
@@ -953,4 +953,4 @@ skip_optional_kwonly:
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=353347db2e808e0d input=a9049054013a1b77]*/ 
+/*[clinic end generated code: output=353347db2e808e0d input=a9049054013a1b77]*/

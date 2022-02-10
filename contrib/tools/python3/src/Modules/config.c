@@ -36,9 +36,9 @@ extern PyObject* PyInit__codecs_kr(void); // _codecs_kr
 extern PyObject* PyInit__codecs_tw(void); // _codecs_tw
 extern PyObject* PyInit__collections(void); // _collections
 extern PyObject* PyInit__contextvars(void); // _contextvars
-#if !defined(_MSC_VER) 
-extern PyObject* PyInit__crypt(void); // _crypt 
-#endif 
+#if !defined(_MSC_VER)
+extern PyObject* PyInit__crypt(void); // _crypt
+#endif
 extern PyObject* PyInit__csv(void); // _csv
 extern PyObject* PyInit__ctypes(void); // _ctypes
 extern PyObject* PyInit__datetime(void); // _datetime
@@ -58,9 +58,9 @@ extern PyObject* PyInit__multibytecodec(void); // _multibytecodec
 extern PyObject* PyInit__multiprocessing(void); // _multiprocessing
 extern PyObject* PyInit__opcode(void); // _opcode
 extern PyObject* PyInit__operator(void); // _operator
-extern PyObject* PyInit__peg_parser(void); // _peg_parser 
+extern PyObject* PyInit__peg_parser(void); // _peg_parser
 extern PyObject* PyInit__pickle(void); // _pickle
-extern PyObject* PyInit__posixshmem(void); // _posixshmem 
+extern PyObject* PyInit__posixshmem(void); // _posixshmem
 #if !defined(_MSC_VER)
 extern PyObject* PyInit__posixsubprocess(void); // _posixsubprocess
 #endif
@@ -75,16 +75,16 @@ extern PyObject* PyInit__socket(void); // _socket
 extern PyObject* PyInit__sre(void); // _sre
 extern PyObject* PyInit__ssl(void); // _ssl
 extern PyObject* PyInit__stat(void); // _stat
-extern PyObject* PyInit__statistics(void); // _statistics 
+extern PyObject* PyInit__statistics(void); // _statistics
 extern PyObject* PyInit__string(void); // _string
 extern PyObject* PyInit__struct(void); // _struct
 extern PyObject* PyInit__symtable(void); // _symtable
 extern PyObject* PyInit__thread(void); // _thread
 extern PyObject* PyInit__tracemalloc(void); // _tracemalloc
 extern PyObject* PyInit__weakref(void); // _weakref
-extern PyObject* PyInit__xxsubinterpreters(void); // _xxsubinterpreters 
+extern PyObject* PyInit__xxsubinterpreters(void); // _xxsubinterpreters
 extern PyObject* PyInit__xxtestfuzz(void); // _xxtestfuzz
-extern PyObject* PyInit__zoneinfo(void); // _zoneinfo 
+extern PyObject* PyInit__zoneinfo(void); // _zoneinfo
 extern PyObject* PyInit_array(void); // array
 extern PyObject* PyInit_atexit(void); // atexit
 extern PyObject* PyInit_audioop(void); // audioop
@@ -170,9 +170,9 @@ struct _inittab _PyImport_Inittab[] = {
     {"_codecs_tw", PyInit__codecs_tw},
     {"_collections", PyInit__collections},
     {"_contextvars", PyInit__contextvars},
-#if !defined(_MSC_VER) 
-    {"_crypt", PyInit__crypt}, 
-#endif 
+#if !defined(_MSC_VER)
+    {"_crypt", PyInit__crypt},
+#endif
     {"_csv", PyInit__csv},
     {"_ctypes", PyInit__ctypes},
     {"_datetime", PyInit__datetime},
@@ -192,9 +192,9 @@ struct _inittab _PyImport_Inittab[] = {
     {"_multiprocessing", PyInit__multiprocessing},
     {"_opcode", PyInit__opcode},
     {"_operator", PyInit__operator},
-    {"_peg_parser", PyInit__peg_parser}, 
+    {"_peg_parser", PyInit__peg_parser},
     {"_pickle", PyInit__pickle},
-    {"_posixshmem", PyInit__posixshmem}, 
+    {"_posixshmem", PyInit__posixshmem},
 #if !defined(_MSC_VER)
     {"_posixsubprocess", PyInit__posixsubprocess},
 #endif
@@ -209,16 +209,16 @@ struct _inittab _PyImport_Inittab[] = {
     {"_sre", PyInit__sre},
     {"_ssl", PyInit__ssl},
     {"_stat", PyInit__stat},
-    {"_statistics", PyInit__statistics}, 
+    {"_statistics", PyInit__statistics},
     {"_string", PyInit__string},
     {"_struct", PyInit__struct},
     {"_symtable", PyInit__symtable},
     {"_thread", PyInit__thread},
     {"_tracemalloc", PyInit__tracemalloc},
     {"_weakref", PyInit__weakref},
-    {"_xxsubinterpreters", PyInit__xxsubinterpreters}, 
+    {"_xxsubinterpreters", PyInit__xxsubinterpreters},
     {"_xxtestfuzz", PyInit__xxtestfuzz},
-    {"_zoneinfo", PyInit__zoneinfo}, 
+    {"_zoneinfo", PyInit__zoneinfo},
     {"array", PyInit_array},
     {"atexit", PyInit_atexit},
     {"audioop", PyInit_audioop},

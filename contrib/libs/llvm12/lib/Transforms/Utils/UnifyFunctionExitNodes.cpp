@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This pass is used to ensure that functions have at most one return and one 
-// unreachable instruction in them. 
+// This pass is used to ensure that functions have at most one return and one
+// unreachable instruction in them.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,66 +20,66 @@
 #include "llvm/Transforms/Utils.h"
 using namespace llvm;
 
-char UnifyFunctionExitNodesLegacyPass::ID = 0; 
+char UnifyFunctionExitNodesLegacyPass::ID = 0;
 
-UnifyFunctionExitNodesLegacyPass::UnifyFunctionExitNodesLegacyPass() 
-    : FunctionPass(ID) { 
-  initializeUnifyFunctionExitNodesLegacyPassPass( 
-      *PassRegistry::getPassRegistry()); 
+UnifyFunctionExitNodesLegacyPass::UnifyFunctionExitNodesLegacyPass()
+    : FunctionPass(ID) {
+  initializeUnifyFunctionExitNodesLegacyPassPass(
+      *PassRegistry::getPassRegistry());
 }
 
-INITIALIZE_PASS(UnifyFunctionExitNodesLegacyPass, "mergereturn", 
+INITIALIZE_PASS(UnifyFunctionExitNodesLegacyPass, "mergereturn",
                 "Unify function exit nodes", false, false)
 
 Pass *llvm::createUnifyFunctionExitNodesPass() {
-  return new UnifyFunctionExitNodesLegacyPass(); 
+  return new UnifyFunctionExitNodesLegacyPass();
 }
 
-void UnifyFunctionExitNodesLegacyPass::getAnalysisUsage( 
-    AnalysisUsage &AU) const { 
+void UnifyFunctionExitNodesLegacyPass::getAnalysisUsage(
+    AnalysisUsage &AU) const {
   // We preserve the non-critical-edgeness property
   AU.addPreservedID(BreakCriticalEdgesID);
   // This is a cluster of orthogonal Transforms
   AU.addPreservedID(LowerSwitchID);
 }
 
-namespace { 
- 
-bool unifyUnreachableBlocks(Function &F) { 
-  std::vector<BasicBlock *> UnreachableBlocks; 
- 
+namespace {
+
+bool unifyUnreachableBlocks(Function &F) {
+  std::vector<BasicBlock *> UnreachableBlocks;
+
   for (BasicBlock &I : F)
-    if (isa<UnreachableInst>(I.getTerminator())) 
+    if (isa<UnreachableInst>(I.getTerminator()))
       UnreachableBlocks.push_back(&I);
 
-  if (UnreachableBlocks.size() <= 1) 
-    return false; 
-
-  BasicBlock *UnreachableBlock = 
-      BasicBlock::Create(F.getContext(), "UnifiedUnreachableBlock", &F); 
-  new UnreachableInst(F.getContext(), UnreachableBlock); 
- 
-  for (BasicBlock *BB : UnreachableBlocks) { 
-    BB->getInstList().pop_back(); // Remove the unreachable inst. 
-    BranchInst::Create(UnreachableBlock, BB); 
-  }
-
-  return true; 
-} 
- 
-bool unifyReturnBlocks(Function &F) { 
-  std::vector<BasicBlock *> ReturningBlocks; 
- 
-  for (BasicBlock &I : F) 
-    if (isa<ReturnInst>(I.getTerminator())) 
-      ReturningBlocks.push_back(&I); 
- 
-  if (ReturningBlocks.size() <= 1) 
+  if (UnreachableBlocks.size() <= 1)
     return false;
 
-  // Insert a new basic block into the function, add PHI nodes (if the function 
-  // returns values), and convert all of the return instructions into 
-  // unconditional branches. 
+  BasicBlock *UnreachableBlock =
+      BasicBlock::Create(F.getContext(), "UnifiedUnreachableBlock", &F);
+  new UnreachableInst(F.getContext(), UnreachableBlock);
+
+  for (BasicBlock *BB : UnreachableBlocks) {
+    BB->getInstList().pop_back(); // Remove the unreachable inst.
+    BranchInst::Create(UnreachableBlock, BB);
+  }
+
+  return true;
+}
+
+bool unifyReturnBlocks(Function &F) {
+  std::vector<BasicBlock *> ReturningBlocks;
+
+  for (BasicBlock &I : F)
+    if (isa<ReturnInst>(I.getTerminator()))
+      ReturningBlocks.push_back(&I);
+
+  if (ReturningBlocks.size() <= 1)
+    return false;
+
+  // Insert a new basic block into the function, add PHI nodes (if the function
+  // returns values), and convert all of the return instructions into
+  // unconditional branches.
   BasicBlock *NewRetBlock = BasicBlock::Create(F.getContext(),
                                                "UnifiedReturnBlock", &F);
 
@@ -105,25 +105,25 @@ bool unifyReturnBlocks(Function &F) {
     BB->getInstList().pop_back();  // Remove the return insn
     BranchInst::Create(NewRetBlock, BB);
   }
- 
+
   return true;
 }
-} // namespace 
- 
-// Unify all exit nodes of the CFG by creating a new BasicBlock, and converting 
-// all returns to unconditional branches to this new basic block. Also, unify 
-// all unreachable blocks. 
-bool UnifyFunctionExitNodesLegacyPass::runOnFunction(Function &F) { 
-  bool Changed = false; 
-  Changed |= unifyUnreachableBlocks(F); 
-  Changed |= unifyReturnBlocks(F); 
-  return Changed; 
-} 
- 
-PreservedAnalyses UnifyFunctionExitNodesPass::run(Function &F, 
-                                                  FunctionAnalysisManager &AM) { 
-  bool Changed = false; 
-  Changed |= unifyUnreachableBlocks(F); 
-  Changed |= unifyReturnBlocks(F); 
-  return Changed ? PreservedAnalyses() : PreservedAnalyses::all(); 
-} 
+} // namespace
+
+// Unify all exit nodes of the CFG by creating a new BasicBlock, and converting
+// all returns to unconditional branches to this new basic block. Also, unify
+// all unreachable blocks.
+bool UnifyFunctionExitNodesLegacyPass::runOnFunction(Function &F) {
+  bool Changed = false;
+  Changed |= unifyUnreachableBlocks(F);
+  Changed |= unifyReturnBlocks(F);
+  return Changed;
+}
+
+PreservedAnalyses UnifyFunctionExitNodesPass::run(Function &F,
+                                                  FunctionAnalysisManager &AM) {
+  bool Changed = false;
+  Changed |= unifyUnreachableBlocks(F);
+  Changed |= unifyReturnBlocks(F);
+  return Changed ? PreservedAnalyses() : PreservedAnalyses::all();
+}

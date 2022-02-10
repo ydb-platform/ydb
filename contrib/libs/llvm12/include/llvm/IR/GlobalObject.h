@@ -133,13 +133,13 @@ public:
   Comdat *getComdat() { return ObjComdat; }
   void setComdat(Comdat *C) { ObjComdat = C; }
 
-  using Value::addMetadata; 
-  using Value::clearMetadata; 
-  using Value::eraseMetadata; 
-  using Value::getAllMetadata; 
-  using Value::getMetadata; 
-  using Value::hasMetadata; 
-  using Value::setMetadata; 
+  using Value::addMetadata;
+  using Value::clearMetadata;
+  using Value::eraseMetadata;
+  using Value::getAllMetadata;
+  using Value::getMetadata;
+  using Value::hasMetadata;
+  using Value::setMetadata;
 
   /// Copy metadata from Src, adjusting offsets by Offset.
   void copyMetadata(const GlobalObject *Src, unsigned Offset);

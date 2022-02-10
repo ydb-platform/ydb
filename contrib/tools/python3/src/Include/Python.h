@@ -32,7 +32,7 @@
 #include <errno.h>
 #endif
 #include <stdlib.h>
-#ifndef MS_WINDOWS 
+#ifndef MS_WINDOWS
 #include <unistd.h>
 #endif
 
@@ -50,22 +50,22 @@
 #include "pyport.h"
 #include "pymacro.h"
 
-/* A convenient way for code to know if sanitizers are enabled. */ 
+/* A convenient way for code to know if sanitizers are enabled. */
 #if defined(__has_feature)
 #  if __has_feature(memory_sanitizer)
 #    if !defined(_Py_MEMORY_SANITIZER)
 #      define _Py_MEMORY_SANITIZER
 #    endif
 #  endif
-#  if __has_feature(address_sanitizer) 
-#    if !defined(_Py_ADDRESS_SANITIZER) 
-#      define _Py_ADDRESS_SANITIZER 
-#    endif 
-#  endif 
-#elif defined(__GNUC__) 
-#  if defined(__SANITIZE_ADDRESS__) 
-#    define _Py_ADDRESS_SANITIZER 
-#  endif 
+#  if __has_feature(address_sanitizer)
+#    if !defined(_Py_ADDRESS_SANITIZER)
+#      define _Py_ADDRESS_SANITIZER
+#    endif
+#  endif
+#elif defined(__GNUC__)
+#  if defined(__SANITIZE_ADDRESS__)
+#    define _Py_ADDRESS_SANITIZER
+#  endif
 #endif
 
 /* Debug-mode build with pymalloc implies PYMALLOC_DEBUG.
@@ -110,25 +110,25 @@
 #include "classobject.h"
 #include "fileobject.h"
 #include "pycapsule.h"
-#include "code.h" 
-#include "pyframe.h" 
+#include "code.h"
+#include "pyframe.h"
 #include "traceback.h"
 #include "sliceobject.h"
 #include "cellobject.h"
 #include "iterobject.h"
-#include <contrib/tools/python3/src/Include/cpython/initconfig.h> 
+#include <contrib/tools/python3/src/Include/cpython/initconfig.h>
 #include "genobject.h"
 #include "descrobject.h"
-#include "genericaliasobject.h" 
+#include "genericaliasobject.h"
 #include "warnings.h"
 #include "weakrefobject.h"
 #include "structseq.h"
 #include "namespaceobject.h"
-#include "picklebufobject.h" 
+#include "picklebufobject.h"
 
 #include "codecs.h"
 #include "pyerrors.h"
-#include "pythread.h" 
+#include "pythread.h"
 #include "pystate.h"
 #include "context.h"
 
@@ -153,6 +153,6 @@
 #include "pystrcmp.h"
 #include "fileutils.h"
 #include "pyfpe.h"
-#include "tracemalloc.h" 
+#include "tracemalloc.h"
 
 #endif /* !Py_PYTHON_H */

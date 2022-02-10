@@ -22,7 +22,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/NonRelocatableStringpool.h"
 #include "llvm/DWARFLinker/DWARFLinkerCompileUnit.h"
-#include "llvm/DebugInfo/DWARF/DWARFDebugLine.h" 
+#include "llvm/DebugInfo/DWARF/DWARFDebugLine.h"
 #include "llvm/DebugInfo/DWARF/DWARFDie.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
@@ -39,18 +39,18 @@ class CachedPathResolver {
 public:
   /// Resolve a path by calling realpath and cache its result. The returned
   /// StringRef is interned in the given \p StringPool.
-  StringRef resolve(const std::string &Path, 
-                    NonRelocatableStringpool &StringPool) { 
+  StringRef resolve(const std::string &Path,
+                    NonRelocatableStringpool &StringPool) {
     StringRef FileName = sys::path::filename(Path);
-    StringRef ParentPath = sys::path::parent_path(Path); 
+    StringRef ParentPath = sys::path::parent_path(Path);
 
     // If the ParentPath has not yet been resolved, resolve and cache it for
     // future look-ups.
     if (!ResolvedPaths.count(ParentPath)) {
       SmallString<256> RealPath;
       sys::fs::real_path(ParentPath, RealPath);
-      ResolvedPaths.insert( 
-          {ParentPath, std::string(RealPath.c_str(), RealPath.size())}); 
+      ResolvedPaths.insert(
+          {ParentPath, std::string(RealPath.c_str(), RealPath.size())});
     }
 
     // Join the file name again with the resolved path.
@@ -138,10 +138,10 @@ public:
   ///
   /// FIXME: The invalid bit along the return value is to emulate some
   /// dsymutil-classic functionality.
-  PointerIntPair<DeclContext *, 1> getChildDeclContext(DeclContext &Context, 
-                                                       const DWARFDie &DIE, 
-                                                       CompileUnit &Unit, 
-                                                       bool InClangModule); 
+  PointerIntPair<DeclContext *, 1> getChildDeclContext(DeclContext &Context,
+                                                       const DWARFDie &DIE,
+                                                       CompileUnit &Unit,
+                                                       bool InClangModule);
 
   DeclContext &getRoot() { return Root; }
 
@@ -150,19 +150,19 @@ private:
   DeclContext Root;
   DeclContext::Map Contexts;
 
-  /// Cached resolved paths from the line table. 
-  /// The key is <UniqueUnitID, FileIdx>. 
-  using ResolvedPathsMap = DenseMap<std::pair<unsigned, unsigned>, StringRef>; 
-  ResolvedPathsMap ResolvedPaths; 
- 
-  /// Helper that resolves and caches fragments of file paths. 
+  /// Cached resolved paths from the line table.
+  /// The key is <UniqueUnitID, FileIdx>.
+  using ResolvedPathsMap = DenseMap<std::pair<unsigned, unsigned>, StringRef>;
+  ResolvedPathsMap ResolvedPaths;
+
+  /// Helper that resolves and caches fragments of file paths.
   CachedPathResolver PathResolver;
- 
-  /// String pool keeping real path bodies. 
-  NonRelocatableStringpool StringPool; 
- 
-  StringRef getResolvedPath(CompileUnit &CU, unsigned FileNum, 
-                            const DWARFDebugLine::LineTable &LineTable); 
+
+  /// String pool keeping real path bodies.
+  NonRelocatableStringpool StringPool;
+
+  StringRef getResolvedPath(CompileUnit &CU, unsigned FileNum,
+                            const DWARFDebugLine::LineTable &LineTable);
 };
 
 /// Info type for the DenseMap storing the DeclContext pointers.

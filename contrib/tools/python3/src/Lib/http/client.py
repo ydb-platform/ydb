@@ -70,7 +70,7 @@ Req-sent-unread-response       _CS_REQ_SENT       <response_class>
 
 import email.parser
 import email.message
-import errno 
+import errno
 import http
 import io
 import re
@@ -106,9 +106,9 @@ globals().update(http.HTTPStatus.__members__)
 # Mapping status codes to official W3C names
 responses = {v: v.phrase for v in http.HTTPStatus.__members__.values()}
 
-# maximal amount of data to read at one time in _safe_read 
-MAXAMOUNT = 1048576 
- 
+# maximal amount of data to read at one time in _safe_read
+MAXAMOUNT = 1048576
+
 # maximal line length when calling readline().
 _MAXLINE = 65536
 _MAXHEADERS = 100
@@ -141,20 +141,20 @@ _MAXHEADERS = 100
 _is_legal_header_name = re.compile(rb'[^:\s][^:\r\n]*').fullmatch
 _is_illegal_header_value = re.compile(rb'\n(?![ \t])|\r(?![ \t\n])').search
 
-# These characters are not allowed within HTTP URL paths. 
-#  See https://tools.ietf.org/html/rfc3986#section-3.3 and the 
-#  https://tools.ietf.org/html/rfc3986#appendix-A pchar definition. 
-# Prevents CVE-2019-9740.  Includes control characters such as \r\n. 
-# We don't restrict chars above \x7f as putrequest() limits us to ASCII. 
-_contains_disallowed_url_pchar_re = re.compile('[\x00-\x20\x7f]') 
-# Arguably only these _should_ allowed: 
-#  _is_allowed_url_pchars_re = re.compile(r"^[/!$&'()*+,;=:@%a-zA-Z0-9._~-]+$") 
-# We are more lenient for assumed real world compatibility purposes. 
- 
-# These characters are not allowed within HTTP method names 
-# to prevent http header injection. 
-_contains_disallowed_method_pchar_re = re.compile('[\x00-\x1f]') 
- 
+# These characters are not allowed within HTTP URL paths.
+#  See https://tools.ietf.org/html/rfc3986#section-3.3 and the
+#  https://tools.ietf.org/html/rfc3986#appendix-A pchar definition.
+# Prevents CVE-2019-9740.  Includes control characters such as \r\n.
+# We don't restrict chars above \x7f as putrequest() limits us to ASCII.
+_contains_disallowed_url_pchar_re = re.compile('[\x00-\x20\x7f]')
+# Arguably only these _should_ allowed:
+#  _is_allowed_url_pchars_re = re.compile(r"^[/!$&'()*+,;=:@%a-zA-Z0-9._~-]+$")
+# We are more lenient for assumed real world compatibility purposes.
+
+# These characters are not allowed within HTTP method names
+# to prevent http header injection.
+_contains_disallowed_method_pchar_re = re.compile('[\x00-\x1f]')
+
 # We always set the Content-Length header for these methods because some
 # servers will otherwise respond with a 411
 _METHODS_EXPECTING_BODY = {'PATCH', 'POST', 'PUT'}
@@ -205,11 +205,11 @@ class HTTPMessage(email.message.Message):
                 lst.append(line)
         return lst
 
-def _read_headers(fp): 
-    """Reads potential header lines into a list from a file pointer. 
+def _read_headers(fp):
+    """Reads potential header lines into a list from a file pointer.
 
-    Length of line is limited by _MAXLINE, and number of 
-    headers is limited by _MAXHEADERS. 
+    Length of line is limited by _MAXLINE, and number of
+    headers is limited by _MAXHEADERS.
     """
     headers = []
     while True:
@@ -221,19 +221,19 @@ def _read_headers(fp):
             raise HTTPException("got more than %d headers" % _MAXHEADERS)
         if line in (b'\r\n', b'\n', b''):
             break
-    return headers 
- 
-def parse_headers(fp, _class=HTTPMessage): 
-    """Parses only RFC2822 headers from a file pointer. 
- 
-    email Parser wants to see strings rather than bytes. 
-    But a TextIOWrapper around self.rfile would buffer too many bytes 
-    from the stream, bytes which we later need to read as bytes. 
-    So we read the correct bytes here, as bytes, for email Parser 
-    to parse. 
- 
-    """ 
-    headers = _read_headers(fp) 
+    return headers
+
+def parse_headers(fp, _class=HTTPMessage):
+    """Parses only RFC2822 headers from a file pointer.
+
+    email Parser wants to see strings rather than bytes.
+    But a TextIOWrapper around self.rfile would buffer too many bytes
+    from the stream, bytes which we later need to read as bytes.
+    So we read the correct bytes here, as bytes, for email Parser
+    to parse.
+
+    """
+    headers = _read_headers(fp)
     hstring = b''.join(headers).decode('iso-8859-1')
     return email.parser.Parser(_class=_class).parsestr(hstring)
 
@@ -321,10 +321,10 @@ class HTTPResponse(io.BufferedIOBase):
             if status != CONTINUE:
                 break
             # skip the header from the 100 response
-            skipped_headers = _read_headers(self.fp) 
-            if self.debuglevel > 0: 
-                print("headers:", skipped_headers) 
-            del skipped_headers 
+            skipped_headers = _read_headers(self.fp)
+            if self.debuglevel > 0:
+                print("headers:", skipped_headers)
+            del skipped_headers
 
         self.code = self.status = status
         self.reason = reason.strip()
@@ -339,8 +339,8 @@ class HTTPResponse(io.BufferedIOBase):
         self.headers = self.msg = parse_headers(self.fp)
 
         if self.debuglevel > 0:
-            for hdr, val in self.headers.items(): 
-                print("header:", hdr + ":", val) 
+            for hdr, val in self.headers.items():
+                print("header:", hdr + ":", val)
 
         # are we using the chunked-style of transfer encoding?
         tr_enc = self.headers.get("transfer-encoding")
@@ -608,43 +608,43 @@ class HTTPResponse(io.BufferedIOBase):
             raise IncompleteRead(bytes(b[0:total_bytes]))
 
     def _safe_read(self, amt):
-        """Read the number of bytes requested, compensating for partial reads. 
+        """Read the number of bytes requested, compensating for partial reads.
 
-        Normally, we have a blocking socket, but a read() can be interrupted 
-        by a signal (resulting in a partial read). 
- 
-        Note that we cannot distinguish between EOF and an interrupt when zero 
-        bytes have been read. IncompleteRead() will be raised in this 
-        situation. 
- 
+        Normally, we have a blocking socket, but a read() can be interrupted
+        by a signal (resulting in a partial read).
+
+        Note that we cannot distinguish between EOF and an interrupt when zero
+        bytes have been read. IncompleteRead() will be raised in this
+        situation.
+
         This function should be used when <amt> bytes "should" be present for
         reading. If the bytes are truly not available (due to EOF), then the
         IncompleteRead exception can be used to detect the problem.
         """
-        s = [] 
-        while amt > 0: 
-            chunk = self.fp.read(min(amt, MAXAMOUNT)) 
-            if not chunk: 
-                raise IncompleteRead(b''.join(s), amt) 
-            s.append(chunk) 
-            amt -= len(chunk) 
-        return b"".join(s) 
+        s = []
+        while amt > 0:
+            chunk = self.fp.read(min(amt, MAXAMOUNT))
+            if not chunk:
+                raise IncompleteRead(b''.join(s), amt)
+            s.append(chunk)
+            amt -= len(chunk)
+        return b"".join(s)
 
     def _safe_readinto(self, b):
         """Same as _safe_read, but for reading into a buffer."""
-        total_bytes = 0 
-        mvb = memoryview(b) 
-        while total_bytes < len(b): 
-            if MAXAMOUNT < len(mvb): 
-                temp_mvb = mvb[0:MAXAMOUNT] 
-                n = self.fp.readinto(temp_mvb) 
-            else: 
-                n = self.fp.readinto(mvb) 
-            if not n: 
-                raise IncompleteRead(bytes(mvb[0:total_bytes]), len(b)) 
-            mvb = mvb[n:] 
-            total_bytes += n 
-        return total_bytes 
+        total_bytes = 0
+        mvb = memoryview(b)
+        while total_bytes < len(b):
+            if MAXAMOUNT < len(mvb):
+                temp_mvb = mvb[0:MAXAMOUNT]
+                n = self.fp.readinto(temp_mvb)
+            else:
+                n = self.fp.readinto(mvb)
+            if not n:
+                raise IncompleteRead(bytes(mvb[0:total_bytes]), len(b))
+            mvb = mvb[n:]
+            total_bytes += n
+        return total_bytes
 
     def read1(self, n=-1):
         """Read with at most one underlying system call.  If at least one
@@ -856,8 +856,8 @@ class HTTPConnection:
 
         (self.host, self.port) = self._get_hostport(host, port)
 
-        self._validate_host(self.host) 
- 
+        self._validate_host(self.host)
+
         # This is stored as an instance variable to allow unit
         # tests to replace it with a suitable mockup
         self._create_connection = socket.create_connection
@@ -870,7 +870,7 @@ class HTTPConnection:
         the endpoint passed to `set_tunnel`. This done by sending an HTTP
         CONNECT request to the proxy server when the connection is established.
 
-        This method must be called before the HTTP connection has been 
+        This method must be called before the HTTP connection has been
         established.
 
         The headers argument should be a mapping of extra HTTP headers to send
@@ -910,24 +910,24 @@ class HTTPConnection:
         self.debuglevel = level
 
     def _tunnel(self):
-        connect = b"CONNECT %s:%d HTTP/1.0\r\n" % ( 
-            self._tunnel_host.encode("ascii"), self._tunnel_port) 
-        headers = [connect] 
+        connect = b"CONNECT %s:%d HTTP/1.0\r\n" % (
+            self._tunnel_host.encode("ascii"), self._tunnel_port)
+        headers = [connect]
         for header, value in self._tunnel_headers.items():
-            headers.append(f"{header}: {value}\r\n".encode("latin-1")) 
-        headers.append(b"\r\n") 
-        # Making a single send() call instead of one per line encourages 
-        # the host OS to use a more optimal packet size instead of 
-        # potentially emitting a series of small packets. 
-        self.send(b"".join(headers)) 
-        del headers 
+            headers.append(f"{header}: {value}\r\n".encode("latin-1"))
+        headers.append(b"\r\n")
+        # Making a single send() call instead of one per line encourages
+        # the host OS to use a more optimal packet size instead of
+        # potentially emitting a series of small packets.
+        self.send(b"".join(headers))
+        del headers
 
         response = self.response_class(self.sock, method=self._method)
         (version, code, message) = response._read_status()
 
         if code != http.HTTPStatus.OK:
             self.close()
-            raise OSError(f"Tunnel connection failed: {code} {message.strip()}") 
+            raise OSError(f"Tunnel connection failed: {code} {message.strip()}")
         while True:
             line = response.fp.readline(_MAXLINE + 1)
             if len(line) > _MAXLINE:
@@ -945,12 +945,12 @@ class HTTPConnection:
         """Connect to the host and port specified in __init__."""
         self.sock = self._create_connection(
             (self.host,self.port), self.timeout, self.source_address)
-        # Might fail in OSs that don't implement TCP_NODELAY 
-        try: 
-             self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1) 
-        except OSError as e: 
-            if e.errno != errno.ENOPROTOOPT: 
-                raise 
+        # Might fail in OSs that don't implement TCP_NODELAY
+        try:
+             self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError as e:
+            if e.errno != errno.ENOPROTOOPT:
+                raise
 
         if self._tunnel_host:
             self._tunnel()
@@ -1121,17 +1121,17 @@ class HTTPConnection:
         else:
             raise CannotSendRequest(self.__state)
 
-        self._validate_method(method) 
- 
-        # Save the method for use later in the response phase 
+        self._validate_method(method)
+
+        # Save the method for use later in the response phase
         self._method = method
- 
-        url = url or '/' 
-        self._validate_path(url) 
- 
+
+        url = url or '/'
+        self._validate_path(url)
+
         request = '%s %s %s' % (method, url, self._http_vsn_str)
 
-        self._output(self._encode_request(request)) 
+        self._output(self._encode_request(request))
 
         if self._http_vsn == 11:
             # Issue some standard headers for better HTTP/1.1 compliance
@@ -1209,35 +1209,35 @@ class HTTPConnection:
             # For HTTP/1.0, the server will assume "not chunked"
             pass
 
-    def _encode_request(self, request): 
-        # ASCII also helps prevent CVE-2019-9740. 
-        return request.encode('ascii') 
- 
-    def _validate_method(self, method): 
-        """Validate a method name for putrequest.""" 
-        # prevent http header injection 
-        match = _contains_disallowed_method_pchar_re.search(method) 
-        if match: 
-            raise ValueError( 
-                    f"method can't contain control characters. {method!r} " 
-                    f"(found at least {match.group()!r})") 
- 
-    def _validate_path(self, url): 
-        """Validate a url for putrequest.""" 
-        # Prevent CVE-2019-9740. 
-        match = _contains_disallowed_url_pchar_re.search(url) 
-        if match: 
-            raise InvalidURL(f"URL can't contain control characters. {url!r} " 
-                             f"(found at least {match.group()!r})") 
- 
-    def _validate_host(self, host): 
-        """Validate a host so it doesn't contain control characters.""" 
-        # Prevent CVE-2019-18348. 
-        match = _contains_disallowed_url_pchar_re.search(host) 
-        if match: 
-            raise InvalidURL(f"URL can't contain control characters. {host!r} " 
-                             f"(found at least {match.group()!r})") 
- 
+    def _encode_request(self, request):
+        # ASCII also helps prevent CVE-2019-9740.
+        return request.encode('ascii')
+
+    def _validate_method(self, method):
+        """Validate a method name for putrequest."""
+        # prevent http header injection
+        match = _contains_disallowed_method_pchar_re.search(method)
+        if match:
+            raise ValueError(
+                    f"method can't contain control characters. {method!r} "
+                    f"(found at least {match.group()!r})")
+
+    def _validate_path(self, url):
+        """Validate a url for putrequest."""
+        # Prevent CVE-2019-9740.
+        match = _contains_disallowed_url_pchar_re.search(url)
+        if match:
+            raise InvalidURL(f"URL can't contain control characters. {url!r} "
+                             f"(found at least {match.group()!r})")
+
+    def _validate_host(self, host):
+        """Validate a host so it doesn't contain control characters."""
+        # Prevent CVE-2019-18348.
+        match = _contains_disallowed_url_pchar_re.search(host)
+        if match:
+            raise InvalidURL(f"URL can't contain control characters. {host!r} "
+                             f"(found at least {match.group()!r})")
+
     def putheader(self, header, *values):
         """Send a request header line to the server.
 
@@ -1422,9 +1422,9 @@ else:
             self.cert_file = cert_file
             if context is None:
                 context = ssl._create_default_https_context()
-                # enable PHA for TLS 1.3 connections if available 
-                if context.post_handshake_auth is not None: 
-                    context.post_handshake_auth = True 
+                # enable PHA for TLS 1.3 connections if available
+                if context.post_handshake_auth is not None:
+                    context.post_handshake_auth = True
             will_verify = context.verify_mode != ssl.CERT_NONE
             if check_hostname is None:
                 check_hostname = context.check_hostname
@@ -1433,10 +1433,10 @@ else:
                                  "either CERT_OPTIONAL or CERT_REQUIRED")
             if key_file or cert_file:
                 context.load_cert_chain(cert_file, key_file)
-                # cert and key file means the user wants to authenticate. 
-                # enable TLS 1.3 PHA implicitly even for custom contexts. 
-                if context.post_handshake_auth is not None: 
-                    context.post_handshake_auth = True 
+                # cert and key file means the user wants to authenticate.
+                # enable TLS 1.3 PHA implicitly even for custom contexts.
+                if context.post_handshake_auth is not None:
+                    context.post_handshake_auth = True
             self._context = context
             if check_hostname is not None:
                 self._context.check_hostname = check_hostname
@@ -1490,7 +1490,7 @@ class IncompleteRead(HTTPException):
             e = ''
         return '%s(%i bytes read%s)' % (self.__class__.__name__,
                                         len(self.partial), e)
-    __str__ = object.__str__ 
+    __str__ = object.__str__
 
 class ImproperConnectionState(HTTPException):
     pass

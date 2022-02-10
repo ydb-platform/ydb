@@ -59,7 +59,7 @@ else:
 
 
 class _ResourceSharer(object):
-    '''Manager for resources using background thread.''' 
+    '''Manager for resources using background thread.'''
     def __init__(self):
         self._key = 0
         self._cache = {}
@@ -112,7 +112,7 @@ class _ResourceSharer(object):
         for key, (send, close) in self._cache.items():
             close()
         self._cache.clear()
-        self._lock._at_fork_reinit() 
+        self._lock._at_fork_reinit()
         if self._listener is not None:
             self._listener.close()
         self._listener = None
@@ -132,7 +132,7 @@ class _ResourceSharer(object):
 
     def _serve(self):
         if hasattr(signal, 'pthread_sigmask'):
-            signal.pthread_sigmask(signal.SIG_BLOCK, signal.valid_signals()) 
+            signal.pthread_sigmask(signal.SIG_BLOCK, signal.valid_signals())
         while 1:
             try:
                 with self._listener.accept() as conn:

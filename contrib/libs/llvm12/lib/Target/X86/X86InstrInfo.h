@@ -317,17 +317,17 @@ public:
                      SmallVectorImpl<MachineOperand> &Cond,
                      bool AllowModify) const override;
 
-  Optional<ExtAddrMode> 
-  getAddrModeFromMemoryOp(const MachineInstr &MemI, 
-                          const TargetRegisterInfo *TRI) const override; 
- 
-  bool getConstValDefinedInReg(const MachineInstr &MI, const Register Reg, 
-                               int64_t &ImmVal) const override; 
- 
-  bool preservesZeroValueInReg(const MachineInstr *MI, 
-                               const Register NullValueReg, 
-                               const TargetRegisterInfo *TRI) const override; 
- 
+  Optional<ExtAddrMode>
+  getAddrModeFromMemoryOp(const MachineInstr &MemI,
+                          const TargetRegisterInfo *TRI) const override;
+
+  bool getConstValDefinedInReg(const MachineInstr &MI, const Register Reg,
+                               int64_t &ImmVal) const override;
+
+  bool preservesZeroValueInReg(const MachineInstr *MI,
+                               const Register NullValueReg,
+                               const TargetRegisterInfo *TRI) const override;
+
   bool getMemOperandsWithOffsetWidth(
       const MachineInstr &LdSt,
       SmallVectorImpl<const MachineOperand *> &BaseOps, int64_t &Offset,
@@ -420,13 +420,13 @@ public:
   bool areLoadsFromSameBasePtr(SDNode *Load1, SDNode *Load2, int64_t &Offset1,
                                int64_t &Offset2) const override;
 
-  /// isSchedulingBoundary - Overrides the isSchedulingBoundary from 
-  ///	Codegen/TargetInstrInfo.cpp to make it capable of identifying ENDBR 
-  /// intructions and prevent it from being re-scheduled. 
-  bool isSchedulingBoundary(const MachineInstr &MI, 
-                            const MachineBasicBlock *MBB, 
-                            const MachineFunction &MF) const override; 
- 
+  /// isSchedulingBoundary - Overrides the isSchedulingBoundary from
+  ///	Codegen/TargetInstrInfo.cpp to make it capable of identifying ENDBR
+  /// intructions and prevent it from being re-scheduled.
+  bool isSchedulingBoundary(const MachineInstr &MI,
+                            const MachineBasicBlock *MBB,
+                            const MachineFunction &MF) const override;
+
   /// shouldScheduleLoadsNear - This is a used by the pre-regalloc scheduler to
   /// determine (in conjunction with areLoadsFromSameBasePtr) if two loads
   /// should be scheduled togther. On some targets if two loads are loading from
@@ -470,7 +470,7 @@ public:
   unsigned
   getPartialRegUpdateClearance(const MachineInstr &MI, unsigned OpNum,
                                const TargetRegisterInfo *TRI) const override;
-  unsigned getUndefRegClearance(const MachineInstr &MI, unsigned OpNum, 
+  unsigned getUndefRegClearance(const MachineInstr &MI, unsigned OpNum,
                                 const TargetRegisterInfo *TRI) const override;
   void breakPartialRegDependency(MachineInstr &MI, unsigned OpNum,
                                  const TargetRegisterInfo *TRI) const override;
@@ -525,7 +525,7 @@ public:
   /// the machine instruction generated due to folding.
   MachineInstr *optimizeLoadInstr(MachineInstr &MI,
                                   const MachineRegisterInfo *MRI,
-                                  Register &FoldAsLoadDefReg, 
+                                  Register &FoldAsLoadDefReg,
                                   MachineInstr *&DefMI) const override;
 
   std::pair<unsigned, unsigned>

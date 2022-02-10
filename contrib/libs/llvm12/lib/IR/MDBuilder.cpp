@@ -151,20 +151,20 @@ MDNode *MDBuilder::mergeCallbackEncodings(MDNode *ExistingCallbacks,
 }
 
 MDNode *MDBuilder::createAnonymousAARoot(StringRef Name, MDNode *Extra) {
-  SmallVector<Metadata *, 3> Args(1, nullptr); 
+  SmallVector<Metadata *, 3> Args(1, nullptr);
   if (Extra)
     Args.push_back(Extra);
   if (!Name.empty())
     Args.push_back(createString(Name));
-  MDNode *Root = MDNode::getDistinct(Context, Args); 
+  MDNode *Root = MDNode::getDistinct(Context, Args);
 
   // At this point we have
-  //   !0 = distinct !{null} <- root 
-  // Replace the reserved operand with the root node itself. 
+  //   !0 = distinct !{null} <- root
+  // Replace the reserved operand with the root node itself.
   Root->replaceOperandWith(0, Root);
 
   // We now have
-  //   !0 = distinct !{!0} <- root 
+  //   !0 = distinct !{!0} <- root
   return Root;
 }
 
@@ -306,12 +306,12 @@ MDNode *MDBuilder::createIrrLoopHeaderWeight(uint64_t Weight) {
   return MDNode::get(Context, Vals);
 }
 
-MDNode *MDBuilder::createPseudoProbeDesc(uint64_t GUID, uint64_t Hash, 
-                                         Function *F) { 
-  auto *Int64Ty = Type::getInt64Ty(Context); 
-  SmallVector<Metadata *, 3> Ops(3); 
-  Ops[0] = createConstant(ConstantInt::get(Int64Ty, GUID)); 
-  Ops[1] = createConstant(ConstantInt::get(Int64Ty, Hash)); 
-  Ops[2] = createString(F->getName()); 
-  return MDNode::get(Context, Ops); 
+MDNode *MDBuilder::createPseudoProbeDesc(uint64_t GUID, uint64_t Hash,
+                                         Function *F) {
+  auto *Int64Ty = Type::getInt64Ty(Context);
+  SmallVector<Metadata *, 3> Ops(3);
+  Ops[0] = createConstant(ConstantInt::get(Int64Ty, GUID));
+  Ops[1] = createConstant(ConstantInt::get(Int64Ty, Hash));
+  Ops[2] = createString(F->getName());
+  return MDNode::get(Context, Ops);
 }

@@ -417,11 +417,11 @@ MachineInstr *MachineRegisterInfo::getUniqueVRegDef(Register Reg) const {
 }
 
 bool MachineRegisterInfo::hasOneNonDBGUse(Register RegNo) const {
-  return hasSingleElement(use_nodbg_operands(RegNo)); 
+  return hasSingleElement(use_nodbg_operands(RegNo));
 }
 
 bool MachineRegisterInfo::hasOneNonDBGUser(Register RegNo) const {
-  return hasSingleElement(use_nodbg_instructions(RegNo)); 
+  return hasSingleElement(use_nodbg_instructions(RegNo));
 }
 
 /// clearKillFlags - Iterate over all the uses of the given register and
@@ -617,7 +617,7 @@ void MachineRegisterInfo::disableCalleeSavedRegister(MCRegister Reg) {
 
   // Remove the register (and its aliases from the list).
   for (MCRegAliasIterator AI(Reg, TRI, true); AI.isValid(); ++AI)
-    llvm::erase_value(UpdatedCSRs, *AI); 
+    llvm::erase_value(UpdatedCSRs, *AI);
 }
 
 const MCPhysReg *MachineRegisterInfo::getCalleeSavedRegs() const {
@@ -631,7 +631,7 @@ void MachineRegisterInfo::setCalleeSavedRegs(ArrayRef<MCPhysReg> CSRs) {
   if (IsUpdatedCSRsInitialized)
     UpdatedCSRs.clear();
 
-  append_range(UpdatedCSRs, CSRs); 
+  append_range(UpdatedCSRs, CSRs);
 
   // Zero value represents the end of the register list
   // (no more registers should be pushed).
@@ -645,7 +645,7 @@ bool MachineRegisterInfo::isReservedRegUnit(unsigned Unit) const {
     bool IsRootReserved = true;
     for (MCSuperRegIterator Super(*Root, TRI, /*IncludeSelf=*/true);
          Super.isValid(); ++Super) {
-      MCRegister Reg = *Super; 
+      MCRegister Reg = *Super;
       if (!isReserved(Reg)) {
         IsRootReserved = false;
         break;

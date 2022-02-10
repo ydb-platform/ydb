@@ -170,10 +170,10 @@ dl_funcptr _PyImport_FindSharedFuncptrWindows(const char *prefix,
 
     _Py_CheckPython3();
 
-_Py_COMP_DIAG_PUSH 
-_Py_COMP_DIAG_IGNORE_DEPR_DECLS 
+_Py_COMP_DIAG_PUSH
+_Py_COMP_DIAG_IGNORE_DEPR_DECLS
     wpathname = _PyUnicode_AsUnicode(pathname);
-_Py_COMP_DIAG_POP 
+_Py_COMP_DIAG_POP
     if (wpathname == NULL)
         return NULL;
 
@@ -186,15 +186,15 @@ _Py_COMP_DIAG_POP
         /* Don't display a message box when Python can't load a DLL */
         old_mode = SetErrorMode(SEM_FAILCRITICALERRORS);
 
-        /* bpo-36085: We use LoadLibraryEx with restricted search paths 
-           to avoid DLL preloading attacks and enable use of the 
-           AddDllDirectory function. We add SEARCH_DLL_LOAD_DIR to 
-           ensure DLLs adjacent to the PYD are preferred. */ 
-        Py_BEGIN_ALLOW_THREADS 
+        /* bpo-36085: We use LoadLibraryEx with restricted search paths
+           to avoid DLL preloading attacks and enable use of the
+           AddDllDirectory function. We add SEARCH_DLL_LOAD_DIR to
+           ensure DLLs adjacent to the PYD are preferred. */
+        Py_BEGIN_ALLOW_THREADS
         hDLL = LoadLibraryExW(wpathname, NULL,
-                              LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | 
-                              LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR); 
-        Py_END_ALLOW_THREADS 
+                              LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
+                              LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
+        Py_END_ALLOW_THREADS
 
         /* restore old error mode settings */
         SetErrorMode(old_mode);
@@ -226,8 +226,8 @@ _Py_COMP_DIAG_POP
                This should not happen if called correctly. */
             if (theLength == 0) {
                 message = PyUnicode_FromFormat(
-                    "DLL load failed with error code %u while importing %s", 
-                    errorCode, shortname); 
+                    "DLL load failed with error code %u while importing %s",
+                    errorCode, shortname);
             } else {
                 /* For some reason a \r\n
                    is appended to the text */
@@ -237,8 +237,8 @@ _Py_COMP_DIAG_POP
                     theLength -= 2;
                     theInfo[theLength] = '\0';
                 }
-                message = PyUnicode_FromFormat( 
-                    "DLL load failed while importing %s: ", shortname); 
+                message = PyUnicode_FromFormat(
+                    "DLL load failed while importing %s: ", shortname);
 
                 PyUnicode_AppendAndDel(&message,
                     PyUnicode_FromWideChar(
@@ -265,20 +265,20 @@ _Py_COMP_DIAG_POP
             import_python = GetPythonImport(hDLL);
 
             if (import_python &&
-                _stricmp(buffer,import_python)) { 
+                _stricmp(buffer,import_python)) {
                 PyErr_Format(PyExc_ImportError,
                              "Module use of %.150s conflicts "
                              "with this version of Python.",
                              import_python);
-                Py_BEGIN_ALLOW_THREADS 
+                Py_BEGIN_ALLOW_THREADS
                 FreeLibrary(hDLL);
-                Py_END_ALLOW_THREADS 
+                Py_END_ALLOW_THREADS
                 return NULL;
             }
         }
-        Py_BEGIN_ALLOW_THREADS 
+        Py_BEGIN_ALLOW_THREADS
         p = GetProcAddress(hDLL, funcname);
-        Py_END_ALLOW_THREADS 
+        Py_END_ALLOW_THREADS
     }
 
     return p;

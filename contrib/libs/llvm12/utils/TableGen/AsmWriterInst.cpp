@@ -18,7 +18,7 @@
 
 using namespace llvm;
 
-static bool isIdentChar(char C) { return isAlnum(C) || C == '_'; } 
+static bool isIdentChar(char C) { return isAlnum(C) || C == '_'; }
 
 std::string AsmWriterOperand::getCode(bool PassSubtarget) const {
   if (OperandType == isLiteralTextOperand) {

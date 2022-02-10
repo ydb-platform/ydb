@@ -18,7 +18,7 @@
 
 #include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/Instructions.h" 
+#include "llvm/IR/Instructions.h"
 //
 //===----------------------------------------------------------------------===//
 //                               ValueLatticeElement
@@ -464,16 +464,16 @@ public:
     if (isConstant() && Other.isConstant())
       return ConstantExpr::getCompare(Pred, getConstant(), Other.getConstant());
 
-    if (ICmpInst::isEquality(Pred)) { 
-      // not(C) != C => true, not(C) == C => false. 
-      if ((isNotConstant() && Other.isConstant() && 
-           getNotConstant() == Other.getConstant()) || 
-          (isConstant() && Other.isNotConstant() && 
-           getConstant() == Other.getNotConstant())) 
-        return Pred == ICmpInst::ICMP_NE 
-            ? ConstantInt::getTrue(Ty) : ConstantInt::getFalse(Ty); 
-    } 
- 
+    if (ICmpInst::isEquality(Pred)) {
+      // not(C) != C => true, not(C) == C => false.
+      if ((isNotConstant() && Other.isConstant() &&
+           getNotConstant() == Other.getConstant()) ||
+          (isConstant() && Other.isNotConstant() &&
+           getConstant() == Other.getNotConstant()))
+        return Pred == ICmpInst::ICMP_NE
+            ? ConstantInt::getTrue(Ty) : ConstantInt::getFalse(Ty);
+    }
+
     // Integer constants are represented as ConstantRanges with single
     // elements.
     if (!isConstantRange() || !Other.isConstantRange())

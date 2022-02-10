@@ -62,7 +62,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeX86Target() {
   RegisterTargetMachine<X86TargetMachine> Y(getTheX86_64Target());
 
   PassRegistry &PR = *PassRegistry::getPassRegistry();
-  initializeX86LowerAMXTypeLegacyPassPass(PR); 
+  initializeX86LowerAMXTypeLegacyPassPass(PR);
   initializeGlobalISel(PR);
   initializeWinEHStatePassPass(PR);
   initializeFixupBWInstPassPass(PR);
@@ -72,7 +72,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeX86Target() {
   initializeX86FixupSetCCPassPass(PR);
   initializeX86CallFrameOptimizationPass(PR);
   initializeX86CmovConverterPassPass(PR);
-  initializeX86TileConfigPass(PR); 
+  initializeX86TileConfigPass(PR);
   initializeX86ExpandPseudoPass(PR);
   initializeX86ExecutionDomainFixPass(PR);
   initializeX86DomainReassignmentPass(PR);
@@ -85,7 +85,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeX86Target() {
   initializeX86LoadValueInjectionRetHardeningPassPass(PR);
   initializeX86OptimizeLEAPassPass(PR);
   initializeX86PartialReductionPass(PR);
-  initializePseudoProbeInserterPass(PR); 
+  initializePseudoProbeInserterPass(PR);
 }
 
 static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
@@ -236,30 +236,30 @@ X86TargetMachine::~X86TargetMachine() = default;
 const X86Subtarget *
 X86TargetMachine::getSubtargetImpl(const Function &F) const {
   Attribute CPUAttr = F.getFnAttribute("target-cpu");
-  Attribute TuneAttr = F.getFnAttribute("tune-cpu"); 
+  Attribute TuneAttr = F.getFnAttribute("tune-cpu");
   Attribute FSAttr = F.getFnAttribute("target-features");
 
-  StringRef CPU = 
-      CPUAttr.isValid() ? CPUAttr.getValueAsString() : (StringRef)TargetCPU; 
-  StringRef TuneCPU = 
-      TuneAttr.isValid() ? TuneAttr.getValueAsString() : (StringRef)CPU; 
-  StringRef FS = 
-      FSAttr.isValid() ? FSAttr.getValueAsString() : (StringRef)TargetFS; 
+  StringRef CPU =
+      CPUAttr.isValid() ? CPUAttr.getValueAsString() : (StringRef)TargetCPU;
+  StringRef TuneCPU =
+      TuneAttr.isValid() ? TuneAttr.getValueAsString() : (StringRef)CPU;
+  StringRef FS =
+      FSAttr.isValid() ? FSAttr.getValueAsString() : (StringRef)TargetFS;
 
   SmallString<512> Key;
-  // The additions here are ordered so that the definitely short strings are 
-  // added first so we won't exceed the small size. We append the 
-  // much longer FS string at the end so that we only heap allocate at most 
-  // one time. 
+  // The additions here are ordered so that the definitely short strings are
+  // added first so we won't exceed the small size. We append the
+  // much longer FS string at the end so that we only heap allocate at most
+  // one time.
 
   // Extract prefer-vector-width attribute.
   unsigned PreferVectorWidthOverride = 0;
-  Attribute PreferVecWidthAttr = F.getFnAttribute("prefer-vector-width"); 
-  if (PreferVecWidthAttr.isValid()) { 
-    StringRef Val = PreferVecWidthAttr.getValueAsString(); 
+  Attribute PreferVecWidthAttr = F.getFnAttribute("prefer-vector-width");
+  if (PreferVecWidthAttr.isValid()) {
+    StringRef Val = PreferVecWidthAttr.getValueAsString();
     unsigned Width;
     if (!Val.getAsInteger(0, Width)) {
-      Key += "prefer-vector-width="; 
+      Key += "prefer-vector-width=";
       Key += Val;
       PreferVectorWidthOverride = Width;
     }
@@ -267,45 +267,45 @@ X86TargetMachine::getSubtargetImpl(const Function &F) const {
 
   // Extract min-legal-vector-width attribute.
   unsigned RequiredVectorWidth = UINT32_MAX;
-  Attribute MinLegalVecWidthAttr = F.getFnAttribute("min-legal-vector-width"); 
-  if (MinLegalVecWidthAttr.isValid()) { 
-    StringRef Val = MinLegalVecWidthAttr.getValueAsString(); 
+  Attribute MinLegalVecWidthAttr = F.getFnAttribute("min-legal-vector-width");
+  if (MinLegalVecWidthAttr.isValid()) {
+    StringRef Val = MinLegalVecWidthAttr.getValueAsString();
     unsigned Width;
     if (!Val.getAsInteger(0, Width)) {
-      Key += "min-legal-vector-width="; 
+      Key += "min-legal-vector-width=";
       Key += Val;
       RequiredVectorWidth = Width;
     }
   }
 
-  // Add CPU to the Key. 
-  Key += CPU; 
+  // Add CPU to the Key.
+  Key += CPU;
 
-  // Add tune CPU to the Key. 
-  Key += "tune="; 
-  Key += TuneCPU; 
- 
-  // Keep track of the start of the feature portion of the string. 
-  unsigned FSStart = Key.size(); 
- 
-  // FIXME: This is related to the code below to reset the target options, 
-  // we need to know whether or not the soft float flag is set on the 
-  // function before we can generate a subtarget. We also need to use 
-  // it as a key for the subtarget since that can be the only difference 
-  // between two functions. 
-  bool SoftFloat = 
-      F.getFnAttribute("use-soft-float").getValueAsString() == "true"; 
-  // If the soft float attribute is set on the function turn on the soft float 
-  // subtarget feature. 
-  if (SoftFloat) 
-    Key += FS.empty() ? "+soft-float" : "+soft-float,"; 
- 
-  Key += FS; 
- 
-  // We may have added +soft-float to the features so move the StringRef to 
-  // point to the full string in the Key. 
-  FS = Key.substr(FSStart); 
- 
+  // Add tune CPU to the Key.
+  Key += "tune=";
+  Key += TuneCPU;
+
+  // Keep track of the start of the feature portion of the string.
+  unsigned FSStart = Key.size();
+
+  // FIXME: This is related to the code below to reset the target options,
+  // we need to know whether or not the soft float flag is set on the
+  // function before we can generate a subtarget. We also need to use
+  // it as a key for the subtarget since that can be the only difference
+  // between two functions.
+  bool SoftFloat =
+      F.getFnAttribute("use-soft-float").getValueAsString() == "true";
+  // If the soft float attribute is set on the function turn on the soft float
+  // subtarget feature.
+  if (SoftFloat)
+    Key += FS.empty() ? "+soft-float" : "+soft-float,";
+
+  Key += FS;
+
+  // We may have added +soft-float to the features so move the StringRef to
+  // point to the full string in the Key.
+  FS = Key.substr(FSStart);
+
   auto &I = SubtargetMap[Key];
   if (!I) {
     // This needs to be done before we create a new subtarget since any
@@ -313,21 +313,21 @@ X86TargetMachine::getSubtargetImpl(const Function &F) const {
     // function that reside in TargetOptions.
     resetTargetOptions(F);
     I = std::make_unique<X86Subtarget>(
-        TargetTriple, CPU, TuneCPU, FS, *this, 
+        TargetTriple, CPU, TuneCPU, FS, *this,
         MaybeAlign(Options.StackAlignmentOverride), PreferVectorWidthOverride,
         RequiredVectorWidth);
   }
   return I.get();
 }
 
-bool X86TargetMachine::isNoopAddrSpaceCast(unsigned SrcAS, 
-                                           unsigned DestAS) const { 
-  assert(SrcAS != DestAS && "Expected different address spaces!"); 
-  if (getPointerSize(SrcAS) != getPointerSize(DestAS)) 
-    return false; 
-  return SrcAS < 256 && DestAS < 256; 
-} 
- 
+bool X86TargetMachine::isNoopAddrSpaceCast(unsigned SrcAS,
+                                           unsigned DestAS) const {
+  assert(SrcAS != DestAS && "Expected different address spaces!");
+  if (getPointerSize(SrcAS) != getPointerSize(DestAS))
+    return false;
+  return SrcAS < 256 && DestAS < 256;
+}
+
 //===----------------------------------------------------------------------===//
 // X86 TTI query.
 //===----------------------------------------------------------------------===//
@@ -381,7 +381,7 @@ public:
   void addPreEmitPass() override;
   void addPreEmitPass2() override;
   void addPreSched2() override;
-  bool addPreRewrite() override; 
+  bool addPreRewrite() override;
 
   std::unique_ptr<CSEConfigBase> getCSEConfig() const override;
 };
@@ -410,7 +410,7 @@ TargetPassConfig *X86TargetMachine::createPassConfig(PassManagerBase &PM) {
 
 void X86PassConfig::addIRPasses() {
   addPass(createAtomicExpandPass());
-  addPass(createX86LowerAMXTypePass()); 
+  addPass(createX86LowerAMXTypePass());
 
   TargetPassConfig::addIRPasses();
 
@@ -449,7 +449,7 @@ bool X86PassConfig::addInstSelector() {
 }
 
 bool X86PassConfig::addIRTranslator() {
-  addPass(new IRTranslator(getOptLevel())); 
+  addPass(new IRTranslator(getOptLevel()));
   return false;
 }
 
@@ -496,12 +496,12 @@ void X86PassConfig::addPreRegAlloc() {
   addPass(createX86SpeculativeLoadHardeningPass());
   addPass(createX86FlagsCopyLoweringPass());
   addPass(createX86WinAllocaExpander());
- 
-  if (getOptLevel() != CodeGenOpt::None) { 
-    addPass(createX86PreTileConfigPass()); 
-  } 
+
+  if (getOptLevel() != CodeGenOpt::None) {
+    addPass(createX86PreTileConfigPass());
+  }
 }
- 
+
 void X86PassConfig::addMachineSSAOptimization() {
   addPass(createX86DomainReassignmentPass());
   TargetPassConfig::addMachineSSAOptimization();
@@ -574,11 +574,11 @@ void X86PassConfig::addPreEmitPass2() {
   addPass(createX86LoadValueInjectionRetHardeningPass());
 }
 
-bool X86PassConfig::addPreRewrite() { 
-  addPass(createX86TileConfigPass()); 
-  return true; 
-} 
- 
+bool X86PassConfig::addPreRewrite() {
+  addPass(createX86TileConfigPass());
+  return true;
+}
+
 std::unique_ptr<CSEConfigBase> X86PassConfig::getCSEConfig() const {
   return getStandardCSEConfigForOpt(TM->getOptLevel());
 }

@@ -87,9 +87,9 @@ class CommandLineInterface(object):
         #: EditingMode.VI or EditingMode.EMACS
         self.editing_mode = application.editing_mode
 
-        #: Quoted insert. This flag is set if we go into quoted insert mode. 
-        self.quoted_insert = False 
- 
+        #: Quoted insert. This flag is set if we go into quoted insert mode.
+        self.quoted_insert = False
+
         #: Vi state. (For Vi key bindings.)
         self.vi_state = ViState()
 
@@ -148,10 +148,10 @@ class CommandLineInterface(object):
     def clipboard(self):
         return self.application.clipboard
 
-    @property 
-    def pre_run_callables(self): 
-        return self.application.pre_run_callables 
- 
+    @property
+    def pre_run_callables(self):
+        return self.application.pre_run_callables
+
     def add_buffer(self, name, buffer, focus=False):
         """
         Insert a new buffer.
@@ -275,10 +275,10 @@ class CommandLineInterface(object):
         """
         Reset everything, for reading the next input.
 
-        :param reset_current_buffer: XXX: not used anymore. The reason for 
-            having this option in the past was when this CommandLineInterface 
-            is run multiple times, that we could reset the buffer content from 
-            the previous run. This is now handled in the AcceptAction. 
+        :param reset_current_buffer: XXX: not used anymore. The reason for
+            having this option in the past was when this CommandLineInterface
+            is run multiple times, that we could reset the buffer content from
+            the previous run. This is now handled in the AcceptAction.
         """
         # Notice that we don't reset the buffers. (This happens just before
         # returning, and when we have multiple buffers, we clearly want the
@@ -372,27 +372,27 @@ class CommandLineInterface(object):
         self.renderer.request_absolute_cursor_position()
         self._redraw()
 
-    def _load_next_buffer_indexes(self): 
-        for buff, index in self._next_buffer_indexes.items(): 
-            if buff in self.buffers: 
-                self.buffers[buff].working_index = index 
- 
-    def _pre_run(self, pre_run=None): 
-        " Called during `run`. " 
-        if pre_run: 
-            pre_run() 
- 
-        # Process registered "pre_run_callables" and clear list. 
-        for c in self.pre_run_callables: 
-            c() 
-        del self.pre_run_callables[:] 
- 
+    def _load_next_buffer_indexes(self):
+        for buff, index in self._next_buffer_indexes.items():
+            if buff in self.buffers:
+                self.buffers[buff].working_index = index
+
+    def _pre_run(self, pre_run=None):
+        " Called during `run`. "
+        if pre_run:
+            pre_run()
+
+        # Process registered "pre_run_callables" and clear list.
+        for c in self.pre_run_callables:
+            c()
+        del self.pre_run_callables[:]
+
     def run(self, reset_current_buffer=False, pre_run=None):
         """
         Read input from the command line.
         This runs the eventloop until a return value has been set.
 
-        :param reset_current_buffer: XXX: Not used anymore. 
+        :param reset_current_buffer: XXX: Not used anymore.
         :param pre_run: Callable that is called right after the reset has taken
             place. This allows custom initialisation.
         """
@@ -402,10 +402,10 @@ class CommandLineInterface(object):
             self._is_running = True
 
             self.on_start.fire()
-            self.reset() 
+            self.reset()
 
             # Call pre_run.
-            self._pre_run(pre_run) 
+            self._pre_run(pre_run)
 
             # Run eventloop in raw mode.
             with self.input.raw_mode():
@@ -454,10 +454,10 @@ class CommandLineInterface(object):
                     self._is_running = True
 
                     self.on_start.fire()
-                    self.reset() 
+                    self.reset()
 
                     # Call pre_run.
-                    self._pre_run(pre_run) 
+                    self._pre_run(pre_run)
 
                     with self.input.raw_mode():
                         self.renderer.request_absolute_cursor_position()
@@ -611,7 +611,7 @@ class CommandLineInterface(object):
         if self.eventloop:
             self.eventloop.stop()
 
-    def run_in_terminal(self, func, render_cli_done=False, cooked_mode=True): 
+    def run_in_terminal(self, func, render_cli_done=False, cooked_mode=True):
         """
         Run function on the terminal above the prompt.
 
@@ -624,8 +624,8 @@ class CommandLineInterface(object):
         :param render_cli_done: When True, render the interface in the
                 'Done' state first, then execute the function. If False,
                 erase the interface first.
-        :param cooked_mode: When True (the default), switch the input to 
-                cooked mode while executing the function. 
+        :param cooked_mode: When True (the default), switch the input to
+                cooked mode while executing the function.
 
         :returns: the result of `func`.
         """
@@ -639,10 +639,10 @@ class CommandLineInterface(object):
         self._return_value = None
 
         # Run system command.
-        if cooked_mode: 
-            with self.input.cooked_mode(): 
-                result = func() 
-        else: 
+        if cooked_mode:
+            with self.input.cooked_mode():
+                result = func()
+        else:
             result = func()
 
         # Redraw interface again.

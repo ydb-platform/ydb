@@ -29,36 +29,36 @@
       "output_token": "NextToken",
       "limit_key": "MaxResults",
       "result_key": "Reservations"
-    }, 
-    "DescribeSchedule": { 
-      "input_token": "NextToken", 
-      "output_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "result_key": "ScheduleActions" 
-    }, 
-    "ListMultiplexPrograms": { 
-      "input_token": "NextToken", 
-      "output_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "result_key": "MultiplexPrograms" 
-    }, 
-    "ListMultiplexes": { 
-      "input_token": "NextToken", 
-      "output_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "result_key": "Multiplexes" 
-    }, 
-    "ListInputDevices": { 
-      "input_token": "NextToken", 
-      "output_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "result_key": "InputDevices" 
-    }, 
-    "ListInputDeviceTransfers": { 
-      "input_token": "NextToken", 
-      "output_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "result_key": "InputDeviceTransfers" 
+    },
+    "DescribeSchedule": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "ScheduleActions"
+    },
+    "ListMultiplexPrograms": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "MultiplexPrograms"
+    },
+    "ListMultiplexes": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "Multiplexes"
+    },
+    "ListInputDevices": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "InputDevices"
+    },
+    "ListInputDeviceTransfers": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "InputDeviceTransfers"
     }
   }
 }

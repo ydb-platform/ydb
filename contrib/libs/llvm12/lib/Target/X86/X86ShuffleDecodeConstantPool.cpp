@@ -293,4 +293,4 @@ void DecodeVPPERMMask(const Constant *C, unsigned Width,
   }
 }
 
-} // namespace llvm 
+} // namespace llvm

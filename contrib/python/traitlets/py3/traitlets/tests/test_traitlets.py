@@ -3,65 +3,65 @@
 
 # Copyright (c) IPython Development Team.
 # Distributed under the terms of the Modified BSD License.
-# 
+#
 # Adapted from enthought.traits, Copyright (c) Enthought, Inc.,
 # also under the terms of the Modified BSD License.
 
 import pickle
 import re
-from unittest import TestCase 
+from unittest import TestCase
 
 import pytest
 
-from traitlets.tests._warnings import expected_warnings 
+from traitlets.tests._warnings import expected_warnings
 from traitlets import (
-    HasTraits, 
-    MetaHasTraits, 
-    TraitType, 
-    Any, 
-    Bool, 
-    CBytes, 
-    Dict, 
-    Enum, 
-    Int, 
-    CInt, 
-    Long, 
-    CLong, 
-    Integer, 
-    Float, 
-    CFloat, 
-    Complex, 
-    Bytes, 
-    Unicode, 
-    TraitError, 
-    Union, 
-    Callable, 
-    All, 
-    Undefined, 
-    Set, 
-    Type, 
-    This, 
-    Instance, 
-    TCPAddress, 
-    List, 
-    Set, 
-    Tuple, 
-    ObjectName, 
-    DottedObjectName, 
-    CRegExp, 
-    link, 
-    directional_link, 
-    ForwardDeclaredType, 
-    ForwardDeclaredInstance, 
-    validate, 
-    observe, 
-    default, 
-    observe_compat, 
-    BaseDescriptor, 
-    HasDescriptors, 
-    CUnicode, 
+    HasTraits,
+    MetaHasTraits,
+    TraitType,
+    Any,
+    Bool,
+    CBytes,
+    Dict,
+    Enum,
+    Int,
+    CInt,
+    Long,
+    CLong,
+    Integer,
+    Float,
+    CFloat,
+    Complex,
+    Bytes,
+    Unicode,
+    TraitError,
+    Union,
+    Callable,
+    All,
+    Undefined,
+    Set,
+    Type,
+    This,
+    Instance,
+    TCPAddress,
+    List,
+    Set,
+    Tuple,
+    ObjectName,
+    DottedObjectName,
+    CRegExp,
+    link,
+    directional_link,
+    ForwardDeclaredType,
+    ForwardDeclaredInstance,
+    validate,
+    observe,
+    default,
+    observe_compat,
+    BaseDescriptor,
+    HasDescriptors,
+    CUnicode,
 )
-from traitlets.utils import cast_unicode 
+from traitlets.utils import cast_unicode
 
 
 def change_dict(*ordered_values):
@@ -93,7 +93,7 @@ class TestTraitType(TestCase):
         class A(HasTraits):
             a = TraitType
         a = A()
-        assert a.a is Undefined 
+        assert a.a is Undefined
 
     def test_set(self):
         class A(HasTraitsStub):
@@ -131,7 +131,7 @@ class TestTraitType(TestCase):
         # Defaults are validated when the HasTraits is instantiated
         class B(HasTraits):
             tt = MyIntTT('bad default')
-        self.assertRaises(TraitError, getattr, B(), 'tt') 
+        self.assertRaises(TraitError, getattr, B(), 'tt')
 
     def test_info(self):
         class A(HasTraits):
@@ -141,7 +141,7 @@ class TestTraitType(TestCase):
 
     def test_error(self):
         class A(HasTraits):
-            tt = TraitType() 
+            tt = TraitType()
         a = A()
         self.assertRaises(TraitError, A.tt.error, a, 10)
 
@@ -175,46 +175,46 @@ class TestTraitType(TestCase):
         self.assertEqual(a.x, 11)
         self.assertEqual(a._trait_values, {'x': 11})
 
-    def test_deprecated_method_warnings(self): 
- 
-        with expected_warnings([]): 
-            class ShouldntWarn(HasTraits): 
-                x = Integer() 
-                @default('x') 
-                def _x_default(self): 
-                    return 10 
- 
-                @validate('x') 
-                def _x_validate(self, proposal): 
-                    return proposal.value 
- 
-                @observe('x') 
-                def _x_changed(self, change): 
-                    pass 
- 
-            obj = ShouldntWarn() 
-            obj.x = 5 
- 
-        assert obj.x == 5 
- 
-        with expected_warnings(['@validate', '@observe']) as w: 
-            class ShouldWarn(HasTraits): 
-                x = Integer() 
- 
-                def _x_default(self): 
-                    return 10 
- 
-                def _x_validate(self, value, _): 
-                    return value 
- 
-                def _x_changed(self): 
-                    pass 
- 
-            obj = ShouldWarn() 
-            obj.x = 5 
- 
-        assert obj.x == 5 
- 
+    def test_deprecated_method_warnings(self):
+
+        with expected_warnings([]):
+            class ShouldntWarn(HasTraits):
+                x = Integer()
+                @default('x')
+                def _x_default(self):
+                    return 10
+
+                @validate('x')
+                def _x_validate(self, proposal):
+                    return proposal.value
+
+                @observe('x')
+                def _x_changed(self, change):
+                    pass
+
+            obj = ShouldntWarn()
+            obj.x = 5
+
+        assert obj.x == 5
+
+        with expected_warnings(['@validate', '@observe']) as w:
+            class ShouldWarn(HasTraits):
+                x = Integer()
+
+                def _x_default(self):
+                    return 10
+
+                def _x_validate(self, value, _):
+                    return value
+
+                def _x_changed(self):
+                    pass
+
+            obj = ShouldWarn()
+            obj.x = 5
+
+        assert obj.x == 5
+
     def test_dynamic_initializer(self):
 
         class A(HasTraits):
@@ -288,19 +288,19 @@ class TestTraitType(TestCase):
         foo = Foo()
         self.assertEqual(foo.bar, 1)
 
-    def test_union_validation_priority(self): 
-        class Foo(HasTraits): 
-            bar = Union([CInt(), Unicode()]) 
-        foo = Foo() 
-        foo.bar = '1' 
-        # validation in order of the TraitTypes given 
-        self.assertEqual(foo.bar, 1) 
- 
-    def test_union_trait_default_value(self): 
-        class Foo(HasTraits): 
-            bar = Union([Dict(), Int()]) 
-        self.assertEqual(Foo().bar, {}) 
- 
+    def test_union_validation_priority(self):
+        class Foo(HasTraits):
+            bar = Union([CInt(), Unicode()])
+        foo = Foo()
+        foo.bar = '1'
+        # validation in order of the TraitTypes given
+        self.assertEqual(foo.bar, 1)
+
+    def test_union_trait_default_value(self):
+        class Foo(HasTraits):
+            bar = Union([Dict(), Int()])
+        self.assertEqual(Foo().bar, {})
+
     def test_deprecated_metadata_access(self):
         class MyIntTT(TraitType):
             metadata = {'a': 1, 'b': 2}
@@ -557,29 +557,29 @@ class TestHasTraitsNotify(TestCase):
 
         class A(HasTraits):
             listen_to = ['a']
- 
+
             a = Int(0)
             b = 0
- 
+
             def __init__(self, **kwargs):
                 super(A, self).__init__(**kwargs)
                 self.on_trait_change(self.listener1, ['a'])
- 
+
             def listener1(self, name, old, new):
                 self.b += 1
 
         class B(A):
- 
+
             c = 0
             d = 0
- 
+
             def __init__(self, **kwargs):
                 super(B, self).__init__(**kwargs)
                 self.on_trait_change(self.listener2)
- 
+
             def listener2(self, name, old, new):
                 self.c += 1
- 
+
             def _a_changed(self, name, old, new):
                 self.d += 1
 
@@ -689,7 +689,7 @@ class TestObserveDecorator(TestCase):
             b = Int()
             _notify1 = []
             _notify_any = []
- 
+
             @observe('a')
             def _a_changed(self, change):
                 self._notify1.append(change)
@@ -753,29 +753,29 @@ class TestObserveDecorator(TestCase):
 
         class A(HasTraits):
             listen_to = ['a']
- 
+
             a = Int(0)
             b = 0
- 
+
             def __init__(self, **kwargs):
                 super(A, self).__init__(**kwargs)
                 self.observe(self.listener1, ['a'])
- 
+
             def listener1(self, change):
                 self.b += 1
 
         class B(A):
- 
+
             c = 0
             d = 0
- 
+
             def __init__(self, **kwargs):
                 super(B, self).__init__(**kwargs)
                 self.observe(self.listener2)
- 
+
             def listener2(self, change):
                 self.c += 1
- 
+
             @observe('a')
             def _a_changed(self, change):
                 self.d += 1
@@ -801,20 +801,20 @@ class TestHasTraits(TestCase):
         self.assertTrue(a.has_trait('f'))
         self.assertFalse(a.has_trait('g'))
 
-    def test_trait_has_value(self): 
-        class A(HasTraits): 
-            i = Int() 
-            f = Float() 
-        a = A() 
-        self.assertFalse(a.trait_has_value('f')) 
-        self.assertFalse(a.trait_has_value('g')) 
-        a.i = 1 
-        a.f 
-        self.assertTrue(a.trait_has_value('i')) 
-        self.assertTrue(a.trait_has_value('f')) 
- 
+    def test_trait_has_value(self):
+        class A(HasTraits):
+            i = Int()
+            f = Float()
+        a = A()
+        self.assertFalse(a.trait_has_value('f'))
+        self.assertFalse(a.trait_has_value('g'))
+        a.i = 1
+        a.f
+        self.assertTrue(a.trait_has_value('i'))
+        self.assertTrue(a.trait_has_value('f'))
+
     def test_trait_metadata_deprecated(self):
-        with expected_warnings([r'metadata should be set using the \.tag\(\) method']): 
+        with expected_warnings([r'metadata should be set using the \.tag\(\) method']):
             class A(HasTraits):
                 i = Int(config_key='MY_VALUE')
         a = A()
@@ -857,7 +857,7 @@ class TestHasTraits(TestCase):
         self.assertEqual(traits, dict(i=A.i, f=A.f, j=A.j))
 
     def test_traits_metadata_deprecated(self):
-        with expected_warnings([r'metadata should be set using the \.tag\(\) method']*2): 
+        with expected_warnings([r'metadata should be set using the \.tag\(\) method']*2):
             class A(HasTraits):
                 i = Int(config_key='VALUE1', other_thing='VALUE2')
                 f = Float(config_key='VALUE3', other_thing='VALUE2')
@@ -887,7 +887,7 @@ class TestHasTraits(TestCase):
             def __init__(self, i):
                 super(A, self).__init__()
                 self.i = i
- 
+
         a = A(5)
         self.assertEqual(a.i, 5)
         # should raise TypeError if no positional arg given
@@ -997,17 +997,17 @@ class TestType(TestCase):
         class C(HasTraits):
             klass = Type(None, B)
 
-        self.assertRaises(TraitError, getattr, C(), 'klass') 
+        self.assertRaises(TraitError, getattr, C(), 'klass')
 
     def test_str_klass(self):
 
         class A(HasTraits):
-            klass = Type("traitlets.config.Config") 
+            klass = Type("traitlets.config.Config")
 
-        from traitlets.config import Config 
+        from traitlets.config import Config
         a = A()
-        a.klass = Config 
-        self.assertEqual(a.klass, Config) 
+        a.klass = Config
+        self.assertEqual(a.klass, Config)
 
         self.assertRaises(TraitError, setattr, a, 'klass', 10)
 
@@ -1016,11 +1016,11 @@ class TestType(TestCase):
         class A(HasTraits):
             klass = Type()
 
-        a = A(klass="traitlets.config.Config") 
-        from traitlets.config import Config 
+        a = A(klass="traitlets.config.Config")
+        from traitlets.config import Config
 
-        self.assertEqual(a.klass, Config) 
- 
+        self.assertEqual(a.klass, Config)
+
 class TestInstance(TestCase):
 
     def test_basic(self):
@@ -1232,7 +1232,7 @@ class AnyTraitTest(TraitTestBase):
     obj = AnyTrait()
 
     _default_value = None
-    _good_values   = [10.0, 'ten', [10], {'ten': 10},(10,), None, 1j] 
+    _good_values   = [10.0, 'ten', [10], {'ten': 10},(10,), None, 1j]
     _bad_values    = []
 
 class UnionTrait(HasTraits):
@@ -1241,20 +1241,20 @@ class UnionTrait(HasTraits):
 
 class UnionTraitTest(TraitTestBase):
 
-    obj = UnionTrait(value="traitlets.config.Config") 
+    obj = UnionTrait(value="traitlets.config.Config")
     _good_values = [int, float, True]
     _bad_values = [[], (0,), 1j]
 
-class CallableTrait(HasTraits): 
- 
-    value = Callable() 
- 
-class CallableTraitTest(TraitTestBase): 
- 
-    obj = CallableTrait(value=lambda x: type(x)) 
-    _good_values = [int, sorted, lambda x: print(x)] 
-    _bad_values = [[], 1, ''] 
- 
+class CallableTrait(HasTraits):
+
+    value = Callable()
+
+class CallableTraitTest(TraitTestBase):
+
+    obj = CallableTrait(value=lambda x: type(x))
+    _good_values = [int, sorted, lambda x: print(x)]
+    _bad_values = [[], 1, '']
+
 class OrTrait(HasTraits):
 
     value = Bool() | Unicode()
@@ -1274,9 +1274,9 @@ class TestInt(TraitTestBase):
     obj = IntTrait()
     _default_value = 99
     _good_values   = [10, -10]
-    _bad_values    = ['ten', [10], {'ten': 10}, (10,), None, 1j, 
-                      10.1, -10.1, '10L', '-10L', '10.1', '-10.1', 
-                      '10', '-10', -200] 
+    _bad_values    = ['ten', [10], {'ten': 10}, (10,), None, 1j,
+                      10.1, -10.1, '10L', '-10L', '10.1', '-10.1',
+                      '10', '-10', -200]
 
 
 class CIntTrait(HasTraits):
@@ -1286,9 +1286,9 @@ class TestCInt(TraitTestBase):
     obj = CIntTrait()
 
     _default_value = 5
-    _good_values   = ['10', '-10', 10, 10.0, -10.0, 10.1] 
-    _bad_values    = ['ten', [10], {'ten': 10},(10,), 
-                      None, 1j, '10.1'] 
+    _good_values   = ['10', '-10', 10, 10.0, -10.0, 10.1]
+    _bad_values    = ['ten', [10], {'ten': 10},(10,),
+                      None, 1j, '10.1']
 
     def coerce(self, n):
         return int(n)
@@ -1307,37 +1307,37 @@ class TestMinBoundCInt(TestCInt):
 
 class LongTrait(HasTraits):
 
-    value = Long(99) 
+    value = Long(99)
 
 class TestLong(TraitTestBase):
 
     obj = LongTrait()
 
-    _default_value = 99 
+    _default_value = 99
     _good_values   = [10, -10]
-    _bad_values    = ['ten', [10], {'ten': 10},(10,), 
+    _bad_values    = ['ten', [10], {'ten': 10},(10,),
                       None, 1j, 10.1, -10.1, '10', '-10', '10L', '-10L', '10.1',
-                      '-10.1'] 
+                      '-10.1']
 
 
 class MinBoundLongTrait(HasTraits):
-    value = Long(99, min=5) 
+    value = Long(99, min=5)
 
 class TestMinBoundLong(TraitTestBase):
     obj = MinBoundLongTrait()
 
-    _default_value = 99 
+    _default_value = 99
     _good_values   = [5, 10]
     _bad_values    = [4, -10]
 
 
 class MaxBoundLongTrait(HasTraits):
-    value = Long(5, max=10) 
+    value = Long(5, max=10)
 
 class TestMaxBoundLong(TraitTestBase):
     obj = MaxBoundLongTrait()
 
-    _default_value = 5 
+    _default_value = 5
     _good_values   = [10, -2]
     _bad_values    = [11, 20]
 
@@ -1348,13 +1348,13 @@ class CLongTrait(HasTraits):
 class TestCLong(TraitTestBase):
     obj = CLongTrait()
 
-    _default_value = 5 
-    _good_values   = ['10', '-10', 10, 10.0, -10.0, 10.1] 
-    _bad_values    = ['ten', [10], {'ten': 10},(10,), 
-                      None, 1j, '10.1'] 
+    _default_value = 5
+    _good_values   = ['10', '-10', 10, 10.0, -10.0, 10.1]
+    _bad_values    = ['ten', [10], {'ten': 10},(10,),
+                      None, 1j, '10.1']
 
     def coerce(self, n):
-        return int(n) 
+        return int(n)
 
 
 class MaxBoundCLongTrait(HasTraits):
@@ -1363,7 +1363,7 @@ class MaxBoundCLongTrait(HasTraits):
 class TestMaxBoundCLong(TestCLong):
     obj = MaxBoundCLongTrait()
 
-    _default_value = 5 
+    _default_value = 5
     _good_values   = [10, '10', 10.3]
     _bad_values    = [11.0, '11']
 
@@ -1411,8 +1411,8 @@ class TestFloat(TraitTestBase):
 
     _default_value = 99.0
     _good_values   = [10, -10, 10.1, -10.1]
-    _bad_values    = ['ten', [10], {'ten': 10}, (10,), None, 
-                      1j, '10', '-10', '10L', '-10L', '10.1', '-10.1', 201.0] 
+    _bad_values    = ['ten', [10], {'ten': 10}, (10,), None,
+                      1j, '10', '-10', '10L', '-10L', '10.1', '-10.1', 201.0]
 
 
 class CFloatTrait(HasTraits):
@@ -1424,8 +1424,8 @@ class TestCFloat(TraitTestBase):
     obj = CFloatTrait()
 
     _default_value = 99.0
-    _good_values   = [10, 10.0, 10.5, '10.0', '10', '-10'] 
-    _bad_values    = ['ten', [10], {'ten': 10}, (10,), None, 1j, 
+    _good_values   = [10, 10.0, 10.5, '10.0', '10', '-10']
+    _bad_values    = ['ten', [10], {'ten': 10}, (10,), None, 1j,
                       200.1, '200.1']
 
     def coerce(self, v):
@@ -1443,7 +1443,7 @@ class TestComplex(TraitTestBase):
     _default_value = 99.0-99.0j
     _good_values   = [10, -10, 10.1, -10.1, 10j, 10+10j, 10-10j,
                       10.1j, 10.1+10.1j, 10.1-10.1j]
-    _bad_values    = ['10L', '-10L', 'ten', [10], {'ten': 10},(10,), None] 
+    _bad_values    = ['10L', '-10L', 'ten', [10], {'ten': 10},(10,), None]
 
 
 class BytesTrait(HasTraits):
@@ -1458,28 +1458,28 @@ class TestBytes(TraitTestBase):
     _good_values   = [b'10', b'-10', b'10L',
                       b'-10L', b'10.1', b'-10.1', b'string']
     _bad_values    = [10, -10, 10.1, -10.1, 1j, [10],
-                      ['ten'],{'ten': 10},(10,), None,  'string'] 
+                      ['ten'],{'ten': 10},(10,), None,  'string']
 
 
 class UnicodeTrait(HasTraits):
 
-    value = Unicode('unicode') 
+    value = Unicode('unicode')
 
- 
+
 class TestUnicode(TraitTestBase):
 
     obj = UnicodeTrait()
 
-    _default_value = 'unicode' 
+    _default_value = 'unicode'
     _good_values   = ['10', '-10', '10L', '-10L', '10.1',
-                      '-10.1', '', 'string', "€", b"bytestring"] 
+                      '-10.1', '', 'string', "€", b"bytestring"]
     _bad_values    = [10, -10, 10.1, -10.1, 1j,
-                      [10], ['ten'], {'ten': 10},(10,), None] 
+                      [10], ['ten'], {'ten': 10},(10,), None]
 
-    def coerce(self, v): 
-        return cast_unicode(v) 
+    def coerce(self, v):
+        return cast_unicode(v)
 
- 
+
 class ObjectNameTrait(HasTraits):
     value = ObjectName("abc")
 
@@ -1487,10 +1487,10 @@ class TestObjectName(TraitTestBase):
     obj = ObjectNameTrait()
 
     _default_value = "abc"
-    _good_values = ["a", "gh", "g9", "g_", "_G", "a345_"] 
-    _bad_values = [1, "", "€", "9g", "!", "#abc", "aj@", "a.b", "a()", "a[0]", 
+    _good_values = ["a", "gh", "g9", "g_", "_G", "a345_"]
+    _bad_values = [1, "", "€", "9g", "!", "#abc", "aj@", "a.b", "a()", "a[0]",
                                                         None, object(), object]
-    _good_values.append("þ")  # þ=1 is valid in Python 3 (PEP 3131). 
+    _good_values.append("þ")  # þ=1 is valid in Python 3 (PEP 3131).
 
 
 class DottedObjectNameTrait(HasTraits):
@@ -1500,12 +1500,12 @@ class TestDottedObjectName(TraitTestBase):
     obj = DottedObjectNameTrait()
 
     _default_value = "a.b"
-    _good_values = ["A", "y.t", "y765.__repr__", "os.path.join"] 
-    _bad_values = [1, "abc.€", "_.@", ".", ".abc", "abc.", ".abc.", None] 
+    _good_values = ["A", "y.t", "y765.__repr__", "os.path.join"]
+    _bad_values = [1, "abc.€", "_.@", ".", ".abc", "abc.", ".abc.", None]
 
-    _good_values.append("t.þ") 
+    _good_values.append("t.þ")
 
- 
+
 class TCPAddressTrait(HasTraits):
     value = TCPAddress()
 
@@ -1517,12 +1517,12 @@ class TestTCPAddress(TraitTestBase):
     _good_values = [('localhost',0),('192.168.0.1',1000),('www.google.com',80)]
     _bad_values = [(0,0),('localhost',10.0),('localhost',-1), None]
 
- 
+
 class ListTrait(HasTraits):
 
     value = List(Int())
 
- 
+
 class TestList(TraitTestBase):
 
     obj = ListTrait()
@@ -1530,18 +1530,18 @@ class TestList(TraitTestBase):
     _default_value = []
     _good_values = [[], [1], list(range(10)), (1,2)]
     _bad_values = [10, [1,'a'], 'a']
- 
+
     def coerce(self, value):
         if value is not None:
             value = list(value)
         return value
 
- 
+
 class Foo(object):
     pass
 
 class NoneInstanceListTrait(HasTraits):
- 
+
     value = List(Instance(Foo))
 
 class TestNoneInstanceList(TraitTestBase):
@@ -1573,7 +1573,7 @@ class UnionListTrait(HasTraits):
 
     value = List(Int() | Bool())
 
-class TestUnionListTrait(TraitTestBase): 
+class TestUnionListTrait(TraitTestBase):
 
     obj = UnionListTrait()
 
@@ -1607,7 +1607,7 @@ class TestTupleTrait(TraitTestBase):
 
     obj = TupleTrait()
 
-    _default_value = (1,) 
+    _default_value = (1,)
     _good_values = [(1,), (0,), [1]]
     _bad_values = [10, (1, 2), ('a'), (), None]
 
@@ -1654,64 +1654,64 @@ class TestMultiTuple(TraitTestBase):
 
     _default_value = (99,b'bottles')
     _good_values = [(1,b'a'), (2,b'b')]
-    _bad_values = ((),10, b'a', (1,b'a',3), (b'a',1), (1, 'a')) 
+    _bad_values = ((),10, b'a', (1,b'a',3), (b'a',1), (1, 'a'))
 
- 
-@pytest.mark.parametrize( 
-    "Trait", (List, Tuple, Set, Dict, Integer, Unicode,), 
-) 
-def test_allow_none_default_value(Trait): 
-    class C(HasTraits): 
-        t = Trait(default_value=None, allow_none=True) 
- 
-    # test default value 
-    c = C() 
-    assert c.t is None 
- 
-    # and in constructor 
-    c = C(t=None) 
-    assert c.t is None 
- 
- 
-@pytest.mark.parametrize( 
-    "Trait, default_value", 
-    ((List, []), (Tuple, ()), (Set, set()), (Dict, {}), (Integer, 0), (Unicode, "")), 
-) 
-def test_default_value(Trait, default_value): 
-    class C(HasTraits): 
-        t = Trait() 
- 
-    # test default value 
-    c = C() 
-    assert type(c.t) is type(default_value) 
-    assert c.t == default_value 
- 
- 
-@pytest.mark.parametrize( 
-    "Trait, default_value", 
-    ((List, []), (Tuple, ()), (Set, set())), 
-) 
-def test_subclass_default_value(Trait, default_value): 
-    """Test deprecated default_value=None behavior for Container subclass traits""" 
- 
-    class SubclassTrait(Trait): 
-        def __init__(self, default_value=None): 
-            super().__init__(default_value=default_value) 
- 
-    class C(HasTraits): 
-        t = SubclassTrait() 
- 
-    # test default value 
-    c = C() 
-    assert type(c.t) is type(default_value) 
-    assert c.t == default_value 
- 
- 
+
+@pytest.mark.parametrize(
+    "Trait", (List, Tuple, Set, Dict, Integer, Unicode,),
+)
+def test_allow_none_default_value(Trait):
+    class C(HasTraits):
+        t = Trait(default_value=None, allow_none=True)
+
+    # test default value
+    c = C()
+    assert c.t is None
+
+    # and in constructor
+    c = C(t=None)
+    assert c.t is None
+
+
+@pytest.mark.parametrize(
+    "Trait, default_value",
+    ((List, []), (Tuple, ()), (Set, set()), (Dict, {}), (Integer, 0), (Unicode, "")),
+)
+def test_default_value(Trait, default_value):
+    class C(HasTraits):
+        t = Trait()
+
+    # test default value
+    c = C()
+    assert type(c.t) is type(default_value)
+    assert c.t == default_value
+
+
+@pytest.mark.parametrize(
+    "Trait, default_value",
+    ((List, []), (Tuple, ()), (Set, set())),
+)
+def test_subclass_default_value(Trait, default_value):
+    """Test deprecated default_value=None behavior for Container subclass traits"""
+
+    class SubclassTrait(Trait):
+        def __init__(self, default_value=None):
+            super().__init__(default_value=default_value)
+
+    class C(HasTraits):
+        t = SubclassTrait()
+
+    # test default value
+    c = C()
+    assert type(c.t) is type(default_value)
+    assert c.t == default_value
+
+
 class CRegExpTrait(HasTraits):
 
     value = CRegExp(r'')
 
- 
+
 class TestCRegExp(TraitTestBase):
 
     def coerce(self, value):
@@ -1731,59 +1731,59 @@ def test_dict_assignment():
     c = DictTrait()
     c.value = d
     d['a'] = 5
-    assert d == c.value 
+    assert d == c.value
     assert c.value is d
 
 
-class UniformlyValueValidatedDictTrait(HasTraits): 
+class UniformlyValueValidatedDictTrait(HasTraits):
 
     value = Dict(trait=Unicode(),
                  default_value={'foo': '1'})
 
 
-class TestInstanceUniformlyValueValidatedDict(TraitTestBase): 
+class TestInstanceUniformlyValueValidatedDict(TraitTestBase):
 
-    obj = UniformlyValueValidatedDictTrait() 
+    obj = UniformlyValueValidatedDictTrait()
 
     _default_value = {'foo': '1'}
     _good_values = [{'foo': '0', 'bar': '1'}]
     _bad_values = [{'foo': 0, 'bar': '1'}]
 
 
-class NonuniformlyValueValidatedDictTrait(HasTraits): 
+class NonuniformlyValueValidatedDictTrait(HasTraits):
 
     value = Dict(traits={'foo': Int()},
                  default_value={'foo': 1})
 
 
-class TestInstanceNonuniformlyValueValidatedDict(TraitTestBase): 
+class TestInstanceNonuniformlyValueValidatedDict(TraitTestBase):
 
-    obj = NonuniformlyValueValidatedDictTrait() 
+    obj = NonuniformlyValueValidatedDictTrait()
 
     _default_value = {'foo': 1}
     _good_values = [{'foo': 0, 'bar': '1'}, {'foo': 0, 'bar': 1}]
     _bad_values = [{'foo': '0', 'bar': '1'}]
 
 
-class KeyValidatedDictTrait(HasTraits): 
- 
-    value = Dict(key_trait=Unicode(), 
-                 default_value={'foo': '1'}) 
- 
- 
-class TestInstanceKeyValidatedDict(TraitTestBase): 
- 
-    obj = KeyValidatedDictTrait() 
- 
-    _default_value = {'foo': '1'} 
-    _good_values = [{'foo': '0', 'bar': '1'}] 
-    _bad_values = [{'foo': '0', 0: '1'}] 
- 
- 
+class KeyValidatedDictTrait(HasTraits):
+
+    value = Dict(key_trait=Unicode(),
+                 default_value={'foo': '1'})
+
+
+class TestInstanceKeyValidatedDict(TraitTestBase):
+
+    obj = KeyValidatedDictTrait()
+
+    _default_value = {'foo': '1'}
+    _good_values = [{'foo': '0', 'bar': '1'}]
+    _bad_values = [{'foo': '0', 0: '1'}]
+
+
 class FullyValidatedDictTrait(HasTraits):
 
     value = Dict(trait=Unicode(),
-                 key_trait=Unicode(), 
+                 key_trait=Unicode(),
                  traits={'foo': Int()},
                  default_value={'foo': 1})
 
@@ -1794,7 +1794,7 @@ class TestInstanceFullyValidatedDict(TraitTestBase):
 
     _default_value = {'foo': 1}
     _good_values = [{'foo': 0, 'bar': '1'}, {'foo': 1, 'bar': '2'}]
-    _bad_values = [{'foo': 0, 'bar': 1}, {'foo': '0', 'bar': '1'}, {'foo': 0, 0: '1'}] 
+    _bad_values = [{'foo': 0, 'bar': 1}, {'foo': '0', 'bar': '1'}, {'foo': 0, 0: '1'}]
 
 
 def test_dict_default_value():
@@ -1829,7 +1829,7 @@ class TestValidationHook(TestCase):
                 if self.parity == 'odd' and (value % 2 == 0):
                     raise TraitError('Expected an odd number')
                 return value
- 
+
         u = Parity()
         u.parity = 'odd'
         u.value = 1  # OK
@@ -1911,8 +1911,8 @@ class TestLink(TestCase):
         b.count = 4
         self.assertEqual(a.value, b.count)
 
-    def test_unlink_link(self): 
-        """Verify two linked traitlets can be unlinked and relinked.""" 
+    def test_unlink_link(self):
+        """Verify two linked traitlets can be unlinked and relinked."""
 
         # Create two simple classes with Int traitlets.
         class A(HasTraits):
@@ -1928,10 +1928,10 @@ class TestLink(TestCase):
         # Change one of the values to make sure they don't stay in sync.
         a.value = 5
         self.assertNotEqual(a.value, b.value)
-        c.link() 
-        self.assertEqual(a.value, b.value) 
-        a.value += 1 
-        self.assertEqual(a.value, b.value) 
+        c.link()
+        self.assertEqual(a.value, b.value)
+        a.value += 1
+        self.assertEqual(a.value, b.value)
 
     def test_callbacks(self):
         """Verify two linked traitlets have their callbacks called once."""
@@ -1943,7 +1943,7 @@ class TestLink(TestCase):
             count = Int()
         a = A(value=9)
         b = B(count=8)
- 
+
         # Register callbacks that count.
         callback_count = []
         def a_callback(name, old, new):
@@ -1970,56 +1970,56 @@ class TestLink(TestCase):
         self.assertEqual(''.join(callback_count), 'ab')
         del callback_count[:]
 
-    def test_tranform(self): 
-        """Test transform link.""" 
- 
-        # Create two simple classes with Int traitlets. 
-        class A(HasTraits): 
-            value = Int() 
-        a = A(value=9) 
-        b = A(value=8) 
- 
-        # Conenct the two classes. 
-        c = link((a, 'value'), (b, 'value'), 
-                 transform=(lambda x: 2 * x, lambda x: int(x / 2.))) 
- 
-        # Make sure the values are correct at the point of linking. 
-        self.assertEqual(b.value, 2 * a.value) 
- 
-        # Change one the value of the source and check that it modifies the target. 
-        a.value = 5 
-        self.assertEqual(b.value, 10) 
-        # Change one the value of the target and check that it modifies the 
-        # source. 
-        b.value = 6 
-        self.assertEqual(a.value, 3) 
- 
-    def test_link_broken_at_source(self): 
-        class MyClass(HasTraits): 
-            i = Int() 
-            j = Int() 
- 
-            @observe("j") 
-            def another_update(self, change): 
-                self.i = change.new * 2 
- 
-        mc = MyClass() 
-        l = link((mc, "i"), (mc, "j")) 
-        self.assertRaises(TraitError, setattr, mc, 'i', 2) 
- 
-    def test_link_broken_at_target(self): 
-        class MyClass(HasTraits): 
-            i =Int() 
-            j = Int() 
- 
-            @observe("i") 
-            def another_update(self, change): 
-                self.j = change.new * 2 
- 
-        mc = MyClass() 
-        l = link((mc, "i"), (mc, "j")) 
-        self.assertRaises(TraitError, setattr, mc, 'j', 2) 
- 
+    def test_tranform(self):
+        """Test transform link."""
+
+        # Create two simple classes with Int traitlets.
+        class A(HasTraits):
+            value = Int()
+        a = A(value=9)
+        b = A(value=8)
+
+        # Conenct the two classes.
+        c = link((a, 'value'), (b, 'value'),
+                 transform=(lambda x: 2 * x, lambda x: int(x / 2.)))
+
+        # Make sure the values are correct at the point of linking.
+        self.assertEqual(b.value, 2 * a.value)
+
+        # Change one the value of the source and check that it modifies the target.
+        a.value = 5
+        self.assertEqual(b.value, 10)
+        # Change one the value of the target and check that it modifies the
+        # source.
+        b.value = 6
+        self.assertEqual(a.value, 3)
+
+    def test_link_broken_at_source(self):
+        class MyClass(HasTraits):
+            i = Int()
+            j = Int()
+
+            @observe("j")
+            def another_update(self, change):
+                self.i = change.new * 2
+
+        mc = MyClass()
+        l = link((mc, "i"), (mc, "j"))
+        self.assertRaises(TraitError, setattr, mc, 'i', 2)
+
+    def test_link_broken_at_target(self):
+        class MyClass(HasTraits):
+            i =Int()
+            j = Int()
+
+            @observe("i")
+            def another_update(self, change):
+                self.j = change.new * 2
+
+        mc = MyClass()
+        l = link((mc, "i"), (mc, "j"))
+        self.assertRaises(TraitError, setattr, mc, 'j', 2)
+
 class TestDirectionalLink(TestCase):
     def test_connect_same(self):
         """Verify two traitlets of the same type can be linked together using directional_link."""
@@ -2089,8 +2089,8 @@ class TestDirectionalLink(TestCase):
         b.value = 6
         self.assertEqual(a.value, 5)
 
-    def test_unlink_link(self): 
-        """Verify two linked traitlets can be unlinked and relinked.""" 
+    def test_unlink_link(self):
+        """Verify two linked traitlets can be unlinked and relinked."""
 
         # Create two simple classes with Int traitlets.
         class A(HasTraits):
@@ -2106,10 +2106,10 @@ class TestDirectionalLink(TestCase):
         # Change one of the values to make sure they don't stay in sync.
         a.value = 5
         self.assertNotEqual(a.value, b.value)
-        c.link() 
-        self.assertEqual(a.value, b.value) 
-        a.value += 1 
-        self.assertEqual(a.value, b.value) 
+        c.link()
+        self.assertEqual(a.value, b.value)
+        a.value += 1
+        self.assertEqual(a.value, b.value)
 
 class Pickleable(HasTraits):
 
@@ -2121,7 +2121,7 @@ class Pickleable(HasTraits):
         return commit['value']
 
     j = Int()
- 
+
     def __init__(self):
         with self.hold_trait_notifications():
             self.i = 1
@@ -2226,7 +2226,7 @@ def test_cache_modification():
 
 class OrderTraits(HasTraits):
     notified = Dict()
- 
+
     a = Unicode()
     b = Unicode()
     c = Unicode()
@@ -2239,10 +2239,10 @@ class OrderTraits(HasTraits):
     j = Unicode()
     k = Unicode()
     l = Unicode()
- 
+
     def _notify(self, name, old, new):
         """check the value of all traits when each trait change is triggered
- 
+
         This verifies that the values are not sensitive
         to dict ordering when loaded from kwargs
         """
@@ -2251,7 +2251,7 @@ class OrderTraits(HasTraits):
         self.notified[name] = {
             c: getattr(self, c) for c in 'abcdefghijkl'
         }
- 
+
     def __init__(self, **kwargs):
         self.on_trait_change(self._notify)
         super(OrderTraits, self).__init__(**kwargs)
@@ -2445,7 +2445,7 @@ def test_default_value_repr():
         n = Integer(0)
         lis = List()
         d = Dict()
- 
+
     assert C.t.default_value_repr() == "'traitlets.HasTraits'"
     assert C.t2.default_value_repr() == "'traitlets.traitlets.HasTraits'"
     assert C.n.default_value_repr() == '0'
@@ -2454,7 +2454,7 @@ def test_default_value_repr():
 
 
 class TransitionalClass(HasTraits):
- 
+
     d = Any()
     @default('d')
     def _d_default(self):
@@ -2462,19 +2462,19 @@ class TransitionalClass(HasTraits):
 
     parent_super = False
     calls_super = Integer(0)
- 
+
     @default('calls_super')
     def _calls_super_default(self):
         return -1
- 
+
     @observe('calls_super')
     @observe_compat
     def _calls_super_changed(self, change):
         self.parent_super = change
- 
+
     parent_override = False
     overrides = Integer(0)
- 
+
     @observe('overrides')
     @observe_compat
     def _overrides_changed(self, change):
@@ -2484,12 +2484,12 @@ class TransitionalClass(HasTraits):
 class SubClass(TransitionalClass):
     def _d_default(self):
         return SubClass
- 
+
     subclass_super = False
     def _calls_super_changed(self, name, old, new):
         self.subclass_super = True
         super(SubClass, self)._calls_super_changed(name, old, new)
- 
+
     subclass_override = False
     def _overrides_changed(self, name, old, new):
         self.subclass_override = True
@@ -2508,7 +2508,7 @@ def test_subclass_compat():
 
 class DefinesHandler(HasTraits):
     parent_called = False
- 
+
     trait = Integer()
     @observe('trait')
     def handler(self, change):
@@ -2517,7 +2517,7 @@ class DefinesHandler(HasTraits):
 
 class OverridesHandler(DefinesHandler):
     child_called = False
- 
+
     @observe('trait')
     def handler(self, change):
         self.child_called = True
@@ -2532,7 +2532,7 @@ def test_subclass_override_observer():
 
 class DoesntRegisterHandler(DefinesHandler):
     child_called = False
- 
+
     def handler(self, change):
         self.child_called = True
 
@@ -2547,7 +2547,7 @@ def test_subclass_override_not_registered():
 
 class AddsHandler(DefinesHandler):
     child_called = False
- 
+
     @observe('trait')
     def child_handler(self, change):
         self.child_called = True
@@ -2604,10 +2604,10 @@ def test_super_args():
         def __init__(self, *args, **kwargs):
             self.super_args = args
             self.super_kwargs = kwargs
- 
+
     class SuperHasTraits(HasTraits, SuperRecorder):
         i = Integer()
- 
+
     obj = SuperHasTraits('a1', 'a2', b=10, i=5, c='x')
     assert obj.i ==  5
     assert not hasattr(obj, 'b')
@@ -2618,317 +2618,317 @@ def test_super_args():
 def test_super_bad_args():
     class SuperHasTraits(HasTraits):
         a = Integer()
- 
-    w = ["Passing unrecognized arguments"] 
+
+    w = ["Passing unrecognized arguments"]
     with expected_warnings(w):
         obj = SuperHasTraits(a=1, b=2)
-    assert obj.a ==  1 
+    assert obj.a ==  1
     assert not hasattr(obj, 'b')
- 
- 
-def test_default_mro(): 
-    """Verify that default values follow mro""" 
-    class Base(HasTraits): 
-        trait = Unicode('base') 
-        attr = 'base' 
- 
-    class A(Base): 
-        pass 
- 
-    class B(Base): 
-        trait = Unicode('B') 
-        attr = 'B' 
- 
-    class AB(A, B): 
-        pass 
- 
-    class BA(B, A): 
-        pass 
- 
-    assert A().trait == 'base' 
-    assert A().attr == 'base' 
-    assert BA().trait == 'B' 
-    assert BA().attr == 'B' 
-    assert AB().trait == 'B' 
-    assert AB().attr == 'B' 
- 
- 
-def test_cls_self_argument(): 
-    class X(HasTraits): 
-        def __init__(__self, cls, self): 
-            pass 
- 
-    x = X(cls=None, self=None) 
- 
- 
-def test_override_default(): 
-    class C(HasTraits): 
-        a = Unicode('hard default') 
-        def _a_default(self): 
-            return 'default method' 
- 
-    C._a_default = lambda self: 'overridden' 
-    c = C() 
-    assert c.a == 'overridden' 
- 
-def test_override_default_decorator(): 
-    class C(HasTraits): 
-        a = Unicode('hard default') 
-        @default('a') 
-        def _a_default(self): 
-            return 'default method' 
- 
-    C._a_default = lambda self: 'overridden' 
-    c = C() 
-    assert c.a == 'overridden' 
- 
-def test_override_default_instance(): 
-    class C(HasTraits): 
-        a = Unicode('hard default') 
-        @default('a') 
-        def _a_default(self): 
-            return 'default method' 
- 
-    c = C() 
-    c._a_default = lambda self: 'overridden' 
-    assert c.a == 'overridden' 
- 
- 
-def test_copy_HasTraits(): 
-    from copy import copy 
- 
-    class C(HasTraits): 
-        a = Int() 
- 
-    c = C(a=1) 
-    assert c.a == 1 
- 
-    cc = copy(c) 
-    cc.a = 2 
-    assert cc.a == 2 
-    assert c.a == 1 
- 
- 
-def _from_string_test(traittype, s, expected): 
-    """Run a test of trait.from_string""" 
-    if isinstance(traittype, TraitType): 
-        trait = traittype 
-    else: 
-        trait = traittype(allow_none=True) 
-    if isinstance(s, list): 
-        cast = trait.from_string_list 
-    else: 
-        cast = trait.from_string 
-    if type(expected) is type and issubclass(expected, Exception): 
-        with pytest.raises(expected): 
-            value = cast(s) 
-            trait.validate(None, value) 
-    else: 
-        value = cast(s) 
-        assert value == expected 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [("xyz", "xyz"), ("1", "1"), ('"xx"', "xx"), ("'abc'", "abc"), ("None", None)], 
-) 
-def test_unicode_from_string(s, expected): 
-    _from_string_test(Unicode, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [("xyz", "xyz"), ("1", "1"), ('"xx"', "xx"), ("'abc'", "abc"), ("None", None)], 
-) 
-def test_cunicode_from_string(s, expected): 
-    _from_string_test(CUnicode, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [("xyz", b"xyz"), ("1", b"1"), ('b"xx"', b"xx"), ("b'abc'", b"abc"), ("None", None)], 
-) 
-def test_bytes_from_string(s, expected): 
-    _from_string_test(Bytes, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [("xyz", b"xyz"), ("1", b"1"), ('b"xx"', b"xx"), ("b'abc'", b"abc"), ("None", None)], 
-) 
-def test_cbytes_from_string(s, expected): 
-    _from_string_test(CBytes, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [("x", ValueError), ("1", 1), ("123", 123), ("2.0", ValueError), ("None", None)], 
-) 
-def test_int_from_string(s, expected): 
-    _from_string_test(Integer, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [("x", ValueError), ("1", 1.0), ("123.5", 123.5), ("2.5", 2.5), ("None", None)], 
-) 
-def test_float_from_string(s, expected): 
-    _from_string_test(Float, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [ 
-        ("x", ValueError), 
-        ("1", 1.0), 
-        ("123.5", 123.5), 
-        ("2.5", 2.5), 
-        ("1+2j", 1 + 2j), 
-        ("None", None), 
-    ], 
-) 
-def test_complex_from_string(s, expected): 
-    _from_string_test(Complex, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [ 
-        ("true", True), 
-        ("TRUE", True), 
-        ("1", True), 
-        ("0", False), 
-        ("False", False), 
-        ("false", False), 
-        ("1.0", ValueError), 
-        ("None", None), 
-    ], 
-) 
-def test_bool_from_string(s, expected): 
-    _from_string_test(Bool, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [ 
-        ("{}", {}), 
-        ("1", TraitError), 
-        ("{1: 2}", {1: 2}), 
-        ('{"key": "value"}', {"key": "value"}), 
-        ("x", TraitError), 
-        ("None", None), 
-    ], 
-) 
-def test_dict_from_string(s, expected): 
-    _from_string_test(Dict, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [ 
-        ("[]", []), 
-        ('[1, 2, "x"]', [1, 2, "x"]), 
-        (["1", "x"], ["1", "x"]), 
-        (["None"], None), 
-    ], 
-) 
-def test_list_from_string(s, expected): 
-    _from_string_test(List, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected, value_trait", 
-    [ 
-        (["1", "2", "3"], [1, 2, 3], Integer()), 
-        (["x"], ValueError, Integer()), 
-        (["1", "x"], ["1", "x"], Unicode()), 
-        (["None"], [None], Unicode(allow_none=True)), 
-        (["None"], ["None"], Unicode(allow_none=False)), 
-    ], 
-) 
-def test_list_items_from_string(s, expected, value_trait): 
-    _from_string_test(List(value_trait), s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [ 
-        ("[]", set()), 
-        ('[1, 2, "x"]', {1, 2, "x"}), 
-        ('{1, 2, "x"}', {1, 2, "x"}), 
-        (["1", "x"], {"1", "x"}), 
-        (["None"], None), 
-    ], 
-) 
-def test_set_from_string(s, expected): 
-    _from_string_test(Set, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected, value_trait", 
-    [ 
-        (["1", "2", "3"], {1, 2, 3}, Integer()), 
-        (["x"], ValueError, Integer()), 
-        (["1", "x"], {"1", "x"}, Unicode()), 
-        (["None"], {None}, Unicode(allow_none=True)), 
-    ], 
-) 
-def test_set_items_from_string(s, expected, value_trait): 
-    _from_string_test(Set(value_trait), s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [ 
-        ("[]", ()), 
-        ("()", ()), 
-        ('[1, 2, "x"]', (1, 2, "x")), 
-        ('(1, 2, "x")', (1, 2, "x")), 
-        (["1", "x"], ("1", "x")), 
-        (["None"], None), 
-    ], 
-) 
-def test_tuple_from_string(s, expected): 
-    _from_string_test(Tuple, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected, value_traits", 
-    [ 
-        (["1", "2", "3"], (1, 2, 3), [Integer(), Integer(), Integer()]), 
-        (["x"], ValueError, [Integer()]), 
-        (["1", "x"], ("1", "x"), [Unicode()]), 
-        (["None"], ("None",), [Unicode(allow_none=False)]), 
-        (["None"], (None,), [Unicode(allow_none=True)]), 
-    ], 
-) 
-def test_tuple_items_from_string(s, expected, value_traits): 
-    _from_string_test(Tuple(*value_traits), s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [ 
-        ("x", "x"), 
-        ("mod.submod", "mod.submod"), 
-        ("not an identifier", TraitError), 
-        ("1", "1"), 
-        ("None", None), 
-    ], 
-) 
-def test_object_from_string(s, expected): 
-    _from_string_test(DottedObjectName, s, expected) 
- 
- 
-@pytest.mark.parametrize( 
-    "s, expected", 
-    [ 
-        ("127.0.0.1:8000", ("127.0.0.1", 8000)), 
-        ("host.tld:80", ("host.tld", 80)), 
-        ("host:notaport", ValueError), 
-        ("127.0.0.1", ValueError), 
-        ("None", None), 
-    ], 
-) 
-def test_tcp_from_string(s, expected): 
-    _from_string_test(TCPAddress, s, expected) 
+
+
+def test_default_mro():
+    """Verify that default values follow mro"""
+    class Base(HasTraits):
+        trait = Unicode('base')
+        attr = 'base'
+
+    class A(Base):
+        pass
+
+    class B(Base):
+        trait = Unicode('B')
+        attr = 'B'
+
+    class AB(A, B):
+        pass
+
+    class BA(B, A):
+        pass
+
+    assert A().trait == 'base'
+    assert A().attr == 'base'
+    assert BA().trait == 'B'
+    assert BA().attr == 'B'
+    assert AB().trait == 'B'
+    assert AB().attr == 'B'
+
+
+def test_cls_self_argument():
+    class X(HasTraits):
+        def __init__(__self, cls, self):
+            pass
+
+    x = X(cls=None, self=None)
+
+
+def test_override_default():
+    class C(HasTraits):
+        a = Unicode('hard default')
+        def _a_default(self):
+            return 'default method'
+
+    C._a_default = lambda self: 'overridden'
+    c = C()
+    assert c.a == 'overridden'
+
+def test_override_default_decorator():
+    class C(HasTraits):
+        a = Unicode('hard default')
+        @default('a')
+        def _a_default(self):
+            return 'default method'
+
+    C._a_default = lambda self: 'overridden'
+    c = C()
+    assert c.a == 'overridden'
+
+def test_override_default_instance():
+    class C(HasTraits):
+        a = Unicode('hard default')
+        @default('a')
+        def _a_default(self):
+            return 'default method'
+
+    c = C()
+    c._a_default = lambda self: 'overridden'
+    assert c.a == 'overridden'
+
+
+def test_copy_HasTraits():
+    from copy import copy
+
+    class C(HasTraits):
+        a = Int()
+
+    c = C(a=1)
+    assert c.a == 1
+
+    cc = copy(c)
+    cc.a = 2
+    assert cc.a == 2
+    assert c.a == 1
+
+
+def _from_string_test(traittype, s, expected):
+    """Run a test of trait.from_string"""
+    if isinstance(traittype, TraitType):
+        trait = traittype
+    else:
+        trait = traittype(allow_none=True)
+    if isinstance(s, list):
+        cast = trait.from_string_list
+    else:
+        cast = trait.from_string
+    if type(expected) is type and issubclass(expected, Exception):
+        with pytest.raises(expected):
+            value = cast(s)
+            trait.validate(None, value)
+    else:
+        value = cast(s)
+        assert value == expected
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [("xyz", "xyz"), ("1", "1"), ('"xx"', "xx"), ("'abc'", "abc"), ("None", None)],
+)
+def test_unicode_from_string(s, expected):
+    _from_string_test(Unicode, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [("xyz", "xyz"), ("1", "1"), ('"xx"', "xx"), ("'abc'", "abc"), ("None", None)],
+)
+def test_cunicode_from_string(s, expected):
+    _from_string_test(CUnicode, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [("xyz", b"xyz"), ("1", b"1"), ('b"xx"', b"xx"), ("b'abc'", b"abc"), ("None", None)],
+)
+def test_bytes_from_string(s, expected):
+    _from_string_test(Bytes, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [("xyz", b"xyz"), ("1", b"1"), ('b"xx"', b"xx"), ("b'abc'", b"abc"), ("None", None)],
+)
+def test_cbytes_from_string(s, expected):
+    _from_string_test(CBytes, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [("x", ValueError), ("1", 1), ("123", 123), ("2.0", ValueError), ("None", None)],
+)
+def test_int_from_string(s, expected):
+    _from_string_test(Integer, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [("x", ValueError), ("1", 1.0), ("123.5", 123.5), ("2.5", 2.5), ("None", None)],
+)
+def test_float_from_string(s, expected):
+    _from_string_test(Float, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [
+        ("x", ValueError),
+        ("1", 1.0),
+        ("123.5", 123.5),
+        ("2.5", 2.5),
+        ("1+2j", 1 + 2j),
+        ("None", None),
+    ],
+)
+def test_complex_from_string(s, expected):
+    _from_string_test(Complex, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [
+        ("true", True),
+        ("TRUE", True),
+        ("1", True),
+        ("0", False),
+        ("False", False),
+        ("false", False),
+        ("1.0", ValueError),
+        ("None", None),
+    ],
+)
+def test_bool_from_string(s, expected):
+    _from_string_test(Bool, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [
+        ("{}", {}),
+        ("1", TraitError),
+        ("{1: 2}", {1: 2}),
+        ('{"key": "value"}', {"key": "value"}),
+        ("x", TraitError),
+        ("None", None),
+    ],
+)
+def test_dict_from_string(s, expected):
+    _from_string_test(Dict, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [
+        ("[]", []),
+        ('[1, 2, "x"]', [1, 2, "x"]),
+        (["1", "x"], ["1", "x"]),
+        (["None"], None),
+    ],
+)
+def test_list_from_string(s, expected):
+    _from_string_test(List, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected, value_trait",
+    [
+        (["1", "2", "3"], [1, 2, 3], Integer()),
+        (["x"], ValueError, Integer()),
+        (["1", "x"], ["1", "x"], Unicode()),
+        (["None"], [None], Unicode(allow_none=True)),
+        (["None"], ["None"], Unicode(allow_none=False)),
+    ],
+)
+def test_list_items_from_string(s, expected, value_trait):
+    _from_string_test(List(value_trait), s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [
+        ("[]", set()),
+        ('[1, 2, "x"]', {1, 2, "x"}),
+        ('{1, 2, "x"}', {1, 2, "x"}),
+        (["1", "x"], {"1", "x"}),
+        (["None"], None),
+    ],
+)
+def test_set_from_string(s, expected):
+    _from_string_test(Set, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected, value_trait",
+    [
+        (["1", "2", "3"], {1, 2, 3}, Integer()),
+        (["x"], ValueError, Integer()),
+        (["1", "x"], {"1", "x"}, Unicode()),
+        (["None"], {None}, Unicode(allow_none=True)),
+    ],
+)
+def test_set_items_from_string(s, expected, value_trait):
+    _from_string_test(Set(value_trait), s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [
+        ("[]", ()),
+        ("()", ()),
+        ('[1, 2, "x"]', (1, 2, "x")),
+        ('(1, 2, "x")', (1, 2, "x")),
+        (["1", "x"], ("1", "x")),
+        (["None"], None),
+    ],
+)
+def test_tuple_from_string(s, expected):
+    _from_string_test(Tuple, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected, value_traits",
+    [
+        (["1", "2", "3"], (1, 2, 3), [Integer(), Integer(), Integer()]),
+        (["x"], ValueError, [Integer()]),
+        (["1", "x"], ("1", "x"), [Unicode()]),
+        (["None"], ("None",), [Unicode(allow_none=False)]),
+        (["None"], (None,), [Unicode(allow_none=True)]),
+    ],
+)
+def test_tuple_items_from_string(s, expected, value_traits):
+    _from_string_test(Tuple(*value_traits), s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [
+        ("x", "x"),
+        ("mod.submod", "mod.submod"),
+        ("not an identifier", TraitError),
+        ("1", "1"),
+        ("None", None),
+    ],
+)
+def test_object_from_string(s, expected):
+    _from_string_test(DottedObjectName, s, expected)
+
+
+@pytest.mark.parametrize(
+    "s, expected",
+    [
+        ("127.0.0.1:8000", ("127.0.0.1", 8000)),
+        ("host.tld:80", ("host.tld", 80)),
+        ("host:notaport", ValueError),
+        ("127.0.0.1", ValueError),
+        ("None", None),
+    ],
+)
+def test_tcp_from_string(s, expected):
+    _from_string_test(TCPAddress, s, expected)

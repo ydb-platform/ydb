@@ -21,8 +21,8 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12 
-    contrib/libs/llvm12/lib/Demangle 
+    contrib/libs/llvm12
+    contrib/libs/llvm12/lib/Demangle
     contrib/libs/zlib
 )
 
@@ -38,7 +38,7 @@ SRCS(
     AArch64TargetParser.cpp
     ABIBreak.cpp
     AMDGPUMetadata.cpp
-    APFixedPoint.cpp 
+    APFixedPoint.cpp
     APFloat.cpp
     APInt.cpp
     APSInt.cpp
@@ -89,7 +89,7 @@ SRCS(
     Hashing.cpp
     Host.cpp
     InitLLVM.cpp
-    InstructionCost.cpp 
+    InstructionCost.cpp
     IntEqClasses.cpp
     IntervalMap.cpp
     ItaniumManglingCanonicalizer.cpp
@@ -106,7 +106,7 @@ SRCS(
     MemAlloc.cpp
     Memory.cpp
     MemoryBuffer.cpp
-    MemoryBufferRef.cpp 
+    MemoryBufferRef.cpp
     NativeFormatting.cpp
     OptimizedStructLayout.cpp
     Optional.cpp

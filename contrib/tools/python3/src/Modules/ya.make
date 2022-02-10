@@ -16,16 +16,16 @@ PEERDIR(
 ADDINCL(
     contrib/restricted/libffi/include
     contrib/tools/python3/src/Include
-    contrib/tools/python3/src/Include/internal 
+    contrib/tools/python3/src/Include/internal
     contrib/tools/python3/src/Modules
     contrib/tools/python3/src/Modules/_decimal/libmpdec
     contrib/tools/python3/src/PC
 )
 
-CFLAGS( 
-    -DPy_BUILD_CORE_MODULE 
-) 
- 
+CFLAGS(
+    -DPy_BUILD_CORE_MODULE
+)
+
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
@@ -58,7 +58,7 @@ SRCS(
     _decimal/libmpdec/fnt.c
     _decimal/libmpdec/fourstep.c
     _decimal/libmpdec/io.c
-    _decimal/libmpdec/mpalloc.c 
+    _decimal/libmpdec/mpalloc.c
     _decimal/libmpdec/mpdecimal.c
     _decimal/libmpdec/numbertheory.c
     _decimal/libmpdec/sixstep.c
@@ -72,11 +72,11 @@ SRCS(
     _lzmamodule.c
     _math.c
     _multiprocessing/multiprocessing.c
-    _multiprocessing/posixshmem.c 
+    _multiprocessing/posixshmem.c
     _multiprocessing/semaphore.c
     _opcode.c
     _operator.c
-    _peg_parser.c 
+    _peg_parser.c
     _pickle.c
     _queuemodule.c
     _randommodule.c
@@ -84,14 +84,14 @@ SRCS(
     _sre.c
     _ssl.c
     _stat.c
-    _statisticsmodule.c 
+    _statisticsmodule.c
     _struct.c
     _tracemalloc.c
     _weakref.c
-    _xxsubinterpretersmodule.c 
+    _xxsubinterpretersmodule.c
     _xxtestfuzz/_xxtestfuzz.c
     _xxtestfuzz/fuzzer.c
-    _zoneinfo.c 
+    _zoneinfo.c
     arraymodule.c
     atexitmodule.c
     audioop.c
@@ -130,7 +130,7 @@ IF (OS_WINDOWS)
     )
 ELSE()
     SRCS(
-        _cryptmodule.c 
+        _cryptmodule.c
         _posixsubprocess.c
         fcntlmodule.c
         grpmodule.c
@@ -140,9 +140,9 @@ ELSE()
         termios.c
     )
     IF (OS_LINUX)
-        IF (NOT MUSL) 
-            EXTRALIBS(crypt) 
-        ENDIF() 
+        IF (NOT MUSL)
+            EXTRALIBS(crypt)
+        ENDIF()
         SRCS(
             spwdmodule.c
         )

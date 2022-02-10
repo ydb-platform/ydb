@@ -63,14 +63,14 @@ public:
 
     /// Called when a virtual register is no longer used. Return false to defer
     /// its deletion from LiveIntervals.
-    virtual bool LRE_CanEraseVirtReg(Register) { return true; } 
+    virtual bool LRE_CanEraseVirtReg(Register) { return true; }
 
     /// Called before shrinking the live range of a virtual register.
-    virtual void LRE_WillShrinkVirtReg(Register) {} 
+    virtual void LRE_WillShrinkVirtReg(Register) {}
 
     /// Called after cloning a virtual register.
     /// This is used for new registers representing connected components of Old.
-    virtual void LRE_DidCloneVirtReg(Register New, Register Old) {} 
+    virtual void LRE_DidCloneVirtReg(Register New, Register Old) {}
   };
 
 private:
@@ -159,7 +159,7 @@ public:
     return *Parent;
   }
 
-  Register getReg() const { return getParent().reg(); } 
+  Register getReg() const { return getParent().reg(); }
 
   /// Iterator for accessing the new registers added by this edit.
   using iterator = SmallVectorImpl<Register>::const_iterator;

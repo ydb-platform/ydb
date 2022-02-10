@@ -44,10 +44,10 @@ using namespace llvm;
 
 std::string X86_MC::ParseX86Triple(const Triple &TT) {
   std::string FS;
-  // SSE2 should default to enabled in 64-bit mode, but can be turned off 
-  // explicitly. 
-  if (TT.isArch64Bit()) 
-    FS = "+64bit-mode,-32bit-mode,-16bit-mode,+sse2"; 
+  // SSE2 should default to enabled in 64-bit mode, but can be turned off
+  // explicitly.
+  if (TT.isArch64Bit())
+    FS = "+64bit-mode,-32bit-mode,-16bit-mode,+sse2";
   else if (TT.getEnvironment() != Triple::CODE16)
     FS = "-64bit-mode,+32bit-mode,-16bit-mode";
   else
@@ -292,10 +292,10 @@ MCSubtargetInfo *X86_MC::createX86MCSubtargetInfo(const Triple &TT,
   if (!FS.empty())
     ArchFS = (Twine(ArchFS) + "," + FS).str();
 
-  if (CPU.empty()) 
-    CPU = "generic"; 
+  if (CPU.empty())
+    CPU = "generic";
 
-  return createX86MCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, ArchFS); 
+  return createX86MCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/ CPU, ArchFS);
 }
 
 static MCInstrInfo *createX86MCInstrInfo() {

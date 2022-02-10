@@ -20,7 +20,7 @@
 #ifndef LLVM_MC_MCSTREAMER_H
 #define LLVM_MC_MCSTREAMER_H
 
-#include "llvm/ADT/APInt.h" 
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Optional.h"
@@ -28,7 +28,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCDirectives.h"
 #include "llvm/MC/MCLinkerOptimizationHint.h"
-#include "llvm/MC/MCPseudoProbe.h" 
+#include "llvm/MC/MCPseudoProbe.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCWinEH.h"
 #include "llvm/Support/Error.h"
@@ -214,7 +214,7 @@ class MCStreamer {
   std::vector<std::unique_ptr<WinEH::FrameInfo>> WinFrameInfos;
 
   WinEH::FrameInfo *CurrentWinFrameInfo;
-  size_t CurrentProcWinFrameInfoStartIndex; 
+  size_t CurrentProcWinFrameInfoStartIndex;
 
   /// Tracks an index to represent the order a symbol was emitted in.
   /// Zero means we did not emit that symbol.
@@ -224,10 +224,10 @@ class MCStreamer {
   /// PushSection.
   SmallVector<std::pair<MCSectionSubPair, MCSectionSubPair>, 4> SectionStack;
 
-  /// Pointer to the parser's SMLoc if available. This is used to provide 
-  /// locations for diagnostics. 
-  const SMLoc *StartTokLocPtr = nullptr; 
- 
+  /// Pointer to the parser's SMLoc if available. This is used to provide
+  /// locations for diagnostics.
+  const SMLoc *StartTokLocPtr = nullptr;
+
   /// The next unique ID to use when creating a WinCFI-related section (.pdata
   /// or .xdata). This ID ensures that we have a one-to-one mapping from
   /// code section to unwind info section, which MSVC's incremental linker
@@ -253,8 +253,8 @@ protected:
     return CurrentWinFrameInfo;
   }
 
-  virtual void EmitWindowsUnwindTables(WinEH::FrameInfo *Frame); 
- 
+  virtual void EmitWindowsUnwindTables(WinEH::FrameInfo *Frame);
+
   virtual void EmitWindowsUnwindTables();
 
   virtual void emitRawTextImpl(StringRef String);
@@ -274,11 +274,11 @@ public:
     TargetStreamer.reset(TS);
   }
 
-  void setStartTokLocPtr(const SMLoc *Loc) { StartTokLocPtr = Loc; } 
-  SMLoc getStartTokLoc() const { 
-    return StartTokLocPtr ? *StartTokLocPtr : SMLoc(); 
-  } 
- 
+  void setStartTokLocPtr(const SMLoc *Loc) { StartTokLocPtr = Loc; }
+  SMLoc getStartTokLoc() const {
+    return StartTokLocPtr ? *StartTokLocPtr : SMLoc();
+  }
+
   /// State management
   ///
   virtual void reset();
@@ -463,10 +463,10 @@ public:
   /// so we can sort on them later.
   void AssignFragment(MCSymbol *Symbol, MCFragment *Fragment);
 
-  /// Returns the mnemonic for \p MI, if the streamer has access to a 
-  /// instruction printer and returns an empty string otherwise. 
-  virtual StringRef getMnemonic(MCInst &MI) { return ""; } 
- 
+  /// Returns the mnemonic for \p MI, if the streamer has access to a
+  /// instruction printer and returns an empty string otherwise.
+  virtual StringRef getMnemonic(MCInst &MI) { return ""; }
+
   /// Emit a label for \p Symbol into the current section.
   ///
   /// This corresponds to an assembler statement such as:
@@ -698,7 +698,7 @@ public:
   /// Special case of EmitValue that avoids the client having
   /// to pass in a MCExpr for constant integers.
   virtual void emitIntValue(uint64_t Value, unsigned Size);
-  virtual void emitIntValue(APInt Value); 
+  virtual void emitIntValue(APInt Value);
 
   /// Special case of EmitValue that avoids the client having to pass
   /// in a MCExpr for constant integers & prints in Hex format for certain
@@ -803,9 +803,9 @@ public:
   virtual void emitFill(const MCExpr &NumValues, int64_t Size, int64_t Expr,
                         SMLoc Loc = SMLoc());
 
-  virtual void emitNops(int64_t NumBytes, int64_t ControlledNopLength, 
-                        SMLoc Loc); 
- 
+  virtual void emitNops(int64_t NumBytes, int64_t ControlledNopLength,
+                        SMLoc Loc);
+
   /// Emit NumBytes worth of zeros.
   /// This function properly handles data in virtual sections.
   void emitZeros(uint64_t NumBytes);
@@ -1057,11 +1057,11 @@ public:
   /// Emit the given \p Instruction into the current section.
   virtual void emitInstruction(const MCInst &Inst, const MCSubtargetInfo &STI);
 
-  /// Emit the a pseudo probe into the current section. 
-  virtual void emitPseudoProbe(uint64_t Guid, uint64_t Index, uint64_t Type, 
-                               uint64_t Attr, 
-                               const MCPseudoProbeInlineStack &InlineStack); 
- 
+  /// Emit the a pseudo probe into the current section.
+  virtual void emitPseudoProbe(uint64_t Guid, uint64_t Index, uint64_t Type,
+                               uint64_t Attr,
+                               const MCPseudoProbeInlineStack &InlineStack);
+
   /// Set the bundle alignment mode from now on in the section.
   /// The argument is the power of 2 to which the alignment is set. The
   /// value 0 means turn the bundle alignment off.
@@ -1084,7 +1084,7 @@ public:
   /// Streamer specific finalization.
   virtual void finishImpl();
   /// Finish emission of machine code.
-  void Finish(SMLoc EndLoc = SMLoc()); 
+  void Finish(SMLoc EndLoc = SMLoc());
 
   virtual bool mayHaveInstructions(MCSection &Sec) const { return true; }
 };

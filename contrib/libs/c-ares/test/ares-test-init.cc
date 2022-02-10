@@ -495,24 +495,24 @@ CONTAINED_TEST_F(LibraryTest, ContainerSvcConfInit,
   return HasFailure();
 }
 
-NameContentList malformedresolvconflookup = { 
-  {"/etc/resolv.conf", "nameserver 1.2.3.4\n" 
-                       "lookup garbage\n"}};  // malformed line 
-CONTAINED_TEST_F(LibraryTest, ContainerMalformedResolvConfLookup, 
-                 "myhostname", "mydomainname.org", malformedresolvconflookup) { 
-  ares_channel channel = nullptr; 
-  EXPECT_EQ(ARES_SUCCESS, ares_init(&channel)); 
- 
-  struct ares_options opts; 
-  int optmask = 0; 
-  ares_save_options(channel, &opts, &optmask); 
-  EXPECT_EQ(std::string("fb"), std::string(opts.lookups)); 
-  ares_destroy_options(&opts); 
- 
-  ares_destroy(channel); 
-  return HasFailure(); 
-} 
- 
+NameContentList malformedresolvconflookup = {
+  {"/etc/resolv.conf", "nameserver 1.2.3.4\n"
+                       "lookup garbage\n"}};  // malformed line
+CONTAINED_TEST_F(LibraryTest, ContainerMalformedResolvConfLookup,
+                 "myhostname", "mydomainname.org", malformedresolvconflookup) {
+  ares_channel channel = nullptr;
+  EXPECT_EQ(ARES_SUCCESS, ares_init(&channel));
+
+  struct ares_options opts;
+  int optmask = 0;
+  ares_save_options(channel, &opts, &optmask);
+  EXPECT_EQ(std::string("fb"), std::string(opts.lookups));
+  ares_destroy_options(&opts);
+
+  ares_destroy(channel);
+  return HasFailure();
+}
+
 // Failures when expected config filenames are inaccessible.
 class MakeUnreadable {
  public:

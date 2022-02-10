@@ -85,11 +85,11 @@ MCAsmBackend *createX86_64AsmBackend(const Target &T,
 /// Implements X86-only directives for assembly emission.
 MCTargetStreamer *createX86AsmTargetStreamer(MCStreamer &S,
                                              formatted_raw_ostream &OS,
-                                             MCInstPrinter *InstPrinter, 
-                                             bool IsVerboseAsm); 
+                                             MCInstPrinter *InstPrinter,
+                                             bool IsVerboseAsm);
 
 /// Implements X86-only directives for object files.
-MCTargetStreamer *createX86ObjectTargetStreamer(MCStreamer &S, 
+MCTargetStreamer *createX86ObjectTargetStreamer(MCStreamer &S,
                                                 const MCSubtargetInfo &STI);
 
 /// Construct an X86 Windows COFF machine code streamer which will generate

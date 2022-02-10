@@ -34,7 +34,7 @@
 #include "llvm/Analysis/ScopedNoAliasAA.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/MemoryLocation.h"
-#include "llvm/IR/InstrTypes.h" 
+#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
@@ -161,7 +161,7 @@ ScopedNoAliasAAResult ScopedNoAliasAA::run(Function &F,
 
 char ScopedNoAliasAAWrapperPass::ID = 0;
 
-INITIALIZE_PASS(ScopedNoAliasAAWrapperPass, "scoped-noalias-aa", 
+INITIALIZE_PASS(ScopedNoAliasAAWrapperPass, "scoped-noalias-aa",
                 "Scoped NoAlias Alias Analysis", false, true)
 
 ImmutablePass *llvm::createScopedNoAliasAAWrapperPass() {

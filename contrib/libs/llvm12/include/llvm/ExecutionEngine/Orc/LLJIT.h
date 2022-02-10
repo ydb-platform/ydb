@@ -35,8 +35,8 @@ namespace orc {
 
 class LLJITBuilderState;
 class LLLazyJITBuilderState;
-class ObjectTransformLayer; 
-class TargetProcessControl; 
+class ObjectTransformLayer;
+class TargetProcessControl;
 
 /// A pre-fabricated ORC JIT stack that can serve as an alternative to MCJIT.
 ///
@@ -93,8 +93,8 @@ public:
     return ES->createJITDylib(std::move(Name));
   }
 
-  /// Adds an IR module with the given ResourceTracker. 
-  Error addIRModule(ResourceTrackerSP RT, ThreadSafeModule TSM); 
+  /// Adds an IR module with the given ResourceTracker.
+  Error addIRModule(ResourceTrackerSP RT, ThreadSafeModule TSM);
 
   /// Adds an IR module to the given JITDylib.
   Error addIRModule(JITDylib &JD, ThreadSafeModule TSM);
@@ -105,9 +105,9 @@ public:
   }
 
   /// Adds an object file to the given JITDylib.
-  Error addObjectFile(ResourceTrackerSP RT, std::unique_ptr<MemoryBuffer> Obj); 
- 
-  /// Adds an object file to the given JITDylib. 
+  Error addObjectFile(ResourceTrackerSP RT, std::unique_ptr<MemoryBuffer> Obj);
+
+  /// Adds an object file to the given JITDylib.
   Error addObjectFile(JITDylib &JD, std::unique_ptr<MemoryBuffer> Obj);
 
   /// Adds an object file to the given JITDylib.
@@ -176,7 +176,7 @@ public:
   ObjectLayer &getObjLinkingLayer() { return *ObjLinkingLayer; }
 
   /// Returns a reference to the object transform layer.
-  ObjectTransformLayer &getObjTransformLayer() { return *ObjTransformLayer; } 
+  ObjectTransformLayer &getObjTransformLayer() { return *ObjTransformLayer; }
 
   /// Returns a reference to the IR transform layer.
   IRTransformLayer &getIRTransformLayer() { return *TransformLayer; }
@@ -193,7 +193,7 @@ public:
   }
 
 protected:
-  static Expected<std::unique_ptr<ObjectLayer>> 
+  static Expected<std::unique_ptr<ObjectLayer>>
   createObjectLinkingLayer(LLJITBuilderState &S, ExecutionSession &ES);
 
   static Expected<std::unique_ptr<IRCompileLayer::IRCompiler>>
@@ -216,7 +216,7 @@ protected:
   std::unique_ptr<ThreadPool> CompileThreads;
 
   std::unique_ptr<ObjectLayer> ObjLinkingLayer;
-  std::unique_ptr<ObjectTransformLayer> ObjTransformLayer; 
+  std::unique_ptr<ObjectTransformLayer> ObjTransformLayer;
   std::unique_ptr<IRCompileLayer> CompileLayer;
   std::unique_ptr<IRTransformLayer> TransformLayer;
   std::unique_ptr<IRTransformLayer> InitHelperTransformLayer;
@@ -235,9 +235,9 @@ public:
     CODLayer->setPartitionFunction(std::move(Partition));
   }
 
-  /// Returns a reference to the on-demand layer. 
-  CompileOnDemandLayer &getCompileOnDemandLayer() { return *CODLayer; } 
- 
+  /// Returns a reference to the on-demand layer.
+  CompileOnDemandLayer &getCompileOnDemandLayer() { return *CODLayer; }
+
   /// Add a module to be lazily compiled to JITDylib JD.
   Error addLazyIRModule(JITDylib &JD, ThreadSafeModule M);
 
@@ -257,9 +257,9 @@ private:
 
 class LLJITBuilderState {
 public:
-  using ObjectLinkingLayerCreator = 
-      std::function<Expected<std::unique_ptr<ObjectLayer>>(ExecutionSession &, 
-                                                           const Triple &)>; 
+  using ObjectLinkingLayerCreator =
+      std::function<Expected<std::unique_ptr<ObjectLayer>>(ExecutionSession &,
+                                                           const Triple &)>;
 
   using CompileFunctionCreator =
       std::function<Expected<std::unique_ptr<IRCompileLayer::IRCompiler>>(
@@ -274,7 +274,7 @@ public:
   CompileFunctionCreator CreateCompileFunction;
   PlatformSetupFunction SetUpPlatform;
   unsigned NumCompileThreads = 0;
-  TargetProcessControl *TPC = nullptr; 
+  TargetProcessControl *TPC = nullptr;
 
   /// Called prior to JIT class construcion to fix up defaults.
   Error prepareForConstruction();
@@ -357,17 +357,17 @@ public:
     return impl();
   }
 
-  /// Set a TargetProcessControl object. 
-  /// 
-  /// If the platform uses ObjectLinkingLayer by default and no 
-  /// ObjectLinkingLayerCreator has been set then the TargetProcessControl 
-  /// object will be used to supply the memory manager for the 
-  /// ObjectLinkingLayer. 
-  SetterImpl &setTargetProcessControl(TargetProcessControl &TPC) { 
-    impl().TPC = &TPC; 
-    return impl(); 
-  } 
- 
+  /// Set a TargetProcessControl object.
+  ///
+  /// If the platform uses ObjectLinkingLayer by default and no
+  /// ObjectLinkingLayerCreator has been set then the TargetProcessControl
+  /// object will be used to supply the memory manager for the
+  /// ObjectLinkingLayer.
+  SetterImpl &setTargetProcessControl(TargetProcessControl &TPC) {
+    impl().TPC = &TPC;
+    return impl();
+  }
+
   /// Create an instance of the JIT.
   Expected<std::unique_ptr<JITType>> create() {
     if (auto Err = impl().prepareForConstruction())

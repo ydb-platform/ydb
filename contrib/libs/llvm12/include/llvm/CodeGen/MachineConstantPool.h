@@ -50,8 +50,8 @@ public:
 
   Type *getType() const { return Ty; }
 
-  virtual unsigned getSizeInBytes(const DataLayout &DL) const; 
- 
+  virtual unsigned getSizeInBytes(const DataLayout &DL) const;
+
   virtual int getExistingMachineCPValue(MachineConstantPool *CP,
                                         Align Alignment) = 0;
 
@@ -101,7 +101,7 @@ public:
 
   Align getAlign() const { return Alignment; }
 
-  unsigned getSizeInBytes(const DataLayout &DL) const; 
+  unsigned getSizeInBytes(const DataLayout &DL) const;
 
   /// This method classifies the entry according to whether or not it may
   /// generate a relocation entry.  This must be conservative, so if it might

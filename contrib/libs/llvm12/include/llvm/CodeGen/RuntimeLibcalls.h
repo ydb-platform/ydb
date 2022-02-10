@@ -22,7 +22,7 @@
 #define LLVM_CODEGEN_RUNTIMELIBCALLS_H
 
 #include "llvm/CodeGen/ValueTypes.h"
-#include "llvm/Support/AtomicOrdering.h" 
+#include "llvm/Support/AtomicOrdering.h"
 
 namespace llvm {
 namespace RTLIB {
@@ -68,10 +68,10 @@ namespace RTLIB {
   /// UNKNOWN_LIBCALL if there is none.
   Libcall getSYNC(unsigned Opc, MVT VT);
 
-  /// Return the outline atomics value for the given opcode, atomic ordering 
-  /// and type, or UNKNOWN_LIBCALL if there is none. 
-  Libcall getOUTLINE_ATOMIC(unsigned Opc, AtomicOrdering Order, MVT VT); 
- 
+  /// Return the outline atomics value for the given opcode, atomic ordering
+  /// and type, or UNKNOWN_LIBCALL if there is none.
+  Libcall getOUTLINE_ATOMIC(unsigned Opc, AtomicOrdering Order, MVT VT);
+
   /// getMEMCPY_ELEMENT_UNORDERED_ATOMIC - Return
   /// MEMCPY_ELEMENT_UNORDERED_ATOMIC_* value for the given element size or
   /// UNKNOW_LIBCALL if there is none.

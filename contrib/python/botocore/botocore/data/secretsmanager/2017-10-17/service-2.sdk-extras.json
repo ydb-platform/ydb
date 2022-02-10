@@ -1,8 +1,8 @@
-{ 
-    "version": 1.0, 
-    "merge": { 
-        "metadata": { 
-            "serviceId": "Secrets Manager" 
-        } 
-    } 
-} 
+{
+    "version": 1.0,
+    "merge": {
+        "metadata": {
+            "serviceId": "Secrets Manager"
+        }
+    }
+}

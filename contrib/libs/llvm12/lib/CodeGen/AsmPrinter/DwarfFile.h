@@ -25,12 +25,12 @@ class AsmPrinter;
 class DbgEntity;
 class DbgVariable;
 class DbgLabel;
-class DINode; 
+class DINode;
 class DwarfCompileUnit;
 class DwarfUnit;
 class LexicalScope;
 class MCSection;
-class MDNode; 
+class MDNode;
 
 // Data structure to hold a range for range lists.
 struct RangeSpan {

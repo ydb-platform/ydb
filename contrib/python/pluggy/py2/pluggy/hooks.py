@@ -2,7 +2,7 @@
 Internal hook annotation, representation and calling machinery.
 """
 import inspect
-import sys 
+import sys
 import warnings
 from .callers import _legacymulticall, _multicall
 
@@ -11,8 +11,8 @@ class HookspecMarker(object):
     """ Decorator helper class for marking functions as hook specifications.
 
     You can instantiate it with a project_name to get a decorator.
-    Calling :py:meth:`.PluginManager.add_hookspecs` later will discover all marked functions 
-    if the :py:class:`.PluginManager` uses the same project_name. 
+    Calling :py:meth:`.PluginManager.add_hookspecs` later will discover all marked functions
+    if the :py:class:`.PluginManager` uses the same project_name.
     """
 
     def __init__(self, project_name):
@@ -22,15 +22,15 @@ class HookspecMarker(object):
         self, function=None, firstresult=False, historic=False, warn_on_impl=None
     ):
         """ if passed a function, directly sets attributes on the function
-        which will make it discoverable to :py:meth:`.PluginManager.add_hookspecs`. 
-        If passed no function, returns a decorator which can be applied to a function 
+        which will make it discoverable to :py:meth:`.PluginManager.add_hookspecs`.
+        If passed no function, returns a decorator which can be applied to a function
         later using the attributes supplied.
 
-        If ``firstresult`` is ``True`` the 1:N hook call (N being the number of registered 
+        If ``firstresult`` is ``True`` the 1:N hook call (N being the number of registered
         hook implementation functions) will stop at I<=N when the I'th function
-        returns a non-``None`` result. 
+        returns a non-``None`` result.
 
-        If ``historic`` is ``True`` calls to a hook will be memorized and replayed 
+        If ``historic`` is ``True`` calls to a hook will be memorized and replayed
         on later registered plugins.
 
         """
@@ -58,9 +58,9 @@ class HookspecMarker(object):
 class HookimplMarker(object):
     """ Decorator helper class for marking functions as hook implementations.
 
-    You can instantiate with a ``project_name`` to get a decorator. 
-    Calling :py:meth:`.PluginManager.register` later will discover all marked functions 
-    if the :py:class:`.PluginManager` uses the same project_name. 
+    You can instantiate with a ``project_name`` to get a decorator.
+    Calling :py:meth:`.PluginManager.register` later will discover all marked functions
+    if the :py:class:`.PluginManager` uses the same project_name.
     """
 
     def __init__(self, project_name):
@@ -76,25 +76,25 @@ class HookimplMarker(object):
     ):
 
         """ if passed a function, directly sets attributes on the function
-        which will make it discoverable to :py:meth:`.PluginManager.register`. 
-        If passed no function, returns a decorator which can be applied to a 
-        function later using the attributes supplied. 
+        which will make it discoverable to :py:meth:`.PluginManager.register`.
+        If passed no function, returns a decorator which can be applied to a
+        function later using the attributes supplied.
 
-        If ``optionalhook`` is ``True`` a missing matching hook specification will not result 
+        If ``optionalhook`` is ``True`` a missing matching hook specification will not result
         in an error (by default it is an error if no matching spec is found).
 
-        If ``tryfirst`` is ``True`` this hook implementation will run as early as possible 
-        in the chain of N hook implementations for a specification. 
+        If ``tryfirst`` is ``True`` this hook implementation will run as early as possible
+        in the chain of N hook implementations for a specification.
 
-        If ``trylast`` is ``True`` this hook implementation will run as late as possible 
+        If ``trylast`` is ``True`` this hook implementation will run as late as possible
         in the chain of N hook implementations.
 
-        If ``hookwrapper`` is ``True`` the hook implementations needs to execute exactly 
-        one ``yield``.  The code before the ``yield`` is run early before any non-hookwrapper 
-        function is run.  The code after the ``yield`` is run after all non-hookwrapper 
-        function have run.  The ``yield`` receives a :py:class:`.callers._Result` object 
-        representing the exception or result outcome of the inner calls (including other 
-        hookwrapper calls). 
+        If ``hookwrapper`` is ``True`` the hook implementations needs to execute exactly
+        one ``yield``.  The code before the ``yield`` is run early before any non-hookwrapper
+        function is run.  The code after the ``yield`` is run after all non-hookwrapper
+        function have run.  The ``yield`` receives a :py:class:`.callers._Result` object
+        representing the exception or result outcome of the inner calls (including other
+        hookwrapper calls).
 
         """
 
@@ -136,9 +136,9 @@ else:
         return inspect.getargspec(func)
 
 
-_PYPY3 = hasattr(sys, "pypy_version_info") and sys.version_info.major == 3 
- 
- 
+_PYPY3 = hasattr(sys, "pypy_version_info") and sys.version_info.major == 3
+
+
 def varnames(func):
     """Return tuple of positional and keywrord argument names for a function,
     method, class or callable.
@@ -161,7 +161,7 @@ def varnames(func):
         try:
             func = getattr(func, "__call__", func)
         except Exception:
-            return (), () 
+            return (), ()
 
     try:  # func MUST be a function or method here or we won't parse any args
         spec = _getargspec(func)
@@ -171,24 +171,24 @@ def varnames(func):
     args, defaults = tuple(spec.args), spec.defaults
     if defaults:
         index = -len(defaults)
-        args, kwargs = args[:index], tuple(args[index:]) 
+        args, kwargs = args[:index], tuple(args[index:])
     else:
-        kwargs = () 
+        kwargs = ()
 
     # strip any implicit instance arg
-    # pypy3 uses "obj" instead of "self" for default dunder methods 
-    implicit_names = ("self",) if not _PYPY3 else ("self", "obj") 
+    # pypy3 uses "obj" instead of "self" for default dunder methods
+    implicit_names = ("self",) if not _PYPY3 else ("self", "obj")
     if args:
         if inspect.ismethod(func) or (
-            "." in getattr(func, "__qualname__", ()) and args[0] in implicit_names 
+            "." in getattr(func, "__qualname__", ()) and args[0] in implicit_names
         ):
             args = args[1:]
 
     try:
-        cache["_varnames"] = args, kwargs 
+        cache["_varnames"] = args, kwargs
     except TypeError:
         pass
-    return args, kwargs 
+    return args, kwargs
 
 
 class _HookRelay(object):
@@ -290,7 +290,7 @@ class _HookCaller(object):
         for all plugins which will be registered afterwards.
 
         If ``result_callback`` is not ``None`` it will be called for for each
-        non-``None`` result obtained from a hook implementation. 
+        non-``None`` result obtained from a hook implementation.
 
         .. note::
             The ``proc`` argument is now deprecated.
@@ -314,7 +314,7 @@ class _HookCaller(object):
 
     def call_extra(self, methods, kwargs):
         """ Call the hook with some additional temporarily participating
-        methods using the specified ``kwargs`` as call parameters. """ 
+        methods using the specified ``kwargs`` as call parameters. """
         old = list(self._nonwrappers), list(self._wrappers)
         for method in methods:
             opts = dict(hookwrapper=False, trylast=False, tryfirst=False)

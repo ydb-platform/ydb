@@ -56,7 +56,7 @@ ConfigParser -- responsible for parsing a list of
 
         When `interpolation` is given, it should be an Interpolation subclass
         instance. It will be used as the handler for option value
-        pre-processing when using getters. RawConfigParser objects don't do 
+        pre-processing when using getters. RawConfigParser objects don't do
         any sort of interpolation, whereas ConfigParser uses an instance of
         BasicInterpolation. The library also provides a ``zc.buildbot``
         inspired ExtendedInterpolation implementation.
@@ -139,7 +139,7 @@ ConfigParser -- responsible for parsing a list of
 """
 
 from collections.abc import MutableMapping
-from collections import ChainMap as _ChainMap 
+from collections import ChainMap as _ChainMap
 import functools
 import io
 import itertools
@@ -157,7 +157,7 @@ __all__ = ["NoSectionError", "DuplicateOptionError", "DuplicateSectionError",
            "LegacyInterpolation", "SectionProxy", "ConverterMapping",
            "DEFAULTSECT", "MAX_INTERPOLATION_DEPTH"]
 
-_default_dict = dict 
+_default_dict = dict
 DEFAULTSECT = "DEFAULT"
 
 MAX_INTERPOLATION_DEPTH = 10
@@ -847,7 +847,7 @@ class RawConfigParser(MutableMapping):
         except KeyError:
             if section != self.default_section:
                 raise NoSectionError(section)
-        orig_keys = list(d.keys()) 
+        orig_keys = list(d.keys())
         # Update with the entry specific variables
         if vars:
             for key, value in vars.items():
@@ -856,7 +856,7 @@ class RawConfigParser(MutableMapping):
             section, option, d[option], d)
         if raw:
             value_getter = lambda option: d[option]
-        return [(option, value_getter(option)) for option in orig_keys] 
+        return [(option, value_getter(option)) for option in orig_keys]
 
     def popitem(self):
         """Remove a section from the parser and return it as
@@ -907,9 +907,9 @@ class RawConfigParser(MutableMapping):
 
         If `space_around_delimiters' is True (the default), delimiters
         between keys and values are surrounded by spaces.
- 
-        Please note that comments in the original configuration file are not 
-        preserved when writing the configuration back. 
+
+        Please note that comments in the original configuration file are not
+        preserved when writing the configuration back.
         """
         if space_around_delimiters:
             d = " {} ".format(self._delimiters[0])
@@ -966,8 +966,8 @@ class RawConfigParser(MutableMapping):
     def __setitem__(self, key, value):
         # To conform with the mapping protocol, overwrites existing values in
         # the section.
-        if key in self and self[key] is value: 
-            return 
+        if key in self and self[key] is value:
+            return
         # XXX this is not atomic if read_dict fails at any point. Then again,
         # no update method in configparser is atomic in this implementation.
         if key == self.default_section:
@@ -1008,7 +1008,7 @@ class RawConfigParser(MutableMapping):
         Configuration files may include comments, prefixed by specific
         characters (`#' and `;' by default). Comments may appear on their own
         in an otherwise empty line or may be entered in lines holding values or
-        section names. Please note that comments get stripped off when reading configuration files. 
+        section names. Please note that comments get stripped off when reading configuration files.
         """
         elements_added = set()
         cursect = None                        # None, or a dictionary

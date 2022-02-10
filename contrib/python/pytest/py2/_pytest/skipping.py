@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 """ support for skip/xfail functions and markers. """
 from __future__ import absolute_import
 from __future__ import division
@@ -18,7 +18,7 @@ def pytest_addoption(parser):
         action="store_true",
         dest="runxfail",
         default=False,
-        help="report the results of xfail tests as if they were not marked", 
+        help="report the results of xfail tests as if they were not marked",
     )
 
     parser.addini(
@@ -181,6 +181,6 @@ def pytest_runtest_makereport(item, call):
 def pytest_report_teststatus(report):
     if hasattr(report, "wasxfail"):
         if report.skipped:
-            return "xfailed", "x", "XFAIL" 
+            return "xfailed", "x", "XFAIL"
         elif report.passed:
-            return "xpassed", "X", "XPASS" 
+            return "xpassed", "X", "XPASS"

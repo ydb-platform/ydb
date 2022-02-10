@@ -36,8 +36,8 @@
 #include "llvm/IR/Value.h"
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/CommandLine.h" 
-#include "llvm/Transforms/Utils/SimplifyCFGOptions.h" 
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Transforms/Utils/SimplifyCFGOptions.h"
 #include <cstdint>
 #include <limits>
 
@@ -101,9 +101,9 @@ bool wouldInstructionBeTriviallyDead(Instruction *I,
 /// recursively. Return true if any instructions were deleted.
 bool RecursivelyDeleteTriviallyDeadInstructions(
     Value *V, const TargetLibraryInfo *TLI = nullptr,
-    MemorySSAUpdater *MSSAU = nullptr, 
-    std::function<void(Value *)> AboutToDeleteCallback = 
-        std::function<void(Value *)>()); 
+    MemorySSAUpdater *MSSAU = nullptr,
+    std::function<void(Value *)> AboutToDeleteCallback =
+        std::function<void(Value *)>());
 
 /// Delete all of the instructions in `DeadInsts`, and all other instructions
 /// that deleting these in turn causes to be trivially dead.
@@ -115,9 +115,9 @@ bool RecursivelyDeleteTriviallyDeadInstructions(
 /// empty afterward.
 void RecursivelyDeleteTriviallyDeadInstructions(
     SmallVectorImpl<WeakTrackingVH> &DeadInsts,
-    const TargetLibraryInfo *TLI = nullptr, MemorySSAUpdater *MSSAU = nullptr, 
-    std::function<void(Value *)> AboutToDeleteCallback = 
-        std::function<void(Value *)>()); 
+    const TargetLibraryInfo *TLI = nullptr, MemorySSAUpdater *MSSAU = nullptr,
+    std::function<void(Value *)> AboutToDeleteCallback =
+        std::function<void(Value *)>());
 
 /// Same functionality as RecursivelyDeleteTriviallyDeadInstructions, but allow
 /// instructions that are not trivially dead. These will be ignored.
@@ -125,9 +125,9 @@ void RecursivelyDeleteTriviallyDeadInstructions(
 /// were found and deleted.
 bool RecursivelyDeleteTriviallyDeadInstructionsPermissive(
     SmallVectorImpl<WeakTrackingVH> &DeadInsts,
-    const TargetLibraryInfo *TLI = nullptr, MemorySSAUpdater *MSSAU = nullptr, 
-    std::function<void(Value *)> AboutToDeleteCallback = 
-        std::function<void(Value *)>()); 
+    const TargetLibraryInfo *TLI = nullptr, MemorySSAUpdater *MSSAU = nullptr,
+    std::function<void(Value *)> AboutToDeleteCallback =
+        std::function<void(Value *)>());
 
 /// If the specified value is an effectively dead PHI node, due to being a
 /// def-use chain of single-use nodes that either forms a cycle or is terminated
@@ -179,11 +179,11 @@ bool EliminateDuplicatePHINodes(BasicBlock *BB);
 /// It returns true if a modification was made, possibly deleting the basic
 /// block that was pointed to. LoopHeaders is an optional input parameter
 /// providing the set of loop headers that SimplifyCFG should not eliminate.
-extern cl::opt<bool> RequireAndPreserveDomTree; 
+extern cl::opt<bool> RequireAndPreserveDomTree;
 bool simplifyCFG(BasicBlock *BB, const TargetTransformInfo &TTI,
-                 DomTreeUpdater *DTU = nullptr, 
+                 DomTreeUpdater *DTU = nullptr,
                  const SimplifyCFGOptions &Options = {},
-                 ArrayRef<WeakVH> LoopHeaders = {}); 
+                 ArrayRef<WeakVH> LoopHeaders = {});
 
 /// This function is used to flatten a CFG. For example, it uses parallel-and
 /// and parallel-or mode to collapse if-conditions and merge if-regions with
@@ -193,9 +193,9 @@ bool FlattenCFG(BasicBlock *BB, AAResults *AA = nullptr);
 /// If this basic block is ONLY a setcc and a branch, and if a predecessor
 /// branches to us and one of our successors, fold the setcc into the
 /// predecessor and use logical operations to pick the right destination.
-bool FoldBranchToCommonDest(BranchInst *BI, llvm::DomTreeUpdater *DTU = nullptr, 
-                            MemorySSAUpdater *MSSAU = nullptr, 
-                            const TargetTransformInfo *TTI = nullptr, 
+bool FoldBranchToCommonDest(BranchInst *BI, llvm::DomTreeUpdater *DTU = nullptr,
+                            MemorySSAUpdater *MSSAU = nullptr,
+                            const TargetTransformInfo *TTI = nullptr,
                             unsigned BonusInstThreshold = 1);
 
 /// This function takes a virtual register computed by an Instruction and
@@ -339,13 +339,13 @@ DIExpression *salvageDebugInfoImpl(Instruction &I, DIExpression *DIExpr,
 bool replaceAllDbgUsesWith(Instruction &From, Value &To, Instruction &DomPoint,
                            DominatorTree &DT);
 
-/// Remove all instructions from a basic block other than its terminator 
-/// and any present EH pad instructions. Returns a pair where the first element 
-/// is the number of instructions (excluding debug info instrinsics) that have 
-/// been removed, and the second element is the number of debug info intrinsics 
-/// that have been removed. 
-std::pair<unsigned, unsigned> 
-removeAllNonTerminatorAndEHPadInstructions(BasicBlock *BB); 
+/// Remove all instructions from a basic block other than its terminator
+/// and any present EH pad instructions. Returns a pair where the first element
+/// is the number of instructions (excluding debug info instrinsics) that have
+/// been removed, and the second element is the number of debug info intrinsics
+/// that have been removed.
+std::pair<unsigned, unsigned>
+removeAllNonTerminatorAndEHPadInstructions(BasicBlock *BB);
 
 /// Insert an unreachable instruction before the specified
 /// instruction, making it and the rest of the code in the block dead.

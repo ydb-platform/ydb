@@ -24,7 +24,7 @@ namespace llvm {
 /// stores, and other memory intrinsics.
 struct BoundsCheckingPass : PassInfoMixin<BoundsCheckingPass> {
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-  static bool isRequired() { return true; } 
+  static bool isRequired() { return true; }
 };
 
 

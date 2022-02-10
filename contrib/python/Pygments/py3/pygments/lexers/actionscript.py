@@ -4,7 +4,7 @@
 
     Lexers for ActionScript and MXML.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -25,7 +25,7 @@ class ActionScriptLexer(RegexLexer):
     """
 
     name = 'ActionScript'
-    aliases = ['actionscript', 'as'] 
+    aliases = ['actionscript', 'as']
     filenames = ['*.as']
     mimetypes = ['application/x-actionscript', 'text/x-actionscript',
                  'text/actionscript']
@@ -36,7 +36,7 @@ class ActionScriptLexer(RegexLexer):
             (r'\s+', Whitespace),
             (r'//.*?\n', Comment.Single),
             (r'/\*.*?\*/', Comment.Multiline),
-            (r'/(\\\\|\\[^\\]|[^/\\\n])*/[gim]*', String.Regex), 
+            (r'/(\\\\|\\[^\\]|[^/\\\n])*/[gim]*', String.Regex),
             (r'[~^*!%&<>|+=:;,/?\\-]+', Operator),
             (r'[{}\[\]();.]+', Punctuation),
             (words((
@@ -104,16 +104,16 @@ class ActionScriptLexer(RegexLexer):
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'0x[0-9a-f]+', Number.Hex),
             (r'[0-9]+', Number.Integer),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double), 
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
         ]
     }
 
-    def analyse_text(text): 
-        """This is only used to disambiguate between ActionScript and 
-        ActionScript3. We return 0 here; the ActionScript3 lexer will match 
-        AS3 variable definitions and that will hopefully suffice.""" 
-        return 0 
+    def analyse_text(text):
+        """This is only used to disambiguate between ActionScript and
+        ActionScript3. We return 0 here; the ActionScript3 lexer will match
+        AS3 variable definitions and that will hopefully suffice."""
+        return 0
 
 class ActionScript3Lexer(RegexLexer):
     """
@@ -123,7 +123,7 @@ class ActionScript3Lexer(RegexLexer):
     """
 
     name = 'ActionScript 3'
-    aliases = ['actionscript3', 'as3'] 
+    aliases = ['actionscript3', 'as3']
     filenames = ['*.as']
     mimetypes = ['application/x-actionscript3', 'text/x-actionscript3',
                  'text/actionscript3']
@@ -148,7 +148,7 @@ class ActionScript3Lexer(RegexLexer):
              bygroups(Keyword, Whitespace, Keyword.Type, Whitespace, Operator)),
             (r'//.*?\n', Comment.Single),
             (r'/\*.*?\*/', Comment.Multiline),
-            (r'/(\\\\|\\[^\\]|[^\\\n])*/[gisx]*', String.Regex), 
+            (r'/(\\\\|\\[^\\]|[^\\\n])*/[gisx]*', String.Regex),
             (r'(\.)(' + identifier + r')', bygroups(Operator, Name.Attribute)),
             (r'(case|default|for|each|in|while|do|break|return|continue|if|else|'
              r'throw|try|catch|with|new|typeof|arguments|instanceof|this|'
@@ -168,8 +168,8 @@ class ActionScript3Lexer(RegexLexer):
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'0x[0-9a-f]+', Number.Hex),
             (r'[0-9]+', Number.Integer),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double), 
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
             (r'[~^*!%&<>|+=:;,/?\\{}\[\]().-]+', Operator),
         ],
         'funcparams': [

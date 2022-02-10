@@ -13,8 +13,8 @@ TEST_F(LibraryTest, ParseAaaaReplyOK) {
     .add_question(new DNSQuestion("example.com", ns_t_aaaa))
     .add_answer(new DNSAaaaRR("example.com", 100,
                               {0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02,
-                               0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04})) 
-    .add_answer(new DNSARR("example.com", 0x01020304, {2,3,4,5})); 
+                               0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04}))
+    .add_answer(new DNSARR("example.com", 0x01020304, {2,3,4,5}));
   std::vector<byte> data = pkt.data();
   struct hostent *host = nullptr;
   struct ares_addr6ttl info[5];

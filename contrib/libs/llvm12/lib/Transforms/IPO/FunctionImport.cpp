@@ -124,8 +124,8 @@ static cl::opt<bool> ComputeDead("compute-dead", cl::init(true), cl::Hidden,
                                  cl::desc("Compute dead symbols"));
 
 static cl::opt<bool> EnableImportMetadata(
-    "enable-import-metadata", cl::init(false), cl::Hidden, 
-    cl::desc("Enable import metadata like 'thinlto_src_module'")); 
+    "enable-import-metadata", cl::init(false), cl::Hidden,
+    cl::desc("Enable import metadata like 'thinlto_src_module'"));
 
 /// Summary file to use for function importing when using -function-import from
 /// the command line.
@@ -255,8 +255,8 @@ selectCallee(const ModuleSummaryIndex &Index,
 
 namespace {
 
-using EdgeInfo = 
-    std::tuple<const GlobalValueSummary *, unsigned /* Threshold */>; 
+using EdgeInfo =
+    std::tuple<const GlobalValueSummary *, unsigned /* Threshold */>;
 
 } // anonymous namespace
 
@@ -276,9 +276,9 @@ updateValueInfoForIndirectCalls(const ModuleSummaryIndex &Index, ValueInfo VI) {
 }
 
 static void computeImportForReferencedGlobals(
-    const GlobalValueSummary &Summary, const ModuleSummaryIndex &Index, 
+    const GlobalValueSummary &Summary, const ModuleSummaryIndex &Index,
     const GVSummaryMapTy &DefinedGVSummaries,
-    SmallVectorImpl<EdgeInfo> &Worklist, 
+    SmallVectorImpl<EdgeInfo> &Worklist,
     FunctionImporter::ImportMapTy &ImportList,
     StringMap<FunctionImporter::ExportSetTy> *ExportLists) {
   for (auto &VI : Summary.refs()) {
@@ -316,11 +316,11 @@ static void computeImportForReferencedGlobals(
         // which is more efficient than adding them here.
         if (ExportLists)
           (*ExportLists)[RefSummary->modulePath()].insert(VI);
- 
-        // If variable is not writeonly we attempt to recursively analyze 
-        // its references in order to import referenced constants. 
-        if (!Index.isWriteOnly(cast<GlobalVarSummary>(RefSummary.get()))) 
-          Worklist.emplace_back(RefSummary.get(), 0); 
+
+        // If variable is not writeonly we attempt to recursively analyze
+        // its references in order to import referenced constants.
+        if (!Index.isWriteOnly(cast<GlobalVarSummary>(RefSummary.get())))
+          Worklist.emplace_back(RefSummary.get(), 0);
         break;
       }
   }
@@ -360,7 +360,7 @@ static void computeImportForFunction(
     StringMap<FunctionImporter::ExportSetTy> *ExportLists,
     FunctionImporter::ImportThresholdsTy &ImportThresholds) {
   computeImportForReferencedGlobals(Summary, Index, DefinedGVSummaries,
-                                    Worklist, ImportList, ExportLists); 
+                                    Worklist, ImportList, ExportLists);
   static int ImportCount = 0;
   for (auto &Edge : Summary.calls()) {
     ValueInfo VI = Edge.first;
@@ -508,7 +508,7 @@ static void computeImportForFunction(
     ImportCount++;
 
     // Insert the newly imported function to the worklist.
-    Worklist.emplace_back(ResolvedCalleeSummary, AdjThreshold); 
+    Worklist.emplace_back(ResolvedCalleeSummary, AdjThreshold);
   }
 }
 
@@ -549,17 +549,17 @@ static void ComputeImportForModule(
 
   // Process the newly imported functions and add callees to the worklist.
   while (!Worklist.empty()) {
-    auto GVInfo = Worklist.pop_back_val(); 
-    auto *Summary = std::get<0>(GVInfo); 
-    auto Threshold = std::get<1>(GVInfo); 
+    auto GVInfo = Worklist.pop_back_val();
+    auto *Summary = std::get<0>(GVInfo);
+    auto Threshold = std::get<1>(GVInfo);
 
-    if (auto *FS = dyn_cast<FunctionSummary>(Summary)) 
-      computeImportForFunction(*FS, Index, Threshold, DefinedGVSummaries, 
-                               Worklist, ImportList, ExportLists, 
-                               ImportThresholds); 
-    else 
-      computeImportForReferencedGlobals(*Summary, Index, DefinedGVSummaries, 
-                                        Worklist, ImportList, ExportLists); 
+    if (auto *FS = dyn_cast<FunctionSummary>(Summary))
+      computeImportForFunction(*FS, Index, Threshold, DefinedGVSummaries,
+                               Worklist, ImportList, ExportLists,
+                               ImportThresholds);
+    else
+      computeImportForReferencedGlobals(*Summary, Index, DefinedGVSummaries,
+                                        Worklist, ImportList, ExportLists);
   }
 
   // Print stats about functions considered but rejected for importing
@@ -888,7 +888,7 @@ void llvm::computeDeadSymbols(
   while (!Worklist.empty()) {
     auto VI = Worklist.pop_back_val();
     for (auto &Summary : VI.getSummaryList()) {
-      Summary->setLive(true); 
+      Summary->setLive(true);
       if (auto *AS = dyn_cast<AliasSummary>(Summary.get())) {
         // If this is an alias, visit the aliasee VI to ensure that all copies
         // are marked live and it is added to the worklist for further
@@ -1314,7 +1314,7 @@ static bool doImportingForModule(Module &M) {
 
   // Next we need to promote to global scope and rename any local values that
   // are potentially exported to other modules.
-  if (renameModuleForThinLTO(M, *Index, /*ClearDSOLocalOnDeclarations=*/false, 
+  if (renameModuleForThinLTO(M, *Index, /*ClearDSOLocalOnDeclarations=*/false,
                              /*GlobalsToImport=*/nullptr)) {
     errs() << "Error renaming module\n";
     return false;

@@ -4,7 +4,7 @@
 
     Lexers for various domain-specific languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -13,9 +13,9 @@ import re
 from pygments.lexer import ExtendedRegexLexer, RegexLexer, bygroups, words, \
     include, default, this, using, combined
 from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
-    Number, Punctuation, Whitespace 
+    Number, Punctuation, Whitespace
 
-__all__ = ['ProtoBufLexer', 'ZeekLexer', 'PuppetLexer', 'RslLexer', 
+__all__ = ['ProtoBufLexer', 'ZeekLexer', 'PuppetLexer', 'RslLexer',
            'MscgenLexer', 'VGLLexer', 'AlloyLexer', 'PanLexer',
            'CrmshLexer', 'ThriftLexer', 'FlatlineLexer', 'SnowballLexer']
 
@@ -39,9 +39,9 @@ class ProtoBufLexer(RegexLexer):
             (r'/(\\\n)?/(\n|(.|\n)*?[^\\]\n)', Comment.Single),
             (r'/(\\\n)?\*(.|\n)*?\*(\\\n)?/', Comment.Multiline),
             (words((
-                'import', 'option', 'optional', 'required', 'repeated', 
-                'reserved', 'default', 'packed', 'ctype', 'extensions', 'to', 
-                'max', 'rpc', 'returns', 'oneof', 'syntax'), prefix=r'\b', suffix=r'\b'), 
+                'import', 'option', 'optional', 'required', 'repeated',
+                'reserved', 'default', 'packed', 'ctype', 'extensions', 'to',
+                'max', 'rpc', 'returns', 'oneof', 'syntax'), prefix=r'\b', suffix=r'\b'),
              Keyword),
             (words((
                 'int32', 'int64', 'uint32', 'uint64', 'sint32', 'sint64',
@@ -187,167 +187,167 @@ class ThriftLexer(RegexLexer):
     }
 
 
-class ZeekLexer(RegexLexer): 
+class ZeekLexer(RegexLexer):
     """
-    For `Zeek <https://www.zeek.org/>`_ scripts. 
+    For `Zeek <https://www.zeek.org/>`_ scripts.
 
-    .. versionadded:: 2.5 
+    .. versionadded:: 2.5
     """
-    name = 'Zeek' 
-    aliases = ['zeek', 'bro'] 
-    filenames = ['*.zeek', '*.bro'] 
+    name = 'Zeek'
+    aliases = ['zeek', 'bro']
+    filenames = ['*.zeek', '*.bro']
 
-    _hex = r'[0-9a-fA-F]' 
+    _hex = r'[0-9a-fA-F]'
     _float = r'((\d*\.?\d+)|(\d+\.?\d*))([eE][-+]?\d+)?'
     _h = r'[A-Za-z0-9][-A-Za-z0-9]*'
 
     tokens = {
         'root': [
-            include('whitespace'), 
-            include('comments'), 
-            include('directives'), 
-            include('attributes'), 
-            include('types'), 
-            include('keywords'), 
-            include('literals'), 
-            include('operators'), 
-            include('punctuation'), 
-            (r'((?:[A-Za-z_]\w*)(?:::(?:[A-Za-z_]\w*))*)(?=\s*\()', 
-                Name.Function), 
-            include('identifiers'), 
-        ], 
- 
-        'whitespace': [ 
+            include('whitespace'),
+            include('comments'),
+            include('directives'),
+            include('attributes'),
+            include('types'),
+            include('keywords'),
+            include('literals'),
+            include('operators'),
+            include('punctuation'),
+            (r'((?:[A-Za-z_]\w*)(?:::(?:[A-Za-z_]\w*))*)(?=\s*\()',
+                Name.Function),
+            include('identifiers'),
+        ],
+
+        'whitespace': [
             (r'\n', Whitespace),
             (r'\s+', Whitespace),
             (r'(\\)(\n)', bygroups(Text, Whitespace)),
-        ], 
- 
-        'comments': [ 
-            (r'#.*$', Comment), 
-        ], 
- 
-        'directives': [ 
-            (r'@(load-plugin|load-sigs|load|unload)\b.*$', Comment.Preproc), 
-            (r'@(DEBUG|DIR|FILENAME|deprecated|if|ifdef|ifndef|else|endif)\b', Comment.Preproc), 
+        ],
+
+        'comments': [
+            (r'#.*$', Comment),
+        ],
+
+        'directives': [
+            (r'@(load-plugin|load-sigs|load|unload)\b.*$', Comment.Preproc),
+            (r'@(DEBUG|DIR|FILENAME|deprecated|if|ifdef|ifndef|else|endif)\b', Comment.Preproc),
             (r'(@prefixes)(\s*)((\+?=).*)$', bygroups(Comment.Preproc, 
                 Whitespace, Comment.Preproc)),
-        ], 
- 
-        'attributes': [ 
-            (words(('redef', 'priority', 'log', 'optional', 'default', 'add_func', 
-                    'delete_func', 'expire_func', 'read_expire', 'write_expire', 
-                    'create_expire', 'synchronized', 'persistent', 'rotate_interval', 
-                    'rotate_size', 'encrypt', 'raw_output', 'mergeable', 'error_handler', 
-                    'type_column', 'deprecated'), 
-                prefix=r'&', suffix=r'\b'), 
-             Keyword.Pseudo), 
-        ], 
- 
-        'types': [ 
-            (words(('any', 
-                    'enum', 'record', 'set', 'table', 'vector', 
-                    'function', 'hook', 'event', 
-                    'addr', 'bool', 'count', 'double', 'file', 'int', 'interval', 
-                    'pattern', 'port', 'string', 'subnet', 'time'), 
-                suffix=r'\b'), 
-             Keyword.Type), 
- 
-            (r'(opaque)(\s+)(of)(\s+)((?:[A-Za-z_]\w*)(?:::(?:[A-Za-z_]\w*))*)\b', 
+        ],
+
+        'attributes': [
+            (words(('redef', 'priority', 'log', 'optional', 'default', 'add_func',
+                    'delete_func', 'expire_func', 'read_expire', 'write_expire',
+                    'create_expire', 'synchronized', 'persistent', 'rotate_interval',
+                    'rotate_size', 'encrypt', 'raw_output', 'mergeable', 'error_handler',
+                    'type_column', 'deprecated'),
+                prefix=r'&', suffix=r'\b'),
+             Keyword.Pseudo),
+        ],
+
+        'types': [
+            (words(('any',
+                    'enum', 'record', 'set', 'table', 'vector',
+                    'function', 'hook', 'event',
+                    'addr', 'bool', 'count', 'double', 'file', 'int', 'interval',
+                    'pattern', 'port', 'string', 'subnet', 'time'),
+                suffix=r'\b'),
+             Keyword.Type),
+
+            (r'(opaque)(\s+)(of)(\s+)((?:[A-Za-z_]\w*)(?:::(?:[A-Za-z_]\w*))*)\b',
                 bygroups(Keyword.Type, Whitespace, Operator.Word, Whitespace, Keyword.Type)),
- 
-            (r'(type)(\s+)((?:[A-Za-z_]\w*)(?:::(?:[A-Za-z_]\w*))*)(\s*)(:)(\s*)\b(record|enum)\b', 
+
+            (r'(type)(\s+)((?:[A-Za-z_]\w*)(?:::(?:[A-Za-z_]\w*))*)(\s*)(:)(\s*)\b(record|enum)\b',
                 bygroups(Keyword, Whitespace, Name.Class, Whitespace, Operator, Whitespace, Keyword.Type)),
- 
-            (r'(type)(\s+)((?:[A-Za-z_]\w*)(?:::(?:[A-Za-z_]\w*))*)(\s*)(:)', 
+
+            (r'(type)(\s+)((?:[A-Za-z_]\w*)(?:::(?:[A-Za-z_]\w*))*)(\s*)(:)',
                 bygroups(Keyword, Whitespace, Name, Whitespace, Operator)),
- 
-            (r'(redef)(\s+)(record|enum)(\s+)((?:[A-Za-z_]\w*)(?:::(?:[A-Za-z_]\w*))*)\b', 
+
+            (r'(redef)(\s+)(record|enum)(\s+)((?:[A-Za-z_]\w*)(?:::(?:[A-Za-z_]\w*))*)\b',
                 bygroups(Keyword, Whitespace, Keyword.Type, Whitespace, Name.Class)),
-        ], 
- 
-        'keywords': [ 
-            (words(('redef', 'export', 'if', 'else', 'for', 'while', 
-                    'return', 'break', 'next', 'continue', 'fallthrough', 
-                    'switch', 'default', 'case', 
-                    'add', 'delete', 
-                    'when', 'timeout', 'schedule'), 
-                suffix=r'\b'), 
-             Keyword), 
-            (r'(print)\b', Keyword), 
-            (r'(global|local|const|option)\b', Keyword.Declaration), 
-            (r'(module)(\s+)(([A-Za-z_]\w*)(?:::([A-Za-z_]\w*))*)\b', 
+        ],
+
+        'keywords': [
+            (words(('redef', 'export', 'if', 'else', 'for', 'while',
+                    'return', 'break', 'next', 'continue', 'fallthrough',
+                    'switch', 'default', 'case',
+                    'add', 'delete',
+                    'when', 'timeout', 'schedule'),
+                suffix=r'\b'),
+             Keyword),
+            (r'(print)\b', Keyword),
+            (r'(global|local|const|option)\b', Keyword.Declaration),
+            (r'(module)(\s+)(([A-Za-z_]\w*)(?:::([A-Za-z_]\w*))*)\b',
                 bygroups(Keyword.Namespace, Whitespace, Name.Namespace)),
-        ], 
- 
-        'literals': [ 
-            (r'"', String, 'string'), 
- 
-            # Not the greatest match for patterns, but generally helps 
-            # disambiguate between start of a pattern and just a division 
-            # operator. 
-            (r'/(?=.*/)', String.Regex, 'regex'), 
- 
+        ],
+
+        'literals': [
+            (r'"', String, 'string'),
+
+            # Not the greatest match for patterns, but generally helps
+            # disambiguate between start of a pattern and just a division
+            # operator.
+            (r'/(?=.*/)', String.Regex, 'regex'),
+
             (r'(T|F)\b', Keyword.Constant),
- 
-            # Port 
-            (r'\d{1,5}/(udp|tcp|icmp|unknown)\b', Number), 
- 
-            # IPv4 Address 
-            (r'(\d{1,3}.){3}(\d{1,3})\b', Number), 
- 
-            # IPv6 Address 
-            (r'\[([0-9a-fA-F]{0,4}:){2,7}([0-9a-fA-F]{0,4})?((\d{1,3}.){3}(\d{1,3}))?\]', Number), 
- 
-            # Numeric 
-            (r'0[xX]' + _hex + r'+\b', Number.Hex), 
-            (_float + r'\s*(day|hr|min|sec|msec|usec)s?\b', Number.Float), 
-            (_float + r'\b', Number.Float), 
-            (r'(\d+)\b', Number.Integer), 
- 
+
+            # Port
+            (r'\d{1,5}/(udp|tcp|icmp|unknown)\b', Number),
+
+            # IPv4 Address
+            (r'(\d{1,3}.){3}(\d{1,3})\b', Number),
+
+            # IPv6 Address
+            (r'\[([0-9a-fA-F]{0,4}:){2,7}([0-9a-fA-F]{0,4})?((\d{1,3}.){3}(\d{1,3}))?\]', Number),
+
+            # Numeric
+            (r'0[xX]' + _hex + r'+\b', Number.Hex),
+            (_float + r'\s*(day|hr|min|sec|msec|usec)s?\b', Number.Float),
+            (_float + r'\b', Number.Float),
+            (r'(\d+)\b', Number.Integer),
+
             # Hostnames
             (_h + r'(\.' + _h + r')+', String),
-        ], 
- 
-        'operators': [ 
-            (r'[!%*/+<=>~|&^-]', Operator), 
+        ],
+
+        'operators': [
+            (r'[!%*/+<=>~|&^-]', Operator),
             (r'([-+=&|]{2}|[+=!><-]=)', Operator),
-            (r'(in|as|is|of)\b', Operator.Word), 
-            (r'\??\$', Operator), 
-        ], 
- 
-        'punctuation': [ 
-            (r'[{}()\[\],;.]', Punctuation), 
-            # The "ternary if", which uses '?' and ':', could instead be 
-            # treated as an Operator, but colons are more frequently used to 
-            # separate field/identifier names from their types, so the (often) 
-            # less-prominent Punctuation is used even with '?' for consistency. 
-            (r'[?:]', Punctuation), 
-        ], 
- 
-        'identifiers': [ 
-            (r'([a-zA-Z_]\w*)(::)', bygroups(Name, Punctuation)), 
+            (r'(in|as|is|of)\b', Operator.Word),
+            (r'\??\$', Operator),
+        ],
+
+        'punctuation': [
+            (r'[{}()\[\],;.]', Punctuation),
+            # The "ternary if", which uses '?' and ':', could instead be
+            # treated as an Operator, but colons are more frequently used to
+            # separate field/identifier names from their types, so the (often)
+            # less-prominent Punctuation is used even with '?' for consistency.
+            (r'[?:]', Punctuation),
+        ],
+
+        'identifiers': [
+            (r'([a-zA-Z_]\w*)(::)', bygroups(Name, Punctuation)),
             (r'[a-zA-Z_]\w*', Name)
         ],
- 
+
         'string': [
-            (r'\\.', String.Escape), 
-            (r'%-?[0-9]*(\.[0-9]+)?[DTd-gsx]', String.Escape), 
+            (r'\\.', String.Escape),
+            (r'%-?[0-9]*(\.[0-9]+)?[DTd-gsx]', String.Escape),
             (r'"', String, '#pop'),
-            (r'.', String), 
+            (r'.', String),
         ],
- 
+
         'regex': [
-            (r'\\.', String.Escape), 
+            (r'\\.', String.Escape),
             (r'/', String.Regex, '#pop'),
-            (r'.', String.Regex), 
-        ], 
+            (r'.', String.Regex),
+        ],
     }
 
 
-BroLexer = ZeekLexer 
- 
- 
+BroLexer = ZeekLexer
+
+
 class PuppetLexer(RegexLexer):
     """
     For `Puppet <http://puppetlabs.com/>`__ configuration DSL.
@@ -635,7 +635,7 @@ class AlloyLexer(RegexLexer):
             (iden_rex, Name),
             (r'[:,]', Punctuation),
             (r'[0-9]+', Number.Integer),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String),
             (r'\n', Whitespace),
         ]
     }
@@ -643,7 +643,7 @@ class AlloyLexer(RegexLexer):
 
 class PanLexer(RegexLexer):
     """
-    Lexer for `pan <https://github.com/quattor/pan/>`_ source files. 
+    Lexer for `pan <https://github.com/quattor/pan/>`_ source files.
 
     Based on tcsh lexer.
 
@@ -831,7 +831,7 @@ class FlatlineLexer(RegexLexer):
             (r'0x-?[a-f\d]+', Number.Hex),
 
             # strings, symbols and characters
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String),
             (r"\\(.|[a-z]+)", String.Char),
 
             # expression template placeholder

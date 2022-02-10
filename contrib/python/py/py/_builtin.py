@@ -1,21 +1,21 @@
 import sys
 
 
-# Passthrough for builtins supported with py27. 
-BaseException = BaseException 
-GeneratorExit = GeneratorExit 
-_sysex = (KeyboardInterrupt, SystemExit, MemoryError, GeneratorExit) 
-all = all 
-any = any 
-callable = callable 
+# Passthrough for builtins supported with py27.
+BaseException = BaseException
+GeneratorExit = GeneratorExit
+_sysex = (KeyboardInterrupt, SystemExit, MemoryError, GeneratorExit)
+all = all
+any = any
+callable = callable
 enumerate = enumerate
-reversed = reversed 
-set, frozenset = set, frozenset 
-sorted = sorted 
+reversed = reversed
+set, frozenset = set, frozenset
+sorted = sorted
 
 
 if sys.version_info >= (3, 0):
-    exec("print_ = print ; exec_=exec") 
+    exec("print_ = print ; exec_=exec")
     import builtins
 
     # some backward compatibility helpers
@@ -32,7 +32,7 @@ if sys.version_info >= (3, 0):
 
     def _isbytes(x):
         return isinstance(x, bytes)
- 
+
     def _istext(x):
         return isinstance(x, str)
 

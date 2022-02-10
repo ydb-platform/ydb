@@ -4,23 +4,23 @@
 
     Lexers for PHP and related languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
 import re
 
-from pygments.lexer import Lexer, RegexLexer, include, bygroups, default, \ 
-    using, this, words, do_insertions 
+from pygments.lexer import Lexer, RegexLexer, include, bygroups, default, \
+    using, this, words, do_insertions
 from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
-    Number, Punctuation, Other, Generic 
-from pygments.util import get_bool_opt, get_list_opt, shebang_matches 
+    Number, Punctuation, Other, Generic
+from pygments.util import get_bool_opt, get_list_opt, shebang_matches
 
-__all__ = ['ZephirLexer', 'PsyshConsoleLexer', 'PhpLexer'] 
+__all__ = ['ZephirLexer', 'PsyshConsoleLexer', 'PhpLexer']
 
-line_re = re.compile('.*?\n') 
+line_re = re.compile('.*?\n')
 
- 
+
 class ZephirLexer(RegexLexer):
     """
     For `Zephir language <http://zephir-lang.com/>`_ source code.
@@ -50,14 +50,14 @@ class ZephirLexer(RegexLexer):
             include('commentsandwhitespace'),
             (r'/(\\.|[^[/\\\n]|\[(\\.|[^\]\\\n])*])+/'
              r'([gim]+\b|\B)', String.Regex, '#pop'),
-            (r'/', Operator, '#pop'), 
+            (r'/', Operator, '#pop'),
             default('#pop')
         ],
         'badregex': [
             (r'\n', Text, '#pop')
         ],
         'root': [
-            (r'^(?=\s|/)', Text, 'slashstartsregex'), 
+            (r'^(?=\s|/)', Text, 'slashstartsregex'),
             include('commentsandwhitespace'),
             (r'\+\+|--|~|&&|\?|:|\|\||\\(?=\n)|'
              r'(<<|>>>?|==?|!=?|->|[-<>+*%&|^/])=?', Operator, 'slashstartsregex'),
@@ -80,61 +80,61 @@ class ZephirLexer(RegexLexer):
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'0x[0-9a-fA-F]+', Number.Hex),
             (r'[0-9]+', Number.Integer),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double), 
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
         ]
     }
 
 
-class PsyshConsoleLexer(Lexer): 
-    """ 
-    For `PsySH`_ console output, such as: 
- 
-    .. sourcecode:: psysh 
- 
-        >>> $greeting = function($name): string { 
-        ...     return "Hello, {$name}"; 
-        ... }; 
-        => Closure($name): string {#2371 …3} 
-        >>> $greeting('World') 
-        => "Hello, World" 
- 
-    .. _PsySH: https://psysh.org/ 
-    .. versionadded:: 2.7 
-    """ 
-    name = 'PsySH console session for PHP' 
-    aliases = ['psysh'] 
- 
-    def __init__(self, **options): 
-        options['startinline'] = True 
-        Lexer.__init__(self, **options) 
- 
-    def get_tokens_unprocessed(self, text): 
-        phplexer = PhpLexer(**self.options) 
-        curcode = '' 
-        insertions = [] 
-        for match in line_re.finditer(text): 
-            line = match.group() 
-            if line.startswith('>>> ') or line.startswith('... '): 
-                insertions.append((len(curcode), 
-                                   [(0, Generic.Prompt, line[:4])])) 
-                curcode += line[4:] 
-            elif line.rstrip() == '...': 
-                insertions.append((len(curcode), 
-                                   [(0, Generic.Prompt, '...')])) 
-                curcode += line[3:] 
-            else: 
-                if curcode: 
-                    yield from do_insertions( 
-                        insertions, phplexer.get_tokens_unprocessed(curcode)) 
-                    curcode = '' 
-                    insertions = [] 
-                yield match.start(), Generic.Output, line 
-        if curcode: 
-            yield from do_insertions(insertions, 
-                                     phplexer.get_tokens_unprocessed(curcode)) 
- 
- 
+class PsyshConsoleLexer(Lexer):
+    """
+    For `PsySH`_ console output, such as:
+
+    .. sourcecode:: psysh
+
+        >>> $greeting = function($name): string {
+        ...     return "Hello, {$name}";
+        ... };
+        => Closure($name): string {#2371 …3}
+        >>> $greeting('World')
+        => "Hello, World"
+
+    .. _PsySH: https://psysh.org/
+    .. versionadded:: 2.7
+    """
+    name = 'PsySH console session for PHP'
+    aliases = ['psysh']
+
+    def __init__(self, **options):
+        options['startinline'] = True
+        Lexer.__init__(self, **options)
+
+    def get_tokens_unprocessed(self, text):
+        phplexer = PhpLexer(**self.options)
+        curcode = ''
+        insertions = []
+        for match in line_re.finditer(text):
+            line = match.group()
+            if line.startswith('>>> ') or line.startswith('... '):
+                insertions.append((len(curcode),
+                                   [(0, Generic.Prompt, line[:4])]))
+                curcode += line[4:]
+            elif line.rstrip() == '...':
+                insertions.append((len(curcode),
+                                   [(0, Generic.Prompt, '...')]))
+                curcode += line[3:]
+            else:
+                if curcode:
+                    yield from do_insertions(
+                        insertions, phplexer.get_tokens_unprocessed(curcode))
+                    curcode = ''
+                    insertions = []
+                yield match.start(), Generic.Output, line
+        if curcode:
+            yield from do_insertions(insertions,
+                                     phplexer.get_tokens_unprocessed(curcode))
+
+
 class PhpLexer(RegexLexer):
     """
     For `PHP <http://www.php.net/>`_ source code.
@@ -294,7 +294,7 @@ class PhpLexer(RegexLexer):
         self._functions = set()
         if self.funcnamehighlighting:
             from pygments.lexers._php_builtins import MODULES
-            for key, value in MODULES.items(): 
+            for key, value in MODULES.items():
                 if key not in self.disabledmodules:
                     self._functions.update(value)
         RegexLexer.__init__(self, **options)

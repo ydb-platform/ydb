@@ -1104,8 +1104,8 @@ InterleavedLoadCombineImpl::findFirstLoad(const std::set<LoadInst *> &LIs) {
 
   // All LIs are within the same BB. Select the first for a reference.
   BasicBlock *BB = (*LIs.begin())->getParent();
-  BasicBlock::iterator FLI = llvm::find_if( 
-      *BB, [&LIs](Instruction &I) -> bool { return is_contained(LIs, &I); }); 
+  BasicBlock::iterator FLI = llvm::find_if(
+      *BB, [&LIs](Instruction &I) -> bool { return is_contained(LIs, &I); });
   assert(FLI != BB->end());
 
   return cast<LoadInst>(FLI);
@@ -1128,8 +1128,8 @@ bool InterleavedLoadCombineImpl::combine(std::list<VectorInfo> &InterleavedLoad,
   std::set<Instruction *> Is;
   std::set<Instruction *> SVIs;
 
-  InstructionCost InterleavedCost; 
-  InstructionCost InstructionCost = 0; 
+  InstructionCost InterleavedCost;
+  InstructionCost InstructionCost = 0;
 
   // Get the interleave factor
   unsigned Factor = InterleavedLoad.size();
@@ -1172,10 +1172,10 @@ bool InterleavedLoadCombineImpl::combine(std::list<VectorInfo> &InterleavedLoad,
     }
   }
 
-  // We need to have a valid cost in order to proceed. 
-  if (!InstructionCost.isValid()) 
-    return false; 
- 
+  // We need to have a valid cost in order to proceed.
+  if (!InstructionCost.isValid())
+    return false;
+
   // We know that all LoadInst are within the same BB. This guarantees that
   // either everything or nothing is loaded.
   LoadInst *First = findFirstLoad(LIs);
@@ -1238,7 +1238,7 @@ bool InterleavedLoadCombineImpl::combine(std::list<VectorInfo> &InterleavedLoad,
       Mask.push_back(i + j * Factor);
 
     Builder.SetInsertPoint(VI.SVI);
-    auto SVI = Builder.CreateShuffleVector(LI, Mask, "interleaved.shuffle"); 
+    auto SVI = Builder.CreateShuffleVector(LI, Mask, "interleaved.shuffle");
     VI.SVI->replaceAllUsesWith(SVI);
     i++;
   }

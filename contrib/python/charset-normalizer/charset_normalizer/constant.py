@@ -1,12 +1,12 @@
-from codecs import BOM_UTF8, BOM_UTF16_BE, BOM_UTF16_LE, BOM_UTF32_BE, BOM_UTF32_LE 
+from codecs import BOM_UTF8, BOM_UTF16_BE, BOM_UTF16_LE, BOM_UTF32_BE, BOM_UTF32_LE
 from collections import OrderedDict
 from encodings.aliases import aliases
 from re import IGNORECASE, compile as re_compile
 from typing import Dict, List, Set, Union
- 
+
 from .assets import FREQUENCIES
 
-# Contain for each eligible encoding a list of/item bytes SIG/BOM 
+# Contain for each eligible encoding a list of/item bytes SIG/BOM
 ENCODING_MARKS = OrderedDict(
     [
         ("utf_8", BOM_UTF8),
@@ -25,12 +25,12 @@ ENCODING_MARKS = OrderedDict(
         ("utf_16", [BOM_UTF16_BE, BOM_UTF16_LE]),
     ]
 )  # type: Dict[str, Union[bytes, List[bytes]]]
- 
-TOO_SMALL_SEQUENCE = 32  # type: int 
-TOO_BIG_SEQUENCE = int(10e6)  # type: int 
- 
-UTF8_MAXIMAL_ALLOCATION = 1112064  # type: int 
- 
+
+TOO_SMALL_SEQUENCE = 32  # type: int
+TOO_BIG_SEQUENCE = int(10e6)  # type: int
+
+UTF8_MAXIMAL_ALLOCATION = 1112064  # type: int
+
 UNICODE_RANGES_COMBINED = {
     "Control character": range(31 + 1),
     "Basic Latin": range(32, 127 + 1),
@@ -312,9 +312,9 @@ UNICODE_RANGES_COMBINED = {
     "Tags": range(917504, 917631 + 1),
     "Variation Selectors Supplement": range(917760, 917999 + 1),
 }  # type: Dict[str, range]
- 
 
-UNICODE_SECONDARY_RANGE_KEYWORD = [ 
+
+UNICODE_SECONDARY_RANGE_KEYWORD = [
     "Supplement",
     "Extended",
     "Extensions",
@@ -330,25 +330,25 @@ UNICODE_SECONDARY_RANGE_KEYWORD = [
     "Shapes",
     "Supplemental",
     "Tags",
-]  # type: List[str] 
- 
-RE_POSSIBLE_ENCODING_INDICATION = re_compile( 
+]  # type: List[str]
+
+RE_POSSIBLE_ENCODING_INDICATION = re_compile(
     r"(?:(?:encoding)|(?:charset)|(?:coding))(?:[\:= ]{1,10})(?:[\"\']?)([a-zA-Z0-9\-_]+)(?:[\"\']?)",
     IGNORECASE,
-) 
- 
-IANA_SUPPORTED = sorted( 
-    filter( 
+)
+
+IANA_SUPPORTED = sorted(
+    filter(
         lambda x: x.endswith("_codec") is False
         and x not in {"rot_13", "tactis", "mbcs"},
         list(set(aliases.values())),
-    ) 
-)  # type: List[str] 
- 
-IANA_SUPPORTED_COUNT = len(IANA_SUPPORTED)  # type: int 
- 
-# pre-computed code page that are similar using the function cp_similarity. 
-IANA_SUPPORTED_SIMILAR = { 
+    )
+)  # type: List[str]
+
+IANA_SUPPORTED_COUNT = len(IANA_SUPPORTED)  # type: int
+
+# pre-computed code page that are similar using the function cp_similarity.
+IANA_SUPPORTED_SIMILAR = {
     "cp037": ["cp1026", "cp1140", "cp273", "cp500"],
     "cp1026": ["cp037", "cp1140", "cp273", "cp500"],
     "cp1125": ["cp866"],
@@ -374,70 +374,70 @@ IANA_SUPPORTED_SIMILAR = {
     "iso8859_10": ["iso8859_14", "iso8859_15", "iso8859_4", "iso8859_9", "latin_1"],
     "iso8859_11": ["tis_620"],
     "iso8859_13": ["cp1257"],
-    "iso8859_14": [ 
-        "iso8859_10", 
-        "iso8859_15", 
-        "iso8859_16", 
-        "iso8859_3", 
-        "iso8859_9", 
+    "iso8859_14": [
+        "iso8859_10",
+        "iso8859_15",
+        "iso8859_16",
+        "iso8859_3",
+        "iso8859_9",
         "latin_1",
-    ], 
-    "iso8859_15": [ 
-        "cp1252", 
-        "cp1254", 
-        "iso8859_10", 
-        "iso8859_14", 
-        "iso8859_16", 
-        "iso8859_3", 
-        "iso8859_9", 
+    ],
+    "iso8859_15": [
+        "cp1252",
+        "cp1254",
+        "iso8859_10",
+        "iso8859_14",
+        "iso8859_16",
+        "iso8859_3",
+        "iso8859_9",
         "latin_1",
-    ], 
-    "iso8859_16": [ 
-        "iso8859_14", 
-        "iso8859_15", 
-        "iso8859_2", 
-        "iso8859_3", 
-        "iso8859_9", 
+    ],
+    "iso8859_16": [
+        "iso8859_14",
+        "iso8859_15",
+        "iso8859_2",
+        "iso8859_3",
+        "iso8859_9",
         "latin_1",
-    ], 
+    ],
     "iso8859_2": ["cp1250", "iso8859_16", "iso8859_4"],
     "iso8859_3": ["iso8859_14", "iso8859_15", "iso8859_16", "iso8859_9", "latin_1"],
     "iso8859_4": ["iso8859_10", "iso8859_2", "iso8859_9", "latin_1"],
     "iso8859_7": ["cp1253"],
-    "iso8859_9": [ 
-        "cp1252", 
-        "cp1254", 
-        "cp1258", 
-        "iso8859_10", 
-        "iso8859_14", 
-        "iso8859_15", 
-        "iso8859_16", 
-        "iso8859_3", 
-        "iso8859_4", 
+    "iso8859_9": [
+        "cp1252",
+        "cp1254",
+        "cp1258",
+        "iso8859_10",
+        "iso8859_14",
+        "iso8859_15",
+        "iso8859_16",
+        "iso8859_3",
+        "iso8859_4",
         "latin_1",
-    ], 
+    ],
     "kz1048": ["cp1251", "ptcp154"],
-    "latin_1": [ 
-        "cp1252", 
-        "cp1254", 
-        "cp1258", 
-        "iso8859_10", 
-        "iso8859_14", 
-        "iso8859_15", 
-        "iso8859_16", 
-        "iso8859_3", 
-        "iso8859_4", 
+    "latin_1": [
+        "cp1252",
+        "cp1254",
+        "cp1258",
+        "iso8859_10",
+        "iso8859_14",
+        "iso8859_15",
+        "iso8859_16",
+        "iso8859_3",
+        "iso8859_4",
         "iso8859_9",
-    ], 
+    ],
     "mac_iceland": ["mac_roman", "mac_turkish"],
     "mac_roman": ["mac_iceland", "mac_turkish"],
     "mac_turkish": ["mac_iceland", "mac_roman"],
     "ptcp154": ["cp1251", "kz1048"],
     "tis_620": ["iso8859_11"],
-}  # type: Dict[str, List[str]] 
- 
- 
-CHARDET_CORRESPONDENCE = { 
+}  # type: Dict[str, List[str]]
+
+
+CHARDET_CORRESPONDENCE = {
     "iso2022_kr": "ISO-2022-KR",
     "iso2022_jp": "ISO-2022-JP",
     "euc_kr": "EUC-KR",
@@ -470,7 +470,7 @@ CHARDET_CORRESPONDENCE = {
     "cp1256": "windows-1256",
     "cp1254": "Windows-1254",
     "cp949": "CP949",
-}  # type: Dict[str, str] 
+}  # type: Dict[str, str]
 
 
 COMMON_SAFE_ASCII_CHARACTERS = {

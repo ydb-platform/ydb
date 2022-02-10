@@ -1,10 +1,10 @@
-import os 
+import os
 import importlib
 import sys
 import inspect
- 
-from pytest import hookimpl 
- 
+
+from pytest import hookimpl
+
 from .fixtures import metrics, links  # noqa
 
 orig_getfile = inspect.getfile
@@ -21,8 +21,8 @@ inspect.getfile = getfile
 conftest_modules = []
 
 
-@hookimpl(trylast=True) 
-def pytest_load_initial_conftests(early_config, parser, args): 
+@hookimpl(trylast=True)
+def pytest_load_initial_conftests(early_config, parser, args):
     conftests = filter(lambda name: name.endswith(".conftest"), sys.extra_modules)
 
     def conftest_key(name):
@@ -33,11 +33,11 @@ def pytest_load_initial_conftests(early_config, parser, args):
 
     for name in sorted(conftests, key=conftest_key):
         mod = importlib.import_module(name)
-        if os.getenv("CONFTEST_LOAD_POLICY") != "LOCAL": 
-            mod.__orig_file__ = mod.__file__ 
-            mod.__file__ = "" 
+        if os.getenv("CONFTEST_LOAD_POLICY") != "LOCAL":
+            mod.__orig_file__ = mod.__file__
+            mod.__file__ = ""
         conftest_modules.append(mod)
-        early_config.pluginmanager.consider_conftest(mod) 
+        early_config.pluginmanager.consider_conftest(mod)
 
 
 def getconftestmodules(*args, **kwargs):

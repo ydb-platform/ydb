@@ -100,7 +100,7 @@ class newdict(with_metaclass(BaseNewDict, _builtin_dict)):
         else:
             value = args[0]
         return super(newdict, cls).__new__(cls, value)
- 
+
     def __native__(self):
         """
         Hook for the future.utils.native() function

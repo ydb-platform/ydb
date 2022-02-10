@@ -233,7 +233,7 @@ class YamlLexer(ExtendedRegexLexer):
             # whitespaces separating tokens
             (r'[ ]+', Text),
             # key with colon
-            (r'''([^#,:?\[\]{}"'\n]+)(:)(?=[ ]|$)''', 
+            (r'''([^#,:?\[\]{}"'\n]+)(:)(?=[ ]|$)''',
              bygroups(Name.Tag, set_indent(Punctuation, implicit=True))),
             # tags, anchors and aliases,
             include('descriptors'),

@@ -33,10 +33,10 @@
         {"shape":"NodeQuotaForCustomerExceededFault"},
         {"shape":"InvalidVPCNetworkStateFault"},
         {"shape":"TagQuotaPerResourceExceeded"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
-        {"shape":"InvalidParameterCombinationException"}, 
-        {"shape":"ServiceQuotaExceededException"} 
+        {"shape":"InvalidParameterCombinationException"},
+        {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p>Creates a DAX cluster. All nodes in the cluster run the same DAX caching software.</p>"
     },
@@ -52,7 +52,7 @@
         {"shape":"ParameterGroupQuotaExceededFault"},
         {"shape":"ParameterGroupAlreadyExistsFault"},
         {"shape":"InvalidParameterGroupStateFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -70,8 +70,8 @@
         {"shape":"SubnetGroupAlreadyExistsFault"},
         {"shape":"SubnetGroupQuotaExceededFault"},
         {"shape":"SubnetQuotaExceededFault"},
-        {"shape":"InvalidSubnet"}, 
-        {"shape":"ServiceLinkedRoleNotFoundFault"} 
+        {"shape":"InvalidSubnet"},
+        {"shape":"ServiceLinkedRoleNotFoundFault"}
       ],
       "documentation":"<p>Creates a new subnet group.</p>"
     },
@@ -87,7 +87,7 @@
         {"shape":"ClusterNotFoundFault"},
         {"shape":"NodeNotFoundFault"},
         {"shape":"InvalidClusterStateFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -104,7 +104,7 @@
       "errors":[
         {"shape":"ClusterNotFoundFault"},
         {"shape":"InvalidClusterStateFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -121,7 +121,7 @@
       "errors":[
         {"shape":"InvalidParameterGroupStateFault"},
         {"shape":"ParameterGroupNotFoundFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -137,8 +137,8 @@
       "output":{"shape":"DeleteSubnetGroupResponse"},
       "errors":[
         {"shape":"SubnetGroupInUseFault"},
-        {"shape":"SubnetGroupNotFoundFault"}, 
-        {"shape":"ServiceLinkedRoleNotFoundFault"} 
+        {"shape":"SubnetGroupNotFoundFault"},
+        {"shape":"ServiceLinkedRoleNotFoundFault"}
       ],
       "documentation":"<p>Deletes a subnet group.</p> <note> <p>You cannot delete a subnet group if it is associated with any DAX clusters.</p> </note>"
     },
@@ -152,7 +152,7 @@
       "output":{"shape":"DescribeClustersResponse"},
       "errors":[
         {"shape":"ClusterNotFoundFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -167,7 +167,7 @@
       "input":{"shape":"DescribeDefaultParametersRequest"},
       "output":{"shape":"DescribeDefaultParametersResponse"},
       "errors":[
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -182,11 +182,11 @@
       "input":{"shape":"DescribeEventsRequest"},
       "output":{"shape":"DescribeEventsResponse"},
       "errors":[
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
-      "documentation":"<p>Returns events related to DAX clusters and parameter groups. You can obtain events specific to a particular DAX cluster or parameter group by providing the name as a parameter.</p> <p>By default, only the events occurring within the last 24 hours are returned; however, you can retrieve up to 14 days' worth of events if necessary.</p>" 
+      "documentation":"<p>Returns events related to DAX clusters and parameter groups. You can obtain events specific to a particular DAX cluster or parameter group by providing the name as a parameter.</p> <p>By default, only the events occurring within the last 24 hours are returned; however, you can retrieve up to 14 days' worth of events if necessary.</p>"
     },
     "DescribeParameterGroups":{
       "name":"DescribeParameterGroups",
@@ -198,7 +198,7 @@
       "output":{"shape":"DescribeParameterGroupsResponse"},
       "errors":[
         {"shape":"ParameterGroupNotFoundFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -214,7 +214,7 @@
       "output":{"shape":"DescribeParametersResponse"},
       "errors":[
         {"shape":"ParameterGroupNotFoundFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -229,8 +229,8 @@
       "input":{"shape":"DescribeSubnetGroupsRequest"},
       "output":{"shape":"DescribeSubnetGroupsResponse"},
       "errors":[
-        {"shape":"SubnetGroupNotFoundFault"}, 
-        {"shape":"ServiceLinkedRoleNotFoundFault"} 
+        {"shape":"SubnetGroupNotFoundFault"},
+        {"shape":"ServiceLinkedRoleNotFoundFault"}
       ],
       "documentation":"<p>Returns a list of subnet group descriptions. If a subnet group name is specified, the list will contain only the description of that group.</p>"
     },
@@ -249,7 +249,7 @@
         {"shape":"InvalidVPCNetworkStateFault"},
         {"shape":"NodeQuotaForClusterExceededFault"},
         {"shape":"NodeQuotaForCustomerExceededFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -267,7 +267,7 @@
         {"shape":"ClusterNotFoundFault"},
         {"shape":"InvalidARNFault"},
         {"shape":"InvalidClusterStateFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -285,11 +285,11 @@
         {"shape":"ClusterNotFoundFault"},
         {"shape":"NodeNotFoundFault"},
         {"shape":"InvalidClusterStateFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
-      "documentation":"<p>Reboots a single node of a DAX cluster. The reboot action takes place as soon as possible. During the reboot, the node status is set to REBOOTING.</p> <note> <p> <code>RebootNode</code> restarts the DAX engine process and does not remove the contents of the cache. </p> </note>" 
+      "documentation":"<p>Reboots a single node of a DAX cluster. The reboot action takes place as soon as possible. During the reboot, the node status is set to REBOOTING.</p> <note> <p> <code>RebootNode</code> restarts the DAX engine process and does not remove the contents of the cache. </p> </note>"
     },
     "TagResource":{
       "name":"TagResource",
@@ -304,7 +304,7 @@
         {"shape":"TagQuotaPerResourceExceeded"},
         {"shape":"InvalidARNFault"},
         {"shape":"InvalidClusterStateFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -323,7 +323,7 @@
         {"shape":"InvalidARNFault"},
         {"shape":"TagNotFoundFault"},
         {"shape":"InvalidClusterStateFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -342,7 +342,7 @@
         {"shape":"ClusterNotFoundFault"},
         {"shape":"InvalidParameterGroupStateFault"},
         {"shape":"ParameterGroupNotFoundFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -359,7 +359,7 @@
       "errors":[
         {"shape":"InvalidParameterGroupStateFault"},
         {"shape":"ParameterGroupNotFoundFault"},
-        {"shape":"ServiceLinkedRoleNotFoundFault"}, 
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"},
         {"shape":"InvalidParameterCombinationException"}
       ],
@@ -377,8 +377,8 @@
         {"shape":"SubnetGroupNotFoundFault"},
         {"shape":"SubnetQuotaExceededFault"},
         {"shape":"SubnetInUse"},
-        {"shape":"InvalidSubnet"}, 
-        {"shape":"ServiceLinkedRoleNotFoundFault"} 
+        {"shape":"InvalidSubnet"},
+        {"shape":"ServiceLinkedRoleNotFoundFault"}
       ],
       "documentation":"<p>Modifies an existing subnet group.</p>"
     }
@@ -429,7 +429,7 @@
         },
         "ClusterDiscoveryEndpoint":{
           "shape":"Endpoint",
-          "documentation":"<p>The endpoint for this DAX cluster, consisting of a DNS name, a port number, and a URL. Applications should use the URL to configure the DAX client to find their cluster.</p>" 
+          "documentation":"<p>The endpoint for this DAX cluster, consisting of a DNS name, a port number, and a URL. Applications should use the URL to configure the DAX client to find their cluster.</p>"
         },
         "NodeIdsToRemove":{
           "shape":"NodeIdentifierList",
@@ -462,14 +462,14 @@
         "ParameterGroup":{
           "shape":"ParameterGroupStatus",
           "documentation":"<p>The parameter group being used by nodes in the cluster.</p>"
-        }, 
-        "SSEDescription":{ 
-          "shape":"SSEDescription", 
-          "documentation":"<p>The description of the server-side encryption status on the specified DAX cluster.</p>" 
-        }, 
-        "ClusterEndpointEncryptionType":{ 
-          "shape":"ClusterEndpointEncryptionType", 
-          "documentation":"<p>The type of encryption supported by the cluster's endpoint. Values are:</p> <ul> <li> <p> <code>NONE</code> for no encryption</p> <p> <code>TLS</code> for Transport Layer Security</p> </li> </ul>" 
+        },
+        "SSEDescription":{
+          "shape":"SSEDescription",
+          "documentation":"<p>The description of the server-side encryption status on the specified DAX cluster.</p>"
+        },
+        "ClusterEndpointEncryptionType":{
+          "shape":"ClusterEndpointEncryptionType",
+          "documentation":"<p>The type of encryption supported by the cluster's endpoint. Values are:</p> <ul> <li> <p> <code>NONE</code> for no encryption</p> <p> <code>TLS</code> for Transport Layer Security</p> </li> </ul>"
         }
       },
       "documentation":"<p>Contains all of the attributes of a specific DAX cluster.</p>"
@@ -481,13 +481,13 @@
       "documentation":"<p>You already have a DAX cluster with the given identifier.</p>",
       "exception":true
     },
-    "ClusterEndpointEncryptionType":{ 
-      "type":"string", 
-      "enum":[ 
-        "NONE", 
-        "TLS" 
-      ] 
-    }, 
+    "ClusterEndpointEncryptionType":{
+      "type":"string",
+      "enum":[
+        "NONE",
+        "TLS"
+      ]
+    },
     "ClusterList":{
       "type":"list",
       "member":{"shape":"Cluster"}
@@ -533,11 +533,11 @@
         },
         "ReplicationFactor":{
           "shape":"Integer",
-          "documentation":"<p>The number of nodes in the DAX cluster. A replication factor of 1 will create a single-node cluster, without any read replicas. For additional fault tolerance, you can create a multiple node cluster with one or more read replicas. To do this, set <code>ReplicationFactor</code> to a number between 3 (one primary and two read replicas) and 10 (one primary and nine read replicas). <code>If the AvailabilityZones</code> parameter is provided, its length must equal the <code>ReplicationFactor</code>.</p> <note> <p>AWS recommends that you have at least two read replicas per cluster.</p> </note>" 
+          "documentation":"<p>The number of nodes in the DAX cluster. A replication factor of 1 will create a single-node cluster, without any read replicas. For additional fault tolerance, you can create a multiple node cluster with one or more read replicas. To do this, set <code>ReplicationFactor</code> to a number between 3 (one primary and two read replicas) and 10 (one primary and nine read replicas). <code>If the AvailabilityZones</code> parameter is provided, its length must equal the <code>ReplicationFactor</code>.</p> <note> <p>AWS recommends that you have at least two read replicas per cluster.</p> </note>"
         },
         "AvailabilityZones":{
           "shape":"AvailabilityZoneList",
-          "documentation":"<p>The Availability Zones (AZs) in which the cluster nodes will reside after the cluster has been created or updated. If provided, the length of this list must equal the <code>ReplicationFactor</code> parameter. If you omit this parameter, DAX will spread the nodes across Availability Zones for the highest availability.</p>" 
+          "documentation":"<p>The Availability Zones (AZs) in which the cluster nodes will reside after the cluster has been created or updated. If provided, the length of this list must equal the <code>ReplicationFactor</code> parameter. If you omit this parameter, DAX will spread the nodes across Availability Zones for the highest availability.</p>"
         },
         "SubnetGroupName":{
           "shape":"String",
@@ -566,14 +566,14 @@
         "Tags":{
           "shape":"TagList",
           "documentation":"<p>A set of tags to associate with the DAX cluster. </p>"
-        }, 
-        "SSESpecification":{ 
-          "shape":"SSESpecification", 
-          "documentation":"<p>Represents the settings used to enable server-side encryption on the cluster.</p>" 
-        }, 
-        "ClusterEndpointEncryptionType":{ 
-          "shape":"ClusterEndpointEncryptionType", 
-          "documentation":"<p>The type of encryption the cluster's endpoint should support. Values are:</p> <ul> <li> <p> <code>NONE</code> for no encryption</p> </li> <li> <p> <code>TLS</code> for Transport Layer Security</p> </li> </ul>" 
+        },
+        "SSESpecification":{
+          "shape":"SSESpecification",
+          "documentation":"<p>Represents the settings used to enable server-side encryption on the cluster.</p>"
+        },
+        "ClusterEndpointEncryptionType":{
+          "shape":"ClusterEndpointEncryptionType",
+          "documentation":"<p>The type of encryption the cluster's endpoint should support. Values are:</p> <ul> <li> <p> <code>NONE</code> for no encryption</p> </li> <li> <p> <code>TLS</code> for Transport Layer Security</p> </li> </ul>"
         }
       }
     },
@@ -937,13 +937,13 @@
         "Port":{
           "shape":"Integer",
           "documentation":"<p>The port number that applications should use to connect to the endpoint.</p>"
-        }, 
-        "URL":{ 
-          "shape":"String", 
-          "documentation":"<p>The URL that applications should use to connect to the endpoint. The default ports are 8111 for the \"dax\" protocol and 9111 for the \"daxs\" protocol.</p>" 
+        },
+        "URL":{
+          "shape":"String",
+          "documentation":"<p>The URL that applications should use to connect to the endpoint. The default ports are 8111 for the \"dax\" protocol and 9111 for the \"daxs\" protocol.</p>"
         }
       },
-      "documentation":"<p>Represents the information required for client programs to connect to the endpoint for a DAX cluster.</p>" 
+      "documentation":"<p>Represents the information required for client programs to connect to the endpoint for a DAX cluster.</p>"
     },
     "Event":{
       "type":"structure",
@@ -1030,8 +1030,8 @@
         "message":{"shape":"AwsQueryErrorMessage"}
       },
       "documentation":"<p>Two or more incompatible parameters were specified.</p>",
-      "exception":true, 
-      "synthetic":true 
+      "exception":true,
+      "synthetic":true
     },
     "InvalidParameterGroupStateFault":{
       "type":"structure",
@@ -1046,8 +1046,8 @@
         "message":{"shape":"AwsQueryErrorMessage"}
       },
       "documentation":"<p>The value for a parameter is invalid.</p>",
-      "exception":true, 
-      "synthetic":true 
+      "exception":true,
+      "synthetic":true
     },
     "InvalidSubnet":{
       "type":"structure",
@@ -1188,7 +1188,7 @@
         },
         "TopicStatus":{
           "shape":"String",
-          "documentation":"<p>The current state of the topic. A value of “active” means that notifications will be sent to the topic. A value of “inactive” means that notifications will not be sent to the topic.</p>" 
+          "documentation":"<p>The current state of the topic. A value of “active” means that notifications will be sent to the topic. A value of “inactive” means that notifications will not be sent to the topic.</p>"
         }
       },
       "documentation":"<p>Describes a notification topic and its status. Notification topics are used for publishing DAX events to subscribers using Amazon Simple Notification Service (SNS).</p>"
@@ -1355,37 +1355,37 @@
         }
       }
     },
-    "SSEDescription":{ 
-      "type":"structure", 
-      "members":{ 
-        "Status":{ 
-          "shape":"SSEStatus", 
-          "documentation":"<p>The current state of server-side encryption:</p> <ul> <li> <p> <code>ENABLING</code> - Server-side encryption is being enabled.</p> </li> <li> <p> <code>ENABLED</code> - Server-side encryption is enabled.</p> </li> <li> <p> <code>DISABLING</code> - Server-side encryption is being disabled.</p> </li> <li> <p> <code>DISABLED</code> - Server-side encryption is disabled.</p> </li> </ul>" 
-        } 
-      }, 
-      "documentation":"<p>The description of the server-side encryption status on the specified DAX cluster.</p>" 
-    }, 
-    "SSEEnabled":{"type":"boolean"}, 
-    "SSESpecification":{ 
-      "type":"structure", 
-      "required":["Enabled"], 
-      "members":{ 
-        "Enabled":{ 
-          "shape":"SSEEnabled", 
-          "documentation":"<p>Indicates whether server-side encryption is enabled (true) or disabled (false) on the cluster.</p>" 
-        } 
-      }, 
-      "documentation":"<p>Represents the settings used to enable server-side encryption.</p>" 
-    }, 
-    "SSEStatus":{ 
-      "type":"string", 
-      "enum":[ 
-        "ENABLING", 
-        "ENABLED", 
-        "DISABLING", 
-        "DISABLED" 
-      ] 
-    }, 
+    "SSEDescription":{
+      "type":"structure",
+      "members":{
+        "Status":{
+          "shape":"SSEStatus",
+          "documentation":"<p>The current state of server-side encryption:</p> <ul> <li> <p> <code>ENABLING</code> - Server-side encryption is being enabled.</p> </li> <li> <p> <code>ENABLED</code> - Server-side encryption is enabled.</p> </li> <li> <p> <code>DISABLING</code> - Server-side encryption is being disabled.</p> </li> <li> <p> <code>DISABLED</code> - Server-side encryption is disabled.</p> </li> </ul>"
+        }
+      },
+      "documentation":"<p>The description of the server-side encryption status on the specified DAX cluster.</p>"
+    },
+    "SSEEnabled":{"type":"boolean"},
+    "SSESpecification":{
+      "type":"structure",
+      "required":["Enabled"],
+      "members":{
+        "Enabled":{
+          "shape":"SSEEnabled",
+          "documentation":"<p>Indicates whether server-side encryption is enabled (true) or disabled (false) on the cluster.</p>"
+        }
+      },
+      "documentation":"<p>Represents the settings used to enable server-side encryption.</p>"
+    },
+    "SSEStatus":{
+      "type":"string",
+      "enum":[
+        "ENABLING",
+        "ENABLED",
+        "DISABLING",
+        "DISABLED"
+      ]
+    },
     "SecurityGroupIdentifierList":{
       "type":"list",
       "member":{"shape":"String"}
@@ -1408,20 +1408,20 @@
       "type":"list",
       "member":{"shape":"SecurityGroupMembership"}
     },
-    "ServiceLinkedRoleNotFoundFault":{ 
-      "type":"structure", 
-      "members":{ 
-      }, 
-      "documentation":"<p>The specified service linked role (SLR) was not found.</p>", 
-      "exception":true 
-    }, 
-    "ServiceQuotaExceededException":{ 
-      "type":"structure", 
-      "members":{ 
-      }, 
-      "documentation":"<p>You have reached the maximum number of x509 certificates that can be created for encrypted clusters in a 30 day period. Contact AWS customer support to discuss options for continuing to create encrypted clusters.</p>", 
-      "exception":true 
-    }, 
+    "ServiceLinkedRoleNotFoundFault":{
+      "type":"structure",
+      "members":{
+      },
+      "documentation":"<p>The specified service linked role (SLR) was not found.</p>",
+      "exception":true
+    },
+    "ServiceQuotaExceededException":{
+      "type":"structure",
+      "members":{
+      },
+      "documentation":"<p>You have reached the maximum number of x509 certificates that can be created for encrypted clusters in a 30 day period. Contact AWS customer support to discuss options for continuing to create encrypted clusters.</p>",
+      "exception":true
+    },
     "SourceType":{
       "type":"string",
       "enum":[
@@ -1440,7 +1440,7 @@
         },
         "SubnetAvailabilityZone":{
           "shape":"String",
-          "documentation":"<p>The Availability Zone (AZ) for the subnet.</p>" 
+          "documentation":"<p>The Availability Zone (AZ) for the subnet.</p>"
         }
       },
       "documentation":"<p>Represents the subnet associated with a DAX cluster. This parameter refers to subnets defined in Amazon Virtual Private Cloud (Amazon VPC) and used with DAX.</p>"
@@ -1632,7 +1632,7 @@
         },
         "NotificationTopicStatus":{
           "shape":"String",
-          "documentation":"<p>The current state of the topic. A value of “active” means that notifications will be sent to the topic. A value of “inactive” means that notifications will not be sent to the topic.</p>" 
+          "documentation":"<p>The current state of the topic. A value of “active” means that notifications will be sent to the topic. A value of “inactive” means that notifications will not be sent to the topic.</p>"
         },
         "ParameterGroupName":{
           "shape":"String",
@@ -1666,7 +1666,7 @@
         },
         "ParameterNameValues":{
           "shape":"ParameterNameValueList",
-          "documentation":"<p>An array of name-value pairs for the parameters in the group. Each element in the array represents a single parameter.</p> <note> <p> <code>record-ttl-millis</code> and <code>query-ttl-millis</code> are the only supported parameter names. For more details, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DAX.cluster-management.html#DAX.cluster-management.custom-settings.ttl\">Configuring TTL Settings</a>.</p> </note>" 
+          "documentation":"<p>An array of name-value pairs for the parameters in the group. Each element in the array represents a single parameter.</p> <note> <p> <code>record-ttl-millis</code> and <code>query-ttl-millis</code> are the only supported parameter names. For more details, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DAX.cluster-management.html#DAX.cluster-management.custom-settings.ttl\">Configuring TTL Settings</a>.</p> </note>"
         }
       }
     },

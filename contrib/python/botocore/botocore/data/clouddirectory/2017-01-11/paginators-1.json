@@ -95,24 +95,24 @@
       "output_token": "NextToken",
       "input_token": "NextToken",
       "limit_key": "MaxResults"
-    }, 
-    "ListIncomingTypedLinks": { 
-      "input_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "output_token": "NextToken", 
-      "result_key": "LinkSpecifiers" 
-    }, 
-    "ListManagedSchemaArns": { 
-      "input_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "output_token": "NextToken", 
-      "result_key": "SchemaArns" 
-    }, 
-    "ListOutgoingTypedLinks": { 
-      "input_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "output_token": "NextToken", 
-      "result_key": "TypedLinkSpecifiers" 
+    },
+    "ListIncomingTypedLinks": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "LinkSpecifiers"
+    },
+    "ListManagedSchemaArns": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "SchemaArns"
+    },
+    "ListOutgoingTypedLinks": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "TypedLinkSpecifiers"
     }
   }
 }

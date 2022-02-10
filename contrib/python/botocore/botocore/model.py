@@ -13,11 +13,11 @@
 """Abstractions to interact with service models."""
 from collections import defaultdict
 
-from botocore.utils import (CachedProperty, instance_cache, 
-                            hyphenize_service_id) 
+from botocore.utils import (CachedProperty, instance_cache,
+                            hyphenize_service_id)
 from botocore.compat import OrderedDict
-from botocore.exceptions import MissingServiceIdError 
-from botocore.exceptions import UndefinedModelAttributeError 
+from botocore.exceptions import MissingServiceIdError
+from botocore.exceptions import UndefinedModelAttributeError
 
 NOT_SET = object()
 
@@ -38,9 +38,9 @@ class InvalidShapeReferenceError(Exception):
     pass
 
 
-class ServiceId(str): 
-    def hyphenize(self): 
-        return hyphenize_service_id(self) 
+class ServiceId(str):
+    def hyphenize(self):
+        return hyphenize_service_id(self)
 
 
 class Shape(object):
@@ -52,11 +52,11 @@ class Shape(object):
     SERIALIZED_ATTRS = ['locationName', 'queryName', 'flattened', 'location',
                         'payload', 'streaming', 'timestampFormat',
                         'xmlNamespace', 'resultWrapper', 'xmlAttribute',
-                        'eventstream', 'event', 'eventheader', 'eventpayload', 
-                        'jsonvalue', 'timestampFormat', 'hostLabel'] 
+                        'eventstream', 'event', 'eventheader', 'eventpayload',
+                        'jsonvalue', 'timestampFormat', 'hostLabel']
     METADATA_ATTRS = ['required', 'min', 'max', 'sensitive', 'enum',
-                      'idempotencyToken', 'error', 'exception', 
-                      'endpointdiscoveryid', 'retryable', 'document'] 
+                      'idempotencyToken', 'error', 'exception',
+                      'endpointdiscoveryid', 'retryable', 'document']
     MAP_TYPE = OrderedDict
 
     def __init__(self, shape_name, shape_model, shape_resolver=None):
@@ -110,7 +110,7 @@ class Shape(object):
             * resultWrapper
             * xmlAttribute
             * jsonvalue
-            * timestampFormat 
+            * timestampFormat
 
         :rtype: dict
         :return: Serialization information about the shape.
@@ -138,7 +138,7 @@ class Shape(object):
             * sensitive
             * required
             * idempotencyToken
-            * document 
+            * document
 
         :rtype: dict
         :return: Metadata about the shape.
@@ -169,15 +169,15 @@ class Shape(object):
         return "<%s(%s)>" % (self.__class__.__name__,
                              self.name)
 
-    @property 
-    def event_stream_name(self): 
-        return None 
+    @property
+    def event_stream_name(self):
+        return None
 
- 
+
 class StructureShape(Shape):
     @CachedProperty
     def members(self):
-        members = self._shape_model.get('members', self.MAP_TYPE()) 
+        members = self._shape_model.get('members', self.MAP_TYPE())
         # The members dict looks like:
         #    'members': {
         #        'MemberName': {'shape': 'shapeName'},
@@ -189,29 +189,29 @@ class StructureShape(Shape):
             shape_members[name] = self._resolve_shape_ref(shape_ref)
         return shape_members
 
-    @CachedProperty 
-    def event_stream_name(self): 
-        for member_name, member in self.members.items(): 
-            if member.serialization.get('eventstream'): 
-                return member_name 
-        return None 
+    @CachedProperty
+    def event_stream_name(self):
+        for member_name, member in self.members.items():
+            if member.serialization.get('eventstream'):
+                return member_name
+        return None
 
-    @CachedProperty 
-    def error_code(self): 
-        if not self.metadata.get('exception', False): 
-            return None 
-        error_metadata = self.metadata.get("error", {}) 
-        code = error_metadata.get("code") 
-        if code: 
-            return code 
-        # Use the exception name if there is no explicit code modeled 
-        return self.name 
- 
-    @CachedProperty 
-    def is_document_type(self): 
-        return self.metadata.get('document', False) 
- 
- 
+    @CachedProperty
+    def error_code(self):
+        if not self.metadata.get('exception', False):
+            return None
+        error_metadata = self.metadata.get("error", {})
+        code = error_metadata.get("code")
+        if code:
+            return code
+        # Use the exception name if there is no explicit code modeled
+        return self.name
+
+    @CachedProperty
+    def is_document_type(self):
+        return self.metadata.get('document', False)
+
+
 class ListShape(Shape):
     @CachedProperty
     def member(self):
@@ -275,17 +275,17 @@ class ServiceModel(object):
         return self._shape_resolver.get_shape_by_name(
             shape_name, member_traits)
 
-    def shape_for_error_code(self, error_code): 
-        return self._error_code_cache.get(error_code, None) 
- 
-    @CachedProperty 
-    def _error_code_cache(self): 
-        error_code_cache = {} 
-        for error_shape in self.error_shapes: 
-            code = error_shape.error_code 
-            error_code_cache[code] = error_shape 
-        return error_code_cache 
- 
+    def shape_for_error_code(self, error_code):
+        return self._error_code_cache.get(error_code, None)
+
+    @CachedProperty
+    def _error_code_cache(self):
+        error_code_cache = {}
+        for error_shape in self.error_shapes:
+            code = error_shape.error_code
+            error_code_cache[code] = error_shape
+        return error_code_cache
+
     def resolve_shape_ref(self, shape_ref):
         return self._shape_resolver.resolve_shape_ref(shape_ref)
 
@@ -293,15 +293,15 @@ class ServiceModel(object):
     def shape_names(self):
         return list(self._service_description.get('shapes', {}))
 
-    @CachedProperty 
-    def error_shapes(self): 
-        error_shapes = [] 
-        for shape_name in self.shape_names: 
-            error_shape = self.shape_for(shape_name) 
-            if error_shape.metadata.get('exception', False): 
-                error_shapes.append(error_shape) 
-        return error_shapes 
- 
+    @CachedProperty
+    def error_shapes(self):
+        error_shapes = []
+        for shape_name in self.shape_names:
+            error_shape = self.shape_for(shape_name)
+            if error_shape.metadata.get('exception', False):
+                error_shapes.append(error_shape)
+        return error_shapes
+
     @instance_cache
     def operation_model(self, operation_name):
         try:
@@ -336,15 +336,15 @@ class ServiceModel(object):
             return self.endpoint_prefix
 
     @CachedProperty
-    def service_id(self): 
-        try: 
-            return ServiceId(self._get_metadata_property('serviceId')) 
-        except UndefinedModelAttributeError: 
-            raise MissingServiceIdError( 
-                service_name=self._service_name 
-            ) 
- 
-    @CachedProperty 
+    def service_id(self):
+        try:
+            return ServiceId(self._get_metadata_property('serviceId'))
+        except UndefinedModelAttributeError:
+            raise MissingServiceIdError(
+                service_name=self._service_name
+            )
+
+    @CachedProperty
     def signing_name(self):
         """The name to use when computing signatures.
 
@@ -368,28 +368,28 @@ class ServiceModel(object):
     def endpoint_prefix(self):
         return self._get_metadata_property('endpointPrefix')
 
-    @CachedProperty 
-    def endpoint_discovery_operation(self): 
-        for operation in self.operation_names: 
-            model = self.operation_model(operation) 
-            if model.is_endpoint_discovery_operation: 
-                return model 
- 
-    @CachedProperty 
-    def endpoint_discovery_required(self): 
-        for operation in self.operation_names: 
-            model = self.operation_model(operation) 
-            if (model.endpoint_discovery is not None and 
-                    model.endpoint_discovery.get('required')): 
-                return True 
-        return False 
- 
+    @CachedProperty
+    def endpoint_discovery_operation(self):
+        for operation in self.operation_names:
+            model = self.operation_model(operation)
+            if model.is_endpoint_discovery_operation:
+                return model
+
+    @CachedProperty
+    def endpoint_discovery_required(self):
+        for operation in self.operation_names:
+            model = self.operation_model(operation)
+            if (model.endpoint_discovery is not None and
+                    model.endpoint_discovery.get('required')):
+                return True
+        return False
+
     def _get_metadata_property(self, name):
         try:
             return self.metadata[name]
         except KeyError:
             raise UndefinedModelAttributeError(
-                '"%s" not defined in the metadata of the model: %s' % 
+                '"%s" not defined in the metadata of the model: %s' %
                 (name, self))
 
     # Signature version is one of the rare properties
@@ -406,11 +406,11 @@ class ServiceModel(object):
     def signature_version(self, value):
         self._signature_version = value
 
-    def __repr__(self): 
-        return '%s(%s)' % (self.__class__.__name__, self.service_name) 
+    def __repr__(self):
+        return '%s(%s)' % (self.__class__.__name__, self.service_name)
 
- 
- 
+
+
 class OperationModel(object):
     def __init__(self, operation_model, service_model, name=None):
         """
@@ -483,16 +483,16 @@ class OperationModel(object):
         return self._operation_model.get('deprecated', False)
 
     @CachedProperty
-    def endpoint_discovery(self): 
-        # Explicit None default. An empty dictionary for this trait means it is 
-        # enabled but not required to be used. 
-        return self._operation_model.get('endpointdiscovery', None) 
- 
-    @CachedProperty 
-    def is_endpoint_discovery_operation(self): 
-        return self._operation_model.get('endpointoperation', False) 
- 
-    @CachedProperty 
+    def endpoint_discovery(self):
+        # Explicit None default. An empty dictionary for this trait means it is
+        # enabled but not required to be used.
+        return self._operation_model.get('endpointdiscovery', None)
+
+    @CachedProperty
+    def is_endpoint_discovery_operation(self):
+        return self._operation_model.get('endpointoperation', False)
+
+    @CachedProperty
     def input_shape(self):
         if 'input' not in self._operation_model:
             # Some operations do not accept any input and do not define an
@@ -531,37 +531,37 @@ class OperationModel(object):
         return list(self._service_model.resolve_shape_ref(s) for s in shapes)
 
     @CachedProperty
-    def endpoint(self): 
-        return self._operation_model.get('endpoint') 
- 
-    @CachedProperty 
-    def http_checksum_required(self): 
-        return self._operation_model.get('httpChecksumRequired', False) 
- 
-    @CachedProperty 
-    def has_event_stream_input(self): 
-        return self.get_event_stream_input() is not None 
- 
-    @CachedProperty 
-    def has_event_stream_output(self): 
-        return self.get_event_stream_output() is not None 
- 
-    def get_event_stream_input(self): 
-        return self._get_event_stream(self.input_shape) 
- 
-    def get_event_stream_output(self): 
-        return self._get_event_stream(self.output_shape) 
- 
-    def _get_event_stream(self, shape): 
-        """Returns the event stream member's shape if any or None otherwise.""" 
-        if shape is None: 
-            return None 
-        event_name = shape.event_stream_name 
-        if event_name: 
-            return shape.members[event_name] 
-        return None 
- 
-    @CachedProperty 
+    def endpoint(self):
+        return self._operation_model.get('endpoint')
+
+    @CachedProperty
+    def http_checksum_required(self):
+        return self._operation_model.get('httpChecksumRequired', False)
+
+    @CachedProperty
+    def has_event_stream_input(self):
+        return self.get_event_stream_input() is not None
+
+    @CachedProperty
+    def has_event_stream_output(self):
+        return self.get_event_stream_output() is not None
+
+    def get_event_stream_input(self):
+        return self._get_event_stream(self.input_shape)
+
+    def get_event_stream_output(self):
+        return self._get_event_stream(self.output_shape)
+
+    def _get_event_stream(self, shape):
+        """Returns the event stream member's shape if any or None otherwise."""
+        if shape is None:
+            return None
+        event_name = shape.event_stream_name
+        if event_name:
+            return shape.members[event_name]
+        return None
+
+    @CachedProperty
     def has_streaming_input(self):
         return self.get_streaming_input() is not None
 
@@ -744,7 +744,7 @@ class DenormalizedStructureBuilder(object):
         shape = self._build_initial_shape(model)
         shape['members'] = members
 
-        for name, member_model in model.get('members', OrderedDict()).items(): 
+        for name, member_model in model.get('members', OrderedDict()).items():
             member_shape_name = self._get_shape_name(member_model)
             members[name] = {'shape': member_shape_name}
             self._build_model(member_model, shapes, member_shape_name)
@@ -773,9 +773,9 @@ class DenormalizedStructureBuilder(object):
         }
         if 'documentation' in model:
             shape['documentation'] = model['documentation']
-        for attr in Shape.METADATA_ATTRS: 
-            if attr in model: 
-                shape[attr] = model[attr] 
+        for attr in Shape.METADATA_ATTRS:
+            if attr in model:
+                shape[attr] = model[attr]
         return shape
 
     def _build_scalar(self, model):

@@ -4,7 +4,7 @@
 
     Lexer for SuperCollider
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -25,7 +25,7 @@ class SuperColliderLexer(RegexLexer):
     """
 
     name = 'SuperCollider'
-    aliases = ['supercollider', 'sc'] 
+    aliases = ['supercollider', 'sc']
     filenames = ['*.sc', '*.scd']
     mimetypes = ['application/supercollider', 'text/supercollider', ]
 
@@ -83,12 +83,12 @@ class SuperColliderLexer(RegexLexer):
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'0x[0-9a-fA-F]+', Number.Hex),
             (r'[0-9]+', Number.Integer),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double), 
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
         ]
     }
- 
-    def analyse_text(text): 
-        """We're searching for a common function and a unique keyword here.""" 
-        if 'SinOsc' in text or 'thisFunctionDef' in text: 
-            return 0.1 
+
+    def analyse_text(text):
+        """We're searching for a common function and a unique keyword here."""
+        if 'SinOsc' in text or 'thisFunctionDef' in text:
+            return 0.1

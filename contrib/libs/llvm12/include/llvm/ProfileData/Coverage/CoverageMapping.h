@@ -62,8 +62,8 @@ enum class coveragemap_error {
   unsupported_version,
   truncated,
   malformed,
-  decompression_failed, 
-  invalid_or_missing_arch_specifier 
+  decompression_failed,
+  invalid_or_missing_arch_specifier
 };
 
 const std::error_category &coveragemap_category();
@@ -97,8 +97,8 @@ private:
 /// A Counter is an abstract value that describes how to compute the
 /// execution count for a region of code using the collected profile count data.
 struct Counter {
-  /// The CounterExpression kind (Add or Subtract) is encoded in bit 0 next to 
-  /// the CounterKind. This means CounterKind has to leave bit 0 free. 
+  /// The CounterExpression kind (Add or Subtract) is encoded in bit 0 next to
+  /// the CounterKind. This means CounterKind has to leave bit 0 free.
   enum CounterKind { Zero, CounterValueReference, Expression };
   static const unsigned EncodingTagBits = 2;
   static const unsigned EncodingTagMask = 0x3;
@@ -228,20 +228,20 @@ struct CounterMappingRegion {
 
     /// A GapRegion is like a CodeRegion, but its count is only set as the
     /// line execution count when its the only region in the line.
-    GapRegion, 
- 
-    /// A BranchRegion represents leaf-level boolean expressions and is 
-    /// associated with two counters, each representing the number of times the 
-    /// expression evaluates to true or false. 
-    BranchRegion 
+    GapRegion,
+
+    /// A BranchRegion represents leaf-level boolean expressions and is
+    /// associated with two counters, each representing the number of times the
+    /// expression evaluates to true or false.
+    BranchRegion
   };
 
-  /// Primary Counter that is also used for Branch Regions (TrueCount). 
+  /// Primary Counter that is also used for Branch Regions (TrueCount).
   Counter Count;
- 
-  /// Secondary Counter used for Branch Regions (FalseCount). 
-  Counter FalseCount; 
- 
+
+  /// Secondary Counter used for Branch Regions (FalseCount).
+  Counter FalseCount;
+
   unsigned FileID, ExpandedFileID;
   unsigned LineStart, ColumnStart, LineEnd, ColumnEnd;
   RegionKind Kind;
@@ -253,15 +253,15 @@ struct CounterMappingRegion {
         LineStart(LineStart), ColumnStart(ColumnStart), LineEnd(LineEnd),
         ColumnEnd(ColumnEnd), Kind(Kind) {}
 
-  CounterMappingRegion(Counter Count, Counter FalseCount, unsigned FileID, 
-                       unsigned ExpandedFileID, unsigned LineStart, 
-                       unsigned ColumnStart, unsigned LineEnd, 
-                       unsigned ColumnEnd, RegionKind Kind) 
-      : Count(Count), FalseCount(FalseCount), FileID(FileID), 
-        ExpandedFileID(ExpandedFileID), LineStart(LineStart), 
-        ColumnStart(ColumnStart), LineEnd(LineEnd), ColumnEnd(ColumnEnd), 
-        Kind(Kind) {} 
- 
+  CounterMappingRegion(Counter Count, Counter FalseCount, unsigned FileID,
+                       unsigned ExpandedFileID, unsigned LineStart,
+                       unsigned ColumnStart, unsigned LineEnd,
+                       unsigned ColumnEnd, RegionKind Kind)
+      : Count(Count), FalseCount(FalseCount), FileID(FileID),
+        ExpandedFileID(ExpandedFileID), LineStart(LineStart),
+        ColumnStart(ColumnStart), LineEnd(LineEnd), ColumnEnd(ColumnEnd),
+        Kind(Kind) {}
+
   static CounterMappingRegion
   makeRegion(Counter Count, unsigned FileID, unsigned LineStart,
              unsigned ColumnStart, unsigned LineEnd, unsigned ColumnEnd) {
@@ -291,14 +291,14 @@ struct CounterMappingRegion {
                                 LineEnd, (1U << 31) | ColumnEnd, GapRegion);
   }
 
-  static CounterMappingRegion 
-  makeBranchRegion(Counter Count, Counter FalseCount, unsigned FileID, 
-                   unsigned LineStart, unsigned ColumnStart, unsigned LineEnd, 
-                   unsigned ColumnEnd) { 
-    return CounterMappingRegion(Count, FalseCount, FileID, 0, LineStart, 
-                                ColumnStart, LineEnd, ColumnEnd, BranchRegion); 
-  } 
- 
+  static CounterMappingRegion
+  makeBranchRegion(Counter Count, Counter FalseCount, unsigned FileID,
+                   unsigned LineStart, unsigned ColumnStart, unsigned LineEnd,
+                   unsigned ColumnEnd) {
+    return CounterMappingRegion(Count, FalseCount, FileID, 0, LineStart,
+                                ColumnStart, LineEnd, ColumnEnd, BranchRegion);
+  }
+
   inline LineColPair startLoc() const {
     return LineColPair(LineStart, ColumnStart);
   }
@@ -309,17 +309,17 @@ struct CounterMappingRegion {
 /// Associates a source range with an execution count.
 struct CountedRegion : public CounterMappingRegion {
   uint64_t ExecutionCount;
-  uint64_t FalseExecutionCount; 
-  bool Folded; 
+  uint64_t FalseExecutionCount;
+  bool Folded;
 
   CountedRegion(const CounterMappingRegion &R, uint64_t ExecutionCount)
-      : CounterMappingRegion(R), ExecutionCount(ExecutionCount), 
-        FalseExecutionCount(0), Folded(false) {} 
- 
-  CountedRegion(const CounterMappingRegion &R, uint64_t ExecutionCount, 
-                uint64_t FalseExecutionCount) 
-      : CounterMappingRegion(R), ExecutionCount(ExecutionCount), 
-        FalseExecutionCount(FalseExecutionCount), Folded(false) {} 
+      : CounterMappingRegion(R), ExecutionCount(ExecutionCount),
+        FalseExecutionCount(0), Folded(false) {}
+
+  CountedRegion(const CounterMappingRegion &R, uint64_t ExecutionCount,
+                uint64_t FalseExecutionCount)
+      : CounterMappingRegion(R), ExecutionCount(ExecutionCount),
+        FalseExecutionCount(FalseExecutionCount), Folded(false) {}
 };
 
 /// A Counter mapping context is used to connect the counters, expressions
@@ -356,8 +356,8 @@ struct FunctionRecord {
   std::vector<std::string> Filenames;
   /// Regions in the function along with their counts.
   std::vector<CountedRegion> CountedRegions;
-  /// Branch Regions in the function along with their counts. 
-  std::vector<CountedRegion> CountedBranchRegions; 
+  /// Branch Regions in the function along with their counts.
+  std::vector<CountedRegion> CountedBranchRegions;
   /// The number of times this function was executed.
   uint64_t ExecutionCount = 0;
 
@@ -367,19 +367,19 @@ struct FunctionRecord {
   FunctionRecord(FunctionRecord &&FR) = default;
   FunctionRecord &operator=(FunctionRecord &&) = default;
 
-  void pushRegion(CounterMappingRegion Region, uint64_t Count, 
-                  uint64_t FalseCount) { 
-    if (Region.Kind == CounterMappingRegion::BranchRegion) { 
-      CountedBranchRegions.emplace_back(Region, Count, FalseCount); 
-      // If both counters are hard-coded to zero, then this region represents a 
-      // constant-folded branch. 
-      if (Region.Count.isZero() && Region.FalseCount.isZero()) 
-        CountedBranchRegions.back().Folded = true; 
-      return; 
-    } 
+  void pushRegion(CounterMappingRegion Region, uint64_t Count,
+                  uint64_t FalseCount) {
+    if (Region.Kind == CounterMappingRegion::BranchRegion) {
+      CountedBranchRegions.emplace_back(Region, Count, FalseCount);
+      // If both counters are hard-coded to zero, then this region represents a
+      // constant-folded branch.
+      if (Region.Count.isZero() && Region.FalseCount.isZero())
+        CountedBranchRegions.back().Folded = true;
+      return;
+    }
     if (CountedRegions.empty())
       ExecutionCount = Count;
-    CountedRegions.emplace_back(Region, Count, FalseCount); 
+    CountedRegions.emplace_back(Region, Count, FalseCount);
   }
 };
 
@@ -458,8 +458,8 @@ struct CoverageSegment {
         IsRegionEntry(IsRegionEntry), IsGapRegion(false) {}
 
   CoverageSegment(unsigned Line, unsigned Col, uint64_t Count,
-                  bool IsRegionEntry, bool IsGapRegion = false, 
-                  bool IsBranchRegion = false) 
+                  bool IsRegionEntry, bool IsGapRegion = false,
+                  bool IsBranchRegion = false)
       : Line(Line), Col(Col), Count(Count), HasCount(true),
         IsRegionEntry(IsRegionEntry), IsGapRegion(IsGapRegion) {}
 
@@ -539,7 +539,7 @@ class CoverageData {
   std::string Filename;
   std::vector<CoverageSegment> Segments;
   std::vector<ExpansionRecord> Expansions;
-  std::vector<CountedRegion> BranchRegions; 
+  std::vector<CountedRegion> BranchRegions;
 
 public:
   CoverageData() = default;
@@ -563,9 +563,9 @@ public:
 
   /// Expansions that can be further processed.
   ArrayRef<ExpansionRecord> getExpansions() const { return Expansions; }
- 
-  /// Branches that can be further processed. 
-  ArrayRef<CountedRegion> getBranches() const { return BranchRegions; } 
+
+  /// Branches that can be further processed.
+  ArrayRef<CountedRegion> getBranches() const { return BranchRegions; }
 };
 
 /// The mapping of profile information to coverage data.
@@ -1001,9 +1001,9 @@ enum CovMapVersion {
   Version3 = 2,
   // Function records are named, uniqued, and moved to a dedicated section.
   Version4 = 3,
-  // Branch regions referring to two counters are added 
-  Version5 = 4, 
-  // The current version is Version5. 
+  // Branch regions referring to two counters are added
+  Version5 = 4,
+  // The current version is Version5.
   CurrentVersion = INSTR_PROF_COVMAP_VERSION
 };
 

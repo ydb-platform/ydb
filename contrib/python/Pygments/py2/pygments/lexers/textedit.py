@@ -102,9 +102,9 @@ class VimLexer(RegexLexer):
 
             (r'[ \t]+', Text),
             # TODO: regexes can have other delims
-            (r'/[^/\\\n]*(?:\\[\s\S][^/\\\n]*)*/', String.Regex), 
-            (r'"[^"\\\n]*(?:\\[\s\S][^"\\\n]*)*"', String.Double), 
-            (r"'[^\n']*(?:''[^\n']*)*'", String.Single), 
+            (r'/[^/\\\n]*(?:\\[\s\S][^/\\\n]*)*/', String.Regex),
+            (r'"[^"\\\n]*(?:\\[\s\S][^"\\\n]*)*"', String.Double),
+            (r"'[^\n']*(?:''[^\n']*)*'", String.Single),
 
             # Who decided that doublequote was a good comment character??
             (r'(?<=\s)"[^\-:.%#=*].*', Comment),

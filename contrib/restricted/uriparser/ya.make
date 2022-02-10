@@ -2,21 +2,21 @@
 
 LIBRARY()
 
-OWNER( 
-    kikht 
-    shindo 
-    g:cpp-contrib 
-    g:mds 
-) 
+OWNER(
+    kikht
+    shindo
+    g:cpp-contrib
+    g:mds
+)
 
 VERSION(0.9.6)
 
 ORIGINAL_SOURCE(https://github.com/uriparser/uriparser/archive/uriparser-0.9.6.tar.gz)
- 
+
 LICENSE(BSD-3-Clause)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 PEERDIR(
     contrib/libs/libc_compat
 )

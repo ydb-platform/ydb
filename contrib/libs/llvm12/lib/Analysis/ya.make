@@ -15,13 +15,13 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12 
-    contrib/libs/llvm12/include 
-    contrib/libs/llvm12/lib/BinaryFormat 
-    contrib/libs/llvm12/lib/IR 
-    contrib/libs/llvm12/lib/Object 
-    contrib/libs/llvm12/lib/ProfileData 
-    contrib/libs/llvm12/lib/Support 
+    contrib/libs/llvm12
+    contrib/libs/llvm12/include
+    contrib/libs/llvm12/lib/BinaryFormat
+    contrib/libs/llvm12/lib/IR
+    contrib/libs/llvm12/lib/Object
+    contrib/libs/llvm12/lib/ProfileData
+    contrib/libs/llvm12/lib/Support
 )
 
 ADDINCL(
@@ -56,28 +56,28 @@ SRCS(
     CmpInstAnalysis.cpp
     CodeMetrics.cpp
     ConstantFolding.cpp
-    ConstraintSystem.cpp 
+    ConstraintSystem.cpp
     CostModel.cpp
     DDG.cpp
-    DDGPrinter.cpp 
+    DDGPrinter.cpp
     Delinearization.cpp
     DemandedBits.cpp
     DependenceAnalysis.cpp
     DependenceGraphBuilder.cpp
-    DevelopmentModeInlineAdvisor.cpp 
+    DevelopmentModeInlineAdvisor.cpp
     DivergenceAnalysis.cpp
     DomPrinter.cpp
     DomTreeUpdater.cpp
     DominanceFrontier.cpp
     EHPersonalities.cpp
-    FunctionPropertiesAnalysis.cpp 
+    FunctionPropertiesAnalysis.cpp
     GlobalsModRef.cpp
     GuardUtils.cpp
     HeatUtils.cpp
-    IRSimilarityIdentifier.cpp 
+    IRSimilarityIdentifier.cpp
     IVDescriptors.cpp
     IVUsers.cpp
-    ImportedFunctionsInliningStatistics.cpp 
+    ImportedFunctionsInliningStatistics.cpp
     IndirectCallPromotionAnalysis.cpp
     InlineAdvisor.cpp
     InlineCost.cpp
@@ -101,7 +101,7 @@ SRCS(
     LoopNestAnalysis.cpp
     LoopPass.cpp
     LoopUnrollAnalyzer.cpp
-    MLInlineAdvisor.cpp 
+    MLInlineAdvisor.cpp
     MemDepPrinter.cpp
     MemDerefPrinter.cpp
     MemoryBuiltins.cpp
@@ -124,8 +124,8 @@ SRCS(
     RegionInfo.cpp
     RegionPass.cpp
     RegionPrinter.cpp
-    ReleaseModeModelRunner.cpp 
-    ReplayInlineAdvisor.cpp 
+    ReleaseModeModelRunner.cpp
+    ReplayInlineAdvisor.cpp
     ScalarEvolution.cpp
     ScalarEvolutionAliasAnalysis.cpp
     ScalarEvolutionDivision.cpp
@@ -135,7 +135,7 @@ SRCS(
     StackSafetyAnalysis.cpp
     SyncDependenceAnalysis.cpp
     SyntheticCountsUtils.cpp
-    TFUtils.cpp 
+    TFUtils.cpp
     TargetLibraryInfo.cpp
     TargetTransformInfo.cpp
     Trace.cpp

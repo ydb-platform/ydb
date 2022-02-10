@@ -1,8 +1,8 @@
 #include "Python.h"
-#include "pycore_object.h"        // _PyObject_GC_TRACK 
-#include "pycore_pystate.h"       // _PyThreadState_GET() 
-#include "pycore_tupleobject.h" 
-#include "structmember.h"         // PyMemberDef 
+#include "pycore_object.h"        // _PyObject_GC_TRACK
+#include "pycore_pystate.h"       // _PyThreadState_GET()
+#include "pycore_tupleobject.h"
+#include "structmember.h"         // PyMemberDef
 
 /* _functools module written and maintained
    by Hye-Shik Chang <perky@FreeBSD.org>
@@ -18,15 +18,15 @@ typedef struct {
     PyObject *fn;
     PyObject *args;
     PyObject *kw;
-    PyObject *dict;        /* __dict__ */ 
+    PyObject *dict;        /* __dict__ */
     PyObject *weakreflist; /* List of weak references */
-    vectorcallfunc vectorcall; 
+    vectorcallfunc vectorcall;
 } partialobject;
 
 static PyTypeObject partial_type;
 
-static void partial_setvectorcall(partialobject *pto); 
- 
+static void partial_setvectorcall(partialobject *pto);
+
 static PyObject *
 partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 {
@@ -41,7 +41,7 @@ partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 
     pargs = pkw = NULL;
     func = PyTuple_GET_ITEM(args, 0);
-    if (Py_IS_TYPE(func, &partial_type) && type == &partial_type) { 
+    if (Py_IS_TYPE(func, &partial_type) && type == &partial_type) {
         partialobject *part = (partialobject *)func;
         if (part->dict == NULL) {
             pargs = part->args;
@@ -109,7 +109,7 @@ partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    partial_setvectorcall(pto); 
+    partial_setvectorcall(pto);
     return (PyObject *)pto;
 }
 
@@ -127,114 +127,114 @@ partial_dealloc(partialobject *pto)
     Py_TYPE(pto)->tp_free(pto);
 }
 
- 
-/* Merging keyword arguments using the vectorcall convention is messy, so 
- * if we would need to do that, we stop using vectorcall and fall back 
- * to using partial_call() instead. */ 
-_Py_NO_INLINE static PyObject * 
-partial_vectorcall_fallback(PyThreadState *tstate, partialobject *pto, 
-                            PyObject *const *args, size_t nargsf, 
-                            PyObject *kwnames) 
-{ 
-    pto->vectorcall = NULL; 
-    Py_ssize_t nargs = PyVectorcall_NARGS(nargsf); 
-    return _PyObject_MakeTpCall(tstate, (PyObject *)pto, 
-                                args, nargs, kwnames); 
-} 
- 
-static PyObject *
-partial_vectorcall(partialobject *pto, PyObject *const *args, 
-                   size_t nargsf, PyObject *kwnames) 
+
+/* Merging keyword arguments using the vectorcall convention is messy, so
+ * if we would need to do that, we stop using vectorcall and fall back
+ * to using partial_call() instead. */
+_Py_NO_INLINE static PyObject *
+partial_vectorcall_fallback(PyThreadState *tstate, partialobject *pto,
+                            PyObject *const *args, size_t nargsf,
+                            PyObject *kwnames)
 {
-    PyThreadState *tstate = _PyThreadState_GET(); 
- 
-    /* pto->kw is mutable, so need to check every time */ 
-    if (PyDict_GET_SIZE(pto->kw)) { 
-        return partial_vectorcall_fallback(tstate, pto, args, nargsf, kwnames); 
-    } 
- 
-    Py_ssize_t nargs = PyVectorcall_NARGS(nargsf); 
-    Py_ssize_t nargs_total = nargs; 
-    if (kwnames != NULL) { 
-        nargs_total += PyTuple_GET_SIZE(kwnames); 
-    } 
- 
-    PyObject **pto_args = _PyTuple_ITEMS(pto->args); 
-    Py_ssize_t pto_nargs = PyTuple_GET_SIZE(pto->args); 
- 
-    /* Fast path if we're called without arguments */ 
-    if (nargs_total == 0) { 
-        return _PyObject_VectorcallTstate(tstate, pto->fn, 
-                                          pto_args, pto_nargs, NULL); 
-    } 
- 
-    /* Fast path using PY_VECTORCALL_ARGUMENTS_OFFSET to prepend a single 
-     * positional argument */ 
-    if (pto_nargs == 1 && (nargsf & PY_VECTORCALL_ARGUMENTS_OFFSET)) { 
-        PyObject **newargs = (PyObject **)args - 1; 
-        PyObject *tmp = newargs[0]; 
-        newargs[0] = pto_args[0]; 
-        PyObject *ret = _PyObject_VectorcallTstate(tstate, pto->fn, 
-                                                   newargs, nargs + 1, kwnames); 
-        newargs[0] = tmp; 
-        return ret; 
-    } 
- 
-    Py_ssize_t newnargs_total = pto_nargs + nargs_total; 
- 
+    pto->vectorcall = NULL;
+    Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
+    return _PyObject_MakeTpCall(tstate, (PyObject *)pto,
+                                args, nargs, kwnames);
+}
+
+static PyObject *
+partial_vectorcall(partialobject *pto, PyObject *const *args,
+                   size_t nargsf, PyObject *kwnames)
+{
+    PyThreadState *tstate = _PyThreadState_GET();
+
+    /* pto->kw is mutable, so need to check every time */
+    if (PyDict_GET_SIZE(pto->kw)) {
+        return partial_vectorcall_fallback(tstate, pto, args, nargsf, kwnames);
+    }
+
+    Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
+    Py_ssize_t nargs_total = nargs;
+    if (kwnames != NULL) {
+        nargs_total += PyTuple_GET_SIZE(kwnames);
+    }
+
+    PyObject **pto_args = _PyTuple_ITEMS(pto->args);
+    Py_ssize_t pto_nargs = PyTuple_GET_SIZE(pto->args);
+
+    /* Fast path if we're called without arguments */
+    if (nargs_total == 0) {
+        return _PyObject_VectorcallTstate(tstate, pto->fn,
+                                          pto_args, pto_nargs, NULL);
+    }
+
+    /* Fast path using PY_VECTORCALL_ARGUMENTS_OFFSET to prepend a single
+     * positional argument */
+    if (pto_nargs == 1 && (nargsf & PY_VECTORCALL_ARGUMENTS_OFFSET)) {
+        PyObject **newargs = (PyObject **)args - 1;
+        PyObject *tmp = newargs[0];
+        newargs[0] = pto_args[0];
+        PyObject *ret = _PyObject_VectorcallTstate(tstate, pto->fn,
+                                                   newargs, nargs + 1, kwnames);
+        newargs[0] = tmp;
+        return ret;
+    }
+
+    Py_ssize_t newnargs_total = pto_nargs + nargs_total;
+
     PyObject *small_stack[_PY_FASTCALL_SMALL_STACK];
     PyObject *ret;
-    PyObject **stack; 
+    PyObject **stack;
 
-    if (newnargs_total <= (Py_ssize_t)Py_ARRAY_LENGTH(small_stack)) { 
-        stack = small_stack; 
+    if (newnargs_total <= (Py_ssize_t)Py_ARRAY_LENGTH(small_stack)) {
+        stack = small_stack;
     }
     else {
-        stack = PyMem_Malloc(newnargs_total * sizeof(PyObject *)); 
-        if (stack == NULL) { 
-            PyErr_NoMemory(); 
-            return NULL; 
+        stack = PyMem_Malloc(newnargs_total * sizeof(PyObject *));
+        if (stack == NULL) {
+            PyErr_NoMemory();
+            return NULL;
         }
-    } 
+    }
 
-    /* Copy to new stack, using borrowed references */ 
-    memcpy(stack, pto_args, pto_nargs * sizeof(PyObject*)); 
-    memcpy(stack + pto_nargs, args, nargs_total * sizeof(PyObject*)); 
- 
-    ret = _PyObject_VectorcallTstate(tstate, pto->fn, 
-                                     stack, pto_nargs + nargs, kwnames); 
-    if (stack != small_stack) { 
-        PyMem_Free(stack); 
+    /* Copy to new stack, using borrowed references */
+    memcpy(stack, pto_args, pto_nargs * sizeof(PyObject*));
+    memcpy(stack + pto_nargs, args, nargs_total * sizeof(PyObject*));
+
+    ret = _PyObject_VectorcallTstate(tstate, pto->fn,
+                                     stack, pto_nargs + nargs, kwnames);
+    if (stack != small_stack) {
+        PyMem_Free(stack);
     }
     return ret;
 }
 
-/* Set pto->vectorcall depending on the parameters of the partial object */ 
-static void 
-partial_setvectorcall(partialobject *pto) 
+/* Set pto->vectorcall depending on the parameters of the partial object */
+static void
+partial_setvectorcall(partialobject *pto)
 {
-    if (PyVectorcall_Function(pto->fn) == NULL) { 
-        /* Don't use vectorcall if the underlying function doesn't support it */ 
-        pto->vectorcall = NULL; 
+    if (PyVectorcall_Function(pto->fn) == NULL) {
+        /* Don't use vectorcall if the underlying function doesn't support it */
+        pto->vectorcall = NULL;
     }
-    /* We could have a special case if there are no arguments, 
-     * but that is unlikely (why use partial without arguments?), 
-     * so we don't optimize that */ 
-    else { 
-        pto->vectorcall = (vectorcallfunc)partial_vectorcall; 
-    } 
+    /* We could have a special case if there are no arguments,
+     * but that is unlikely (why use partial without arguments?),
+     * so we don't optimize that */
+    else {
+        pto->vectorcall = (vectorcallfunc)partial_vectorcall;
+    }
 }
 
- 
+
 static PyObject *
 partial_call(partialobject *pto, PyObject *args, PyObject *kwargs)
 {
-    assert(PyCallable_Check(pto->fn)); 
-    assert(PyTuple_Check(pto->args)); 
-    assert(PyDict_Check(pto->kw)); 
+    assert(PyCallable_Check(pto->fn));
+    assert(PyTuple_Check(pto->args));
+    assert(PyDict_Check(pto->kw));
 
-    /* Merge keywords */ 
-    PyObject *kwargs2; 
+    /* Merge keywords */
+    PyObject *kwargs2;
     if (PyDict_GET_SIZE(pto->kw) == 0) {
         /* kwargs can be NULL */
         kwargs2 = kwargs;
@@ -257,16 +257,16 @@ partial_call(partialobject *pto, PyObject *args, PyObject *kwargs)
         }
     }
 
-    /* Merge positional arguments */ 
-    /* Note: tupleconcat() is optimized for empty tuples */ 
-    PyObject *args2 = PySequence_Concat(pto->args, args); 
-    if (args2 == NULL) { 
-        Py_XDECREF(kwargs2); 
-        return NULL; 
-    } 
+    /* Merge positional arguments */
+    /* Note: tupleconcat() is optimized for empty tuples */
+    PyObject *args2 = PySequence_Concat(pto->args, args);
+    if (args2 == NULL) {
+        Py_XDECREF(kwargs2);
+        return NULL;
+    }
 
-    PyObject *res = PyObject_Call(pto->fn, args2, kwargs2); 
-    Py_DECREF(args2); 
+    PyObject *res = PyObject_Call(pto->fn, args2, kwargs2);
+    Py_DECREF(args2);
     Py_XDECREF(kwargs2);
     return res;
 }
@@ -407,15 +407,15 @@ partial_setstate(partialobject *pto, PyObject *state)
     Py_SETREF(pto->args, fnargs);
     Py_SETREF(pto->kw, kw);
     Py_XSETREF(pto->dict, dict);
-    partial_setvectorcall(pto); 
+    partial_setvectorcall(pto);
     Py_RETURN_NONE;
 }
 
 static PyMethodDef partial_methods[] = {
     {"__reduce__", (PyCFunction)partial_reduce, METH_NOARGS},
     {"__setstate__", (PyCFunction)partial_setstate, METH_O},
-    {"__class_getitem__",    (PyCFunction)Py_GenericAlias, 
-    METH_O|METH_CLASS,       PyDoc_STR("See PEP 585")}, 
+    {"__class_getitem__",    (PyCFunction)Py_GenericAlias,
+    METH_O|METH_CLASS,       PyDoc_STR("See PEP 585")},
     {NULL,              NULL}           /* sentinel */
 };
 
@@ -426,10 +426,10 @@ static PyTypeObject partial_type = {
     0,                                  /* tp_itemsize */
     /* methods */
     (destructor)partial_dealloc,        /* tp_dealloc */
-    offsetof(partialobject, vectorcall),/* tp_vectorcall_offset */ 
+    offsetof(partialobject, vectorcall),/* tp_vectorcall_offset */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_as_async */ 
+    0,                                  /* tp_as_async */
     (reprfunc)partial_repr,             /* tp_repr */
     0,                                  /* tp_as_number */
     0,                                  /* tp_as_sequence */
@@ -441,8 +441,8 @@ static PyTypeObject partial_type = {
     PyObject_GenericSetAttr,            /* tp_setattro */
     0,                                  /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC |
-        Py_TPFLAGS_BASETYPE | 
-        Py_TPFLAGS_HAVE_VECTORCALL,     /* tp_flags */ 
+        Py_TPFLAGS_BASETYPE |
+        Py_TPFLAGS_HAVE_VECTORCALL,     /* tp_flags */
     partial_doc,                        /* tp_doc */
     (traverseproc)partial_traverse,     /* tp_traverse */
     0,                                  /* tp_clear */
@@ -519,10 +519,10 @@ static PyTypeObject keyobject_type = {
     0,                                  /* tp_itemsize */
     /* methods */
     (destructor)keyobject_dealloc,      /* tp_dealloc */
-    0,                                  /* tp_vectorcall_offset */ 
+    0,                                  /* tp_vectorcall_offset */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_as_async */ 
+    0,                                  /* tp_as_async */
     0,                                  /* tp_repr */
     0,                                  /* tp_as_number */
     0,                                  /* tp_as_sequence */
@@ -575,7 +575,7 @@ keyobject_richcompare(PyObject *ko, PyObject *other, int op)
     PyObject *answer;
     PyObject* stack[2];
 
-    if (!Py_IS_TYPE(other, &keyobject_type)) { 
+    if (!Py_IS_TYPE(other, &keyobject_type)) {
         PyErr_Format(PyExc_TypeError, "other argument must be K instance");
         return NULL;
     }
@@ -651,7 +651,7 @@ functools_reduce(PyObject *self, PyObject *args)
     for (;;) {
         PyObject *op2;
 
-        if (Py_REFCNT(args) > 1) { 
+        if (Py_REFCNT(args) > 1) {
             Py_DECREF(args);
             if ((args = PyTuple_New(2)) == NULL)
                 goto Fail;
@@ -667,18 +667,18 @@ functools_reduce(PyObject *self, PyObject *args)
         if (result == NULL)
             result = op2;
         else {
-            /* Update the args tuple in-place */ 
-            assert(Py_REFCNT(args) == 1); 
-            Py_XSETREF(_PyTuple_ITEMS(args)[0], result); 
-            Py_XSETREF(_PyTuple_ITEMS(args)[1], op2); 
-            if ((result = PyObject_Call(func, args, NULL)) == NULL) { 
+            /* Update the args tuple in-place */
+            assert(Py_REFCNT(args) == 1);
+            Py_XSETREF(_PyTuple_ITEMS(args)[0], result);
+            Py_XSETREF(_PyTuple_ITEMS(args)[1], op2);
+            if ((result = PyObject_Call(func, args, NULL)) == NULL) {
                 goto Fail;
-            } 
-            // bpo-42536: The GC may have untracked this args tuple. Since we're 
-            // recycling it, make sure it's tracked again: 
-            if (!_PyObject_GC_IS_TRACKED(args)) { 
-                _PyObject_GC_TRACK(args); 
-            } 
+            }
+            // bpo-42536: The GC may have untracked this args tuple. Since we're
+            // recycling it, make sure it's tracked again:
+            if (!_PyObject_GC_IS_TRACKED(args)) {
+                _PyObject_GC_TRACK(args);
+            }
         }
     }
 
@@ -758,10 +758,10 @@ static PyTypeObject lru_list_elem_type = {
     0,                                  /* tp_itemsize */
     /* methods */
     (destructor)lru_list_elem_dealloc,  /* tp_dealloc */
-    0,                                  /* tp_vectorcall_offset */ 
+    0,                                  /* tp_vectorcall_offset */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_as_async */ 
+    0,                                  /* tp_as_async */
     0,                                  /* tp_repr */
     0,                                  /* tp_as_number */
     0,                                  /* tp_as_sequence */
@@ -789,7 +789,7 @@ typedef struct lru_cache_object {
     Py_ssize_t misses;
     PyObject *cache_info_type;
     PyObject *dict;
-    PyObject *weakreflist; 
+    PyObject *weakreflist;
 } lru_cache_object;
 
 static PyTypeObject lru_cache_type;
@@ -800,10 +800,10 @@ lru_cache_make_key(PyObject *args, PyObject *kwds, int typed)
     PyObject *key, *keyword, *value;
     Py_ssize_t key_size, pos, key_pos, kwds_size;
 
-    kwds_size = kwds ? PyDict_GET_SIZE(kwds) : 0; 
- 
+    kwds_size = kwds ? PyDict_GET_SIZE(kwds) : 0;
+
     /* short path, key will match args anyway, which is a tuple */
-    if (!typed && !kwds_size) { 
+    if (!typed && !kwds_size) {
         if (PyTuple_GET_SIZE(args) == 1) {
             key = PyTuple_GET_ITEM(args, 0);
             if (PyUnicode_CheckExact(key) || PyLong_CheckExact(key)) {
@@ -1202,8 +1202,8 @@ lru_cache_new(PyTypeObject *type, PyObject *args, PyObject *kw)
     obj->maxsize = maxsize;
     Py_INCREF(cache_info_type);
     obj->cache_info_type = cache_info_type;
-    obj->dict = NULL; 
-    obj->weakreflist = NULL; 
+    obj->dict = NULL;
+    obj->weakreflist = NULL;
     return (PyObject *)obj;
 }
 
@@ -1235,8 +1235,8 @@ lru_cache_dealloc(lru_cache_object *obj)
     lru_list_elem *list;
     /* bpo-31095: UnTrack is needed before calling any callbacks */
     PyObject_GC_UnTrack(obj);
-    if (obj->weakreflist != NULL) 
-        PyObject_ClearWeakRefs((PyObject*)obj); 
+    if (obj->weakreflist != NULL)
+        PyObject_ClearWeakRefs((PyObject*)obj);
 
     list = lru_cache_unlink_list(obj);
     Py_XDECREF(obj->cache);
@@ -1373,10 +1373,10 @@ static PyTypeObject lru_cache_type = {
     0,                                  /* tp_itemsize */
     /* methods */
     (destructor)lru_cache_dealloc,      /* tp_dealloc */
-    0,                                  /* tp_vectorcall_offset */ 
+    0,                                  /* tp_vectorcall_offset */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_as_async */ 
+    0,                                  /* tp_as_async */
     0,                                  /* tp_repr */
     0,                                  /* tp_as_number */
     0,                                  /* tp_as_sequence */
@@ -1387,15 +1387,15 @@ static PyTypeObject lru_cache_type = {
     0,                                  /* tp_getattro */
     0,                                  /* tp_setattro */
     0,                                  /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | 
-    Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_METHOD_DESCRIPTOR, 
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE |
+    Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_METHOD_DESCRIPTOR,
                                         /* tp_flags */
     lru_cache_doc,                      /* tp_doc */
     (traverseproc)lru_cache_tp_traverse,/* tp_traverse */
     (inquiry)lru_cache_tp_clear,        /* tp_clear */
     0,                                  /* tp_richcompare */
-    offsetof(lru_cache_object, weakreflist), 
-                                        /* tp_weaklistoffset */ 
+    offsetof(lru_cache_object, weakreflist),
+                                        /* tp_weaklistoffset */
     0,                                  /* tp_iter */
     0,                                  /* tp_iternext */
     lru_cache_methods,                  /* tp_methods */
@@ -1413,67 +1413,67 @@ static PyTypeObject lru_cache_type = {
 
 /* module level code ********************************************************/
 
-PyDoc_STRVAR(_functools_doc, 
+PyDoc_STRVAR(_functools_doc,
 "Tools that operate on functions.");
 
-static PyMethodDef _functools_methods[] = { 
+static PyMethodDef _functools_methods[] = {
     {"reduce",          functools_reduce,     METH_VARARGS, functools_reduce_doc},
-    {"cmp_to_key",      (PyCFunction)(void(*)(void))functools_cmp_to_key, 
+    {"cmp_to_key",      (PyCFunction)(void(*)(void))functools_cmp_to_key,
      METH_VARARGS | METH_KEYWORDS, functools_cmp_to_key_doc},
     {NULL,              NULL}           /* sentinel */
 };
 
 static void
-_functools_free(void *m) 
+_functools_free(void *m)
 {
-    // FIXME: Do not clear kwd_mark to avoid NULL pointer dereferencing if we have 
-    //        other modules instances that could use it. Will fix when PEP-573 land 
-    //        and we could move kwd_mark to a per-module state. 
-    // Py_CLEAR(kwd_mark); 
+    // FIXME: Do not clear kwd_mark to avoid NULL pointer dereferencing if we have
+    //        other modules instances that could use it. Will fix when PEP-573 land
+    //        and we could move kwd_mark to a per-module state.
+    // Py_CLEAR(kwd_mark);
 }
 
-static int 
-_functools_exec(PyObject *module) 
+static int
+_functools_exec(PyObject *module)
 {
     PyTypeObject *typelist[] = {
         &partial_type,
-        &lru_cache_type 
+        &lru_cache_type
     };
 
     if (!kwd_mark) {
-        kwd_mark = _PyObject_CallNoArg((PyObject *)&PyBaseObject_Type); 
-        if (!kwd_mark) { 
-            return -1; 
-        } 
-    }
-
-    for (size_t i = 0; i < Py_ARRAY_LENGTH(typelist); i++) { 
-        if (PyModule_AddType(module, typelist[i]) < 0) { 
-            return -1; 
+        kwd_mark = _PyObject_CallNoArg((PyObject *)&PyBaseObject_Type);
+        if (!kwd_mark) {
+            return -1;
         }
     }
-    return 0; 
+
+    for (size_t i = 0; i < Py_ARRAY_LENGTH(typelist); i++) {
+        if (PyModule_AddType(module, typelist[i]) < 0) {
+            return -1;
+        }
+    }
+    return 0;
 }
- 
-static struct PyModuleDef_Slot _functools_slots[] = { 
-    {Py_mod_exec, _functools_exec}, 
-    {0, NULL} 
-}; 
- 
-static struct PyModuleDef _functools_module = { 
-    PyModuleDef_HEAD_INIT, 
-    "_functools", 
-    _functools_doc, 
-    0, 
-    _functools_methods, 
-    _functools_slots, 
-    NULL, 
-    NULL, 
-    _functools_free, 
-}; 
- 
-PyMODINIT_FUNC 
-PyInit__functools(void) 
-{ 
-    return PyModuleDef_Init(&_functools_module); 
-} 
+
+static struct PyModuleDef_Slot _functools_slots[] = {
+    {Py_mod_exec, _functools_exec},
+    {0, NULL}
+};
+
+static struct PyModuleDef _functools_module = {
+    PyModuleDef_HEAD_INIT,
+    "_functools",
+    _functools_doc,
+    0,
+    _functools_methods,
+    _functools_slots,
+    NULL,
+    NULL,
+    _functools_free,
+};
+
+PyMODINIT_FUNC
+PyInit__functools(void)
+{
+    return PyModuleDef_Init(&_functools_module);
+}

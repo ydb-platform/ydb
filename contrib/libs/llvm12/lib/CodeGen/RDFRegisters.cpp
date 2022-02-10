@@ -84,23 +84,23 @@ PhysicalRegisterInfo::PhysicalRegisterInfo(const TargetRegisterInfo &tri,
   for (uint32_t M = 1, NM = RegMasks.size(); M <= NM; ++M) {
     BitVector PU(TRI.getNumRegUnits());
     const uint32_t *MB = RegMasks.get(M);
-    for (unsigned I = 1, E = TRI.getNumRegs(); I != E; ++I) { 
-      if (!(MB[I / 32] & (1u << (I % 32)))) 
+    for (unsigned I = 1, E = TRI.getNumRegs(); I != E; ++I) {
+      if (!(MB[I / 32] & (1u << (I % 32))))
         continue;
-      for (MCRegUnitIterator U(MCRegister::from(I), &TRI); U.isValid(); ++U) 
+      for (MCRegUnitIterator U(MCRegister::from(I), &TRI); U.isValid(); ++U)
         PU.set(*U);
     }
     MaskInfos[M].Units = PU.flip();
   }
 
-  AliasInfos.resize(TRI.getNumRegUnits()); 
-  for (uint32_t U = 0, NU = TRI.getNumRegUnits(); U != NU; ++U) { 
-    BitVector AS(TRI.getNumRegs()); 
-    for (MCRegUnitRootIterator R(U, &TRI); R.isValid(); ++R) 
-      for (MCSuperRegIterator S(*R, &TRI, true); S.isValid(); ++S) 
-        AS.set(*S); 
-    AliasInfos[U].Regs = AS; 
-  } 
+  AliasInfos.resize(TRI.getNumRegUnits());
+  for (uint32_t U = 0, NU = TRI.getNumRegUnits(); U != NU; ++U) {
+    BitVector AS(TRI.getNumRegs());
+    for (MCRegUnitRootIterator R(U, &TRI); R.isValid(); ++R)
+      for (MCSuperRegIterator S(*R, &TRI, true); S.isValid(); ++S)
+        AS.set(*S);
+    AliasInfos[U].Regs = AS;
+  }
 }
 
 std::set<RegisterId> PhysicalRegisterInfo::getAliasSet(RegisterId Reg) const {
@@ -330,13 +330,13 @@ RegisterRef RegisterAggr::makeRegRef() const {
   // in this aggregate.
 
   // Get all the registers aliased to the first unit in the bit vector.
-  BitVector Regs = PRI.getUnitAliases(U); 
+  BitVector Regs = PRI.getUnitAliases(U);
   U = Units.find_next(U);
 
   // For each other unit, intersect it with the set of all registers
   // aliased that unit.
   while (U >= 0) {
-    Regs &= PRI.getUnitAliases(U); 
+    Regs &= PRI.getUnitAliases(U);
     U = Units.find_next(U);
   }
 
@@ -374,8 +374,8 @@ RegisterAggr::rr_iterator::rr_iterator(const RegisterAggr &RG,
   Pos = End ? Masks.end() : Masks.begin();
   Index = End ? Masks.size() : 0;
 }
- 
-raw_ostream &rdf::operator<<(raw_ostream &OS, const RegisterAggr &A) { 
-  A.print(OS); 
-  return OS; 
-} 
+
+raw_ostream &rdf::operator<<(raw_ostream &OS, const RegisterAggr &A) {
+  A.print(OS);
+  return OS;
+}

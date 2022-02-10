@@ -21,47 +21,47 @@
 // Therefore, IssueWidth is set to the narrower of the two at three, while still
 // modeling the machine as out-of-order.
 
-def IsCPSRDefinedAndPredicated : CheckAll<[IsCPSRDefined, IsPredicated]>; 
+def IsCPSRDefinedAndPredicated : CheckAll<[IsCPSRDefined, IsPredicated]>;
 def IsCPSRDefinedAndPredicatedPred :
-    MCSchedPredicate<IsCPSRDefinedAndPredicated>; 
+    MCSchedPredicate<IsCPSRDefinedAndPredicated>;
 
 // Cortex A57 rev. r1p0 or later (false = r0px)
-def IsR1P0AndLaterPred : MCSchedPredicate<FalsePred>; 
+def IsR1P0AndLaterPred : MCSchedPredicate<FalsePred>;
 
-def IsLdrAm3RegOffPred : MCSchedPredicate<CheckInvalidRegOperand<2>>; 
-def IsLdrAm3RegOffPredX2 : MCSchedPredicate<CheckInvalidRegOperand<3>>; 
-def IsLdrAm3RegOffPredX3 : MCSchedPredicate<CheckInvalidRegOperand<4>>; 
+def IsLdrAm3RegOffPred : MCSchedPredicate<CheckInvalidRegOperand<2>>;
+def IsLdrAm3RegOffPredX2 : MCSchedPredicate<CheckInvalidRegOperand<3>>;
+def IsLdrAm3RegOffPredX3 : MCSchedPredicate<CheckInvalidRegOperand<4>>;
 
 // If Addrmode3 contains "minus register"
-class Am3NegativeRegOffset<int n> : MCSchedPredicate<CheckAll<[ 
-                                      CheckValidRegOperand<n>, 
-                                      CheckAM3OpSub<!add(n, 1)>]>>; 
+class Am3NegativeRegOffset<int n> : MCSchedPredicate<CheckAll<[
+                                      CheckValidRegOperand<n>,
+                                      CheckAM3OpSub<!add(n, 1)>]>>;
 
-def IsLdrAm3NegRegOffPred : Am3NegativeRegOffset<2>; 
-def IsLdrAm3NegRegOffPredX2 : Am3NegativeRegOffset<3>; 
-def IsLdrAm3NegRegOffPredX3 : Am3NegativeRegOffset<4>; 
- 
+def IsLdrAm3NegRegOffPred : Am3NegativeRegOffset<2>;
+def IsLdrAm3NegRegOffPredX2 : Am3NegativeRegOffset<3>;
+def IsLdrAm3NegRegOffPredX3 : Am3NegativeRegOffset<4>;
+
 // Load, scaled register offset, not plus LSL2
-class ScaledRegNotPlusLsl2<int n> : CheckNot< 
-                                      CheckAny<[ 
-                                        CheckAM2NoShift<n>, 
-                                        CheckAll<[ 
-                                          CheckAM2OpAdd<n>, 
-                                          CheckAM2ShiftLSL<n>, 
-                                          CheckAM2Offset<n, 2> 
-                                        ]> 
-                                      ]> 
-                                    >; 
+class ScaledRegNotPlusLsl2<int n> : CheckNot<
+                                      CheckAny<[
+                                        CheckAM2NoShift<n>,
+                                        CheckAll<[
+                                          CheckAM2OpAdd<n>,
+                                          CheckAM2ShiftLSL<n>,
+                                          CheckAM2Offset<n, 2>
+                                        ]>
+                                      ]>
+                                    >;
 
-def IsLdstsoScaledNotOptimalPredX0 : MCSchedPredicate<ScaledRegNotPlusLsl2<2>>; 
-def IsLdstsoScaledNotOptimalPred : MCSchedPredicate<ScaledRegNotPlusLsl2<3>>; 
-def IsLdstsoScaledNotOptimalPredX2 : MCSchedPredicate<ScaledRegNotPlusLsl2<4>>; 
+def IsLdstsoScaledNotOptimalPredX0 : MCSchedPredicate<ScaledRegNotPlusLsl2<2>>;
+def IsLdstsoScaledNotOptimalPred : MCSchedPredicate<ScaledRegNotPlusLsl2<3>>;
+def IsLdstsoScaledNotOptimalPredX2 : MCSchedPredicate<ScaledRegNotPlusLsl2<4>>;
 
-def IsLdstsoScaledPredX2 : MCSchedPredicate<CheckNot<CheckAM2NoShift<4>>>; 
+def IsLdstsoScaledPredX2 : MCSchedPredicate<CheckNot<CheckAM2NoShift<4>>>;
 
-def IsLdstsoMinusRegPredX0 : MCSchedPredicate<CheckAM2OpSub<2>>; 
-def IsLdstsoMinusRegPred : MCSchedPredicate<CheckAM2OpSub<3>>; 
-def IsLdstsoMinusRegPredX2 : MCSchedPredicate<CheckAM2OpSub<4>>; 
+def IsLdstsoMinusRegPredX0 : MCSchedPredicate<CheckAM2OpSub<2>>;
+def IsLdstsoMinusRegPred : MCSchedPredicate<CheckAM2OpSub<3>>;
+def IsLdstsoMinusRegPredX2 : MCSchedPredicate<CheckAM2OpSub<4>>;
 
 class A57WriteLMOpsListType<list<SchedWriteRes> writes> {
   list <SchedWriteRes> Writes = writes;
@@ -173,29 +173,29 @@ def : InstRW<[A57Write_6cyc_1B_1L], (instregex "BR_JTm")>;
 
 def : InstRW<[A57Write_1cyc_1I], (instregex "tADDframe")>;
 
-// Check branch forms of ALU ops: 
-// check reg 0 for ARM_AM::PC 
-// if so adds 2 cyc to latency, 1 uop, 1 res cycle for A57UnitB 
-class A57BranchForm<SchedWriteRes non_br> : 
-  BranchWriteRes<2, 1, [A57UnitB], [1], non_br>; 
- 
+// Check branch forms of ALU ops:
+// check reg 0 for ARM_AM::PC
+// if so adds 2 cyc to latency, 1 uop, 1 res cycle for A57UnitB
+class A57BranchForm<SchedWriteRes non_br> :
+  BranchWriteRes<2, 1, [A57UnitB], [1], non_br>;
+
 // shift by register, conditional or unconditional
 // TODO: according to the doc, conditional uses I0/I1, unconditional uses M
 // Why more complex instruction uses more simple pipeline?
 // May be an error in doc.
 def A57WriteALUsr : SchedWriteVariant<[
-  SchedVar<IsPredicatedPred, [CheckBranchForm<0, A57BranchForm<A57Write_2cyc_1I>>]>, 
-  SchedVar<NoSchedPred,      [CheckBranchForm<0, A57BranchForm<A57Write_2cyc_1M>>]> 
+  SchedVar<IsPredicatedPred, [CheckBranchForm<0, A57BranchForm<A57Write_2cyc_1I>>]>,
+  SchedVar<NoSchedPred,      [CheckBranchForm<0, A57BranchForm<A57Write_2cyc_1M>>]>
 ]>;
 def A57WriteALUSsr : SchedWriteVariant<[
-  SchedVar<IsPredicatedPred, [CheckBranchForm<0, A57BranchForm<A57Write_2cyc_1I>>]>, 
-  SchedVar<NoSchedPred,      [CheckBranchForm<0, A57BranchForm<A57Write_2cyc_1M>>]> 
+  SchedVar<IsPredicatedPred, [CheckBranchForm<0, A57BranchForm<A57Write_2cyc_1I>>]>,
+  SchedVar<NoSchedPred,      [CheckBranchForm<0, A57BranchForm<A57Write_2cyc_1M>>]>
 ]>;
 def A57ReadALUsr : SchedReadVariant<[
   SchedVar<IsPredicatedPred, [ReadDefault]>,
   SchedVar<NoSchedPred,      [ReadDefault]>
 ]>;
-def : SchedAlias<WriteALUsi,  CheckBranchForm<0, A57BranchForm<A57Write_2cyc_1M>>>; 
+def : SchedAlias<WriteALUsi,  CheckBranchForm<0, A57BranchForm<A57Write_2cyc_1M>>>;
 def : SchedAlias<WriteALUsr,  A57WriteALUsr>;
 def : SchedAlias<WriteALUSsr, A57WriteALUSsr>;
 def : SchedAlias<ReadALUsr,   A57ReadALUsr>;
@@ -271,11 +271,11 @@ def : ReadAdvance<ReadMUL, 0>;
 // from similar μops, allowing a typical sequence of multiply-accumulate μops
 // to issue one every 1 cycle (sched advance = 2).
 def A57WriteMLA : SchedWriteRes<[A57UnitM]> { let Latency = 3; }
-def A57WriteMLAL : SchedWriteVariant<[ 
-  SchedVar<IsCPSRDefinedPred, [A57Write_5cyc_1I_1M]>, 
-  SchedVar<NoSchedPred,       [A57Write_4cyc_1M]> 
-]>; 
- 
+def A57WriteMLAL : SchedWriteVariant<[
+  SchedVar<IsCPSRDefinedPred, [A57Write_5cyc_1I_1M]>,
+  SchedVar<NoSchedPred,       [A57Write_4cyc_1M]>
+]>;
+
 def A57ReadMLA  : SchedReadAdvance<2, [A57WriteMLA, A57WriteMLAL]>;
 
 def : InstRW<[A57WriteMLA],
@@ -470,11 +470,11 @@ def : InstRW<[A57Write_4cyc_1L_1I, A57WrBackTwo], (instregex "LDR_POST_REG",
   "LDRB_POST_REG", "LDR(B?)T_POST$")>;
 
 def A57WriteLdrTRegPost : SchedWriteVariant<[
-  SchedVar<IsLdstsoScaledPredX2, [A57Write_4cyc_1I_1L_1M]>, 
+  SchedVar<IsLdstsoScaledPredX2, [A57Write_4cyc_1I_1L_1M]>,
   SchedVar<NoSchedPred,        [A57Write_4cyc_1L_1I]>
 ]>;
 def A57WriteLdrTRegPostWrBack : SchedWriteVariant<[
-  SchedVar<IsLdstsoScaledPredX2, [A57WrBackThree]>, 
+  SchedVar<IsLdstsoScaledPredX2, [A57WrBackThree]>,
   SchedVar<NoSchedPred,        [A57WrBackTwo]>
 ]>;
 // 4(3) "I0/I1,L,M" for scaled register, otherwise 4(2) "I0/I1,L"
@@ -510,12 +510,12 @@ def : InstRW<[A57WritePLD], (instregex "PLDrs", "PLDWrs")>;
 
 // --- Load multiple instructions ---
 foreach NumAddr = 1-8 in {
-  def A57LMAddrPred#NumAddr : MCSchedPredicate<CheckAny<[ 
-                                CheckNumOperands<!add(!shl(NumAddr, 1), 2)>, 
-                                CheckNumOperands<!add(!shl(NumAddr, 1), 3)>]>>; 
-  def A57LMAddrUpdPred#NumAddr : MCSchedPredicate<CheckAny<[ 
-                                   CheckNumOperands<!add(!shl(NumAddr, 1), 3)>, 
-                                   CheckNumOperands<!add(!shl(NumAddr, 1), 4)>]>>; 
+  def A57LMAddrPred#NumAddr : MCSchedPredicate<CheckAny<[
+                                CheckNumOperands<!add(!shl(NumAddr, 1), 2)>,
+                                CheckNumOperands<!add(!shl(NumAddr, 1), 3)>]>>;
+  def A57LMAddrUpdPred#NumAddr : MCSchedPredicate<CheckAny<[
+                                   CheckNumOperands<!add(!shl(NumAddr, 1), 3)>,
+                                   CheckNumOperands<!add(!shl(NumAddr, 1), 4)>]>>;
 }
 
 def A57LDMOpsListNoregin : A57WriteLMOpsListType<
@@ -571,20 +571,20 @@ def A57LDMOpsList_Upd : A57WriteLMOpsListType<
                A57Write_9cyc_1L_1I, A57Write_9cyc_1L_1I,
                A57Write_10cyc_1L_1I, A57Write_10cyc_1L_1I]>;
 def A57WriteLDM_Upd : SchedWriteVariant<[
-  SchedVar<A57LMAddrUpdPred1,     A57LDMOpsList_Upd.Writes[0-2]>, 
-  SchedVar<A57LMAddrUpdPred2,     A57LDMOpsList_Upd.Writes[0-4]>, 
-  SchedVar<A57LMAddrUpdPred3,     A57LDMOpsList_Upd.Writes[0-6]>, 
-  SchedVar<A57LMAddrUpdPred4,     A57LDMOpsList_Upd.Writes[0-8]>, 
-  SchedVar<A57LMAddrUpdPred5,     A57LDMOpsList_Upd.Writes[0-10]>, 
-  SchedVar<A57LMAddrUpdPred6,     A57LDMOpsList_Upd.Writes[0-12]>, 
-  SchedVar<A57LMAddrUpdPred7,     A57LDMOpsList_Upd.Writes[0-14]>, 
-  SchedVar<A57LMAddrUpdPred8,     A57LDMOpsList_Upd.Writes[0-16]>, 
-  SchedVar<NoSchedPred,           A57LDMOpsList_Upd.Writes[0-16]> 
+  SchedVar<A57LMAddrUpdPred1,     A57LDMOpsList_Upd.Writes[0-2]>,
+  SchedVar<A57LMAddrUpdPred2,     A57LDMOpsList_Upd.Writes[0-4]>,
+  SchedVar<A57LMAddrUpdPred3,     A57LDMOpsList_Upd.Writes[0-6]>,
+  SchedVar<A57LMAddrUpdPred4,     A57LDMOpsList_Upd.Writes[0-8]>,
+  SchedVar<A57LMAddrUpdPred5,     A57LDMOpsList_Upd.Writes[0-10]>,
+  SchedVar<A57LMAddrUpdPred6,     A57LDMOpsList_Upd.Writes[0-12]>,
+  SchedVar<A57LMAddrUpdPred7,     A57LDMOpsList_Upd.Writes[0-14]>,
+  SchedVar<A57LMAddrUpdPred8,     A57LDMOpsList_Upd.Writes[0-16]>,
+  SchedVar<NoSchedPred,           A57LDMOpsList_Upd.Writes[0-16]>
 ]> { let Variadic=1; }
 
 def A57WriteLDM : SchedWriteVariant<[
-  SchedVar<IsLDMBaseRegInListPred, [A57WriteLDMreginlist]>, 
-  SchedVar<NoSchedPred,            [A57WriteLDMnoreginlist]> 
+  SchedVar<IsLDMBaseRegInListPred, [A57WriteLDMreginlist]>,
+  SchedVar<NoSchedPred,            [A57WriteLDMnoreginlist]>
 ]> { let Variadic=1; }
 
 def : InstRW<[A57WriteLDM], (instregex "(t|t2|sys)?LDM(IA|DA|DB|IB)$")>;
@@ -1194,7 +1194,7 @@ def : InstRW<[A57Write_5cyc_1V], (instregex
 // --- 3.16 ASIMD Miscellaneous Instructions ---
 
 // ASIMD bitwise insert
-def : InstRW<[A57Write_3cyc_1V], (instregex "VBIF", "VBIT", "VBSL", "VBSP")>; 
+def : InstRW<[A57Write_3cyc_1V], (instregex "VBIF", "VBIT", "VBSL", "VBSP")>;
 
 // ASIMD count
 def : InstRW<[A57Write_3cyc_1V], (instregex "VCLS", "VCLZ", "VCNT")>;
@@ -1483,7 +1483,7 @@ def : InstRW<[A57Write_3cyc_1W], (instregex "^(t2)?CRC32")>;
 // -----------------------------------------------------------------------------
 // Common definitions
 def : WriteRes<WriteNoop, []> { let Latency = 0; let NumMicroOps = 0; }
-def : SchedAlias<WriteALU, CheckBranchForm<0, A57BranchForm<A57Write_1cyc_1I>>>; 
+def : SchedAlias<WriteALU, CheckBranchForm<0, A57BranchForm<A57Write_1cyc_1I>>>;
 
 def : SchedAlias<WriteBr, A57Write_1cyc_1B>;
 def : SchedAlias<WriteBrL, A57Write_1cyc_1B_1I>;

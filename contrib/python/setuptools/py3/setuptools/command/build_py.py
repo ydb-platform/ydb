@@ -7,15 +7,15 @@ import textwrap
 import io
 import distutils.errors
 import itertools
-import stat 
-from setuptools.extern.more_itertools import unique_everseen 
+import stat
+from setuptools.extern.more_itertools import unique_everseen
 
 
-def make_writable(target): 
-    os.chmod(target, os.stat(target).st_mode | stat.S_IWRITE) 
- 
- 
-class build_py(orig.build_py): 
+def make_writable(target):
+    os.chmod(target, os.stat(target).st_mode | stat.S_IWRITE)
+
+
+class build_py(orig.build_py):
     """Enhanced 'build_py' command that includes data files with packages
 
     The data files are specified via a 'package_data' argument to 'setup()'.
@@ -28,7 +28,7 @@ class build_py(orig.build_py):
     def finalize_options(self):
         orig.build_py.finalize_options(self)
         self.package_data = self.distribution.package_data
-        self.exclude_package_data = self.distribution.exclude_package_data or {} 
+        self.exclude_package_data = self.distribution.exclude_package_data or {}
         if 'data_files' in self.__dict__:
             del self.__dict__['data_files']
         self.__updated_files = []
@@ -57,7 +57,7 @@ class build_py(orig.build_py):
         return orig.build_py.__getattr__(self, attr)
 
     def build_module(self, module, module_file, package):
-        outfile, copied = orig.build_py.build_module(self, module, module_file, package) 
+        outfile, copied = orig.build_py.build_module(self, module, module_file, package)
         if copied:
             self.__updated_files.append(outfile)
         return outfile, copied
@@ -67,16 +67,16 @@ class build_py(orig.build_py):
         self.analyze_manifest()
         return list(map(self._get_pkg_data_files, self.packages or ()))
 
-    def get_data_files_without_manifest(self): 
-        """ 
-        Generate list of ``(package,src_dir,build_dir,filenames)`` tuples, 
-        but without triggering any attempt to analyze or build the manifest. 
-        """ 
-        # Prevent eventual errors from unset `manifest_files` 
-        # (that would otherwise be set by `analyze_manifest`) 
-        self.__dict__.setdefault('manifest_files', {}) 
-        return list(map(self._get_pkg_data_files, self.packages or ())) 
- 
+    def get_data_files_without_manifest(self):
+        """
+        Generate list of ``(package,src_dir,build_dir,filenames)`` tuples,
+        but without triggering any attempt to analyze or build the manifest.
+        """
+        # Prevent eventual errors from unset `manifest_files`
+        # (that would otherwise be set by `analyze_manifest`)
+        self.__dict__.setdefault('manifest_files', {})
+        return list(map(self._get_pkg_data_files, self.packages or ()))
+
     def _get_pkg_data_files(self, package):
         # Locate package source directory
         src_dir = self.get_package_dir(package)
@@ -116,7 +116,7 @@ class build_py(orig.build_py):
                 self.mkpath(os.path.dirname(target))
                 srcfile = os.path.join(src_dir, filename)
                 outf, copied = self.copy_file(srcfile, target)
-                make_writable(target) 
+                make_writable(target)
                 srcfile = os.path.abspath(srcfile)
 
     def analyze_manifest(self):
@@ -194,13 +194,13 @@ class build_py(orig.build_py):
             package,
             src_dir,
         )
-        match_groups = (fnmatch.filter(files, pattern) for pattern in patterns) 
+        match_groups = (fnmatch.filter(files, pattern) for pattern in patterns)
         # flatten the groups of matches into an iterable of matches
         matches = itertools.chain.from_iterable(match_groups)
         bad = set(matches)
-        keepers = (fn for fn in files if fn not in bad) 
+        keepers = (fn for fn in files if fn not in bad)
         # ditch dupes
-        return list(unique_everseen(keepers)) 
+        return list(unique_everseen(keepers))
 
     @staticmethod
     def _get_platform_patterns(spec, package, src_dir):
@@ -226,17 +226,17 @@ def assert_relative(path):
         return path
     from distutils.errors import DistutilsSetupError
 
-    msg = ( 
-        textwrap.dedent( 
-            """ 
+    msg = (
+        textwrap.dedent(
+            """
         Error: setup script specifies an absolute path:
 
             %s
 
         setup() arguments must *always* be /-separated paths relative to the
         setup.py directory, *never* absolute paths.
-        """ 
-        ).lstrip() 
-        % path 
-    ) 
+        """
+        ).lstrip()
+        % path
+    )
     raise DistutilsSetupError(msg)

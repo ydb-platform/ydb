@@ -64,7 +64,7 @@ public:
   ///     other instruction is available, issue it first.
   ///  * NoopHazard: issuing this instruction would break the program.  If
   ///     some other instruction can be issued, do so, otherwise issue a noop.
-  virtual HazardType getHazardType(SUnit *, int Stalls = 0) { 
+  virtual HazardType getHazardType(SUnit *, int Stalls = 0) {
     return NoHazard;
   }
 
@@ -121,14 +121,14 @@ public:
     // Default implementation: count it as a cycle.
     AdvanceCycle();
   }
- 
-  /// EmitNoops - This callback is invoked when noops were added to the 
-  /// instruction stream. 
-  virtual void EmitNoops(unsigned Quantity) { 
-    // Default implementation: count it as a cycle. 
-    for (unsigned i = 0; i < Quantity; ++i) 
-      EmitNoop(); 
-  } 
+
+  /// EmitNoops - This callback is invoked when noops were added to the
+  /// instruction stream.
+  virtual void EmitNoops(unsigned Quantity) {
+    // Default implementation: count it as a cycle.
+    for (unsigned i = 0; i < Quantity; ++i)
+      EmitNoop();
+  }
 };
 
 } // end namespace llvm

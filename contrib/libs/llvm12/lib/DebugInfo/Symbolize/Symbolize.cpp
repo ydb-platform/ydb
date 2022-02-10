@@ -16,7 +16,7 @@
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/BinaryFormat/COFF.h"
-#include "llvm/Config/config.h" 
+#include "llvm/Config/config.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/DebugInfo/PDB/PDB.h"
 #include "llvm/DebugInfo/PDB/PDBContext.h"
@@ -287,8 +287,8 @@ bool darwinDsymMatchesBinary(const MachOObjectFile *DbgObj,
 }
 
 template <typename ELFT>
-Optional<ArrayRef<uint8_t>> getBuildID(const ELFFile<ELFT> &Obj) { 
-  auto PhdrsOrErr = Obj.program_headers(); 
+Optional<ArrayRef<uint8_t>> getBuildID(const ELFFile<ELFT> &Obj) {
+  auto PhdrsOrErr = Obj.program_headers();
   if (!PhdrsOrErr) {
     consumeError(PhdrsOrErr.takeError());
     return {};
@@ -297,7 +297,7 @@ Optional<ArrayRef<uint8_t>> getBuildID(const ELFFile<ELFT> &Obj) {
     if (P.p_type != ELF::PT_NOTE)
       continue;
     Error Err = Error::success();
-    for (auto N : Obj.notes(P, Err)) 
+    for (auto N : Obj.notes(P, Err))
       if (N.getType() == ELF::NT_GNU_BUILD_ID && N.getName() == ELF::ELF_NOTE_GNU)
         return N.getDesc();
     consumeError(std::move(Err));
@@ -554,9 +554,9 @@ LLVMSymbolizer::getOrCreateModuleInfo(const std::string &ModuleName) {
     if (!EC && DebugInfo != nullptr && !PDBFileName.empty()) {
       using namespace pdb;
       std::unique_ptr<IPDBSession> Session;
- 
-      PDB_ReaderType ReaderType = 
-          Opts.UseDIA ? PDB_ReaderType::DIA : PDB_ReaderType::Native; 
+
+      PDB_ReaderType ReaderType =
+          Opts.UseDIA ? PDB_ReaderType::DIA : PDB_ReaderType::Native;
       if (auto Err = loadDataForEXE(ReaderType, Objects.first->getFileName(),
                                     Session)) {
         Modules.emplace(ModuleName, std::unique_ptr<SymbolizableModule>());
@@ -589,7 +589,7 @@ StringRef demanglePE32ExternCFunc(StringRef SymbolName) {
   if (Front != '?') {
     size_t AtPos = SymbolName.rfind('@');
     if (AtPos != StringRef::npos &&
-        all_of(drop_begin(SymbolName, AtPos + 1), isDigit)) 
+        all_of(drop_begin(SymbolName, AtPos + 1), isDigit))
       SymbolName = SymbolName.substr(0, AtPos);
   }
 

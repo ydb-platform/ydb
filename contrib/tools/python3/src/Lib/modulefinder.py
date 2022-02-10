@@ -5,10 +5,10 @@ import importlib._bootstrap_external
 import importlib.machinery
 import marshal
 import os
-import io 
+import io
 import sys
 
- 
+
 LOAD_CONST = dis.opmap['LOAD_CONST']
 IMPORT_NAME = dis.opmap['IMPORT_NAME']
 STORE_NAME = dis.opmap['STORE_NAME']
@@ -16,16 +16,16 @@ STORE_GLOBAL = dis.opmap['STORE_GLOBAL']
 STORE_OPS = STORE_NAME, STORE_GLOBAL
 EXTENDED_ARG = dis.EXTENDED_ARG
 
-# Old imp constants: 
- 
-_SEARCH_ERROR = 0 
-_PY_SOURCE = 1 
-_PY_COMPILED = 2 
-_C_EXTENSION = 3 
-_PKG_DIRECTORY = 5 
-_C_BUILTIN = 6 
-_PY_FROZEN = 7 
- 
+# Old imp constants:
+
+_SEARCH_ERROR = 0
+_PY_SOURCE = 1
+_PY_COMPILED = 2
+_C_EXTENSION = 3
+_PKG_DIRECTORY = 5
+_C_BUILTIN = 6
+_PY_FROZEN = 7
+
 # Modulefinder does a good job at simulating Python's, but it can not
 # handle __path__ modifications packages make at runtime.  Therefore there
 # is a mechanism whereby you can register extra paths in this map for a
@@ -50,51 +50,51 @@ def ReplacePackage(oldname, newname):
     replacePackageMap[oldname] = newname
 
 
-def _find_module(name, path=None): 
-    """An importlib reimplementation of imp.find_module (for our purposes).""" 
- 
-    # It's necessary to clear the caches for our Finder first, in case any 
-    # modules are being added/deleted/modified at runtime. In particular, 
-    # test_modulefinder.py changes file tree contents in a cache-breaking way: 
- 
-    importlib.machinery.PathFinder.invalidate_caches() 
- 
-    spec = importlib.machinery.PathFinder.find_spec(name, path) 
- 
-    if spec is None: 
-        raise ImportError("No module named {name!r}".format(name=name), name=name) 
- 
-    # Some special cases: 
- 
-    if spec.loader is importlib.machinery.BuiltinImporter: 
-        return None, None, ("", "", _C_BUILTIN) 
- 
-    if spec.loader is importlib.machinery.FrozenImporter: 
-        return None, None, ("", "", _PY_FROZEN) 
- 
-    file_path = spec.origin 
- 
-    if spec.loader.is_package(name): 
-        return None, os.path.dirname(file_path), ("", "", _PKG_DIRECTORY) 
- 
-    if isinstance(spec.loader, importlib.machinery.SourceFileLoader): 
-        kind = _PY_SOURCE 
- 
-    elif isinstance(spec.loader, importlib.machinery.ExtensionFileLoader): 
-        kind = _C_EXTENSION 
- 
-    elif isinstance(spec.loader, importlib.machinery.SourcelessFileLoader): 
-        kind = _PY_COMPILED 
- 
-    else:  # Should never happen. 
-        return None, None, ("", "", _SEARCH_ERROR) 
- 
-    file = io.open_code(file_path) 
-    suffix = os.path.splitext(file_path)[-1] 
- 
-    return file, file_path, (suffix, "rb", kind) 
- 
- 
+def _find_module(name, path=None):
+    """An importlib reimplementation of imp.find_module (for our purposes)."""
+
+    # It's necessary to clear the caches for our Finder first, in case any
+    # modules are being added/deleted/modified at runtime. In particular,
+    # test_modulefinder.py changes file tree contents in a cache-breaking way:
+
+    importlib.machinery.PathFinder.invalidate_caches()
+
+    spec = importlib.machinery.PathFinder.find_spec(name, path)
+
+    if spec is None:
+        raise ImportError("No module named {name!r}".format(name=name), name=name)
+
+    # Some special cases:
+
+    if spec.loader is importlib.machinery.BuiltinImporter:
+        return None, None, ("", "", _C_BUILTIN)
+
+    if spec.loader is importlib.machinery.FrozenImporter:
+        return None, None, ("", "", _PY_FROZEN)
+
+    file_path = spec.origin
+
+    if spec.loader.is_package(name):
+        return None, os.path.dirname(file_path), ("", "", _PKG_DIRECTORY)
+
+    if isinstance(spec.loader, importlib.machinery.SourceFileLoader):
+        kind = _PY_SOURCE
+
+    elif isinstance(spec.loader, importlib.machinery.ExtensionFileLoader):
+        kind = _C_EXTENSION
+
+    elif isinstance(spec.loader, importlib.machinery.SourcelessFileLoader):
+        kind = _PY_COMPILED
+
+    else:  # Should never happen.
+        return None, None, ("", "", _SEARCH_ERROR)
+
+    file = io.open_code(file_path)
+    suffix = os.path.splitext(file_path)[-1]
+
+    return file, file_path, (suffix, "rb", kind)
+
+
 class Module:
 
     def __init__(self, name, file=None, path=None):
@@ -121,7 +121,7 @@ class Module:
 
 class ModuleFinder:
 
-    def __init__(self, path=None, debug=0, excludes=None, replace_paths=None): 
+    def __init__(self, path=None, debug=0, excludes=None, replace_paths=None):
         if path is None:
             path = sys.path
         self.path = path
@@ -129,8 +129,8 @@ class ModuleFinder:
         self.badmodules = {}
         self.debug = debug
         self.indent = 0
-        self.excludes = excludes if excludes is not None else [] 
-        self.replace_paths = replace_paths if replace_paths is not None else [] 
+        self.excludes = excludes if excludes is not None else []
+        self.replace_paths = replace_paths if replace_paths is not None else []
         self.processed_paths = []   # Used in debugging only
 
     def msg(self, level, str, *args):
@@ -156,15 +156,15 @@ class ModuleFinder:
 
     def run_script(self, pathname):
         self.msg(2, "run_script", pathname)
-        with io.open_code(pathname) as fp: 
-            stuff = ("", "rb", _PY_SOURCE) 
+        with io.open_code(pathname) as fp:
+            stuff = ("", "rb", _PY_SOURCE)
             self.load_module('__main__', fp, pathname, stuff)
 
     def load_file(self, pathname):
         dir, name = os.path.split(pathname)
         name, ext = os.path.splitext(name)
-        with io.open_code(pathname) as fp: 
-            stuff = (ext, "rb", _PY_SOURCE) 
+        with io.open_code(pathname) as fp:
+            stuff = (ext, "rb", _PY_SOURCE)
             self.load_module(name, fp, pathname, stuff)
 
     def import_hook(self, name, caller=None, fromlist=None, level=-1):
@@ -318,7 +318,7 @@ class ModuleFinder:
         except ImportError:
             self.msgout(3, "import_module ->", None)
             return None
- 
+
         try:
             m = self.load_module(fqname, fp, pathname, stuff)
         finally:
@@ -332,13 +332,13 @@ class ModuleFinder:
     def load_module(self, fqname, fp, pathname, file_info):
         suffix, mode, type = file_info
         self.msgin(2, "load_module", fqname, fp and "fp", pathname)
-        if type == _PKG_DIRECTORY: 
+        if type == _PKG_DIRECTORY:
             m = self.load_package(fqname, pathname)
             self.msgout(2, "load_module ->", m)
             return m
-        if type == _PY_SOURCE: 
-            co = compile(fp.read(), pathname, 'exec') 
-        elif type == _PY_COMPILED: 
+        if type == _PY_SOURCE:
+            co = compile(fp.read(), pathname, 'exec')
+        elif type == _PY_COMPILED:
             try:
                 data = fp.read()
                 importlib._bootstrap_external._classify_pyc(data, fqname, {})
@@ -376,15 +376,15 @@ class ModuleFinder:
         except ImportError as msg:
             self.msg(2, "ImportError:", str(msg))
             self._add_badmodule(name, caller)
-        except SyntaxError as msg: 
-            self.msg(2, "SyntaxError:", str(msg)) 
-            self._add_badmodule(name, caller) 
+        except SyntaxError as msg:
+            self.msg(2, "SyntaxError:", str(msg))
+            self._add_badmodule(name, caller)
         else:
             if fromlist:
                 for sub in fromlist:
-                    fullname = name + "." + sub 
-                    if fullname in self.badmodules: 
-                        self._add_badmodule(fullname, caller) 
+                    fullname = name + "." + sub
+                    if fullname in self.badmodules:
+                        self._add_badmodule(fullname, caller)
                         continue
                     try:
                         self.import_hook(name, caller, [sub], level=level)
@@ -501,12 +501,12 @@ class ModuleFinder:
 
         if path is None:
             if name in sys.builtin_module_names:
-                return (None, None, ("", "", _C_BUILTIN)) 
+                return (None, None, ("", "", _C_BUILTIN))
 
             path = self.path
 
-        return _find_module(name, path) 
- 
+        return _find_module(name, path)
+
     def report(self):
         """Print a report to stdout, listing the found modules with their
         paths, as well as modules that are missing, or seem to be missing.
@@ -616,7 +616,7 @@ class ModuleFinder:
             if isinstance(consts[i], type(co)):
                 consts[i] = self.replace_paths_in_code(consts[i])
 
-        return co.replace(co_consts=tuple(consts), co_filename=new_filename) 
+        return co.replace(co_consts=tuple(consts), co_filename=new_filename)
 
 
 def test():

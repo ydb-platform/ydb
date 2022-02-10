@@ -243,7 +243,7 @@ static bool mustBeFiniteCountedLoop(Loop *L, ScalarEvolution *SE,
                                     BasicBlock *Pred) {
   // A conservative bound on the loop as a whole.
   const SCEV *MaxTrips = SE->getConstantMaxBackedgeTakenCount(L);
-  if (!isa<SCEVCouldNotCompute>(MaxTrips) && 
+  if (!isa<SCEVCouldNotCompute>(MaxTrips) &&
       SE->getUnsignedRange(MaxTrips).getUnsignedMax().isIntN(
           CountedLoopTripWidth))
     return true;
@@ -255,7 +255,7 @@ static bool mustBeFiniteCountedLoop(Loop *L, ScalarEvolution *SE,
     // This returns an exact expression only.  TODO: We really only need an
     // upper bound here, but SE doesn't expose that.
     const SCEV *MaxExec = SE->getExitCount(L, Pred);
-    if (!isa<SCEVCouldNotCompute>(MaxExec) && 
+    if (!isa<SCEVCouldNotCompute>(MaxExec) &&
         SE->getUnsignedRange(MaxExec).getUnsignedMax().isIntN(
             CountedLoopTripWidth))
         return true;
@@ -435,7 +435,7 @@ static Instruction *findLocationForEntrySafepoint(Function &F,
   return Cursor;
 }
 
-const char GCSafepointPollName[] = "gc.safepoint_poll"; 
+const char GCSafepointPollName[] = "gc.safepoint_poll";
 
 static bool isGCSafepointPoll(Function &F) {
   return F.getName().equals(GCSafepointPollName);
@@ -589,7 +589,7 @@ bool PlaceSafepoints::runOnFunction(Function &F) {
   for (Instruction *PollLocation : PollsNeeded) {
     std::vector<CallBase *> RuntimeCalls;
     InsertSafepointPoll(PollLocation, RuntimeCalls, TLI);
-    llvm::append_range(ParsePointNeeded, RuntimeCalls); 
+    llvm::append_range(ParsePointNeeded, RuntimeCalls);
   }
 
   return Modified;

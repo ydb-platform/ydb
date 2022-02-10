@@ -4,7 +4,7 @@
 
     Lexers for interactive fiction languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -37,10 +37,10 @@ class Inform6Lexer(RegexLexer):
     # Inform 7 maps these four character classes to their ASCII
     # equivalents. To support Inform 6 inclusions within Inform 7,
     # Inform6Lexer maps them too.
-    _dash = '\\-\u2010-\u2014' 
-    _dquote = '"\u201c\u201d' 
-    _squote = "'\u2018\u2019" 
-    _newline = '\\n\u0085\u2028\u2029' 
+    _dash = '\\-\u2010-\u2014'
+    _dquote = '"\u201c\u201d'
+    _squote = "'\u2018\u2019"
+    _newline = '\\n\u0085\u2028\u2029'
 
     tokens = {
         'root': [
@@ -117,7 +117,7 @@ class Inform6Lexer(RegexLexer):
             include('_whitespace'),
             # Strings
             (r'[%s][^@][%s]' % (_squote, _squote), String.Char, '#pop'),
-            (r'([%s])(@\{[0-9a-fA-F]*\})([%s])' % (_squote, _squote), 
+            (r'([%s])(@\{[0-9a-fA-F]*\})([%s])' % (_squote, _squote),
              bygroups(String.Char, String.Escape, String.Char), '#pop'),
             (r'([%s])(@.{2})([%s])' % (_squote, _squote),
              bygroups(String.Char, String.Escape, String.Char), '#pop'),
@@ -179,7 +179,7 @@ class Inform6Lexer(RegexLexer):
             (r'[~^]+', String.Escape),
             (r'[^~^\\@({%s]+' % _squote, String.Single),
             (r'[({]', String.Single),
-            (r'@\{[0-9a-fA-F]*\}', String.Escape), 
+            (r'@\{[0-9a-fA-F]*\}', String.Escape),
             (r'@.{2}', String.Escape),
             (r'[%s]' % _squote, String.Single, '#pop')
         ],
@@ -190,7 +190,7 @@ class Inform6Lexer(RegexLexer):
             (r'\\', String.Escape),
             (r'@(\\\s*[%s]\s*)*@((\\\s*[%s]\s*)*[0-9])*' %
              (_newline, _newline), String.Escape),
-            (r'@(\\\s*[%s]\s*)*\{((\\\s*[%s]\s*)*[0-9a-fA-F])*' 
+            (r'@(\\\s*[%s]\s*)*\{((\\\s*[%s]\s*)*[0-9a-fA-F])*'
              r'(\\\s*[%s]\s*)*\}' % (_newline, _newline, _newline),
              String.Escape),
             (r'@(\\\s*[%s]\s*)*.(\\\s*[%s]\s*)*.' % (_newline, _newline),
@@ -256,8 +256,8 @@ class Inform6Lexer(RegexLexer):
             (r'(?i)(extend|verb)\b', Keyword, 'grammar'),
             (r'(?i)fake_action\b', Keyword, ('default', '_constant')),
             (r'(?i)import\b', Keyword, 'manifest'),
-            (r'(?i)(include|link|origsource)\b', Keyword, 
-             ('default', 'before-plain-string?')), 
+            (r'(?i)(include|link|origsource)\b', Keyword,
+             ('default', 'before-plain-string?')),
             (r'(?i)(lowstring|undef)\b', Keyword, ('default', '_constant')),
             (r'(?i)message\b', Keyword, ('default', 'diagnostic')),
             (r'(?i)(nearby|object)\b', Keyword,
@@ -364,12 +364,12 @@ class Inform6Lexer(RegexLexer):
         'diagnostic': [
             include('_whitespace'),
             (r'[%s]' % _dquote, String.Double, ('#pop', 'message-string')),
-            default(('#pop', 'before-plain-string?', 'directive-keyword?')) 
+            default(('#pop', 'before-plain-string?', 'directive-keyword?'))
         ],
-        'before-plain-string?': [ 
+        'before-plain-string?': [
             include('_whitespace'),
-            (r'[%s]' % _dquote, String.Double, ('#pop', 'plain-string')), 
-            default('#pop') 
+            (r'[%s]' % _dquote, String.Double, ('#pop', 'plain-string')),
+            default('#pop')
         ],
         'message-string': [
             (r'[~^]+', String.Escape),
@@ -386,7 +386,7 @@ class Inform6Lexer(RegexLexer):
                 'replace', 'reverse', 'scope', 'score', 'special', 'string', 'table', 'terminating',
                 'time', 'topic', 'warning', 'with'), suffix=r'\b'),
              Keyword, '#pop'),
-            (r'static\b', Keyword), 
+            (r'static\b', Keyword),
             (r'[%s]{1,2}>|[+=]' % _dash, Punctuation, '#pop')
         ],
         '_directive-keyword': [
@@ -515,16 +515,16 @@ class Inform6Lexer(RegexLexer):
         while objectloop_queue:
             yield objectloop_queue.pop(0)
 
-    def analyse_text(text): 
-        """We try to find a keyword which seem relatively common, unfortunately 
-        there is a decent overlap with Smalltalk keywords otherwise here..""" 
-        result = 0 
-        if re.search('\borigsource\b', text, re.IGNORECASE): 
-            result += 0.05 
+    def analyse_text(text):
+        """We try to find a keyword which seem relatively common, unfortunately
+        there is a decent overlap with Smalltalk keywords otherwise here.."""
+        result = 0
+        if re.search('\borigsource\b', text, re.IGNORECASE):
+            result += 0.05
 
-        return result 
- 
- 
+        return result
+
+
 class Inform7Lexer(RegexLexer):
     """
     For `Inform 7 <http://inform7.com/>`_ source code.
@@ -866,7 +866,7 @@ class Tads3Lexer(RegexLexer):
 
     tokens = {
         'root': [
-            ('\ufeff', Text), 
+            ('\ufeff', Text),
             (r'\{', Punctuation, 'object-body'),
             (r';+', Punctuation),
             (r'(?=(argcount|break|case|catch|continue|default|definingobj|'
@@ -1351,17 +1351,17 @@ class Tads3Lexer(RegexLexer):
                 else:
                     token = Comment
             yield index, token, value
- 
-    def analyse_text(text): 
-        """This is a rather generic descriptive language without strong 
-        identifiers. It looks like a 'GameMainDef' has to be present, 
-        and/or a 'versionInfo' with an 'IFID' field.""" 
-        result = 0 
-        if '__TADS' in text or 'GameMainDef' in text: 
-            result += 0.2 
- 
-        # This is a fairly unique keyword which is likely used in source as well 
-        if 'versionInfo' in text and 'IFID' in text: 
-            result += 0.1 
- 
-        return result 
+
+    def analyse_text(text):
+        """This is a rather generic descriptive language without strong
+        identifiers. It looks like a 'GameMainDef' has to be present,
+        and/or a 'versionInfo' with an 'IFID' field."""
+        result = 0
+        if '__TADS' in text or 'GameMainDef' in text:
+            result += 0.2
+
+        # This is a fairly unique keyword which is likely used in source as well
+        if 'versionInfo' in text and 'IFID' in text:
+            result += 0.1
+
+        return result

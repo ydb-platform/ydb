@@ -35,7 +35,7 @@ LLVMContextImpl::LLVMContextImpl(LLVMContext &C)
     FP128Ty(C, Type::FP128TyID),
     PPC_FP128Ty(C, Type::PPC_FP128TyID),
     X86_MMXTy(C, Type::X86_MMXTyID),
-    X86_AMXTy(C, Type::X86_AMXTyID), 
+    X86_AMXTy(C, Type::X86_AMXTyID),
     Int1Ty(C, 1),
     Int8Ty(C, 8),
     Int16Ty(C, 16),
@@ -51,10 +51,10 @@ LLVMContextImpl::~LLVMContextImpl() {
     delete *OwnedModules.begin();
 
 #ifndef NDEBUG
-  // Check for metadata references from leaked Values. 
-  for (auto &Pair : ValueMetadata) 
+  // Check for metadata references from leaked Values.
+  for (auto &Pair : ValueMetadata)
     Pair.first->dump();
-  assert(ValueMetadata.empty() && "Values with metadata have been leaked"); 
+  assert(ValueMetadata.empty() && "Values with metadata have been leaked");
 #endif
 
   // Drop references for MDNodes.  Do this before Values get deleted to avoid
@@ -98,7 +98,7 @@ LLVMContextImpl::~LLVMContextImpl() {
   CAZConstants.clear();
   CPNConstants.clear();
   UVConstants.clear();
-  PVConstants.clear(); 
+  PVConstants.clear();
   IntConstants.clear();
   FPConstants.clear();
   CDSConstants.clear();
@@ -127,16 +127,16 @@ LLVMContextImpl::~LLVMContextImpl() {
 }
 
 void LLVMContextImpl::dropTriviallyDeadConstantArrays() {
-  SmallSetVector<ConstantArray *, 4> WorkList; 
+  SmallSetVector<ConstantArray *, 4> WorkList;
 
-  // When ArrayConstants are of substantial size and only a few in them are 
-  // dead, starting WorkList with all elements of ArrayConstants can be 
-  // wasteful. Instead, starting WorkList with only elements that have empty 
-  // uses. 
-  for (ConstantArray *C : ArrayConstants) 
-    if (C->use_empty()) 
-      WorkList.insert(C); 
- 
+  // When ArrayConstants are of substantial size and only a few in them are
+  // dead, starting WorkList with all elements of ArrayConstants can be
+  // wasteful. Instead, starting WorkList with only elements that have empty
+  // uses.
+  for (ConstantArray *C : ArrayConstants)
+    if (C->use_empty())
+      WorkList.insert(C);
+
   while (!WorkList.empty()) {
     ConstantArray *C = WorkList.pop_back_val();
     if (C->use_empty()) {
@@ -176,7 +176,7 @@ unsigned MDNodeOpsKey::calculateHash(MDNode *N, unsigned Offset) {
   unsigned Hash = hash_combine_range(N->op_begin() + Offset, N->op_end());
 #ifndef NDEBUG
   {
-    SmallVector<Metadata *, 8> MDs(drop_begin(N->operands(), Offset)); 
+    SmallVector<Metadata *, 8> MDs(drop_begin(N->operands(), Offset));
     unsigned RawHash = calculateHash(MDs);
     assert(Hash == RawHash &&
            "Expected hash of MDOperand to equal hash of Metadata*");
@@ -220,8 +220,8 @@ void LLVMContextImpl::getSyncScopeNames(
     SSNs[SSE.second] = SSE.first();
 }
 
-/// Gets the OptPassGate for this LLVMContextImpl, which defaults to the 
-/// singleton OptBisect if not explicitly set. 
+/// Gets the OptPassGate for this LLVMContextImpl, which defaults to the
+/// singleton OptBisect if not explicitly set.
 OptPassGate &LLVMContextImpl::getOptPassGate() const {
   if (!OPG)
     OPG = &(*OptBisector);

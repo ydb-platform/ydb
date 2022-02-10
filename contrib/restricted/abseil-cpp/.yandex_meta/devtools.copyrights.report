@@ -431,7 +431,7 @@ BELONGS absl/base/ya.make absl/container/ya.make absl/debugging/internal/ya.make
         absl/types/variant.h [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 58e60221a225d38384f3c66b2400cc91
-BELONGS absl/debugging/internal/ya.make absl/flags/ya.make absl/numeric/ya.make absl/strings/ya.make ya.make 
+BELONGS absl/debugging/internal/ya.make absl/flags/ya.make absl/numeric/ya.make absl/strings/ya.make ya.make
     License text:
         // Copyright 2021 The Abseil Authors.
     Scancode info:

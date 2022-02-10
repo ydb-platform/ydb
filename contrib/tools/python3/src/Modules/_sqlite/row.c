@@ -76,34 +76,34 @@ PyObject* pysqlite_row_item(pysqlite_Row* self, Py_ssize_t idx)
    return item;
 }
 
-static int 
-equal_ignore_case(PyObject *left, PyObject *right) 
-{ 
-    int eq = PyObject_RichCompareBool(left, right, Py_EQ); 
-    if (eq) { /* equal or error */ 
-        return eq; 
-    } 
-    if (!PyUnicode_Check(left) || !PyUnicode_Check(right)) { 
-        return 0; 
-    } 
-    if (!PyUnicode_IS_ASCII(left) || !PyUnicode_IS_ASCII(right)) { 
-        return 0; 
-    } 
- 
-    Py_ssize_t len = PyUnicode_GET_LENGTH(left); 
-    if (PyUnicode_GET_LENGTH(right) != len) { 
-        return 0; 
-    } 
-    const Py_UCS1 *p1 = PyUnicode_1BYTE_DATA(left); 
-    const Py_UCS1 *p2 = PyUnicode_1BYTE_DATA(right); 
-    for (; len; len--, p1++, p2++) { 
-        if (Py_TOLOWER(*p1) != Py_TOLOWER(*p2)) { 
-            return 0; 
-        } 
-    } 
-    return 1; 
-} 
- 
+static int
+equal_ignore_case(PyObject *left, PyObject *right)
+{
+    int eq = PyObject_RichCompareBool(left, right, Py_EQ);
+    if (eq) { /* equal or error */
+        return eq;
+    }
+    if (!PyUnicode_Check(left) || !PyUnicode_Check(right)) {
+        return 0;
+    }
+    if (!PyUnicode_IS_ASCII(left) || !PyUnicode_IS_ASCII(right)) {
+        return 0;
+    }
+
+    Py_ssize_t len = PyUnicode_GET_LENGTH(left);
+    if (PyUnicode_GET_LENGTH(right) != len) {
+        return 0;
+    }
+    const Py_UCS1 *p1 = PyUnicode_1BYTE_DATA(left);
+    const Py_UCS1 *p2 = PyUnicode_1BYTE_DATA(right);
+    for (; len; len--, p1++, p2++) {
+        if (Py_TOLOWER(*p1) != Py_TOLOWER(*p2)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 PyObject* pysqlite_row_subscript(pysqlite_Row* self, PyObject* idx)
 {
     Py_ssize_t _idx;
@@ -126,11 +126,11 @@ PyObject* pysqlite_row_subscript(pysqlite_Row* self, PyObject* idx)
             PyObject *obj;
             obj = PyTuple_GET_ITEM(self->description, i);
             obj = PyTuple_GET_ITEM(obj, 0);
-            int eq = equal_ignore_case(idx, obj); 
-            if (eq < 0) { 
+            int eq = equal_ignore_case(idx, obj);
+            if (eq < 0) {
                 return NULL;
             }
-            if (eq) { 
+            if (eq) {
                 /* found item */
                 item = PyTuple_GetItem(self->data, i);
                 Py_INCREF(item);
@@ -156,7 +156,7 @@ pysqlite_row_length(pysqlite_Row* self)
     return PyTuple_GET_SIZE(self->data);
 }
 
-PyObject* pysqlite_row_keys(pysqlite_Row* self, PyObject *Py_UNUSED(ignored)) 
+PyObject* pysqlite_row_keys(pysqlite_Row* self, PyObject *Py_UNUSED(ignored))
 {
     PyObject* list;
     Py_ssize_t nitems, i;
@@ -192,16 +192,16 @@ static PyObject* pysqlite_row_richcompare(pysqlite_Row *self, PyObject *_other, 
     if (opid != Py_EQ && opid != Py_NE)
         Py_RETURN_NOTIMPLEMENTED;
 
-    if (PyObject_TypeCheck(_other, &pysqlite_RowType)) { 
+    if (PyObject_TypeCheck(_other, &pysqlite_RowType)) {
         pysqlite_Row *other = (pysqlite_Row *)_other;
-        int eq = PyObject_RichCompareBool(self->description, other->description, Py_EQ); 
-        if (eq < 0) { 
-            return NULL; 
-        } 
-        if (eq) { 
+        int eq = PyObject_RichCompareBool(self->description, other->description, Py_EQ);
+        if (eq < 0) {
+            return NULL;
+        }
+        if (eq) {
             return PyObject_RichCompare(self->data, other->data, opid);
         }
-        return PyBool_FromLong(opid != Py_EQ); 
+        return PyBool_FromLong(opid != Py_EQ);
     }
     Py_RETURN_NOTIMPLEMENTED;
 }
@@ -233,10 +233,10 @@ PyTypeObject pysqlite_RowType = {
         sizeof(pysqlite_Row),                           /* tp_basicsize */
         0,                                              /* tp_itemsize */
         (destructor)pysqlite_row_dealloc,               /* tp_dealloc */
-        0,                                              /* tp_vectorcall_offset */ 
+        0,                                              /* tp_vectorcall_offset */
         0,                                              /* tp_getattr */
         0,                                              /* tp_setattr */
-        0,                                              /* tp_as_async */ 
+        0,                                              /* tp_as_async */
         0,                                              /* tp_repr */
         0,                                              /* tp_as_number */
         0,                                              /* tp_as_sequence */

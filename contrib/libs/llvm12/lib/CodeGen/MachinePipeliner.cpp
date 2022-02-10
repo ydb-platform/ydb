@@ -268,7 +268,7 @@ bool MachinePipeliner::scheduleLoop(MachineLoop &L) {
 void MachinePipeliner::setPragmaPipelineOptions(MachineLoop &L) {
   // Reset the pragma for the next loop in iteration.
   disabledByPragma = false;
-  II_setByPragma = 0; 
+  II_setByPragma = 0;
 
   MachineBasicBlock *LBLK = L.getTopBlock();
 
@@ -442,16 +442,16 @@ bool MachinePipeliner::swingModuloScheduler(MachineLoop &L) {
   return SMS.hasNewSchedule();
 }
 
-void MachinePipeliner::getAnalysisUsage(AnalysisUsage &AU) const { 
-  AU.addRequired<AAResultsWrapperPass>(); 
-  AU.addPreserved<AAResultsWrapperPass>(); 
-  AU.addRequired<MachineLoopInfo>(); 
-  AU.addRequired<MachineDominatorTree>(); 
-  AU.addRequired<LiveIntervals>(); 
-  AU.addRequired<MachineOptimizationRemarkEmitterPass>(); 
-  MachineFunctionPass::getAnalysisUsage(AU); 
-} 
- 
+void MachinePipeliner::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.addRequired<AAResultsWrapperPass>();
+  AU.addPreserved<AAResultsWrapperPass>();
+  AU.addRequired<MachineLoopInfo>();
+  AU.addRequired<MachineDominatorTree>();
+  AU.addRequired<LiveIntervals>();
+  AU.addRequired<MachineOptimizationRemarkEmitterPass>();
+  MachineFunctionPass::getAnalysisUsage(AU);
+}
+
 void SwingSchedulerDAG::setMII(unsigned ResMII, unsigned RecMII) {
   if (II_setByPragma > 0)
     MII = II_setByPragma;
@@ -716,13 +716,13 @@ static bool isDependenceBarrier(MachineInstr &MI, AliasAnalysis *AA) {
 /// This function calls the code in ValueTracking, but first checks that the
 /// instruction has a memory operand.
 static void getUnderlyingObjects(const MachineInstr *MI,
-                                 SmallVectorImpl<const Value *> &Objs) { 
+                                 SmallVectorImpl<const Value *> &Objs) {
   if (!MI->hasOneMemOperand())
     return;
   MachineMemOperand *MM = *MI->memoperands_begin();
   if (!MM->getValue())
     return;
-  getUnderlyingObjects(MM->getValue(), Objs); 
+  getUnderlyingObjects(MM->getValue(), Objs);
   for (const Value *V : Objs) {
     if (!isIdentifiedObject(V)) {
       Objs.clear();
@@ -746,7 +746,7 @@ void SwingSchedulerDAG::addLoopCarriedDependences(AliasAnalysis *AA) {
       PendingLoads.clear();
     else if (MI.mayLoad()) {
       SmallVector<const Value *, 4> Objs;
-      ::getUnderlyingObjects(&MI, Objs); 
+      ::getUnderlyingObjects(&MI, Objs);
       if (Objs.empty())
         Objs.push_back(UnknownValue);
       for (auto V : Objs) {
@@ -755,7 +755,7 @@ void SwingSchedulerDAG::addLoopCarriedDependences(AliasAnalysis *AA) {
       }
     } else if (MI.mayStore()) {
       SmallVector<const Value *, 4> Objs;
-      ::getUnderlyingObjects(&MI, Objs); 
+      ::getUnderlyingObjects(&MI, Objs);
       if (Objs.empty())
         Objs.push_back(UnknownValue);
       for (auto V : Objs) {
@@ -813,8 +813,8 @@ void SwingSchedulerDAG::addLoopCarriedDependences(AliasAnalysis *AA) {
             continue;
           }
           AliasResult AAResult = AA->alias(
-              MemoryLocation::getAfter(MMO1->getValue(), MMO1->getAAInfo()), 
-              MemoryLocation::getAfter(MMO2->getValue(), MMO2->getAAInfo())); 
+              MemoryLocation::getAfter(MMO1->getValue(), MMO1->getAAInfo()),
+              MemoryLocation::getAfter(MMO2->getValue(), MMO2->getAAInfo()));
 
           if (AAResult != NoAlias) {
             SDep Dep(Load, SDep::Barrier);
@@ -1595,12 +1595,12 @@ static bool computePath(SUnit *Cur, SetVector<SUnit *> &Path,
                         SmallPtrSet<SUnit *, 8> &Visited) {
   if (Cur->isBoundaryNode())
     return false;
-  if (Exclude.contains(Cur)) 
+  if (Exclude.contains(Cur))
     return false;
-  if (DestNodes.contains(Cur)) 
+  if (DestNodes.contains(Cur))
     return true;
   if (!Visited.insert(Cur).second)
-    return Path.contains(Cur); 
+    return Path.contains(Cur);
   bool FoundPath = false;
   for (auto &SI : Cur->Succs)
     FoundPath |= computePath(SI.getSUnit(), Path, DestNodes, Exclude, Visited);
@@ -1640,8 +1640,8 @@ static void computeLiveOuts(MachineFunction &MF, RegPressureTracker &RPTracker,
         if (Register::isVirtualRegister(Reg))
           Uses.insert(Reg);
         else if (MRI.isAllocatable(Reg))
-          for (MCRegUnitIterator Units(Reg.asMCReg(), TRI); Units.isValid(); 
-               ++Units) 
+          for (MCRegUnitIterator Units(Reg.asMCReg(), TRI); Units.isValid();
+               ++Units)
             Uses.insert(*Units);
       }
   }
@@ -1654,8 +1654,8 @@ static void computeLiveOuts(MachineFunction &MF, RegPressureTracker &RPTracker,
             LiveOutRegs.push_back(RegisterMaskPair(Reg,
                                                    LaneBitmask::getNone()));
         } else if (MRI.isAllocatable(Reg)) {
-          for (MCRegUnitIterator Units(Reg.asMCReg(), TRI); Units.isValid(); 
-               ++Units) 
+          for (MCRegUnitIterator Units(Reg.asMCReg(), TRI); Units.isValid();
+               ++Units)
             if (!Uses.count(*Units))
               LiveOutRegs.push_back(RegisterMaskPair(*Units,
                                                      LaneBitmask::getNone()));
@@ -1955,7 +1955,7 @@ void SwingSchedulerDAG::computeNodeOrder(NodeSetType &NodeSets) {
           for (const auto &I : maxHeight->Succs) {
             if (Nodes.count(I.getSUnit()) == 0)
               continue;
-            if (NodeOrder.contains(I.getSUnit())) 
+            if (NodeOrder.contains(I.getSUnit()))
               continue;
             if (ignoreDependence(I, false))
               continue;
@@ -1967,7 +1967,7 @@ void SwingSchedulerDAG::computeNodeOrder(NodeSetType &NodeSets) {
               continue;
             if (Nodes.count(I.getSUnit()) == 0)
               continue;
-            if (NodeOrder.contains(I.getSUnit())) 
+            if (NodeOrder.contains(I.getSUnit()))
               continue;
             R.insert(I.getSUnit());
           }
@@ -2006,7 +2006,7 @@ void SwingSchedulerDAG::computeNodeOrder(NodeSetType &NodeSets) {
           for (const auto &I : maxDepth->Preds) {
             if (Nodes.count(I.getSUnit()) == 0)
               continue;
-            if (NodeOrder.contains(I.getSUnit())) 
+            if (NodeOrder.contains(I.getSUnit()))
               continue;
             R.insert(I.getSUnit());
           }
@@ -2016,7 +2016,7 @@ void SwingSchedulerDAG::computeNodeOrder(NodeSetType &NodeSets) {
               continue;
             if (Nodes.count(I.getSUnit()) == 0)
               continue;
-            if (NodeOrder.contains(I.getSUnit())) 
+            if (NodeOrder.contains(I.getSUnit()))
               continue;
             R.insert(I.getSUnit());
           }
@@ -2279,7 +2279,7 @@ void SwingSchedulerDAG::applyInstrChange(MachineInstr *MI,
 /// Return the instruction in the loop that defines the register.
 /// If the definition is a Phi, then follow the Phi operand to
 /// the instruction in the loop.
-MachineInstr *SwingSchedulerDAG::findDefInLoop(Register Reg) { 
+MachineInstr *SwingSchedulerDAG::findDefInLoop(Register Reg) {
   SmallPtrSet<MachineInstr *, 8> Visited;
   MachineInstr *Def = MRI.getVRegDef(Reg);
   while (Def->isPHI()) {
@@ -2952,7 +2952,7 @@ void SMSchedule::finalizeSchedule(SwingSchedulerDAG *SSD) {
     }
     // Replace the old order with the new order.
     cycleInstrs.swap(newOrderPhi);
-    llvm::append_range(cycleInstrs, newOrderI); 
+    llvm::append_range(cycleInstrs, newOrderI);
     SSD->fixupRegisterOverlaps(cycleInstrs);
   }
 

@@ -33,14 +33,14 @@
             "documentation": "<p>The ID of the region that contains the source for the read replica.</p>"
           }
         }
-      }, 
-      "StartDBInstanceAutomatedBackupsReplicationMessage": { 
-        "members": { 
-          "SourceRegion": { 
-            "shape": "String", 
-            "documentation": "<p>The ID of the region that contains the source for the db instance.</p>" 
-          } 
-        } 
+      },
+      "StartDBInstanceAutomatedBackupsReplicationMessage": {
+        "members": {
+          "SourceRegion": {
+            "shape": "String",
+            "documentation": "<p>The ID of the region that contains the source for the db instance.</p>"
+          }
+        }
       }
     }
   }

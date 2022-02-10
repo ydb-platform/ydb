@@ -1,22 +1,22 @@
-PY3_LIBRARY() 
+PY3_LIBRARY()
 
 LICENSE(MIT)
 
-VERSION(5.4.1) 
+VERSION(5.4.1)
 
 OWNER(g:python-contrib borman g:testenv)
 
-PEERDIR( 
-    contrib/libs/yaml 
-) 
+PEERDIR(
+    contrib/libs/yaml
+)
 
-ADDINCL( 
-    contrib/python/PyYAML/py3/yaml 
-) 
+ADDINCL(
+    contrib/python/PyYAML/py3/yaml
+)
 
 PY_SRCS(
     TOP_LEVEL
-    _yaml/__init__.py 
+    _yaml/__init__.py
     yaml/__init__.py
     yaml/composer.py
     yaml/constructor.py
@@ -34,18 +34,18 @@ PY_SRCS(
     yaml/scanner.py
     yaml/serializer.py
     yaml/tokens.py
-    CYTHON_C 
-    yaml/_yaml.pyx 
+    CYTHON_C
+    yaml/_yaml.pyx
 )
 
-RESOURCE_FILES( 
-    PREFIX contrib/python/PyYAML/ 
-    .dist-info/METADATA 
-    .dist-info/top_level.txt 
-) 
- 
+RESOURCE_FILES(
+    PREFIX contrib/python/PyYAML/
+    .dist-info/METADATA
+    .dist-info/top_level.txt
+)
+
 NO_LINT()
 
-NO_COMPILER_WARNINGS() 
- 
+NO_COMPILER_WARNINGS()
+
 END()

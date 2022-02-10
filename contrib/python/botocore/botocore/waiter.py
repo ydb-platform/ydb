@@ -75,13 +75,13 @@ def create_waiter_with_client(waiter_name, waiter_model, client):
     )
 
 
-def is_valid_waiter_error(response): 
-    error = response.get('Error') 
-    if isinstance(error, dict) and 'Code' in error: 
-        return True 
-    return False 
- 
- 
+def is_valid_waiter_error(response):
+    error = response.get('Error')
+    if isinstance(error, dict) and 'Code' in error:
+        return True
+    return False
+
+
 class NormalizedOperationMethod(object):
     def __init__(self, client_method):
         self._client_method = client_method
@@ -170,21 +170,21 @@ class AcceptorConfig(object):
         self.argument = config.get('argument')
         self.matcher_func = self._create_matcher_func()
 
-    @property 
-    def explanation(self): 
-        if self.matcher == 'path': 
-            return 'For expression "%s" we matched expected path: "%s"' % (self.argument, self.expected) 
-        elif self.matcher == 'pathAll': 
-            return 'For expression "%s" all members matched excepted path: "%s"' % (self.argument, self.expected) 
-        elif self.matcher == 'pathAny': 
-            return 'For expression "%s" we matched expected path: "%s" at least once' % (self.argument, self.expected) 
-        elif self.matcher == 'status': 
-            return 'Matched expected HTTP status code: %s' % self.expected 
-        elif self.matcher == 'error': 
-            return 'Matched expected service error code: %s' % self.expected 
-        else: 
-            return 'No explanation for unknown waiter type: "%s"' % self.matcher 
- 
+    @property
+    def explanation(self):
+        if self.matcher == 'path':
+            return 'For expression "%s" we matched expected path: "%s"' % (self.argument, self.expected)
+        elif self.matcher == 'pathAll':
+            return 'For expression "%s" all members matched excepted path: "%s"' % (self.argument, self.expected)
+        elif self.matcher == 'pathAny':
+            return 'For expression "%s" we matched expected path: "%s" at least once' % (self.argument, self.expected)
+        elif self.matcher == 'status':
+            return 'Matched expected HTTP status code: %s' % self.expected
+        elif self.matcher == 'error':
+            return 'Matched expected service error code: %s' % self.expected
+        else:
+            return 'No explanation for unknown waiter type: "%s"' % self.matcher
+
     def _create_matcher_func(self):
         # An acceptor function is a callable that takes a single value.  The
         # parsed AWS response.  Note that the parsed error response is also
@@ -213,7 +213,7 @@ class AcceptorConfig(object):
         expected = self.expected
 
         def acceptor_matches(response):
-            if is_valid_waiter_error(response): 
+            if is_valid_waiter_error(response):
                 return
             return expression.search(response) == expected
         return acceptor_matches
@@ -223,7 +223,7 @@ class AcceptorConfig(object):
         expected = self.expected
 
         def acceptor_matches(response):
-            if is_valid_waiter_error(response): 
+            if is_valid_waiter_error(response):
                 return
             result = expression.search(response)
             if not isinstance(result, list) or not result:
@@ -243,7 +243,7 @@ class AcceptorConfig(object):
         expected = self.expected
 
         def acceptor_matches(response):
-            if is_valid_waiter_error(response): 
+            if is_valid_waiter_error(response):
                 return
             result = expression.search(response)
             if not isinstance(result, list) or not result:
@@ -313,7 +313,7 @@ class Waiter(object):
         config = kwargs.pop('WaiterConfig', {})
         sleep_amount = config.get('Delay', self.config.delay)
         max_attempts = config.get('MaxAttempts', self.config.max_attempts)
-        last_matched_acceptor = None 
+        last_matched_acceptor = None
         num_attempts = 0
 
         while True:
@@ -321,47 +321,47 @@ class Waiter(object):
             num_attempts += 1
             for acceptor in acceptors:
                 if acceptor.matcher_func(response):
-                    last_matched_acceptor = acceptor 
+                    last_matched_acceptor = acceptor
                     current_state = acceptor.state
                     break
             else:
                 # If none of the acceptors matched, we should
                 # transition to the failure state if an error
                 # response was received.
-                if is_valid_waiter_error(response): 
+                if is_valid_waiter_error(response):
                     # Transition to a failure state, which we
                     # can just handle here by raising an exception.
                     raise WaiterError(
                         name=self.name,
-                        reason='An error occurred (%s): %s' % ( 
-                            response['Error'].get('Code', 'Unknown'), 
-                            response['Error'].get('Message', 'Unknown'), 
-                        ), 
-                        last_response=response, 
+                        reason='An error occurred (%s): %s' % (
+                            response['Error'].get('Code', 'Unknown'),
+                            response['Error'].get('Message', 'Unknown'),
+                        ),
+                        last_response=response,
                     )
             if current_state == 'success':
                 logger.debug("Waiting complete, waiter matched the "
                              "success state.")
                 return
             if current_state == 'failure':
-                reason = 'Waiter encountered a terminal failure state: %s' % ( 
-                        acceptor.explanation 
-                        ) 
+                reason = 'Waiter encountered a terminal failure state: %s' % (
+                        acceptor.explanation
+                        )
                 raise WaiterError(
                     name=self.name,
-                    reason=reason, 
+                    reason=reason,
                     last_response=response,
                 )
             if num_attempts >= max_attempts:
-                if last_matched_acceptor is None: 
-                    reason = 'Max attempts exceeded' 
-                else: 
-                    reason = 'Max attempts exceeded. Previously accepted state: %s' %( 
-                        acceptor.explanation 
-                    ) 
+                if last_matched_acceptor is None:
+                    reason = 'Max attempts exceeded'
+                else:
+                    reason = 'Max attempts exceeded. Previously accepted state: %s' %(
+                        acceptor.explanation
+                    )
                 raise WaiterError(
                     name=self.name,
-                    reason=reason, 
-                    last_response=response, 
+                    reason=reason,
+                    last_response=response,
                 )
             time.sleep(sleep_amount)

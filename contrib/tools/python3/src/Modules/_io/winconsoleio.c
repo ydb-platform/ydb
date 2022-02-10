@@ -8,11 +8,11 @@
 
 #define PY_SSIZE_T_CLEAN
 #include "Python.h"
-#include "pycore_object.h" 
+#include "pycore_object.h"
 
 #ifdef MS_WINDOWS
 
-#include "structmember.h"         // PyMemberDef 
+#include "structmember.h"         // PyMemberDef
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
@@ -204,8 +204,8 @@ _io__WindowsConsoleIO_close_impl(winconsoleio *self)
     PyObject *exc, *val, *tb;
     int rc;
     _Py_IDENTIFIER(close);
-    res = _PyObject_CallMethodIdOneArg((PyObject*)&PyRawIOBase_Type, 
-                                       &PyId_close, (PyObject*)self); 
+    res = _PyObject_CallMethodIdOneArg((PyObject*)&PyRawIOBase_Type,
+                                       &PyId_close, (PyObject*)self);
     if (!self->closehandle) {
         self->handle = INVALID_HANDLE_VALUE;
         return res;
@@ -557,7 +557,7 @@ read_console_w(HANDLE handle, DWORD maxlen, DWORD *readlen) {
     Py_BEGIN_ALLOW_THREADS
     DWORD off = 0;
     while (off < maxlen) {
-        DWORD n = (DWORD)-1; 
+        DWORD n = (DWORD)-1;
         DWORD len = min(maxlen - off, BUFSIZ);
         SetLastError(0);
         BOOL res = ReadConsoleW(handle, &buf[off], len, &n, NULL);
@@ -725,7 +725,7 @@ readinto(winconsoleio *self, char *buf, Py_ssize_t len)
 
     if (u8n) {
         PyErr_Format(PyExc_SystemError,
-            "Buffer had room for %zd bytes but %u bytes required", 
+            "Buffer had room for %zd bytes but %u bytes required",
             len, u8n);
         return -1;
     }
@@ -1118,10 +1118,10 @@ PyTypeObject PyWindowsConsoleIO_Type = {
     sizeof(winconsoleio),
     0,
     (destructor)winconsoleio_dealloc,           /* tp_dealloc */
-    0,                                          /* tp_vectorcall_offset */ 
+    0,                                          /* tp_vectorcall_offset */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_as_async */ 
+    0,                                          /* tp_as_async */
     (reprfunc)winconsoleio_repr,                /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
@@ -1133,7 +1133,7 @@ PyTypeObject PyWindowsConsoleIO_Type = {
     0,                                          /* tp_setattro */
     0,                                          /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE
-        | Py_TPFLAGS_HAVE_GC,                   /* tp_flags */ 
+        | Py_TPFLAGS_HAVE_GC,                   /* tp_flags */
     _io__WindowsConsoleIO___init____doc__,      /* tp_doc */
     (traverseproc)winconsoleio_traverse,        /* tp_traverse */
     (inquiry)winconsoleio_clear,                /* tp_clear */
@@ -1164,6 +1164,6 @@ PyTypeObject PyWindowsConsoleIO_Type = {
     0,                                          /* tp_finalize */
 };
 
-PyObject * _PyWindowsConsoleIO_Type = (PyObject*)&PyWindowsConsoleIO_Type; 
+PyObject * _PyWindowsConsoleIO_Type = (PyObject*)&PyWindowsConsoleIO_Type;
 
 #endif /* MS_WINDOWS */

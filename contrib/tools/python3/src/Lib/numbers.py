@@ -33,7 +33,7 @@ class Complex(Number):
     """Complex defines the operations that work on the builtin complex type.
 
     In short, those are: a conversion to complex, .real, .imag, +, -,
-    *, /, **, abs(), .conjugate, ==, and !=. 
+    *, /, **, abs(), .conjugate, ==, and !=.
 
     If it is given heterogeneous arguments, and doesn't have special
     knowledge about them, it should fall back to the builtin complex
@@ -292,12 +292,12 @@ class Rational(Real):
 
 
 class Integral(Rational):
-    """Integral adds methods that work on integral numbers. 
+    """Integral adds methods that work on integral numbers.
 
-    In short, these are conversion to int, pow with modulus, and the 
-    bit-string operations. 
-    """ 
- 
+    In short, these are conversion to int, pow with modulus, and the
+    bit-string operations.
+    """
+
     __slots__ = ()
 
     @abstractmethod

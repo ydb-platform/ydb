@@ -14,11 +14,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Analysis/ModuleDebugInfoPrinter.h" 
+#include "llvm/Analysis/ModuleDebugInfoPrinter.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/DebugInfo.h"
-#include "llvm/IR/PassManager.h" 
+#include "llvm/IR/PassManager.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -26,34 +26,34 @@
 using namespace llvm;
 
 namespace {
-class ModuleDebugInfoLegacyPrinter : public ModulePass { 
-  DebugInfoFinder Finder; 
+class ModuleDebugInfoLegacyPrinter : public ModulePass {
+  DebugInfoFinder Finder;
 
-public: 
-  static char ID; // Pass identification, replacement for typeid 
-  ModuleDebugInfoLegacyPrinter() : ModulePass(ID) { 
-    initializeModuleDebugInfoLegacyPrinterPass( 
-        *PassRegistry::getPassRegistry()); 
-  } 
+public:
+  static char ID; // Pass identification, replacement for typeid
+  ModuleDebugInfoLegacyPrinter() : ModulePass(ID) {
+    initializeModuleDebugInfoLegacyPrinterPass(
+        *PassRegistry::getPassRegistry());
+  }
 
-  bool runOnModule(Module &M) override; 
- 
-  void getAnalysisUsage(AnalysisUsage &AU) const override { 
-    AU.setPreservesAll(); 
-  } 
-  void print(raw_ostream &O, const Module *M) const override; 
-}; 
+  bool runOnModule(Module &M) override;
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.setPreservesAll();
+  }
+  void print(raw_ostream &O, const Module *M) const override;
+};
 }
 
-char ModuleDebugInfoLegacyPrinter::ID = 0; 
-INITIALIZE_PASS(ModuleDebugInfoLegacyPrinter, "module-debuginfo", 
+char ModuleDebugInfoLegacyPrinter::ID = 0;
+INITIALIZE_PASS(ModuleDebugInfoLegacyPrinter, "module-debuginfo",
                 "Decodes module-level debug info", false, true)
 
 ModulePass *llvm::createModuleDebugInfoPrinterPass() {
-  return new ModuleDebugInfoLegacyPrinter(); 
+  return new ModuleDebugInfoLegacyPrinter();
 }
 
-bool ModuleDebugInfoLegacyPrinter::runOnModule(Module &M) { 
+bool ModuleDebugInfoLegacyPrinter::runOnModule(Module &M) {
   Finder.processModule(M);
   return false;
 }
@@ -71,8 +71,8 @@ static void printFile(raw_ostream &O, StringRef Filename, StringRef Directory,
     O << ":" << Line;
 }
 
-static void printModuleDebugInfo(raw_ostream &O, const Module *M, 
-                                 const DebugInfoFinder &Finder) { 
+static void printModuleDebugInfo(raw_ostream &O, const Module *M,
+                                 const DebugInfoFinder &Finder) {
   // Printing the nodes directly isn't particularly helpful (since they
   // reference other nodes that won't be printed, particularly for the
   // filenames), so just print a few useful things.
@@ -131,18 +131,18 @@ static void printModuleDebugInfo(raw_ostream &O, const Module *M,
     O << '\n';
   }
 }
- 
-void ModuleDebugInfoLegacyPrinter::print(raw_ostream &O, 
-                                         const Module *M) const { 
-  printModuleDebugInfo(O, M, Finder); 
-} 
- 
-ModuleDebugInfoPrinterPass::ModuleDebugInfoPrinterPass(raw_ostream &OS) 
-    : OS(OS) {} 
- 
-PreservedAnalyses ModuleDebugInfoPrinterPass::run(Module &M, 
-                                                  ModuleAnalysisManager &AM) { 
-  Finder.processModule(M); 
-  printModuleDebugInfo(OS, &M, Finder); 
-  return PreservedAnalyses::all(); 
-} 
+
+void ModuleDebugInfoLegacyPrinter::print(raw_ostream &O,
+                                         const Module *M) const {
+  printModuleDebugInfo(O, M, Finder);
+}
+
+ModuleDebugInfoPrinterPass::ModuleDebugInfoPrinterPass(raw_ostream &OS)
+    : OS(OS) {}
+
+PreservedAnalyses ModuleDebugInfoPrinterPass::run(Module &M,
+                                                  ModuleAnalysisManager &AM) {
+  Finder.processModule(M);
+  printModuleDebugInfo(OS, &M, Finder);
+  return PreservedAnalyses::all();
+}

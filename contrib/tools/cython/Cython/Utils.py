@@ -21,7 +21,7 @@ import re
 import io
 import codecs
 import shutil
-import tempfile 
+import tempfile
 from contextlib import contextmanager
 
 modification_time = os.path.getmtime
@@ -337,23 +337,23 @@ def get_cython_cache_dir():
 def captured_fd(stream=2, encoding=None):
     orig_stream = os.dup(stream)  # keep copy of original stream
     try:
-        with tempfile.TemporaryFile(mode="a+b") as temp_file: 
-            def read_output(_output=[b'']): 
-                if not temp_file.closed: 
-                    temp_file.seek(0) 
-                    _output[0] = temp_file.read() 
-                return _output[0] 
+        with tempfile.TemporaryFile(mode="a+b") as temp_file:
+            def read_output(_output=[b'']):
+                if not temp_file.closed:
+                    temp_file.seek(0)
+                    _output[0] = temp_file.read()
+                return _output[0]
 
-            os.dup2(temp_file.fileno(), stream)  # replace stream by copy of pipe 
-            try: 
-                def get_output(): 
-                    result = read_output() 
-                    return result.decode(encoding) if encoding else result 
+            os.dup2(temp_file.fileno(), stream)  # replace stream by copy of pipe
+            try:
+                def get_output():
+                    result = read_output()
+                    return result.decode(encoding) if encoding else result
 
-                yield get_output 
-            finally: 
-                os.dup2(orig_stream, stream)  # restore original stream 
-                read_output()  # keep the output in case it's used after closing the context manager 
+                yield get_output
+            finally:
+                os.dup2(orig_stream, stream)  # restore original stream
+                read_output()  # keep the output in case it's used after closing the context manager
     finally:
         os.close(orig_stream)
 
@@ -427,7 +427,7 @@ def raise_error_if_module_name_forbidden(full_module_name):
 
 def build_hex_version(version_string):
     """
-    Parse and translate '4.3a1' into the readable hex representation '0x040300A1' (like PY_VERSION_HEX). 
+    Parse and translate '4.3a1' into the readable hex representation '0x040300A1' (like PY_VERSION_HEX).
     """
     # First, parse '4.12a1' into [4, 12, 0, 0xA01].
     digits = []

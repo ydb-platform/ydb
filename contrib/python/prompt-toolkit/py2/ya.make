@@ -1,36 +1,36 @@
-PY2_LIBRARY() 
+PY2_LIBRARY()
 
-OWNER(blinkov nslus g:python-contrib) 
+OWNER(blinkov nslus g:python-contrib)
 
-VERSION(1.0.18) 
+VERSION(1.0.18)
 
-LICENSE(BSD-3-Clause) 
+LICENSE(BSD-3-Clause)
 
 PEERDIR(
-    contrib/python/six 
+    contrib/python/six
     contrib/python/wcwidth
 )
 
-NO_LINT() 
- 
+NO_LINT()
+
 NO_CHECK_IMPORTS(
     prompt_toolkit.clipboard.pyperclip
-    prompt_toolkit.contrib.telnet.* 
+    prompt_toolkit.contrib.telnet.*
     prompt_toolkit.eventloop.asyncio_posix
     prompt_toolkit.eventloop.asyncio_win32
-    prompt_toolkit.eventloop.posix 
+    prompt_toolkit.eventloop.posix
     prompt_toolkit.eventloop.win32
-    prompt_toolkit.input.win32 
-    prompt_toolkit.input.win32_pipe 
-    prompt_toolkit.output.conemu 
-    prompt_toolkit.output.win32 
-    prompt_toolkit.output.windows10 
+    prompt_toolkit.input.win32
+    prompt_toolkit.input.win32_pipe
+    prompt_toolkit.output.conemu
+    prompt_toolkit.output.win32
+    prompt_toolkit.output.windows10
     prompt_toolkit.terminal.conemu_output
-    prompt_toolkit.terminal.vt100_input 
-    prompt_toolkit.terminal.vt100_output 
+    prompt_toolkit.terminal.vt100_input
+    prompt_toolkit.terminal.vt100_output
     prompt_toolkit.terminal.win32_input
     prompt_toolkit.terminal.win32_output
-    prompt_toolkit.win32_types 
+    prompt_toolkit.win32_types
 )
 
 PY_SRCS(
@@ -95,7 +95,7 @@ PY_SRCS(
     prompt_toolkit/key_binding/bindings/scroll.py
     prompt_toolkit/key_binding/bindings/utils.py
     prompt_toolkit/key_binding/bindings/vi.py
-    prompt_toolkit/key_binding/defaults.py 
+    prompt_toolkit/key_binding/defaults.py
     prompt_toolkit/key_binding/digraphs.py
     prompt_toolkit/key_binding/input_processor.py
     prompt_toolkit/key_binding/manager.py
@@ -140,14 +140,14 @@ PY_SRCS(
     prompt_toolkit/win32_types.py
 )
 
-RESOURCE_FILES( 
-    PREFIX contrib/python/prompt-toolkit/py2/ 
-    .dist-info/METADATA 
-    .dist-info/top_level.txt 
-) 
- 
+RESOURCE_FILES(
+    PREFIX contrib/python/prompt-toolkit/py2/
+    .dist-info/METADATA
+    .dist-info/top_level.txt
+)
+
 END()
 
-RECURSE_FOR_TESTS( 
-    tests 
-) 
+RECURSE_FOR_TESTS(
+    tests
+)

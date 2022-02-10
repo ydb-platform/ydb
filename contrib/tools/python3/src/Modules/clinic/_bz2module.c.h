@@ -25,13 +25,13 @@ _bz2_BZ2Compressor_compress(BZ2Compressor *self, PyObject *arg)
     PyObject *return_value = NULL;
     Py_buffer data = {NULL, NULL};
 
-    if (PyObject_GetBuffer(arg, &data, PyBUF_SIMPLE) != 0) { 
+    if (PyObject_GetBuffer(arg, &data, PyBUF_SIMPLE) != 0) {
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&data, 'C')) { 
-        _PyArg_BadArgument("compress", "argument", "contiguous buffer", arg); 
-        goto exit; 
-    } 
+    if (!PyBuffer_IsContiguous(&data, 'C')) {
+        _PyArg_BadArgument("compress", "argument", "contiguous buffer", arg);
+        goto exit;
+    }
     return_value = _bz2_BZ2Compressor_compress_impl(self, &data);
 
 exit:
@@ -85,26 +85,26 @@ _bz2_BZ2Compressor___init__(PyObject *self, PyObject *args, PyObject *kwargs)
     int return_value = -1;
     int compresslevel = 9;
 
-    if (Py_IS_TYPE(self, &BZ2Compressor_Type) && 
+    if (Py_IS_TYPE(self, &BZ2Compressor_Type) &&
         !_PyArg_NoKeywords("BZ2Compressor", kwargs)) {
         goto exit;
     }
-    if (!_PyArg_CheckPositional("BZ2Compressor", PyTuple_GET_SIZE(args), 0, 1)) { 
+    if (!_PyArg_CheckPositional("BZ2Compressor", PyTuple_GET_SIZE(args), 0, 1)) {
         goto exit;
     }
-    if (PyTuple_GET_SIZE(args) < 1) { 
-        goto skip_optional; 
-    } 
-    if (PyFloat_Check(PyTuple_GET_ITEM(args, 0))) { 
-        PyErr_SetString(PyExc_TypeError, 
-                        "integer argument expected, got float" ); 
-        goto exit; 
-    } 
-    compresslevel = _PyLong_AsInt(PyTuple_GET_ITEM(args, 0)); 
-    if (compresslevel == -1 && PyErr_Occurred()) { 
-        goto exit; 
-    } 
-skip_optional: 
+    if (PyTuple_GET_SIZE(args) < 1) {
+        goto skip_optional;
+    }
+    if (PyFloat_Check(PyTuple_GET_ITEM(args, 0))) {
+        PyErr_SetString(PyExc_TypeError,
+                        "integer argument expected, got float" );
+        goto exit;
+    }
+    compresslevel = _PyLong_AsInt(PyTuple_GET_ITEM(args, 0));
+    if (compresslevel == -1 && PyErr_Occurred()) {
+        goto exit;
+    }
+skip_optional:
     return_value = _bz2_BZ2Compressor___init___impl((BZ2Compressor *)self, compresslevel);
 
 exit:
@@ -131,7 +131,7 @@ PyDoc_STRVAR(_bz2_BZ2Decompressor_decompress__doc__,
 "the unused_data attribute.");
 
 #define _BZ2_BZ2DECOMPRESSOR_DECOMPRESS_METHODDEF    \
-    {"decompress", (PyCFunction)(void(*)(void))_bz2_BZ2Decompressor_decompress, METH_FASTCALL|METH_KEYWORDS, _bz2_BZ2Decompressor_decompress__doc__}, 
+    {"decompress", (PyCFunction)(void(*)(void))_bz2_BZ2Decompressor_decompress, METH_FASTCALL|METH_KEYWORDS, _bz2_BZ2Decompressor_decompress__doc__},
 
 static PyObject *
 _bz2_BZ2Decompressor_decompress_impl(BZ2Decompressor *self, Py_buffer *data,
@@ -142,44 +142,44 @@ _bz2_BZ2Decompressor_decompress(BZ2Decompressor *self, PyObject *const *args, Py
 {
     PyObject *return_value = NULL;
     static const char * const _keywords[] = {"data", "max_length", NULL};
-    static _PyArg_Parser _parser = {NULL, _keywords, "decompress", 0}; 
-    PyObject *argsbuf[2]; 
-    Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1; 
+    static _PyArg_Parser _parser = {NULL, _keywords, "decompress", 0};
+    PyObject *argsbuf[2];
+    Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
     Py_buffer data = {NULL, NULL};
     Py_ssize_t max_length = -1;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 2, 0, argsbuf); 
-    if (!args) { 
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 2, 0, argsbuf);
+    if (!args) {
         goto exit;
     }
-    if (PyObject_GetBuffer(args[0], &data, PyBUF_SIMPLE) != 0) { 
-        goto exit; 
-    } 
-    if (!PyBuffer_IsContiguous(&data, 'C')) { 
-        _PyArg_BadArgument("decompress", "argument 'data'", "contiguous buffer", args[0]); 
-        goto exit; 
-    } 
-    if (!noptargs) { 
-        goto skip_optional_pos; 
-    } 
-    if (PyFloat_Check(args[1])) { 
-        PyErr_SetString(PyExc_TypeError, 
-                        "integer argument expected, got float" ); 
-        goto exit; 
-    } 
-    { 
-        Py_ssize_t ival = -1; 
-        PyObject *iobj = PyNumber_Index(args[1]); 
-        if (iobj != NULL) { 
-            ival = PyLong_AsSsize_t(iobj); 
-            Py_DECREF(iobj); 
-        } 
-        if (ival == -1 && PyErr_Occurred()) { 
-            goto exit; 
-        } 
-        max_length = ival; 
-    } 
-skip_optional_pos: 
+    if (PyObject_GetBuffer(args[0], &data, PyBUF_SIMPLE) != 0) {
+        goto exit;
+    }
+    if (!PyBuffer_IsContiguous(&data, 'C')) {
+        _PyArg_BadArgument("decompress", "argument 'data'", "contiguous buffer", args[0]);
+        goto exit;
+    }
+    if (!noptargs) {
+        goto skip_optional_pos;
+    }
+    if (PyFloat_Check(args[1])) {
+        PyErr_SetString(PyExc_TypeError,
+                        "integer argument expected, got float" );
+        goto exit;
+    }
+    {
+        Py_ssize_t ival = -1;
+        PyObject *iobj = PyNumber_Index(args[1]);
+        if (iobj != NULL) {
+            ival = PyLong_AsSsize_t(iobj);
+            Py_DECREF(iobj);
+        }
+        if (ival == -1 && PyErr_Occurred()) {
+            goto exit;
+        }
+        max_length = ival;
+    }
+skip_optional_pos:
     return_value = _bz2_BZ2Decompressor_decompress_impl(self, &data, max_length);
 
 exit:
@@ -207,11 +207,11 @@ _bz2_BZ2Decompressor___init__(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     int return_value = -1;
 
-    if (Py_IS_TYPE(self, &BZ2Decompressor_Type) && 
+    if (Py_IS_TYPE(self, &BZ2Decompressor_Type) &&
         !_PyArg_NoPositional("BZ2Decompressor", args)) {
         goto exit;
     }
-    if (Py_IS_TYPE(self, &BZ2Decompressor_Type) && 
+    if (Py_IS_TYPE(self, &BZ2Decompressor_Type) &&
         !_PyArg_NoKeywords("BZ2Decompressor", kwargs)) {
         goto exit;
     }
@@ -220,4 +220,4 @@ _bz2_BZ2Decompressor___init__(PyObject *self, PyObject *args, PyObject *kwargs)
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=3f3f1e788fe28ee1 input=a9049054013a1b77]*/ 
+/*[clinic end generated code: output=3f3f1e788fe28ee1 input=a9049054013a1b77]*/

@@ -15,12 +15,12 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/DebugInfo/Symbolize/SymbolizableModule.h"
-#include "llvm/Support/Error.h" 
+#include "llvm/Support/Error.h"
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <utility> 
-#include <vector> 
+#include <utility>
+#include <vector>
 
 namespace llvm {
 

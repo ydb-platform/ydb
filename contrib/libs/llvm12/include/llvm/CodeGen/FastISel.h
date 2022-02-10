@@ -249,7 +249,7 @@ public:
   /// be appended.
   void startNewBlock();
 
-  /// Flush the local value map. 
+  /// Flush the local value map.
   void finishBasicBlock();
 
   /// Return current debug location information.
@@ -316,7 +316,7 @@ public:
   void removeDeadCode(MachineBasicBlock::iterator I,
                       MachineBasicBlock::iterator E);
 
-  using SavePoint = MachineBasicBlock::iterator; 
+  using SavePoint = MachineBasicBlock::iterator;
 
   /// Prepare InsertPt to begin inserting instructions into the local
   /// value area and return the old insert position.
@@ -497,10 +497,10 @@ protected:
   /// - \c Add has a constant operand.
   bool canFoldAddIntoGEP(const User *GEP, const Value *Add);
 
-  /// Test whether the register associated with this value has exactly one use, 
-  /// in which case that single use is killing. Note that multiple IR values 
-  /// may map onto the same register, in which case this is not the same as 
-  /// checking that an IR value has one use. 
+  /// Test whether the register associated with this value has exactly one use,
+  /// in which case that single use is killing. Note that multiple IR values
+  /// may map onto the same register, in which case this is not the same as
+  /// checking that an IR value has one use.
   bool hasTrivialKill(const Value *V);
 
   /// Create a machine mem operand from the given instruction.

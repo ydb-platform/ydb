@@ -63,7 +63,7 @@ static cl::opt<bool> ForceReductionIntrinsic(
 
 static const char *LLVMLoopDisableNonforced = "llvm.loop.disable_nonforced";
 static const char *LLVMLoopDisableLICM = "llvm.licm.disable";
-static const char *LLVMLoopMustProgress = "llvm.loop.mustprogress"; 
+static const char *LLVMLoopMustProgress = "llvm.loop.mustprogress";
 
 bool llvm::formDedicatedExitBlocks(Loop *L, DominatorTree *DT, LoopInfo *LI,
                                    MemorySSAUpdater *MSSAU,
@@ -298,24 +298,24 @@ static Optional<bool> getOptionalBoolLoopAttribute(const Loop *TheLoop,
   llvm_unreachable("unexpected number of options");
 }
 
-bool llvm::getBooleanLoopAttribute(const Loop *TheLoop, StringRef Name) { 
+bool llvm::getBooleanLoopAttribute(const Loop *TheLoop, StringRef Name) {
   return getOptionalBoolLoopAttribute(TheLoop, Name).getValueOr(false);
 }
 
-Optional<ElementCount> 
-llvm::getOptionalElementCountLoopAttribute(Loop *TheLoop) { 
-  Optional<int> Width = 
-      getOptionalIntLoopAttribute(TheLoop, "llvm.loop.vectorize.width"); 
- 
-  if (Width.hasValue()) { 
-    Optional<int> IsScalable = getOptionalIntLoopAttribute( 
-        TheLoop, "llvm.loop.vectorize.scalable.enable"); 
-    return ElementCount::get(*Width, IsScalable.getValueOr(false)); 
-  } 
- 
-  return None; 
-} 
- 
+Optional<ElementCount>
+llvm::getOptionalElementCountLoopAttribute(Loop *TheLoop) {
+  Optional<int> Width =
+      getOptionalIntLoopAttribute(TheLoop, "llvm.loop.vectorize.width");
+
+  if (Width.hasValue()) {
+    Optional<int> IsScalable = getOptionalIntLoopAttribute(
+        TheLoop, "llvm.loop.vectorize.scalable.enable");
+    return ElementCount::get(*Width, IsScalable.getValueOr(false));
+  }
+
+  return None;
+}
+
 llvm::Optional<int> llvm::getOptionalIntLoopAttribute(Loop *TheLoop,
                                                       StringRef Name) {
   const MDOperand *AttrMD =
@@ -349,7 +349,7 @@ Optional<MDNode *> llvm::makeFollowupLoopID(
 
   bool Changed = false;
   if (InheritAllAttrs || InheritSomeAttrs) {
-    for (const MDOperand &Existing : drop_begin(OrigLoopID->operands())) { 
+    for (const MDOperand &Existing : drop_begin(OrigLoopID->operands())) {
       MDNode *Op = cast<MDNode>(Existing.get());
 
       auto InheritThisAttribute = [InheritSomeAttrs,
@@ -386,7 +386,7 @@ Optional<MDNode *> llvm::makeFollowupLoopID(
       continue;
 
     HasAnyFollowup = true;
-    for (const MDOperand &Option : drop_begin(FollowupNode->operands())) { 
+    for (const MDOperand &Option : drop_begin(FollowupNode->operands())) {
       MDs.push_back(Option.get());
       Changed = true;
     }
@@ -419,10 +419,10 @@ bool llvm::hasDisableLICMTransformsHint(const Loop *L) {
   return getBooleanLoopAttribute(L, LLVMLoopDisableLICM);
 }
 
-bool llvm::hasMustProgress(const Loop *L) { 
-  return getBooleanLoopAttribute(L, LLVMLoopMustProgress); 
-} 
- 
+bool llvm::hasMustProgress(const Loop *L) {
+  return getBooleanLoopAttribute(L, LLVMLoopMustProgress);
+}
+
 TransformationMode llvm::hasUnrollTransformation(Loop *L) {
   if (getBooleanLoopAttribute(L, "llvm.loop.unroll.disable"))
     return TM_SuppressedByUser;
@@ -469,15 +469,15 @@ TransformationMode llvm::hasVectorizeTransformation(Loop *L) {
   if (Enable == false)
     return TM_SuppressedByUser;
 
-  Optional<ElementCount> VectorizeWidth = 
-      getOptionalElementCountLoopAttribute(L); 
+  Optional<ElementCount> VectorizeWidth =
+      getOptionalElementCountLoopAttribute(L);
   Optional<int> InterleaveCount =
       getOptionalIntLoopAttribute(L, "llvm.loop.interleave.count");
 
   // 'Forcing' vector width and interleave count to one effectively disables
   // this tranformation.
-  if (Enable == true && VectorizeWidth && VectorizeWidth->isScalar() && 
-      InterleaveCount == 1) 
+  if (Enable == true && VectorizeWidth && VectorizeWidth->isScalar() &&
+      InterleaveCount == 1)
     return TM_SuppressedByUser;
 
   if (getBooleanLoopAttribute(L, "llvm.loop.isvectorized"))
@@ -486,10 +486,10 @@ TransformationMode llvm::hasVectorizeTransformation(Loop *L) {
   if (Enable == true)
     return TM_ForcedByUser;
 
-  if ((VectorizeWidth && VectorizeWidth->isScalar()) && InterleaveCount == 1) 
+  if ((VectorizeWidth && VectorizeWidth->isScalar()) && InterleaveCount == 1)
     return TM_Disable;
 
-  if ((VectorizeWidth && VectorizeWidth->isVector()) || InterleaveCount > 1) 
+  if ((VectorizeWidth && VectorizeWidth->isVector()) || InterleaveCount > 1)
     return TM_Enable;
 
   if (hasDisableAllTransformsHint(L))
@@ -592,61 +592,61 @@ void llvm::deleteDeadLoop(Loop *L, DominatorTree *DT, ScalarEvolution *SE,
   // non-loop, it will be deleted in a future iteration of loop deletion pass.
   IRBuilder<> Builder(OldBr);
 
-  auto *ExitBlock = L->getUniqueExitBlock(); 
-  DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Eager); 
-  if (ExitBlock) { 
-    assert(ExitBlock && "Should have a unique exit block!"); 
-    assert(L->hasDedicatedExits() && "Loop should have dedicated exits!"); 
+  auto *ExitBlock = L->getUniqueExitBlock();
+  DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Eager);
+  if (ExitBlock) {
+    assert(ExitBlock && "Should have a unique exit block!");
+    assert(L->hasDedicatedExits() && "Loop should have dedicated exits!");
 
-    Builder.CreateCondBr(Builder.getFalse(), L->getHeader(), ExitBlock); 
-    // Remove the old branch. The conditional branch becomes a new terminator. 
-    OldBr->eraseFromParent(); 
+    Builder.CreateCondBr(Builder.getFalse(), L->getHeader(), ExitBlock);
+    // Remove the old branch. The conditional branch becomes a new terminator.
+    OldBr->eraseFromParent();
 
-    // Rewrite phis in the exit block to get their inputs from the Preheader 
-    // instead of the exiting block. 
-    for (PHINode &P : ExitBlock->phis()) { 
-      // Set the zero'th element of Phi to be from the preheader and remove all 
-      // other incoming values. Given the loop has dedicated exits, all other 
-      // incoming values must be from the exiting blocks. 
-      int PredIndex = 0; 
-      P.setIncomingBlock(PredIndex, Preheader); 
-      // Removes all incoming values from all other exiting blocks (including 
-      // duplicate values from an exiting block). 
-      // Nuke all entries except the zero'th entry which is the preheader entry. 
-      // NOTE! We need to remove Incoming Values in the reverse order as done 
-      // below, to keep the indices valid for deletion (removeIncomingValues 
-      // updates getNumIncomingValues and shifts all values down into the 
-      // operand being deleted). 
-      for (unsigned i = 0, e = P.getNumIncomingValues() - 1; i != e; ++i) 
-        P.removeIncomingValue(e - i, false); 
- 
-      assert((P.getNumIncomingValues() == 1 && 
-              P.getIncomingBlock(PredIndex) == Preheader) && 
-             "Should have exactly one value and that's from the preheader!"); 
+    // Rewrite phis in the exit block to get their inputs from the Preheader
+    // instead of the exiting block.
+    for (PHINode &P : ExitBlock->phis()) {
+      // Set the zero'th element of Phi to be from the preheader and remove all
+      // other incoming values. Given the loop has dedicated exits, all other
+      // incoming values must be from the exiting blocks.
+      int PredIndex = 0;
+      P.setIncomingBlock(PredIndex, Preheader);
+      // Removes all incoming values from all other exiting blocks (including
+      // duplicate values from an exiting block).
+      // Nuke all entries except the zero'th entry which is the preheader entry.
+      // NOTE! We need to remove Incoming Values in the reverse order as done
+      // below, to keep the indices valid for deletion (removeIncomingValues
+      // updates getNumIncomingValues and shifts all values down into the
+      // operand being deleted).
+      for (unsigned i = 0, e = P.getNumIncomingValues() - 1; i != e; ++i)
+        P.removeIncomingValue(e - i, false);
+
+      assert((P.getNumIncomingValues() == 1 &&
+              P.getIncomingBlock(PredIndex) == Preheader) &&
+             "Should have exactly one value and that's from the preheader!");
     }
- 
-    if (DT) { 
-      DTU.applyUpdates({{DominatorTree::Insert, Preheader, ExitBlock}}); 
-      if (MSSA) { 
-        MSSAU->applyUpdates({{DominatorTree::Insert, Preheader, ExitBlock}}, 
-                            *DT); 
-        if (VerifyMemorySSA) 
-          MSSA->verifyMemorySSA(); 
-      } 
-    } 
- 
-    // Disconnect the loop body by branching directly to its exit. 
-    Builder.SetInsertPoint(Preheader->getTerminator()); 
-    Builder.CreateBr(ExitBlock); 
-    // Remove the old branch. 
-    Preheader->getTerminator()->eraseFromParent(); 
-  } else { 
-    assert(L->hasNoExitBlocks() && 
-           "Loop should have either zero or one exit blocks."); 
- 
-    Builder.SetInsertPoint(OldBr); 
-    Builder.CreateUnreachable(); 
-    Preheader->getTerminator()->eraseFromParent(); 
+
+    if (DT) {
+      DTU.applyUpdates({{DominatorTree::Insert, Preheader, ExitBlock}});
+      if (MSSA) {
+        MSSAU->applyUpdates({{DominatorTree::Insert, Preheader, ExitBlock}},
+                            *DT);
+        if (VerifyMemorySSA)
+          MSSA->verifyMemorySSA();
+      }
+    }
+
+    // Disconnect the loop body by branching directly to its exit.
+    Builder.SetInsertPoint(Preheader->getTerminator());
+    Builder.CreateBr(ExitBlock);
+    // Remove the old branch.
+    Preheader->getTerminator()->eraseFromParent();
+  } else {
+    assert(L->hasNoExitBlocks() &&
+           "Loop should have either zero or one exit blocks.");
+
+    Builder.SetInsertPoint(OldBr);
+    Builder.CreateUnreachable();
+    Preheader->getTerminator()->eraseFromParent();
   }
 
   if (DT) {
@@ -666,58 +666,58 @@ void llvm::deleteDeadLoop(Loop *L, DominatorTree *DT, ScalarEvolution *SE,
   llvm::SmallDenseSet<std::pair<DIVariable *, DIExpression *>, 4> DeadDebugSet;
   llvm::SmallVector<DbgVariableIntrinsic *, 4> DeadDebugInst;
 
-  if (ExitBlock) { 
-    // Given LCSSA form is satisfied, we should not have users of instructions 
-    // within the dead loop outside of the loop. However, LCSSA doesn't take 
-    // unreachable uses into account. We handle them here. 
-    // We could do it after drop all references (in this case all users in the 
-    // loop will be already eliminated and we have less work to do but according 
-    // to API doc of User::dropAllReferences only valid operation after dropping 
-    // references, is deletion. So let's substitute all usages of 
-    // instruction from the loop with undef value of corresponding type first. 
-    for (auto *Block : L->blocks()) 
-      for (Instruction &I : *Block) { 
-        auto *Undef = UndefValue::get(I.getType()); 
-        for (Value::use_iterator UI = I.use_begin(), E = I.use_end(); 
-             UI != E;) { 
-          Use &U = *UI; 
-          ++UI; 
-          if (auto *Usr = dyn_cast<Instruction>(U.getUser())) 
-            if (L->contains(Usr->getParent())) 
-              continue; 
-          // If we have a DT then we can check that uses outside a loop only in 
-          // unreachable block. 
-          if (DT) 
-            assert(!DT->isReachableFromEntry(U) && 
-                   "Unexpected user in reachable block"); 
-          U.set(Undef); 
-        } 
-        auto *DVI = dyn_cast<DbgVariableIntrinsic>(&I); 
-        if (!DVI) 
-          continue; 
-        auto Key = 
-            DeadDebugSet.find({DVI->getVariable(), DVI->getExpression()}); 
-        if (Key != DeadDebugSet.end()) 
-          continue; 
-        DeadDebugSet.insert({DVI->getVariable(), DVI->getExpression()}); 
-        DeadDebugInst.push_back(DVI); 
+  if (ExitBlock) {
+    // Given LCSSA form is satisfied, we should not have users of instructions
+    // within the dead loop outside of the loop. However, LCSSA doesn't take
+    // unreachable uses into account. We handle them here.
+    // We could do it after drop all references (in this case all users in the
+    // loop will be already eliminated and we have less work to do but according
+    // to API doc of User::dropAllReferences only valid operation after dropping
+    // references, is deletion. So let's substitute all usages of
+    // instruction from the loop with undef value of corresponding type first.
+    for (auto *Block : L->blocks())
+      for (Instruction &I : *Block) {
+        auto *Undef = UndefValue::get(I.getType());
+        for (Value::use_iterator UI = I.use_begin(), E = I.use_end();
+             UI != E;) {
+          Use &U = *UI;
+          ++UI;
+          if (auto *Usr = dyn_cast<Instruction>(U.getUser()))
+            if (L->contains(Usr->getParent()))
+              continue;
+          // If we have a DT then we can check that uses outside a loop only in
+          // unreachable block.
+          if (DT)
+            assert(!DT->isReachableFromEntry(U) &&
+                   "Unexpected user in reachable block");
+          U.set(Undef);
+        }
+        auto *DVI = dyn_cast<DbgVariableIntrinsic>(&I);
+        if (!DVI)
+          continue;
+        auto Key =
+            DeadDebugSet.find({DVI->getVariable(), DVI->getExpression()});
+        if (Key != DeadDebugSet.end())
+          continue;
+        DeadDebugSet.insert({DVI->getVariable(), DVI->getExpression()});
+        DeadDebugInst.push_back(DVI);
       }
 
-    // After the loop has been deleted all the values defined and modified 
-    // inside the loop are going to be unavailable. 
-    // Since debug values in the loop have been deleted, inserting an undef 
-    // dbg.value truncates the range of any dbg.value before the loop where the 
-    // loop used to be. This is particularly important for constant values. 
-    DIBuilder DIB(*ExitBlock->getModule()); 
-    Instruction *InsertDbgValueBefore = ExitBlock->getFirstNonPHI(); 
-    assert(InsertDbgValueBefore && 
-           "There should be a non-PHI instruction in exit block, else these " 
-           "instructions will have no parent."); 
-    for (auto *DVI : DeadDebugInst) 
-      DIB.insertDbgValueIntrinsic(UndefValue::get(Builder.getInt32Ty()), 
-                                  DVI->getVariable(), DVI->getExpression(), 
-                                  DVI->getDebugLoc(), InsertDbgValueBefore); 
-  } 
+    // After the loop has been deleted all the values defined and modified
+    // inside the loop are going to be unavailable.
+    // Since debug values in the loop have been deleted, inserting an undef
+    // dbg.value truncates the range of any dbg.value before the loop where the
+    // loop used to be. This is particularly important for constant values.
+    DIBuilder DIB(*ExitBlock->getModule());
+    Instruction *InsertDbgValueBefore = ExitBlock->getFirstNonPHI();
+    assert(InsertDbgValueBefore &&
+           "There should be a non-PHI instruction in exit block, else these "
+           "instructions will have no parent.");
+    for (auto *DVI : DeadDebugInst)
+      DIB.insertDbgValueIntrinsic(UndefValue::get(Builder.getInt32Ty()),
+                                  DVI->getVariable(), DVI->getExpression(),
+                                  DVI->getDebugLoc(), InsertDbgValueBefore);
+  }
 
   // Remove the block from the reference counting scheme, so that we can
   // delete it freely later.
@@ -761,51 +761,51 @@ void llvm::deleteDeadLoop(Loop *L, DominatorTree *DT, ScalarEvolution *SE,
   }
 }
 
-static Loop *getOutermostLoop(Loop *L) { 
-  while (Loop *Parent = L->getParentLoop()) 
-    L = Parent; 
-  return L; 
-} 
- 
-void llvm::breakLoopBackedge(Loop *L, DominatorTree &DT, ScalarEvolution &SE, 
-                             LoopInfo &LI, MemorySSA *MSSA) { 
-  auto *Latch = L->getLoopLatch(); 
-  assert(Latch && "multiple latches not yet supported"); 
-  auto *Header = L->getHeader(); 
-  Loop *OutermostLoop = getOutermostLoop(L); 
- 
-  SE.forgetLoop(L); 
- 
-  // Note: By splitting the backedge, and then explicitly making it unreachable 
-  // we gracefully handle corner cases such as non-bottom tested loops and the 
-  // like.  We also have the benefit of being able to reuse existing well tested 
-  // code.  It might be worth special casing the common bottom tested case at 
-  // some point to avoid code churn. 
- 
-  std::unique_ptr<MemorySSAUpdater> MSSAU; 
-  if (MSSA) 
-    MSSAU = std::make_unique<MemorySSAUpdater>(MSSA); 
- 
-  auto *BackedgeBB = SplitEdge(Latch, Header, &DT, &LI, MSSAU.get()); 
- 
-  DomTreeUpdater DTU(&DT, DomTreeUpdater::UpdateStrategy::Eager); 
-  (void)changeToUnreachable(BackedgeBB->getTerminator(), /*UseTrap*/false, 
-                            /*PreserveLCSSA*/true, &DTU, MSSAU.get()); 
- 
-  // Erase (and destroy) this loop instance.  Handles relinking sub-loops 
-  // and blocks within the loop as needed. 
-  LI.erase(L); 
- 
-  // If the loop we broke had a parent, then changeToUnreachable might have 
-  // caused a block to be removed from the parent loop (see loop_nest_lcssa 
-  // test case in zero-btc.ll for an example), thus changing the parent's 
-  // exit blocks.  If that happened, we need to rebuild LCSSA on the outermost 
-  // loop which might have a had a block removed. 
-  if (OutermostLoop != L) 
-    formLCSSARecursively(*OutermostLoop, DT, &LI, &SE); 
-} 
- 
- 
+static Loop *getOutermostLoop(Loop *L) {
+  while (Loop *Parent = L->getParentLoop())
+    L = Parent;
+  return L;
+}
+
+void llvm::breakLoopBackedge(Loop *L, DominatorTree &DT, ScalarEvolution &SE,
+                             LoopInfo &LI, MemorySSA *MSSA) {
+  auto *Latch = L->getLoopLatch();
+  assert(Latch && "multiple latches not yet supported");
+  auto *Header = L->getHeader();
+  Loop *OutermostLoop = getOutermostLoop(L);
+
+  SE.forgetLoop(L);
+
+  // Note: By splitting the backedge, and then explicitly making it unreachable
+  // we gracefully handle corner cases such as non-bottom tested loops and the
+  // like.  We also have the benefit of being able to reuse existing well tested
+  // code.  It might be worth special casing the common bottom tested case at
+  // some point to avoid code churn.
+
+  std::unique_ptr<MemorySSAUpdater> MSSAU;
+  if (MSSA)
+    MSSAU = std::make_unique<MemorySSAUpdater>(MSSA);
+
+  auto *BackedgeBB = SplitEdge(Latch, Header, &DT, &LI, MSSAU.get());
+
+  DomTreeUpdater DTU(&DT, DomTreeUpdater::UpdateStrategy::Eager);
+  (void)changeToUnreachable(BackedgeBB->getTerminator(), /*UseTrap*/false,
+                            /*PreserveLCSSA*/true, &DTU, MSSAU.get());
+
+  // Erase (and destroy) this loop instance.  Handles relinking sub-loops
+  // and blocks within the loop as needed.
+  LI.erase(L);
+
+  // If the loop we broke had a parent, then changeToUnreachable might have
+  // caused a block to be removed from the parent loop (see loop_nest_lcssa
+  // test case in zero-btc.ll for an example), thus changing the parent's
+  // exit blocks.  If that happened, we need to rebuild LCSSA on the outermost
+  // loop which might have a had a block removed.
+  if (OutermostLoop != L)
+    formLCSSARecursively(*OutermostLoop, DT, &LI, &SE);
+}
+
+
 /// Checks if \p L has single exit through latch block except possibly
 /// "deoptimizing" exits. Returns branch instruction terminating the loop
 /// latch if above check is successful, nullptr otherwise.
@@ -918,29 +918,29 @@ bool llvm::hasIterationCountInvariantInParent(Loop *InnerLoop,
   return true;
 }
 
-Value *llvm::createMinMaxOp(IRBuilderBase &Builder, RecurKind RK, Value *Left, 
-                            Value *Right) { 
-  CmpInst::Predicate Pred; 
+Value *llvm::createMinMaxOp(IRBuilderBase &Builder, RecurKind RK, Value *Left,
+                            Value *Right) {
+  CmpInst::Predicate Pred;
   switch (RK) {
   default:
     llvm_unreachable("Unknown min/max recurrence kind");
-  case RecurKind::UMin: 
-    Pred = CmpInst::ICMP_ULT; 
+  case RecurKind::UMin:
+    Pred = CmpInst::ICMP_ULT;
     break;
-  case RecurKind::UMax: 
-    Pred = CmpInst::ICMP_UGT; 
+  case RecurKind::UMax:
+    Pred = CmpInst::ICMP_UGT;
     break;
-  case RecurKind::SMin: 
-    Pred = CmpInst::ICMP_SLT; 
+  case RecurKind::SMin:
+    Pred = CmpInst::ICMP_SLT;
     break;
-  case RecurKind::SMax: 
-    Pred = CmpInst::ICMP_SGT; 
+  case RecurKind::SMax:
+    Pred = CmpInst::ICMP_SGT;
     break;
-  case RecurKind::FMin: 
-    Pred = CmpInst::FCMP_OLT; 
+  case RecurKind::FMin:
+    Pred = CmpInst::FCMP_OLT;
     break;
-  case RecurKind::FMax: 
-    Pred = CmpInst::FCMP_OGT; 
+  case RecurKind::FMax:
+    Pred = CmpInst::FCMP_OGT;
     break;
   }
 
@@ -950,15 +950,15 @@ Value *llvm::createMinMaxOp(IRBuilderBase &Builder, RecurKind RK, Value *Left,
   FastMathFlags FMF;
   FMF.setFast();
   Builder.setFastMathFlags(FMF);
-  Value *Cmp = Builder.CreateCmp(Pred, Left, Right, "rdx.minmax.cmp"); 
+  Value *Cmp = Builder.CreateCmp(Pred, Left, Right, "rdx.minmax.cmp");
   Value *Select = Builder.CreateSelect(Cmp, Left, Right, "rdx.minmax.select");
   return Select;
 }
 
 // Helper to generate an ordered reduction.
-Value *llvm::getOrderedReduction(IRBuilderBase &Builder, Value *Acc, Value *Src, 
-                                 unsigned Op, RecurKind RdxKind, 
-                                 ArrayRef<Value *> RedOps) { 
+Value *llvm::getOrderedReduction(IRBuilderBase &Builder, Value *Acc, Value *Src,
+                                 unsigned Op, RecurKind RdxKind,
+                                 ArrayRef<Value *> RedOps) {
   unsigned VF = cast<FixedVectorType>(Src->getType())->getNumElements();
 
   // Extract and apply reduction ops in ascending order:
@@ -972,9 +972,9 @@ Value *llvm::getOrderedReduction(IRBuilderBase &Builder, Value *Acc, Value *Src,
       Result = Builder.CreateBinOp((Instruction::BinaryOps)Op, Result, Ext,
                                    "bin.rdx");
     } else {
-      assert(RecurrenceDescriptor::isMinMaxRecurrenceKind(RdxKind) && 
+      assert(RecurrenceDescriptor::isMinMaxRecurrenceKind(RdxKind) &&
              "Invalid min/max");
-      Result = createMinMaxOp(Builder, RdxKind, Result, Ext); 
+      Result = createMinMaxOp(Builder, RdxKind, Result, Ext);
     }
 
     if (!RedOps.empty())
@@ -985,9 +985,9 @@ Value *llvm::getOrderedReduction(IRBuilderBase &Builder, Value *Acc, Value *Src,
 }
 
 // Helper to generate a log2 shuffle reduction.
-Value *llvm::getShuffleReduction(IRBuilderBase &Builder, Value *Src, 
-                                 unsigned Op, RecurKind RdxKind, 
-                                 ArrayRef<Value *> RedOps) { 
+Value *llvm::getShuffleReduction(IRBuilderBase &Builder, Value *Src,
+                                 unsigned Op, RecurKind RdxKind,
+                                 ArrayRef<Value *> RedOps) {
   unsigned VF = cast<FixedVectorType>(Src->getType())->getNumElements();
   // VF is a power of 2 so we can emit the reduction using log2(VF) shuffles
   // and vector ops, reducing the set of values being computed by half each
@@ -1004,16 +1004,16 @@ Value *llvm::getShuffleReduction(IRBuilderBase &Builder, Value *Src,
     // Fill the rest of the mask with undef.
     std::fill(&ShuffleMask[i / 2], ShuffleMask.end(), -1);
 
-    Value *Shuf = Builder.CreateShuffleVector(TmpVec, ShuffleMask, "rdx.shuf"); 
+    Value *Shuf = Builder.CreateShuffleVector(TmpVec, ShuffleMask, "rdx.shuf");
 
     if (Op != Instruction::ICmp && Op != Instruction::FCmp) {
       // The builder propagates its fast-math-flags setting.
       TmpVec = Builder.CreateBinOp((Instruction::BinaryOps)Op, TmpVec, Shuf,
                                    "bin.rdx");
     } else {
-      assert(RecurrenceDescriptor::isMinMaxRecurrenceKind(RdxKind) && 
+      assert(RecurrenceDescriptor::isMinMaxRecurrenceKind(RdxKind) &&
              "Invalid min/max");
-      TmpVec = createMinMaxOp(Builder, RdxKind, TmpVec, Shuf); 
+      TmpVec = createMinMaxOp(Builder, RdxKind, TmpVec, Shuf);
     }
     if (!RedOps.empty())
       propagateIRFlags(TmpVec, RedOps);
@@ -1027,48 +1027,48 @@ Value *llvm::getShuffleReduction(IRBuilderBase &Builder, Value *Src,
   return Builder.CreateExtractElement(TmpVec, Builder.getInt32(0));
 }
 
-Value *llvm::createSimpleTargetReduction(IRBuilderBase &Builder, 
-                                         const TargetTransformInfo *TTI, 
-                                         Value *Src, RecurKind RdxKind, 
-                                         ArrayRef<Value *> RedOps) { 
-  unsigned Opcode = RecurrenceDescriptor::getOpcode(RdxKind); 
-  TargetTransformInfo::ReductionFlags RdxFlags; 
-  RdxFlags.IsMaxOp = RdxKind == RecurKind::SMax || RdxKind == RecurKind::UMax || 
-                     RdxKind == RecurKind::FMax; 
-  RdxFlags.IsSigned = RdxKind == RecurKind::SMax || RdxKind == RecurKind::SMin; 
-  if (!ForceReductionIntrinsic && 
-      !TTI->useReductionIntrinsic(Opcode, Src->getType(), RdxFlags)) 
-    return getShuffleReduction(Builder, Src, Opcode, RdxKind, RedOps); 
+Value *llvm::createSimpleTargetReduction(IRBuilderBase &Builder,
+                                         const TargetTransformInfo *TTI,
+                                         Value *Src, RecurKind RdxKind,
+                                         ArrayRef<Value *> RedOps) {
+  unsigned Opcode = RecurrenceDescriptor::getOpcode(RdxKind);
+  TargetTransformInfo::ReductionFlags RdxFlags;
+  RdxFlags.IsMaxOp = RdxKind == RecurKind::SMax || RdxKind == RecurKind::UMax ||
+                     RdxKind == RecurKind::FMax;
+  RdxFlags.IsSigned = RdxKind == RecurKind::SMax || RdxKind == RecurKind::SMin;
+  if (!ForceReductionIntrinsic &&
+      !TTI->useReductionIntrinsic(Opcode, Src->getType(), RdxFlags))
+    return getShuffleReduction(Builder, Src, Opcode, RdxKind, RedOps);
 
-  auto *SrcVecEltTy = cast<VectorType>(Src->getType())->getElementType(); 
-  switch (RdxKind) { 
-  case RecurKind::Add: 
-    return Builder.CreateAddReduce(Src); 
-  case RecurKind::Mul: 
-    return Builder.CreateMulReduce(Src); 
-  case RecurKind::And: 
-    return Builder.CreateAndReduce(Src); 
-  case RecurKind::Or: 
-    return Builder.CreateOrReduce(Src); 
-  case RecurKind::Xor: 
-    return Builder.CreateXorReduce(Src); 
-  case RecurKind::FAdd: 
-    return Builder.CreateFAddReduce(ConstantFP::getNegativeZero(SrcVecEltTy), 
-                                    Src); 
-  case RecurKind::FMul: 
-    return Builder.CreateFMulReduce(ConstantFP::get(SrcVecEltTy, 1.0), Src); 
-  case RecurKind::SMax: 
-    return Builder.CreateIntMaxReduce(Src, true); 
-  case RecurKind::SMin: 
-    return Builder.CreateIntMinReduce(Src, true); 
-  case RecurKind::UMax: 
-    return Builder.CreateIntMaxReduce(Src, false); 
-  case RecurKind::UMin: 
-    return Builder.CreateIntMinReduce(Src, false); 
-  case RecurKind::FMax: 
-    return Builder.CreateFPMaxReduce(Src); 
-  case RecurKind::FMin: 
-    return Builder.CreateFPMinReduce(Src); 
+  auto *SrcVecEltTy = cast<VectorType>(Src->getType())->getElementType();
+  switch (RdxKind) {
+  case RecurKind::Add:
+    return Builder.CreateAddReduce(Src);
+  case RecurKind::Mul:
+    return Builder.CreateMulReduce(Src);
+  case RecurKind::And:
+    return Builder.CreateAndReduce(Src);
+  case RecurKind::Or:
+    return Builder.CreateOrReduce(Src);
+  case RecurKind::Xor:
+    return Builder.CreateXorReduce(Src);
+  case RecurKind::FAdd:
+    return Builder.CreateFAddReduce(ConstantFP::getNegativeZero(SrcVecEltTy),
+                                    Src);
+  case RecurKind::FMul:
+    return Builder.CreateFMulReduce(ConstantFP::get(SrcVecEltTy, 1.0), Src);
+  case RecurKind::SMax:
+    return Builder.CreateIntMaxReduce(Src, true);
+  case RecurKind::SMin:
+    return Builder.CreateIntMinReduce(Src, true);
+  case RecurKind::UMax:
+    return Builder.CreateIntMaxReduce(Src, false);
+  case RecurKind::UMin:
+    return Builder.CreateIntMinReduce(Src, false);
+  case RecurKind::FMax:
+    return Builder.CreateFPMaxReduce(Src);
+  case RecurKind::FMin:
+    return Builder.CreateFPMinReduce(Src);
   default:
     llvm_unreachable("Unhandled opcode");
   }
@@ -1076,13 +1076,13 @@ Value *llvm::createSimpleTargetReduction(IRBuilderBase &Builder,
 
 Value *llvm::createTargetReduction(IRBuilderBase &B,
                                    const TargetTransformInfo *TTI,
-                                   RecurrenceDescriptor &Desc, Value *Src) { 
+                                   RecurrenceDescriptor &Desc, Value *Src) {
   // TODO: Support in-order reductions based on the recurrence descriptor.
   // All ops in the reduction inherit fast-math-flags from the recurrence
   // descriptor.
   IRBuilderBase::FastMathFlagGuard FMFGuard(B);
   B.setFastMathFlags(Desc.getFastMathFlags());
-  return createSimpleTargetReduction(B, TTI, Src, Desc.getRecurrenceKind()); 
+  return createSimpleTargetReduction(B, TTI, Src, Desc.getRecurrenceKind());
 }
 
 void llvm::propagateIRFlags(Value *I, ArrayRef<Value *> VL, Value *OpValue) {
@@ -1158,7 +1158,7 @@ static bool isValidRewrite(ScalarEvolution *SE, Value *FromVal, Value *ToVal) {
   // producing an expression involving multiple pointers. Until then, we must
   // bail out here.
   //
-  // Retrieve the pointer operand of the GEP. Don't use getUnderlyingObject 
+  // Retrieve the pointer operand of the GEP. Don't use getUnderlyingObject
   // because it understands lcssa phis while SCEV does not.
   Value *FromPtr = FromVal;
   Value *ToPtr = ToVal;
@@ -1175,7 +1175,7 @@ static bool isValidRewrite(ScalarEvolution *SE, Value *FromVal, Value *ToVal) {
 
     // SCEV may have rewritten an expression that produces the GEP's pointer
     // operand. That's ok as long as the pointer operand has the same base
-    // pointer. Unlike getUnderlyingObject(), getPointerBase() will find the 
+    // pointer. Unlike getUnderlyingObject(), getPointerBase() will find the
     // base of a recurrence. This handles the case in which SCEV expansion
     // converts a pointer type recurrence into a nonrecurrent pointer base
     // indexed by an integer recurrence.

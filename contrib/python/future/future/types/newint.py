@@ -16,9 +16,9 @@ from future.utils import PY3, isint, istext, isbytes, with_metaclass, native
 
 if PY3:
     long = int
-    from collections.abc import Iterable 
-else: 
-    from collections import Iterable 
+    from collections.abc import Iterable
+else:
+    from collections import Iterable
 
 
 class BaseNewInt(type):
@@ -358,7 +358,7 @@ class newint(with_metaclass(BaseNewInt, long)):
             raise TypeError("cannot convert unicode objects to bytes")
         # mybytes can also be passed as a sequence of integers on Py3.
         # Test for this:
-        elif isinstance(mybytes, Iterable): 
+        elif isinstance(mybytes, Iterable):
             mybytes = newbytes(mybytes)
         b = mybytes if byteorder == 'big' else mybytes[::-1]
         if len(b) == 0:

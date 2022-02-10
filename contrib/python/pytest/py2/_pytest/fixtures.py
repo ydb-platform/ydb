@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import functools
 import inspect
-import itertools 
+import itertools
 import sys
 import warnings
 from collections import defaultdict
@@ -18,7 +18,7 @@ import six
 
 import _pytest
 from _pytest import nodes
-from _pytest._code.code import FormattedExcinfo 
+from _pytest._code.code import FormattedExcinfo
 from _pytest._code.code import TerminalRepr
 from _pytest.compat import _format_args
 from _pytest.compat import _PytestWrapper
@@ -308,8 +308,8 @@ class FuncFixtureInfo(object):
     # fixture names specified via usefixtures and via autouse=True in fixture
     # definitions.
     initialnames = attr.ib(type=tuple)
-    names_closure = attr.ib()  # List[str] 
-    name2fixturedefs = attr.ib()  # List[str, List[FixtureDef]] 
+    names_closure = attr.ib()  # List[str]
+    name2fixturedefs = attr.ib()  # List[str, List[FixtureDef]]
 
     def prune_dependency_tree(self):
         """Recompute names_closure from initialnames and name2fixturedefs
@@ -567,7 +567,7 @@ class FixtureRequest(FuncargnamesCompatAttr):
                 )
                 fail(msg, pytrace=False)
         else:
-            param_index = funcitem.callspec.indices[argname] 
+            param_index = funcitem.callspec.indices[argname]
             # if a parametrize invocation set a scope it will override
             # the static scope defined with the fixture function
             paramscopenum = funcitem.callspec._arg2scopenum.get(argname)
@@ -586,14 +586,14 @@ class FixtureRequest(FuncargnamesCompatAttr):
             # call the fixture function
             fixturedef.execute(request=subrequest)
         finally:
-            self._schedule_finalizers(fixturedef, subrequest) 
+            self._schedule_finalizers(fixturedef, subrequest)
 
-    def _schedule_finalizers(self, fixturedef, subrequest): 
-        # if fixture function failed it might have registered finalizers 
-        self.session._setupstate.addfinalizer( 
-            functools.partial(fixturedef.finish, request=subrequest), subrequest.node 
-        ) 
- 
+    def _schedule_finalizers(self, fixturedef, subrequest):
+        # if fixture function failed it might have registered finalizers
+        self.session._setupstate.addfinalizer(
+            functools.partial(fixturedef.finish, request=subrequest), subrequest.node
+        )
+
     def _check_scope(self, argname, invoking_scope, requested_scope):
         if argname == "request":
             return
@@ -615,7 +615,7 @@ class FixtureRequest(FuncargnamesCompatAttr):
             fs, lineno = getfslineno(factory)
             p = self._pyfuncitem.session.fspath.bestrelpath(fs)
             args = _format_args(factory)
-            lines.append("%s:%d:  def %s%s" % (p, lineno + 1, factory.__name__, args)) 
+            lines.append("%s:%d:  def %s%s" % (p, lineno + 1, factory.__name__, args))
         return lines
 
     def _getscopeitem(self, scope):
@@ -662,15 +662,15 @@ class SubRequest(FixtureRequest):
     def addfinalizer(self, finalizer):
         self._fixturedef.addfinalizer(finalizer)
 
-    def _schedule_finalizers(self, fixturedef, subrequest): 
-        # if the executing fixturedef was not explicitly requested in the argument list (via 
-        # getfixturevalue inside the fixture call) then ensure this fixture def will be finished 
-        # first 
-        if fixturedef.argname not in self.funcargnames: 
-            fixturedef.addfinalizer( 
-                functools.partial(self._fixturedef.finish, request=self) 
-            ) 
-        super(SubRequest, self)._schedule_finalizers(fixturedef, subrequest) 
+    def _schedule_finalizers(self, fixturedef, subrequest):
+        # if the executing fixturedef was not explicitly requested in the argument list (via
+        # getfixturevalue inside the fixture call) then ensure this fixture def will be finished
+        # first
+        if fixturedef.argname not in self.funcargnames:
+            fixturedef.addfinalizer(
+                functools.partial(self._fixturedef.finish, request=self)
+            )
+        super(SubRequest, self)._schedule_finalizers(fixturedef, subrequest)
 
 
 scopes = "session package module class function".split()
@@ -854,8 +854,8 @@ class FixtureDef(object):
                     exceptions.append(sys.exc_info())
             if exceptions:
                 e = exceptions[0]
-                # Ensure to not keep frame references through traceback. 
-                del exceptions 
+                # Ensure to not keep frame references through traceback.
+                del exceptions
                 six.reraise(*e)
         finally:
             hook = self._fixturemanager.session.gethookproxy(request.node.fspath)
@@ -949,17 +949,17 @@ def _ensure_immutable_ids(ids):
     return tuple(ids)
 
 
-def wrap_function_to_error_out_if_called_directly(function, fixture_marker): 
-    """Wrap the given fixture function so we can raise an error about it being called directly, 
-    instead of used as an argument in a test function. 
+def wrap_function_to_error_out_if_called_directly(function, fixture_marker):
+    """Wrap the given fixture function so we can raise an error about it being called directly,
+    instead of used as an argument in a test function.
     """
-    message = FIXTURE_FUNCTION_CALL.format( 
+    message = FIXTURE_FUNCTION_CALL.format(
         name=fixture_marker.name or function.__name__
     )
 
-    @six.wraps(function) 
-    def result(*args, **kwargs): 
-        fail(message, pytrace=False) 
+    @six.wraps(function)
+    def result(*args, **kwargs):
+        fail(message, pytrace=False)
 
     # keep reference to the original function in our own custom attribute so we don't unwrap
     # further than this point and lose useful wrappings like @mock.patch (#3774)
@@ -985,7 +985,7 @@ class FixtureFunctionMarker(object):
                 "fixture is being applied more than once to the same function"
             )
 
-        function = wrap_function_to_error_out_if_called_directly(function, self) 
+        function = wrap_function_to_error_out_if_called_directly(function, self)
 
         name = self.name or function.__name__
         if name == "request":
@@ -1022,7 +1022,7 @@ def fixture(scope="function", params=None, autouse=False, ids=None, name=None):
     :arg params: an optional list of parameters which will cause multiple
                 invocations of the fixture function and all of the tests
                 using it.
-                The current parameter is available in ``request.param``. 
+                The current parameter is available in ``request.param``.
 
     :arg autouse: if True, the fixture func is activated for all tests that
                 can see it.  If False (the default) then an explicit
@@ -1067,22 +1067,22 @@ def pytestconfig(request):
     Example::
 
         def test_foo(pytestconfig):
-            if pytestconfig.getoption("verbose") > 0: 
+            if pytestconfig.getoption("verbose") > 0:
                 ...
 
     """
     return request.config
 
 
-def pytest_addoption(parser): 
-    parser.addini( 
-        "usefixtures", 
-        type="args", 
-        default=[], 
-        help="list of default fixtures to be used with this project", 
-    ) 
- 
- 
+def pytest_addoption(parser):
+    parser.addini(
+        "usefixtures",
+        type="args",
+        default=[],
+        help="list of default fixtures to be used with this project",
+    )
+
+
 class FixtureManager(object):
     """
     pytest fixtures definitions and information is stored and managed
@@ -1127,40 +1127,40 @@ class FixtureManager(object):
         self._nodeid_and_autousenames = [("", self.config.getini("usefixtures"))]
         session.config.pluginmanager.register(self, "funcmanage")
 
-    def _get_direct_parametrize_args(self, node): 
-        """This function returns all the direct parametrization 
-        arguments of a node, so we don't mistake them for fixtures 
- 
-        Check https://github.com/pytest-dev/pytest/issues/5036 
- 
-        This things are done later as well when dealing with parametrization 
-        so this could be improved 
-        """ 
-        from _pytest.mark import ParameterSet 
- 
-        parametrize_argnames = [] 
-        for marker in node.iter_markers(name="parametrize"): 
-            if not marker.kwargs.get("indirect", False): 
-                p_argnames, _ = ParameterSet._parse_parametrize_args( 
-                    *marker.args, **marker.kwargs 
-                ) 
-                parametrize_argnames.extend(p_argnames) 
- 
-        return parametrize_argnames 
- 
+    def _get_direct_parametrize_args(self, node):
+        """This function returns all the direct parametrization
+        arguments of a node, so we don't mistake them for fixtures
+
+        Check https://github.com/pytest-dev/pytest/issues/5036
+
+        This things are done later as well when dealing with parametrization
+        so this could be improved
+        """
+        from _pytest.mark import ParameterSet
+
+        parametrize_argnames = []
+        for marker in node.iter_markers(name="parametrize"):
+            if not marker.kwargs.get("indirect", False):
+                p_argnames, _ = ParameterSet._parse_parametrize_args(
+                    *marker.args, **marker.kwargs
+                )
+                parametrize_argnames.extend(p_argnames)
+
+        return parametrize_argnames
+
     def getfixtureinfo(self, node, func, cls, funcargs=True):
         if funcargs and not getattr(node, "nofuncargs", False):
             argnames = getfuncargnames(func, cls=cls)
         else:
             argnames = ()
- 
-        usefixtures = itertools.chain.from_iterable( 
+
+        usefixtures = itertools.chain.from_iterable(
             mark.args for mark in node.iter_markers(name="usefixtures")
         )
         initialnames = tuple(usefixtures) + argnames
         fm = node.session._fixturemanager
         initialnames, names_closure, arg2fixturedefs = fm.getfixtureclosure(
-            initialnames, node, ignore_args=self._get_direct_parametrize_args(node) 
+            initialnames, node, ignore_args=self._get_direct_parametrize_args(node)
         )
         return FuncFixtureInfo(argnames, initialnames, names_closure, arg2fixturedefs)
 
@@ -1194,7 +1194,7 @@ class FixtureManager(object):
                 autousenames.extend(basenames)
         return autousenames
 
-    def getfixtureclosure(self, fixturenames, parentnode, ignore_args=()): 
+    def getfixtureclosure(self, fixturenames, parentnode, ignore_args=()):
         # collect the closure of all fixtures , starting with the given
         # fixturenames as the initial set.  As we have to visit all
         # factory definitions anyway, we also return an arg2fixturedefs
@@ -1222,8 +1222,8 @@ class FixtureManager(object):
         while lastlen != len(fixturenames_closure):
             lastlen = len(fixturenames_closure)
             for argname in fixturenames_closure:
-                if argname in ignore_args: 
-                    continue 
+                if argname in ignore_args:
+                    continue
                 if argname in arg2fixturedefs:
                     continue
                 fixturedefs = self.getfixturedefs(argname, parentid)
@@ -1248,19 +1248,19 @@ class FixtureManager(object):
             if faclist:
                 fixturedef = faclist[-1]
                 if fixturedef.params is not None:
-                    markers = list(metafunc.definition.iter_markers("parametrize")) 
-                    for parametrize_mark in markers: 
-                        if "argnames" in parametrize_mark.kwargs: 
-                            argnames = parametrize_mark.kwargs["argnames"] 
-                        else: 
-                            argnames = parametrize_mark.args[0] 
- 
-                        if not isinstance(argnames, (tuple, list)): 
-                            argnames = [ 
-                                x.strip() for x in argnames.split(",") if x.strip() 
-                            ] 
-                        if argname in argnames: 
-                            break 
+                    markers = list(metafunc.definition.iter_markers("parametrize"))
+                    for parametrize_mark in markers:
+                        if "argnames" in parametrize_mark.kwargs:
+                            argnames = parametrize_mark.kwargs["argnames"]
+                        else:
+                            argnames = parametrize_mark.args[0]
+
+                        if not isinstance(argnames, (tuple, list)):
+                            argnames = [
+                                x.strip() for x in argnames.split(",") if x.strip()
+                            ]
+                        if argname in argnames:
+                            break
                     else:
                         metafunc.parametrize(
                             argname,
@@ -1292,14 +1292,14 @@ class FixtureManager(object):
             # access below can raise. safe_getatt() ignores such exceptions.
             obj = safe_getattr(holderobj, name, None)
             marker = getfixturemarker(obj)
-            if not isinstance(marker, FixtureFunctionMarker): 
+            if not isinstance(marker, FixtureFunctionMarker):
                 # magic globals  with __getattr__ might have got us a wrong
                 # fixture attribute
                 continue
 
-            if marker.name: 
-                name = marker.name 
- 
+            if marker.name:
+                name = marker.name
+
             # during fixture definition we wrap the original fixture function
             # to issue a warning if called directly, so here we unwrap it in order to not emit the warning
             # when pytest itself calls the fixture function

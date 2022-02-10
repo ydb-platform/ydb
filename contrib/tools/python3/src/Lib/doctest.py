@@ -211,13 +211,13 @@ def _normalize_module(module, depth=2):
     else:
         raise TypeError("Expected a module, string, or None")
 
-def _newline_convert(data): 
-    # We have two cases to cover and we need to make sure we do 
-    # them in the right order 
-    for newline in ('\r\n', '\r'): 
-        data = data.replace(newline, '\n') 
-    return data 
- 
+def _newline_convert(data):
+    # We have two cases to cover and we need to make sure we do
+    # them in the right order
+    for newline in ('\r\n', '\r'):
+        data = data.replace(newline, '\n')
+    return data
+
 def _load_testfile(filename, package, module_relative, encoding):
     if module_relative:
         package = _normalize_module(package, 3)
@@ -228,7 +228,7 @@ def _load_testfile(filename, package, module_relative, encoding):
                 file_contents = file_contents.decode(encoding)
                 # get_data() opens files as 'rb', so one must do the equivalent
                 # conversion as universal newlines would do.
-                return _newline_convert(file_contents), filename 
+                return _newline_convert(file_contents), filename
     with open(filename, encoding=encoding) as f:
         return f.read(), filename
 
@@ -1025,8 +1025,8 @@ class DocTestFinder:
         if inspect.isclass(obj) and self._recurse:
             for valname, val in obj.__dict__.items():
                 # Special handling for staticmethod/classmethod.
-                if isinstance(val, (staticmethod, classmethod)): 
-                    val = val.__func__ 
+                if isinstance(val, (staticmethod, classmethod)):
+                    val = val.__func__
 
                 # Recurse to methods, properties, and nested classes.
                 if ((inspect.isroutine(val) or inspect.isclass(val) or
@@ -1067,8 +1067,8 @@ class DocTestFinder:
         if module is None:
             filename = None
         else:
-            # __file__ can be None for namespace packages. 
-            filename = getattr(module, '__file__', None) or module.__name__ 
+            # __file__ can be None for namespace packages.
+            filename = getattr(module, '__file__', None) or module.__name__
             if filename[-4:] == ".pyc":
                 filename = filename[:-1]
         return self._parser.get_doctest(docstring, globs, name,
@@ -1335,7 +1335,7 @@ class DocTestRunner:
             try:
                 # Don't blink!  This is where the user's code gets run.
                 exec(compile(example.source, filename, "single",
-                             compileflags, True), test.globs) 
+                             compileflags, True), test.globs)
                 self.debugger.set_continue() # ==== Example Finished ====
                 exception = None
             except KeyboardInterrupt:
@@ -2309,7 +2309,7 @@ class DocTestCase(unittest.TestCase):
         name = self._dt_test.name.split('.')
         return "%s (%s)" % (name[-1], '.'.join(name[:-1]))
 
-    __str__ = object.__str__ 
+    __str__ = object.__str__
 
     def shortDescription(self):
         return "Doctest: " + self._dt_test.name

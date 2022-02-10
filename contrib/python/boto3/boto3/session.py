@@ -249,7 +249,7 @@ class Session(object):
             over environment variables and configuration values, but not over
             a region_name value passed explicitly to the method. See
             `botocore config documentation
-            <https://botocore.amazonaws.com/v1/documentation/api/latest/reference/config.html>`_ 
+            <https://botocore.amazonaws.com/v1/documentation/api/latest/reference/config.html>`_
             for more details.
 
         :return: Service client instance
@@ -331,7 +331,7 @@ class Session(object):
             user_agent_extra is specified in the client config, it overrides
             the default user_agent_extra provided by the resource API. See
             `botocore config documentation
-            <https://botocore.amazonaws.com/v1/documentation/api/latest/reference/config.html>`_ 
+            <https://botocore.amazonaws.com/v1/documentation/api/latest/reference/config.html>`_
             for more details.
 
         :return: Subclass of :py:class:`~boto3.resources.base.ServiceResource`
@@ -392,11 +392,11 @@ class Session(object):
         # Create a ServiceContext object to serve as a reference to
         # important read-only information about the general service.
         service_context = boto3.utils.ServiceContext(
-            service_name=service_name, service_model=service_model, 
-            resource_json_definitions=resource_model['resources'], 
-            service_waiter_model=boto3.utils.LazyLoadedWaiterModel( 
-                self._session, service_name, api_version 
-            ) 
+            service_name=service_name, service_model=service_model,
+            resource_json_definitions=resource_model['resources'],
+            service_waiter_model=boto3.utils.LazyLoadedWaiterModel(
+                self._session, service_name, api_version
+            )
         )
 
         # Create the service resource class.

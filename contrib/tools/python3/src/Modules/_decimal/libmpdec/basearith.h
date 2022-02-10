@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2020 Stefan Krah. All rights reserved. 
+ * Copyright (c) 2008-2020 Stefan Krah. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,8 +26,8 @@
  */
 
 
-#ifndef LIBMPDEC_BASEARITH_H_ 
-#define LIBMPDEC_BASEARITH_H_ 
+#ifndef LIBMPDEC_BASEARITH_H_
+#define LIBMPDEC_BASEARITH_H_
 
 
 #include "mpdecimal.h"
@@ -215,4 +215,4 @@ _mpd_isallnine(const mpd_uint_t *data, mpd_ssize_t len)
 MPD_PRAGMA(MPD_HIDE_SYMBOLS_END) /* restore previous scope rules */
 
 
-#endif /* LIBMPDEC_BASEARITH_H_ */ 
+#endif /* LIBMPDEC_BASEARITH_H_ */

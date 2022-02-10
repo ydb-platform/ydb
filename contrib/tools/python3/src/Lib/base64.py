@@ -82,7 +82,7 @@ def b64decode(s, altchars=None, validate=False):
         altchars = _bytes_from_decode_data(altchars)
         assert len(altchars) == 2, repr(altchars)
         s = s.translate(bytes.maketrans(altchars, b'+/'))
-    if validate and not re.fullmatch(b'[A-Za-z0-9+/]*={0,2}', s): 
+    if validate and not re.fullmatch(b'[A-Za-z0-9+/]*={0,2}', s):
         raise binascii.Error('Non-base64 digit found')
     return binascii.a2b_base64(s)
 
@@ -320,7 +320,7 @@ def a85encode(b, *, foldspaces=False, wrapcol=0, pad=False, adobe=False):
     global _a85chars, _a85chars2
     # Delay the initialization of tables to not waste memory
     # if the function is never called
-    if _a85chars2 is None: 
+    if _a85chars2 is None:
         _a85chars = [bytes((i,)) for i in range(33, 118)]
         _a85chars2 = [(a + b) for a in _a85chars for b in _a85chars]
 
@@ -428,7 +428,7 @@ def b85encode(b, pad=False):
     global _b85chars, _b85chars2
     # Delay the initialization of tables to not waste memory
     # if the function is never called
-    if _b85chars2 is None: 
+    if _b85chars2 is None:
         _b85chars = [bytes((i,)) for i in _b85alphabet]
         _b85chars2 = [(a + b) for a in _b85chars for b in _b85chars]
     return _85encode(b, _b85chars, _b85chars2, pad)

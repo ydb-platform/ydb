@@ -166,8 +166,8 @@ class StrictVersion (Version):
     def _cmp (self, other):
         if isinstance(other, str):
             other = StrictVersion(other)
-        elif not isinstance(other, StrictVersion): 
-            return NotImplemented 
+        elif not isinstance(other, StrictVersion):
+            return NotImplemented
 
         if self.version != other.version:
             # numeric versions don't match
@@ -333,8 +333,8 @@ class LooseVersion (Version):
     def _cmp (self, other):
         if isinstance(other, str):
             other = LooseVersion(other)
-        elif not isinstance(other, LooseVersion): 
-            return NotImplemented 
+        elif not isinstance(other, LooseVersion):
+            return NotImplemented
 
         if self.version == other.version:
             return 0

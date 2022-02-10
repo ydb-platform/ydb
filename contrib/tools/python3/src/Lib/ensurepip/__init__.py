@@ -1,37 +1,37 @@
 import os
 import os.path
 import sys
-import runpy 
+import runpy
 import tempfile
-import subprocess 
-from importlib import resources 
+import subprocess
+from importlib import resources
 
-from . import _bundled 
+from . import _bundled
 
- 
- 
+
+
 __all__ = ["version", "bootstrap"]
-_SETUPTOOLS_VERSION = "58.1.0" 
-_PIP_VERSION = "21.2.4" 
+_SETUPTOOLS_VERSION = "58.1.0"
+_PIP_VERSION = "21.2.4"
 _PROJECTS = [
-    ("setuptools", _SETUPTOOLS_VERSION, "py3"), 
-    ("pip", _PIP_VERSION, "py3"), 
+    ("setuptools", _SETUPTOOLS_VERSION, "py3"),
+    ("pip", _PIP_VERSION, "py3"),
 ]
 
 
 def _run_pip(args, additional_paths=None):
-    # Run the bootstraping in a subprocess to avoid leaking any state that happens 
-    # after pip has executed. Particulary, this avoids the case when pip holds onto 
-    # the files in *additional_paths*, preventing us to remove them at the end of the 
-    # invocation. 
-    code = f""" 
-import runpy 
-import sys 
-sys.path = {additional_paths or []} + sys.path 
-sys.argv[1:] = {args} 
-runpy.run_module("pip", run_name="__main__", alter_sys=True) 
-""" 
-    return subprocess.run([sys.executable, "-c", code], check=True).returncode 
+    # Run the bootstraping in a subprocess to avoid leaking any state that happens
+    # after pip has executed. Particulary, this avoids the case when pip holds onto
+    # the files in *additional_paths*, preventing us to remove them at the end of the
+    # invocation.
+    code = f"""
+import runpy
+import sys
+sys.path = {additional_paths or []} + sys.path
+sys.argv[1:] = {args}
+runpy.run_module("pip", run_name="__main__", alter_sys=True)
+"""
+    return subprocess.run([sys.executable, "-c", code], check=True).returncode
 
 
 def version():
@@ -79,8 +79,8 @@ def _bootstrap(*, root=None, upgrade=False, user=False,
     if altinstall and default_pip:
         raise ValueError("Cannot use altinstall and default_pip together")
 
-    sys.audit("ensurepip.bootstrap", root) 
- 
+    sys.audit("ensurepip.bootstrap", root)
+
     _disable_pip_configuration_settings()
 
     # By default, installing pip and setuptools installs all of the
@@ -100,11 +100,11 @@ def _bootstrap(*, root=None, upgrade=False, user=False,
         # Put our bundled wheels into a temporary directory and construct the
         # additional paths that need added to sys.path
         additional_paths = []
-        for project, version, py_tag in _PROJECTS: 
-            wheel_name = "{}-{}-{}-none-any.whl".format(project, version, py_tag) 
-            whl = resources.read_binary( 
-                _bundled, 
-                wheel_name, 
+        for project, version, py_tag in _PROJECTS:
+            wheel_name = "{}-{}-{}-none-any.whl".format(project, version, py_tag)
+            whl = resources.read_binary(
+                _bundled,
+                wheel_name,
             )
             with open(os.path.join(tmpdir, wheel_name), "wb") as fp:
                 fp.write(whl)
@@ -112,7 +112,7 @@ def _bootstrap(*, root=None, upgrade=False, user=False,
             additional_paths.append(os.path.join(tmpdir, wheel_name))
 
         # Construct the arguments to be passed to the pip command
-        args = ["install", "--no-cache-dir", "--no-index", "--find-links", tmpdir] 
+        args = ["install", "--no-cache-dir", "--no-index", "--find-links", tmpdir]
         if root:
             args += ["--root", root]
         if upgrade:

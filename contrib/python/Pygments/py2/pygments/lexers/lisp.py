@@ -1554,7 +1554,7 @@ class EmacsLispLexer(RegexLexer):
     # Take a deep breath...
     symbol = r'((?:%s)(?:%s)*)' % (nonmacro, constituent)
 
-    macros = { 
+    macros = {
         'atomic-change-group', 'case', 'block', 'cl-block', 'cl-callf', 'cl-callf2',
         'cl-case', 'cl-decf', 'cl-declaim', 'cl-declare',
         'cl-define-compiler-macro', 'cl-defmacro', 'cl-defstruct',
@@ -1601,17 +1601,17 @@ class EmacsLispLexer(RegexLexer):
         'with-tramp-file-property', 'with-tramp-progress-reporter',
         'with-wrapper-hook', 'load-time-value', 'locally', 'macrolet', 'progv',
         'return-from',
-    } 
+    }
 
-    special_forms = { 
+    special_forms = {
         'and', 'catch', 'cond', 'condition-case', 'defconst', 'defvar',
         'function', 'if', 'interactive', 'let', 'let*', 'or', 'prog1',
         'prog2', 'progn', 'quote', 'save-current-buffer', 'save-excursion',
         'save-restriction', 'setq', 'setq-default', 'subr-arity',
         'unwind-protect', 'while',
-    } 
+    }
 
-    builtin_function = { 
+    builtin_function = {
         '%', '*', '+', '-', '/', '/=', '1+', '1-', '<', '<=', '=', '>', '>=',
         'Snarf-documentation', 'abort-recursive-edit', 'abs',
         'accept-process-output', 'access-file', 'accessible-keymaps', 'acos',
@@ -1937,9 +1937,9 @@ class EmacsLispLexer(RegexLexer):
         'split-window-internal', 'sqrt', 'standard-case-table',
         'standard-category-table', 'standard-syntax-table', 'start-kbd-macro',
         'start-process', 'stop-process', 'store-kbd-macro-event', 'string',
-        'string=', 'string<', 'string>', 'string-as-multibyte', 
-        'string-as-unibyte', 'string-bytes', 'string-collate-equalp', 
-        'string-collate-lessp', 'string-equal', 'string-greaterp', 
+        'string=', 'string<', 'string>', 'string-as-multibyte',
+        'string-as-unibyte', 'string-bytes', 'string-collate-equalp',
+        'string-collate-lessp', 'string-equal', 'string-greaterp',
         'string-lessp', 'string-make-multibyte', 'string-make-unibyte',
         'string-match', 'string-to-char', 'string-to-multibyte',
         'string-to-number', 'string-to-syntax', 'string-to-unibyte',
@@ -2051,23 +2051,23 @@ class EmacsLispLexer(RegexLexer):
         'xw-color-values', 'xw-display-color-p', 'xw-display-color-p',
         'yes-or-no-p', 'zlib-available-p', 'zlib-decompress-region',
         'forward-point',
-    } 
+    }
 
-    builtin_function_highlighted = { 
+    builtin_function_highlighted = {
         'defvaralias', 'provide', 'require',
         'with-no-warnings', 'define-widget', 'with-electric-help',
         'throw', 'defalias', 'featurep'
-    } 
+    }
 
-    lambda_list_keywords = { 
+    lambda_list_keywords = {
         '&allow-other-keys', '&aux', '&body', '&environment', '&key', '&optional',
         '&rest', '&whole',
-    } 
+    }
 
-    error_keywords = { 
+    error_keywords = {
         'cl-assert', 'cl-check-type', 'error', 'signal',
         'user-error', 'warn',
-    } 
+    }
 
     def get_tokens_unprocessed(self, text):
         stack = ['root']
@@ -2226,7 +2226,7 @@ class ShenLexer(RegexLexer):
 
     BUILTINS_ANYWHERE = ('where', 'skip', '>>', '_', '!', '<e>', '<!>')
 
-    MAPPINGS = {s: Keyword for s in DECLARATIONS} 
+    MAPPINGS = {s: Keyword for s in DECLARATIONS}
     MAPPINGS.update((s, Name.Builtin) for s in BUILTINS)
     MAPPINGS.update((s, Keyword) for s in SPECIAL_FORMS)
 

@@ -102,12 +102,12 @@ for the sdk. For instance, additional operation parameters might be added here
 which don't represent the actual service api.
 """
 import collections
-import os 
+import os
 import logging
 
 from botocore import BOTOCORE_ROOT
 from botocore.compat import json
-from botocore.compat import six 
+from botocore.compat import six
 from botocore.compat import OrderedDict
 from botocore.exceptions import DataNotFoundError, UnknownServiceError
 from botocore.utils import deep_merge
@@ -182,45 +182,45 @@ class JSONFileLoader(object):
 # SQS-119
 class HybridJsonLoader(JSONFileLoader):
 
-    type_data_cache = collections.defaultdict(lambda: collections.defaultdict(set)) 
- 
-    arcadia_resources_path = ( 
-        'contrib/python/awscli/awscli/data/', 
-        'contrib/python/boto3/boto3/data/', 
-        'contrib/python/botocore/botocore/data/', 
-    ) 
- 
-    @classmethod 
-    def collect_service_data(cls): 
-        if cls.type_data_cache: 
+    type_data_cache = collections.defaultdict(lambda: collections.defaultdict(set))
+
+    arcadia_resources_path = (
+        'contrib/python/awscli/awscli/data/',
+        'contrib/python/boto3/boto3/data/',
+        'contrib/python/botocore/botocore/data/',
+    )
+
+    @classmethod
+    def collect_service_data(cls):
+        if cls.type_data_cache:
             return
 
-        for res in resource.resfs_files(): 
-            res = six.ensure_str(res) 
-            if res.startswith(cls.arcadia_resources_path): 
-                splitted_path = res.split('/data/')[1].split('/') 
-                if len(splitted_path) >= 3: 
-                    service_name, version, type_name = splitted_path[:3] 
-                    type_name = type_name.replace('.json', '') 
-                    cls.type_data_cache[type_name][service_name].add(version) 
+        for res in resource.resfs_files():
+            res = six.ensure_str(res)
+            if res.startswith(cls.arcadia_resources_path):
+                splitted_path = res.split('/data/')[1].split('/')
+                if len(splitted_path) >= 3:
+                    service_name, version, type_name = splitted_path[:3]
+                    type_name = type_name.replace('.json', '')
+                    cls.type_data_cache[type_name][service_name].add(version)
 
-    @classmethod 
-    def path_in_arcadia_resources(cls, file_path): 
-        for prefix in cls.arcadia_resources_path: 
+    @classmethod
+    def path_in_arcadia_resources(cls, file_path):
+        for prefix in cls.arcadia_resources_path:
             path = '{}{}.json'.format(prefix, file_path)
-            if path in resource.resfs_files(): 
-                return path 
-        return 
+            if path in resource.resfs_files():
+                return path
+        return
 
     def exists(self, file_path):
-        if self.path_in_arcadia_resources(file_path): 
+        if self.path_in_arcadia_resources(file_path):
             return True
         return super(HybridJsonLoader, self).exists(file_path)
 
     def load_file(self, file_path):
-        path = self.path_in_arcadia_resources(file_path) 
-        if path: 
-            return json.loads(resource.resfs_read(path).decode(encoding='utf-8')) 
+        path = self.path_in_arcadia_resources(file_path)
+        if path:
+            return json.loads(resource.resfs_read(path).decode(encoding='utf-8'))
         return super(HybridJsonLoader, self).load_file(file_path)
 
 
@@ -336,7 +336,7 @@ class Loader(object):
 
         # SQS-119
         HybridJsonLoader.collect_service_data()
-        services = services.union(HybridJsonLoader.type_data_cache[type_name].keys()) 
+        services = services.union(HybridJsonLoader.type_data_cache[type_name].keys())
 
         return sorted(services)
 
@@ -392,7 +392,7 @@ class Loader(object):
 
         # SQS-119
         HybridJsonLoader.collect_service_data()
-        known_api_versions = known_api_versions.union(HybridJsonLoader.type_data_cache[type_name][service_name]) 
+        known_api_versions = known_api_versions.union(HybridJsonLoader.type_data_cache[type_name][service_name])
 
         if not known_api_versions:
             raise DataNotFoundError(data_path=service_name)

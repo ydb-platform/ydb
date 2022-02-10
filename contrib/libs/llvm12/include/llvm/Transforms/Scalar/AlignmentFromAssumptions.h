@@ -44,9 +44,9 @@ struct AlignmentFromAssumptionsPass
   ScalarEvolution *SE = nullptr;
   DominatorTree *DT = nullptr;
 
-  bool extractAlignmentInfo(CallInst *I, unsigned Idx, Value *&AAPtr, 
-                            const SCEV *&AlignSCEV, const SCEV *&OffSCEV); 
-  bool processAssumption(CallInst *I, unsigned Idx); 
+  bool extractAlignmentInfo(CallInst *I, unsigned Idx, Value *&AAPtr,
+                            const SCEV *&AlignSCEV, const SCEV *&OffSCEV);
+  bool processAssumption(CallInst *I, unsigned Idx);
 };
 }
 

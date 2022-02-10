@@ -1,7 +1,7 @@
 import os
 import sys
 import itertools
-from importlib.machinery import EXTENSION_SUFFIXES 
+from importlib.machinery import EXTENSION_SUFFIXES
 from distutils.command.build_ext import build_ext as _du_build_ext
 from distutils.file_util import copy_file
 from distutils.ccompiler import new_compiler
@@ -14,15 +14,15 @@ from setuptools.extension import Library
 try:
     # Attempt to use Cython for building extensions, if available
     from Cython.Distutils.build_ext import build_ext as _build_ext
-    # Additionally, assert that the compiler module will load 
-    # also. Ref #1229. 
-    __import__('Cython.Compiler.Main') 
+    # Additionally, assert that the compiler module will load
+    # also. Ref #1229.
+    __import__('Cython.Compiler.Main')
 except ImportError:
     _build_ext = _du_build_ext
 
 # make sure _config_vars is initialized
 get_config_var("LDSHARED")
-from distutils.sysconfig import _config_vars as _CONFIG_VARS  # noqa 
+from distutils.sysconfig import _config_vars as _CONFIG_VARS  # noqa
 
 
 def _customize_compiler_for_shlib(compiler):
@@ -59,13 +59,13 @@ elif os.name != 'nt':
         pass
 
 
-def if_dl(s): 
-    return s if have_rtld else '' 
+def if_dl(s):
+    return s if have_rtld else ''
 
- 
+
 def get_abi3_suffix():
     """Return the file extension for an abi3-compliant Extension()"""
-    for suffix in EXTENSION_SUFFIXES: 
+    for suffix in EXTENSION_SUFFIXES:
         if '.abi3' in suffix:  # Unix
             return suffix
         elif suffix == '.pyd':  # Windows
@@ -104,20 +104,20 @@ class build_ext(_build_ext):
                 self.write_stub(package_dir or os.curdir, ext, True)
 
     def get_ext_filename(self, fullname):
-        so_ext = os.getenv('SETUPTOOLS_EXT_SUFFIX') 
-        if so_ext: 
-            filename = os.path.join(*fullname.split('.')) + so_ext 
-        else: 
-            filename = _build_ext.get_ext_filename(self, fullname) 
-            so_ext = get_config_var('EXT_SUFFIX') 
- 
+        so_ext = os.getenv('SETUPTOOLS_EXT_SUFFIX')
+        if so_ext:
+            filename = os.path.join(*fullname.split('.')) + so_ext
+        else:
+            filename = _build_ext.get_ext_filename(self, fullname)
+            so_ext = get_config_var('EXT_SUFFIX')
+
         if fullname in self.ext_map:
             ext = self.ext_map[fullname]
-            use_abi3 = getattr(ext, 'py_limited_api') and get_abi3_suffix() 
+            use_abi3 = getattr(ext, 'py_limited_api') and get_abi3_suffix()
             if use_abi3:
                 filename = filename[:-len(so_ext)]
-                so_ext = get_abi3_suffix() 
-                filename = filename + so_ext 
+                so_ext = get_abi3_suffix()
+                filename = filename + so_ext
             if isinstance(ext, Library):
                 fn, ext = os.path.splitext(filename)
                 return self.shlib_compiler.library_filename(fn, libtype)
@@ -248,8 +248,8 @@ class build_ext(_build_ext):
                 '\n'.join([
                     "def __bootstrap__():",
                     "   global __bootstrap__, __file__, __loader__",
-                    "   import sys, os, pkg_resources, importlib.util" + 
-                    if_dl(", dl"), 
+                    "   import sys, os, pkg_resources, importlib.util" +
+                    if_dl(", dl"),
                     "   __file__ = pkg_resources.resource_filename"
                     "(__name__,%r)"
                     % os.path.basename(ext._file_name),
@@ -261,10 +261,10 @@ class build_ext(_build_ext):
                     "   try:",
                     "     os.chdir(os.path.dirname(__file__))",
                     if_dl("     sys.setdlopenflags(dl.RTLD_NOW)"),
-                    "     spec = importlib.util.spec_from_file_location(", 
-                    "                __name__, __file__)", 
-                    "     mod = importlib.util.module_from_spec(spec)", 
-                    "     spec.loader.exec_module(mod)", 
+                    "     spec = importlib.util.spec_from_file_location(",
+                    "                __name__, __file__)",
+                    "     mod = importlib.util.module_from_spec(spec)",
+                    "     spec.loader.exec_module(mod)",
                     "   finally:",
                     if_dl("     sys.setdlopenflags(old_flags)"),
                     "     os.chdir(old_dir)",

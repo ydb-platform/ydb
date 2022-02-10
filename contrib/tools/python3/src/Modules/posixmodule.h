@@ -14,18 +14,18 @@ extern "C" {
 #ifndef MS_WINDOWS
 PyAPI_FUNC(PyObject *) _PyLong_FromUid(uid_t);
 PyAPI_FUNC(PyObject *) _PyLong_FromGid(gid_t);
-PyAPI_FUNC(int) _Py_Uid_Converter(PyObject *, uid_t *); 
-PyAPI_FUNC(int) _Py_Gid_Converter(PyObject *, gid_t *); 
+PyAPI_FUNC(int) _Py_Uid_Converter(PyObject *, uid_t *);
+PyAPI_FUNC(int) _Py_Gid_Converter(PyObject *, gid_t *);
 #endif /* MS_WINDOWS */
- 
-#if defined(PYPTHREAD_SIGMASK) || defined(HAVE_SIGWAIT) || \ 
-        defined(HAVE_SIGWAITINFO) || defined(HAVE_SIGTIMEDWAIT) 
-# define HAVE_SIGSET_T 
+
+#if defined(PYPTHREAD_SIGMASK) || defined(HAVE_SIGWAIT) || \
+        defined(HAVE_SIGWAITINFO) || defined(HAVE_SIGTIMEDWAIT)
+# define HAVE_SIGSET_T
 #endif
 
-PyAPI_FUNC(int) _Py_Sigset_Converter(PyObject *, void *); 
-#endif /* Py_LIMITED_API */ 
- 
+PyAPI_FUNC(int) _Py_Sigset_Converter(PyObject *, void *);
+#endif /* Py_LIMITED_API */
+
 #ifdef __cplusplus
 }
 #endif

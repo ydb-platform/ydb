@@ -25,7 +25,7 @@
 6. `for path in $(ls packages); do ar -xf packages/$path; tar -xf data.tar.xz; done;`
 7. `mv usr python`
 8. `tar -czf python{PYTHON_VERSION}_linux.tar.gz python`
-9. `ya upload python{PYTHON_VERSION}_linux.tar.gz -d "Ubuntu {UBUNTU_VERSION} x86_64 python{PYTHON_VERSION} installation" --do-not-remove` 
+9. `ya upload python{PYTHON_VERSION}_linux.tar.gz -d "Ubuntu {UBUNTU_VERSION} x86_64 python{PYTHON_VERSION} installation" --do-not-remove`
 
 UBUNTU_VERSION - версия ubuntu, на которой майнился системный питон
 
@@ -40,7 +40,7 @@ UBUNTU_VERSION - версия ubuntu, на которой майнился си�
     3. `python/Python.framework/Python -> Versions/Current/Python`
     4. `python/Python.framework/Resources -> Versions/Current/Resources`
 6. `tar -czf python{PYTHON_VERSION}_darwin.tar.gz python`
-7. `ya upload python{PYTHON_VERSION}_darwin.tar.gz -d "Darwin x86_64 python{PYTHON_VERSION} installation" --do-not-remove` 
+7. `ya upload python{PYTHON_VERSION}_darwin.tar.gz -d "Darwin x86_64 python{PYTHON_VERSION} installation" --do-not-remove`
 
 Если нужного питона нет в системе, его нужно установить из `python.org`, его установку можно найти в стандартном месте.
 
@@ -52,7 +52,7 @@ UBUNTU_VERSION - версия ubuntu, на которой майнился си�
 2. Устанавливаем нужную версию питона из `python.org`
 3. Копируем содержимое установки питона в директорию `python`
 4. Пакуем директорию `python` в `python{PYTHON_VERSION}_windows.tar.gz`
-5. `ya upload python{PYTHON_VERSION}_windows.tar.gz -d "Windows x86_64 python{PYTHON_VERSION} installation" --do-not-remove` 
+5. `ya upload python{PYTHON_VERSION}_windows.tar.gz -d "Windows x86_64 python{PYTHON_VERSION} installation" --do-not-remove`
 
 ## Добавляем бандлы системного питона в сборку
 

@@ -50,7 +50,7 @@ DebugLoc DebugLoc::getFnDebugLoc() const {
   // FIXME: Add a method on \a DILocation that does this work.
   const MDNode *Scope = getInlinedAtScope();
   if (auto *SP = getDISubprogram(Scope))
-    return DILocation::get(SP->getContext(), SP->getScopeLine(), 0, SP); 
+    return DILocation::get(SP->getContext(), SP->getScopeLine(), 0, SP);
 
   return DebugLoc();
 }
@@ -70,7 +70,7 @@ void DebugLoc::setImplicitCode(bool ImplicitCode) {
 
 DebugLoc DebugLoc::appendInlinedAt(const DebugLoc &DL, DILocation *InlinedAt,
                                    LLVMContext &Ctx,
-                                   DenseMap<const MDNode *, MDNode *> &Cache) { 
+                                   DenseMap<const MDNode *, MDNode *> &Cache) {
   SmallVector<DILocation *, 3> InlinedAtLocations;
   DILocation *Last = InlinedAt;
   DILocation *CurInlinedAt = DL;

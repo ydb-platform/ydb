@@ -1,7 +1,7 @@
 
 /* Copyright 1998 by the Massachusetts Institute of Technology.
  * Copyright 2005 Dominick Meglio
- * Copyright (C) 2019 by Andrew Selivanov 
+ * Copyright (C) 2019 by Andrew Selivanov
  *
  * Permission to use, copy, modify, and distribute this
  * software and its documentation for any purpose and without
@@ -53,165 +53,165 @@ int ares_parse_aaaa_reply(const unsigned char *abuf, int alen,
                           struct hostent **host, struct ares_addr6ttl *addrttls,
                           int *naddrttls)
 {
-  struct ares_addrinfo ai; 
-  struct ares_addrinfo_node *next; 
-  struct ares_addrinfo_cname *next_cname; 
-  char **aliases = NULL; 
-  char *question_hostname = NULL; 
-  struct hostent *hostent = NULL; 
-  struct ares_in6_addr *addrs = NULL; 
-  int naliases = 0, naddrs = 0, alias = 0, i; 
-  int cname_ttl = INT_MAX; 
-  int status; 
+  struct ares_addrinfo ai;
+  struct ares_addrinfo_node *next;
+  struct ares_addrinfo_cname *next_cname;
+  char **aliases = NULL;
+  char *question_hostname = NULL;
+  struct hostent *hostent = NULL;
+  struct ares_in6_addr *addrs = NULL;
+  int naliases = 0, naddrs = 0, alias = 0, i;
+  int cname_ttl = INT_MAX;
+  int status;
 
-  memset(&ai, 0, sizeof(ai)); 
+  memset(&ai, 0, sizeof(ai));
 
-  status = ares__parse_into_addrinfo2(abuf, alen, &question_hostname, &ai); 
-  if (status != ARES_SUCCESS) 
-    { 
-      ares_free(question_hostname); 
-
-      if (naddrttls) 
-        { 
-          *naddrttls = 0; 
-        } 
-
-      return status; 
-    } 
- 
-  hostent = ares_malloc(sizeof(struct hostent)); 
-  if (!hostent) 
+  status = ares__parse_into_addrinfo2(abuf, alen, &question_hostname, &ai);
+  if (status != ARES_SUCCESS)
     {
-      goto enomem; 
-    }
+      ares_free(question_hostname);
 
-  next = ai.nodes; 
-  while (next) 
-    {
-      if(next->ai_family == AF_INET6) 
+      if (naddrttls)
         {
-          ++naddrs; 
+          *naddrttls = 0;
         }
-      next = next->ai_next; 
-    }
- 
-  next_cname = ai.cnames; 
-  while (next_cname) 
-    {
-      if(next_cname->alias) 
-        ++naliases; 
-      next_cname = next_cname->next; 
+
+      return status;
     }
 
-  aliases = ares_malloc((naliases + 1) * sizeof(char *)); 
-  if (!aliases) 
+  hostent = ares_malloc(sizeof(struct hostent));
+  if (!hostent)
     {
-      goto enomem; 
-    } 
+      goto enomem;
+    }
 
-  if (naliases) 
-    { 
-      next_cname = ai.cnames; 
-      while (next_cname) 
+  next = ai.nodes;
+  while (next)
+    {
+      if(next->ai_family == AF_INET6)
         {
-          if(next_cname->alias) 
-            aliases[alias++] = strdup(next_cname->alias); 
-          if(next_cname->ttl < cname_ttl) 
-            cname_ttl = next_cname->ttl; 
-          next_cname = next_cname->next; 
+          ++naddrs;
         }
-    } 
-
-  aliases[alias] = NULL; 
-
-  hostent->h_addr_list = ares_malloc((naddrs + 1) * sizeof(char *)); 
-  if (!hostent->h_addr_list) 
-    { 
-      goto enomem; 
-    } 
-
-  for (i = 0; i < naddrs + 1; ++i) 
-    { 
-      hostent->h_addr_list[i] = NULL; 
-    } 
-
-  if (ai.cnames) 
-    { 
-      hostent->h_name = strdup(ai.cnames->name); 
-      ares_free(question_hostname); 
+      next = next->ai_next;
     }
-  else 
-    { 
-      hostent->h_name = question_hostname; 
-    } 
 
-  hostent->h_aliases = aliases; 
-  hostent->h_addrtype = AF_INET6; 
-  hostent->h_length = sizeof(struct ares_in6_addr); 
- 
-  if (naddrs) 
+  next_cname = ai.cnames;
+  while (next_cname)
     {
-      addrs = ares_malloc(naddrs * sizeof(struct ares_in6_addr)); 
-      if (!addrs) 
+      if(next_cname->alias)
+        ++naliases;
+      next_cname = next_cname->next;
+    }
+
+  aliases = ares_malloc((naliases + 1) * sizeof(char *));
+  if (!aliases)
+    {
+      goto enomem;
+    }
+
+  if (naliases)
+    {
+      next_cname = ai.cnames;
+      while (next_cname)
         {
-          goto enomem; 
+          if(next_cname->alias)
+            aliases[alias++] = strdup(next_cname->alias);
+          if(next_cname->ttl < cname_ttl)
+            cname_ttl = next_cname->ttl;
+          next_cname = next_cname->next;
         }
- 
-      i = 0; 
-      next = ai.nodes; 
-      while (next) 
+    }
+
+  aliases[alias] = NULL;
+
+  hostent->h_addr_list = ares_malloc((naddrs + 1) * sizeof(char *));
+  if (!hostent->h_addr_list)
+    {
+      goto enomem;
+    }
+
+  for (i = 0; i < naddrs + 1; ++i)
+    {
+      hostent->h_addr_list[i] = NULL;
+    }
+
+  if (ai.cnames)
+    {
+      hostent->h_name = strdup(ai.cnames->name);
+      ares_free(question_hostname);
+    }
+  else
+    {
+      hostent->h_name = question_hostname;
+    }
+
+  hostent->h_aliases = aliases;
+  hostent->h_addrtype = AF_INET6;
+  hostent->h_length = sizeof(struct ares_in6_addr);
+
+  if (naddrs)
+    {
+      addrs = ares_malloc(naddrs * sizeof(struct ares_in6_addr));
+      if (!addrs)
         {
-          if(next->ai_family == AF_INET6) 
+          goto enomem;
+        }
+
+      i = 0;
+      next = ai.nodes;
+      while (next)
+        {
+          if(next->ai_family == AF_INET6)
             {
-              hostent->h_addr_list[i] = (char*)&addrs[i]; 
-              memcpy(hostent->h_addr_list[i], 
-                     &(CARES_INADDR_CAST(struct sockaddr_in6 *, next->ai_addr)->sin6_addr), 
-                     sizeof(struct ares_in6_addr)); 
-              if (naddrttls && i < *naddrttls) 
+              hostent->h_addr_list[i] = (char*)&addrs[i];
+              memcpy(hostent->h_addr_list[i],
+                     &(CARES_INADDR_CAST(struct sockaddr_in6 *, next->ai_addr)->sin6_addr),
+                     sizeof(struct ares_in6_addr));
+              if (naddrttls && i < *naddrttls)
                 {
-                    if(next->ai_ttl > cname_ttl) 
-                      addrttls[i].ttl = cname_ttl; 
-                    else 
-                      addrttls[i].ttl = next->ai_ttl; 
- 
-                    memcpy(&addrttls[i].ip6addr, 
-                           &(CARES_INADDR_CAST(struct sockaddr_in6 *, next->ai_addr)->sin6_addr), 
-                           sizeof(struct ares_in6_addr)); 
+                    if(next->ai_ttl > cname_ttl)
+                      addrttls[i].ttl = cname_ttl;
+                    else
+                      addrttls[i].ttl = next->ai_ttl;
+
+                    memcpy(&addrttls[i].ip6addr,
+                           &(CARES_INADDR_CAST(struct sockaddr_in6 *, next->ai_addr)->sin6_addr),
+                           sizeof(struct ares_in6_addr));
                 }
-              ++i; 
+              ++i;
             }
-          next = next->ai_next; 
+          next = next->ai_next;
         }
- 
-      if (i == 0) 
-        { 
-          ares_free(addrs); 
-        } 
+
+      if (i == 0)
+        {
+          ares_free(addrs);
+        }
     }
- 
-  if (host) 
+
+  if (host)
     {
-      *host = hostent; 
+      *host = hostent;
     }
-  else 
-    { 
-      ares_free_hostent(hostent); 
-    } 
- 
-  if (naddrttls) 
-    { 
-      *naddrttls = naddrs; 
-    } 
- 
-  ares__freeaddrinfo_cnames(ai.cnames); 
-  ares__freeaddrinfo_nodes(ai.nodes); 
-  return ARES_SUCCESS; 
- 
-enomem: 
-  ares_free(aliases); 
-  ares_free(hostent); 
-  ares__freeaddrinfo_cnames(ai.cnames); 
-  ares__freeaddrinfo_nodes(ai.nodes); 
-  ares_free(question_hostname); 
-  return ARES_ENOMEM; 
+  else
+    {
+      ares_free_hostent(hostent);
+    }
+
+  if (naddrttls)
+    {
+      *naddrttls = naddrs;
+    }
+
+  ares__freeaddrinfo_cnames(ai.cnames);
+  ares__freeaddrinfo_nodes(ai.nodes);
+  return ARES_SUCCESS;
+
+enomem:
+  ares_free(aliases);
+  ares_free(hostent);
+  ares__freeaddrinfo_cnames(ai.cnames);
+  ares__freeaddrinfo_nodes(ai.nodes);
+  ares_free(question_hostname);
+  return ARES_ENOMEM;
 }

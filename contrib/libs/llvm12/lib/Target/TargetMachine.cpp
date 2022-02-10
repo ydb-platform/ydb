@@ -93,30 +93,30 @@ static TLSModel::Model getSelectedTLSModel(const GlobalValue *GV) {
 
 bool TargetMachine::shouldAssumeDSOLocal(const Module &M,
                                          const GlobalValue *GV) const {
-  const Triple &TT = getTargetTriple(); 
-  Reloc::Model RM = getRelocationModel(); 
+  const Triple &TT = getTargetTriple();
+  Reloc::Model RM = getRelocationModel();
 
   // According to the llvm language reference, we should be able to
   // just return false in here if we have a GV, as we know it is
   // dso_preemptable.  At this point in time, the various IR producers
   // have not been transitioned to always produce a dso_local when it
   // is possible to do so.
-  // In the case of ExternalSymbolSDNode, GV is null and we should just return 
-  // false. However, COFF currently relies on this to be true 
-  // 
+  // In the case of ExternalSymbolSDNode, GV is null and we should just return
+  // false. However, COFF currently relies on this to be true
+  //
   // As a result we still have some logic in here to improve the quality of the
   // generated code.
   // FIXME: Add a module level metadata for whether intrinsics should be assumed
   // local.
-  if (!GV) 
-    return TT.isOSBinFormatCOFF(); 
+  if (!GV)
+    return TT.isOSBinFormatCOFF();
 
-  // If the IR producer requested that this GV be treated as dso local, obey. 
-  if (GV->isDSOLocal()) 
-    return true; 
+  // If the IR producer requested that this GV be treated as dso local, obey.
+  if (GV->isDSOLocal())
+    return true;
 
   // DLLImport explicitly marks the GV as external.
-  if (GV->hasDLLImportStorageClass()) 
+  if (GV->hasDLLImportStorageClass())
     return false;
 
   // On MinGW, variables that haven't been declared with DLLImport may still
@@ -124,14 +124,14 @@ bool TargetMachine::shouldAssumeDSOLocal(const Module &M,
   // don't assume the variables to be DSO local unless we actually know
   // that for sure. This only has to be done for variables; for functions
   // the linker can insert thunks for calling functions from another DLL.
-  if (TT.isWindowsGNUEnvironment() && TT.isOSBinFormatCOFF() && 
+  if (TT.isWindowsGNUEnvironment() && TT.isOSBinFormatCOFF() &&
       GV->isDeclarationForLinker() && isa<GlobalVariable>(GV))
     return false;
 
   // On COFF, don't mark 'extern_weak' symbols as DSO local. If these symbols
   // remain unresolved in the link, they can be resolved to zero, which is
   // outside the current DSO.
-  if (TT.isOSBinFormatCOFF() && GV->hasExternalWeakLinkage()) 
+  if (TT.isOSBinFormatCOFF() && GV->hasExternalWeakLinkage())
     return false;
 
   // Every other GV is local on COFF.
@@ -146,7 +146,7 @@ bool TargetMachine::shouldAssumeDSOLocal(const Module &M,
   if (TT.isOSBinFormatMachO()) {
     if (RM == Reloc::Static)
       return true;
-    return GV->isStrongDefinitionForLinker(); 
+    return GV->isStrongDefinitionForLinker();
   }
 
   // Due to the AIX linkage model, any global with default visibility is
@@ -233,12 +233,12 @@ TargetIRAnalysis TargetMachine::getTargetIRAnalysis() {
   return TargetIRAnalysis(
       [this](const Function &F) { return this->getTargetTransformInfo(F); });
 }
- 
-std::pair<int, int> TargetMachine::parseBinutilsVersion(StringRef Version) { 
-  if (Version == "none") 
-    return {INT_MAX, INT_MAX}; // Make binutilsIsAtLeast() return true. 
-  std::pair<int, int> Ret; 
-  if (!Version.consumeInteger(10, Ret.first) && Version.consume_front(".")) 
-    Version.consumeInteger(10, Ret.second); 
-  return Ret; 
-} 
+
+std::pair<int, int> TargetMachine::parseBinutilsVersion(StringRef Version) {
+  if (Version == "none")
+    return {INT_MAX, INT_MAX}; // Make binutilsIsAtLeast() return true.
+  std::pair<int, int> Ret;
+  if (!Version.consumeInteger(10, Ret.first) && Version.consume_front("."))
+    Version.consumeInteger(10, Ret.second);
+  return Ret;
+}

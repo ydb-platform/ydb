@@ -142,7 +142,7 @@ static void MarkBlocksLiveIn(BasicBlock *BB,
 /// instruction with those returned by the personality function.
 void SjLjEHPrepare::substituteLPadValues(LandingPadInst *LPI, Value *ExnVal,
                                          Value *SelVal) {
-  SmallVector<Value *, 8> UseWorkList(LPI->users()); 
+  SmallVector<Value *, 8> UseWorkList(LPI->users());
   while (!UseWorkList.empty()) {
     Value *Val = UseWorkList.pop_back_val();
     auto *EVI = dyn_cast<ExtractValueInst>(Val);

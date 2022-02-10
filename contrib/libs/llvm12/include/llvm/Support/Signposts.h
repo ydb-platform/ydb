@@ -24,8 +24,8 @@
 #ifndef LLVM_SUPPORT_SIGNPOSTS_H
 #define LLVM_SUPPORT_SIGNPOSTS_H
 
-#include "llvm/ADT/StringRef.h" 
- 
+#include "llvm/ADT/StringRef.h"
+
 namespace llvm {
 class SignpostEmitterImpl;
 
@@ -40,10 +40,10 @@ public:
 
   bool isEnabled() const;
 
-  /// Begin a signposted interval for a given object. 
-  void startInterval(const void *O, StringRef Name); 
-  /// End a signposted interval for a given object. 
-  void endInterval(const void *O, StringRef Name); 
+  /// Begin a signposted interval for a given object.
+  void startInterval(const void *O, StringRef Name);
+  /// End a signposted interval for a given object.
+  void endInterval(const void *O, StringRef Name);
 };
 
 } // end namespace llvm

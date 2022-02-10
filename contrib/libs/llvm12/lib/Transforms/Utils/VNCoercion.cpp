@@ -17,7 +17,7 @@ static bool isFirstClassAggregateOrScalableType(Type *Ty) {
 bool canCoerceMustAliasedValueToLoad(Value *StoredVal, Type *LoadTy,
                                      const DataLayout &DL) {
   Type *StoredTy = StoredVal->getType();
- 
+
   if (StoredTy == LoadTy)
     return true;
 
@@ -37,29 +37,29 @@ bool canCoerceMustAliasedValueToLoad(Value *StoredVal, Type *LoadTy,
   if (StoreSize < DL.getTypeSizeInBits(LoadTy).getFixedSize())
     return false;
 
-  bool StoredNI = DL.isNonIntegralPointerType(StoredTy->getScalarType()); 
-  bool LoadNI = DL.isNonIntegralPointerType(LoadTy->getScalarType()); 
+  bool StoredNI = DL.isNonIntegralPointerType(StoredTy->getScalarType());
+  bool LoadNI = DL.isNonIntegralPointerType(LoadTy->getScalarType());
   // Don't coerce non-integral pointers to integers or vice versa.
-  if (StoredNI != LoadNI) { 
+  if (StoredNI != LoadNI) {
     // As a special case, allow coercion of memset used to initialize
     // an array w/null.  Despite non-integral pointers not generally having a
     // specific bit pattern, we do assume null is zero.
     if (auto *CI = dyn_cast<Constant>(StoredVal))
       return CI->isNullValue();
     return false;
-  } else if (StoredNI && LoadNI && 
-             StoredTy->getPointerAddressSpace() != 
-                 LoadTy->getPointerAddressSpace()) { 
-    return false; 
+  } else if (StoredNI && LoadNI &&
+             StoredTy->getPointerAddressSpace() !=
+                 LoadTy->getPointerAddressSpace()) {
+    return false;
   }
- 
- 
-  // The implementation below uses inttoptr for vectors of unequal size; we 
-  // can't allow this for non integral pointers. We could teach it to extract 
-  // exact subvectors if desired.  
-  if (StoredNI && StoreSize != DL.getTypeSizeInBits(LoadTy).getFixedSize()) 
-    return false; 
- 
+
+
+  // The implementation below uses inttoptr for vectors of unequal size; we
+  // can't allow this for non integral pointers. We could teach it to extract
+  // exact subvectors if desired. 
+  if (StoredNI && StoreSize != DL.getTypeSizeInBits(LoadTy).getFixedSize())
+    return false;
+
   return true;
 }
 
@@ -236,8 +236,8 @@ int analyzeLoadFromClobberingStore(Type *LoadTy, Value *LoadPtr,
   if (isFirstClassAggregateOrScalableType(StoredVal->getType()))
     return -1;
 
-  if (!canCoerceMustAliasedValueToLoad(StoredVal, LoadTy, DL)) 
-    return -1; 
+  if (!canCoerceMustAliasedValueToLoad(StoredVal, LoadTy, DL))
+    return -1;
 
   Value *StorePtr = DepSI->getPointerOperand();
   uint64_t StoreSize =
@@ -340,7 +340,7 @@ int analyzeLoadFromClobberingLoad(Type *LoadTy, Value *LoadPtr, LoadInst *DepLI,
   if (DepLI->getType()->isStructTy() || DepLI->getType()->isArrayTy())
     return -1;
 
-  if (!canCoerceMustAliasedValueToLoad(DepLI, LoadTy, DL)) 
+  if (!canCoerceMustAliasedValueToLoad(DepLI, LoadTy, DL))
     return -1;
 
   Value *DepPtr = DepLI->getPointerOperand();
@@ -398,7 +398,7 @@ int analyzeLoadFromClobberingMemInst(Type *LoadTy, Value *LoadPtr,
   if (!Src)
     return -1;
 
-  GlobalVariable *GV = dyn_cast<GlobalVariable>(getUnderlyingObject(Src)); 
+  GlobalVariable *GV = dyn_cast<GlobalVariable>(getUnderlyingObject(Src));
   if (!GV || !GV->isConstant() || !GV->hasDefinitiveInitializer())
     return -1;
 

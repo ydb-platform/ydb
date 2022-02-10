@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
-from ._common import NotAValue 
+from ._common import NotAValue
 
 import calendar
 from datetime import datetime, date, timedelta
 import unittest
 
-import pytest 
- 
+import pytest
+
 from dateutil.relativedelta import relativedelta, MO, TU, WE, FR, SU
 
 
-class RelativeDeltaTest(unittest.TestCase): 
+class RelativeDeltaTest(unittest.TestCase):
     now = datetime(2003, 9, 17, 20, 54, 47, 282310)
     today = date(2003, 9, 17)
 
@@ -119,30 +119,30 @@ class RelativeDeltaTest(unittest.TestCase):
         self.assertEqual(self.today+relativedelta(day=31, weekday=FR(-1)),
                          date(2003, 9, 26))
 
-    def testLastDayOfFebruary(self): 
-        self.assertEqual(date(2021, 2, 1) + relativedelta(day=31), 
-                         date(2021, 2, 28)) 
- 
-    def testLastDayOfFebruaryLeapYear(self): 
-        self.assertEqual(date(2020, 2, 1) + relativedelta(day=31), 
-                         date(2020, 2, 29)) 
- 
+    def testLastDayOfFebruary(self):
+        self.assertEqual(date(2021, 2, 1) + relativedelta(day=31),
+                         date(2021, 2, 28))
+
+    def testLastDayOfFebruaryLeapYear(self):
+        self.assertEqual(date(2020, 2, 1) + relativedelta(day=31),
+                         date(2020, 2, 29))
+
     def testNextWednesdayIsToday(self):
         self.assertEqual(self.today+relativedelta(weekday=WE),
                          date(2003, 9, 17))
 
-    def testNextWednesdayNotToday(self): 
+    def testNextWednesdayNotToday(self):
         self.assertEqual(self.today+relativedelta(days=+1, weekday=WE),
                          date(2003, 9, 24))
 
-    def testAddMoreThan12Months(self): 
-        self.assertEqual(date(2003, 12, 1) + relativedelta(months=+13), 
-                         date(2005, 1, 1)) 
- 
-    def testAddNegativeMonths(self): 
-        self.assertEqual(date(2003, 1, 1) + relativedelta(months=-2), 
-                         date(2002, 11, 1)) 
- 
+    def testAddMoreThan12Months(self):
+        self.assertEqual(date(2003, 12, 1) + relativedelta(months=+13),
+                         date(2005, 1, 1))
+
+    def testAddNegativeMonths(self):
+        self.assertEqual(date(2003, 1, 1) + relativedelta(months=-2),
+                         date(2002, 11, 1))
+
     def test15thISOYearWeek(self):
         self.assertEqual(date(2003, 1, 1) +
                          relativedelta(day=4, weeks=+14, weekday=MO(-1)),
@@ -368,38 +368,38 @@ class RelativeDeltaTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             relativedelta(months=1.5)
 
-    def testRelativeDeltaInvalidDatetimeObject(self): 
-        with self.assertRaises(TypeError): 
-            relativedelta(dt1='2018-01-01', dt2='2018-01-02') 
- 
-        with self.assertRaises(TypeError): 
-            relativedelta(dt1=datetime(2018, 1, 1), dt2='2018-01-02') 
- 
-        with self.assertRaises(TypeError): 
-            relativedelta(dt1='2018-01-01', dt2=datetime(2018, 1, 2)) 
- 
+    def testRelativeDeltaInvalidDatetimeObject(self):
+        with self.assertRaises(TypeError):
+            relativedelta(dt1='2018-01-01', dt2='2018-01-02')
+
+        with self.assertRaises(TypeError):
+            relativedelta(dt1=datetime(2018, 1, 1), dt2='2018-01-02')
+
+        with self.assertRaises(TypeError):
+            relativedelta(dt1='2018-01-01', dt2=datetime(2018, 1, 2))
+
     def testRelativeDeltaFractionalAbsolutes(self):
         # Fractional absolute values will soon be unsupported,
         # check for the deprecation warning.
-        with pytest.warns(DeprecationWarning): 
+        with pytest.warns(DeprecationWarning):
             relativedelta(year=2.86)
 
-        with pytest.warns(DeprecationWarning): 
+        with pytest.warns(DeprecationWarning):
             relativedelta(month=1.29)
 
-        with pytest.warns(DeprecationWarning): 
+        with pytest.warns(DeprecationWarning):
             relativedelta(day=0.44)
 
-        with pytest.warns(DeprecationWarning): 
+        with pytest.warns(DeprecationWarning):
             relativedelta(hour=23.98)
 
-        with pytest.warns(DeprecationWarning): 
+        with pytest.warns(DeprecationWarning):
             relativedelta(minute=45.21)
 
-        with pytest.warns(DeprecationWarning): 
+        with pytest.warns(DeprecationWarning):
             relativedelta(second=13.2)
 
-        with pytest.warns(DeprecationWarning): 
+        with pytest.warns(DeprecationWarning):
             relativedelta(microsecond=157221.93)
 
     def testRelativeDeltaFractionalRepr(self):
@@ -484,7 +484,7 @@ class RelativeDeltaTest(unittest.TestCase):
 
         self.assertEqual(rd1.normalized(), relativedelta(days=2, hours=18))
 
-        # Equivalent to (days=1, hours=11, minutes=31, seconds=12) 
+        # Equivalent to (days=1, hours=11, minutes=31, seconds=12)
         rd2 = relativedelta(days=1.48)
 
         self.assertEqual(rd2.normalized(),

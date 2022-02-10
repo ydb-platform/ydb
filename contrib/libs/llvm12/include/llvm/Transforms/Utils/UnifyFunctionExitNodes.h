@@ -14,24 +14,24 @@
 //===----------------------------------------------------------------------===//
 //
 // This pass is used to ensure that functions have at most one return and one
-// unreachable instruction in them. 
+// unreachable instruction in them.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_TRANSFORMS_UTILS_UNIFYFUNCTIONEXITNODES_H
 #define LLVM_TRANSFORMS_UTILS_UNIFYFUNCTIONEXITNODES_H
 
-#include "llvm/IR/PassManager.h" 
+#include "llvm/IR/PassManager.h"
 #include "llvm/Pass.h"
 
 namespace llvm {
 
 class BasicBlock;
 
-class UnifyFunctionExitNodesLegacyPass : public FunctionPass { 
+class UnifyFunctionExitNodesLegacyPass : public FunctionPass {
 public:
   static char ID; // Pass identification, replacement for typeid
-  UnifyFunctionExitNodesLegacyPass(); 
+  UnifyFunctionExitNodesLegacyPass();
 
   // We can preserve non-critical-edgeness when we unify function exit nodes
   void getAnalysisUsage(AnalysisUsage &AU) const override;
@@ -41,12 +41,12 @@ public:
 
 Pass *createUnifyFunctionExitNodesPass();
 
-class UnifyFunctionExitNodesPass 
-    : public PassInfoMixin<UnifyFunctionExitNodesPass> { 
-public: 
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM); 
-}; 
- 
+class UnifyFunctionExitNodesPass
+    : public PassInfoMixin<UnifyFunctionExitNodesPass> {
+public:
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+};
+
 } // end namespace llvm
 
 #endif // LLVM_TRANSFORMS_UTILS_UNIFYFUNCTIONEXITNODES_H

@@ -106,14 +106,14 @@ class config(Command):
 
     def _gen_temp_sourcefile(self, body, headers, lang):
         filename = "_configtest" + LANG_EXT[lang]
-        with open(filename, "w") as file: 
-            if headers: 
-                for header in headers: 
-                    file.write("#include <%s>\n" % header) 
-                file.write("\n") 
-            file.write(body) 
-            if body[-1] != "\n": 
-                file.write("\n") 
+        with open(filename, "w") as file:
+            if headers:
+                for header in headers:
+                    file.write("#include <%s>\n" % header)
+                file.write("\n")
+            file.write(body)
+            if body[-1] != "\n":
+                file.write("\n")
         return filename
 
     def _preprocess(self, body, headers, include_dirs, lang):
@@ -202,15 +202,15 @@ class config(Command):
         if isinstance(pattern, str):
             pattern = re.compile(pattern)
 
-        with open(out) as file: 
-            match = False 
-            while True: 
-                line = file.readline() 
-                if line == '': 
-                    break 
-                if pattern.search(line): 
-                    match = True 
-                    break 
+        with open(out) as file:
+            match = False
+            while True:
+                line = file.readline()
+                if line == '':
+                    break
+                if pattern.search(line):
+                    match = True
+                    break
 
         self._clean()
         return match

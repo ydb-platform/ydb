@@ -58,7 +58,7 @@ public:
   /// For convenience, finishedChangingAllUsesOfReg() will report the completion
   /// of the changes. The use list may change between this call and
   /// finishedChangingAllUsesOfReg().
-  void changingAllUsesOfReg(const MachineRegisterInfo &MRI, Register Reg); 
+  void changingAllUsesOfReg(const MachineRegisterInfo &MRI, Register Reg);
   /// All instructions reported as changing by changingAllUsesOfReg() have
   /// finished being changed.
   void finishedChangingAllUsesOfReg();

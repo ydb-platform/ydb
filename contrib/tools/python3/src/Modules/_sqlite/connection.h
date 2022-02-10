@@ -23,7 +23,7 @@
 
 #ifndef PYSQLITE_CONNECTION_H
 #define PYSQLITE_CONNECTION_H
-#define PY_SSIZE_T_CLEAN 
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 #include "pythread.h"
 #include "structmember.h"
@@ -85,10 +85,10 @@ typedef struct
      */
     PyObject* text_factory;
 
-    /* remember references to object used in trace_callback/progress_handler/authorizer_cb */ 
-    PyObject* function_pinboard_trace_callback; 
-    PyObject* function_pinboard_progress_handler; 
-    PyObject* function_pinboard_authorizer_cb; 
+    /* remember references to object used in trace_callback/progress_handler/authorizer_cb */
+    PyObject* function_pinboard_trace_callback;
+    PyObject* function_pinboard_progress_handler;
+    PyObject* function_pinboard_authorizer_cb;
 
     /* a dictionary of registered collation name => collation callable mappings */
     PyObject* collations;

@@ -27,7 +27,7 @@ from .enums import DEFAULT_BUFFER, SEARCH_BUFFER, EditingMode
 from .filters import IsDone, HasFocus, RendererHeightIsKnown, to_simple_filter, to_cli_filter, Condition
 from .history import InMemoryHistory
 from .interface import CommandLineInterface, Application, AbortAction
-from .key_binding.defaults import load_key_bindings_for_prompt 
+from .key_binding.defaults import load_key_bindings_for_prompt
 from .key_binding.registry import Registry
 from .keys import Keys
 from .layout import Window, HSplit, FloatContainer, Float
@@ -77,10 +77,10 @@ __all__ = (
     'prompt',
     'prompt_async',
     'create_confirm_application',
-    'run_application', 
+    'run_application',
     'confirm',
     'print_tokens',
-    'clear', 
+    'clear',
 )
 
 
@@ -449,9 +449,9 @@ def create_prompt_application(
         be edited by the user.)
     """
     if key_bindings_registry is None:
-        key_bindings_registry = load_key_bindings_for_prompt( 
+        key_bindings_registry = load_key_bindings_for_prompt(
             enable_system_bindings=enable_system_bindings,
-            enable_open_in_editor=enable_open_in_editor) 
+            enable_open_in_editor=enable_open_in_editor)
 
     # Ensure backwards-compatibility, when `vi_mode` is passed.
     if vi_mode:
@@ -506,7 +506,7 @@ def create_prompt_application(
         mouse_support=mouse_support,
         editing_mode=editing_mode,
         erase_when_done=erase_when_done,
-        reverse_vi_search_direction=True, 
+        reverse_vi_search_direction=True,
         on_abort=on_abort,
         on_exit=on_exit)
 
@@ -594,7 +594,7 @@ def run_application(
         cli.on_stop += stop_refresh_loop
 
     # Replace stdout.
-    patch_context = cli.patch_stdout_context(raw=True) if patch_stdout else DummyContext() 
+    patch_context = cli.patch_stdout_context(raw=True) if patch_stdout else DummyContext()
 
     # Read input and return it.
     if return_asyncio_coroutine:
@@ -610,7 +610,7 @@ def run_application(
             @asyncio.coroutine
             def run():
                 with patch_context:
-                    result = yield from cli.run_async() 
+                    result = yield from cli.run_async()
 
                 if isinstance(result, Document):  # Backwards-compatibility.
                     return result.text
@@ -622,7 +622,7 @@ def run_application(
     else:
         try:
             with patch_context:
-                result = cli.run() 
+                result = cli.run()
 
             if isinstance(result, Document):  # Backwards-compatibility.
                 return result.text
@@ -671,7 +671,7 @@ def confirm(message='Confirm (y or n) '):
     return run_application(app)
 
 
-def print_tokens(tokens, style=None, true_color=False, file=None): 
+def print_tokens(tokens, style=None, true_color=False, file=None):
     """
     Print a list of (Token, text) tuples in the given style to the output.
     E.g.::
@@ -689,13 +689,13 @@ def print_tokens(tokens, style=None, true_color=False, file=None):
     :param tokens: List of ``(Token, text)`` tuples.
     :param style: :class:`.Style` instance for the color scheme.
     :param true_color: When True, use 24bit colors instead of 256 colors.
-    :param file: The output file. This can be `sys.stdout` or `sys.stderr`. 
+    :param file: The output file. This can be `sys.stdout` or `sys.stderr`.
     """
-    if style is None: 
-        style = DEFAULT_STYLE 
+    if style is None:
+        style = DEFAULT_STYLE
     assert isinstance(style, Style)
 
-    output = create_output(true_color=true_color, stdout=file) 
+    output = create_output(true_color=true_color, stdout=file)
     renderer_print_tokens(output, tokens, style)
 
 

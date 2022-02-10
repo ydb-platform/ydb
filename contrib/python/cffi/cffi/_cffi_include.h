@@ -7,50 +7,50 @@
    we can learn about Py_DEBUG from pyconfig.h, but it is unclear if
    the same works for the other two macros.  Py_DEBUG implies them,
    but not the other way around.
- 
-   The implementation is messy (issue #350): on Windows, with _MSC_VER, 
-   we have to define Py_LIMITED_API even before including pyconfig.h. 
-   In that case, we guess what pyconfig.h will do to the macros above, 
-   and check our guess after the #include. 
- 
-   Note that on Windows, with CPython 3.x, you need >= 3.5 and virtualenv 
-   version >= 16.0.0.  With older versions of either, you don't get a 
-   copy of PYTHON3.DLL in the virtualenv.  We can't check the version of 
-   CPython *before* we even include pyconfig.h.  ffi.set_source() puts 
-   a ``#define _CFFI_NO_LIMITED_API'' at the start of this file if it is 
-   running on Windows < 3.5, as an attempt at fixing it, but that's 
-   arguably wrong because it may not be the target version of Python. 
-   Still better than nothing I guess.  As another workaround, you can 
-   remove the definition of Py_LIMITED_API here. 
- 
-   See also 'py_limited_api' in cffi/setuptools_ext.py. 
+
+   The implementation is messy (issue #350): on Windows, with _MSC_VER,
+   we have to define Py_LIMITED_API even before including pyconfig.h.
+   In that case, we guess what pyconfig.h will do to the macros above,
+   and check our guess after the #include.
+
+   Note that on Windows, with CPython 3.x, you need >= 3.5 and virtualenv
+   version >= 16.0.0.  With older versions of either, you don't get a
+   copy of PYTHON3.DLL in the virtualenv.  We can't check the version of
+   CPython *before* we even include pyconfig.h.  ffi.set_source() puts
+   a ``#define _CFFI_NO_LIMITED_API'' at the start of this file if it is
+   running on Windows < 3.5, as an attempt at fixing it, but that's
+   arguably wrong because it may not be the target version of Python.
+   Still better than nothing I guess.  As another workaround, you can
+   remove the definition of Py_LIMITED_API here.
+
+   See also 'py_limited_api' in cffi/setuptools_ext.py.
 */
-#if !defined(_CFFI_USE_EMBEDDING) && !defined(Py_LIMITED_API) 
-#  ifdef _MSC_VER 
-#    if !defined(_DEBUG) && !defined(Py_DEBUG) && !defined(Py_TRACE_REFS) && !defined(Py_REF_DEBUG) && !defined(_CFFI_NO_LIMITED_API) 
-#      define Py_LIMITED_API 
-#    endif 
-#    include <pyconfig.h> 
-     /* sanity-check: Py_LIMITED_API will cause crashes if any of these 
-        are also defined.  Normally, the Python file PC/pyconfig.h does not 
-        cause any of these to be defined, with the exception that _DEBUG 
-        causes Py_DEBUG.  Double-check that. */ 
-#    ifdef Py_LIMITED_API 
-#      if defined(Py_DEBUG) 
-#        error "pyconfig.h unexpectedly defines Py_DEBUG, but Py_LIMITED_API is set" 
-#      endif 
-#      if defined(Py_TRACE_REFS) 
-#        error "pyconfig.h unexpectedly defines Py_TRACE_REFS, but Py_LIMITED_API is set" 
-#      endif 
-#      if defined(Py_REF_DEBUG) 
-#        error "pyconfig.h unexpectedly defines Py_REF_DEBUG, but Py_LIMITED_API is set" 
-#      endif 
-#    endif 
-#  else 
-#    include <pyconfig.h> 
-#    if !defined(Py_DEBUG) && !defined(Py_TRACE_REFS) && !defined(Py_REF_DEBUG) && !defined(_CFFI_NO_LIMITED_API) 
-#      define Py_LIMITED_API 
-#    endif 
+#if !defined(_CFFI_USE_EMBEDDING) && !defined(Py_LIMITED_API)
+#  ifdef _MSC_VER
+#    if !defined(_DEBUG) && !defined(Py_DEBUG) && !defined(Py_TRACE_REFS) && !defined(Py_REF_DEBUG) && !defined(_CFFI_NO_LIMITED_API)
+#      define Py_LIMITED_API
+#    endif
+#    include <pyconfig.h>
+     /* sanity-check: Py_LIMITED_API will cause crashes if any of these
+        are also defined.  Normally, the Python file PC/pyconfig.h does not
+        cause any of these to be defined, with the exception that _DEBUG
+        causes Py_DEBUG.  Double-check that. */
+#    ifdef Py_LIMITED_API
+#      if defined(Py_DEBUG)
+#        error "pyconfig.h unexpectedly defines Py_DEBUG, but Py_LIMITED_API is set"
+#      endif
+#      if defined(Py_TRACE_REFS)
+#        error "pyconfig.h unexpectedly defines Py_TRACE_REFS, but Py_LIMITED_API is set"
+#      endif
+#      if defined(Py_REF_DEBUG)
+#        error "pyconfig.h unexpectedly defines Py_REF_DEBUG, but Py_LIMITED_API is set"
+#      endif
+#    endif
+#  else
+#    include <pyconfig.h>
+#    if !defined(Py_DEBUG) && !defined(Py_TRACE_REFS) && !defined(Py_REF_DEBUG) && !defined(_CFFI_NO_LIMITED_API)
+#      define Py_LIMITED_API
+#    endif
 #  endif
 #endif
 
@@ -134,7 +134,7 @@ extern "C" {
 #define _cffi_from_c_ulong PyLong_FromUnsignedLong
 #define _cffi_from_c_longlong PyLong_FromLongLong
 #define _cffi_from_c_ulonglong PyLong_FromUnsignedLongLong
-#define _cffi_from_c__Bool PyBool_FromLong 
+#define _cffi_from_c__Bool PyBool_FromLong
 
 #define _cffi_to_c_double PyFloat_AsDouble
 #define _cffi_to_c_float PyFloat_AsDouble
@@ -199,9 +199,9 @@ extern "C" {
 #define _cffi_from_c_struct                                              \
     ((PyObject *(*)(char *, struct _cffi_ctypedescr *))_cffi_exports[18])
 #define _cffi_to_c_wchar_t                                               \
-    ((_cffi_wchar_t(*)(PyObject *))_cffi_exports[19]) 
+    ((_cffi_wchar_t(*)(PyObject *))_cffi_exports[19])
 #define _cffi_from_c_wchar_t                                             \
-    ((PyObject *(*)(_cffi_wchar_t))_cffi_exports[20]) 
+    ((PyObject *(*)(_cffi_wchar_t))_cffi_exports[20])
 #define _cffi_to_c_long_double                                           \
     ((long double(*)(PyObject *))_cffi_exports[21])
 #define _cffi_to_c__Bool                                                 \
@@ -214,11 +214,11 @@ extern "C" {
 #define _CFFI_CPIDX  25
 #define _cffi_call_python                                                \
     ((void(*)(struct _cffi_externpy_s *, char *))_cffi_exports[_CFFI_CPIDX])
-#define _cffi_to_c_wchar3216_t                                           \ 
-    ((int(*)(PyObject *))_cffi_exports[26]) 
-#define _cffi_from_c_wchar3216_t                                         \ 
-    ((PyObject *(*)(int))_cffi_exports[27]) 
-#define _CFFI_NUM_EXPORTS 28 
+#define _cffi_to_c_wchar3216_t                                           \
+    ((int(*)(PyObject *))_cffi_exports[26])
+#define _cffi_from_c_wchar3216_t                                         \
+    ((PyObject *(*)(int))_cffi_exports[27])
+#define _CFFI_NUM_EXPORTS 28
 
 struct _cffi_ctypedescr;
 
@@ -259,94 +259,94 @@ static PyObject *_cffi_init(const char *module_name, Py_ssize_t version,
     return NULL;
 }
 
- 
-#ifdef HAVE_WCHAR_H 
-typedef wchar_t _cffi_wchar_t; 
-#else 
-typedef uint16_t _cffi_wchar_t;   /* same random pick as _cffi_backend.c */ 
-#endif 
- 
-_CFFI_UNUSED_FN static uint16_t _cffi_to_c_char16_t(PyObject *o) 
-{ 
-    if (sizeof(_cffi_wchar_t) == 2) 
-        return (uint16_t)_cffi_to_c_wchar_t(o); 
-    else 
-        return (uint16_t)_cffi_to_c_wchar3216_t(o); 
-} 
- 
-_CFFI_UNUSED_FN static PyObject *_cffi_from_c_char16_t(uint16_t x) 
-{ 
-    if (sizeof(_cffi_wchar_t) == 2) 
-        return _cffi_from_c_wchar_t((_cffi_wchar_t)x); 
-    else 
-        return _cffi_from_c_wchar3216_t((int)x); 
-} 
- 
-_CFFI_UNUSED_FN static int _cffi_to_c_char32_t(PyObject *o) 
-{ 
-    if (sizeof(_cffi_wchar_t) == 4) 
-        return (int)_cffi_to_c_wchar_t(o); 
-    else 
-        return (int)_cffi_to_c_wchar3216_t(o); 
-} 
- 
-_CFFI_UNUSED_FN static PyObject *_cffi_from_c_char32_t(unsigned int x) 
-{ 
-    if (sizeof(_cffi_wchar_t) == 4) 
-        return _cffi_from_c_wchar_t((_cffi_wchar_t)x); 
-    else 
-        return _cffi_from_c_wchar3216_t((int)x); 
-} 
- 
-union _cffi_union_alignment_u { 
-    unsigned char m_char; 
-    unsigned short m_short; 
-    unsigned int m_int; 
-    unsigned long m_long; 
-    unsigned long long m_longlong; 
-    float m_float; 
-    double m_double; 
-    long double m_longdouble; 
-}; 
- 
-struct _cffi_freeme_s { 
-    struct _cffi_freeme_s *next; 
-    union _cffi_union_alignment_u alignment; 
-}; 
- 
-_CFFI_UNUSED_FN static int 
-_cffi_convert_array_argument(struct _cffi_ctypedescr *ctptr, PyObject *arg, 
-                             char **output_data, Py_ssize_t datasize, 
-                             struct _cffi_freeme_s **freeme) 
-{ 
-    char *p; 
-    if (datasize < 0) 
-        return -1; 
- 
-    p = *output_data; 
-    if (p == NULL) { 
-        struct _cffi_freeme_s *fp = (struct _cffi_freeme_s *)PyObject_Malloc( 
-            offsetof(struct _cffi_freeme_s, alignment) + (size_t)datasize); 
-        if (fp == NULL) 
-            return -1; 
-        fp->next = *freeme; 
-        *freeme = fp; 
-        p = *output_data = (char *)&fp->alignment; 
-    } 
-    memset((void *)p, 0, (size_t)datasize); 
-    return _cffi_convert_array_from_object(p, ctptr, arg); 
-} 
- 
-_CFFI_UNUSED_FN static void 
-_cffi_free_array_arguments(struct _cffi_freeme_s *freeme) 
-{ 
-    do { 
-        void *p = (void *)freeme; 
-        freeme = freeme->next; 
-        PyObject_Free(p); 
-    } while (freeme != NULL); 
-} 
- 
+
+#ifdef HAVE_WCHAR_H
+typedef wchar_t _cffi_wchar_t;
+#else
+typedef uint16_t _cffi_wchar_t;   /* same random pick as _cffi_backend.c */
+#endif
+
+_CFFI_UNUSED_FN static uint16_t _cffi_to_c_char16_t(PyObject *o)
+{
+    if (sizeof(_cffi_wchar_t) == 2)
+        return (uint16_t)_cffi_to_c_wchar_t(o);
+    else
+        return (uint16_t)_cffi_to_c_wchar3216_t(o);
+}
+
+_CFFI_UNUSED_FN static PyObject *_cffi_from_c_char16_t(uint16_t x)
+{
+    if (sizeof(_cffi_wchar_t) == 2)
+        return _cffi_from_c_wchar_t((_cffi_wchar_t)x);
+    else
+        return _cffi_from_c_wchar3216_t((int)x);
+}
+
+_CFFI_UNUSED_FN static int _cffi_to_c_char32_t(PyObject *o)
+{
+    if (sizeof(_cffi_wchar_t) == 4)
+        return (int)_cffi_to_c_wchar_t(o);
+    else
+        return (int)_cffi_to_c_wchar3216_t(o);
+}
+
+_CFFI_UNUSED_FN static PyObject *_cffi_from_c_char32_t(unsigned int x)
+{
+    if (sizeof(_cffi_wchar_t) == 4)
+        return _cffi_from_c_wchar_t((_cffi_wchar_t)x);
+    else
+        return _cffi_from_c_wchar3216_t((int)x);
+}
+
+union _cffi_union_alignment_u {
+    unsigned char m_char;
+    unsigned short m_short;
+    unsigned int m_int;
+    unsigned long m_long;
+    unsigned long long m_longlong;
+    float m_float;
+    double m_double;
+    long double m_longdouble;
+};
+
+struct _cffi_freeme_s {
+    struct _cffi_freeme_s *next;
+    union _cffi_union_alignment_u alignment;
+};
+
+_CFFI_UNUSED_FN static int
+_cffi_convert_array_argument(struct _cffi_ctypedescr *ctptr, PyObject *arg,
+                             char **output_data, Py_ssize_t datasize,
+                             struct _cffi_freeme_s **freeme)
+{
+    char *p;
+    if (datasize < 0)
+        return -1;
+
+    p = *output_data;
+    if (p == NULL) {
+        struct _cffi_freeme_s *fp = (struct _cffi_freeme_s *)PyObject_Malloc(
+            offsetof(struct _cffi_freeme_s, alignment) + (size_t)datasize);
+        if (fp == NULL)
+            return -1;
+        fp->next = *freeme;
+        *freeme = fp;
+        p = *output_data = (char *)&fp->alignment;
+    }
+    memset((void *)p, 0, (size_t)datasize);
+    return _cffi_convert_array_from_object(p, ctptr, arg);
+}
+
+_CFFI_UNUSED_FN static void
+_cffi_free_array_arguments(struct _cffi_freeme_s *freeme)
+{
+    do {
+        void *p = (void *)freeme;
+        freeme = freeme->next;
+        PyObject_Free(p);
+    } while (freeme != NULL);
+}
+
 /**********  end CPython-specific section  **********/
 #else
 _CFFI_UNUSED_FN

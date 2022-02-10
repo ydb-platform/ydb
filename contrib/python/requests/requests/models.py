@@ -12,7 +12,7 @@ import sys
 
 # Import encoding now, to avoid implicit import later.
 # Implicit import within threads may cause LookupError when standard library is in a ZIP,
-# such as in Embedded Python. See https://github.com/psf/requests/issues/3578. 
+# such as in Embedded Python. See https://github.com/psf/requests/issues/3578.
 import encodings.idna
 
 from urllib3.fields import RequestField
@@ -29,18 +29,18 @@ from .auth import HTTPBasicAuth
 from .cookies import cookiejar_from_dict, get_cookie_header, _copy_cookie_jar
 from .exceptions import (
     HTTPError, MissingSchema, InvalidURL, ChunkedEncodingError,
-    ContentDecodingError, ConnectionError, StreamConsumedError, 
-    InvalidJSONError) 
-from .exceptions import JSONDecodeError as RequestsJSONDecodeError 
+    ContentDecodingError, ConnectionError, StreamConsumedError,
+    InvalidJSONError)
+from .exceptions import JSONDecodeError as RequestsJSONDecodeError
 from ._internal_utils import to_native_string, unicode_is_ascii
 from .utils import (
     guess_filename, get_auth_from_url, requote_uri,
     stream_decode_response_unicode, to_key_val_list, parse_header_links,
     iter_slices, guess_json_utf, super_len, check_header_validity)
 from .compat import (
-    Callable, Mapping, 
+    Callable, Mapping,
     cookielib, urlunparse, urlsplit, urlencode, str, bytes,
-    is_py2, chardet, builtin_str, basestring, JSONDecodeError) 
+    is_py2, chardet, builtin_str, basestring, JSONDecodeError)
 from .compat import json as complexjson
 from .status_codes import codes
 
@@ -157,12 +157,12 @@ class RequestEncodingMixin(object):
 
             if isinstance(fp, (str, bytes, bytearray)):
                 fdata = fp
-            elif hasattr(fp, 'read'): 
-                fdata = fp.read() 
-            elif fp is None: 
-                continue 
+            elif hasattr(fp, 'read'):
+                fdata = fp.read()
+            elif fp is None:
+                continue
             else:
-                fdata = fp 
+                fdata = fp
 
             rf = RequestField(name=k, data=fdata, filename=fn, headers=fh)
             rf.make_multipart(content_type=ft)
@@ -180,10 +180,10 @@ class RequestHooksMixin(object):
         if event not in self.hooks:
             raise ValueError('Unsupported event specified, with event name "%s"' % (event))
 
-        if isinstance(hook, Callable): 
+        if isinstance(hook, Callable):
             self.hooks[event].append(hook)
         elif hasattr(hook, '__iter__'):
-            self.hooks[event].extend(h for h in hook if isinstance(h, Callable)) 
+            self.hooks[event].extend(h for h in hook if isinstance(h, Callable))
 
     def deregister_hook(self, event, hook):
         """Deregister a previously registered hook.
@@ -206,13 +206,13 @@ class Request(RequestHooksMixin):
     :param url: URL to send.
     :param headers: dictionary of headers to send.
     :param files: dictionary of {filename: fileobject} files to multipart upload.
-    :param data: the body to attach to the request. If a dictionary or 
-        list of tuples ``[(key, value)]`` is provided, form-encoding will 
-        take place. 
+    :param data: the body to attach to the request. If a dictionary or
+        list of tuples ``[(key, value)]`` is provided, form-encoding will
+        take place.
     :param json: json for the body to attach to the request (if files or data is not specified).
-    :param params: URL parameters to append to the URL. If a dictionary or 
-        list of tuples ``[(key, value)]`` is provided, form-encoding will 
-        take place. 
+    :param params: URL parameters to append to the URL. If a dictionary or
+        list of tuples ``[(key, value)]`` is provided, form-encoding will
+        take place.
     :param auth: Auth handler or (user, pass) tuple.
     :param cookies: dictionary or CookieJar of cookies to attach to this request.
     :param hooks: dictionary of callback hooks, for internal usage.
@@ -220,7 +220,7 @@ class Request(RequestHooksMixin):
     Usage::
 
       >>> import requests
-      >>> req = requests.Request('GET', 'https://httpbin.org/get') 
+      >>> req = requests.Request('GET', 'https://httpbin.org/get')
       >>> req.prepare()
       <PreparedRequest [GET]>
     """
@@ -275,16 +275,16 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):
     """The fully mutable :class:`PreparedRequest <PreparedRequest>` object,
     containing the exact bytes that will be sent to the server.
 
-    Instances are generated from a :class:`Request <Request>` object, and 
-    should not be instantiated manually; doing so may produce undesirable 
-    effects. 
+    Instances are generated from a :class:`Request <Request>` object, and
+    should not be instantiated manually; doing so may produce undesirable
+    effects.
 
     Usage::
 
       >>> import requests
-      >>> req = requests.Request('GET', 'https://httpbin.org/get') 
+      >>> req = requests.Request('GET', 'https://httpbin.org/get')
       >>> r = req.prepare()
-      >>> r 
+      >>> r
       <PreparedRequest [GET]>
 
       >>> s = requests.Session()
@@ -363,7 +363,7 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):
         #: We're unable to blindly call unicode/str functions
         #: as this will include the bytestring indicator (b'')
         #: on python 3.x.
-        #: https://github.com/psf/requests/pull/2238 
+        #: https://github.com/psf/requests/pull/2238
         if isinstance(url, bytes):
             url = url.decode('utf8')
         else:
@@ -386,7 +386,7 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):
             raise InvalidURL(*e.args)
 
         if not scheme:
-            error = ("Invalid URL {0!r}: No scheme supplied. Perhaps you meant http://{0}?") 
+            error = ("Invalid URL {0!r}: No scheme supplied. Perhaps you meant http://{0}?")
             error = error.format(to_native_string(url, 'utf8'))
 
             raise MissingSchema(error)
@@ -403,7 +403,7 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):
                 host = self._get_idna_encoded_host(host)
             except UnicodeError:
                 raise InvalidURL('URL has an invalid label.')
-        elif host.startswith((u'*', u'.')): 
+        elif host.startswith((u'*', u'.')):
             raise InvalidURL('URL has an invalid label.')
 
         # Carefully reconstruct the network location
@@ -468,25 +468,25 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):
             # urllib3 requires a bytes-like body. Python 2's json.dumps
             # provides this natively, but Python 3 gives a Unicode string.
             content_type = 'application/json'
- 
-            try: 
-                body = complexjson.dumps(json, allow_nan=False) 
-            except ValueError as ve: 
-                raise InvalidJSONError(ve, request=self) 
- 
+
+            try:
+                body = complexjson.dumps(json, allow_nan=False)
+            except ValueError as ve:
+                raise InvalidJSONError(ve, request=self)
+
             if not isinstance(body, bytes):
                 body = body.encode('utf-8')
 
         is_stream = all([
             hasattr(data, '__iter__'),
-            not isinstance(data, (basestring, list, tuple, Mapping)) 
+            not isinstance(data, (basestring, list, tuple, Mapping))
         ])
 
-        if is_stream: 
-            try: 
-                length = super_len(data) 
-            except (TypeError, AttributeError, UnsupportedOperation): 
-                length = None 
+        if is_stream:
+            try:
+                length = super_len(data)
+            except (TypeError, AttributeError, UnsupportedOperation):
+                length = None
 
             body = data
 
@@ -618,7 +618,7 @@ class Response(object):
 
         #: File-like object representation of response (for advanced usage).
         #: Use of ``raw`` requires that ``stream=True`` be set on the request.
-        #: This requirement does not apply for use internally to Requests. 
+        #: This requirement does not apply for use internally to Requests.
         self.raw = None
 
         #: Final URL location of Response.
@@ -662,7 +662,7 @@ class Response(object):
         if not self._content_consumed:
             self.content
 
-        return {attr: getattr(self, attr, None) for attr in self.__attrs__} 
+        return {attr: getattr(self, attr, None) for attr in self.__attrs__}
 
     def __setstate__(self, state):
         for name, value in state.items():
@@ -701,11 +701,11 @@ class Response(object):
 
     @property
     def ok(self):
-        """Returns True if :attr:`status_code` is less than 400, False if not. 
+        """Returns True if :attr:`status_code` is less than 400, False if not.
 
         This attribute checks if the status code of the response is between
         400 and 600 to see if there was a client error or a server error. If
-        the status code is between 200 and 400, this will return True. This 
+        the status code is between 200 and 400, this will return True. This
         is **not** a check to see if the response code is ``200 OK``.
         """
         try:
@@ -733,7 +733,7 @@ class Response(object):
 
     @property
     def apparent_encoding(self):
-        """The apparent encoding, provided by the charset_normalizer or chardet libraries.""" 
+        """The apparent encoding, provided by the charset_normalizer or chardet libraries."""
         return chardet.detect(self.content)['encoding']
 
     def iter_content(self, chunk_size=1, decode_unicode=False):
@@ -791,7 +791,7 @@ class Response(object):
 
         return chunks
 
-    def iter_lines(self, chunk_size=ITER_CHUNK_SIZE, decode_unicode=False, delimiter=None): 
+    def iter_lines(self, chunk_size=ITER_CHUNK_SIZE, decode_unicode=False, delimiter=None):
         """Iterates over the response data, one line at a time.  When
         stream=True is set on the request, this avoids reading the
         content at once into memory for large responses.
@@ -835,7 +835,7 @@ class Response(object):
             if self.status_code == 0 or self.raw is None:
                 self._content = None
             else:
-                self._content = b''.join(self.iter_content(CONTENT_CHUNK_SIZE)) or b'' 
+                self._content = b''.join(self.iter_content(CONTENT_CHUNK_SIZE)) or b''
 
         self._content_consumed = True
         # don't need to release the connection; that's been handled by urllib3
@@ -847,7 +847,7 @@ class Response(object):
         """Content of the response, in unicode.
 
         If Response.encoding is None, encoding will be guessed using
-        ``charset_normalizer`` or ``chardet``. 
+        ``charset_normalizer`` or ``chardet``.
 
         The encoding of the response content is determined based solely on HTTP
         headers, following RFC 2616 to the letter. If you can take advantage of
@@ -884,14 +884,14 @@ class Response(object):
         r"""Returns the json-encoded content of a response, if any.
 
         :param \*\*kwargs: Optional arguments that ``json.loads`` takes.
-        :raises requests.exceptions.JSONDecodeError: If the response body does not 
-            contain valid json. 
+        :raises requests.exceptions.JSONDecodeError: If the response body does not
+            contain valid json.
         """
 
         if not self.encoding and self.content and len(self.content) > 3:
             # No encoding set. JSON RFC 4627 section 3 states we should expect
             # UTF-8, -16 or -32. Detect which one to use; If the detection or
-            # decoding fails, fall back to `self.text` (using charset_normalizer to make 
+            # decoding fails, fall back to `self.text` (using charset_normalizer to make
             # a best guess).
             encoding = guess_json_utf(self.content)
             if encoding is not None:
@@ -906,16 +906,16 @@ class Response(object):
                     # used.
                     pass
 
-        try: 
-            return complexjson.loads(self.text, **kwargs) 
-        except JSONDecodeError as e: 
-            # Catch JSON-related errors and raise as requests.JSONDecodeError 
-            # This aliases json.JSONDecodeError and simplejson.JSONDecodeError 
-            if is_py2: # e is a ValueError 
-                raise RequestsJSONDecodeError(e.message) 
-            else: 
-                raise RequestsJSONDecodeError(e.msg, e.doc, e.pos) 
- 
+        try:
+            return complexjson.loads(self.text, **kwargs)
+        except JSONDecodeError as e:
+            # Catch JSON-related errors and raise as requests.JSONDecodeError
+            # This aliases json.JSONDecodeError and simplejson.JSONDecodeError
+            if is_py2: # e is a ValueError
+                raise RequestsJSONDecodeError(e.message)
+            else:
+                raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
+
     @property
     def links(self):
         """Returns the parsed header links of the response, if any."""
@@ -935,7 +935,7 @@ class Response(object):
         return l
 
     def raise_for_status(self):
-        """Raises :class:`HTTPError`, if one occurred.""" 
+        """Raises :class:`HTTPError`, if one occurred."""
 
         http_error_msg = ''
         if isinstance(self.reason, bytes):

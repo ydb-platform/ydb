@@ -47,7 +47,7 @@ class Printable;
 class SlotIndexes;
 class StringRef;
 class raw_ostream;
-class LiveIntervals; 
+class LiveIntervals;
 class TargetRegisterClass;
 class TargetRegisterInfo;
 
@@ -182,9 +182,9 @@ private:
   /// is only computed once and is cached.
   mutable MCSymbol *CachedMCSymbol = nullptr;
 
-  /// Marks the end of the basic block. Used during basic block sections to 
-  /// calculate the size of the basic block, or the BB section ending with it. 
-  mutable MCSymbol *CachedEndMCSymbol = nullptr; 
+  /// Marks the end of the basic block. Used during basic block sections to
+  /// calculate the size of the basic block, or the BB section ending with it.
+  mutable MCSymbol *CachedEndMCSymbol = nullptr;
 
   // Intrusive list support
   MachineBasicBlock() = default;
@@ -441,9 +441,9 @@ public:
 
   bool hasEHPadSuccessor() const;
 
-  /// Returns true if this is the entry block of the function. 
-  bool isEntryBlock() const; 
- 
+  /// Returns true if this is the entry block of the function.
+  bool isEntryBlock() const;
+
   /// Returns true if this is the entry block of an EH scope, i.e., the block
   /// that used to have a catchpad or cleanuppad instruction in the LLVM IR.
   bool isEHScopeEntry() const { return IsEHScopeEntry; }
@@ -486,9 +486,9 @@ public:
   /// Sets the section ID for this basic block.
   void setSectionID(MBBSectionID V) { SectionID = V; }
 
-  /// Returns the MCSymbol marking the end of this basic block. 
-  MCSymbol *getEndSymbol() const; 
- 
+  /// Returns the MCSymbol marking the end of this basic block.
+  MCSymbol *getEndSymbol() const;
+
   /// Returns true if this block may have an INLINEASM_BR (overestimate, by
   /// checking if any of the successors are indirect targets of any inlineasm_br
   /// in the function).
@@ -686,17 +686,17 @@ public:
     return !empty() && back().isEHScopeReturn();
   }
 
-  /// Split a basic block into 2 pieces at \p SplitPoint. A new block will be 
-  /// inserted after this block, and all instructions after \p SplitInst moved 
-  /// to it (\p SplitInst will be in the original block). If \p LIS is provided, 
-  /// LiveIntervals will be appropriately updated. \return the newly inserted 
-  /// block. 
-  /// 
-  /// If \p UpdateLiveIns is true, this will ensure the live ins list is 
-  /// accurate, including for physreg uses/defs in the original block. 
-  MachineBasicBlock *splitAt(MachineInstr &SplitInst, bool UpdateLiveIns = true, 
-                             LiveIntervals *LIS = nullptr); 
- 
+  /// Split a basic block into 2 pieces at \p SplitPoint. A new block will be
+  /// inserted after this block, and all instructions after \p SplitInst moved
+  /// to it (\p SplitInst will be in the original block). If \p LIS is provided,
+  /// LiveIntervals will be appropriately updated. \return the newly inserted
+  /// block.
+  ///
+  /// If \p UpdateLiveIns is true, this will ensure the live ins list is
+  /// accurate, including for physreg uses/defs in the original block.
+  MachineBasicBlock *splitAt(MachineInstr &SplitInst, bool UpdateLiveIns = true,
+                             LiveIntervals *LIS = nullptr);
+
   /// Split the critical edge from this block to the given successor block, and
   /// return the newly created block, or null if splitting is not possible.
   ///
@@ -898,14 +898,14 @@ public:
   void print(raw_ostream &OS, ModuleSlotTracker &MST,
              const SlotIndexes * = nullptr, bool IsStandalone = true) const;
 
-  enum PrintNameFlag { 
-    PrintNameIr = (1 << 0), ///< Add IR name where available 
-    PrintNameAttributes = (1 << 1), ///< Print attributes 
-  }; 
- 
-  void printName(raw_ostream &os, unsigned printNameFlags = PrintNameIr, 
-                 ModuleSlotTracker *moduleSlotTracker = nullptr) const; 
- 
+  enum PrintNameFlag {
+    PrintNameIr = (1 << 0), ///< Add IR name where available
+    PrintNameAttributes = (1 << 1), ///< Print attributes
+  };
+
+  void printName(raw_ostream &os, unsigned printNameFlags = PrintNameIr,
+                 ModuleSlotTracker *moduleSlotTracker = nullptr) const;
+
   // Printing method used by LoopInfo.
   void printAsOperand(raw_ostream &OS, bool PrintType = true) const;
 

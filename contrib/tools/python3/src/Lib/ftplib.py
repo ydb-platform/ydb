@@ -75,14 +75,14 @@ class FTP:
     '''An FTP client class.
 
     To create a connection, call the class using these arguments:
-            host, user, passwd, acct, timeout, source_address, encoding 
+            host, user, passwd, acct, timeout, source_address, encoding
 
     The first four arguments are all strings, and have default value ''.
-    The parameter ´timeout´ must be numeric and defaults to None if not 
-    passed, meaning that no timeout will be set on any ftp socket(s). 
+    The parameter ´timeout´ must be numeric and defaults to None if not
+    passed, meaning that no timeout will be set on any ftp socket(s).
     If a timeout is passed, then this is now the default timeout for all ftp
     socket operations for this instance.
-    The last parameter is the encoding of filenames, which defaults to utf-8. 
+    The last parameter is the encoding of filenames, which defaults to utf-8.
 
     Then use self.connect() with optional host and port argument.
 
@@ -102,19 +102,19 @@ class FTP:
     sock = None
     file = None
     welcome = None
-    passiveserver = True 
-    # Disables https://bugs.python.org/issue43285 security if set to True. 
-    trust_server_pasv_ipv4_address = False 
+    passiveserver = True
+    # Disables https://bugs.python.org/issue43285 security if set to True.
+    trust_server_pasv_ipv4_address = False
 
     def __init__(self, host='', user='', passwd='', acct='',
-                 timeout=_GLOBAL_DEFAULT_TIMEOUT, source_address=None, *, 
-                 encoding='utf-8'): 
-        """Initialization method (called by class instantiation). 
-        Initialize host to localhost, port to standard ftp port. 
-        Optional arguments are host (for connect()), 
-        and user, passwd, acct (for login()). 
-        """ 
-        self.encoding = encoding 
+                 timeout=_GLOBAL_DEFAULT_TIMEOUT, source_address=None, *,
+                 encoding='utf-8'):
+        """Initialization method (called by class instantiation).
+        Initialize host to localhost, port to standard ftp port.
+        Optional arguments are host (for connect()),
+        and user, passwd, acct (for login()).
+        """
+        self.encoding = encoding
         self.source_address = source_address
         self.timeout = timeout
         if host:
@@ -150,11 +150,11 @@ class FTP:
             self.port = port
         if timeout != -999:
             self.timeout = timeout
-        if self.timeout is not None and not self.timeout: 
-            raise ValueError('Non-blocking socket (timeout=0) is not supported') 
+        if self.timeout is not None and not self.timeout:
+            raise ValueError('Non-blocking socket (timeout=0) is not supported')
         if source_address is not None:
             self.source_address = source_address
-        sys.audit("ftplib.connect", self, self.host, self.port) 
+        sys.audit("ftplib.connect", self, self.host, self.port)
         self.sock = socket.create_connection((self.host, self.port), self.timeout,
                                              source_address=self.source_address)
         self.af = self.sock.family
@@ -195,7 +195,7 @@ class FTP:
     def putline(self, line):
         if '\r' in line or '\n' in line:
             raise ValueError('an illegal newline character should not be contained')
-        sys.audit("ftplib.sendcmd", self, line) 
+        sys.audit("ftplib.sendcmd", self, line)
         line = line + CRLF
         if self.debugging > 1:
             print('*put*', self.sanitize(line))
@@ -310,7 +310,7 @@ class FTP:
 
     def makeport(self):
         '''Create a new socket and send a PORT command for it.'''
-        sock = socket.create_server(("", 0), family=self.af, backlog=1) 
+        sock = socket.create_server(("", 0), family=self.af, backlog=1)
         port = sock.getsockname()[1] # Get proper port
         host = self.sock.getsockname()[0] # Get proper host
         if self.af == socket.AF_INET:
@@ -322,13 +322,13 @@ class FTP:
         return sock
 
     def makepasv(self):
-        """Internal: Does the PASV or EPSV handshake -> (address, port)""" 
+        """Internal: Does the PASV or EPSV handshake -> (address, port)"""
         if self.af == socket.AF_INET:
-            untrusted_host, port = parse227(self.sendcmd('PASV')) 
-            if self.trust_server_pasv_ipv4_address: 
-                host = untrusted_host 
-            else: 
-                host = self.sock.getpeername()[0] 
+            untrusted_host, port = parse227(self.sendcmd('PASV'))
+            if self.trust_server_pasv_ipv4_address:
+                host = untrusted_host
+            else:
+                host = self.sock.getpeername()[0]
         else:
             host, port = parse229(self.sendcmd('EPSV'), self.sock.getpeername())
         return host, port
@@ -715,10 +715,10 @@ else:
         '''
         ssl_version = ssl.PROTOCOL_TLS_CLIENT
 
-        def __init__(self, host='', user='', passwd='', acct='', 
-                     keyfile=None, certfile=None, context=None, 
-                     timeout=_GLOBAL_DEFAULT_TIMEOUT, source_address=None, *, 
-                     encoding='utf-8'): 
+        def __init__(self, host='', user='', passwd='', acct='',
+                     keyfile=None, certfile=None, context=None,
+                     timeout=_GLOBAL_DEFAULT_TIMEOUT, source_address=None, *,
+                     encoding='utf-8'):
             if context is not None and keyfile is not None:
                 raise ValueError("context and keyfile arguments are mutually "
                                  "exclusive")
@@ -737,13 +737,13 @@ else:
                                                      keyfile=keyfile)
             self.context = context
             self._prot_p = False
-            super().__init__(host, user, passwd, acct, 
-                             timeout, source_address, encoding=encoding) 
+            super().__init__(host, user, passwd, acct,
+                             timeout, source_address, encoding=encoding)
 
         def login(self, user='', passwd='', acct='', secure=True):
             if secure and not isinstance(self.sock, ssl.SSLSocket):
                 self.auth()
-            return super().login(user, passwd, acct) 
+            return super().login(user, passwd, acct)
 
         def auth(self):
             '''Set up secure control connection by using TLS/SSL.'''
@@ -753,7 +753,7 @@ else:
                 resp = self.voidcmd('AUTH TLS')
             else:
                 resp = self.voidcmd('AUTH SSL')
-            self.sock = self.context.wrap_socket(self.sock, server_hostname=self.host) 
+            self.sock = self.context.wrap_socket(self.sock, server_hostname=self.host)
             self.file = self.sock.makefile(mode='r', encoding=self.encoding)
             return resp
 
@@ -790,7 +790,7 @@ else:
         # --- Overridden FTP methods
 
         def ntransfercmd(self, cmd, rest=None):
-            conn, size = super().ntransfercmd(cmd, rest) 
+            conn, size = super().ntransfercmd(cmd, rest)
             if self._prot_p:
                 conn = self.context.wrap_socket(conn,
                                                 server_hostname=self.host)

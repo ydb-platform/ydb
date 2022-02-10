@@ -35,7 +35,7 @@ class TextLexer(Lexer):
     def analyse_text(text):
         return TextLexer.priority
 
- 
+
 _ttype_cache = {}
 
 line_re = re.compile(b'.*?\n')

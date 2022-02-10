@@ -491,7 +491,7 @@ namespace orc {
   WriterId ReaderImpl::getWriterId() const {
     if (footer->has_writer()) {
       uint32_t id = footer->writer();
-      if (id > WriterId::TRINO_WRITER) { 
+      if (id > WriterId::TRINO_WRITER) {
         return WriterId::UNKNOWN_WRITER;
       } else {
 	return static_cast<WriterId>(id);
@@ -508,15 +508,15 @@ namespace orc {
     }
   }
 
-  std::string ReaderImpl::getSoftwareVersion() const { 
-    std::ostringstream buffer; 
-    buffer << writerIdToString(getWriterIdValue()); 
-    if (footer->has_softwareversion()) { 
-      buffer << " " << footer->softwareversion(); 
-    } 
-    return buffer.str(); 
-  } 
- 
+  std::string ReaderImpl::getSoftwareVersion() const {
+    std::ostringstream buffer;
+    buffer << writerIdToString(getWriterIdValue());
+    if (footer->has_softwareversion()) {
+      buffer << " " << footer->softwareversion();
+    }
+    return buffer.str();
+  }
+
   WriterVersion ReaderImpl::getWriterVersion() const {
     if (!contents->postscript->has_writerversion()) {
       return WriterVersion_ORIGINAL;

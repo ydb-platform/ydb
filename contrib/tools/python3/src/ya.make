@@ -10,7 +10,7 @@ PEERDIR(
 
 ADDINCL(
     contrib/tools/python3/src/Include
-    contrib/tools/python3/src/Include/internal 
+    contrib/tools/python3/src/Include/internal
     contrib/tools/python3/src/Modules
     contrib/tools/python3/src/Modules/_decimal/libmpdec
     contrib/tools/python3/src/PC
@@ -36,10 +36,10 @@ ELSEIF (OS_WINDOWS)
         Winmm.lib
     )
 
-    CFLAGS( 
-        -DPY3_DLLNAME="L\"python3\"" 
-    ) 
- 
+    CFLAGS(
+        -DPY3_DLLNAME="L\"python3\""
+    )
+
     DISABLE(MSVC_INLINE_OPTIMIZED)
 ENDIF()
 
@@ -85,9 +85,9 @@ SRCS(
     Objects/floatobject.c
     Objects/frameobject.c
     Objects/funcobject.c
-    Objects/genericaliasobject.c 
+    Objects/genericaliasobject.c
     Objects/genobject.c
-    Objects/interpreteridobject.c 
+    Objects/interpreteridobject.c
     Objects/iterobject.c
     Objects/listobject.c
     Objects/longobject.c
@@ -98,7 +98,7 @@ SRCS(
     Objects/object.c
     Objects/obmalloc.c
     Objects/odictobject.c
-    Objects/picklebufobject.c 
+    Objects/picklebufobject.c
     Objects/rangeobject.c
     Objects/setobject.c
     Objects/sliceobject.c
@@ -115,11 +115,11 @@ SRCS(
     Parser/node.c
     Parser/parser.c
     Parser/parsetok.c
-    Parser/pegen/parse.c 
-    Parser/pegen/parse_string.c 
-    Parser/pegen/peg_api.c 
-    Parser/pegen/pegen.c 
-    Parser/token.c 
+    Parser/pegen/parse.c
+    Parser/pegen/parse_string.c
+    Parser/pegen/peg_api.c
+    Parser/pegen/pegen.c
+    Parser/token.c
     Parser/tokenizer.c
     Python/Python-ast.c
     Python/_warnings.c
@@ -149,17 +149,17 @@ SRCS(
     Python/getversion.c
     Python/graminit.c
     Python/hamt.c
-    Python/hashtable.c 
+    Python/hashtable.c
     Python/import.c
     Python/importdl.c
-    Python/initconfig.c 
+    Python/initconfig.c
     Python/marshal.c
     Python/modsupport.c
     Python/mysnprintf.c
     Python/mystrtoul.c
     Python/pathconfig.c
     Python/peephole.c
-    Python/preconfig.c 
+    Python/preconfig.c
     Python/pyarena.c
     Python/pyctype.c
     Python/pyfpe.c

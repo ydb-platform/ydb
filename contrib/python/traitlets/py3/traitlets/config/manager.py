@@ -34,7 +34,7 @@ def recursive_update(target, new):
 
 class BaseJSONConfigManager(LoggingConfigurable):
     """General JSON config manager
- 
+
     Deals with persisting/storing config in a json file
     """
 
@@ -69,7 +69,7 @@ class BaseJSONConfigManager(LoggingConfigurable):
         filename = self.file_name(section_name)
         self.ensure_config_dir_exists()
 
-        f = open(filename, 'w', encoding='utf-8') 
+        f = open(filename, 'w', encoding='utf-8')
         with f:
             json.dump(data, f, indent=2)
 

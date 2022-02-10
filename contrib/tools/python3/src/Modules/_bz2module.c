@@ -3,7 +3,7 @@
 #define PY_SSIZE_T_CLEAN
 
 #include "Python.h"
-#include "structmember.h"         // PyMemberDef 
+#include "structmember.h"         // PyMemberDef
 
 #include <bzlib.h>
 #include <stdio.h>
@@ -347,10 +347,10 @@ static PyTypeObject BZ2Compressor_Type = {
     sizeof(BZ2Compressor),              /* tp_basicsize */
     0,                                  /* tp_itemsize */
     (destructor)BZ2Compressor_dealloc,  /* tp_dealloc */
-    0,                                  /* tp_vectorcall_offset */ 
+    0,                                  /* tp_vectorcall_offset */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_as_async */ 
+    0,                                  /* tp_as_async */
     0,                                  /* tp_repr */
     0,                                  /* tp_as_number */
     0,                                  /* tp_as_sequence */
@@ -688,10 +688,10 @@ static PyTypeObject BZ2Decompressor_Type = {
     sizeof(BZ2Decompressor),            /* tp_basicsize */
     0,                                  /* tp_itemsize */
     (destructor)BZ2Decompressor_dealloc,/* tp_dealloc */
-    0,                                  /* tp_vectorcall_offset */ 
+    0,                                  /* tp_vectorcall_offset */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_as_async */ 
+    0,                                  /* tp_as_async */
     0,                                  /* tp_repr */
     0,                                  /* tp_as_number */
     0,                                  /* tp_as_sequence */
@@ -726,32 +726,32 @@ static PyTypeObject BZ2Decompressor_Type = {
 
 /* Module initialization. */
 
-static int 
-_bz2_exec(PyObject *module) 
-{ 
-    if (PyModule_AddType(module, &BZ2Compressor_Type) < 0) { 
-        return -1; 
-    } 
- 
-    if (PyModule_AddType(module, &BZ2Decompressor_Type) < 0) { 
-        return -1; 
-    } 
- 
-    return 0; 
-} 
- 
-static struct PyModuleDef_Slot _bz2_slots[] = { 
-    {Py_mod_exec, _bz2_exec}, 
-    {0, NULL} 
-}; 
- 
+static int
+_bz2_exec(PyObject *module)
+{
+    if (PyModule_AddType(module, &BZ2Compressor_Type) < 0) {
+        return -1;
+    }
+
+    if (PyModule_AddType(module, &BZ2Decompressor_Type) < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static struct PyModuleDef_Slot _bz2_slots[] = {
+    {Py_mod_exec, _bz2_exec},
+    {0, NULL}
+};
+
 static struct PyModuleDef _bz2module = {
     PyModuleDef_HEAD_INIT,
     "_bz2",
     NULL,
-    0, 
+    0,
     NULL,
-    _bz2_slots, 
+    _bz2_slots,
     NULL,
     NULL,
     NULL
@@ -760,5 +760,5 @@ static struct PyModuleDef _bz2module = {
 PyMODINIT_FUNC
 PyInit__bz2(void)
 {
-    return PyModuleDef_Init(&_bz2module); 
+    return PyModuleDef_Init(&_bz2module);
 }

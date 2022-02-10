@@ -15,7 +15,7 @@ from distutils.spawn import spawn
 from distutils import log
 from distutils.errors import DistutilsByteCompileError
 
-def get_host_platform(): 
+def get_host_platform():
     """Return a string that identifies the current platform.  This is used mainly to
     distinguish platform-specific build directories and platform-specific built
     distributions.  Typically includes the OS name and version and the
@@ -38,10 +38,10 @@ def get_host_platform():
     if os.name == 'nt':
         if 'amd64' in sys.version.lower():
             return 'win-amd64'
-        if '(arm)' in sys.version.lower(): 
-            return 'win-arm32' 
-        if '(arm64)' in sys.version.lower(): 
-            return 'win-arm64' 
+        if '(arm)' in sys.version.lower():
+            return 'win-arm32'
+        if '(arm64)' in sys.version.lower():
+            return 'win-arm64'
         return sys.platform
 
     # Set for cross builds explicitly
@@ -79,8 +79,8 @@ def get_host_platform():
             machine += ".%s" % bitness[sys.maxsize]
         # fall through to standard osname-release-machine representation
     elif osname[:3] == "aix":
-        from _aix_support import aix_platform 
-        return aix_platform() 
+        from _aix_support import aix_platform
+        return aix_platform()
     elif osname[:6] == "cygwin":
         osname = "cygwin"
         rel_re = re.compile (r'[\d.]+', re.ASCII)
@@ -95,16 +95,16 @@ def get_host_platform():
 
     return "%s-%s-%s" % (osname, release, machine)
 
-def get_platform(): 
-    if os.name == 'nt': 
-        TARGET_TO_PLAT = { 
-            'x86' : 'win32', 
-            'x64' : 'win-amd64', 
-            'arm' : 'win-arm32', 
-        } 
-        return TARGET_TO_PLAT.get(os.environ.get('VSCMD_ARG_TGT_ARCH')) or get_host_platform() 
-    else: 
-        return get_host_platform() 
+def get_platform():
+    if os.name == 'nt':
+        TARGET_TO_PLAT = {
+            'x86' : 'win32',
+            'x64' : 'win-amd64',
+            'arm' : 'win-arm32',
+        }
+        return TARGET_TO_PLAT.get(os.environ.get('VSCMD_ARG_TGT_ARCH')) or get_host_platform()
+    else:
+        return get_host_platform()
 
 def convert_path (pathname):
     """Return 'pathname' as a name that will work on the native filesystem,
@@ -391,28 +391,28 @@ def byte_compile (py_files,
             else:
                 script = open(script_name, "w")
 
-            with script: 
-                script.write("""\ 
+            with script:
+                script.write("""\
 from distutils.util import byte_compile
 files = [
 """)
 
-                # XXX would be nice to write absolute filenames, just for 
-                # safety's sake (script should be more robust in the face of 
-                # chdir'ing before running it).  But this requires abspath'ing 
-                # 'prefix' as well, and that breaks the hack in build_lib's 
-                # 'byte_compile()' method that carefully tacks on a trailing 
-                # slash (os.sep really) to make sure the prefix here is "just 
-                # right".  This whole prefix business is rather delicate -- the 
-                # problem is that it's really a directory, but I'm treating it 
-                # as a dumb string, so trailing slashes and so forth matter. 
+                # XXX would be nice to write absolute filenames, just for
+                # safety's sake (script should be more robust in the face of
+                # chdir'ing before running it).  But this requires abspath'ing
+                # 'prefix' as well, and that breaks the hack in build_lib's
+                # 'byte_compile()' method that carefully tacks on a trailing
+                # slash (os.sep really) to make sure the prefix here is "just
+                # right".  This whole prefix business is rather delicate -- the
+                # problem is that it's really a directory, but I'm treating it
+                # as a dumb string, so trailing slashes and so forth matter.
 
-                #py_files = map(os.path.abspath, py_files) 
-                #if prefix: 
-                #    prefix = os.path.abspath(prefix) 
+                #py_files = map(os.path.abspath, py_files)
+                #if prefix:
+                #    prefix = os.path.abspath(prefix)
 
-                script.write(",\n".join(map(repr, py_files)) + "]\n") 
-                script.write(""" 
+                script.write(",\n".join(map(repr, py_files)) + "]\n")
+                script.write("""
 byte_compile(files, optimize=%r, force=%r,
              prefix=%r, base_dir=%r,
              verbose=%r, dry_run=0,

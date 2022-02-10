@@ -1,14 +1,14 @@
 import sys
 import marshal
-import contextlib 
+import contextlib
 from distutils.version import StrictVersion
 
 from .py33compat import Bytecode
 
-from .py27compat import find_module, PY_COMPILED, PY_FROZEN, PY_SOURCE 
-from . import py27compat 
+from .py27compat import find_module, PY_COMPILED, PY_FROZEN, PY_SOURCE
+from . import py27compat
 
- 
+
 __all__ = [
     'Require', 'find_module', 'get_module_constant', 'extract_constant'
 ]
@@ -17,8 +17,8 @@ __all__ = [
 class Require:
     """A prerequisite to building or installing a distribution"""
 
-    def __init__( 
-            self, name, requested_version, module, homepage='', 
+    def __init__(
+            self, name, requested_version, module, homepage='',
             attribute=None, format=None):
 
         if format is None and requested_version is not None:
@@ -82,15 +82,15 @@ class Require:
         return self.version_ok(version)
 
 
-def maybe_close(f): 
-    @contextlib.contextmanager 
-    def empty(): 
-        yield 
-        return 
-    if not f: 
-        return empty() 
+def maybe_close(f):
+    @contextlib.contextmanager
+    def empty():
+        yield
+        return
+    if not f:
+        return empty()
 
-    return contextlib.closing(f) 
+    return contextlib.closing(f)
 
 
 def get_module_constant(module, symbol, default=-1, paths=None):
@@ -101,23 +101,23 @@ def get_module_constant(module, symbol, default=-1, paths=None):
     constant.  Otherwise, return 'default'."""
 
     try:
-        f, path, (suffix, mode, kind) = info = find_module(module, paths) 
+        f, path, (suffix, mode, kind) = info = find_module(module, paths)
     except ImportError:
         # Module doesn't exist
         return None
 
-    with maybe_close(f): 
+    with maybe_close(f):
         if kind == PY_COMPILED:
             f.read(8)  # skip magic & date
             code = marshal.load(f)
         elif kind == PY_FROZEN:
-            code = py27compat.get_frozen_object(module, paths) 
+            code = py27compat.get_frozen_object(module, paths)
         elif kind == PY_SOURCE:
             code = compile(f.read(), path, 'exec')
         else:
             # Not something we can parse; we'll have to import it.  :(
-            imported = py27compat.get_module(module, paths, info) 
-            return getattr(imported, symbol, None) 
+            imported = py27compat.get_module(module, paths, info)
+            return getattr(imported, symbol, None)
 
     return extract_constant(code, symbol, default)
 

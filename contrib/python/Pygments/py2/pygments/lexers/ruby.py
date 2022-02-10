@@ -43,17 +43,17 @@ class RubyLexer(ExtendedRegexLexer):
 
     def heredoc_callback(self, match, ctx):
         # okay, this is the hardest part of parsing Ruby...
-        # match: 1 = <<[-~]?, 2 = quote? 3 = name 4 = quote? 5 = rest of line 
+        # match: 1 = <<[-~]?, 2 = quote? 3 = name 4 = quote? 5 = rest of line
 
         start = match.start(1)
-        yield start, Operator, match.group(1)        # <<[-~]? 
+        yield start, Operator, match.group(1)        # <<[-~]?
         yield match.start(2), String.Heredoc, match.group(2)   # quote ", ', `
         yield match.start(3), String.Delimiter, match.group(3) # heredoc name
         yield match.start(4), String.Heredoc, match.group(4)   # quote again
 
         heredocstack = ctx.__dict__.setdefault('heredocstack', [])
         outermost = not bool(heredocstack)
-        heredocstack.append((match.group(1) in ('<<-', '<<~'), match.group(3))) 
+        heredocstack.append((match.group(1) in ('<<-', '<<~'), match.group(3)))
 
         ctx.pos = match.start(5)
         ctx.end = match.end(5)
@@ -247,10 +247,10 @@ class RubyLexer(ExtendedRegexLexer):
              Name.Builtin),
             (r'__(FILE|LINE)__\b', Name.Builtin.Pseudo),
             # normal heredocs
-            (r'(?<!\w)(<<[-~]?)(["`\']?)([a-zA-Z_]\w*)(\2)(.*?\n)', 
+            (r'(?<!\w)(<<[-~]?)(["`\']?)([a-zA-Z_]\w*)(\2)(.*?\n)',
              heredoc_callback),
             # empty string heredocs
-            (r'(<<[-~]?)("|\')()(\2)(.*?\n)', heredoc_callback), 
+            (r'(<<[-~]?)("|\')()(\2)(.*?\n)', heredoc_callback),
             (r'__END__', Comment.Preproc, 'end-part'),
             # multiline regex (after keywords or assignments)
             (r'(?:^|(?<=[=<>~!:])|'

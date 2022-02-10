@@ -9,21 +9,21 @@ from distutils.errors import DistutilsError
 from distutils import log
 
 from setuptools.extension import Library
-from setuptools.extern import six 
+from setuptools.extern import six
 
-if six.PY2: 
-    import imp 
- 
-    EXTENSION_SUFFIXES = [s for s, _, tp in imp.get_suffixes() if tp == imp.C_EXTENSION] 
-else: 
-    from importlib.machinery import EXTENSION_SUFFIXES 
- 
+if six.PY2:
+    import imp
+
+    EXTENSION_SUFFIXES = [s for s, _, tp in imp.get_suffixes() if tp == imp.C_EXTENSION]
+else:
+    from importlib.machinery import EXTENSION_SUFFIXES
+
 try:
     # Attempt to use Cython for building extensions, if available
     from Cython.Distutils.build_ext import build_ext as _build_ext
-    # Additionally, assert that the compiler module will load 
-    # also. Ref #1229. 
-    __import__('Cython.Compiler.Main') 
+    # Additionally, assert that the compiler module will load
+    # also. Ref #1229.
+    __import__('Cython.Compiler.Main')
 except ImportError:
     _build_ext = _du_build_ext
 
@@ -70,7 +70,7 @@ if_dl = lambda s: s if have_rtld else ''
 
 def get_abi3_suffix():
     """Return the file extension for an abi3-compliant Extension()"""
-    for suffix in EXTENSION_SUFFIXES: 
+    for suffix in EXTENSION_SUFFIXES:
         if '.abi3' in suffix:  # Unix
             return suffix
         elif suffix == '.pyd':  # Windows
@@ -113,12 +113,12 @@ class build_ext(_build_ext):
         if fullname in self.ext_map:
             ext = self.ext_map[fullname]
             use_abi3 = (
-                not six.PY2 
+                not six.PY2
                 and getattr(ext, 'py_limited_api')
                 and get_abi3_suffix()
             )
             if use_abi3:
-                so_ext = get_config_var('EXT_SUFFIX') 
+                so_ext = get_config_var('EXT_SUFFIX')
                 filename = filename[:-len(so_ext)]
                 filename = filename + get_abi3_suffix()
             if isinstance(ext, Library):

@@ -1,6 +1,6 @@
 [console_scripts]
 easy_install = setuptools.command.easy_install:main
-easy_install-3.8 = setuptools.command.easy_install:main 
+easy_install-3.8 = setuptools.command.easy_install:main
 
 [distutils.commands]
 alias = setuptools.command.alias:alias
@@ -58,12 +58,12 @@ namespace_packages.txt = setuptools.command.egg_info:overwrite_arg
 requires.txt = setuptools.command.egg_info:write_requirements
 top_level.txt = setuptools.command.egg_info:write_toplevel_names
 
-[setuptools.finalize_distribution_options] 
-2to3_doctests = setuptools.dist:Distribution._finalize_2to3_doctests 
-features = setuptools.dist:Distribution._finalize_feature_opts 
-keywords = setuptools.dist:Distribution._finalize_setup_keywords 
-parent_finalize = setuptools.dist:_Distribution.finalize_options 
- 
+[setuptools.finalize_distribution_options]
+2to3_doctests = setuptools.dist:Distribution._finalize_2to3_doctests
+features = setuptools.dist:Distribution._finalize_feature_opts
+keywords = setuptools.dist:Distribution._finalize_setup_keywords
+parent_finalize = setuptools.dist:_Distribution.finalize_options
+
 [setuptools.installation]
 eggsecutable = setuptools.command.easy_install:bootstrap
 

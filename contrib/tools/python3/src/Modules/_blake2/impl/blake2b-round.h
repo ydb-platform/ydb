@@ -1,23 +1,23 @@
 /*
    BLAKE2 reference source code package - optimized C implementations
- 
-   Written in 2012 by Samuel Neves <sneves@dei.uc.pt> 
- 
-   To the extent possible under law, the author(s) have dedicated all copyright 
-   and related and neighboring rights to this software to the public domain 
-   worldwide. This software is distributed without any warranty. 
- 
-   You should have received a copy of the CC0 Public Domain Dedication along with 
-   this software. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>. 
+
+   Written in 2012 by Samuel Neves <sneves@dei.uc.pt>
+
+   To the extent possible under law, the author(s) have dedicated all copyright
+   and related and neighboring rights to this software to the public domain
+   worldwide. This software is distributed without any warranty.
+
+   You should have received a copy of the CC0 Public Domain Dedication along with
+   this software. If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 */
 #pragma once
 #ifndef __BLAKE2B_ROUND_H__
 #define __BLAKE2B_ROUND_H__
 
-#define LOAD(p)  _mm_load_si128( (__m128i *)(p) ) 
-#define STORE(p,r) _mm_store_si128((__m128i *)(p), r) 
- 
-#define LOADU(p)  _mm_loadu_si128( (__m128i *)(p) ) 
+#define LOAD(p)  _mm_load_si128( (__m128i *)(p) )
+#define STORE(p,r) _mm_store_si128((__m128i *)(p), r)
+
+#define LOADU(p)  _mm_loadu_si128( (__m128i *)(p) )
 #define STOREU(p,r) _mm_storeu_si128((__m128i *)(p), r)
 
 #define TOF(reg) _mm_castsi128_ps((reg))
@@ -138,7 +138,7 @@
 
 #endif
 
-#if defined(HAVE_SSE4_1) 
+#if defined(HAVE_SSE4_1)
 #include "blake2b-load-sse41.h"
 #else
 #include "blake2b-load-sse2.h"

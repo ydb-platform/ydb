@@ -1,20 +1,20 @@
 PY23_LIBRARY()
 
 LICENSE(Service-Py23-Proxy)
- 
-OWNER(g:python-contrib) 
 
-IF (PYTHON2) 
-    PEERDIR(contrib/python/packaging/py2) 
-ELSE() 
-    PEERDIR(contrib/python/packaging/py3) 
-ENDIF() 
+OWNER(g:python-contrib)
 
-NO_LINT() 
+IF (PYTHON2)
+    PEERDIR(contrib/python/packaging/py2)
+ELSE()
+    PEERDIR(contrib/python/packaging/py3)
+ENDIF()
 
-END() 
+NO_LINT()
 
-RECURSE( 
-    py2 
-    py3 
-) 
+END()
+
+RECURSE(
+    py2
+    py3
+)

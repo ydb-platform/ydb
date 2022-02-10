@@ -16,15 +16,15 @@
     * it is usable as a command-line tool and as a library
     * ... and it highlights even Brainfuck!
 
-    The `Pygments master branch`_ is installable with ``easy_install Pygments==dev``. 
+    The `Pygments master branch`_ is installable with ``easy_install Pygments==dev``.
 
-    .. _Pygments master branch: 
-       https://github.com/pygments/pygments/archive/master.zip#egg=Pygments-dev 
+    .. _Pygments master branch:
+       https://github.com/pygments/pygments/archive/master.zip#egg=Pygments-dev
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
-from io import StringIO, BytesIO 
+from io import StringIO, BytesIO
 
 __version__ = '2.11.2'
 __docformat__ = 'restructuredtext'

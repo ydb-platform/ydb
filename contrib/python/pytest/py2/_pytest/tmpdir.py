@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 """ support for providing temporary directories to test functions.  """
 from __future__ import absolute_import
 from __future__ import division
@@ -60,30 +60,30 @@ class TempPathFactory(object):
 
     def getbasetemp(self):
         """ return base temporary directory. """
-        if self._basetemp is not None: 
+        if self._basetemp is not None:
             return self._basetemp
 
-        if self._given_basetemp is not None: 
-            basetemp = self._given_basetemp 
-            ensure_reset_dir(basetemp) 
-            basetemp = basetemp.resolve() 
-        else: 
-            from_env = os.environ.get("PYTEST_DEBUG_TEMPROOT") 
-            temproot = Path(from_env or tempfile.gettempdir()).resolve() 
-            user = get_user() or "unknown" 
-            # use a sub-directory in the temproot to speed-up 
-            # make_numbered_dir() call 
-            rootdir = temproot.joinpath("pytest-of-{}".format(user)) 
-            rootdir.mkdir(exist_ok=True) 
-            basetemp = make_numbered_dir_with_cleanup( 
-                prefix="pytest-", root=rootdir, keep=3, lock_timeout=LOCK_TIMEOUT 
-            ) 
-        assert basetemp is not None, basetemp 
-        self._basetemp = t = basetemp 
-        self._trace("new basetemp", t) 
-        return t 
+        if self._given_basetemp is not None:
+            basetemp = self._given_basetemp
+            ensure_reset_dir(basetemp)
+            basetemp = basetemp.resolve()
+        else:
+            from_env = os.environ.get("PYTEST_DEBUG_TEMPROOT")
+            temproot = Path(from_env or tempfile.gettempdir()).resolve()
+            user = get_user() or "unknown"
+            # use a sub-directory in the temproot to speed-up
+            # make_numbered_dir() call
+            rootdir = temproot.joinpath("pytest-of-{}".format(user))
+            rootdir.mkdir(exist_ok=True)
+            basetemp = make_numbered_dir_with_cleanup(
+                prefix="pytest-", root=rootdir, keep=3, lock_timeout=LOCK_TIMEOUT
+            )
+        assert basetemp is not None, basetemp
+        self._basetemp = t = basetemp
+        self._trace("new basetemp", t)
+        return t
 
- 
+
 @attr.s
 class TempdirFactory(object):
     """
@@ -169,7 +169,7 @@ def _mk_tmp(request, factory):
 
 
 @pytest.fixture
-def tmpdir(tmp_path): 
+def tmpdir(tmp_path):
     """Return a temporary directory path object
     which is unique to each test function invocation,
     created as a sub directory of the base temporary
@@ -178,7 +178,7 @@ def tmpdir(tmp_path):
 
     .. _`py.path.local`: https://py.readthedocs.io/en/latest/path.html
     """
-    return py.path.local(tmp_path) 
+    return py.path.local(tmp_path)
 
 
 @pytest.fixture

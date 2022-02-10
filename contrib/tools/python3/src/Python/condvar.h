@@ -41,16 +41,16 @@
 #define _CONDVAR_IMPL_H_
 
 #include "Python.h"
-#include "pycore_condvar.h" 
+#include "pycore_condvar.h"
 
 #ifdef _POSIX_THREADS
 /*
  * POSIX support
  */
 
-/* These private functions are implemented in Python/thread_pthread.h */ 
-int _PyThread_cond_init(PyCOND_T *cond); 
-void _PyThread_cond_after(long long us, struct timespec *abs); 
+/* These private functions are implemented in Python/thread_pthread.h */
+int _PyThread_cond_init(PyCOND_T *cond);
+void _PyThread_cond_after(long long us, struct timespec *abs);
 
 /* The following functions return 0 on success, nonzero on error */
 #define PyMUTEX_INIT(mut)       pthread_mutex_init((mut), NULL)
@@ -58,7 +58,7 @@ void _PyThread_cond_after(long long us, struct timespec *abs);
 #define PyMUTEX_LOCK(mut)       pthread_mutex_lock(mut)
 #define PyMUTEX_UNLOCK(mut)     pthread_mutex_unlock(mut)
 
-#define PyCOND_INIT(cond)       _PyThread_cond_init(cond) 
+#define PyCOND_INIT(cond)       _PyThread_cond_init(cond)
 #define PyCOND_FINI(cond)       pthread_cond_destroy(cond)
 #define PyCOND_SIGNAL(cond)     pthread_cond_signal(cond)
 #define PyCOND_BROADCAST(cond)  pthread_cond_broadcast(cond)
@@ -68,16 +68,16 @@ void _PyThread_cond_after(long long us, struct timespec *abs);
 Py_LOCAL_INLINE(int)
 PyCOND_TIMEDWAIT(PyCOND_T *cond, PyMUTEX_T *mut, long long us)
 {
-    struct timespec abs; 
-    _PyThread_cond_after(us, &abs); 
-    int ret = pthread_cond_timedwait(cond, mut, &abs); 
-    if (ret == ETIMEDOUT) { 
+    struct timespec abs;
+    _PyThread_cond_after(us, &abs);
+    int ret = pthread_cond_timedwait(cond, mut, &abs);
+    if (ret == ETIMEDOUT) {
         return 1;
-    } 
-    if (ret) { 
+    }
+    if (ret) {
         return -1;
-    } 
-    return 0; 
+    }
+    return 0;
 }
 
 #elif defined(NT_THREADS)
@@ -178,7 +178,7 @@ _PyCOND_WAIT_MS(PyCOND_T *cv, PyMUTEX_T *cs, DWORD ms)
          * just means an extra spurious wakeup for a waiting thread.
          * ('waiting' corresponds to the semaphore's "negative" count and
          * we may end up with e.g. (waiting == -1 && sem.count == 1).  When
-         * a new thread comes along, it will pass right through, having 
+         * a new thread comes along, it will pass right through, having
          * adjusted it to (waiting == 0 && sem.count == 0).
          */
 

@@ -119,10 +119,10 @@
   includes:
     - xray/xray_interface.h: contrib/libs/clang11-rt/include/xray/xray_interface.h
 
-- source_filter: "^contrib/libs/clang12-rt" 
-  includes: 
-    - xray/xray_interface.h: contrib/libs/clang12-rt/include/xray/xray_interface.h 
- 
+- source_filter: "^contrib/libs/clang12-rt"
+  includes:
+    - xray/xray_interface.h: contrib/libs/clang12-rt/include/xray/xray_interface.h
+
 - source_filter: "^contrib/libs/llvm"
   includes:
     - plugin-api.h # GNU linker plugin API.
@@ -172,10 +172,10 @@
   includes:
     - atomic.h:      contrib/libs/nsync/platform/c++11/atomic.h
 
-- source_filter: "^contrib/python/numpy/py3" 
-  includes: 
-    - numpy/random.pxd 
- 
+- source_filter: "^contrib/python/numpy/py3"
+  includes:
+    - numpy/random.pxd
+
 - source_filter: "^contrib/tools/python/src/Objects/exceptions.c"
   includes:
     - errmap.h:      contrib/tools/python/src/PC/errmap.h
@@ -446,10 +446,10 @@
     - cmqxc.h
     - cmqcfc.h
     - cmqbc.h
- 
-- source_filter: "^contrib/libs/h3" 
-  includes: 
-    - alloc.h: contrib/libs/h3/h3lib/include/alloc.h 
+
+- source_filter: "^contrib/libs/h3"
+  includes:
+    - alloc.h: contrib/libs/h3/h3lib/include/alloc.h
 - source_filter: "^cloud/iam/token_agent/daemon"
   includes:
     - contrib/libs/grpc/include/grpcpp/impl/codegen/server_context_impl.h

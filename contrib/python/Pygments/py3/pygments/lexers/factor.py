@@ -4,7 +4,7 @@
 
     Lexers for the Factor language.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -285,7 +285,7 @@ class FactorLexer(RegexLexer):
             (r'(<PRIVATE|PRIVATE>)(\s)', bygroups(Keyword.Namespace, Whitespace)),
 
             # strings
-            (r'"""\s(?:.|\n)*?\s"""', String), 
+            (r'"""\s(?:.|\n)*?\s"""', String),
             (r'"(?:\\\\|\\"|[^"])*"', String),
             (r'(\S+")(\s+)((?:\\\\|\\"|[^"])*")',
                 bygroups(String, Whitespace, String)),

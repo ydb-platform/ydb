@@ -64,9 +64,9 @@
  *  7. _Py_dg_strtod has been modified so that it doesn't accept strings with
  *     leading whitespace.
  *
- *  8. A corner case where _Py_dg_dtoa didn't strip trailing zeros has been 
- *     fixed. (bugs.python.org/issue40780) 
- * 
+ *  8. A corner case where _Py_dg_dtoa didn't strip trailing zeros has been
+ *     fixed. (bugs.python.org/issue40780)
+ *
  ***************************************************************/
 
 /* Please send bug reports for the original dtoa.c code to David M. Gay (dmg
@@ -118,7 +118,7 @@
 /* Linking of Python's #defines to Gay's #defines starts here. */
 
 #include "Python.h"
-#include "pycore_dtoa.h" 
+#include "pycore_dtoa.h"
 
 /* if PY_NO_SHORT_FLOAT_REPR is defined, then don't even try to compile
    the following code */
@@ -1445,9 +1445,9 @@ _Py_dg_strtod(const char *s00, char **se)
     ULong y, z, abs_exp;
     Long L;
     BCinfo bc;
-    Bigint *bb = NULL, *bd = NULL, *bd0 = NULL, *bs = NULL, *delta = NULL; 
+    Bigint *bb = NULL, *bd = NULL, *bd0 = NULL, *bs = NULL, *delta = NULL;
     size_t ndigits, fraclen;
-    double result; 
+    double result;
 
     dval(&rv) = 0.;
 
@@ -1874,7 +1874,7 @@ _Py_dg_strtod(const char *s00, char **se)
             if (bs == NULL) {
                 goto failed_malloc;
             }
-            Bigint *bb1 = mult(bs, bb); 
+            Bigint *bb1 = mult(bs, bb);
             Bfree(bb);
             bb = bb1;
             if (bb == NULL) {
@@ -2107,10 +2107,10 @@ _Py_dg_strtod(const char *s00, char **se)
                 }
         }
       cont:
-        Bfree(bb); bb = NULL; 
-        Bfree(bd); bd = NULL; 
-        Bfree(bs); bs = NULL; 
-        Bfree(delta); delta = NULL; 
+        Bfree(bb); bb = NULL;
+        Bfree(bd); bd = NULL;
+        Bfree(bs); bs = NULL;
+        Bfree(delta); delta = NULL;
     }
     if (bc.nd > nd) {
         error = bigcomp(&rv, s0, &bc);
@@ -2125,38 +2125,38 @@ _Py_dg_strtod(const char *s00, char **se)
     }
 
   ret:
-    result = sign ? -dval(&rv) : dval(&rv); 
-    goto done; 
+    result = sign ? -dval(&rv) : dval(&rv);
+    goto done;
 
   parse_error:
-    result = 0.0; 
-    goto done; 
+    result = 0.0;
+    goto done;
 
   failed_malloc:
     errno = ENOMEM;
-    result = -1.0; 
-    goto done; 
+    result = -1.0;
+    goto done;
 
   undfl:
-    result = sign ? -0.0 : 0.0; 
-    goto done; 
+    result = sign ? -0.0 : 0.0;
+    goto done;
 
   ovfl:
     errno = ERANGE;
     /* Can't trust HUGE_VAL */
     word0(&rv) = Exp_mask;
     word1(&rv) = 0;
-    result = sign ? -dval(&rv) : dval(&rv); 
-    goto done; 
+    result = sign ? -dval(&rv) : dval(&rv);
+    goto done;
 
-  done: 
-    Bfree(bb); 
-    Bfree(bd); 
-    Bfree(bs); 
-    Bfree(bd0); 
-    Bfree(delta); 
-    return result; 
- 
+  done:
+    Bfree(bb);
+    Bfree(bd);
+    Bfree(bs);
+    Bfree(bd0);
+    Bfree(delta);
+    return result;
+
 }
 
 static char *
@@ -2566,14 +2566,14 @@ _Py_dg_dtoa(double dd, int mode, int ndigits,
                         }
                     ++*s++;
                 }
-                else { 
-                    /* Strip trailing zeros. This branch was missing from the 
-                       original dtoa.c, leading to surplus trailing zeros in 
-                       some cases. See bugs.python.org/issue40780. */ 
-                    while (s > s0 && s[-1] == '0') { 
-                        --s; 
-                    } 
-                } 
+                else {
+                    /* Strip trailing zeros. This branch was missing from the
+                       original dtoa.c, leading to surplus trailing zeros in
+                       some cases. See bugs.python.org/issue40780. */
+                    while (s > s0 && s[-1] == '0') {
+                        --s;
+                    }
+                }
                 break;
             }
         }

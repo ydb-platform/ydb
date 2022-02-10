@@ -13,19 +13,19 @@
 
 import copy
 import datetime
-import sys 
-import inspect 
-import warnings 
+import sys
+import inspect
+import warnings
 import hashlib
 import logging
 import shlex
-import os 
+import os
 from math import floor
 
-import six 
+import six
 from botocore.exceptions import MD5UnavailableError
-from dateutil.tz import tzlocal 
-from urllib3 import exceptions 
+from dateutil.tz import tzlocal
+from urllib3 import exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -144,16 +144,16 @@ else:
         raise ValueError("Expected str or unicode, received %s." % type(s))
 
 
-from collections import OrderedDict 
+from collections import OrderedDict
 
 
-try: 
-    import xml.etree.cElementTree as ETree 
-except ImportError: 
-    # cElementTree does not exist from Python3.9+ 
-    import xml.etree.ElementTree as ETree 
-XMLParseError = ETree.ParseError 
-import json 
+try:
+    import xml.etree.cElementTree as ETree
+except ImportError:
+    # cElementTree does not exist from Python3.9+
+    import xml.etree.ElementTree as ETree
+XMLParseError = ETree.ParseError
+import json
 
 
 def filter_ssl_warnings():
@@ -186,9 +186,9 @@ HTTPHeaders.from_pairs = from_pairs
 
 def copy_kwargs(kwargs):
     """
-    This used to be a compat shim for 2.6 but is now just an alias. 
+    This used to be a compat shim for 2.6 but is now just an alias.
     """
-    copy_kwargs = copy.copy(kwargs) 
+    copy_kwargs = copy.copy(kwargs)
     return copy_kwargs
 
 
@@ -196,12 +196,12 @@ def total_seconds(delta):
     """
     Returns the total seconds in a ``datetime.timedelta``.
 
-    This used to be a compat shim for 2.6 but is now just an alias. 
+    This used to be a compat shim for 2.6 but is now just an alias.
 
     :param delta: The timedelta object
     :type delta: ``datetime.timedelta``
     """
-    return delta.total_seconds() 
+    return delta.total_seconds()
 
 
 # Checks to see if md5 is available on this system. A given system might not
@@ -333,29 +333,29 @@ def _windows_shell_split(s):
         components.append(''.join(buff))
 
     return components
- 
- 
-def get_tzinfo_options(): 
-    # Due to dateutil/dateutil#197, Windows may fail to parse times in the past 
-    # with the system clock. We can alternatively fallback to tzwininfo when 
-    # this happens, which will get time info from the Windows registry. 
-    if sys.platform == 'win32': 
-        from dateutil.tz import tzwinlocal 
-        return (tzlocal, tzwinlocal) 
-    else: 
-        return (tzlocal,) 
- 
- 
-try: 
-    from collections.abc import MutableMapping 
-except ImportError: 
-    from collections import MutableMapping 
- 
-# Detect if CRT is available for use 
-try: 
-    import awscrt.auth 
-    # Allow user opt-out if needed 
-    disabled = os.environ.get('BOTO_DISABLE_CRT', "false") 
-    HAS_CRT = not disabled.lower() == 'true' 
-except ImportError: 
-    HAS_CRT = False 
+
+
+def get_tzinfo_options():
+    # Due to dateutil/dateutil#197, Windows may fail to parse times in the past
+    # with the system clock. We can alternatively fallback to tzwininfo when
+    # this happens, which will get time info from the Windows registry.
+    if sys.platform == 'win32':
+        from dateutil.tz import tzwinlocal
+        return (tzlocal, tzwinlocal)
+    else:
+        return (tzlocal,)
+
+
+try:
+    from collections.abc import MutableMapping
+except ImportError:
+    from collections import MutableMapping
+
+# Detect if CRT is available for use
+try:
+    import awscrt.auth
+    # Allow user opt-out if needed
+    disabled = os.environ.get('BOTO_DISABLE_CRT', "false")
+    HAS_CRT = not disabled.lower() == 'true'
+except ImportError:
+    HAS_CRT = False

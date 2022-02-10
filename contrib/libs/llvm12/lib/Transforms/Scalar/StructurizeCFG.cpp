@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Transforms/Scalar/StructurizeCFG.h" 
+#include "llvm/Transforms/Scalar/StructurizeCFG.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SCCIterator.h"
@@ -29,7 +29,7 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Metadata.h"
-#include "llvm/IR/PassManager.h" 
+#include "llvm/IR/PassManager.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
@@ -57,7 +57,7 @@ using namespace llvm::PatternMatch;
 #define DEBUG_TYPE "structurizecfg"
 
 // The name for newly created blocks.
-const char FlowBlockName[] = "Flow"; 
+const char FlowBlockName[] = "Flow";
 
 namespace {
 
@@ -236,7 +236,7 @@ public:
 /// consist of a network of PHI nodes where the true incoming values expresses
 /// breaks and the false values expresses continue states.
 
-class StructurizeCFG { 
+class StructurizeCFG {
   Type *Boolean;
   ConstantInt *BoolTrue;
   ConstantInt *BoolFalse;
@@ -245,7 +245,7 @@ class StructurizeCFG {
   Function *Func;
   Region *ParentRegion;
 
-  LegacyDivergenceAnalysis *DA = nullptr; 
+  LegacyDivergenceAnalysis *DA = nullptr;
   DominatorTree *DT;
 
   SmallVector<RegionNode *, 8> Order;
@@ -310,35 +310,35 @@ class StructurizeCFG {
   void rebuildSSA();
 
 public:
-  void init(Region *R); 
-  bool run(Region *R, DominatorTree *DT); 
-  bool makeUniformRegion(Region *R, LegacyDivergenceAnalysis *DA); 
-}; 
- 
-class StructurizeCFGLegacyPass : public RegionPass { 
-  bool SkipUniformRegions; 
- 
-public: 
+  void init(Region *R);
+  bool run(Region *R, DominatorTree *DT);
+  bool makeUniformRegion(Region *R, LegacyDivergenceAnalysis *DA);
+};
+
+class StructurizeCFGLegacyPass : public RegionPass {
+  bool SkipUniformRegions;
+
+public:
   static char ID;
 
-  explicit StructurizeCFGLegacyPass(bool SkipUniformRegions_ = false) 
-      : RegionPass(ID), SkipUniformRegions(SkipUniformRegions_) { 
+  explicit StructurizeCFGLegacyPass(bool SkipUniformRegions_ = false)
+      : RegionPass(ID), SkipUniformRegions(SkipUniformRegions_) {
     if (ForceSkipUniformRegions.getNumOccurrences())
       SkipUniformRegions = ForceSkipUniformRegions.getValue();
-    initializeStructurizeCFGLegacyPassPass(*PassRegistry::getPassRegistry()); 
+    initializeStructurizeCFGLegacyPassPass(*PassRegistry::getPassRegistry());
   }
 
-  bool runOnRegion(Region *R, RGPassManager &RGM) override { 
-    StructurizeCFG SCFG; 
-    SCFG.init(R); 
-    if (SkipUniformRegions) { 
-      LegacyDivergenceAnalysis *DA = &getAnalysis<LegacyDivergenceAnalysis>(); 
-      if (SCFG.makeUniformRegion(R, DA)) 
-        return false; 
-    } 
-    DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree(); 
-    return SCFG.run(R, DT); 
-  } 
+  bool runOnRegion(Region *R, RGPassManager &RGM) override {
+    StructurizeCFG SCFG;
+    SCFG.init(R);
+    if (SkipUniformRegions) {
+      LegacyDivergenceAnalysis *DA = &getAnalysis<LegacyDivergenceAnalysis>();
+      if (SCFG.makeUniformRegion(R, DA))
+        return false;
+    }
+    DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+    return SCFG.run(R, DT);
+  }
 
   StringRef getPassName() const override { return "Structurize control flow"; }
 
@@ -355,16 +355,16 @@ public:
 
 } // end anonymous namespace
 
-char StructurizeCFGLegacyPass::ID = 0; 
+char StructurizeCFGLegacyPass::ID = 0;
 
-INITIALIZE_PASS_BEGIN(StructurizeCFGLegacyPass, "structurizecfg", 
-                      "Structurize the CFG", false, false) 
+INITIALIZE_PASS_BEGIN(StructurizeCFGLegacyPass, "structurizecfg",
+                      "Structurize the CFG", false, false)
 INITIALIZE_PASS_DEPENDENCY(LegacyDivergenceAnalysis)
-INITIALIZE_PASS_DEPENDENCY(LowerSwitchLegacyPass) 
+INITIALIZE_PASS_DEPENDENCY(LowerSwitchLegacyPass)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(RegionInfoPass)
-INITIALIZE_PASS_END(StructurizeCFGLegacyPass, "structurizecfg", 
-                    "Structurize the CFG", false, false) 
+INITIALIZE_PASS_END(StructurizeCFGLegacyPass, "structurizecfg",
+                    "Structurize the CFG", false, false)
 
 /// Build up the general order of nodes, by performing a topological sort of the
 /// parent region's nodes, while ensuring that there is no outer cycle node
@@ -1008,59 +1008,59 @@ static bool hasOnlyUniformBranches(Region *R, unsigned UniformMDKindID,
   return SubRegionsAreUniform || (ConditionalDirectChildren <= 1);
 }
 
-void StructurizeCFG::init(Region *R) { 
-  LLVMContext &Context = R->getEntry()->getContext(); 
- 
-  Boolean = Type::getInt1Ty(Context); 
-  BoolTrue = ConstantInt::getTrue(Context); 
-  BoolFalse = ConstantInt::getFalse(Context); 
-  BoolUndef = UndefValue::get(Boolean); 
- 
-  this->DA = nullptr; 
-} 
- 
-bool StructurizeCFG::makeUniformRegion(Region *R, 
-                                       LegacyDivergenceAnalysis *DA) { 
+void StructurizeCFG::init(Region *R) {
+  LLVMContext &Context = R->getEntry()->getContext();
+
+  Boolean = Type::getInt1Ty(Context);
+  BoolTrue = ConstantInt::getTrue(Context);
+  BoolFalse = ConstantInt::getFalse(Context);
+  BoolUndef = UndefValue::get(Boolean);
+
+  this->DA = nullptr;
+}
+
+bool StructurizeCFG::makeUniformRegion(Region *R,
+                                       LegacyDivergenceAnalysis *DA) {
   if (R->isTopLevelRegion())
     return false;
 
-  this->DA = DA; 
-  // TODO: We could probably be smarter here with how we handle sub-regions. 
-  // We currently rely on the fact that metadata is set by earlier invocations 
-  // of the pass on sub-regions, and that this metadata doesn't get lost -- 
-  // but we shouldn't rely on metadata for correctness! 
-  unsigned UniformMDKindID = 
-      R->getEntry()->getContext().getMDKindID("structurizecfg.uniform"); 
+  this->DA = DA;
+  // TODO: We could probably be smarter here with how we handle sub-regions.
+  // We currently rely on the fact that metadata is set by earlier invocations
+  // of the pass on sub-regions, and that this metadata doesn't get lost --
+  // but we shouldn't rely on metadata for correctness!
+  unsigned UniformMDKindID =
+      R->getEntry()->getContext().getMDKindID("structurizecfg.uniform");
 
-  if (hasOnlyUniformBranches(R, UniformMDKindID, *DA)) { 
-    LLVM_DEBUG(dbgs() << "Skipping region with uniform control flow: " << *R 
-                      << '\n'); 
+  if (hasOnlyUniformBranches(R, UniformMDKindID, *DA)) {
+    LLVM_DEBUG(dbgs() << "Skipping region with uniform control flow: " << *R
+                      << '\n');
 
-    // Mark all direct child block terminators as having been treated as 
-    // uniform. To account for a possible future in which non-uniform 
-    // sub-regions are treated more cleverly, indirect children are not 
-    // marked as uniform. 
-    MDNode *MD = MDNode::get(R->getEntry()->getParent()->getContext(), {}); 
-    for (RegionNode *E : R->elements()) { 
-      if (E->isSubRegion()) 
-        continue; 
+    // Mark all direct child block terminators as having been treated as
+    // uniform. To account for a possible future in which non-uniform
+    // sub-regions are treated more cleverly, indirect children are not
+    // marked as uniform.
+    MDNode *MD = MDNode::get(R->getEntry()->getParent()->getContext(), {});
+    for (RegionNode *E : R->elements()) {
+      if (E->isSubRegion())
+        continue;
 
-      if (Instruction *Term = E->getEntry()->getTerminator()) 
-        Term->setMetadata(UniformMDKindID, MD); 
-    } 
+      if (Instruction *Term = E->getEntry()->getTerminator())
+        Term->setMetadata(UniformMDKindID, MD);
+    }
 
-    return true; 
+    return true;
   }
-  return false; 
-} 
+  return false;
+}
 
-/// Run the transformation for each region found 
-bool StructurizeCFG::run(Region *R, DominatorTree *DT) { 
-  if (R->isTopLevelRegion()) 
-    return false; 
- 
-  this->DT = DT; 
- 
+/// Run the transformation for each region found
+bool StructurizeCFG::run(Region *R, DominatorTree *DT) {
+  if (R->isTopLevelRegion())
+    return false;
+
+  this->DT = DT;
+
   Func = R->getEntry()->getParent();
   ParentRegion = R;
 
@@ -1088,33 +1088,33 @@ bool StructurizeCFG::run(Region *R, DominatorTree *DT) {
 }
 
 Pass *llvm::createStructurizeCFGPass(bool SkipUniformRegions) {
-  return new StructurizeCFGLegacyPass(SkipUniformRegions); 
+  return new StructurizeCFGLegacyPass(SkipUniformRegions);
 }
- 
-static void addRegionIntoQueue(Region &R, std::vector<Region *> &Regions) { 
-  Regions.push_back(&R); 
-  for (const auto &E : R) 
-    addRegionIntoQueue(*E, Regions); 
-} 
- 
-PreservedAnalyses StructurizeCFGPass::run(Function &F, 
-                                          FunctionAnalysisManager &AM) { 
- 
-  bool Changed = false; 
-  DominatorTree *DT = &AM.getResult<DominatorTreeAnalysis>(F); 
-  auto &RI = AM.getResult<RegionInfoAnalysis>(F); 
-  std::vector<Region *> Regions; 
-  addRegionIntoQueue(*RI.getTopLevelRegion(), Regions); 
-  while (!Regions.empty()) { 
-    Region *R = Regions.back(); 
-    StructurizeCFG SCFG; 
-    SCFG.init(R); 
-    Changed |= SCFG.run(R, DT); 
-    Regions.pop_back(); 
-  } 
-  if (!Changed) 
-    return PreservedAnalyses::all(); 
-  PreservedAnalyses PA; 
-  PA.preserve<DominatorTreeAnalysis>(); 
-  return PA; 
-} 
+
+static void addRegionIntoQueue(Region &R, std::vector<Region *> &Regions) {
+  Regions.push_back(&R);
+  for (const auto &E : R)
+    addRegionIntoQueue(*E, Regions);
+}
+
+PreservedAnalyses StructurizeCFGPass::run(Function &F,
+                                          FunctionAnalysisManager &AM) {
+
+  bool Changed = false;
+  DominatorTree *DT = &AM.getResult<DominatorTreeAnalysis>(F);
+  auto &RI = AM.getResult<RegionInfoAnalysis>(F);
+  std::vector<Region *> Regions;
+  addRegionIntoQueue(*RI.getTopLevelRegion(), Regions);
+  while (!Regions.empty()) {
+    Region *R = Regions.back();
+    StructurizeCFG SCFG;
+    SCFG.init(R);
+    Changed |= SCFG.run(R, DT);
+    Regions.pop_back();
+  }
+  if (!Changed)
+    return PreservedAnalyses::all();
+  PreservedAnalyses PA;
+  PA.preserve<DominatorTreeAnalysis>();
+  return PA;
+}

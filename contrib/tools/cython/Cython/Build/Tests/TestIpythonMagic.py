@@ -28,24 +28,24 @@ try:
 except ImportError:
     pass
 
-code = u"""\ 
+code = u"""\
 def f(x):
     return 2*x
-""" 
+"""
 
-cython3_code = u"""\ 
+cython3_code = u"""\
 def f(int x):
     return 2 / x
 
 def call(x):
     return f(*(x,))
-""" 
+"""
 
-pgo_cython3_code = cython3_code + u"""\ 
+pgo_cython3_code = cython3_code + u"""\
 def main():
     for _ in range(100): call(5)
 main()
-""" 
+"""
 
 
 if sys.platform == 'win32':
@@ -154,10 +154,10 @@ class TestIPythonMagic(CythonTest):
     @skip_win32('Skip on Windows')
     def test_extlibs(self):
         ip = self._ip
-        code = u""" 
+        code = u"""
 from libc.math cimport sin
 x = sin(0.0)
-        """ 
+        """
         ip.user_ns['x'] = 1
         ip.run_cell_magic('cython', '-l m', code)
         self.assertEqual(ip.user_ns['x'], 0)
@@ -195,11 +195,11 @@ x = sin(0.0)
             ip.run_cell_magic('cython', '--verbose', code)
             ip.ex('g = f(10)')
         self.assertEqual(ip.user_ns['g'], 20.0)
-        self.assertEqual([verbose_log.INFO, verbose_log.DEBUG, verbose_log.INFO], 
+        self.assertEqual([verbose_log.INFO, verbose_log.DEBUG, verbose_log.INFO],
                           verbose_log.thresholds)
 
         with mock_distutils() as normal_log:
             ip.run_cell_magic('cython', '', code)
             ip.ex('g = f(10)')
         self.assertEqual(ip.user_ns['g'], 20.0)
-        self.assertEqual([normal_log.INFO], normal_log.thresholds) 
+        self.assertEqual([normal_log.INFO], normal_log.thresholds)

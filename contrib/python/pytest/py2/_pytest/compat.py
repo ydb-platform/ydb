@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 """
 python version compatibility code
 """
@@ -13,13 +13,13 @@ import re
 import sys
 from contextlib import contextmanager
 
-import attr 
+import attr
 import py
 import six
 from six import text_type
 
 import _pytest
-from _pytest._io.saferepr import saferepr 
+from _pytest._io.saferepr import saferepr
 from _pytest.outcomes import fail
 from _pytest.outcomes import TEST_OUTCOME
 
@@ -47,11 +47,11 @@ MODULE_NOT_FOUND_ERROR = "ModuleNotFoundError" if PY36 else "ImportError"
 
 if _PY3:
     from collections.abc import MutableMapping as MappingMixin
-    from collections.abc import Iterable, Mapping, Sequence, Sized 
+    from collections.abc import Iterable, Mapping, Sequence, Sized
 else:
     # those raise DeprecationWarnings in Python >=3.7
     from collections import MutableMapping as MappingMixin  # noqa
-    from collections import Iterable, Mapping, Sequence, Sized  # noqa 
+    from collections import Iterable, Mapping, Sequence, Sized  # noqa
 
 
 if sys.version_info >= (3, 4):
@@ -62,12 +62,12 @@ else:
         return None
 
 
-if sys.version_info >= (3, 8): 
-    from importlib import metadata as importlib_metadata  # noqa 
-else: 
-    import importlib_metadata  # noqa 
- 
- 
+if sys.version_info >= (3, 8):
+    from importlib import metadata as importlib_metadata  # noqa
+else:
+    import importlib_metadata  # noqa
+
+
 def _format_args(func):
     return str(signature(func))
 
@@ -190,18 +190,18 @@ def get_default_arg_names(function):
     )
 
 
-_non_printable_ascii_translate_table = { 
-    i: u"\\x{:02x}".format(i) for i in range(128) if i not in range(32, 127) 
-} 
-_non_printable_ascii_translate_table.update( 
-    {ord("\t"): u"\\t", ord("\r"): u"\\r", ord("\n"): u"\\n"} 
-) 
- 
- 
-def _translate_non_printable(s): 
-    return s.translate(_non_printable_ascii_translate_table) 
- 
- 
+_non_printable_ascii_translate_table = {
+    i: u"\\x{:02x}".format(i) for i in range(128) if i not in range(32, 127)
+}
+_non_printable_ascii_translate_table.update(
+    {ord("\t"): u"\\t", ord("\r"): u"\\r", ord("\n"): u"\\n"}
+)
+
+
+def _translate_non_printable(s):
+    return s.translate(_non_printable_ascii_translate_table)
+
+
 if _PY3:
     STRING_TYPES = bytes, str
     UNICODE_TYPES = six.text_type
@@ -241,10 +241,10 @@ if _PY3:
 
         """
         if isinstance(val, bytes):
-            ret = _bytes_to_ascii(val) 
+            ret = _bytes_to_ascii(val)
         else:
-            ret = val 
-        return ret 
+            ret = val
+        return ret
 
 
 else:
@@ -262,12 +262,12 @@ else:
         """
         if isinstance(val, bytes):
             try:
-                ret = val.decode("utf-8") 
+                ret = val.decode("utf-8")
             except UnicodeDecodeError:
-                ret = val.decode("utf-8", "ignore") 
+                ret = val.decode("utf-8", "ignore")
         else:
-            ret = val.encode("utf-8", "replace").decode("utf-8") 
-        return ret 
+            ret = val.encode("utf-8", "replace").decode("utf-8")
+        return ret
 
 
 class _PytestWrapper(object):
@@ -302,7 +302,7 @@ def get_real_func(obj):
     else:
         raise ValueError(
             ("could not find real function of {start}\nstopped at {current}").format(
-                start=saferepr(start_obj), current=saferepr(obj) 
+                start=saferepr(start_obj), current=saferepr(obj)
             )
         )
     if isinstance(obj, functools.partial):
@@ -378,16 +378,16 @@ if _PY3:
 
     def safe_str(v):
         """returns v as string"""
-        try: 
-            return str(v) 
-        except UnicodeEncodeError: 
-            return str(v, encoding="utf-8") 
+        try:
+            return str(v)
+        except UnicodeEncodeError:
+            return str(v, encoding="utf-8")
 
 
 else:
 
     def safe_str(v):
-        """returns v as string, converting to utf-8 if necessary""" 
+        """returns v as string, converting to utf-8 if necessary"""
         try:
             return str(v)
         except UnicodeError:
@@ -416,8 +416,8 @@ def _setup_collect_fakemodule():
 
     pytest.collect = ModuleType("pytest.collect")
     pytest.collect.__all__ = []  # used for setns
-    for attribute in COLLECT_FAKEMODULE_ATTRIBUTES: 
-        setattr(pytest.collect, attribute, getattr(pytest, attribute)) 
+    for attribute in COLLECT_FAKEMODULE_ATTRIBUTES:
+        setattr(pytest.collect, attribute, getattr(pytest, attribute))
 
 
 if _PY2:
@@ -465,9 +465,9 @@ if six.PY2:
 
 else:
     from functools import lru_cache  # noqa: F401
- 
- 
-if getattr(attr, "__version_info__", ()) >= (19, 2): 
-    ATTRS_EQ_FIELD = "eq" 
-else: 
-    ATTRS_EQ_FIELD = "cmp" 
+
+
+if getattr(attr, "__version_info__", ()) >= (19, 2):
+    ATTRS_EQ_FIELD = "eq"
+else:
+    ATTRS_EQ_FIELD = "cmp"

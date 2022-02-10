@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2020 Stefan Krah. All rights reserved. 
+ * Copyright (c) 2008-2020 Stefan Krah. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,15 +26,15 @@
  */
 
 
-#ifndef LIBMPDEC_CONSTANTS_H_ 
-#define LIBMPDEC_CONSTANTS_H_ 
+#ifndef LIBMPDEC_CONSTANTS_H_
+#define LIBMPDEC_CONSTANTS_H_
 
 
 #include "mpdecimal.h"
 
-#include <stdint.h> 
+#include <stdint.h>
 
- 
+
 /* Internal header file: all symbols have local scope in the DSO */
 MPD_PRAGMA(MPD_HIDE_SYMBOLS_START)
 
@@ -86,4 +86,4 @@ extern const mpd_uint_t UH_P1P2;
 MPD_PRAGMA(MPD_HIDE_SYMBOLS_END) /* restore previous scope rules */
 
 
-#endif /* LIBMPDEC_CONSTANTS_H_ */ 
+#endif /* LIBMPDEC_CONSTANTS_H_ */

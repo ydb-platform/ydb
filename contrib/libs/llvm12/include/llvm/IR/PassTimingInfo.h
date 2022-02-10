@@ -24,13 +24,13 @@
 
 #include "llvm/ADT/Any.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVector.h" 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Timer.h"
 #include <memory>
-#include <utility> 
- 
+#include <utility>
+
 namespace llvm {
 
 class Pass;
@@ -72,11 +72,11 @@ class TimePassesHandler {
   raw_ostream *OutStream = nullptr;
 
   bool Enabled;
-  bool PerRun; 
+  bool PerRun;
 
 public:
-  TimePassesHandler(); 
-  TimePassesHandler(bool Enabled, bool PerRun = false); 
+  TimePassesHandler();
+  TimePassesHandler(bool Enabled, bool PerRun = false);
 
   /// Destructor handles the print action if it has not been handled before.
   ~TimePassesHandler() { print(); }
@@ -104,7 +104,7 @@ private:
   void stopTimer(StringRef PassID);
 
   // Implementation of pass instrumentation callbacks.
-  void runBeforePass(StringRef PassID); 
+  void runBeforePass(StringRef PassID);
   void runAfterPass(StringRef PassID);
 };
 

@@ -12,7 +12,7 @@ from prompt_toolkit.filters.cli import ViNavigationMode
 from prompt_toolkit.keys import Keys, Key
 from prompt_toolkit.utils import Event
 
-from .registry import BaseRegistry 
+from .registry import BaseRegistry
 
 from collections import deque
 from six.moves import range
@@ -67,11 +67,11 @@ class InputProcessor(object):
         # Now the ControlX-ControlC callback will be called if this sequence is
         # registered in the registry.
 
-    :param registry: `BaseRegistry` instance. 
+    :param registry: `BaseRegistry` instance.
     :param cli_ref: weakref to `CommandLineInterface`.
     """
     def __init__(self, registry, cli_ref):
-        assert isinstance(registry, BaseRegistry) 
+        assert isinstance(registry, BaseRegistry)
 
         self._registry = registry
         self._cli_ref = cli_ref
@@ -86,14 +86,14 @@ class InputProcessor(object):
         # (This is at at most the amount of keys that make up for one key binding.)
         self.key_buffer = []
 
-        # Simple macro recording. (Like readline does.) 
-        self.record_macro = False 
-        self.macro = [] 
- 
+        # Simple macro recording. (Like readline does.)
+        self.record_macro = False
+        self.macro = []
+
         self.reset()
 
     def reset(self):
-        self._previous_key_sequence = [] 
+        self._previous_key_sequence = []
         self._previous_handler = None
 
         self._process_coroutine = self._process()
@@ -103,19 +103,19 @@ class InputProcessor(object):
         #: https://www.gnu.org/software/bash/manual/html_node/Readline-Arguments.html
         self.arg = None
 
-    def start_macro(self): 
-        " Start recording macro. " 
-        self.record_macro = True 
-        self.macro = [] 
- 
-    def end_macro(self): 
-        " End recording macro. " 
-        self.record_macro = False 
- 
-    def call_macro(self): 
-        for k in self.macro: 
-            self.feed(k) 
- 
+    def start_macro(self):
+        " Start recording macro. "
+        self.record_macro = True
+        self.macro = []
+
+    def end_macro(self):
+        " End recording macro. "
+        self.record_macro = False
+
+    def call_macro(self):
+        for k in self.macro:
+            self.feed(k)
+
     def _get_matches(self, key_presses):
         """
         For a list of :class:`KeyPress` instances. Give the matching handlers
@@ -163,17 +163,17 @@ class InputProcessor(object):
                 is_prefix_of_longer_match = self._is_prefix_of_longer_match(buffer)
                 matches = self._get_matches(buffer)
 
-                # When eager matches were found, give priority to them and also 
-                # ignore all the longer matches. 
-                eager_matches = [m for m in matches if m.eager(self._cli_ref())] 
- 
-                if eager_matches: 
-                    matches = eager_matches 
+                # When eager matches were found, give priority to them and also
+                # ignore all the longer matches.
+                eager_matches = [m for m in matches if m.eager(self._cli_ref())]
+
+                if eager_matches:
+                    matches = eager_matches
                     is_prefix_of_longer_match = False
 
                 # Exact matches found, call handler.
                 if not is_prefix_of_longer_match and matches:
-                    self._call_handler(matches[-1], key_sequence=buffer[:]) 
+                    self._call_handler(matches[-1], key_sequence=buffer[:])
                     del buffer[:]  # Keep reference.
 
                 # No match found.
@@ -227,7 +227,7 @@ class InputProcessor(object):
             cli.invalidate()
 
     def _call_handler(self, handler, key_sequence=None):
-        was_recording = self.record_macro 
+        was_recording = self.record_macro
         arg = self.arg
         self.arg = None
 
@@ -255,11 +255,11 @@ class InputProcessor(object):
         self._previous_key_sequence = key_sequence
         self._previous_handler = handler
 
-        # Record the key sequence in our macro. (Only if we're in macro mode 
-        # before and after executing the key.) 
-        if self.record_macro and was_recording: 
-            self.macro.extend(key_sequence) 
- 
+        # Record the key sequence in our macro. (Only if we're in macro mode
+        # before and after executing the key.)
+        if self.record_macro and was_recording:
+            self.macro.extend(key_sequence)
+
     def _fix_vi_cursor_position(self, event):
         """
         After every command, make sure that if we are in Vi navigation mode, we

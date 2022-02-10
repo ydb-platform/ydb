@@ -46,7 +46,7 @@ namespace llvm {
       t_LocalID, t_GlobalID,           // ID in UIntVal.
       t_LocalName, t_GlobalName,       // Name in StrVal.
       t_APSInt, t_APFloat,             // Value in APSIntVal/APFloatVal.
-      t_Null, t_Undef, t_Zero, t_None, t_Poison, // No value. 
+      t_Null, t_Undef, t_Zero, t_None, t_Poison, // No value.
       t_EmptyArray,                    // No value:  []
       t_Constant,                      // Value in ConstantVal.
       t_InlineAsm,                     // Value in FTy/StrVal/StrVal2/UIntVal.
@@ -166,8 +166,8 @@ namespace llvm {
         : Context(Context), Lex(F, SM, Err, Context), M(M), Index(Index),
           Slots(Slots), BlockAddressPFS(nullptr) {}
     bool Run(
-        bool UpgradeDebugInfo, DataLayoutCallbackTy DataLayoutCallback = 
-                                   [](StringRef) { return None; }); 
+        bool UpgradeDebugInfo, DataLayoutCallbackTy DataLayoutCallback =
+                                   [](StringRef) { return None; });
 
     bool parseStandaloneConstantValue(Constant *&C, const SlotMapping *Slots);
 
@@ -177,26 +177,26 @@ namespace llvm {
     LLVMContext &getContext() { return Context; }
 
   private:
-    bool error(LocTy L, const Twine &Msg) const { return Lex.Error(L, Msg); } 
-    bool tokError(const Twine &Msg) const { return error(Lex.getLoc(), Msg); } 
+    bool error(LocTy L, const Twine &Msg) const { return Lex.Error(L, Msg); }
+    bool tokError(const Twine &Msg) const { return error(Lex.getLoc(), Msg); }
 
     /// Restore the internal name and slot mappings using the mappings that
     /// were created at an earlier parsing stage.
     void restoreParsingState(const SlotMapping *Slots);
 
-    /// getGlobalVal - Get a value with the specified name or ID, creating a 
+    /// getGlobalVal - Get a value with the specified name or ID, creating a
     /// forward reference record if needed.  This can return null if the value
     /// exists but does not have the right type.
-    GlobalValue *getGlobalVal(const std::string &N, Type *Ty, LocTy Loc, 
+    GlobalValue *getGlobalVal(const std::string &N, Type *Ty, LocTy Loc,
                               bool IsCall);
-    GlobalValue *getGlobalVal(unsigned ID, Type *Ty, LocTy Loc, bool IsCall); 
+    GlobalValue *getGlobalVal(unsigned ID, Type *Ty, LocTy Loc, bool IsCall);
 
     /// Get a Comdat with the specified name, creating a forward reference
     /// record if needed.
     Comdat *getComdat(const std::string &Name, LocTy Loc);
 
     // Helper Routines.
-    bool parseToken(lltok::Kind T, const char *ErrMsg); 
+    bool parseToken(lltok::Kind T, const char *ErrMsg);
     bool EatIfPresent(lltok::Kind T) {
       if (Lex.getKind() != T) return false;
       Lex.Lex();
@@ -223,7 +223,7 @@ namespace llvm {
       return FMF;
     }
 
-    bool parseOptionalToken(lltok::Kind T, bool &Present, 
+    bool parseOptionalToken(lltok::Kind T, bool &Present,
                             LocTy *Loc = nullptr) {
       if (Lex.getKind() != T) {
         Present = false;
@@ -235,81 +235,81 @@ namespace llvm {
       }
       return false;
     }
-    bool parseStringConstant(std::string &Result); 
-    bool parseUInt32(unsigned &Val); 
-    bool parseUInt32(unsigned &Val, LocTy &Loc) { 
+    bool parseStringConstant(std::string &Result);
+    bool parseUInt32(unsigned &Val);
+    bool parseUInt32(unsigned &Val, LocTy &Loc) {
       Loc = Lex.getLoc();
-      return parseUInt32(Val); 
+      return parseUInt32(Val);
     }
-    bool parseUInt64(uint64_t &Val); 
-    bool parseUInt64(uint64_t &Val, LocTy &Loc) { 
+    bool parseUInt64(uint64_t &Val);
+    bool parseUInt64(uint64_t &Val, LocTy &Loc) {
       Loc = Lex.getLoc();
-      return parseUInt64(Val); 
+      return parseUInt64(Val);
     }
-    bool parseFlag(unsigned &Val); 
+    bool parseFlag(unsigned &Val);
 
-    bool parseStringAttribute(AttrBuilder &B); 
+    bool parseStringAttribute(AttrBuilder &B);
 
-    bool parseTLSModel(GlobalVariable::ThreadLocalMode &TLM); 
-    bool parseOptionalThreadLocal(GlobalVariable::ThreadLocalMode &TLM); 
-    bool parseOptionalUnnamedAddr(GlobalVariable::UnnamedAddr &UnnamedAddr); 
-    bool parseOptionalAddrSpace(unsigned &AddrSpace, unsigned DefaultAS = 0); 
-    bool parseOptionalProgramAddrSpace(unsigned &AddrSpace) { 
-      return parseOptionalAddrSpace( 
+    bool parseTLSModel(GlobalVariable::ThreadLocalMode &TLM);
+    bool parseOptionalThreadLocal(GlobalVariable::ThreadLocalMode &TLM);
+    bool parseOptionalUnnamedAddr(GlobalVariable::UnnamedAddr &UnnamedAddr);
+    bool parseOptionalAddrSpace(unsigned &AddrSpace, unsigned DefaultAS = 0);
+    bool parseOptionalProgramAddrSpace(unsigned &AddrSpace) {
+      return parseOptionalAddrSpace(
           AddrSpace, M->getDataLayout().getProgramAddressSpace());
     };
-    bool parseOptionalParamAttrs(AttrBuilder &B); 
-    bool parseOptionalReturnAttrs(AttrBuilder &B); 
-    bool parseOptionalLinkage(unsigned &Res, bool &HasLinkage, 
+    bool parseOptionalParamAttrs(AttrBuilder &B);
+    bool parseOptionalReturnAttrs(AttrBuilder &B);
+    bool parseOptionalLinkage(unsigned &Res, bool &HasLinkage,
                               unsigned &Visibility, unsigned &DLLStorageClass,
                               bool &DSOLocal);
-    void parseOptionalDSOLocal(bool &DSOLocal); 
-    void parseOptionalVisibility(unsigned &Res); 
-    void parseOptionalDLLStorageClass(unsigned &Res); 
-    bool parseOptionalCallingConv(unsigned &CC); 
-    bool parseOptionalAlignment(MaybeAlign &Alignment, 
+    void parseOptionalDSOLocal(bool &DSOLocal);
+    void parseOptionalVisibility(unsigned &Res);
+    void parseOptionalDLLStorageClass(unsigned &Res);
+    bool parseOptionalCallingConv(unsigned &CC);
+    bool parseOptionalAlignment(MaybeAlign &Alignment,
                                 bool AllowParens = false);
-    bool parseOptionalDerefAttrBytes(lltok::Kind AttrKind, uint64_t &Bytes); 
-    bool parseScopeAndOrdering(bool IsAtomic, SyncScope::ID &SSID, 
+    bool parseOptionalDerefAttrBytes(lltok::Kind AttrKind, uint64_t &Bytes);
+    bool parseScopeAndOrdering(bool IsAtomic, SyncScope::ID &SSID,
                                AtomicOrdering &Ordering);
-    bool parseScope(SyncScope::ID &SSID); 
-    bool parseOrdering(AtomicOrdering &Ordering); 
-    bool parseOptionalStackAlignment(unsigned &Alignment); 
-    bool parseOptionalCommaAlign(MaybeAlign &Alignment, bool &AteExtraComma); 
-    bool parseOptionalCommaAddrSpace(unsigned &AddrSpace, LocTy &Loc, 
+    bool parseScope(SyncScope::ID &SSID);
+    bool parseOrdering(AtomicOrdering &Ordering);
+    bool parseOptionalStackAlignment(unsigned &Alignment);
+    bool parseOptionalCommaAlign(MaybeAlign &Alignment, bool &AteExtraComma);
+    bool parseOptionalCommaAddrSpace(unsigned &AddrSpace, LocTy &Loc,
                                      bool &AteExtraComma);
-    bool parseOptionalCommaInAlloca(bool &IsInAlloca); 
+    bool parseOptionalCommaInAlloca(bool &IsInAlloca);
     bool parseAllocSizeArguments(unsigned &BaseSizeArg,
                                  Optional<unsigned> &HowManyArg);
-    bool parseIndexList(SmallVectorImpl<unsigned> &Indices, 
+    bool parseIndexList(SmallVectorImpl<unsigned> &Indices,
                         bool &AteExtraComma);
-    bool parseIndexList(SmallVectorImpl<unsigned> &Indices) { 
+    bool parseIndexList(SmallVectorImpl<unsigned> &Indices) {
       bool AteExtraComma;
-      if (parseIndexList(Indices, AteExtraComma)) 
-        return true; 
+      if (parseIndexList(Indices, AteExtraComma))
+        return true;
       if (AteExtraComma)
-        return tokError("expected index"); 
+        return tokError("expected index");
       return false;
     }
 
     // Top-Level Entities
-    bool parseTopLevelEntities(); 
-    bool validateEndOfModule(bool UpgradeDebugInfo); 
-    bool validateEndOfIndex(); 
-    bool parseTargetDefinitions(); 
-    bool parseTargetDefinition(); 
-    bool parseModuleAsm(); 
-    bool parseSourceFileName(); 
-    bool parseDepLibs(); // FIXME: Remove in 4.0. 
-    bool parseUnnamedType(); 
-    bool parseNamedType(); 
-    bool parseDeclare(); 
-    bool parseDefine(); 
+    bool parseTopLevelEntities();
+    bool validateEndOfModule(bool UpgradeDebugInfo);
+    bool validateEndOfIndex();
+    bool parseTargetDefinitions();
+    bool parseTargetDefinition();
+    bool parseModuleAsm();
+    bool parseSourceFileName();
+    bool parseDepLibs(); // FIXME: Remove in 4.0.
+    bool parseUnnamedType();
+    bool parseNamedType();
+    bool parseDeclare();
+    bool parseDefine();
 
-    bool parseGlobalType(bool &IsConstant); 
-    bool parseUnnamedGlobal(); 
-    bool parseNamedGlobal(); 
-    bool parseGlobal(const std::string &Name, LocTy NameLoc, unsigned Linkage, 
+    bool parseGlobalType(bool &IsConstant);
+    bool parseUnnamedGlobal();
+    bool parseNamedGlobal();
+    bool parseGlobal(const std::string &Name, LocTy NameLoc, unsigned Linkage,
                      bool HasLinkage, unsigned Visibility,
                      unsigned DLLStorageClass, bool DSOLocal,
                      GlobalVariable::ThreadLocalMode TLM,
@@ -320,96 +320,96 @@ namespace llvm {
                              GlobalVariable::ThreadLocalMode TLM,
                              GlobalVariable::UnnamedAddr UnnamedAddr);
     bool parseComdat();
-    bool parseStandaloneMetadata(); 
-    bool parseNamedMetadata(); 
-    bool parseMDString(MDString *&Result); 
-    bool parseMDNodeID(MDNode *&Result); 
-    bool parseUnnamedAttrGrp(); 
-    bool parseFnAttributeValuePairs(AttrBuilder &B, 
+    bool parseStandaloneMetadata();
+    bool parseNamedMetadata();
+    bool parseMDString(MDString *&Result);
+    bool parseMDNodeID(MDNode *&Result);
+    bool parseUnnamedAttrGrp();
+    bool parseFnAttributeValuePairs(AttrBuilder &B,
                                     std::vector<unsigned> &FwdRefAttrGrps,
                                     bool inAttrGrp, LocTy &BuiltinLoc);
-    bool parseRequiredTypeAttr(Type *&Result, lltok::Kind AttrName); 
-    bool parsePreallocated(Type *&Result); 
-    bool parseByRef(Type *&Result); 
+    bool parseRequiredTypeAttr(Type *&Result, lltok::Kind AttrName);
+    bool parsePreallocated(Type *&Result);
+    bool parseByRef(Type *&Result);
 
     // Module Summary Index Parsing.
-    bool skipModuleSummaryEntry(); 
-    bool parseSummaryEntry(); 
-    bool parseModuleEntry(unsigned ID); 
-    bool parseModuleReference(StringRef &ModulePath); 
-    bool parseGVReference(ValueInfo &VI, unsigned &GVId); 
-    bool parseSummaryIndexFlags(); 
-    bool parseBlockCount(); 
-    bool parseGVEntry(unsigned ID); 
-    bool parseFunctionSummary(std::string Name, GlobalValue::GUID, unsigned ID); 
-    bool parseVariableSummary(std::string Name, GlobalValue::GUID, unsigned ID); 
-    bool parseAliasSummary(std::string Name, GlobalValue::GUID, unsigned ID); 
-    bool parseGVFlags(GlobalValueSummary::GVFlags &GVFlags); 
-    bool parseGVarFlags(GlobalVarSummary::GVarFlags &GVarFlags); 
-    bool parseOptionalFFlags(FunctionSummary::FFlags &FFlags); 
-    bool parseOptionalCalls(std::vector<FunctionSummary::EdgeTy> &Calls); 
-    bool parseHotness(CalleeInfo::HotnessType &Hotness); 
-    bool parseOptionalTypeIdInfo(FunctionSummary::TypeIdInfo &TypeIdInfo); 
-    bool parseTypeTests(std::vector<GlobalValue::GUID> &TypeTests); 
-    bool parseVFuncIdList(lltok::Kind Kind, 
+    bool skipModuleSummaryEntry();
+    bool parseSummaryEntry();
+    bool parseModuleEntry(unsigned ID);
+    bool parseModuleReference(StringRef &ModulePath);
+    bool parseGVReference(ValueInfo &VI, unsigned &GVId);
+    bool parseSummaryIndexFlags();
+    bool parseBlockCount();
+    bool parseGVEntry(unsigned ID);
+    bool parseFunctionSummary(std::string Name, GlobalValue::GUID, unsigned ID);
+    bool parseVariableSummary(std::string Name, GlobalValue::GUID, unsigned ID);
+    bool parseAliasSummary(std::string Name, GlobalValue::GUID, unsigned ID);
+    bool parseGVFlags(GlobalValueSummary::GVFlags &GVFlags);
+    bool parseGVarFlags(GlobalVarSummary::GVarFlags &GVarFlags);
+    bool parseOptionalFFlags(FunctionSummary::FFlags &FFlags);
+    bool parseOptionalCalls(std::vector<FunctionSummary::EdgeTy> &Calls);
+    bool parseHotness(CalleeInfo::HotnessType &Hotness);
+    bool parseOptionalTypeIdInfo(FunctionSummary::TypeIdInfo &TypeIdInfo);
+    bool parseTypeTests(std::vector<GlobalValue::GUID> &TypeTests);
+    bool parseVFuncIdList(lltok::Kind Kind,
                           std::vector<FunctionSummary::VFuncId> &VFuncIdList);
-    bool parseConstVCallList( 
+    bool parseConstVCallList(
         lltok::Kind Kind,
         std::vector<FunctionSummary::ConstVCall> &ConstVCallList);
     using IdToIndexMapType =
         std::map<unsigned, std::vector<std::pair<unsigned, LocTy>>>;
-    bool parseConstVCall(FunctionSummary::ConstVCall &ConstVCall, 
+    bool parseConstVCall(FunctionSummary::ConstVCall &ConstVCall,
                          IdToIndexMapType &IdToIndexMap, unsigned Index);
-    bool parseVFuncId(FunctionSummary::VFuncId &VFuncId, 
+    bool parseVFuncId(FunctionSummary::VFuncId &VFuncId,
                       IdToIndexMapType &IdToIndexMap, unsigned Index);
-    bool parseOptionalVTableFuncs(VTableFuncList &VTableFuncs); 
-    bool parseOptionalParamAccesses( 
+    bool parseOptionalVTableFuncs(VTableFuncList &VTableFuncs);
+    bool parseOptionalParamAccesses(
         std::vector<FunctionSummary::ParamAccess> &Params);
-    bool parseParamNo(uint64_t &ParamNo); 
-    using IdLocListType = std::vector<std::pair<unsigned, LocTy>>; 
-    bool parseParamAccess(FunctionSummary::ParamAccess &Param, 
-                          IdLocListType &IdLocList); 
-    bool parseParamAccessCall(FunctionSummary::ParamAccess::Call &Call, 
-                              IdLocListType &IdLocList); 
-    bool parseParamAccessOffset(ConstantRange &Range); 
-    bool parseOptionalRefs(std::vector<ValueInfo> &Refs); 
-    bool parseTypeIdEntry(unsigned ID); 
-    bool parseTypeIdSummary(TypeIdSummary &TIS); 
-    bool parseTypeIdCompatibleVtableEntry(unsigned ID); 
-    bool parseTypeTestResolution(TypeTestResolution &TTRes); 
-    bool parseOptionalWpdResolutions( 
+    bool parseParamNo(uint64_t &ParamNo);
+    using IdLocListType = std::vector<std::pair<unsigned, LocTy>>;
+    bool parseParamAccess(FunctionSummary::ParamAccess &Param,
+                          IdLocListType &IdLocList);
+    bool parseParamAccessCall(FunctionSummary::ParamAccess::Call &Call,
+                              IdLocListType &IdLocList);
+    bool parseParamAccessOffset(ConstantRange &Range);
+    bool parseOptionalRefs(std::vector<ValueInfo> &Refs);
+    bool parseTypeIdEntry(unsigned ID);
+    bool parseTypeIdSummary(TypeIdSummary &TIS);
+    bool parseTypeIdCompatibleVtableEntry(unsigned ID);
+    bool parseTypeTestResolution(TypeTestResolution &TTRes);
+    bool parseOptionalWpdResolutions(
         std::map<uint64_t, WholeProgramDevirtResolution> &WPDResMap);
-    bool parseWpdRes(WholeProgramDevirtResolution &WPDRes); 
-    bool parseOptionalResByArg( 
+    bool parseWpdRes(WholeProgramDevirtResolution &WPDRes);
+    bool parseOptionalResByArg(
         std::map<std::vector<uint64_t>, WholeProgramDevirtResolution::ByArg>
             &ResByArg);
-    bool parseArgs(std::vector<uint64_t> &Args); 
-    void addGlobalValueToIndex(std::string Name, GlobalValue::GUID, 
+    bool parseArgs(std::vector<uint64_t> &Args);
+    void addGlobalValueToIndex(std::string Name, GlobalValue::GUID,
                                GlobalValue::LinkageTypes Linkage, unsigned ID,
                                std::unique_ptr<GlobalValueSummary> Summary);
 
     // Type Parsing.
-    bool parseType(Type *&Result, const Twine &Msg, bool AllowVoid = false); 
-    bool parseType(Type *&Result, bool AllowVoid = false) { 
-      return parseType(Result, "expected type", AllowVoid); 
+    bool parseType(Type *&Result, const Twine &Msg, bool AllowVoid = false);
+    bool parseType(Type *&Result, bool AllowVoid = false) {
+      return parseType(Result, "expected type", AllowVoid);
     }
-    bool parseType(Type *&Result, const Twine &Msg, LocTy &Loc, 
+    bool parseType(Type *&Result, const Twine &Msg, LocTy &Loc,
                    bool AllowVoid = false) {
       Loc = Lex.getLoc();
-      return parseType(Result, Msg, AllowVoid); 
+      return parseType(Result, Msg, AllowVoid);
     }
-    bool parseType(Type *&Result, LocTy &Loc, bool AllowVoid = false) { 
+    bool parseType(Type *&Result, LocTy &Loc, bool AllowVoid = false) {
       Loc = Lex.getLoc();
-      return parseType(Result, AllowVoid); 
+      return parseType(Result, AllowVoid);
     }
-    bool parseAnonStructType(Type *&Result, bool Packed); 
-    bool parseStructBody(SmallVectorImpl<Type *> &Body); 
-    bool parseStructDefinition(SMLoc TypeLoc, StringRef Name, 
-                               std::pair<Type *, LocTy> &Entry, 
+    bool parseAnonStructType(Type *&Result, bool Packed);
+    bool parseStructBody(SmallVectorImpl<Type *> &Body);
+    bool parseStructDefinition(SMLoc TypeLoc, StringRef Name,
+                               std::pair<Type *, LocTy> &Entry,
                                Type *&ResultTy);
 
-    bool parseArrayVectorType(Type *&Result, bool IsVector); 
-    bool parseFunctionType(Type *&Result); 
+    bool parseArrayVectorType(Type *&Result, bool IsVector);
+    bool parseFunctionType(Type *&Result);
 
     // Function Semantic Analysis.
     class PerFunctionState {
@@ -428,63 +428,63 @@ namespace llvm {
 
       Function &getFunction() const { return F; }
 
-      bool finishFunction(); 
+      bool finishFunction();
 
       /// GetVal - Get a value with the specified name or ID, creating a
       /// forward reference record if needed.  This can return null if the value
       /// exists but does not have the right type.
-      Value *getVal(const std::string &Name, Type *Ty, LocTy Loc, bool IsCall); 
-      Value *getVal(unsigned ID, Type *Ty, LocTy Loc, bool IsCall); 
+      Value *getVal(const std::string &Name, Type *Ty, LocTy Loc, bool IsCall);
+      Value *getVal(unsigned ID, Type *Ty, LocTy Loc, bool IsCall);
 
-      /// setInstName - After an instruction is parsed and inserted into its 
+      /// setInstName - After an instruction is parsed and inserted into its
       /// basic block, this installs its name.
-      bool setInstName(int NameID, const std::string &NameStr, LocTy NameLoc, 
+      bool setInstName(int NameID, const std::string &NameStr, LocTy NameLoc,
                        Instruction *Inst);
 
       /// GetBB - Get a basic block with the specified name or ID, creating a
       /// forward reference record if needed.  This can return null if the value
       /// is not a BasicBlock.
-      BasicBlock *getBB(const std::string &Name, LocTy Loc); 
-      BasicBlock *getBB(unsigned ID, LocTy Loc); 
+      BasicBlock *getBB(const std::string &Name, LocTy Loc);
+      BasicBlock *getBB(unsigned ID, LocTy Loc);
 
       /// DefineBB - Define the specified basic block, which is either named or
       /// unnamed.  If there is an error, this returns null otherwise it returns
       /// the block being defined.
-      BasicBlock *defineBB(const std::string &Name, int NameID, LocTy Loc); 
+      BasicBlock *defineBB(const std::string &Name, int NameID, LocTy Loc);
 
       bool resolveForwardRefBlockAddresses();
     };
 
-    bool convertValIDToValue(Type *Ty, ValID &ID, Value *&V, 
+    bool convertValIDToValue(Type *Ty, ValID &ID, Value *&V,
                              PerFunctionState *PFS, bool IsCall);
 
     Value *checkValidVariableType(LocTy Loc, const Twine &Name, Type *Ty,
                                   Value *Val, bool IsCall);
 
     bool parseConstantValue(Type *Ty, Constant *&C);
-    bool parseValue(Type *Ty, Value *&V, PerFunctionState *PFS); 
-    bool parseValue(Type *Ty, Value *&V, PerFunctionState &PFS) { 
-      return parseValue(Ty, V, &PFS); 
+    bool parseValue(Type *Ty, Value *&V, PerFunctionState *PFS);
+    bool parseValue(Type *Ty, Value *&V, PerFunctionState &PFS) {
+      return parseValue(Ty, V, &PFS);
     }
 
-    bool parseValue(Type *Ty, Value *&V, LocTy &Loc, PerFunctionState &PFS) { 
+    bool parseValue(Type *Ty, Value *&V, LocTy &Loc, PerFunctionState &PFS) {
       Loc = Lex.getLoc();
-      return parseValue(Ty, V, &PFS); 
+      return parseValue(Ty, V, &PFS);
     }
 
-    bool parseTypeAndValue(Value *&V, PerFunctionState *PFS); 
-    bool parseTypeAndValue(Value *&V, PerFunctionState &PFS) { 
-      return parseTypeAndValue(V, &PFS); 
+    bool parseTypeAndValue(Value *&V, PerFunctionState *PFS);
+    bool parseTypeAndValue(Value *&V, PerFunctionState &PFS) {
+      return parseTypeAndValue(V, &PFS);
     }
-    bool parseTypeAndValue(Value *&V, LocTy &Loc, PerFunctionState &PFS) { 
+    bool parseTypeAndValue(Value *&V, LocTy &Loc, PerFunctionState &PFS) {
       Loc = Lex.getLoc();
-      return parseTypeAndValue(V, PFS); 
+      return parseTypeAndValue(V, PFS);
     }
-    bool parseTypeAndBasicBlock(BasicBlock *&BB, LocTy &Loc, 
+    bool parseTypeAndBasicBlock(BasicBlock *&BB, LocTy &Loc,
                                 PerFunctionState &PFS);
-    bool parseTypeAndBasicBlock(BasicBlock *&BB, PerFunctionState &PFS) { 
+    bool parseTypeAndBasicBlock(BasicBlock *&BB, PerFunctionState &PFS) {
       LocTy Loc;
-      return parseTypeAndBasicBlock(BB, Loc, PFS); 
+      return parseTypeAndBasicBlock(BB, Loc, PFS);
     }
 
     struct ParamInfo {
@@ -494,47 +494,47 @@ namespace llvm {
       ParamInfo(LocTy loc, Value *v, AttributeSet attrs)
           : Loc(loc), V(v), Attrs(attrs) {}
     };
-    bool parseParameterList(SmallVectorImpl<ParamInfo> &ArgList, 
-                            PerFunctionState &PFS, bool IsMustTailCall = false, 
+    bool parseParameterList(SmallVectorImpl<ParamInfo> &ArgList,
+                            PerFunctionState &PFS, bool IsMustTailCall = false,
                             bool InVarArgsFunc = false);
 
     bool
-    parseOptionalOperandBundles(SmallVectorImpl<OperandBundleDef> &BundleList, 
+    parseOptionalOperandBundles(SmallVectorImpl<OperandBundleDef> &BundleList,
                                 PerFunctionState &PFS);
 
-    bool parseExceptionArgs(SmallVectorImpl<Value *> &Args, 
+    bool parseExceptionArgs(SmallVectorImpl<Value *> &Args,
                             PerFunctionState &PFS);
 
     // Constant Parsing.
-    bool parseValID(ValID &ID, PerFunctionState *PFS = nullptr); 
-    bool parseGlobalValue(Type *Ty, Constant *&C); 
-    bool parseGlobalTypeAndValue(Constant *&V); 
-    bool parseGlobalValueVector(SmallVectorImpl<Constant *> &Elts, 
+    bool parseValID(ValID &ID, PerFunctionState *PFS = nullptr);
+    bool parseGlobalValue(Type *Ty, Constant *&C);
+    bool parseGlobalTypeAndValue(Constant *&V);
+    bool parseGlobalValueVector(SmallVectorImpl<Constant *> &Elts,
                                 Optional<unsigned> *InRangeOp = nullptr);
     bool parseOptionalComdat(StringRef GlobalName, Comdat *&C);
-    bool parseMetadataAsValue(Value *&V, PerFunctionState &PFS); 
-    bool parseValueAsMetadata(Metadata *&MD, const Twine &TypeMsg, 
+    bool parseMetadataAsValue(Value *&V, PerFunctionState &PFS);
+    bool parseValueAsMetadata(Metadata *&MD, const Twine &TypeMsg,
                               PerFunctionState *PFS);
-    bool parseMetadata(Metadata *&MD, PerFunctionState *PFS); 
-    bool parseMDTuple(MDNode *&MD, bool IsDistinct = false); 
-    bool parseMDNode(MDNode *&N); 
-    bool parseMDNodeTail(MDNode *&N); 
-    bool parseMDNodeVector(SmallVectorImpl<Metadata *> &Elts); 
-    bool parseMetadataAttachment(unsigned &Kind, MDNode *&MD); 
-    bool parseInstructionMetadata(Instruction &Inst); 
-    bool parseGlobalObjectMetadataAttachment(GlobalObject &GO); 
-    bool parseOptionalFunctionMetadata(Function &F); 
+    bool parseMetadata(Metadata *&MD, PerFunctionState *PFS);
+    bool parseMDTuple(MDNode *&MD, bool IsDistinct = false);
+    bool parseMDNode(MDNode *&N);
+    bool parseMDNodeTail(MDNode *&N);
+    bool parseMDNodeVector(SmallVectorImpl<Metadata *> &Elts);
+    bool parseMetadataAttachment(unsigned &Kind, MDNode *&MD);
+    bool parseInstructionMetadata(Instruction &Inst);
+    bool parseGlobalObjectMetadataAttachment(GlobalObject &GO);
+    bool parseOptionalFunctionMetadata(Function &F);
 
     template <class FieldTy>
-    bool parseMDField(LocTy Loc, StringRef Name, FieldTy &Result); 
-    template <class FieldTy> bool parseMDField(StringRef Name, FieldTy &Result); 
-    template <class ParserTy> bool parseMDFieldsImplBody(ParserTy ParseField); 
+    bool parseMDField(LocTy Loc, StringRef Name, FieldTy &Result);
+    template <class FieldTy> bool parseMDField(StringRef Name, FieldTy &Result);
+    template <class ParserTy> bool parseMDFieldsImplBody(ParserTy ParseField);
     template <class ParserTy>
-    bool parseMDFieldsImpl(ParserTy ParseField, LocTy &ClosingLoc); 
-    bool parseSpecializedMDNode(MDNode *&N, bool IsDistinct = false); 
+    bool parseMDFieldsImpl(ParserTy ParseField, LocTy &ClosingLoc);
+    bool parseSpecializedMDNode(MDNode *&N, bool IsDistinct = false);
 
 #define HANDLE_SPECIALIZED_MDNODE_LEAF(CLASS)                                  \
-  bool parse##CLASS(MDNode *&Result, bool IsDistinct); 
+  bool parse##CLASS(MDNode *&Result, bool IsDistinct);
 #include "llvm/IR/Metadata.def"
 
     // Function Parsing.
@@ -546,64 +546,64 @@ namespace llvm {
       ArgInfo(LocTy L, Type *ty, AttributeSet Attr, const std::string &N)
           : Loc(L), Ty(ty), Attrs(Attr), Name(N) {}
     };
-    bool parseArgumentList(SmallVectorImpl<ArgInfo> &ArgList, bool &IsVarArg); 
-    bool parseFunctionHeader(Function *&Fn, bool IsDefine); 
-    bool parseFunctionBody(Function &Fn); 
-    bool parseBasicBlock(PerFunctionState &PFS); 
+    bool parseArgumentList(SmallVectorImpl<ArgInfo> &ArgList, bool &IsVarArg);
+    bool parseFunctionHeader(Function *&Fn, bool IsDefine);
+    bool parseFunctionBody(Function &Fn);
+    bool parseBasicBlock(PerFunctionState &PFS);
 
     enum TailCallType { TCT_None, TCT_Tail, TCT_MustTail };
 
     // Instruction Parsing.  Each instruction parsing routine can return with a
     // normal result, an error result, or return having eaten an extra comma.
     enum InstResult { InstNormal = 0, InstError = 1, InstExtraComma = 2 };
-    int parseInstruction(Instruction *&Inst, BasicBlock *BB, 
+    int parseInstruction(Instruction *&Inst, BasicBlock *BB,
                          PerFunctionState &PFS);
-    bool parseCmpPredicate(unsigned &P, unsigned Opc); 
+    bool parseCmpPredicate(unsigned &P, unsigned Opc);
 
-    bool parseRet(Instruction *&Inst, BasicBlock *BB, PerFunctionState &PFS); 
-    bool parseBr(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseSwitch(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseIndirectBr(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseInvoke(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseResume(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseCleanupRet(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseCatchRet(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseCatchSwitch(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseCatchPad(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseCleanupPad(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseCallBr(Instruction *&Inst, PerFunctionState &PFS); 
+    bool parseRet(Instruction *&Inst, BasicBlock *BB, PerFunctionState &PFS);
+    bool parseBr(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseSwitch(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseIndirectBr(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseInvoke(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseResume(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseCleanupRet(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseCatchRet(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseCatchSwitch(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseCatchPad(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseCleanupPad(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseCallBr(Instruction *&Inst, PerFunctionState &PFS);
 
-    bool parseUnaryOp(Instruction *&Inst, PerFunctionState &PFS, unsigned Opc, 
+    bool parseUnaryOp(Instruction *&Inst, PerFunctionState &PFS, unsigned Opc,
                       bool IsFP);
-    bool parseArithmetic(Instruction *&Inst, PerFunctionState &PFS, 
-                         unsigned Opc, bool IsFP); 
-    bool parseLogical(Instruction *&Inst, PerFunctionState &PFS, unsigned Opc); 
-    bool parseCompare(Instruction *&Inst, PerFunctionState &PFS, unsigned Opc); 
-    bool parseCast(Instruction *&Inst, PerFunctionState &PFS, unsigned Opc); 
-    bool parseSelect(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseVAArg(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseExtractElement(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseInsertElement(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseShuffleVector(Instruction *&Inst, PerFunctionState &PFS); 
-    int parsePHI(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseLandingPad(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseCall(Instruction *&Inst, PerFunctionState &PFS, 
+    bool parseArithmetic(Instruction *&Inst, PerFunctionState &PFS,
+                         unsigned Opc, bool IsFP);
+    bool parseLogical(Instruction *&Inst, PerFunctionState &PFS, unsigned Opc);
+    bool parseCompare(Instruction *&Inst, PerFunctionState &PFS, unsigned Opc);
+    bool parseCast(Instruction *&Inst, PerFunctionState &PFS, unsigned Opc);
+    bool parseSelect(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseVAArg(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseExtractElement(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseInsertElement(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseShuffleVector(Instruction *&Inst, PerFunctionState &PFS);
+    int parsePHI(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseLandingPad(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseCall(Instruction *&Inst, PerFunctionState &PFS,
                    CallInst::TailCallKind TCK);
-    int parseAlloc(Instruction *&Inst, PerFunctionState &PFS); 
-    int parseLoad(Instruction *&Inst, PerFunctionState &PFS); 
-    int parseStore(Instruction *&Inst, PerFunctionState &PFS); 
-    int parseCmpXchg(Instruction *&Inst, PerFunctionState &PFS); 
-    int parseAtomicRMW(Instruction *&Inst, PerFunctionState &PFS); 
-    int parseFence(Instruction *&Inst, PerFunctionState &PFS); 
-    int parseGetElementPtr(Instruction *&Inst, PerFunctionState &PFS); 
-    int parseExtractValue(Instruction *&Inst, PerFunctionState &PFS); 
-    int parseInsertValue(Instruction *&Inst, PerFunctionState &PFS); 
-    bool parseFreeze(Instruction *&I, PerFunctionState &PFS); 
+    int parseAlloc(Instruction *&Inst, PerFunctionState &PFS);
+    int parseLoad(Instruction *&Inst, PerFunctionState &PFS);
+    int parseStore(Instruction *&Inst, PerFunctionState &PFS);
+    int parseCmpXchg(Instruction *&Inst, PerFunctionState &PFS);
+    int parseAtomicRMW(Instruction *&Inst, PerFunctionState &PFS);
+    int parseFence(Instruction *&Inst, PerFunctionState &PFS);
+    int parseGetElementPtr(Instruction *&Inst, PerFunctionState &PFS);
+    int parseExtractValue(Instruction *&Inst, PerFunctionState &PFS);
+    int parseInsertValue(Instruction *&Inst, PerFunctionState &PFS);
+    bool parseFreeze(Instruction *&I, PerFunctionState &PFS);
 
     // Use-list order directives.
-    bool parseUseListOrder(PerFunctionState *PFS = nullptr); 
-    bool parseUseListOrderBB(); 
-    bool parseUseListOrderIndexes(SmallVectorImpl<unsigned> &Indexes); 
+    bool parseUseListOrder(PerFunctionState *PFS = nullptr);
+    bool parseUseListOrderBB();
+    bool parseUseListOrderIndexes(SmallVectorImpl<unsigned> &Indexes);
     bool sortUseListOrder(Value *V, ArrayRef<unsigned> Indexes, SMLoc Loc);
   };
 } // End llvm namespace

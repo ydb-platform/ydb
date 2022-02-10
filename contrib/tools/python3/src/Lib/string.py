@@ -52,9 +52,9 @@ def capwords(s, sep=None):
 import re as _re
 from collections import ChainMap as _ChainMap
 
-_sentinel_dict = {} 
- 
-class Template: 
+_sentinel_dict = {}
+
+class Template:
     """A string class for supporting $-substitutions."""
 
     delimiter = '$'
@@ -66,24 +66,24 @@ class Template:
     braceidpattern = None
     flags = _re.IGNORECASE
 
-    def __init_subclass__(cls): 
-        super().__init_subclass__() 
-        if 'pattern' in cls.__dict__: 
-            pattern = cls.pattern 
-        else: 
-            delim = _re.escape(cls.delimiter) 
-            id = cls.idpattern 
-            bid = cls.braceidpattern or cls.idpattern 
-            pattern = fr""" 
-            {delim}(?: 
-              (?P<escaped>{delim})  |   # Escape sequence of two delimiters 
-              (?P<named>{id})       |   # delimiter and a Python identifier 
-              {{(?P<braced>{bid})}} |   # delimiter and a braced identifier 
-              (?P<invalid>)             # Other ill-formed delimiter exprs 
-            ) 
-            """ 
-        cls.pattern = _re.compile(pattern, cls.flags | _re.VERBOSE) 
- 
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+        if 'pattern' in cls.__dict__:
+            pattern = cls.pattern
+        else:
+            delim = _re.escape(cls.delimiter)
+            id = cls.idpattern
+            bid = cls.braceidpattern or cls.idpattern
+            pattern = fr"""
+            {delim}(?:
+              (?P<escaped>{delim})  |   # Escape sequence of two delimiters
+              (?P<named>{id})       |   # delimiter and a Python identifier
+              {{(?P<braced>{bid})}} |   # delimiter and a braced identifier
+              (?P<invalid>)             # Other ill-formed delimiter exprs
+            )
+            """
+        cls.pattern = _re.compile(pattern, cls.flags | _re.VERBOSE)
+
     def __init__(self, template):
         self.template = template
 
@@ -101,11 +101,11 @@ class Template:
         raise ValueError('Invalid placeholder in string: line %d, col %d' %
                          (lineno, colno))
 
-    def substitute(self, mapping=_sentinel_dict, /, **kws): 
-        if mapping is _sentinel_dict: 
+    def substitute(self, mapping=_sentinel_dict, /, **kws):
+        if mapping is _sentinel_dict:
             mapping = kws
         elif kws:
-            mapping = _ChainMap(kws, mapping) 
+            mapping = _ChainMap(kws, mapping)
         # Helper function for .sub()
         def convert(mo):
             # Check the most common path first.
@@ -120,11 +120,11 @@ class Template:
                              self.pattern)
         return self.pattern.sub(convert, self.template)
 
-    def safe_substitute(self, mapping=_sentinel_dict, /, **kws): 
-        if mapping is _sentinel_dict: 
+    def safe_substitute(self, mapping=_sentinel_dict, /, **kws):
+        if mapping is _sentinel_dict:
             mapping = kws
         elif kws:
-            mapping = _ChainMap(kws, mapping) 
+            mapping = _ChainMap(kws, mapping)
         # Helper function for .sub()
         def convert(mo):
             named = mo.group('named') or mo.group('braced')
@@ -141,9 +141,9 @@ class Template:
                              self.pattern)
         return self.pattern.sub(convert, self.template)
 
-# Initialize Template.pattern.  __init_subclass__() is automatically called 
-# only for subclasses, not for the Template class itself. 
-Template.__init_subclass__() 
+# Initialize Template.pattern.  __init_subclass__() is automatically called
+# only for subclasses, not for the Template class itself.
+Template.__init_subclass__()
 
 
 ########################################################################
@@ -157,7 +157,7 @@ Template.__init_subclass__()
 # The field name parser is implemented in _string.formatter_field_name_split
 
 class Formatter:
-    def format(self, format_string, /, *args, **kwargs): 
+    def format(self, format_string, /, *args, **kwargs):
         return self.vformat(format_string, args, kwargs)
 
     def vformat(self, format_string, args, kwargs):

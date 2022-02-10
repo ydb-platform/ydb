@@ -220,12 +220,12 @@ def _setoption(arg):
                                                  for s in parts]
     action = _getaction(action)
     category = _getcategory(category)
-    if message or module: 
-        import re 
-    if message: 
-        message = re.escape(message) 
+    if message or module:
+        import re
+    if message:
+        message = re.escape(message)
     if module:
-        module = re.escape(module) + r'\Z' 
+        module = re.escape(module) + r'\Z'
     if lineno:
         try:
             lineno = int(lineno)
@@ -251,19 +251,19 @@ def _getaction(action):
 def _getcategory(category):
     if not category:
         return Warning
-    if '.' not in category: 
-        import builtins as m 
-        klass = category 
+    if '.' not in category:
+        import builtins as m
+        klass = category
     else:
-        module, _, klass = category.rpartition('.') 
+        module, _, klass = category.rpartition('.')
         try:
             m = __import__(module, None, None, [klass])
         except ImportError:
             raise _OptionError("invalid module name: %r" % (module,)) from None
-    try: 
-        cat = getattr(m, klass) 
-    except AttributeError: 
-        raise _OptionError("unknown warning category: %r" % (category,)) from None 
+    try:
+        cat = getattr(m, klass)
+    except AttributeError:
+        raise _OptionError("unknown warning category: %r" % (category,)) from None
     if not issubclass(cat, Warning):
         raise _OptionError("invalid warning category: %r" % (category,))
     return cat
@@ -310,11 +310,11 @@ def warn(message, category=None, stacklevel=1, source=None):
                     raise ValueError
     except ValueError:
         globals = sys.__dict__
-        filename = "sys" 
+        filename = "sys"
         lineno = 1
     else:
         globals = frame.f_globals
-        filename = frame.f_code.co_filename 
+        filename = frame.f_code.co_filename
         lineno = frame.f_lineno
     if '__name__' in globals:
         module = globals['__name__']

@@ -67,8 +67,8 @@ public:
 
   /// isNodeHidden - If the function returns true, the given node is not
   /// displayed in the graph.
-  template <typename GraphType> 
-  static bool isNodeHidden(const void *, const GraphType &) { 
+  template <typename GraphType>
+  static bool isNodeHidden(const void *, const GraphType &) {
     return false;
   }
 

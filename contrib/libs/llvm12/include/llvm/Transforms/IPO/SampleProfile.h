@@ -31,18 +31,18 @@ class Module;
 /// The sample profiler data loader pass.
 class SampleProfileLoaderPass : public PassInfoMixin<SampleProfileLoaderPass> {
 public:
-  SampleProfileLoaderPass( 
-      std::string File = "", std::string RemappingFile = "", 
-      ThinOrFullLTOPhase LTOPhase = ThinOrFullLTOPhase::None) 
+  SampleProfileLoaderPass(
+      std::string File = "", std::string RemappingFile = "",
+      ThinOrFullLTOPhase LTOPhase = ThinOrFullLTOPhase::None)
       : ProfileFileName(File), ProfileRemappingFileName(RemappingFile),
-        LTOPhase(LTOPhase) {} 
+        LTOPhase(LTOPhase) {}
 
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 
 private:
   std::string ProfileFileName;
   std::string ProfileRemappingFileName;
-  ThinOrFullLTOPhase LTOPhase; 
+  ThinOrFullLTOPhase LTOPhase;
 };
 
 } // end namespace llvm

@@ -1,7 +1,7 @@
 // namespace object implementation
 
 #include "Python.h"
-#include "structmember.h"         // PyMemberDef 
+#include "structmember.h"         // PyMemberDef
 
 
 typedef struct {
@@ -72,8 +72,8 @@ namespace_repr(PyObject *ns)
     PyObject *separator, *pairsrepr, *repr = NULL;
     const char * name;
 
-    name = Py_IS_TYPE(ns, &_PyNamespace_Type) ? "namespace" 
-                                               : Py_TYPE(ns)->tp_name; 
+    name = Py_IS_TYPE(ns, &_PyNamespace_Type) ? "namespace"
+                                               : Py_TYPE(ns)->tp_name;
 
     i = Py_ReprEnter(ns);
     if (i != 0) {
@@ -100,9 +100,9 @@ namespace_repr(PyObject *ns)
         if (PyUnicode_Check(key) && PyUnicode_GET_LENGTH(key) > 0) {
             PyObject *value, *item;
 
-            value = PyDict_GetItemWithError(d, key); 
+            value = PyDict_GetItemWithError(d, key);
             if (value != NULL) {
-                item = PyUnicode_FromFormat("%U=%R", key, value); 
+                item = PyUnicode_FromFormat("%U=%R", key, value);
                 if (item == NULL) {
                     loop_error = 1;
                 }
@@ -111,9 +111,9 @@ namespace_repr(PyObject *ns)
                     Py_DECREF(item);
                 }
             }
-            else if (PyErr_Occurred()) { 
-                loop_error = 1; 
-            } 
+            else if (PyErr_Occurred()) {
+                loop_error = 1;
+            }
         }
 
         Py_DECREF(key);
@@ -174,7 +174,7 @@ namespace_richcompare(PyObject *self, PyObject *other, int op)
 PyDoc_STRVAR(namespace_reduce__doc__, "Return state information for pickling");
 
 static PyObject *
-namespace_reduce(_PyNamespaceObject *ns, PyObject *Py_UNUSED(ignored)) 
+namespace_reduce(_PyNamespaceObject *ns, PyObject *Py_UNUSED(ignored))
 {
     PyObject *result, *args = PyTuple_New(0);
 
@@ -205,10 +205,10 @@ PyTypeObject _PyNamespace_Type = {
     sizeof(_PyNamespaceObject),                 /* tp_basicsize */
     0,                                          /* tp_itemsize */
     (destructor)namespace_dealloc,              /* tp_dealloc */
-    0,                                          /* tp_vectorcall_offset */ 
+    0,                                          /* tp_vectorcall_offset */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_as_async */ 
+    0,                                          /* tp_as_async */
     (reprfunc)namespace_repr,                   /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */

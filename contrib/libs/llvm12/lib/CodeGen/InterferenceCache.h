@@ -44,7 +44,7 @@ class LLVM_LIBRARY_VISIBILITY InterferenceCache {
   /// of PhysReg in all basic blocks.
   class Entry {
     /// PhysReg - The register currently represented.
-    MCRegister PhysReg = 0; 
+    MCRegister PhysReg = 0;
 
     /// Tag - Cache tag is changed when any of the underlying LiveIntervalUnions
     /// change.
@@ -102,13 +102,13 @@ class LLVM_LIBRARY_VISIBILITY InterferenceCache {
 
     void clear(MachineFunction *mf, SlotIndexes *indexes, LiveIntervals *lis) {
       assert(!hasRefs() && "Cannot clear cache entry with references");
-      PhysReg = MCRegister::NoRegister; 
+      PhysReg = MCRegister::NoRegister;
       MF = mf;
       Indexes = indexes;
       LIS = lis;
     }
 
-    MCRegister getPhysReg() const { return PhysReg; } 
+    MCRegister getPhysReg() const { return PhysReg; }
 
     void addRef(int Delta) { RefCount += Delta; }
 
@@ -120,8 +120,8 @@ class LLVM_LIBRARY_VISIBILITY InterferenceCache {
     bool valid(LiveIntervalUnion *LIUArray, const TargetRegisterInfo *TRI);
 
     /// reset - Initialize entry to represent physReg's aliases.
-    void reset(MCRegister physReg, LiveIntervalUnion *LIUArray, 
-               const TargetRegisterInfo *TRI, const MachineFunction *MF); 
+    void reset(MCRegister physReg, LiveIntervalUnion *LIUArray,
+               const TargetRegisterInfo *TRI, const MachineFunction *MF);
 
     /// get - Return an up to date BlockInterference.
     BlockInterference *get(unsigned MBBNum) {
@@ -152,7 +152,7 @@ class LLVM_LIBRARY_VISIBILITY InterferenceCache {
   Entry Entries[CacheEntries];
 
   // get - Get a valid entry for PhysReg.
-  Entry *get(MCRegister PhysReg); 
+  Entry *get(MCRegister PhysReg);
 
 public:
   InterferenceCache() = default;
@@ -205,11 +205,11 @@ public:
     ~Cursor() { setEntry(nullptr); }
 
     /// setPhysReg - Point this cursor to PhysReg's interference.
-    void setPhysReg(InterferenceCache &Cache, MCRegister PhysReg) { 
+    void setPhysReg(InterferenceCache &Cache, MCRegister PhysReg) {
       // Release reference before getting a new one. That guarantees we can
       // actually have CacheEntries live cursors.
       setEntry(nullptr);
-      if (PhysReg.isValid()) 
+      if (PhysReg.isValid())
         setEntry(Cache.get(PhysReg));
     }
 

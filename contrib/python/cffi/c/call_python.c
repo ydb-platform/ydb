@@ -1,18 +1,18 @@
-#if PY_VERSION_HEX >= 0x03080000 
-# define HAVE_PYINTERPSTATE_GETDICT 
-#endif 
+#if PY_VERSION_HEX >= 0x03080000
+# define HAVE_PYINTERPSTATE_GETDICT
+#endif
 
- 
-static PyObject *_current_interp_key(void) 
-{ 
-    PyInterpreterState *interp = PyThreadState_GET()->interp; 
-#ifdef HAVE_PYINTERPSTATE_GETDICT 
-    return PyInterpreterState_GetDict(interp);   /* shared reference */ 
-#else 
-    return interp->modules; 
-#endif 
-} 
- 
+
+static PyObject *_current_interp_key(void)
+{
+    PyInterpreterState *interp = PyThreadState_GET()->interp;
+#ifdef HAVE_PYINTERPSTATE_GETDICT
+    return PyInterpreterState_GetDict(interp);   /* shared reference */
+#else
+    return interp->modules;
+#endif
+}
+
 static PyObject *_get_interpstate_dict(void)
 {
     /* Hack around to return a dict that is subinterpreter-local.
@@ -22,9 +22,9 @@ static PyObject *_get_interpstate_dict(void)
     */
     static PyObject *attr_name = NULL;
     PyThreadState *tstate;
-    PyObject *d, *interpdict; 
+    PyObject *d, *interpdict;
     int err;
-    PyInterpreterState *interp; 
+    PyInterpreterState *interp;
 
     tstate = PyThreadState_GET();
     if (tstate == NULL) {
@@ -32,13 +32,13 @@ static PyObject *_get_interpstate_dict(void)
         return NULL;
     }
 
-    interp = tstate->interp; 
-#ifdef HAVE_PYINTERPSTATE_GETDICT 
-    interpdict = PyInterpreterState_GetDict(interp);   /* shared reference */ 
-#else 
-    interpdict = interp->builtins; 
-#endif 
-    if (interpdict == NULL) { 
+    interp = tstate->interp;
+#ifdef HAVE_PYINTERPSTATE_GETDICT
+    interpdict = PyInterpreterState_GetDict(interp);   /* shared reference */
+#else
+    interpdict = interp->builtins;
+#endif
+    if (interpdict == NULL) {
         /* subinterpreter was cleared already, or is being cleared right now,
            to a point that is too much for us to continue */
         return NULL;
@@ -52,13 +52,13 @@ static PyObject *_get_interpstate_dict(void)
             goto error;
     }
 
-    d = PyDict_GetItem(interpdict, attr_name); 
+    d = PyDict_GetItem(interpdict, attr_name);
     if (d == NULL) {
         d = PyDict_New();
         if (d == NULL)
             goto error;
-        err = PyDict_SetItem(interpdict, attr_name, d); 
-        Py_DECREF(d);   /* if successful, there is one ref left in interpdict */ 
+        err = PyDict_SetItem(interpdict, attr_name, d);
+        Py_DECREF(d);   /* if successful, there is one ref left in interpdict */
         if (err < 0)
             goto error;
     }
@@ -71,7 +71,7 @@ static PyObject *_get_interpstate_dict(void)
 
 static PyObject *_ffi_def_extern_decorator(PyObject *outer_args, PyObject *fn)
 {
-    const char *s; 
+    const char *s;
     PyObject *error, *onerror, *infotuple, *old1;
     int index, err;
     const struct _cffi_global_s *g;
@@ -177,7 +177,7 @@ static int _update_cache_to_call_python(struct _cffi_externpy_s *externpy)
     if (infotuple == NULL)
         return 3;    /* no ffi.def_extern() from this subinterpreter */
 
-    new1 = _current_interp_key(); 
+    new1 = _current_interp_key();
     Py_INCREF(new1);
     Py_INCREF(infotuple);
     old1 = (PyObject *)externpy->reserved1;
@@ -197,20 +197,20 @@ static int _update_cache_to_call_python(struct _cffi_externpy_s *externpy)
 #if (defined(WITH_THREAD) && !defined(_MSC_VER) &&   \
      !defined(__amd64__) && !defined(__x86_64__) &&   \
      !defined(__i386__) && !defined(__i386))
-# if defined(HAVE_SYNC_SYNCHRONIZE) 
-#   define read_barrier()  __sync_synchronize() 
-# elif defined(_AIX) 
-#   define read_barrier()  __lwsync() 
-# elif defined(__SUNPRO_C) || defined(__SUNPRO_CC) 
-#   include <mbarrier.h> 
-#   define read_barrier()  __compiler_barrier() 
-# elif defined(__hpux) 
-#   define read_barrier()  _Asm_mf() 
-# else 
-#   define read_barrier()  /* missing */ 
-#   warning "no definition for read_barrier(), missing synchronization for\ 
- multi-thread initialization in embedded mode" 
-# endif 
+# if defined(HAVE_SYNC_SYNCHRONIZE)
+#   define read_barrier()  __sync_synchronize()
+# elif defined(_AIX)
+#   define read_barrier()  __lwsync()
+# elif defined(__SUNPRO_C) || defined(__SUNPRO_CC)
+#   include <mbarrier.h>
+#   define read_barrier()  __compiler_barrier()
+# elif defined(__hpux)
+#   define read_barrier()  _Asm_mf()
+# else
+#   define read_barrier()  /* missing */
+#   warning "no definition for read_barrier(), missing synchronization for\
+ multi-thread initialization in embedded mode"
+# endif
 #else
 # define read_barrier()  (void)0
 #endif
@@ -254,10 +254,10 @@ static void cffi_call_python(struct _cffi_externpy_s *externpy, char *args)
     save_errno();
 
     /* We need the infotuple here.  We could always go through
-       _update_cache_to_call_python(), but to avoid the extra dict 
+       _update_cache_to_call_python(), but to avoid the extra dict
        lookups, we cache in (reserved1, reserved2) the last seen pair
-       (interp->modules, infotuple).  The first item in this tuple is 
-       a random PyObject that identifies the subinterpreter. 
+       (interp->modules, infotuple).  The first item in this tuple is
+       a random PyObject that identifies the subinterpreter.
     */
     if (externpy->reserved1 == NULL) {
         /* Not initialized!  We didn't call @ffi.def_extern() on this
@@ -266,7 +266,7 @@ static void cffi_call_python(struct _cffi_externpy_s *externpy, char *args)
     }
     else {
         PyGILState_STATE state = gil_ensure();
-        if (externpy->reserved1 != _current_interp_key()) { 
+        if (externpy->reserved1 != _current_interp_key()) {
             /* Update the (reserved1, reserved2) cache.  This will fail
                if we didn't call @ffi.def_extern() in this particular
                subinterpreter. */

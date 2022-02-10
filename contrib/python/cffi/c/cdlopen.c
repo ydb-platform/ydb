@@ -1,7 +1,7 @@
 /* ffi.dlopen() interface with dlopen()/dlsym()/dlclose() */
 
-static void *cdlopen_fetch(PyObject *libname, void *libhandle, 
-                           const char *symbol) 
+static void *cdlopen_fetch(PyObject *libname, void *libhandle,
+                           const char *symbol)
 {
     void *address;
 
@@ -40,19 +40,19 @@ static int cdlopen_close(PyObject *libname, void *libhandle)
 
 static PyObject *ffi_dlopen(PyObject *self, PyObject *args)
 {
-    const char *modname; 
-    PyObject *temp, *result = NULL; 
+    const char *modname;
+    PyObject *temp, *result = NULL;
     void *handle;
-    int auto_close; 
+    int auto_close;
 
-    handle = b_do_dlopen(args, &modname, &temp, &auto_close); 
-    if (handle != NULL) 
-    { 
-        result = (PyObject *)lib_internal_new((FFIObject *)self, 
-                                              modname, handle, auto_close); 
+    handle = b_do_dlopen(args, &modname, &temp, &auto_close);
+    if (handle != NULL)
+    {
+        result = (PyObject *)lib_internal_new((FFIObject *)self,
+                                              modname, handle, auto_close);
     }
-    Py_XDECREF(temp); 
-    return result; 
+    Py_XDECREF(temp);
+    return result;
 }
 
 static PyObject *ffi_dlclose(PyObject *self, PyObject *args)
@@ -63,16 +63,16 @@ static PyObject *ffi_dlclose(PyObject *self, PyObject *args)
         return NULL;
 
     libhandle = lib->l_libhandle;
-    if (libhandle != NULL) 
-    { 
-        lib->l_libhandle = NULL; 
+    if (libhandle != NULL)
+    {
+        lib->l_libhandle = NULL;
 
-        /* Clear the dict to force further accesses to do cdlopen_fetch() 
-           again, and fail because the library was closed. */ 
-        PyDict_Clear(lib->l_dict); 
- 
-        if (cdlopen_close(lib->l_libname, libhandle) < 0) 
-            return NULL; 
+        /* Clear the dict to force further accesses to do cdlopen_fetch()
+           again, and fail because the library was closed. */
+        PyDict_Clear(lib->l_dict);
+
+        if (cdlopen_close(lib->l_libname, libhandle) < 0)
+            return NULL;
     }
     Py_INCREF(Py_None);
     return Py_None;

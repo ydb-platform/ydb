@@ -22,8 +22,8 @@
 #ifndef LLVM_TRANSFORMS_UTILS_SIMPLIFYINDVAR_H
 #define LLVM_TRANSFORMS_UTILS_SIMPLIFYINDVAR_H
 
-#include "llvm/Analysis/ScalarEvolutionExpressions.h" 
-#include "llvm/IR/ConstantRange.h" 
+#include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/ValueHandle.h"
 
 namespace llvm {
@@ -66,27 +66,27 @@ bool simplifyLoopIVs(Loop *L, ScalarEvolution *SE, DominatorTree *DT,
                      LoopInfo *LI, const TargetTransformInfo *TTI,
                      SmallVectorImpl<WeakTrackingVH> &Dead);
 
-/// Collect information about induction variables that are used by sign/zero 
-/// extend operations. This information is recorded by CollectExtend and provides 
-/// the input to WidenIV. 
-struct WideIVInfo { 
-  PHINode *NarrowIV = nullptr; 
- 
-  // Widest integer type created [sz]ext 
-  Type *WidestNativeType = nullptr; 
- 
-  // Was a sext user seen before a zext? 
-  bool IsSigned = false; 
-}; 
- 
-/// Widen Induction Variables - Extend the width of an IV to cover its 
-/// widest uses. 
-PHINode *createWideIV(const WideIVInfo &WI, 
-    LoopInfo *LI, ScalarEvolution *SE, SCEVExpander &Rewriter, 
-    DominatorTree *DT, SmallVectorImpl<WeakTrackingVH> &DeadInsts, 
-    unsigned &NumElimExt, unsigned &NumWidened, 
-    bool HasGuards, bool UsePostIncrementRanges); 
- 
+/// Collect information about induction variables that are used by sign/zero
+/// extend operations. This information is recorded by CollectExtend and provides
+/// the input to WidenIV.
+struct WideIVInfo {
+  PHINode *NarrowIV = nullptr;
+
+  // Widest integer type created [sz]ext
+  Type *WidestNativeType = nullptr;
+
+  // Was a sext user seen before a zext?
+  bool IsSigned = false;
+};
+
+/// Widen Induction Variables - Extend the width of an IV to cover its
+/// widest uses.
+PHINode *createWideIV(const WideIVInfo &WI,
+    LoopInfo *LI, ScalarEvolution *SE, SCEVExpander &Rewriter,
+    DominatorTree *DT, SmallVectorImpl<WeakTrackingVH> &DeadInsts,
+    unsigned &NumElimExt, unsigned &NumWidened,
+    bool HasGuards, bool UsePostIncrementRanges);
+
 } // end namespace llvm
 
 #endif // LLVM_TRANSFORMS_UTILS_SIMPLIFYINDVAR_H

@@ -4,7 +4,7 @@
 
     Lexers for the X10 programming language.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -58,7 +58,7 @@ class X10Lexer(RegexLexer):
             (r'\b(%s)\b' % '|'.join(types), Keyword.Type),
             (r'\b(%s)\b' % '|'.join(values), Keyword.Constant),
             (r'\b(%s)\b' % '|'.join(modifiers), Keyword.Declaration),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String),
             (r"'\\.'|'[^\\]'|'\\u[0-9a-fA-F]{4}'", String.Char),
             (r'.', Text)
         ],

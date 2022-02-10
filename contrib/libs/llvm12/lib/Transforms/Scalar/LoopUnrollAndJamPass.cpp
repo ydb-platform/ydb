@@ -41,7 +41,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Utils/LoopPeel.h" 
+#include "llvm/Transforms/Utils/LoopPeel.h"
 #include "llvm/Transforms/Utils/LoopSimplify.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
 #include "llvm/Transforms/Utils/UnrollLoop.h"
@@ -288,13 +288,13 @@ tryToUnrollAndJamLoop(Loop *L, DominatorTree &DT, LoopInfo *LI,
                                  None, None, None, None, None);
   TargetTransformInfo::PeelingPreferences PP =
       gatherPeelingPreferences(L, SE, TTI, None, None);
- 
-  TransformationMode EnableMode = hasUnrollAndJamTransformation(L); 
-  if (EnableMode & TM_Disable) 
-    return LoopUnrollResult::Unmodified; 
-  if (EnableMode & TM_ForcedByUser) 
-    UP.UnrollAndJam = true; 
- 
+
+  TransformationMode EnableMode = hasUnrollAndJamTransformation(L);
+  if (EnableMode & TM_Disable)
+    return LoopUnrollResult::Unmodified;
+  if (EnableMode & TM_ForcedByUser)
+    UP.UnrollAndJam = true;
+
   if (AllowUnrollAndJam.getNumOccurrences() > 0)
     UP.UnrollAndJam = AllowUnrollAndJam;
   if (UnrollAndJamThreshold.getNumOccurrences() > 0)

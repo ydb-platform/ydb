@@ -47,24 +47,24 @@ public:
   /// frame index in a variable that normally holds a register. isStackSlot()
   /// returns true if Reg is in the range used for stack slots.
   ///
-  /// FIXME: remove in favor of member. 
+  /// FIXME: remove in favor of member.
   static bool isStackSlot(unsigned Reg) {
     return MCRegister::isStackSlot(Reg);
   }
 
-  /// Return true if this is a stack slot. 
-  bool isStack() const { return MCRegister::isStackSlot(Reg); } 
- 
+  /// Return true if this is a stack slot.
+  bool isStack() const { return MCRegister::isStackSlot(Reg); }
+
   /// Compute the frame index from a register value representing a stack slot.
-  static int stackSlot2Index(Register Reg) { 
-    assert(Reg.isStack() && "Not a stack slot"); 
+  static int stackSlot2Index(Register Reg) {
+    assert(Reg.isStack() && "Not a stack slot");
     return int(Reg - MCRegister::FirstStackSlot);
   }
 
   /// Convert a non-negative frame index to a stack slot register value.
-  static Register index2StackSlot(int FI) { 
+  static Register index2StackSlot(int FI) {
     assert(FI >= 0 && "Cannot hold a negative frame index.");
-    return Register(FI + MCRegister::FirstStackSlot); 
+    return Register(FI + MCRegister::FirstStackSlot);
   }
 
   /// Return true if the specified register number is in
@@ -76,19 +76,19 @@ public:
   /// Return true if the specified register number is in
   /// the virtual register namespace.
   static bool isVirtualRegister(unsigned Reg) {
-    return Reg & MCRegister::VirtualRegFlag && !isStackSlot(Reg); 
+    return Reg & MCRegister::VirtualRegFlag && !isStackSlot(Reg);
   }
 
   /// Convert a virtual register number to a 0-based index.
   /// The first virtual register in a function will get the index 0.
-  static unsigned virtReg2Index(Register Reg) { 
+  static unsigned virtReg2Index(Register Reg) {
     assert(isVirtualRegister(Reg) && "Not a virtual register");
     return Reg & ~MCRegister::VirtualRegFlag;
   }
 
   /// Convert a 0-based index to a virtual register number.
   /// This is the inverse operation of VirtReg2IndexFunctor below.
-  static Register index2VirtReg(unsigned Index) { 
+  static Register index2VirtReg(unsigned Index) {
     assert(Index < (1u << 31) && "Index too large for virtual register range.");
     return Index | MCRegister::VirtualRegFlag;
   }
@@ -121,15 +121,15 @@ public:
     return MCRegister(Reg);
   }
 
-  /// Utility to check-convert this value to a MCRegister. The caller is 
-  /// expected to have already validated that this Register is, indeed, 
-  /// physical. 
-  MCRegister asMCReg() const { 
-    assert(Reg == MCRegister::NoRegister || 
-           MCRegister::isPhysicalRegister(Reg)); 
-    return MCRegister(Reg); 
-  } 
- 
+  /// Utility to check-convert this value to a MCRegister. The caller is
+  /// expected to have already validated that this Register is, indeed,
+  /// physical.
+  MCRegister asMCReg() const {
+    assert(Reg == MCRegister::NoRegister ||
+           MCRegister::isPhysicalRegister(Reg));
+    return MCRegister(Reg);
+  }
+
   bool isValid() const { return Reg != MCRegister::NoRegister; }
 
   /// Comparisons between register objects

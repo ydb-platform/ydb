@@ -365,20 +365,20 @@ private:
 
     unsigned DummyIdx = 1;
     for (BasicBlock *BB : DeadExitBlocks) {
-      // Eliminate all Phis and LandingPads from dead exits. 
-      // TODO: Consider removing all instructions in this dead block. 
-      SmallVector<Instruction *, 4> DeadInstructions; 
+      // Eliminate all Phis and LandingPads from dead exits.
+      // TODO: Consider removing all instructions in this dead block.
+      SmallVector<Instruction *, 4> DeadInstructions;
       for (auto &PN : BB->phis())
-        DeadInstructions.push_back(&PN); 
+        DeadInstructions.push_back(&PN);
 
-      if (auto *LandingPad = dyn_cast<LandingPadInst>(BB->getFirstNonPHI())) 
-        DeadInstructions.emplace_back(LandingPad); 
- 
-      for (Instruction *I : DeadInstructions) { 
-        I->replaceAllUsesWith(UndefValue::get(I->getType())); 
-        I->eraseFromParent(); 
+      if (auto *LandingPad = dyn_cast<LandingPadInst>(BB->getFirstNonPHI()))
+        DeadInstructions.emplace_back(LandingPad);
+
+      for (Instruction *I : DeadInstructions) {
+        I->replaceAllUsesWith(UndefValue::get(I->getType()));
+        I->eraseFromParent();
       }
- 
+
       assert(DummyIdx != 0 && "Too many dead exits!");
       DummySwitch->addCase(Builder.getInt32(DummyIdx++), BB);
       DTUpdates.push_back({DominatorTree::Insert, Preheader, BB});
@@ -415,9 +415,9 @@ private:
         assert(FixLCSSALoop && "Should be a loop!");
         // We need all DT updates to be done before forming LCSSA.
         if (MSSAU)
-          MSSAU->applyUpdates(DTUpdates, DT, /*UpdateDT=*/true); 
-        else 
-          DTU.applyUpdates(DTUpdates); 
+          MSSAU->applyUpdates(DTUpdates, DT, /*UpdateDT=*/true);
+        else
+          DTU.applyUpdates(DTUpdates);
         DTUpdates.clear();
         formLCSSARecursively(*FixLCSSALoop, DT, &LI, &SE);
       }
@@ -425,7 +425,7 @@ private:
 
     if (MSSAU) {
       // Clear all updates now. Facilitates deletes that follow.
-      MSSAU->applyUpdates(DTUpdates, DT, /*UpdateDT=*/true); 
+      MSSAU->applyUpdates(DTUpdates, DT, /*UpdateDT=*/true);
       DTUpdates.clear();
       if (VerifyMemorySSA)
         MSSAU->getMemorySSA()->verifyMemorySSA();
@@ -451,7 +451,7 @@ private:
       if (LI.isLoopHeader(BB)) {
         assert(LI.getLoopFor(BB) != &L && "Attempt to remove current loop!");
         Loop *DL = LI.getLoopFor(BB);
-        if (!DL->isOutermost()) { 
+        if (!DL->isOutermost()) {
           for (auto *PL = DL->getParentLoop(); PL; PL = PL->getParentLoop())
             for (auto *BB : DL->getBlocks())
               PL->removeBlockFromLoop(BB);

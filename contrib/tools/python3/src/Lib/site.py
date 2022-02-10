@@ -73,7 +73,7 @@ import sys
 import os
 import builtins
 import _sitebuiltins
-import io 
+import io
 
 # Prefixes for site-packages; add additional prefixes like /usr/local here
 PREFIXES = [sys.prefix, sys.exec_prefix]
@@ -157,7 +157,7 @@ def addpackage(sitedir, name, known_paths):
         reset = False
     fullname = os.path.join(sitedir, name)
     try:
-        f = io.TextIOWrapper(io.open_code(fullname)) 
+        f = io.TextIOWrapper(io.open_code(fullname))
     except OSError:
         return
     with f:
@@ -334,22 +334,22 @@ def getsitepackages(prefixes=None):
             continue
         seen.add(prefix)
 
-        libdirs = [sys.platlibdir] 
-        if sys.platlibdir != "lib": 
-            libdirs.append("lib") 
- 
+        libdirs = [sys.platlibdir]
+        if sys.platlibdir != "lib":
+            libdirs.append("lib")
+
         if os.sep == '/':
-            for libdir in libdirs: 
-                path = os.path.join(prefix, libdir, 
-                                    "python%d.%d" % sys.version_info[:2], 
-                                    "site-packages") 
-                sitepackages.append(path) 
+            for libdir in libdirs:
+                path = os.path.join(prefix, libdir,
+                                    "python%d.%d" % sys.version_info[:2],
+                                    "site-packages")
+                sitepackages.append(path)
         else:
             sitepackages.append(prefix)
- 
-            for libdir in libdirs: 
-                path = os.path.join(prefix, libdir, "site-packages") 
-                sitepackages.append(path) 
+
+            for libdir in libdirs:
+                path = os.path.join(prefix, libdir, "site-packages")
+                sitepackages.append(path)
     return sitepackages
 
 def addsitepackages(known_paths, prefixes=None):
@@ -453,9 +453,9 @@ def enablerlcompleter():
             def write_history():
                 try:
                     readline.write_history_file(history)
-                except OSError: 
-                    # bpo-19891, bpo-41193: Home directory does not exist 
-                    # or is not writable, or the filesystem is read-only. 
+                except OSError:
+                    # bpo-19891, bpo-41193: Home directory does not exist
+                    # or is not writable, or the filesystem is read-only.
                     pass
 
             atexit.register(write_history)
@@ -599,7 +599,7 @@ def _script():
     Exit codes with --user-base or --user-site:
       0 - user site directory is enabled
       1 - user site directory is disabled by user
-      2 - user site directory is disabled by super user 
+      2 - user site directory is disabled by super user
           or for security reasons
      >2 - unknown error
     """

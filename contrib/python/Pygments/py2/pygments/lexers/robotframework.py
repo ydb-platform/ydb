@@ -64,7 +64,7 @@ class RobotFrameworkLexer(Lexer):
     """
     name = 'RobotFramework'
     aliases = ['robotframework']
-    filenames = ['*.robot'] 
+    filenames = ['*.robot']
     mimetypes = ['text/x-robotframework']
 
     def __init__(self, **options):

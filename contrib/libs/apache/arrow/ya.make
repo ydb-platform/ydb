@@ -10,7 +10,7 @@ OWNER(
 VERSION(5.0.0)
 
 ORIGINAL_SOURCE(https://github.com/apache/arrow/archive/apache-arrow-5.0.0.tar.gz)
- 
+
 LICENSE(
     Apache-2.0 AND
     BSD-2-Clause AND
@@ -24,7 +24,7 @@ LICENSE(
     ZPL-2.1 AND
     Zlib
 )
- 
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(

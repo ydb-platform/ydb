@@ -1,23 +1,23 @@
 from typing import (
-    Any, 
-    AnyStr, 
-    Callable, 
+    Any,
+    AnyStr,
+    Callable,
     Container,
-    Iterable, 
+    Iterable,
     List,
-    Mapping, 
-    Match, 
+    Mapping,
+    Match,
     Optional,
     Tuple,
-    Type, 
-    TypeVar, 
-    Union, 
+    Type,
+    TypeVar,
+    Union,
     overload,
 )
- 
+
 from . import _ValidatorType
 
- 
+
 _T = TypeVar("_T")
 _T1 = TypeVar("_T1")
 _T2 = TypeVar("_T2")

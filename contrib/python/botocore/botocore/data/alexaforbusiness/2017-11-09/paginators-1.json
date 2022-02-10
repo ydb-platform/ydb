@@ -41,42 +41,42 @@
       "output_token": "NextToken",
       "input_token": "NextToken",
       "limit_key": "MaxResults"
-    }, 
-    "ListBusinessReportSchedules": { 
-      "input_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "output_token": "NextToken", 
-      "result_key": "BusinessReportSchedules" 
-    }, 
-    "ListConferenceProviders": { 
-      "input_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "output_token": "NextToken", 
-      "result_key": "ConferenceProviders" 
-    }, 
-    "ListDeviceEvents": { 
-      "input_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "output_token": "NextToken", 
-      "result_key": "DeviceEvents" 
-    }, 
-    "ListSkillsStoreCategories": { 
-      "input_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "output_token": "NextToken", 
-      "result_key": "CategoryList" 
-    }, 
-    "ListSkillsStoreSkillsByCategory": { 
-      "input_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "output_token": "NextToken", 
-      "result_key": "SkillsStoreSkills" 
-    }, 
-    "ListSmartHomeAppliances": { 
-      "input_token": "NextToken", 
-      "limit_key": "MaxResults", 
-      "output_token": "NextToken", 
-      "result_key": "SmartHomeAppliances" 
+    },
+    "ListBusinessReportSchedules": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "BusinessReportSchedules"
+    },
+    "ListConferenceProviders": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "ConferenceProviders"
+    },
+    "ListDeviceEvents": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "DeviceEvents"
+    },
+    "ListSkillsStoreCategories": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "CategoryList"
+    },
+    "ListSkillsStoreSkillsByCategory": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "SkillsStoreSkills"
+    },
+    "ListSmartHomeAppliances": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "SmartHomeAppliances"
     }
   }
 }

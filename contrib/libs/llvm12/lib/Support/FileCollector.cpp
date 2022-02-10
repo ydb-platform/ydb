@@ -15,22 +15,22 @@
 
 using namespace llvm;
 
-FileCollectorBase::FileCollectorBase() = default; 
-FileCollectorBase::~FileCollectorBase() = default; 
- 
-void FileCollectorBase::addFile(const Twine &File) { 
-  std::lock_guard<std::mutex> lock(Mutex); 
-  std::string FileStr = File.str(); 
-  if (markAsSeen(FileStr)) 
-    addFileImpl(FileStr); 
-} 
- 
-void FileCollectorBase::addDirectory(const Twine &Dir) { 
-  assert(sys::fs::is_directory(Dir)); 
-  std::error_code EC; 
-  addDirectoryImpl(Dir, vfs::getRealFileSystem(), EC); 
-} 
- 
+FileCollectorBase::FileCollectorBase() = default;
+FileCollectorBase::~FileCollectorBase() = default;
+
+void FileCollectorBase::addFile(const Twine &File) {
+  std::lock_guard<std::mutex> lock(Mutex);
+  std::string FileStr = File.str();
+  if (markAsSeen(FileStr))
+    addFileImpl(FileStr);
+}
+
+void FileCollectorBase::addDirectory(const Twine &Dir) {
+  assert(sys::fs::is_directory(Dir));
+  std::error_code EC;
+  addDirectoryImpl(Dir, vfs::getRealFileSystem(), EC);
+}
+
 static bool isCaseSensitivePath(StringRef Path) {
   SmallString<256> TmpDest = Path, UpperDest, RealDest;
 
@@ -53,82 +53,82 @@ FileCollector::FileCollector(std::string Root, std::string OverlayRoot)
     : Root(std::move(Root)), OverlayRoot(std::move(OverlayRoot)) {
 }
 
-void FileCollector::PathCanonicalizer::updateWithRealPath( 
-    SmallVectorImpl<char> &Path) { 
-  StringRef SrcPath(Path.begin(), Path.size()); 
-  StringRef Filename = sys::path::filename(SrcPath); 
-  StringRef Directory = sys::path::parent_path(SrcPath); 
- 
-  // Use real_path to fix any symbolic link component present in the directory 
-  // part of the path, caching the search because computing the real path is 
-  // expensive. 
+void FileCollector::PathCanonicalizer::updateWithRealPath(
+    SmallVectorImpl<char> &Path) {
+  StringRef SrcPath(Path.begin(), Path.size());
+  StringRef Filename = sys::path::filename(SrcPath);
+  StringRef Directory = sys::path::parent_path(SrcPath);
+
+  // Use real_path to fix any symbolic link component present in the directory
+  // part of the path, caching the search because computing the real path is
+  // expensive.
   SmallString<256> RealPath;
-  auto DirWithSymlink = CachedDirs.find(Directory); 
-  if (DirWithSymlink == CachedDirs.end()) { 
-    // FIXME: Should this be a call to FileSystem::getRealpath(), in some 
-    // cases? What if there is nothing on disk? 
-    if (sys::fs::real_path(Directory, RealPath)) 
-      return; 
-    CachedDirs[Directory] = std::string(RealPath.str()); 
+  auto DirWithSymlink = CachedDirs.find(Directory);
+  if (DirWithSymlink == CachedDirs.end()) {
+    // FIXME: Should this be a call to FileSystem::getRealpath(), in some
+    // cases? What if there is nothing on disk?
+    if (sys::fs::real_path(Directory, RealPath))
+      return;
+    CachedDirs[Directory] = std::string(RealPath.str());
   } else {
     RealPath = DirWithSymlink->second;
   }
 
-  // Finish recreating the path by appending the original filename, since we 
-  // don't need to resolve symlinks in the filename. 
-  // 
-  // FIXME: If we can cope with this, maybe we can cope without calling 
-  // getRealPath() at all when there's no ".." component. 
-  sys::path::append(RealPath, Filename); 
+  // Finish recreating the path by appending the original filename, since we
+  // don't need to resolve symlinks in the filename.
+  //
+  // FIXME: If we can cope with this, maybe we can cope without calling
+  // getRealPath() at all when there's no ".." component.
+  sys::path::append(RealPath, Filename);
 
-  // Swap to create the output. 
-  Path.swap(RealPath); 
+  // Swap to create the output.
+  Path.swap(RealPath);
 }
 
-/// Make Path absolute. 
-static void makeAbsolute(SmallVectorImpl<char> &Path) { 
+/// Make Path absolute.
+static void makeAbsolute(SmallVectorImpl<char> &Path) {
   // We need an absolute src path to append to the root.
-  sys::fs::make_absolute(Path); 
+  sys::fs::make_absolute(Path);
 
   // Canonicalize src to a native path to avoid mixed separator styles.
-  sys::path::native(Path); 
+  sys::path::native(Path);
 
   // Remove redundant leading "./" pieces and consecutive separators.
-  Path.erase(Path.begin(), sys::path::remove_leading_dotslash( 
-                               StringRef(Path.begin(), Path.size())) 
-                               .begin()); 
-} 
+  Path.erase(Path.begin(), sys::path::remove_leading_dotslash(
+                               StringRef(Path.begin(), Path.size()))
+                               .begin());
+}
 
-FileCollector::PathCanonicalizer::PathStorage 
-FileCollector::PathCanonicalizer::canonicalize(StringRef SrcPath) { 
-  PathStorage Paths; 
-  Paths.VirtualPath = SrcPath; 
-  makeAbsolute(Paths.VirtualPath); 
+FileCollector::PathCanonicalizer::PathStorage
+FileCollector::PathCanonicalizer::canonicalize(StringRef SrcPath) {
+  PathStorage Paths;
+  Paths.VirtualPath = SrcPath;
+  makeAbsolute(Paths.VirtualPath);
 
   // If a ".." component is present after a symlink component, remove_dots may
   // lead to the wrong real destination path. Let the source be canonicalized
   // like that but make sure we always use the real path for the destination.
-  Paths.CopyFrom = Paths.VirtualPath; 
-  updateWithRealPath(Paths.CopyFrom); 
+  Paths.CopyFrom = Paths.VirtualPath;
+  updateWithRealPath(Paths.CopyFrom);
 
-  // Canonicalize the virtual path by removing "..", "." components. 
-  sys::path::remove_dots(Paths.VirtualPath, /*remove_dot_dot=*/true); 
- 
-  return Paths; 
-} 
- 
-void FileCollector::addFileImpl(StringRef SrcPath) { 
-  PathCanonicalizer::PathStorage Paths = Canonicalizer.canonicalize(SrcPath); 
- 
+  // Canonicalize the virtual path by removing "..", "." components.
+  sys::path::remove_dots(Paths.VirtualPath, /*remove_dot_dot=*/true);
+
+  return Paths;
+}
+
+void FileCollector::addFileImpl(StringRef SrcPath) {
+  PathCanonicalizer::PathStorage Paths = Canonicalizer.canonicalize(SrcPath);
+
   SmallString<256> DstPath = StringRef(Root);
-  sys::path::append(DstPath, sys::path::relative_path(Paths.CopyFrom)); 
+  sys::path::append(DstPath, sys::path::relative_path(Paths.CopyFrom));
 
   // Always map a canonical src path to its real path into the YAML, by doing
   // this we map different virtual src paths to the same entry in the VFS
   // overlay, which is a way to emulate symlink inside the VFS; this is also
   // needed for correctness, not doing that can lead to module redefinition
   // errors.
-  addFileToMapping(Paths.VirtualPath, DstPath); 
+  addFileToMapping(Paths.VirtualPath, DstPath);
 }
 
 llvm::vfs::directory_iterator
@@ -182,18 +182,18 @@ std::error_code FileCollector::copyFiles(bool StopOnError) {
   std::lock_guard<std::mutex> lock(Mutex);
 
   for (auto &entry : VFSWriter.getMappings()) {
-    // Get the status of the original file/directory. 
-    sys::fs::file_status Stat; 
-    if (std::error_code EC = sys::fs::status(entry.VPath, Stat)) { 
-      if (StopOnError) 
-        return EC; 
-      continue; 
-    } 
- 
-    // Continue if the file doesn't exist. 
-    if (Stat.type() == sys::fs::file_type::file_not_found) 
-      continue; 
- 
+    // Get the status of the original file/directory.
+    sys::fs::file_status Stat;
+    if (std::error_code EC = sys::fs::status(entry.VPath, Stat)) {
+      if (StopOnError)
+        return EC;
+      continue;
+    }
+
+    // Continue if the file doesn't exist.
+    if (Stat.type() == sys::fs::file_type::file_not_found)
+      continue;
+
     // Create directory tree.
     if (std::error_code EC =
             sys::fs::create_directories(sys::path::parent_path(entry.RPath),

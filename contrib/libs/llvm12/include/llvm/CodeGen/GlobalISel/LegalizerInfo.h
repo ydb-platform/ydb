@@ -189,7 +189,7 @@ struct TypePairAndMemDesc {
            MemSize == Other.MemSize;
   }
 
-  /// \returns true if this memory access is legal with for the access described 
+  /// \returns true if this memory access is legal with for the access described
   /// by \p Other (The alignment is sufficient for the size and result type).
   bool isCompatible(const TypePairAndMemDesc &Other) const {
     return Type0 == Other.Type0 && Type1 == Other.Type1 &&
@@ -224,19 +224,19 @@ Predicate any(Predicate P0, Predicate P1, Args... args) {
   return any(any(P0, P1), args...);
 }
 
-/// True iff the given type index is the specified type. 
+/// True iff the given type index is the specified type.
 LegalityPredicate typeIs(unsigned TypeIdx, LLT TypesInit);
 /// True iff the given type index is one of the specified types.
 LegalityPredicate typeInSet(unsigned TypeIdx,
                             std::initializer_list<LLT> TypesInit);
- 
-/// True iff the given type index is not the specified type. 
-inline LegalityPredicate typeIsNot(unsigned TypeIdx, LLT Type) { 
-  return [=](const LegalityQuery &Query) { 
-           return Query.Types[TypeIdx] != Type; 
-         }; 
-} 
- 
+
+/// True iff the given type index is not the specified type.
+inline LegalityPredicate typeIsNot(unsigned TypeIdx, LLT Type) {
+  return [=](const LegalityQuery &Query) {
+           return Query.Types[TypeIdx] != Type;
+         };
+}
+
 /// True iff the given types for the given pair of type indexes is one of the
 /// specified type pairs.
 LegalityPredicate
@@ -322,11 +322,11 @@ LegalizeMutation changeElementTo(unsigned TypeIdx, unsigned FromTypeIdx);
 /// Keep the same scalar or element type as the given type.
 LegalizeMutation changeElementTo(unsigned TypeIdx, LLT Ty);
 
-/// Change the scalar size or element size to have the same scalar size as type 
-/// index \p FromIndex. Unlike changeElementTo, this discards pointer types and 
-/// only changes the size. 
-LegalizeMutation changeElementSizeTo(unsigned TypeIdx, unsigned FromTypeIdx); 
- 
+/// Change the scalar size or element size to have the same scalar size as type
+/// index \p FromIndex. Unlike changeElementTo, this discards pointer types and
+/// only changes the size.
+LegalizeMutation changeElementSizeTo(unsigned TypeIdx, unsigned FromTypeIdx);
+
 /// Widen the scalar type or vector element type for the given type index to the
 /// next power of 2.
 LegalizeMutation widenScalarOrEltToNextPow2(unsigned TypeIdx, unsigned Min = 0);
@@ -635,7 +635,7 @@ public:
   /// The instruction is lowered when type index 0 is any type in the given
   /// list. Keep type index 0 as the same type.
   LegalizeRuleSet &lowerFor(std::initializer_list<LLT> Types) {
-    return actionFor(LegalizeAction::Lower, Types); 
+    return actionFor(LegalizeAction::Lower, Types);
   }
   /// The instruction is lowered when type index 0 is any type in the given
   /// list.
@@ -646,7 +646,7 @@ public:
   /// The instruction is lowered when type indexes 0 and 1 is any type pair in
   /// the given list. Keep type index 0 as the same type.
   LegalizeRuleSet &lowerFor(std::initializer_list<std::pair<LLT, LLT>> Types) {
-    return actionFor(LegalizeAction::Lower, Types); 
+    return actionFor(LegalizeAction::Lower, Types);
   }
   /// The instruction is lowered when type indexes 0 and 1 is any type pair in
   /// the given list.
@@ -671,15 +671,15 @@ public:
                                      Types2);
   }
 
-  /// The instruction is emitted as a library call. 
-  LegalizeRuleSet &libcall() { 
-    using namespace LegalizeMutations; 
-    // We have no choice but conservatively assume that predicate-less lowering 
-    // properly handles all type indices by design: 
-    markAllIdxsAsCovered(); 
-    return actionIf(LegalizeAction::Libcall, always); 
-  } 
- 
+  /// The instruction is emitted as a library call.
+  LegalizeRuleSet &libcall() {
+    using namespace LegalizeMutations;
+    // We have no choice but conservatively assume that predicate-less lowering
+    // properly handles all type indices by design:
+    markAllIdxsAsCovered();
+    return actionIf(LegalizeAction::Libcall, always);
+  }
+
   /// Like legalIf, but for the Libcall action.
   LegalizeRuleSet &libcallIf(LegalityPredicate Predicate) {
     // We have no choice but conservatively assume that a libcall with a
@@ -722,13 +722,13 @@ public:
     markAllIdxsAsCovered();
     return actionIf(LegalizeAction::NarrowScalar, Predicate, Mutation);
   }
-  /// Narrow the scalar, specified in mutation, when type indexes 0 and 1 is any 
-  /// type pair in the given list. 
-  LegalizeRuleSet & 
-  narrowScalarFor(std::initializer_list<std::pair<LLT, LLT>> Types, 
-                  LegalizeMutation Mutation) { 
-    return actionFor(LegalizeAction::NarrowScalar, Types, Mutation); 
-  } 
+  /// Narrow the scalar, specified in mutation, when type indexes 0 and 1 is any
+  /// type pair in the given list.
+  LegalizeRuleSet &
+  narrowScalarFor(std::initializer_list<std::pair<LLT, LLT>> Types,
+                  LegalizeMutation Mutation) {
+    return actionFor(LegalizeAction::NarrowScalar, Types, Mutation);
+  }
 
   /// Add more elements to reach the type selected by the mutation if the
   /// predicate is true.
@@ -833,13 +833,13 @@ public:
                     LegalizeMutations::scalarize(TypeIdx));
   }
 
-  LegalizeRuleSet &scalarizeIf(LegalityPredicate Predicate, unsigned TypeIdx) { 
-    using namespace LegalityPredicates; 
-    return actionIf(LegalizeAction::FewerElements, 
-                    all(Predicate, isVector(typeIdx(TypeIdx))), 
-                    LegalizeMutations::scalarize(TypeIdx)); 
-  } 
- 
+  LegalizeRuleSet &scalarizeIf(LegalityPredicate Predicate, unsigned TypeIdx) {
+    using namespace LegalityPredicates;
+    return actionIf(LegalizeAction::FewerElements,
+                    all(Predicate, isVector(typeIdx(TypeIdx))),
+                    LegalizeMutations::scalarize(TypeIdx));
+  }
+
   /// Ensure the scalar or element is at least as wide as Ty.
   LegalizeRuleSet &minScalarOrElt(unsigned TypeIdx, const LLT Ty) {
     using namespace LegalityPredicates;
@@ -897,10 +897,10 @@ public:
     return actionIf(
         LegalizeAction::NarrowScalar,
         [=](const LegalityQuery &Query) {
-          const LLT QueryTy = Query.Types[TypeIdx]; 
-          return QueryTy.isScalar() && 
-                 QueryTy.getSizeInBits() > Ty.getSizeInBits() && 
-                 Predicate(Query); 
+          const LLT QueryTy = Query.Types[TypeIdx];
+          return QueryTy.isScalar() &&
+                 QueryTy.getSizeInBits() > Ty.getSizeInBits() &&
+                 Predicate(Query);
         },
         changeElementTo(typeIdx(TypeIdx), Ty));
   }
@@ -926,27 +926,27 @@ public:
           return Query.Types[LargeTypeIdx].getScalarSizeInBits() >
                  Query.Types[TypeIdx].getSizeInBits();
         },
-        LegalizeMutations::changeElementSizeTo(TypeIdx, LargeTypeIdx)); 
-  } 
- 
-  /// Narrow the scalar to match the size of another. 
-  LegalizeRuleSet &maxScalarSameAs(unsigned TypeIdx, unsigned NarrowTypeIdx) { 
-    typeIdx(TypeIdx); 
-    return narrowScalarIf( 
-        [=](const LegalityQuery &Query) {
-          return Query.Types[NarrowTypeIdx].getScalarSizeInBits() < 
-                 Query.Types[TypeIdx].getSizeInBits(); 
-        }, 
-        LegalizeMutations::changeElementSizeTo(TypeIdx, NarrowTypeIdx)); 
+        LegalizeMutations::changeElementSizeTo(TypeIdx, LargeTypeIdx));
   }
 
-  /// Change the type \p TypeIdx to have the same scalar size as type \p 
-  /// SameSizeIdx. 
-  LegalizeRuleSet &scalarSameSizeAs(unsigned TypeIdx, unsigned SameSizeIdx) { 
-    return minScalarSameAs(TypeIdx, SameSizeIdx) 
-          .maxScalarSameAs(TypeIdx, SameSizeIdx); 
-  } 
- 
+  /// Narrow the scalar to match the size of another.
+  LegalizeRuleSet &maxScalarSameAs(unsigned TypeIdx, unsigned NarrowTypeIdx) {
+    typeIdx(TypeIdx);
+    return narrowScalarIf(
+        [=](const LegalityQuery &Query) {
+          return Query.Types[NarrowTypeIdx].getScalarSizeInBits() <
+                 Query.Types[TypeIdx].getSizeInBits();
+        },
+        LegalizeMutations::changeElementSizeTo(TypeIdx, NarrowTypeIdx));
+  }
+
+  /// Change the type \p TypeIdx to have the same scalar size as type \p
+  /// SameSizeIdx.
+  LegalizeRuleSet &scalarSameSizeAs(unsigned TypeIdx, unsigned SameSizeIdx) {
+    return minScalarSameAs(TypeIdx, SameSizeIdx)
+          .maxScalarSameAs(TypeIdx, SameSizeIdx);
+  }
+
   /// Conditionally widen the scalar or elt to match the size of another.
   LegalizeRuleSet &minScalarEltSameAsIf(LegalityPredicate Predicate,
                                    unsigned TypeIdx, unsigned LargeTypeIdx) {
@@ -1264,12 +1264,12 @@ public:
   bool isLegal(const LegalityQuery &Query) const {
     return getAction(Query).Action == LegalizeAction::Legal;
   }
- 
-  bool isLegalOrCustom(const LegalityQuery &Query) const { 
-    auto Action = getAction(Query).Action; 
-    return Action == LegalizeAction::Legal || Action == LegalizeAction::Custom; 
-  } 
- 
+
+  bool isLegalOrCustom(const LegalityQuery &Query) const {
+    auto Action = getAction(Query).Action;
+    return Action == LegalizeAction::Legal || Action == LegalizeAction::Custom;
+  }
+
   bool isLegal(const MachineInstr &MI, const MachineRegisterInfo &MRI) const;
   bool isLegalOrCustom(const MachineInstr &MI,
                        const MachineRegisterInfo &MRI) const;

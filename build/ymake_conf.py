@@ -115,7 +115,7 @@ class Platform(object):
 
         self.is_none = self.os == 'none'
 
-        self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_cygwin or self.is_yocto 
+        self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_cygwin or self.is_yocto
 
     @staticmethod
     def from_json(data):
@@ -628,7 +628,7 @@ class Build(object):
         swiftc.configure()
         swiftc.print_compiler()
 
-        if host.is_linux or host.is_macos or host.is_cygwin: 
+        if host.is_linux or host.is_macos or host.is_cygwin:
             if is_negative('USE_ARCADIA_PYTHON'):
                 python = Python(self.tc)
                 python.configure_posix()
@@ -1903,7 +1903,7 @@ class LD(Linker):
         self.dwarf_command = None
         self.libresolv = '-lresolv' if target.is_linux or target.is_macos or target.is_android else None
 
-        if target.is_linux or target.is_android: 
+        if target.is_linux or target.is_android:
             self.ld_export_dynamic_flag = '-rdynamic'
             self.use_stdlib = '-nodefaultlibs'
 
@@ -2946,7 +2946,7 @@ class Perl(object):
 
 
 class Setting(object):
-    def __init__(self, key, auto=None, convert=None, rewrite=False): 
+    def __init__(self, key, auto=None, convert=None, rewrite=False):
         self.key = key
 
         self.auto = auto
@@ -2954,7 +2954,7 @@ class Setting(object):
 
         self.preset = preset(key)
         self.from_user = self.preset is not None
-        self.rewrite = rewrite 
+        self.rewrite = rewrite
 
         self._value = Setting.no_value
 
@@ -2977,7 +2977,7 @@ class Setting(object):
         self._value = value
 
     def emit(self):
-        if not self.from_user or self.rewrite: 
+        if not self.from_user or self.rewrite:
             emit(self.key, self.value)
 
     no_value = object()
@@ -2993,7 +2993,7 @@ class Cuda(object):
         self.have_cuda = Setting('HAVE_CUDA', auto=self.auto_have_cuda, convert=to_bool)
 
         self.cuda_root = Setting('CUDA_ROOT')
-        self.cuda_version = Setting('CUDA_VERSION', auto=self.auto_cuda_version, convert=self.convert_major_version, rewrite=True) 
+        self.cuda_version = Setting('CUDA_VERSION', auto=self.auto_cuda_version, convert=self.convert_major_version, rewrite=True)
         self.use_arcadia_cuda = Setting('USE_ARCADIA_CUDA', auto=self.auto_use_arcadia_cuda, convert=to_bool)
         self.use_arcadia_cuda_host_compiler = Setting('USE_ARCADIA_CUDA_HOST_COMPILER', auto=self.auto_use_arcadia_cuda_host_compiler, convert=to_bool)
         self.cuda_use_clang = Setting('CUDA_USE_CLANG', auto=False, convert=to_bool)
@@ -3004,7 +3004,7 @@ class Cuda(object):
 
         self.peerdirs = ['build/platform/cuda']
 
-        self.nvcc_std = '-std=c++14' 
+        self.nvcc_std = '-std=c++14'
         if self.build.tc.type == 'msvc':
             self.nvcc_std = self.nvcc_std.replace('-std=', '/std:')
 
@@ -3076,8 +3076,8 @@ class Cuda(object):
             if self.cuda_version.value not in ('11.3',):
                 raise ConfigureError('Only CUDA 11.3 are available for cross compilation from linux-x86 to linux-aarch64.\nUse -DCUDA_VERSION=11.3 flag.')
 
-        if self.cuda_version.value in ('8.0', '9.0', '9.1', '9.2', '10.0'): 
-            raise ConfigureError('CUDA versions 8.x, 9.x and 10.0 are no longer supported.\nSee DEVTOOLS-7108.') 
+        if self.cuda_version.value in ('8.0', '9.0', '9.1', '9.2', '10.0'):
+            raise ConfigureError('CUDA versions 8.x, 9.x and 10.0 are no longer supported.\nSee DEVTOOLS-7108.')
 
         if self.cuda_version.value in ('10.1', '11.0', '11.1', '11.2', '11.3', '11.4'):
             return True
@@ -3104,18 +3104,18 @@ class Cuda(object):
             raise ConfigureError('Failed to get CUDA version from {}'.format(nvcc_exe))
 
         version_output = get_stdout([nvcc_exe, '--version']) or error()
-        match = re.search(r'^Cuda compilation tools, release (\d+)\.\d+,', version_output, re.MULTILINE) or error() 
+        match = re.search(r'^Cuda compilation tools, release (\d+)\.\d+,', version_output, re.MULTILINE) or error()
 
         return match.group(1)
 
-    def convert_major_version(self, value): 
-        if value == '10': 
-            return '10.1' 
-        elif value == '11': 
-            return '11.3' 
-        else: 
-            return value 
- 
+    def convert_major_version(self, value):
+        if value == '10':
+            return '10.1'
+        elif value == '11':
+            return '11.3'
+        else:
+            return value
+
     def auto_use_arcadia_cuda(self):
         return not self.cuda_root.from_user
 
@@ -3139,11 +3139,11 @@ class Cuda(object):
         ))
 
     def cuda_windows_host_compiler(self):
-        vc_version = '14.28.29910' 
+        vc_version = '14.28.29910'
 
         env = {
             'Y_VC_Version': vc_version,
-            'Y_VC_Root': '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/VC/Tools/MSVC/{}'.format(vc_version), 
+            'Y_VC_Root': '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/VC/Tools/MSVC/{}'.format(vc_version),
             'Y_SDK_Version': self.build.tc.sdk_version,
             'Y_SDK_Root': '$WINDOWS_KITS_RESOURCE_GLOBAL',
         }

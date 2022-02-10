@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 """(disabled by default) support for testing pytest and pytest plugins."""
 from __future__ import absolute_import
 from __future__ import division
@@ -21,16 +21,16 @@ import six
 
 import pytest
 from _pytest._code import Source
-from _pytest._io.saferepr import saferepr 
+from _pytest._io.saferepr import saferepr
 from _pytest.assertion.rewrite import AssertionRewritingHook
 from _pytest.capture import MultiCapture
 from _pytest.capture import SysCapture
 from _pytest.compat import safe_str
-from _pytest.compat import Sequence 
+from _pytest.compat import Sequence
 from _pytest.main import EXIT_INTERRUPTED
 from _pytest.main import EXIT_OK
 from _pytest.main import Session
-from _pytest.monkeypatch import MonkeyPatch 
+from _pytest.monkeypatch import MonkeyPatch
 from _pytest.pathlib import Path
 
 IGNORE_PAM = [  # filenames added when obtaining details about the current user
@@ -69,19 +69,19 @@ def pytest_configure(config):
         if checker.matching_platform():
             config.pluginmanager.register(checker)
 
-    config.addinivalue_line( 
-        "markers", 
-        "pytester_example_path(*path_segments): join the given path " 
-        "segments to `pytester_example_dir` for this test.", 
-    ) 
+    config.addinivalue_line(
+        "markers",
+        "pytester_example_path(*path_segments): join the given path "
+        "segments to `pytester_example_dir` for this test.",
+    )
 
- 
+
 def raise_on_kwargs(kwargs):
-    __tracebackhide__ = True 
-    if kwargs:  # pragma: no branch 
-        raise TypeError( 
-            "Unexpected keyword arguments: {}".format(", ".join(sorted(kwargs))) 
-        ) 
+    __tracebackhide__ = True
+    if kwargs:  # pragma: no branch
+        raise TypeError(
+            "Unexpected keyword arguments: {}".format(", ".join(sorted(kwargs)))
+        )
 
 
 class LsofFdLeakChecker(object):
@@ -92,11 +92,11 @@ class LsofFdLeakChecker(object):
 
     def _exec_lsof(self):
         pid = os.getpid()
-        # py3: use subprocess.DEVNULL directly. 
-        with open(os.devnull, "wb") as devnull: 
-            return subprocess.check_output( 
-                ("lsof", "-Ffn0", "-p", str(pid)), stderr=devnull 
-            ).decode() 
+        # py3: use subprocess.DEVNULL directly.
+        with open(os.devnull, "wb") as devnull:
+            return subprocess.check_output(
+                ("lsof", "-Ffn0", "-p", str(pid)), stderr=devnull
+            ).decode()
 
     def _parse_lsof_output(self, out):
         def isopen(line):
@@ -123,8 +123,8 @@ class LsofFdLeakChecker(object):
 
     def matching_platform(self):
         try:
-            subprocess.check_output(("lsof", "-v")) 
-        except (OSError, subprocess.CalledProcessError): 
+            subprocess.check_output(("lsof", "-v"))
+        except (OSError, subprocess.CalledProcessError):
             return False
         else:
             return True
@@ -270,11 +270,11 @@ class HookRecorder(object):
         """return a testreport whose dotted import path matches"""
         values = []
         for rep in self.getreports(names=names):
-            if not when and rep.when != "call" and rep.passed: 
-                # setup/teardown passing reports - let's ignore those 
+            if not when and rep.when != "call" and rep.passed:
+                # setup/teardown passing reports - let's ignore those
                 continue
-            if when and rep.when != when: 
-                continue 
+            if when and rep.when != when:
+                continue
             if not inamepart or inamepart in rep.nodeid.split("::"):
                 values.append(rep)
         if not values:
@@ -300,12 +300,12 @@ class HookRecorder(object):
         failed = []
         for rep in self.getreports("pytest_collectreport pytest_runtest_logreport"):
             if rep.passed:
-                if rep.when == "call": 
+                if rep.when == "call":
                     passed.append(rep)
             elif rep.skipped:
                 skipped.append(rep)
-            else: 
-                assert rep.failed, "Unexpected outcome: {!r}".format(rep) 
+            else:
+                assert rep.failed, "Unexpected outcome: {!r}".format(rep)
                 failed.append(rep)
         return passed, skipped, failed
 
@@ -337,24 +337,24 @@ def testdir(request, tmpdir_factory):
     return Testdir(request, tmpdir_factory)
 
 
-@pytest.fixture 
-def _sys_snapshot(): 
-    snappaths = SysPathsSnapshot() 
-    snapmods = SysModulesSnapshot() 
-    yield 
-    snapmods.restore() 
-    snappaths.restore() 
- 
- 
-@pytest.fixture 
-def _config_for_test(): 
-    from _pytest.config import get_config 
- 
-    config = get_config() 
-    yield config 
-    config._ensure_unconfigure()  # cleanup, e.g. capman closing tmpfiles. 
- 
- 
+@pytest.fixture
+def _sys_snapshot():
+    snappaths = SysPathsSnapshot()
+    snapmods = SysModulesSnapshot()
+    yield
+    snapmods.restore()
+    snappaths.restore()
+
+
+@pytest.fixture
+def _config_for_test():
+    from _pytest.config import get_config
+
+    config = get_config()
+    yield config
+    config._ensure_unconfigure()  # cleanup, e.g. capman closing tmpfiles.
+
+
 rex_outcome = re.compile(r"(\d+) ([\w-]+)")
 
 
@@ -382,12 +382,12 @@ class RunResult(object):
         self.stderr = LineMatcher(errlines)
         self.duration = duration
 
-    def __repr__(self): 
-        return ( 
-            "<RunResult ret=%r len(stdout.lines)=%d len(stderr.lines)=%d duration=%.2fs>" 
-            % (self.ret, len(self.stdout.lines), len(self.stderr.lines), self.duration) 
-        ) 
- 
+    def __repr__(self):
+        return (
+            "<RunResult ret=%r len(stdout.lines)=%d len(stderr.lines)=%d duration=%.2fs>"
+            % (self.ret, len(self.stdout.lines), len(self.stderr.lines), self.duration)
+        )
+
     def parseoutcomes(self):
         """Return a dictionary of outcomestring->num from parsing the terminal
         output that the test process produced.
@@ -478,8 +478,8 @@ class Testdir(object):
 
     """
 
-    CLOSE_STDIN = object 
- 
+    CLOSE_STDIN = object
+
     class TimeoutExpired(Exception):
         pass
 
@@ -501,17 +501,17 @@ class Testdir(object):
         elif method == "subprocess":
             self._runpytest_method = self.runpytest_subprocess
 
-        mp = self.monkeypatch = MonkeyPatch() 
-        mp.setenv("PYTEST_DEBUG_TEMPROOT", str(self.test_tmproot)) 
-        # Ensure no unexpected caching via tox. 
-        mp.delenv("TOX_ENV_DIR", raising=False) 
-        # Discard outer pytest options. 
-        mp.delenv("PYTEST_ADDOPTS", raising=False) 
- 
-        # Environment (updates) for inner runs. 
-        tmphome = str(self.tmpdir) 
-        self._env_run_update = {"HOME": tmphome, "USERPROFILE": tmphome} 
- 
+        mp = self.monkeypatch = MonkeyPatch()
+        mp.setenv("PYTEST_DEBUG_TEMPROOT", str(self.test_tmproot))
+        # Ensure no unexpected caching via tox.
+        mp.delenv("TOX_ENV_DIR", raising=False)
+        # Discard outer pytest options.
+        mp.delenv("PYTEST_ADDOPTS", raising=False)
+
+        # Environment (updates) for inner runs.
+        tmphome = str(self.tmpdir)
+        self._env_run_update = {"HOME": tmphome, "USERPROFILE": tmphome}
+
     def __repr__(self):
         return "<Testdir %r>" % (self.tmpdir,)
 
@@ -529,7 +529,7 @@ class Testdir(object):
         self._sys_modules_snapshot.restore()
         self._sys_path_snapshot.restore()
         self._cwd_snapshot.restore()
-        self.monkeypatch.undo() 
+        self.monkeypatch.undo()
 
     def __take_sys_modules_snapshot(self):
         # some zope modules used by twisted-related tests keep internal state
@@ -627,7 +627,7 @@ class Testdir(object):
         if path is None:
             path = self.tmpdir
 
-        self.monkeypatch.syspath_prepend(str(path)) 
+        self.monkeypatch.syspath_prepend(str(path))
 
     def mkdir(self, name):
         """Create a new (sub)directory."""
@@ -670,7 +670,7 @@ class Testdir(object):
             else:
                 raise LookupError(
                     "{} cant be found as module or package in {}".format(
-                        func_name, example_dir.bestrelpath(self.request.config.rootdir) 
+                        func_name, example_dir.bestrelpath(self.request.config.rootdir)
                     )
                 )
         else:
@@ -795,23 +795,23 @@ class Testdir(object):
 
         :param args: command line arguments to pass to :py:func:`pytest.main`
 
-        :param plugins: (keyword-only) extra plugin instances the 
+        :param plugins: (keyword-only) extra plugin instances the
            ``pytest.main()`` instance should use
 
         :return: a :py:class:`HookRecorder` instance
-        """ 
-        plugins = kwargs.pop("plugins", []) 
-        no_reraise_ctrlc = kwargs.pop("no_reraise_ctrlc", None) 
-        raise_on_kwargs(kwargs) 
+        """
+        plugins = kwargs.pop("plugins", [])
+        no_reraise_ctrlc = kwargs.pop("no_reraise_ctrlc", None)
+        raise_on_kwargs(kwargs)
 
         finalizers = []
         try:
-            # Do not load user config (during runs only). 
-            mp_run = MonkeyPatch() 
-            for k, v in self._env_run_update.items(): 
-                mp_run.setenv(k, v) 
-            finalizers.append(mp_run.undo) 
- 
+            # Do not load user config (during runs only).
+            mp_run = MonkeyPatch()
+            for k, v in self._env_run_update.items():
+                mp_run.setenv(k, v)
+            finalizers.append(mp_run.undo)
+
             # When running pytest inline any plugins active in the main test
             # process are already imported.  So this disables the warning which
             # will trigger to say they can no longer be rewritten, which is
@@ -856,7 +856,7 @@ class Testdir(object):
 
             # typically we reraise keyboard interrupts from the child run
             # because it's our user requesting interruption of the testing
-            if ret == EXIT_INTERRUPTED and not no_reraise_ctrlc: 
+            if ret == EXIT_INTERRUPTED and not no_reraise_ctrlc:
                 calls = reprec.getcalls("pytest_keyboard_interrupt")
                 if calls and calls[-1].excinfo.type == KeyboardInterrupt:
                     raise KeyboardInterrupt()
@@ -868,10 +868,10 @@ class Testdir(object):
     def runpytest_inprocess(self, *args, **kwargs):
         """Return result of running pytest in-process, providing a similar
         interface to what self.runpytest() provides.
-        """ 
-        syspathinsert = kwargs.pop("syspathinsert", False) 
+        """
+        syspathinsert = kwargs.pop("syspathinsert", False)
 
-        if syspathinsert: 
+        if syspathinsert:
             self.syspathinsert()
         now = time.time()
         capture = MultiCapture(Capture=SysCapture)
@@ -1029,14 +1029,14 @@ class Testdir(object):
             if colitem.name == name:
                 return colitem
 
-    def popen( 
-        self, 
-        cmdargs, 
-        stdout=subprocess.PIPE, 
-        stderr=subprocess.PIPE, 
-        stdin=CLOSE_STDIN, 
-        **kw 
-    ): 
+    def popen(
+        self,
+        cmdargs,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=CLOSE_STDIN,
+        **kw
+    ):
         """Invoke subprocess.Popen.
 
         This calls subprocess.Popen making sure the current working directory
@@ -1049,22 +1049,22 @@ class Testdir(object):
         env["PYTHONPATH"] = os.pathsep.join(
             filter(None, [os.getcwd(), env.get("PYTHONPATH", "")])
         )
-        env.update(self._env_run_update) 
+        env.update(self._env_run_update)
         kw["env"] = env
 
-        if stdin is Testdir.CLOSE_STDIN: 
-            kw["stdin"] = subprocess.PIPE 
-        elif isinstance(stdin, bytes): 
-            kw["stdin"] = subprocess.PIPE 
-        else: 
-            kw["stdin"] = stdin 
+        if stdin is Testdir.CLOSE_STDIN:
+            kw["stdin"] = subprocess.PIPE
+        elif isinstance(stdin, bytes):
+            kw["stdin"] = subprocess.PIPE
+        else:
+            kw["stdin"] = stdin
 
-        popen = subprocess.Popen(cmdargs, stdout=stdout, stderr=stderr, **kw) 
-        if stdin is Testdir.CLOSE_STDIN: 
-            popen.stdin.close() 
-        elif isinstance(stdin, bytes): 
-            popen.stdin.write(stdin) 
- 
+        popen = subprocess.Popen(cmdargs, stdout=stdout, stderr=stderr, **kw)
+        if stdin is Testdir.CLOSE_STDIN:
+            popen.stdin.close()
+        elif isinstance(stdin, bytes):
+            popen.stdin.write(stdin)
+
         return popen
 
     def run(self, *cmdargs, **kwargs):
@@ -1075,10 +1075,10 @@ class Testdir(object):
         :param args: the sequence of arguments to pass to `subprocess.Popen()`
         :param timeout: the period in seconds after which to timeout and raise
             :py:class:`Testdir.TimeoutExpired`
-        :param stdin: optional standard input.  Bytes are being send, closing 
-            the pipe, otherwise it is passed through to ``popen``. 
-            Defaults to ``CLOSE_STDIN``, which translates to using a pipe 
-            (``subprocess.PIPE``) that gets closed. 
+        :param stdin: optional standard input.  Bytes are being send, closing
+            the pipe, otherwise it is passed through to ``popen``.
+            Defaults to ``CLOSE_STDIN``, which translates to using a pipe
+            (``subprocess.PIPE``) that gets closed.
 
         Returns a :py:class:`RunResult`.
 
@@ -1086,7 +1086,7 @@ class Testdir(object):
         __tracebackhide__ = True
 
         timeout = kwargs.pop("timeout", None)
-        stdin = kwargs.pop("stdin", Testdir.CLOSE_STDIN) 
+        stdin = kwargs.pop("stdin", Testdir.CLOSE_STDIN)
         raise_on_kwargs(kwargs)
 
         cmdargs = [
@@ -1101,14 +1101,14 @@ class Testdir(object):
         try:
             now = time.time()
             popen = self.popen(
-                cmdargs, 
-                stdin=stdin, 
-                stdout=f1, 
-                stderr=f2, 
-                close_fds=(sys.platform != "win32"), 
+                cmdargs,
+                stdin=stdin,
+                stdout=f1,
+                stderr=f2,
+                close_fds=(sys.platform != "win32"),
             )
-            if isinstance(stdin, bytes): 
-                popen.stdin.close() 
+            if isinstance(stdin, bytes):
+                popen.stdin.close()
 
             def handle_timeout():
                 __tracebackhide__ = True
@@ -1124,7 +1124,7 @@ class Testdir(object):
 
             if timeout is None:
                 ret = popen.wait()
-            elif not six.PY2: 
+            elif not six.PY2:
                 try:
                     ret = popen.wait(timeout)
                 except subprocess.TimeoutExpired:
@@ -1196,8 +1196,8 @@ class Testdir(object):
         Returns a :py:class:`RunResult`.
         """
         __tracebackhide__ = True
-        timeout = kwargs.pop("timeout", None) 
-        raise_on_kwargs(kwargs) 
+        timeout = kwargs.pop("timeout", None)
+        raise_on_kwargs(kwargs)
 
         p = py.path.local.make_numbered_dir(
             prefix="runpytest-", keep=None, rootdir=self.tmpdir
@@ -1207,7 +1207,7 @@ class Testdir(object):
         if plugins:
             args = ("-p", plugins[0]) + args
         args = self._getpytestargs() + args
-        return self.run(*args, timeout=timeout) 
+        return self.run(*args, timeout=timeout)
 
     def spawn_pytest(self, string, expect_timeout=10.0):
         """Run pytest using pexpect.
@@ -1235,12 +1235,12 @@ class Testdir(object):
         if sys.platform.startswith("freebsd"):
             pytest.xfail("pexpect does not work reliably on freebsd")
         logfile = self.tmpdir.join("spawn.out").open("wb")
- 
-        # Do not load user config. 
-        env = os.environ.copy() 
-        env.update(self._env_run_update) 
- 
-        child = pexpect.spawn(cmd, logfile=logfile, env=env) 
+
+        # Do not load user config.
+        env = os.environ.copy()
+        env.update(self._env_run_update)
+
+        child = pexpect.spawn(cmd, logfile=logfile, env=env)
         self.request.addfinalizer(logfile.close)
         child.timeout = expect_timeout
         return child
@@ -1250,7 +1250,7 @@ def getdecoded(out):
     try:
         return out.decode("utf-8")
     except UnicodeDecodeError:
-        return "INTERNAL not-utf8-decodeable, truncated string:\n%s" % (saferepr(out),) 
+        return "INTERNAL not-utf8-decodeable, truncated string:\n%s" % (saferepr(out),)
 
 
 class LineComp(object):
@@ -1344,7 +1344,7 @@ class LineMatcher(object):
         raise ValueError("line %r not found in output" % fnline)
 
     def _log(self, *args):
-        self._log_output.append(" ".join(str(x) for x in args)) 
+        self._log_output.append(" ".join(str(x) for x in args))
 
     @property
     def _log_text(self):
@@ -1385,7 +1385,7 @@ class LineMatcher(object):
             will be logged to stdout when a match occurs
 
         """
-        assert isinstance(lines2, Sequence) 
+        assert isinstance(lines2, Sequence)
         lines2 = self._getlines(lines2)
         lines1 = self.lines[:]
         nextline = None

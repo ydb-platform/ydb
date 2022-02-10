@@ -77,13 +77,13 @@ class raw_ostream;
 
 enum PredicateType { PT_Branch, PT_Assume, PT_Switch };
 
-/// Constraint for a predicate of the form "cmp Pred Op, OtherOp", where Op 
-/// is the value the constraint applies to (the ssa.copy result). 
-struct PredicateConstraint { 
-  CmpInst::Predicate Predicate; 
-  Value *OtherOp; 
-}; 
- 
+/// Constraint for a predicate of the form "cmp Pred Op, OtherOp", where Op
+/// is the value the constraint applies to (the ssa.copy result).
+struct PredicateConstraint {
+  CmpInst::Predicate Predicate;
+  Value *OtherOp;
+};
+
 // Base class for all predicate information we provide.
 // All of our predicate information has at least a comparison.
 class PredicateBase : public ilist_node<PredicateBase> {
@@ -97,9 +97,9 @@ public:
   // predicates, this is different to OriginalOp which refers to the initial
   // operand.
   Value *RenamedOp;
-  // The condition associated with this predicate. 
-  Value *Condition; 
- 
+  // The condition associated with this predicate.
+  Value *Condition;
+
   PredicateBase(const PredicateBase &) = delete;
   PredicateBase &operator=(const PredicateBase &) = delete;
   PredicateBase() = delete;
@@ -109,22 +109,22 @@ public:
            PB->Type == PT_Switch;
   }
 
-  /// Fetch condition in the form of PredicateConstraint, if possible. 
-  Optional<PredicateConstraint> getConstraint() const; 
- 
+  /// Fetch condition in the form of PredicateConstraint, if possible.
+  Optional<PredicateConstraint> getConstraint() const;
+
 protected:
-  PredicateBase(PredicateType PT, Value *Op, Value *Condition) 
-      : Type(PT), OriginalOp(Op), Condition(Condition) {} 
+  PredicateBase(PredicateType PT, Value *Op, Value *Condition)
+      : Type(PT), OriginalOp(Op), Condition(Condition) {}
 };
 
 // Provides predicate information for assumes.  Since assumes are always true,
 // we simply provide the assume instruction, so you can tell your relative
 // position to it.
-class PredicateAssume : public PredicateBase { 
+class PredicateAssume : public PredicateBase {
 public:
   IntrinsicInst *AssumeInst;
   PredicateAssume(Value *Op, IntrinsicInst *AssumeInst, Value *Condition)
-      : PredicateBase(PT_Assume, Op, Condition), AssumeInst(AssumeInst) {} 
+      : PredicateBase(PT_Assume, Op, Condition), AssumeInst(AssumeInst) {}
   PredicateAssume() = delete;
   static bool classof(const PredicateBase *PB) {
     return PB->Type == PT_Assume;
@@ -134,7 +134,7 @@ public:
 // Mixin class for edge predicates.  The FROM block is the block where the
 // predicate originates, and the TO block is the block where the predicate is
 // valid.
-class PredicateWithEdge : public PredicateBase { 
+class PredicateWithEdge : public PredicateBase {
 public:
   BasicBlock *From;
   BasicBlock *To;
@@ -146,7 +146,7 @@ public:
 protected:
   PredicateWithEdge(PredicateType PType, Value *Op, BasicBlock *From,
                     BasicBlock *To, Value *Cond)
-      : PredicateBase(PType, Op, Cond), From(From), To(To) {} 
+      : PredicateBase(PType, Op, Cond), From(From), To(To) {}
 };
 
 // Provides predicate information for branches.

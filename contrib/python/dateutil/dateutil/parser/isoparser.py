@@ -88,13 +88,13 @@ class isoparser(object):
         - ``hh``
         - ``hh:mm`` or ``hhmm``
         - ``hh:mm:ss`` or ``hhmmss``
-        - ``hh:mm:ss.ssssss`` (Up to 6 sub-second digits) 
+        - ``hh:mm:ss.ssssss`` (Up to 6 sub-second digits)
 
         Midnight is a special case for `hh`, as the standard supports both
-        00:00 and 24:00 as a representation. The decimal separator can be 
-        either a dot or a comma. 
+        00:00 and 24:00 as a representation. The decimal separator can be
+        either a dot or a comma.
 
- 
+
         .. caution::
 
             Support for fractional components other than seconds is part of the
@@ -139,10 +139,10 @@ class isoparser(object):
             else:
                 raise ValueError('String contains unknown ISO components')
 
-        if len(components) > 3 and components[3] == 24: 
-            components[3] = 0 
-            return datetime(*components) + timedelta(days=1) 
- 
+        if len(components) > 3 and components[3] == 24:
+            components[3] = 0
+            return datetime(*components) + timedelta(days=1)
+
         return datetime(*components)
 
     @_takes_ascii
@@ -159,7 +159,7 @@ class isoparser(object):
         components, pos = self._parse_isodate(datestr)
         if pos < len(datestr):
             raise ValueError('String contains unknown ISO ' +
-                             'components: {!r}'.format(datestr.decode('ascii'))) 
+                             'components: {!r}'.format(datestr.decode('ascii')))
         return date(*components)
 
     @_takes_ascii
@@ -173,10 +173,10 @@ class isoparser(object):
         :return:
             Returns a :class:`datetime.time` object
         """
-        components = self._parse_isotime(timestr) 
-        if components[0] == 24: 
-            components[0] = 0 
-        return time(*components) 
+        components = self._parse_isotime(timestr)
+        if components[0] == 24:
+            components[0] = 0
+        return time(*components)
 
     @_takes_ascii
     def parse_tzstr(self, tzstr, zero_as_utc=True):
@@ -201,7 +201,7 @@ class isoparser(object):
     # Constants
     _DATE_SEP = b'-'
     _TIME_SEP = b':'
-    _FRACTION_REGEX = re.compile(b'[\\.,]([0-9]+)') 
+    _FRACTION_REGEX = re.compile(b'[\\.,]([0-9]+)')
 
     def _parse_isodate(self, dt_str):
         try:
@@ -333,42 +333,42 @@ class isoparser(object):
         pos = 0
         comp = -1
 
-        if len_str < 2: 
+        if len_str < 2:
             raise ValueError('ISO time too short')
 
-        has_sep = False 
+        has_sep = False
 
         while pos < len_str and comp < 5:
             comp += 1
 
-            if timestr[pos:pos + 1] in b'-+Zz': 
+            if timestr[pos:pos + 1] in b'-+Zz':
                 # Detect time zone boundary
                 components[-1] = self._parse_tzstr(timestr[pos:])
                 pos = len_str
                 break
 
-            if comp == 1 and timestr[pos:pos+1] == self._TIME_SEP: 
-                has_sep = True 
-                pos += 1 
-            elif comp == 2 and has_sep: 
-                if timestr[pos:pos+1] != self._TIME_SEP: 
-                    raise ValueError('Inconsistent use of colon separator') 
-                pos += 1 
- 
+            if comp == 1 and timestr[pos:pos+1] == self._TIME_SEP:
+                has_sep = True
+                pos += 1
+            elif comp == 2 and has_sep:
+                if timestr[pos:pos+1] != self._TIME_SEP:
+                    raise ValueError('Inconsistent use of colon separator')
+                pos += 1
+
             if comp < 3:
                 # Hour, minute, second
                 components[comp] = int(timestr[pos:pos + 2])
                 pos += 2
 
             if comp == 3:
-                # Fraction of a second 
-                frac = self._FRACTION_REGEX.match(timestr[pos:]) 
-                if not frac: 
+                # Fraction of a second
+                frac = self._FRACTION_REGEX.match(timestr[pos:])
+                if not frac:
                     continue
 
-                us_str = frac.group(1)[:6]  # Truncate to microseconds 
+                us_str = frac.group(1)[:6]  # Truncate to microseconds
                 components[comp] = int(us_str) * 10**(6 - len(us_str))
-                pos += len(frac.group()) 
+                pos += len(frac.group())
 
         if pos < len_str:
             raise ValueError('Unused components in ISO string')
@@ -381,8 +381,8 @@ class isoparser(object):
         return components
 
     def _parse_tzstr(self, tzstr, zero_as_utc=True):
-        if tzstr == b'Z' or tzstr == b'z': 
-            return tz.UTC 
+        if tzstr == b'Z' or tzstr == b'z':
+            return tz.UTC
 
         if len(tzstr) not in {3, 5, 6}:
             raise ValueError('Time zone offset must be 1, 3, 5 or 6 characters')
@@ -401,7 +401,7 @@ class isoparser(object):
             minutes = int(tzstr[(4 if tzstr[3:4] == self._TIME_SEP else 3):])
 
         if zero_as_utc and hours == 0 and minutes == 0:
-            return tz.UTC 
+            return tz.UTC
         else:
             if minutes > 59:
                 raise ValueError('Invalid minutes in time zone offset')

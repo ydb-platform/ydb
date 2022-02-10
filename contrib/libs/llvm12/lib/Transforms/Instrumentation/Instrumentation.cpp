@@ -105,8 +105,8 @@ Comdat *llvm::GetOrCreateFunctionComdat(Function &F, Triple &T,
 void llvm::initializeInstrumentation(PassRegistry &Registry) {
   initializeAddressSanitizerLegacyPassPass(Registry);
   initializeModuleAddressSanitizerLegacyPassPass(Registry);
-  initializeMemProfilerLegacyPassPass(Registry); 
-  initializeModuleMemProfilerLegacyPassPass(Registry); 
+  initializeMemProfilerLegacyPassPass(Registry);
+  initializeModuleMemProfilerLegacyPassPass(Registry);
   initializeBoundsCheckingLegacyPassPass(Registry);
   initializeControlHeightReductionLegacyPassPass(Registry);
   initializeGCOVProfilerLegacyPassPass(Registry);
@@ -121,7 +121,7 @@ void llvm::initializeInstrumentation(PassRegistry &Registry) {
   initializeHWAddressSanitizerLegacyPassPass(Registry);
   initializeThreadSanitizerLegacyPassPass(Registry);
   initializeModuleSanitizerCoverageLegacyPassPass(Registry);
-  initializeDataFlowSanitizerLegacyPassPass(Registry); 
+  initializeDataFlowSanitizerLegacyPassPass(Registry);
 }
 
 /// LLVMInitializeInstrumentation - C binding for

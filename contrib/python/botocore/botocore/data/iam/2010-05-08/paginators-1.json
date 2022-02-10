@@ -193,13 +193,13 @@
       "more_results": "IsTruncated",
       "output_token": "Marker",
       "result_key": "EvaluationResults"
-    }, 
-    "ListUserTags": { 
-      "input_token": "Marker", 
-      "limit_key": "MaxItems", 
-      "more_results": "IsTruncated", 
-      "output_token": "Marker", 
-      "result_key": "Tags" 
+    },
+    "ListUserTags": {
+      "input_token": "Marker",
+      "limit_key": "MaxItems",
+      "more_results": "IsTruncated",
+      "output_token": "Marker",
+      "result_key": "Tags"
     }
   }
 }

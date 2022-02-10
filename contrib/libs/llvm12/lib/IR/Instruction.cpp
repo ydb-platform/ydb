@@ -485,7 +485,7 @@ bool Instruction::isIdenticalToWhenDefined(const Instruction *I) const {
   if (!std::equal(op_begin(), op_end(), I->op_begin()))
     return false;
 
-  // WARNING: this logic must be kept in sync with EliminateDuplicatePHINodes()! 
+  // WARNING: this logic must be kept in sync with EliminateDuplicatePHINodes()!
   if (const PHINode *thisPHI = dyn_cast<PHINode>(this)) {
     const PHINode *otherPHI = cast<PHINode>(I);
     return std::equal(thisPHI->block_begin(), thisPHI->block_end(),
@@ -633,16 +633,16 @@ bool Instruction::isSafeToRemove() const {
          !this->isTerminator();
 }
 
-bool Instruction::willReturn() const { 
-  if (const auto *CB = dyn_cast<CallBase>(this)) 
-    // FIXME: Temporarily assume that all side-effect free intrinsics will 
-    // return. Remove this workaround once all intrinsics are appropriately 
-    // annotated. 
-    return CB->hasFnAttr(Attribute::WillReturn) || 
-           (isa<IntrinsicInst>(CB) && CB->onlyReadsMemory()); 
-  return true; 
-} 
- 
+bool Instruction::willReturn() const {
+  if (const auto *CB = dyn_cast<CallBase>(this))
+    // FIXME: Temporarily assume that all side-effect free intrinsics will
+    // return. Remove this workaround once all intrinsics are appropriately
+    // annotated.
+    return CB->hasFnAttr(Attribute::WillReturn) ||
+           (isa<IntrinsicInst>(CB) && CB->onlyReadsMemory());
+  return true;
+}
+
 bool Instruction::isLifetimeStartOrEnd() const {
   auto II = dyn_cast<IntrinsicInst>(this);
   if (!II)
@@ -651,22 +651,22 @@ bool Instruction::isLifetimeStartOrEnd() const {
   return ID == Intrinsic::lifetime_start || ID == Intrinsic::lifetime_end;
 }
 
-bool Instruction::isDebugOrPseudoInst() const { 
-  return isa<DbgInfoIntrinsic>(this) || isa<PseudoProbeInst>(this); 
-} 
- 
-const Instruction * 
-Instruction::getNextNonDebugInstruction(bool SkipPseudoOp) const { 
+bool Instruction::isDebugOrPseudoInst() const {
+  return isa<DbgInfoIntrinsic>(this) || isa<PseudoProbeInst>(this);
+}
+
+const Instruction *
+Instruction::getNextNonDebugInstruction(bool SkipPseudoOp) const {
   for (const Instruction *I = getNextNode(); I; I = I->getNextNode())
-    if (!isa<DbgInfoIntrinsic>(I) && !(SkipPseudoOp && isa<PseudoProbeInst>(I))) 
+    if (!isa<DbgInfoIntrinsic>(I) && !(SkipPseudoOp && isa<PseudoProbeInst>(I)))
       return I;
   return nullptr;
 }
 
-const Instruction * 
-Instruction::getPrevNonDebugInstruction(bool SkipPseudoOp) const { 
+const Instruction *
+Instruction::getPrevNonDebugInstruction(bool SkipPseudoOp) const {
   for (const Instruction *I = getPrevNode(); I; I = I->getPrevNode())
-    if (!isa<DbgInfoIntrinsic>(I) && !(SkipPseudoOp && isa<PseudoProbeInst>(I))) 
+    if (!isa<DbgInfoIntrinsic>(I) && !(SkipPseudoOp && isa<PseudoProbeInst>(I)))
       return I;
   return nullptr;
 }
@@ -686,13 +686,13 @@ bool Instruction::isAssociative() const {
   }
 }
 
-bool Instruction::isCommutative() const { 
-  if (auto *II = dyn_cast<IntrinsicInst>(this)) 
-    return II->isCommutative(); 
-  // TODO: Should allow icmp/fcmp? 
-  return isCommutative(getOpcode()); 
-} 
- 
+bool Instruction::isCommutative() const {
+  if (auto *II = dyn_cast<IntrinsicInst>(this))
+    return II->isCommutative();
+  // TODO: Should allow icmp/fcmp?
+  return isCommutative(getOpcode());
+}
+
 unsigned Instruction::getNumSuccessors() const {
   switch (getOpcode()) {
 #define HANDLE_TERM_INST(N, OPC, CLASS)                                        \

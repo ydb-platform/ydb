@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -17,8 +17,8 @@ import py
 from six import text_type
 
 import _pytest
-from _pytest._io.saferepr import safeformat 
-from _pytest._io.saferepr import saferepr 
+from _pytest._io.saferepr import safeformat
+from _pytest._io.saferepr import saferepr
 from _pytest.compat import _PY2
 from _pytest.compat import _PY3
 from _pytest.compat import PY35
@@ -138,12 +138,12 @@ class Frame(object):
         """
         f_locals = self.f_locals.copy()
         f_locals.update(vars)
-        exec(code, self.f_globals, f_locals) 
+        exec(code, self.f_globals, f_locals)
 
     def repr(self, object):
         """ return a 'safe' (non-recursive, one-line) string repr for 'object'
         """
-        return saferepr(object) 
+        return saferepr(object)
 
     def is_true(self, object):
         return object
@@ -241,20 +241,20 @@ class TracebackEntry(object):
 
     def ishidden(self):
         """ return True if the current frame has a var __tracebackhide__
-            resolving to True. 
+            resolving to True.
 
             If __tracebackhide__ is a callable, it gets called with the
             ExceptionInfo instance and can decide whether to hide the traceback.
 
             mostly for internal use
         """
-        f = self.frame 
-        tbh = f.f_locals.get( 
-            "__tracebackhide__", f.f_globals.get("__tracebackhide__", False) 
-        ) 
-        if tbh and callable(tbh): 
+        f = self.frame
+        tbh = f.f_locals.get(
+            "__tracebackhide__", f.f_globals.get("__tracebackhide__", False)
+        )
+        if tbh and callable(tbh):
             return tbh(None if self._excinfo is None else self._excinfo())
-        return tbh 
+        return tbh
 
     def __str__(self):
         try:
@@ -385,7 +385,7 @@ co_equal = compile(
 )
 
 
-@attr.s(repr=False) 
+@attr.s(repr=False)
 class ExceptionInfo(object):
     """ wraps sys.exc_info() objects and offers
         help for navigating the traceback.
@@ -395,76 +395,76 @@ class ExceptionInfo(object):
         "AssertionError(u'assert " if _PY2 else "AssertionError('assert "
     )
 
-    _excinfo = attr.ib() 
-    _striptext = attr.ib(default="") 
-    _traceback = attr.ib(default=None) 
+    _excinfo = attr.ib()
+    _striptext = attr.ib(default="")
+    _traceback = attr.ib(default=None)
 
-    @classmethod 
-    def from_current(cls, exprinfo=None): 
-        """returns an ExceptionInfo matching the current traceback 
+    @classmethod
+    def from_current(cls, exprinfo=None):
+        """returns an ExceptionInfo matching the current traceback
 
-        .. warning:: 
- 
-            Experimental API 
- 
- 
-        :param exprinfo: a text string helping to determine if we should 
-                         strip ``AssertionError`` from the output, defaults 
-                         to the exception message/``__str__()`` 
-        """ 
-        tup = sys.exc_info() 
-        assert tup[0] is not None, "no current exception" 
-        _striptext = "" 
-        if exprinfo is None and isinstance(tup[1], AssertionError): 
-            exprinfo = getattr(tup[1], "msg", None) 
-            if exprinfo is None: 
-                exprinfo = saferepr(tup[1]) 
-            if exprinfo and exprinfo.startswith(cls._assert_start_repr): 
-                _striptext = "AssertionError: " 
- 
-        return cls(tup, _striptext) 
- 
-    @classmethod 
-    def for_later(cls): 
-        """return an unfilled ExceptionInfo 
-        """ 
-        return cls(None) 
- 
-    @property 
-    def type(self): 
-        """the exception class""" 
-        return self._excinfo[0] 
- 
-    @property 
-    def value(self): 
-        """the exception value""" 
-        return self._excinfo[1] 
- 
-    @property 
-    def tb(self): 
-        """the exception raw traceback""" 
-        return self._excinfo[2] 
- 
-    @property 
-    def typename(self): 
-        """the type name of the exception""" 
-        return self.type.__name__ 
- 
-    @property 
-    def traceback(self): 
-        """the traceback""" 
-        if self._traceback is None: 
-            self._traceback = Traceback(self.tb, excinfo=ref(self)) 
-        return self._traceback 
- 
-    @traceback.setter 
-    def traceback(self, value): 
-        self._traceback = value 
- 
+        .. warning::
+
+            Experimental API
+
+
+        :param exprinfo: a text string helping to determine if we should
+                         strip ``AssertionError`` from the output, defaults
+                         to the exception message/``__str__()``
+        """
+        tup = sys.exc_info()
+        assert tup[0] is not None, "no current exception"
+        _striptext = ""
+        if exprinfo is None and isinstance(tup[1], AssertionError):
+            exprinfo = getattr(tup[1], "msg", None)
+            if exprinfo is None:
+                exprinfo = saferepr(tup[1])
+            if exprinfo and exprinfo.startswith(cls._assert_start_repr):
+                _striptext = "AssertionError: "
+
+        return cls(tup, _striptext)
+
+    @classmethod
+    def for_later(cls):
+        """return an unfilled ExceptionInfo
+        """
+        return cls(None)
+
+    @property
+    def type(self):
+        """the exception class"""
+        return self._excinfo[0]
+
+    @property
+    def value(self):
+        """the exception value"""
+        return self._excinfo[1]
+
+    @property
+    def tb(self):
+        """the exception raw traceback"""
+        return self._excinfo[2]
+
+    @property
+    def typename(self):
+        """the type name of the exception"""
+        return self.type.__name__
+
+    @property
+    def traceback(self):
+        """the traceback"""
+        if self._traceback is None:
+            self._traceback = Traceback(self.tb, excinfo=ref(self))
+        return self._traceback
+
+    @traceback.setter
+    def traceback(self, value):
+        self._traceback = value
+
     def __repr__(self):
-        if self._excinfo is None: 
-            return "<ExceptionInfo for raises contextmanager>" 
-        return "<ExceptionInfo %s tblen=%d>" % (self.typename, len(self.traceback)) 
+        if self._excinfo is None:
+            return "<ExceptionInfo for raises contextmanager>"
+        return "<ExceptionInfo %s tblen=%d>" % (self.typename, len(self.traceback))
 
     def exconly(self, tryshort=False):
         """ return the exception as a string
@@ -552,11 +552,11 @@ class ExceptionInfo(object):
         return fmt.repr_excinfo(self)
 
     def __str__(self):
-        if self._excinfo is None: 
+        if self._excinfo is None:
             return repr(self)
-        entry = self.traceback[-1] 
-        loc = ReprFileLocation(entry.path, entry.lineno + 1, self.exconly()) 
-        return str(loc) 
+        entry = self.traceback[-1]
+        loc = ReprFileLocation(entry.path, entry.lineno + 1, self.exconly())
+        return str(loc)
 
     def __unicode__(self):
         entry = self.traceback[-1]
@@ -565,20 +565,20 @@ class ExceptionInfo(object):
 
     def match(self, regexp):
         """
-        Check whether the regular expression 'regexp' is found in the string 
-        representation of the exception using ``re.search``. If it matches 
-        then True is returned (so that it is possible to write 
-        ``assert excinfo.match()``). If it doesn't match an AssertionError is 
-        raised. 
+        Check whether the regular expression 'regexp' is found in the string
+        representation of the exception using ``re.search``. If it matches
+        then True is returned (so that it is possible to write
+        ``assert excinfo.match()``). If it doesn't match an AssertionError is
+        raised.
         """
         __tracebackhide__ = True
-        value = ( 
-            text_type(self.value) if isinstance(regexp, text_type) else str(self.value) 
-        ) 
-        if not re.search(regexp, value): 
-            raise AssertionError( 
-                u"Pattern {!r} not found in {!r}".format(regexp, value) 
-            ) 
+        value = (
+            text_type(self.value) if isinstance(regexp, text_type) else str(self.value)
+        )
+        if not re.search(regexp, value):
+            raise AssertionError(
+                u"Pattern {!r} not found in {!r}".format(regexp, value)
+            )
         return True
 
 
@@ -624,7 +624,7 @@ class FormattedExcinfo(object):
         if self.funcargs:
             args = []
             for argname, argvalue in entry.frame.getargs(var=True):
-                args.append((argname, saferepr(argvalue))) 
+                args.append((argname, saferepr(argvalue)))
             return ReprFuncArgs(args)
 
     def get_source(self, source, line_index=-1, excinfo=None, short=False):
@@ -677,9 +677,9 @@ class FormattedExcinfo(object):
                     # _repr() function, which is only reprlib.Repr in
                     # disguise, so is very configurable.
                     if self.truncate_locals:
-                        str_repr = saferepr(value) 
+                        str_repr = saferepr(value)
                     else:
-                        str_repr = safeformat(value) 
+                        str_repr = safeformat(value)
                     # if len(str_repr) < 70 or not isinstance(value,
                     #                            (list, tuple, dict)):
                     lines.append("%-10s = %s" % (name, str_repr))

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -104,9 +104,9 @@ def catch_warnings_for_item(config, ihook, when, item):
 
 
 def warning_record_to_str(warning_message):
-    """Convert a warnings.WarningMessage to a string. 
+    """Convert a warnings.WarningMessage to a string.
 
-    This takes lot of unicode shenaningans into account for Python 2. 
+    This takes lot of unicode shenaningans into account for Python 2.
     When Python 2 support is dropped this function can be greatly simplified.
     """
     warn_msg = warning_message.message
@@ -162,19 +162,19 @@ def pytest_terminal_summary(terminalreporter):
         yield
 
 
-def _issue_warning_captured(warning, hook, stacklevel): 
+def _issue_warning_captured(warning, hook, stacklevel):
     """
     This function should be used instead of calling ``warnings.warn`` directly when we are in the "configure" stage:
     at this point the actual options might not have been set, so we manually trigger the pytest_warning_captured
     hook so we can display this warnings in the terminal. This is a hack until we can sort out #2891.
 
     :param warning: the warning instance.
-    :param hook: the hook caller 
+    :param hook: the hook caller
     :param stacklevel: stacklevel forwarded to warnings.warn
     """
     with warnings.catch_warnings(record=True) as records:
         warnings.simplefilter("always", type(warning))
         warnings.warn(warning, stacklevel=stacklevel)
-    hook.pytest_warning_captured.call_historic( 
+    hook.pytest_warning_captured.call_historic(
         kwargs=dict(warning_message=records[0], when="config", item=None)
     )

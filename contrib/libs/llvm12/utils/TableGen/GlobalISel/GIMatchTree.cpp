@@ -121,7 +121,7 @@ void GIMatchTreeBuilderLeafInfo::declareInstr(const GIMatchDagInstr *Instr, unsi
     Info.bindOperandVariable(VarBinding.second, ID, VarBinding.first);
 
   // Clear the bit indicating we haven't visited this instr.
-  const auto &NodeI = find(MatchDag.instr_nodes(), Instr); 
+  const auto &NodeI = find(MatchDag.instr_nodes(), Instr);
   assert(NodeI != MatchDag.instr_nodes_end() && "Instr isn't in this DAG");
   unsigned InstrIdx = MatchDag.getInstrNodeIdx(NodeI);
   RemainingInstrNodes.reset(InstrIdx);
@@ -265,10 +265,10 @@ void GIMatchTreeBuilder::runStep() {
       LLVM_DEBUG(dbgs() << "Leaf contains multiple rules, drop after the first "
                            "fully tested rule\n");
       auto FirstFullyTested =
-          llvm::find_if(Leaves, [](const GIMatchTreeBuilderLeafInfo &X) { 
-            return X.isFullyTraversed() && X.isFullyTested() && 
-                   !X.getMatchDag().hasPostMatchPredicate(); 
-          }); 
+          llvm::find_if(Leaves, [](const GIMatchTreeBuilderLeafInfo &X) {
+            return X.isFullyTraversed() && X.isFullyTested() &&
+                   !X.getMatchDag().hasPostMatchPredicate();
+          });
       if (FirstFullyTested != Leaves.end())
         FirstFullyTested++;
 
@@ -454,7 +454,7 @@ void GIMatchTreeOpcodePartitioner::repartition(
         // predicates for one instruction in the same DAG. That should be
         // impossible.
         assert(AllOpcodes && "Conflicting opcode predicates");
-        append_range(OpcodesForThisPredicate, OpcodeP->getInstrs()); 
+        append_range(OpcodesForThisPredicate, OpcodeP->getInstrs());
       }
 
       for (const CodeGenInstruction *Expected : OpcodesForThisPredicate) {

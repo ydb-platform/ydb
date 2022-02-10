@@ -20,8 +20,8 @@
 #include "llvm/IR/LegacyPassNameParser.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassTimingInfo.h"
-#include "llvm/IR/PrintPasses.h" 
-#include "llvm/IR/StructuralHash.h" 
+#include "llvm/IR/PrintPasses.h"
+#include "llvm/IR/StructuralHash.h"
 #include "llvm/Support/Chrono.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -50,7 +50,7 @@ namespace {
 enum PassDebugLevel {
   Disabled, Arguments, Structure, Executions, Details
 };
-} // namespace 
+} // namespace
 
 static cl::opt<enum PassDebugLevel>
 PassDebugging("debug-pass", cl::Hidden,
@@ -137,7 +137,7 @@ void PMDataManager::emitInstrCountChangedRemark(
     // remarks. Since it's possible that the first function in the module
     // doesn't actually contain a basic block, we have to go and find one that's
     // suitable for emitting remarks.
-    auto It = llvm::find_if(M, [](const Function &Fn) { return !Fn.empty(); }); 
+    auto It = llvm::find_if(M, [](const Function &Fn) { return !Fn.empty(); });
 
     // Didn't find a function. Quit.
     if (It == M.end())
@@ -568,12 +568,12 @@ PMTopLevelManager::setLastUser(ArrayRef<Pass*> AnalysisPasses, Pass *P) {
     PDepth = P->getResolver()->getPMDataManager().getDepth();
 
   for (Pass *AP : AnalysisPasses) {
-    // Record P as the new last user of AP. 
-    auto &LastUserOfAP = LastUser[AP]; 
-    if (LastUserOfAP) 
-      InversedLastUser[LastUserOfAP].erase(AP); 
-    LastUserOfAP = P; 
-    InversedLastUser[P].insert(AP); 
+    // Record P as the new last user of AP.
+    auto &LastUserOfAP = LastUser[AP];
+    if (LastUserOfAP)
+      InversedLastUser[LastUserOfAP].erase(AP);
+    LastUserOfAP = P;
+    InversedLastUser[P].insert(AP);
 
     if (P == AP)
       continue;
@@ -605,23 +605,23 @@ PMTopLevelManager::setLastUser(ArrayRef<Pass*> AnalysisPasses, Pass *P) {
 
     // If AP is the last user of other passes then make P last user of
     // such passes.
-    auto &LastUsedByAP = InversedLastUser[AP]; 
-    for (Pass *L : LastUsedByAP) 
-      LastUser[L] = P; 
-    InversedLastUser[P].insert(LastUsedByAP.begin(), LastUsedByAP.end()); 
-    LastUsedByAP.clear(); 
+    auto &LastUsedByAP = InversedLastUser[AP];
+    for (Pass *L : LastUsedByAP)
+      LastUser[L] = P;
+    InversedLastUser[P].insert(LastUsedByAP.begin(), LastUsedByAP.end());
+    LastUsedByAP.clear();
   }
 }
 
 /// Collect passes whose last user is P
 void PMTopLevelManager::collectLastUses(SmallVectorImpl<Pass *> &LastUses,
                                         Pass *P) {
-  auto DMI = InversedLastUser.find(P); 
+  auto DMI = InversedLastUser.find(P);
   if (DMI == InversedLastUser.end())
     return;
 
-  auto &LU = DMI->second; 
-  LastUses.append(LU.begin(), LU.end()); 
+  auto &LU = DMI->second;
+  LastUses.append(LU.begin(), LU.end());
 }
 
 AnalysisUsage *PMTopLevelManager::findAnalysisUsage(Pass *P) {
@@ -1151,8 +1151,8 @@ Pass *PMDataManager::findAnalysisPass(AnalysisID AID, bool SearchParent) {
 
 // Print list of passes that are last used by P.
 void PMDataManager::dumpLastUses(Pass *P, unsigned Offset) const{
-  if (PassDebugging < Details) 
-    return; 
+  if (PassDebugging < Details)
+    return;
 
   SmallVector<Pass *, 12> LUses;
 
@@ -1308,8 +1308,8 @@ PMDataManager::~PMDataManager() {
 //===----------------------------------------------------------------------===//
 // NOTE: Is this the right place to define this method ?
 // getAnalysisIfAvailable - Return analysis result or null if it doesn't exist.
-Pass *AnalysisResolver::getAnalysisIfAvailable(AnalysisID ID) const { 
-  return PM.findAnalysisPass(ID, true); 
+Pass *AnalysisResolver::getAnalysisIfAvailable(AnalysisID ID) const {
+  return PM.findAnalysisPass(ID, true);
 }
 
 std::tuple<Pass *, bool>
@@ -1429,19 +1429,19 @@ bool FPPassManager::runOnFunction(Function &F) {
     {
       PassManagerPrettyStackEntry X(FP, F);
       TimeRegion PassTimer(getPassTimer(FP));
-#ifdef EXPENSIVE_CHECKS 
-      uint64_t RefHash = StructuralHash(F); 
-#endif 
+#ifdef EXPENSIVE_CHECKS
+      uint64_t RefHash = StructuralHash(F);
+#endif
       LocalChanged |= FP->runOnFunction(F);
- 
-#if defined(EXPENSIVE_CHECKS) && !defined(NDEBUG) 
-      if (!LocalChanged && (RefHash != StructuralHash(F))) { 
-        llvm::errs() << "Pass modifies its input and doesn't report it: " 
-                     << FP->getPassName() << "\n"; 
-        llvm_unreachable("Pass modifies its input and doesn't report it"); 
-      } 
-#endif 
- 
+
+#if defined(EXPENSIVE_CHECKS) && !defined(NDEBUG)
+      if (!LocalChanged && (RefHash != StructuralHash(F))) {
+        llvm::errs() << "Pass modifies its input and doesn't report it: "
+                     << FP->getPassName() << "\n";
+        llvm_unreachable("Pass modifies its input and doesn't report it");
+      }
+#endif
+
       if (EmitICRemark) {
         unsigned NewSize = F.getInstructionCount();
 
@@ -1465,8 +1465,8 @@ bool FPPassManager::runOnFunction(Function &F) {
     dumpUsedSet(FP);
 
     verifyPreservedAnalysis(FP);
-    if (LocalChanged) 
-      removeNotPreservedAnalysis(FP); 
+    if (LocalChanged)
+      removeNotPreservedAnalysis(FP);
     recordAvailableAnalysis(FP);
     removeDeadPasses(FP, F.getName(), ON_FUNCTION_MSG);
   }
@@ -1543,17 +1543,17 @@ MPPassManager::runOnModule(Module &M) {
       PassManagerPrettyStackEntry X(MP, M);
       TimeRegion PassTimer(getPassTimer(MP));
 
-#ifdef EXPENSIVE_CHECKS 
-      uint64_t RefHash = StructuralHash(M); 
-#endif 
- 
+#ifdef EXPENSIVE_CHECKS
+      uint64_t RefHash = StructuralHash(M);
+#endif
+
       LocalChanged |= MP->runOnModule(M);
- 
-#ifdef EXPENSIVE_CHECKS 
-      assert((LocalChanged || (RefHash == StructuralHash(M))) && 
-             "Pass modifies its input and doesn't report it."); 
-#endif 
- 
+
+#ifdef EXPENSIVE_CHECKS
+      assert((LocalChanged || (RefHash == StructuralHash(M))) &&
+             "Pass modifies its input and doesn't report it.");
+#endif
+
       if (EmitICRemark) {
         // Update the size of the module.
         unsigned ModuleCount = M.getInstructionCount();
@@ -1575,8 +1575,8 @@ MPPassManager::runOnModule(Module &M) {
     dumpUsedSet(MP);
 
     verifyPreservedAnalysis(MP);
-    if (LocalChanged) 
-      removeNotPreservedAnalysis(MP); 
+    if (LocalChanged)
+      removeNotPreservedAnalysis(MP);
     recordAvailableAnalysis(MP);
     removeDeadPasses(MP, M.getModuleIdentifier(), ON_MODULE_MSG);
   }

@@ -663,20 +663,20 @@ public:
 
   /// Try to distribute an inner-most loop.
   bool processLoop(std::function<const LoopAccessInfo &(Loop &)> &GetLAA) {
-    assert(L->isInnermost() && "Only process inner loops."); 
+    assert(L->isInnermost() && "Only process inner loops.");
 
     LLVM_DEBUG(dbgs() << "\nLDist: In \""
                       << L->getHeader()->getParent()->getName()
                       << "\" checking " << *L << "\n");
 
-    // Having a single exit block implies there's also one exiting block. 
+    // Having a single exit block implies there's also one exiting block.
     if (!L->getExitBlock())
       return fail("MultipleExitBlocks", "multiple exit blocks");
     if (!L->isLoopSimplifyForm())
       return fail("NotLoopSimplifyForm",
                   "loop is not in loop-simplify form");
-    if (!L->isRotatedForm()) 
-      return fail("NotBottomTested", "loop is not bottom tested"); 
+    if (!L->isRotatedForm())
+      return fail("NotBottomTested", "loop is not bottom tested");
 
     BasicBlock *PH = L->getLoopPreheader();
 
@@ -815,7 +815,7 @@ public:
 
       LLVM_DEBUG(dbgs() << "\nPointers:\n");
       LLVM_DEBUG(LAI->getRuntimePointerChecking()->printChecks(dbgs(), Checks));
-      LoopVersioning LVer(*LAI, Checks, L, LI, DT, SE); 
+      LoopVersioning LVer(*LAI, Checks, L, LI, DT, SE);
       LVer.versionLoop(DefsUsedOutside);
       LVer.annotateLoopWithNoAlias();
 
@@ -981,7 +981,7 @@ static bool runImpl(Function &F, LoopInfo *LI, DominatorTree *DT,
   for (Loop *TopLevelLoop : *LI)
     for (Loop *L : depth_first(TopLevelLoop))
       // We only handle inner-most loops.
-      if (L->isInnermost()) 
+      if (L->isInnermost())
         Worklist.push_back(L);
 
   // Now walk the identified inner loops.
@@ -1057,8 +1057,8 @@ PreservedAnalyses LoopDistributePass::run(Function &F,
   auto &LAM = AM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
   std::function<const LoopAccessInfo &(Loop &)> GetLAA =
       [&](Loop &L) -> const LoopAccessInfo & {
-    LoopStandardAnalysisResults AR = {AA,  AC,  DT,      LI,     SE, 
-                                      TLI, TTI, nullptr, nullptr}; 
+    LoopStandardAnalysisResults AR = {AA,  AC,  DT,      LI,     SE,
+                                      TLI, TTI, nullptr, nullptr};
     return LAM.getResult<LoopAccessAnalysis>(L, AR);
   };
 

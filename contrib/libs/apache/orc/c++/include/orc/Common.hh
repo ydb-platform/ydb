@@ -69,13 +69,13 @@ namespace orc {
     ORC_JAVA_WRITER = 0,
     ORC_CPP_WRITER = 1,
     PRESTO_WRITER = 2,
-    SCRITCHLEY_GO = 3, 
-    TRINO_WRITER = 4, 
+    SCRITCHLEY_GO = 3,
+    TRINO_WRITER = 4,
     UNKNOWN_WRITER = INT32_MAX
   };
 
-  std::string writerIdToString(uint32_t id); 
- 
+  std::string writerIdToString(uint32_t id);
+
   enum CompressionKind {
     CompressionKind_NONE = 0,
     CompressionKind_ZLIB = 1,
@@ -99,9 +99,9 @@ namespace orc {
     WriterVersion_HIVE_13083 = 4,
     WriterVersion_ORC_101 = 5,
     WriterVersion_ORC_135 = 6,
-    WriterVersion_ORC_517 = 7, 
-    WriterVersion_ORC_203 = 8, 
-    WriterVersion_ORC_14 = 9, 
+    WriterVersion_ORC_517 = 7,
+    WriterVersion_ORC_203 = 8,
+    WriterVersion_ORC_14 = 9,
     WriterVersion_MAX = INT32_MAX
   };
 

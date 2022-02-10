@@ -54,7 +54,7 @@ import datetime
 import sys
 from email.base64mime import body_encode as encode_base64
 
-__all__ = ["SMTPException", "SMTPNotSupportedError", "SMTPServerDisconnected", "SMTPResponseException", 
+__all__ = ["SMTPException", "SMTPNotSupportedError", "SMTPServerDisconnected", "SMTPResponseException",
            "SMTPSenderRefused", "SMTPRecipientsRefused", "SMTPDataError",
            "SMTPConnectError", "SMTPHeloError", "SMTPAuthenticationError",
            "quoteaddr", "quotedata", "SMTP"]
@@ -64,7 +64,7 @@ SMTP_SSL_PORT = 465
 CRLF = "\r\n"
 bCRLF = b"\r\n"
 _MAXLINE = 8192 # more than 8 times larger than RFC 821, 4.5.3
-_MAXCHALLENGE = 5  # Maximum number of AUTH challenges sent 
+_MAXCHALLENGE = 5  # Maximum number of AUTH challenges sent
 
 OLDSTYLE_AUTH = re.compile(r"auth=(.*)", re.I)
 
@@ -217,8 +217,8 @@ class SMTP:
         method called 'sendmail' that will do an entire mail transaction.
         """
     debuglevel = 0
- 
-    sock = None 
+
+    sock = None
     file = None
     helo_resp = None
     ehlo_msg = "ehlo"
@@ -231,8 +231,8 @@ class SMTP:
                  source_address=None):
         """Initialize a new instance.
 
-        If specified, `host` is the name of the remote host to which to 
-        connect.  If specified, `port` specifies the port to which to connect. 
+        If specified, `host` is the name of the remote host to which to
+        connect.  If specified, `port` specifies the port to which to connect.
         By default, smtplib.SMTP_PORT is used.  If a host is specified the
         connect method is called, and if it returns anything other than a
         success code an SMTPConnectError is raised.  If specified,
@@ -249,7 +249,7 @@ class SMTP:
         self.esmtp_features = {}
         self.command_encoding = 'ascii'
         self.source_address = source_address
-        self._auth_challenge_count = 0 
+        self._auth_challenge_count = 0
 
         if host:
             (code, msg) = self.connect(host, port)
@@ -305,8 +305,8 @@ class SMTP:
     def _get_socket(self, host, port, timeout):
         # This makes it simpler for SMTP_SSL to use the SMTP connect code
         # and just alter the socket connection bit.
-        if timeout is not None and not timeout: 
-            raise ValueError('Non-blocking socket (timeout=0) is not supported') 
+        if timeout is not None and not timeout:
+            raise ValueError('Non-blocking socket (timeout=0) is not supported')
         if self.debuglevel > 0:
             self._print_debug('connect: to', (host, port), self.source_address)
         return socket.create_connection((host, port), timeout,
@@ -337,7 +337,7 @@ class SMTP:
                     raise OSError("nonnumeric port")
         if not port:
             port = self.default_port
-        sys.audit("smtplib.connect", self, host, port) 
+        sys.audit("smtplib.connect", self, host, port)
         self.sock = self._get_socket(host, port, self.timeout)
         self.file = None
         (code, msg) = self.getreply()
@@ -349,13 +349,13 @@ class SMTP:
         """Send `s' to the server."""
         if self.debuglevel > 0:
             self._print_debug('send:', repr(s))
-        if self.sock: 
+        if self.sock:
             if isinstance(s, str):
                 # send is used by the 'data' command, where command_encoding
                 # should not be used, but 'data' needs to convert the string to
                 # binary itself anyway, so that's not a problem.
                 s = s.encode(self.command_encoding)
-            sys.audit("smtplib.send", self, s) 
+            sys.audit("smtplib.send", self, s)
             try:
                 self.sock.sendall(s)
             except OSError:
@@ -367,15 +367,15 @@ class SMTP:
     def putcmd(self, cmd, args=""):
         """Send a command to the server."""
         if args == "":
-            s = cmd 
+            s = cmd
         else:
-            s = f'{cmd} {args}' 
-        if '\r' in s or '\n' in s: 
-            s = s.replace('\n', '\\n').replace('\r', '\\r') 
-            raise ValueError( 
-                f'command and arguments contain prohibited newline characters: {s}' 
-            ) 
-        self.send(f'{s}{CRLF}') 
+            s = f'{cmd} {args}'
+        if '\r' in s or '\n' in s:
+            s = s.replace('\n', '\\n').replace('\r', '\\r')
+            raise ValueError(
+                f'command and arguments contain prohibited newline characters: {s}'
+            )
+        self.send(f'{s}{CRLF}')
 
     def getreply(self):
         """Get a reply from the server.
@@ -640,23 +640,23 @@ class SMTP:
         if initial_response is not None:
             response = encode_base64(initial_response.encode('ascii'), eol='')
             (code, resp) = self.docmd("AUTH", mechanism + " " + response)
-            self._auth_challenge_count = 1 
+            self._auth_challenge_count = 1
         else:
             (code, resp) = self.docmd("AUTH", mechanism)
-            self._auth_challenge_count = 0 
+            self._auth_challenge_count = 0
         # If server responds with a challenge, send the response.
-        while code == 334: 
-            self._auth_challenge_count += 1 
+        while code == 334:
+            self._auth_challenge_count += 1
             challenge = base64.decodebytes(resp)
             response = encode_base64(
                 authobject(challenge).encode('ascii'), eol='')
             (code, resp) = self.docmd(response)
-            # If server keeps sending challenges, something is wrong. 
-            if self._auth_challenge_count > _MAXCHALLENGE: 
-                raise SMTPException( 
-                    "Server AUTH mechanism infinite loop. Last response: " 
-                    + repr((code, resp)) 
-                ) 
+            # If server keeps sending challenges, something is wrong.
+            if self._auth_challenge_count > _MAXCHALLENGE:
+                raise SMTPException(
+                    "Server AUTH mechanism infinite loop. Last response: "
+                    + repr((code, resp))
+                )
         if code in (235, 503):
             return (code, resp)
         raise SMTPAuthenticationError(code, resp)
@@ -678,7 +678,7 @@ class SMTP:
     def auth_login(self, challenge=None):
         """ Authobject to use with LOGIN authentication. Requires self.user and
         self.password to be set."""
-        if challenge is None or self._auth_challenge_count < 2: 
+        if challenge is None or self._auth_challenge_count < 2:
             return self.user
         else:
             return self.password
@@ -1048,12 +1048,12 @@ if _have_ssl:
                                                      keyfile=keyfile)
             self.context = context
             SMTP.__init__(self, host, port, local_hostname, timeout,
-                          source_address) 
+                          source_address)
 
         def _get_socket(self, host, port, timeout):
             if self.debuglevel > 0:
                 self._print_debug('connect:', (host, port))
-            new_socket = super()._get_socket(host, port, timeout) 
+            new_socket = super()._get_socket(host, port, timeout)
             new_socket = self.context.wrap_socket(new_socket,
                                                   server_hostname=self._host)
             return new_socket
@@ -1082,24 +1082,24 @@ class LMTP(SMTP):
     ehlo_msg = "lhlo"
 
     def __init__(self, host='', port=LMTP_PORT, local_hostname=None,
-                 source_address=None, timeout=socket._GLOBAL_DEFAULT_TIMEOUT): 
+                 source_address=None, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
         """Initialize a new instance."""
-        super().__init__(host, port, local_hostname=local_hostname, 
-                         source_address=source_address, timeout=timeout) 
+        super().__init__(host, port, local_hostname=local_hostname,
+                         source_address=source_address, timeout=timeout)
 
     def connect(self, host='localhost', port=0, source_address=None):
         """Connect to the LMTP daemon, on either a Unix or a TCP socket."""
         if host[0] != '/':
-            return super().connect(host, port, source_address=source_address) 
+            return super().connect(host, port, source_address=source_address)
 
-        if self.timeout is not None and not self.timeout: 
-            raise ValueError('Non-blocking socket (timeout=0) is not supported') 
- 
+        if self.timeout is not None and not self.timeout:
+            raise ValueError('Non-blocking socket (timeout=0) is not supported')
+
         # Handle Unix-domain sockets.
         try:
             self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            if self.timeout is not socket._GLOBAL_DEFAULT_TIMEOUT: 
-                self.sock.settimeout(self.timeout) 
+            if self.timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
+                self.sock.settimeout(self.timeout)
             self.file = None
             self.sock.connect(host)
         except OSError:

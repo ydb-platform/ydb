@@ -25,7 +25,7 @@
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/Core.h"
 #include "llvm/ExecutionEngine/Orc/Mangling.h"
-#include "llvm/ExecutionEngine/Orc/Shared/OrcError.h" 
+#include "llvm/ExecutionEngine/Orc/Shared/OrcError.h"
 #include "llvm/ExecutionEngine/RuntimeDyld.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Support/DynamicLibrary.h"
@@ -222,7 +222,7 @@ private:
 /// If an instance of this class is attached to a JITDylib as a fallback
 /// definition generator, then any symbol found in the given DynamicLibrary that
 /// passes the 'Allow' predicate will be added to the JITDylib.
-class DynamicLibrarySearchGenerator : public DefinitionGenerator { 
+class DynamicLibrarySearchGenerator : public DefinitionGenerator {
 public:
   using SymbolPredicate = std::function<bool(const SymbolStringPtr &)>;
 
@@ -250,7 +250,7 @@ public:
     return Load(nullptr, GlobalPrefix, std::move(Allow));
   }
 
-  Error tryToGenerate(LookupState &LS, LookupKind K, JITDylib &JD, 
+  Error tryToGenerate(LookupState &LS, LookupKind K, JITDylib &JD,
                       JITDylibLookupFlags JDLookupFlags,
                       const SymbolLookupSet &Symbols) override;
 
@@ -265,7 +265,7 @@ private:
 /// If an instance of this class is attached to a JITDylib as a fallback
 /// definition generator, then any symbol found in the archive will result in
 /// the containing object being added to the JITDylib.
-class StaticLibraryDefinitionGenerator : public DefinitionGenerator { 
+class StaticLibraryDefinitionGenerator : public DefinitionGenerator {
 public:
   /// Try to create a StaticLibraryDefinitionGenerator from the given path.
   ///
@@ -288,7 +288,7 @@ public:
   static Expected<std::unique_ptr<StaticLibraryDefinitionGenerator>>
   Create(ObjectLayer &L, std::unique_ptr<MemoryBuffer> ArchiveBuffer);
 
-  Error tryToGenerate(LookupState &LS, LookupKind K, JITDylib &JD, 
+  Error tryToGenerate(LookupState &LS, LookupKind K, JITDylib &JD,
                       JITDylibLookupFlags JDLookupFlags,
                       const SymbolLookupSet &Symbols) override;
 

@@ -1,31 +1,31 @@
---- contrib/python/urllib3/ya.make	(index) 
-+++ contrib/python/urllib3/ya.make	(working tree) 
-@@ -24,20 +22,20 @@ PY_SRCS( 
-     urllib3/connectionpool.py 
-     urllib3/contrib/__init__.py 
-     urllib3/contrib/_appengine_environ.py 
--    urllib3/contrib/_securetransport/__init__.py 
--    urllib3/contrib/_securetransport/bindings.py 
--    urllib3/contrib/_securetransport/low_level.py 
-+    #urllib3/contrib/_securetransport/__init__.py 
-+    #urllib3/contrib/_securetransport/bindings.py 
-+    #urllib3/contrib/_securetransport/low_level.py 
-     urllib3/contrib/appengine.py 
--    urllib3/contrib/ntlmpool.py 
--    urllib3/contrib/pyopenssl.py 
--    urllib3/contrib/securetransport.py 
-+    #urllib3/contrib/ntlmpool.py 
-+    #urllib3/contrib/pyopenssl.py 
-+    #urllib3/contrib/securetransport.py 
-     urllib3/contrib/socks.py 
-     urllib3/exceptions.py 
-     urllib3/fields.py 
-     urllib3/filepost.py 
-     urllib3/packages/__init__.py 
--    urllib3/packages/backports/__init__.py 
--    urllib3/packages/backports/makefile.py 
-+    #urllib3/packages/backports/__init__.py 
-+    #urllib3/packages/backports/makefile.py 
-     urllib3/packages/six.py 
-     urllib3/poolmanager.py 
-     urllib3/request.py 
+--- contrib/python/urllib3/ya.make	(index)
++++ contrib/python/urllib3/ya.make	(working tree)
+@@ -24,20 +22,20 @@ PY_SRCS(
+     urllib3/connectionpool.py
+     urllib3/contrib/__init__.py
+     urllib3/contrib/_appengine_environ.py
+-    urllib3/contrib/_securetransport/__init__.py
+-    urllib3/contrib/_securetransport/bindings.py
+-    urllib3/contrib/_securetransport/low_level.py
++    #urllib3/contrib/_securetransport/__init__.py
++    #urllib3/contrib/_securetransport/bindings.py
++    #urllib3/contrib/_securetransport/low_level.py
+     urllib3/contrib/appengine.py
+-    urllib3/contrib/ntlmpool.py
+-    urllib3/contrib/pyopenssl.py
+-    urllib3/contrib/securetransport.py
++    #urllib3/contrib/ntlmpool.py
++    #urllib3/contrib/pyopenssl.py
++    #urllib3/contrib/securetransport.py
+     urllib3/contrib/socks.py
+     urllib3/exceptions.py
+     urllib3/fields.py
+     urllib3/filepost.py
+     urllib3/packages/__init__.py
+-    urllib3/packages/backports/__init__.py
+-    urllib3/packages/backports/makefile.py
++    #urllib3/packages/backports/__init__.py
++    #urllib3/packages/backports/makefile.py
+     urllib3/packages/six.py
+     urllib3/poolmanager.py
+     urllib3/request.py

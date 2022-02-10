@@ -3,17 +3,17 @@ from __future__ import unicode_literals
 from prompt_toolkit.buffer import ClipboardData, indent, unindent, reshape_text
 from prompt_toolkit.document import Document
 from prompt_toolkit.enums import IncrementalSearchDirection, SEARCH_BUFFER, SYSTEM_BUFFER
-from prompt_toolkit.filters import Filter, Condition, HasArg, Always, IsReadOnly 
+from prompt_toolkit.filters import Filter, Condition, HasArg, Always, IsReadOnly
 from prompt_toolkit.filters.cli import ViNavigationMode, ViInsertMode, ViInsertMultipleMode, ViReplaceMode, ViSelectionMode, ViWaitingForTextObjectMode, ViDigraphMode, ViMode
 from prompt_toolkit.key_binding.digraphs import DIGRAPHS
 from prompt_toolkit.key_binding.vi_state import CharacterFind, InputMode
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.layout.utils import find_window_for_buffer_name
-from prompt_toolkit.selection import SelectionType, SelectionState, PasteMode 
+from prompt_toolkit.selection import SelectionType, SelectionState, PasteMode
 
 from .scroll import scroll_forward, scroll_backward, scroll_half_page_up, scroll_half_page_down, scroll_one_line_up, scroll_one_line_down, scroll_page_up, scroll_page_down
-from .named_commands import get_by_name 
-from ..registry import Registry, ConditionalRegistry, BaseRegistry 
+from .named_commands import get_by_name
+from ..registry import Registry, ConditionalRegistry, BaseRegistry
 
 import prompt_toolkit.filters as filters
 from six.moves import range
@@ -137,168 +137,168 @@ class TextObject(object):
         return new_document, clipboard_data
 
 
-def create_text_object_decorator(registry): 
+def create_text_object_decorator(registry):
     """
-    Create a decorator that can be used to register Vi text object implementations. 
-    """ 
-    assert isinstance(registry, BaseRegistry) 
- 
-    operator_given = ViWaitingForTextObjectMode() 
-    navigation_mode = ViNavigationMode() 
-    selection_mode = ViSelectionMode() 
- 
-    def text_object_decorator(*keys, **kw): 
-        """ 
-        Register a text object function. 
- 
-        Usage:: 
- 
-            @text_object('w', filter=..., no_move_handler=False) 
-            def handler(event): 
-                # Return a text object for this key. 
-                return TextObject(...) 
- 
-        :param no_move_handler: Disable the move handler in navigation mode. 
-            (It's still active in selection mode.) 
-        """ 
-        filter = kw.pop('filter', Always()) 
-        no_move_handler = kw.pop('no_move_handler', False) 
-        no_selection_handler = kw.pop('no_selection_handler', False) 
-        eager = kw.pop('eager', False) 
-        assert not kw 
- 
-        def decorator(text_object_func): 
-            assert callable(text_object_func) 
- 
-            @registry.add_binding(*keys, filter=operator_given & filter, eager=eager) 
-            def _(event): 
-                # Arguments are multiplied. 
-                vi_state = event.cli.vi_state 
-                event._arg = (vi_state.operator_arg or 1) * (event.arg or 1) 
- 
-                # Call the text object handler. 
-                text_obj = text_object_func(event) 
-                if text_obj is not None: 
-                    assert isinstance(text_obj, TextObject) 
- 
-                    # Call the operator function with the text object. 
-                    vi_state.operator_func(event, text_obj) 
- 
-                # Clear operator. 
-                event.cli.vi_state.operator_func = None 
-                event.cli.vi_state.operator_arg = None 
- 
-            # Register a move operation. (Doesn't need an operator.) 
-            if not no_move_handler: 
-                @registry.add_binding(*keys, filter=~operator_given & filter & navigation_mode, eager=eager) 
-                def _(event): 
-                    " Move handler for navigation mode. " 
-                    text_object = text_object_func(event) 
-                    event.current_buffer.cursor_position += text_object.start 
- 
-            # Register a move selection operation. 
-            if not no_selection_handler: 
-                @registry.add_binding(*keys, filter=~operator_given & filter & selection_mode, eager=eager) 
-                def _(event): 
-                    " Move handler for selection mode. " 
-                    text_object = text_object_func(event) 
-                    buff = event.current_buffer 
- 
-                    # When the text object has both a start and end position, like 'i(' or 'iw', 
-                    # Turn this into a selection, otherwise the cursor. 
-                    if text_object.end: 
-                        # Take selection positions from text object. 
-                        start, end = text_object.operator_range(buff.document) 
-                        start += buff.cursor_position 
-                        end += buff.cursor_position 
- 
-                        buff.selection_state.original_cursor_position = start 
-                        buff.cursor_position = end 
- 
-                        # Take selection type from text object. 
-                        if text_object.type == TextObjectType.LINEWISE: 
-                            buff.selection_state.type = SelectionType.LINES 
-                        else: 
-                            buff.selection_state.type = SelectionType.CHARACTERS 
-                    else: 
-                        event.current_buffer.cursor_position += text_object.start 
- 
-            # Make it possible to chain @text_object decorators. 
-            return text_object_func 
- 
-        return decorator 
-    return text_object_decorator 
- 
- 
-def create_operator_decorator(registry): 
-    """ 
-    Create a decorator that can be used for registering Vi operators. 
-    """ 
-    assert isinstance(registry, BaseRegistry) 
- 
-    operator_given = ViWaitingForTextObjectMode() 
-    navigation_mode = ViNavigationMode() 
-    selection_mode = ViSelectionMode() 
- 
-    def operator_decorator(*keys, **kw): 
-        """ 
-        Register a Vi operator. 
- 
-        Usage:: 
- 
-            @operator('d', filter=...) 
-            def handler(cli, text_object): 
-                # Do something with the text object here. 
-        """ 
-        filter = kw.pop('filter', Always()) 
-        eager = kw.pop('eager', False) 
-        assert not kw 
- 
-        def decorator(operator_func): 
-            @registry.add_binding(*keys, filter=~operator_given & filter & navigation_mode, eager=eager) 
-            def _(event): 
-                """ 
-                Handle operator in navigation mode. 
-                """ 
-                # When this key binding is matched, only set the operator 
-                # function in the ViState. We should execute it after a text 
-                # object has been received. 
-                event.cli.vi_state.operator_func = operator_func 
-                event.cli.vi_state.operator_arg = event.arg 
- 
-            @registry.add_binding(*keys, filter=~operator_given & filter & selection_mode, eager=eager) 
-            def _(event): 
-                """ 
-                Handle operator in selection mode. 
-                """ 
-                buff = event.current_buffer 
-                selection_state = buff.selection_state 
- 
-                # Create text object from selection. 
-                if selection_state.type == SelectionType.LINES: 
-                    text_obj_type = TextObjectType.LINEWISE 
-                elif selection_state.type == SelectionType.BLOCK: 
-                    text_obj_type = TextObjectType.BLOCK 
-                else: 
-                    text_obj_type = TextObjectType.INCLUSIVE 
- 
-                text_object = TextObject( 
-                    selection_state.original_cursor_position - buff.cursor_position, 
-                    type=text_obj_type) 
- 
-                # Execute operator. 
-                operator_func(event, text_object) 
- 
-                # Quit selection mode. 
-                buff.selection_state = None 
- 
-            return operator_func 
-        return decorator 
-    return operator_decorator 
- 
- 
-def load_vi_bindings(get_search_state=None): 
-    """ 
+    Create a decorator that can be used to register Vi text object implementations.
+    """
+    assert isinstance(registry, BaseRegistry)
+
+    operator_given = ViWaitingForTextObjectMode()
+    navigation_mode = ViNavigationMode()
+    selection_mode = ViSelectionMode()
+
+    def text_object_decorator(*keys, **kw):
+        """
+        Register a text object function.
+
+        Usage::
+
+            @text_object('w', filter=..., no_move_handler=False)
+            def handler(event):
+                # Return a text object for this key.
+                return TextObject(...)
+
+        :param no_move_handler: Disable the move handler in navigation mode.
+            (It's still active in selection mode.)
+        """
+        filter = kw.pop('filter', Always())
+        no_move_handler = kw.pop('no_move_handler', False)
+        no_selection_handler = kw.pop('no_selection_handler', False)
+        eager = kw.pop('eager', False)
+        assert not kw
+
+        def decorator(text_object_func):
+            assert callable(text_object_func)
+
+            @registry.add_binding(*keys, filter=operator_given & filter, eager=eager)
+            def _(event):
+                # Arguments are multiplied.
+                vi_state = event.cli.vi_state
+                event._arg = (vi_state.operator_arg or 1) * (event.arg or 1)
+
+                # Call the text object handler.
+                text_obj = text_object_func(event)
+                if text_obj is not None:
+                    assert isinstance(text_obj, TextObject)
+
+                    # Call the operator function with the text object.
+                    vi_state.operator_func(event, text_obj)
+
+                # Clear operator.
+                event.cli.vi_state.operator_func = None
+                event.cli.vi_state.operator_arg = None
+
+            # Register a move operation. (Doesn't need an operator.)
+            if not no_move_handler:
+                @registry.add_binding(*keys, filter=~operator_given & filter & navigation_mode, eager=eager)
+                def _(event):
+                    " Move handler for navigation mode. "
+                    text_object = text_object_func(event)
+                    event.current_buffer.cursor_position += text_object.start
+
+            # Register a move selection operation.
+            if not no_selection_handler:
+                @registry.add_binding(*keys, filter=~operator_given & filter & selection_mode, eager=eager)
+                def _(event):
+                    " Move handler for selection mode. "
+                    text_object = text_object_func(event)
+                    buff = event.current_buffer
+
+                    # When the text object has both a start and end position, like 'i(' or 'iw',
+                    # Turn this into a selection, otherwise the cursor.
+                    if text_object.end:
+                        # Take selection positions from text object.
+                        start, end = text_object.operator_range(buff.document)
+                        start += buff.cursor_position
+                        end += buff.cursor_position
+
+                        buff.selection_state.original_cursor_position = start
+                        buff.cursor_position = end
+
+                        # Take selection type from text object.
+                        if text_object.type == TextObjectType.LINEWISE:
+                            buff.selection_state.type = SelectionType.LINES
+                        else:
+                            buff.selection_state.type = SelectionType.CHARACTERS
+                    else:
+                        event.current_buffer.cursor_position += text_object.start
+
+            # Make it possible to chain @text_object decorators.
+            return text_object_func
+
+        return decorator
+    return text_object_decorator
+
+
+def create_operator_decorator(registry):
+    """
+    Create a decorator that can be used for registering Vi operators.
+    """
+    assert isinstance(registry, BaseRegistry)
+
+    operator_given = ViWaitingForTextObjectMode()
+    navigation_mode = ViNavigationMode()
+    selection_mode = ViSelectionMode()
+
+    def operator_decorator(*keys, **kw):
+        """
+        Register a Vi operator.
+
+        Usage::
+
+            @operator('d', filter=...)
+            def handler(cli, text_object):
+                # Do something with the text object here.
+        """
+        filter = kw.pop('filter', Always())
+        eager = kw.pop('eager', False)
+        assert not kw
+
+        def decorator(operator_func):
+            @registry.add_binding(*keys, filter=~operator_given & filter & navigation_mode, eager=eager)
+            def _(event):
+                """
+                Handle operator in navigation mode.
+                """
+                # When this key binding is matched, only set the operator
+                # function in the ViState. We should execute it after a text
+                # object has been received.
+                event.cli.vi_state.operator_func = operator_func
+                event.cli.vi_state.operator_arg = event.arg
+
+            @registry.add_binding(*keys, filter=~operator_given & filter & selection_mode, eager=eager)
+            def _(event):
+                """
+                Handle operator in selection mode.
+                """
+                buff = event.current_buffer
+                selection_state = buff.selection_state
+
+                # Create text object from selection.
+                if selection_state.type == SelectionType.LINES:
+                    text_obj_type = TextObjectType.LINEWISE
+                elif selection_state.type == SelectionType.BLOCK:
+                    text_obj_type = TextObjectType.BLOCK
+                else:
+                    text_obj_type = TextObjectType.INCLUSIVE
+
+                text_object = TextObject(
+                    selection_state.original_cursor_position - buff.cursor_position,
+                    type=text_obj_type)
+
+                # Execute operator.
+                operator_func(event, text_object)
+
+                # Quit selection mode.
+                buff.selection_state = None
+
+            return operator_func
+        return decorator
+    return operator_decorator
+
+
+def load_vi_bindings(get_search_state=None):
+    """
     Vi extensions.
 
     # Overview of Readline Vi commands:
@@ -316,8 +316,8 @@ def load_vi_bindings(get_search_state=None):
     #       handled correctly. There is no need to add "~IsReadOnly" to all key
     #       bindings that do text manipulation.
 
-    registry = ConditionalRegistry(Registry(), ViMode()) 
-    handle = registry.add_binding 
+    registry = ConditionalRegistry(Registry(), ViMode())
+    handle = registry.add_binding
 
     # Default get_search_state.
     if get_search_state is None:
@@ -348,9 +348,9 @@ def load_vi_bindings(get_search_state=None):
         (('~', ), Condition(lambda cli: cli.vi_state.tilde_operator), lambda string: string.swapcase()),
     ]
 
-    # Insert a character literally (quoted insert). 
-    handle(Keys.ControlV, filter=insert_mode)(get_by_name('quoted-insert')) 
- 
+    # Insert a character literally (quoted insert).
+    handle(Keys.ControlV, filter=insert_mode)(get_by_name('quoted-insert'))
+
     @handle(Keys.Escape)
     def _(event):
         """
@@ -635,8 +635,8 @@ def load_vi_bindings(get_search_state=None):
         """
         event.current_buffer.paste_clipboard_data(
             event.cli.clipboard.get_data(),
-            count=event.arg, 
-            paste_mode=PasteMode.VI_AFTER) 
+            count=event.arg,
+            paste_mode=PasteMode.VI_AFTER)
 
     @handle('P', filter=navigation_mode)
     def _(event):
@@ -645,8 +645,8 @@ def load_vi_bindings(get_search_state=None):
         """
         event.current_buffer.paste_clipboard_data(
             event.cli.clipboard.get_data(),
-            count=event.arg, 
-            paste_mode=PasteMode.VI_BEFORE) 
+            count=event.arg,
+            paste_mode=PasteMode.VI_BEFORE)
 
     @handle('"', Keys.Any, 'p', filter=navigation_mode)
     def _(event):
@@ -655,8 +655,8 @@ def load_vi_bindings(get_search_state=None):
         if c in vi_register_names:
             data = event.cli.vi_state.named_registers.get(c)
             if data:
-                event.current_buffer.paste_clipboard_data( 
-                    data, count=event.arg, paste_mode=PasteMode.VI_AFTER) 
+                event.current_buffer.paste_clipboard_data(
+                    data, count=event.arg, paste_mode=PasteMode.VI_AFTER)
 
     @handle('"', Keys.Any, 'P', filter=navigation_mode)
     def _(event):
@@ -666,7 +666,7 @@ def load_vi_bindings(get_search_state=None):
             data = event.cli.vi_state.named_registers.get(c)
             if data:
                 event.current_buffer.paste_clipboard_data(
-                    data, count=event.arg, paste_mode=PasteMode.VI_BEFORE) 
+                    data, count=event.arg, paste_mode=PasteMode.VI_BEFORE)
 
     @handle('r', Keys.Any, filter=navigation_mode)
     def _(event):
@@ -723,7 +723,7 @@ def load_vi_bindings(get_search_state=None):
         else:
             event.current_buffer.exit_selection()
 
-    @handle('v', filter=navigation_mode) 
+    @handle('v', filter=navigation_mode)
     def _(event):
         " Enter character selection mode. "
         event.current_buffer.start_selection(selection_type=SelectionType.CHARACTERS)
@@ -910,8 +910,8 @@ def load_vi_bindings(get_search_state=None):
         # XXX: should become text_object.
         pass
 
-    operator = create_operator_decorator(registry) 
-    text_object = create_text_object_decorator(registry) 
+    operator = create_operator_decorator(registry)
+    text_object = create_text_object_decorator(registry)
 
     @text_object(Keys.Any, filter=operator_given)
     def _(event):
@@ -1705,25 +1705,25 @@ def load_vi_bindings(get_search_state=None):
             event.cli.vi_state.waiting_for_digraph = False
             event.cli.vi_state.digraph_symbol1 = None
 
-    return registry 
+    return registry
 
- 
-def load_vi_open_in_editor_bindings(): 
+
+def load_vi_open_in_editor_bindings():
     """
     Pressing 'v' in navigation mode will open the buffer in an external editor.
     """
-    registry = Registry() 
+    registry = Registry()
     navigation_mode = ViNavigationMode()
 
-    registry.add_binding('v', filter=navigation_mode)( 
-        get_by_name('edit-and-execute-command')) 
-    return registry 
+    registry.add_binding('v', filter=navigation_mode)(
+        get_by_name('edit-and-execute-command'))
+    return registry
 
 
-def load_vi_system_bindings(): 
-    registry = ConditionalRegistry(Registry(), ViMode()) 
-    handle = registry.add_binding 
- 
+def load_vi_system_bindings():
+    registry = ConditionalRegistry(Registry(), ViMode())
+    handle = registry.add_binding
+
     has_focus = filters.HasFocus(SYSTEM_BUFFER)
     navigation_mode = ViNavigationMode()
 
@@ -1759,28 +1759,28 @@ def load_vi_system_bindings():
         # Focus previous buffer again.
         event.cli.pop_focus()
 
-    return registry 
+    return registry
 
- 
-def load_vi_search_bindings(get_search_state=None, 
-                            search_buffer_name=SEARCH_BUFFER): 
+
+def load_vi_search_bindings(get_search_state=None,
+                            search_buffer_name=SEARCH_BUFFER):
     assert get_search_state is None or callable(get_search_state)
 
     if not get_search_state:
         def get_search_state(cli): return cli.search_state
 
-    registry = ConditionalRegistry(Registry(), ViMode()) 
-    handle = registry.add_binding 
- 
+    registry = ConditionalRegistry(Registry(), ViMode())
+    handle = registry.add_binding
+
     has_focus = filters.HasFocus(search_buffer_name)
     navigation_mode = ViNavigationMode()
     selection_mode = ViSelectionMode()
 
-    reverse_vi_search_direction = Condition( 
-        lambda cli: cli.application.reverse_vi_search_direction(cli)) 
- 
-    @handle('/', filter=(navigation_mode|selection_mode)&~reverse_vi_search_direction) 
-    @handle('?', filter=(navigation_mode|selection_mode)&reverse_vi_search_direction) 
+    reverse_vi_search_direction = Condition(
+        lambda cli: cli.application.reverse_vi_search_direction(cli))
+
+    @handle('/', filter=(navigation_mode|selection_mode)&~reverse_vi_search_direction)
+    @handle('?', filter=(navigation_mode|selection_mode)&reverse_vi_search_direction)
     @handle(Keys.ControlS, filter=~has_focus)
     def _(event):
         """
@@ -1793,8 +1793,8 @@ def load_vi_search_bindings(get_search_state=None,
         # Focus search buffer.
         event.cli.push_focus(search_buffer_name)
 
-    @handle('?', filter=(navigation_mode|selection_mode)&~reverse_vi_search_direction) 
-    @handle('/', filter=(navigation_mode|selection_mode)&reverse_vi_search_direction) 
+    @handle('?', filter=(navigation_mode|selection_mode)&~reverse_vi_search_direction)
+    @handle('/', filter=(navigation_mode|selection_mode)&reverse_vi_search_direction)
     @handle(Keys.ControlR, filter=~has_focus)
     def _(event):
         """
@@ -1808,7 +1808,7 @@ def load_vi_search_bindings(get_search_state=None,
         event.cli.vi_state.input_mode = InputMode.INSERT
 
     @handle(Keys.ControlJ, filter=has_focus)
-    @handle(Keys.Escape, filter=has_focus) 
+    @handle(Keys.Escape, filter=has_focus)
     def _(event):
         """
         Apply the search. (At the / or ? prompt.)
@@ -1870,16 +1870,16 @@ def load_vi_search_bindings(get_search_state=None,
         event.cli.pop_focus()
         event.cli.buffers[search_buffer_name].reset()
 
-    return registry 
+    return registry
 
- 
-def load_extra_vi_page_navigation_bindings(): 
+
+def load_extra_vi_page_navigation_bindings():
     """
     Key bindings, for scrolling up and down through pages.
     This are separate bindings, because GNU readline doesn't have them.
     """
-    registry = ConditionalRegistry(Registry(), ViMode()) 
-    handle = registry.add_binding 
+    registry = ConditionalRegistry(Registry(), ViMode())
+    handle = registry.add_binding
 
     handle(Keys.ControlF)(scroll_forward)
     handle(Keys.ControlB)(scroll_backward)
@@ -1890,9 +1890,9 @@ def load_extra_vi_page_navigation_bindings():
     handle(Keys.PageDown)(scroll_page_down)
     handle(Keys.PageUp)(scroll_page_up)
 
-    return registry 
+    return registry
 
- 
+
 class ViStateFilter(Filter):
     " Deprecated! "
     def __init__(self, get_vi_state, mode):

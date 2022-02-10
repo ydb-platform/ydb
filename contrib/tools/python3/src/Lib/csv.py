@@ -116,7 +116,7 @@ class DictReader:
         # values
         while row == []:
             row = next(self.reader)
-        d = dict(zip(self.fieldnames, row)) 
+        d = dict(zip(self.fieldnames, row))
         lf = len(self.fieldnames)
         lr = len(row)
         if lf < lr:
@@ -140,7 +140,7 @@ class DictWriter:
 
     def writeheader(self):
         header = dict(zip(self.fieldnames, self.fieldnames))
-        return self.writerow(header) 
+        return self.writerow(header)
 
     def _dict_to_list(self, rowdict):
         if self.extrasaction == "raise":

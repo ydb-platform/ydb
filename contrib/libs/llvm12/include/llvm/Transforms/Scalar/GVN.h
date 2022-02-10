@@ -53,8 +53,8 @@ class FunctionPass;
 class IntrinsicInst;
 class LoadInst;
 class LoopInfo;
-class MemorySSA; 
-class MemorySSAUpdater; 
+class MemorySSA;
+class MemorySSAUpdater;
 class OptimizationRemarkEmitter;
 class PHINode;
 class TargetLibraryInfo;
@@ -80,7 +80,7 @@ struct GVNOptions {
   Optional<bool> AllowPRE = None;
   Optional<bool> AllowLoadPRE = None;
   Optional<bool> AllowLoadInLoopPRE = None;
-  Optional<bool> AllowLoadPRESplitBackedge = None; 
+  Optional<bool> AllowLoadPRESplitBackedge = None;
   Optional<bool> AllowMemDep = None;
 
   GVNOptions() = default;
@@ -102,12 +102,12 @@ struct GVNOptions {
     return *this;
   }
 
-  /// Enables or disables PRE of loads in GVN. 
-  GVNOptions &setLoadPRESplitBackedge(bool LoadPRESplitBackedge) { 
-    AllowLoadPRESplitBackedge = LoadPRESplitBackedge; 
-    return *this; 
-  } 
- 
+  /// Enables or disables PRE of loads in GVN.
+  GVNOptions &setLoadPRESplitBackedge(bool LoadPRESplitBackedge) {
+    AllowLoadPRESplitBackedge = LoadPRESplitBackedge;
+    return *this;
+  }
+
   /// Enables or disables use of MemDepAnalysis.
   GVNOptions &setMemDep(bool MemDep) {
     AllowMemDep = MemDep;
@@ -144,7 +144,7 @@ public:
   bool isPREEnabled() const;
   bool isLoadPREEnabled() const;
   bool isLoadInLoopPREEnabled() const;
-  bool isLoadPRESplitBackedgeEnabled() const; 
+  bool isLoadPRESplitBackedgeEnabled() const;
   bool isMemDepEnabled() const;
 
   /// This class holds the mapping between values and value numbers.  It is used
@@ -227,7 +227,7 @@ private:
   OptimizationRemarkEmitter *ORE = nullptr;
   ImplicitControlFlowTracking *ICF = nullptr;
   LoopInfo *LI = nullptr;
-  MemorySSAUpdater *MSSAU = nullptr; 
+  MemorySSAUpdater *MSSAU = nullptr;
 
   ValueTable VN;
 
@@ -263,7 +263,7 @@ private:
   bool runImpl(Function &F, AssumptionCache &RunAC, DominatorTree &RunDT,
                const TargetLibraryInfo &RunTLI, AAResults &RunAA,
                MemoryDependenceResults *RunMD, LoopInfo *LI,
-               OptimizationRemarkEmitter *ORE, MemorySSA *MSSA = nullptr); 
+               OptimizationRemarkEmitter *ORE, MemorySSA *MSSA = nullptr);
 
   /// Push a new Value to the LeaderTable onto the list for its value number.
   void addToLeaderTable(uint32_t N, Value *V, const BasicBlock *BB) {

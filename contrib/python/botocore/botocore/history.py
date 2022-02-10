@@ -38,14 +38,14 @@ class HistoryRecorder(object):
 
     def record(self, event_type, payload, source='BOTOCORE'):
         if self._enabled and self._handlers:
-            for handler in self._handlers: 
-                try: 
-                    handler.emit(event_type, payload, source) 
-                except Exception: 
-                    # Never let the process die because we had a failure in 
-                    # a record collection handler. 
-                    logger.debug("Exception raised in %s.", handler, 
-                                 exc_info=True) 
+            for handler in self._handlers:
+                try:
+                    handler.emit(event_type, payload, source)
+                except Exception:
+                    # Never let the process die because we had a failure in
+                    # a record collection handler.
+                    logger.debug("Exception raised in %s.", handler,
+                                 exc_info=True)
 
 
 def get_global_history_recorder():

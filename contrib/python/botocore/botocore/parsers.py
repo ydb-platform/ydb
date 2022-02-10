@@ -65,30 +65,30 @@ come from other parts of the HTTP response.  Classes like the
 XML body parsing logic and the ``BaseRestParser`` to get the HTTP
 header/status code/query string parsing.
 
-Additionally, there are event stream parsers that are used by the other parsers 
-to wrap streaming bodies that represent a stream of events. The 
-BaseEventStreamParser extends from ResponseParser and defines the logic for 
-parsing values from the headers and payload of a message from the underlying 
-binary encoding protocol. Currently, event streams support parsing bodies 
-encoded as JSON and XML through the following hierarchy. 
- 
- 
-                                  +--------------+ 
-                                  |ResponseParser| 
-                                  +--------------+ 
-                                    ^    ^    ^ 
-               +--------------------+    |    +------------------+ 
-               |                         |                       | 
-    +----------+----------+   +----------+----------+    +-------+------+ 
-    |BaseXMLResponseParser|   |BaseEventStreamParser|    |BaseJSONParser| 
-    +---------------------+   +---------------------+    +--------------+ 
-                     ^                ^        ^                 ^ 
-                     |                |        |                 | 
-                     |                |        |                 | 
-                   +-+----------------+-+    +-+-----------------+-+ 
-                   |EventStreamXMLParser|    |EventStreamJSONParser| 
-                   +--------------------+    +---------------------+ 
- 
+Additionally, there are event stream parsers that are used by the other parsers
+to wrap streaming bodies that represent a stream of events. The
+BaseEventStreamParser extends from ResponseParser and defines the logic for
+parsing values from the headers and payload of a message from the underlying
+binary encoding protocol. Currently, event streams support parsing bodies
+encoded as JSON and XML through the following hierarchy.
+
+
+                                  +--------------+
+                                  |ResponseParser|
+                                  +--------------+
+                                    ^    ^    ^
+               +--------------------+    |    +------------------+
+               |                         |                       |
+    +----------+----------+   +----------+----------+    +-------+------+
+    |BaseXMLResponseParser|   |BaseEventStreamParser|    |BaseJSONParser|
+    +---------------------+   +---------------------+    +--------------+
+                     ^                ^        ^                 ^
+                     |                |        |                 |
+                     |                |        |                 |
+                   +-+----------------+-+    +-+-----------------+-+
+                   |EventStreamXMLParser|    |EventStreamJSONParser|
+                   +--------------------+    +---------------------+
+
 Return Values
 =============
 
@@ -119,11 +119,11 @@ import base64
 import json
 import logging
 
-from botocore.compat import six, ETree, XMLParseError 
-from botocore.eventstream import EventStream, NoInitialResponseError 
+from botocore.compat import six, ETree, XMLParseError
+from botocore.eventstream import EventStream, NoInitialResponseError
 
 from botocore.utils import parse_timestamp, merge_dicts, \
-    is_json_value_header, lowercase_dict 
+    is_json_value_header, lowercase_dict
 
 LOG = logging.getLogger(__name__)
 
@@ -140,7 +140,7 @@ class ResponseParserFactory(object):
         You can specify any kwargs that are allowed by a ResponseParser
         class.  There are currently two arguments:
 
-            * timestamp_parser - A callable that can parse a timestamp string 
+            * timestamp_parser - A callable that can parse a timestamp string
             * blob_parser - A callable that can parse a blob type
 
         """
@@ -193,7 +193,7 @@ class ResponseParser(object):
 
     """
     DEFAULT_ENCODING = 'utf-8'
-    EVENT_STREAM_PARSER_CLS = None 
+    EVENT_STREAM_PARSER_CLS = None
 
     def __init__(self, timestamp_parser=None, blob_parser=None):
         if timestamp_parser is None:
@@ -202,10 +202,10 @@ class ResponseParser(object):
         if blob_parser is None:
             blob_parser = self._default_blob_parser
         self._blob_parser = blob_parser
-        self._event_stream_parser = None 
-        if self.EVENT_STREAM_PARSER_CLS is not None: 
-            self._event_stream_parser = self.EVENT_STREAM_PARSER_CLS( 
-                timestamp_parser, blob_parser) 
+        self._event_stream_parser = None
+        if self.EVENT_STREAM_PARSER_CLS is not None:
+            self._event_stream_parser = self.EVENT_STREAM_PARSER_CLS(
+                timestamp_parser, blob_parser)
 
     def _default_blob_parser(self, value):
         # Blobs are always returned as bytes type (this matters on python3).
@@ -235,35 +235,35 @@ class ResponseParser(object):
         if response['status_code'] >= 301:
             if self._is_generic_error_response(response):
                 parsed = self._do_generic_error_parse(response)
-            elif self._is_modeled_error_shape(shape): 
-                parsed = self._do_modeled_error_parse(response, shape) 
-                # We don't want to decorate the modeled fields with metadata 
-                return parsed 
+            elif self._is_modeled_error_shape(shape):
+                parsed = self._do_modeled_error_parse(response, shape)
+                # We don't want to decorate the modeled fields with metadata
+                return parsed
             else:
                 parsed = self._do_error_parse(response, shape)
         else:
             parsed = self._do_parse(response, shape)
 
-        # We don't want to decorate event stream responses with metadata 
-        if shape and shape.serialization.get('eventstream'): 
-            return parsed 
- 
+        # We don't want to decorate event stream responses with metadata
+        if shape and shape.serialization.get('eventstream'):
+            return parsed
+
         # Add ResponseMetadata if it doesn't exist and inject the HTTP
         # status code and headers from the response.
         if isinstance(parsed, dict):
             response_metadata = parsed.get('ResponseMetadata', {})
             response_metadata['HTTPStatusCode'] = response['status_code']
-            # Ensure that the http header keys are all lower cased. Older 
-            # versions of urllib3 (< 1.11) would unintentionally do this for us 
-            # (see urllib3#633). We need to do this conversion manually now. 
-            headers = response['headers'] 
-            response_metadata['HTTPHeaders'] = lowercase_dict(headers) 
+            # Ensure that the http header keys are all lower cased. Older
+            # versions of urllib3 (< 1.11) would unintentionally do this for us
+            # (see urllib3#633). We need to do this conversion manually now.
+            headers = response['headers']
+            response_metadata['HTTPHeaders'] = lowercase_dict(headers)
             parsed['ResponseMetadata'] = response_metadata
         return parsed
 
-    def _is_modeled_error_shape(self, shape): 
-        return shape is not None and shape.metadata.get('exception', False) 
- 
+    def _is_modeled_error_shape(self, shape):
+        return shape is not None and shape.metadata.get('exception', False)
+
     def _is_generic_error_response(self, response):
         # There are times when a service will respond with a generic
         # error response such as:
@@ -277,9 +277,9 @@ class ResponseParser(object):
         # To prevent this case from happening we first need to check
         # whether or not this response looks like the generic response.
         if response['status_code'] >= 500:
-            if 'body' not in response or response['body'] is None: 
-                return True 
- 
+            if 'body' not in response or response['body'] is None:
+                return True
+
             body = response['body'].strip()
             return body.startswith(b'<html>') or not body
 
@@ -302,10 +302,10 @@ class ResponseParser(object):
         raise NotImplementedError(
             "%s._do_error_parse" % self.__class__.__name__)
 
-    def _do_modeled_error_parse(self, response, shape, parsed): 
-        raise NotImplementedError( 
-            "%s._do_modeled_error_parse" % self.__class__.__name__) 
- 
+    def _do_modeled_error_parse(self, response, shape, parsed):
+        raise NotImplementedError(
+            "%s._do_modeled_error_parse" % self.__class__.__name__)
+
     def _parse_shape(self, shape, node):
         handler = getattr(self, '_handle_%s' % shape.type_name,
                           self._default_handle)
@@ -323,12 +323,12 @@ class ResponseParser(object):
     def _default_handle(self, shape, value):
         return value
 
-    def _create_event_stream(self, response, shape): 
-        parser = self._event_stream_parser 
-        name = response['context'].get('operation_name') 
-        return EventStream(response['body'], shape, parser, name) 
+    def _create_event_stream(self, response, shape):
+        parser = self._event_stream_parser
+        name = response['context'].get('operation_name')
+        return EventStream(response['body'], shape, parser, name)
 
- 
+
 class BaseXMLResponseParser(ResponseParser):
     def __init__(self, timestamp_parser=None, blob_parser=None):
         super(BaseXMLResponseParser, self).__init__(timestamp_parser,
@@ -372,13 +372,13 @@ class BaseXMLResponseParser(ResponseParser):
     def _handle_structure(self, shape, node):
         parsed = {}
         members = shape.members
-        if shape.metadata.get('exception', False): 
-            node = self._get_error_root(node) 
+        if shape.metadata.get('exception', False):
+            node = self._get_error_root(node)
         xml_dict = self._build_name_to_xml_node(node)
         for member_name in members:
             member_shape = members[member_name]
-            if 'location' in member_shape.serialization or \ 
-               member_shape.serialization.get('eventheader'): 
+            if 'location' in member_shape.serialization or \
+               member_shape.serialization.get('eventheader'):
                 # All members with locations have already been handled,
                 # so we don't need to parse these members.
                 continue
@@ -398,13 +398,13 @@ class BaseXMLResponseParser(ResponseParser):
                     parsed[member_name] = attribs[location_name]
         return parsed
 
-    def _get_error_root(self, original_root): 
-        if self._node_tag(original_root) == 'ErrorResponse': 
-            for child in original_root: 
-                if self._node_tag(child) == 'Error': 
-                    return child 
-        return original_root 
- 
+    def _get_error_root(self, original_root):
+        if self._node_tag(original_root) == 'ErrorResponse':
+            for child in original_root:
+                if self._node_tag(child) == 'Error':
+                    return child
+        return original_root
+
     def _member_key_name(self, shape, member_name):
         # This method is needed because we have to special case flattened list
         # with a serialization name.  If this is the case we use the
@@ -445,21 +445,21 @@ class BaseXMLResponseParser(ResponseParser):
 
     def _parse_xml_string_to_dom(self, xml_string):
         try:
-            parser = ETree.XMLParser( 
-                target=ETree.TreeBuilder(), 
+            parser = ETree.XMLParser(
+                target=ETree.TreeBuilder(),
                 encoding=self.DEFAULT_ENCODING)
             parser.feed(xml_string)
             root = parser.close()
         except XMLParseError as e:
             raise ResponseParserError(
                 "Unable to parse response (%s), "
-                "invalid XML received. Further retries may succeed:\n%s" % 
-                (e, xml_string)) 
+                "invalid XML received. Further retries may succeed:\n%s" %
+                (e, xml_string))
         return root
 
     def _replace_nodes(self, parsed):
         for key, value in parsed.items():
-            if list(value): 
+            if list(value):
                 sub_dict = self._build_name_to_xml_node(value)
                 parsed[key] = self._replace_nodes(sub_dict)
             else:
@@ -516,13 +516,13 @@ class QueryParser(BaseXMLResponseParser):
             parsed['ResponseMetadata'] = {'RequestId': parsed.pop('RequestId')}
         return parsed
 
-    def _do_modeled_error_parse(self, response, shape): 
-        return self._parse_body_as_xml(response, shape, inject_metadata=False) 
- 
+    def _do_modeled_error_parse(self, response, shape):
+        return self._parse_body_as_xml(response, shape, inject_metadata=False)
+
     def _do_parse(self, response, shape):
-        return self._parse_body_as_xml(response, shape, inject_metadata=True) 
- 
-    def _parse_body_as_xml(self, response, shape, inject_metadata=True): 
+        return self._parse_body_as_xml(response, shape, inject_metadata=True)
+
+    def _parse_body_as_xml(self, response, shape, inject_metadata=True):
         xml_contents = response['body']
         root = self._parse_xml_string_to_dom(xml_contents)
         parsed = {}
@@ -533,8 +533,8 @@ class QueryParser(BaseXMLResponseParser):
                     shape.serialization['resultWrapper'],
                     root)
             parsed = self._parse_shape(shape, start)
-        if inject_metadata: 
-            self._inject_response_metadata(root, parsed) 
+        if inject_metadata:
+            self._inject_response_metadata(root, parsed)
         return parsed
 
     def _find_result_wrapped_shape(self, element_name, xml_root_node):
@@ -573,43 +573,43 @@ class EC2QueryParser(QueryParser):
         # This is different from QueryParser in that it's RequestID,
         # not RequestId
         original = super(EC2QueryParser, self)._do_error_parse(response, shape)
-        if 'RequestID' in original: 
-            original['ResponseMetadata'] = { 
-                'RequestId': original.pop('RequestID') 
-            } 
+        if 'RequestID' in original:
+            original['ResponseMetadata'] = {
+                'RequestId': original.pop('RequestID')
+            }
         return original
 
-    def _get_error_root(self, original_root): 
-        for child in original_root: 
-            if self._node_tag(child) == 'Errors': 
-                for errors_child in child: 
-                    if self._node_tag(errors_child) == 'Error': 
-                        return errors_child 
-        return original_root 
+    def _get_error_root(self, original_root):
+        for child in original_root:
+            if self._node_tag(child) == 'Errors':
+                for errors_child in child:
+                    if self._node_tag(errors_child) == 'Error':
+                        return errors_child
+        return original_root
 
- 
+
 class BaseJSONParser(ResponseParser):
 
     def _handle_structure(self, shape, value):
         final_parsed = {}
-        if shape.is_document_type: 
-            final_parsed = value 
-        else: 
-            member_shapes = shape.members 
-            if value is None: 
-                # If the comes across the wire as "null" (None in python), 
-                # we should be returning this unchanged, instead of as an 
-                # empty dict. 
-                return None 
-            final_parsed = {} 
-            for member_name in member_shapes: 
-                member_shape = member_shapes[member_name] 
-                json_name = member_shape.serialization.get('name', member_name) 
-                raw_value = value.get(json_name) 
-                if raw_value is not None: 
-                    final_parsed[member_name] = self._parse_shape( 
-                        member_shapes[member_name], 
-                        raw_value) 
+        if shape.is_document_type:
+            final_parsed = value
+        else:
+            member_shapes = shape.members
+            if value is None:
+                # If the comes across the wire as "null" (None in python),
+                # we should be returning this unchanged, instead of as an
+                # empty dict.
+                return None
+            final_parsed = {}
+            for member_name in member_shapes:
+                member_shape = member_shapes[member_name]
+                json_name = member_shape.serialization.get('name', member_name)
+                raw_value = value.get(json_name)
+                if raw_value is not None:
+                    final_parsed[member_name] = self._parse_shape(
+                        member_shapes[member_name],
+                        raw_value)
         return final_parsed
 
     def _handle_map(self, shape, value):
@@ -673,157 +673,157 @@ class BaseJSONParser(ResponseParser):
             return { 'message': body }
 
 
-class BaseEventStreamParser(ResponseParser): 
- 
-    def _do_parse(self, response, shape): 
-        final_parsed = {} 
-        if shape.serialization.get('eventstream'): 
-            event_type = response['headers'].get(':event-type') 
-            event_shape = shape.members.get(event_type) 
-            if event_shape: 
-                final_parsed[event_type] = self._do_parse(response, event_shape) 
-        else: 
-            self._parse_non_payload_attrs(response, shape, 
-                                          shape.members, final_parsed) 
-            self._parse_payload(response, shape, shape.members, final_parsed) 
-        return final_parsed 
- 
-    def _do_error_parse(self, response, shape): 
-        exception_type = response['headers'].get(':exception-type') 
-        exception_shape = shape.members.get(exception_type) 
-        if exception_shape is not None: 
-            original_parsed = self._initial_body_parse(response['body']) 
-            body = self._parse_shape(exception_shape, original_parsed) 
-            error = { 
-                'Error': { 
-                    'Code': exception_type, 
-                    'Message': body.get('Message', body.get('message', '')) 
-                } 
-            } 
-        else: 
-            error = { 
-                'Error': { 
-                    'Code': response['headers'].get(':error-code', ''), 
-                    'Message': response['headers'].get(':error-message', ''), 
-                } 
-            } 
-        return error 
- 
-    def _parse_payload(self, response, shape, member_shapes, final_parsed): 
-        if shape.serialization.get('event'): 
-            for name in member_shapes: 
-                member_shape = member_shapes[name] 
-                if member_shape.serialization.get('eventpayload'): 
-                    body = response['body'] 
-                    if member_shape.type_name == 'blob': 
-                        parsed_body = body 
-                    elif member_shape.type_name == 'string': 
-                        parsed_body = body.decode(self.DEFAULT_ENCODING) 
-                    else: 
-                        raw_parse = self._initial_body_parse(body) 
-                        parsed_body = self._parse_shape(member_shape, raw_parse) 
-                    final_parsed[name] = parsed_body 
-                    return 
-            # If we didn't find an explicit payload, use the current shape 
-            original_parsed = self._initial_body_parse(response['body']) 
-            body_parsed = self._parse_shape(shape, original_parsed) 
-            final_parsed.update(body_parsed) 
- 
-    def _parse_non_payload_attrs(self, response, shape, 
-                                 member_shapes, final_parsed): 
-        headers = response['headers'] 
-        for name in member_shapes: 
-            member_shape = member_shapes[name] 
-            if member_shape.serialization.get('eventheader'): 
-                if name in headers: 
-                    value = headers[name] 
-                    if member_shape.type_name == 'timestamp': 
-                        # Event stream timestamps are an in milleseconds so we 
-                        # divide by 1000 to convert to seconds. 
-                        value = self._timestamp_parser(value / 1000.0) 
-                    final_parsed[name] = value 
- 
-    def _initial_body_parse(self, body_contents): 
-        # This method should do the initial xml/json parsing of the 
-        # body.  We we still need to walk the parsed body in order 
-        # to convert types, but this method will do the first round 
-        # of parsing. 
-        raise NotImplementedError("_initial_body_parse") 
- 
- 
-class EventStreamJSONParser(BaseEventStreamParser, BaseJSONParser): 
- 
-    def _initial_body_parse(self, body_contents): 
-        return self._parse_body_as_json(body_contents) 
- 
- 
-class EventStreamXMLParser(BaseEventStreamParser, BaseXMLResponseParser): 
- 
-    def _initial_body_parse(self, xml_string): 
-        if not xml_string: 
-            return ETree.Element('') 
-        return self._parse_xml_string_to_dom(xml_string) 
- 
- 
+class BaseEventStreamParser(ResponseParser):
+
+    def _do_parse(self, response, shape):
+        final_parsed = {}
+        if shape.serialization.get('eventstream'):
+            event_type = response['headers'].get(':event-type')
+            event_shape = shape.members.get(event_type)
+            if event_shape:
+                final_parsed[event_type] = self._do_parse(response, event_shape)
+        else:
+            self._parse_non_payload_attrs(response, shape,
+                                          shape.members, final_parsed)
+            self._parse_payload(response, shape, shape.members, final_parsed)
+        return final_parsed
+
+    def _do_error_parse(self, response, shape):
+        exception_type = response['headers'].get(':exception-type')
+        exception_shape = shape.members.get(exception_type)
+        if exception_shape is not None:
+            original_parsed = self._initial_body_parse(response['body'])
+            body = self._parse_shape(exception_shape, original_parsed)
+            error = {
+                'Error': {
+                    'Code': exception_type,
+                    'Message': body.get('Message', body.get('message', ''))
+                }
+            }
+        else:
+            error = {
+                'Error': {
+                    'Code': response['headers'].get(':error-code', ''),
+                    'Message': response['headers'].get(':error-message', ''),
+                }
+            }
+        return error
+
+    def _parse_payload(self, response, shape, member_shapes, final_parsed):
+        if shape.serialization.get('event'):
+            for name in member_shapes:
+                member_shape = member_shapes[name]
+                if member_shape.serialization.get('eventpayload'):
+                    body = response['body']
+                    if member_shape.type_name == 'blob':
+                        parsed_body = body
+                    elif member_shape.type_name == 'string':
+                        parsed_body = body.decode(self.DEFAULT_ENCODING)
+                    else:
+                        raw_parse = self._initial_body_parse(body)
+                        parsed_body = self._parse_shape(member_shape, raw_parse)
+                    final_parsed[name] = parsed_body
+                    return
+            # If we didn't find an explicit payload, use the current shape
+            original_parsed = self._initial_body_parse(response['body'])
+            body_parsed = self._parse_shape(shape, original_parsed)
+            final_parsed.update(body_parsed)
+
+    def _parse_non_payload_attrs(self, response, shape,
+                                 member_shapes, final_parsed):
+        headers = response['headers']
+        for name in member_shapes:
+            member_shape = member_shapes[name]
+            if member_shape.serialization.get('eventheader'):
+                if name in headers:
+                    value = headers[name]
+                    if member_shape.type_name == 'timestamp':
+                        # Event stream timestamps are an in milleseconds so we
+                        # divide by 1000 to convert to seconds.
+                        value = self._timestamp_parser(value / 1000.0)
+                    final_parsed[name] = value
+
+    def _initial_body_parse(self, body_contents):
+        # This method should do the initial xml/json parsing of the
+        # body.  We we still need to walk the parsed body in order
+        # to convert types, but this method will do the first round
+        # of parsing.
+        raise NotImplementedError("_initial_body_parse")
+
+
+class EventStreamJSONParser(BaseEventStreamParser, BaseJSONParser):
+
+    def _initial_body_parse(self, body_contents):
+        return self._parse_body_as_json(body_contents)
+
+
+class EventStreamXMLParser(BaseEventStreamParser, BaseXMLResponseParser):
+
+    def _initial_body_parse(self, xml_string):
+        if not xml_string:
+            return ETree.Element('')
+        return self._parse_xml_string_to_dom(xml_string)
+
+
 class JSONParser(BaseJSONParser):
- 
-    EVENT_STREAM_PARSER_CLS = EventStreamJSONParser 
- 
-    """Response parser for the "json" protocol.""" 
+
+    EVENT_STREAM_PARSER_CLS = EventStreamJSONParser
+
+    """Response parser for the "json" protocol."""
     def _do_parse(self, response, shape):
         parsed = {}
         if shape is not None:
-            event_name = shape.event_stream_name 
-            if event_name: 
-                parsed = self._handle_event_stream(response, shape, event_name) 
-            else: 
-                parsed = self._handle_json_body(response['body'], shape) 
+            event_name = shape.event_stream_name
+            if event_name:
+                parsed = self._handle_event_stream(response, shape, event_name)
+            else:
+                parsed = self._handle_json_body(response['body'], shape)
         self._inject_response_metadata(parsed, response['headers'])
         return parsed
 
-    def _do_modeled_error_parse(self, response, shape): 
-        return self._handle_json_body(response['body'], shape) 
- 
-    def _handle_event_stream(self, response, shape, event_name): 
-        event_stream_shape = shape.members[event_name] 
-        event_stream = self._create_event_stream(response, event_stream_shape) 
-        try: 
-            event = event_stream.get_initial_response() 
-        except NoInitialResponseError: 
-            error_msg = 'First event was not of type initial-response' 
-            raise ResponseParserError(error_msg) 
-        parsed = self._handle_json_body(event.payload, shape) 
-        parsed[event_name] = event_stream 
-        return parsed 
+    def _do_modeled_error_parse(self, response, shape):
+        return self._handle_json_body(response['body'], shape)
 
-    def _handle_json_body(self, raw_body, shape): 
-        # The json.loads() gives us the primitive JSON types, 
-        # but we need to traverse the parsed JSON data to convert 
-        # to richer types (blobs, timestamps, etc. 
-        parsed_json = self._parse_body_as_json(raw_body) 
-        return self._parse_shape(shape, parsed_json) 
- 
- 
+    def _handle_event_stream(self, response, shape, event_name):
+        event_stream_shape = shape.members[event_name]
+        event_stream = self._create_event_stream(response, event_stream_shape)
+        try:
+            event = event_stream.get_initial_response()
+        except NoInitialResponseError:
+            error_msg = 'First event was not of type initial-response'
+            raise ResponseParserError(error_msg)
+        parsed = self._handle_json_body(event.payload, shape)
+        parsed[event_name] = event_stream
+        return parsed
+
+    def _handle_json_body(self, raw_body, shape):
+        # The json.loads() gives us the primitive JSON types,
+        # but we need to traverse the parsed JSON data to convert
+        # to richer types (blobs, timestamps, etc.
+        parsed_json = self._parse_body_as_json(raw_body)
+        return self._parse_shape(shape, parsed_json)
+
+
 class BaseRestParser(ResponseParser):
 
     def _do_parse(self, response, shape):
         final_parsed = {}
         final_parsed['ResponseMetadata'] = self._populate_response_metadata(
             response)
-        self._add_modeled_parse(response, shape, final_parsed) 
-        return final_parsed 
- 
-    def _add_modeled_parse(self, response, shape, final_parsed): 
+        self._add_modeled_parse(response, shape, final_parsed)
+        return final_parsed
+
+    def _add_modeled_parse(self, response, shape, final_parsed):
         if shape is None:
             return final_parsed
         member_shapes = shape.members
         self._parse_non_payload_attrs(response, shape,
                                       member_shapes, final_parsed)
         self._parse_payload(response, shape, member_shapes, final_parsed)
- 
-    def _do_modeled_error_parse(self, response, shape): 
-        final_parsed = {} 
-        self._add_modeled_parse(response, shape, final_parsed) 
+
+    def _do_modeled_error_parse(self, response, shape):
+        final_parsed = {}
+        self._add_modeled_parse(response, shape, final_parsed)
         return final_parsed
 
     def _populate_response_metadata(self, response):
@@ -833,7 +833,7 @@ class BaseRestParser(ResponseParser):
             metadata['RequestId'] = headers['x-amzn-requestid']
         elif 'x-amz-request-id' in headers:
             metadata['RequestId'] = headers['x-amz-request-id']
-            # HostId is what it's called whenever this value is returned 
+            # HostId is what it's called whenever this value is returned
             # in an XML response body, so to be consistent, we'll always
             # call is HostId.
             metadata['HostId'] = headers.get('x-amz-id-2', '')
@@ -845,10 +845,10 @@ class BaseRestParser(ResponseParser):
             # shape is used for the body payload.
             payload_member_name = shape.serialization['payload']
             body_shape = member_shapes[payload_member_name]
-            if body_shape.serialization.get('eventstream'): 
-                body = self._create_event_stream(response, body_shape) 
-                final_parsed[payload_member_name] = body 
-            elif body_shape.type_name in ['string', 'blob']: 
+            if body_shape.serialization.get('eventstream'):
+                body = self._create_event_stream(response, body_shape)
+                final_parsed[payload_member_name] = body
+            elif body_shape.type_name in ['string', 'blob']:
                 # This is a stream
                 body = response['body']
                 if isinstance(body, bytes):
@@ -913,8 +913,8 @@ class BaseRestParser(ResponseParser):
 
 class RestJSONParser(BaseRestParser, BaseJSONParser):
 
-    EVENT_STREAM_PARSER_CLS = EventStreamJSONParser 
- 
+    EVENT_STREAM_PARSER_CLS = EventStreamJSONParser
+
     def _initial_body_parse(self, body_contents):
         return self._parse_body_as_json(body_contents)
 
@@ -940,11 +940,11 @@ class RestJSONParser(BaseRestParser, BaseJSONParser):
 
 class RestXMLParser(BaseRestParser, BaseXMLResponseParser):
 
-    EVENT_STREAM_PARSER_CLS = EventStreamXMLParser 
- 
+    EVENT_STREAM_PARSER_CLS = EventStreamXMLParser
+
     def _initial_body_parse(self, xml_string):
         if not xml_string:
-            return ETree.Element('') 
+            return ETree.Element('')
         return self._parse_xml_string_to_dom(xml_string)
 
     def _do_error_parse(self, response, shape):

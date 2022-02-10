@@ -90,44 +90,44 @@ public:
     return false;
   }
 
-  bool parseSectionFlags(StringRef FlagStr, bool &Passive, bool &Group) { 
-    for (char C : FlagStr) { 
-      switch (C) { 
-      case 'p': 
+  bool parseSectionFlags(StringRef FlagStr, bool &Passive, bool &Group) {
+    for (char C : FlagStr) {
+      switch (C) {
+      case 'p':
         Passive = true;
-        break; 
-      case 'G': 
-        Group = true; 
-        break; 
-      default: 
-        return Parser->Error(getTok().getLoc(), 
-                             StringRef("Unexepcted section flag: ") + FlagStr); 
-      } 
+        break;
+      case 'G':
+        Group = true;
+        break;
+      default:
+        return Parser->Error(getTok().getLoc(),
+                             StringRef("Unexepcted section flag: ") + FlagStr);
+      }
     }
     return false;
   }
 
-  bool parseGroup(StringRef &GroupName) { 
-    if (Lexer->isNot(AsmToken::Comma)) 
-      return TokError("expected group name"); 
-    Lex(); 
-    if (Lexer->is(AsmToken::Integer)) { 
-      GroupName = getTok().getString(); 
-      Lex(); 
-    } else if (Parser->parseIdentifier(GroupName)) { 
-      return TokError("invalid group name"); 
-    } 
-    if (Lexer->is(AsmToken::Comma)) { 
-      Lex(); 
-      StringRef Linkage; 
-      if (Parser->parseIdentifier(Linkage)) 
-        return TokError("invalid linkage"); 
-      if (Linkage != "comdat") 
-        return TokError("Linkage must be 'comdat'"); 
-    } 
-    return false; 
-  } 
- 
+  bool parseGroup(StringRef &GroupName) {
+    if (Lexer->isNot(AsmToken::Comma))
+      return TokError("expected group name");
+    Lex();
+    if (Lexer->is(AsmToken::Integer)) {
+      GroupName = getTok().getString();
+      Lex();
+    } else if (Parser->parseIdentifier(GroupName)) {
+      return TokError("invalid group name");
+    }
+    if (Lexer->is(AsmToken::Comma)) {
+      Lex();
+      StringRef Linkage;
+      if (Parser->parseIdentifier(Linkage))
+        return TokError("invalid linkage");
+      if (Linkage != "comdat")
+        return TokError("Linkage must be 'comdat'");
+    }
+    return false;
+  }
+
   bool parseSectionDirective(StringRef, SMLoc) {
     StringRef Name;
     if (Parser->parseIdentifier(Name))
@@ -141,8 +141,8 @@ public:
 
     auto Kind = StringSwitch<Optional<SectionKind>>(Name)
                     .StartsWith(".data", SectionKind::getData())
-                    .StartsWith(".tdata", SectionKind::getThreadData()) 
-                    .StartsWith(".tbss", SectionKind::getThreadBSS()) 
+                    .StartsWith(".tdata", SectionKind::getThreadData())
+                    .StartsWith(".tbss", SectionKind::getThreadBSS())
                     .StartsWith(".rodata", SectionKind::getReadOnly())
                     .StartsWith(".text", SectionKind::getText())
                     .StartsWith(".custom_section", SectionKind::getMetadata())
@@ -158,30 +158,30 @@ public:
 
     // Update section flags if present in this .section directive
     bool Passive = false;
-    bool Group = false; 
-    if (parseSectionFlags(getTok().getStringContents(), Passive, Group)) 
+    bool Group = false;
+    if (parseSectionFlags(getTok().getStringContents(), Passive, Group))
       return true;
 
-    Lex(); 
- 
-    if (expect(AsmToken::Comma, ",") || expect(AsmToken::At, "@")) 
-      return true; 
- 
-    StringRef GroupName; 
-    if (Group && parseGroup(GroupName)) 
-      return true; 
- 
-    if (expect(AsmToken::EndOfStatement, "eol")) 
-      return true; 
- 
-    // TODO: Parse UniqueID 
-    MCSectionWasm *WS = getContext().getWasmSection( 
-        Name, Kind.getValue(), GroupName, MCContext::GenericSectionID); 
+    Lex();
+
+    if (expect(AsmToken::Comma, ",") || expect(AsmToken::At, "@"))
+      return true;
+
+    StringRef GroupName;
+    if (Group && parseGroup(GroupName))
+      return true;
+
+    if (expect(AsmToken::EndOfStatement, "eol"))
+      return true;
+
+    // TODO: Parse UniqueID
+    MCSectionWasm *WS = getContext().getWasmSection(
+        Name, Kind.getValue(), GroupName, MCContext::GenericSectionID);
     if (Passive) {
-      if (!WS->isWasmData()) 
+      if (!WS->isWasmData())
         return Parser->Error(getTok().getLoc(),
                              "Only data sections can be passive");
-      WS->setPassive(); 
+      WS->setPassive();
     }
     getStreamer().SwitchSection(WS);
     return false;
@@ -221,13 +221,13 @@ public:
           Lexer->is(AsmToken::Identifier)))
       return error("Expected label,@type declaration, got: ", Lexer->getTok());
     auto TypeName = Lexer->getTok().getString();
-    if (TypeName == "function") { 
+    if (TypeName == "function") {
       WasmSym->setType(wasm::WASM_SYMBOL_TYPE_FUNCTION);
-      auto *Current = 
-          cast<MCSectionWasm>(getStreamer().getCurrentSection().first); 
-      if (Current->getGroup()) 
-        WasmSym->setComdat(true); 
-    } else if (TypeName == "global") 
+      auto *Current =
+          cast<MCSectionWasm>(getStreamer().getCurrentSection().first);
+      if (Current->getGroup())
+        WasmSym->setComdat(true);
+    } else if (TypeName == "global")
       WasmSym->setType(wasm::WASM_SYMBOL_TYPE_GLOBAL);
     else if (TypeName == "object")
       WasmSym->setType(wasm::WASM_SYMBOL_TYPE_DATA);

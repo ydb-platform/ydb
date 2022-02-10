@@ -103,7 +103,7 @@ import socketserver
 import sys
 import time
 import urllib.parse
-import contextlib 
+import contextlib
 from functools import partial
 
 from http import HTTPStatus
@@ -639,17 +639,17 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     """
 
     server_version = "SimpleHTTP/" + __version__
-    extensions_map = _encodings_map_default = { 
-        '.gz': 'application/gzip', 
-        '.Z': 'application/octet-stream', 
-        '.bz2': 'application/x-bzip2', 
-        '.xz': 'application/x-xz', 
-    } 
+    extensions_map = _encodings_map_default = {
+        '.gz': 'application/gzip',
+        '.Z': 'application/octet-stream',
+        '.bz2': 'application/x-bzip2',
+        '.xz': 'application/x-xz',
+    }
 
     def __init__(self, *args, directory=None, **kwargs):
         if directory is None:
             directory = os.getcwd()
-        self.directory = os.fspath(directory) 
+        self.directory = os.fspath(directory)
         super().__init__(*args, **kwargs)
 
     def do_GET(self):
@@ -689,7 +689,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                              parts[3], parts[4])
                 new_url = urllib.parse.urlunsplit(new_parts)
                 self.send_header("Location", new_url)
-                self.send_header("Content-Length", "0") 
+                self.send_header("Content-Length", "0")
                 self.end_headers()
                 return None
             for index in "index.html", "index.htm":
@@ -700,14 +700,14 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             else:
                 return self.list_directory(path)
         ctype = self.guess_type(path)
-        # check for trailing "/" which should return 404. See Issue17324 
-        # The test for this was added in test_httpserver.py 
-        # However, some OS platforms accept a trailingSlash as a filename 
-        # See discussion on python-dev and Issue34711 regarding 
-        # parseing and rejection of filenames with a trailing slash 
-        if path.endswith("/"): 
-            self.send_error(HTTPStatus.NOT_FOUND, "File not found") 
-            return None 
+        # check for trailing "/" which should return 404. See Issue17324
+        # The test for this was added in test_httpserver.py
+        # However, some OS platforms accept a trailingSlash as a filename
+        # See discussion on python-dev and Issue34711 regarding
+        # parseing and rejection of filenames with a trailing slash
+        if path.endswith("/"):
+            self.send_error(HTTPStatus.NOT_FOUND, "File not found")
+            return None
         try:
             f = open(path, 'rb')
         except OSError:
@@ -879,10 +879,10 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         ext = ext.lower()
         if ext in self.extensions_map:
             return self.extensions_map[ext]
-        guess, _ = mimetypes.guess_type(path) 
-        if guess: 
-            return guess 
-        return 'application/octet-stream' 
+        guess, _ = mimetypes.guess_type(path)
+        if guess:
+            return guess
+        return 'application/octet-stream'
 
 
 # Utilities for CGIHTTPRequestHandler
@@ -1013,10 +1013,10 @@ class CGIHTTPRequestHandler(SimpleHTTPRequestHandler):
         """
         collapsed_path = _url_collapse_path(self.path)
         dir_sep = collapsed_path.find('/', 1)
-        while dir_sep > 0 and not collapsed_path[:dir_sep] in self.cgi_directories: 
-            dir_sep = collapsed_path.find('/', dir_sep+1) 
-        if dir_sep > 0: 
-            head, tail = collapsed_path[:dir_sep], collapsed_path[dir_sep+1:] 
+        while dir_sep > 0 and not collapsed_path[:dir_sep] in self.cgi_directories:
+            dir_sep = collapsed_path.find('/', dir_sep+1)
+        if dir_sep > 0:
+            head, tail = collapsed_path[:dir_sep], collapsed_path[dir_sep+1:]
             self.cgi_info = head, tail
             return True
         return False
@@ -1124,7 +1124,7 @@ class CGIHTTPRequestHandler(SimpleHTTPRequestHandler):
         referer = self.headers.get('referer')
         if referer:
             env['HTTP_REFERER'] = referer
-        accept = self.headers.get_all('accept', ()) 
+        accept = self.headers.get_all('accept', ())
         env['HTTP_ACCEPT'] = ','.join(accept)
         ua = self.headers.get('user-agent')
         if ua:
@@ -1160,9 +1160,9 @@ class CGIHTTPRequestHandler(SimpleHTTPRequestHandler):
                 while select.select([self.rfile], [], [], 0)[0]:
                     if not self.rfile.read(1):
                         break
-                exitcode = os.waitstatus_to_exitcode(sts) 
-                if exitcode: 
-                    self.log_error(f"CGI script exit code {exitcode}") 
+                exitcode = os.waitstatus_to_exitcode(sts)
+                if exitcode:
+                    self.log_error(f"CGI script exit code {exitcode}")
                 return
             # Child
             try:
@@ -1221,34 +1221,34 @@ class CGIHTTPRequestHandler(SimpleHTTPRequestHandler):
                 self.log_message("CGI script exited OK")
 
 
-def _get_best_family(*address): 
-    infos = socket.getaddrinfo( 
-        *address, 
-        type=socket.SOCK_STREAM, 
-        flags=socket.AI_PASSIVE, 
-    ) 
-    family, type, proto, canonname, sockaddr = next(iter(infos)) 
-    return family, sockaddr 
- 
- 
+def _get_best_family(*address):
+    infos = socket.getaddrinfo(
+        *address,
+        type=socket.SOCK_STREAM,
+        flags=socket.AI_PASSIVE,
+    )
+    family, type, proto, canonname, sockaddr = next(iter(infos))
+    return family, sockaddr
+
+
 def test(HandlerClass=BaseHTTPRequestHandler,
          ServerClass=ThreadingHTTPServer,
-         protocol="HTTP/1.0", port=8000, bind=None): 
+         protocol="HTTP/1.0", port=8000, bind=None):
     """Test the HTTP request handler class.
 
     This runs an HTTP server on port 8000 (or the port argument).
 
     """
-    ServerClass.address_family, addr = _get_best_family(bind, port) 
+    ServerClass.address_family, addr = _get_best_family(bind, port)
 
     HandlerClass.protocol_version = protocol
-    with ServerClass(addr, HandlerClass) as httpd: 
-        host, port = httpd.socket.getsockname()[:2] 
-        url_host = f'[{host}]' if ':' in host else host 
-        print( 
-            f"Serving HTTP on {host} port {port} " 
-            f"(http://{url_host}:{port}/) ..." 
-        ) 
+    with ServerClass(addr, HandlerClass) as httpd:
+        host, port = httpd.socket.getsockname()[:2]
+        url_host = f'[{host}]' if ':' in host else host
+        print(
+            f"Serving HTTP on {host} port {port} "
+            f"(http://{url_host}:{port}/) ..."
+        )
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
@@ -1261,7 +1261,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--cgi', action='store_true',
                        help='Run as CGI Server')
-    parser.add_argument('--bind', '-b', metavar='ADDRESS', 
+    parser.add_argument('--bind', '-b', metavar='ADDRESS',
                         help='Specify alternate bind address '
                              '[default: all interfaces]')
     parser.add_argument('--directory', '-d', default=os.getcwd(),
@@ -1277,19 +1277,19 @@ if __name__ == '__main__':
     else:
         handler_class = partial(SimpleHTTPRequestHandler,
                                 directory=args.directory)
- 
-    # ensure dual-stack is not disabled; ref #38907 
-    class DualStackServer(ThreadingHTTPServer): 
-        def server_bind(self): 
-            # suppress exception when protocol is IPv4 
-            with contextlib.suppress(Exception): 
-                self.socket.setsockopt( 
-                    socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0) 
-            return super().server_bind() 
- 
-    test( 
-        HandlerClass=handler_class, 
-        ServerClass=DualStackServer, 
-        port=args.port, 
-        bind=args.bind, 
-    ) 
+
+    # ensure dual-stack is not disabled; ref #38907
+    class DualStackServer(ThreadingHTTPServer):
+        def server_bind(self):
+            # suppress exception when protocol is IPv4
+            with contextlib.suppress(Exception):
+                self.socket.setsockopt(
+                    socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+            return super().server_bind()
+
+    test(
+        HandlerClass=handler_class,
+        ServerClass=DualStackServer,
+        port=args.port,
+        bind=args.bind,
+    )

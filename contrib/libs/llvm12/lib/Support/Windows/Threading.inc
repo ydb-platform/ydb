@@ -195,25 +195,25 @@ static ArrayRef<ProcessorGroup> getProcessorGroups() {
     if (!IterateProcInfo(RelationProcessorCore, HandleProc))
       return std::vector<ProcessorGroup>();
 
-    // If there's an affinity mask set, assume the user wants to constrain the 
-    // current process to only a single CPU group. On Windows, it is not 
-    // possible for affinity masks to cross CPU group boundaries. 
-    DWORD_PTR ProcessAffinityMask = 0, SystemAffinityMask = 0; 
-    if (::GetProcessAffinityMask(GetCurrentProcess(), &ProcessAffinityMask, 
-                                 &SystemAffinityMask) && 
-        ProcessAffinityMask != SystemAffinityMask) { 
-      // We don't expect more that 4 CPU groups on Windows (256 processors). 
-      USHORT GroupCount = 4; 
-      USHORT GroupArray[4]{}; 
-      if (::GetProcessGroupAffinity(GetCurrentProcess(), &GroupCount, 
-                                    GroupArray)) { 
-        assert(GroupCount == 1 && 
-               "On startup, a program is expected to be assigned only to " 
-               "one processor group!"); 
-        unsigned CurrentGroupID = GroupArray[0]; 
-        ProcessorGroup NewG{Groups[CurrentGroupID]}; 
-        NewG.Affinity = ProcessAffinityMask; 
-        NewG.UsableThreads = countPopulation(ProcessAffinityMask); 
+    // If there's an affinity mask set, assume the user wants to constrain the
+    // current process to only a single CPU group. On Windows, it is not
+    // possible for affinity masks to cross CPU group boundaries.
+    DWORD_PTR ProcessAffinityMask = 0, SystemAffinityMask = 0;
+    if (::GetProcessAffinityMask(GetCurrentProcess(), &ProcessAffinityMask,
+                                 &SystemAffinityMask) &&
+        ProcessAffinityMask != SystemAffinityMask) {
+      // We don't expect more that 4 CPU groups on Windows (256 processors).
+      USHORT GroupCount = 4;
+      USHORT GroupArray[4]{};
+      if (::GetProcessGroupAffinity(GetCurrentProcess(), &GroupCount,
+                                    GroupArray)) {
+        assert(GroupCount == 1 &&
+               "On startup, a program is expected to be assigned only to "
+               "one processor group!");
+        unsigned CurrentGroupID = GroupArray[0];
+        ProcessorGroup NewG{Groups[CurrentGroupID]};
+        NewG.Affinity = ProcessAffinityMask;
+        NewG.UsableThreads = countPopulation(ProcessAffinityMask);
         Groups.clear();
         Groups.push_back(NewG);
       }

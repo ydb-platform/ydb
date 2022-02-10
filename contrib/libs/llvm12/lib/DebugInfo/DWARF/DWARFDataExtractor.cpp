@@ -53,16 +53,16 @@ uint64_t DWARFDataExtractor::getRelocatedValue(uint32_t Size, uint64_t *Off,
 
   ErrorAsOutParameter ErrAsOut(Err);
   Optional<RelocAddrEntry> E = Obj->find(*Section, *Off);
-  uint64_t LocData = getUnsigned(Off, Size, Err); 
+  uint64_t LocData = getUnsigned(Off, Size, Err);
   if (!E || (Err && *Err))
-    return LocData; 
+    return LocData;
   if (SecNdx)
     *SecNdx = E->SectionIndex;
- 
-  uint64_t R = 
-      object::resolveRelocation(E->Resolver, E->Reloc, E->SymbolValue, LocData); 
+
+  uint64_t R =
+      object::resolveRelocation(E->Resolver, E->Reloc, E->SymbolValue, LocData);
   if (E->Reloc2)
-    R = object::resolveRelocation(E->Resolver, *E->Reloc2, E->SymbolValue2, R); 
+    R = object::resolveRelocation(E->Resolver, *E->Reloc2, E->SymbolValue2, R);
   return R;
 }
 
@@ -106,10 +106,10 @@ DWARFDataExtractor::getEncodedPointer(uint64_t *Offset, uint8_t Encoding,
     Result = getSigned(Offset, 2);
     break;
   case dwarf::DW_EH_PE_sdata4:
-    Result = SignExtend64<32>(getRelocatedValue(4, Offset)); 
+    Result = SignExtend64<32>(getRelocatedValue(4, Offset));
     break;
   case dwarf::DW_EH_PE_sdata8:
-    Result = getRelocatedValue(8, Offset); 
+    Result = getRelocatedValue(8, Offset);
     break;
   default:
     return None;

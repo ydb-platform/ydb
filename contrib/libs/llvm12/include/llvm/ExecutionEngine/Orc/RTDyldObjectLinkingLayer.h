@@ -42,16 +42,16 @@
 namespace llvm {
 namespace orc {
 
-class RTDyldObjectLinkingLayer : public ObjectLayer, private ResourceManager { 
+class RTDyldObjectLinkingLayer : public ObjectLayer, private ResourceManager {
 public:
   /// Functor for receiving object-loaded notifications.
-  using NotifyLoadedFunction = std::function<void( 
-      MaterializationResponsibility &R, const object::ObjectFile &Obj, 
-      const RuntimeDyld::LoadedObjectInfo &)>; 
+  using NotifyLoadedFunction = std::function<void(
+      MaterializationResponsibility &R, const object::ObjectFile &Obj,
+      const RuntimeDyld::LoadedObjectInfo &)>;
 
   /// Functor for receiving finalization notifications.
-  using NotifyEmittedFunction = std::function<void( 
-      MaterializationResponsibility &R, std::unique_ptr<MemoryBuffer>)>; 
+  using NotifyEmittedFunction = std::function<void(
+      MaterializationResponsibility &R, std::unique_ptr<MemoryBuffer>)>;
 
   using GetMemoryManagerFunction =
       std::function<std::unique_ptr<RuntimeDyld::MemoryManager>()>;
@@ -64,7 +64,7 @@ public:
   ~RTDyldObjectLinkingLayer();
 
   /// Emit the object.
-  void emit(std::unique_ptr<MaterializationResponsibility> R, 
+  void emit(std::unique_ptr<MaterializationResponsibility> R,
             std::unique_ptr<MemoryBuffer> O) override;
 
   /// Set the NotifyLoaded callback.
@@ -129,24 +129,24 @@ public:
   void unregisterJITEventListener(JITEventListener &L);
 
 private:
-  using MemoryManagerUP = std::unique_ptr<RuntimeDyld::MemoryManager>; 
- 
-  Error onObjLoad(MaterializationResponsibility &R, 
+  using MemoryManagerUP = std::unique_ptr<RuntimeDyld::MemoryManager>;
+
+  Error onObjLoad(MaterializationResponsibility &R,
                   const object::ObjectFile &Obj,
-                  RuntimeDyld::MemoryManager &MemMgr, 
-                  RuntimeDyld::LoadedObjectInfo &LoadedObjInfo, 
+                  RuntimeDyld::MemoryManager &MemMgr,
+                  RuntimeDyld::LoadedObjectInfo &LoadedObjInfo,
                   std::map<StringRef, JITEvaluatedSymbol> Resolved,
                   std::set<StringRef> &InternalSymbols);
 
-  void onObjEmit(MaterializationResponsibility &R, 
+  void onObjEmit(MaterializationResponsibility &R,
                  object::OwningBinary<object::ObjectFile> O,
-                 std::unique_ptr<RuntimeDyld::MemoryManager> MemMgr, 
-                 std::unique_ptr<RuntimeDyld::LoadedObjectInfo> LoadedObjInfo, 
-                 Error Err); 
+                 std::unique_ptr<RuntimeDyld::MemoryManager> MemMgr,
+                 std::unique_ptr<RuntimeDyld::LoadedObjectInfo> LoadedObjInfo,
+                 Error Err);
 
-  Error handleRemoveResources(ResourceKey K) override; 
-  void handleTransferResources(ResourceKey DstKey, ResourceKey SrcKey) override; 
- 
+  Error handleRemoveResources(ResourceKey K) override;
+  void handleTransferResources(ResourceKey DstKey, ResourceKey SrcKey) override;
+
   mutable std::mutex RTDyldLayerMutex;
   GetMemoryManagerFunction GetMemoryManager;
   NotifyLoadedFunction NotifyLoaded;
@@ -154,7 +154,7 @@ private:
   bool ProcessAllSections = false;
   bool OverrideObjectFlags = false;
   bool AutoClaimObjectSymbols = false;
-  DenseMap<ResourceKey, std::vector<MemoryManagerUP>> MemMgrs; 
+  DenseMap<ResourceKey, std::vector<MemoryManagerUP>> MemMgrs;
   std::vector<JITEventListener *> EventListeners;
 };
 

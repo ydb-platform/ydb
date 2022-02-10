@@ -135,10 +135,10 @@ cl::opt<bool> IterativeCounterPromotion(
     cl::ZeroOrMore, "iterative-counter-promotion", cl::init(true),
     cl::desc("Allow counter promotion across the whole loop nest."));
 
-cl::opt<bool> SkipRetExitBlock( 
-    cl::ZeroOrMore, "skip-ret-exit-block", cl::init(true), 
-    cl::desc("Suppress counter promotion if exit blocks contain ret.")); 
- 
+cl::opt<bool> SkipRetExitBlock(
+    cl::ZeroOrMore, "skip-ret-exit-block", cl::init(true),
+    cl::desc("Suppress counter promotion if exit blocks contain ret."));
+
 class InstrProfilingLegacyPass : public ModulePass {
   InstrProfiling InstrProf;
 
@@ -261,18 +261,18 @@ public:
     // Skip 'infinite' loops:
     if (ExitBlocks.size() == 0)
       return false;
- 
-    // Skip if any of the ExitBlocks contains a ret instruction. 
-    // This is to prevent dumping of incomplete profile -- if the 
-    // the loop is a long running loop and dump is called in the middle 
-    // of the loop, the result profile is incomplete. 
-    // FIXME: add other heuristics to detect long running loops. 
-    if (SkipRetExitBlock) { 
-      for (auto BB : ExitBlocks) 
-        if (isa<ReturnInst>(BB->getTerminator())) 
-          return false; 
-    } 
- 
+
+    // Skip if any of the ExitBlocks contains a ret instruction.
+    // This is to prevent dumping of incomplete profile -- if the
+    // the loop is a long running loop and dump is called in the middle
+    // of the loop, the result profile is incomplete.
+    // FIXME: add other heuristics to detect long running loops.
+    if (SkipRetExitBlock) {
+      for (auto BB : ExitBlocks)
+        if (isa<ReturnInst>(BB->getTerminator()))
+          return false;
+    }
+
     unsigned MaxProm = getMaxNumOfPromotionsInLoop(&L);
     if (MaxProm == 0)
       return false;
@@ -396,15 +396,15 @@ private:
   BlockFrequencyInfo *BFI;
 };
 
-enum class ValueProfilingCallType { 
-  // Individual values are tracked. Currently used for indiret call target 
-  // profiling. 
-  Default, 
- 
-  // MemOp: the memop size value profiling. 
-  MemOp 
-}; 
- 
+enum class ValueProfilingCallType {
+  // Individual values are tracked. Currently used for indiret call target
+  // profiling.
+  Default,
+
+  // MemOp: the memop size value profiling.
+  MemOp
+};
+
 } // end anonymous namespace
 
 PreservedAnalyses InstrProfiling::run(Module &M, ModuleAnalysisManager &AM) {
@@ -587,9 +587,9 @@ bool InstrProfiling::run(
   return true;
 }
 
-static FunctionCallee getOrInsertValueProfilingCall( 
-    Module &M, const TargetLibraryInfo &TLI, 
-    ValueProfilingCallType CallType = ValueProfilingCallType::Default) { 
+static FunctionCallee getOrInsertValueProfilingCall(
+    Module &M, const TargetLibraryInfo &TLI,
+    ValueProfilingCallType CallType = ValueProfilingCallType::Default) {
   LLVMContext &Ctx = M.getContext();
   auto *ReturnTy = Type::getVoidTy(M.getContext());
 
@@ -597,19 +597,19 @@ static FunctionCallee getOrInsertValueProfilingCall(
   if (auto AK = TLI.getExtAttrForI32Param(false))
     AL = AL.addParamAttribute(M.getContext(), 2, AK);
 
-  assert((CallType == ValueProfilingCallType::Default || 
-          CallType == ValueProfilingCallType::MemOp) && 
-         "Must be Default or MemOp"); 
-  Type *ParamTypes[] = { 
+  assert((CallType == ValueProfilingCallType::Default ||
+          CallType == ValueProfilingCallType::MemOp) &&
+         "Must be Default or MemOp");
+  Type *ParamTypes[] = {
 #define VALUE_PROF_FUNC_PARAM(ParamType, ParamName, ParamLLVMType) ParamLLVMType
 #include "llvm/ProfileData/InstrProfData.inc"
-  }; 
-  auto *ValueProfilingCallTy = 
-      FunctionType::get(ReturnTy, makeArrayRef(ParamTypes), false); 
-  StringRef FuncName = CallType == ValueProfilingCallType::Default 
-                           ? getInstrProfValueProfFuncName() 
-                           : getInstrProfValueProfMemOpFuncName(); 
-  return M.getOrInsertFunction(FuncName, ValueProfilingCallTy, AL); 
+  };
+  auto *ValueProfilingCallTy =
+      FunctionType::get(ReturnTy, makeArrayRef(ParamTypes), false);
+  StringRef FuncName = CallType == ValueProfilingCallType::Default
+                           ? getInstrProfValueProfFuncName()
+                           : getInstrProfValueProfMemOpFuncName();
+  return M.getOrInsertFunction(FuncName, ValueProfilingCallTy, AL);
 }
 
 void InstrProfiling::computeNumValueSiteCounts(InstrProfValueProfileInst *Ind) {
@@ -638,8 +638,8 @@ void InstrProfiling::lowerValueProfileInst(InstrProfValueProfileInst *Ind) {
     Index += It->second.NumValueSites[Kind];
 
   IRBuilder<> Builder(Ind);
-  bool IsMemOpSize = (Ind->getValueKind()->getZExtValue() == 
-                      llvm::InstrProfValueKind::IPVK_MemOPSize); 
+  bool IsMemOpSize = (Ind->getValueKind()->getZExtValue() ==
+                      llvm::InstrProfValueKind::IPVK_MemOPSize);
   CallInst *Call = nullptr;
   auto *TLI = &GetTLI(*Ind->getFunction());
 
@@ -649,19 +649,19 @@ void InstrProfiling::lowerValueProfileInst(InstrProfValueProfileInst *Ind) {
   // WinEHPrepare pass.
   SmallVector<OperandBundleDef, 1> OpBundles;
   Ind->getOperandBundlesAsDefs(OpBundles);
-  if (!IsMemOpSize) { 
+  if (!IsMemOpSize) {
     Value *Args[3] = {Ind->getTargetValue(),
                       Builder.CreateBitCast(DataVar, Builder.getInt8PtrTy()),
                       Builder.getInt32(Index)};
     Call = Builder.CreateCall(getOrInsertValueProfilingCall(*M, *TLI), Args,
                               OpBundles);
   } else {
-    Value *Args[3] = {Ind->getTargetValue(), 
-                      Builder.CreateBitCast(DataVar, Builder.getInt8PtrTy()), 
-                      Builder.getInt32(Index)}; 
-    Call = Builder.CreateCall( 
-        getOrInsertValueProfilingCall(*M, *TLI, ValueProfilingCallType::MemOp), 
-        Args, OpBundles); 
+    Value *Args[3] = {Ind->getTargetValue(),
+                      Builder.CreateBitCast(DataVar, Builder.getInt8PtrTy()),
+                      Builder.getInt32(Index)};
+    Call = Builder.CreateCall(
+        getOrInsertValueProfilingCall(*M, *TLI, ValueProfilingCallType::MemOp),
+        Args, OpBundles);
   }
   if (auto AK = TLI->getExtAttrForI32Param(false))
     Call->addParamAttr(2, AK);
@@ -828,11 +828,11 @@ InstrProfiling::getOrCreateRegionCounters(InstrProfIncrementInst *Inc) {
       Visibility = GlobalValue::HiddenVisibility;
     }
   }
-  std::string DataVarName = getVarName(Inc, getInstrProfDataVarPrefix()); 
+  std::string DataVarName = getVarName(Inc, getInstrProfDataVarPrefix());
   auto MaybeSetComdat = [=](GlobalVariable *GV) {
     if (NeedComdat)
-      GV->setComdat(M->getOrInsertComdat(TT.isOSBinFormatCOFF() ? GV->getName() 
-                                                                : DataVarName)); 
+      GV->setComdat(M->getOrInsertComdat(TT.isOSBinFormatCOFF() ? GV->getName()
+                                                                : DataVarName));
   };
 
   uint64_t NumCounters = Inc->getNumCounters()->getZExtValue();
@@ -897,9 +897,9 @@ InstrProfiling::getOrCreateRegionCounters(InstrProfIncrementInst *Inc) {
 #define INSTR_PROF_DATA(Type, LLVMType, Name, Init) Init,
 #include "llvm/ProfileData/InstrProfData.inc"
   };
-  auto *Data = 
-      new GlobalVariable(*M, DataTy, false, Linkage, 
-                         ConstantStruct::get(DataTy, DataVals), DataVarName); 
+  auto *Data =
+      new GlobalVariable(*M, DataTy, false, Linkage,
+                         ConstantStruct::get(DataTy, DataVals), DataVarName);
   Data->setVisibility(Visibility);
   Data->setSection(getInstrProfSectionName(IPSK_data, TT.getObjectFormat()));
   Data->setAlignment(Align(INSTR_PROF_DATA_ALIGNMENT));

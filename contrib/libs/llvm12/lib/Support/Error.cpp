@@ -168,7 +168,7 @@ void LLVMDisposeErrorMessage(char *ErrMsg) { delete[] ErrMsg; }
 LLVMErrorTypeId LLVMGetStringErrorTypeId() {
   return reinterpret_cast<void *>(&StringError::ID);
 }
- 
-LLVMErrorRef LLVMCreateStringError(const char *ErrMsg) { 
-  return wrap(make_error<StringError>(ErrMsg, inconvertibleErrorCode())); 
-} 
+
+LLVMErrorRef LLVMCreateStringError(const char *ErrMsg) {
+  return wrap(make_error<StringError>(ErrMsg, inconvertibleErrorCode()));
+}

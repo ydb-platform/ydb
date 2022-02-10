@@ -25,7 +25,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Transforms/InstCombine/InstCombineWorklist.h"
-#include "llvm/Transforms/InstCombine/InstCombiner.h" 
+#include "llvm/Transforms/InstCombine/InstCombiner.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include <cassert>
 
@@ -33,14 +33,14 @@
 
 using namespace llvm::PatternMatch;
 
-// As a default, let's assume that we want to be aggressive, 
-// and attempt to traverse with no limits in attempt to sink negation. 
-static constexpr unsigned NegatorDefaultMaxDepth = ~0U; 
- 
-// Let's guesstimate that most often we will end up visiting/producing 
-// fairly small number of new instructions. 
-static constexpr unsigned NegatorMaxNodesSSO = 16; 
- 
+// As a default, let's assume that we want to be aggressive,
+// and attempt to traverse with no limits in attempt to sink negation.
+static constexpr unsigned NegatorDefaultMaxDepth = ~0U;
+
+// Let's guesstimate that most often we will end up visiting/producing
+// fairly small number of new instructions.
+static constexpr unsigned NegatorMaxNodesSSO = 16;
+
 namespace llvm {
 
 class AAResults;
@@ -57,20 +57,20 @@ class ProfileSummaryInfo;
 class TargetLibraryInfo;
 class User;
 
-class LLVM_LIBRARY_VISIBILITY InstCombinerImpl final 
-    : public InstCombiner, 
-      public InstVisitor<InstCombinerImpl, Instruction *> { 
+class LLVM_LIBRARY_VISIBILITY InstCombinerImpl final
+    : public InstCombiner,
+      public InstVisitor<InstCombinerImpl, Instruction *> {
 public:
-  InstCombinerImpl(InstCombineWorklist &Worklist, BuilderTy &Builder, 
-                   bool MinimizeSize, AAResults *AA, AssumptionCache &AC, 
-                   TargetLibraryInfo &TLI, TargetTransformInfo &TTI, 
-                   DominatorTree &DT, OptimizationRemarkEmitter &ORE, 
-                   BlockFrequencyInfo *BFI, ProfileSummaryInfo *PSI, 
-                   const DataLayout &DL, LoopInfo *LI) 
-      : InstCombiner(Worklist, Builder, MinimizeSize, AA, AC, TLI, TTI, DT, ORE, 
-                     BFI, PSI, DL, LI) {} 
+  InstCombinerImpl(InstCombineWorklist &Worklist, BuilderTy &Builder,
+                   bool MinimizeSize, AAResults *AA, AssumptionCache &AC,
+                   TargetLibraryInfo &TLI, TargetTransformInfo &TTI,
+                   DominatorTree &DT, OptimizationRemarkEmitter &ORE,
+                   BlockFrequencyInfo *BFI, ProfileSummaryInfo *PSI,
+                   const DataLayout &DL, LoopInfo *LI)
+      : InstCombiner(Worklist, Builder, MinimizeSize, AA, AC, TLI, TTI, DT, ORE,
+                     BFI, PSI, DL, LI) {}
 
-  virtual ~InstCombinerImpl() {} 
+  virtual ~InstCombinerImpl() {}
 
   /// Run the combiner over the entire worklist until it is empty.
   ///
@@ -105,7 +105,7 @@ public:
   Value *simplifyRangeCheck(ICmpInst *Cmp0, ICmpInst *Cmp1, bool Inverted);
   Instruction *visitAnd(BinaryOperator &I);
   Instruction *visitOr(BinaryOperator &I);
-  bool sinkNotIntoOtherHandOfAndOrOr(BinaryOperator &I); 
+  bool sinkNotIntoOtherHandOfAndOrOr(BinaryOperator &I);
   Instruction *visitXor(BinaryOperator &I);
   Instruction *visitShl(BinaryOperator &I);
   Value *reassociateShiftAmtsOfTwoSameDirectionShifts(
@@ -119,7 +119,7 @@ public:
   Instruction *visitLShr(BinaryOperator &I);
   Instruction *commonShiftTransforms(BinaryOperator &I);
   Instruction *visitFCmpInst(FCmpInst &I);
-  CmpInst *canonicalizeICmpPredicate(CmpInst &I); 
+  CmpInst *canonicalizeICmpPredicate(CmpInst &I);
   Instruction *visitICmpInst(ICmpInst &I);
   Instruction *FoldShiftByConstant(Value *Op0, Constant *Op1,
                                    BinaryOperator &I);
@@ -158,9 +158,9 @@ public:
   Instruction *visitFenceInst(FenceInst &FI);
   Instruction *visitSwitchInst(SwitchInst &SI);
   Instruction *visitReturnInst(ReturnInst &RI);
-  Instruction *visitUnreachableInst(UnreachableInst &I); 
-  Instruction * 
-  foldAggregateConstructionIntoAggregateReuse(InsertValueInst &OrigIVI); 
+  Instruction *visitUnreachableInst(UnreachableInst &I);
+  Instruction *
+  foldAggregateConstructionIntoAggregateReuse(InsertValueInst &OrigIVI);
   Instruction *visitInsertValueInst(InsertValueInst &IV);
   Instruction *visitInsertElementInst(InsertElementInst &IE);
   Instruction *visitExtractElementInst(ExtractElementInst &EI);
@@ -320,12 +320,12 @@ private:
   Instruction *narrowBinOp(TruncInst &Trunc);
   Instruction *narrowMaskedBinOp(BinaryOperator &And);
   Instruction *narrowMathIfNoOverflow(BinaryOperator &I);
-  Instruction *narrowFunnelShift(TruncInst &Trunc); 
+  Instruction *narrowFunnelShift(TruncInst &Trunc);
   Instruction *optimizeBitCastFromPhi(CastInst &CI, PHINode *PN);
   Instruction *matchSAddSubSat(SelectInst &MinMax1);
 
-  void freelyInvertAllUsersOf(Value *V); 
- 
+  void freelyInvertAllUsersOf(Value *V);
+
   /// Determine if a pair of casts can be replaced by a single cast.
   ///
   /// \param CI1 The first of a pair of casts.
@@ -398,7 +398,7 @@ public:
                       << "    with " << *V << '\n');
 
     I.replaceAllUsesWith(V);
-    MadeIRChange = true; 
+    MadeIRChange = true;
     return &I;
   }
 
@@ -440,7 +440,7 @@ public:
   /// When dealing with an instruction that has side effects or produces a void
   /// value, we can't rely on DCE to delete the instruction. Instead, visit
   /// methods should return the value returned by this function.
-  Instruction *eraseInstFromFunction(Instruction &I) override { 
+  Instruction *eraseInstFromFunction(Instruction &I) override {
     LLVM_DEBUG(dbgs() << "IC: ERASE " << I << '\n');
     assert(I.use_empty() && "Cannot erase instruction that is used!");
     salvageDebugInfo(I);
@@ -567,7 +567,7 @@ public:
                                  unsigned Depth, Instruction *CxtI);
   bool SimplifyDemandedBits(Instruction *I, unsigned Op,
                             const APInt &DemandedMask, KnownBits &Known,
-                            unsigned Depth = 0) override; 
+                            unsigned Depth = 0) override;
 
   /// Helper routine of SimplifyDemandedUseBits. It computes KnownZero/KnownOne
   /// bits. It also tries to handle simplifications that can be done based on
@@ -587,10 +587,10 @@ public:
   /// demanded bits.
   bool SimplifyDemandedInstructionBits(Instruction &Inst);
 
-  virtual Value * 
-  SimplifyDemandedVectorElts(Value *V, APInt DemandedElts, APInt &UndefElts, 
-                             unsigned Depth = 0, 
-                             bool AllowMultipleUsers = false) override; 
+  virtual Value *
+  SimplifyDemandedVectorElts(Value *V, APInt DemandedElts, APInt &UndefElts,
+                             unsigned Depth = 0,
+                             bool AllowMultipleUsers = false) override;
 
   /// Canonicalize the position of binops relative to shufflevector.
   Instruction *foldVectorBinop(BinaryOperator &Inst);
@@ -614,18 +614,18 @@ public:
 
   /// Try to rotate an operation below a PHI node, using PHI nodes for
   /// its operands.
-  Instruction *foldPHIArgOpIntoPHI(PHINode &PN); 
-  Instruction *foldPHIArgBinOpIntoPHI(PHINode &PN); 
-  Instruction *foldPHIArgInsertValueInstructionIntoPHI(PHINode &PN); 
-  Instruction *foldPHIArgExtractValueInstructionIntoPHI(PHINode &PN); 
-  Instruction *foldPHIArgGEPIntoPHI(PHINode &PN); 
-  Instruction *foldPHIArgLoadIntoPHI(PHINode &PN); 
-  Instruction *foldPHIArgZextsIntoPHI(PHINode &PN); 
+  Instruction *foldPHIArgOpIntoPHI(PHINode &PN);
+  Instruction *foldPHIArgBinOpIntoPHI(PHINode &PN);
+  Instruction *foldPHIArgInsertValueInstructionIntoPHI(PHINode &PN);
+  Instruction *foldPHIArgExtractValueInstructionIntoPHI(PHINode &PN);
+  Instruction *foldPHIArgGEPIntoPHI(PHINode &PN);
+  Instruction *foldPHIArgLoadIntoPHI(PHINode &PN);
+  Instruction *foldPHIArgZextsIntoPHI(PHINode &PN);
 
   /// If an integer typed PHI has only one use which is an IntToPtr operation,
   /// replace the PHI with an existing pointer typed PHI if it exists. Otherwise
   /// insert a new pointer typed PHI and replace the original one.
-  Instruction *foldIntegerTypedPHI(PHINode &PN); 
+  Instruction *foldIntegerTypedPHI(PHINode &PN);
 
   /// Helper function for FoldPHIArgXIntoPHI() to set debug location for the
   /// folded operation.
@@ -708,18 +708,18 @@ public:
                             Value *A, Value *B, Instruction &Outer,
                             SelectPatternFlavor SPF2, Value *C);
   Instruction *foldSelectInstWithICmp(SelectInst &SI, ICmpInst *ICI);
-  Instruction *foldSelectValueEquivalence(SelectInst &SI, ICmpInst &ICI); 
+  Instruction *foldSelectValueEquivalence(SelectInst &SI, ICmpInst &ICI);
 
   Value *insertRangeTest(Value *V, const APInt &Lo, const APInt &Hi,
                          bool isSigned, bool Inside);
   Instruction *PromoteCastOfAllocation(BitCastInst &CI, AllocaInst &AI);
   bool mergeStoreIntoSuccessor(StoreInst &SI);
 
-  /// Given an 'or' instruction, check to see if it is part of a 
-  /// bswap/bitreverse idiom. If so, return the equivalent bswap/bitreverse 
-  /// intrinsic. 
-  Instruction *matchBSwapOrBitReverse(BinaryOperator &Or, bool MatchBSwaps, 
-                                      bool MatchBitReversals); 
+  /// Given an 'or' instruction, check to see if it is part of a
+  /// bswap/bitreverse idiom. If so, return the equivalent bswap/bitreverse
+  /// intrinsic.
+  Instruction *matchBSwapOrBitReverse(BinaryOperator &Or, bool MatchBSwaps,
+                                      bool MatchBitReversals);
 
   Instruction *SimplifyAnyMemTransfer(AnyMemTransferInst *MI);
   Instruction *SimplifyAnyMemSet(AnyMemSetInst *MI);
@@ -758,8 +758,8 @@ class Negator final {
   using Result = std::pair<ArrayRef<Instruction *> /*NewInstructions*/,
                            Value * /*NegatedRoot*/>;
 
-  std::array<Value *, 2> getSortedOperandsOfBinOp(Instruction *I); 
- 
+  std::array<Value *, 2> getSortedOperandsOfBinOp(Instruction *I);
+
   LLVM_NODISCARD Value *visitImpl(Value *V, unsigned Depth);
 
   LLVM_NODISCARD Value *negate(Value *V, unsigned Depth);
@@ -777,7 +777,7 @@ public:
   /// Attempt to negate \p Root. Retuns nullptr if negation can't be performed,
   /// otherwise returns negated value.
   LLVM_NODISCARD static Value *Negate(bool LHSIsZero, Value *Root,
-                                      InstCombinerImpl &IC); 
+                                      InstCombinerImpl &IC);
 };
 
 } // end namespace llvm

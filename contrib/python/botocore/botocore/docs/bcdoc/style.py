@@ -88,16 +88,16 @@ class ReSTStyle(BaseStyle):
         # problems in the ReST inline markup so we remove it here
         # by popping the last item written off the stack, striping
         # the whitespace and then pushing it back on the stack.
-        last_write = self.doc.pop_write().rstrip(' ') 
- 
-        # Sometimes, for whatever reason, a tag like <b/> is present. This 
-        # is problematic because if we simply translate that directly then 
-        # we end up with something like ****, which rst will assume is a 
-        # heading instead of an empty bold. 
-        if last_write == markup: 
-            return 
- 
-        self.doc.push_write(last_write) 
+        last_write = self.doc.pop_write().rstrip(' ')
+
+        # Sometimes, for whatever reason, a tag like <b/> is present. This
+        # is problematic because if we simply translate that directly then
+        # we end up with something like ****, which rst will assume is a
+        # heading instead of an empty bold.
+        if last_write == markup:
+            return
+
+        self.doc.push_write(last_write)
         self.doc.write(markup + ' ')
 
     def start_bold(self, attrs=None):
@@ -410,9 +410,9 @@ class ReSTStyle(BaseStyle):
             self.doc.write('`%s <%s>`_' % (title, link))
         else:
             self.doc.write(title)
- 
-    def internal_link(self, title, page): 
-        if self.doc.target == 'html': 
-            self.doc.write(':doc:`%s <%s>`' % (title, page)) 
-        else: 
-            self.doc.write(title) 
+
+    def internal_link(self, title, page):
+        if self.doc.target == 'html':
+            self.doc.write(':doc:`%s <%s>`' % (title, page))
+        else:
+            self.doc.write(title)

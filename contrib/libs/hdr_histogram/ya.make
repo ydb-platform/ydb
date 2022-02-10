@@ -7,8 +7,8 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.9.5) 
- 
+VERSION(0.9.5)
+
 OWNER(
     jamel
     g:contrib

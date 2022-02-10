@@ -15,28 +15,28 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12 
-    contrib/libs/llvm12/include 
-    contrib/libs/llvm12/lib/Analysis 
-    contrib/libs/llvm12/lib/CodeGen 
-    contrib/libs/llvm12/lib/CodeGen/AsmPrinter 
-    contrib/libs/llvm12/lib/CodeGen/GlobalISel 
-    contrib/libs/llvm12/lib/CodeGen/SelectionDAG 
-    contrib/libs/llvm12/lib/IR 
-    contrib/libs/llvm12/lib/MC 
-    contrib/libs/llvm12/lib/Support 
-    contrib/libs/llvm12/lib/Target 
-    contrib/libs/llvm12/lib/Target/AArch64/MCTargetDesc 
-    contrib/libs/llvm12/lib/Target/AArch64/TargetInfo 
-    contrib/libs/llvm12/lib/Target/AArch64/Utils 
-    contrib/libs/llvm12/lib/Transforms/CFGuard 
-    contrib/libs/llvm12/lib/Transforms/Scalar 
-    contrib/libs/llvm12/lib/Transforms/Utils 
+    contrib/libs/llvm12
+    contrib/libs/llvm12/include
+    contrib/libs/llvm12/lib/Analysis
+    contrib/libs/llvm12/lib/CodeGen
+    contrib/libs/llvm12/lib/CodeGen/AsmPrinter
+    contrib/libs/llvm12/lib/CodeGen/GlobalISel
+    contrib/libs/llvm12/lib/CodeGen/SelectionDAG
+    contrib/libs/llvm12/lib/IR
+    contrib/libs/llvm12/lib/MC
+    contrib/libs/llvm12/lib/Support
+    contrib/libs/llvm12/lib/Target
+    contrib/libs/llvm12/lib/Target/AArch64/MCTargetDesc
+    contrib/libs/llvm12/lib/Target/AArch64/TargetInfo
+    contrib/libs/llvm12/lib/Target/AArch64/Utils
+    contrib/libs/llvm12/lib/Transforms/CFGuard
+    contrib/libs/llvm12/lib/Transforms/Scalar
+    contrib/libs/llvm12/lib/Transforms/Utils
 )
 
 ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64 
-    contrib/libs/llvm12/lib/Target/AArch64 
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64
+    contrib/libs/llvm12/lib/Target/AArch64
 )
 
 NO_COMPILER_WARNINGS()
@@ -88,8 +88,8 @@ SRCS(
     GISel/AArch64InstructionSelector.cpp
     GISel/AArch64LegalizerInfo.cpp
     GISel/AArch64PostLegalizerCombiner.cpp
-    GISel/AArch64PostLegalizerLowering.cpp 
-    GISel/AArch64PostSelectOptimize.cpp 
+    GISel/AArch64PostLegalizerLowering.cpp
+    GISel/AArch64PostSelectOptimize.cpp
     GISel/AArch64PreLegalizerCombiner.cpp
     GISel/AArch64RegisterBankInfo.cpp
     SVEIntrinsicOpts.cpp

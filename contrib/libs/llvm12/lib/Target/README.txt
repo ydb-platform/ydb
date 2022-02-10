@@ -1541,9 +1541,9 @@ int bar() { return foo("abcd"); }
 
 //===---------------------------------------------------------------------===//
 
-function-attrs doesn't know much about memcpy/memset.  This function should be 
+function-attrs doesn't know much about memcpy/memset.  This function should be
 marked readnone rather than readonly, since it only twiddles local memory, but
-function-attrs doesn't handle memset/memcpy/memmove aggressively: 
+function-attrs doesn't handle memset/memcpy/memmove aggressively:
 
 struct X { int *p; int *q; };
 int foo() {
@@ -1557,7 +1557,7 @@ int foo() {
 }
 
 This can be seen at:
-$ clang t.c -S -o - -mkernel -O0 -emit-llvm | opt -function-attrs -S 
+$ clang t.c -S -o - -mkernel -O0 -emit-llvm | opt -function-attrs -S
 
 
 //===---------------------------------------------------------------------===//
@@ -1840,7 +1840,7 @@ current definition always folds to a constant. We also should make sure that
 we remove checking in code like
 
   char *p = malloc(strlen(s)+1);
-  __strcpy_chk(p, s, __builtin_object_size(p, 0)); 
+  __strcpy_chk(p, s, __builtin_object_size(p, 0));
 
 //===---------------------------------------------------------------------===//
 

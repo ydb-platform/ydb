@@ -174,8 +174,8 @@ toNullTerminatedCStringArray(ArrayRef<StringRef> Strings, StringSaver &Saver) {
 static bool Execute(ProcessInfo &PI, StringRef Program,
                     ArrayRef<StringRef> Args, Optional<ArrayRef<StringRef>> Env,
                     ArrayRef<Optional<StringRef>> Redirects,
-                    unsigned MemoryLimit, std::string *ErrMsg, 
-                    BitVector *AffinityMask) { 
+                    unsigned MemoryLimit, std::string *ErrMsg,
+                    BitVector *AffinityMask) {
   if (!llvm::sys::fs::exists(Program)) {
     if (ErrMsg)
       *ErrMsg = std::string("Executable \"") + Program.str() +
@@ -183,9 +183,9 @@ static bool Execute(ProcessInfo &PI, StringRef Program,
     return false;
   }
 
-  assert(!AffinityMask && "Starting a process with an affinity mask is " 
-                          "currently not supported on Unix!"); 
- 
+  assert(!AffinityMask && "Starting a process with an affinity mask is "
+                          "currently not supported on Unix!");
+
   BumpPtrAllocator Allocator;
   StringSaver Saver(Allocator);
   std::vector<const char *> ArgVector, EnvVector;

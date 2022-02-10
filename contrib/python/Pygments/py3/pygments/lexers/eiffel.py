@@ -4,7 +4,7 @@
 
     Lexer for the Eiffel language.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -46,7 +46,7 @@ class EiffelLexer(RegexLexer):
                 'require', 'rescue', 'retry', 'select', 'separate', 'then',
                 'undefine', 'until', 'variant', 'when'), prefix=r'(?i)\b', suffix=r'\b'),
              Keyword.Reserved),
-            (r'"\[([^\]%]|%(.|\n)|\][^"])*?\]"', String), 
+            (r'"\[([^\]%]|%(.|\n)|\][^"])*?\]"', String),
             (r'"([^"%\n]|%.)*?"', String),
             include('numbers'),
             (r"'([^'%]|%'|%%)'", String.Char),

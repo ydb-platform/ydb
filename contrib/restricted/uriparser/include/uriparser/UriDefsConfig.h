@@ -59,15 +59,15 @@
 /* No encoding at all */
 #  error URI_NO_ANSI and URI_NO_UNICODE cannot go together.
 # else
-/* Wide strings only */ 
+/* Wide strings only */
 #  define URI_ENABLE_UNICODE  1
 # endif
 #else
 # ifdef URI_NO_UNICODE
-/* Narrow strings only */ 
+/* Narrow strings only */
 #  define URI_ENABLE_ANSI     1
 # else
-/* Both narrow and wide strings */ 
+/* Both narrow and wide strings */
 #  define URI_ENABLE_ANSI     1
 #  define URI_ENABLE_UNICODE  1
 # endif
@@ -82,7 +82,7 @@
 /* Intel C/C++ */
 /* http://predef.sourceforge.net/precomp.html#sec20 */
 /* http://www.intel.com/support/performancetools/c/windows/sb/CS-007751.htm#2 */
-# define URI_INLINE __forceinline 
+# define URI_INLINE __forceinline
 #elif defined(_MSC_VER)
 /* Microsoft Visual C++ */
 /* http://predef.sourceforge.net/precomp.html#sec32 */

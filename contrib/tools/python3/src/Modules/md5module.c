@@ -74,7 +74,7 @@ typedef struct {
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@gmail.com, https://www.libtom.net 
+ * Tom St Denis, tomstdenis@gmail.com, https://www.libtom.net
  */
 
 /* rotate the hard way (platform optimizations could be done) */
@@ -119,7 +119,7 @@ typedef struct {
     a = (a + I(b,c,d) + M + t); a = ROLc(a, s) + b;
 
 
-static void md5_compress(struct md5_state *md5, const unsigned char *buf) 
+static void md5_compress(struct md5_state *md5, const unsigned char *buf)
 {
     MD5_INT32 i, W[16], a, b, c, d;
 
@@ -242,7 +242,7 @@ md5_process(struct md5_state *md5, const unsigned char *in, Py_ssize_t inlen)
 
     while (inlen > 0) {
         if (md5->curlen == 0 && inlen >= MD5_BLOCKSIZE) {
-           md5_compress(md5, in); 
+           md5_compress(md5, in);
            md5->length    += MD5_BLOCKSIZE * 8;
            in             += MD5_BLOCKSIZE;
            inlen          -= MD5_BLOCKSIZE;
@@ -469,10 +469,10 @@ static PyTypeObject MD5type = {
     0,                  /*tp_itemsize*/
     /* methods */
     MD5_dealloc,        /*tp_dealloc*/
-    0,                  /*tp_vectorcall_offset*/ 
+    0,                  /*tp_vectorcall_offset*/
     0,                  /*tp_getattr*/
     0,                  /*tp_setattr*/
-    0,                  /*tp_as_async*/ 
+    0,                  /*tp_as_async*/
     0,                  /*tp_repr*/
     0,                  /*tp_as_number*/
     0,                  /*tp_as_sequence*/
@@ -503,15 +503,15 @@ static PyTypeObject MD5type = {
 _md5.md5
 
     string: object(c_default="NULL") = b''
-    * 
-    usedforsecurity: bool = True 
+    *
+    usedforsecurity: bool = True
 
 Return a new MD5 hash object; optionally initialized with a string.
 [clinic start generated code]*/
 
 static PyObject *
-_md5_md5_impl(PyObject *module, PyObject *string, int usedforsecurity) 
-/*[clinic end generated code: output=587071f76254a4ac input=7a144a1905636985]*/ 
+_md5_md5_impl(PyObject *module, PyObject *string, int usedforsecurity)
+/*[clinic end generated code: output=587071f76254a4ac input=7a144a1905636985]*/
 {
     MD5object *new;
     Py_buffer buf;
@@ -569,15 +569,15 @@ PyInit__md5(void)
 {
     PyObject *m;
 
-    Py_SET_TYPE(&MD5type, &PyType_Type); 
-    if (PyType_Ready(&MD5type) < 0) { 
+    Py_SET_TYPE(&MD5type, &PyType_Type);
+    if (PyType_Ready(&MD5type) < 0) {
         return NULL;
-    } 
+    }
 
     m = PyModule_Create(&_md5module);
-    if (m == NULL) { 
+    if (m == NULL) {
         return NULL;
-    } 
+    }
 
     Py_INCREF((PyObject *)&MD5type);
     PyModule_AddObject(m, "MD5Type", (PyObject *)&MD5type);

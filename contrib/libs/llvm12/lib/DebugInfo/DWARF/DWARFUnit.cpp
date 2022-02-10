@@ -198,8 +198,8 @@ DWARFUnit::getAddrOffsetSectionItem(uint32_t Index) const {
     // probably shouldn't be valid, but if a use case is found, here's where to
     // support it (probably have to linearly search for the matching skeleton CU
     // here)
-    if (hasSingleElement(R)) 
-      return (*R.begin())->getAddrOffsetSectionItem(Index); 
+    if (hasSingleElement(R))
+      return (*R.begin())->getAddrOffsetSectionItem(Index);
   }
   if (!AddrOffsetSectionBase)
     return None;
@@ -467,7 +467,7 @@ Error DWARFUnit::tryExtractDIEsIfNeeded(bool CUDieOnly) {
   if (getVersion() >= 5) {
     // In case of DWP, the base offset from the index has to be added.
     if (IsDWO) {
-      uint64_t ContributionBaseOffset = 0; 
+      uint64_t ContributionBaseOffset = 0;
       if (auto *IndexEntry = Header.getIndexEntry())
         if (auto *Contrib = IndexEntry->getContribution(DW_SECT_RNGLISTS))
           ContributionBaseOffset = Contrib->Offset;
@@ -477,36 +477,36 @@ Error DWARFUnit::tryExtractDIEsIfNeeded(bool CUDieOnly) {
               DWARFListTableHeader::getHeaderSize(Header.getFormat()));
     } else
       setRangesSection(&Context.getDWARFObj().getRnglistsSection(),
-                       toSectionOffset(UnitDie.find(DW_AT_rnglists_base), 
-                                       DWARFListTableHeader::getHeaderSize( 
-                                           Header.getFormat()))); 
-  } 
+                       toSectionOffset(UnitDie.find(DW_AT_rnglists_base),
+                                       DWARFListTableHeader::getHeaderSize(
+                                           Header.getFormat())));
+  }
 
-  if (IsDWO) { 
-    // If we are reading a package file, we need to adjust the location list 
-    // data based on the index entries. 
-    StringRef Data = Header.getVersion() >= 5 
-                         ? Context.getDWARFObj().getLoclistsDWOSection().Data 
-                         : Context.getDWARFObj().getLocDWOSection().Data; 
-    if (auto *IndexEntry = Header.getIndexEntry()) 
-      if (const auto *C = IndexEntry->getContribution( 
-              Header.getVersion() >= 5 ? DW_SECT_LOCLISTS : DW_SECT_EXT_LOC)) 
-        Data = Data.substr(C->Offset, C->Length); 
+  if (IsDWO) {
+    // If we are reading a package file, we need to adjust the location list
+    // data based on the index entries.
+    StringRef Data = Header.getVersion() >= 5
+                         ? Context.getDWARFObj().getLoclistsDWOSection().Data
+                         : Context.getDWARFObj().getLocDWOSection().Data;
+    if (auto *IndexEntry = Header.getIndexEntry())
+      if (const auto *C = IndexEntry->getContribution(
+              Header.getVersion() >= 5 ? DW_SECT_LOCLISTS : DW_SECT_EXT_LOC))
+        Data = Data.substr(C->Offset, C->Length);
 
-    DWARFDataExtractor DWARFData(Data, isLittleEndian, getAddressByteSize()); 
-    LocTable = 
-        std::make_unique<DWARFDebugLoclists>(DWARFData, Header.getVersion()); 
-    LocSectionBase = DWARFListTableHeader::getHeaderSize(Header.getFormat()); 
-  } else if (getVersion() >= 5) { 
-    LocTable = std::make_unique<DWARFDebugLoclists>( 
-        DWARFDataExtractor(Context.getDWARFObj(), 
-                           Context.getDWARFObj().getLoclistsSection(), 
-                           isLittleEndian, getAddressByteSize()), 
-        getVersion()); 
-  } else { 
-    LocTable = std::make_unique<DWARFDebugLoc>(DWARFDataExtractor( 
-        Context.getDWARFObj(), Context.getDWARFObj().getLocSection(), 
-        isLittleEndian, getAddressByteSize())); 
+    DWARFDataExtractor DWARFData(Data, isLittleEndian, getAddressByteSize());
+    LocTable =
+        std::make_unique<DWARFDebugLoclists>(DWARFData, Header.getVersion());
+    LocSectionBase = DWARFListTableHeader::getHeaderSize(Header.getFormat());
+  } else if (getVersion() >= 5) {
+    LocTable = std::make_unique<DWARFDebugLoclists>(
+        DWARFDataExtractor(Context.getDWARFObj(),
+                           Context.getDWARFObj().getLoclistsSection(),
+                           isLittleEndian, getAddressByteSize()),
+        getVersion());
+  } else {
+    LocTable = std::make_unique<DWARFDebugLoc>(DWARFDataExtractor(
+        Context.getDWARFObj(), Context.getDWARFObj().getLocSection(),
+        isLittleEndian, getAddressByteSize()));
   }
 
   // Don't fall back to DW_AT_GNU_ranges_base: it should be ignored for
@@ -549,8 +549,8 @@ bool DWARFUnit::parseDWO() {
   if (AddrOffsetSectionBase)
     DWO->setAddrOffsetSection(AddrOffsetSection, *AddrOffsetSectionBase);
   if (getVersion() >= 5) {
-    DWO->setRangesSection(&Context.getDWARFObj().getRnglistsDWOSection(), 
-                          DWARFListTableHeader::getHeaderSize(getFormat())); 
+    DWO->setRangesSection(&Context.getDWARFObj().getRnglistsDWOSection(),
+                          DWARFListTableHeader::getHeaderSize(getFormat()));
   } else {
     auto DWORangesBase = UnitDie.getRangesBaseAttribute();
     DWO->setRangesSection(RangeSection, DWORangesBase ? *DWORangesBase : 0);
@@ -574,13 +574,13 @@ DWARFUnit::findRnglistFromOffset(uint64_t Offset) {
       return std::move(E);
     return RangeList.getAbsoluteRanges(getBaseAddress());
   }
-  DWARFDataExtractor RangesData(Context.getDWARFObj(), *RangeSection, 
-                                isLittleEndian, Header.getAddressByteSize()); 
-  DWARFDebugRnglistTable RnglistTable; 
-  auto RangeListOrError = RnglistTable.findList(RangesData, Offset); 
-  if (RangeListOrError) 
-    return RangeListOrError.get().getAbsoluteRanges(getBaseAddress(), *this); 
-  return RangeListOrError.takeError(); 
+  DWARFDataExtractor RangesData(Context.getDWARFObj(), *RangeSection,
+                                isLittleEndian, Header.getAddressByteSize());
+  DWARFDebugRnglistTable RnglistTable;
+  auto RangeListOrError = RnglistTable.findList(RangesData, Offset);
+  if (RangeListOrError)
+    return RangeListOrError.get().getAbsoluteRanges(getBaseAddress(), *this);
+  return RangeListOrError.takeError();
 }
 
 Expected<DWARFAddressRangesVector>
@@ -589,9 +589,9 @@ DWARFUnit::findRnglistFromIndex(uint32_t Index) {
     return findRnglistFromOffset(*Offset);
 
   return createStringError(errc::invalid_argument,
-                           "invalid range list table index %d (possibly " 
-                           "missing the entire range list table)", 
-                           Index); 
+                           "invalid range list table index %d (possibly "
+                           "missing the entire range list table)",
+                           Index);
 }
 
 Expected<DWARFAddressRangesVector> DWARFUnit::collectAddressRanges() {
@@ -921,35 +921,35 @@ DWARFUnit::determineStringOffsetsTableContributionDWO(DWARFDataExtractor & DA) {
   // Prior to DWARF v5, we derive the contribution size from the
   // index table (in a package file). In a .dwo file it is simply
   // the length of the string offsets section.
-  StrOffsetsContributionDescriptor Desc; 
+  StrOffsetsContributionDescriptor Desc;
   if (C)
-    Desc = StrOffsetsContributionDescriptor(C->Offset, C->Length, 4, 
-                                            Header.getFormat()); 
-  else if (!IndexEntry && !StringOffsetSection.Data.empty()) 
-    Desc = StrOffsetsContributionDescriptor(0, StringOffsetSection.Data.size(), 
-                                            4, Header.getFormat()); 
-  else 
-    return None; 
-  auto DescOrError = Desc.validateContributionSize(DA); 
-  if (!DescOrError) 
-    return DescOrError.takeError(); 
-  return *DescOrError; 
-} 
- 
-Optional<uint64_t> DWARFUnit::getRnglistOffset(uint32_t Index) { 
-  DataExtractor RangesData(RangeSection->Data, isLittleEndian, 
-                           getAddressByteSize()); 
-  DWARFDataExtractor RangesDA(Context.getDWARFObj(), *RangeSection, 
-                              isLittleEndian, 0); 
-  if (Optional<uint64_t> Off = llvm::DWARFListTableHeader::getOffsetEntry( 
-          RangesData, RangeSectionBase, getFormat(), Index)) 
-    return *Off + RangeSectionBase; 
+    Desc = StrOffsetsContributionDescriptor(C->Offset, C->Length, 4,
+                                            Header.getFormat());
+  else if (!IndexEntry && !StringOffsetSection.Data.empty())
+    Desc = StrOffsetsContributionDescriptor(0, StringOffsetSection.Data.size(),
+                                            4, Header.getFormat());
+  else
+    return None;
+  auto DescOrError = Desc.validateContributionSize(DA);
+  if (!DescOrError)
+    return DescOrError.takeError();
+  return *DescOrError;
+}
+
+Optional<uint64_t> DWARFUnit::getRnglistOffset(uint32_t Index) {
+  DataExtractor RangesData(RangeSection->Data, isLittleEndian,
+                           getAddressByteSize());
+  DWARFDataExtractor RangesDA(Context.getDWARFObj(), *RangeSection,
+                              isLittleEndian, 0);
+  if (Optional<uint64_t> Off = llvm::DWARFListTableHeader::getOffsetEntry(
+          RangesData, RangeSectionBase, getFormat(), Index))
+    return *Off + RangeSectionBase;
   return None;
 }
- 
-Optional<uint64_t> DWARFUnit::getLoclistOffset(uint32_t Index) { 
-  if (Optional<uint64_t> Off = llvm::DWARFListTableHeader::getOffsetEntry( 
-          LocTable->getData(), LocSectionBase, getFormat(), Index)) 
-    return *Off + LocSectionBase; 
-  return None; 
-} 
+
+Optional<uint64_t> DWARFUnit::getLoclistOffset(uint32_t Index) {
+  if (Optional<uint64_t> Off = llvm::DWARFListTableHeader::getOffsetEntry(
+          LocTable->getData(), LocSectionBase, getFormat(), Index))
+    return *Off + LocSectionBase;
+  return None;
+}

@@ -41,7 +41,7 @@ private:
   // Initialize class variables.
   void initialize(MachineFunction &MFParm);
 
-  bool processAtomicInsts(void); 
+  bool processAtomicInsts(void);
 
 public:
 
@@ -49,7 +49,7 @@ public:
   bool runOnMachineFunction(MachineFunction &MF) override {
     if (!skipFunction(MF.getFunction())) {
       initialize(MF);
-      return processAtomicInsts(); 
+      return processAtomicInsts();
     }
     return false;
   }
@@ -145,13 +145,13 @@ static bool hasLiveDefs(const MachineInstr &MI, const TargetRegisterInfo *TRI) {
   // Otherwise, return true if any aliased SuperReg of GPR32 is not dead.
   for (auto I : GPR32LiveDefs)
     for (MCSuperRegIterator SR(I, TRI); SR.isValid(); ++SR)
-      if (!llvm::is_contained(GPR64DeadDefs, *SR)) 
-        return true; 
+      if (!llvm::is_contained(GPR64DeadDefs, *SR))
+        return true;
 
   return false;
 }
 
-bool BPFMIPreEmitChecking::processAtomicInsts(void) { 
+bool BPFMIPreEmitChecking::processAtomicInsts(void) {
   for (MachineBasicBlock &MBB : *MF) {
     for (MachineInstr &MI : MBB) {
       if (MI.getOpcode() != BPF::XADDW &&
@@ -172,71 +172,71 @@ bool BPFMIPreEmitChecking::processAtomicInsts(void) {
     }
   }
 
-  // Check return values of atomic_fetch_and_{add,and,or,xor}. 
-  // If the return is not used, the atomic_fetch_and_<op> instruction 
-  // is replaced with atomic_<op> instruction. 
-  MachineInstr *ToErase = nullptr; 
-  bool Changed = false; 
-  const BPFInstrInfo *TII = MF->getSubtarget<BPFSubtarget>().getInstrInfo(); 
-  for (MachineBasicBlock &MBB : *MF) { 
-    for (MachineInstr &MI : MBB) { 
-      if (ToErase) { 
-        ToErase->eraseFromParent(); 
-        ToErase = nullptr; 
-      } 
- 
-      if (MI.getOpcode() != BPF::XFADDW32 && MI.getOpcode() != BPF::XFADDD && 
-          MI.getOpcode() != BPF::XFANDW32 && MI.getOpcode() != BPF::XFANDD && 
-          MI.getOpcode() != BPF::XFXORW32 && MI.getOpcode() != BPF::XFXORD && 
-          MI.getOpcode() != BPF::XFORW32 && MI.getOpcode() != BPF::XFORD) 
-        continue; 
- 
-      if (hasLiveDefs(MI, TRI)) 
-        continue; 
- 
-      LLVM_DEBUG(dbgs() << "Transforming "; MI.dump()); 
-      unsigned newOpcode; 
-      switch (MI.getOpcode()) { 
-      case BPF::XFADDW32: 
-        newOpcode = BPF::XADDW32; 
-        break; 
-      case BPF::XFADDD: 
-        newOpcode = BPF::XADDD; 
-        break; 
-      case BPF::XFANDW32: 
-        newOpcode = BPF::XANDW32; 
-        break; 
-      case BPF::XFANDD: 
-        newOpcode = BPF::XANDD; 
-        break; 
-      case BPF::XFXORW32: 
-        newOpcode = BPF::XXORW32; 
-        break; 
-      case BPF::XFXORD: 
-        newOpcode = BPF::XXORD; 
-        break; 
-      case BPF::XFORW32: 
-        newOpcode = BPF::XORW32; 
-        break; 
-      case BPF::XFORD: 
-        newOpcode = BPF::XORD; 
-        break; 
-      default: 
-        llvm_unreachable("Incorrect Atomic Instruction Opcode"); 
-      } 
- 
-      BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(newOpcode)) 
-          .add(MI.getOperand(0)) 
-          .add(MI.getOperand(1)) 
-          .add(MI.getOperand(2)) 
-          .add(MI.getOperand(3)); 
- 
-      ToErase = &MI; 
-      Changed = true; 
-    } 
-  } 
- 
-  return Changed; 
+  // Check return values of atomic_fetch_and_{add,and,or,xor}.
+  // If the return is not used, the atomic_fetch_and_<op> instruction
+  // is replaced with atomic_<op> instruction.
+  MachineInstr *ToErase = nullptr;
+  bool Changed = false;
+  const BPFInstrInfo *TII = MF->getSubtarget<BPFSubtarget>().getInstrInfo();
+  for (MachineBasicBlock &MBB : *MF) {
+    for (MachineInstr &MI : MBB) {
+      if (ToErase) {
+        ToErase->eraseFromParent();
+        ToErase = nullptr;
+      }
+
+      if (MI.getOpcode() != BPF::XFADDW32 && MI.getOpcode() != BPF::XFADDD &&
+          MI.getOpcode() != BPF::XFANDW32 && MI.getOpcode() != BPF::XFANDD &&
+          MI.getOpcode() != BPF::XFXORW32 && MI.getOpcode() != BPF::XFXORD &&
+          MI.getOpcode() != BPF::XFORW32 && MI.getOpcode() != BPF::XFORD)
+        continue;
+
+      if (hasLiveDefs(MI, TRI))
+        continue;
+
+      LLVM_DEBUG(dbgs() << "Transforming "; MI.dump());
+      unsigned newOpcode;
+      switch (MI.getOpcode()) {
+      case BPF::XFADDW32:
+        newOpcode = BPF::XADDW32;
+        break;
+      case BPF::XFADDD:
+        newOpcode = BPF::XADDD;
+        break;
+      case BPF::XFANDW32:
+        newOpcode = BPF::XANDW32;
+        break;
+      case BPF::XFANDD:
+        newOpcode = BPF::XANDD;
+        break;
+      case BPF::XFXORW32:
+        newOpcode = BPF::XXORW32;
+        break;
+      case BPF::XFXORD:
+        newOpcode = BPF::XXORD;
+        break;
+      case BPF::XFORW32:
+        newOpcode = BPF::XORW32;
+        break;
+      case BPF::XFORD:
+        newOpcode = BPF::XORD;
+        break;
+      default:
+        llvm_unreachable("Incorrect Atomic Instruction Opcode");
+      }
+
+      BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(newOpcode))
+          .add(MI.getOperand(0))
+          .add(MI.getOperand(1))
+          .add(MI.getOperand(2))
+          .add(MI.getOperand(3));
+
+      ToErase = &MI;
+      Changed = true;
+    }
+  }
+
+  return Changed;
 }
 
 } // end default namespace

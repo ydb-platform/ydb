@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2020 Stefan Krah. All rights reserved. 
+ * Copyright (c) 2008-2020 Stefan Krah. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,8 +26,8 @@
  */
 
 
-#ifndef LIBMPDEC_BITS_H_ 
-#define LIBMPDEC_BITS_H_ 
+#ifndef LIBMPDEC_BITS_H_
+#define LIBMPDEC_BITS_H_
 
 
 #include "mpdecimal.h"
@@ -185,4 +185,4 @@ mpd_bsf(mpd_size_t a)
 #endif /* BSR/BSF */
 
 
-#endif /* LIBMPDEC_BITS_H_ */ 
+#endif /* LIBMPDEC_BITS_H_ */

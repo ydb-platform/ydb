@@ -135,20 +135,20 @@ namespace orc {
 
   void BloomFilterImpl::addBytes(const char * data, int64_t length) {
     uint64_t hash64 = getBytesHash(data, length);
-    addHash(static_cast<int64_t>(hash64)); 
+    addHash(static_cast<int64_t>(hash64));
   }
 
   void BloomFilterImpl::addLong(int64_t data) {
-    addHash(getLongHash(data)); 
+    addHash(getLongHash(data));
   }
 
   bool BloomFilterImpl::testBytes(const char * data, int64_t length) const {
     uint64_t hash64 = getBytesHash(data, length);
-    return testHash(static_cast<int64_t>(hash64)); 
+    return testHash(static_cast<int64_t>(hash64));
   }
 
   bool BloomFilterImpl::testLong(int64_t data) const {
-    return testHash(getLongHash(data)); 
+    return testHash(getLongHash(data));
   }
 
   uint64_t BloomFilterImpl::sizeInBytes() const {
@@ -210,11 +210,11 @@ namespace orc {
 
   DIAGNOSTIC_POP
 
-  void BloomFilterImpl::addHash(int64_t hash64) { 
+  void BloomFilterImpl::addHash(int64_t hash64) {
     int32_t hash1 = static_cast<int32_t>(hash64 & 0xffffffff);
-    // In Java codes, we use "hash64 >>> 32" which is an unsigned shift op. 
-    // So we cast hash64 to uint64_t here for an unsigned right shift. 
-    int32_t hash2 = static_cast<int32_t>(static_cast<uint64_t>(hash64) >> 32); 
+    // In Java codes, we use "hash64 >>> 32" which is an unsigned shift op.
+    // So we cast hash64 to uint64_t here for an unsigned right shift.
+    int32_t hash2 = static_cast<int32_t>(static_cast<uint64_t>(hash64) >> 32);
 
     for (int32_t i = 1; i <= mNumHashFunctions; ++i) {
       int32_t combinedHash = hash1 + i * hash2;
@@ -227,11 +227,11 @@ namespace orc {
     }
   }
 
-  bool BloomFilterImpl::testHash(int64_t hash64) const{ 
+  bool BloomFilterImpl::testHash(int64_t hash64) const{
     int32_t hash1 = static_cast<int32_t>(hash64 & 0xffffffff);
-    // In Java codes, we use "hash64 >>> 32" which is an unsigned shift op. 
-    // So we cast hash64 to uint64_t here for an unsigned right shift. 
-    int32_t hash2 = static_cast<int32_t>(static_cast<uint64_t>(hash64) >> 32); 
+    // In Java codes, we use "hash64 >>> 32" which is an unsigned shift op.
+    // So we cast hash64 to uint64_t here for an unsigned right shift.
+    int32_t hash2 = static_cast<int32_t>(static_cast<uint64_t>(hash64) >> 32);
 
     for (int32_t i = 1; i <= mNumHashFunctions; ++i) {
       int32_t combinedHash = hash1 + i * hash2;

@@ -90,11 +90,11 @@ class StdoutRefactoringTool(refactor.MultiprocessRefactoringTool):
             if os.path.lexists(backup):
                 try:
                     os.remove(backup)
-                except OSError: 
+                except OSError:
                     self.log_message("Can't remove backup %s", backup)
             try:
                 os.rename(filename, backup)
-            except OSError: 
+            except OSError:
                 self.log_message("Can't rename %s to %s", filename, backup)
         # Actually write the new file
         write = super(StdoutRefactoringTool, self).write_file
@@ -154,8 +154,8 @@ def main(fixer_pkg, args=None):
                       help="List available transformations")
     parser.add_option("-p", "--print-function", action="store_true",
                       help="Modify the grammar so that print() is a function")
-    parser.add_option("-e", "--exec-function", action="store_true", 
-                      help="Modify the grammar so that exec() is a function") 
+    parser.add_option("-e", "--exec-function", action="store_true",
+                      help="Modify the grammar so that exec() is a function")
     parser.add_option("-v", "--verbose", action="store_true",
                       help="More verbose logging")
     parser.add_option("--no-diffs", action="store_true",
@@ -213,9 +213,9 @@ def main(fixer_pkg, args=None):
     if options.print_function:
         flags["print_function"] = True
 
-    if options.exec_function: 
-        flags["exec_function"] = True 
- 
+    if options.exec_function:
+        flags["exec_function"] = True
+
     # Set up logging handler
     level = logging.DEBUG if options.verbose else logging.INFO
     logging.basicConfig(format='%(name)s: %(message)s', level=level)

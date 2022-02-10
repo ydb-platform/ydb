@@ -559,7 +559,7 @@ bool CFLAndersAAResult::FunctionInfo::mayAlias(
 
     if (RangePair.first != RangePair.second) {
       // Be conservative about unknown sizes
-      if (!MaybeLHSSize.hasValue() || !MaybeRHSSize.hasValue()) 
+      if (!MaybeLHSSize.hasValue() || !MaybeRHSSize.hasValue())
         return true;
 
       const uint64_t LHSSize = MaybeLHSSize.getValue();

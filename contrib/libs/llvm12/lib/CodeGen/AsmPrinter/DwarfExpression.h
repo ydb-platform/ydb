@@ -218,7 +218,7 @@ protected:
   /// Return whether the given machine register is the frame register in the
   /// current function.
   virtual bool isFrameRegister(const TargetRegisterInfo &TRI,
-                               llvm::Register MachineReg) = 0; 
+                               llvm::Register MachineReg) = 0;
 
   /// Emit a DW_OP_reg operation. Note that this is only legal inside a DWARF
   /// register location description.
@@ -245,7 +245,7 @@ protected:
   /// multiple subregisters that alias the register.
   ///
   /// \return false if no DWARF register exists for MachineReg.
-  bool addMachineReg(const TargetRegisterInfo &TRI, llvm::Register MachineReg, 
+  bool addMachineReg(const TargetRegisterInfo &TRI, llvm::Register MachineReg,
                      unsigned MaxSize = ~1U);
 
   /// Emit a DW_OP_piece or DW_OP_bit_piece operation for a variable fragment.
@@ -299,9 +299,9 @@ public:
   /// Emit an unsigned constant.
   void addUnsignedConstant(const APInt &Value);
 
-  /// Emit an floating point constant. 
-  void addConstantFP(const APFloat &Value, const AsmPrinter &AP); 
- 
+  /// Emit an floating point constant.
+  void addConstantFP(const APFloat &Value, const AsmPrinter &AP);
+
   /// Lock this down to become a memory location description.
   void setMemoryLocationKind() {
     assert(isUnknownLocation());
@@ -325,8 +325,8 @@ public:
   /// \return                         false if no DWARF register exists
   ///                                 for MachineReg.
   bool addMachineRegExpression(const TargetRegisterInfo &TRI,
-                               DIExpressionCursor &Expr, 
-                               llvm::Register MachineReg, 
+                               DIExpressionCursor &Expr,
+                               llvm::Register MachineReg,
                                unsigned FragmentOffsetInBits = 0);
 
   /// Begin emission of an entry value dwarf operation. The entry value's
@@ -389,7 +389,7 @@ class DebugLocDwarfExpression final : public DwarfExpression {
   void commitTemporaryBuffer() override;
 
   bool isFrameRegister(const TargetRegisterInfo &TRI,
-                       llvm::Register MachineReg) override; 
+                       llvm::Register MachineReg) override;
 
 public:
   DebugLocDwarfExpression(unsigned DwarfVersion, BufferByteStreamer &BS,
@@ -419,7 +419,7 @@ class DIEDwarfExpression final : public DwarfExpression {
   void commitTemporaryBuffer() override;
 
   bool isFrameRegister(const TargetRegisterInfo &TRI,
-                       llvm::Register MachineReg) override; 
+                       llvm::Register MachineReg) override;
 
 public:
   DIEDwarfExpression(const AsmPrinter &AP, DwarfCompileUnit &CU, DIELoc &DIE);

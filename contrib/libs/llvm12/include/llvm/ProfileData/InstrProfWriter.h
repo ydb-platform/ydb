@@ -47,16 +47,16 @@ private:
   bool Sparse;
   StringMap<ProfilingData> FunctionData;
   ProfKind ProfileKind = PF_Unknown;
-  bool InstrEntryBBEnabled; 
+  bool InstrEntryBBEnabled;
   // Use raw pointer here for the incomplete type object.
   InstrProfRecordWriterTrait *InfoObj;
 
 public:
-  InstrProfWriter(bool Sparse = false, bool InstrEntryBBEnabled = false); 
+  InstrProfWriter(bool Sparse = false, bool InstrEntryBBEnabled = false);
   ~InstrProfWriter();
 
-  StringMap<ProfilingData> &getProfileData() { return FunctionData; } 
- 
+  StringMap<ProfilingData> &getProfileData() { return FunctionData; }
+
   /// Add function counts for the given function. If there are already counts
   /// for this function and the hash and number of counts match, each counter is
   /// summed. Optionally scale counts by \p Weight.
@@ -107,7 +107,7 @@ public:
     return Error::success();
   }
 
-  void setInstrEntryBBEnabled(bool Enabled) { InstrEntryBBEnabled = Enabled; } 
+  void setInstrEntryBBEnabled(bool Enabled) { InstrEntryBBEnabled = Enabled; }
   // Internal interface for testing purpose only.
   void setValueProfDataEndianness(support::endianness Endianness);
   void setOutputSparse(bool Sparse);

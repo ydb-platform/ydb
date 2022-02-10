@@ -4,11 +4,11 @@
 
     ANSI Common Lisp builtins.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
-BUILTIN_FUNCTIONS = {  # 638 functions 
+BUILTIN_FUNCTIONS = {  # 638 functions
     '<', '<=', '=', '>', '>=', '-', '/', '/=', '*', '+', '1-', '1+',
     'abort', 'abs', 'acons', 'acos', 'acosh', 'add-method', 'adjoin',
     'adjustable-array-p', 'adjust-array', 'allocate-instance',
@@ -156,17 +156,17 @@ BUILTIN_FUNCTIONS = {  # 638 functions
     'wild-pathname-p', 'write', 'write-byte', 'write-char', 'write-line',
     'write-sequence', 'write-string', 'write-to-string', 'yes-or-no-p',
     'y-or-n-p', 'zerop',
-} 
+}
 
-SPECIAL_FORMS = { 
+SPECIAL_FORMS = {
     'block', 'catch', 'declare', 'eval-when', 'flet', 'function', 'go', 'if',
     'labels', 'lambda', 'let', 'let*', 'load-time-value', 'locally', 'macrolet',
     'multiple-value-call', 'multiple-value-prog1', 'progn', 'progv', 'quote',
     'return-from', 'setq', 'symbol-macrolet', 'tagbody', 'the', 'throw',
     'unwind-protect',
-} 
+}
 
-MACROS = { 
+MACROS = {
     'and', 'assert', 'call-method', 'case', 'ccase', 'check-type', 'cond',
     'ctypecase', 'decf', 'declaim', 'defclass', 'defconstant', 'defgeneric',
     'define-compiler-macro', 'define-condition', 'define-method-combination',
@@ -187,19 +187,19 @@ MACROS = {
     'with-input-from-string', 'with-open-file', 'with-open-stream',
     'with-output-to-string', 'with-package-iterator', 'with-simple-restart',
     'with-slots', 'with-standard-io-syntax',
-} 
+}
 
-LAMBDA_LIST_KEYWORDS = { 
+LAMBDA_LIST_KEYWORDS = {
     '&allow-other-keys', '&aux', '&body', '&environment', '&key', '&optional',
     '&rest', '&whole',
-} 
+}
 
-DECLARATIONS = { 
+DECLARATIONS = {
     'dynamic-extent', 'ignore', 'optimize', 'ftype', 'inline', 'special',
     'ignorable', 'notinline', 'type',
-} 
+}
 
-BUILTIN_TYPES = { 
+BUILTIN_TYPES = {
     'atom', 'boolean', 'base-char', 'base-string', 'bignum', 'bit',
     'compiled-function', 'extended-char', 'fixnum', 'keyword', 'nil',
     'signed-byte', 'short-float', 'single-float', 'double-float', 'long-float',
@@ -216,9 +216,9 @@ BUILTIN_TYPES = {
     'simple-type-error', 'simple-warning', 'stream-error', 'storage-condition',
     'style-warning', 'type-error', 'unbound-variable', 'unbound-slot',
     'undefined-function', 'warning',
-} 
+}
 
-BUILTIN_CLASSES = { 
+BUILTIN_CLASSES = {
     'array', 'broadcast-stream', 'bit-vector', 'built-in-class', 'character',
     'class', 'complex', 'concatenated-stream', 'cons', 'echo-stream',
     'file-stream', 'float', 'function', 'generic-function', 'hash-table',
@@ -228,4 +228,4 @@ BUILTIN_CLASSES = {
     'standard-generic-function', 'standard-method', 'standard-object',
     'string-stream', 'stream', 'string', 'structure-class', 'structure-object',
     'symbol', 'synonym-stream', 't', 'two-way-stream', 'vector',
-} 
+}

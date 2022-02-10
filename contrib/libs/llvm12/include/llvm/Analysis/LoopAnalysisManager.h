@@ -64,7 +64,7 @@ struct LoopStandardAnalysisResults {
   ScalarEvolution &SE;
   TargetLibraryInfo &TLI;
   TargetTransformInfo &TTI;
-  BlockFrequencyInfo *BFI; 
+  BlockFrequencyInfo *BFI;
   MemorySSA *MSSA;
 };
 

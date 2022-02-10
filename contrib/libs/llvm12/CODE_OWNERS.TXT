@@ -9,10 +9,10 @@ beautification by scripts. The fields are: name (N), email (E), web-address
 (S) and (I) IRC handle. Each entry should contain at least the (N), (E) and
 (D) fields.
 
-N: Paul C. Anagnostopoulos 
-E: paul@windfall.com 
-D: TableGen 
- 
+N: Paul C. Anagnostopoulos
+E: paul@windfall.com
+D: TableGen
+
 N: Matt Arsenault
 E: Matthew.Arsenault@amd.com
 E: arsenm2@gmail.com
@@ -89,14 +89,14 @@ D: Branch weights and BlockFrequencyInfo
 
 N: Hal Finkel
 E: hfinkel@anl.gov
-D: The loop reroller and alias analysis 
+D: The loop reroller and alias analysis
 
-N: Nemanja Ivanovic 
-E: nemanja.i.ibm@gmail.com 
-D: PowerPC Backend 
- 
+N: Nemanja Ivanovic
+E: nemanja.i.ibm@gmail.com
+D: PowerPC Backend
+
 N: Dan Gohman
-E: llvm@sunfishcode.online 
+E: llvm@sunfishcode.online
 D: WebAssembly Backend (lib/Target/WebAssembly/*)
 
 N: Renato Golin
@@ -176,10 +176,10 @@ N: Krzysztof Parzyszek
 E: kparzysz@quicinc.com
 D: Hexagon Backend
 
-N: Nigel Perks 
-E: nigelp@xmos.com 
-D: XCore Backend 
- 
+N: Nigel Perks
+E: nigelp@xmos.com
+D: XCore Backend
+
 N: Jacques Pienaar
 E: jpienaar@google.com
 D: Lanai Backend
@@ -235,7 +235,7 @@ D: llvm-objcopy (tools/llvm-objcopy)
 N: Martin Storsjö
 E: martin@martin.st
 D: MinGW
- 
-N: Zi Xuan Wu (Zeson) 
-E: zixuan.wu@linux.alibaba.com 
-D: C-SKY backend (lib/Target/CSKY/*) 
+
+N: Zi Xuan Wu (Zeson)
+E: zixuan.wu@linux.alibaba.com
+D: C-SKY backend (lib/Target/CSKY/*)

@@ -14,14 +14,14 @@ def import_item(name):
     Parameters
     ----------
     name : string
-        The fully qualified name of the module/package being imported. 
+        The fully qualified name of the module/package being imported.
 
     Returns
     -------
     mod : module object
-        The module that was imported. 
+        The module that was imported.
     """
-    if not isinstance(name, str): 
+    if not isinstance(name, str):
         raise TypeError("import_item accepts strings, not '%s'." % type(name))
     parts = name.rsplit('.', 1)
     if len(parts) == 2:

@@ -158,77 +158,77 @@ bool FastISel::lowerArguments() {
 
 /// Return the defined register if this instruction defines exactly one
 /// virtual register and uses no other virtual registers. Otherwise return 0.
-static Register findLocalRegDef(MachineInstr &MI) { 
+static Register findLocalRegDef(MachineInstr &MI) {
   Register RegDef;
   for (const MachineOperand &MO : MI.operands()) {
     if (!MO.isReg())
       continue;
     if (MO.isDef()) {
       if (RegDef)
-        return Register(); 
+        return Register();
       RegDef = MO.getReg();
     } else if (MO.getReg().isVirtual()) {
-      // This is another use of a vreg. Don't delete it. 
+      // This is another use of a vreg. Don't delete it.
       return Register();
     }
   }
   return RegDef;
 }
 
-static bool isRegUsedByPhiNodes(Register DefReg, 
-                                FunctionLoweringInfo &FuncInfo) { 
-  for (auto &P : FuncInfo.PHINodesToUpdate) 
-    if (P.second == DefReg) 
-      return true; 
-  return false; 
-} 
- 
+static bool isRegUsedByPhiNodes(Register DefReg,
+                                FunctionLoweringInfo &FuncInfo) {
+  for (auto &P : FuncInfo.PHINodesToUpdate)
+    if (P.second == DefReg)
+      return true;
+  return false;
+}
+
 void FastISel::flushLocalValueMap() {
-  // If FastISel bails out, it could leave local value instructions behind 
-  // that aren't used for anything.  Detect and erase those. 
-  if (LastLocalValue != EmitStartPt) { 
-    // Save the first instruction after local values, for later. 
-    MachineBasicBlock::iterator FirstNonValue(LastLocalValue); 
-    ++FirstNonValue; 
- 
+  // If FastISel bails out, it could leave local value instructions behind
+  // that aren't used for anything.  Detect and erase those.
+  if (LastLocalValue != EmitStartPt) {
+    // Save the first instruction after local values, for later.
+    MachineBasicBlock::iterator FirstNonValue(LastLocalValue);
+    ++FirstNonValue;
+
     MachineBasicBlock::reverse_iterator RE =
         EmitStartPt ? MachineBasicBlock::reverse_iterator(EmitStartPt)
                     : FuncInfo.MBB->rend();
     MachineBasicBlock::reverse_iterator RI(LastLocalValue);
     for (; RI != RE;) {
       MachineInstr &LocalMI = *RI;
-      // Increment before erasing what it points to. 
+      // Increment before erasing what it points to.
       ++RI;
-      Register DefReg = findLocalRegDef(LocalMI); 
-      if (!DefReg) 
+      Register DefReg = findLocalRegDef(LocalMI);
+      if (!DefReg)
         continue;
-      if (FuncInfo.RegsWithFixups.count(DefReg)) 
+      if (FuncInfo.RegsWithFixups.count(DefReg))
         continue;
-      bool UsedByPHI = isRegUsedByPhiNodes(DefReg, FuncInfo); 
-      if (!UsedByPHI && MRI.use_nodbg_empty(DefReg)) { 
-        if (EmitStartPt == &LocalMI) 
-          EmitStartPt = EmitStartPt->getPrevNode(); 
-        LLVM_DEBUG(dbgs() << "removing dead local value materialization" 
-                          << LocalMI); 
-        LocalMI.eraseFromParent(); 
-      } 
-    } 
+      bool UsedByPHI = isRegUsedByPhiNodes(DefReg, FuncInfo);
+      if (!UsedByPHI && MRI.use_nodbg_empty(DefReg)) {
+        if (EmitStartPt == &LocalMI)
+          EmitStartPt = EmitStartPt->getPrevNode();
+        LLVM_DEBUG(dbgs() << "removing dead local value materialization"
+                          << LocalMI);
+        LocalMI.eraseFromParent();
+      }
+    }
 
-    if (FirstNonValue != FuncInfo.MBB->end()) { 
-      // See if there are any local value instructions left.  If so, we want to 
-      // make sure the first one has a debug location; if it doesn't, use the 
-      // first non-value instruction's debug location. 
- 
-      // If EmitStartPt is non-null, this block had copies at the top before 
-      // FastISel started doing anything; it points to the last one, so the 
-      // first local value instruction is the one after EmitStartPt. 
-      // If EmitStartPt is null, the first local value instruction is at the 
-      // top of the block. 
-      MachineBasicBlock::iterator FirstLocalValue = 
-          EmitStartPt ? ++MachineBasicBlock::iterator(EmitStartPt) 
-                      : FuncInfo.MBB->begin(); 
-      if (FirstLocalValue != FirstNonValue && !FirstLocalValue->getDebugLoc()) 
-        FirstLocalValue->setDebugLoc(FirstNonValue->getDebugLoc()); 
+    if (FirstNonValue != FuncInfo.MBB->end()) {
+      // See if there are any local value instructions left.  If so, we want to
+      // make sure the first one has a debug location; if it doesn't, use the
+      // first non-value instruction's debug location.
+
+      // If EmitStartPt is non-null, this block had copies at the top before
+      // FastISel started doing anything; it points to the last one, so the
+      // first local value instruction is the one after EmitStartPt.
+      // If EmitStartPt is null, the first local value instruction is at the
+      // top of the block.
+      MachineBasicBlock::iterator FirstLocalValue =
+          EmitStartPt ? ++MachineBasicBlock::iterator(EmitStartPt)
+                      : FuncInfo.MBB->begin();
+      if (FirstLocalValue != FirstNonValue && !FirstLocalValue->getDebugLoc())
+        FirstLocalValue->setDebugLoc(FirstNonValue->getDebugLoc());
     }
   }
 
@@ -261,13 +261,13 @@ bool FastISel::hasTrivialKill(const Value *V) {
     if (GEP->hasAllZeroIndices() && !hasTrivialKill(GEP->getOperand(0)))
       return false;
 
-  // Casts and extractvalues may be trivially coalesced by fast-isel. 
-  if (I->getOpcode() == Instruction::BitCast || 
-      I->getOpcode() == Instruction::PtrToInt || 
-      I->getOpcode() == Instruction::IntToPtr || 
-      I->getOpcode() == Instruction::ExtractValue) 
-    return false; 
- 
+  // Casts and extractvalues may be trivially coalesced by fast-isel.
+  if (I->getOpcode() == Instruction::BitCast ||
+      I->getOpcode() == Instruction::PtrToInt ||
+      I->getOpcode() == Instruction::IntToPtr ||
+      I->getOpcode() == Instruction::ExtractValue)
+    return false;
+
   // Only instructions with a single use in the same basic block are considered
   // to have trivial kills.
   return I->hasOneUse() &&
@@ -347,7 +347,7 @@ Register FastISel::materializeConstant(const Value *V, MVT VT) {
             getRegForValue(ConstantInt::get(V->getContext(), SIntVal));
         if (IntegerReg)
           Reg = fastEmit_r(IntVT.getSimpleVT(), VT, ISD::SINT_TO_FP, IntegerReg,
-                           /*Op0IsKill=*/false); 
+                           /*Op0IsKill=*/false);
       }
     }
   } else if (const auto *Op = dyn_cast<Operator>(V)) {
@@ -477,9 +477,9 @@ void FastISel::removeDeadCode(MachineBasicBlock::iterator I,
 }
 
 FastISel::SavePoint FastISel::enterLocalValueArea() {
-  SavePoint OldInsertPt = FuncInfo.InsertPt; 
+  SavePoint OldInsertPt = FuncInfo.InsertPt;
   recomputeInsertPt();
-  return OldInsertPt; 
+  return OldInsertPt;
 }
 
 void FastISel::leaveLocalValueArea(SavePoint OldInsertPt) {
@@ -487,7 +487,7 @@ void FastISel::leaveLocalValueArea(SavePoint OldInsertPt) {
     LastLocalValue = &*std::prev(FuncInfo.InsertPt);
 
   // Restore the previous insert position.
-  FuncInfo.InsertPt = OldInsertPt; 
+  FuncInfo.InsertPt = OldInsertPt;
 }
 
 bool FastISel::selectBinaryOp(const User *I, unsigned ISDOpcode) {
@@ -1256,8 +1256,8 @@ bool FastISel::selectIntrinsicCall(const IntrinsicInst *II) {
   case Intrinsic::sideeffect:
   // Neither does the assume intrinsic; it's also OK not to codegen its operand.
   case Intrinsic::assume:
-  // Neither does the llvm.experimental.noalias.scope.decl intrinsic 
-  case Intrinsic::experimental_noalias_scope_decl: 
+  // Neither does the llvm.experimental.noalias.scope.decl intrinsic
+  case Intrinsic::experimental_noalias_scope_decl:
     return true;
   case Intrinsic::dbg_declare: {
     const DbgDeclareInst *DI = cast<DbgDeclareInst>(II);
@@ -1526,11 +1526,11 @@ void FastISel::removeDeadLocalValueCode(MachineInstr *SavedLastLocalValue)
 }
 
 bool FastISel::selectInstruction(const Instruction *I) {
-  // Flush the local value map before starting each instruction. 
-  // This improves locality and debugging, and can reduce spills. 
-  // Reuse of values across IR instructions is relatively uncommon. 
-  flushLocalValueMap(); 
- 
+  // Flush the local value map before starting each instruction.
+  // This improves locality and debugging, and can reduce spills.
+  // Reuse of values across IR instructions is relatively uncommon.
+  flushLocalValueMap();
+
   MachineInstr *SavedLastLocalValue = getLastLocalValue();
   // Just before the terminator instruction, insert instructions to
   // feed PHI nodes in successor blocks.
@@ -1677,13 +1677,13 @@ bool FastISel::selectFNeg(const User *I, const Value *In) {
     return false;
 
   Register IntResultReg = fastEmit_ri_(
-      IntVT.getSimpleVT(), ISD::XOR, IntReg, /*Op0IsKill=*/true, 
+      IntVT.getSimpleVT(), ISD::XOR, IntReg, /*Op0IsKill=*/true,
       UINT64_C(1) << (VT.getSizeInBits() - 1), IntVT.getSimpleVT());
   if (!IntResultReg)
     return false;
 
   ResultReg = fastEmit_r(IntVT.getSimpleVT(), VT.getSimpleVT(), ISD::BITCAST,
-                         IntResultReg, /*Op0IsKill=*/true); 
+                         IntResultReg, /*Op0IsKill=*/true);
   if (!ResultReg)
     return false;
 
@@ -1739,7 +1739,7 @@ bool FastISel::selectOperator(const User *I, unsigned Opcode) {
     return selectBinaryOp(I, ISD::FADD);
   case Instruction::Sub:
     return selectBinaryOp(I, ISD::SUB);
-  case Instruction::FSub: 
+  case Instruction::FSub:
     return selectBinaryOp(I, ISD::FSUB);
   case Instruction::Mul:
     return selectBinaryOp(I, ISD::MUL);
@@ -2236,9 +2236,9 @@ bool FastISel::handlePHINodesInSuccessorBlocks(const BasicBlock *LLVMBB) {
 
       const Value *PHIOp = PN.getIncomingValueForBlock(LLVMBB);
 
-      // Set the DebugLoc for the copy. Use the location of the operand if 
-      // there is one; otherwise no location, flushLocalValueMap will fix it. 
-      DbgLoc = DebugLoc(); 
+      // Set the DebugLoc for the copy. Use the location of the operand if
+      // there is one; otherwise no location, flushLocalValueMap will fix it.
+      DbgLoc = DebugLoc();
       if (const auto *Inst = dyn_cast<Instruction>(PHIOp))
         DbgLoc = Inst->getDebugLoc();
 

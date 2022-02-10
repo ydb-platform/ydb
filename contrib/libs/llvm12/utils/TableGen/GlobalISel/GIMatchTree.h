@@ -353,7 +353,7 @@ public:
   void declareOperand(unsigned InstrID, unsigned OpIdx);
 
   GIMatchTreeInstrInfo *getInstrInfo(unsigned ID) const {
-    return InstrIDToInfo.lookup(ID); 
+    return InstrIDToInfo.lookup(ID);
   }
 
   void dump(raw_ostream &OS) const {

@@ -165,7 +165,7 @@ public:
         writeNode(Node);
   }
 
-  bool isNodeHidden(NodeRef Node) { return DTraits.isNodeHidden(Node, G); } 
+  bool isNodeHidden(NodeRef Node) { return DTraits.isNodeHidden(Node, G); }
 
   void writeNode(NodeRef Node) {
     std::string NodeAttributes = DTraits.getNodeAttributes(Node, G);
@@ -233,10 +233,10 @@ public:
     child_iterator EI = GTraits::child_begin(Node);
     child_iterator EE = GTraits::child_end(Node);
     for (unsigned i = 0; EI != EE && i != 64; ++EI, ++i)
-      if (!DTraits.isNodeHidden(*EI, G)) 
+      if (!DTraits.isNodeHidden(*EI, G))
         writeEdge(Node, i, EI);
     for (; EI != EE; ++EI)
-      if (!DTraits.isNodeHidden(*EI, G)) 
+      if (!DTraits.isNodeHidden(*EI, G))
         writeEdge(Node, 64, EI);
   }
 

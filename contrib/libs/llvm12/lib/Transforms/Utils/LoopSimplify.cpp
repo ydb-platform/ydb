@@ -163,7 +163,7 @@ BasicBlock *llvm::InsertPreheaderForLoop(Loop *L, DominatorTree *DT,
 /// if it's not already in there.  Stop predecessor traversal when we reach
 /// StopBlock.
 static void addBlockAndPredsToSet(BasicBlock *InputBB, BasicBlock *StopBlock,
-                                  SmallPtrSetImpl<BasicBlock *> &Blocks) { 
+                                  SmallPtrSetImpl<BasicBlock *> &Blocks) {
   SmallVector<BasicBlock *, 8> Worklist;
   Worklist.push_back(InputBB);
   do {
@@ -171,7 +171,7 @@ static void addBlockAndPredsToSet(BasicBlock *InputBB, BasicBlock *StopBlock,
     if (Blocks.insert(BB).second && BB != StopBlock)
       // If BB is not already processed and it is not a stop block then
       // insert its predecessor in the work list
-      append_range(Worklist, predecessors(BB)); 
+      append_range(Worklist, predecessors(BB));
   } while (!Worklist.empty());
 }
 
@@ -305,8 +305,8 @@ static Loop *separateNestedLoop(Loop *L, BasicBlock *Preheader,
 
   // Determine which blocks should stay in L and which should be moved out to
   // the Outer loop now.
-  SmallPtrSet<BasicBlock *, 4> BlocksInL; 
-  for (BasicBlock *P : predecessors(Header)) { 
+  SmallPtrSet<BasicBlock *, 4> BlocksInL;
+  for (BasicBlock *P : predecessors(Header)) {
     if (DT->dominates(Header, P))
       addBlockAndPredsToSet(P, Header, BlocksInL);
   }
@@ -679,7 +679,7 @@ ReprocessLoop:
       // The block has now been cleared of all instructions except for
       // a comparison and a conditional branch. SimplifyCFG may be able
       // to fold it now.
-      if (!FoldBranchToCommonDest(BI, /*DTU=*/nullptr, MSSAU)) 
+      if (!FoldBranchToCommonDest(BI, /*DTU=*/nullptr, MSSAU))
         continue;
 
       // Success. The block is now dead, so remove it from the loop,
@@ -687,7 +687,7 @@ ReprocessLoop:
       LLVM_DEBUG(dbgs() << "LoopSimplify: Eliminating exiting block "
                         << ExitingBlock->getName() << "\n");
 
-      assert(pred_empty(ExitingBlock)); 
+      assert(pred_empty(ExitingBlock));
       Changed = true;
       LI->removeBlock(ExitingBlock);
 
@@ -832,8 +832,8 @@ bool LoopSimplify::runOnFunction(Function &F) {
   bool PreserveLCSSA = mustPreserveAnalysisID(LCSSAID);
 
   // Simplify each loop nest in the function.
-  for (auto *L : *LI) 
-    Changed |= simplifyLoop(L, DT, LI, SE, AC, MSSAU.get(), PreserveLCSSA); 
+  for (auto *L : *LI)
+    Changed |= simplifyLoop(L, DT, LI, SE, AC, MSSAU.get(), PreserveLCSSA);
 
 #ifndef NDEBUG
   if (PreserveLCSSA) {
@@ -862,9 +862,9 @@ PreservedAnalyses LoopSimplifyPass::run(Function &F,
 
   // Note that we don't preserve LCSSA in the new PM, if you need it run LCSSA
   // after simplifying the loops. MemorySSA is preserved if it exists.
-  for (auto *L : *LI) 
+  for (auto *L : *LI)
     Changed |=
-        simplifyLoop(L, DT, LI, SE, AC, MSSAU.get(), /*PreserveLCSSA*/ false); 
+        simplifyLoop(L, DT, LI, SE, AC, MSSAU.get(), /*PreserveLCSSA*/ false);
 
   if (!Changed)
     return PreservedAnalyses::all();

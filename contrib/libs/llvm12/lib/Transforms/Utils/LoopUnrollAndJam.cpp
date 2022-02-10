@@ -148,7 +148,7 @@ static bool processHeaderPhiOperands(BasicBlock *Header, BasicBlock *Latch,
   }
 
   while (!Worklist.empty()) {
-    Instruction *I = Worklist.pop_back_val(); 
+    Instruction *I = Worklist.pop_back_val();
     if (!Visit(I))
       return false;
 
@@ -516,10 +516,10 @@ llvm::UnrollAndJamLoop(Loop *L, unsigned Count, unsigned TripCount,
       cast<BranchInst>(SubLoopBlocksLast.back()->getTerminator());
   SubTerm->setSuccessor(!SubLoopContinueOnTrue, SubLoopBlocksFirst[0]);
   SubTerm->setSuccessor(SubLoopContinueOnTrue, AftBlocksFirst[0]);
-  SubLoopBlocksFirst[0]->replacePhiUsesWith(ForeBlocksLast[0], 
-                                            ForeBlocksLast.back()); 
-  SubLoopBlocksFirst[0]->replacePhiUsesWith(SubLoopBlocksLast[0], 
-                                            SubLoopBlocksLast.back()); 
+  SubLoopBlocksFirst[0]->replacePhiUsesWith(ForeBlocksLast[0],
+                                            ForeBlocksLast.back());
+  SubLoopBlocksFirst[0]->replacePhiUsesWith(SubLoopBlocksLast[0],
+                                            SubLoopBlocksLast.back());
 
   for (unsigned It = 1; It != Count; It++) {
     // Replace the conditional branch of the previous iteration subloop with an
@@ -529,10 +529,10 @@ llvm::UnrollAndJamLoop(Loop *L, unsigned Count, unsigned TripCount,
     BranchInst::Create(SubLoopBlocksFirst[It], SubTerm);
     SubTerm->eraseFromParent();
 
-    SubLoopBlocksFirst[It]->replacePhiUsesWith(ForeBlocksLast[It], 
-                                               ForeBlocksLast.back()); 
-    SubLoopBlocksFirst[It]->replacePhiUsesWith(SubLoopBlocksLast[It], 
-                                               SubLoopBlocksLast.back()); 
+    SubLoopBlocksFirst[It]->replacePhiUsesWith(ForeBlocksLast[It],
+                                               ForeBlocksLast.back());
+    SubLoopBlocksFirst[It]->replacePhiUsesWith(SubLoopBlocksLast[It],
+                                               SubLoopBlocksLast.back());
     movePHIs(SubLoopBlocksFirst[It], SubLoopBlocksFirst[0]);
   }
 
@@ -546,8 +546,8 @@ llvm::UnrollAndJamLoop(Loop *L, unsigned Count, unsigned TripCount,
     assert(AftTerm->getSuccessor(ContinueOnTrue) == LoopExit &&
            "Expecting the ContinueOnTrue successor of AftTerm to be LoopExit");
   }
-  AftBlocksFirst[0]->replacePhiUsesWith(SubLoopBlocksLast[0], 
-                                        SubLoopBlocksLast.back()); 
+  AftBlocksFirst[0]->replacePhiUsesWith(SubLoopBlocksLast[0],
+                                        SubLoopBlocksLast.back());
 
   for (unsigned It = 1; It != Count; It++) {
     // Replace the conditional branch of the previous iteration subloop with an
@@ -557,8 +557,8 @@ llvm::UnrollAndJamLoop(Loop *L, unsigned Count, unsigned TripCount,
     BranchInst::Create(AftBlocksFirst[It], AftTerm);
     AftTerm->eraseFromParent();
 
-    AftBlocksFirst[It]->replacePhiUsesWith(SubLoopBlocksLast[It], 
-                                           SubLoopBlocksLast.back()); 
+    AftBlocksFirst[It]->replacePhiUsesWith(SubLoopBlocksLast[It],
+                                           SubLoopBlocksLast.back());
     movePHIs(AftBlocksFirst[It], AftBlocksFirst[0]);
   }
 

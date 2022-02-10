@@ -32,13 +32,13 @@ import itertools as _itertools
 import re
 import sys
 from token import *
-from token import EXACT_TOKEN_TYPES 
+from token import EXACT_TOKEN_TYPES
 
 cookie_re = re.compile(r'^[ \t\f]*#.*?coding[:=][ \t]*([-\w.]+)', re.ASCII)
 blank_re = re.compile(br'^[ \t\f]*(?:[#\r\n]|$)', re.ASCII)
 
 import token
-__all__ = token.__all__ + ["tokenize", "generate_tokens", "detect_encoding", 
+__all__ = token.__all__ + ["tokenize", "generate_tokens", "detect_encoding",
                            "untokenize", "TokenInfo"]
 del token
 
@@ -82,7 +82,7 @@ Number = group(Imagnumber, Floatnumber, Intnumber)
 # Return the empty string, plus all of the valid string prefixes.
 def _all_string_prefixes():
     # The valid string prefixes. Only contain the lower case versions,
-    #  and don't contain any permutations (include 'fr', but not 
+    #  and don't contain any permutations (include 'fr', but not
     #  'rf'). The various permutations will be generated.
     _valid_string_prefixes = ['b', 'r', 'u', 'f', 'br', 'fr']
     # if we add binary f-strings, add: ['fb', 'fbr']
@@ -115,11 +115,11 @@ Triple = group(StringPrefix + "'''", StringPrefix + '"""')
 String = group(StringPrefix + r"'[^\n'\\]*(?:\\.[^\n'\\]*)*'",
                StringPrefix + r'"[^\n"\\]*(?:\\.[^\n"\\]*)*"')
 
-# Sorting in reverse order puts the long operators before their prefixes. 
-# Otherwise if = came before ==, == would get recognized as two instances 
-# of =. 
-Special = group(*map(re.escape, sorted(EXACT_TOKEN_TYPES, reverse=True))) 
-Funny = group(r'\r?\n', Special) 
+# Sorting in reverse order puts the long operators before their prefixes.
+# Otherwise if = came before ==, == would get recognized as two instances
+# of =.
+Special = group(*map(re.escape, sorted(EXACT_TOKEN_TYPES, reverse=True)))
+Funny = group(r'\r?\n', Special)
 
 PlainToken = group(Number, Funny, String, Name)
 Token = Ignore + PlainToken
@@ -223,7 +223,7 @@ class Untokenizer:
         startline = token[0] in (NEWLINE, NL)
         prevstring = False
 
-        for tok in _itertools.chain([token], iterable): 
+        for tok in _itertools.chain([token], iterable):
             toknum, tokval = tok[:2]
             if toknum == ENCODING:
                 self.encoding = tokval
@@ -415,15 +415,15 @@ def tokenize(readline):
     column where the token begins in the source; a 2-tuple (erow, ecol) of
     ints specifying the row and column where the token ends in the source;
     and the line on which the token was found.  The line passed is the
-    physical line. 
+    physical line.
 
     The first token sequence will always be an ENCODING token
     which tells you which encoding was used to decode the bytes stream.
     """
     encoding, consumed = detect_encoding(readline)
-    empty = _itertools.repeat(b"") 
-    rl_gen = _itertools.chain(consumed, iter(readline, b""), empty) 
-    return _tokenize(rl_gen.__next__, encoding) 
+    empty = _itertools.repeat(b"")
+    rl_gen = _itertools.chain(consumed, iter(readline, b""), empty)
+    return _tokenize(rl_gen.__next__, encoding)
 
 
 def _tokenize(readline, encoding):
@@ -530,7 +530,7 @@ def _tokenize(readline, encoding):
                     continue
                 token, initial = line[start:end], line[start]
 
-                if (initial in numchars or                 # ordinary number 
+                if (initial in numchars or                 # ordinary number
                     (initial == '.' and token != '.' and token != '...')):
                     yield TokenInfo(NUMBER, token, spos, epos, line)
                 elif initial in '\r\n':
@@ -602,7 +602,7 @@ def _tokenize(readline, encoding):
                 pos += 1
 
     # Add an implicit NEWLINE if the input doesn't end in one
-    if last_line and last_line[-1] not in '\r\n' and not last_line.strip().startswith("#"): 
+    if last_line and last_line[-1] not in '\r\n' and not last_line.strip().startswith("#"):
         yield TokenInfo(NEWLINE, '', (lnum - 1, len(last_line)), (lnum - 1, len(last_line) + 1), '')
     for indent in indents[1:]:                 # pop remaining indent levels
         yield TokenInfo(DEDENT, '', (lnum, 0), (lnum, 0), '')
@@ -610,11 +610,11 @@ def _tokenize(readline, encoding):
 
 
 def generate_tokens(readline):
-    """Tokenize a source reading Python code as unicode strings. 
- 
-    This has the same API as tokenize(), except that it expects the *readline* 
-    callable to return str objects instead of bytes. 
-    """ 
+    """Tokenize a source reading Python code as unicode strings.
+
+    This has the same API as tokenize(), except that it expects the *readline*
+    callable to return str objects instead of bytes.
+    """
     return _tokenize(readline, None)
 
 def main():
@@ -622,8 +622,8 @@ def main():
 
     # Helper error handling routines
     def perror(message):
-        sys.stderr.write(message) 
-        sys.stderr.write('\n') 
+        sys.stderr.write(message)
+        sys.stderr.write('\n')
 
     def error(message, filename=None, location=None):
         if location:

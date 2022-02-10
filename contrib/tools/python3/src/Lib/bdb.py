@@ -38,7 +38,7 @@ class Bdb:
         """Return canonical form of filename.
 
         For real filenames, the canonical form is a case-normalized (on
-        case insensitive filesystems) absolute path.  'Filenames' with 
+        case insensitive filesystems) absolute path.  'Filenames' with
         angle brackets, such as "<stdin>", generated in interactive
         mode, are returned unchanged.
         """
@@ -117,7 +117,7 @@ class Bdb:
         """Invoke user function and return trace function for call event.
 
         If the debugger stops on this function call, invoke
-        self.user_call(). Raise BdbQuit if self.quitting is set. 
+        self.user_call(). Raise BdbQuit if self.quitting is set.
         Return self.trace_dispatch to continue tracing in this scope.
         """
         # XXX 'arg' is no longer used
@@ -190,8 +190,8 @@ class Bdb:
 
     def is_skipped_module(self, module_name):
         "Return True if module_name matches any skip pattern."
-        if module_name is None:  # some modules do not have names 
-            return False 
+        if module_name is None:  # some modules do not have names
+            return False
         for pattern in self.skip:
             if fnmatch.fnmatch(module_name, pattern):
                 return True
@@ -384,7 +384,7 @@ class Bdb:
         return None
 
     def _prune_breaks(self, filename, lineno):
-        """Prune breakpoints for filename:lineno. 
+        """Prune breakpoints for filename:lineno.
 
         A list of breakpoints is maintained in the Bdb instance and in
         the Breakpoint class.  If a breakpoint in the Bdb instance no
@@ -548,7 +548,7 @@ class Bdb:
             s += frame.f_code.co_name
         else:
             s += "<lambda>"
-        s += '()' 
+        s += '()'
         if '__return__' in frame.f_locals:
             rv = frame.f_locals['__return__']
             s += '->'
@@ -611,7 +611,7 @@ class Bdb:
 
     # This method is more useful to debug a single function call.
 
-    def runcall(self, func, /, *args, **kwds): 
+    def runcall(self, func, /, *args, **kwds):
         """Debug a single function call.
 
         Return the result of the function call.

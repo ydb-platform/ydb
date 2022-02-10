@@ -2,9 +2,9 @@
 
 #define PY_SSIZE_T_CLEAN
 #include "Python.h"
-#include "pycore_object.h" 
-#include "structmember.h"         // PyMemberDef 
-#include <stdbool.h> 
+#include "pycore_object.h"
+#include "structmember.h"         // PyMemberDef
+#include <stdbool.h>
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
@@ -76,7 +76,7 @@ _Py_IDENTIFIER(name);
 #define PyFileIO_Check(op) (PyObject_TypeCheck((op), &PyFileIO_Type))
 
 /* Forward declarations */
-static PyObject* portable_lseek(fileio *self, PyObject *posobj, int whence, bool suppress_pipe_error); 
+static PyObject* portable_lseek(fileio *self, PyObject *posobj, int whence, bool suppress_pipe_error);
 
 int
 _PyFileIO_closed(PyObject *self)
@@ -146,8 +146,8 @@ _io_FileIO_close_impl(fileio *self)
     PyObject *exc, *val, *tb;
     int rc;
     _Py_IDENTIFIER(close);
-    res = _PyObject_CallMethodIdOneArg((PyObject*)&PyRawIOBase_Type, 
-                                       &PyId_close, (PyObject *)self); 
+    res = _PyObject_CallMethodIdOneArg((PyObject*)&PyRawIOBase_Type,
+                                       &PyId_close, (PyObject *)self);
     if (!self->closefd) {
         self->fd = -1;
         return res;
@@ -276,10 +276,10 @@ _io_FileIO___init___impl(fileio *self, PyObject *nameobj, const char *mode,
         if (!PyUnicode_FSDecoder(nameobj, &stringobj)) {
             return -1;
         }
-_Py_COMP_DIAG_PUSH 
-_Py_COMP_DIAG_IGNORE_DEPR_DECLS 
+_Py_COMP_DIAG_PUSH
+_Py_COMP_DIAG_IGNORE_DEPR_DECLS
         widename = PyUnicode_AsUnicode(stringobj);
-_Py_COMP_DIAG_POP 
+_Py_COMP_DIAG_POP
         if (widename == NULL)
             return -1;
 #else
@@ -362,10 +362,10 @@ _Py_COMP_DIAG_POP
     flags |= O_CLOEXEC;
 #endif
 
-    if (PySys_Audit("open", "Osi", nameobj, mode, flags) < 0) { 
-        goto error; 
-    } 
- 
+    if (PySys_Audit("open", "Osi", nameobj, mode, flags) < 0) {
+        goto error;
+    }
+
     if (fd >= 0) {
         self->fd = fd;
         self->closefd = closefd;
@@ -484,7 +484,7 @@ _Py_COMP_DIAG_POP
         /* For consistent behaviour, we explicitly seek to the
            end of file (otherwise, it might be done only on the
            first write()). */
-        PyObject *pos = portable_lseek(self, NULL, 2, true); 
+        PyObject *pos = portable_lseek(self, NULL, 2, true);
         if (pos == NULL)
             goto error;
         Py_DECREF(pos);
@@ -607,7 +607,7 @@ _io_FileIO_seekable_impl(fileio *self)
         return err_closed();
     if (self->seekable < 0) {
         /* portable_lseek() sets the seekable attribute */
-        PyObject *pos = portable_lseek(self, NULL, SEEK_CUR, false); 
+        PyObject *pos = portable_lseek(self, NULL, SEEK_CUR, false);
         assert(self->seekable >= 0);
         if (pos == NULL) {
             PyErr_Clear();
@@ -874,7 +874,7 @@ _io_FileIO_write_impl(fileio *self, Py_buffer *b)
 
 /* Cribbed from posix_lseek() */
 static PyObject *
-portable_lseek(fileio *self, PyObject *posobj, int whence, bool suppress_pipe_error) 
+portable_lseek(fileio *self, PyObject *posobj, int whence, bool suppress_pipe_error)
 {
     Py_off_t pos, res;
     int fd = self->fd;
@@ -925,13 +925,13 @@ portable_lseek(fileio *self, PyObject *posobj, int whence, bool suppress_pipe_er
         self->seekable = (res >= 0);
     }
 
-    if (res < 0) { 
-        if (suppress_pipe_error && errno == ESPIPE) { 
-            res = 0; 
-        } else { 
-            return PyErr_SetFromErrno(PyExc_OSError); 
-        } 
-    } 
+    if (res < 0) {
+        if (suppress_pipe_error && errno == ESPIPE) {
+            res = 0;
+        } else {
+            return PyErr_SetFromErrno(PyExc_OSError);
+        }
+    }
 
 #if defined(HAVE_LARGEFILE_SUPPORT)
     return PyLong_FromLongLong(res);
@@ -964,7 +964,7 @@ _io_FileIO_seek_impl(fileio *self, PyObject *pos, int whence)
     if (self->fd < 0)
         return err_closed();
 
-    return portable_lseek(self, pos, whence, false); 
+    return portable_lseek(self, pos, whence, false);
 }
 
 /*[clinic input]
@@ -982,13 +982,13 @@ _io_FileIO_tell_impl(fileio *self)
     if (self->fd < 0)
         return err_closed();
 
-    return portable_lseek(self, NULL, 1, false); 
+    return portable_lseek(self, NULL, 1, false);
 }
 
 #ifdef HAVE_FTRUNCATE
 /*[clinic input]
 _io.FileIO.truncate
-    size as posobj: object = None 
+    size as posobj: object = None
     /
 
 Truncate the file to at most size bytes and return the truncated size.
@@ -999,7 +999,7 @@ The current file position is changed to the value of size.
 
 static PyObject *
 _io_FileIO_truncate_impl(fileio *self, PyObject *posobj)
-/*[clinic end generated code: output=e49ca7a916c176fa input=b0ac133939823875]*/ 
+/*[clinic end generated code: output=e49ca7a916c176fa input=b0ac133939823875]*/
 {
     Py_off_t pos;
     int ret;
@@ -1011,9 +1011,9 @@ _io_FileIO_truncate_impl(fileio *self, PyObject *posobj)
     if (!self->writable)
         return err_mode("writing");
 
-    if (posobj == Py_None) { 
+    if (posobj == Py_None) {
         /* Get the current position. */
-        posobj = portable_lseek(self, NULL, 1, false); 
+        posobj = portable_lseek(self, NULL, 1, false);
         if (posobj == NULL)
             return NULL;
     }
@@ -1194,10 +1194,10 @@ PyTypeObject PyFileIO_Type = {
     sizeof(fileio),
     0,
     (destructor)fileio_dealloc,                 /* tp_dealloc */
-    0,                                          /* tp_vectorcall_offset */ 
+    0,                                          /* tp_vectorcall_offset */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_as_async */ 
+    0,                                          /* tp_as_async */
     (reprfunc)fileio_repr,                      /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
@@ -1209,12 +1209,12 @@ PyTypeObject PyFileIO_Type = {
     0,                                          /* tp_setattro */
     0,                                          /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE
-        | Py_TPFLAGS_HAVE_GC,                   /* tp_flags */ 
+        | Py_TPFLAGS_HAVE_GC,                   /* tp_flags */
     _io_FileIO___init____doc__,                 /* tp_doc */
     (traverseproc)fileio_traverse,              /* tp_traverse */
     (inquiry)fileio_clear,                      /* tp_clear */
     0,                                          /* tp_richcompare */
-    offsetof(fileio, weakreflist),              /* tp_weaklistoffset */ 
+    offsetof(fileio, weakreflist),              /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
     fileio_methods,                             /* tp_methods */
@@ -1224,7 +1224,7 @@ PyTypeObject PyFileIO_Type = {
     0,                                          /* tp_dict */
     0,                                          /* tp_descr_get */
     0,                                          /* tp_descr_set */
-    offsetof(fileio, dict),                     /* tp_dictoffset */ 
+    offsetof(fileio, dict),                     /* tp_dictoffset */
     _io_FileIO___init__,                        /* tp_init */
     PyType_GenericAlloc,                        /* tp_alloc */
     fileio_new,                                 /* tp_new */

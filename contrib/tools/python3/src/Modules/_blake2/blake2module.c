@@ -62,8 +62,8 @@ PyInit__blake2(void)
         return NULL;
 
     /* BLAKE2b */
-    Py_SET_TYPE(&PyBlake2_BLAKE2bType, &PyType_Type); 
-    if (PyModule_AddType(m, &PyBlake2_BLAKE2bType) < 0) { 
+    Py_SET_TYPE(&PyBlake2_BLAKE2bType, &PyType_Type);
+    if (PyModule_AddType(m, &PyBlake2_BLAKE2bType) < 0) {
         return NULL;
     }
 
@@ -79,8 +79,8 @@ PyInit__blake2(void)
     PyModule_AddIntConstant(m, "BLAKE2B_MAX_DIGEST_SIZE", BLAKE2B_OUTBYTES);
 
     /* BLAKE2s */
-    Py_SET_TYPE(&PyBlake2_BLAKE2sType, &PyType_Type); 
-    if (PyModule_AddType(m, &PyBlake2_BLAKE2sType) < 0) { 
+    Py_SET_TYPE(&PyBlake2_BLAKE2sType, &PyType_Type);
+    if (PyModule_AddType(m, &PyBlake2_BLAKE2sType) < 0) {
         return NULL;
     }
 

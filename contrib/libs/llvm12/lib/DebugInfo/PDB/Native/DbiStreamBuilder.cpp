@@ -18,7 +18,7 @@
 #include "llvm/DebugInfo/PDB/Native/RawError.h"
 #include "llvm/Object/COFF.h"
 #include "llvm/Support/BinaryStreamWriter.h"
-#include "llvm/Support/Parallel.h" 
+#include "llvm/Support/Parallel.h"
 
 using namespace llvm;
 using namespace llvm::codeview;
@@ -395,17 +395,17 @@ Error DbiStreamBuilder::commit(const msf::MSFLayout &Layout,
     return EC;
 
   for (auto &M : ModiList) {
-    if (auto EC = M->commit(Writer)) 
+    if (auto EC = M->commit(Writer))
       return EC;
   }
 
-  // Commit symbol streams. This is a lot of data, so do it in parallel. 
-  if (auto EC = parallelForEachError( 
-          ModiList, [&](std::unique_ptr<DbiModuleDescriptorBuilder> &M) { 
-            return M->commitSymbolStream(Layout, MsfBuffer); 
-          })) 
-    return EC; 
- 
+  // Commit symbol streams. This is a lot of data, so do it in parallel.
+  if (auto EC = parallelForEachError(
+          ModiList, [&](std::unique_ptr<DbiModuleDescriptorBuilder> &M) {
+            return M->commitSymbolStream(Layout, MsfBuffer);
+          }))
+    return EC;
+
   if (!SectionContribs.empty()) {
     if (auto EC = Writer.writeEnum(DbiSecContribVer60))
       return EC;

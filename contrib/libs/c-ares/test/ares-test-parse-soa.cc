@@ -50,7 +50,7 @@ TEST_F(LibraryTest, ParseSoaReplyErrors) {
   pkt.questions_.clear();
   pkt.add_question(new DNSQuestion("Axample.com", ns_t_soa));
   data = pkt.data();
-  EXPECT_EQ(ARES_EBADRESP, ares_parse_soa_reply(data.data(), data.size(), &soa)); 
+  EXPECT_EQ(ARES_EBADRESP, ares_parse_soa_reply(data.data(), data.size(), &soa));
   pkt.questions_.clear();
   pkt.add_question(new DNSQuestion("example.com", ns_t_soa));
 #endif

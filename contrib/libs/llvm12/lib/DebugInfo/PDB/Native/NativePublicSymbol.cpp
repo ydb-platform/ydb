@@ -18,7 +18,7 @@ using namespace llvm::pdb;
 
 NativePublicSymbol::NativePublicSymbol(NativeSession &Session, SymIndexId Id,
                                        const codeview::PublicSym32 &Sym)
-    : NativeRawSymbol(Session, PDB_SymType::PublicSymbol, Id), Sym(Sym) {} 
+    : NativeRawSymbol(Session, PDB_SymType::PublicSymbol, Id), Sym(Sym) {}
 
 NativePublicSymbol::~NativePublicSymbol() {}
 

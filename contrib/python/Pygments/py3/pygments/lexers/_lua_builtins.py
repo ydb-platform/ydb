@@ -8,7 +8,7 @@
 
     Do not edit the MODULES dict by hand.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -285,7 +285,7 @@ if __name__ == '__main__':  # pragma: no cover
             print('>> %s' % full_function_name)
             m = get_function_module(full_function_name)
             modules.setdefault(m, []).append(full_function_name)
-        modules = {k: tuple(v) for k, v in modules.items()} 
+        modules = {k: tuple(v) for k, v in modules.items()}
 
         regenerate(__file__, modules)
 

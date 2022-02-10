@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2020 Stefan Krah. All rights reserved. 
+ * Copyright (c) 2008-2020 Stefan Krah. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,14 +27,14 @@
 
 
 #include "mpdecimal.h"
- 
+
 #include <assert.h>
- 
-#include "constants.h" 
-#include "crt.h" 
+
+#include "constants.h"
+#include "crt.h"
 #include "numbertheory.h"
 #include "umodarith.h"
-#include "typearith.h" 
+#include "typearith.h"
 
 
 /* Bignum: Chinese Remainder Theorem, extends the maximum transform length. */

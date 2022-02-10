@@ -40,9 +40,9 @@ Py_GetBuildInfo(void)
     const char *revision = _Py_gitversion();
     const char *sep = *revision ? ":" : "";
     const char *gitid = _Py_gitidentifier();
-    if (!(*gitid)) { 
-        gitid = "main"; 
-    } 
+    if (!(*gitid)) {
+        gitid = "main";
+    }
     PyOS_snprintf(buildinfo, sizeof(buildinfo),
                   "%s%s%s, %.20s, %.9s", gitid, sep, revision,
                   DATE, TIME);

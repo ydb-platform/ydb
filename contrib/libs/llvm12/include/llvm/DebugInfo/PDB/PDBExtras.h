@@ -16,11 +16,11 @@
 #ifndef LLVM_DEBUGINFO_PDB_PDBEXTRAS_H
 #define LLVM_DEBUGINFO_PDB_PDBEXTRAS_H
 
-#include "llvm/ADT/StringRef.h" 
+#include "llvm/ADT/StringRef.h"
 #include "llvm/DebugInfo/CodeView/CodeView.h"
 #include "llvm/DebugInfo/PDB/PDBTypes.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cstdint> 
+#include <cstdint>
 #include <unordered_map>
 
 namespace llvm {

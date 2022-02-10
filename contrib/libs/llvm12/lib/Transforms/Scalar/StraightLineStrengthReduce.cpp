@@ -55,7 +55,7 @@
 // - When (i' - i) is constant but i and i' are not, we could still perform
 //   SLSR.
 
-#include "llvm/Transforms/Scalar/StraightLineStrengthReduce.h" 
+#include "llvm/Transforms/Scalar/StraightLineStrengthReduce.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/SmallVector.h"
@@ -96,39 +96,39 @@ static const unsigned UnknownAddressSpace =
 
 namespace {
 
-class StraightLineStrengthReduceLegacyPass : public FunctionPass { 
-  const DataLayout *DL = nullptr; 
- 
+class StraightLineStrengthReduceLegacyPass : public FunctionPass {
+  const DataLayout *DL = nullptr;
+
 public:
-  static char ID; 
- 
-  StraightLineStrengthReduceLegacyPass() : FunctionPass(ID) { 
-    initializeStraightLineStrengthReduceLegacyPassPass( 
-        *PassRegistry::getPassRegistry()); 
-  } 
- 
-  void getAnalysisUsage(AnalysisUsage &AU) const override { 
-    AU.addRequired<DominatorTreeWrapperPass>(); 
-    AU.addRequired<ScalarEvolutionWrapperPass>(); 
-    AU.addRequired<TargetTransformInfoWrapperPass>(); 
-    // We do not modify the shape of the CFG. 
-    AU.setPreservesCFG(); 
-  } 
- 
-  bool doInitialization(Module &M) override { 
-    DL = &M.getDataLayout(); 
-    return false; 
-  } 
- 
-  bool runOnFunction(Function &F) override; 
-}; 
- 
-class StraightLineStrengthReduce { 
-public: 
-  StraightLineStrengthReduce(const DataLayout *DL, DominatorTree *DT, 
-                             ScalarEvolution *SE, TargetTransformInfo *TTI) 
-      : DL(DL), DT(DT), SE(SE), TTI(TTI) {} 
- 
+  static char ID;
+
+  StraightLineStrengthReduceLegacyPass() : FunctionPass(ID) {
+    initializeStraightLineStrengthReduceLegacyPassPass(
+        *PassRegistry::getPassRegistry());
+  }
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.addRequired<DominatorTreeWrapperPass>();
+    AU.addRequired<ScalarEvolutionWrapperPass>();
+    AU.addRequired<TargetTransformInfoWrapperPass>();
+    // We do not modify the shape of the CFG.
+    AU.setPreservesCFG();
+  }
+
+  bool doInitialization(Module &M) override {
+    DL = &M.getDataLayout();
+    return false;
+  }
+
+  bool runOnFunction(Function &F) override;
+};
+
+class StraightLineStrengthReduce {
+public:
+  StraightLineStrengthReduce(const DataLayout *DL, DominatorTree *DT,
+                             ScalarEvolution *SE, TargetTransformInfo *TTI)
+      : DL(DL), DT(DT), SE(SE), TTI(TTI) {}
+
   // SLSR candidate. Such a candidate must be in one of the forms described in
   // the header comments.
   struct Candidate {
@@ -176,7 +176,7 @@ public:
     Candidate *Basis = nullptr;
   };
 
-  bool runOnFunction(Function &F); 
+  bool runOnFunction(Function &F);
 
 private:
   // Returns true if Basis is a basis for C, i.e., Basis dominates C and they
@@ -256,18 +256,18 @@ private:
 
 } // end anonymous namespace
 
-char StraightLineStrengthReduceLegacyPass::ID = 0; 
+char StraightLineStrengthReduceLegacyPass::ID = 0;
 
-INITIALIZE_PASS_BEGIN(StraightLineStrengthReduceLegacyPass, "slsr", 
+INITIALIZE_PASS_BEGIN(StraightLineStrengthReduceLegacyPass, "slsr",
                       "Straight line strength reduction", false, false)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
-INITIALIZE_PASS_END(StraightLineStrengthReduceLegacyPass, "slsr", 
+INITIALIZE_PASS_END(StraightLineStrengthReduceLegacyPass, "slsr",
                     "Straight line strength reduction", false, false)
 
 FunctionPass *llvm::createStraightLineStrengthReducePass() {
-  return new StraightLineStrengthReduceLegacyPass(); 
+  return new StraightLineStrengthReduceLegacyPass();
 }
 
 bool StraightLineStrengthReduce::isBasisFor(const Candidate &Basis,
@@ -285,7 +285,7 @@ bool StraightLineStrengthReduce::isBasisFor(const Candidate &Basis,
 
 static bool isGEPFoldable(GetElementPtrInst *GEP,
                           const TargetTransformInfo *TTI) {
-  SmallVector<const Value *, 4> Indices(GEP->indices()); 
+  SmallVector<const Value *, 4> Indices(GEP->indices());
   return TTI->getGEPCost(GEP->getSourceElementType(), GEP->getPointerOperand(),
                          Indices) == TargetTransformInfo::TCC_Free;
 }
@@ -715,17 +715,17 @@ void StraightLineStrengthReduce::rewriteCandidateWithBasis(
   UnlinkedInstructions.push_back(C.Ins);
 }
 
-bool StraightLineStrengthReduceLegacyPass::runOnFunction(Function &F) { 
+bool StraightLineStrengthReduceLegacyPass::runOnFunction(Function &F) {
   if (skipFunction(F))
     return false;
 
-  auto *TTI = &getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F); 
-  auto *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree(); 
-  auto *SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE(); 
-  return StraightLineStrengthReduce(DL, DT, SE, TTI).runOnFunction(F); 
-} 
- 
-bool StraightLineStrengthReduce::runOnFunction(Function &F) { 
+  auto *TTI = &getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F);
+  auto *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+  auto *SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
+  return StraightLineStrengthReduce(DL, DT, SE, TTI).runOnFunction(F);
+}
+
+bool StraightLineStrengthReduce::runOnFunction(Function &F) {
   // Traverse the dominator tree in the depth-first order. This order makes sure
   // all bases of a candidate are in Candidates when we process it.
   for (const auto Node : depth_first(DT))
@@ -755,25 +755,25 @@ bool StraightLineStrengthReduce::runOnFunction(Function &F) {
   UnlinkedInstructions.clear();
   return Ret;
 }
- 
-namespace llvm { 
- 
-PreservedAnalyses 
-StraightLineStrengthReducePass::run(Function &F, FunctionAnalysisManager &AM) { 
-  const DataLayout *DL = &F.getParent()->getDataLayout(); 
-  auto *DT = &AM.getResult<DominatorTreeAnalysis>(F); 
-  auto *SE = &AM.getResult<ScalarEvolutionAnalysis>(F); 
-  auto *TTI = &AM.getResult<TargetIRAnalysis>(F); 
- 
-  if (!StraightLineStrengthReduce(DL, DT, SE, TTI).runOnFunction(F)) 
-    return PreservedAnalyses::all(); 
- 
-  PreservedAnalyses PA; 
-  PA.preserveSet<CFGAnalyses>(); 
-  PA.preserve<DominatorTreeAnalysis>(); 
-  PA.preserve<ScalarEvolutionAnalysis>(); 
-  PA.preserve<TargetIRAnalysis>(); 
-  return PA; 
-} 
- 
-} // namespace llvm 
+
+namespace llvm {
+
+PreservedAnalyses
+StraightLineStrengthReducePass::run(Function &F, FunctionAnalysisManager &AM) {
+  const DataLayout *DL = &F.getParent()->getDataLayout();
+  auto *DT = &AM.getResult<DominatorTreeAnalysis>(F);
+  auto *SE = &AM.getResult<ScalarEvolutionAnalysis>(F);
+  auto *TTI = &AM.getResult<TargetIRAnalysis>(F);
+
+  if (!StraightLineStrengthReduce(DL, DT, SE, TTI).runOnFunction(F))
+    return PreservedAnalyses::all();
+
+  PreservedAnalyses PA;
+  PA.preserveSet<CFGAnalyses>();
+  PA.preserve<DominatorTreeAnalysis>();
+  PA.preserve<ScalarEvolutionAnalysis>();
+  PA.preserve<TargetIRAnalysis>();
+  return PA;
+}
+
+} // namespace llvm

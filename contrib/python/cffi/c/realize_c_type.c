@@ -151,10 +151,10 @@ static PyObject *build_primitive_type(int num)
         "uint_fast64_t",
         "intmax_t",
         "uintmax_t",
-        "float _Complex", 
-        "double _Complex", 
-        "char16_t", 
-        "char32_t", 
+        "float _Complex",
+        "double _Complex",
+        "char16_t",
+        "char32_t",
     };
     PyObject *x;
 
@@ -269,11 +269,11 @@ realize_c_type(builder_c_t *builder, _cffi_opcode_t opcodes[], int index)
     PyObject *x = realize_c_type_or_func(builder, opcodes, index);
     if (x == NULL || CTypeDescr_Check(x))
         return (CTypeDescrObject *)x;
-    else { 
-        unexpected_fn_type(x); 
-        Py_DECREF(x); 
-        return NULL; 
-    } 
+    else {
+        unexpected_fn_type(x);
+        Py_DECREF(x);
+        return NULL;
+    }
 }
 
 static void _realize_name(char *target, const char *prefix, const char *srcname)
@@ -413,8 +413,8 @@ _realize_c_struct_or_union(builder_c_t *builder, int sindex)
 }
 
 static PyObject *
-realize_c_type_or_func_now(builder_c_t *builder, _cffi_opcode_t op, 
-                           _cffi_opcode_t opcodes[], int index) 
+realize_c_type_or_func_now(builder_c_t *builder, _cffi_opcode_t op,
+                           _cffi_opcode_t opcodes[], int index)
 {
     PyObject *x, *y, *z;
     Py_ssize_t length = -1;
@@ -636,36 +636,36 @@ realize_c_type_or_func_now(builder_c_t *builder, _cffi_opcode_t op,
         return NULL;
     }
 
-    return x; 
-} 
- 
-static int _realize_recursion_level; 
- 
-static PyObject * 
-realize_c_type_or_func(builder_c_t *builder, 
-                        _cffi_opcode_t opcodes[], int index) 
-{ 
-    PyObject *x; 
-     _cffi_opcode_t op = opcodes[index]; 
- 
-    if ((((uintptr_t)op) & 1) == 0) { 
-        x = (PyObject *)op; 
-        Py_INCREF(x); 
-        return x; 
-    } 
- 
-    if (_realize_recursion_level >= 1000) { 
-        PyErr_Format(PyExc_RuntimeError, 
-            "type-building recursion too deep or infinite.  " 
-            "This is known to occur e.g. in ``struct s { void(*callable)" 
-            "(struct s); }''.  Please report if you get this error and " 
-            "really need support for your case."); 
-        return NULL; 
-    } 
-    _realize_recursion_level++; 
-    x = realize_c_type_or_func_now(builder, op, opcodes, index); 
-    _realize_recursion_level--; 
- 
+    return x;
+}
+
+static int _realize_recursion_level;
+
+static PyObject *
+realize_c_type_or_func(builder_c_t *builder,
+                        _cffi_opcode_t opcodes[], int index)
+{
+    PyObject *x;
+     _cffi_opcode_t op = opcodes[index];
+
+    if ((((uintptr_t)op) & 1) == 0) {
+        x = (PyObject *)op;
+        Py_INCREF(x);
+        return x;
+    }
+
+    if (_realize_recursion_level >= 1000) {
+        PyErr_Format(PyExc_RuntimeError,
+            "type-building recursion too deep or infinite.  "
+            "This is known to occur e.g. in ``struct s { void(*callable)"
+            "(struct s); }''.  Please report if you get this error and "
+            "really need support for your case.");
+        return NULL;
+    }
+    _realize_recursion_level++;
+    x = realize_c_type_or_func_now(builder, op, opcodes, index);
+    _realize_recursion_level--;
+
     if (x != NULL && opcodes == builder->ctx.types && opcodes[index] != x) {
         assert((((uintptr_t)x) & 1) == 0);
         assert((((uintptr_t)opcodes[index]) & 1) == 1);
@@ -673,7 +673,7 @@ realize_c_type_or_func(builder_c_t *builder,
         opcodes[index] = x;
     }
     return x;
-} 
+}
 
 static CTypeDescrObject *
 realize_c_func_return_type(builder_c_t *builder,
@@ -760,13 +760,13 @@ static int do_realize_lazy_struct(CTypeDescrObject *ct)
                 return -1;
             }
 
-            if (ctf != NULL && fld->field_offset == (size_t)-1) { 
+            if (ctf != NULL && fld->field_offset == (size_t)-1) {
                 /* unnamed struct, with field positions and sizes entirely
                    determined by complete_struct_or_union() and not checked.
                    Or, bitfields (field_size >= 0), similarly not checked. */
                 assert(fld->field_size == (size_t)-1 || fbitsize >= 0);
             }
-            else if (ctf == NULL || detect_custom_layout(ct, SF_STD_FIELD_POS, 
+            else if (ctf == NULL || detect_custom_layout(ct, SF_STD_FIELD_POS,
                                      ctf->ct_size, fld->field_size,
                                      "wrong size for field '",
                                      fld->name, "'") < 0) {

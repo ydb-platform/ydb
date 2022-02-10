@@ -727,14 +727,14 @@ def quote_from_bytes(bs, safe='/'):
         return str('')
     ### For Python-Future:
     bs = bytes(bs)
-    ### 
+    ###
     if isinstance(safe, str):
         # Normalize 'safe' by converting to bytes and removing non-ASCII chars
         safe = str(safe).encode('ascii', 'ignore')
     else:
         ### For Python-Future:
         safe = bytes(safe)
-        ### 
+        ###
         safe = bytes([c for c in safe if c < 128])
     if not bs.rstrip(_ALWAYS_SAFE_BYTES + safe):
         return bs.decode()

@@ -6,7 +6,7 @@ import warnings
 import tempfile
 import pickle
 
-import pytest 
+import pytest
 
 
 class PicklableMixin(object):
@@ -69,12 +69,12 @@ class TZContextBase(object):
         Class method used to query whether or not this class allows time zone
         changes.
         """
-        guard = bool(os.environ.get(cls._guard_var_name, False)) 
+        guard = bool(os.environ.get(cls._guard_var_name, False))
 
         # _guard_allows_change gives the "default" behavior - if True, the
         # guard is overcoming a block. If false, the guard is causing a block.
         # Whether tz_change is allowed is therefore the XNOR of the two.
-        return guard == cls._guard_allows_change 
+        return guard == cls._guard_allows_change
 
     @classmethod
     def tz_change_disallowed_message(cls):
@@ -87,12 +87,12 @@ class TZContextBase(object):
 
     def __enter__(self):
         if not self.tz_change_allowed():
-            msg = self.tz_change_disallowed_message() 
-            pytest.skip(msg) 
+            msg = self.tz_change_disallowed_message()
+            pytest.skip(msg)
 
-            # If this is used outside of a test suite, we still want an error. 
-            raise ValueError(msg)  # pragma: no cover 
- 
+            # If this is used outside of a test suite, we still want an error.
+            raise ValueError(msg)  # pragma: no cover
+
         self._old_tz = self.get_current_tz()
         self.set_current_tz(self.tzval)
 

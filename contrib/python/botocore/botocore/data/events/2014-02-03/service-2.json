@@ -5,7 +5,7 @@
     "endpointPrefix":"events",
     "jsonVersion":"1.1",
     "serviceFullName":"Amazon CloudWatch Events",
-    "serviceId":"CloudWatch Events", 
+    "serviceId":"CloudWatch Events",
     "signatureVersion":"v4",
     "targetPrefix":"AWSEvents",
     "protocol":"json"

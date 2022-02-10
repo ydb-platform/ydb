@@ -1,5 +1,5 @@
-OWNER(shadchin) 
- 
-RECURSE( 
-    hello 
-) 
+OWNER(shadchin)
+
+RECURSE(
+    hello
+)

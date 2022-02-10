@@ -154,5 +154,5 @@ class TeraTermLexer(RegexLexer):
     def analyse_text(text):
         result = 0.0
         if re.search(TeraTermLexer.tokens['commands'][0][0], text):
-            result += 0.01 
+            result += 0.01
         return result

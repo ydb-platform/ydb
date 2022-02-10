@@ -4,12 +4,12 @@
 
     Utility functions.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
 import re
-from io import TextIOWrapper 
+from io import TextIOWrapper
 
 
 split_path_re = re.compile(r'[/\\ ]')
@@ -51,7 +51,7 @@ def get_bool_opt(options, optname, default=None):
         return string
     elif isinstance(string, int):
         return bool(string)
-    elif not isinstance(string, str): 
+    elif not isinstance(string, str):
         raise OptionError('Invalid type %r for option %s; use '
                           '1/0, yes/no, true/false, on/off' % (
                               string, optname))
@@ -81,7 +81,7 @@ def get_int_opt(options, optname, default=None):
 
 def get_list_opt(options, optname, default=None):
     val = options.get(optname, default)
-    if isinstance(val, str): 
+    if isinstance(val, str):
         return val.split()
     elif isinstance(val, (list, tuple)):
         return list(val)
@@ -171,10 +171,10 @@ def doctype_matches(text, regex):
     Note that this method only checks the first part of a DOCTYPE.
     eg: 'html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"'
     """
-    m = doctype_lookup_re.search(text) 
+    m = doctype_lookup_re.search(text)
     if m is None:
         return False
-    doctype = m.group(1) 
+    doctype = m.group(1)
     return re.compile(regex, re.I).match(doctype.strip()) is not None
 
 
@@ -194,7 +194,7 @@ def looks_like_xml(text):
     try:
         return _looks_like_xml_cache[key]
     except KeyError:
-        m = doctype_lookup_re.search(text) 
+        m = doctype_lookup_re.search(text)
         if m is not None:
             return True
         rv = tag_re.search(text[:1000]) is not None
@@ -202,10 +202,10 @@ def looks_like_xml(text):
         return rv
 
 
-def surrogatepair(c): 
-    """Given a unicode character code with length greater than 16 bits, 
-    return the two 16 bit surrogate pair. 
-    """ 
+def surrogatepair(c):
+    """Given a unicode character code with length greater than 16 bits,
+    return the two 16 bit surrogate pair.
+    """
     # From example D28 of:
     # http://www.unicode.org/book/ch03.pdf
     return (0xd7c0 + (c >> 10), (0xdc00 + (c & 0x3ff)))
@@ -246,7 +246,7 @@ def duplicates_removed(it, already_seen=()):
     return lst
 
 
-class Future: 
+class Future:
     """Generic class to defer some work.
 
     Handled specially in RegexLexerMeta, to support regex string construction at
@@ -302,7 +302,7 @@ def terminal_encoding(term):
     return locale.getpreferredencoding()
 
 
-class UnclosingTextIOWrapper(TextIOWrapper): 
-    # Don't close underlying buffer on destruction. 
-    def close(self): 
-        self.flush() 
+class UnclosingTextIOWrapper(TextIOWrapper):
+    # Don't close underlying buffer on destruction.
+    def close(self):
+        self.flush()

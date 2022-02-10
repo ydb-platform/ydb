@@ -143,8 +143,8 @@ struct DOTGraphTraits<CallGraphDOTInfo *> : public DefaultDOTGraphTraits {
            std::string(CGInfo->getModule()->getModuleIdentifier());
   }
 
-  static bool isNodeHidden(const CallGraphNode *Node, 
-                           const CallGraphDOTInfo *CGInfo) { 
+  static bool isNodeHidden(const CallGraphNode *Node,
+                           const CallGraphDOTInfo *CGInfo) {
     if (CallMultiGraph || Node->getFunction())
       return false;
     return true;
@@ -196,7 +196,7 @@ struct DOTGraphTraits<CallGraphDOTInfo *> : public DefaultDOTGraphTraits {
     Function *F = Node->getFunction();
     if (F == nullptr)
       return "";
-    std::string attrs; 
+    std::string attrs;
     if (ShowHeatColors) {
       uint64_t freq = CGInfo->getFreq(F);
       std::string color = getHeatColor(freq, CGInfo->getMaxFreq());

@@ -1,8 +1,8 @@
-import types 
+import types
 import weakref
 
 from .lock import allocate_lock
-from .error import CDefError, VerificationError, VerificationMissing 
+from .error import CDefError, VerificationError, VerificationMissing
 
 # type qualifiers
 Q_CONST    = 0x01
@@ -95,8 +95,8 @@ void_type = VoidType()
 
 
 class BasePrimitiveType(BaseType):
-    def is_complex_type(self): 
-        return False 
+    def is_complex_type(self):
+        return False
 
 
 class PrimitiveType(BasePrimitiveType):
@@ -117,13 +117,13 @@ class PrimitiveType(BasePrimitiveType):
         'float':              'f',
         'double':             'f',
         'long double':        'f',
-        'float _Complex':     'j', 
-        'double _Complex':    'j', 
+        'float _Complex':     'j',
+        'double _Complex':    'j',
         '_Bool':              'i',
         # the following types are not primitive in the C sense
         'wchar_t':            'c',
-        'char16_t':           'c', 
-        'char32_t':           'c', 
+        'char16_t':           'c',
+        'char32_t':           'c',
         'int8_t':             'i',
         'uint8_t':            'i',
         'int16_t':            'i',
@@ -168,8 +168,8 @@ class PrimitiveType(BasePrimitiveType):
         return self.ALL_PRIMITIVE_TYPES[self.name] == 'i'
     def is_float_type(self):
         return self.ALL_PRIMITIVE_TYPES[self.name] == 'f'
-    def is_complex_type(self): 
-        return self.ALL_PRIMITIVE_TYPES[self.name] == 'j' 
+    def is_complex_type(self):
+        return self.ALL_PRIMITIVE_TYPES[self.name] == 'j'
 
     def build_backend_type(self, ffi, finishlist):
         return global_cache(self, ffi, 'new_primitive_type', self.name)
@@ -229,8 +229,8 @@ class RawFunctionType(BaseFunctionType):
     is_raw_function = True
 
     def build_backend_type(self, ffi, finishlist):
-        raise CDefError("cannot render the type %r: it is a function " 
-                        "type, not a pointer-to-function type" % (self,)) 
+        raise CDefError("cannot render the type %r: it is a function "
+                        "type, not a pointer-to-function type" % (self,))
 
     def as_function_pointer(self):
         return FunctionPtrType(self.args, self.result, self.ellipsis, self.abi)
@@ -307,16 +307,16 @@ class ArrayType(BaseType):
         self.c_name_with_marker = (
             self.item.c_name_with_marker.replace('&', brackets))
 
-    def length_is_unknown(self): 
-        return isinstance(self.length, str) 
- 
+    def length_is_unknown(self):
+        return isinstance(self.length, str)
+
     def resolve_length(self, newlength):
         return ArrayType(self.item, newlength)
 
     def build_backend_type(self, ffi, finishlist):
-        if self.length_is_unknown(): 
-            raise CDefError("cannot render the type %r: unknown length" % 
-                            (self,)) 
+        if self.length_is_unknown():
+            raise CDefError("cannot render the type %r: unknown length" %
+                            (self,))
         self.item.get_cached_btype(ffi, finishlist)   # force the item BType
         BPtrItem = PointerType(self.item).get_cached_btype(ffi, finishlist)
         return global_cache(self, ffi, 'new_array_type', BPtrItem, self.length)
@@ -345,7 +345,7 @@ class StructOrUnion(StructOrUnionOrEnum):
     fixedlayout = None
     completed = 0
     partial = False
-    packed = 0 
+    packed = 0
 
     def __init__(self, name, fldnames, fldtypes, fldbitsize, fldquals=None):
         self.name = name
@@ -355,20 +355,20 @@ class StructOrUnion(StructOrUnionOrEnum):
         self.fldquals = fldquals
         self.build_c_name_with_marker()
 
-    def anonymous_struct_fields(self): 
-        if self.fldtypes is not None: 
-            for name, type in zip(self.fldnames, self.fldtypes): 
-                if name == '' and isinstance(type, StructOrUnion): 
-                    yield type 
+    def anonymous_struct_fields(self):
+        if self.fldtypes is not None:
+            for name, type in zip(self.fldnames, self.fldtypes):
+                if name == '' and isinstance(type, StructOrUnion):
+                    yield type
 
-    def enumfields(self, expand_anonymous_struct_union=True): 
+    def enumfields(self, expand_anonymous_struct_union=True):
         fldquals = self.fldquals
         if fldquals is None:
             fldquals = (0,) * len(self.fldnames)
         for name, type, bitsize, quals in zip(self.fldnames, self.fldtypes,
                                               self.fldbitsize, fldquals):
-            if (name == '' and isinstance(type, StructOrUnion) 
-                    and expand_anonymous_struct_union): 
+            if (name == '' and isinstance(type, StructOrUnion)
+                    and expand_anonymous_struct_union):
                 # nested anonymous struct/union
                 for result in type.enumfields():
                     yield result
@@ -417,14 +417,14 @@ class StructOrUnion(StructOrUnionOrEnum):
             fldtypes = [tp.get_cached_btype(ffi, finishlist)
                         for tp in self.fldtypes]
             lst = list(zip(self.fldnames, fldtypes, self.fldbitsize))
-            extra_flags = () 
+            extra_flags = ()
             if self.packed:
-                if self.packed == 1: 
-                    extra_flags = (8,)    # SF_PACKED 
-                else: 
-                    extra_flags = (0, self.packed) 
+                if self.packed == 1:
+                    extra_flags = (8,)    # SF_PACKED
+                else:
+                    extra_flags = (0, self.packed)
             ffi._backend.complete_struct_or_union(BType, lst, self,
-                                                  -1, -1, *extra_flags) 
+                                                  -1, -1, *extra_flags)
             #
         else:
             fldtypes = []
@@ -433,7 +433,7 @@ class StructOrUnion(StructOrUnionOrEnum):
                 fsize = fieldsize[i]
                 ftype = self.fldtypes[i]
                 #
-                if isinstance(ftype, ArrayType) and ftype.length_is_unknown(): 
+                if isinstance(ftype, ArrayType) and ftype.length_is_unknown():
                     # fix the length to match the total size
                     BItemType = ftype.item.get_cached_btype(ffi, finishlist)
                     nlen, nrest = divmod(fsize, ffi.sizeof(BItemType))
@@ -468,7 +468,7 @@ class StructOrUnion(StructOrUnionOrEnum):
 
     def check_not_partial(self):
         if self.partial and self.fixedlayout is None:
-            raise VerificationMissing(self._get_c_name()) 
+            raise VerificationMissing(self._get_c_name())
 
     def build_backend_type(self, ffi, finishlist):
         self.check_not_partial()
@@ -506,7 +506,7 @@ class EnumType(StructOrUnionOrEnum):
 
     def check_not_partial(self):
         if self.partial and not self.partial_resolved:
-            raise VerificationMissing(self._get_c_name()) 
+            raise VerificationMissing(self._get_c_name())
 
     def build_backend_type(self, ffi, finishlist):
         self.check_not_partial()
@@ -554,8 +554,8 @@ class EnumType(StructOrUnionOrEnum):
         if (smallest_value >= ((-1) << (8*size2-1)) and
             largest_value < (1 << (8*size2-sign))):
             return btype2
-        raise CDefError("%s values don't all fit into either 'long' " 
-                        "or 'unsigned long'" % self._get_c_name()) 
+        raise CDefError("%s values don't all fit into either 'long' "
+                        "or 'unsigned long'" % self._get_c_name())
 
 def unknown_type(name, structname=None):
     if structname is None:
@@ -573,24 +573,24 @@ def unknown_ptr_type(name, structname=None):
 
 
 global_lock = allocate_lock()
-_typecache_cffi_backend = weakref.WeakValueDictionary() 
+_typecache_cffi_backend = weakref.WeakValueDictionary()
 
-def get_typecache(backend): 
-    # returns _typecache_cffi_backend if backend is the _cffi_backend 
-    # module, or type(backend).__typecache if backend is an instance of 
-    # CTypesBackend (or some FakeBackend class during tests) 
-    if isinstance(backend, types.ModuleType): 
-        return _typecache_cffi_backend 
-    with global_lock: 
-        if not hasattr(type(backend), '__typecache'): 
-            type(backend).__typecache = weakref.WeakValueDictionary() 
-        return type(backend).__typecache 
- 
+def get_typecache(backend):
+    # returns _typecache_cffi_backend if backend is the _cffi_backend
+    # module, or type(backend).__typecache if backend is an instance of
+    # CTypesBackend (or some FakeBackend class during tests)
+    if isinstance(backend, types.ModuleType):
+        return _typecache_cffi_backend
+    with global_lock:
+        if not hasattr(type(backend), '__typecache'):
+            type(backend).__typecache = weakref.WeakValueDictionary()
+        return type(backend).__typecache
+
 def global_cache(srctype, ffi, funcname, *args, **kwds):
     key = kwds.pop('key', (funcname, args))
     assert not kwds
     try:
-        return ffi._typecache[key] 
+        return ffi._typecache[key]
     except KeyError:
         pass
     try:
@@ -600,7 +600,7 @@ def global_cache(srctype, ffi, funcname, *args, **kwds):
     # note that setdefault() on WeakValueDictionary is not atomic
     # and contains a rare bug (http://bugs.python.org/issue19542);
     # we have to use a lock and do it ourselves
-    cache = ffi._typecache 
+    cache = ffi._typecache
     with global_lock:
         res1 = cache.get(key)
         if res1 is None:

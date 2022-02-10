@@ -37,9 +37,9 @@
 #include "llvm/IR/ValueHandle.h"
 
 namespace llvm {
- 
-class AAResults; 
- 
+
+class AAResults;
+
 namespace objcarc {
 
 /// A handy option to enable/disable all ARC Optimizations.
@@ -73,9 +73,9 @@ inline bool ModuleHasARC(const Module &M) {
 /// This is a wrapper around getUnderlyingObject which also knows how to
 /// look through objc_retain and objc_autorelease calls, which we know to return
 /// their argument verbatim.
-inline const Value *GetUnderlyingObjCPtr(const Value *V) { 
+inline const Value *GetUnderlyingObjCPtr(const Value *V) {
   for (;;) {
-    V = getUnderlyingObject(V); 
+    V = getUnderlyingObject(V);
     if (!IsForwarding(GetBasicARCInstKind(V)))
       break;
     V = cast<CallInst>(V)->getArgOperand(0);
@@ -86,12 +86,12 @@ inline const Value *GetUnderlyingObjCPtr(const Value *V) {
 
 /// A wrapper for GetUnderlyingObjCPtr used for results memoization.
 inline const Value *
-GetUnderlyingObjCPtrCached(const Value *V, 
+GetUnderlyingObjCPtrCached(const Value *V,
                            DenseMap<const Value *, WeakTrackingVH> &Cache) {
   if (auto InCache = Cache.lookup(V))
     return InCache;
 
-  const Value *Computed = GetUnderlyingObjCPtr(V); 
+  const Value *Computed = GetUnderlyingObjCPtr(V);
   Cache[V] = const_cast<Value *>(Computed);
   return Computed;
 }
@@ -154,7 +154,7 @@ inline bool IsPotentialRetainableObjPtr(const Value *Op) {
     return false;
   // Special arguments can not be a valid retainable object pointer.
   if (const Argument *Arg = dyn_cast<Argument>(Op))
-    if (Arg->hasPassPointeeByValueCopyAttr() || Arg->hasNestAttr() || 
+    if (Arg->hasPassPointeeByValueCopyAttr() || Arg->hasNestAttr() ||
         Arg->hasStructRetAttr())
       return false;
   // Only consider values with pointer types.
@@ -170,7 +170,7 @@ inline bool IsPotentialRetainableObjPtr(const Value *Op) {
   return true;
 }
 
-bool IsPotentialRetainableObjPtr(const Value *Op, AAResults &AA); 
+bool IsPotentialRetainableObjPtr(const Value *Op, AAResults &AA);
 
 /// Helper for GetARCInstKind. Determines what kind of construct CS
 /// is.

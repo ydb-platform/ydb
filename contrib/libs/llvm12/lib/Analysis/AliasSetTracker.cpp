@@ -23,7 +23,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/PassManager.h" 
+#include "llvm/IR/PassManager.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/Value.h"
 #include "llvm/InitializePasses.h"
@@ -83,7 +83,7 @@ void AliasSet::mergeSetIn(AliasSet &AS, AliasSetTracker &AST) {
       addRef();
     }
   } else if (ASHadUnknownInsts) {
-    llvm::append_range(UnknownInsts, AS.UnknownInsts); 
+    llvm::append_range(UnknownInsts, AS.UnknownInsts);
     AS.UnknownInsts.clear();
   }
 
@@ -438,9 +438,9 @@ void AliasSetTracker::addUnknown(Instruction *Inst) {
       break;
       // FIXME: Add lifetime/invariant intrinsics (See: PR30807).
     case Intrinsic::assume:
-    case Intrinsic::experimental_noalias_scope_decl: 
+    case Intrinsic::experimental_noalias_scope_decl:
     case Intrinsic::sideeffect:
-    case Intrinsic::pseudoprobe: 
+    case Intrinsic::pseudoprobe:
       return;
     }
   }
@@ -672,10 +672,10 @@ void AliasSet::print(raw_ostream &OS) const {
     for (iterator I = begin(), E = end(); I != E; ++I) {
       if (I != begin()) OS << ", ";
       I.getPointer()->printAsOperand(OS << "(");
-      if (I.getSize() == LocationSize::afterPointer()) 
-        OS << ", unknown after)"; 
-      else if (I.getSize() == LocationSize::beforeOrAfterPointer()) 
-        OS << ", unknown before-or-after)"; 
+      if (I.getSize() == LocationSize::afterPointer())
+        OS << ", unknown after)";
+      else if (I.getSize() == LocationSize::beforeOrAfterPointer())
+        OS << ", unknown before-or-after)";
       else
         OS << ", " << I.getSize() << ")";
     }
@@ -753,11 +753,11 @@ namespace {
 
     bool runOnFunction(Function &F) override {
       auto &AAWP = getAnalysis<AAResultsWrapperPass>();
-      AliasSetTracker Tracker(AAWP.getAAResults()); 
+      AliasSetTracker Tracker(AAWP.getAAResults());
       errs() << "Alias sets for function '" << F.getName() << "':\n";
       for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
-        Tracker.add(&*I); 
-      Tracker.print(errs()); 
+        Tracker.add(&*I);
+      Tracker.print(errs());
       return false;
     }
   };
@@ -771,16 +771,16 @@ INITIALIZE_PASS_BEGIN(AliasSetPrinter, "print-alias-sets",
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
 INITIALIZE_PASS_END(AliasSetPrinter, "print-alias-sets",
                 "Alias Set Printer", false, true)
- 
-AliasSetsPrinterPass::AliasSetsPrinterPass(raw_ostream &OS) : OS(OS) {} 
- 
-PreservedAnalyses AliasSetsPrinterPass::run(Function &F, 
-                                            FunctionAnalysisManager &AM) { 
-  auto &AA = AM.getResult<AAManager>(F); 
-  AliasSetTracker Tracker(AA); 
-  OS << "Alias sets for function '" << F.getName() << "':\n"; 
-  for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) 
-    Tracker.add(&*I); 
-  Tracker.print(OS); 
-  return PreservedAnalyses::all(); 
-} 
+
+AliasSetsPrinterPass::AliasSetsPrinterPass(raw_ostream &OS) : OS(OS) {}
+
+PreservedAnalyses AliasSetsPrinterPass::run(Function &F,
+                                            FunctionAnalysisManager &AM) {
+  auto &AA = AM.getResult<AAManager>(F);
+  AliasSetTracker Tracker(AA);
+  OS << "Alias sets for function '" << F.getName() << "':\n";
+  for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
+    Tracker.add(&*I);
+  Tracker.print(OS);
+  return PreservedAnalyses::all();
+}

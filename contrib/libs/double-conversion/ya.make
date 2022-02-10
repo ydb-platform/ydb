@@ -1,7 +1,7 @@
 LIBRARY()
 
-VERSION(3.1.0) 
- 
+VERSION(3.1.0)
+
 LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)

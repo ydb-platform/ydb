@@ -2,7 +2,7 @@
 from __future__ import unicode_literals
 
 from prompt_toolkit.enums import DEFAULT_BUFFER
-from prompt_toolkit.filters import HasSelection, Condition, EmacsInsertMode, ViInsertMode 
+from prompt_toolkit.filters import HasSelection, Condition, EmacsInsertMode, ViInsertMode
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.layout.screen import Point
 from prompt_toolkit.mouse_events import MouseEventType, MouseEvent
@@ -10,7 +10,7 @@ from prompt_toolkit.renderer import HeightIsUnknownError
 from prompt_toolkit.utils import suspend_to_background_supported, is_windows
 
 from .named_commands import get_by_name
-from ..registry import Registry 
+from ..registry import Registry
 
 
 __all__ = (
@@ -26,10 +26,10 @@ def if_no_repeat(event):
     return not event.is_repeat
 
 
-def load_basic_bindings(): 
-    registry = Registry() 
+def load_basic_bindings():
+    registry = Registry()
     insert_mode = ViInsertMode() | EmacsInsertMode()
-    handle = registry.add_binding 
+    handle = registry.add_binding
     has_selection = HasSelection()
 
     @handle(Keys.ControlA)
@@ -141,8 +141,8 @@ def load_basic_bindings():
         get_by_name('self-insert'))
     handle(Keys.ControlT, filter=insert_mode)(get_by_name('transpose-chars'))
     handle(Keys.ControlW, filter=insert_mode)(get_by_name('unix-word-rubout'))
-    handle(Keys.ControlI, filter=insert_mode)(get_by_name('menu-complete')) 
-    handle(Keys.BackTab, filter=insert_mode)(get_by_name('menu-complete-backward')) 
+    handle(Keys.ControlI, filter=insert_mode)(get_by_name('menu-complete'))
+    handle(Keys.BackTab, filter=insert_mode)(get_by_name('menu-complete-backward'))
 
     handle(Keys.PageUp, filter= ~has_selection)(get_by_name('previous-history'))
     handle(Keys.PageDown, filter= ~has_selection)(get_by_name('next-history'))
@@ -181,7 +181,7 @@ def load_basic_bindings():
         data = event.current_buffer.cut_selection()
         event.cli.clipboard.set_data(data)
 
-    # Global bindings. 
+    # Global bindings.
 
     @handle(Keys.ControlZ)
     def _(event):
@@ -196,7 +196,7 @@ def load_basic_bindings():
         """
         event.current_buffer.insert_text(event.data)
 
-    @handle(Keys.CPRResponse, save_before=lambda e: False) 
+    @handle(Keys.CPRResponse, save_before=lambda e: False)
     def _(event):
         """
         Handle incoming Cursor-Position-Request response.
@@ -208,7 +208,7 @@ def load_basic_bindings():
         # Report absolute cursor position to the renderer.
         event.cli.renderer.report_absolute_cursor_row(row)
 
-    @handle(Keys.BracketedPaste) 
+    @handle(Keys.BracketedPaste)
     def _(event):
         " Pasting from clipboard. "
         data = event.data
@@ -221,24 +221,24 @@ def load_basic_bindings():
 
         event.current_buffer.insert_text(data)
 
-    @handle(Keys.Any, filter=Condition(lambda cli: cli.quoted_insert), eager=True) 
-    def _(event): 
-        """ 
-        Handle quoted insert. 
-        """ 
-        event.current_buffer.insert_text(event.data, overwrite=False) 
-        event.cli.quoted_insert = False 
+    @handle(Keys.Any, filter=Condition(lambda cli: cli.quoted_insert), eager=True)
+    def _(event):
+        """
+        Handle quoted insert.
+        """
+        event.current_buffer.insert_text(event.data, overwrite=False)
+        event.cli.quoted_insert = False
 
-    return registry 
- 
- 
-def load_mouse_bindings(): 
+    return registry
+
+
+def load_mouse_bindings():
     """
     Key bindings, required for mouse support.
     (Mouse events enter through the key binding system.)
     """
-    registry = Registry() 
- 
+    registry = Registry()
+
     @registry.add_binding(Keys.Vt100MouseEvent)
     def _(event):
         """
@@ -335,15 +335,15 @@ def load_mouse_bindings():
         handler(event.cli, MouseEvent(position=Point(x=x, y=y),
                                       event_type=event_type))
 
-    return registry 
+    return registry
 
- 
-def load_abort_and_exit_bindings(): 
+
+def load_abort_and_exit_bindings():
     """
     Basic bindings for abort (Ctrl-C) and exit (Ctrl-D).
     """
-    registry = Registry() 
-    handle = registry.add_binding 
+    registry = Registry()
+    handle = registry.add_binding
 
     @handle(Keys.ControlC)
     def _(event):
@@ -359,34 +359,34 @@ def load_abort_and_exit_bindings():
 
     handle(Keys.ControlD, filter=ctrl_d_condition)(get_by_name('end-of-file'))
 
-    return registry 
+    return registry
 
- 
-def load_basic_system_bindings(): 
+
+def load_basic_system_bindings():
     """
     Basic system bindings (For both Emacs and Vi mode.)
     """
-    registry = Registry() 
+    registry = Registry()
 
     suspend_supported = Condition(
         lambda cli: suspend_to_background_supported())
 
-    @registry.add_binding(Keys.ControlZ, filter=suspend_supported) 
+    @registry.add_binding(Keys.ControlZ, filter=suspend_supported)
     def _(event):
         """
         Suspend process to background.
         """
         event.cli.suspend_to_background()
 
-    return registry 
+    return registry
 
- 
-def load_auto_suggestion_bindings(): 
+
+def load_auto_suggestion_bindings():
     """
     Key bindings for accepting auto suggestion text.
     """
-    registry = Registry() 
-    handle = registry.add_binding 
+    registry = Registry()
+    handle = registry.add_binding
 
     suggestion_available = Condition(
         lambda cli:
@@ -403,5 +403,5 @@ def load_auto_suggestion_bindings():
 
         if suggestion:
             b.insert_text(suggestion.text)
- 
-    return registry 
+
+    return registry

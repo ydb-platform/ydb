@@ -33,7 +33,7 @@ private:
   GCOVOptions GCOVOpts;
 };
 
-} // namespace llvm 
+} // namespace llvm
 #endif
 
 #ifdef __GNUC__

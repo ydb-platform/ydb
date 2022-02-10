@@ -7,8 +7,8 @@
 # Licensed to PSF under a Contributor Agreement.
 #
 
-__all__ = ['BaseProcess', 'current_process', 'active_children', 
-           'parent_process'] 
+__all__ = ['BaseProcess', 'current_process', 'active_children',
+           'parent_process']
 
 #
 # Imports
@@ -47,13 +47,13 @@ def active_children():
     _cleanup()
     return list(_children)
 
- 
-def parent_process(): 
-    ''' 
-    Return process object representing the parent process 
-    ''' 
-    return _parent_process 
- 
+
+def parent_process():
+    '''
+    Return process object representing the parent process
+    '''
+    return _parent_process
+
 #
 #
 #
@@ -84,7 +84,7 @@ class BaseProcess(object):
         self._identity = _current_process._identity + (count,)
         self._config = _current_process._config.copy()
         self._parent_pid = os.getpid()
-        self._parent_name = _current_process.name 
+        self._parent_name = _current_process.name
         self._popen = None
         self._closed = False
         self._target = target
@@ -257,7 +257,7 @@ class BaseProcess(object):
             raise ValueError("process not started") from None
 
     def __repr__(self):
-        exitcode = None 
+        exitcode = None
         if self is _current_process:
             status = 'started'
         elif self._closed:
@@ -267,29 +267,29 @@ class BaseProcess(object):
         elif self._popen is None:
             status = 'initial'
         else:
-            exitcode = self._popen.poll() 
-            if exitcode is not None: 
-                status = 'stopped' 
+            exitcode = self._popen.poll()
+            if exitcode is not None:
+                status = 'stopped'
             else:
                 status = 'started'
 
-        info = [type(self).__name__, 'name=%r' % self._name] 
-        if self._popen is not None: 
-            info.append('pid=%s' % self._popen.pid) 
-        info.append('parent=%s' % self._parent_pid) 
-        info.append(status) 
-        if exitcode is not None: 
-            exitcode = _exitcode_to_name.get(exitcode, exitcode) 
-            info.append('exitcode=%s' % exitcode) 
-        if self.daemon: 
-            info.append('daemon') 
-        return '<%s>' % ' '.join(info) 
+        info = [type(self).__name__, 'name=%r' % self._name]
+        if self._popen is not None:
+            info.append('pid=%s' % self._popen.pid)
+        info.append('parent=%s' % self._parent_pid)
+        info.append(status)
+        if exitcode is not None:
+            exitcode = _exitcode_to_name.get(exitcode, exitcode)
+            info.append('exitcode=%s' % exitcode)
+        if self.daemon:
+            info.append('daemon')
+        return '<%s>' % ' '.join(info)
 
     ##
 
-    def _bootstrap(self, parent_sentinel=None): 
+    def _bootstrap(self, parent_sentinel=None):
         from . import util, context
-        global _current_process, _parent_process, _process_counter, _children 
+        global _current_process, _parent_process, _process_counter, _children
 
         try:
             if self._start_method is not None:
@@ -299,10 +299,10 @@ class BaseProcess(object):
             util._close_stdin()
             old_process = _current_process
             _current_process = self
-            _parent_process = _ParentProcess( 
-                self._parent_name, self._parent_pid, parent_sentinel) 
-            if threading._HAVE_THREAD_NATIVE_ID: 
-                threading.main_thread()._set_native_id() 
+            _parent_process = _ParentProcess(
+                self._parent_name, self._parent_pid, parent_sentinel)
+            if threading._HAVE_THREAD_NATIVE_ID:
+                threading.main_thread()._set_native_id()
             try:
                 util._finalizer_registry.clear()
                 util._run_after_forkers()
@@ -317,12 +317,12 @@ class BaseProcess(object):
             finally:
                 util._exit_function()
         except SystemExit as e:
-            if e.code is None: 
-                exitcode = 0 
-            elif isinstance(e.code, int): 
-                exitcode = e.code 
+            if e.code is None:
+                exitcode = 0
+            elif isinstance(e.code, int):
+                exitcode = e.code
             else:
-                sys.stderr.write(str(e.code) + '\n') 
+                sys.stderr.write(str(e.code) + '\n')
                 exitcode = 1
         except:
             exitcode = 1
@@ -350,41 +350,41 @@ class AuthenticationString(bytes):
                 )
         return AuthenticationString, (bytes(self),)
 
- 
+
 #
-# Create object representing the parent process 
-# 
- 
-class _ParentProcess(BaseProcess): 
- 
-    def __init__(self, name, pid, sentinel): 
-        self._identity = () 
-        self._name = name 
-        self._pid = pid 
-        self._parent_pid = None 
-        self._popen = None 
-        self._closed = False 
-        self._sentinel = sentinel 
-        self._config = {} 
- 
-    def is_alive(self): 
-        from multiprocessing.connection import wait 
-        return not wait([self._sentinel], timeout=0) 
- 
-    @property 
-    def ident(self): 
-        return self._pid 
- 
-    def join(self, timeout=None): 
-        ''' 
-        Wait until parent process terminates 
-        ''' 
-        from multiprocessing.connection import wait 
-        wait([self._sentinel], timeout=timeout) 
- 
-    pid = ident 
- 
-# 
+# Create object representing the parent process
+#
+
+class _ParentProcess(BaseProcess):
+
+    def __init__(self, name, pid, sentinel):
+        self._identity = ()
+        self._name = name
+        self._pid = pid
+        self._parent_pid = None
+        self._popen = None
+        self._closed = False
+        self._sentinel = sentinel
+        self._config = {}
+
+    def is_alive(self):
+        from multiprocessing.connection import wait
+        return not wait([self._sentinel], timeout=0)
+
+    @property
+    def ident(self):
+        return self._pid
+
+    def join(self, timeout=None):
+        '''
+        Wait until parent process terminates
+        '''
+        from multiprocessing.connection import wait
+        wait([self._sentinel], timeout=timeout)
+
+    pid = ident
+
+#
 # Create object representing the main process
 #
 
@@ -412,7 +412,7 @@ class _MainProcess(BaseProcess):
         pass
 
 
-_parent_process = None 
+_parent_process = None
 _current_process = _MainProcess()
 _process_counter = itertools.count(1)
 _children = set()
@@ -426,7 +426,7 @@ _exitcode_to_name = {}
 
 for name, signum in list(signal.__dict__.items()):
     if name[:3]=='SIG' and '_' not in name:
-        _exitcode_to_name[-signum] = f'-{name}' 
+        _exitcode_to_name[-signum] = f'-{name}'
 
 # For debug and leak testing
 _dangling = WeakSet()

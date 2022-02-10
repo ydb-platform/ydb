@@ -42,10 +42,10 @@ public:
 class InProcessEHFrameRegistrar final : public EHFrameRegistrar {
 public:
   Error registerEHFrames(JITTargetAddress EHFrameSectionAddr,
-                         size_t EHFrameSectionSize) override; 
+                         size_t EHFrameSectionSize) override;
 
   Error deregisterEHFrames(JITTargetAddress EHFrameSectionAddr,
-                           size_t EHFrameSectionSize) override; 
+                           size_t EHFrameSectionSize) override;
 };
 
 using StoreFrameRangeFunction =

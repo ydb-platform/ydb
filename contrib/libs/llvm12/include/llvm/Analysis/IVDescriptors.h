@@ -40,24 +40,24 @@ class ScalarEvolution;
 class SCEV;
 class DominatorTree;
 
-/// These are the kinds of recurrences that we support. 
-enum class RecurKind { 
-  None,   ///< Not a recurrence. 
-  Add,    ///< Sum of integers. 
-  Mul,    ///< Product of integers. 
-  Or,     ///< Bitwise or logical OR of integers. 
-  And,    ///< Bitwise or logical AND of integers. 
-  Xor,    ///< Bitwise or logical XOR of integers. 
-  SMin,   ///< Signed integer min implemented in terms of select(cmp()). 
-  SMax,   ///< Signed integer max implemented in terms of select(cmp()). 
-  UMin,   ///< Unisgned integer min implemented in terms of select(cmp()). 
-  UMax,   ///< Unsigned integer max implemented in terms of select(cmp()). 
-  FAdd,   ///< Sum of floats. 
-  FMul,   ///< Product of floats. 
-  FMin,   ///< FP min implemented in terms of select(cmp()). 
-  FMax    ///< FP max implemented in terms of select(cmp()). 
-}; 
- 
+/// These are the kinds of recurrences that we support.
+enum class RecurKind {
+  None,   ///< Not a recurrence.
+  Add,    ///< Sum of integers.
+  Mul,    ///< Product of integers.
+  Or,     ///< Bitwise or logical OR of integers.
+  And,    ///< Bitwise or logical AND of integers.
+  Xor,    ///< Bitwise or logical XOR of integers.
+  SMin,   ///< Signed integer min implemented in terms of select(cmp()).
+  SMax,   ///< Signed integer max implemented in terms of select(cmp()).
+  UMin,   ///< Unisgned integer min implemented in terms of select(cmp()).
+  UMax,   ///< Unsigned integer max implemented in terms of select(cmp()).
+  FAdd,   ///< Sum of floats.
+  FMul,   ///< Product of floats.
+  FMin,   ///< FP min implemented in terms of select(cmp()).
+  FMax    ///< FP max implemented in terms of select(cmp()).
+};
+
 /// The RecurrenceDescriptor is used to identify recurrences variables in a
 /// loop. Reduction is a special case of recurrence that has uses of the
 /// recurrence variable outside the loop. The method isReductionPHI identifies
@@ -74,11 +74,11 @@ class RecurrenceDescriptor {
 public:
   RecurrenceDescriptor() = default;
 
-  RecurrenceDescriptor(Value *Start, Instruction *Exit, RecurKind K, 
-                       FastMathFlags FMF, Instruction *UAI, Type *RT, 
-                       bool Signed, SmallPtrSetImpl<Instruction *> &CI) 
+  RecurrenceDescriptor(Value *Start, Instruction *Exit, RecurKind K,
+                       FastMathFlags FMF, Instruction *UAI, Type *RT,
+                       bool Signed, SmallPtrSetImpl<Instruction *> &CI)
       : StartValue(Start), LoopExitInstr(Exit), Kind(K), FMF(FMF),
-        UnsafeAlgebraInst(UAI), RecurrenceType(RT), IsSigned(Signed) { 
+        UnsafeAlgebraInst(UAI), RecurrenceType(RT), IsSigned(Signed) {
     CastInsts.insert(CI.begin(), CI.end());
   }
 
@@ -86,22 +86,22 @@ public:
   class InstDesc {
   public:
     InstDesc(bool IsRecur, Instruction *I, Instruction *UAI = nullptr)
-        : IsRecurrence(IsRecur), PatternLastInst(I), 
-          RecKind(RecurKind::None), UnsafeAlgebraInst(UAI) {} 
+        : IsRecurrence(IsRecur), PatternLastInst(I),
+          RecKind(RecurKind::None), UnsafeAlgebraInst(UAI) {}
 
-    InstDesc(Instruction *I, RecurKind K, Instruction *UAI = nullptr) 
-        : IsRecurrence(true), PatternLastInst(I), RecKind(K), 
+    InstDesc(Instruction *I, RecurKind K, Instruction *UAI = nullptr)
+        : IsRecurrence(true), PatternLastInst(I), RecKind(K),
           UnsafeAlgebraInst(UAI) {}
 
-    bool isRecurrence() const { return IsRecurrence; } 
+    bool isRecurrence() const { return IsRecurrence; }
 
-    bool hasUnsafeAlgebra() const { return UnsafeAlgebraInst != nullptr; } 
+    bool hasUnsafeAlgebra() const { return UnsafeAlgebraInst != nullptr; }
 
-    Instruction *getUnsafeAlgebraInst() const { return UnsafeAlgebraInst; } 
+    Instruction *getUnsafeAlgebraInst() const { return UnsafeAlgebraInst; }
 
-    RecurKind getRecKind() const { return RecKind; } 
+    RecurKind getRecKind() const { return RecKind; }
 
-    Instruction *getPatternInst() const { return PatternLastInst; } 
+    Instruction *getPatternInst() const { return PatternLastInst; }
 
   private:
     // Is this instruction a recurrence candidate.
@@ -109,8 +109,8 @@ public:
     // The last instruction in a min/max pattern (select of the select(icmp())
     // pattern), or the current recurrence instruction otherwise.
     Instruction *PatternLastInst;
-    // If this is a min/max pattern. 
-    RecurKind RecKind; 
+    // If this is a min/max pattern.
+    RecurKind RecKind;
     // Recurrence has unsafe algebra.
     Instruction *UnsafeAlgebraInst;
   };
@@ -120,7 +120,7 @@ public:
   /// select(icmp()) this function advances the instruction pointer 'I' from the
   /// compare instruction to the select instruction and stores this pointer in
   /// 'PatternLastInst' member of the returned struct.
-  static InstDesc isRecurrenceInstr(Instruction *I, RecurKind Kind, 
+  static InstDesc isRecurrenceInstr(Instruction *I, RecurKind Kind,
                                     InstDesc &Prev, bool HasFunNoNaNAttr);
 
   /// Returns true if instruction I has multiple uses in Insts
@@ -131,28 +131,28 @@ public:
   /// Returns true if all uses of the instruction I is within the Set.
   static bool areAllUsesIn(Instruction *I, SmallPtrSetImpl<Instruction *> &Set);
 
-  /// Returns a struct describing if the instruction is a 
+  /// Returns a struct describing if the instruction is a
   /// Select(ICmp(X, Y), X, Y) instruction pattern corresponding to a min(X, Y)
-  /// or max(X, Y). \p Prev specifies the description of an already processed 
-  /// select instruction, so its corresponding cmp can be matched to it. 
-  static InstDesc isMinMaxSelectCmpPattern(Instruction *I, 
-                                           const InstDesc &Prev); 
+  /// or max(X, Y). \p Prev specifies the description of an already processed
+  /// select instruction, so its corresponding cmp can be matched to it.
+  static InstDesc isMinMaxSelectCmpPattern(Instruction *I,
+                                           const InstDesc &Prev);
 
   /// Returns a struct describing if the instruction is a
   /// Select(FCmp(X, Y), (Z = X op PHINode), PHINode) instruction pattern.
-  static InstDesc isConditionalRdxPattern(RecurKind Kind, Instruction *I); 
+  static InstDesc isConditionalRdxPattern(RecurKind Kind, Instruction *I);
 
   /// Returns identity corresponding to the RecurrenceKind.
-  static Constant *getRecurrenceIdentity(RecurKind K, Type *Tp); 
+  static Constant *getRecurrenceIdentity(RecurKind K, Type *Tp);
 
-  /// Returns the opcode corresponding to the RecurrenceKind. 
-  static unsigned getOpcode(RecurKind Kind); 
+  /// Returns the opcode corresponding to the RecurrenceKind.
+  static unsigned getOpcode(RecurKind Kind);
 
   /// Returns true if Phi is a reduction of type Kind and adds it to the
   /// RecurrenceDescriptor. If either \p DB is non-null or \p AC and \p DT are
   /// non-null, the minimal bit width needed to compute the reduction will be
   /// computed.
-  static bool AddReductionVar(PHINode *Phi, RecurKind Kind, Loop *TheLoop, 
+  static bool AddReductionVar(PHINode *Phi, RecurKind Kind, Loop *TheLoop,
                               bool HasFunNoNaNAttr,
                               RecurrenceDescriptor &RedDes,
                               DemandedBits *DB = nullptr,
@@ -181,64 +181,64 @@ public:
                          DenseMap<Instruction *, Instruction *> &SinkAfter,
                          DominatorTree *DT);
 
-  RecurKind getRecurrenceKind() const { return Kind; } 
+  RecurKind getRecurrenceKind() const { return Kind; }
 
-  unsigned getOpcode() const { return getOpcode(getRecurrenceKind()); } 
+  unsigned getOpcode() const { return getOpcode(getRecurrenceKind()); }
 
-  FastMathFlags getFastMathFlags() const { return FMF; } 
+  FastMathFlags getFastMathFlags() const { return FMF; }
 
-  TrackingVH<Value> getRecurrenceStartValue() const { return StartValue; } 
+  TrackingVH<Value> getRecurrenceStartValue() const { return StartValue; }
 
-  Instruction *getLoopExitInstr() const { return LoopExitInstr; } 
+  Instruction *getLoopExitInstr() const { return LoopExitInstr; }
 
   /// Returns true if the recurrence has unsafe algebra which requires a relaxed
   /// floating-point model.
-  bool hasUnsafeAlgebra() const { return UnsafeAlgebraInst != nullptr; } 
+  bool hasUnsafeAlgebra() const { return UnsafeAlgebraInst != nullptr; }
 
   /// Returns first unsafe algebra instruction in the PHI node's use-chain.
-  Instruction *getUnsafeAlgebraInst() const { return UnsafeAlgebraInst; } 
+  Instruction *getUnsafeAlgebraInst() const { return UnsafeAlgebraInst; }
 
   /// Returns true if the recurrence kind is an integer kind.
-  static bool isIntegerRecurrenceKind(RecurKind Kind); 
+  static bool isIntegerRecurrenceKind(RecurKind Kind);
 
   /// Returns true if the recurrence kind is a floating point kind.
-  static bool isFloatingPointRecurrenceKind(RecurKind Kind); 
+  static bool isFloatingPointRecurrenceKind(RecurKind Kind);
 
   /// Returns true if the recurrence kind is an arithmetic kind.
-  static bool isArithmeticRecurrenceKind(RecurKind Kind); 
+  static bool isArithmeticRecurrenceKind(RecurKind Kind);
 
-  /// Returns true if the recurrence kind is an integer min/max kind. 
-  static bool isIntMinMaxRecurrenceKind(RecurKind Kind) { 
-    return Kind == RecurKind::UMin || Kind == RecurKind::UMax || 
-           Kind == RecurKind::SMin || Kind == RecurKind::SMax; 
-  } 
- 
-  /// Returns true if the recurrence kind is a floating-point min/max kind. 
-  static bool isFPMinMaxRecurrenceKind(RecurKind Kind) { 
-    return Kind == RecurKind::FMin || Kind == RecurKind::FMax; 
-  } 
- 
-  /// Returns true if the recurrence kind is any min/max kind. 
-  static bool isMinMaxRecurrenceKind(RecurKind Kind) { 
-    return isIntMinMaxRecurrenceKind(Kind) || isFPMinMaxRecurrenceKind(Kind); 
-  } 
- 
+  /// Returns true if the recurrence kind is an integer min/max kind.
+  static bool isIntMinMaxRecurrenceKind(RecurKind Kind) {
+    return Kind == RecurKind::UMin || Kind == RecurKind::UMax ||
+           Kind == RecurKind::SMin || Kind == RecurKind::SMax;
+  }
+
+  /// Returns true if the recurrence kind is a floating-point min/max kind.
+  static bool isFPMinMaxRecurrenceKind(RecurKind Kind) {
+    return Kind == RecurKind::FMin || Kind == RecurKind::FMax;
+  }
+
+  /// Returns true if the recurrence kind is any min/max kind.
+  static bool isMinMaxRecurrenceKind(RecurKind Kind) {
+    return isIntMinMaxRecurrenceKind(Kind) || isFPMinMaxRecurrenceKind(Kind);
+  }
+
   /// Returns the type of the recurrence. This type can be narrower than the
   /// actual type of the Phi if the recurrence has been type-promoted.
-  Type *getRecurrenceType() const { return RecurrenceType; } 
+  Type *getRecurrenceType() const { return RecurrenceType; }
 
   /// Returns a reference to the instructions used for type-promoting the
   /// recurrence.
-  const SmallPtrSet<Instruction *, 8> &getCastInsts() const { return CastInsts; } 
+  const SmallPtrSet<Instruction *, 8> &getCastInsts() const { return CastInsts; }
 
   /// Returns true if all source operands of the recurrence are SExtInsts.
-  bool isSigned() const { return IsSigned; } 
+  bool isSigned() const { return IsSigned; }
 
-  /// Attempts to find a chain of operations from Phi to LoopExitInst that can 
-  /// be treated as a set of reductions instructions for in-loop reductions. 
-  SmallVector<Instruction *, 4> getReductionOpChain(PHINode *Phi, 
-                                                    Loop *L) const; 
- 
+  /// Attempts to find a chain of operations from Phi to LoopExitInst that can
+  /// be treated as a set of reductions instructions for in-loop reductions.
+  SmallVector<Instruction *, 4> getReductionOpChain(PHINode *Phi,
+                                                    Loop *L) const;
+
 private:
   // The starting value of the recurrence.
   // It does not have to be zero!
@@ -246,7 +246,7 @@ private:
   // The instruction who's value is used outside the loop.
   Instruction *LoopExitInstr = nullptr;
   // The kind of the recurrence.
-  RecurKind Kind = RecurKind::None; 
+  RecurKind Kind = RecurKind::None;
   // The fast-math flags on the recurrent instructions.  We propagate these
   // fast-math flags into the vectorized FP instructions we generate.
   FastMathFlags FMF;

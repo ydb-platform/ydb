@@ -7,12 +7,12 @@ import itertools
 import re
 import contextlib
 import pickle
-import textwrap 
+import textwrap
 
-from setuptools.extern import six 
-from setuptools.extern.six.moves import builtins, map 
+from setuptools.extern import six
+from setuptools.extern.six.moves import builtins, map
 
-import pkg_resources.py31compat 
+import pkg_resources.py31compat
 
 if sys.platform.startswith('java'):
     import org.python.modules.posix.PosixModule as _os
@@ -26,7 +26,7 @@ _open = open
 from distutils.errors import DistutilsError
 from pkg_resources import working_set
 
- 
+
 __all__ = [
     "AbstractSandbox", "DirectorySandbox", "SandboxViolation", "run_setup",
 ]
@@ -70,7 +70,7 @@ def override_temp(replacement):
     """
     Monkey-patch tempfile.tempdir with replacement, ensuring it exists
     """
-    pkg_resources.py31compat.makedirs(replacement, exist_ok=True) 
+    pkg_resources.py31compat.makedirs(replacement, exist_ok=True)
 
     saved = tempfile.tempdir
 
@@ -245,7 +245,7 @@ def run_setup(setup_script, args):
                 setup_script.encode(sys.getfilesystemencoding())
             )
 
-            with DirectorySandbox(setup_dir): 
+            with DirectorySandbox(setup_dir):
                 ns = dict(__file__=dunder_file, __name__='__main__')
                 _execfile(setup_script, ns)
         except SystemExit as v:
@@ -269,23 +269,23 @@ class AbstractSandbox:
         for name in self._attrs:
             setattr(os, name, getattr(source, name))
 
-    def __enter__(self): 
-        self._copy(self) 
-        if _file: 
-            builtins.file = self._file 
-        builtins.open = self._open 
-        self._active = True 
- 
-    def __exit__(self, exc_type, exc_value, traceback): 
-        self._active = False 
-        if _file: 
-            builtins.file = _file 
-        builtins.open = _open 
-        self._copy(_os) 
- 
+    def __enter__(self):
+        self._copy(self)
+        if _file:
+            builtins.file = self._file
+        builtins.open = self._open
+        self._active = True
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._active = False
+        if _file:
+            builtins.file = _file
+        builtins.open = _open
+        self._copy(_os)
+
     def run(self, func):
         """Run 'func' under os sandboxing"""
-        with self: 
+        with self:
             return func()
 
     def _mk_dual_path_wrapper(name):
@@ -474,18 +474,18 @@ WRITE_FLAGS = functools.reduce(
 class SandboxViolation(DistutilsError):
     """A setup script attempted to modify the filesystem outside the sandbox"""
 
-    tmpl = textwrap.dedent(""" 
-        SandboxViolation: {cmd}{args!r} {kwargs} 
+    tmpl = textwrap.dedent("""
+        SandboxViolation: {cmd}{args!r} {kwargs}
 
-        The package setup script has attempted to modify files on your system 
-        that are not within the EasyInstall build area, and has been aborted. 
+        The package setup script has attempted to modify files on your system
+        that are not within the EasyInstall build area, and has been aborted.
 
-        This package cannot be safely installed by EasyInstall, and may not 
-        support alternate installation locations even if you run its setup 
-        script by hand.  Please inform the package's author and the EasyInstall 
-        maintainers to find out if a fix or workaround is available. 
-        """).lstrip() 
+        This package cannot be safely installed by EasyInstall, and may not
+        support alternate installation locations even if you run its setup
+        script by hand.  Please inform the package's author and the EasyInstall
+        maintainers to find out if a fix or workaround is available.
+        """).lstrip()
 
-    def __str__(self): 
-        cmd, args, kwargs = self.args 
-        return self.tmpl.format(**locals()) 
+    def __str__(self):
+        cmd, args, kwargs = self.args
+        return self.tmpl.format(**locals())

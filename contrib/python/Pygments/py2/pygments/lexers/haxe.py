@@ -79,7 +79,7 @@ class HaxeLexer(ExtendedRegexLexer):
         if proc in ['error']:
             ctx.stack.append('preproc-error')
 
-        yield match.start(), Comment.Preproc, u'#' + proc 
+        yield match.start(), Comment.Preproc, u'#' + proc
         ctx.pos = match.end()
 
     tokens = {

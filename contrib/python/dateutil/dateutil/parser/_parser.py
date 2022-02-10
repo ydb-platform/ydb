@@ -20,11 +20,11 @@ value falls back to the end of the month.
 Additional resources about date/time string formats can be found below:
 
 - `A summary of the international standard date and time notation
-  <https://www.cl.cam.ac.uk/~mgk25/iso-time.html>`_ 
-- `W3C Date and Time Formats <https://www.w3.org/TR/NOTE-datetime>`_ 
+  <https://www.cl.cam.ac.uk/~mgk25/iso-time.html>`_
+- `W3C Date and Time Formats <https://www.w3.org/TR/NOTE-datetime>`_
 - `Time Formats (Planetary Rings Node) <https://pds-rings.seti.org:443/tools/time_formats.html>`_
 - `CPAN ParseDate module
-  <https://metacpan.org/pod/release/MUIR/Time-modules-2013.0912/lib/Time/ParseDate.pm>`_ 
+  <https://metacpan.org/pod/release/MUIR/Time-modules-2013.0912/lib/Time/ParseDate.pm>`_
 - `Java SimpleDateFormat Class
   <https://docs.oracle.com/javase/6/docs/api/java/text/SimpleDateFormat.html>`_
 """
@@ -40,7 +40,7 @@ from calendar import monthrange
 from io import StringIO
 
 import six
-from six import integer_types, text_type 
+from six import integer_types, text_type
 
 from decimal import Decimal
 
@@ -49,7 +49,7 @@ from warnings import warn
 from .. import relativedelta
 from .. import tz
 
-__all__ = ["parse", "parserinfo", "ParserError"] 
+__all__ = ["parse", "parserinfo", "ParserError"]
 
 
 # TODO: pandas.core.tools.datetimes imports this explicitly.  Might be worth
@@ -60,8 +60,8 @@ class _timelex(object):
     _split_decimal = re.compile("([.,])")
 
     def __init__(self, instream):
-        if isinstance(instream, (bytes, bytearray)): 
-            instream = instream.decode() 
+        if isinstance(instream, (bytes, bytearray)):
+            instream = instream.decode()
 
         if isinstance(instream, text_type):
             instream = StringIO(instream)
@@ -285,7 +285,7 @@ class parserinfo(object):
            ("s", "second", "seconds")]
     AMPM = [("am", "a"),
             ("pm", "p")]
-    UTCZONE = ["UTC", "GMT", "Z", "z"] 
+    UTCZONE = ["UTC", "GMT", "Z", "z"]
     PERTAIN = ["of"]
     TZOFFSET = {}
     # TODO: ERA = ["AD", "BC", "CE", "BCE", "Stardate",
@@ -382,8 +382,8 @@ class parserinfo(object):
         if res.year is not None:
             res.year = self.convertyear(res.year, res.century_specified)
 
-        if ((res.tzoffset == 0 and not res.tzname) or 
-             (res.tzname == 'Z' or res.tzname == 'z')): 
+        if ((res.tzoffset == 0 and not res.tzname) or
+             (res.tzname == 'Z' or res.tzname == 'z')):
             res.tzname = "UTC"
             res.tzoffset = 0
         elif res.tzoffset != 0 and res.tzname and self.utczone(res.tzname):
@@ -417,7 +417,7 @@ class _ymd(list):
         elif not self.has_month:
             return 1 <= value <= 31
         elif not self.has_year:
-            # Be permissive, assume leap year 
+            # Be permissive, assume leap year
             month = self[self.mstridx]
             return 1 <= value <= monthrange(2000, month)[1]
         else:
@@ -533,7 +533,7 @@ class _ymd(list):
                     year, month, day = self
                 else:
                     # 01-Jan-01
-                    # Give precedence to day-first, since 
+                    # Give precedence to day-first, since
                     # two-digit years is usually hand-written.
                     day, month, year = self
 
@@ -620,7 +620,7 @@ class parser(object):
             first element being a :class:`datetime.datetime` object, the second
             a tuple containing the fuzzy tokens.
 
-        :raises ParserError: 
+        :raises ParserError:
             Raised for invalid or unknown string format, if the provided
             :class:`tzinfo` is not in a valid format, or if an invalid date
             would be created.
@@ -640,15 +640,15 @@ class parser(object):
         res, skipped_tokens = self._parse(timestr, **kwargs)
 
         if res is None:
-            raise ParserError("Unknown string format: %s", timestr) 
+            raise ParserError("Unknown string format: %s", timestr)
 
         if len(res) == 0:
-            raise ParserError("String does not contain a date: %s", timestr) 
+            raise ParserError("String does not contain a date: %s", timestr)
 
-        try: 
-            ret = self._build_naive(res, default) 
-        except ValueError as e: 
-            six.raise_from(ParserError(str(e) + ": %s", timestr), e) 
+        try:
+            ret = self._build_naive(res, default)
+        except ValueError as e:
+            six.raise_from(ParserError(str(e) + ": %s", timestr), e)
 
         if not ignoretz:
             ret = self._build_tzaware(ret, res, tzinfos)
@@ -1019,7 +1019,7 @@ class parser(object):
             hms_idx = idx + 2
 
         elif idx > 0 and info.hms(tokens[idx-1]) is not None:
-            # There is a "h", "m", or "s" preceding this token.  Since neither 
+            # There is a "h", "m", or "s" preceding this token.  Since neither
             # of the previous cases was hit, there is no label following this
             # token, so we use the previous label.
             # e.g. the "04" in "12h04"
@@ -1058,8 +1058,8 @@ class parser(object):
                 tzname is None and
                 tzoffset is None and
                 len(token) <= 5 and
-                (all(x in string.ascii_uppercase for x in token) 
-                 or token in self.info.UTCZONE)) 
+                (all(x in string.ascii_uppercase for x in token)
+                 or token in self.info.UTCZONE))
 
     def _ampm_valid(self, hour, ampm, fuzzy):
         """
@@ -1099,7 +1099,7 @@ class parser(object):
     def _parse_min_sec(self, value):
         # TODO: Every usage of this function sets res.second to the return
         # value. Are there any cases where second will be returned as None and
-        # we *don't* want to set res.second = None? 
+        # we *don't* want to set res.second = None?
         minute = int(value)
         second = None
 
@@ -1126,36 +1126,36 @@ class parser(object):
 
         return (new_idx, hms)
 
-    # ------------------------------------------------------------------ 
-    # Handling for individual tokens.  These are kept as methods instead 
-    #  of functions for the sake of customizability via subclassing. 
+    # ------------------------------------------------------------------
+    # Handling for individual tokens.  These are kept as methods instead
+    #  of functions for the sake of customizability via subclassing.
 
-    def _parsems(self, value): 
-        """Parse a I[.F] seconds value into (seconds, microseconds).""" 
-        if "." not in value: 
-            return int(value), 0 
-        else: 
-            i, f = value.split(".") 
-            return int(i), int(f.ljust(6, "0")[:6]) 
+    def _parsems(self, value):
+        """Parse a I[.F] seconds value into (seconds, microseconds)."""
+        if "." not in value:
+            return int(value), 0
+        else:
+            i, f = value.split(".")
+            return int(i), int(f.ljust(6, "0")[:6])
 
-    def _to_decimal(self, val): 
-        try: 
-            decimal_value = Decimal(val) 
-            # See GH 662, edge case, infinite value should not be converted 
-            #  via `_to_decimal` 
-            if not decimal_value.is_finite(): 
-                raise ValueError("Converted decimal value is infinite or NaN") 
-        except Exception as e: 
-            msg = "Could not convert %s to decimal" % val 
-            six.raise_from(ValueError(msg), e) 
-        else: 
-            return decimal_value 
- 
-    # ------------------------------------------------------------------ 
-    # Post-Parsing construction of datetime output.  These are kept as 
-    #  methods instead of functions for the sake of customizability via 
-    #  subclassing. 
- 
+    def _to_decimal(self, val):
+        try:
+            decimal_value = Decimal(val)
+            # See GH 662, edge case, infinite value should not be converted
+            #  via `_to_decimal`
+            if not decimal_value.is_finite():
+                raise ValueError("Converted decimal value is infinite or NaN")
+        except Exception as e:
+            msg = "Could not convert %s to decimal" % val
+            six.raise_from(ValueError(msg), e)
+        else:
+            return decimal_value
+
+    # ------------------------------------------------------------------
+    # Post-Parsing construction of datetime output.  These are kept as
+    #  methods instead of functions for the sake of customizability via
+    #  subclassing.
+
     def _build_tzinfo(self, tzinfos, tzname, tzoffset):
         if callable(tzinfos):
             tzdata = tzinfos(tzname, tzoffset)
@@ -1169,9 +1169,9 @@ class parser(object):
             tzinfo = tz.tzstr(tzdata)
         elif isinstance(tzdata, integer_types):
             tzinfo = tz.tzoffset(tzname, tzdata)
-        else: 
-            raise TypeError("Offset must be tzinfo subclass, tz string, " 
-                            "or int offset.") 
+        else:
+            raise TypeError("Offset must be tzinfo subclass, tz string, "
+                            "or int offset.")
         return tzinfo
 
     def _build_tzaware(self, naive, res, tzinfos):
@@ -1189,10 +1189,10 @@ class parser(object):
             # This is mostly relevant for winter GMT zones parsed in the UK
             if (aware.tzname() != res.tzname and
                     res.tzname in self.info.UTCZONE):
-                aware = aware.replace(tzinfo=tz.UTC) 
+                aware = aware.replace(tzinfo=tz.UTC)
 
         elif res.tzoffset == 0:
-            aware = naive.replace(tzinfo=tz.UTC) 
+            aware = naive.replace(tzinfo=tz.UTC)
 
         elif res.tzoffset:
             aware = naive.replace(tzinfo=tz.tzoffset(res.tzname, res.tzoffset))
@@ -1247,23 +1247,23 @@ class parser(object):
 
         return dt
 
-    def _recombine_skipped(self, tokens, skipped_idxs): 
-        """ 
-        >>> tokens = ["foo", " ", "bar", " ", "19June2000", "baz"] 
-        >>> skipped_idxs = [0, 1, 2, 5] 
-        >>> _recombine_skipped(tokens, skipped_idxs) 
-        ["foo bar", "baz"] 
-        """ 
-        skipped_tokens = [] 
-        for i, idx in enumerate(sorted(skipped_idxs)): 
-            if i > 0 and idx - 1 == skipped_idxs[i - 1]: 
-                skipped_tokens[-1] = skipped_tokens[-1] + tokens[idx] 
-            else: 
-                skipped_tokens.append(tokens[idx]) 
+    def _recombine_skipped(self, tokens, skipped_idxs):
+        """
+        >>> tokens = ["foo", " ", "bar", " ", "19June2000", "baz"]
+        >>> skipped_idxs = [0, 1, 2, 5]
+        >>> _recombine_skipped(tokens, skipped_idxs)
+        ["foo bar", "baz"]
+        """
+        skipped_tokens = []
+        for i, idx in enumerate(sorted(skipped_idxs)):
+            if i > 0 and idx - 1 == skipped_idxs[i - 1]:
+                skipped_tokens[-1] = skipped_tokens[-1] + tokens[idx]
+            else:
+                skipped_tokens.append(tokens[idx])
 
-        return skipped_tokens 
+        return skipped_tokens
 
- 
+
 DEFAULTPARSER = parser()
 
 
@@ -1353,10 +1353,10 @@ def parse(timestr, parserinfo=None, **kwargs):
         first element being a :class:`datetime.datetime` object, the second
         a tuple containing the fuzzy tokens.
 
-    :raises ParserError: 
-        Raised for invalid or unknown string formats, if the provided 
-        :class:`tzinfo` is not in a valid format, or if an invalid date would 
-        be created. 
+    :raises ParserError:
+        Raised for invalid or unknown string formats, if the provided
+        :class:`tzinfo` is not in a valid format, or if an invalid date would
+        be created.
 
     :raises OverflowError:
         Raised if the parsed date exceeds the largest valid C integer on
@@ -1585,29 +1585,29 @@ DEFAULTTZPARSER = _tzparser()
 def _parsetz(tzstr):
     return DEFAULTTZPARSER.parse(tzstr)
 
- 
-class ParserError(ValueError): 
-    """Exception subclass used for any failure to parse a datetime string. 
- 
-    This is a subclass of :py:exc:`ValueError`, and should be raised any time 
-    earlier versions of ``dateutil`` would have raised ``ValueError``. 
- 
-    .. versionadded:: 2.8.1 
-    """ 
-    def __str__(self): 
-        try: 
-            return self.args[0] % self.args[1:] 
-        except (TypeError, IndexError): 
-            return super(ParserError, self).__str__() 
- 
-    def __repr__(self): 
-        args = ", ".join("'%s'" % arg for arg in self.args) 
-        return "%s(%s)" % (self.__class__.__name__, args) 
- 
- 
+
+class ParserError(ValueError):
+    """Exception subclass used for any failure to parse a datetime string.
+
+    This is a subclass of :py:exc:`ValueError`, and should be raised any time
+    earlier versions of ``dateutil`` would have raised ``ValueError``.
+
+    .. versionadded:: 2.8.1
+    """
+    def __str__(self):
+        try:
+            return self.args[0] % self.args[1:]
+        except (TypeError, IndexError):
+            return super(ParserError, self).__str__()
+
+    def __repr__(self):
+        args = ", ".join("'%s'" % arg for arg in self.args)
+        return "%s(%s)" % (self.__class__.__name__, args)
+
+
 class UnknownTimezoneWarning(RuntimeWarning):
-    """Raised when the parser finds a timezone it cannot parse into a tzinfo. 
- 
-    .. versionadded:: 2.7.0 
-    """ 
+    """Raised when the parser finds a timezone it cannot parse into a tzinfo.
+
+    .. versionadded:: 2.7.0
+    """
 # vim:ts=4:sw=4:et

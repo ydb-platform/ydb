@@ -17,8 +17,8 @@
 /* SHA objects */
 
 #include "Python.h"
-#include "pycore_byteswap.h"      // _Py_bswap32() 
-#include "structmember.h"         // PyMemberDef 
+#include "pycore_byteswap.h"      // _Py_bswap32()
+#include "structmember.h"         // PyMemberDef
 #include "hashlib.h"
 #include "pystrhex.h"
 
@@ -31,8 +31,8 @@ class SHA512Type "SHAobject *" "&PyType_Type"
 /* Some useful types */
 
 typedef unsigned char SHA_BYTE;
-typedef uint32_t SHA_INT32;  /* 32-bit integer */ 
-typedef uint64_t SHA_INT64;  /* 64-bit integer */ 
+typedef uint32_t SHA_INT32;  /* 32-bit integer */
+typedef uint64_t SHA_INT64;  /* 64-bit integer */
 
 /* The SHA block size and message digest sizes, in bytes */
 
@@ -59,8 +59,8 @@ typedef struct {
 static void longReverse(SHA_INT64 *buffer, int byteCount)
 {
     byteCount /= sizeof(*buffer);
-    for (; byteCount--; buffer++) { 
-        *buffer = _Py_bswap64(*buffer); 
+    for (; byteCount--; buffer++) {
+        *buffer = _Py_bswap64(*buffer);
     }
 }
 #endif
@@ -94,7 +94,7 @@ static void SHAcopy(SHAobject *src, SHAobject *dest)
  * The library is free for all purposes without any express
  * guarantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, https://www.libtom.net 
+ * Tom St Denis, tomstdenis@iahu.ca, https://www.libtom.net
  */
 
 
@@ -461,7 +461,7 @@ SHA512Type_copy_impl(SHAobject *self)
 {
     SHAobject *newobj;
 
-    if (Py_IS_TYPE((PyObject*)self, &SHA512type)) { 
+    if (Py_IS_TYPE((PyObject*)self, &SHA512type)) {
         if ( (newobj = newSHA512object())==NULL)
             return NULL;
     } else {
@@ -581,10 +581,10 @@ static PyTypeObject SHA384type = {
     0,                  /*tp_itemsize*/
     /* methods */
     SHA512_dealloc,     /*tp_dealloc*/
-    0,                  /*tp_vectorcall_offset*/ 
+    0,                  /*tp_vectorcall_offset*/
     0,                  /*tp_getattr*/
     0,                  /*tp_setattr*/
-    0,                  /*tp_as_async*/ 
+    0,                  /*tp_as_async*/
     0,                  /*tp_repr*/
     0,                  /*tp_as_number*/
     0,                  /*tp_as_sequence*/
@@ -615,10 +615,10 @@ static PyTypeObject SHA512type = {
     0,                  /*tp_itemsize*/
     /* methods */
     SHA512_dealloc,     /*tp_dealloc*/
-    0,                  /*tp_vectorcall_offset*/ 
+    0,                  /*tp_vectorcall_offset*/
     0,                  /*tp_getattr*/
     0,                  /*tp_setattr*/
-    0,                  /*tp_as_async*/ 
+    0,                  /*tp_as_async*/
     0,                  /*tp_repr*/
     0,                  /*tp_as_number*/
     0,                  /*tp_as_sequence*/
@@ -649,15 +649,15 @@ static PyTypeObject SHA512type = {
 _sha512.sha512
 
     string: object(c_default="NULL") = b''
-    * 
-    usedforsecurity: bool = True 
+    *
+    usedforsecurity: bool = True
 
 Return a new SHA-512 hash object; optionally initialized with a string.
 [clinic start generated code]*/
 
 static PyObject *
-_sha512_sha512_impl(PyObject *module, PyObject *string, int usedforsecurity) 
-/*[clinic end generated code: output=a8d9e5f9e6a0831c input=23b4daebc2ebb9c9]*/ 
+_sha512_sha512_impl(PyObject *module, PyObject *string, int usedforsecurity)
+/*[clinic end generated code: output=a8d9e5f9e6a0831c input=23b4daebc2ebb9c9]*/
 {
     SHAobject *new;
     Py_buffer buf;
@@ -691,15 +691,15 @@ _sha512_sha512_impl(PyObject *module, PyObject *string, int usedforsecurity)
 _sha512.sha384
 
     string: object(c_default="NULL") = b''
-    * 
-    usedforsecurity: bool = True 
+    *
+    usedforsecurity: bool = True
 
 Return a new SHA-384 hash object; optionally initialized with a string.
 [clinic start generated code]*/
 
 static PyObject *
-_sha512_sha384_impl(PyObject *module, PyObject *string, int usedforsecurity) 
-/*[clinic end generated code: output=da7d594a08027ac3 input=59ef72f039a6b431]*/ 
+_sha512_sha384_impl(PyObject *module, PyObject *string, int usedforsecurity)
+/*[clinic end generated code: output=da7d594a08027ac3 input=59ef72f039a6b431]*/
 {
     SHAobject *new;
     Py_buffer buf;
@@ -758,19 +758,19 @@ PyInit__sha512(void)
 {
     PyObject *m;
 
-    Py_SET_TYPE(&SHA384type, &PyType_Type); 
-    if (PyType_Ready(&SHA384type) < 0) { 
+    Py_SET_TYPE(&SHA384type, &PyType_Type);
+    if (PyType_Ready(&SHA384type) < 0) {
         return NULL;
-    } 
-    Py_SET_TYPE(&SHA512type, &PyType_Type); 
-    if (PyType_Ready(&SHA512type) < 0) { 
+    }
+    Py_SET_TYPE(&SHA512type, &PyType_Type);
+    if (PyType_Ready(&SHA512type) < 0) {
         return NULL;
-    } 
+    }
 
     m = PyModule_Create(&_sha512module);
-    if (m == NULL) { 
+    if (m == NULL) {
         return NULL;
-    } 
+    }
 
     Py_INCREF((PyObject *)&SHA384type);
     PyModule_AddObject(m, "SHA384Type", (PyObject *)&SHA384type);

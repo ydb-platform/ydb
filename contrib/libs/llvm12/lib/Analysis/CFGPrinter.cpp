@@ -272,17 +272,17 @@ FunctionPass *llvm::createCFGOnlyPrinterLegacyPassPass() {
 
 void DOTGraphTraits<DOTFuncInfo *>::computeHiddenNodes(const Function *F) {
   auto evaluateBB = [&](const BasicBlock *Node) {
-    if (succ_empty(Node)) { 
+    if (succ_empty(Node)) {
       const Instruction *TI = Node->getTerminator();
       isHiddenBasicBlock[Node] =
           (HideUnreachablePaths && isa<UnreachableInst>(TI)) ||
           (HideDeoptimizePaths && Node->getTerminatingDeoptimizeCall());
       return;
     }
-    isHiddenBasicBlock[Node] = 
-        llvm::all_of(successors(Node), [this](const BasicBlock *BB) { 
-          return isHiddenBasicBlock[BB]; 
-        }); 
+    isHiddenBasicBlock[Node] =
+        llvm::all_of(successors(Node), [this](const BasicBlock *BB) {
+          return isHiddenBasicBlock[BB];
+        });
   };
   /// The post order traversal iteration is done to know the status of
   /// isHiddenBasicBlock for all the successors on the current BB.
@@ -290,8 +290,8 @@ void DOTGraphTraits<DOTFuncInfo *>::computeHiddenNodes(const Function *F) {
            evaluateBB);
 }
 
-bool DOTGraphTraits<DOTFuncInfo *>::isNodeHidden(const BasicBlock *Node, 
-                                                 const DOTFuncInfo *CFGInfo) { 
+bool DOTGraphTraits<DOTFuncInfo *>::isNodeHidden(const BasicBlock *Node,
+                                                 const DOTFuncInfo *CFGInfo) {
   // If both restricting flags are false, all nodes are displayed.
   if (!HideUnreachablePaths && !HideDeoptimizePaths)
     return false;

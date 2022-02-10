@@ -307,8 +307,8 @@ struct InstructionMapper {
       // repeated substring.
       mapToIllegalUnsigned(It, CanOutlineWithPrevInstr, UnsignedVecForMBB,
                            InstrListForMBB);
-      llvm::append_range(InstrList, InstrListForMBB); 
-      llvm::append_range(UnsignedVec, UnsignedVecForMBB); 
+      llvm::append_range(InstrList, InstrListForMBB);
+      llvm::append_range(UnsignedVec, UnsignedVecForMBB);
     }
   }
 
@@ -545,10 +545,10 @@ void MachineOutliner::findCandidates(
       // That is, one must either
       // * End before the other starts
       // * Start after the other ends
-      if (llvm::all_of(CandidatesForRepeatedSeq, [&StartIdx, 
-                                                  &EndIdx](const Candidate &C) { 
-            return (EndIdx < C.getStartIdx() || StartIdx > C.getEndIdx()); 
-          })) { 
+      if (llvm::all_of(CandidatesForRepeatedSeq, [&StartIdx,
+                                                  &EndIdx](const Candidate &C) {
+            return (EndIdx < C.getStartIdx() || StartIdx > C.getEndIdx());
+          })) {
         // It doesn't overlap with anything, so we can outline it.
         // Each sequence is over [StartIt, EndIt].
         // Save the candidate and its location.
@@ -651,8 +651,8 @@ MachineFunction *MachineOutliner::createOutlinedFunction(
       OriginalMF->getFrameInstructions();
   for (auto I = FirstCand.front(), E = std::next(FirstCand.back()); I != E;
        ++I) {
-    if (I->isDebugInstr()) 
-      continue; 
+    if (I->isDebugInstr())
+      continue;
     MachineInstr *NewMI = MF.CloneMachineInstr(&*I);
     if (I->isCFIInstruction()) {
       unsigned CFIIndex = NewMI->getOperand(0).getCFIIndex();
@@ -688,7 +688,7 @@ MachineFunction *MachineOutliner::createOutlinedFunction(
 
     // The live-in set for the outlined function is the union of the live-ins
     // from all the outlining points.
-    for (MCPhysReg Reg : CandLiveIns) 
+    for (MCPhysReg Reg : CandLiveIns)
       LiveIns.addReg(Reg);
   }
   addLiveIns(MBB, LiveIns);

@@ -79,18 +79,18 @@ bool DWARFDebugLine::Prologue::hasFileAtIndex(uint64_t FileIndex) const {
   return FileIndex != 0 && FileIndex <= FileNames.size();
 }
 
-Optional<uint64_t> DWARFDebugLine::Prologue::getLastValidFileIndex() const { 
-  if (FileNames.empty()) 
-    return None; 
-  uint16_t DwarfVersion = getVersion(); 
-  assert(DwarfVersion != 0 && 
-         "line table prologue has no dwarf version information"); 
-  // In DWARF v5 the file names are 0-indexed. 
-  if (DwarfVersion >= 5) 
-    return FileNames.size() - 1; 
-  return FileNames.size(); 
-} 
- 
+Optional<uint64_t> DWARFDebugLine::Prologue::getLastValidFileIndex() const {
+  if (FileNames.empty())
+    return None;
+  uint16_t DwarfVersion = getVersion();
+  assert(DwarfVersion != 0 &&
+         "line table prologue has no dwarf version information");
+  // In DWARF v5 the file names are 0-indexed.
+  if (DwarfVersion >= 5)
+    return FileNames.size() - 1;
+  return FileNames.size();
+}
+
 const llvm::DWARFDebugLine::FileNameEntry &
 DWARFDebugLine::Prologue::getFileNameEntry(uint64_t Index) const {
   uint16_t DwarfVersion = getVersion();
@@ -783,18 +783,18 @@ Error DWARFDebugLine::LineTable::parse(
     *OS << '\n';
     Row::dumpTableHeader(*OS, /*Indent=*/Verbose ? 12 : 0);
   }
-  bool TombstonedAddress = false; 
-  auto EmitRow = [&] { 
-    if (!TombstonedAddress) { 
-      if (Verbose) { 
-        *OS << "\n"; 
-        OS->indent(12); 
-      } 
-      if (OS) 
-        State.Row.dump(*OS); 
-      State.appendRowToMatrix(); 
-    } 
-  }; 
+  bool TombstonedAddress = false;
+  auto EmitRow = [&] {
+    if (!TombstonedAddress) {
+      if (Verbose) {
+        *OS << "\n";
+        OS->indent(12);
+      }
+      if (OS)
+        State.Row.dump(*OS);
+      State.appendRowToMatrix();
+    }
+  };
   while (*OffsetPtr < EndOffset) {
     DataExtractor::Cursor Cursor(*OffsetPtr);
 
@@ -846,7 +846,7 @@ Error DWARFDebugLine::LineTable::parse(
         // No need to test the Cursor is valid here, since it must be to get
         // into this code path - if it were invalid, the default case would be
         // followed.
-        EmitRow(); 
+        EmitRow();
         State.resetRowAndSequence();
         break;
 
@@ -888,20 +888,20 @@ Error DWARFDebugLine::LineTable::parse(
             State.Row.Address.Address = TableData.getRelocatedAddress(
                 Cursor, &State.Row.Address.SectionIndex);
 
-            uint64_t Tombstone = 
-                dwarf::computeTombstoneAddress(OpcodeAddressSize); 
-            TombstonedAddress = State.Row.Address.Address == Tombstone; 
- 
+            uint64_t Tombstone =
+                dwarf::computeTombstoneAddress(OpcodeAddressSize);
+            TombstonedAddress = State.Row.Address.Address == Tombstone;
+
             // Restore the address size if the extractor already had it.
             if (ExtractorAddressSize != 0)
               TableData.setAddressSize(ExtractorAddressSize);
           }
 
-          if (Cursor && Verbose) { 
-            *OS << " ("; 
-            DWARFFormValue::dumpAddress(*OS, OpcodeAddressSize, State.Row.Address.Address); 
-            *OS << ')'; 
-          } 
+          if (Cursor && Verbose) {
+            *OS << " (";
+            DWARFFormValue::dumpAddress(*OS, OpcodeAddressSize, State.Row.Address.Address);
+            *OS << ')';
+          }
         }
         break;
 
@@ -994,7 +994,7 @@ Error DWARFDebugLine::LineTable::parse(
       case DW_LNS_copy:
         // Takes no arguments. Append a row to the matrix using the
         // current values of the state-machine registers.
-        EmitRow(); 
+        EmitRow();
         break;
 
       case DW_LNS_advance_pc:
@@ -1159,9 +1159,9 @@ Error DWARFDebugLine::LineTable::parse(
       ParsingState::AddrAndLineDelta Delta =
           State.handleSpecialOpcode(Opcode, OpcodeOffset);
 
-      if (Verbose) 
-        *OS << "address += " << Delta.Address << ",  line += " << Delta.Line; 
-      EmitRow(); 
+      if (Verbose)
+        *OS << "address += " << Delta.Address << ",  line += " << Delta.Line;
+      EmitRow();
       *OffsetPtr = Cursor.tell();
     }
 
@@ -1419,20 +1419,20 @@ bool DWARFDebugLine::LineTable::getFileLineInfoForAddress(
 // Therefore, collect up handles on all the Units that point into the
 // line-table section.
 static DWARFDebugLine::SectionParser::LineToUnitMap
-buildLineToUnitMap(DWARFUnitVector::iterator_range Units) { 
+buildLineToUnitMap(DWARFUnitVector::iterator_range Units) {
   DWARFDebugLine::SectionParser::LineToUnitMap LineToUnit;
-  for (const auto &U : Units) 
-    if (auto CUDIE = U->getUnitDIE()) 
+  for (const auto &U : Units)
+    if (auto CUDIE = U->getUnitDIE())
       if (auto StmtOffset = toSectionOffset(CUDIE.find(DW_AT_stmt_list)))
-        LineToUnit.insert(std::make_pair(*StmtOffset, &*U)); 
+        LineToUnit.insert(std::make_pair(*StmtOffset, &*U));
   return LineToUnit;
 }
 
-DWARFDebugLine::SectionParser::SectionParser( 
-    DWARFDataExtractor &Data, const DWARFContext &C, 
-    DWARFUnitVector::iterator_range Units) 
+DWARFDebugLine::SectionParser::SectionParser(
+    DWARFDataExtractor &Data, const DWARFContext &C,
+    DWARFUnitVector::iterator_range Units)
     : DebugLineData(Data), Context(C) {
-  LineToUnit = buildLineToUnitMap(Units); 
+  LineToUnit = buildLineToUnitMap(Units);
   if (!DebugLineData.isValidOffset(Offset))
     Done = true;
 }

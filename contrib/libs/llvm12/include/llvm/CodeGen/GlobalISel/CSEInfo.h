@@ -25,10 +25,10 @@
 #include "llvm/CodeGen/GlobalISel/GISelWorkList.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/Support/Allocator.h"
-#include "llvm/Support/CodeGen.h" 
+#include "llvm/Support/CodeGen.h"
 
 namespace llvm {
-class MachineBasicBlock; 
+class MachineBasicBlock;
 
 /// A class that wraps MachineInstrs and derives from FoldingSetNode in order to
 /// be uniqued in a CSEMap. The tradeoff here is extra memory allocations for
@@ -189,8 +189,8 @@ public:
 
   const GISelInstProfileBuilder &addNodeIDRegNum(Register Reg) const;
 
-  const GISelInstProfileBuilder &addNodeIDReg(Register Reg) const; 
- 
+  const GISelInstProfileBuilder &addNodeIDReg(Register Reg) const;
+
   const GISelInstProfileBuilder &addNodeIDImmediate(int64_t Imm) const;
   const GISelInstProfileBuilder &
   addNodeIDMBB(const MachineBasicBlock *MBB) const;

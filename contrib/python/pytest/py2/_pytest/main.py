@@ -1,16 +1,16 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 """ core implementation of testing process: init, session, runtest loop. """
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import contextlib
-import fnmatch 
+import fnmatch
 import functools
 import os
 import pkgutil
 import sys
-import warnings 
+import warnings
 
 import attr
 import py
@@ -21,7 +21,7 @@ from _pytest import nodes
 from _pytest.config import directory_arg
 from _pytest.config import hookimpl
 from _pytest.config import UsageError
-from _pytest.deprecated import PYTEST_CONFIG_GLOBAL 
+from _pytest.deprecated import PYTEST_CONFIG_GLOBAL
 from _pytest.outcomes import exit
 from _pytest.runner import collect_one_node
 
@@ -67,10 +67,10 @@ def pytest_addoption(parser):
         help="exit after first num failures or errors.",
     )
     group._addoption(
-        "--strict-markers", 
+        "--strict-markers",
         "--strict",
         action="store_true",
-        help="markers not registered in the `markers` section of the configuration file raise errors.", 
+        help="markers not registered in the `markers` section of the configuration file raise errors.",
     )
     group._addoption(
         "-c",
@@ -115,12 +115,12 @@ def pytest_addoption(parser):
         help="ignore path during collection (multi-allowed).",
     )
     group.addoption(
-        "--ignore-glob", 
-        action="append", 
-        metavar="path", 
-        help="ignore path pattern during collection (multi-allowed).", 
-    ) 
-    group.addoption( 
+        "--ignore-glob",
+        action="append",
+        metavar="path",
+        help="ignore path pattern during collection (multi-allowed).",
+    )
+    group.addoption(
         "--deselect",
         action="append",
         metavar="nodeid_prefix",
@@ -172,24 +172,24 @@ def pytest_addoption(parser):
     )
 
 
-class _ConfigDeprecated(object): 
-    def __init__(self, config): 
-        self.__dict__["_config"] = config 
- 
-    def __getattr__(self, attr): 
-        warnings.warn(PYTEST_CONFIG_GLOBAL, stacklevel=2) 
-        return getattr(self._config, attr) 
- 
-    def __setattr__(self, attr, val): 
-        warnings.warn(PYTEST_CONFIG_GLOBAL, stacklevel=2) 
-        return setattr(self._config, attr, val) 
- 
-    def __repr__(self): 
-        return "{}({!r})".format(type(self).__name__, self._config) 
- 
- 
+class _ConfigDeprecated(object):
+    def __init__(self, config):
+        self.__dict__["_config"] = config
+
+    def __getattr__(self, attr):
+        warnings.warn(PYTEST_CONFIG_GLOBAL, stacklevel=2)
+        return getattr(self._config, attr)
+
+    def __setattr__(self, attr, val):
+        warnings.warn(PYTEST_CONFIG_GLOBAL, stacklevel=2)
+        return setattr(self._config, attr, val)
+
+    def __repr__(self):
+        return "{}({!r})".format(type(self).__name__, self._config)
+
+
 def pytest_configure(config):
-    __import__("pytest").config = _ConfigDeprecated(config)  # compatibility 
+    __import__("pytest").config = _ConfigDeprecated(config)  # compatibility
 
 
 def wrap_session(config, doit):
@@ -205,28 +205,28 @@ def wrap_session(config, doit):
             initstate = 2
             session.exitstatus = doit(config, session) or 0
         except UsageError:
-            session.exitstatus = EXIT_USAGEERROR 
+            session.exitstatus = EXIT_USAGEERROR
             raise
         except Failed:
             session.exitstatus = EXIT_TESTSFAILED
-        except (KeyboardInterrupt, exit.Exception): 
-            excinfo = _pytest._code.ExceptionInfo.from_current() 
+        except (KeyboardInterrupt, exit.Exception):
+            excinfo = _pytest._code.ExceptionInfo.from_current()
             exitstatus = EXIT_INTERRUPTED
-            if isinstance(excinfo.value, exit.Exception): 
+            if isinstance(excinfo.value, exit.Exception):
                 if excinfo.value.returncode is not None:
                     exitstatus = excinfo.value.returncode
-                if initstate < 2: 
-                    sys.stderr.write( 
-                        "{}: {}\n".format(excinfo.typename, excinfo.value.msg) 
-                    ) 
+                if initstate < 2:
+                    sys.stderr.write(
+                        "{}: {}\n".format(excinfo.typename, excinfo.value.msg)
+                    )
             config.hook.pytest_keyboard_interrupt(excinfo=excinfo)
             session.exitstatus = exitstatus
         except:  # noqa
-            excinfo = _pytest._code.ExceptionInfo.from_current() 
+            excinfo = _pytest._code.ExceptionInfo.from_current()
             config.notify_exception(excinfo, config.option)
             session.exitstatus = EXIT_INTERNALERROR
             if excinfo.errisinstance(SystemExit):
-                sys.stderr.write("mainloop: caught unexpected SystemExit!\n") 
+                sys.stderr.write("mainloop: caught unexpected SystemExit!\n")
 
     finally:
         excinfo = None  # Explicitly break reference cycle.
@@ -303,20 +303,20 @@ def pytest_ignore_collect(path, config):
     if py.path.local(path) in ignore_paths:
         return True
 
-    ignore_globs = config._getconftest_pathlist( 
-        "collect_ignore_glob", path=path.dirpath() 
-    ) 
-    ignore_globs = ignore_globs or [] 
-    excludeglobopt = config.getoption("ignore_glob") 
-    if excludeglobopt: 
-        ignore_globs.extend([py.path.local(x) for x in excludeglobopt]) 
- 
-    if any( 
-        fnmatch.fnmatch(six.text_type(path), six.text_type(glob)) 
-        for glob in ignore_globs 
-    ): 
-        return True 
- 
+    ignore_globs = config._getconftest_pathlist(
+        "collect_ignore_glob", path=path.dirpath()
+    )
+    ignore_globs = ignore_globs or []
+    excludeglobopt = config.getoption("ignore_glob")
+    if excludeglobopt:
+        ignore_globs.extend([py.path.local(x) for x in excludeglobopt])
+
+    if any(
+        fnmatch.fnmatch(six.text_type(path), six.text_type(glob))
+        for glob in ignore_globs
+    ):
+        return True
+
     allow_in_venv = config.getoption("collect_in_virtualenv")
     if not allow_in_venv and _in_venv(path):
         return True
@@ -432,7 +432,7 @@ class Session(nodes.FSCollector):
         self.shouldfail = False
         self.trace = config.trace.root.get("collection")
         self._norecursepatterns = config.getini("norecursedirs")
-        self.startdir = config.invocation_dir 
+        self.startdir = config.invocation_dir
         self._initialpaths = frozenset()
         # Keep track of any collected nodes in here, so we don't duplicate fixtures
         self._node_cache = {}
@@ -442,15 +442,15 @@ class Session(nodes.FSCollector):
 
         self.config.pluginmanager.register(self, name="session")
 
-    def __repr__(self): 
-        return "<%s %s exitstatus=%r testsfailed=%d testscollected=%d>" % ( 
-            self.__class__.__name__, 
-            self.name, 
-            getattr(self, "exitstatus", "<UNSET>"), 
-            self.testsfailed, 
-            self.testscollected, 
-        ) 
- 
+    def __repr__(self):
+        return "<%s %s exitstatus=%r testsfailed=%d testscollected=%d>" % (
+            self.__class__.__name__,
+            self.name,
+            getattr(self, "exitstatus", "<UNSET>"),
+            self.testsfailed,
+            self.testscollected,
+        )
+
     def _node_location_to_relpath(self, node_path):
         # bestrelpath is a quite slow function
         return self._bestrelpathcache[node_path]
@@ -558,7 +558,7 @@ class Session(nodes.FSCollector):
         # Start with a Session root, and delve to argpath item (dir or file)
         # and stack all Packages found on the way.
         # No point in finding packages when collecting doctests
-        if not self.config.getoption("doctestmodules", False): 
+        if not self.config.getoption("doctestmodules", False):
             pm = self.config.pluginmanager
             for parent in reversed(argpath.parts()):
                 if pm._confcutdir and pm._confcutdir.relto(parent):
@@ -582,7 +582,7 @@ class Session(nodes.FSCollector):
 
             seen_dirs = set()
             for path in argpath.visit(
-                fil=self._visit_filter, rec=self._recurse, bf=True, sort=True 
+                fil=self._visit_filter, rec=self._recurse, bf=True, sort=True
             ):
                 dirpath = path.dirpath()
                 if dirpath not in seen_dirs:
@@ -612,7 +612,7 @@ class Session(nodes.FSCollector):
                 col = self._node_cache[argpath]
             else:
                 collect_root = self._pkg_roots.get(argpath.dirname, self)
-                col = collect_root._collectfile(argpath, handle_dupes=False) 
+                col = collect_root._collectfile(argpath, handle_dupes=False)
                 if col:
                     self._node_cache[argpath] = col
             m = self.matchnodes(col, names)
@@ -621,24 +621,24 @@ class Session(nodes.FSCollector):
             # Module itself, so just use that. If this special case isn't taken, then all
             # the files in the package will be yielded.
             if argpath.basename == "__init__.py":
-                try: 
-                    yield next(m[0].collect()) 
-                except StopIteration: 
-                    # The package collects nothing with only an __init__.py 
-                    # file in it, which gets ignored by the default 
-                    # "python_files" option. 
-                    pass 
+                try:
+                    yield next(m[0].collect())
+                except StopIteration:
+                    # The package collects nothing with only an __init__.py
+                    # file in it, which gets ignored by the default
+                    # "python_files" option.
+                    pass
                 return
             for y in m:
                 yield y
 
     def _collectfile(self, path, handle_dupes=True):
-        assert path.isfile(), "%r is not a file (isdir=%r, exists=%r, islink=%r)" % ( 
-            path, 
-            path.isdir(), 
-            path.exists(), 
-            path.islink(), 
-        ) 
+        assert path.isfile(), "%r is not a file (isdir=%r, exists=%r, islink=%r)" % (
+            path,
+            path.isdir(),
+            path.exists(),
+            path.islink(),
+        )
         ihook = self.gethookproxy(path)
         if not self.isinitpath(path):
             if ihook.pytest_ignore_collect(path=path, config=self.config):
@@ -668,18 +668,18 @@ class Session(nodes.FSCollector):
         ihook.pytest_collect_directory(path=dirpath, parent=self)
         return True
 
-    if six.PY2: 
- 
-        @staticmethod 
-        def _visit_filter(f): 
-            return f.check(file=1) and not f.strpath.endswith("*.pyc") 
- 
-    else: 
- 
-        @staticmethod 
-        def _visit_filter(f): 
-            return f.check(file=1) 
- 
+    if six.PY2:
+
+        @staticmethod
+        def _visit_filter(f):
+            return f.check(file=1) and not f.strpath.endswith("*.pyc")
+
+    else:
+
+        @staticmethod
+        def _visit_filter(f):
+            return f.check(file=1)
+
     def _tryconvertpyarg(self, x):
         """Convert a dotted module name to path."""
         try:

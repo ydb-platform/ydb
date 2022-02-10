@@ -5,7 +5,7 @@ import sys
 import io
 import contextlib
 
-from setuptools.extern import six, ordered_set 
+from setuptools.extern import six, ordered_set
 
 from .py36compat import sdist_add_defaults
 
@@ -37,8 +37,8 @@ class sdist(sdist_add_defaults, orig.sdist):
 
     negative_opt = {}
 
-    README_EXTENSIONS = ['', '.rst', '.txt', '.md'] 
-    READMES = tuple('README{0}'.format(ext) for ext in README_EXTENSIONS) 
+    README_EXTENSIONS = ['', '.rst', '.txt', '.md']
+    READMES = tuple('README{0}'.format(ext) for ext in README_EXTENSIONS)
 
     def run(self):
         self.run_command('egg_info')
@@ -121,41 +121,41 @@ class sdist(sdist_add_defaults, orig.sdist):
     if has_leaky_handle:
         read_template = __read_template_hack
 
-    def _add_defaults_optional(self): 
-        if six.PY2: 
-            sdist_add_defaults._add_defaults_optional(self) 
-        else: 
-            super()._add_defaults_optional() 
-        if os.path.isfile('pyproject.toml'): 
-            self.filelist.append('pyproject.toml') 
- 
+    def _add_defaults_optional(self):
+        if six.PY2:
+            sdist_add_defaults._add_defaults_optional(self)
+        else:
+            super()._add_defaults_optional()
+        if os.path.isfile('pyproject.toml'):
+            self.filelist.append('pyproject.toml')
+
     def _add_defaults_python(self):
         """getting python files"""
         if self.distribution.has_pure_modules():
             build_py = self.get_finalized_command('build_py')
             self.filelist.extend(build_py.get_source_files())
-            self._add_data_files(self._safe_data_files(build_py)) 
+            self._add_data_files(self._safe_data_files(build_py))
 
-    def _safe_data_files(self, build_py): 
-        """ 
-        Extracting data_files from build_py is known to cause 
-        infinite recursion errors when `include_package_data` 
-        is enabled, so suppress it in that case. 
-        """ 
-        if self.distribution.include_package_data: 
-            return () 
-        return build_py.data_files 
- 
-    def _add_data_files(self, data_files): 
-        """ 
-        Add data files as found in build_py.data_files. 
-        """ 
-        self.filelist.extend( 
-            os.path.join(src_dir, name) 
-            for _, src_dir, _, filenames in data_files 
-            for name in filenames 
-        ) 
- 
+    def _safe_data_files(self, build_py):
+        """
+        Extracting data_files from build_py is known to cause
+        infinite recursion errors when `include_package_data`
+        is enabled, so suppress it in that case.
+        """
+        if self.distribution.include_package_data:
+            return ()
+        return build_py.data_files
+
+    def _add_data_files(self, data_files):
+        """
+        Add data files as found in build_py.data_files.
+        """
+        self.filelist.extend(
+            os.path.join(src_dir, name)
+            for _, src_dir, _, filenames in data_files
+            for name in filenames
+        )
+
     def _add_defaults_data_files(self):
         try:
             if six.PY2:
@@ -207,7 +207,7 @@ class sdist(sdist_add_defaults, orig.sdist):
         manifest = open(self.manifest, 'rb')
         for line in manifest:
             # The manifest must contain UTF-8. See #303.
-            if not six.PY2: 
+            if not six.PY2:
                 try:
                     line = line.decode('UTF-8')
                 except UnicodeDecodeError:
@@ -219,34 +219,34 @@ class sdist(sdist_add_defaults, orig.sdist):
                 continue
             self.filelist.append(line)
         manifest.close()
- 
-    def check_license(self): 
-        """Checks if license_file' or 'license_files' is configured and adds any 
-        valid paths to 'self.filelist'. 
-        """ 
- 
-        files = ordered_set.OrderedSet() 
- 
-        opts = self.distribution.get_option_dict('metadata') 
- 
-        # ignore the source of the value 
-        _, license_file = opts.get('license_file', (None, None)) 
- 
-        if license_file is None: 
-            log.debug("'license_file' option was not specified") 
-        else: 
-            files.add(license_file) 
- 
-        try: 
-            files.update(self.distribution.metadata.license_files) 
-        except TypeError: 
-            log.warn("warning: 'license_files' option is malformed") 
- 
-        for f in files: 
-            if not os.path.exists(f): 
-                log.warn( 
-                    "warning: Failed to find the configured license file '%s'", 
-                    f) 
-                files.remove(f) 
- 
-        self.filelist.extend(files) 
+
+    def check_license(self):
+        """Checks if license_file' or 'license_files' is configured and adds any
+        valid paths to 'self.filelist'.
+        """
+
+        files = ordered_set.OrderedSet()
+
+        opts = self.distribution.get_option_dict('metadata')
+
+        # ignore the source of the value
+        _, license_file = opts.get('license_file', (None, None))
+
+        if license_file is None:
+            log.debug("'license_file' option was not specified")
+        else:
+            files.add(license_file)
+
+        try:
+            files.update(self.distribution.metadata.license_files)
+        except TypeError:
+            log.warn("warning: 'license_files' option is malformed")
+
+        for f in files:
+            if not os.path.exists(f):
+                log.warn(
+                    "warning: Failed to find the configured license file '%s'",
+                    f)
+                files.remove(f)
+
+        self.filelist.extend(files)

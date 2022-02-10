@@ -1,19 +1,19 @@
 __all__ = (
     'StreamReader', 'StreamWriter', 'StreamReaderProtocol',
-    'open_connection', 'start_server') 
+    'open_connection', 'start_server')
 
 import socket
-import sys 
-import warnings 
-import weakref 
+import sys
+import warnings
+import weakref
 
 if hasattr(socket, 'AF_UNIX'):
     __all__ += ('open_unix_connection', 'start_unix_server')
 
 from . import coroutines
 from . import events
-from . import exceptions 
-from . import format_helpers 
+from . import exceptions
+from . import format_helpers
 from . import protocols
 from .log import logger
 from .tasks import sleep
@@ -43,10 +43,10 @@ async def open_connection(host=None, port=None, *,
     """
     if loop is None:
         loop = events.get_event_loop()
-    else: 
-        warnings.warn("The loop argument is deprecated since Python 3.8, " 
-                      "and scheduled for removal in Python 3.10.", 
-                      DeprecationWarning, stacklevel=2) 
+    else:
+        warnings.warn("The loop argument is deprecated since Python 3.8, "
+                      "and scheduled for removal in Python 3.10.",
+                      DeprecationWarning, stacklevel=2)
     reader = StreamReader(limit=limit, loop=loop)
     protocol = StreamReaderProtocol(reader, loop=loop)
     transport, _ = await loop.create_connection(
@@ -80,10 +80,10 @@ async def start_server(client_connected_cb, host=None, port=None, *,
     """
     if loop is None:
         loop = events.get_event_loop()
-    else: 
-        warnings.warn("The loop argument is deprecated since Python 3.8, " 
-                      "and scheduled for removal in Python 3.10.", 
-                      DeprecationWarning, stacklevel=2) 
+    else:
+        warnings.warn("The loop argument is deprecated since Python 3.8, "
+                      "and scheduled for removal in Python 3.10.",
+                      DeprecationWarning, stacklevel=2)
 
     def factory():
         reader = StreamReader(limit=limit, loop=loop)
@@ -102,10 +102,10 @@ if hasattr(socket, 'AF_UNIX'):
         """Similar to `open_connection` but works with UNIX Domain Sockets."""
         if loop is None:
             loop = events.get_event_loop()
-        else: 
-            warnings.warn("The loop argument is deprecated since Python 3.8, " 
-                          "and scheduled for removal in Python 3.10.", 
-                          DeprecationWarning, stacklevel=2) 
+        else:
+            warnings.warn("The loop argument is deprecated since Python 3.8, "
+                          "and scheduled for removal in Python 3.10.",
+                          DeprecationWarning, stacklevel=2)
         reader = StreamReader(limit=limit, loop=loop)
         protocol = StreamReaderProtocol(reader, loop=loop)
         transport, _ = await loop.create_unix_connection(
@@ -118,10 +118,10 @@ if hasattr(socket, 'AF_UNIX'):
         """Similar to `start_server` but works with UNIX Domain Sockets."""
         if loop is None:
             loop = events.get_event_loop()
-        else: 
-            warnings.warn("The loop argument is deprecated since Python 3.8, " 
-                          "and scheduled for removal in Python 3.10.", 
-                          DeprecationWarning, stacklevel=2) 
+        else:
+            warnings.warn("The loop argument is deprecated since Python 3.8, "
+                          "and scheduled for removal in Python 3.10.",
+                          DeprecationWarning, stacklevel=2)
 
         def factory():
             reader = StreamReader(limit=limit, loop=loop)
@@ -196,10 +196,10 @@ class FlowControlMixin(protocols.Protocol):
         self._drain_waiter = waiter
         await waiter
 
-    def _get_close_waiter(self, stream): 
-        raise NotImplementedError 
+    def _get_close_waiter(self, stream):
+        raise NotImplementedError
 
- 
+
 class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
     """Helper class to adapt between Protocol and StreamReader.
 
@@ -209,86 +209,86 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
     call inappropriate methods of the protocol.)
     """
 
-    _source_traceback = None 
- 
+    _source_traceback = None
+
     def __init__(self, stream_reader, client_connected_cb=None, loop=None):
         super().__init__(loop=loop)
-        if stream_reader is not None: 
-            self._stream_reader_wr = weakref.ref(stream_reader) 
-            self._source_traceback = stream_reader._source_traceback 
-        else: 
-            self._stream_reader_wr = None 
-        if client_connected_cb is not None: 
-            # This is a stream created by the `create_server()` function. 
-            # Keep a strong reference to the reader until a connection 
-            # is established. 
-            self._strong_reader = stream_reader 
-        self._reject_connection = False 
+        if stream_reader is not None:
+            self._stream_reader_wr = weakref.ref(stream_reader)
+            self._source_traceback = stream_reader._source_traceback
+        else:
+            self._stream_reader_wr = None
+        if client_connected_cb is not None:
+            # This is a stream created by the `create_server()` function.
+            # Keep a strong reference to the reader until a connection
+            # is established.
+            self._strong_reader = stream_reader
+        self._reject_connection = False
         self._stream_writer = None
-        self._transport = None 
+        self._transport = None
         self._client_connected_cb = client_connected_cb
         self._over_ssl = False
         self._closed = self._loop.create_future()
 
-    @property 
-    def _stream_reader(self): 
-        if self._stream_reader_wr is None: 
-            return None 
-        return self._stream_reader_wr() 
- 
+    @property
+    def _stream_reader(self):
+        if self._stream_reader_wr is None:
+            return None
+        return self._stream_reader_wr()
+
     def connection_made(self, transport):
-        if self._reject_connection: 
-            context = { 
-                'message': ('An open stream was garbage collected prior to ' 
-                            'establishing network connection; ' 
-                            'call "stream.close()" explicitly.') 
-            } 
-            if self._source_traceback: 
-                context['source_traceback'] = self._source_traceback 
-            self._loop.call_exception_handler(context) 
-            transport.abort() 
-            return 
-        self._transport = transport 
-        reader = self._stream_reader 
-        if reader is not None: 
-            reader.set_transport(transport) 
+        if self._reject_connection:
+            context = {
+                'message': ('An open stream was garbage collected prior to '
+                            'establishing network connection; '
+                            'call "stream.close()" explicitly.')
+            }
+            if self._source_traceback:
+                context['source_traceback'] = self._source_traceback
+            self._loop.call_exception_handler(context)
+            transport.abort()
+            return
+        self._transport = transport
+        reader = self._stream_reader
+        if reader is not None:
+            reader.set_transport(transport)
         self._over_ssl = transport.get_extra_info('sslcontext') is not None
         if self._client_connected_cb is not None:
             self._stream_writer = StreamWriter(transport, self,
-                                               reader, 
+                                               reader,
                                                self._loop)
-            res = self._client_connected_cb(reader, 
+            res = self._client_connected_cb(reader,
                                             self._stream_writer)
             if coroutines.iscoroutine(res):
                 self._loop.create_task(res)
-            self._strong_reader = None 
+            self._strong_reader = None
 
     def connection_lost(self, exc):
-        reader = self._stream_reader 
-        if reader is not None: 
+        reader = self._stream_reader
+        if reader is not None:
             if exc is None:
-                reader.feed_eof() 
+                reader.feed_eof()
             else:
-                reader.set_exception(exc) 
+                reader.set_exception(exc)
         if not self._closed.done():
             if exc is None:
                 self._closed.set_result(None)
             else:
                 self._closed.set_exception(exc)
         super().connection_lost(exc)
-        self._stream_reader_wr = None 
+        self._stream_reader_wr = None
         self._stream_writer = None
-        self._transport = None 
+        self._transport = None
 
     def data_received(self, data):
-        reader = self._stream_reader 
-        if reader is not None: 
-            reader.feed_data(data) 
+        reader = self._stream_reader
+        if reader is not None:
+            reader.feed_data(data)
 
     def eof_received(self):
-        reader = self._stream_reader 
-        if reader is not None: 
-            reader.feed_eof() 
+        reader = self._stream_reader
+        if reader is not None:
+            reader.feed_eof()
         if self._over_ssl:
             # Prevent a warning in SSLProtocol.eof_received:
             # "returning true from eof_received()
@@ -296,9 +296,9 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
             return False
         return True
 
-    def _get_close_waiter(self, stream): 
-        return self._closed 
- 
+    def _get_close_waiter(self, stream):
+        return self._closed
+
     def __del__(self):
         # Prevent reports about unhandled exceptions.
         # Better than self._closed._log_traceback = False hack
@@ -324,8 +324,8 @@ class StreamWriter:
         assert reader is None or isinstance(reader, StreamReader)
         self._reader = reader
         self._loop = loop
-        self._complete_fut = self._loop.create_future() 
-        self._complete_fut.set_result(None) 
+        self._complete_fut = self._loop.create_future()
+        self._complete_fut.set_result(None)
 
     def __repr__(self):
         info = [self.__class__.__name__, f'transport={self._transport!r}']
@@ -356,7 +356,7 @@ class StreamWriter:
         return self._transport.is_closing()
 
     async def wait_closed(self):
-        await self._protocol._get_close_waiter(self) 
+        await self._protocol._get_close_waiter(self)
 
     def get_extra_info(self, name, default=None):
         return self._transport.get_extra_info(name, default)
@@ -374,23 +374,23 @@ class StreamWriter:
             if exc is not None:
                 raise exc
         if self._transport.is_closing():
-            # Wait for protocol.connection_lost() call 
-            # Raise connection closing error if any, 
-            # ConnectionResetError otherwise 
+            # Wait for protocol.connection_lost() call
+            # Raise connection closing error if any,
+            # ConnectionResetError otherwise
             # Yield to the event loop so connection_lost() may be
             # called.  Without this, _drain_helper() would return
             # immediately, and code that calls
             #     write(...); await drain()
             # in a loop would never call connection_lost(), so it
             # would not see an error when the socket is closed.
-            await sleep(0) 
+            await sleep(0)
         await self._protocol._drain_helper()
 
 
 class StreamReader:
 
-    _source_traceback = None 
- 
+    _source_traceback = None
+
     def __init__(self, limit=_DEFAULT_LIMIT, loop=None):
         # The line length limit is  a security feature;
         # it also doubles as half the buffer limit.
@@ -409,9 +409,9 @@ class StreamReader:
         self._exception = None
         self._transport = None
         self._paused = False
-        if self._loop.get_debug(): 
-            self._source_traceback = format_helpers.extract_stack( 
-                sys._getframe(1)) 
+        if self._loop.get_debug():
+            self._source_traceback = format_helpers.extract_stack(
+                sys._getframe(1))
 
     def __repr__(self):
         info = ['StreamReader']
@@ -538,9 +538,9 @@ class StreamReader:
         seplen = len(sep)
         try:
             line = await self.readuntil(sep)
-        except exceptions.IncompleteReadError as e: 
+        except exceptions.IncompleteReadError as e:
             return e.partial
-        except exceptions.LimitOverrunError as e: 
+        except exceptions.LimitOverrunError as e:
             if self._buffer.startswith(sep, e.consumed):
                 del self._buffer[:e.consumed + seplen]
             else:
@@ -615,7 +615,7 @@ class StreamReader:
                 # see upper comment for explanation.
                 offset = buflen + 1 - seplen
                 if offset > self._limit:
-                    raise exceptions.LimitOverrunError( 
+                    raise exceptions.LimitOverrunError(
                         'Separator is not found, and chunk exceed the limit',
                         offset)
 
@@ -626,13 +626,13 @@ class StreamReader:
             if self._eof:
                 chunk = bytes(self._buffer)
                 self._buffer.clear()
-                raise exceptions.IncompleteReadError(chunk, None) 
+                raise exceptions.IncompleteReadError(chunk, None)
 
             # _wait_for_data() will resume reading if stream was paused.
             await self._wait_for_data('readuntil')
 
         if isep > self._limit:
-            raise exceptions.LimitOverrunError( 
+            raise exceptions.LimitOverrunError(
                 'Separator is found, but chunk is longer than limit', isep)
 
         chunk = self._buffer[:isep + seplen]
@@ -718,7 +718,7 @@ class StreamReader:
             if self._eof:
                 incomplete = bytes(self._buffer)
                 self._buffer.clear()
-                raise exceptions.IncompleteReadError(incomplete, n) 
+                raise exceptions.IncompleteReadError(incomplete, n)
 
             await self._wait_for_data('readexactly')
 

@@ -33,7 +33,7 @@ static FILE *PyFile_AsFile(PyObject *ob_file)
     PyObject *ob, *ob_capsule = NULL, *ob_mode = NULL;
     FILE *f;
     int fd;
-    const char *mode; 
+    const char *mode;
 
     ob = PyObject_CallMethod(ob_file, "flush", NULL);
     if (ob == NULL)

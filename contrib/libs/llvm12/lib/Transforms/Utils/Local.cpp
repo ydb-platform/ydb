@@ -91,25 +91,25 @@ using namespace llvm::PatternMatch;
 #define DEBUG_TYPE "local"
 
 STATISTIC(NumRemoved, "Number of unreachable basic blocks removed");
-STATISTIC(NumPHICSEs, "Number of PHI's that got CSE'd"); 
+STATISTIC(NumPHICSEs, "Number of PHI's that got CSE'd");
 
-static cl::opt<bool> PHICSEDebugHash( 
-    "phicse-debug-hash", 
-#ifdef EXPENSIVE_CHECKS 
-    cl::init(true), 
-#else 
-    cl::init(false), 
-#endif 
-    cl::Hidden, 
-    cl::desc("Perform extra assertion checking to verify that PHINodes's hash " 
-             "function is well-behaved w.r.t. its isEqual predicate")); 
- 
-static cl::opt<unsigned> PHICSENumPHISmallSize( 
-    "phicse-num-phi-smallsize", cl::init(32), cl::Hidden, 
-    cl::desc( 
-        "When the basic block contains not more than this number of PHI nodes, " 
-        "perform a (faster!) exhaustive search instead of set-driven one.")); 
- 
+static cl::opt<bool> PHICSEDebugHash(
+    "phicse-debug-hash",
+#ifdef EXPENSIVE_CHECKS
+    cl::init(true),
+#else
+    cl::init(false),
+#endif
+    cl::Hidden,
+    cl::desc("Perform extra assertion checking to verify that PHINodes's hash "
+             "function is well-behaved w.r.t. its isEqual predicate"));
+
+static cl::opt<unsigned> PHICSENumPHISmallSize(
+    "phicse-num-phi-smallsize", cl::init(32), cl::Hidden,
+    cl::desc(
+        "When the basic block contains not more than this number of PHI nodes, "
+        "perform a (faster!) exhaustive search instead of set-driven one."));
+
 // Max recursion depth for collectBitParts used when detecting bswap and
 // bitreverse idioms
 static const unsigned BitPartRecursionMaxDepth = 64;
@@ -134,7 +134,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
   // Branch - See if we are conditional jumping on constant
   if (auto *BI = dyn_cast<BranchInst>(T)) {
     if (BI->isUnconditional()) return false;  // Can't optimize uncond branch
- 
+
     BasicBlock *Dest1 = BI->getSuccessor(0);
     BasicBlock *Dest2 = BI->getSuccessor(1);
 
@@ -155,25 +155,25 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
         RecursivelyDeleteTriviallyDeadInstructions(Cond, TLI);
       return true;
     }
- 
-    if (auto *Cond = dyn_cast<ConstantInt>(BI->getCondition())) { 
-      // Are we branching on constant? 
-      // YES.  Change to unconditional branch... 
-      BasicBlock *Destination = Cond->getZExtValue() ? Dest1 : Dest2; 
-      BasicBlock *OldDest = Cond->getZExtValue() ? Dest2 : Dest1; 
- 
-      // Let the basic block know that we are letting go of it.  Based on this, 
-      // it will adjust it's PHI nodes. 
-      OldDest->removePredecessor(BB); 
- 
-      // Replace the conditional branch with an unconditional one. 
-      Builder.CreateBr(Destination); 
-      BI->eraseFromParent(); 
-      if (DTU) 
-        DTU->applyUpdates({{DominatorTree::Delete, BB, OldDest}}); 
-      return true; 
-    } 
- 
+
+    if (auto *Cond = dyn_cast<ConstantInt>(BI->getCondition())) {
+      // Are we branching on constant?
+      // YES.  Change to unconditional branch...
+      BasicBlock *Destination = Cond->getZExtValue() ? Dest1 : Dest2;
+      BasicBlock *OldDest = Cond->getZExtValue() ? Dest2 : Dest1;
+
+      // Let the basic block know that we are letting go of it.  Based on this,
+      // it will adjust it's PHI nodes.
+      OldDest->removePredecessor(BB);
+
+      // Replace the conditional branch with an unconditional one.
+      Builder.CreateBr(Destination);
+      BI->eraseFromParent();
+      if (DTU)
+        DTU->applyUpdates({{DominatorTree::Delete, BB, OldDest}});
+      return true;
+    }
+
     return false;
   }
 
@@ -190,8 +190,8 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       TheOnlyDest = SI->case_begin()->getCaseSuccessor();
     }
 
-    bool Changed = false; 
- 
+    bool Changed = false;
+
     // Figure out which case it goes to.
     for (auto i = SI->case_begin(), e = SI->case_end(); i != e;) {
       // Found case matching a constant operand?
@@ -230,7 +230,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
         DefaultDest->removePredecessor(ParentBB);
         i = SI->removeCase(i);
         e = SI->case_end();
-        Changed = true; 
+        Changed = true;
         continue;
       }
 
@@ -257,16 +257,16 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       Builder.CreateBr(TheOnlyDest);
       BasicBlock *BB = SI->getParent();
 
-      SmallSetVector<BasicBlock *, 8> RemovedSuccessors; 
- 
+      SmallSetVector<BasicBlock *, 8> RemovedSuccessors;
+
       // Remove entries from PHI nodes which we no longer branch to...
-      BasicBlock *SuccToKeep = TheOnlyDest; 
+      BasicBlock *SuccToKeep = TheOnlyDest;
       for (BasicBlock *Succ : successors(SI)) {
-        if (DTU && Succ != TheOnlyDest) 
-          RemovedSuccessors.insert(Succ); 
+        if (DTU && Succ != TheOnlyDest)
+          RemovedSuccessors.insert(Succ);
         // Found case matching a constant operand?
-        if (Succ == SuccToKeep) { 
-          SuccToKeep = nullptr; // Don't modify the first branch to TheOnlyDest 
+        if (Succ == SuccToKeep) {
+          SuccToKeep = nullptr; // Don't modify the first branch to TheOnlyDest
         } else {
           Succ->removePredecessor(BB);
         }
@@ -277,13 +277,13 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       SI->eraseFromParent();
       if (DeleteDeadConditions)
         RecursivelyDeleteTriviallyDeadInstructions(Cond, TLI);
-      if (DTU) { 
-        std::vector<DominatorTree::UpdateType> Updates; 
-        Updates.reserve(RemovedSuccessors.size()); 
-        for (auto *RemovedSuccessor : RemovedSuccessors) 
-          Updates.push_back({DominatorTree::Delete, BB, RemovedSuccessor}); 
-        DTU->applyUpdates(Updates); 
-      } 
+      if (DTU) {
+        std::vector<DominatorTree::UpdateType> Updates;
+        Updates.reserve(RemovedSuccessors.size());
+        for (auto *RemovedSuccessor : RemovedSuccessors)
+          Updates.push_back({DominatorTree::Delete, BB, RemovedSuccessor});
+        DTU->applyUpdates(Updates);
+      }
       return true;
     }
 
@@ -321,7 +321,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       SI->eraseFromParent();
       return true;
     }
-    return Changed; 
+    return Changed;
   }
 
   if (auto *IBI = dyn_cast<IndirectBrInst>(T)) {
@@ -329,20 +329,20 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
     if (auto *BA =
           dyn_cast<BlockAddress>(IBI->getAddress()->stripPointerCasts())) {
       BasicBlock *TheOnlyDest = BA->getBasicBlock();
-      SmallSetVector<BasicBlock *, 8> RemovedSuccessors; 
+      SmallSetVector<BasicBlock *, 8> RemovedSuccessors;
 
       // Insert the new branch.
       Builder.CreateBr(TheOnlyDest);
 
-      BasicBlock *SuccToKeep = TheOnlyDest; 
+      BasicBlock *SuccToKeep = TheOnlyDest;
       for (unsigned i = 0, e = IBI->getNumDestinations(); i != e; ++i) {
-        BasicBlock *DestBB = IBI->getDestination(i); 
-        if (DTU && DestBB != TheOnlyDest) 
-          RemovedSuccessors.insert(DestBB); 
-        if (IBI->getDestination(i) == SuccToKeep) { 
-          SuccToKeep = nullptr; 
+        BasicBlock *DestBB = IBI->getDestination(i);
+        if (DTU && DestBB != TheOnlyDest)
+          RemovedSuccessors.insert(DestBB);
+        if (IBI->getDestination(i) == SuccToKeep) {
+          SuccToKeep = nullptr;
         } else {
-          DestBB->removePredecessor(BB); 
+          DestBB->removePredecessor(BB);
         }
       }
       Value *Address = IBI->getAddress();
@@ -359,18 +359,18 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       // If we didn't find our destination in the IBI successor list, then we
       // have undefined behavior.  Replace the unconditional branch with an
       // 'unreachable' instruction.
-      if (SuccToKeep) { 
+      if (SuccToKeep) {
         BB->getTerminator()->eraseFromParent();
         new UnreachableInst(BB->getContext(), BB);
       }
 
-      if (DTU) { 
-        std::vector<DominatorTree::UpdateType> Updates; 
-        Updates.reserve(RemovedSuccessors.size()); 
-        for (auto *RemovedSuccessor : RemovedSuccessors) 
-          Updates.push_back({DominatorTree::Delete, BB, RemovedSuccessor}); 
-        DTU->applyUpdates(Updates); 
-      } 
+      if (DTU) {
+        std::vector<DominatorTree::UpdateType> Updates;
+        Updates.reserve(RemovedSuccessors.size());
+        for (auto *RemovedSuccessor : RemovedSuccessors)
+          Updates.push_back({DominatorTree::Delete, BB, RemovedSuccessor});
+        DTU->applyUpdates(Updates);
+      }
       return true;
     }
   }
@@ -420,9 +420,9 @@ bool llvm::wouldInstructionBeTriviallyDead(Instruction *I,
     return true;
   }
 
-  if (!I->willReturn()) 
-    return false; 
- 
+  if (!I->willReturn())
+    return false;
+
   if (!I->mayHaveSideEffects())
     return true;
 
@@ -484,24 +484,24 @@ bool llvm::wouldInstructionBeTriviallyDead(Instruction *I,
 /// trivially dead, delete them too, recursively.  Return true if any
 /// instructions were deleted.
 bool llvm::RecursivelyDeleteTriviallyDeadInstructions(
-    Value *V, const TargetLibraryInfo *TLI, MemorySSAUpdater *MSSAU, 
-    std::function<void(Value *)> AboutToDeleteCallback) { 
+    Value *V, const TargetLibraryInfo *TLI, MemorySSAUpdater *MSSAU,
+    std::function<void(Value *)> AboutToDeleteCallback) {
   Instruction *I = dyn_cast<Instruction>(V);
   if (!I || !isInstructionTriviallyDead(I, TLI))
     return false;
 
   SmallVector<WeakTrackingVH, 16> DeadInsts;
   DeadInsts.push_back(I);
-  RecursivelyDeleteTriviallyDeadInstructions(DeadInsts, TLI, MSSAU, 
-                                             AboutToDeleteCallback); 
+  RecursivelyDeleteTriviallyDeadInstructions(DeadInsts, TLI, MSSAU,
+                                             AboutToDeleteCallback);
 
   return true;
 }
 
 bool llvm::RecursivelyDeleteTriviallyDeadInstructionsPermissive(
     SmallVectorImpl<WeakTrackingVH> &DeadInsts, const TargetLibraryInfo *TLI,
-    MemorySSAUpdater *MSSAU, 
-    std::function<void(Value *)> AboutToDeleteCallback) { 
+    MemorySSAUpdater *MSSAU,
+    std::function<void(Value *)> AboutToDeleteCallback) {
   unsigned S = 0, E = DeadInsts.size(), Alive = 0;
   for (; S != E; ++S) {
     auto *I = cast<Instruction>(DeadInsts[S]);
@@ -512,15 +512,15 @@ bool llvm::RecursivelyDeleteTriviallyDeadInstructionsPermissive(
   }
   if (Alive == E)
     return false;
-  RecursivelyDeleteTriviallyDeadInstructions(DeadInsts, TLI, MSSAU, 
-                                             AboutToDeleteCallback); 
+  RecursivelyDeleteTriviallyDeadInstructions(DeadInsts, TLI, MSSAU,
+                                             AboutToDeleteCallback);
   return true;
 }
 
 void llvm::RecursivelyDeleteTriviallyDeadInstructions(
     SmallVectorImpl<WeakTrackingVH> &DeadInsts, const TargetLibraryInfo *TLI,
-    MemorySSAUpdater *MSSAU, 
-    std::function<void(Value *)> AboutToDeleteCallback) { 
+    MemorySSAUpdater *MSSAU,
+    std::function<void(Value *)> AboutToDeleteCallback) {
   // Process the dead instruction list until empty.
   while (!DeadInsts.empty()) {
     Value *V = DeadInsts.pop_back_val();
@@ -534,9 +534,9 @@ void llvm::RecursivelyDeleteTriviallyDeadInstructions(
     // Don't lose the debug info while deleting the instructions.
     salvageDebugInfo(*I);
 
-    if (AboutToDeleteCallback) 
-      AboutToDeleteCallback(I); 
- 
+    if (AboutToDeleteCallback)
+      AboutToDeleteCallback(I);
+
     // Null out all of the instruction's operands to see if any operand becomes
     // dead as we go.
     for (Use &OpU : I->operands()) {
@@ -740,11 +740,11 @@ void llvm::MergeBasicBlockIntoOnlyPred(BasicBlock *DestBB,
   if (DTU) {
     for (auto I = pred_begin(PredBB), E = pred_end(PredBB); I != E; ++I) {
       // This predecessor of PredBB may already have DestBB as a successor.
-      if (!llvm::is_contained(successors(*I), DestBB)) 
+      if (!llvm::is_contained(successors(*I), DestBB))
         Updates.push_back({DominatorTree::Insert, *I, DestBB});
-      Updates.push_back({DominatorTree::Delete, *I, PredBB}); 
+      Updates.push_back({DominatorTree::Delete, *I, PredBB});
     }
-    Updates.push_back({DominatorTree::Delete, PredBB, DestBB}); 
+    Updates.push_back({DominatorTree::Delete, PredBB, DestBB});
   }
 
   // Zap anything that took the address of DestBB.  Not doing this will give the
@@ -918,7 +918,7 @@ static void gatherIncomingValuesToPhi(PHINode *PN,
 /// \param IncomingValues A map from block to value.
 static void replaceUndefValuesInPhi(PHINode *PN,
                                     const IncomingValueMap &IncomingValues) {
-  SmallVector<unsigned> TrueUndefOps; 
+  SmallVector<unsigned> TrueUndefOps;
   for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
     Value *V = PN->getIncomingValue(i);
 
@@ -927,30 +927,30 @@ static void replaceUndefValuesInPhi(PHINode *PN,
     BasicBlock *BB = PN->getIncomingBlock(i);
     IncomingValueMap::const_iterator It = IncomingValues.find(BB);
 
-    // Keep track of undef/poison incoming values. Those must match, so we fix 
-    // them up below if needed. 
-    // Note: this is conservatively correct, but we could try harder and group 
-    // the undef values per incoming basic block. 
-    if (It == IncomingValues.end()) { 
-      TrueUndefOps.push_back(i); 
-      continue; 
-    } 
- 
-    // There is a defined value for this incoming block, so map this undef 
-    // incoming value to the defined value. 
+    // Keep track of undef/poison incoming values. Those must match, so we fix
+    // them up below if needed.
+    // Note: this is conservatively correct, but we could try harder and group
+    // the undef values per incoming basic block.
+    if (It == IncomingValues.end()) {
+      TrueUndefOps.push_back(i);
+      continue;
+    }
+
+    // There is a defined value for this incoming block, so map this undef
+    // incoming value to the defined value.
     PN->setIncomingValue(i, It->second);
   }
- 
-  // If there are both undef and poison values incoming, then convert those 
-  // values to undef. It is invalid to have different values for the same 
-  // incoming block. 
-  unsigned PoisonCount = count_if(TrueUndefOps, [&](unsigned i) { 
-    return isa<PoisonValue>(PN->getIncomingValue(i)); 
-  }); 
-  if (PoisonCount != 0 && PoisonCount != TrueUndefOps.size()) { 
-    for (unsigned i : TrueUndefOps) 
-      PN->setIncomingValue(i, UndefValue::get(PN->getType())); 
-  } 
+
+  // If there are both undef and poison values incoming, then convert those
+  // values to undef. It is invalid to have different values for the same
+  // incoming block.
+  unsigned PoisonCount = count_if(TrueUndefOps, [&](unsigned i) {
+    return isa<PoisonValue>(PN->getIncomingValue(i));
+  });
+  if (PoisonCount != 0 && PoisonCount != TrueUndefOps.size()) {
+    for (unsigned i : TrueUndefOps)
+      PN->setIncomingValue(i, UndefValue::get(PN->getType()));
+  }
 }
 
 /// Replace a value flowing from a block to a phi with
@@ -1072,15 +1072,15 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
   SmallVector<DominatorTree::UpdateType, 32> Updates;
   if (DTU) {
     // All predecessors of BB will be moved to Succ.
-    SmallSetVector<BasicBlock *, 8> Predecessors(pred_begin(BB), pred_end(BB)); 
-    Updates.reserve(Updates.size() + 2 * Predecessors.size()); 
-    for (auto *Predecessor : Predecessors) { 
+    SmallSetVector<BasicBlock *, 8> Predecessors(pred_begin(BB), pred_end(BB));
+    Updates.reserve(Updates.size() + 2 * Predecessors.size());
+    for (auto *Predecessor : Predecessors) {
       // This predecessor of BB may already have Succ as a successor.
-      if (!llvm::is_contained(successors(Predecessor), Succ)) 
-        Updates.push_back({DominatorTree::Insert, Predecessor, Succ}); 
-      Updates.push_back({DominatorTree::Delete, Predecessor, BB}); 
+      if (!llvm::is_contained(successors(Predecessor), Succ))
+        Updates.push_back({DominatorTree::Insert, Predecessor, Succ});
+      Updates.push_back({DominatorTree::Delete, Predecessor, BB});
     }
-    Updates.push_back({DominatorTree::Delete, BB, Succ}); 
+    Updates.push_back({DominatorTree::Delete, BB, Succ});
   }
 
   if (isa<PHINode>(Succ->begin())) {
@@ -1136,7 +1136,7 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
                            "applying corresponding DTU updates.");
 
   if (DTU) {
-    DTU->applyUpdates(Updates); 
+    DTU->applyUpdates(Updates);
     DTU->deleteBB(BB);
   } else {
     BB->eraseFromParent(); // Delete the old basic block.
@@ -1144,43 +1144,43 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
   return true;
 }
 
-static bool EliminateDuplicatePHINodesNaiveImpl(BasicBlock *BB) { 
+static bool EliminateDuplicatePHINodesNaiveImpl(BasicBlock *BB) {
   // This implementation doesn't currently consider undef operands
   // specially. Theoretically, two phis which are identical except for
   // one having an undef where the other doesn't could be collapsed.
 
-  bool Changed = false; 
- 
-  // Examine each PHI. 
-  // Note that increment of I must *NOT* be in the iteration_expression, since 
-  // we don't want to immediately advance when we restart from the beginning. 
-  for (auto I = BB->begin(); PHINode *PN = dyn_cast<PHINode>(I);) { 
-    ++I; 
-    // Is there an identical PHI node in this basic block? 
-    // Note that we only look in the upper square's triangle, 
-    // we already checked that the lower triangle PHI's aren't identical. 
-    for (auto J = I; PHINode *DuplicatePN = dyn_cast<PHINode>(J); ++J) { 
-      if (!DuplicatePN->isIdenticalToWhenDefined(PN)) 
-        continue; 
-      // A duplicate. Replace this PHI with the base PHI. 
-      ++NumPHICSEs; 
-      DuplicatePN->replaceAllUsesWith(PN); 
-      DuplicatePN->eraseFromParent(); 
-      Changed = true; 
- 
-      // The RAUW can change PHIs that we already visited. 
-      I = BB->begin(); 
-      break; // Start over from the beginning. 
-    } 
-  } 
-  return Changed; 
-} 
- 
-static bool EliminateDuplicatePHINodesSetBasedImpl(BasicBlock *BB) { 
-  // This implementation doesn't currently consider undef operands 
-  // specially. Theoretically, two phis which are identical except for 
-  // one having an undef where the other doesn't could be collapsed. 
- 
+  bool Changed = false;
+
+  // Examine each PHI.
+  // Note that increment of I must *NOT* be in the iteration_expression, since
+  // we don't want to immediately advance when we restart from the beginning.
+  for (auto I = BB->begin(); PHINode *PN = dyn_cast<PHINode>(I);) {
+    ++I;
+    // Is there an identical PHI node in this basic block?
+    // Note that we only look in the upper square's triangle,
+    // we already checked that the lower triangle PHI's aren't identical.
+    for (auto J = I; PHINode *DuplicatePN = dyn_cast<PHINode>(J); ++J) {
+      if (!DuplicatePN->isIdenticalToWhenDefined(PN))
+        continue;
+      // A duplicate. Replace this PHI with the base PHI.
+      ++NumPHICSEs;
+      DuplicatePN->replaceAllUsesWith(PN);
+      DuplicatePN->eraseFromParent();
+      Changed = true;
+
+      // The RAUW can change PHIs that we already visited.
+      I = BB->begin();
+      break; // Start over from the beginning.
+    }
+  }
+  return Changed;
+}
+
+static bool EliminateDuplicatePHINodesSetBasedImpl(BasicBlock *BB) {
+  // This implementation doesn't currently consider undef operands
+  // specially. Theoretically, two phis which are identical except for
+  // one having an undef where the other doesn't could be collapsed.
+
   struct PHIDenseMapInfo {
     static PHINode *getEmptyKey() {
       return DenseMapInfo<PHINode *>::getEmptyKey();
@@ -1190,13 +1190,13 @@ static bool EliminateDuplicatePHINodesSetBasedImpl(BasicBlock *BB) {
       return DenseMapInfo<PHINode *>::getTombstoneKey();
     }
 
-    static bool isSentinel(PHINode *PN) { 
-      return PN == getEmptyKey() || PN == getTombstoneKey(); 
-    } 
- 
-    // WARNING: this logic must be kept in sync with 
-    //          Instruction::isIdenticalToWhenDefined()! 
-    static unsigned getHashValueImpl(PHINode *PN) { 
+    static bool isSentinel(PHINode *PN) {
+      return PN == getEmptyKey() || PN == getTombstoneKey();
+    }
+
+    // WARNING: this logic must be kept in sync with
+    //          Instruction::isIdenticalToWhenDefined()!
+    static unsigned getHashValueImpl(PHINode *PN) {
       // Compute a hash value on the operands. Instcombine will likely have
       // sorted them, which helps expose duplicates, but we have to check all
       // the operands to be safe in case instcombine hasn't run.
@@ -1205,37 +1205,37 @@ static bool EliminateDuplicatePHINodesSetBasedImpl(BasicBlock *BB) {
           hash_combine_range(PN->block_begin(), PN->block_end())));
     }
 
-    static unsigned getHashValue(PHINode *PN) { 
-#ifndef NDEBUG 
-      // If -phicse-debug-hash was specified, return a constant -- this 
-      // will force all hashing to collide, so we'll exhaustively search 
-      // the table for a match, and the assertion in isEqual will fire if 
-      // there's a bug causing equal keys to hash differently. 
-      if (PHICSEDebugHash) 
-        return 0; 
-#endif 
-      return getHashValueImpl(PN); 
-    } 
- 
-    static bool isEqualImpl(PHINode *LHS, PHINode *RHS) { 
-      if (isSentinel(LHS) || isSentinel(RHS)) 
+    static unsigned getHashValue(PHINode *PN) {
+#ifndef NDEBUG
+      // If -phicse-debug-hash was specified, return a constant -- this
+      // will force all hashing to collide, so we'll exhaustively search
+      // the table for a match, and the assertion in isEqual will fire if
+      // there's a bug causing equal keys to hash differently.
+      if (PHICSEDebugHash)
+        return 0;
+#endif
+      return getHashValueImpl(PN);
+    }
+
+    static bool isEqualImpl(PHINode *LHS, PHINode *RHS) {
+      if (isSentinel(LHS) || isSentinel(RHS))
         return LHS == RHS;
       return LHS->isIdenticalTo(RHS);
     }
- 
-    static bool isEqual(PHINode *LHS, PHINode *RHS) { 
-      // These comparisons are nontrivial, so assert that equality implies 
-      // hash equality (DenseMap demands this as an invariant). 
-      bool Result = isEqualImpl(LHS, RHS); 
-      assert(!Result || (isSentinel(LHS) && LHS == RHS) || 
-             getHashValueImpl(LHS) == getHashValueImpl(RHS)); 
-      return Result; 
-    } 
+
+    static bool isEqual(PHINode *LHS, PHINode *RHS) {
+      // These comparisons are nontrivial, so assert that equality implies
+      // hash equality (DenseMap demands this as an invariant).
+      bool Result = isEqualImpl(LHS, RHS);
+      assert(!Result || (isSentinel(LHS) && LHS == RHS) ||
+             getHashValueImpl(LHS) == getHashValueImpl(RHS));
+      return Result;
+    }
   };
 
   // Set of unique PHINodes.
   DenseSet<PHINode *, PHIDenseMapInfo> PHISet;
-  PHISet.reserve(4 * PHICSENumPHISmallSize); 
+  PHISet.reserve(4 * PHICSENumPHISmallSize);
 
   // Examine each PHI.
   bool Changed = false;
@@ -1243,7 +1243,7 @@ static bool EliminateDuplicatePHINodesSetBasedImpl(BasicBlock *BB) {
     auto Inserted = PHISet.insert(PN);
     if (!Inserted.second) {
       // A duplicate. Replace this PHI with its duplicate.
-      ++NumPHICSEs; 
+      ++NumPHICSEs;
       PN->replaceAllUsesWith(*Inserted.first);
       PN->eraseFromParent();
       Changed = true;
@@ -1258,63 +1258,63 @@ static bool EliminateDuplicatePHINodesSetBasedImpl(BasicBlock *BB) {
   return Changed;
 }
 
-bool llvm::EliminateDuplicatePHINodes(BasicBlock *BB) { 
-  if ( 
-#ifndef NDEBUG 
-      !PHICSEDebugHash && 
-#endif 
-      hasNItemsOrLess(BB->phis(), PHICSENumPHISmallSize)) 
-    return EliminateDuplicatePHINodesNaiveImpl(BB); 
-  return EliminateDuplicatePHINodesSetBasedImpl(BB); 
-} 
+bool llvm::EliminateDuplicatePHINodes(BasicBlock *BB) {
+  if (
+#ifndef NDEBUG
+      !PHICSEDebugHash &&
+#endif
+      hasNItemsOrLess(BB->phis(), PHICSENumPHISmallSize))
+    return EliminateDuplicatePHINodesNaiveImpl(BB);
+  return EliminateDuplicatePHINodesSetBasedImpl(BB);
+}
 
-/// If the specified pointer points to an object that we control, try to modify 
-/// the object's alignment to PrefAlign. Returns a minimum known alignment of 
-/// the value after the operation, which may be lower than PrefAlign. 
-/// 
-/// Increating value alignment isn't often possible though. If alignment is 
-/// important, a more reliable approach is to simply align all global variables 
-/// and allocation instructions to their preferred alignment from the beginning. 
-static Align tryEnforceAlignment(Value *V, Align PrefAlign, 
-                                 const DataLayout &DL) { 
+/// If the specified pointer points to an object that we control, try to modify
+/// the object's alignment to PrefAlign. Returns a minimum known alignment of
+/// the value after the operation, which may be lower than PrefAlign.
+///
+/// Increating value alignment isn't often possible though. If alignment is
+/// important, a more reliable approach is to simply align all global variables
+/// and allocation instructions to their preferred alignment from the beginning.
+static Align tryEnforceAlignment(Value *V, Align PrefAlign,
+                                 const DataLayout &DL) {
   V = V->stripPointerCasts();
 
   if (AllocaInst *AI = dyn_cast<AllocaInst>(V)) {
-    // TODO: Ideally, this function would not be called if PrefAlign is smaller 
-    // than the current alignment, as the known bits calculation should have 
-    // already taken it into account. However, this is not always the case, 
-    // as computeKnownBits() has a depth limit, while stripPointerCasts() 
-    // doesn't. 
-    Align CurrentAlign = AI->getAlign(); 
-    if (PrefAlign <= CurrentAlign) 
-      return CurrentAlign; 
+    // TODO: Ideally, this function would not be called if PrefAlign is smaller
+    // than the current alignment, as the known bits calculation should have
+    // already taken it into account. However, this is not always the case,
+    // as computeKnownBits() has a depth limit, while stripPointerCasts()
+    // doesn't.
+    Align CurrentAlign = AI->getAlign();
+    if (PrefAlign <= CurrentAlign)
+      return CurrentAlign;
 
     // If the preferred alignment is greater than the natural stack alignment
     // then don't round up. This avoids dynamic stack realignment.
     if (DL.exceedsNaturalStackAlignment(PrefAlign))
-      return CurrentAlign; 
+      return CurrentAlign;
     AI->setAlignment(PrefAlign);
     return PrefAlign;
   }
 
   if (auto *GO = dyn_cast<GlobalObject>(V)) {
     // TODO: as above, this shouldn't be necessary.
-    Align CurrentAlign = GO->getPointerAlignment(DL); 
-    if (PrefAlign <= CurrentAlign) 
-      return CurrentAlign; 
+    Align CurrentAlign = GO->getPointerAlignment(DL);
+    if (PrefAlign <= CurrentAlign)
+      return CurrentAlign;
 
     // If there is a large requested alignment and we can, bump up the alignment
     // of the global.  If the memory we set aside for the global may not be the
     // memory used by the final program then it is impossible for us to reliably
     // enforce the preferred alignment.
     if (!GO->canIncreaseAlignment())
-      return CurrentAlign; 
+      return CurrentAlign;
 
     GO->setAlignment(PrefAlign);
     return PrefAlign;
   }
 
-  return Align(1); 
+  return Align(1);
 }
 
 Align llvm::getOrEnforceKnownAlignment(Value *V, MaybeAlign PrefAlign,
@@ -1336,7 +1336,7 @@ Align llvm::getOrEnforceKnownAlignment(Value *V, MaybeAlign PrefAlign,
   Align Alignment = Align(1ull << std::min(Known.getBitWidth() - 1, TrailZ));
 
   if (PrefAlign && *PrefAlign > Alignment)
-    Alignment = std::max(Alignment, tryEnforceAlignment(V, *PrefAlign, DL)); 
+    Alignment = std::max(Alignment, tryEnforceAlignment(V, *PrefAlign, DL));
 
   // We don't need to make any adjustment.
   return Alignment;
@@ -1374,22 +1374,22 @@ static bool PhiHasDebugValue(DILocalVariable *DIVar,
 /// least n bits.
 static bool valueCoversEntireFragment(Type *ValTy, DbgVariableIntrinsic *DII) {
   const DataLayout &DL = DII->getModule()->getDataLayout();
-  TypeSize ValueSize = DL.getTypeAllocSizeInBits(ValTy); 
-  if (Optional<uint64_t> FragmentSize = DII->getFragmentSizeInBits()) { 
-    assert(!ValueSize.isScalable() && 
-           "Fragments don't work on scalable types."); 
-    return ValueSize.getFixedSize() >= *FragmentSize; 
-  } 
+  TypeSize ValueSize = DL.getTypeAllocSizeInBits(ValTy);
+  if (Optional<uint64_t> FragmentSize = DII->getFragmentSizeInBits()) {
+    assert(!ValueSize.isScalable() &&
+           "Fragments don't work on scalable types.");
+    return ValueSize.getFixedSize() >= *FragmentSize;
+  }
   // We can't always calculate the size of the DI variable (e.g. if it is a
   // VLA). Try to use the size of the alloca that the dbg intrinsic describes
   // intead.
   if (DII->isAddressOfVariable())
     if (auto *AI = dyn_cast_or_null<AllocaInst>(DII->getVariableLocation()))
-      if (Optional<TypeSize> FragmentSize = AI->getAllocationSizeInBits(DL)) { 
-        assert(ValueSize.isScalable() == FragmentSize->isScalable() && 
-               "Both sizes should agree on the scalable flag."); 
-        return TypeSize::isKnownGE(ValueSize, *FragmentSize); 
-      } 
+      if (Optional<TypeSize> FragmentSize = AI->getAllocationSizeInBits(DL)) {
+        assert(ValueSize.isScalable() == FragmentSize->isScalable() &&
+               "Both sizes should agree on the scalable flag.");
+        return TypeSize::isKnownGE(ValueSize, *FragmentSize);
+      }
   // Could not determine size of variable. Conservatively return false.
   return false;
 }
@@ -1404,7 +1404,7 @@ static DebugLoc getDebugValueLoc(DbgVariableIntrinsic *DII, Instruction *Src) {
   MDNode *Scope = DeclareLoc.getScope();
   DILocation *InlinedAt = DeclareLoc.getInlinedAt();
   // Produce an unknown location with the correct scope / inlinedAt fields.
-  return DILocation::get(DII->getContext(), 0, 0, Scope, InlinedAt); 
+  return DILocation::get(DII->getContext(), 0, 0, Scope, InlinedAt);
 }
 
 /// Inserts a llvm.dbg.value intrinsic before a store to an alloca'd value
@@ -2021,10 +2021,10 @@ bool llvm::replaceAllDbgUsesWith(Instruction &From, Value &To,
   return false;
 }
 
-std::pair<unsigned, unsigned> 
-llvm::removeAllNonTerminatorAndEHPadInstructions(BasicBlock *BB) { 
+std::pair<unsigned, unsigned>
+llvm::removeAllNonTerminatorAndEHPadInstructions(BasicBlock *BB) {
   unsigned NumDeadInst = 0;
-  unsigned NumDeadDbgInst = 0; 
+  unsigned NumDeadDbgInst = 0;
   // Delete the instructions backwards, as it has a reduced likelihood of
   // having to update as many def-use and use-def chains.
   Instruction *EndInst = BB->getTerminator(); // Last not to be deleted.
@@ -2037,13 +2037,13 @@ llvm::removeAllNonTerminatorAndEHPadInstructions(BasicBlock *BB) {
       EndInst = Inst;
       continue;
     }
-    if (isa<DbgInfoIntrinsic>(Inst)) 
-      ++NumDeadDbgInst; 
-    else 
+    if (isa<DbgInfoIntrinsic>(Inst))
+      ++NumDeadDbgInst;
+    else
       ++NumDeadInst;
     Inst->eraseFromParent();
   }
-  return {NumDeadInst, NumDeadDbgInst}; 
+  return {NumDeadInst, NumDeadDbgInst};
 }
 
 unsigned llvm::changeToUnreachable(Instruction *I, bool UseLLVMTrap,
@@ -2054,14 +2054,14 @@ unsigned llvm::changeToUnreachable(Instruction *I, bool UseLLVMTrap,
   if (MSSAU)
     MSSAU->changeToUnreachable(I);
 
-  SmallSetVector<BasicBlock *, 8> UniqueSuccessors; 
- 
+  SmallSetVector<BasicBlock *, 8> UniqueSuccessors;
+
   // Loop over all of the successors, removing BB's entry from any PHI
   // nodes.
   for (BasicBlock *Successor : successors(BB)) {
     Successor->removePredecessor(BB, PreserveLCSSA);
     if (DTU)
-      UniqueSuccessors.insert(Successor); 
+      UniqueSuccessors.insert(Successor);
   }
   // Insert a call to llvm.trap right before this.  This turns the undefined
   // behavior into a hard fail instead of falling through into random code.
@@ -2083,18 +2083,18 @@ unsigned llvm::changeToUnreachable(Instruction *I, bool UseLLVMTrap,
     BB->getInstList().erase(BBI++);
     ++NumInstrsRemoved;
   }
-  if (DTU) { 
-    SmallVector<DominatorTree::UpdateType, 8> Updates; 
-    Updates.reserve(UniqueSuccessors.size()); 
-    for (BasicBlock *UniqueSuccessor : UniqueSuccessors) 
-      Updates.push_back({DominatorTree::Delete, BB, UniqueSuccessor}); 
-    DTU->applyUpdates(Updates); 
-  } 
+  if (DTU) {
+    SmallVector<DominatorTree::UpdateType, 8> Updates;
+    Updates.reserve(UniqueSuccessors.size());
+    for (BasicBlock *UniqueSuccessor : UniqueSuccessors)
+      Updates.push_back({DominatorTree::Delete, BB, UniqueSuccessor});
+    DTU->applyUpdates(Updates);
+  }
   return NumInstrsRemoved;
 }
 
 CallInst *llvm::createCallMatchingInvoke(InvokeInst *II) {
-  SmallVector<Value *, 8> Args(II->args()); 
+  SmallVector<Value *, 8> Args(II->args());
   SmallVector<OperandBundleDef, 1> OpBundles;
   II->getOperandBundlesAsDefs(OpBundles);
   CallInst *NewCall = CallInst::Create(II->getFunctionType(),
@@ -2135,7 +2135,7 @@ void llvm::changeToCall(InvokeInst *II, DomTreeUpdater *DTU) {
   UnwindDestBB->removePredecessor(BB);
   II->eraseFromParent();
   if (DTU)
-    DTU->applyUpdates({{DominatorTree::Delete, BB, UnwindDestBB}}); 
+    DTU->applyUpdates({{DominatorTree::Delete, BB, UnwindDestBB}});
 }
 
 BasicBlock *llvm::changeToInvokeAndSplitBasicBlock(CallInst *CI,
@@ -2151,7 +2151,7 @@ BasicBlock *llvm::changeToInvokeAndSplitBasicBlock(CallInst *CI,
   BB->getInstList().pop_back();
 
   // Create the new invoke instruction.
-  SmallVector<Value *, 8> InvokeArgs(CI->args()); 
+  SmallVector<Value *, 8> InvokeArgs(CI->args());
   SmallVector<OperandBundleDef, 1> OpBundles;
 
   CI->getOperandBundlesAsDefs(OpBundles);
@@ -2282,7 +2282,7 @@ static bool markAliveBlocks(Function &F,
           UnwindDestBB->removePredecessor(II->getParent());
           II->eraseFromParent();
           if (DTU)
-            DTU->applyUpdates({{DominatorTree::Delete, BB, UnwindDestBB}}); 
+            DTU->applyUpdates({{DominatorTree::Delete, BB, UnwindDestBB}});
         } else
           changeToCall(II, DTU);
         Changed = true;
@@ -2311,7 +2311,7 @@ static bool markAliveBlocks(Function &F,
         }
       };
 
-      SmallMapVector<BasicBlock *, int, 8> NumPerSuccessorCases; 
+      SmallMapVector<BasicBlock *, int, 8> NumPerSuccessorCases;
       // Set of unique CatchPads.
       SmallDenseMap<CatchPadInst *, detail::DenseSetEmpty, 4,
                     CatchPadDenseMapInfo, detail::DenseSetPair<CatchPadInst *>>
@@ -2321,22 +2321,22 @@ static bool markAliveBlocks(Function &F,
                                              E = CatchSwitch->handler_end();
            I != E; ++I) {
         BasicBlock *HandlerBB = *I;
-        ++NumPerSuccessorCases[HandlerBB]; 
+        ++NumPerSuccessorCases[HandlerBB];
         auto *CatchPad = cast<CatchPadInst>(HandlerBB->getFirstNonPHI());
         if (!HandlerSet.insert({CatchPad, Empty}).second) {
-          --NumPerSuccessorCases[HandlerBB]; 
+          --NumPerSuccessorCases[HandlerBB];
           CatchSwitch->removeHandler(I);
           --I;
           --E;
           Changed = true;
         }
       }
-      std::vector<DominatorTree::UpdateType> Updates; 
-      for (const std::pair<BasicBlock *, int> &I : NumPerSuccessorCases) 
-        if (I.second == 0) 
-          Updates.push_back({DominatorTree::Delete, BB, I.first}); 
-      if (DTU) 
-        DTU->applyUpdates(Updates); 
+      std::vector<DominatorTree::UpdateType> Updates;
+      for (const std::pair<BasicBlock *, int> &I : NumPerSuccessorCases)
+        if (I.second == 0)
+          Updates.push_back({DominatorTree::Delete, BB, I.first});
+      if (DTU)
+        DTU->applyUpdates(Updates);
     }
 
     Changed |= ConstantFoldTerminator(BB, true, nullptr, DTU);
@@ -2380,7 +2380,7 @@ void llvm::removeUnwindEdge(BasicBlock *BB, DomTreeUpdater *DTU) {
   TI->replaceAllUsesWith(NewTI);
   TI->eraseFromParent();
   if (DTU)
-    DTU->applyUpdates({{DominatorTree::Delete, BB, UnwindDest}}); 
+    DTU->applyUpdates({{DominatorTree::Delete, BB, UnwindDest}});
 }
 
 /// removeUnreachableBlocks - Remove blocks that are not reachable, even
@@ -2397,38 +2397,38 @@ bool llvm::removeUnreachableBlocks(Function &F, DomTreeUpdater *DTU,
 
   assert(Reachable.size() < F.size());
 
-  // Are there any blocks left to actually delete? 
-  SmallSetVector<BasicBlock *, 8> BlocksToRemove; 
+  // Are there any blocks left to actually delete?
+  SmallSetVector<BasicBlock *, 8> BlocksToRemove;
   for (BasicBlock &BB : F) {
     // Skip reachable basic blocks
     if (Reachable.count(&BB))
       continue;
-    // Skip already-deleted blocks 
-    if (DTU && DTU->isBBPendingDeletion(&BB)) 
-      continue; 
-    BlocksToRemove.insert(&BB); 
+    // Skip already-deleted blocks
+    if (DTU && DTU->isBBPendingDeletion(&BB))
+      continue;
+    BlocksToRemove.insert(&BB);
   }
 
-  if (BlocksToRemove.empty()) 
-    return Changed; 
- 
-  Changed = true; 
-  NumRemoved += BlocksToRemove.size(); 
- 
-  if (MSSAU)
-    MSSAU->removeBlocks(BlocksToRemove); 
+  if (BlocksToRemove.empty())
+    return Changed;
 
-  // Loop over all of the basic blocks that are up for removal, dropping all of 
+  Changed = true;
+  NumRemoved += BlocksToRemove.size();
+
+  if (MSSAU)
+    MSSAU->removeBlocks(BlocksToRemove);
+
+  // Loop over all of the basic blocks that are up for removal, dropping all of
   // their internal references. Update DTU if available.
   std::vector<DominatorTree::UpdateType> Updates;
-  for (auto *BB : BlocksToRemove) { 
-    SmallSetVector<BasicBlock *, 8> UniqueSuccessors; 
+  for (auto *BB : BlocksToRemove) {
+    SmallSetVector<BasicBlock *, 8> UniqueSuccessors;
     for (BasicBlock *Successor : successors(BB)) {
-      // Only remove references to BB in reachable successors of BB. 
-      if (Reachable.count(Successor)) 
+      // Only remove references to BB in reachable successors of BB.
+      if (Reachable.count(Successor))
         Successor->removePredecessor(BB);
       if (DTU)
-        UniqueSuccessors.insert(Successor); 
+        UniqueSuccessors.insert(Successor);
     }
     BB->dropAllReferences();
     if (DTU) {
@@ -2442,22 +2442,22 @@ bool llvm::removeUnreachableBlocks(Function &F, DomTreeUpdater *DTU,
       new UnreachableInst(BB->getContext(), BB);
       assert(succ_empty(BB) && "The successor list of BB isn't empty before "
                                "applying corresponding DTU updates.");
-      Updates.reserve(Updates.size() + UniqueSuccessors.size()); 
-      for (auto *UniqueSuccessor : UniqueSuccessors) 
-        Updates.push_back({DominatorTree::Delete, BB, UniqueSuccessor}); 
+      Updates.reserve(Updates.size() + UniqueSuccessors.size());
+      for (auto *UniqueSuccessor : UniqueSuccessors)
+        Updates.push_back({DominatorTree::Delete, BB, UniqueSuccessor});
     }
   }
 
   if (DTU) {
-    DTU->applyUpdates(Updates); 
-    for (auto *BB : BlocksToRemove) 
+    DTU->applyUpdates(Updates);
+    for (auto *BB : BlocksToRemove)
       DTU->deleteBB(BB);
   } else {
-    for (auto *BB : BlocksToRemove) 
+    for (auto *BB : BlocksToRemove)
       BB->eraseFromParent();
   }
 
-  return Changed; 
+  return Changed;
 }
 
 void llvm::combineMetadata(Instruction *K, const Instruction *J,
@@ -2702,13 +2702,13 @@ bool llvm::callsGCLeafFunction(const CallBase *Call,
     if (F->hasFnAttribute("gc-leaf-function"))
       return true;
 
-    if (auto IID = F->getIntrinsicID()) { 
+    if (auto IID = F->getIntrinsicID()) {
       // Most LLVM intrinsics do not take safepoints.
       return IID != Intrinsic::experimental_gc_statepoint &&
-             IID != Intrinsic::experimental_deoptimize && 
-             IID != Intrinsic::memcpy_element_unordered_atomic && 
-             IID != Intrinsic::memmove_element_unordered_atomic; 
-    } 
+             IID != Intrinsic::experimental_deoptimize &&
+             IID != Intrinsic::memcpy_element_unordered_atomic &&
+             IID != Intrinsic::memmove_element_unordered_atomic;
+    }
   }
 
   // Lib calls can be materialized by some passes, and won't be
@@ -2836,7 +2836,7 @@ struct BitPart {
 
 /// Analyze the specified subexpression and see if it is capable of providing
 /// pieces of a bswap or bitreverse. The subexpression provides a potential
-/// piece of a bswap or bitreverse if it can be proved that each non-zero bit in 
+/// piece of a bswap or bitreverse if it can be proved that each non-zero bit in
 /// the output of the expression came from a corresponding bit in some other
 /// value. This function is recursive, and the end result is a mapping of
 /// bitnumber to bitnumber. It is the caller's responsibility to validate that
@@ -2848,10 +2848,10 @@ struct BitPart {
 /// BitPart is returned with Provider set to %X and Provenance[24-31] set to
 /// [0-7].
 ///
-/// For vector types, all analysis is performed at the per-element level. No 
-/// cross-element analysis is supported (shuffle/insertion/reduction), and all 
-/// constant masks must be splatted across all elements. 
-/// 
+/// For vector types, all analysis is performed at the per-element level. No
+/// cross-element analysis is supported (shuffle/insertion/reduction), and all
+/// constant masks must be splatted across all elements.
+///
 /// To avoid revisiting values, the BitPart results are memoized into the
 /// provided map. To avoid unnecessary copying of BitParts, BitParts are
 /// constructed in-place in the \c BPS map. Because of this \c BPS needs to
@@ -2869,7 +2869,7 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
     return I->second;
 
   auto &Result = BPS[V] = None;
-  auto BitWidth = V->getType()->getScalarSizeInBits(); 
+  auto BitWidth = V->getType()->getScalarSizeInBits();
 
   // Prevent stack overflow by limiting the recursion depth
   if (Depth == BitPartRecursionMaxDepth) {
@@ -2877,16 +2877,16 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
     return Result;
   }
 
-  if (auto *I = dyn_cast<Instruction>(V)) { 
-    Value *X, *Y; 
-    const APInt *C; 
- 
+  if (auto *I = dyn_cast<Instruction>(V)) {
+    Value *X, *Y;
+    const APInt *C;
+
     // If this is an or instruction, it may be an inner node of the bswap.
-    if (match(V, m_Or(m_Value(X), m_Value(Y)))) { 
-      const auto &A = 
-          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1); 
-      const auto &B = 
-          collectBitParts(Y, MatchBSwaps, MatchBitReversals, BPS, Depth + 1); 
+    if (match(V, m_Or(m_Value(X), m_Value(Y)))) {
+      const auto &A =
+          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1);
+      const auto &B =
+          collectBitParts(Y, MatchBSwaps, MatchBitReversals, BPS, Depth + 1);
       if (!A || !B)
         return Result;
 
@@ -2895,31 +2895,31 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
         return Result;
 
       Result = BitPart(A->Provider, BitWidth);
-      for (unsigned BitIdx = 0; BitIdx < BitWidth; ++BitIdx) { 
-        if (A->Provenance[BitIdx] != BitPart::Unset && 
-            B->Provenance[BitIdx] != BitPart::Unset && 
-            A->Provenance[BitIdx] != B->Provenance[BitIdx]) 
+      for (unsigned BitIdx = 0; BitIdx < BitWidth; ++BitIdx) {
+        if (A->Provenance[BitIdx] != BitPart::Unset &&
+            B->Provenance[BitIdx] != BitPart::Unset &&
+            A->Provenance[BitIdx] != B->Provenance[BitIdx])
           return Result = None;
 
-        if (A->Provenance[BitIdx] == BitPart::Unset) 
-          Result->Provenance[BitIdx] = B->Provenance[BitIdx]; 
+        if (A->Provenance[BitIdx] == BitPart::Unset)
+          Result->Provenance[BitIdx] = B->Provenance[BitIdx];
         else
-          Result->Provenance[BitIdx] = A->Provenance[BitIdx]; 
+          Result->Provenance[BitIdx] = A->Provenance[BitIdx];
       }
 
       return Result;
     }
 
     // If this is a logical shift by a constant, recurse then shift the result.
-    if (match(V, m_LogicalShift(m_Value(X), m_APInt(C)))) { 
-      const APInt &BitShift = *C; 
- 
+    if (match(V, m_LogicalShift(m_Value(X), m_APInt(C)))) {
+      const APInt &BitShift = *C;
+
       // Ensure the shift amount is defined.
-      if (BitShift.uge(BitWidth)) 
+      if (BitShift.uge(BitWidth))
         return Result;
 
-      const auto &Res = 
-          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1); 
+      const auto &Res =
+          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1);
       if (!Res)
         return Result;
       Result = Res;
@@ -2927,11 +2927,11 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
       // Perform the "shift" on BitProvenance.
       auto &P = Result->Provenance;
       if (I->getOpcode() == Instruction::Shl) {
-        P.erase(std::prev(P.end(), BitShift.getZExtValue()), P.end()); 
-        P.insert(P.begin(), BitShift.getZExtValue(), BitPart::Unset); 
+        P.erase(std::prev(P.end(), BitShift.getZExtValue()), P.end());
+        P.insert(P.begin(), BitShift.getZExtValue(), BitPart::Unset);
       } else {
-        P.erase(P.begin(), std::next(P.begin(), BitShift.getZExtValue())); 
-        P.insert(P.end(), BitShift.getZExtValue(), BitPart::Unset); 
+        P.erase(P.begin(), std::next(P.begin(), BitShift.getZExtValue()));
+        P.insert(P.end(), BitShift.getZExtValue(), BitPart::Unset);
       }
 
       return Result;
@@ -2939,111 +2939,111 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
 
     // If this is a logical 'and' with a mask that clears bits, recurse then
     // unset the appropriate bits.
-    if (match(V, m_And(m_Value(X), m_APInt(C)))) { 
-      const APInt &AndMask = *C; 
+    if (match(V, m_And(m_Value(X), m_APInt(C)))) {
+      const APInt &AndMask = *C;
 
       // Check that the mask allows a multiple of 8 bits for a bswap, for an
       // early exit.
       unsigned NumMaskedBits = AndMask.countPopulation();
-      if (!MatchBitReversals && (NumMaskedBits % 8) != 0) 
+      if (!MatchBitReversals && (NumMaskedBits % 8) != 0)
         return Result;
 
-      const auto &Res = 
-          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1); 
+      const auto &Res =
+          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1);
       if (!Res)
         return Result;
       Result = Res;
 
-      for (unsigned BitIdx = 0; BitIdx < BitWidth; ++BitIdx) 
+      for (unsigned BitIdx = 0; BitIdx < BitWidth; ++BitIdx)
         // If the AndMask is zero for this bit, clear the bit.
-        if (AndMask[BitIdx] == 0) 
-          Result->Provenance[BitIdx] = BitPart::Unset; 
+        if (AndMask[BitIdx] == 0)
+          Result->Provenance[BitIdx] = BitPart::Unset;
       return Result;
     }
 
     // If this is a zext instruction zero extend the result.
-    if (match(V, m_ZExt(m_Value(X)))) { 
-      const auto &Res = 
-          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1); 
+    if (match(V, m_ZExt(m_Value(X)))) {
+      const auto &Res =
+          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1);
       if (!Res)
         return Result;
 
       Result = BitPart(Res->Provider, BitWidth);
-      auto NarrowBitWidth = X->getType()->getScalarSizeInBits(); 
-      for (unsigned BitIdx = 0; BitIdx < NarrowBitWidth; ++BitIdx) 
-        Result->Provenance[BitIdx] = Res->Provenance[BitIdx]; 
-      for (unsigned BitIdx = NarrowBitWidth; BitIdx < BitWidth; ++BitIdx) 
-        Result->Provenance[BitIdx] = BitPart::Unset; 
+      auto NarrowBitWidth = X->getType()->getScalarSizeInBits();
+      for (unsigned BitIdx = 0; BitIdx < NarrowBitWidth; ++BitIdx)
+        Result->Provenance[BitIdx] = Res->Provenance[BitIdx];
+      for (unsigned BitIdx = NarrowBitWidth; BitIdx < BitWidth; ++BitIdx)
+        Result->Provenance[BitIdx] = BitPart::Unset;
       return Result;
     }
- 
-    // BITREVERSE - most likely due to us previous matching a partial 
-    // bitreverse. 
-    if (match(V, m_BitReverse(m_Value(X)))) { 
-      const auto &Res = 
-          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1); 
-      if (!Res) 
-        return Result; 
- 
-      Result = BitPart(Res->Provider, BitWidth); 
-      for (unsigned BitIdx = 0; BitIdx < BitWidth; ++BitIdx) 
-        Result->Provenance[(BitWidth - 1) - BitIdx] = Res->Provenance[BitIdx]; 
-      return Result; 
-    } 
- 
-    // BSWAP - most likely due to us previous matching a partial bswap. 
-    if (match(V, m_BSwap(m_Value(X)))) { 
-      const auto &Res = 
-          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1); 
-      if (!Res) 
-        return Result; 
- 
-      unsigned ByteWidth = BitWidth / 8; 
-      Result = BitPart(Res->Provider, BitWidth); 
-      for (unsigned ByteIdx = 0; ByteIdx < ByteWidth; ++ByteIdx) { 
-        unsigned ByteBitOfs = ByteIdx * 8; 
-        for (unsigned BitIdx = 0; BitIdx < 8; ++BitIdx) 
-          Result->Provenance[(BitWidth - 8 - ByteBitOfs) + BitIdx] = 
-              Res->Provenance[ByteBitOfs + BitIdx]; 
-      } 
-      return Result; 
-    } 
- 
-    // Funnel 'double' shifts take 3 operands, 2 inputs and the shift 
-    // amount (modulo). 
-    // fshl(X,Y,Z): (X << (Z % BW)) | (Y >> (BW - (Z % BW))) 
-    // fshr(X,Y,Z): (X << (BW - (Z % BW))) | (Y >> (Z % BW)) 
-    if (match(V, m_FShl(m_Value(X), m_Value(Y), m_APInt(C))) || 
-        match(V, m_FShr(m_Value(X), m_Value(Y), m_APInt(C)))) { 
-      // We can treat fshr as a fshl by flipping the modulo amount. 
-      unsigned ModAmt = C->urem(BitWidth); 
-      if (cast<IntrinsicInst>(I)->getIntrinsicID() == Intrinsic::fshr) 
-        ModAmt = BitWidth - ModAmt; 
- 
-      const auto &LHS = 
-          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1); 
-      const auto &RHS = 
-          collectBitParts(Y, MatchBSwaps, MatchBitReversals, BPS, Depth + 1); 
- 
-      // Check we have both sources and they are from the same provider. 
-      if (!LHS || !RHS || !LHS->Provider || LHS->Provider != RHS->Provider) 
-        return Result; 
- 
-      unsigned StartBitRHS = BitWidth - ModAmt; 
-      Result = BitPart(LHS->Provider, BitWidth); 
-      for (unsigned BitIdx = 0; BitIdx < StartBitRHS; ++BitIdx) 
-        Result->Provenance[BitIdx + ModAmt] = LHS->Provenance[BitIdx]; 
-      for (unsigned BitIdx = 0; BitIdx < ModAmt; ++BitIdx) 
-        Result->Provenance[BitIdx] = RHS->Provenance[BitIdx + StartBitRHS]; 
-      return Result; 
-    } 
+
+    // BITREVERSE - most likely due to us previous matching a partial
+    // bitreverse.
+    if (match(V, m_BitReverse(m_Value(X)))) {
+      const auto &Res =
+          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1);
+      if (!Res)
+        return Result;
+
+      Result = BitPart(Res->Provider, BitWidth);
+      for (unsigned BitIdx = 0; BitIdx < BitWidth; ++BitIdx)
+        Result->Provenance[(BitWidth - 1) - BitIdx] = Res->Provenance[BitIdx];
+      return Result;
+    }
+
+    // BSWAP - most likely due to us previous matching a partial bswap.
+    if (match(V, m_BSwap(m_Value(X)))) {
+      const auto &Res =
+          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1);
+      if (!Res)
+        return Result;
+
+      unsigned ByteWidth = BitWidth / 8;
+      Result = BitPart(Res->Provider, BitWidth);
+      for (unsigned ByteIdx = 0; ByteIdx < ByteWidth; ++ByteIdx) {
+        unsigned ByteBitOfs = ByteIdx * 8;
+        for (unsigned BitIdx = 0; BitIdx < 8; ++BitIdx)
+          Result->Provenance[(BitWidth - 8 - ByteBitOfs) + BitIdx] =
+              Res->Provenance[ByteBitOfs + BitIdx];
+      }
+      return Result;
+    }
+
+    // Funnel 'double' shifts take 3 operands, 2 inputs and the shift
+    // amount (modulo).
+    // fshl(X,Y,Z): (X << (Z % BW)) | (Y >> (BW - (Z % BW)))
+    // fshr(X,Y,Z): (X << (BW - (Z % BW))) | (Y >> (Z % BW))
+    if (match(V, m_FShl(m_Value(X), m_Value(Y), m_APInt(C))) ||
+        match(V, m_FShr(m_Value(X), m_Value(Y), m_APInt(C)))) {
+      // We can treat fshr as a fshl by flipping the modulo amount.
+      unsigned ModAmt = C->urem(BitWidth);
+      if (cast<IntrinsicInst>(I)->getIntrinsicID() == Intrinsic::fshr)
+        ModAmt = BitWidth - ModAmt;
+
+      const auto &LHS =
+          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1);
+      const auto &RHS =
+          collectBitParts(Y, MatchBSwaps, MatchBitReversals, BPS, Depth + 1);
+
+      // Check we have both sources and they are from the same provider.
+      if (!LHS || !RHS || !LHS->Provider || LHS->Provider != RHS->Provider)
+        return Result;
+
+      unsigned StartBitRHS = BitWidth - ModAmt;
+      Result = BitPart(LHS->Provider, BitWidth);
+      for (unsigned BitIdx = 0; BitIdx < StartBitRHS; ++BitIdx)
+        Result->Provenance[BitIdx + ModAmt] = LHS->Provenance[BitIdx];
+      for (unsigned BitIdx = 0; BitIdx < ModAmt; ++BitIdx)
+        Result->Provenance[BitIdx] = RHS->Provenance[BitIdx + StartBitRHS];
+      return Result;
+    }
   }
 
   // Okay, we got to something that isn't a shift, 'or' or 'and'.  This must be
   // the input value to the bswap/bitreverse.
   Result = BitPart(V, BitWidth);
-  for (unsigned BitIdx = 0; BitIdx < BitWidth; ++BitIdx) 
-    Result->Provenance[BitIdx] = BitIdx; 
+  for (unsigned BitIdx = 0; BitIdx < BitWidth; ++BitIdx)
+    Result->Provenance[BitIdx] = BitIdx;
   return Result;
 }
 
@@ -3070,89 +3070,89 @@ bool llvm::recognizeBSwapOrBitReverseIdiom(
     return false;
   if (!MatchBSwaps && !MatchBitReversals)
     return false;
-  Type *ITy = I->getType(); 
-  if (!ITy->isIntOrIntVectorTy() || ITy->getScalarSizeInBits() > 128) 
-    return false;  // Can't do integer/elements > 128 bits. 
+  Type *ITy = I->getType();
+  if (!ITy->isIntOrIntVectorTy() || ITy->getScalarSizeInBits() > 128)
+    return false;  // Can't do integer/elements > 128 bits.
 
-  Type *DemandedTy = ITy; 
-  if (I->hasOneUse()) 
-    if (auto *Trunc = dyn_cast<TruncInst>(I->user_back())) 
-      DemandedTy = Trunc->getType(); 
+  Type *DemandedTy = ITy;
+  if (I->hasOneUse())
+    if (auto *Trunc = dyn_cast<TruncInst>(I->user_back()))
+      DemandedTy = Trunc->getType();
 
   // Try to find all the pieces corresponding to the bswap.
   std::map<Value *, Optional<BitPart>> BPS;
   auto Res = collectBitParts(I, MatchBSwaps, MatchBitReversals, BPS, 0);
   if (!Res)
     return false;
-  ArrayRef<int8_t> BitProvenance = Res->Provenance; 
-  assert(all_of(BitProvenance, 
-                [](int8_t I) { return I == BitPart::Unset || 0 <= I; }) && 
-         "Illegal bit provenance index"); 
+  ArrayRef<int8_t> BitProvenance = Res->Provenance;
+  assert(all_of(BitProvenance,
+                [](int8_t I) { return I == BitPart::Unset || 0 <= I; }) &&
+         "Illegal bit provenance index");
 
-  // If the upper bits are zero, then attempt to perform as a truncated op. 
-  if (BitProvenance.back() == BitPart::Unset) { 
-    while (!BitProvenance.empty() && BitProvenance.back() == BitPart::Unset) 
-      BitProvenance = BitProvenance.drop_back(); 
-    if (BitProvenance.empty()) 
-      return false; // TODO - handle null value? 
-    DemandedTy = Type::getIntNTy(I->getContext(), BitProvenance.size()); 
-    if (auto *IVecTy = dyn_cast<VectorType>(ITy)) 
-      DemandedTy = VectorType::get(DemandedTy, IVecTy); 
-  } 
- 
-  // Check BitProvenance hasn't found a source larger than the result type. 
-  unsigned DemandedBW = DemandedTy->getScalarSizeInBits(); 
-  if (DemandedBW > ITy->getScalarSizeInBits()) 
-    return false; 
- 
+  // If the upper bits are zero, then attempt to perform as a truncated op.
+  if (BitProvenance.back() == BitPart::Unset) {
+    while (!BitProvenance.empty() && BitProvenance.back() == BitPart::Unset)
+      BitProvenance = BitProvenance.drop_back();
+    if (BitProvenance.empty())
+      return false; // TODO - handle null value?
+    DemandedTy = Type::getIntNTy(I->getContext(), BitProvenance.size());
+    if (auto *IVecTy = dyn_cast<VectorType>(ITy))
+      DemandedTy = VectorType::get(DemandedTy, IVecTy);
+  }
+
+  // Check BitProvenance hasn't found a source larger than the result type.
+  unsigned DemandedBW = DemandedTy->getScalarSizeInBits();
+  if (DemandedBW > ITy->getScalarSizeInBits())
+    return false;
+
   // Now, is the bit permutation correct for a bswap or a bitreverse? We can
   // only byteswap values with an even number of bytes.
-  APInt DemandedMask = APInt::getAllOnesValue(DemandedBW); 
-  bool OKForBSwap = MatchBSwaps && (DemandedBW % 16) == 0; 
-  bool OKForBitReverse = MatchBitReversals; 
-  for (unsigned BitIdx = 0; 
-       (BitIdx < DemandedBW) && (OKForBSwap || OKForBitReverse); ++BitIdx) { 
-    if (BitProvenance[BitIdx] == BitPart::Unset) { 
-      DemandedMask.clearBit(BitIdx); 
-      continue; 
-    } 
-    OKForBSwap &= bitTransformIsCorrectForBSwap(BitProvenance[BitIdx], BitIdx, 
-                                                DemandedBW); 
-    OKForBitReverse &= bitTransformIsCorrectForBitReverse(BitProvenance[BitIdx], 
-                                                          BitIdx, DemandedBW); 
+  APInt DemandedMask = APInt::getAllOnesValue(DemandedBW);
+  bool OKForBSwap = MatchBSwaps && (DemandedBW % 16) == 0;
+  bool OKForBitReverse = MatchBitReversals;
+  for (unsigned BitIdx = 0;
+       (BitIdx < DemandedBW) && (OKForBSwap || OKForBitReverse); ++BitIdx) {
+    if (BitProvenance[BitIdx] == BitPart::Unset) {
+      DemandedMask.clearBit(BitIdx);
+      continue;
+    }
+    OKForBSwap &= bitTransformIsCorrectForBSwap(BitProvenance[BitIdx], BitIdx,
+                                                DemandedBW);
+    OKForBitReverse &= bitTransformIsCorrectForBitReverse(BitProvenance[BitIdx],
+                                                          BitIdx, DemandedBW);
   }
 
   Intrinsic::ID Intrin;
-  if (OKForBSwap) 
+  if (OKForBSwap)
     Intrin = Intrinsic::bswap;
-  else if (OKForBitReverse) 
+  else if (OKForBitReverse)
     Intrin = Intrinsic::bitreverse;
   else
     return false;
 
-  Function *F = Intrinsic::getDeclaration(I->getModule(), Intrin, DemandedTy); 
-  Value *Provider = Res->Provider; 
- 
-  // We may need to truncate the provider. 
-  if (DemandedTy != Provider->getType()) { 
-    auto *Trunc = 
-        CastInst::CreateIntegerCast(Provider, DemandedTy, false, "trunc", I); 
-    InsertedInsts.push_back(Trunc); 
-    Provider = Trunc; 
-  } 
- 
-  Instruction *Result = CallInst::Create(F, Provider, "rev", I); 
-  InsertedInsts.push_back(Result); 
- 
-  if (!DemandedMask.isAllOnesValue()) { 
-    auto *Mask = ConstantInt::get(DemandedTy, DemandedMask); 
-    Result = BinaryOperator::Create(Instruction::And, Result, Mask, "mask", I); 
-    InsertedInsts.push_back(Result); 
-  } 
- 
-  // We may need to zeroextend back to the result type. 
-  if (ITy != Result->getType()) { 
-    auto *ExtInst = CastInst::CreateIntegerCast(Result, ITy, false, "zext", I); 
+  Function *F = Intrinsic::getDeclaration(I->getModule(), Intrin, DemandedTy);
+  Value *Provider = Res->Provider;
+
+  // We may need to truncate the provider.
+  if (DemandedTy != Provider->getType()) {
+    auto *Trunc =
+        CastInst::CreateIntegerCast(Provider, DemandedTy, false, "trunc", I);
+    InsertedInsts.push_back(Trunc);
+    Provider = Trunc;
+  }
+
+  Instruction *Result = CallInst::Create(F, Provider, "rev", I);
+  InsertedInsts.push_back(Result);
+
+  if (!DemandedMask.isAllOnesValue()) {
+    auto *Mask = ConstantInt::get(DemandedTy, DemandedMask);
+    Result = BinaryOperator::Create(Instruction::And, Result, Mask, "mask", I);
+    InsertedInsts.push_back(Result);
+  }
+
+  // We may need to zeroextend back to the result type.
+  if (ITy != Result->getType()) {
+    auto *ExtInst = CastInst::CreateIntegerCast(Result, ITy, false, "zext", I);
     InsertedInsts.push_back(ExtInst);
   }
 

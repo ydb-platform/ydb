@@ -1,4 +1,4 @@
-//===---- DivergenceAnalysis.cpp --- Divergence Analysis Implementation ----==// 
+//===---- DivergenceAnalysis.cpp --- Divergence Analysis Implementation ----==//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -96,12 +96,12 @@ DivergenceAnalysis::DivergenceAnalysis(
     : F(F), RegionLoop(RegionLoop), DT(DT), LI(LI), SDA(SDA),
       IsLCSSAForm(IsLCSSAForm) {}
 
-bool DivergenceAnalysis::markDivergent(const Value &DivVal) { 
-  if (isAlwaysUniform(DivVal)) 
-    return false; 
+bool DivergenceAnalysis::markDivergent(const Value &DivVal) {
+  if (isAlwaysUniform(DivVal))
+    return false;
   assert(isa<Instruction>(DivVal) || isa<Argument>(DivVal));
   assert(!isAlwaysUniform(DivVal) && "cannot be a divergent");
-  return DivergentValues.insert(&DivVal).second; 
+  return DivergentValues.insert(&DivVal).second;
 }
 
 void DivergenceAnalysis::addUniformOverride(const Value &UniVal) {
@@ -118,7 +118,7 @@ bool DivergenceAnalysis::isTemporalDivergent(const BasicBlock &ObservingBlock,
   for (const auto *Loop = LI.getLoopFor(Inst->getParent());
        Loop != RegionLoop && !Loop->contains(&ObservingBlock);
        Loop = Loop->getParentLoop()) {
-    if (DivergentLoops.contains(Loop)) 
+    if (DivergentLoops.contains(Loop))
       return true;
   }
 
@@ -133,103 +133,103 @@ bool DivergenceAnalysis::inRegion(const BasicBlock &BB) const {
   return (!RegionLoop && BB.getParent() == &F) || RegionLoop->contains(&BB);
 }
 
-void DivergenceAnalysis::pushUsers(const Value &V) { 
-  const auto *I = dyn_cast<const Instruction>(&V); 
- 
-  if (I && I->isTerminator()) { 
-    analyzeControlDivergence(*I); 
-    return; 
-  } 
- 
-  for (const auto *User : V.users()) { 
-    const auto *UserInst = dyn_cast<const Instruction>(User); 
-    if (!UserInst) 
-      continue; 
- 
-    // only compute divergent inside loop 
-    if (!inRegion(*UserInst)) 
-      continue; 
- 
-    // All users of divergent values are immediate divergent 
-    if (markDivergent(*UserInst)) 
-      Worklist.push_back(UserInst); 
-  } 
-} 
- 
-static const Instruction *getIfCarriedInstruction(const Use &U, 
-                                                  const Loop &DivLoop) { 
-  const auto *I = dyn_cast<const Instruction>(&U); 
-  if (!I) 
-    return nullptr; 
-  if (!DivLoop.contains(I)) 
-    return nullptr; 
-  return I; 
-} 
- 
-void DivergenceAnalysis::analyzeTemporalDivergence(const Instruction &I, 
-                                                   const Loop &OuterDivLoop) { 
-  if (isAlwaysUniform(I)) 
-    return; 
-  if (isDivergent(I)) 
-    return; 
- 
-  LLVM_DEBUG(dbgs() << "Analyze temporal divergence: " << I.getName() << "\n"); 
-  assert((isa<PHINode>(I) || !IsLCSSAForm) && 
-         "In LCSSA form all users of loop-exiting defs are Phi nodes."); 
-  for (const Use &Op : I.operands()) { 
-    const auto *OpInst = getIfCarriedInstruction(Op, OuterDivLoop); 
+void DivergenceAnalysis::pushUsers(const Value &V) {
+  const auto *I = dyn_cast<const Instruction>(&V);
+
+  if (I && I->isTerminator()) {
+    analyzeControlDivergence(*I);
+    return;
+  }
+
+  for (const auto *User : V.users()) {
+    const auto *UserInst = dyn_cast<const Instruction>(User);
+    if (!UserInst)
+      continue;
+
+    // only compute divergent inside loop
+    if (!inRegion(*UserInst))
+      continue;
+
+    // All users of divergent values are immediate divergent
+    if (markDivergent(*UserInst))
+      Worklist.push_back(UserInst);
+  }
+}
+
+static const Instruction *getIfCarriedInstruction(const Use &U,
+                                                  const Loop &DivLoop) {
+  const auto *I = dyn_cast<const Instruction>(&U);
+  if (!I)
+    return nullptr;
+  if (!DivLoop.contains(I))
+    return nullptr;
+  return I;
+}
+
+void DivergenceAnalysis::analyzeTemporalDivergence(const Instruction &I,
+                                                   const Loop &OuterDivLoop) {
+  if (isAlwaysUniform(I))
+    return;
+  if (isDivergent(I))
+    return;
+
+  LLVM_DEBUG(dbgs() << "Analyze temporal divergence: " << I.getName() << "\n");
+  assert((isa<PHINode>(I) || !IsLCSSAForm) &&
+         "In LCSSA form all users of loop-exiting defs are Phi nodes.");
+  for (const Use &Op : I.operands()) {
+    const auto *OpInst = getIfCarriedInstruction(Op, OuterDivLoop);
     if (!OpInst)
       continue;
-    if (markDivergent(I)) 
-      pushUsers(I); 
-    return; 
+    if (markDivergent(I))
+      pushUsers(I);
+    return;
   }
 }
 
 // marks all users of loop-carried values of the loop headed by LoopHeader as
 // divergent
-void DivergenceAnalysis::analyzeLoopExitDivergence(const BasicBlock &DivExit, 
-                                                   const Loop &OuterDivLoop) { 
-  // All users are in immediate exit blocks 
-  if (IsLCSSAForm) { 
-    for (const auto &Phi : DivExit.phis()) { 
-      analyzeTemporalDivergence(Phi, OuterDivLoop); 
-    } 
-    return; 
-  } 
+void DivergenceAnalysis::analyzeLoopExitDivergence(const BasicBlock &DivExit,
+                                                   const Loop &OuterDivLoop) {
+  // All users are in immediate exit blocks
+  if (IsLCSSAForm) {
+    for (const auto &Phi : DivExit.phis()) {
+      analyzeTemporalDivergence(Phi, OuterDivLoop);
+    }
+    return;
+  }
 
-  // For non-LCSSA we have to follow all live out edges wherever they may lead. 
-  const BasicBlock &LoopHeader = *OuterDivLoop.getHeader(); 
-  SmallVector<const BasicBlock *, 8> TaintStack; 
-  TaintStack.push_back(&DivExit); 
+  // For non-LCSSA we have to follow all live out edges wherever they may lead.
+  const BasicBlock &LoopHeader = *OuterDivLoop.getHeader();
+  SmallVector<const BasicBlock *, 8> TaintStack;
+  TaintStack.push_back(&DivExit);
 
   // Otherwise potential users of loop-carried values could be anywhere in the
   // dominance region of DivLoop (including its fringes for phi nodes)
   DenseSet<const BasicBlock *> Visited;
-  Visited.insert(&DivExit); 
+  Visited.insert(&DivExit);
 
-  do { 
-    auto *UserBlock = TaintStack.pop_back_val(); 
+  do {
+    auto *UserBlock = TaintStack.pop_back_val();
 
     // don't spread divergence beyond the region
     if (!inRegion(*UserBlock))
       continue;
 
-    assert(!OuterDivLoop.contains(UserBlock) && 
+    assert(!OuterDivLoop.contains(UserBlock) &&
            "irreducible control flow detected");
 
     // phi nodes at the fringes of the dominance region
     if (!DT.dominates(&LoopHeader, UserBlock)) {
       // all PHI nodes of UserBlock become divergent
       for (auto &Phi : UserBlock->phis()) {
-        analyzeTemporalDivergence(Phi, OuterDivLoop); 
+        analyzeTemporalDivergence(Phi, OuterDivLoop);
       }
       continue;
     }
 
-    // Taint outside users of values carried by OuterDivLoop. 
+    // Taint outside users of values carried by OuterDivLoop.
     for (auto &I : *UserBlock) {
-      analyzeTemporalDivergence(I, OuterDivLoop); 
+      analyzeTemporalDivergence(I, OuterDivLoop);
     }
 
     // visit all blocks in the dominance region
@@ -239,57 +239,57 @@ void DivergenceAnalysis::analyzeLoopExitDivergence(const BasicBlock &DivExit,
       }
       TaintStack.push_back(SuccBlock);
     }
-  } while (!TaintStack.empty()); 
+  } while (!TaintStack.empty());
 }
 
-void DivergenceAnalysis::propagateLoopExitDivergence(const BasicBlock &DivExit, 
-                                                     const Loop &InnerDivLoop) { 
-  LLVM_DEBUG(dbgs() << "\tpropLoopExitDiv " << DivExit.getName() << "\n"); 
- 
-  // Find outer-most loop that does not contain \p DivExit 
-  const Loop *DivLoop = &InnerDivLoop; 
-  const Loop *OuterDivLoop = DivLoop; 
-  const Loop *ExitLevelLoop = LI.getLoopFor(&DivExit); 
-  const unsigned LoopExitDepth = 
-      ExitLevelLoop ? ExitLevelLoop->getLoopDepth() : 0; 
-  while (DivLoop && DivLoop->getLoopDepth() > LoopExitDepth) { 
-    DivergentLoops.insert(DivLoop); // all crossed loops are divergent 
-    OuterDivLoop = DivLoop; 
-    DivLoop = DivLoop->getParentLoop(); 
+void DivergenceAnalysis::propagateLoopExitDivergence(const BasicBlock &DivExit,
+                                                     const Loop &InnerDivLoop) {
+  LLVM_DEBUG(dbgs() << "\tpropLoopExitDiv " << DivExit.getName() << "\n");
+
+  // Find outer-most loop that does not contain \p DivExit
+  const Loop *DivLoop = &InnerDivLoop;
+  const Loop *OuterDivLoop = DivLoop;
+  const Loop *ExitLevelLoop = LI.getLoopFor(&DivExit);
+  const unsigned LoopExitDepth =
+      ExitLevelLoop ? ExitLevelLoop->getLoopDepth() : 0;
+  while (DivLoop && DivLoop->getLoopDepth() > LoopExitDepth) {
+    DivergentLoops.insert(DivLoop); // all crossed loops are divergent
+    OuterDivLoop = DivLoop;
+    DivLoop = DivLoop->getParentLoop();
   }
-  LLVM_DEBUG(dbgs() << "\tOuter-most left loop: " << OuterDivLoop->getName() 
-                    << "\n"); 
+  LLVM_DEBUG(dbgs() << "\tOuter-most left loop: " << OuterDivLoop->getName()
+                    << "\n");
 
-  analyzeLoopExitDivergence(DivExit, *OuterDivLoop); 
+  analyzeLoopExitDivergence(DivExit, *OuterDivLoop);
 }
 
-// this is a divergent join point - mark all phi nodes as divergent and push 
-// them onto the stack. 
-void DivergenceAnalysis::taintAndPushPhiNodes(const BasicBlock &JoinBlock) { 
-  LLVM_DEBUG(dbgs() << "taintAndPushPhiNodes in " << JoinBlock.getName() 
-                    << "\n"); 
+// this is a divergent join point - mark all phi nodes as divergent and push
+// them onto the stack.
+void DivergenceAnalysis::taintAndPushPhiNodes(const BasicBlock &JoinBlock) {
+  LLVM_DEBUG(dbgs() << "taintAndPushPhiNodes in " << JoinBlock.getName()
+                    << "\n");
 
   // ignore divergence outside the region
   if (!inRegion(JoinBlock)) {
-    return; 
+    return;
   }
 
   // push non-divergent phi nodes in JoinBlock to the worklist
-  for (const auto &Phi : JoinBlock.phis()) { 
-    if (isDivergent(Phi)) 
-      continue; 
-    // FIXME Theoretically ,the 'undef' value could be replaced by any other 
-    // value causing spurious divergence. 
-    if (Phi.hasConstantOrUndefValue()) 
-      continue; 
-    if (markDivergent(Phi)) 
-      Worklist.push_back(&Phi); 
-  } 
+  for (const auto &Phi : JoinBlock.phis()) {
+    if (isDivergent(Phi))
+      continue;
+    // FIXME Theoretically ,the 'undef' value could be replaced by any other
+    // value causing spurious divergence.
+    if (Phi.hasConstantOrUndefValue())
+      continue;
+    if (markDivergent(Phi))
+      Worklist.push_back(&Phi);
+  }
 }
 
-void DivergenceAnalysis::analyzeControlDivergence(const Instruction &Term) { 
-  LLVM_DEBUG(dbgs() << "analyzeControlDiv " << Term.getParent()->getName() 
-                    << "\n"); 
+void DivergenceAnalysis::analyzeControlDivergence(const Instruction &Term) {
+  LLVM_DEBUG(dbgs() << "analyzeControlDiv " << Term.getParent()->getName()
+                    << "\n");
 
   // Don't propagate divergence from unreachable blocks.
   if (!DT.isReachableFromEntry(Term.getParent()))
@@ -297,45 +297,45 @@ void DivergenceAnalysis::analyzeControlDivergence(const Instruction &Term) {
 
   const auto *BranchLoop = LI.getLoopFor(Term.getParent());
 
-  const auto &DivDesc = SDA.getJoinBlocks(Term); 
+  const auto &DivDesc = SDA.getJoinBlocks(Term);
 
-  // Iterate over all blocks now reachable by a disjoint path join 
-  for (const auto *JoinBlock : DivDesc.JoinDivBlocks) { 
-    taintAndPushPhiNodes(*JoinBlock); 
+  // Iterate over all blocks now reachable by a disjoint path join
+  for (const auto *JoinBlock : DivDesc.JoinDivBlocks) {
+    taintAndPushPhiNodes(*JoinBlock);
   }
 
-  assert(DivDesc.LoopDivBlocks.empty() || BranchLoop); 
-  for (const auto *DivExitBlock : DivDesc.LoopDivBlocks) { 
-    propagateLoopExitDivergence(*DivExitBlock, *BranchLoop); 
+  assert(DivDesc.LoopDivBlocks.empty() || BranchLoop);
+  for (const auto *DivExitBlock : DivDesc.LoopDivBlocks) {
+    propagateLoopExitDivergence(*DivExitBlock, *BranchLoop);
   }
 }
 
 void DivergenceAnalysis::compute() {
-  // Initialize worklist. 
-  auto DivValuesCopy = DivergentValues; 
-  for (const auto *DivVal : DivValuesCopy) { 
-    assert(isDivergent(*DivVal) && "Worklist invariant violated!"); 
+  // Initialize worklist.
+  auto DivValuesCopy = DivergentValues;
+  for (const auto *DivVal : DivValuesCopy) {
+    assert(isDivergent(*DivVal) && "Worklist invariant violated!");
     pushUsers(*DivVal);
   }
 
-  // All values on the Worklist are divergent. 
-  // Their users may not have been updated yed. 
+  // All values on the Worklist are divergent.
+  // Their users may not have been updated yed.
   while (!Worklist.empty()) {
     const Instruction &I = *Worklist.back();
     Worklist.pop_back();
 
     // propagate value divergence to users
-    assert(isDivergent(I) && "Worklist invariant violated!"); 
-    pushUsers(I); 
+    assert(isDivergent(I) && "Worklist invariant violated!");
+    pushUsers(I);
   }
 }
 
 bool DivergenceAnalysis::isAlwaysUniform(const Value &V) const {
-  return UniformOverrides.contains(&V); 
+  return UniformOverrides.contains(&V);
 }
 
 bool DivergenceAnalysis::isDivergent(const Value &V) const {
-  return DivergentValues.contains(&V); 
+  return DivergentValues.contains(&V);
 }
 
 bool DivergenceAnalysis::isDivergentUse(const Use &U) const {
@@ -360,7 +360,7 @@ GPUDivergenceAnalysis::GPUDivergenceAnalysis(Function &F,
                                              const PostDominatorTree &PDT,
                                              const LoopInfo &LI,
                                              const TargetTransformInfo &TTI)
-    : SDA(DT, PDT, LI), DA(F, nullptr, DT, LI, SDA, /* LCSSA */ false) { 
+    : SDA(DT, PDT, LI), DA(F, nullptr, DT, LI, SDA, /* LCSSA */ false) {
   for (auto &I : instructions(F)) {
     if (TTI.isSourceOfDivergence(&I)) {
       DA.markDivergent(I);

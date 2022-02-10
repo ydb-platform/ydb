@@ -275,11 +275,11 @@ namespace llvm {
       return SU->SchedClass;
     }
 
-    /// IsReachable - Checks if SU is reachable from TargetSU. 
-    bool IsReachable(SUnit *SU, SUnit *TargetSU) { 
-      return Topo.IsReachable(SU, TargetSU); 
-    } 
- 
+    /// IsReachable - Checks if SU is reachable from TargetSU.
+    bool IsReachable(SUnit *SU, SUnit *TargetSU) {
+      return Topo.IsReachable(SU, TargetSU);
+    }
+
     /// Returns an iterator to the top of the current scheduling region.
     MachineBasicBlock::iterator begin() const { return RegionBegin; }
 
@@ -395,7 +395,7 @@ namespace llvm {
 
   /// Returns an existing SUnit for this MI, or nullptr.
   inline SUnit *ScheduleDAGInstrs::getSUnit(MachineInstr *MI) const {
-    return MISUnitMap.lookup(MI); 
+    return MISUnitMap.lookup(MI);
   }
 
 } // end namespace llvm

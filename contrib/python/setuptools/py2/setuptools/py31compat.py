@@ -1,6 +1,6 @@
-__all__ = [] 
+__all__ = []
 
-__metaclass__ = type 
+__metaclass__ = type
 
 
 try:
@@ -10,16 +10,16 @@ except ImportError:
     import shutil
     import tempfile
 
-    class TemporaryDirectory: 
+    class TemporaryDirectory:
         """
         Very simple temporary directory context manager.
         Will try to delete afterward, but will also ignore OS and similar
         errors on deletion.
         """
 
-        def __init__(self, **kwargs): 
+        def __init__(self, **kwargs):
             self.name = None  # Handle mkdtemp raising an exception
-            self.name = tempfile.mkdtemp(**kwargs) 
+            self.name = tempfile.mkdtemp(**kwargs)
 
         def __enter__(self):
             return self.name

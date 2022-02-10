@@ -7,9 +7,9 @@ OWNER(
     g:cpp-contrib
 )
 
-VERSION(2.4.4) 
+VERSION(2.4.4)
 
-ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/releases/download/R_2_4_4/expat-2.4.4.tar.xz) 
+ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/releases/download/R_2_4_4/expat-2.4.4.tar.xz)
 
 LICENSE(
     CC0-1.0 AND

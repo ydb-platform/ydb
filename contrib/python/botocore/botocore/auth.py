@@ -12,21 +12,21 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 import base64
-import calendar 
+import calendar
 import datetime
-import functools 
-from email.utils import formatdate 
-from hashlib import sha1, sha256 
+import functools
+from email.utils import formatdate
+from hashlib import sha1, sha256
 import hmac
-from io import BytesIO 
+from io import BytesIO
 import logging
 from operator import itemgetter
 import time
 
-from botocore.compat import( 
-    encodebytes, ensure_unicode, HTTPHeaders, json, parse_qs, quote, 
-    six, unquote, urlsplit, urlunsplit, HAS_CRT, MD5_AVAILABLE 
-) 
+from botocore.compat import(
+    encodebytes, ensure_unicode, HTTPHeaders, json, parse_qs, quote,
+    six, unquote, urlsplit, urlunsplit, HAS_CRT, MD5_AVAILABLE
+)
 from botocore.exceptions import NoCredentialsError
 from botocore.utils import normalize_url_path, percent_encode_sequence
 
@@ -49,36 +49,36 @@ SIGNED_HEADERS_BLACKLIST = [
 UNSIGNED_PAYLOAD = 'UNSIGNED-PAYLOAD'
 
 
-def _host_from_url(url): 
-    # Given URL, derive value for host header. Ensure that value: 
-    # 1) is lowercase 
-    # 2) excludes port, if it was the default port 
-    # 3) excludes userinfo 
-    url_parts = urlsplit(url) 
-    host = url_parts.hostname  # urlsplit's hostname is always lowercase 
-    default_ports = { 
-        'http': 80, 
-        'https': 443 
-    } 
-    if url_parts.port is not None: 
-        if url_parts.port != default_ports.get(url_parts.scheme): 
-            host = '%s:%d' % (host, url_parts.port) 
-    return host 
- 
- 
-def _get_body_as_dict(request): 
-    # For query services, request.data is form-encoded and is already a 
-    # dict, but for other services such as rest-json it could be a json 
-    # string or bytes. In those cases we attempt to load the data as a 
-    # dict. 
-    data = request.data 
-    if isinstance(data, six.binary_type): 
-        data = json.loads(data.decode('utf-8')) 
-    elif isinstance(data, six.string_types): 
-        data = json.loads(data) 
-    return data 
- 
- 
+def _host_from_url(url):
+    # Given URL, derive value for host header. Ensure that value:
+    # 1) is lowercase
+    # 2) excludes port, if it was the default port
+    # 3) excludes userinfo
+    url_parts = urlsplit(url)
+    host = url_parts.hostname  # urlsplit's hostname is always lowercase
+    default_ports = {
+        'http': 80,
+        'https': 443
+    }
+    if url_parts.port is not None:
+        if url_parts.port != default_ports.get(url_parts.scheme):
+            host = '%s:%d' % (host, url_parts.port)
+    return host
+
+
+def _get_body_as_dict(request):
+    # For query services, request.data is form-encoded and is already a
+    # dict, but for other services such as rest-json it could be a json
+    # string or bytes. In those cases we attempt to load the data as a
+    # dict.
+    data = request.data
+    if isinstance(data, six.binary_type):
+        data = json.loads(data.decode('utf-8'))
+    elif isinstance(data, six.string_types):
+        data = json.loads(data)
+    return data
+
+
 class BaseSigner(object):
     REQUIRES_REGION = False
 
@@ -129,7 +129,7 @@ class SigV2Auth(BaseSigner):
         # from the request body so we can update them with
         # the sigv2 auth params.
         if self.credentials is None:
-            raise NoCredentialsError() 
+            raise NoCredentialsError()
         if request.data:
             # POST
             params = request.data
@@ -153,7 +153,7 @@ class SigV3Auth(BaseSigner):
 
     def add_auth(self, request):
         if self.credentials is None:
-            raise NoCredentialsError() 
+            raise NoCredentialsError()
         if 'Date' in request.headers:
             del request.headers['Date']
         request.headers['Date'] = formatdate(usegmt=True)
@@ -205,9 +205,9 @@ class SigV4Auth(BaseSigner):
             if lname not in SIGNED_HEADERS_BLACKLIST:
                 header_map[lname] = value
         if 'host' not in header_map:
-            # TODO: We should set the host ourselves, instead of relying on our 
-            # HTTP client to set it for us. 
-            header_map['host'] = _host_from_url(request.url) 
+            # TODO: We should set the host ourselves, instead of relying on our
+            # HTTP client to set it for us.
+            header_map['host'] = _host_from_url(request.url)
         return header_map
 
     def canonical_query_string(self, request):
@@ -221,19 +221,19 @@ class SigV4Auth(BaseSigner):
             return self._canonical_query_string_url(urlsplit(request.url))
 
     def _canonical_query_string_params(self, params):
-        # [(key, value), (key2, value2)] 
-        key_val_pairs = [] 
-        for key in params: 
-            value = str(params[key]) 
-            key_val_pairs.append((quote(key, safe='-_.~'), 
-                                  quote(value, safe='-_.~'))) 
-        sorted_key_vals = [] 
-        # Sort by the URI-encoded key names, and in the case of 
-        # repeated keys, then sort by the value. 
-        for key, value in sorted(key_val_pairs): 
-            sorted_key_vals.append('%s=%s' % (key, value)) 
-        canonical_query_string = '&'.join(sorted_key_vals) 
-        return canonical_query_string 
+        # [(key, value), (key2, value2)]
+        key_val_pairs = []
+        for key in params:
+            value = str(params[key])
+            key_val_pairs.append((quote(key, safe='-_.~'),
+                                  quote(value, safe='-_.~')))
+        sorted_key_vals = []
+        # Sort by the URI-encoded key names, and in the case of
+        # repeated keys, then sort by the value.
+        for key, value in sorted(key_val_pairs):
+            sorted_key_vals.append('%s=%s' % (key, value))
+        canonical_query_string = '&'.join(sorted_key_vals)
+        return canonical_query_string
 
     def _canonical_query_string_url(self, parts):
         canonical_query_string = ''
@@ -244,7 +244,7 @@ class SigV4Auth(BaseSigner):
                 key, _, value = pair.partition('=')
                 key_val_pairs.append((key, value))
             sorted_key_vals = []
-            # Sort by the URI-encoded key names, and in the case of 
+            # Sort by the URI-encoded key names, and in the case of
             # repeated keys, then sort by the value.
             for key, value in sorted(key_val_pairs):
                 sorted_key_vals.append('%s=%s' % (key, value))
@@ -262,7 +262,7 @@ class SigV4Auth(BaseSigner):
         sorted_header_names = sorted(set(headers_to_sign))
         for key in sorted_header_names:
             value = ','.join(self._header_value(v) for v in
-                             headers_to_sign.get_all(key)) 
+                             headers_to_sign.get_all(key))
             headers.append('%s:%s' % (key, ensure_unicode(value)))
         return '\n'.join(headers)
 
@@ -284,21 +284,21 @@ class SigV4Auth(BaseSigner):
             # When payload signing is disabled, we use this static string in
             # place of the payload checksum.
             return UNSIGNED_PAYLOAD
-        request_body = request.body 
-        if request_body and hasattr(request_body, 'seek'): 
-            position = request_body.tell() 
-            read_chunksize = functools.partial(request_body.read, 
+        request_body = request.body
+        if request_body and hasattr(request_body, 'seek'):
+            position = request_body.tell()
+            read_chunksize = functools.partial(request_body.read,
                                                PAYLOAD_BUFFER)
             checksum = sha256()
             for chunk in iter(read_chunksize, b''):
                 checksum.update(chunk)
             hex_checksum = checksum.hexdigest()
-            request_body.seek(position) 
+            request_body.seek(position)
             return hex_checksum
-        elif request_body: 
+        elif request_body:
             # The request serialization has ensured that
             # request.body is a bytes() type.
-            return sha256(request_body).hexdigest() 
+            return sha256(request_body).hexdigest()
         else:
             return EMPTY_SHA256_HASH
 
@@ -370,7 +370,7 @@ class SigV4Auth(BaseSigner):
 
     def add_auth(self, request):
         if self.credentials is None:
-            raise NoCredentialsError() 
+            raise NoCredentialsError()
         datetime_now = datetime.datetime.utcnow()
         request.context['timestamp'] = datetime_now.strftime(SIGV4_TIMESTAMP)
         # This could be a retry.  Make sure the previous
@@ -483,20 +483,20 @@ class SigV4QueryAuth(SigV4Auth):
         self._expires = expires
 
     def _modify_request_before_signing(self, request):
-        # We automatically set this header, so if it's the auto-set value we 
-        # want to get rid of it since it doesn't make sense for presigned urls. 
-        content_type = request.headers.get('content-type') 
-        blacklisted_content_type = ( 
-            'application/x-www-form-urlencoded; charset=utf-8' 
-        ) 
-        if content_type == blacklisted_content_type: 
-            del request.headers['content-type'] 
- 
+        # We automatically set this header, so if it's the auto-set value we
+        # want to get rid of it since it doesn't make sense for presigned urls.
+        content_type = request.headers.get('content-type')
+        blacklisted_content_type = (
+            'application/x-www-form-urlencoded; charset=utf-8'
+        )
+        if content_type == blacklisted_content_type:
+            del request.headers['content-type']
+
         # Note that we're not including X-Amz-Signature.
         # From the docs: "The Canonical Query String must include all the query
         # parameters from the preceding table except for X-Amz-Signature.
         signed_headers = self.signed_headers(self.headers_to_sign(request))
- 
+
         auth_params = {
             'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
             'X-Amz-Credential': self.scope(request),
@@ -525,7 +525,7 @@ class SigV4QueryAuth(SigV4Auth):
         if request.data:
             # We also need to move the body params into the query string. To
             # do this, we first have to convert it to a dict.
-            query_dict.update(_get_body_as_dict(request)) 
+            query_dict.update(_get_body_as_dict(request))
             request.data = ''
         if query_dict:
             operation_params = percent_encode_sequence(query_dict) + '&'
@@ -632,7 +632,7 @@ class HmacV1Auth(BaseSigner):
                      'response-content-encoding', 'delete', 'lifecycle',
                      'tagging', 'restore', 'storageClass', 'notification',
                      'replication', 'requestPayment', 'analytics', 'metrics',
-                     'inventory', 'select', 'select-type'] 
+                     'inventory', 'select', 'select-type']
 
     def __init__(self, credentials, service_name=None, region_name=None):
         self.credentials = credentials
@@ -853,16 +853,16 @@ AUTH_TYPE_MAPS = {
     's3-query': HmacV1QueryAuth,
     's3-presign-post': HmacV1PostAuth,
     's3v4-presign-post': S3SigV4PostAuth,
-} 
+}
 
-# Define v4 signers depending on if CRT is present 
-if HAS_CRT: 
-    from botocore.crt.auth import CRT_AUTH_TYPE_MAPS 
-    AUTH_TYPE_MAPS.update(CRT_AUTH_TYPE_MAPS) 
-else: 
-    AUTH_TYPE_MAPS.update({ 
-        'v4': SigV4Auth, 
-        'v4-query': SigV4QueryAuth, 
-        's3v4': S3SigV4Auth, 
-        's3v4-query': S3SigV4QueryAuth, 
-    }) 
+# Define v4 signers depending on if CRT is present
+if HAS_CRT:
+    from botocore.crt.auth import CRT_AUTH_TYPE_MAPS
+    AUTH_TYPE_MAPS.update(CRT_AUTH_TYPE_MAPS)
+else:
+    AUTH_TYPE_MAPS.update({
+        'v4': SigV4Auth,
+        'v4-query': SigV4QueryAuth,
+        's3v4': S3SigV4Auth,
+        's3v4-query': S3SigV4QueryAuth,
+    })

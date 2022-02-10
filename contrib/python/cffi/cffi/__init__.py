@@ -1,12 +1,12 @@
 __all__ = ['FFI', 'VerificationError', 'VerificationMissing', 'CDefError',
            'FFIError']
 
-from .api import FFI 
-from .error import CDefError, FFIError, VerificationError, VerificationMissing 
-from .error import PkgConfigError 
+from .api import FFI
+from .error import CDefError, FFIError, VerificationError, VerificationMissing
+from .error import PkgConfigError
 
-__version__ = "1.15.0" 
-__version_info__ = (1, 15, 0) 
+__version__ = "1.15.0"
+__version_info__ = (1, 15, 0)
 
 # The verifier module file names are based on the CRC32 of a string that
 # contains the following version number.  It may be older than __version__

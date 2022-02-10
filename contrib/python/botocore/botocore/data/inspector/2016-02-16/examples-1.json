@@ -168,13 +168,13 @@
               "createdAt": "1458680170.035",
               "dataCollected": true,
               "durationInSeconds": 3600,
-              "findingCounts": { 
-                "High": 14, 
-                "Informational": 0, 
-                "Low": 0, 
-                "Medium": 2, 
-                "Undefined": 0 
-              }, 
+              "findingCounts": {
+                "High": 14,
+                "Informational": 0,
+                "Low": 0,
+                "Medium": 2,
+                "Undefined": 0
+              },
               "notifications": [
 
               ],
@@ -280,7 +280,7 @@
             {
               "name": "ExampleAssessmentTemplate",
               "arn": "arn:aws:inspector:us-west-2:123456789012:target/0-0kFIPusq/template/0-4r1V2mAw",
-              "assessmentRunCount": 0, 
+              "assessmentRunCount": 0,
               "assessmentTargetArn": "arn:aws:inspector:us-west-2:123456789012:target/0-0kFIPusq",
               "createdAt": "1458074191.844",
               "durationInSeconds": 3600,

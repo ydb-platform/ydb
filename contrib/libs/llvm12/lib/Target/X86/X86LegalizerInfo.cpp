@@ -70,11 +70,11 @@ X86LegalizerInfo::X86LegalizerInfo(const X86Subtarget &STI,
   setLegalizerInfoAVX512DQ();
   setLegalizerInfoAVX512BW();
 
-  getActionDefinitionsBuilder(G_INTRINSIC_ROUNDEVEN) 
-    .scalarize(0) 
-    .minScalar(0, LLT::scalar(32)) 
-    .libcall(); 
- 
+  getActionDefinitionsBuilder(G_INTRINSIC_ROUNDEVEN)
+    .scalarize(0)
+    .minScalar(0, LLT::scalar(32))
+    .libcall();
+
   setLegalizeScalarToDifferentSizeStrategy(G_PHI, 0, widen_1);
   for (unsigned BinOp : {G_SUB, G_MUL, G_AND, G_OR, G_XOR})
     setLegalizeScalarToDifferentSizeStrategy(BinOp, 0, widen_1);
@@ -86,8 +86,8 @@ X86LegalizerInfo::X86LegalizerInfo(const X86Subtarget &STI,
   setLegalizeScalarToDifferentSizeStrategy(
       G_CONSTANT, 0, widenToLargerTypesAndNarrowToLargest);
 
-  getActionDefinitionsBuilder({G_MEMCPY, G_MEMMOVE, G_MEMSET}).libcall(); 
- 
+  getActionDefinitionsBuilder({G_MEMCPY, G_MEMMOVE, G_MEMSET}).libcall();
+
   computeTables();
   verify(*STI.getInstrInfo());
 }
@@ -155,11 +155,11 @@ void X86LegalizerInfo::setLegalizerInfo32bit() {
       .legalFor({{s8, s8}, {s16, s8}, {s32, s8}})
       .clampScalar(0, s8, s32)
       .clampScalar(1, s8, s8);
- 
-    // Comparison 
-    getActionDefinitionsBuilder(G_ICMP) 
-        .legalForCartesianProduct({s8}, {s8, s16, s32, p0}) 
-        .clampScalar(0, s8, s8); 
+
+    // Comparison
+    getActionDefinitionsBuilder(G_ICMP)
+        .legalForCartesianProduct({s8}, {s8, s16, s32, p0})
+        .clampScalar(0, s8, s8);
   }
 
   // Control-flow
@@ -246,9 +246,9 @@ void X86LegalizerInfo::setLegalizerInfo64bit() {
       .widenScalarToNextPow2(1);
 
   // Comparison
-  getActionDefinitionsBuilder(G_ICMP) 
-      .legalForCartesianProduct({s8}, {s8, s16, s32, s64, p0}) 
-      .clampScalar(0, s8, s8); 
+  getActionDefinitionsBuilder(G_ICMP)
+      .legalForCartesianProduct({s8}, {s8, s16, s32, s64, p0})
+      .clampScalar(0, s8, s8);
 
   getActionDefinitionsBuilder(G_FCMP)
       .legalForCartesianProduct({s8}, {s32, s64})

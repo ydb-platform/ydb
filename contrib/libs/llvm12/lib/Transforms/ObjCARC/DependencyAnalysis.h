@@ -50,12 +50,12 @@ enum DependenceKind {
   RetainRVDep                 ///< Blocks objc_retainAutoreleasedReturnValue.
 };
 
-/// Find dependent instructions. If there is exactly one dependent instruction, 
-/// return it. Otherwise, return null. 
-llvm::Instruction *findSingleDependency(DependenceKind Flavor, const Value *Arg, 
-                                        BasicBlock *StartBB, 
-                                        Instruction *StartInst, 
-                                        ProvenanceAnalysis &PA); 
+/// Find dependent instructions. If there is exactly one dependent instruction,
+/// return it. Otherwise, return null.
+llvm::Instruction *findSingleDependency(DependenceKind Flavor, const Value *Arg,
+                                        BasicBlock *StartBB,
+                                        Instruction *StartInst,
+                                        ProvenanceAnalysis &PA);
 
 bool
 Depends(DependenceKind Flavor, Instruction *Inst, const Value *Arg,

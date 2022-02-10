@@ -7,7 +7,7 @@
     "protocol":"rest-xml",
     "serviceAbbreviation":"CloudFront",
     "serviceFullName":"Amazon CloudFront",
-    "serviceId":"CloudFront", 
+    "serviceId":"CloudFront",
     "signatureVersion":"v4"
   },
   "operations":{

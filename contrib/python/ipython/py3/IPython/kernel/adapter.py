@@ -1,1 +1,1 @@
-from jupyter_client.adapter import * 
+from jupyter_client.adapter import *

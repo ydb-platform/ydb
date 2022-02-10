@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*- 
-from __future__ import absolute_import 
- 
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+
 import atexit
 import errno
 import fnmatch
@@ -10,8 +10,8 @@ import os
 import shutil
 import sys
 import uuid
-import warnings 
-from functools import partial 
+import warnings
+from functools import partial
 from functools import reduce
 from os.path import expanduser
 from os.path import expandvars
@@ -23,7 +23,7 @@ import six
 from six.moves import map
 
 from .compat import PY36
-from _pytest.warning_types import PytestWarning 
+from _pytest.warning_types import PytestWarning
 
 if PY36:
     from pathlib import Path, PurePath
@@ -43,74 +43,74 @@ def ensure_reset_dir(path):
     ensures the given path is an empty directory
     """
     if path.exists():
-        rm_rf(path) 
+        rm_rf(path)
     path.mkdir()
 
 
-def on_rm_rf_error(func, path, exc, **kwargs): 
-    """Handles known read-only errors during rmtree. 
+def on_rm_rf_error(func, path, exc, **kwargs):
+    """Handles known read-only errors during rmtree.
 
-    The returned value is used only by our own tests. 
-    """ 
-    start_path = kwargs["start_path"] 
-    exctype, excvalue = exc[:2] 
+    The returned value is used only by our own tests.
+    """
+    start_path = kwargs["start_path"]
+    exctype, excvalue = exc[:2]
 
-    # another process removed the file in the middle of the "rm_rf" (xdist for example) 
-    # more context: https://github.com/pytest-dev/pytest/issues/5974#issuecomment-543799018 
-    if isinstance(excvalue, OSError) and excvalue.errno == errno.ENOENT: 
-        return False 
- 
-    if not isinstance(excvalue, OSError) or excvalue.errno not in ( 
-        errno.EACCES, 
-        errno.EPERM, 
-    ): 
-        warnings.warn( 
-            PytestWarning( 
-                "(rm_rf) error removing {}\n{}: {}".format(path, exctype, excvalue) 
-            ) 
-        ) 
-        return False 
- 
-    if func not in (os.rmdir, os.remove, os.unlink): 
-        warnings.warn( 
-            PytestWarning( 
-                "(rm_rf) unknown function {} when removing {}:\n{}: {}".format( 
-                    path, func, exctype, excvalue 
-                ) 
-            ) 
-        ) 
-        return False 
- 
-    # Chmod + retry. 
-    import stat 
- 
-    def chmod_rw(p): 
-        mode = os.stat(p).st_mode 
-        os.chmod(p, mode | stat.S_IRUSR | stat.S_IWUSR) 
- 
-    # For files, we need to recursively go upwards in the directories to 
-    # ensure they all are also writable. 
-    p = Path(path) 
-    if p.is_file(): 
-        for parent in p.parents: 
-            chmod_rw(str(parent)) 
-            # stop when we reach the original path passed to rm_rf 
-            if parent == start_path: 
-                break 
-    chmod_rw(str(path)) 
- 
-    func(path) 
-    return True 
- 
- 
-def rm_rf(path): 
-    """Remove the path contents recursively, even if some elements 
-    are read-only. 
-    """ 
-    onerror = partial(on_rm_rf_error, start_path=path) 
-    shutil.rmtree(str(path), onerror=onerror) 
- 
- 
+    # another process removed the file in the middle of the "rm_rf" (xdist for example)
+    # more context: https://github.com/pytest-dev/pytest/issues/5974#issuecomment-543799018
+    if isinstance(excvalue, OSError) and excvalue.errno == errno.ENOENT:
+        return False
+
+    if not isinstance(excvalue, OSError) or excvalue.errno not in (
+        errno.EACCES,
+        errno.EPERM,
+    ):
+        warnings.warn(
+            PytestWarning(
+                "(rm_rf) error removing {}\n{}: {}".format(path, exctype, excvalue)
+            )
+        )
+        return False
+
+    if func not in (os.rmdir, os.remove, os.unlink):
+        warnings.warn(
+            PytestWarning(
+                "(rm_rf) unknown function {} when removing {}:\n{}: {}".format(
+                    path, func, exctype, excvalue
+                )
+            )
+        )
+        return False
+
+    # Chmod + retry.
+    import stat
+
+    def chmod_rw(p):
+        mode = os.stat(p).st_mode
+        os.chmod(p, mode | stat.S_IRUSR | stat.S_IWUSR)
+
+    # For files, we need to recursively go upwards in the directories to
+    # ensure they all are also writable.
+    p = Path(path)
+    if p.is_file():
+        for parent in p.parents:
+            chmod_rw(str(parent))
+            # stop when we reach the original path passed to rm_rf
+            if parent == start_path:
+                break
+    chmod_rw(str(path))
+
+    func(path)
+    return True
+
+
+def rm_rf(path):
+    """Remove the path contents recursively, even if some elements
+    are read-only.
+    """
+    onerror = partial(on_rm_rf_error, start_path=path)
+    shutil.rmtree(str(path), onerror=onerror)
+
+
 def find_prefixed(root, prefix):
     """finds all elements in root that begin with the prefix, case insensitive"""
     l_prefix = prefix.lower()
@@ -246,7 +246,7 @@ def maybe_delete_a_numbered_dir(path):
 
         garbage = parent.joinpath("garbage-{}".format(uuid.uuid4()))
         path.rename(garbage)
-        rm_rf(garbage) 
+        rm_rf(garbage)
     except (OSError, EnvironmentError):
         #  known races:
         #  * other process did a cleanup at the same time

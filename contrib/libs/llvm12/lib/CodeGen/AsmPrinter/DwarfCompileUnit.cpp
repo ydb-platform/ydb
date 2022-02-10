@@ -105,7 +105,7 @@ unsigned DwarfCompileUnit::getOrCreateSourceID(const DIFile *File) {
     return Asm->OutStreamer->emitDwarfFileDirective(0, "", "", None, None,
                                                     CUID);
   return Asm->OutStreamer->emitDwarfFileDirective(
-      0, File->getDirectory(), File->getFilename(), DD->getMD5AsBytes(File), 
+      0, File->getDirectory(), File->getFilename(), DD->getMD5AsBytes(File),
       File->getSource(), CUID);
 }
 
@@ -248,9 +248,9 @@ void DwarfCompileUnit::addLocationAttribute(
                                      : dwarf::DW_OP_const8u);
             // 2) containing the (relocated) offset of the TLS variable
             //    within the module's TLS block.
-            addExpr(*Loc, 
-                    PointerSize == 4 ? dwarf::DW_FORM_data4 
-                                     : dwarf::DW_FORM_data8, 
+            addExpr(*Loc,
+                    PointerSize == 4 ? dwarf::DW_FORM_data4
+                                     : dwarf::DW_FORM_data8,
                     Asm->getObjFileLowering().getDebugThreadLocalSymbol(Sym));
           } else {
             addUInt(*Loc, dwarf::DW_FORM_data1, dwarf::DW_OP_GNU_const_index);
@@ -422,10 +422,10 @@ DIE &DwarfCompileUnit::updateSubprogramScopeDIE(const DISubprogram *SP) {
       // FIXME: duplicated from Target/WebAssembly/WebAssembly.h
       // don't want to depend on target specific headers in this code?
       const unsigned TI_GLOBAL_RELOC = 3;
-      // FIXME: when writing dwo, we need to avoid relocations. Probably 
-      // the "right" solution is to treat globals the way func and data symbols 
-      // are (with entries in .debug_addr). 
-      if (FrameBase.Location.WasmLoc.Kind == TI_GLOBAL_RELOC && !isDwoUnit()) { 
+      // FIXME: when writing dwo, we need to avoid relocations. Probably
+      // the "right" solution is to treat globals the way func and data symbols
+      // are (with entries in .debug_addr).
+      if (FrameBase.Location.WasmLoc.Kind == TI_GLOBAL_RELOC && !isDwoUnit()) {
         // These need to be relocatable.
         assert(FrameBase.Location.WasmLoc.Index == 0);  // Only SP so far.
         auto SPSym = cast<MCSymbolWasm>(
@@ -442,8 +442,8 @@ DIE &DwarfCompileUnit::updateSubprogramScopeDIE(const DISubprogram *SP) {
             true});
         DIELoc *Loc = new (DIEValueAllocator) DIELoc;
         addUInt(*Loc, dwarf::DW_FORM_data1, dwarf::DW_OP_WASM_location);
-        addSInt(*Loc, dwarf::DW_FORM_sdata, TI_GLOBAL_RELOC); 
-        addLabel(*Loc, dwarf::DW_FORM_data4, SPSym); 
+        addSInt(*Loc, dwarf::DW_FORM_sdata, TI_GLOBAL_RELOC);
+        addLabel(*Loc, dwarf::DW_FORM_data4, SPSym);
         DD->addArangeLabel(SymbolCU(this, SPSym));
         addUInt(*Loc, dwarf::DW_FORM_data1, dwarf::DW_OP_stack_value);
         addBlock(*SPDie, dwarf::DW_AT_frame_base, Loc);
@@ -558,12 +558,12 @@ void DwarfCompileUnit::addScopeRangeList(DIE &ScopeDIE,
 
 void DwarfCompileUnit::attachRangesOrLowHighPC(
     DIE &Die, SmallVector<RangeSpan, 2> Ranges) {
-  assert(!Ranges.empty()); 
-  if (!DD->useRangesSection() || 
-      (Ranges.size() == 1 && 
-       (!DD->alwaysUseRanges() || 
-        DD->getSectionLabel(&Ranges.front().Begin->getSection()) == 
-            Ranges.front().Begin))) { 
+  assert(!Ranges.empty());
+  if (!DD->useRangesSection() ||
+      (Ranges.size() == 1 &&
+       (!DD->alwaysUseRanges() ||
+        DD->getSectionLabel(&Ranges.front().Begin->getSection()) ==
+            Ranges.front().Begin))) {
     const RangeSpan &Front = Ranges.front();
     const RangeSpan &Back = Ranges.back();
     attachLowHighPC(Die, Front.Begin, Back.End);
@@ -686,9 +686,9 @@ DIE *DwarfCompileUnit::constructVariableDIEImpl(const DbgVariable &DV,
 
   // Add variable address.
 
-  unsigned Index = DV.getDebugLocListIndex(); 
-  if (Index != ~0U) { 
-    addLocationList(*VariableDie, dwarf::DW_AT_location, Index); 
+  unsigned Index = DV.getDebugLocListIndex();
+  if (Index != ~0U) {
+    addLocationList(*VariableDie, dwarf::DW_AT_location, Index);
     auto TagOffset = DV.getDebugLocListTagOffset();
     if (TagOffset)
       addUInt(*VariableDie, dwarf::DW_AT_LLVM_tag_offset, dwarf::DW_FORM_data1,
@@ -720,13 +720,13 @@ DIE *DwarfCompileUnit::constructVariableDIEImpl(const DbgVariable &DV,
       addConstantFPValue(*VariableDie, DVal->getConstantFP());
     } else if (DVal->isConstantInt()) {
       addConstantValue(*VariableDie, DVal->getConstantInt(), DV.getType());
-    } else if (DVal->isTargetIndexLocation()) { 
-      DIELoc *Loc = new (DIEValueAllocator) DIELoc; 
-      DIEDwarfExpression DwarfExpr(*Asm, *this, *Loc); 
-      const DIBasicType *BT = dyn_cast<DIBasicType>( 
-          static_cast<const Metadata *>(DV.getVariable()->getType())); 
-      DwarfDebug::emitDebugLocValue(*Asm, BT, *DVal, DwarfExpr); 
-      addBlock(*VariableDie, dwarf::DW_AT_location, DwarfExpr.finalize()); 
+    } else if (DVal->isTargetIndexLocation()) {
+      DIELoc *Loc = new (DIEValueAllocator) DIELoc;
+      DIEDwarfExpression DwarfExpr(*Asm, *this, *Loc);
+      const DIBasicType *BT = dyn_cast<DIBasicType>(
+          static_cast<const Metadata *>(DV.getVariable()->getType()));
+      DwarfDebug::emitDebugLocValue(*Asm, BT, *DVal, DwarfExpr);
+      addBlock(*VariableDie, dwarf::DW_AT_location, DwarfExpr.finalize());
     }
     return VariableDie;
   }
@@ -742,14 +742,14 @@ DIE *DwarfCompileUnit::constructVariableDIEImpl(const DbgVariable &DV,
     Register FrameReg;
     const DIExpression *Expr = Fragment.Expr;
     const TargetFrameLowering *TFI = Asm->MF->getSubtarget().getFrameLowering();
-    StackOffset Offset = 
-        TFI->getFrameIndexReference(*Asm->MF, Fragment.FI, FrameReg); 
+    StackOffset Offset =
+        TFI->getFrameIndexReference(*Asm->MF, Fragment.FI, FrameReg);
     DwarfExpr.addFragmentOffset(Expr);
- 
-    auto *TRI = Asm->MF->getSubtarget().getRegisterInfo(); 
+
+    auto *TRI = Asm->MF->getSubtarget().getRegisterInfo();
     SmallVector<uint64_t, 8> Ops;
-    TRI->getOffsetOpcodes(Offset, Ops); 
- 
+    TRI->getOffsetOpcodes(Offset, Ops);
+
     // According to
     // https://docs.nvidia.com/cuda/archive/10.0/ptx-writers-guide-to-interoperability/index.html#cuda-specific-dwarf
     // cuda-gdb requires DW_AT_address_class for all variables to be able to
@@ -810,10 +810,10 @@ static SmallVector<const DIVariable *, 2> dependencies(DbgVariable *Var) {
     return Result;
   if (auto *DLVar = Array->getDataLocation())
     Result.push_back(DLVar);
-  if (auto *AsVar = Array->getAssociated()) 
-    Result.push_back(AsVar); 
-  if (auto *AlVar = Array->getAllocated()) 
-    Result.push_back(AlVar); 
+  if (auto *AsVar = Array->getAssociated())
+    Result.push_back(AsVar);
+  if (auto *AlVar = Array->getAllocated())
+    Result.push_back(AlVar);
   for (auto *El : Array->getElements()) {
     if (auto *Subrange = dyn_cast<DISubrange>(El)) {
       if (auto Count = Subrange->getCount())
@@ -828,19 +828,19 @@ static SmallVector<const DIVariable *, 2> dependencies(DbgVariable *Var) {
       if (auto ST = Subrange->getStride())
         if (auto *Dependency = ST.dyn_cast<DIVariable *>())
           Result.push_back(Dependency);
-    } else if (auto *GenericSubrange = dyn_cast<DIGenericSubrange>(El)) { 
-      if (auto Count = GenericSubrange->getCount()) 
-        if (auto *Dependency = Count.dyn_cast<DIVariable *>()) 
-          Result.push_back(Dependency); 
-      if (auto LB = GenericSubrange->getLowerBound()) 
-        if (auto *Dependency = LB.dyn_cast<DIVariable *>()) 
-          Result.push_back(Dependency); 
-      if (auto UB = GenericSubrange->getUpperBound()) 
-        if (auto *Dependency = UB.dyn_cast<DIVariable *>()) 
-          Result.push_back(Dependency); 
-      if (auto ST = GenericSubrange->getStride()) 
-        if (auto *Dependency = ST.dyn_cast<DIVariable *>()) 
-          Result.push_back(Dependency); 
+    } else if (auto *GenericSubrange = dyn_cast<DIGenericSubrange>(El)) {
+      if (auto Count = GenericSubrange->getCount())
+        if (auto *Dependency = Count.dyn_cast<DIVariable *>())
+          Result.push_back(Dependency);
+      if (auto LB = GenericSubrange->getLowerBound())
+        if (auto *Dependency = LB.dyn_cast<DIVariable *>())
+          Result.push_back(Dependency);
+      if (auto UB = GenericSubrange->getUpperBound())
+        if (auto *Dependency = UB.dyn_cast<DIVariable *>())
+          Result.push_back(Dependency);
+      if (auto ST = GenericSubrange->getStride())
+        if (auto *Dependency = ST.dyn_cast<DIVariable *>())
+          Result.push_back(Dependency);
     }
   }
   return Result;
@@ -1022,7 +1022,7 @@ void DwarfCompileUnit::constructAbstractSubprogramScopeDIE(
 }
 
 bool DwarfCompileUnit::useGNUAnalogForDwarf5Feature() const {
-  return DD->getDwarfVersion() == 4 && !DD->tuneForLLDB(); 
+  return DD->getDwarfVersion() == 4 && !DD->tuneForLLDB();
 }
 
 dwarf::Tag DwarfCompileUnit::getDwarf5OrGNUTag(dwarf::Tag Tag) const {
@@ -1378,9 +1378,9 @@ void DwarfCompileUnit::addComplexAddress(const DbgVariable &DV, DIE &Die,
 /// Add a Dwarf loclistptr attribute data and value.
 void DwarfCompileUnit::addLocationList(DIE &Die, dwarf::Attribute Attribute,
                                        unsigned Index) {
-  dwarf::Form Form = (DD->getDwarfVersion() >= 5) 
-                         ? dwarf::DW_FORM_loclistx 
-                         : DD->getDwarfSectionOffsetForm(); 
+  dwarf::Form Form = (DD->getDwarfVersion() >= 5)
+                         ? dwarf::DW_FORM_loclistx
+                         : DD->getDwarfSectionOffsetForm();
   Die.addValue(DIEValueAllocator, Attribute, Form, DIELocList(Index));
 }
 
@@ -1441,8 +1441,8 @@ void DwarfCompileUnit::addAddrTableBase() {
   const TargetLoweringObjectFile &TLOF = Asm->getObjFileLowering();
   MCSymbol *Label = DD->getAddressPool().getLabel();
   addSectionLabel(getUnitDie(),
-                  DD->getDwarfVersion() >= 5 ? dwarf::DW_AT_addr_base 
-                                             : dwarf::DW_AT_GNU_addr_base, 
+                  DD->getDwarfVersion() >= 5 ? dwarf::DW_AT_addr_base
+                                             : dwarf::DW_AT_GNU_addr_base,
                   Label, TLOF.getDwarfAddrSection()->getBeginSymbol());
 }
 

@@ -4,12 +4,12 @@
 
     Formatter for SVG output.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
 from pygments.formatter import Formatter
-from pygments.token import Comment 
+from pygments.token import Comment
 from pygments.util import get_bool_opt, get_int_opt
 
 __all__ = ['SvgFormatter']
@@ -52,19 +52,19 @@ class SvgFormatter(Formatter):
         The value to give the wrapping ``<g>`` element's ``font-size``
         attribute, defaults to ``"14px"``.
 
-    `linenos` 
-        If ``True``, add line numbers (default: ``False``). 
- 
-    `linenostart` 
-        The line number for the first line (default: ``1``). 
- 
-    `linenostep` 
-        If set to a number n > 1, only every nth line number is printed. 
-         
-    `linenowidth` 
-        Maximum width devoted to line numbers (default: ``3*ystep``, sufficient 
-        for up to 4-digit line numbers. Increase width for longer code blocks).   
-         
+    `linenos`
+        If ``True``, add line numbers (default: ``False``).
+
+    `linenostart`
+        The line number for the first line (default: ``1``).
+
+    `linenostep`
+        If set to a number n > 1, only every nth line number is printed.
+        
+    `linenowidth`
+        Maximum width devoted to line numbers (default: ``3*ystep``, sufficient
+        for up to 4-digit line numbers. Increase width for longer code blocks).  
+        
     `xoffset`
         Starting offset in X direction, defaults to ``0``.
 
@@ -105,10 +105,10 @@ class SvgFormatter(Formatter):
         self.yoffset = get_int_opt(options, 'yoffset', int_fs)
         self.ystep = get_int_opt(options, 'ystep', int_fs + 5)
         self.spacehack = get_bool_opt(options, 'spacehack', True)
-        self.linenos = get_bool_opt(options,'linenos',False) 
-        self.linenostart = get_int_opt(options,'linenostart',1) 
-        self.linenostep = get_int_opt(options,'linenostep',1) 
-        self.linenowidth = get_int_opt(options,'linenowidth', 3*self.ystep) 
+        self.linenos = get_bool_opt(options,'linenos',False)
+        self.linenostart = get_int_opt(options,'linenostart',1)
+        self.linenostep = get_int_opt(options,'linenostep',1)
+        self.linenowidth = get_int_opt(options,'linenowidth', 3*self.ystep)
         self._stylecache = {}
 
     def format_unencoded(self, tokensource, outfile):
@@ -132,20 +132,20 @@ class SvgFormatter(Formatter):
             outfile.write('<svg xmlns="http://www.w3.org/2000/svg">\n')
             outfile.write('<g font-family="%s" font-size="%s">\n' %
                           (self.fontfamily, self.fontsize))
-         
-        counter = self.linenostart  
-        counter_step = self.linenostep 
-        counter_style = self._get_style(Comment) 
-        line_x = x 
-         
-        if self.linenos: 
-            if counter % counter_step == 0: 
-                outfile.write('<text x="%s" y="%s" %s text-anchor="end">%s</text>' % 
-                    (x+self.linenowidth,y,counter_style,counter)) 
-            line_x += self.linenowidth + self.ystep 
-            counter += 1 
- 
-        outfile.write('<text x="%s" y="%s" xml:space="preserve">' % (line_x, y)) 
+        
+        counter = self.linenostart 
+        counter_step = self.linenostep
+        counter_style = self._get_style(Comment)
+        line_x = x
+        
+        if self.linenos:
+            if counter % counter_step == 0:
+                outfile.write('<text x="%s" y="%s" %s text-anchor="end">%s</text>' %
+                    (x+self.linenowidth,y,counter_style,counter))
+            line_x += self.linenowidth + self.ystep
+            counter += 1
+
+        outfile.write('<text x="%s" y="%s" xml:space="preserve">' % (line_x, y))
         for ttype, value in tokensource:
             style = self._get_style(ttype)
             tspan = style and '<tspan' + style + '>' or ''
@@ -157,13 +157,13 @@ class SvgFormatter(Formatter):
             for part in parts[:-1]:
                 outfile.write(tspan + part + tspanend)
                 y += self.ystep
-                outfile.write('</text>\n') 
-                if self.linenos and counter % counter_step == 0: 
-                    outfile.write('<text x="%s" y="%s" text-anchor="end" %s>%s</text>' % 
-                        (x+self.linenowidth,y,counter_style,counter)) 
-                 
-                counter += 1 
-                outfile.write('<text x="%s" y="%s" ' 'xml:space="preserve">' % (line_x,y)) 
+                outfile.write('</text>\n')
+                if self.linenos and counter % counter_step == 0:
+                    outfile.write('<text x="%s" y="%s" text-anchor="end" %s>%s</text>' %
+                        (x+self.linenowidth,y,counter_style,counter))
+                
+                counter += 1
+                outfile.write('<text x="%s" y="%s" ' 'xml:space="preserve">' % (line_x,y))
             outfile.write(tspan + parts[-1] + tspanend)
         outfile.write('</text>')
 

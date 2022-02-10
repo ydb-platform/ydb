@@ -13,8 +13,8 @@ extern "C" {
 
 PyAPI_DATA(PyTypeObject) PyCFunction_Type;
 
-#define PyCFunction_CheckExact(op) Py_IS_TYPE(op, &PyCFunction_Type) 
-#define PyCFunction_Check(op) PyObject_TypeCheck(op, &PyCFunction_Type) 
+#define PyCFunction_CheckExact(op) Py_IS_TYPE(op, &PyCFunction_Type)
+#define PyCFunction_Check(op) PyObject_TypeCheck(op, &PyCFunction_Type)
 
 typedef PyObject *(*PyCFunction)(PyObject *, PyObject *);
 typedef PyObject *(*_PyCFunctionFast) (PyObject *, PyObject *const *, Py_ssize_t);
@@ -23,14 +23,14 @@ typedef PyObject *(*PyCFunctionWithKeywords)(PyObject *, PyObject *,
 typedef PyObject *(*_PyCFunctionFastWithKeywords) (PyObject *,
                                                    PyObject *const *, Py_ssize_t,
                                                    PyObject *);
-typedef PyObject *(*PyCMethod)(PyObject *, PyTypeObject *, PyObject *const *, 
-                               size_t, PyObject *); 
+typedef PyObject *(*PyCMethod)(PyObject *, PyTypeObject *, PyObject *const *,
+                               size_t, PyObject *);
 
 PyAPI_FUNC(PyCFunction) PyCFunction_GetFunction(PyObject *);
 PyAPI_FUNC(PyObject *) PyCFunction_GetSelf(PyObject *);
 PyAPI_FUNC(int) PyCFunction_GetFlags(PyObject *);
 
-Py_DEPRECATED(3.9) PyAPI_FUNC(PyObject *) PyCFunction_Call(PyObject *, PyObject *, PyObject *); 
+Py_DEPRECATED(3.9) PyAPI_FUNC(PyObject *) PyCFunction_Call(PyObject *, PyObject *, PyObject *);
 
 struct PyMethodDef {
     const char  *ml_name;   /* The name of the built-in function/method */
@@ -45,13 +45,13 @@ typedef struct PyMethodDef PyMethodDef;
 PyAPI_FUNC(PyObject *) PyCFunction_NewEx(PyMethodDef *, PyObject *,
                                          PyObject *);
 
-#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03090000 
-#define PyCFunction_NewEx(ML, SELF, MOD) PyCMethod_New((ML), (SELF), (MOD), NULL) 
-PyAPI_FUNC(PyObject *) PyCMethod_New(PyMethodDef *, PyObject *, 
-                                     PyObject *, PyTypeObject *); 
-#endif 
- 
- 
+#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03090000
+#define PyCFunction_NewEx(ML, SELF, MOD) PyCMethod_New((ML), (SELF), (MOD), NULL)
+PyAPI_FUNC(PyObject *) PyCMethod_New(PyMethodDef *, PyObject *,
+                                     PyObject *, PyTypeObject *);
+#endif
+
+
 /* Flag passed to newmethodobject */
 /* #define METH_OLDARGS  0x0000   -- unsupported now */
 #define METH_VARARGS  0x0001
@@ -84,24 +84,24 @@ PyAPI_FUNC(PyObject *) PyCMethod_New(PyMethodDef *, PyObject *,
 #define METH_STACKLESS 0x0000
 #endif
 
-/* METH_METHOD means the function stores an 
- * additional reference to the class that defines it; 
- * both self and class are passed to it. 
- * It uses PyCMethodObject instead of PyCFunctionObject. 
- * May not be combined with METH_NOARGS, METH_O, METH_CLASS or METH_STATIC. 
- */ 
+/* METH_METHOD means the function stores an
+ * additional reference to the class that defines it;
+ * both self and class are passed to it.
+ * It uses PyCMethodObject instead of PyCFunctionObject.
+ * May not be combined with METH_NOARGS, METH_O, METH_CLASS or METH_STATIC.
+ */
 
-#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03090000 
-#define METH_METHOD 0x0200 
+#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03090000
+#define METH_METHOD 0x0200
 #endif
 
 
 #ifndef Py_LIMITED_API
- 
-#define Py_CPYTHON_METHODOBJECT_H 
-#include  "cpython/methodobject.h" 
-#undef Py_CPYTHON_METHODOBJECT_H 
- 
+
+#define Py_CPYTHON_METHODOBJECT_H
+#include  "cpython/methodobject.h"
+#undef Py_CPYTHON_METHODOBJECT_H
+
 #endif
 
 #ifdef __cplusplus

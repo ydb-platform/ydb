@@ -21,7 +21,7 @@
 #ifndef LLVM_ANALYSIS_LOOPNESTANALYSIS_H
 #define LLVM_ANALYSIS_LOOPNESTANALYSIS_H
 
-#include "llvm/ADT/STLExtras.h" 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Analysis/LoopInfo.h"
 
@@ -67,12 +67,12 @@ public:
   /// getMaxPerfectDepth(Loop_i) would return 2.
   static unsigned getMaxPerfectDepth(const Loop &Root, ScalarEvolution &SE);
 
-  /// Recursivelly traverse all empty 'single successor' basic blocks of \p From 
-  /// (if there are any). Return the last basic block found or \p End if it was 
-  /// reached during the search. 
-  static const BasicBlock &skipEmptyBlockUntil(const BasicBlock *From, 
-                                               const BasicBlock *End); 
- 
+  /// Recursivelly traverse all empty 'single successor' basic blocks of \p From
+  /// (if there are any). Return the last basic block found or \p End if it was
+  /// reached during the search.
+  static const BasicBlock &skipEmptyBlockUntil(const BasicBlock *From,
+                                               const BasicBlock *End);
+
   /// Return the outermost loop in the loop nest.
   Loop &getOutermostLoop() const { return *Loops.front(); }
 
@@ -138,16 +138,16 @@ public:
 
   /// Return true if all loops in the loop nest are in simplify form.
   bool areAllLoopsSimplifyForm() const {
-    return all_of(Loops, [](const Loop *L) { return L->isLoopSimplifyForm(); }); 
+    return all_of(Loops, [](const Loop *L) { return L->isLoopSimplifyForm(); });
   }
 
-  /// Return true if all loops in the loop nest are in rotated form. 
-  bool areAllLoopsRotatedForm() const { 
-    return all_of(Loops, [](const Loop *L) { return L->isRotatedForm(); }); 
-  } 
- 
-  StringRef getName() const { return Loops.front()->getName(); } 
- 
+  /// Return true if all loops in the loop nest are in rotated form.
+  bool areAllLoopsRotatedForm() const {
+    return all_of(Loops, [](const Loop *L) { return L->isRotatedForm(); });
+  }
+
+  StringRef getName() const { return Loops.front()->getName(); }
+
 protected:
   const unsigned MaxPerfectDepth; // maximum perfect nesting depth level.
   LoopVectorTy Loops; // the loops in the nest (in breadth first order).

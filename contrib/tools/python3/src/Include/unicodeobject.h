@@ -113,7 +113,7 @@ PyAPI_DATA(PyTypeObject) PyUnicodeIter_Type;
 
 #define PyUnicode_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_UNICODE_SUBCLASS)
-#define PyUnicode_CheckExact(op) Py_IS_TYPE(op, &PyUnicode_Type) 
+#define PyUnicode_CheckExact(op) Py_IS_TYPE(op, &PyUnicode_Type)
 
 /* --- Constants ---------------------------------------------------------- */
 
@@ -174,9 +174,9 @@ PyAPI_FUNC(Py_ssize_t) PyUnicode_GetLength(
 /* Get the number of Py_UNICODE units in the
    string representation. */
 
-Py_DEPRECATED(3.3) PyAPI_FUNC(Py_ssize_t) PyUnicode_GetSize( 
+Py_DEPRECATED(3.3) PyAPI_FUNC(Py_ssize_t) PyUnicode_GetSize(
     PyObject *unicode           /* Unicode object */
-    ); 
+    );
 
 #if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03030000
 /* Read a character from the string. */
@@ -370,11 +370,11 @@ PyAPI_FUNC(PyObject*) PyUnicode_Decode(
    Use PyCodec_Decode() to decode with rot13 and non-standard codecs
    that decode from str. */
 
-Py_DEPRECATED(3.6) PyAPI_FUNC(PyObject*) PyUnicode_AsDecodedObject( 
+Py_DEPRECATED(3.6) PyAPI_FUNC(PyObject*) PyUnicode_AsDecodedObject(
     PyObject *unicode,          /* Unicode object */
     const char *encoding,       /* encoding */
     const char *errors          /* error handling */
-    ); 
+    );
 
 /* Decode a Unicode object unicode and return the result as Unicode
    object.
@@ -383,11 +383,11 @@ Py_DEPRECATED(3.6) PyAPI_FUNC(PyObject*) PyUnicode_AsDecodedObject(
    Use PyCodec_Decode() to decode with rot13 and non-standard codecs
    that decode from str to str. */
 
-Py_DEPRECATED(3.6) PyAPI_FUNC(PyObject*) PyUnicode_AsDecodedUnicode( 
+Py_DEPRECATED(3.6) PyAPI_FUNC(PyObject*) PyUnicode_AsDecodedUnicode(
     PyObject *unicode,          /* Unicode object */
     const char *encoding,       /* encoding */
     const char *errors          /* error handling */
-    ); 
+    );
 
 /* Encodes a Unicode object and returns the result as Python
    object.
@@ -397,11 +397,11 @@ Py_DEPRECATED(3.6) PyAPI_FUNC(PyObject*) PyUnicode_AsDecodedUnicode(
    Use PyCodec_Encode() for encoding with rot13 and non-standard codecs
    that encode form str to non-bytes. */
 
-Py_DEPRECATED(3.6) PyAPI_FUNC(PyObject*) PyUnicode_AsEncodedObject( 
+Py_DEPRECATED(3.6) PyAPI_FUNC(PyObject*) PyUnicode_AsEncodedObject(
     PyObject *unicode,          /* Unicode object */
     const char *encoding,       /* encoding */
     const char *errors          /* error handling */
-    ); 
+    );
 
 /* Encodes a Unicode object and returns the result as Python string
    object. */
@@ -419,11 +419,11 @@ PyAPI_FUNC(PyObject*) PyUnicode_AsEncodedString(
    Use PyCodec_Encode() to encode with rot13 and non-standard codecs
    that encode from str to str. */
 
-Py_DEPRECATED(3.6) PyAPI_FUNC(PyObject*) PyUnicode_AsEncodedUnicode( 
+Py_DEPRECATED(3.6) PyAPI_FUNC(PyObject*) PyUnicode_AsEncodedUnicode(
     PyObject *unicode,          /* Unicode object */
     const char *encoding,       /* encoding */
     const char *errors          /* error handling */
-    ); 
+    );
 
 /* Build an encoding map. */
 
@@ -609,7 +609,7 @@ PyAPI_FUNC(PyObject*) PyUnicode_AsRawUnicodeEscapeString(
 
 /* --- Latin-1 Codecs -----------------------------------------------------
 
-   Note: Latin-1 corresponds to the first 256 Unicode ordinals. */ 
+   Note: Latin-1 corresponds to the first 256 Unicode ordinals. */
 
 PyAPI_FUNC(PyObject*) PyUnicode_DecodeLatin1(
     const char *string,         /* Latin-1 encoded string */
@@ -666,7 +666,7 @@ PyAPI_FUNC(PyObject*) PyUnicode_AsCharmapString(
     PyObject *mapping           /* encoding mapping */
     );
 
-/* --- MBCS codecs for Windows -------------------------------------------- */ 
+/* --- MBCS codecs for Windows -------------------------------------------- */
 
 #ifdef MS_WINDOWS
 PyAPI_FUNC(PyObject*) PyUnicode_DecodeMBCS(
@@ -1022,9 +1022,9 @@ PyAPI_FUNC(int) PyUnicode_IsIdentifier(PyObject *s);
 /* === Characters Type APIs =============================================== */
 
 #ifndef Py_LIMITED_API
-#  define Py_CPYTHON_UNICODEOBJECT_H 
-#  include  "cpython/unicodeobject.h" 
-#  undef Py_CPYTHON_UNICODEOBJECT_H 
+#  define Py_CPYTHON_UNICODEOBJECT_H
+#  include  "cpython/unicodeobject.h"
+#  undef Py_CPYTHON_UNICODEOBJECT_H
 #endif
 
 #ifdef __cplusplus

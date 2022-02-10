@@ -85,9 +85,9 @@ class Grammar(object):
         self.start = 256
 
     def dump(self, filename):
-        """Dump the grammar tables to a pickle file.""" 
+        """Dump the grammar tables to a pickle file."""
         with open(filename, "wb") as f:
-            pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL) 
+            pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
 
     def load(self, filename):
         """Load the grammar tables from a pickle file."""
@@ -178,7 +178,7 @@ opmap_raw = """
 // DOUBLESLASH
 //= DOUBLESLASHEQUAL
 -> RARROW
-:= COLONEQUAL 
+:= COLONEQUAL
 """
 
 opmap = {}

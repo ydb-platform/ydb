@@ -112,7 +112,7 @@ static void createRetPHINode(Instruction *OrigInst, Instruction *NewInst,
 
   Builder.SetInsertPoint(&MergeBlock->front());
   PHINode *Phi = Builder.CreatePHI(OrigInst->getType(), 0);
-  SmallVector<User *, 16> UsersToUpdate(OrigInst->users()); 
+  SmallVector<User *, 16> UsersToUpdate(OrigInst->users());
   for (User *U : UsersToUpdate)
     U->replaceUsesOfWith(OrigInst, Phi);
   Phi->addIncoming(OrigInst, OrigInst->getParent());
@@ -163,7 +163,7 @@ static void createRetBitCast(CallBase &CB, Type *RetTy, CastInst **RetBitCast) {
 
   // Save the users of the calling instruction. These uses will be changed to
   // use the bitcast after we create it.
-  SmallVector<User *, 16> UsersToUpdate(CB.users()); 
+  SmallVector<User *, 16> UsersToUpdate(CB.users());
 
   // Determine an appropriate location to create the bitcast for the return
   // value. The location depends on if we have a call or invoke instruction.
@@ -426,11 +426,11 @@ bool llvm::isLegalToPromote(const CallBase &CB, Function *Callee,
     }
   }
   for (; I < NumArgs; I++) {
-    // Vararg functions can have more arguments than parameters. 
+    // Vararg functions can have more arguments than parameters.
     assert(Callee->isVarArg());
     if (CB.paramHasAttr(I, Attribute::StructRet)) {
-      if (FailureReason) 
-        *FailureReason = "SRet arg to vararg function"; 
+      if (FailureReason)
+        *FailureReason = "SRet arg to vararg function";
       return false;
     }
   }

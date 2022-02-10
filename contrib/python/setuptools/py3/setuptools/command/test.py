@@ -3,30 +3,30 @@ import operator
 import sys
 import contextlib
 import itertools
-import unittest 
+import unittest
 from distutils.errors import DistutilsError, DistutilsOptionError
 from distutils import log
 from unittest import TestLoader
 
-from pkg_resources import ( 
-    resource_listdir, 
-    resource_exists, 
-    normalize_path, 
-    working_set, 
-    evaluate_marker, 
-    add_activation_listener, 
-    require, 
-    EntryPoint, 
-) 
+from pkg_resources import (
+    resource_listdir,
+    resource_exists,
+    normalize_path,
+    working_set,
+    evaluate_marker,
+    add_activation_listener,
+    require,
+    EntryPoint,
+)
 from setuptools import Command
-from setuptools.extern.more_itertools import unique_everseen 
+from setuptools.extern.more_itertools import unique_everseen
 
 
 class ScanningLoader(TestLoader):
-    def __init__(self): 
-        TestLoader.__init__(self) 
-        self._visited = set() 
- 
+    def __init__(self):
+        TestLoader.__init__(self)
+        self._visited = set()
+
     def loadTestsFromModule(self, module, pattern=None):
         """Return a suite of all tests cases contained in the given module
 
@@ -34,10 +34,10 @@ class ScanningLoader(TestLoader):
         If the module has an ``additional_tests`` function, call it and add
         the return value to the tests.
         """
-        if module in self._visited: 
-            return None 
-        self._visited.add(module) 
- 
+        if module in self._visited:
+            return None
+        self._visited.add(module)
+
         tests = []
         tests.append(TestLoader.loadTestsFromModule(self, module))
 
@@ -62,7 +62,7 @@ class ScanningLoader(TestLoader):
 
 
 # adapted from jaraco.classes.properties:NonDataProperty
-class NonDataProperty: 
+class NonDataProperty:
     def __init__(self, fget):
         self.fget = fget
 
@@ -75,15 +75,15 @@ class NonDataProperty:
 class test(Command):
     """Command to run unit tests after in-place build"""
 
-    description = "run unit tests after in-place build (deprecated)" 
+    description = "run unit tests after in-place build (deprecated)"
 
     user_options = [
         ('test-module=', 'm', "Run 'test_suite' in specified module"),
-        ( 
-            'test-suite=', 
-            's', 
-            "Run single test, case or suite (e.g. 'module.test_suite')", 
-        ), 
+        (
+            'test-suite=',
+            's',
+            "Run single test, case or suite (e.g. 'module.test_suite')",
+        ),
         ('test-runner=', 'r', "Test runner to use"),
     ]
 
@@ -117,8 +117,8 @@ class test(Command):
         return list(self._test_args())
 
     def _test_args(self):
-        if not self.test_suite and sys.version_info >= (2, 7): 
-            yield 'discover' 
+        if not self.test_suite and sys.version_info >= (2, 7):
+            yield 'discover'
         if self.verbose:
             yield '--verbose'
         if self.test_suite:
@@ -133,11 +133,11 @@ class test(Command):
 
     @contextlib.contextmanager
     def project_on_sys_path(self, include_dists=[]):
-        self.run_command('egg_info') 
+        self.run_command('egg_info')
 
-        # Build extensions in-place 
-        self.reinitialize_command('build_ext', inplace=1) 
-        self.run_command('build_ext') 
+        # Build extensions in-place
+        self.reinitialize_command('build_ext', inplace=1)
+        self.run_command('build_ext')
 
         ei_cmd = self.get_finalized_command("egg_info")
 
@@ -172,7 +172,7 @@ class test(Command):
         orig_pythonpath = os.environ.get('PYTHONPATH', nothing)
         current_pythonpath = os.environ.get('PYTHONPATH', '')
         try:
-            prefix = os.pathsep.join(unique_everseen(paths)) 
+            prefix = os.pathsep.join(unique_everseen(paths))
             to_join = filter(None, [prefix, current_pythonpath])
             new_path = os.pathsep.join(to_join)
             if new_path:
@@ -190,24 +190,24 @@ class test(Command):
         Install the requirements indicated by self.distribution and
         return an iterable of the dists that were built.
         """
-        ir_d = dist.fetch_build_eggs(dist.install_requires) 
+        ir_d = dist.fetch_build_eggs(dist.install_requires)
         tr_d = dist.fetch_build_eggs(dist.tests_require or [])
-        er_d = dist.fetch_build_eggs( 
-            v 
-            for k, v in dist.extras_require.items() 
-            if k.startswith(':') and evaluate_marker(k[1:]) 
-        ) 
-        return itertools.chain(ir_d, tr_d, er_d) 
+        er_d = dist.fetch_build_eggs(
+            v
+            for k, v in dist.extras_require.items()
+            if k.startswith(':') and evaluate_marker(k[1:])
+        )
+        return itertools.chain(ir_d, tr_d, er_d)
 
     def run(self):
-        self.announce( 
-            "WARNING: Testing via this command is deprecated and will be " 
-            "removed in a future version. Users looking for a generic test " 
-            "entry point independent of test runner are encouraged to use " 
-            "tox.", 
-            log.WARN, 
-        ) 
- 
+        self.announce(
+            "WARNING: Testing via this command is deprecated and will be "
+            "removed in a future version. Users looking for a generic test "
+            "entry point independent of test runner are encouraged to use "
+            "tox.",
+            log.WARN,
+        )
+
         installed_dists = self.install_dists(self.distribution)
 
         cmd = ' '.join(self._argv)
@@ -223,13 +223,13 @@ class test(Command):
                 self.run_tests()
 
     def run_tests(self):
-        test = unittest.main( 
-            None, 
-            None, 
-            self._argv, 
+        test = unittest.main(
+            None,
+            None,
+            self._argv,
             testLoader=self._resolve_as_ep(self.test_loader),
             testRunner=self._resolve_as_ep(self.test_runner),
-            exit=False, 
+            exit=False,
         )
         if not test.result.wasSuccessful():
             msg = 'Test failed: %s' % test.result

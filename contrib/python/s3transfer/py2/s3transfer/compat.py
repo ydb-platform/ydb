@@ -89,13 +89,13 @@ def readable(fileobj):
         return fileobj.readable()
 
     return hasattr(fileobj, 'read')
- 
- 
-def fallocate(fileobj, size): 
-    if hasattr(os, 'posix_fallocate'): 
-        os.posix_fallocate(fileobj.fileno(), 0, size) 
-    else: 
-        fileobj.truncate(size) 
- 
- 
-from multiprocessing.managers import BaseManager 
+
+
+def fallocate(fileobj, size):
+    if hasattr(os, 'posix_fallocate'):
+        os.posix_fallocate(fileobj.fileno(), 0, size)
+    else:
+        fileobj.truncate(size)
+
+
+from multiprocessing.managers import BaseManager

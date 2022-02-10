@@ -2,19 +2,19 @@ PY23_LIBRARY()
 
 LICENSE(Service-Py23-Proxy)
 
-OWNER(g:python-contrib) 
+OWNER(g:python-contrib)
 
-IF (PYTHON2) 
-    PEERDIR(contrib/python/s3transfer/py2) 
-ELSE() 
-    PEERDIR(contrib/python/s3transfer/py3) 
+IF (PYTHON2)
+    PEERDIR(contrib/python/s3transfer/py2)
+ELSE()
+    PEERDIR(contrib/python/s3transfer/py3)
 ENDIF()
 
 NO_LINT()
 
 END()
- 
-RECURSE( 
-    py2 
-    py3 
-) 
+
+RECURSE(
+    py2
+    py3
+)

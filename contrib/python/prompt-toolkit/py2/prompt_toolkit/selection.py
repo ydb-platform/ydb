@@ -5,7 +5,7 @@ from __future__ import unicode_literals
 
 __all__ = (
     'SelectionType',
-    'PasteMode', 
+    'PasteMode',
     'SelectionState',
 )
 
@@ -24,12 +24,12 @@ class SelectionType(object):
     BLOCK = 'BLOCK'
 
 
-class PasteMode(object): 
-    EMACS = 'EMACS'  # Yank like emacs. 
-    VI_AFTER = 'VI_AFTER'  # When pressing 'p' in Vi. 
-    VI_BEFORE = 'VI_BEFORE'  # When pressing 'P' in Vi. 
- 
- 
+class PasteMode(object):
+    EMACS = 'EMACS'  # Yank like emacs.
+    VI_AFTER = 'VI_AFTER'  # When pressing 'p' in Vi.
+    VI_BEFORE = 'VI_BEFORE'  # When pressing 'P' in Vi.
+
+
 class SelectionState(object):
     """
     State of the current selection.

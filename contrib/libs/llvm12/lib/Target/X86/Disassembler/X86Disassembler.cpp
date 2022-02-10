@@ -492,7 +492,7 @@ static int readPrefixes(struct InternalInstruction *insn) {
       insn->addressSize = (insn->hasAdSize ? 4 : 8);
       insn->displacementSize = 4;
       insn->immediateSize = 4;
-      insn->hasOpSize = false; 
+      insn->hasOpSize = false;
     } else {
       insn->registerSize = (insn->hasOpSize ? 2 : 4);
       insn->addressSize = (insn->hasAdSize ? 4 : 8);
@@ -1663,9 +1663,9 @@ namespace X86 {
     sib   = 504,
     sib64 = 505
   };
-} // namespace X86 
+} // namespace X86
 
-} // namespace llvm 
+} // namespace llvm
 
 static bool translateInstruction(MCInst &target,
                                 InternalInstruction &source,
@@ -1690,7 +1690,7 @@ private:
   DisassemblerMode              fMode;
 };
 
-} // namespace 
+} // namespace
 
 X86GenericDisassembler::X86GenericDisassembler(
                                          const MCSubtargetInfo &STI,

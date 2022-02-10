@@ -18,8 +18,8 @@ import logging
 from botocore import ScalarTypes
 from botocore.hooks import first_non_none_response
 from botocore.compat import json, set_socket_timeout, XMLParseError
-from botocore.exceptions import IncompleteReadError, ReadTimeoutError 
-from urllib3.exceptions import ReadTimeoutError as URLLib3ReadTimeoutError 
+from botocore.exceptions import IncompleteReadError, ReadTimeoutError
+from urllib3.exceptions import ReadTimeoutError as URLLib3ReadTimeoutError
 from botocore import parsers
 
 
@@ -38,8 +38,8 @@ class StreamingBody(object):
           is raised.
 
     """
-    _DEFAULT_CHUNK_SIZE = 1024 
- 
+    _DEFAULT_CHUNK_SIZE = 1024
+
     def __init__(self, raw_stream, content_length):
         self._raw_stream = raw_stream
         self._content_length = content_length
@@ -73,11 +73,11 @@ class StreamingBody(object):
 
         If the amt argument is omitted, read all data.
         """
-        try: 
-            chunk = self._raw_stream.read(amt) 
-        except URLLib3ReadTimeoutError as e: 
-            # TODO: the url will be None as urllib3 isn't setting it yet 
-            raise ReadTimeoutError(endpoint_url=e.url, error=e) 
+        try:
+            chunk = self._raw_stream.read(amt)
+        except URLLib3ReadTimeoutError as e:
+            # TODO: the url will be None as urllib3 isn't setting it yet
+            raise ReadTimeoutError(endpoint_url=e.url, error=e)
         self._amount_read += len(chunk)
         if amt is None or (not chunk and amt > 0):
             # If the server sends empty contents or
@@ -86,46 +86,46 @@ class StreamingBody(object):
             self._verify_content_length()
         return chunk
 
-    def __iter__(self): 
-        """Return an iterator to yield 1k chunks from the raw stream. 
-        """ 
-        return self.iter_chunks(self._DEFAULT_CHUNK_SIZE) 
- 
-    def __next__(self): 
-        """Return the next 1k chunk from the raw stream. 
-        """ 
-        current_chunk = self.read(self._DEFAULT_CHUNK_SIZE) 
-        if current_chunk: 
-            return current_chunk 
-        raise StopIteration() 
- 
-    next = __next__ 
- 
-    def iter_lines(self, chunk_size=1024, keepends=False): 
-        """Return an iterator to yield lines from the raw stream. 
- 
-        This is achieved by reading chunk of bytes (of size chunk_size) at a 
-        time from the raw stream, and then yielding lines from there. 
-        """ 
-        pending = b'' 
-        for chunk in self.iter_chunks(chunk_size): 
-            lines = (pending + chunk).splitlines(True) 
-            for line in lines[:-1]: 
-                yield line.splitlines(keepends)[0] 
-            pending = lines[-1] 
-        if pending: 
-            yield pending.splitlines(keepends)[0] 
- 
-    def iter_chunks(self, chunk_size=_DEFAULT_CHUNK_SIZE): 
-        """Return an iterator to yield chunks of chunk_size bytes from the raw 
-        stream. 
-        """ 
-        while True: 
-            current_chunk = self.read(chunk_size) 
-            if current_chunk == b"": 
-                break 
-            yield current_chunk 
- 
+    def __iter__(self):
+        """Return an iterator to yield 1k chunks from the raw stream.
+        """
+        return self.iter_chunks(self._DEFAULT_CHUNK_SIZE)
+
+    def __next__(self):
+        """Return the next 1k chunk from the raw stream.
+        """
+        current_chunk = self.read(self._DEFAULT_CHUNK_SIZE)
+        if current_chunk:
+            return current_chunk
+        raise StopIteration()
+
+    next = __next__
+
+    def iter_lines(self, chunk_size=1024, keepends=False):
+        """Return an iterator to yield lines from the raw stream.
+
+        This is achieved by reading chunk of bytes (of size chunk_size) at a
+        time from the raw stream, and then yielding lines from there.
+        """
+        pending = b''
+        for chunk in self.iter_chunks(chunk_size):
+            lines = (pending + chunk).splitlines(True)
+            for line in lines[:-1]:
+                yield line.splitlines(keepends)[0]
+            pending = lines[-1]
+        if pending:
+            yield pending.splitlines(keepends)[0]
+
+    def iter_chunks(self, chunk_size=_DEFAULT_CHUNK_SIZE):
+        """Return an iterator to yield chunks of chunk_size bytes from the raw
+        stream.
+        """
+        while True:
+            current_chunk = self.read(chunk_size)
+            if current_chunk == b"":
+                break
+            yield current_chunk
+
     def _verify_content_length(self):
         # See: https://github.com/kennethreitz/requests/issues/1855
         # Basically, our http library doesn't do this for us, so we have

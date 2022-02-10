@@ -276,38 +276,38 @@ Foundation (http://www.apache.org/).
 
 
 ====================COPYRIGHT====================
-   * Copyright (c) 2007-present, Stephen Colebourne & Michael Nascimento Santos 
+   * Copyright (c) 2007-present, Stephen Colebourne & Michael Nascimento Santos
 
 
 ====================COPYRIGHT====================
-  (C) 1995-2017 Jean-loup Gailly and Mark Adler 
+  (C) 1995-2017 Jean-loup Gailly and Mark Adler
 
 
 ====================COPYRIGHT====================
-  (c) Copyright [2008-2015] Tom Preston-Werner 
- 
- 
-====================COPYRIGHT==================== 
-  Copyright 2008 Google Inc.  All rights reserved. 
- 
- 
-====================COPYRIGHT==================== 
-  Copyright 2011, Google Inc. 
-  All rights reserved. 
- 
- 
-====================COPYRIGHT==================== 
-Copyright 2013 and onwards The Apache Software Foundation. 
- 
- 
-====================COPYRIGHT==================== 
+  (c) Copyright [2008-2015] Tom Preston-Werner
+
+
+====================COPYRIGHT====================
+  Copyright 2008 Google Inc.  All rights reserved.
+
+
+====================COPYRIGHT====================
+  Copyright 2011, Google Inc.
+  All rights reserved.
+
+
+====================COPYRIGHT====================
+Copyright 2013 and onwards The Apache Software Foundation.
+
+
+====================COPYRIGHT====================
 This product includes software developed by Hewlett-Packard:
 (c) Copyright [2014-2015] Hewlett-Packard Development Company, L.P
 
 
 ====================File: NOTICE====================
 Apache ORC
-Copyright 2013 and onwards The Apache Software Foundation. 
+Copyright 2013 and onwards The Apache Software Foundation.
 
 This product includes software developed by The Apache Software
 Foundation (http://www.apache.org/).

@@ -11,23 +11,23 @@
       "output_token": "NextToken",
       "input_token": "NextToken",
       "limit_key": "MaxResults"
-    }, 
-    "ListConfigurationSets": { 
-      "input_token": "NextToken", 
-      "limit_key": "MaxItems", 
-      "output_token": "NextToken", 
-      "result_key": "ConfigurationSets" 
-    }, 
-    "ListReceiptRuleSets": { 
-      "input_token": "NextToken", 
-      "output_token": "NextToken", 
-      "result_key": "RuleSets" 
-    }, 
-    "ListTemplates": { 
-      "input_token": "NextToken", 
-      "limit_key": "MaxItems", 
-      "output_token": "NextToken", 
-      "result_key": "TemplatesMetadata" 
+    },
+    "ListConfigurationSets": {
+      "input_token": "NextToken",
+      "limit_key": "MaxItems",
+      "output_token": "NextToken",
+      "result_key": "ConfigurationSets"
+    },
+    "ListReceiptRuleSets": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "result_key": "RuleSets"
+    },
+    "ListTemplates": {
+      "input_token": "NextToken",
+      "limit_key": "MaxItems",
+      "output_token": "NextToken",
+      "result_key": "TemplatesMetadata"
     }
   }
 }

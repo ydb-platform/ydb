@@ -63,7 +63,7 @@ private:
   bool isAtStartOfComment(const char *Ptr);
   bool isAtStatementSeparator(const char *Ptr);
   int getNextChar();
-  int peekNextChar(); 
+  int peekNextChar();
   AsmToken ReturnError(const char *Loc, const std::string &Msg);
 
   AsmToken LexIdentifier();

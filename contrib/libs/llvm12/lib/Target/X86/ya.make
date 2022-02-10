@@ -15,26 +15,26 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12 
-    contrib/libs/llvm12/include 
-    contrib/libs/llvm12/lib/Analysis 
-    contrib/libs/llvm12/lib/CodeGen 
-    contrib/libs/llvm12/lib/CodeGen/AsmPrinter 
-    contrib/libs/llvm12/lib/CodeGen/GlobalISel 
-    contrib/libs/llvm12/lib/CodeGen/SelectionDAG 
-    contrib/libs/llvm12/lib/IR 
-    contrib/libs/llvm12/lib/MC 
-    contrib/libs/llvm12/lib/ProfileData 
-    contrib/libs/llvm12/lib/Support 
-    contrib/libs/llvm12/lib/Target 
-    contrib/libs/llvm12/lib/Target/X86/MCTargetDesc 
-    contrib/libs/llvm12/lib/Target/X86/TargetInfo 
-    contrib/libs/llvm12/lib/Transforms/CFGuard 
+    contrib/libs/llvm12
+    contrib/libs/llvm12/include
+    contrib/libs/llvm12/lib/Analysis
+    contrib/libs/llvm12/lib/CodeGen
+    contrib/libs/llvm12/lib/CodeGen/AsmPrinter
+    contrib/libs/llvm12/lib/CodeGen/GlobalISel
+    contrib/libs/llvm12/lib/CodeGen/SelectionDAG
+    contrib/libs/llvm12/lib/IR
+    contrib/libs/llvm12/lib/MC
+    contrib/libs/llvm12/lib/ProfileData
+    contrib/libs/llvm12/lib/Support
+    contrib/libs/llvm12/lib/Target
+    contrib/libs/llvm12/lib/Target/X86/MCTargetDesc
+    contrib/libs/llvm12/lib/Target/X86/TargetInfo
+    contrib/libs/llvm12/lib/Transforms/CFGuard
 )
 
 ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86 
-    contrib/libs/llvm12/lib/Target/X86 
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86
+    contrib/libs/llvm12/lib/Target/X86
 )
 
 NO_CLANG_COVERAGE()
@@ -68,7 +68,7 @@ SRCS(
     X86IndirectThunks.cpp
     X86InsertPrefetch.cpp
     X86InsertWait.cpp
-    X86InstCombineIntrinsic.cpp 
+    X86InstCombineIntrinsic.cpp
     X86InstrFMA3Info.cpp
     X86InstrFoldTables.cpp
     X86InstrInfo.cpp
@@ -77,14 +77,14 @@ SRCS(
     X86LegalizerInfo.cpp
     X86LoadValueInjectionLoadHardening.cpp
     X86LoadValueInjectionRetHardening.cpp
-    X86LowerAMXType.cpp 
+    X86LowerAMXType.cpp
     X86MCInstLower.cpp
     X86MachineFunctionInfo.cpp
     X86MacroFusion.cpp
     X86OptimizeLEAs.cpp
     X86PadShortFunction.cpp
     X86PartialReduction.cpp
-    X86PreTileConfig.cpp 
+    X86PreTileConfig.cpp
     X86RegisterBankInfo.cpp
     X86RegisterInfo.cpp
     X86SelectionDAGInfo.cpp
@@ -95,7 +95,7 @@ SRCS(
     X86TargetMachine.cpp
     X86TargetObjectFile.cpp
     X86TargetTransformInfo.cpp
-    X86TileConfig.cpp 
+    X86TileConfig.cpp
     X86VZeroUpper.cpp
     X86WinAllocaExpander.cpp
     X86WinEHState.cpp

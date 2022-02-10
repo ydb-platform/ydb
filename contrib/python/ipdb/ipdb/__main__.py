@@ -8,54 +8,54 @@ from __future__ import print_function
 import os
 import sys
 
-from decorator import contextmanager 
+from decorator import contextmanager
 
-__version__ = '0.13.9' 
+__version__ = '0.13.9'
 
 from IPython import get_ipython
 from IPython.core.debugger import BdbQuit_excepthook
 from IPython.terminal.ipapp import TerminalIPythonApp
 from IPython.terminal.embed import InteractiveShellEmbed
-try: 
-    import configparser 
-except: 
-    import ConfigParser as configparser 
+try:
+    import configparser
+except:
+    import ConfigParser as configparser
 
 
-def _get_debugger_cls(): 
-    shell = get_ipython() 
-    if shell is None: 
-        # Not inside IPython 
-        # Build a terminal app in order to force ipython to load the 
-        # configuration 
-        ipapp = TerminalIPythonApp() 
-        # Avoid output (banner, prints) 
-        ipapp.interact = False 
-        ipapp.initialize(["--no-term-title"]) 
-        shell = ipapp.shell 
-    else: 
-        # Running inside IPython 
+def _get_debugger_cls():
+    shell = get_ipython()
+    if shell is None:
+        # Not inside IPython
+        # Build a terminal app in order to force ipython to load the
+        # configuration
+        ipapp = TerminalIPythonApp()
+        # Avoid output (banner, prints)
+        ipapp.interact = False
+        ipapp.initialize(["--no-term-title"])
+        shell = ipapp.shell
+    else:
+        # Running inside IPython
 
-        # Detect if embed shell or not and display a message 
-        if isinstance(shell, InteractiveShellEmbed): 
-            sys.stderr.write( 
-                "\nYou are currently into an embedded ipython shell,\n" 
-                "the configuration will not be loaded.\n\n" 
-            ) 
+        # Detect if embed shell or not and display a message
+        if isinstance(shell, InteractiveShellEmbed):
+            sys.stderr.write(
+                "\nYou are currently into an embedded ipython shell,\n"
+                "the configuration will not be loaded.\n\n"
+            )
 
-    # Let IPython decide about which debugger class to use 
-    # This is especially important for tools that fiddle with stdout 
-    return shell.debugger_cls 
+    # Let IPython decide about which debugger class to use
+    # This is especially important for tools that fiddle with stdout
+    return shell.debugger_cls
 
- 
-def _init_pdb(context=None, commands=[]): 
-    if context is None: 
-        context = os.getenv("IPDB_CONTEXT_SIZE", get_context_from_config()) 
-    debugger_cls = _get_debugger_cls() 
+
+def _init_pdb(context=None, commands=[]):
+    if context is None:
+        context = os.getenv("IPDB_CONTEXT_SIZE", get_context_from_config())
+    debugger_cls = _get_debugger_cls()
     try:
-        p = debugger_cls(context=context) 
+        p = debugger_cls(context=context)
     except TypeError:
-        p = debugger_cls() 
+        p = debugger_cls()
     p.rcLines.extend(commands)
     return p
 
@@ -68,9 +68,9 @@ def wrap_sys_excepthook():
         sys.excepthook = BdbQuit_excepthook
 
 
-def set_trace(frame=None, context=None, cond=True): 
-    if not cond: 
-        return 
+def set_trace(frame=None, context=None, cond=True):
+    if not cond:
+        return
     wrap_sys_excepthook()
     if frame is None:
         frame = sys._getframe().f_back
@@ -79,115 +79,115 @@ def set_trace(frame=None, context=None, cond=True):
         p.shell.restore_sys_module_state()
 
 
-def get_context_from_config(): 
-    try: 
-        parser = get_config() 
-        return parser.getint("ipdb", "context") 
-    except (configparser.NoSectionError, configparser.NoOptionError): 
-        return 3 
-    except ValueError: 
-        value = parser.get("ipdb", "context") 
-        raise ValueError( 
-            "In %s,  context value [%s] cannot be converted into an integer." 
-            % (parser.filepath, value) 
-        ) 
- 
- 
-class ConfigFile(object): 
-    """ 
-    Filehandle wrapper that adds a "[ipdb]" section to the start of a config 
-    file so that users don't actually have to manually add a [ipdb] section. 
-    Works with configparser versions from both Python 2 and 3 
-    """ 
- 
-    def __init__(self, filepath): 
-        self.first = True 
-        with open(filepath) as f: 
-            self.lines = f.readlines() 
- 
-    # Python 2.7 (Older dot versions) 
-    def readline(self): 
-        try: 
-            return self.__next__() 
-        except StopIteration: 
-            return '' 
- 
-    # Python 2.7 (Newer dot versions) 
-    def next(self): 
-        return self.__next__() 
- 
-    # Python 3 
-    def __iter__(self): 
-        return self 
- 
-    def __next__(self): 
-        if self.first: 
-            self.first = False 
-            return "[ipdb]\n" 
-        if self.lines: 
-            return self.lines.pop(0) 
-        raise StopIteration 
- 
- 
-def get_config(): 
-    """ 
-    Get ipdb config file settings. 
-    All available config files are read.  If settings are in multiple configs, 
-    the last value encountered wins.  Values specified on the command-line take 
-    precedence over all config file settings. 
-    Returns: A ConfigParser object. 
-    """ 
-    parser = configparser.ConfigParser() 
- 
-    filepaths = [] 
- 
-    # Low priority goes first in the list 
-    for cfg_file in ("setup.cfg", ".ipdb", "pyproject.toml"): 
-        cwd_filepath = os.path.join(os.getcwd(), cfg_file) 
-        if os.path.isfile(cwd_filepath): 
-            filepaths.append(cwd_filepath) 
- 
-    # Medium priority (whenever user wants to set a specific path to config file) 
-    home = os.getenv("HOME") 
-    if home: 
-        default_filepath = os.path.join(home, ".ipdb") 
-        if os.path.isfile(default_filepath): 
-            filepaths.append(default_filepath) 
- 
-    # High priority (default files) 
-    env_filepath = os.getenv("IPDB_CONFIG") 
-    if env_filepath and os.path.isfile(env_filepath): 
-        filepaths.append(env_filepath) 
- 
-    if filepaths: 
-        # Python 3 has parser.read_file(iterator) while Python2 has 
-        # parser.readfp(obj_with_readline) 
-        try: 
-            read_func = parser.read_file 
-        except AttributeError: 
-            read_func = parser.readfp 
-        for filepath in filepaths: 
-            parser.filepath = filepath 
-            # Users are expected to put an [ipdb] section 
-            # only if they use setup.cfg 
-            if filepath.endswith('setup.cfg'): 
-                with open(filepath) as f: 
-                    parser.remove_section("ipdb") 
-                    read_func(f) 
-            # To use on pyproject.toml, put [tool.ipdb] section 
-            elif filepath.endswith('pyproject.toml'): 
-                import toml 
-                toml_file = toml.load(filepath) 
-                if "tool" in toml_file and "ipdb" in toml_file["tool"]: 
-                    if not parser.has_section("ipdb"): 
-                        parser.add_section("ipdb") 
-                    for key, value in toml_file["tool"]["ipdb"].items(): 
-                        parser.set("ipdb", key, str(value)) 
-            else: 
-                read_func(ConfigFile(filepath)) 
-    return parser 
- 
- 
+def get_context_from_config():
+    try:
+        parser = get_config()
+        return parser.getint("ipdb", "context")
+    except (configparser.NoSectionError, configparser.NoOptionError):
+        return 3
+    except ValueError:
+        value = parser.get("ipdb", "context")
+        raise ValueError(
+            "In %s,  context value [%s] cannot be converted into an integer."
+            % (parser.filepath, value)
+        )
+
+
+class ConfigFile(object):
+    """
+    Filehandle wrapper that adds a "[ipdb]" section to the start of a config
+    file so that users don't actually have to manually add a [ipdb] section.
+    Works with configparser versions from both Python 2 and 3
+    """
+
+    def __init__(self, filepath):
+        self.first = True
+        with open(filepath) as f:
+            self.lines = f.readlines()
+
+    # Python 2.7 (Older dot versions)
+    def readline(self):
+        try:
+            return self.__next__()
+        except StopIteration:
+            return ''
+
+    # Python 2.7 (Newer dot versions)
+    def next(self):
+        return self.__next__()
+
+    # Python 3
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.first:
+            self.first = False
+            return "[ipdb]\n"
+        if self.lines:
+            return self.lines.pop(0)
+        raise StopIteration
+
+
+def get_config():
+    """
+    Get ipdb config file settings.
+    All available config files are read.  If settings are in multiple configs,
+    the last value encountered wins.  Values specified on the command-line take
+    precedence over all config file settings.
+    Returns: A ConfigParser object.
+    """
+    parser = configparser.ConfigParser()
+
+    filepaths = []
+
+    # Low priority goes first in the list
+    for cfg_file in ("setup.cfg", ".ipdb", "pyproject.toml"):
+        cwd_filepath = os.path.join(os.getcwd(), cfg_file)
+        if os.path.isfile(cwd_filepath):
+            filepaths.append(cwd_filepath)
+
+    # Medium priority (whenever user wants to set a specific path to config file)
+    home = os.getenv("HOME")
+    if home:
+        default_filepath = os.path.join(home, ".ipdb")
+        if os.path.isfile(default_filepath):
+            filepaths.append(default_filepath)
+
+    # High priority (default files)
+    env_filepath = os.getenv("IPDB_CONFIG")
+    if env_filepath and os.path.isfile(env_filepath):
+        filepaths.append(env_filepath)
+
+    if filepaths:
+        # Python 3 has parser.read_file(iterator) while Python2 has
+        # parser.readfp(obj_with_readline)
+        try:
+            read_func = parser.read_file
+        except AttributeError:
+            read_func = parser.readfp
+        for filepath in filepaths:
+            parser.filepath = filepath
+            # Users are expected to put an [ipdb] section
+            # only if they use setup.cfg
+            if filepath.endswith('setup.cfg'):
+                with open(filepath) as f:
+                    parser.remove_section("ipdb")
+                    read_func(f)
+            # To use on pyproject.toml, put [tool.ipdb] section
+            elif filepath.endswith('pyproject.toml'):
+                import toml
+                toml_file = toml.load(filepath)
+                if "tool" in toml_file and "ipdb" in toml_file["tool"]:
+                    if not parser.has_section("ipdb"):
+                        parser.add_section("ipdb")
+                    for key, value in toml_file["tool"]["ipdb"].items():
+                        parser.set("ipdb", key, str(value))
+            else:
+                read_func(ConfigFile(filepath))
+    return parser
+
+
 def post_mortem(tb=None):
     wrap_sys_excepthook()
     p = _init_pdb()
@@ -228,12 +228,12 @@ def launch_ipdb_on_exception():
         pass
 
 
-# iex is a concise alias 
-iex = launch_ipdb_on_exception() 
- 
- 
+# iex is a concise alias
+iex = launch_ipdb_on_exception()
+
+
 _usage = """\
-usage: python -m ipdb [-m] [-c command] ... pyfile [arg] ... 
+usage: python -m ipdb [-m] [-c command] ... pyfile [arg] ...
 
 Debug the Python program given by pyfile.
 
@@ -244,9 +244,9 @@ and in the current directory, if they exist.  Commands supplied with
 To let the script run until an exception occurs, use "-c continue".
 To let the script run up to a given line X in the debugged file, use
 "-c 'until X'"
- 
-Option -m is available only in Python 3.7 and later. 
- 
+
+Option -m is available only in Python 3.7 and later.
+
 ipdb version %s.""" % __version__
 
 
@@ -260,37 +260,37 @@ def main():
     except ImportError:
         class Restart(Exception):
             pass
- 
-    if sys.version_info >= (3, 7): 
-        opts, args = getopt.getopt(sys.argv[1:], 'mhc:', ['help', 'command=']) 
-    else: 
-        opts, args = getopt.getopt(sys.argv[1:], 'hc:', ['help', 'command=']) 
+
+    if sys.version_info >= (3, 7):
+        opts, args = getopt.getopt(sys.argv[1:], 'mhc:', ['help', 'command='])
+    else:
+        opts, args = getopt.getopt(sys.argv[1:], 'hc:', ['help', 'command='])
 
     commands = []
-    run_as_module = False 
+    run_as_module = False
     for opt, optarg in opts:
         if opt in ['-h', '--help']:
             print(_usage)
             sys.exit()
         elif opt in ['-c', '--command']:
             commands.append(optarg)
-        elif opt in ['-m']: 
-            run_as_module = True 
+        elif opt in ['-m']:
+            run_as_module = True
 
-    if not args: 
-        print(_usage) 
-        sys.exit(2) 
- 
+    if not args:
+        print(_usage)
+        sys.exit(2)
+
     mainpyfile = args[0]     # Get script filename
-    if not run_as_module and not os.path.exists(mainpyfile): 
+    if not run_as_module and not os.path.exists(mainpyfile):
         print('Error:', mainpyfile, 'does not exist')
         sys.exit(1)
 
     sys.argv = args     # Hide "pdb.py" from argument list
 
     # Replace pdb's dir with script's dir in front of module search path.
-    if not run_as_module: 
-        sys.path[0] = os.path.dirname(mainpyfile) 
+    if not run_as_module:
+        sys.path[0] = os.path.dirname(mainpyfile)
 
     # Note on saving/restoring sys.argv: it's a good idea when sys.argv was
     # modified by the script being debugged. It's a bad idea when it was
@@ -299,10 +299,10 @@ def main():
     pdb = _init_pdb(commands=commands)
     while 1:
         try:
-            if run_as_module: 
-                pdb._runmodule(mainpyfile) 
-            else: 
-                pdb._runscript(mainpyfile) 
+            if run_as_module:
+                pdb._runmodule(mainpyfile)
+            else:
+                pdb._runscript(mainpyfile)
             if pdb._user_requested_quit:
                 break
             print("The program finished and will be restarted")
@@ -322,6 +322,6 @@ def main():
             print("Post mortem debugger finished. The " + mainpyfile +
                   " will be restarted")
 
- 
+
 if __name__ == '__main__':
     main()

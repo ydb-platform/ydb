@@ -43,8 +43,8 @@
 // configure time.
 #if !defined(NDEBUG) || LLVM_FORCE_ENABLE_STATS
 #define LLVM_ENABLE_STATS 1
-#else 
-#define LLVM_ENABLE_STATS 0 
+#else
+#define LLVM_ENABLE_STATS 0
 #endif
 
 namespace llvm {

@@ -469,7 +469,7 @@ class RegexLexerMeta(LexerMeta):
 
     def _process_state(cls, unprocessed, processed, state):
         """Preprocess a single state definition."""
-        assert type(state) is str, "wrong state name %r" % state 
+        assert type(state) is str, "wrong state name %r" % state
         assert state[0] != '#', "invalid state name %r" % state
         if state in processed:
             return processed[state]

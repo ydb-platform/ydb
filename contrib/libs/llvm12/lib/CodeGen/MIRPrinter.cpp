@@ -220,10 +220,10 @@ void MIRPrinter::print(const MachineFunction &MF) {
   convert(MST, YamlMF.FrameInfo, MF.getFrameInfo());
   convertStackObjects(YamlMF, MF, MST);
   convertCallSiteObjects(YamlMF, MF, MST);
-  for (auto &Sub : MF.DebugValueSubstitutions) 
-    YamlMF.DebugValueSubstitutions.push_back({Sub.first.first, Sub.first.second, 
-                                              Sub.second.first, 
-                                              Sub.second.second}); 
+  for (auto &Sub : MF.DebugValueSubstitutions)
+    YamlMF.DebugValueSubstitutions.push_back({Sub.first.first, Sub.first.second,
+                                              Sub.second.first,
+                                              Sub.second.second});
   if (const auto *ConstantPool = MF.getConstantPool())
     convert(YamlMF, *ConstantPool);
   if (const auto *JumpTableInfo = MF.getJumpTableInfo())
@@ -367,17 +367,17 @@ void MIRPrinter::convertStackObjects(yaml::MachineFunction &YMF,
                                      ModuleSlotTracker &MST) {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
- 
+
   // Process fixed stack objects.
-  assert(YMF.FixedStackObjects.empty()); 
-  SmallVector<int, 32> FixedStackObjectsIdx; 
-  const int BeginIdx = MFI.getObjectIndexBegin(); 
-  if (BeginIdx < 0) 
-    FixedStackObjectsIdx.reserve(-BeginIdx); 
- 
+  assert(YMF.FixedStackObjects.empty());
+  SmallVector<int, 32> FixedStackObjectsIdx;
+  const int BeginIdx = MFI.getObjectIndexBegin();
+  if (BeginIdx < 0)
+    FixedStackObjectsIdx.reserve(-BeginIdx);
+
   unsigned ID = 0;
-  for (int I = BeginIdx; I < 0; ++I, ++ID) { 
-    FixedStackObjectsIdx.push_back(-1); // Fill index for possible dead. 
+  for (int I = BeginIdx; I < 0; ++I, ++ID) {
+    FixedStackObjectsIdx.push_back(-1); // Fill index for possible dead.
     if (MFI.isDeadObjectIndex(I))
       continue;
 
@@ -392,22 +392,22 @@ void MIRPrinter::convertStackObjects(yaml::MachineFunction &YMF,
     YamlObject.StackID = (TargetStackID::Value)MFI.getStackID(I);
     YamlObject.IsImmutable = MFI.isImmutableObjectIndex(I);
     YamlObject.IsAliased = MFI.isAliasedObjectIndex(I);
-    // Save the ID' position in FixedStackObjects storage vector. 
-    FixedStackObjectsIdx[ID] = YMF.FixedStackObjects.size(); 
+    // Save the ID' position in FixedStackObjects storage vector.
+    FixedStackObjectsIdx[ID] = YMF.FixedStackObjects.size();
     YMF.FixedStackObjects.push_back(YamlObject);
     StackObjectOperandMapping.insert(
         std::make_pair(I, FrameIndexOperand::createFixed(ID)));
   }
 
   // Process ordinary stack objects.
-  assert(YMF.StackObjects.empty()); 
-  SmallVector<unsigned, 32> StackObjectsIdx; 
-  const int EndIdx = MFI.getObjectIndexEnd(); 
-  if (EndIdx > 0) 
-    StackObjectsIdx.reserve(EndIdx); 
+  assert(YMF.StackObjects.empty());
+  SmallVector<unsigned, 32> StackObjectsIdx;
+  const int EndIdx = MFI.getObjectIndexEnd();
+  if (EndIdx > 0)
+    StackObjectsIdx.reserve(EndIdx);
   ID = 0;
-  for (int I = 0; I < EndIdx; ++I, ++ID) { 
-    StackObjectsIdx.push_back(-1); // Fill index for possible dead. 
+  for (int I = 0; I < EndIdx; ++I, ++ID) {
+    StackObjectsIdx.push_back(-1); // Fill index for possible dead.
     if (MFI.isDeadObjectIndex(I))
       continue;
 
@@ -415,7 +415,7 @@ void MIRPrinter::convertStackObjects(yaml::MachineFunction &YMF,
     YamlObject.ID = ID;
     if (const auto *Alloca = MFI.getObjectAllocation(I))
       YamlObject.Name.Value = std::string(
-          Alloca->hasName() ? Alloca->getName() : ""); 
+          Alloca->hasName() ? Alloca->getName() : "");
     YamlObject.Type = MFI.isSpillSlotObjectIndex(I)
                           ? yaml::MachineStackObject::SpillSlot
                           : MFI.isVariableSizedObjectIndex(I)
@@ -426,42 +426,42 @@ void MIRPrinter::convertStackObjects(yaml::MachineFunction &YMF,
     YamlObject.Alignment = MFI.getObjectAlign(I);
     YamlObject.StackID = (TargetStackID::Value)MFI.getStackID(I);
 
-    // Save the ID' position in StackObjects storage vector. 
-    StackObjectsIdx[ID] = YMF.StackObjects.size(); 
+    // Save the ID' position in StackObjects storage vector.
+    StackObjectsIdx[ID] = YMF.StackObjects.size();
     YMF.StackObjects.push_back(YamlObject);
     StackObjectOperandMapping.insert(std::make_pair(
         I, FrameIndexOperand::create(YamlObject.Name.Value, ID)));
   }
 
   for (const auto &CSInfo : MFI.getCalleeSavedInfo()) {
-    const int FrameIdx = CSInfo.getFrameIdx(); 
-    if (!CSInfo.isSpilledToReg() && MFI.isDeadObjectIndex(FrameIdx)) 
+    const int FrameIdx = CSInfo.getFrameIdx();
+    if (!CSInfo.isSpilledToReg() && MFI.isDeadObjectIndex(FrameIdx))
       continue;
 
     yaml::StringValue Reg;
     printRegMIR(CSInfo.getReg(), Reg, TRI);
     if (!CSInfo.isSpilledToReg()) {
-      assert(FrameIdx >= MFI.getObjectIndexBegin() && 
-             FrameIdx < MFI.getObjectIndexEnd() && 
+      assert(FrameIdx >= MFI.getObjectIndexBegin() &&
+             FrameIdx < MFI.getObjectIndexEnd() &&
              "Invalid stack object index");
-      if (FrameIdx < 0) { // Negative index means fixed objects. 
-        auto &Object = 
-            YMF.FixedStackObjects 
-                [FixedStackObjectsIdx[FrameIdx + MFI.getNumFixedObjects()]]; 
-        Object.CalleeSavedRegister = Reg; 
-        Object.CalleeSavedRestored = CSInfo.isRestored(); 
+      if (FrameIdx < 0) { // Negative index means fixed objects.
+        auto &Object =
+            YMF.FixedStackObjects
+                [FixedStackObjectsIdx[FrameIdx + MFI.getNumFixedObjects()]];
+        Object.CalleeSavedRegister = Reg;
+        Object.CalleeSavedRestored = CSInfo.isRestored();
       } else {
-        auto &Object = YMF.StackObjects[StackObjectsIdx[FrameIdx]]; 
-        Object.CalleeSavedRegister = Reg; 
-        Object.CalleeSavedRestored = CSInfo.isRestored(); 
+        auto &Object = YMF.StackObjects[StackObjectsIdx[FrameIdx]];
+        Object.CalleeSavedRegister = Reg;
+        Object.CalleeSavedRestored = CSInfo.isRestored();
       }
     }
   }
   for (unsigned I = 0, E = MFI.getLocalFrameObjectCount(); I < E; ++I) {
     auto LocalObject = MFI.getLocalFrameObjectMap(I);
-    assert(LocalObject.first >= 0 && "Expected a locally mapped stack object"); 
-    YMF.StackObjects[StackObjectsIdx[LocalObject.first]].LocalOffset = 
-        LocalObject.second; 
+    assert(LocalObject.first >= 0 && "Expected a locally mapped stack object");
+    YMF.StackObjects[StackObjectsIdx[LocalObject.first]].LocalOffset =
+        LocalObject.second;
   }
 
   // Print the stack object references in the frame information class after
@@ -475,16 +475,16 @@ void MIRPrinter::convertStackObjects(yaml::MachineFunction &YMF,
   // Print the debug variable information.
   for (const MachineFunction::VariableDbgInfo &DebugVar :
        MF.getVariableDbgInfo()) {
-    assert(DebugVar.Slot >= MFI.getObjectIndexBegin() && 
-           DebugVar.Slot < MFI.getObjectIndexEnd() && 
+    assert(DebugVar.Slot >= MFI.getObjectIndexBegin() &&
+           DebugVar.Slot < MFI.getObjectIndexEnd() &&
            "Invalid stack object index");
-    if (DebugVar.Slot < 0) { // Negative index means fixed objects. 
-      auto &Object = 
-          YMF.FixedStackObjects[FixedStackObjectsIdx[DebugVar.Slot + 
-                                                     MFI.getNumFixedObjects()]]; 
+    if (DebugVar.Slot < 0) { // Negative index means fixed objects.
+      auto &Object =
+          YMF.FixedStackObjects[FixedStackObjectsIdx[DebugVar.Slot +
+                                                     MFI.getNumFixedObjects()]];
       printStackObjectDbgInfo(DebugVar, Object, MST);
     } else {
-      auto &Object = YMF.StackObjects[StackObjectsIdx[DebugVar.Slot]]; 
+      auto &Object = YMF.StackObjects[StackObjectsIdx[DebugVar.Slot]];
       printStackObjectDbgInfo(DebugVar, Object, MST);
     }
   }
@@ -630,10 +630,10 @@ bool MIPrinter::canPredictSuccessors(const MachineBasicBlock &MBB) const {
 
 void MIPrinter::print(const MachineBasicBlock &MBB) {
   assert(MBB.getNumber() >= 0 && "Invalid MBB number");
-  MBB.printName(OS, 
-                MachineBasicBlock::PrintNameIr | 
-                    MachineBasicBlock::PrintNameAttributes, 
-                &MST); 
+  MBB.printName(OS,
+                MachineBasicBlock::PrintNameIr |
+                    MachineBasicBlock::PrintNameAttributes,
+                &MST);
   OS << ":\n";
 
   bool HasLineAttributes = false;
@@ -792,13 +792,13 @@ void MIPrinter::print(const MachineInstr &MI) {
     NeedComma = true;
   }
 
-  if (auto Num = MI.peekDebugInstrNum()) { 
-    if (NeedComma) 
-      OS << ','; 
-    OS << " debug-instr-number " << Num; 
-    NeedComma = true; 
-  } 
- 
+  if (auto Num = MI.peekDebugInstrNum()) {
+    if (NeedComma)
+      OS << ',';
+    OS << " debug-instr-number " << Num;
+    NeedComma = true;
+  }
+
   if (PrintLocations) {
     if (const DebugLoc &DL = MI.getDebugLoc()) {
       if (NeedComma)

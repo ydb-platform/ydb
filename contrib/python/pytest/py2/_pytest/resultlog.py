@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 """ log machine-parseable test session result information in a plain
 text file.
 """
@@ -35,9 +35,9 @@ def pytest_configure(config):
         config.pluginmanager.register(config._resultlog)
 
         from _pytest.deprecated import RESULT_LOG
-        from _pytest.warnings import _issue_warning_captured 
+        from _pytest.warnings import _issue_warning_captured
 
-        _issue_warning_captured(RESULT_LOG, config.hook, stacklevel=2) 
+        _issue_warning_captured(RESULT_LOG, config.hook, stacklevel=2)
 
 
 def pytest_unconfigure(config):
@@ -67,9 +67,9 @@ class ResultLog(object):
     def pytest_runtest_logreport(self, report):
         if report.when != "call" and report.passed:
             return
-        res = self.config.hook.pytest_report_teststatus( 
-            report=report, config=self.config 
-        ) 
+        res = self.config.hook.pytest_report_teststatus(
+            report=report, config=self.config
+        )
         code = res[1]
         if code == "x":
             longrepr = str(report.longrepr)

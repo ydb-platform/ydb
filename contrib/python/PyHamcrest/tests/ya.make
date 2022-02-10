@@ -1,8 +1,8 @@
 OWNER(g:python-contrib)
 
-PY23_TEST() 
+PY23_TEST()
 
-NO_LINT() 
+NO_LINT()
 
 TEST_SRCS(
     test_raises.py

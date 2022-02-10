@@ -15,7 +15,7 @@ It is used as follows::
 
 to bring in the new semantics for these functions from Python 3. And
 then, for example::
- 
+
     b = bytes(b'ABCD')
     assert list(b) == [65, 66, 67, 68]
     assert repr(b) == "b'ABCD'"
@@ -46,7 +46,7 @@ then, for example::
         pass
 
 and::
- 
+
     class VerboseList(list):
         def append(self, item):
             print('Adding an item')
@@ -112,7 +112,7 @@ def disallow_types(argnums, disallowed_types):
     raises a TypeError when f is called if a unicode object is passed as
     `a` or a bytes object is passed as `b`.
 
-    This also skips over keyword arguments, so 
+    This also skips over keyword arguments, so
 
         @disallow_types([0, 1], [unicode, bytes])
         def g(a, b=None):
@@ -130,7 +130,7 @@ def disallow_types(argnums, disallowed_types):
     ...     def __add__(self, other):
     ...          pass
 
-    >>> newbytes('1234') + u'1234'      #doctest: +IGNORE_EXCEPTION_DETAIL 
+    >>> newbytes('1234') + u'1234'      #doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
       ...
     TypeError: can't concat 'bytes' to (unicode) str

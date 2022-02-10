@@ -611,23 +611,23 @@ class raw_ostream;
     }
 
     /// Add the given MachineBasicBlock into the maps.
-    /// If it contains any instructions then they must already be in the maps. 
-    /// This is used after a block has been split by moving some suffix of its 
-    /// instructions into a newly created block. 
-    void insertMBBInMaps(MachineBasicBlock *mbb) { 
-      assert(mbb != &mbb->getParent()->front() && 
-             "Can't insert a new block at the beginning of a function."); 
-      auto prevMBB = std::prev(MachineFunction::iterator(mbb)); 
+    /// If it contains any instructions then they must already be in the maps.
+    /// This is used after a block has been split by moving some suffix of its
+    /// instructions into a newly created block.
+    void insertMBBInMaps(MachineBasicBlock *mbb) {
+      assert(mbb != &mbb->getParent()->front() &&
+             "Can't insert a new block at the beginning of a function.");
+      auto prevMBB = std::prev(MachineFunction::iterator(mbb));
 
-      // Create a new entry to be used for the start of mbb and the end of 
-      // prevMBB. 
-      IndexListEntry *startEntry = createEntry(nullptr, 0); 
-      IndexListEntry *endEntry = getMBBEndIdx(&*prevMBB).listEntry(); 
-      IndexListEntry *insEntry = 
-          mbb->empty() ? endEntry 
-                       : getInstructionIndex(mbb->front()).listEntry(); 
-      IndexList::iterator newItr = 
-          indexList.insert(insEntry->getIterator(), startEntry); 
+      // Create a new entry to be used for the start of mbb and the end of
+      // prevMBB.
+      IndexListEntry *startEntry = createEntry(nullptr, 0);
+      IndexListEntry *endEntry = getMBBEndIdx(&*prevMBB).listEntry();
+      IndexListEntry *insEntry =
+          mbb->empty() ? endEntry
+                       : getInstructionIndex(mbb->front()).listEntry();
+      IndexList::iterator newItr =
+          indexList.insert(insEntry->getIterator(), startEntry);
 
       SlotIndex startIdx(startEntry, SlotIndex::Slot_Block);
       SlotIndex endIdx(endEntry, SlotIndex::Slot_Block);

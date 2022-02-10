@@ -19,11 +19,11 @@ from distutils.util import strtobool
 import zipfile
 
 try:
-    from collections.abc import Iterable 
-except ImportError: 
-    from collections import Iterable 
- 
-try: 
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
+
+try:
     import gzip
     gzip_open = gzip.open
     gzip_ext = '.gz'
@@ -322,8 +322,8 @@ def strip_string_literals(code, prefix='__Pyx_L'):
     in_quote = False
     hash_mark = single_q = double_q = -1
     code_len = len(code)
-    quote_type = None 
-    quote_len = -1 
+    quote_type = None
+    quote_len = -1
 
     while True:
         if hash_mark < q:
@@ -755,7 +755,7 @@ def create_extension_list(patterns, exclude=None, ctx=None, aliases=None, quiet=
         exclude = []
     if patterns is None:
         return [], {}
-    elif isinstance(patterns, basestring) or not isinstance(patterns, Iterable): 
+    elif isinstance(patterns, basestring) or not isinstance(patterns, Iterable):
         patterns = [patterns]
     explicit_modules = set([m.name for m in patterns if isinstance(m, Extension)])
     seen = set()
@@ -911,8 +911,8 @@ def cythonize(module_list, exclude=None, nthreads=0, aliases=None, quiet=False, 
                     variable called ``foo`` as a string, and then call
                     ``cythonize(..., aliases={'MY_HEADERS': foo})``.
 
-    :param quiet: If True, Cython won't print error, warning, or status messages during the 
-                  compilation. 
+    :param quiet: If True, Cython won't print error, warning, or status messages during the
+                  compilation.
 
     :param force: Forces the recompilation of the Cython modules, even if the timestamps
                   don't indicate that a recompilation is necessary.
@@ -944,8 +944,8 @@ def cythonize(module_list, exclude=None, nthreads=0, aliases=None, quiet=False, 
     :param compiler_directives: Allow to set compiler directives in the ``setup.py`` like this:
                                 ``compiler_directives={'embedsignature': True}``.
                                 See :ref:`compiler-directives`.
- 
-    :param depfile: produce depfiles for the sources if True. 
+
+    :param depfile: produce depfiles for the sources if True.
     """
     if exclude is None:
         exclude = []
@@ -954,8 +954,8 @@ def cythonize(module_list, exclude=None, nthreads=0, aliases=None, quiet=False, 
     if 'common_utility_include_dir' in options:
         safe_makedirs(options['common_utility_include_dir'])
 
-    depfile = options.pop('depfile', None) 
- 
+    depfile = options.pop('depfile', None)
+
     if pythran is None:
         pythran_options = None
     else:
@@ -1027,26 +1027,26 @@ def cythonize(module_list, exclude=None, nthreads=0, aliases=None, quiet=False, 
                     dir = os.path.dirname(c_file)
                     safe_makedirs_once(dir)
 
-                # write out the depfile, if requested 
-                if depfile: 
-                    dependencies = deps.all_dependencies(source) 
-                    src_base_dir, _ = os.path.split(source) 
-                    if not src_base_dir.endswith(os.sep): 
-                        src_base_dir += os.sep 
-                    # paths below the base_dir are relative, otherwise absolute 
-                    paths = [] 
-                    for fname in dependencies: 
-                        if (fname.startswith(src_base_dir) or 
-                            fname.startswith('.' + os.path.sep)): 
-                            paths.append(os.path.relpath(fname, src_base_dir)) 
-                        else: 
-                            paths.append(os.path.abspath(fname)) 
- 
-                    depline = os.path.split(c_file)[1] + ": \\\n  " 
-                    depline += " \\\n  ".join(paths) + "\n" 
-                    with open(c_file+'.dep', 'w') as outfile: 
-                        outfile.write(depline) 
- 
+                # write out the depfile, if requested
+                if depfile:
+                    dependencies = deps.all_dependencies(source)
+                    src_base_dir, _ = os.path.split(source)
+                    if not src_base_dir.endswith(os.sep):
+                        src_base_dir += os.sep
+                    # paths below the base_dir are relative, otherwise absolute
+                    paths = []
+                    for fname in dependencies:
+                        if (fname.startswith(src_base_dir) or
+                            fname.startswith('.' + os.path.sep)):
+                            paths.append(os.path.relpath(fname, src_base_dir))
+                        else:
+                            paths.append(os.path.abspath(fname))
+
+                    depline = os.path.split(c_file)[1] + ": \\\n  "
+                    depline += " \\\n  ".join(paths) + "\n"
+                    with open(c_file+'.dep', 'w') as outfile:
+                        outfile.write(depline)
+
                 if os.path.exists(c_file):
                     c_timestamp = os.path.getmtime(c_file)
                 else:

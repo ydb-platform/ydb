@@ -39,7 +39,7 @@
 
 /**
  * @file UriDefsUnicode.h
- * Holds definitions for the wide string pass. 
+ * Holds definitions for the wide string pass.
  * NOTE: This header is included N times, not once.
  */
 

@@ -59,7 +59,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "aarch64-stack-tagging" 
+#define DEBUG_TYPE "aarch64-stack-tagging"
 
 static cl::opt<bool> ClMergeInit(
     "stack-tagging-merge-init", cl::Hidden, cl::init(true), cl::ZeroOrMore,
@@ -73,10 +73,10 @@ static cl::opt<bool>
 static cl::opt<unsigned> ClScanLimit("stack-tagging-merge-init-scan-limit",
                                      cl::init(40), cl::Hidden);
 
-static cl::opt<unsigned> 
-    ClMergeInitSizeLimit("stack-tagging-merge-init-size-limit", cl::init(272), 
-                         cl::Hidden); 
- 
+static cl::opt<unsigned>
+    ClMergeInitSizeLimit("stack-tagging-merge-init-size-limit", cl::init(272),
+                         cl::Hidden);
+
 static const Align kTagGranuleSize = Align(16);
 
 namespace {
@@ -107,10 +107,10 @@ public:
         SetTagZeroFn(SetTagZeroFn), StgpFn(StgpFn) {}
 
   bool addRange(uint64_t Start, uint64_t End, Instruction *Inst) {
-    auto I = 
-        llvm::lower_bound(Ranges, Start, [](const Range &LHS, uint64_t RHS) { 
-          return LHS.End <= RHS; 
-        }); 
+    auto I =
+        llvm::lower_bound(Ranges, Start, [](const Range &LHS, uint64_t RHS) {
+          return LHS.End <= RHS;
+        });
     if (I != Ranges.end() && End > I->Start) {
       // Overlap - bail.
       return false;
@@ -439,8 +439,8 @@ void AArch64StackTagging::tagAlloca(AllocaInst *AI, Instruction *InsertBefore,
   bool LittleEndian =
       Triple(AI->getModule()->getTargetTriple()).isLittleEndian();
   // Current implementation of initializer merging assumes little endianness.
-  if (MergeInit && !F->hasOptNone() && LittleEndian && 
-      Size < ClMergeInitSizeLimit) { 
+  if (MergeInit && !F->hasOptNone() && LittleEndian &&
+      Size < ClMergeInitSizeLimit) {
     LLVM_DEBUG(dbgs() << "collecting initializers for " << *AI
                       << ", size = " << Size << "\n");
     InsertBefore = collectInitializers(InsertBefore, Ptr, Size, IB);
@@ -571,7 +571,7 @@ bool AArch64StackTagging::runOnFunction(Function &Fn) {
       auto *II = dyn_cast<IntrinsicInst>(I);
       if (II && (II->getIntrinsicID() == Intrinsic::lifetime_start ||
                  II->getIntrinsicID() == Intrinsic::lifetime_end)) {
-        AllocaInst *AI = findAllocaForValue(II->getArgOperand(1)); 
+        AllocaInst *AI = findAllocaForValue(II->getArgOperand(1));
         if (!AI) {
           UnrecognizedLifetimes.push_back(I);
           continue;
@@ -659,7 +659,7 @@ bool AArch64StackTagging::runOnFunction(Function &Fn) {
       IntrinsicInst *Start = Info.LifetimeStart[0];
       IntrinsicInst *End = Info.LifetimeEnd[0];
       uint64_t Size =
-          cast<ConstantInt>(Start->getArgOperand(0))->getZExtValue(); 
+          cast<ConstantInt>(Start->getArgOperand(0))->getZExtValue();
       Size = alignTo(Size, kTagGranuleSize);
       tagAlloca(AI, Start->getNextNode(), Start->getArgOperand(1), Size);
       // We need to ensure that if we tag some object, we certainly untag it

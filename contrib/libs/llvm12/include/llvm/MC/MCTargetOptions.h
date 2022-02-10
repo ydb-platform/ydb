@@ -29,7 +29,7 @@ enum class ExceptionHandling {
   ARM,      ///< ARM EHABI
   WinEH,    ///< Windows Exception Handling
   Wasm,     ///< WebAssembly Exception Handling
-  AIX,      ///< AIX Exception Handling 
+  AIX,      ///< AIX Exception Handling
 };
 
 enum class DebugCompressionType {

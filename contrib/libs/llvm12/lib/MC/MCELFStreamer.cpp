@@ -224,31 +224,31 @@ bool MCELFStreamer::emitSymbolAttribute(MCSymbol *S, MCSymbolAttr Attribute) {
     break;
 
   case MCSA_Global:
-    // For `.weak x; .global x`, GNU as sets the binding to STB_WEAK while we 
-    // traditionally set the binding to STB_GLOBAL. This is error-prone, so we 
-    // error on such cases. Note, we also disallow changed binding from .local. 
-    if (Symbol->isBindingSet() && Symbol->getBinding() != ELF::STB_GLOBAL) 
-      getContext().reportError(getStartTokLoc(), 
-                               Symbol->getName() + 
-                                   " changed binding to STB_GLOBAL"); 
+    // For `.weak x; .global x`, GNU as sets the binding to STB_WEAK while we
+    // traditionally set the binding to STB_GLOBAL. This is error-prone, so we
+    // error on such cases. Note, we also disallow changed binding from .local.
+    if (Symbol->isBindingSet() && Symbol->getBinding() != ELF::STB_GLOBAL)
+      getContext().reportError(getStartTokLoc(),
+                               Symbol->getName() +
+                                   " changed binding to STB_GLOBAL");
     Symbol->setBinding(ELF::STB_GLOBAL);
     break;
 
   case MCSA_WeakReference:
   case MCSA_Weak:
-    // For `.global x; .weak x`, both MC and GNU as set the binding to STB_WEAK. 
-    // We emit a warning for now but may switch to an error in the future. 
-    if (Symbol->isBindingSet() && Symbol->getBinding() != ELF::STB_WEAK) 
-      getContext().reportWarning( 
-          getStartTokLoc(), Symbol->getName() + " changed binding to STB_WEAK"); 
+    // For `.global x; .weak x`, both MC and GNU as set the binding to STB_WEAK.
+    // We emit a warning for now but may switch to an error in the future.
+    if (Symbol->isBindingSet() && Symbol->getBinding() != ELF::STB_WEAK)
+      getContext().reportWarning(
+          getStartTokLoc(), Symbol->getName() + " changed binding to STB_WEAK");
     Symbol->setBinding(ELF::STB_WEAK);
     break;
 
   case MCSA_Local:
-    if (Symbol->isBindingSet() && Symbol->getBinding() != ELF::STB_LOCAL) 
-      getContext().reportError(getStartTokLoc(), 
-                               Symbol->getName() + 
-                                   " changed binding to STB_LOCAL"); 
+    if (Symbol->isBindingSet() && Symbol->getBinding() != ELF::STB_LOCAL)
+      getContext().reportError(getStartTokLoc(),
+                               Symbol->getName() +
+                                   " changed binding to STB_LOCAL");
     Symbol->setBinding(ELF::STB_LOCAL);
     break;
 
@@ -304,7 +304,7 @@ void MCELFStreamer::emitCommonSymbol(MCSymbol *S, uint64_t Size,
   auto *Symbol = cast<MCSymbolELF>(S);
   getAssembler().registerSymbol(*Symbol);
 
-  if (!Symbol->isBindingSet()) 
+  if (!Symbol->isBindingSet())
     Symbol->setBinding(ELF::STB_GLOBAL);
 
   Symbol->setType(ELF::STT_OBJECT);
@@ -336,8 +336,8 @@ void MCELFStreamer::emitELFSize(MCSymbol *Symbol, const MCExpr *Value) {
 
 void MCELFStreamer::emitELFSymverDirective(StringRef AliasName,
                                            const MCSymbol *Aliasee) {
-  getAssembler().Symvers.push_back( 
-      MCAssembler::Symver{AliasName, Aliasee, getStartTokLoc()}); 
+  getAssembler().Symvers.push_back(
+      MCAssembler::Symver{AliasName, Aliasee, getStartTokLoc()});
 }
 
 void MCELFStreamer::emitLocalCommonSymbol(MCSymbol *S, uint64_t Size,
@@ -443,18 +443,18 @@ void MCELFStreamer::fixSymbolsInTLSFixups(const MCExpr *expr) {
     case MCSymbolRefExpr::VK_PPC_GOT_TPREL_LO:
     case MCSymbolRefExpr::VK_PPC_GOT_TPREL_HI:
     case MCSymbolRefExpr::VK_PPC_GOT_TPREL_HA:
-    case MCSymbolRefExpr::VK_PPC_GOT_TPREL_PCREL: 
+    case MCSymbolRefExpr::VK_PPC_GOT_TPREL_PCREL:
     case MCSymbolRefExpr::VK_PPC_GOT_DTPREL:
     case MCSymbolRefExpr::VK_PPC_GOT_DTPREL_LO:
     case MCSymbolRefExpr::VK_PPC_GOT_DTPREL_HI:
     case MCSymbolRefExpr::VK_PPC_GOT_DTPREL_HA:
     case MCSymbolRefExpr::VK_PPC_TLS:
-    case MCSymbolRefExpr::VK_PPC_TLS_PCREL: 
+    case MCSymbolRefExpr::VK_PPC_TLS_PCREL:
     case MCSymbolRefExpr::VK_PPC_GOT_TLSGD:
     case MCSymbolRefExpr::VK_PPC_GOT_TLSGD_LO:
     case MCSymbolRefExpr::VK_PPC_GOT_TLSGD_HI:
     case MCSymbolRefExpr::VK_PPC_GOT_TLSGD_HA:
-    case MCSymbolRefExpr::VK_PPC_GOT_TLSGD_PCREL: 
+    case MCSymbolRefExpr::VK_PPC_GOT_TLSGD_PCREL:
     case MCSymbolRefExpr::VK_PPC_TLSGD:
     case MCSymbolRefExpr::VK_PPC_GOT_TLSLD:
     case MCSymbolRefExpr::VK_PPC_GOT_TLSLD_LO:
@@ -492,7 +492,7 @@ void MCELFStreamer::finalizeCGProfileEntry(const MCSymbolRefExpr *&SRE) {
   // Not a temporary, referece it as a weak undefined.
   bool Created;
   getAssembler().registerSymbol(*S, &Created);
-  if (Created) 
+  if (Created)
     cast<MCSymbolELF>(S)->setBinding(ELF::STB_WEAK);
 }
 

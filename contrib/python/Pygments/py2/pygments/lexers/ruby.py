@@ -5,7 +5,7 @@
 
     Lexers for Ruby and related languages.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -47,9 +47,9 @@ class RubyLexer(ExtendedRegexLexer):
 
         start = match.start(1)
         yield start, Operator, match.group(1)        # <<[-~]?
-        yield match.start(2), String.Heredoc, match.group(2)   # quote ", ', ` 
-        yield match.start(3), String.Delimiter, match.group(3) # heredoc name 
-        yield match.start(4), String.Heredoc, match.group(4)   # quote again 
+        yield match.start(2), String.Heredoc, match.group(2)   # quote ", ', `
+        yield match.start(3), String.Delimiter, match.group(3) # heredoc name
+        yield match.start(4), String.Heredoc, match.group(4)   # quote again
 
         heredocstack = ctx.__dict__.setdefault('heredocstack', [])
         outermost = not bool(heredocstack)
@@ -74,7 +74,7 @@ class RubyLexer(ExtendedRegexLexer):
                     if check == hdname:
                         for amatch in lines:
                             yield amatch.start(), String.Heredoc, amatch.group()
-                        yield match.start(), String.Delimiter, match.group() 
+                        yield match.start(), String.Delimiter, match.group()
                         ctx.pos = match.end()
                         break
                     else:
@@ -403,8 +403,8 @@ class RubyConsoleLexer(Lexer):
     aliases = ['rbcon', 'irb']
     mimetypes = ['text/x-ruby-shellsession']
 
-    _prompt_re = re.compile(r'irb\([a-zA-Z_]\w*\):\d{3}:\d+[>*"\'] ' 
-                            r'|>> |\?> ') 
+    _prompt_re = re.compile(r'irb\([a-zA-Z_]\w*\):\d{3}:\d+[>*"\'] '
+                            r'|>> |\?> ')
 
     def get_tokens_unprocessed(self, text):
         rblexer = RubyLexer(**self.options)
@@ -498,11 +498,11 @@ class FancyLexer(RegexLexer):
             (r'[a-zA-Z](\w|[-+?!=*/^><%])*:', Name.Function),
             # operators, must be below functions
             (r'[-+*/~,<>=&!?%^\[\].$]+', Operator),
-            (r'[A-Z]\w*', Name.Constant), 
-            (r'@[a-zA-Z_]\w*', Name.Variable.Instance), 
-            (r'@@[a-zA-Z_]\w*', Name.Variable.Class), 
+            (r'[A-Z]\w*', Name.Constant),
+            (r'@[a-zA-Z_]\w*', Name.Variable.Instance),
+            (r'@@[a-zA-Z_]\w*', Name.Variable.Class),
             ('@@?', Operator),
-            (r'[a-zA-Z_]\w*', Name), 
+            (r'[a-zA-Z_]\w*', Name),
             # numbers - / checks are necessary to avoid mismarking regexes,
             # see comment in RubyLexer
             (r'(0[oO]?[0-7]+(?:_[0-7]+)*)(\s*)([/?])?',

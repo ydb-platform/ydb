@@ -2,7 +2,7 @@ import re
 import sys
 
 import __res
- 
+
 from importlib.abc import ResourceReader
 from importlib.metadata import Distribution, DistributionFinder, PackageNotFoundError, Prepared
 

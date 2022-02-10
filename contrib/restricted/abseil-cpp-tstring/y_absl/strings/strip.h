@@ -22,7 +22,7 @@
 #define ABSL_STRINGS_STRIP_H_
 
 #include <cstddef>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include "y_absl/base/macros.h"
 #include "y_absl/strings/ascii.h"
@@ -30,7 +30,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // ConsumePrefix()
 //
@@ -85,7 +85,7 @@ ABSL_MUST_USE_RESULT inline y_absl::string_view StripSuffix(
   return str;
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_STRIP_H_

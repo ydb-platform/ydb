@@ -52,7 +52,7 @@
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // Stores information about a sampled hashtable.  All mutations to this *must*
@@ -231,9 +231,9 @@ class HashtablezInfoHandle {
   friend inline void swap(HashtablezInfoHandle& /*lhs*/,
                           HashtablezInfoHandle& /*rhs*/) {}
 };
-#endif  // defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE) 
- 
-#if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE) 
+#endif  // defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
+
+#if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
 extern ABSL_PER_THREAD_TLS_KEYWORD int64_t global_next_sample;
 #endif  // defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
 
@@ -241,7 +241,7 @@ extern ABSL_PER_THREAD_TLS_KEYWORD int64_t global_next_sample;
 // with the global sampler.
 inline HashtablezInfoHandle Sample(
     size_t inline_element_size ABSL_ATTRIBUTE_UNUSED) {
-#if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE) 
+#if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
   if (ABSL_PREDICT_TRUE(--global_next_sample > 0)) {
     return HashtablezInfoHandle(nullptr);
   }
@@ -275,7 +275,7 @@ void SetHashtablezMaxSamples(int32_t max);
 extern "C" bool ABSL_INTERNAL_C_SYMBOL(AbslContainerInternalSampleEverything)();
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_HASHTABLEZ_SAMPLER_H_

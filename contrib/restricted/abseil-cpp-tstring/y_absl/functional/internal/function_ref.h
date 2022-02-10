@@ -23,7 +23,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace functional_internal {
 
 // Like a void* that can handle function pointers as well. The standard does not
@@ -100,7 +100,7 @@ template <bool C>
 using EnableIf = typename ::std::enable_if<C, int>::type;
 
 }  // namespace functional_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_FUNCTIONAL_INTERNAL_FUNCTION_REF_H_

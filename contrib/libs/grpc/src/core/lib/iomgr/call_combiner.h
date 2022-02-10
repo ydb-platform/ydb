@@ -1,50 +1,50 @@
-/* 
- * 
- * Copyright 2017 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#ifndef GRPC_CORE_LIB_IOMGR_CALL_COMBINER_H 
-#define GRPC_CORE_LIB_IOMGR_CALL_COMBINER_H 
- 
-#include <grpc/support/port_platform.h> 
- 
-#include <stddef.h> 
- 
+/*
+ *
+ * Copyright 2017 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#ifndef GRPC_CORE_LIB_IOMGR_CALL_COMBINER_H
+#define GRPC_CORE_LIB_IOMGR_CALL_COMBINER_H
+
+#include <grpc/support/port_platform.h>
+
+#include <stddef.h>
+
 #include "y_absl/container/inlined_vector.h"
 
-#include <grpc/support/atm.h> 
- 
+#include <grpc/support/atm.h>
+
 #include "src/core/lib/gprpp/mpscq.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/iomgr/closure.h" 
+#include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/dynamic_annotations.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
- 
-// A simple, lock-free mechanism for serializing activity related to a 
-// single call.  This is similar to a combiner but is more lightweight. 
-// 
-// It requires the callback (or, in the common case where the callback 
-// actually kicks off a chain of callbacks, the last callback in that 
-// chain) to explicitly indicate (by calling GRPC_CALL_COMBINER_STOP()) 
-// when it is done with the action that was kicked off by the original 
-// callback. 
- 
+
+// A simple, lock-free mechanism for serializing activity related to a
+// single call.  This is similar to a combiner but is more lightweight.
+//
+// It requires the callback (or, in the common case where the callback
+// actually kicks off a chain of callbacks, the last callback in that
+// chain) to explicitly indicate (by calling GRPC_CALL_COMBINER_STOP())
+// when it is done with the action that was kicked off by the original
+// callback.
+
 namespace grpc_core {
- 
+
 extern DebugOnlyTraceFlag grpc_call_combiner_trace;
 
 class CallCombiner {
@@ -111,9 +111,9 @@ class CallCombiner {
 
   gpr_atm size_ = 0;  // size_t, num closures in queue or currently executing
   MultiProducerSingleConsumerQueue queue_;
-  // Either 0 (if not cancelled and no cancellation closure set), 
-  // a grpc_closure* (if the lowest bit is 0), 
-  // or a grpc_error* (if the lowest bit is 1). 
+  // Either 0 (if not cancelled and no cancellation closure set),
+  // a grpc_closure* (if the lowest bit is 0),
+  // or a grpc_error* (if the lowest bit is 1).
   gpr_atm cancel_state_ = 0;
 #ifdef GRPC_TSAN_ENABLED
   // A fake ref-counted lock that is kept alive after the destruction of
@@ -214,4 +214,4 @@ class CallCombinerClosureList {
 
 }  // namespace grpc_core
 
-#endif /* GRPC_CORE_LIB_IOMGR_CALL_COMBINER_H */ 
+#endif /* GRPC_CORE_LIB_IOMGR_CALL_COMBINER_H */

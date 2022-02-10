@@ -170,7 +170,7 @@ public:
 		m.initial = reinterpret_cast<size_t>(m_jumps + startState * m.lettersCount);
 
 		// Build letter translation table
-		Fill(m_letters, m_letters + MaxChar, 0); 
+		Fill(m_letters, m_letters + MaxChar, 0);
 		for (auto&& letter : letters)
 			for (auto&& character : letter.second.second)
 				m_letters[character] = letter.second.first;

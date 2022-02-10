@@ -122,8 +122,8 @@
   #define XMLCDECL __cdecl
 #endif
 
-/* Cygwin platform (does not define _WIN32), GNU compiler */ 
-#if defined(__CYGWIN__) 
+/* Cygwin platform (does not define _WIN32), GNU compiler */
+#if defined(__CYGWIN__)
   #undef XMLPUBFUN
   #undef XMLPUBVAR
   #undef XMLCALL
@@ -136,7 +136,7 @@
     #if !defined(LIBXML_STATIC)
       #define XMLPUBVAR __declspec(dllimport) extern
     #else
-      #define XMLPUBVAR extern 
+      #define XMLPUBVAR extern
     #endif
   #endif
   #define XMLCALL __cdecl

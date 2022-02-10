@@ -2,7 +2,7 @@ from distutils import log
 import distutils.command.install_scripts as orig
 from distutils.errors import DistutilsModuleError
 import os
-import sys 
+import sys
 
 from pkg_resources import Distribution, PathMetadata, ensure_directory
 
@@ -42,10 +42,10 @@ class install_scripts(orig.install_scripts):
         if is_wininst:
             exec_param = "python.exe"
             writer = ei.WindowsScriptWriter
-        if exec_param == sys.executable: 
-            # In case the path to the Python executable contains a space, wrap 
-            # it so it's not split up. 
-            exec_param = [exec_param] 
+        if exec_param == sys.executable:
+            # In case the path to the Python executable contains a space, wrap
+            # it so it's not split up.
+            exec_param = [exec_param]
         # resolve the writer to the environment
         writer = writer.best()
         cmd = writer.command_spec_class.best().from_param(exec_param)

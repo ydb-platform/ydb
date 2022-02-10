@@ -9,18 +9,18 @@ import contextlib
 from distutils.errors import DistutilsError
 
 from pkg_resources import ensure_directory
- 
-__all__ = [ 
-    "unpack_archive", "unpack_zipfile", "unpack_tarfile", "default_filter", 
-    "UnrecognizedFormat", "extraction_drivers", "unpack_directory", 
-] 
- 
- 
+
+__all__ = [
+    "unpack_archive", "unpack_zipfile", "unpack_tarfile", "default_filter",
+    "UnrecognizedFormat", "extraction_drivers", "unpack_directory",
+]
+
+
 class UnrecognizedFormat(DistutilsError):
     """Couldn't recognize the archive type"""
 
- 
-def default_filter(src, dst): 
+
+def default_filter(src, dst):
     """The default progress/filter callback; returns True for all files"""
     return dst
 
@@ -201,5 +201,5 @@ def unpack_tarfile(filename, extract_dir, progress_filter=default_filter):
 
     return True
 
- 
+
 extraction_drivers = unpack_directory, unpack_zipfile, unpack_tarfile

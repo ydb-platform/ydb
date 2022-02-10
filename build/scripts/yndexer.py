@@ -2,11 +2,11 @@ import sys
 import subprocess
 import threading
 import os
-import re 
+import re
 
 
-rx_resource_dir = re.compile(r'libraries: =([^:]*)') 
- 
+rx_resource_dir = re.compile(r'libraries: =([^:]*)')
+
 
 def _try_to_kill(process):
     try:
@@ -54,22 +54,22 @@ if __name__ == '__main__':
 
     subprocess.check_call(tail_args)
 
-    clang = tail_args[0] 
-    out = subprocess.check_output([clang, '-print-search-dirs']) 
-    resource_dir = rx_resource_dir.search(out).group(1) 
- 
-    yndexer_args = [ 
-        yndexer, input_file, 
-        '-pb2', 
-        '-i', 'arc::{}'.format(arc_root), 
+    clang = tail_args[0]
+    out = subprocess.check_output([clang, '-print-search-dirs'])
+    resource_dir = rx_resource_dir.search(out).group(1)
+
+    yndexer_args = [
+        yndexer, input_file,
+        '-pb2',
+        '-i', 'arc::{}'.format(arc_root),
         '-i', 'build::{}'.format(build_root),
-        '-i', '.IGNORE::/', 
-        '-o', os.path.dirname(output_file), 
-        '-n', os.path.basename(output_file).rsplit('.ydx.pb2', 1)[0], 
-        '--' 
-    ] + tail_args + [ 
-        '-resource-dir', resource_dir, 
-    ] 
+        '-i', '.IGNORE::/',
+        '-o', os.path.dirname(output_file),
+        '-n', os.path.basename(output_file).rsplit('.ydx.pb2', 1)[0],
+        '--'
+    ] + tail_args + [
+        '-resource-dir', resource_dir,
+    ]
 
     process = Process(yndexer_args)
     result = process.wait(timeout=timeout)

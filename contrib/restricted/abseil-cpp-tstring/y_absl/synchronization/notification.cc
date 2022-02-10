@@ -22,7 +22,7 @@
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 void Notification::Notify() {
   MutexLock l(&this->mutex_);
@@ -74,5 +74,5 @@ bool Notification::WaitForNotificationWithDeadline(y_absl::Time deadline) const 
   return notified;
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

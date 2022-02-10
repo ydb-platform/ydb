@@ -85,14 +85,14 @@ struct Curl_addrinfo *Curl_unix2addr(const char *path, bool *longpath,
 #if defined(CURLDEBUG) && defined(HAVE_GETADDRINFO) && \
     defined(HAVE_FREEADDRINFO)
 void
-curl_dbg_freeaddrinfo(struct addrinfo *freethis, int line, const char *source); 
+curl_dbg_freeaddrinfo(struct addrinfo *freethis, int line, const char *source);
 #endif
 
 #if defined(CURLDEBUG) && defined(HAVE_GETADDRINFO)
 int
-curl_dbg_getaddrinfo(const char *hostname, const char *service, 
-                     const struct addrinfo *hints, struct addrinfo **result, 
-                     int line, const char *source); 
+curl_dbg_getaddrinfo(const char *hostname, const char *service,
+                     const struct addrinfo *hints, struct addrinfo **result,
+                     int line, const char *source);
 #endif
 
 #ifdef HAVE_GETADDRINFO

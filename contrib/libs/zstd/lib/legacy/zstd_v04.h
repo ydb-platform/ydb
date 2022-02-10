@@ -1,15 +1,15 @@
 /*
  * Copyright (c) Yann Collet, Facebook, Inc.
- * All rights reserved. 
- * 
+ * All rights reserved.
+ *
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
- */ 
+ */
 
-#ifndef ZSTD_V04_H_91868324769238 
-#define ZSTD_V04_H_91868324769238 
+#ifndef ZSTD_V04_H_91868324769238
+#define ZSTD_V04_H_91868324769238
 
 #if defined (__cplusplus)
 extern "C" {
@@ -138,5 +138,5 @@ size_t ZBUFFv04_recommendedDOutSize(void);
 #if defined (__cplusplus)
 }
 #endif
- 
-#endif /* ZSTD_V04_H_91868324769238 */ 
+
+#endif /* ZSTD_V04_H_91868324769238 */

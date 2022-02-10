@@ -3,7 +3,7 @@ import sys
 
 from setuptools.extern import six
 
- 
+
 # HFS Plus uses decomposed UTF-8
 def decompose(path):
     if isinstance(path, six.text_type):

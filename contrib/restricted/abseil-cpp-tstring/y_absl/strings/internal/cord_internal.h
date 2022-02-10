@@ -1,38 +1,38 @@
 // Copyright 2021 The Abseil Authors.
-// 
-// Licensed under the Apache License, Version 2.0 (the "License"); 
-// you may not use this file except in compliance with the License. 
-// You may obtain a copy of the License at 
-// 
-//      https://www.apache.org/licenses/LICENSE-2.0 
-// 
-// Unless required by applicable law or agreed to in writing, software 
-// distributed under the License is distributed on an "AS IS" BASIS, 
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-// See the License for the specific language governing permissions and 
-// limitations under the License. 
- 
-#ifndef ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_ 
-#define ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_ 
- 
-#include <atomic> 
-#include <cassert> 
-#include <cstddef> 
-#include <cstdint> 
-#include <type_traits> 
- 
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifndef ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_
+#define ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_
+
+#include <atomic>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <type_traits>
+
 #include "y_absl/base/config.h"
 #include "y_absl/base/internal/endian.h"
 #include "y_absl/base/internal/invoke.h"
 #include "y_absl/base/optimization.h"
 #include "y_absl/container/internal/compressed_tuple.h"
-#include "y_absl/meta/type_traits.h" 
-#include "y_absl/strings/string_view.h" 
- 
-namespace y_absl { 
-ABSL_NAMESPACE_BEGIN 
-namespace cord_internal { 
- 
+#include "y_absl/meta/type_traits.h"
+#include "y_absl/strings/string_view.h"
+
+namespace y_absl {
+ABSL_NAMESPACE_BEGIN
+namespace cord_internal {
+
 class CordzInfo;
 
 // Default feature enable states for cord ring buffers
@@ -83,48 +83,48 @@ enum Constants {
 // Compact class for tracking the reference count and state flags for CordRep
 // instances.  Data is stored in an atomic int32_t for compactness and speed.
 class RefcountAndFlags {
- public: 
+ public:
   constexpr RefcountAndFlags() : count_{kRefIncrement} {}
   struct Immortal {};
   explicit constexpr RefcountAndFlags(Immortal) : count_(kImmortalFlag) {}
   struct WithCrc {};
   explicit constexpr RefcountAndFlags(WithCrc)
       : count_(kCrcFlag | kRefIncrement) {}
- 
+
   // Increments the reference count. Imposes no memory ordering.
   inline void Increment() {
     count_.fetch_add(kRefIncrement, std::memory_order_relaxed);
   }
- 
-  // Asserts that the current refcount is greater than 0. If the refcount is 
+
+  // Asserts that the current refcount is greater than 0. If the refcount is
   // greater than 1, decrements the reference count.
-  // 
-  // Returns false if there are no references outstanding; true otherwise. 
-  // Inserts barriers to ensure that state written before this method returns 
-  // false will be visible to a thread that just observed this method returning 
+  //
+  // Returns false if there are no references outstanding; true otherwise.
+  // Inserts barriers to ensure that state written before this method returns
+  // false will be visible to a thread that just observed this method returning
   // false.  Always returns false when the immortal bit is set.
-  inline bool Decrement() { 
+  inline bool Decrement() {
     int32_t refcount = count_.load(std::memory_order_acquire) & kRefcountMask;
     assert(refcount > 0 || refcount & kImmortalFlag);
     return refcount != kRefIncrement &&
            (count_.fetch_sub(kRefIncrement, std::memory_order_acq_rel) &
             kRefcountMask) != kRefIncrement;
-  } 
- 
-  // Same as Decrement but expect that refcount is greater than 1. 
-  inline bool DecrementExpectHighRefcount() { 
+  }
+
+  // Same as Decrement but expect that refcount is greater than 1.
+  inline bool DecrementExpectHighRefcount() {
     int32_t refcount =
         count_.fetch_sub(kRefIncrement, std::memory_order_acq_rel) &
         kRefcountMask;
     assert(refcount > 0 || refcount & kImmortalFlag);
     return refcount != kRefIncrement;
-  } 
- 
-  // Returns the current reference count using acquire semantics. 
+  }
+
+  // Returns the current reference count using acquire semantics.
   inline int32_t Get() const {
     return count_.load(std::memory_order_acquire) >> kNumFlags;
   }
- 
+
   // Returns true if the referenced object carries a CRC value.
   bool HasCrc() const {
     return (count_.load(std::memory_order_relaxed) & kCrcFlag) != 0;
@@ -155,12 +155,12 @@ class RefcountAndFlags {
     return (count_.load(std::memory_order_acquire) & kRefcountMask) ==
            kRefIncrement;
   }
- 
+
   bool IsImmortal() const {
     return (count_.load(std::memory_order_relaxed) & kImmortalFlag) != 0;
   }
 
- private: 
+ private:
   // We reserve the bottom bits for flags.
   // kImmortalBit indicates that this entity should never be collected; it is
   // used for the StringConstant constructor to avoid collecting immutable
@@ -180,21 +180,21 @@ class RefcountAndFlags {
     kRefcountMask = ~kCrcFlag,
   };
 
-  std::atomic<int32_t> count_; 
-}; 
- 
-// The overhead of a vtable is too much for Cord, so we roll our own subclasses 
-// using only a single byte to differentiate classes from each other - the "tag" 
-// byte.  Define the subclasses first so we can provide downcasting helper 
-// functions in the base class. 
- 
-struct CordRepConcat; 
+  std::atomic<int32_t> count_;
+};
+
+// The overhead of a vtable is too much for Cord, so we roll our own subclasses
+// using only a single byte to differentiate classes from each other - the "tag"
+// byte.  Define the subclasses first so we can provide downcasting helper
+// functions in the base class.
+
+struct CordRepConcat;
 struct CordRepExternal;
 struct CordRepFlat;
-struct CordRepSubstring; 
+struct CordRepSubstring;
 class CordRepRing;
 class CordRepBtree;
- 
+
 // Various representations that we allow
 enum CordRepKind {
   CONCAT = 0,
@@ -224,19 +224,19 @@ static_assert(RING == BTREE + 1, "BTREE and RING not consecutive");
 static_assert(EXTERNAL == RING + 1, "BTREE and EXTERNAL not consecutive");
 static_assert(FLAT == EXTERNAL + 1, "EXTERNAL and FLAT not consecutive");
 
-struct CordRep { 
+struct CordRep {
   CordRep() = default;
   constexpr CordRep(RefcountAndFlags::Immortal immortal, size_t l)
       : length(l), refcount(immortal), tag(EXTERNAL), storage{} {}
 
-  // The following three fields have to be less than 32 bytes since 
-  // that is the smallest supported flat node size. 
+  // The following three fields have to be less than 32 bytes since
+  // that is the smallest supported flat node size.
   size_t length;
   RefcountAndFlags refcount;
-  // If tag < FLAT, it represents CordRepKind and indicates the type of node. 
-  // Otherwise, the node type is CordRepFlat and the tag is the encoded size. 
-  uint8_t tag; 
- 
+  // If tag < FLAT, it represents CordRepKind and indicates the type of node.
+  // Otherwise, the node type is CordRepFlat and the tag is the encoded size.
+  uint8_t tag;
+
   // `storage` provides two main purposes:
   // - the starting point for FlatCordRep.Data() [flexible-array-member]
   // - 3 bytes of additional storage for use by derived classes.
@@ -257,12 +257,12 @@ struct CordRep {
 
   inline CordRepRing* ring();
   inline const CordRepRing* ring() const;
-  inline CordRepConcat* concat(); 
-  inline const CordRepConcat* concat() const; 
-  inline CordRepSubstring* substring(); 
-  inline const CordRepSubstring* substring() const; 
-  inline CordRepExternal* external(); 
-  inline const CordRepExternal* external() const; 
+  inline CordRepConcat* concat();
+  inline const CordRepConcat* concat() const;
+  inline CordRepSubstring* substring();
+  inline const CordRepSubstring* substring() const;
+  inline CordRepExternal* external();
+  inline const CordRepExternal* external() const;
   inline CordRepFlat* flat();
   inline const CordRepFlat* flat() const;
   inline CordRepBtree* btree();
@@ -281,28 +281,28 @@ struct CordRep {
   // Decrements the reference count of `rep`. Destroys rep if count reaches
   // zero. Requires `rep` to be a non-null pointer value.
   static inline void Unref(CordRep* rep);
-}; 
- 
-struct CordRepConcat : public CordRep { 
-  CordRep* left; 
-  CordRep* right; 
- 
+};
+
+struct CordRepConcat : public CordRep {
+  CordRep* left;
+  CordRep* right;
+
   uint8_t depth() const { return storage[0]; }
   void set_depth(uint8_t depth) { storage[0] = depth; }
-}; 
- 
-struct CordRepSubstring : public CordRep { 
-  size_t start;  // Starting offset of substring in child 
-  CordRep* child; 
-}; 
- 
+};
+
+struct CordRepSubstring : public CordRep {
+  size_t start;  // Starting offset of substring in child
+  CordRep* child;
+};
+
 // Type for function pointer that will invoke the releaser function and also
 // delete the `CordRepExternalImpl` corresponding to the passed in
 // `CordRepExternal`.
 using ExternalReleaserInvoker = void (*)(CordRepExternal*);
- 
-// External CordReps are allocated together with a type erased releaser. The 
-// releaser is stored in the memory directly following the CordRepExternal. 
+
+// External CordReps are allocated together with a type erased releaser. The
+// releaser is stored in the memory directly following the CordRepExternal.
 struct CordRepExternal : public CordRep {
   CordRepExternal() = default;
   explicit constexpr CordRepExternal(y_absl::string_view str)
@@ -310,18 +310,18 @@ struct CordRepExternal : public CordRep {
         base(str.data()),
         releaser_invoker(nullptr) {}
 
-  const char* base; 
-  // Pointer to function that knows how to call and destroy the releaser. 
-  ExternalReleaserInvoker releaser_invoker; 
+  const char* base;
+  // Pointer to function that knows how to call and destroy the releaser.
+  ExternalReleaserInvoker releaser_invoker;
 
   // Deletes (releases) the external rep.
   // Requires rep != nullptr and rep->IsExternal()
   static void Delete(CordRep* rep);
-}; 
- 
+};
+
 struct Rank1 {};
 struct Rank0 : Rank1 {};
- 
+
 template <typename Releaser, typename = ::y_absl::base_internal::invoke_result_t<
                                  Releaser, y_absl::string_view>>
 void InvokeReleaser(Rank0, Releaser&& releaser, y_absl::string_view data) {
@@ -613,8 +613,8 @@ inline void CordRep::Unref(CordRep* rep) {
   }
 }
 
-}  // namespace cord_internal 
+}  // namespace cord_internal
 
-ABSL_NAMESPACE_END 
-}  // namespace y_absl 
-#endif  // ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_ 
+ABSL_NAMESPACE_END
+}  // namespace y_absl
+#endif  // ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_

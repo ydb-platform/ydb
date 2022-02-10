@@ -186,7 +186,7 @@ void ImmutableEnumFieldGenerator::GenerateMembers(io::Printer* printer) const {
                    "${$has$capitalized_name$$}$() {\n"
                    "  return $get_has_field_bit_message$;\n"
                    "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
   }
   if (SupportUnknownEnumValue(descriptor_->file())) {
     WriteFieldEnumValueAccessorDocComment(printer, descriptor_, GETTER);
@@ -195,7 +195,7 @@ void ImmutableEnumFieldGenerator::GenerateMembers(io::Printer* printer) const {
                    "${$get$capitalized_name$Value$}$() {\n"
                    "  return $name$_;\n"
                    "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
   }
   WriteFieldAccessorDocComment(printer, descriptor_, GETTER);
   printer->Print(variables_,
@@ -205,7 +205,7 @@ void ImmutableEnumFieldGenerator::GenerateMembers(io::Printer* printer) const {
                  "  $type$ result = $type$.$for_number$($name$_);\n"
                  "  return result == null ? $unknown$ : result;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
 }
 
 void ImmutableEnumFieldGenerator::GenerateBuilderMembers(
@@ -218,7 +218,7 @@ void ImmutableEnumFieldGenerator::GenerateBuilderMembers(
                    "${$has$capitalized_name$$}$() {\n"
                    "  return $get_has_field_bit_builder$;\n"
                    "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
   }
   if (SupportUnknownEnumValue(descriptor_->file())) {
     WriteFieldEnumValueAccessorDocComment(printer, descriptor_, GETTER);
@@ -227,7 +227,7 @@ void ImmutableEnumFieldGenerator::GenerateBuilderMembers(
                    "${$get$capitalized_name$Value$}$() {\n"
                    "  return $name$_;\n"
                    "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
     WriteFieldEnumValueAccessorDocComment(printer, descriptor_, SETTER,
                                           /* builder */ true);
     printer->Print(variables_,
@@ -238,7 +238,7 @@ void ImmutableEnumFieldGenerator::GenerateBuilderMembers(
                    "  $on_changed$\n"
                    "  return this;\n"
                    "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
   }
   WriteFieldAccessorDocComment(printer, descriptor_, GETTER);
   printer->Print(variables_,
@@ -248,7 +248,7 @@ void ImmutableEnumFieldGenerator::GenerateBuilderMembers(
                  "  $type$ result = $type$.$for_number$($name$_);\n"
                  "  return result == null ? $unknown$ : result;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, SETTER,
                                /* builder */ true);
   printer->Print(variables_,
@@ -262,7 +262,7 @@ void ImmutableEnumFieldGenerator::GenerateBuilderMembers(
                  "  $on_changed$\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, CLEARER,
                                /* builder */ true);
   printer->Print(
@@ -443,7 +443,7 @@ void ImmutableEnumOneofFieldGenerator::GenerateMembers(
         "  }\n"
         "  return $default_number$;\n"
         "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
   }
   WriteFieldAccessorDocComment(printer, descriptor_, GETTER);
   printer->Print(variables_,
@@ -456,7 +456,7 @@ void ImmutableEnumOneofFieldGenerator::GenerateMembers(
                  "  }\n"
                  "  return $default$;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
 }
 
 void ImmutableEnumOneofFieldGenerator::GenerateBuilderMembers(
@@ -481,7 +481,7 @@ void ImmutableEnumOneofFieldGenerator::GenerateBuilderMembers(
         "  }\n"
         "  return $default_number$;\n"
         "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
     WriteFieldEnumValueAccessorDocComment(printer, descriptor_, SETTER,
                                           /* builder */ true);
     printer->Print(variables_,
@@ -492,7 +492,7 @@ void ImmutableEnumOneofFieldGenerator::GenerateBuilderMembers(
                    "  $on_changed$\n"
                    "  return this;\n"
                    "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
   }
   WriteFieldAccessorDocComment(printer, descriptor_, GETTER);
   printer->Print(variables_,
@@ -506,7 +506,7 @@ void ImmutableEnumOneofFieldGenerator::GenerateBuilderMembers(
                  "  }\n"
                  "  return $default$;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, SETTER,
                                /* builder */ true);
   printer->Print(variables_,
@@ -520,7 +520,7 @@ void ImmutableEnumOneofFieldGenerator::GenerateBuilderMembers(
                  "  $on_changed$\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, CLEARER,
                                /* builder */ true);
   printer->Print(
@@ -533,7 +533,7 @@ void ImmutableEnumOneofFieldGenerator::GenerateBuilderMembers(
       "  }\n"
       "  return this;\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
 }
 
 void ImmutableEnumOneofFieldGenerator::GenerateBuildingCode(
@@ -696,7 +696,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateMembers(
       "  return new com.google.protobuf.Internal.ListAdapter<\n"
       "      java.lang.Integer, $type$>($name$_, $name$_converter_);\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_COUNT);
   printer->Print(
       variables_,
@@ -704,7 +704,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateMembers(
       "$deprecation$public int ${$get$capitalized_name$Count$}$() {\n"
       "  return $name$_.size();\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_INDEXED_GETTER);
   printer->Print(
       variables_,
@@ -712,7 +712,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateMembers(
       "$deprecation$public $type$ ${$get$capitalized_name$$}$(int index) {\n"
       "  return $name$_converter_.convert($name$_.get(index));\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   if (SupportUnknownEnumValue(descriptor_->file())) {
     WriteFieldEnumValueAccessorDocComment(printer, descriptor_, LIST_GETTER);
     printer->Print(variables_,
@@ -721,7 +721,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateMembers(
                    "${$get$capitalized_name$ValueList$}$() {\n"
                    "  return $name$_;\n"
                    "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
     WriteFieldEnumValueAccessorDocComment(printer, descriptor_,
                                           LIST_INDEXED_GETTER);
     printer->Print(variables_,
@@ -730,7 +730,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateMembers(
                    "${$get$capitalized_name$Value$}$(int index) {\n"
                    "  return $name$_.get(index);\n"
                    "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
   }
 
   if (descriptor_->is_packed()) {
@@ -773,21 +773,21 @@ void RepeatedImmutableEnumFieldGenerator::GenerateBuilderMembers(
       "  return new com.google.protobuf.Internal.ListAdapter<\n"
       "      java.lang.Integer, $type$>($name$_, $name$_converter_);\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_COUNT);
   printer->Print(
       variables_,
       "$deprecation$public int ${$get$capitalized_name$Count$}$() {\n"
       "  return $name$_.size();\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_INDEXED_GETTER);
   printer->Print(
       variables_,
       "$deprecation$public $type$ ${$get$capitalized_name$$}$(int index) {\n"
       "  return $name$_converter_.convert($name$_.get(index));\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_INDEXED_SETTER,
                                /* builder */ true);
   printer->Print(variables_,
@@ -801,7 +801,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateBuilderMembers(
                  "  $on_changed$\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_ADDER,
                                /* builder */ true);
   printer->Print(variables_,
@@ -815,7 +815,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateBuilderMembers(
                  "  $on_changed$\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_MULTI_ADDER,
                                /* builder */ true);
   printer->Print(variables_,
@@ -828,7 +828,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateBuilderMembers(
                  "  $on_changed$\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
   WriteFieldAccessorDocComment(printer, descriptor_, CLEARER,
                                /* builder */ true);
   printer->Print(
@@ -839,7 +839,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateBuilderMembers(
       "  $on_changed$\n"
       "  return this;\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
 
   if (SupportUnknownEnumValue(descriptor_->file())) {
     WriteFieldEnumValueAccessorDocComment(printer, descriptor_, LIST_GETTER);
@@ -848,7 +848,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateBuilderMembers(
                    "${$get$capitalized_name$ValueList$}$() {\n"
                    "  return java.util.Collections.unmodifiableList($name$_);\n"
                    "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
     WriteFieldEnumValueAccessorDocComment(printer, descriptor_,
                                           LIST_INDEXED_GETTER);
     printer->Print(variables_,
@@ -856,7 +856,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateBuilderMembers(
                    "${$get$capitalized_name$Value$}$(int index) {\n"
                    "  return $name$_.get(index);\n"
                    "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
     WriteFieldEnumValueAccessorDocComment(printer, descriptor_,
                                           LIST_INDEXED_GETTER,
                                           /* builder */ true);
@@ -869,7 +869,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateBuilderMembers(
         "  $on_changed$\n"
         "  return this;\n"
         "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
     WriteFieldEnumValueAccessorDocComment(printer, descriptor_, LIST_ADDER,
                                           /* builder */ true);
     printer->Print(variables_,
@@ -880,7 +880,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateBuilderMembers(
                    "  $on_changed$\n"
                    "  return this;\n"
                    "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
     WriteFieldEnumValueAccessorDocComment(printer, descriptor_,
                                           LIST_MULTI_ADDER, /* builder */ true);
     printer->Print(
@@ -894,7 +894,7 @@ void RepeatedImmutableEnumFieldGenerator::GenerateBuilderMembers(
         "  $on_changed$\n"
         "  return this;\n"
         "}\n");
-    printer->Annotate("{", "}", descriptor_); 
+    printer->Annotate("{", "}", descriptor_);
   }
 }
 

@@ -1,29 +1,29 @@
-#include <Python.h> 
+#include <Python.h>
 #include <contrib/tools/python3/src/Include/internal/pycore_runtime.h>  // _PyRuntime_Initialize()
- 
-#include <stdlib.h> 
-#include <string.h> 
+
+#include <stdlib.h>
+#include <string.h>
 #include <locale.h>
- 
-void Py_InitArgcArgv(int argc, wchar_t **argv); 
+
+void Py_InitArgcArgv(int argc, wchar_t **argv);
 char* GetPyMain();
- 
-static const char* env_entry_point = "Y_PYTHON_ENTRY_POINT"; 
+
+static const char* env_entry_point = "Y_PYTHON_ENTRY_POINT";
 static const char* env_bytes_warning = "Y_PYTHON_BYTES_WARNING";
- 
-#ifdef _MSC_VER 
-extern char** environ; 
- 
-void unsetenv(const char* name) { 
-    const int n = strlen(name); 
+
+#ifdef _MSC_VER
+extern char** environ;
+
+void unsetenv(const char* name) {
+    const int n = strlen(name);
     char** dst = environ;
     for (char** src = environ; *src; src++)
-        if (strncmp(*src, name, n) || (*src)[n] != '=') 
-            *dst++ = *src; 
-    *dst = NULL; 
-} 
-#endif 
- 
+        if (strncmp(*src, name, n) || (*src)[n] != '=')
+            *dst++ = *src;
+    *dst = NULL;
+}
+#endif
+
 static int RunModule(const char *modname)
 {
     PyObject *module, *runpy, *runmodule, *runargs, *result;
@@ -73,7 +73,7 @@ static int RunModule(const char *modname)
     return 0;
 }
 
-static int pymain(int argc, char** argv) { 
+static int pymain(int argc, char** argv) {
     PyStatus status = _PyRuntime_Initialize();
     if (PyStatus_Exception(status)) {
         Py_ExitStatusException(status);
@@ -134,7 +134,7 @@ static int pymain(int argc, char** argv) {
         Py_ExitStatusException(status);
     }
 
-    const char* entry_point = getenv(env_entry_point); 
+    const char* entry_point = getenv(env_entry_point);
     if (entry_point) {
         entry_point_copy = strdup(entry_point);
         if (!entry_point_copy) {
@@ -151,13 +151,13 @@ static int pymain(int argc, char** argv) {
     }
 
     if (entry_point_copy && !strcmp(entry_point_copy, ":main")) {
-        unsetenv(env_entry_point); 
+        unsetenv(env_entry_point);
         sts = Py_Main(argc, argv_copy);
         free(entry_point_copy);
         return sts;
-    } 
+    }
 
-    Py_InitArgcArgv(argc, argv_copy); 
+    Py_InitArgcArgv(argc, argv_copy);
     PySys_SetArgv(argc, argv_copy);
 
     {
@@ -222,10 +222,10 @@ error:
     }
     PyMem_RawFree(oldloc);
     return sts;
-} 
- 
-int (*mainptr)(int argc, char** argv) = pymain; 
- 
-int main(int argc, char** argv) { 
-    return mainptr(argc, argv); 
-} 
+}
+
+int (*mainptr)(int argc, char** argv) = pymain;
+
+int main(int argc, char** argv) {
+    return mainptr(argc, argv);
+}

@@ -184,8 +184,8 @@ static ERR_STRING_DATA *int_err_get_item(const ERR_STRING_DATA *d)
 }
 
 #ifndef OPENSSL_NO_ERR
-/* 2019-05-21: Russian and Ukrainian locales on Linux require more than 6,5 kB */ 
-# define SPACE_SYS_STR_REASONS 8 * 1024 
+/* 2019-05-21: Russian and Ukrainian locales on Linux require more than 6,5 kB */
+# define SPACE_SYS_STR_REASONS 8 * 1024
 # define NUM_SYS_STR_REASONS 127
 
 static ERR_STRING_DATA SYS_str_reasons[NUM_SYS_STR_REASONS + 1];
@@ -219,28 +219,28 @@ static void build_SYS_str_reasons(void)
         ERR_STRING_DATA *str = &SYS_str_reasons[i - 1];
 
         str->error = ERR_PACK(ERR_LIB_SYS, 0, i);
-        /* 
-         * If we have used up all the space in strerror_pool, 
-         * there's no point in calling openssl_strerror_r() 
-         */ 
-        if (str->string == NULL && cnt < sizeof(strerror_pool)) { 
+        /*
+         * If we have used up all the space in strerror_pool,
+         * there's no point in calling openssl_strerror_r()
+         */
+        if (str->string == NULL && cnt < sizeof(strerror_pool)) {
             if (openssl_strerror_r(i, cur, sizeof(strerror_pool) - cnt)) {
-                size_t l = strlen(cur); 
+                size_t l = strlen(cur);
 
                 str->string = cur;
                 cnt += l;
                 cur += l;
- 
-                /* 
-                 * VMS has an unusual quirk of adding spaces at the end of 
-                 * some (most? all?) messages. Lets trim them off. 
-                 */ 
-                while (cur > strerror_pool && ossl_isspace(cur[-1])) { 
-                    cur--; 
-                    cnt--; 
-                } 
-                *cur++ = '\0'; 
-                cnt++; 
+
+                /*
+                 * VMS has an unusual quirk of adding spaces at the end of
+                 * some (most? all?) messages. Lets trim them off.
+                 */
+                while (cur > strerror_pool && ossl_isspace(cur[-1])) {
+                    cur--;
+                    cnt--;
+                }
+                *cur++ = '\0';
+                cnt++;
             }
         }
         if (str->string == NULL)
@@ -525,24 +525,24 @@ static unsigned long get_error_values(int inc, int top, const char **file,
         return ERR_R_INTERNAL_ERROR;
     }
 
-    while (es->bottom != es->top) { 
-        if (es->err_flags[es->top] & ERR_FLAG_CLEAR) { 
-            err_clear(es, es->top); 
-            es->top = es->top > 0 ? es->top - 1 : ERR_NUM_ERRORS - 1; 
-            continue; 
-        } 
-        i = (es->bottom + 1) % ERR_NUM_ERRORS; 
-        if (es->err_flags[i] & ERR_FLAG_CLEAR) { 
-            es->bottom = i; 
-            err_clear(es, es->bottom); 
-            continue; 
-        } 
-        break; 
-    } 
- 
+    while (es->bottom != es->top) {
+        if (es->err_flags[es->top] & ERR_FLAG_CLEAR) {
+            err_clear(es, es->top);
+            es->top = es->top > 0 ? es->top - 1 : ERR_NUM_ERRORS - 1;
+            continue;
+        }
+        i = (es->bottom + 1) % ERR_NUM_ERRORS;
+        if (es->err_flags[i] & ERR_FLAG_CLEAR) {
+            es->bottom = i;
+            err_clear(es, es->bottom);
+            continue;
+        }
+        break;
+    }
+
     if (es->bottom == es->top)
         return 0;
- 
+
     if (top)
         i = es->top;            /* last error */
     else
@@ -942,11 +942,11 @@ void err_clear_last_constant_time(int clear)
 
     top = es->top;
 
-    /* 
-     * Flag error as cleared but remove it elsewhere to avoid two errors 
-     * accessing the same error stack location, revealing timing information. 
-     */ 
-    clear = constant_time_select_int(constant_time_eq_int(clear, 0), 
-                                     0, ERR_FLAG_CLEAR); 
-    es->err_flags[top] |= clear; 
+    /*
+     * Flag error as cleared but remove it elsewhere to avoid two errors
+     * accessing the same error stack location, revealing timing information.
+     */
+    clear = constant_time_select_int(constant_time_eq_int(clear, 0),
+                                     0, ERR_FLAG_CLEAR);
+    es->err_flags[top] |= clear;
 }

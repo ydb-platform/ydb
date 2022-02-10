@@ -75,7 +75,7 @@
 #endif
 
 
-#if defined(_WIN32) && !defined(__CYGWIN__) 
+#if defined(_WIN32) && !defined(__CYGWIN__)
 #include <wsockcompat.h>
 #endif
 
@@ -503,8 +503,8 @@ xmlNanoFTPFreeCtxt(void * ctx) {
     if (ctxt->hostname != NULL) xmlFree(ctxt->hostname);
     if (ctxt->protocol != NULL) xmlFree(ctxt->protocol);
     if (ctxt->path != NULL) xmlFree(ctxt->path);
-    if (ctxt->user != NULL) xmlFree(ctxt->user); 
-    if (ctxt->passwd != NULL) xmlFree(ctxt->passwd); 
+    if (ctxt->user != NULL) xmlFree(ctxt->user);
+    if (ctxt->passwd != NULL) xmlFree(ctxt->passwd);
     ctxt->passive = 1;
     if (ctxt->controlFd != INVALID_SOCKET) closesocket(ctxt->controlFd);
     ctxt->controlFd = INVALID_SOCKET;
@@ -901,7 +901,7 @@ xmlNanoFTPConnect(void *ctx) {
 	    __xmlIOErr(XML_FROM_FTP, 0, "getaddrinfo failed");
 	    return (-1);
 	}
-	if ((size_t)tmp->ai_addrlen > sizeof(ctxt->ftpAddr)) { 
+	if ((size_t)tmp->ai_addrlen > sizeof(ctxt->ftpAddr)) {
 	    if (result)
 		freeaddrinfo (result);
 	    __xmlIOErr(XML_FROM_FTP, 0, "gethostbyname address mismatch");
@@ -1036,7 +1036,7 @@ xmlNanoFTPConnect(void *ctx) {
 		case 2:
 		    if (proxyPasswd == NULL)
 			break;
-                    /* Falls through. */ 
+                    /* Falls through. */
 		case 3:
 		    if (proxyPasswd != NULL)
 			snprintf(buf, sizeof(buf), "PASS %s\r\n", proxyPasswd);
@@ -1106,7 +1106,7 @@ xmlNanoFTPConnect(void *ctx) {
 		    ctxt->controlFd = INVALID_SOCKET;
 		    return(-1);
 		}
-                /* Falls through. */ 
+                /* Falls through. */
 	    case 2:
 		/* USER user@host command */
 		if (ctxt->user == NULL)
@@ -1160,7 +1160,7 @@ xmlNanoFTPConnect(void *ctx) {
 		    ctxt->controlFd = INVALID_SOCKET;
 		    return(-1);
 		}
-                /* Falls through. */ 
+                /* Falls through. */
 	    case 3:
 		/*
 		 * If you need support for other Proxy authentication scheme
@@ -1209,7 +1209,7 @@ xmlNanoFTPConnect(void *ctx) {
 	case 3:
 	    __xmlIOErr(XML_FROM_FTP, XML_FTP_ACCNT,
 		       "FTP server asking for ACCNT on anonymous\n");
-           /* Falls through. */ 
+           /* Falls through. */
 	case 1:
 	case 4:
 	case 5:

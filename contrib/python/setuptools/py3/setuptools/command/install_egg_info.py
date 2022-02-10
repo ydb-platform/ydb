@@ -2,12 +2,12 @@ from distutils import log, dir_util
 import os
 
 from setuptools import Command
-from setuptools import namespaces 
+from setuptools import namespaces
 from setuptools.archive_util import unpack_archive
 import pkg_resources
 
 
-class install_egg_info(namespaces.Installer, Command): 
+class install_egg_info(namespaces.Installer, Command):
     """Install an .egg-info directory for the package"""
 
     description = "Install an .egg-info directory for the package"
@@ -28,7 +28,7 @@ class install_egg_info(namespaces.Installer, Command):
         ).egg_name() + '.egg-info'
         self.source = ei_cmd.egg_info
         self.target = os.path.join(self.install_dir, basename)
-        self.outputs = [] 
+        self.outputs = []
 
     def run(self):
         self.run_command('egg_info')

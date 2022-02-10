@@ -5,7 +5,7 @@
 
     Just export lexer classes previously contained in this module.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -29,6 +29,6 @@ from pygments.lexers.dylan import DylanLexer, DylanLidLexer, DylanConsoleLexer
 from pygments.lexers.ooc import OocLexer
 from pygments.lexers.felix import FelixLexer
 from pygments.lexers.nimrod import NimrodLexer
-from pygments.lexers.crystal import CrystalLexer 
+from pygments.lexers.crystal import CrystalLexer
 
 __all__ = []

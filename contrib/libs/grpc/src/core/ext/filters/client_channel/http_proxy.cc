@@ -1,58 +1,58 @@
-/* 
- * 
- * Copyright 2016 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#include <grpc/support/port_platform.h> 
- 
-#include "src/core/ext/filters/client_channel/http_proxy.h" 
- 
-#include <stdbool.h> 
-#include <string.h> 
- 
+/*
+ *
+ * Copyright 2016 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#include <grpc/support/port_platform.h>
+
+#include "src/core/ext/filters/client_channel/http_proxy.h"
+
+#include <stdbool.h>
+#include <string.h>
+
 #include "y_absl/strings/str_cat.h"
 
-#include <grpc/support/alloc.h> 
-#include <grpc/support/log.h> 
-#include <grpc/support/string_util.h> 
- 
-#include "src/core/ext/filters/client_channel/http_connect_handshaker.h" 
-#include "src/core/ext/filters/client_channel/proxy_mapper_registry.h" 
-#include "src/core/lib/channel/channel_args.h" 
-#include "src/core/lib/gpr/env.h" 
-#include "src/core/lib/gpr/string.h" 
+#include <grpc/support/alloc.h>
+#include <grpc/support/log.h>
+#include <grpc/support/string_util.h>
+
+#include "src/core/ext/filters/client_channel/http_connect_handshaker.h"
+#include "src/core/ext/filters/client_channel/proxy_mapper_registry.h"
+#include "src/core/lib/channel/channel_args.h"
+#include "src/core/lib/gpr/env.h"
+#include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gprpp/host_port.h"
-#include "src/core/lib/slice/b64.h" 
+#include "src/core/lib/slice/b64.h"
 #include "src/core/lib/uri/uri_parser.h"
- 
+
 namespace grpc_core {
 namespace {
 
-/** 
+/**
  * Parses the 'https_proxy' env var (fallback on 'http_proxy') and returns the
  * proxy hostname to resolve or nullptr on error. Also sets 'user_cred' to user
  * credentials if present in the 'http_proxy' env var, otherwise leaves it
  * unchanged. It is caller's responsibility to gpr_free user_cred.
- */ 
+ */
 char* GetHttpProxyServer(const grpc_channel_args* args, char** user_cred) {
-  GPR_ASSERT(user_cred != nullptr); 
+  GPR_ASSERT(user_cred != nullptr);
   grpc_uri* uri = nullptr;
-  char* proxy_name = nullptr; 
-  char** authority_strs = nullptr; 
-  size_t authority_nstrs; 
+  char* proxy_name = nullptr;
+  char** authority_strs = nullptr;
+  size_t authority_nstrs;
   /* We check the following places to determine the HTTP proxy to use, stopping
    * at the first one that is set:
    * 1. GRPC_ARG_HTTP_PROXY channel arg
@@ -66,43 +66,43 @@ char* GetHttpProxyServer(const grpc_channel_args* args, char** user_cred) {
   if (uri_str == nullptr) uri_str = gpr_getenv("grpc_proxy");
   if (uri_str == nullptr) uri_str = gpr_getenv("https_proxy");
   if (uri_str == nullptr) uri_str = gpr_getenv("http_proxy");
-  if (uri_str == nullptr) return nullptr; 
+  if (uri_str == nullptr) return nullptr;
   // an emtpy value means "don't use proxy"
   if (uri_str[0] == '\0') goto done;
   uri = grpc_uri_parse(uri_str, false /* suppress_errors */);
-  if (uri == nullptr || uri->authority == nullptr) { 
-    gpr_log(GPR_ERROR, "cannot parse value of 'http_proxy' env var"); 
-    goto done; 
-  } 
-  if (strcmp(uri->scheme, "http") != 0) { 
-    gpr_log(GPR_ERROR, "'%s' scheme not supported in proxy URI", uri->scheme); 
-    goto done; 
-  } 
-  /* Split on '@' to separate user credentials from host */ 
-  gpr_string_split(uri->authority, "@", &authority_strs, &authority_nstrs); 
-  GPR_ASSERT(authority_nstrs != 0); /* should have at least 1 string */ 
-  if (authority_nstrs == 1) { 
-    /* User cred not present in authority */ 
-    proxy_name = authority_strs[0]; 
-  } else if (authority_nstrs == 2) { 
-    /* User cred found */ 
-    *user_cred = authority_strs[0]; 
-    proxy_name = authority_strs[1]; 
-    gpr_log(GPR_DEBUG, "userinfo found in proxy URI"); 
-  } else { 
-    /* Bad authority */ 
-    for (size_t i = 0; i < authority_nstrs; i++) { 
-      gpr_free(authority_strs[i]); 
-    } 
-    proxy_name = nullptr; 
-  } 
-  gpr_free(authority_strs); 
-done: 
-  gpr_free(uri_str); 
-  grpc_uri_destroy(uri); 
-  return proxy_name; 
-} 
- 
+  if (uri == nullptr || uri->authority == nullptr) {
+    gpr_log(GPR_ERROR, "cannot parse value of 'http_proxy' env var");
+    goto done;
+  }
+  if (strcmp(uri->scheme, "http") != 0) {
+    gpr_log(GPR_ERROR, "'%s' scheme not supported in proxy URI", uri->scheme);
+    goto done;
+  }
+  /* Split on '@' to separate user credentials from host */
+  gpr_string_split(uri->authority, "@", &authority_strs, &authority_nstrs);
+  GPR_ASSERT(authority_nstrs != 0); /* should have at least 1 string */
+  if (authority_nstrs == 1) {
+    /* User cred not present in authority */
+    proxy_name = authority_strs[0];
+  } else if (authority_nstrs == 2) {
+    /* User cred found */
+    *user_cred = authority_strs[0];
+    proxy_name = authority_strs[1];
+    gpr_log(GPR_DEBUG, "userinfo found in proxy URI");
+  } else {
+    /* Bad authority */
+    for (size_t i = 0; i < authority_nstrs; i++) {
+      gpr_free(authority_strs[i]);
+    }
+    proxy_name = nullptr;
+  }
+  gpr_free(authority_strs);
+done:
+  gpr_free(uri_str);
+  grpc_uri_destroy(uri);
+  return proxy_name;
+}
+
 class HttpProxyMapper : public ProxyMapperInterface {
  public:
   bool MapName(const char* server_uri, const grpc_channel_args* args,
@@ -119,7 +119,7 @@ class HttpProxyMapper : public ProxyMapperInterface {
       gpr_log(GPR_ERROR,
               "'http_proxy' environment variable set, but cannot "
               "parse server URI '%s' -- not using proxy",
-              server_uri); 
+              server_uri);
       goto no_use_proxy;
     }
     if (strcmp(uri->scheme, "unix") == 0) {
@@ -161,15 +161,15 @@ class HttpProxyMapper : public ProxyMapperInterface {
             use_proxy = false;
             break;
           }
-        } 
+        }
         for (size_t i = 0; i < num_no_proxy_hosts; i++) {
           gpr_free(no_proxy_hosts[i]);
         }
         gpr_free(no_proxy_hosts);
         gpr_free(no_proxy_str);
         if (!use_proxy) goto no_use_proxy;
-      } 
-    } 
+      }
+    }
     grpc_arg args_to_add[2];
     args_to_add[0] = grpc_channel_arg_string_create(
         (char*)GRPC_ARG_HTTP_CONNECT_SERVER,
@@ -197,22 +197,22 @@ class HttpProxyMapper : public ProxyMapperInterface {
     *name_to_resolve = nullptr;
     gpr_free(user_cred);
     return false;
-  } 
+  }
 
   bool MapAddress(const grpc_resolved_address& /*address*/,
                   const grpc_channel_args* /*args*/,
                   grpc_resolved_address** /*new_address*/,
                   grpc_channel_args** /*new_args*/) override {
     return false;
-  } 
+  }
 };
- 
+
 }  // namespace
 
 void RegisterHttpProxyMapper() {
   ProxyMapperRegistry::Register(
       true /* at_start */,
       std::unique_ptr<ProxyMapperInterface>(new HttpProxyMapper()));
-} 
- 
+}
+
 }  // namespace grpc_core

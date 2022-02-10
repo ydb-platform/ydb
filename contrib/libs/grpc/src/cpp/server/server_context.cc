@@ -1,35 +1,35 @@
 /*
  *
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
 #include <grpcpp/impl/codegen/server_context.h>
 
-#include <algorithm> 
-#include <utility> 
+#include <algorithm>
+#include <utility>
 
 #include <grpc/compression.h>
 #include <grpc/grpc.h>
-#include <grpc/load_reporting.h> 
+#include <grpc/load_reporting.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
-#include <grpcpp/impl/call.h> 
+#include <grpcpp/impl/call.h>
 #include <grpcpp/impl/codegen/completion_queue.h>
 #include <grpcpp/support/server_callback.h>
-#include <grpcpp/support/time.h> 
+#include <grpcpp/support/time.h>
 
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/sync.h"
@@ -228,7 +228,7 @@ ServerContextBase::ServerContextBase()
 ServerContextBase::ServerContextBase(gpr_timespec deadline,
                                      grpc_metadata_array* arr)
     : deadline_(deadline) {
-  std::swap(*client_metadata_.arr(), *arr); 
+  std::swap(*client_metadata_.arr(), *arr);
 }
 
 void ServerContextBase::BindDeadlineAndMetadata(gpr_timespec deadline,
@@ -281,8 +281,8 @@ void ServerContextBase::BeginCompletionOp(
 
 internal::CompletionQueueTag* ServerContextBase::GetCompletionOpTag() {
   return static_cast<internal::CompletionQueueTag*>(completion_op_);
-} 
- 
+}
+
 void ServerContextBase::AddInitialMetadata(const TString& key,
                                            const TString& value) {
   initial_metadata_.insert(std::make_pair(key, value));
@@ -324,14 +324,14 @@ bool ServerContextBase::IsCancelled() const {
 
 void ServerContextBase::set_compression_algorithm(
     grpc_compression_algorithm algorithm) {
-  compression_algorithm_ = algorithm; 
-  const char* algorithm_name = nullptr; 
+  compression_algorithm_ = algorithm;
+  const char* algorithm_name = nullptr;
   if (!grpc_compression_algorithm_name(algorithm, &algorithm_name)) {
     gpr_log(GPR_ERROR, "Name for compression algorithm '%d' unknown.",
             algorithm);
     abort();
   }
-  GPR_ASSERT(algorithm_name != nullptr); 
+  GPR_ASSERT(algorithm_name != nullptr);
   AddInitialMetadata(GRPC_COMPRESSION_REQUEST_ALGORITHM_MD_KEY, algorithm_name);
 }
 
@@ -353,9 +353,9 @@ const struct census_context* ServerContextBase::census_context() const {
 void ServerContextBase::SetLoadReportingCosts(
     const std::vector<TString>& cost_data) {
   if (call_.call == nullptr) return;
-  for (const auto& cost_datum : cost_data) { 
-    AddTrailingMetadata(GRPC_LB_COST_MD_KEY, cost_datum); 
-  } 
-} 
- 
+  for (const auto& cost_datum : cost_data) {
+    AddTrailingMetadata(GRPC_LB_COST_MD_KEY, cost_datum);
+  }
+}
+
 }  // namespace grpc

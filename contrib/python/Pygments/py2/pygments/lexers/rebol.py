@@ -5,7 +5,7 @@
 
     Lexers for the REBOL and related languages.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -102,12 +102,12 @@ class RebolLexer(RegexLexer):
             yield match.start(), Generic.Heading, word
         elif re.match("to-.*", word):
             yield match.start(), Keyword, word
-        elif re.match(r'(\+|-|\*|/|//|\*\*|and|or|xor|=\?|=|==|<>|<|>|<=|>=)$', 
+        elif re.match(r'(\+|-|\*|/|//|\*\*|and|or|xor|=\?|=|==|<>|<|>|<=|>=)$',
                       word):
             yield match.start(), Operator, word
-        elif re.match(r".*\?$", word): 
+        elif re.match(r".*\?$", word):
             yield match.start(), Keyword, word
-        elif re.match(r".*\!$", word): 
+        elif re.match(r".*\!$", word):
             yield match.start(), Keyword.Type, word
         elif re.match("'.*", word):
             yield match.start(), Name.Variable.Instance, word  # lit-word
@@ -239,7 +239,7 @@ class RebolLexer(RegexLexer):
         if re.match(r'^\s*REBOL\s*\[', text, re.IGNORECASE):
             # The code starts with REBOL header
             return 1.0
-        elif re.search(r'\s*REBOL\s*\[', text, re.IGNORECASE): 
+        elif re.search(r'\s*REBOL\s*\[', text, re.IGNORECASE):
             # The code contains REBOL header but also some text before it
             return 0.5
 
@@ -297,10 +297,10 @@ class RedLexer(RegexLexer):
             yield match.start(), Keyword.Namespace, word
         elif re.match("to-.*", word):
             yield match.start(), Keyword, word
-        elif re.match(r'(\+|-\*\*|-|\*\*|//|/|\*|and|or|xor|=\?|===|==|=|<>|<=|>=|' 
-                      r'<<<|>>>|<<|>>|<|>%)$', word): 
+        elif re.match(r'(\+|-\*\*|-|\*\*|//|/|\*|and|or|xor|=\?|===|==|=|<>|<=|>=|'
+                      r'<<<|>>>|<<|>>|<|>%)$', word):
             yield match.start(), Operator, word
-        elif re.match(r".*\!$", word): 
+        elif re.match(r".*\!$", word):
             yield match.start(), Keyword.Type, word
         elif re.match("'.*", word):
             yield match.start(), Name.Variable.Instance, word  # lit-word

@@ -45,16 +45,16 @@ namespace
   {
       return PyString_Check(obj) ? PyString_AsString(obj) : 0;
   }
-#elif PY_VERSION_HEX < 0x03070000 
+#elif PY_VERSION_HEX < 0x03070000
   void* convert_to_cstring(PyObject* obj)
   {
       return PyUnicode_Check(obj) ? _PyUnicode_AsString(obj) : 0;
   }
-#else 
-  void* convert_to_cstring(PyObject* obj) 
-  { 
-      return PyUnicode_Check(obj) ? const_cast<void*>(reinterpret_cast<const void*>(_PyUnicode_AsString(obj))) : 0; 
-  } 
+#else
+  void* convert_to_cstring(PyObject* obj)
+  {
+      return PyUnicode_Check(obj) ? const_cast<void*>(reinterpret_cast<const void*>(_PyUnicode_AsString(obj))) : 0;
+  }
 #endif
 
   // Given a target type and a SlotPolicy describing how to perform a

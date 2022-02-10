@@ -1,21 +1,21 @@
-# Copyright 2015 gRPC authors. 
+# Copyright 2015 gRPC authors.
 #
-# Licensed under the Apache License, Version 2.0 (the "License"); 
-# you may not use this file except in compliance with the License. 
-# You may obtain a copy of the License at 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0 
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software 
-# distributed under the License is distributed on an "AS IS" BASIS, 
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-# See the License for the specific language governing permissions and 
-# limitations under the License. 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 
 cdef class Server:
 
-  def __cinit__(self, object arguments): 
+  def __cinit__(self, object arguments):
     fork_handlers_and_grpc_init()
     self.references = []
     self.registered_completion_queues = []
@@ -34,15 +34,15 @@ cdef class Server:
       raise ValueError("server must be started and not shutting down")
     if server_queue not in self.registered_completion_queues:
       raise ValueError("server_queue must be a registered completion queue")
-    cdef _RequestCallTag request_call_tag = _RequestCallTag(tag) 
-    request_call_tag.prepare() 
-    cpython.Py_INCREF(request_call_tag) 
-    return grpc_server_request_call( 
-        self.c_server, &request_call_tag.call.c_call, 
-        &request_call_tag.call_details.c_details, 
-        &request_call_tag.c_invocation_metadata, 
-        call_queue.c_completion_queue, server_queue.c_completion_queue, 
-        <cpython.PyObject *>request_call_tag) 
+    cdef _RequestCallTag request_call_tag = _RequestCallTag(tag)
+    request_call_tag.prepare()
+    cpython.Py_INCREF(request_call_tag)
+    return grpc_server_request_call(
+        self.c_server, &request_call_tag.call.c_call,
+        &request_call_tag.call_details.c_details,
+        &request_call_tag.c_invocation_metadata,
+        call_queue.c_completion_queue, server_queue.c_completion_queue,
+        <cpython.PyObject *>request_call_tag)
 
   def register_completion_queue(
       self, CompletionQueue queue not None):
@@ -92,12 +92,12 @@ cdef class Server:
 
   cdef _c_shutdown(self, CompletionQueue queue, tag):
     self.is_shutting_down = True
-    cdef _ServerShutdownTag server_shutdown_tag = _ServerShutdownTag(tag, self) 
-    cpython.Py_INCREF(server_shutdown_tag) 
+    cdef _ServerShutdownTag server_shutdown_tag = _ServerShutdownTag(tag, self)
+    cpython.Py_INCREF(server_shutdown_tag)
     with nogil:
       grpc_server_shutdown_and_notify(
           self.c_server, queue.c_completion_queue,
-          <cpython.PyObject *>server_shutdown_tag) 
+          <cpython.PyObject *>server_shutdown_tag)
 
   def shutdown(self, CompletionQueue queue not None, tag):
     if queue.is_shutting_down:
@@ -112,8 +112,8 @@ cdef class Server:
       self._c_shutdown(queue, tag)
 
   cdef notify_shutdown_complete(self):
-    # called only after our server shutdown tag has emerged from a completion 
-    # queue. 
+    # called only after our server shutdown tag has emerged from a completion
+    # queue.
     self.is_shutdown = True
 
   def cancel_all_calls(self):

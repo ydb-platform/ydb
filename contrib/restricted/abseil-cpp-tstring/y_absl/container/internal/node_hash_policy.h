@@ -39,10 +39,10 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/base/config.h" 
- 
+#include "y_absl/base/config.h"
+
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 template <class Reference, class Policy>
@@ -86,7 +86,7 @@ struct node_hash_policy {
 };
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_NODE_HASH_POLICY_H_

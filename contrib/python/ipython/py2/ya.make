@@ -35,10 +35,10 @@ IF (OS_DARWIN)
     )
 ENDIF ()
 
-NO_CHECK_IMPORTS(IPython.*) 
- 
-NO_LINT() 
- 
+NO_CHECK_IMPORTS(IPython.*)
+
+NO_LINT()
+
 PY_SRCS(
     TOP_LEVEL
     IPython/__init__.py

@@ -17,10 +17,10 @@
 
 #include <cstdint>
 
-#include "y_absl/base/config.h" 
- 
+#include "y_absl/base/config.h"
+
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 // Arbitrary value with high bits set. Xor'ing with it is unlikely
@@ -45,7 +45,7 @@ inline T* UnhidePtr(uintptr_t hidden) {
 }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_HIDE_PTR_H_

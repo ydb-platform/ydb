@@ -1,26 +1,26 @@
 /*
  *
- * Copyright 2016 gRPC authors. 
+ * Copyright 2016 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
 #ifndef GRPC_CORE_LIB_CHANNEL_HANDSHAKER_H
 #define GRPC_CORE_LIB_CHANNEL_HANDSHAKER_H
 
-#include <grpc/support/port_platform.h> 
- 
+#include <grpc/support/port_platform.h>
+
 #include "y_absl/container/inlined_vector.h"
 
 #include <grpc/support/string_util.h>
@@ -88,7 +88,7 @@ class Handshaker : public RefCounted<Handshaker> {
 //
 // HandshakeManager
 //
- 
+
 class HandshakeManager : public RefCounted<HandshakeManager> {
  public:
   HandshakeManager();
@@ -166,14 +166,14 @@ class HandshakeManager : public RefCounted<HandshakeManager> {
   HandshakeManager* prev_ = nullptr;
   HandshakeManager* next_ = nullptr;
 };
- 
+
 }  // namespace grpc_core
- 
+
 // TODO(arjunroy): These are transitional to account for the new handshaker API
 // and will eventually be removed entirely.
 typedef grpc_core::HandshakeManager grpc_handshake_manager;
 typedef grpc_core::Handshaker grpc_handshaker;
 void grpc_handshake_manager_add(grpc_handshake_manager* mgr,
                                 grpc_handshaker* handshaker);
- 
+
 #endif /* GRPC_CORE_LIB_CHANNEL_HANDSHAKER_H */

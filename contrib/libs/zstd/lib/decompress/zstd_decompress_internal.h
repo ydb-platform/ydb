@@ -19,7 +19,7 @@
 /*-*******************************************************
  *  Dependencies
  *********************************************************/
-#include "../common/mem.h"             /* BYTE, U16, U32 */ 
+#include "../common/mem.h"             /* BYTE, U16, U32 */
 #include "../common/zstd_internal.h"   /* constants : MaxLL, MaxML, MaxOff, LLFSELog, etc. */
 
 
@@ -184,7 +184,7 @@ struct ZSTD_DCtx_s
     U32 hostageByte;
     int noForwardProgress;
     ZSTD_bufferMode_e outBufferMode;
-    ZSTD_outBuffer expectedOutBuffer; 
+    ZSTD_outBuffer expectedOutBuffer;
 
     /* workspace */
     BYTE* litBuffer;
@@ -192,13 +192,13 @@ struct ZSTD_DCtx_s
     ZSTD_litLocation_e litBufferLocation;
     BYTE litExtraBuffer[ZSTD_LITBUFFEREXTRASIZE + WILDCOPY_OVERLENGTH]; /* literal buffer can be split between storage within dst and within this scratch buffer */
     BYTE headerBuffer[ZSTD_FRAMEHEADERSIZE_MAX];
- 
-    size_t oversizedDuration; 
- 
-#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION 
-    void const* dictContentBeginForFuzzing; 
-    void const* dictContentEndForFuzzing; 
-#endif 
+
+    size_t oversizedDuration;
+
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+    void const* dictContentBeginForFuzzing;
+    void const* dictContentEndForFuzzing;
+#endif
 
     /* Tracing */
 #if ZSTD_TRACE
@@ -221,7 +221,7 @@ MEM_STATIC int ZSTD_DCtx_get_bmi2(const struct ZSTD_DCtx_s *dctx) {
 
 /*! ZSTD_loadDEntropy() :
  *  dict : must point at beginning of a valid zstd dictionary.
- * @return : size of dictionary header (size of magic number + dict ID + entropy tables) */ 
+ * @return : size of dictionary header (size of magic number + dict ID + entropy tables) */
 size_t ZSTD_loadDEntropy(ZSTD_entropyDTables_t* entropy,
                    const void* const dict, size_t const dictSize);
 

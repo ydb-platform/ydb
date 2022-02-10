@@ -54,7 +54,7 @@ void SetStringVariables(const FieldDescriptor* descriptor,
   (*variables)["default_length"] =
       StrCat(descriptor->default_value_string().length());
   TProtoStringType default_variable_string = MakeDefaultName(descriptor);
-  (*variables)["default_variable_name"] = default_variable_string; 
+  (*variables)["default_variable_name"] = default_variable_string;
 
   if (!descriptor->default_value_string().empty()) {
     (*variables)["lazy_variable"] =
@@ -235,7 +235,7 @@ void StringFieldGenerator::GenerateInlineAccessorDefinitions(
         "  if (!_internal_has_$name$()) {\n"
         "    return nullptr;\n"
         "  }\n"
-        "  $clear_hasbit$\n" 
+        "  $clear_hasbit$\n"
         "  return $name$_.ReleaseNonDefault($init_value$, "
         "GetArenaForAllocation());\n");
   } else {
@@ -282,30 +282,30 @@ void StringFieldGenerator::GenerateClearingCode(io::Printer* printer) const {
 void StringFieldGenerator::GenerateMessageClearingCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
-  // Two-dimension specialization here: supporting arenas, field presence, or 
-  // not, and default value is the empty string or not. Complexity here ensures 
-  // the minimal number of branches / amount of extraneous code at runtime 
-  // (given that the below methods are inlined one-liners)! 
- 
+  // Two-dimension specialization here: supporting arenas, field presence, or
+  // not, and default value is the empty string or not. Complexity here ensures
+  // the minimal number of branches / amount of extraneous code at runtime
+  // (given that the below methods are inlined one-liners)!
+
   // If we have a hasbit, then the Clear() method of the protocol buffer
-  // will have checked that this field is set.  If so, we can avoid redundant 
+  // will have checked that this field is set.  If so, we can avoid redundant
   // checks against the default variable.
   const bool must_be_present = HasHasbit(descriptor_);
- 
+
   if (descriptor_->default_value_string().empty()) {
     if (must_be_present) {
       format("$name$_.ClearNonDefaultToEmpty();\n");
-    } else { 
+    } else {
       format("$name$_.ClearToEmpty();\n");
-    } 
-  } else { 
+    }
+  } else {
     // Clear to a non-empty default is more involved, as we try to use the
     // Arena if one is present and may need to reallocate the string.
     format(
         "$name$_.ClearToDefault($lazy_variable$, GetArenaForAllocation());\n ");
-  } 
-} 
- 
+  }
+}
+
 void StringFieldGenerator::GenerateMergingCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   // TODO(gpike): improve this
@@ -330,25 +330,25 @@ void StringFieldGenerator::GenerateConstructorCode(io::Printer* printer) const {
 void StringFieldGenerator::GenerateCopyConstructorCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
-  GenerateConstructorCode(printer); 
- 
+  GenerateConstructorCode(printer);
+
   if (HasHasbit(descriptor_)) {
     format("if (from._internal_has_$name$()) {\n");
-  } else { 
+  } else {
     format("if (!from._internal_$name$().empty()) {\n");
-  } 
- 
+  }
+
   format.Indent();
- 
+
   // TODO(gpike): improve this
   format(
       "$name$_.Set($default_value_tag$, from._internal_$name$(), \n"
       "  GetArenaForAllocation());\n");
- 
+
   format.Outdent();
   format("}\n");
-} 
- 
+}
+
 void StringFieldGenerator::GenerateDestructorCode(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_.DestroyNoArena($init_value$);\n");
@@ -491,9 +491,9 @@ void StringOneofFieldGenerator::GenerateClearingCode(
 
 void StringOneofFieldGenerator::GenerateMessageClearingCode(
     io::Printer* printer) const {
-  return GenerateClearingCode(printer); 
-} 
- 
+  return GenerateClearingCode(printer);
+}
+
 void StringOneofFieldGenerator::GenerateSwappingCode(
     io::Printer* printer) const {
   // Don't print any swapping code. Swapping the union will swap this field.
@@ -733,8 +733,8 @@ void RepeatedStringFieldGenerator::GenerateCopyConstructorCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_.CopyFrom(from.$name$_);");
-} 
- 
+}
+
 void RepeatedStringFieldGenerator::GenerateSerializeWithCachedSizesToArray(
     io::Printer* printer) const {
   Formatter format(printer, variables_);

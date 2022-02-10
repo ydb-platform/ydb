@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #include <aws/s3/model/RequestProgress.h>
 #include <aws/core/utils/xml/XmlSerializer.h>
@@ -42,7 +42,7 @@ RequestProgress& RequestProgress::operator =(const XmlNode& xmlNode)
     XmlNode enabledNode = resultNode.FirstChild("Enabled");
     if(!enabledNode.IsNull())
     {
-      m_enabled = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(enabledNode.GetText()).c_str()).c_str()); 
+      m_enabled = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(enabledNode.GetText()).c_str()).c_str());
       m_enabledHasBeenSet = true;
     }
   }

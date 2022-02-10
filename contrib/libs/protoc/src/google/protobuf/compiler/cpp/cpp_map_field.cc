@@ -50,7 +50,7 @@ void SetMessageVariables(const FieldDescriptor* descriptor,
                          std::map<TProtoStringType, TProtoStringType>* variables,
                          const Options& options) {
   SetCommonFieldVariables(descriptor, variables, options);
-  (*variables)["type"] = ClassName(descriptor->message_type(), false); 
+  (*variables)["type"] = ClassName(descriptor->message_type(), false);
   (*variables)["full_name"] = descriptor->full_name();
 
   const FieldDescriptor* key =
@@ -162,10 +162,10 @@ void MapFieldGenerator::GenerateSwappingCode(io::Printer* printer) const {
 
 void MapFieldGenerator::GenerateCopyConstructorCode(
     io::Printer* printer) const {
-  GenerateConstructorCode(printer); 
-  GenerateMergingCode(printer); 
-} 
- 
+  GenerateConstructorCode(printer);
+  GenerateMergingCode(printer);
+}
+
 static void GenerateSerializationLoop(const Formatter& format, bool string_key,
                                       bool string_value,
                                       bool is_deterministic) {
@@ -236,12 +236,12 @@ void MapFieldGenerator::GenerateSerializeWithCachedSizesToArray(
     format.Indent();
     format.Indent();
     if (string_key) {
-      GenerateUtf8CheckCodeForString( 
+      GenerateUtf8CheckCodeForString(
           key_field, options_, false,
           "p->first.data(), static_cast<int>(p->first.length()),\n", format);
     }
     if (string_value) {
-      GenerateUtf8CheckCodeForString( 
+      GenerateUtf8CheckCodeForString(
           value_field, options_, false,
           "p->second.data(), static_cast<int>(p->second.length()),\n", format);
     }
@@ -264,9 +264,9 @@ void MapFieldGenerator::GenerateSerializeWithCachedSizesToArray(
       "  for (::$proto_ns$::Map< $key_cpp$, $val_cpp$ >::const_iterator\n"
       "      it = this->_internal_$name$().begin();\n"
       "      it != this->_internal_$name$().end(); ++it, ++n) {\n"
-      "    items[static_cast<ptrdiff_t>(n)] = SortItem(&*it);\n" 
+      "    items[static_cast<ptrdiff_t>(n)] = SortItem(&*it);\n"
       "  }\n"
-      "  ::std::sort(&items[0], &items[static_cast<ptrdiff_t>(n)], Less());\n"); 
+      "  ::std::sort(&items[0], &items[static_cast<ptrdiff_t>(n)], Less());\n");
   format.Indent();
   GenerateSerializationLoop(format, string_key, string_value, true);
   format.Outdent();
@@ -282,7 +282,7 @@ void MapFieldGenerator::GenerateSerializeWithCachedSizesToArray(
 void MapFieldGenerator::GenerateByteSize(io::Printer* printer) const {
   Formatter format(printer, variables_);
   format(
-      "total_size += $tag_size$ *\n" 
+      "total_size += $tag_size$ *\n"
       "    "
       "::$proto_ns$::internal::FromIntSize(this->_internal_$name$_size());\n"
       "for (::$proto_ns$::Map< $key_cpp$, $val_cpp$ >::const_iterator\n"

@@ -1,37 +1,37 @@
 PY23_LIBRARY()
- 
+
 LICENSE(MIT)
 
-OWNER(g:python-contrib) 
- 
+OWNER(g:python-contrib)
+
 VERSION(21.2.0)
- 
-NO_LINT() 
- 
-PY_SRCS( 
-    TOP_LEVEL 
-    attr/__init__.py 
+
+NO_LINT()
+
+PY_SRCS(
+    TOP_LEVEL
+    attr/__init__.py
     attr/__init__.pyi
     attr/_cmp.py
     attr/_cmp.pyi
-    attr/_compat.py 
-    attr/_config.py 
-    attr/_funcs.py 
-    attr/_make.py 
+    attr/_compat.py
+    attr/_config.py
+    attr/_funcs.py
+    attr/_make.py
     attr/_version_info.py
     attr/_version_info.pyi
-    attr/converters.py 
+    attr/converters.py
     attr/converters.pyi
-    attr/exceptions.py 
+    attr/exceptions.py
     attr/exceptions.pyi
-    attr/filters.py 
+    attr/filters.py
     attr/filters.pyi
     attr/setters.py
     attr/setters.pyi
-    attr/validators.py 
+    attr/validators.py
     attr/validators.pyi
-) 
- 
+)
+
 IF (PYTHON3)
     PY_SRCS(
         TOP_LEVEL
@@ -46,4 +46,4 @@ RESOURCE_FILES(
     attr/py.typed
 )
 
-END() 
+END()

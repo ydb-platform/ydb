@@ -5,8 +5,8 @@ static constexpr size_t MIN_BUFFER_GROW_SIZE = 16;
 TStringInput::~TStringInput() = default;
 
 size_t TStringInput::DoNext(const void** ptr, size_t len) {
-    len = Min(len, S_->size() - Pos_); 
-    *ptr = S_->data() + Pos_; 
+    len = Min(len, S_->size() - Pos_);
+    *ptr = S_->data() + Pos_;
     Pos_ += len;
     return len;
 }

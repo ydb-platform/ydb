@@ -1,8 +1,8 @@
 #ifndef AWS_COMMON_BYTE_BUF_H
 #define AWS_COMMON_BYTE_BUF_H
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
  */
 
 #include <aws/common/array_list.h>
@@ -56,12 +56,12 @@ struct aws_byte_cursor {
 #define AWS_BYTE_BUF_PRI(B) ((int)(B).len < 0 ? 0 : (int)(B).len), (const char *)(B).buffer
 
 /**
- * Helper Macro for inititilizing a byte cursor from a string literal 
- */ 
-#define AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(literal)                                                                 \ 
-    { .ptr = (uint8_t *)(const char *)(literal), .len = sizeof(literal) - 1 } 
- 
-/** 
+ * Helper Macro for inititilizing a byte cursor from a string literal
+ */
+#define AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(literal)                                                                 \
+    { .ptr = (uint8_t *)(const char *)(literal), .len = sizeof(literal) - 1 }
+
+/**
  * Signature for function argument to trim APIs
  */
 typedef bool(aws_byte_predicate_fn)(uint8_t value);
@@ -74,7 +74,7 @@ AWS_EXTERN_C_BEGIN
  * NULL may be passed as the array pointer if its length is declared to be 0.
  */
 AWS_COMMON_API
-bool aws_array_eq(const void *const array_a, const size_t len_a, const void *array_b, const size_t len_b); 
+bool aws_array_eq(const void *const array_a, const size_t len_a, const void *array_b, const size_t len_b);
 
 /**
  * Perform a case-insensitive string comparison of two arrays.
@@ -84,11 +84,11 @@ bool aws_array_eq(const void *const array_a, const size_t len_a, const void *arr
  * Data is assumed to be ASCII text, UTF-8 will work fine too.
  */
 AWS_COMMON_API
-bool aws_array_eq_ignore_case( 
-    const void *const array_a, 
-    const size_t len_a, 
-    const void *const array_b, 
-    const size_t len_b); 
+bool aws_array_eq_ignore_case(
+    const void *const array_a,
+    const size_t len_a,
+    const void *const array_b,
+    const size_t len_b);
 
 /**
  * Compare an array and a null-terminated string.
@@ -97,7 +97,7 @@ bool aws_array_eq_ignore_case(
  * NULL may be passed as the array pointer if its length is declared to be 0.
  */
 AWS_COMMON_API
-bool aws_array_eq_c_str(const void *const array, const size_t array_len, const char *const c_str); 
+bool aws_array_eq_c_str(const void *const array, const size_t array_len, const char *const c_str);
 
 /**
  * Perform a case-insensitive string comparison of an array and a null-terminated string.
@@ -108,7 +108,7 @@ bool aws_array_eq_c_str(const void *const array, const size_t array_len, const c
  * Data is assumed to be ASCII text, UTF-8 will work fine too.
  */
 AWS_COMMON_API
-bool aws_array_eq_c_str_ignore_case(const void *const array, const size_t array_len, const char *const c_str); 
+bool aws_array_eq_c_str_ignore_case(const void *const array, const size_t array_len, const char *const c_str);
 
 AWS_COMMON_API
 int aws_byte_buf_init(struct aws_byte_buf *buf, struct aws_allocator *allocator, size_t capacity);
@@ -152,17 +152,17 @@ int aws_byte_buf_init_copy_from_cursor(
     struct aws_allocator *allocator,
     struct aws_byte_cursor src);
 
-/** 
- * Init buffer with contents of multiple cursors, and update cursors to reference the memory stored in the buffer. 
- * Each cursor arg must be an `struct aws_byte_cursor *`. NULL must be passed as the final arg. 
- * NOTE: Do not append/grow/resize buffers initialized this way, or the cursors will end up referencing invalid memory. 
- * Returns AWS_OP_SUCCESS in case of success. 
- * AWS_OP_ERR is returned if memory can't be allocated or the total cursor length exceeds SIZE_MAX. 
- */ 
+/**
+ * Init buffer with contents of multiple cursors, and update cursors to reference the memory stored in the buffer.
+ * Each cursor arg must be an `struct aws_byte_cursor *`. NULL must be passed as the final arg.
+ * NOTE: Do not append/grow/resize buffers initialized this way, or the cursors will end up referencing invalid memory.
+ * Returns AWS_OP_SUCCESS in case of success.
+ * AWS_OP_ERR is returned if memory can't be allocated or the total cursor length exceeds SIZE_MAX.
+ */
 AWS_COMMON_API
-int aws_byte_buf_init_cache_and_update_cursors(struct aws_byte_buf *dest, struct aws_allocator *allocator, ...); 
- 
-AWS_COMMON_API 
+int aws_byte_buf_init_cache_and_update_cursors(struct aws_byte_buf *dest, struct aws_allocator *allocator, ...);
+
+AWS_COMMON_API
 void aws_byte_buf_clean_up(struct aws_byte_buf *buf);
 
 /**
@@ -173,13 +173,13 @@ AWS_COMMON_API
 void aws_byte_buf_clean_up_secure(struct aws_byte_buf *buf);
 
 /**
- * Resets the len of the buffer to 0, but does not free the memory. The buffer can then be reused. 
- * Optionally zeroes the contents, if the "zero_contents" flag is true. 
- */ 
-AWS_COMMON_API 
-void aws_byte_buf_reset(struct aws_byte_buf *buf, bool zero_contents); 
- 
-/** 
+ * Resets the len of the buffer to 0, but does not free the memory. The buffer can then be reused.
+ * Optionally zeroes the contents, if the "zero_contents" flag is true.
+ */
+AWS_COMMON_API
+void aws_byte_buf_reset(struct aws_byte_buf *buf, bool zero_contents);
+
+/**
  * Sets all bytes of buffer to zero and resets len to zero.
  */
 AWS_COMMON_API
@@ -190,7 +190,7 @@ void aws_byte_buf_secure_zero(struct aws_byte_buf *buf);
  * Return whether their contents are equivalent.
  */
 AWS_COMMON_API
-bool aws_byte_buf_eq(const struct aws_byte_buf *const a, const struct aws_byte_buf *const b); 
+bool aws_byte_buf_eq(const struct aws_byte_buf *const a, const struct aws_byte_buf *const b);
 
 /**
  * Perform a case-insensitive string comparison of two aws_byte_buf structures.
@@ -199,7 +199,7 @@ bool aws_byte_buf_eq(const struct aws_byte_buf *const a, const struct aws_byte_b
  * Data is assumed to be ASCII text, UTF-8 will work fine too.
  */
 AWS_COMMON_API
-bool aws_byte_buf_eq_ignore_case(const struct aws_byte_buf *const a, const struct aws_byte_buf *const b); 
+bool aws_byte_buf_eq_ignore_case(const struct aws_byte_buf *const a, const struct aws_byte_buf *const b);
 
 /**
  * Compare an aws_byte_buf and a null-terminated string.
@@ -207,7 +207,7 @@ bool aws_byte_buf_eq_ignore_case(const struct aws_byte_buf *const a, const struc
  * The buffer should NOT contain a null-terminator, or the comparison will always return false.
  */
 AWS_COMMON_API
-bool aws_byte_buf_eq_c_str(const struct aws_byte_buf *const buf, const char *const c_str); 
+bool aws_byte_buf_eq_c_str(const struct aws_byte_buf *const buf, const char *const c_str);
 
 /**
  * Perform a case-insensitive string comparison of an aws_byte_buf and a null-terminated string.
@@ -217,18 +217,18 @@ bool aws_byte_buf_eq_c_str(const struct aws_byte_buf *const buf, const char *con
  * Data is assumed to be ASCII text, UTF-8 will work fine too.
  */
 AWS_COMMON_API
-bool aws_byte_buf_eq_c_str_ignore_case(const struct aws_byte_buf *const buf, const char *const c_str); 
+bool aws_byte_buf_eq_c_str_ignore_case(const struct aws_byte_buf *const buf, const char *const c_str);
 
 /**
  * No copies, no buffer allocations. Iterates over input_str, and returns the next substring between split_on instances.
  *
  * Edge case rules are as follows:
- * If the input is an empty string, an empty cursor will be the one entry returned. 
+ * If the input is an empty string, an empty cursor will be the one entry returned.
  * If the input begins with split_on, an empty cursor will be the first entry returned.
  * If the input has two adjacent split_on tokens, an empty cursor will be returned.
  * If the input ends with split_on, an empty cursor will be returned last.
  *
- * It is the user's responsibility zero-initialize substr before the first call. 
+ * It is the user's responsibility zero-initialize substr before the first call.
  *
  * It is the user's responsibility to make sure the input buffer stays in memory
  * long enough to use the results.
@@ -293,18 +293,18 @@ int aws_byte_cursor_split_on_char_n(
     struct aws_array_list *AWS_RESTRICT output);
 
 /**
- * Search for an exact byte match inside a cursor. The first match will be returned. Returns AWS_OP_SUCCESS 
- * on successful match and first_find will be set to the offset in input_str, and length will be the remaining length 
- * from input_str past the returned offset. If the match was not found, AWS_OP_ERR will be returned and 
- * AWS_ERROR_STRING_MATCH_NOT_FOUND will be raised. 
- */ 
-AWS_COMMON_API 
-int aws_byte_cursor_find_exact( 
-    const struct aws_byte_cursor *AWS_RESTRICT input_str, 
-    const struct aws_byte_cursor *AWS_RESTRICT to_find, 
-    struct aws_byte_cursor *first_find); 
- 
-/** 
+ * Search for an exact byte match inside a cursor. The first match will be returned. Returns AWS_OP_SUCCESS
+ * on successful match and first_find will be set to the offset in input_str, and length will be the remaining length
+ * from input_str past the returned offset. If the match was not found, AWS_OP_ERR will be returned and
+ * AWS_ERROR_STRING_MATCH_NOT_FOUND will be raised.
+ */
+AWS_COMMON_API
+int aws_byte_cursor_find_exact(
+    const struct aws_byte_cursor *AWS_RESTRICT input_str,
+    const struct aws_byte_cursor *AWS_RESTRICT to_find,
+    struct aws_byte_cursor *first_find);
+
+/**
  *
  * Shrinks a byte cursor from the right for as long as the supplied predicate is true
  */
@@ -370,54 +370,54 @@ AWS_COMMON_API
 int aws_byte_buf_append_dynamic(struct aws_byte_buf *to, const struct aws_byte_cursor *from);
 
 /**
- * Copies `from` to `to`. If `to` is too small, the buffer will be grown appropriately and 
- * the old contents copied over, before the new contents are appended. 
- * 
- * If the grow fails (overflow or OOM), then an error will be returned. 
- * 
- * If the buffer is grown, the old buffer will be securely cleared before getting freed. 
- * 
- * `from` and `to` may be the same buffer, permitting copying a buffer into itself. 
- */ 
-AWS_COMMON_API 
-int aws_byte_buf_append_dynamic_secure(struct aws_byte_buf *to, const struct aws_byte_cursor *from); 
- 
-/** 
- * Copies a single byte into `to`. If `to` is too small, the buffer will be grown appropriately and 
- * the old contents copied over, before the byte is appended. 
- * 
- * If the grow fails (overflow or OOM), then an error will be returned. 
- */ 
-AWS_COMMON_API 
-int aws_byte_buf_append_byte_dynamic(struct aws_byte_buf *buffer, uint8_t value); 
- 
-/** 
- * Copies a single byte into `to`. If `to` is too small, the buffer will be grown appropriately and 
- * the old contents copied over, before the byte is appended. 
- * 
- * If the grow fails (overflow or OOM), then an error will be returned. 
- * 
- * If the buffer is grown, the old buffer will be securely cleared before getting freed. 
- */ 
-AWS_COMMON_API 
-int aws_byte_buf_append_byte_dynamic_secure(struct aws_byte_buf *buffer, uint8_t value); 
- 
-/** 
- * Copy contents of cursor to buffer, then update cursor to reference the memory stored in the buffer. 
- * If buffer is too small, AWS_ERROR_DEST_COPY_TOO_SMALL will be returned. 
- * 
- * The cursor is permitted to reference memory from earlier in the buffer. 
- */ 
-AWS_COMMON_API 
-int aws_byte_buf_append_and_update(struct aws_byte_buf *to, struct aws_byte_cursor *from_and_update); 
- 
-/** 
- * Appends '\0' at the end of the buffer. 
- */ 
-AWS_COMMON_API 
-int aws_byte_buf_append_null_terminator(struct aws_byte_buf *buf); 
- 
-/** 
+ * Copies `from` to `to`. If `to` is too small, the buffer will be grown appropriately and
+ * the old contents copied over, before the new contents are appended.
+ *
+ * If the grow fails (overflow or OOM), then an error will be returned.
+ *
+ * If the buffer is grown, the old buffer will be securely cleared before getting freed.
+ *
+ * `from` and `to` may be the same buffer, permitting copying a buffer into itself.
+ */
+AWS_COMMON_API
+int aws_byte_buf_append_dynamic_secure(struct aws_byte_buf *to, const struct aws_byte_cursor *from);
+
+/**
+ * Copies a single byte into `to`. If `to` is too small, the buffer will be grown appropriately and
+ * the old contents copied over, before the byte is appended.
+ *
+ * If the grow fails (overflow or OOM), then an error will be returned.
+ */
+AWS_COMMON_API
+int aws_byte_buf_append_byte_dynamic(struct aws_byte_buf *buffer, uint8_t value);
+
+/**
+ * Copies a single byte into `to`. If `to` is too small, the buffer will be grown appropriately and
+ * the old contents copied over, before the byte is appended.
+ *
+ * If the grow fails (overflow or OOM), then an error will be returned.
+ *
+ * If the buffer is grown, the old buffer will be securely cleared before getting freed.
+ */
+AWS_COMMON_API
+int aws_byte_buf_append_byte_dynamic_secure(struct aws_byte_buf *buffer, uint8_t value);
+
+/**
+ * Copy contents of cursor to buffer, then update cursor to reference the memory stored in the buffer.
+ * If buffer is too small, AWS_ERROR_DEST_COPY_TOO_SMALL will be returned.
+ *
+ * The cursor is permitted to reference memory from earlier in the buffer.
+ */
+AWS_COMMON_API
+int aws_byte_buf_append_and_update(struct aws_byte_buf *to, struct aws_byte_cursor *from_and_update);
+
+/**
+ * Appends '\0' at the end of the buffer.
+ */
+AWS_COMMON_API
+int aws_byte_buf_append_null_terminator(struct aws_byte_buf *buf);
+
+/**
  * Attempts to increase the capacity of a buffer to the requested capacity
  *
  * If the the buffer's capacity is currently larger than the request capacity, the
@@ -466,7 +466,7 @@ bool aws_byte_cursor_eq_ignore_case(const struct aws_byte_cursor *a, const struc
  * Return whether their contents are equivalent.
  */
 AWS_COMMON_API
-bool aws_byte_cursor_eq_byte_buf(const struct aws_byte_cursor *const a, const struct aws_byte_buf *const b); 
+bool aws_byte_cursor_eq_byte_buf(const struct aws_byte_cursor *const a, const struct aws_byte_buf *const b);
 
 /**
  * Perform a case-insensitive string comparison of an aws_byte_cursor and an aws_byte_buf.
@@ -475,7 +475,7 @@ bool aws_byte_cursor_eq_byte_buf(const struct aws_byte_cursor *const a, const st
  * Data is assumed to be ASCII text, UTF-8 will work fine too.
  */
 AWS_COMMON_API
-bool aws_byte_cursor_eq_byte_buf_ignore_case(const struct aws_byte_cursor *const a, const struct aws_byte_buf *const b); 
+bool aws_byte_cursor_eq_byte_buf_ignore_case(const struct aws_byte_cursor *const a, const struct aws_byte_buf *const b);
 
 /**
  * Compare an aws_byte_cursor and a null-terminated string.
@@ -483,7 +483,7 @@ bool aws_byte_cursor_eq_byte_buf_ignore_case(const struct aws_byte_cursor *const
  * The cursor should NOT contain a null-terminator, or the comparison will always return false.
  */
 AWS_COMMON_API
-bool aws_byte_cursor_eq_c_str(const struct aws_byte_cursor *const cursor, const char *const c_str); 
+bool aws_byte_cursor_eq_c_str(const struct aws_byte_cursor *const cursor, const char *const c_str);
 
 /**
  * Perform a case-insensitive string comparison of an aws_byte_cursor and a null-terminated string.
@@ -493,13 +493,13 @@ bool aws_byte_cursor_eq_c_str(const struct aws_byte_cursor *const cursor, const 
  * Data is assumed to be ASCII text, UTF-8 will work fine too.
  */
 AWS_COMMON_API
-bool aws_byte_cursor_eq_c_str_ignore_case(const struct aws_byte_cursor *const cursor, const char *const c_str); 
+bool aws_byte_cursor_eq_c_str_ignore_case(const struct aws_byte_cursor *const cursor, const char *const c_str);
 
 /**
  * Case-insensitive hash function for array containing ASCII or UTF-8 text.
  */
 AWS_COMMON_API
-uint64_t aws_hash_array_ignore_case(const void *array, const size_t len); 
+uint64_t aws_hash_array_ignore_case(const void *array, const size_t len);
 
 /**
  * Case-insensitive hash function for aws_byte_cursors stored in an aws_hash_table.
@@ -516,50 +516,50 @@ uint64_t aws_hash_byte_cursor_ptr_ignore_case(const void *item);
 AWS_COMMON_API
 const uint8_t *aws_lookup_table_to_lower_get(void);
 
-/** 
- * Returns lookup table to go from ASCII/UTF-8 hex character to a number (0-15). 
- * Non-hex characters map to 255. 
- * Valid examples: 
- * '0' -> 0 
- * 'F' -> 15 
- * 'f' -> 15 
- * Invalid examples: 
- * ' ' -> 255 
- * 'Z' -> 255 
- * '\0' -> 255 
- */ 
-AWS_COMMON_API 
-const uint8_t *aws_lookup_table_hex_to_num_get(void); 
- 
-/** 
- * Lexical (byte value) comparison of two byte cursors 
- */ 
-AWS_COMMON_API 
-int aws_byte_cursor_compare_lexical(const struct aws_byte_cursor *lhs, const struct aws_byte_cursor *rhs); 
- 
-/** 
- * Lexical (byte value) comparison of two byte cursors where the raw values are sent through a lookup table first 
- */ 
-AWS_COMMON_API 
-int aws_byte_cursor_compare_lookup( 
-    const struct aws_byte_cursor *lhs, 
-    const struct aws_byte_cursor *rhs, 
-    const uint8_t *lookup_table); 
- 
+/**
+ * Returns lookup table to go from ASCII/UTF-8 hex character to a number (0-15).
+ * Non-hex characters map to 255.
+ * Valid examples:
+ * '0' -> 0
+ * 'F' -> 15
+ * 'f' -> 15
+ * Invalid examples:
+ * ' ' -> 255
+ * 'Z' -> 255
+ * '\0' -> 255
+ */
+AWS_COMMON_API
+const uint8_t *aws_lookup_table_hex_to_num_get(void);
+
+/**
+ * Lexical (byte value) comparison of two byte cursors
+ */
+AWS_COMMON_API
+int aws_byte_cursor_compare_lexical(const struct aws_byte_cursor *lhs, const struct aws_byte_cursor *rhs);
+
+/**
+ * Lexical (byte value) comparison of two byte cursors where the raw values are sent through a lookup table first
+ */
+AWS_COMMON_API
+int aws_byte_cursor_compare_lookup(
+    const struct aws_byte_cursor *lhs,
+    const struct aws_byte_cursor *rhs,
+    const uint8_t *lookup_table);
+
 /**
  * For creating a byte buffer from a null-terminated string literal.
  */
-AWS_COMMON_API struct aws_byte_buf aws_byte_buf_from_c_str(const char *c_str); 
+AWS_COMMON_API struct aws_byte_buf aws_byte_buf_from_c_str(const char *c_str);
 
-AWS_COMMON_API struct aws_byte_buf aws_byte_buf_from_array(const void *bytes, size_t len); 
+AWS_COMMON_API struct aws_byte_buf aws_byte_buf_from_array(const void *bytes, size_t len);
 
-AWS_COMMON_API struct aws_byte_buf aws_byte_buf_from_empty_array(const void *bytes, size_t capacity); 
+AWS_COMMON_API struct aws_byte_buf aws_byte_buf_from_empty_array(const void *bytes, size_t capacity);
 
-AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_from_buf(const struct aws_byte_buf *const buf); 
+AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_from_buf(const struct aws_byte_buf *const buf);
 
-AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_from_c_str(const char *c_str); 
+AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_from_c_str(const char *c_str);
 
-AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_from_array(const void *const bytes, const size_t len); 
+AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_from_array(const void *const bytes, const size_t len);
 
 /**
  * Tests if the given aws_byte_cursor has at least len bytes remaining. If so,
@@ -571,7 +571,7 @@ AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_from_array(const void *con
  * Note that if len is above (SIZE_MAX / 2), this function will also treat it as
  * a buffer overflow, and return NULL without changing *buf.
  */
-AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_advance(struct aws_byte_cursor *const cursor, const size_t len); 
+AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_advance(struct aws_byte_cursor *const cursor, const size_t len);
 
 /**
  * Behaves identically to aws_byte_cursor_advance, but avoids speculative
@@ -583,7 +583,7 @@ AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_advance(struct aws_byte_cu
  * cursor->ptr points outside the true ptr length.
  */
 
-AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_advance_nospec(struct aws_byte_cursor *const cursor, size_t len); 
+AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_advance_nospec(struct aws_byte_cursor *const cursor, size_t len);
 
 /**
  * Reads specified length of data from byte cursor and copies it to the
@@ -593,10 +593,10 @@ AWS_COMMON_API struct aws_byte_cursor aws_byte_cursor_advance_nospec(struct aws_
  * If there is insufficient space in the cursor, returns false, leaving the
  * cursor unchanged.
  */
-AWS_COMMON_API bool aws_byte_cursor_read( 
+AWS_COMMON_API bool aws_byte_cursor_read(
     struct aws_byte_cursor *AWS_RESTRICT cur,
     void *AWS_RESTRICT dest,
-    const size_t len); 
+    const size_t len);
 
 /**
  * Reads as many bytes from cursor as size of buffer, and copies them to buffer.
@@ -605,9 +605,9 @@ AWS_COMMON_API bool aws_byte_cursor_read(
  * If there is insufficient space in the cursor, returns false, leaving the
  * cursor unchanged.
  */
-AWS_COMMON_API bool aws_byte_cursor_read_and_fill_buffer( 
+AWS_COMMON_API bool aws_byte_cursor_read_and_fill_buffer(
     struct aws_byte_cursor *AWS_RESTRICT cur,
-    struct aws_byte_buf *AWS_RESTRICT dest); 
+    struct aws_byte_buf *AWS_RESTRICT dest);
 
 /**
  * Reads a single byte from cursor, placing it in *var.
@@ -616,7 +616,7 @@ AWS_COMMON_API bool aws_byte_cursor_read_and_fill_buffer(
  * If there is insufficient space in the cursor, returns false, leaving the
  * cursor unchanged.
  */
-AWS_COMMON_API bool aws_byte_cursor_read_u8(struct aws_byte_cursor *AWS_RESTRICT cur, uint8_t *AWS_RESTRICT var); 
+AWS_COMMON_API bool aws_byte_cursor_read_u8(struct aws_byte_cursor *AWS_RESTRICT cur, uint8_t *AWS_RESTRICT var);
 
 /**
  * Reads a 16-bit value in network byte order from cur, and places it in host
@@ -626,18 +626,18 @@ AWS_COMMON_API bool aws_byte_cursor_read_u8(struct aws_byte_cursor *AWS_RESTRICT
  * If there is insufficient space in the cursor, returns false, leaving the
  * cursor unchanged.
  */
-AWS_COMMON_API bool aws_byte_cursor_read_be16(struct aws_byte_cursor *cur, uint16_t *var); 
+AWS_COMMON_API bool aws_byte_cursor_read_be16(struct aws_byte_cursor *cur, uint16_t *var);
 
-/** 
- * Reads an unsigned 24-bit value (3 bytes) in network byte order from cur, 
- * and places it in host byte order into 32-bit var. 
- * Ex: if cur's next 3 bytes are {0xAA, 0xBB, 0xCC}, then var becomes 0x00AABBCC. 
- * 
- * On success, returns true and updates the cursor pointer/length accordingly. 
- * If there is insufficient space in the cursor, returns false, leaving the 
- * cursor unchanged. 
- */ 
-AWS_COMMON_API bool aws_byte_cursor_read_be24(struct aws_byte_cursor *cur, uint32_t *var); 
+/**
+ * Reads an unsigned 24-bit value (3 bytes) in network byte order from cur,
+ * and places it in host byte order into 32-bit var.
+ * Ex: if cur's next 3 bytes are {0xAA, 0xBB, 0xCC}, then var becomes 0x00AABBCC.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_be24(struct aws_byte_cursor *cur, uint32_t *var);
 
 /**
  * Reads a 32-bit value in network byte order from cur, and places it in host
@@ -647,27 +647,7 @@ AWS_COMMON_API bool aws_byte_cursor_read_be24(struct aws_byte_cursor *cur, uint3
  * If there is insufficient space in the cursor, returns false, leaving the
  * cursor unchanged.
  */
-AWS_COMMON_API bool aws_byte_cursor_read_be32(struct aws_byte_cursor *cur, uint32_t *var); 
-
-/** 
- * Reads a 64-bit value in network byte order from cur, and places it in host 
- * byte order into var. 
- * 
- * On success, returns true and updates the cursor pointer/length accordingly. 
- * If there is insufficient space in the cursor, returns false, leaving the 
- * cursor unchanged. 
- */ 
-AWS_COMMON_API bool aws_byte_cursor_read_be64(struct aws_byte_cursor *cur, uint64_t *var); 
-
-/** 
- * Reads a 32-bit value in network byte order from cur, and places it in host 
- * byte order into var. 
- * 
- * On success, returns true and updates the cursor pointer/length accordingly. 
- * If there is insufficient space in the cursor, returns false, leaving the 
- * cursor unchanged. 
- */ 
-AWS_COMMON_API bool aws_byte_cursor_read_float_be32(struct aws_byte_cursor *cur, float *var); 
+AWS_COMMON_API bool aws_byte_cursor_read_be32(struct aws_byte_cursor *cur, uint32_t *var);
 
 /**
  * Reads a 64-bit value in network byte order from cur, and places it in host
@@ -677,18 +657,38 @@ AWS_COMMON_API bool aws_byte_cursor_read_float_be32(struct aws_byte_cursor *cur,
  * If there is insufficient space in the cursor, returns false, leaving the
  * cursor unchanged.
  */
-AWS_COMMON_API bool aws_byte_cursor_read_float_be64(struct aws_byte_cursor *cur, double *var); 
+AWS_COMMON_API bool aws_byte_cursor_read_be64(struct aws_byte_cursor *cur, uint64_t *var);
 
-/** 
- * Reads 2 hex characters from ASCII/UTF-8 text to produce an 8-bit number. 
- * Accepts both lowercase 'a'-'f' and uppercase 'A'-'F'. 
- * For example: "0F" produces 15. 
- * 
- * On success, returns true and advances the cursor by 2. 
- * If there is insufficient space in the cursor or an invalid character 
- * is encountered, returns false, leaving the cursor unchanged. 
- */ 
-AWS_COMMON_API bool aws_byte_cursor_read_hex_u8(struct aws_byte_cursor *cur, uint8_t *var); 
+/**
+ * Reads a 32-bit value in network byte order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_float_be32(struct aws_byte_cursor *cur, float *var);
+
+/**
+ * Reads a 64-bit value in network byte order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_float_be64(struct aws_byte_cursor *cur, double *var);
+
+/**
+ * Reads 2 hex characters from ASCII/UTF-8 text to produce an 8-bit number.
+ * Accepts both lowercase 'a'-'f' and uppercase 'A'-'F'.
+ * For example: "0F" produces 15.
+ *
+ * On success, returns true and advances the cursor by 2.
+ * If there is insufficient space in the cursor or an invalid character
+ * is encountered, returns false, leaving the cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_hex_u8(struct aws_byte_cursor *cur, uint8_t *var);
 
 /**
  * Appends a sub-buffer to the specified buffer.
@@ -701,10 +701,10 @@ AWS_COMMON_API bool aws_byte_cursor_read_hex_u8(struct aws_byte_cursor *cur, uin
  * If there is insufficient space, then this function nulls all fields in *output and returns
  * false.
  */
-AWS_COMMON_API bool aws_byte_buf_advance( 
-    struct aws_byte_buf *const AWS_RESTRICT buffer, 
-    struct aws_byte_buf *const AWS_RESTRICT output, 
-    const size_t len); 
+AWS_COMMON_API bool aws_byte_buf_advance(
+    struct aws_byte_buf *const AWS_RESTRICT buffer,
+    struct aws_byte_buf *const AWS_RESTRICT output,
+    const size_t len);
 
 /**
  * Write specified number of bytes from array to byte buffer.
@@ -713,10 +713,10 @@ AWS_COMMON_API bool aws_byte_buf_advance(
  * If there is insufficient space in the buffer, returns false, leaving the
  * buffer unchanged.
  */
-AWS_COMMON_API bool aws_byte_buf_write( 
+AWS_COMMON_API bool aws_byte_buf_write(
     struct aws_byte_buf *AWS_RESTRICT buf,
     const uint8_t *AWS_RESTRICT src,
-    size_t len); 
+    size_t len);
 
 /**
  * Copies all bytes from buffer to buffer.
@@ -725,9 +725,9 @@ AWS_COMMON_API bool aws_byte_buf_write(
  * If there is insufficient space in the buffer, returns false, leaving the
  * buffer unchanged.
  */
-AWS_COMMON_API bool aws_byte_buf_write_from_whole_buffer( 
+AWS_COMMON_API bool aws_byte_buf_write_from_whole_buffer(
     struct aws_byte_buf *AWS_RESTRICT buf,
-    struct aws_byte_buf src); 
+    struct aws_byte_buf src);
 
 /**
  * Copies all bytes from buffer to buffer.
@@ -736,143 +736,143 @@ AWS_COMMON_API bool aws_byte_buf_write_from_whole_buffer(
  * If there is insufficient space in the buffer, returns false, leaving the
  * buffer unchanged.
  */
-AWS_COMMON_API bool aws_byte_buf_write_from_whole_cursor( 
+AWS_COMMON_API bool aws_byte_buf_write_from_whole_cursor(
     struct aws_byte_buf *AWS_RESTRICT buf,
-    struct aws_byte_cursor src); 
+    struct aws_byte_cursor src);
 
 /**
- * Without increasing buf's capacity, write as much as possible from advancing_cursor into buf. 
- * 
- * buf's len is updated accordingly. 
- * advancing_cursor is advanced so it contains the remaining unwritten parts. 
- * Returns the section of advancing_cursor which was written. 
- * 
- * This function cannot fail. If buf is full (len == capacity) or advancing_len has 0 length, 
- * then buf and advancing_cursor are not altered and a cursor with 0 length is returned. 
- * 
- * Example: Given a buf with 2 bytes of space available and advancing_cursor with contents "abc". 
- * "ab" will be written to buf and buf->len will increase 2 and become equal to buf->capacity. 
- * advancing_cursor will advance so its contents become the unwritten "c". 
- * The returned cursor's contents will be the "ab" from the original advancing_cursor. 
- */ 
-AWS_COMMON_API struct aws_byte_cursor aws_byte_buf_write_to_capacity( 
-    struct aws_byte_buf *buf, 
-    struct aws_byte_cursor *advancing_cursor); 
- 
-/** 
+ * Without increasing buf's capacity, write as much as possible from advancing_cursor into buf.
+ *
+ * buf's len is updated accordingly.
+ * advancing_cursor is advanced so it contains the remaining unwritten parts.
+ * Returns the section of advancing_cursor which was written.
+ *
+ * This function cannot fail. If buf is full (len == capacity) or advancing_len has 0 length,
+ * then buf and advancing_cursor are not altered and a cursor with 0 length is returned.
+ *
+ * Example: Given a buf with 2 bytes of space available and advancing_cursor with contents "abc".
+ * "ab" will be written to buf and buf->len will increase 2 and become equal to buf->capacity.
+ * advancing_cursor will advance so its contents become the unwritten "c".
+ * The returned cursor's contents will be the "ab" from the original advancing_cursor.
+ */
+AWS_COMMON_API struct aws_byte_cursor aws_byte_buf_write_to_capacity(
+    struct aws_byte_buf *buf,
+    struct aws_byte_cursor *advancing_cursor);
+
+/**
  * Copies one byte to buffer.
  *
  * On success, returns true and updates the cursor /length
  accordingly.
- * 
- * If there is insufficient space in the buffer, returns false, leaving the 
- * buffer unchanged. 
- */ 
-AWS_COMMON_API bool aws_byte_buf_write_u8(struct aws_byte_buf *AWS_RESTRICT buf, uint8_t c); 
-
-/** 
- * Writes one byte repeatedly to buffer (like memset) 
- * 
- * If there is insufficient space in the buffer, returns false, leaving the 
- * buffer unchanged. 
+ *
+ * If there is insufficient space in the buffer, returns false, leaving the
+ * buffer unchanged.
  */
-AWS_COMMON_API bool aws_byte_buf_write_u8_n(struct aws_byte_buf *buf, uint8_t c, size_t count); 
+AWS_COMMON_API bool aws_byte_buf_write_u8(struct aws_byte_buf *AWS_RESTRICT buf, uint8_t c);
+
+/**
+ * Writes one byte repeatedly to buffer (like memset)
+ *
+ * If there is insufficient space in the buffer, returns false, leaving the
+ * buffer unchanged.
+ */
+AWS_COMMON_API bool aws_byte_buf_write_u8_n(struct aws_byte_buf *buf, uint8_t c, size_t count);
 
 /**
  * Writes a 16-bit integer in network byte order (big endian) to buffer.
  *
- * On success, returns true and updates the buffer /length accordingly. 
- * If there is insufficient space in the buffer, returns false, leaving the 
- * buffer unchanged. 
+ * On success, returns true and updates the buffer /length accordingly.
+ * If there is insufficient space in the buffer, returns false, leaving the
+ * buffer unchanged.
  */
-AWS_COMMON_API bool aws_byte_buf_write_be16(struct aws_byte_buf *buf, uint16_t x); 
+AWS_COMMON_API bool aws_byte_buf_write_be16(struct aws_byte_buf *buf, uint16_t x);
 
 /**
- * Writes low 24-bits (3 bytes) of an unsigned integer in network byte order (big endian) to buffer. 
- * Ex: If x is 0x00AABBCC then {0xAA, 0xBB, 0xCC} is written to buffer. 
- * 
- * On success, returns true and updates the buffer /length accordingly. 
- * If there is insufficient space in the buffer, or x's value cannot fit in 3 bytes, 
- * returns false, leaving the buffer unchanged. 
- */ 
-AWS_COMMON_API bool aws_byte_buf_write_be24(struct aws_byte_buf *buf, uint32_t x); 
- 
-/** 
+ * Writes low 24-bits (3 bytes) of an unsigned integer in network byte order (big endian) to buffer.
+ * Ex: If x is 0x00AABBCC then {0xAA, 0xBB, 0xCC} is written to buffer.
+ *
+ * On success, returns true and updates the buffer /length accordingly.
+ * If there is insufficient space in the buffer, or x's value cannot fit in 3 bytes,
+ * returns false, leaving the buffer unchanged.
+ */
+AWS_COMMON_API bool aws_byte_buf_write_be24(struct aws_byte_buf *buf, uint32_t x);
+
+/**
  * Writes a 32-bit integer in network byte order (big endian) to buffer.
  *
- * On success, returns true and updates the buffer /length accordingly. 
- * If there is insufficient space in the buffer, returns false, leaving the 
- * buffer unchanged. 
+ * On success, returns true and updates the buffer /length accordingly.
+ * If there is insufficient space in the buffer, returns false, leaving the
+ * buffer unchanged.
  */
-AWS_COMMON_API bool aws_byte_buf_write_be32(struct aws_byte_buf *buf, uint32_t x); 
+AWS_COMMON_API bool aws_byte_buf_write_be32(struct aws_byte_buf *buf, uint32_t x);
 
 /**
- * Writes a 32-bit float in network byte order (big endian) to buffer. 
- * 
- * On success, returns true and updates the buffer /length accordingly. 
- * If there is insufficient space in the buffer, returns false, leaving the 
- * buffer unchanged. 
- */ 
-AWS_COMMON_API bool aws_byte_buf_write_float_be32(struct aws_byte_buf *buf, float x); 
- 
-/** 
+ * Writes a 32-bit float in network byte order (big endian) to buffer.
+ *
+ * On success, returns true and updates the buffer /length accordingly.
+ * If there is insufficient space in the buffer, returns false, leaving the
+ * buffer unchanged.
+ */
+AWS_COMMON_API bool aws_byte_buf_write_float_be32(struct aws_byte_buf *buf, float x);
+
+/**
  * Writes a 64-bit integer in network byte order (big endian) to buffer.
  *
- * On success, returns true and updates the buffer /length accordingly. 
- * If there is insufficient space in the buffer, returns false, leaving the 
- * buffer unchanged. 
+ * On success, returns true and updates the buffer /length accordingly.
+ * If there is insufficient space in the buffer, returns false, leaving the
+ * buffer unchanged.
  */
-AWS_COMMON_API bool aws_byte_buf_write_be64(struct aws_byte_buf *buf, uint64_t x); 
+AWS_COMMON_API bool aws_byte_buf_write_be64(struct aws_byte_buf *buf, uint64_t x);
 
-/** 
- * Writes a 64-bit float in network byte order (big endian) to buffer. 
- * 
- * On success, returns true and updates the buffer /length accordingly. 
- * If there is insufficient space in the buffer, returns false, leaving the 
- * buffer unchanged. 
- */ 
-AWS_COMMON_API bool aws_byte_buf_write_float_be64(struct aws_byte_buf *buf, double x); 
- 
-/** 
- * Like isalnum(), but ignores C locale. 
- * Returns true if ch has the value of ASCII/UTF-8: 'a'-'z', 'A'-'Z', or '0'-'9'. 
- */ 
-AWS_COMMON_API bool aws_isalnum(uint8_t ch); 
- 
-/** 
- * Like isalpha(), but ignores C locale. 
- * Returns true if ch has the value of ASCII/UTF-8: 'a'-'z' or 'A'-'Z'. 
- */ 
-AWS_COMMON_API bool aws_isalpha(uint8_t ch); 
- 
-/** 
- * Like isdigit(). 
- * Returns true if ch has the value of ASCII/UTF-8: '0'-'9'. 
- * 
- * Note: C's built-in isdigit() is also supposed to ignore the C locale, 
- * but cppreference.com claims "some implementations (e.g. Microsoft in 1252 codepage) 
- * may classify additional single-byte characters as digits" 
- */ 
-AWS_COMMON_API bool aws_isdigit(uint8_t ch); 
- 
-/** 
- * Like isxdigit(). 
- * Returns true if ch has the value of ASCII/UTF-8: '0'-'9', 'a'-'f', or 'A'-'F'. 
- * 
- * Note: C's built-in isxdigit() is also supposed to ignore the C locale, 
- * but cppreference.com claims "some implementations (e.g. Microsoft in 1252 codepage) 
- * may classify additional single-byte characters as digits" 
- */ 
- 
-AWS_COMMON_API bool aws_isxdigit(uint8_t ch); 
- 
-/** 
- * Like isspace(), but ignores C locale. 
- * Return true if ch has the value of ASCII/UTF-8: space (0x20), form feed (0x0C), 
- * line feed (0x0A), carriage return (0x0D), horizontal tab (0x09), or vertical tab (0x0B). 
- */ 
-AWS_COMMON_API bool aws_isspace(uint8_t ch); 
- 
-AWS_EXTERN_C_END 
- 
+/**
+ * Writes a 64-bit float in network byte order (big endian) to buffer.
+ *
+ * On success, returns true and updates the buffer /length accordingly.
+ * If there is insufficient space in the buffer, returns false, leaving the
+ * buffer unchanged.
+ */
+AWS_COMMON_API bool aws_byte_buf_write_float_be64(struct aws_byte_buf *buf, double x);
+
+/**
+ * Like isalnum(), but ignores C locale.
+ * Returns true if ch has the value of ASCII/UTF-8: 'a'-'z', 'A'-'Z', or '0'-'9'.
+ */
+AWS_COMMON_API bool aws_isalnum(uint8_t ch);
+
+/**
+ * Like isalpha(), but ignores C locale.
+ * Returns true if ch has the value of ASCII/UTF-8: 'a'-'z' or 'A'-'Z'.
+ */
+AWS_COMMON_API bool aws_isalpha(uint8_t ch);
+
+/**
+ * Like isdigit().
+ * Returns true if ch has the value of ASCII/UTF-8: '0'-'9'.
+ *
+ * Note: C's built-in isdigit() is also supposed to ignore the C locale,
+ * but cppreference.com claims "some implementations (e.g. Microsoft in 1252 codepage)
+ * may classify additional single-byte characters as digits"
+ */
+AWS_COMMON_API bool aws_isdigit(uint8_t ch);
+
+/**
+ * Like isxdigit().
+ * Returns true if ch has the value of ASCII/UTF-8: '0'-'9', 'a'-'f', or 'A'-'F'.
+ *
+ * Note: C's built-in isxdigit() is also supposed to ignore the C locale,
+ * but cppreference.com claims "some implementations (e.g. Microsoft in 1252 codepage)
+ * may classify additional single-byte characters as digits"
+ */
+
+AWS_COMMON_API bool aws_isxdigit(uint8_t ch);
+
+/**
+ * Like isspace(), but ignores C locale.
+ * Return true if ch has the value of ASCII/UTF-8: space (0x20), form feed (0x0C),
+ * line feed (0x0A), carriage return (0x0D), horizontal tab (0x09), or vertical tab (0x0B).
+ */
+AWS_COMMON_API bool aws_isspace(uint8_t ch);
+
+AWS_EXTERN_C_END
+
 #endif /* AWS_COMMON_BYTE_BUF_H */

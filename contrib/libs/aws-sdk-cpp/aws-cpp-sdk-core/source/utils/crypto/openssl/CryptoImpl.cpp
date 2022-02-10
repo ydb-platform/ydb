@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #include <cstring>
 
@@ -9,21 +9,21 @@
 #include <aws/core/utils/crypto/openssl/CryptoImpl.h>
 #include <aws/core/utils/Outcome.h>
 #include <openssl/md5.h>
- 
-#ifdef OPENSSL_IS_BORINGSSL 
-#ifdef _MSC_VER 
-AWS_SUPPRESS_WARNING_PUSH(4201) 
-#else 
-AWS_SUPPRESS_WARNING_PUSH("-Wpedantic") 
-#endif 
-#endif 
- 
+
+#ifdef OPENSSL_IS_BORINGSSL
+#ifdef _MSC_VER
+AWS_SUPPRESS_WARNING_PUSH(4201)
+#else
+AWS_SUPPRESS_WARNING_PUSH("-Wpedantic")
+#endif
+#endif
+
 #include <openssl/sha.h>
- 
-#ifdef OPENSSL_IS_BORINGSSL 
-AWS_SUPPRESS_WARNING_POP 
-#endif 
- 
+
+#ifdef OPENSSL_IS_BORINGSSL
+AWS_SUPPRESS_WARNING_POP
+#endif
+
 #include <openssl/err.h>
 #include <aws/core/utils/logging/LogMacros.h>
 #include <thread>
@@ -41,7 +41,7 @@ namespace Aws
             {
 /**
  * openssl with OPENSSL_VERSION_NUMBER < 0x10100003L made data type details unavailable
- * libressl use openssl with data type details available, but mandatorily set 
+ * libressl use openssl with data type details available, but mandatorily set
  * OPENSSL_VERSION_NUMBER = 0x20000000L, insane!
  * https://github.com/aws/aws-sdk-cpp/pull/507/commits/2c99f1fe0c4b4683280caeb161538d4724d6a179
  */
@@ -60,14 +60,14 @@ namespace Aws
 
                 void init_static_state()
                 {
-#if OPENSSL_VERSION_LESS_1_1 || defined(OPENSSL_IS_BORINGSSL) 
-                    ERR_load_crypto_strings(); 
-#else 
-                    OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CRYPTO_STRINGS /*options*/ ,NULL /* OpenSSL init settings*/ ); 
-#endif 
-#if !defined(OPENSSL_IS_BORINGSSL) 
+#if OPENSSL_VERSION_LESS_1_1 || defined(OPENSSL_IS_BORINGSSL)
+                    ERR_load_crypto_strings();
+#else
+                    OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CRYPTO_STRINGS /*options*/ ,NULL /* OpenSSL init settings*/ );
+#endif
+#if !defined(OPENSSL_IS_BORINGSSL)
                     OPENSSL_add_all_algorithms_noconf();
-#endif 
+#endif
 #if OPENSSL_VERSION_LESS_1_1
                     if (!CRYPTO_get_locking_callback())
                     {
@@ -122,22 +122,22 @@ namespace Aws
 #endif
             }
 
-            static const char* OPENSSL_LOG_TAG = "OpenSSLCipher"; 
- 
+            static const char* OPENSSL_LOG_TAG = "OpenSSLCipher";
+
             void SecureRandomBytes_OpenSSLImpl::GetBytes(unsigned char* buffer, size_t bufferSize)
             {
-                if (!bufferSize) 
-                { 
-                    return; 
-                } 
+                if (!bufferSize)
+                {
+                    return;
+                }
 
-                if (!buffer) 
-                { 
-                    AWS_LOGSTREAM_FATAL(OPENSSL_LOG_TAG, "Secure Random Bytes generator can't generate: " << bufferSize << " bytes with nullptr buffer."); 
-                    assert(buffer); 
-                    return; 
-                } 
- 
+                if (!buffer)
+                {
+                    AWS_LOGSTREAM_FATAL(OPENSSL_LOG_TAG, "Secure Random Bytes generator can't generate: " << bufferSize << " bytes with nullptr buffer.");
+                    assert(buffer);
+                    return;
+                }
+
                 int success = RAND_bytes(buffer, static_cast<int>(bufferSize));
                 if (success != 1)
                 {
@@ -145,22 +145,22 @@ namespace Aws
                 }
             }
 
-            class OpensslCtxRAIIGuard 
+            class OpensslCtxRAIIGuard
             {
-            public: 
-                OpensslCtxRAIIGuard() 
+            public:
+                OpensslCtxRAIIGuard()
                 {
                     m_ctx = EVP_MD_CTX_create();
                     assert(m_ctx != nullptr);
                 }
 
-                ~OpensslCtxRAIIGuard() 
+                ~OpensslCtxRAIIGuard()
                 {
                     EVP_MD_CTX_destroy(m_ctx);
                     m_ctx = nullptr;
                 }
 
-                EVP_MD_CTX* getResource() 
+                EVP_MD_CTX* getResource()
                 {
                     return m_ctx;
                 }
@@ -172,9 +172,9 @@ namespace Aws
             {
                 OpensslCtxRAIIGuard guard;
                 auto ctx = guard.getResource();
-#if !defined(OPENSSL_IS_BORINGSSL) 
+#if !defined(OPENSSL_IS_BORINGSSL)
                 EVP_MD_CTX_set_flags(ctx, EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-#endif 
+#endif
                 EVP_DigestInit_ex(ctx, EVP_md5(), nullptr);
                 EVP_DigestUpdate(ctx, str.c_str(), str.size());
 
@@ -188,9 +188,9 @@ namespace Aws
             {
                 OpensslCtxRAIIGuard guard;
                 auto ctx = guard.getResource();
-#if !defined(OPENSSL_IS_BORINGSSL) 
+#if !defined(OPENSSL_IS_BORINGSSL)
                 EVP_MD_CTX_set_flags(ctx, EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-#endif 
+#endif
                 EVP_DigestInit_ex(ctx, EVP_md5(), nullptr);
 
                 auto currentPos = stream.tellg();
@@ -304,7 +304,7 @@ namespace Aws
                 unsigned int length = SHA256_DIGEST_LENGTH;
                 ByteBuffer digest(length);
                 memset(digest.GetUnderlyingData(), 0, length);
- 
+
                 HMACRAIIGuard guard;
                 HMAC_CTX* m_ctx = guard.getResource();
 
@@ -381,11 +381,11 @@ namespace Aws
 
             void OpenSSLCipher::Init()
             {
-                if (m_failure) 
-                { 
-                    return; 
-                } 
- 
+                if (m_failure)
+                {
+                    return;
+                }
+
                 if (!m_encryptor_ctx)
                 {
                     // EVP_CIPHER_CTX_init() will be called inside EVP_CIPHER_CTX_new().
@@ -406,7 +406,7 @@ namespace Aws
                 {   // _init is the same as _reset after openssl 1.1
                     EVP_CIPHER_CTX_init(m_decryptor_ctx);
                 }
-                m_emptyPlaintext = false; 
+                m_emptyPlaintext = false;
             }
 
             CryptoBuffer OpenSSLCipher::EncryptBuffer(const CryptoBuffer& unEncryptedData)
@@ -440,7 +440,7 @@ namespace Aws
             {
                 if (m_failure)
                 {
-                    AWS_LOGSTREAM_FATAL(OPENSSL_LOG_TAG, "Cipher not properly initialized for encryption finalization. Aborting"); 
+                    AWS_LOGSTREAM_FATAL(OPENSSL_LOG_TAG, "Cipher not properly initialized for encryption finalization. Aborting");
                     return CryptoBuffer();
                 }
 
@@ -475,10 +475,10 @@ namespace Aws
                     return CryptoBuffer();
                 }
 
-                if (lengthWritten == 0) 
-                { 
-                    m_emptyPlaintext = true; 
-                } 
+                if (lengthWritten == 0)
+                {
+                    m_emptyPlaintext = true;
+                }
                 if (static_cast<size_t>(lengthWritten) < decryptedText.GetLength())
                 {
                     return CryptoBuffer(decryptedText.GetUnderlyingData(), static_cast<size_t>(lengthWritten));
@@ -490,18 +490,18 @@ namespace Aws
             {
                 if (m_failure)
                 {
-                    AWS_LOGSTREAM_FATAL(OPENSSL_LOG_TAG, "Cipher not properly initialized for decryption finalization. Aborting"); 
+                    AWS_LOGSTREAM_FATAL(OPENSSL_LOG_TAG, "Cipher not properly initialized for decryption finalization. Aborting");
                     return CryptoBuffer();
                 }
 
                 CryptoBuffer finalBlock(GetBlockSizeBytes());
                 int writtenSize = static_cast<int>(finalBlock.GetLength());
-                int ret = EVP_DecryptFinal_ex(m_decryptor_ctx, finalBlock.GetUnderlyingData(), &writtenSize); 
-#if OPENSSL_VERSION_NUMBER > 0x1010104fL //1.1.1d 
-                if (ret <= 0) 
-#else 
-                if (ret <= 0 && !m_emptyPlaintext) // see details why making exception for empty string at: https://github.com/aws/aws-sdk-cpp/issues/1413 
-#endif 
+                int ret = EVP_DecryptFinal_ex(m_decryptor_ctx, finalBlock.GetUnderlyingData(), &writtenSize);
+#if OPENSSL_VERSION_NUMBER > 0x1010104fL //1.1.1d
+                if (ret <= 0)
+#else
+                if (ret <= 0 && !m_emptyPlaintext) // see details why making exception for empty string at: https://github.com/aws/aws-sdk-cpp/issues/1413
+#endif
                 {
                     m_failure = true;
                     LogErrors();
@@ -519,18 +519,18 @@ namespace Aws
             void OpenSSLCipher::Cleanup()
             {
                 m_failure = false;
-                if (m_encryptor_ctx) EVP_CIPHER_CTX_cleanup(m_encryptor_ctx); 
-                if (m_decryptor_ctx) EVP_CIPHER_CTX_cleanup(m_decryptor_ctx); 
-            } 
+                if (m_encryptor_ctx) EVP_CIPHER_CTX_cleanup(m_encryptor_ctx);
+                if (m_decryptor_ctx) EVP_CIPHER_CTX_cleanup(m_decryptor_ctx);
+            }
 
-            bool OpenSSLCipher::CheckKeyAndIVLength(size_t expectedKeyLength, size_t expectedIVLength) 
-            { 
-                if (!m_failure && ((m_key.GetLength() != expectedKeyLength) || m_initializationVector.GetLength() != expectedIVLength)) 
-                { 
-                    AWS_LOGSTREAM_ERROR(OPENSSL_LOG_TAG, "Expected Key size is: " << expectedKeyLength << " and expected IV size is: " << expectedIVLength); 
-                    m_failure = true; 
-                } 
-                return !m_failure; 
+            bool OpenSSLCipher::CheckKeyAndIVLength(size_t expectedKeyLength, size_t expectedIVLength)
+            {
+                if (!m_failure && ((m_key.GetLength() != expectedKeyLength) || m_initializationVector.GetLength() != expectedIVLength))
+                {
+                    AWS_LOGSTREAM_ERROR(OPENSSL_LOG_TAG, "Expected Key size is: " << expectedKeyLength << " and expected IV size is: " << expectedIVLength);
+                    m_failure = true;
+                }
+                return !m_failure;
             }
 
             size_t AES_CBC_Cipher_OpenSSL::BlockSizeBytes = 16;
@@ -557,11 +557,11 @@ namespace Aws
 
             void AES_CBC_Cipher_OpenSSL::InitCipher()
             {
-                if (m_failure || !CheckKeyAndIVLength(KeyLengthBits/8, BlockSizeBytes)) 
-                { 
-                    return; 
-                } 
- 
+                if (m_failure || !CheckKeyAndIVLength(KeyLengthBits/8, BlockSizeBytes))
+                {
+                    return;
+                }
+
                 if (!EVP_EncryptInit_ex(m_encryptor_ctx, EVP_aes_256_cbc(), nullptr, m_key.GetUnderlyingData(),
                                         m_initializationVector.GetUnderlyingData()) ||
                     !EVP_DecryptInit_ex(m_decryptor_ctx, EVP_aes_256_cbc(), nullptr, m_key.GetUnderlyingData(),
@@ -582,12 +582,12 @@ namespace Aws
                 return KeyLengthBits;
             }
 
-            void AES_CBC_Cipher_OpenSSL::Reset() 
-            { 
-                OpenSSLCipher::Reset(); 
-                InitCipher(); 
-            } 
- 
+            void AES_CBC_Cipher_OpenSSL::Reset()
+            {
+                OpenSSLCipher::Reset();
+                InitCipher();
+            }
+
             size_t AES_CTR_Cipher_OpenSSL::BlockSizeBytes = 16;
             size_t AES_CTR_Cipher_OpenSSL::KeyLengthBits = 256;
             static const char* CTR_LOG_TAG = "AES_CTR_Cipher_OpenSSL";
@@ -613,11 +613,11 @@ namespace Aws
 
             void AES_CTR_Cipher_OpenSSL::InitCipher()
             {
-                if (m_failure || !CheckKeyAndIVLength(KeyLengthBits/8, BlockSizeBytes)) 
-                { 
-                    return; 
-                } 
- 
+                if (m_failure || !CheckKeyAndIVLength(KeyLengthBits/8, BlockSizeBytes))
+                {
+                    return;
+                }
+
                 if (!(EVP_EncryptInit_ex(m_encryptor_ctx, EVP_aes_256_ctr(), nullptr, m_key.GetUnderlyingData(),
                                          m_initializationVector.GetUnderlyingData())
                         && EVP_CIPHER_CTX_set_padding(m_encryptor_ctx, 0)) ||
@@ -640,12 +640,12 @@ namespace Aws
                 return KeyLengthBits;
             }
 
-            void AES_CTR_Cipher_OpenSSL::Reset() 
-            { 
-                OpenSSLCipher::Reset(); 
-                InitCipher(); 
-            } 
- 
+            void AES_CTR_Cipher_OpenSSL::Reset()
+            {
+                OpenSSLCipher::Reset();
+                InitCipher();
+            }
+
             size_t AES_GCM_Cipher_OpenSSL::BlockSizeBytes = 16;
             size_t AES_GCM_Cipher_OpenSSL::KeyLengthBits = 256;
             size_t AES_GCM_Cipher_OpenSSL::IVLengthBytes = 12;
@@ -653,62 +653,62 @@ namespace Aws
 
             static const char* GCM_LOG_TAG = "AES_GCM_Cipher_OpenSSL";
 
-            AES_GCM_Cipher_OpenSSL::AES_GCM_Cipher_OpenSSL(const CryptoBuffer& key) 
-                : OpenSSLCipher(key, IVLengthBytes) 
+            AES_GCM_Cipher_OpenSSL::AES_GCM_Cipher_OpenSSL(const CryptoBuffer& key)
+                : OpenSSLCipher(key, IVLengthBytes)
             {
                 InitCipher();
             }
 
-            AES_GCM_Cipher_OpenSSL::AES_GCM_Cipher_OpenSSL(const CryptoBuffer& key, const CryptoBuffer* aad) 
-                : OpenSSLCipher(key, IVLengthBytes), m_aad(*aad) 
-            { 
-                InitCipher(); 
-            } 
- 
+            AES_GCM_Cipher_OpenSSL::AES_GCM_Cipher_OpenSSL(const CryptoBuffer& key, const CryptoBuffer* aad)
+                : OpenSSLCipher(key, IVLengthBytes), m_aad(*aad)
+            {
+                InitCipher();
+            }
+
             AES_GCM_Cipher_OpenSSL::AES_GCM_Cipher_OpenSSL(CryptoBuffer&& key, CryptoBuffer&& initializationVector,
-                                                           CryptoBuffer&& tag, CryptoBuffer&& aad) : 
-                    OpenSSLCipher(std::move(key), std::move(initializationVector), std::move(tag)), m_aad(std::move(aad)) 
+                                                           CryptoBuffer&& tag, CryptoBuffer&& aad) :
+                    OpenSSLCipher(std::move(key), std::move(initializationVector), std::move(tag)), m_aad(std::move(aad))
             {
                 InitCipher();
             }
 
-            AES_GCM_Cipher_OpenSSL::AES_GCM_Cipher_OpenSSL(const CryptoBuffer& key, const CryptoBuffer& initializationVector, 
-                                                           const CryptoBuffer& tag, const CryptoBuffer& aad) : 
-                    OpenSSLCipher(key, initializationVector, tag), m_aad(std::move(aad)) 
+            AES_GCM_Cipher_OpenSSL::AES_GCM_Cipher_OpenSSL(const CryptoBuffer& key, const CryptoBuffer& initializationVector,
+                                                           const CryptoBuffer& tag, const CryptoBuffer& aad) :
+                    OpenSSLCipher(key, initializationVector, tag), m_aad(std::move(aad))
             {
                 InitCipher();
             }
 
             CryptoBuffer AES_GCM_Cipher_OpenSSL::FinalizeEncryption()
             {
-                if (m_failure) 
-                { 
-                    AWS_LOGSTREAM_FATAL(GCM_LOG_TAG, "Cipher not properly initialized for encryption finalization. Aborting"); 
-                    return CryptoBuffer(); 
-                } 
- 
-                int writtenSize = 0; 
-                CryptoBuffer finalBlock(GetBlockSizeBytes()); 
-                EVP_EncryptFinal_ex(m_encryptor_ctx, finalBlock.GetUnderlyingData(), &writtenSize); 
- 
+                if (m_failure)
+                {
+                    AWS_LOGSTREAM_FATAL(GCM_LOG_TAG, "Cipher not properly initialized for encryption finalization. Aborting");
+                    return CryptoBuffer();
+                }
+
+                int writtenSize = 0;
+                CryptoBuffer finalBlock(GetBlockSizeBytes());
+                EVP_EncryptFinal_ex(m_encryptor_ctx, finalBlock.GetUnderlyingData(), &writtenSize);
+
                 m_tag = CryptoBuffer(TagLengthBytes);
-                if (!EVP_CIPHER_CTX_ctrl(m_encryptor_ctx, EVP_CTRL_GCM_GET_TAG, static_cast<int>(m_tag.GetLength()), 
+                if (!EVP_CIPHER_CTX_ctrl(m_encryptor_ctx, EVP_CTRL_GCM_GET_TAG, static_cast<int>(m_tag.GetLength()),
                                          m_tag.GetUnderlyingData()))
                 {
                     m_failure = true;
                     LogErrors(GCM_LOG_TAG);
                 }
 
-                return CryptoBuffer(); 
+                return CryptoBuffer();
             }
 
             void AES_GCM_Cipher_OpenSSL::InitCipher()
             {
-                if (m_failure || !CheckKeyAndIVLength(KeyLengthBits/8, IVLengthBytes)) 
-                { 
-                    return; 
-                } 
- 
+                if (m_failure || !CheckKeyAndIVLength(KeyLengthBits/8, IVLengthBytes))
+                {
+                    return;
+                }
+
                 if (!(EVP_EncryptInit_ex(m_encryptor_ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) &&
                         EVP_EncryptInit_ex(m_encryptor_ctx, nullptr, nullptr, m_key.GetUnderlyingData(),
                                            m_initializationVector.GetUnderlyingData()) &&
@@ -723,29 +723,29 @@ namespace Aws
                     return;
                 }
 
-                if (m_aad.GetLength() > 0) 
-                { 
-                    int outLen = 0; 
-                    if(!EVP_EncryptUpdate(m_encryptor_ctx, nullptr, &outLen, m_aad.GetUnderlyingData(), m_aad.GetLength()) 
-                    || !EVP_DecryptUpdate(m_decryptor_ctx, nullptr, &outLen, m_aad.GetUnderlyingData(), m_aad.GetLength())) 
-                    { 
-                        m_failure = true; 
-                        LogErrors(GCM_LOG_TAG); 
-                        return; 
-                    } 
-                } 
- 
+                if (m_aad.GetLength() > 0)
+                {
+                    int outLen = 0;
+                    if(!EVP_EncryptUpdate(m_encryptor_ctx, nullptr, &outLen, m_aad.GetUnderlyingData(), m_aad.GetLength())
+                    || !EVP_DecryptUpdate(m_decryptor_ctx, nullptr, &outLen, m_aad.GetUnderlyingData(), m_aad.GetLength()))
+                    {
+                        m_failure = true;
+                        LogErrors(GCM_LOG_TAG);
+                        return;
+                    }
+                }
+
                 //tag should always be set in GCM decrypt mode
                 if (m_tag.GetLength() > 0)
                 {
                     if (m_tag.GetLength() < TagLengthBytes)
                     {
-                        AWS_LOGSTREAM_ERROR(GCM_LOG_TAG, "Illegal attempt to decrypt an AES GCM payload without a valid tag set: tag length=" << m_tag.GetLength()); 
+                        AWS_LOGSTREAM_ERROR(GCM_LOG_TAG, "Illegal attempt to decrypt an AES GCM payload without a valid tag set: tag length=" << m_tag.GetLength());
                         m_failure = true;
                         return;
                     }
 
-                    if (!EVP_CIPHER_CTX_ctrl(m_decryptor_ctx, EVP_CTRL_GCM_SET_TAG, static_cast<int>(m_tag.GetLength()), m_tag.GetUnderlyingData())) 
+                    if (!EVP_CIPHER_CTX_ctrl(m_decryptor_ctx, EVP_CTRL_GCM_SET_TAG, static_cast<int>(m_tag.GetLength()), m_tag.GetUnderlyingData()))
                     {
                         m_failure = true;
                         LogErrors(GCM_LOG_TAG);
@@ -768,12 +768,12 @@ namespace Aws
                 return TagLengthBytes;
             }
 
-            void AES_GCM_Cipher_OpenSSL::Reset() 
-            { 
-                OpenSSLCipher::Reset(); 
-                InitCipher(); 
-            } 
- 
+            void AES_GCM_Cipher_OpenSSL::Reset()
+            {
+                OpenSSLCipher::Reset();
+                InitCipher();
+            }
+
             size_t AES_KeyWrap_Cipher_OpenSSL::KeyLengthBits = 256;
             size_t AES_KeyWrap_Cipher_OpenSSL::BlockSizeBytes = 8;
             static const unsigned char INTEGRITY_VALUE = 0xA6;
@@ -788,10 +788,10 @@ namespace Aws
 
             CryptoBuffer AES_KeyWrap_Cipher_OpenSSL::EncryptBuffer(const CryptoBuffer& plainText)
             {
-                if (!m_failure) 
-                { 
-                    m_workingKeyBuffer = CryptoBuffer({&m_workingKeyBuffer, (CryptoBuffer*) &plainText}); 
-                } 
+                if (!m_failure)
+                {
+                    m_workingKeyBuffer = CryptoBuffer({&m_workingKeyBuffer, (CryptoBuffer*) &plainText});
+                }
                 return CryptoBuffer();
             }
 
@@ -811,7 +811,7 @@ namespace Aws
                 }
 
                 //the following is an in place implementation of
-                //RFC 3394 using the alternate in-place implementation. 
+                //RFC 3394 using the alternate in-place implementation.
                 //we use one in-place buffer instead of the copy at the end.
                 //the one letter variable names are meant to directly reflect the variables in the RFC
                 CryptoBuffer cipherText(m_workingKeyBuffer.GetLength() + BlockSizeBytes);
@@ -869,10 +869,10 @@ namespace Aws
 
             CryptoBuffer AES_KeyWrap_Cipher_OpenSSL::DecryptBuffer(const CryptoBuffer& cipherText)
             {
-                if (!m_failure) 
-                { 
-                    m_workingKeyBuffer = CryptoBuffer({&m_workingKeyBuffer, (CryptoBuffer*)&cipherText}); 
-                } 
+                if (!m_failure)
+                {
+                    m_workingKeyBuffer = CryptoBuffer({&m_workingKeyBuffer, (CryptoBuffer*)&cipherText});
+                }
                 return CryptoBuffer();
             }
 
@@ -961,11 +961,11 @@ namespace Aws
 
             void AES_KeyWrap_Cipher_OpenSSL::InitCipher()
             {
-                if (m_failure || !CheckKeyAndIVLength(KeyLengthBits/8, 0)) 
-                { 
-                    return; 
-                } 
- 
+                if (m_failure || !CheckKeyAndIVLength(KeyLengthBits/8, 0))
+                {
+                    return;
+                }
+
                 if (!(EVP_EncryptInit_ex(m_encryptor_ctx, EVP_aes_256_ecb(), nullptr, m_key.GetUnderlyingData(), nullptr) &&
                         EVP_CIPHER_CTX_set_padding(m_encryptor_ctx, 0)) ||
                     !(EVP_DecryptInit_ex(m_decryptor_ctx, EVP_aes_256_ecb(), nullptr, m_key.GetUnderlyingData(), nullptr) &&
@@ -975,13 +975,13 @@ namespace Aws
                     LogErrors(KEY_WRAP_TAG);
                 }
             }
- 
-            void AES_KeyWrap_Cipher_OpenSSL::Reset() 
-            { 
-                m_workingKeyBuffer = CryptoBuffer(); 
-                OpenSSLCipher::Reset(); 
-                InitCipher(); 
-            } 
+
+            void AES_KeyWrap_Cipher_OpenSSL::Reset()
+            {
+                m_workingKeyBuffer = CryptoBuffer();
+                OpenSSLCipher::Reset();
+                InitCipher();
+            }
         }
     }
 }

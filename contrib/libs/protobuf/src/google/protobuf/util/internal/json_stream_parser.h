@@ -225,11 +225,11 @@ class PROTOBUF_EXPORT JsonStreamParser {
   util::Status ParseTrue();
   util::Status ParseFalse();
   util::Status ParseNull();
-  util::Status ParseEmptyNull(); 
+  util::Status ParseEmptyNull();
 
-  // Whether an empty-null is allowed in the current state. 
-  bool IsEmptyNullAllowed(TokenType type); 
- 
+  // Whether an empty-null is allowed in the current state.
+  bool IsEmptyNullAllowed(TokenType type);
+
   // Whether the whole input is all whitespaces.
   bool IsInputAllWhiteSpaces(TokenType type);
 
@@ -319,17 +319,17 @@ class PROTOBUF_EXPORT JsonStreamParser {
   // Replacement character for invalid UTF-8 code points.
   TProtoStringType utf8_replacement_character_;
 
-  // Whether allows empty string represented null array value or object entry 
-  // value. 
-  bool allow_empty_null_; 
- 
+  // Whether allows empty string represented null array value or object entry
+  // value.
+  bool allow_empty_null_;
+
   // Whether unquoted object keys can contain embedded non-alphanumeric
   // characters when this is unambiguous for parsing.
   bool allow_permissive_key_naming_;
 
-  // Whether allows out-of-range floating point numbers or reject them. 
-  bool loose_float_number_conversion_; 
- 
+  // Whether allows out-of-range floating point numbers or reject them.
+  bool loose_float_number_conversion_;
+
   // Tracks current recursion depth.
   mutable int recursion_depth_;
 

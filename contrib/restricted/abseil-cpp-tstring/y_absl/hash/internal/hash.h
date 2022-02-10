@@ -33,7 +33,7 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -53,12 +53,12 @@
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
 // Internal detail: Large buffers are hashed in smaller chunks.  This function
 // returns the size of these chunks.
-constexpr size_t PiecewiseChunkSize() { return 1024; } 
+constexpr size_t PiecewiseChunkSize() { return 1024; }
 
 // PiecewiseCombiner
 //
@@ -1057,7 +1057,7 @@ H PiecewiseCombiner::add_buffer(H state, const unsigned char* data,
     // This partial chunk does not fill our existing buffer
     memcpy(buf_ + position_, data, size);
     position_ += size;
-    return state; 
+    return state;
   }
 
   // If the buffer is partially filled we need to complete the buffer
@@ -1079,7 +1079,7 @@ H PiecewiseCombiner::add_buffer(H state, const unsigned char* data,
   // Fill the buffer with the remainder
   memcpy(buf_, data, size);
   position_ = size;
-  return state; 
+  return state;
 }
 
 // HashStateBase::PiecewiseCombiner::finalize()
@@ -1090,7 +1090,7 @@ H PiecewiseCombiner::finalize(H state) {
 }
 
 }  // namespace hash_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_HASH_INTERNAL_HASH_H_

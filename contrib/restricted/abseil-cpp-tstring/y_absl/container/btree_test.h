@@ -18,7 +18,7 @@
 #include <algorithm>
 #include <cassert>
 #include <random>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <utility>
 #include <vector>
 
@@ -29,7 +29,7 @@
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // Like remove_const but propagates the removal through std::pair.
@@ -160,7 +160,7 @@ std::vector<V> GenerateValuesWithSeed(int n, int maxval, int seed) {
 }
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_BTREE_TEST_H_

@@ -51,7 +51,7 @@
 #include "y_absl/container/internal/btree_container.h"  // IWYU pragma: export
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // y_absl::btree_set<>
 //
@@ -382,20 +382,20 @@ void swap(btree_set<K, C, A> &x, btree_set<K, C, A> &y) {
   return x.swap(y);
 }
 
-// y_absl::erase_if(y_absl::btree_set<>, Pred) 
-// 
-// Erases all elements that satisfy the predicate pred from the container. 
-template <typename K, typename C, typename A, typename Pred> 
-void erase_if(btree_set<K, C, A> &set, Pred pred) { 
-  for (auto it = set.begin(); it != set.end();) { 
-    if (pred(*it)) { 
-      it = set.erase(it); 
-    } else { 
-      ++it; 
-    } 
-  } 
-} 
- 
+// y_absl::erase_if(y_absl::btree_set<>, Pred)
+//
+// Erases all elements that satisfy the predicate pred from the container.
+template <typename K, typename C, typename A, typename Pred>
+void erase_if(btree_set<K, C, A> &set, Pred pred) {
+  for (auto it = set.begin(); it != set.end();) {
+    if (pred(*it)) {
+      it = set.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
 // y_absl::btree_multiset<>
 //
 // An `y_absl::btree_multiset<K>` is an ordered associative container of
@@ -708,21 +708,21 @@ void swap(btree_multiset<K, C, A> &x, btree_multiset<K, C, A> &y) {
   return x.swap(y);
 }
 
-// y_absl::erase_if(y_absl::btree_multiset<>, Pred) 
-// 
-// Erases all elements that satisfy the predicate pred from the container. 
-template <typename K, typename C, typename A, typename Pred> 
-void erase_if(btree_multiset<K, C, A> &set, Pred pred) { 
-  for (auto it = set.begin(); it != set.end();) { 
-    if (pred(*it)) { 
-      it = set.erase(it); 
-    } else { 
-      ++it; 
-    } 
-  } 
-} 
- 
-ABSL_NAMESPACE_END 
+// y_absl::erase_if(y_absl::btree_multiset<>, Pred)
+//
+// Erases all elements that satisfy the predicate pred from the container.
+template <typename K, typename C, typename A, typename Pred>
+void erase_if(btree_multiset<K, C, A> &set, Pred pred) {
+  for (auto it = set.begin(); it != set.end();) {
+    if (pred(*it)) {
+      it = set.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_BTREE_SET_H_

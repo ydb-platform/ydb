@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #pragma once
 
@@ -60,7 +60,7 @@ namespace Aws
             inline Scheme GetScheme() const { return m_scheme; }
 
             /**
-            * Sets scheme, if the port is incompatible with this scheme, the port will automatically be set as well. 
+            * Sets scheme, if the port is incompatible with this scheme, the port will automatically be set as well.
             */
             void SetScheme(Scheme value);
 
@@ -114,7 +114,7 @@ namespace Aws
             Aws::String GetFormParameters() const;
 
             /**
-            * Canonicalizes the query string. 
+            * Canonicalizes the query string.
             */
             void CanonicalizeQueryString();
 
@@ -141,7 +141,7 @@ namespace Aws
 
             /**
              * URLEncodes the path portions of path (doesn't encode the "/" portion)
-             * Keeps the first and the last "/". 
+             * Keeps the first and the last "/".
              */
             static Aws::String URLEncodePath(const Aws::String& path);
 

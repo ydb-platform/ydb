@@ -1,8 +1,8 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -48,10 +48,10 @@ enum {
   // GNU extensions
   DW_CFA_GNU_window_save              = 0x2D,
   DW_CFA_GNU_args_size                = 0x2E,
-  DW_CFA_GNU_negative_offset_extended = 0x2F, 
- 
-  // AARCH64 extensions 
-  DW_CFA_AARCH64_negate_ra_state      = 0x2D 
+  DW_CFA_GNU_negative_offset_extended = 0x2F,
+
+  // AARCH64 extensions
+  DW_CFA_AARCH64_negate_ra_state      = 0x2D
 };
 
 

@@ -209,7 +209,7 @@ util::Status DecodeCompactFieldMaskPaths(StringPiece paths,
         StrCat("Invalid FieldMask '", paths,
                      "'. Cannot find matching ')' for all '('."));
   }
-  return util::Status(); 
+  return util::Status();
 }
 
 }  // namespace converter

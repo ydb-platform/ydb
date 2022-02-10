@@ -12,9 +12,9 @@ from ptyprocess.ptyprocess import use_native_pty_fork
 
 from .exceptions import ExceptionPexpect, EOF, TIMEOUT
 from .spawnbase import SpawnBase
-from .utils import ( 
-    which, split_command_line, select_ignore_interrupts, poll_ignore_interrupts 
-) 
+from .utils import (
+    which, split_command_line, select_ignore_interrupts, poll_ignore_interrupts
+)
 
 @contextmanager
 def _wrap_ptyprocess_err():
@@ -36,8 +36,8 @@ class spawn(SpawnBase):
     def __init__(self, command, args=[], timeout=30, maxread=2000,
                  searchwindowsize=None, logfile=None, cwd=None, env=None,
                  ignore_sighup=False, echo=True, preexec_fn=None,
-                 encoding=None, codec_errors='strict', dimensions=None, 
-                 use_poll=False): 
+                 encoding=None, codec_errors='strict', dimensions=None,
+                 use_poll=False):
         '''This is the constructor. The command parameter may be a string that
         includes a command and any arguments to the command. For example::
 
@@ -109,9 +109,9 @@ class spawn(SpawnBase):
             child = pexpect.spawn('some_command')
             child.logfile = sys.stdout
 
-            # In Python 3, we'll use the ``encoding`` argument to decode data 
-            # from the subprocess and handle it as unicode: 
-            child = pexpect.spawn('some_command', encoding='utf-8') 
+            # In Python 3, we'll use the ``encoding`` argument to decode data
+            # from the subprocess and handle it as unicode:
+            child = pexpect.spawn('some_command', encoding='utf-8')
             child.logfile = sys.stdout
 
         The logfile_read and logfile_send members can be used to separately log
@@ -147,7 +147,7 @@ class spawn(SpawnBase):
         many users that I decided that the default pexpect behavior should be
         to sleep just before writing to the child application. 1/20th of a
         second (50 ms) seems to be enough to clear up the problem. You can set
-        delaybeforesend to None to return to the old behavior. 
+        delaybeforesend to None to return to the old behavior.
 
         Note that spawn is clever about finding commands on your path.
         It uses the same logic that "which" uses to find executables.
@@ -157,12 +157,12 @@ class spawn(SpawnBase):
         in self.exitstatus or self.signalstatus. If the child exited normally
         then exitstatus will store the exit return code and signalstatus will
         be None. If the child was terminated abnormally with a signal then
-        signalstatus will store the signal value and exitstatus will be None:: 
- 
-            child = pexpect.spawn('some_command') 
-            child.close() 
-            print(child.exitstatus, child.signalstatus) 
- 
+        signalstatus will store the signal value and exitstatus will be None::
+
+            child = pexpect.spawn('some_command')
+            child.close()
+            print(child.exitstatus, child.signalstatus)
+
         If you need more detail you can also read the self.status member which
         stores the status returned by os.waitpid. You can interpret this using
         os.WIFEXITED/os.WEXITSTATUS or os.WIFSIGNALED/os.TERMSIG.
@@ -174,7 +174,7 @@ class spawn(SpawnBase):
         using setecho(False) followed by waitnoecho().  However, for some
         platforms such as Solaris, this is not possible, and should be
         disabled immediately on spawn.
- 
+
         If preexec_fn is given, it will be called in the child process before
         launching the given command. This is useful to e.g. reset inherited
         signal handlers.
@@ -182,9 +182,9 @@ class spawn(SpawnBase):
         The dimensions attribute specifies the size of the pseudo-terminal as
         seen by the subprocess, and is specified as a two-entry tuple (rows,
         columns). If this is unspecified, the defaults in ptyprocess will apply.
- 
-        The use_poll attribute enables using select.poll() over select.select() 
-        for socket handling. This is handy if your system could have > 1024 fds 
+
+        The use_poll attribute enables using select.poll() over select.select()
+        for socket handling. This is handy if your system could have > 1024 fds
         '''
         super(spawn, self).__init__(timeout=timeout, maxread=maxread, searchwindowsize=searchwindowsize,
                                     logfile=logfile, encoding=encoding, codec_errors=codec_errors)
@@ -203,7 +203,7 @@ class spawn(SpawnBase):
             self.name = '<pexpect factory incomplete>'
         else:
             self._spawn(command, args, preexec_fn, dimensions)
-        self.use_poll = use_poll 
+        self.use_poll = use_poll
 
     def __str__(self):
         '''This returns a human-readable string that represents the state of
@@ -219,8 +219,8 @@ class spawn(SpawnBase):
         s.append('match: %r' % (self.match,))
         s.append('match_index: ' + str(self.match_index))
         s.append('exitstatus: ' + str(self.exitstatus))
-        if hasattr(self, 'ptyproc'): 
-            s.append('flag_eof: ' + str(self.flag_eof)) 
+        if hasattr(self, 'ptyproc'):
+            s.append('flag_eof: ' + str(self.flag_eof))
         s.append('pid: ' + str(self.pid))
         s.append('child_fd: ' + str(self.child_fd))
         s.append('closed: ' + str(self.closed))
@@ -271,7 +271,7 @@ class spawn(SpawnBase):
             self.args.insert(0, command)
             self.command = command
 
-        command_with_path = which(self.command, env=self.env) 
+        command_with_path = which(self.command, env=self.env)
         if command_with_path is None:
             raise ExceptionPexpect('The command was not found or was not ' +
                     'executable: %s.' % self.command)
@@ -295,14 +295,14 @@ class spawn(SpawnBase):
         if dimensions is not None:
             kwargs['dimensions'] = dimensions
 
-        if self.encoding is not None: 
-            # Encode command line using the specified encoding 
-            self.args = [a if isinstance(a, bytes) else a.encode(self.encoding) 
-                         for a in self.args] 
+        if self.encoding is not None:
+            # Encode command line using the specified encoding
+            self.args = [a if isinstance(a, bytes) else a.encode(self.encoding)
+                         for a in self.args]
 
-        self.ptyproc = self._spawnpty(self.args, env=self.env, 
-                                     cwd=self.cwd, **kwargs) 
- 
+        self.ptyproc = self._spawnpty(self.args, env=self.env,
+                                     cwd=self.cwd, **kwargs)
+
         self.pid = self.ptyproc.pid
         self.child_fd = self.ptyproc.fd
 
@@ -310,10 +310,10 @@ class spawn(SpawnBase):
         self.terminated = False
         self.closed = False
 
-    def _spawnpty(self, args, **kwargs): 
-        '''Spawn a pty and return an instance of PtyProcess.''' 
-        return ptyprocess.PtyProcess.spawn(args, **kwargs) 
- 
+    def _spawnpty(self, args, **kwargs):
+        '''Spawn a pty and return an instance of PtyProcess.'''
+        return ptyprocess.PtyProcess.spawn(args, **kwargs)
+
     def close(self, force=True):
         '''This closes the connection with the child application. Note that
         calling close() more than once is valid. This emulates standard Python
@@ -322,13 +322,13 @@ class spawn(SpawnBase):
         and SIGINT). '''
 
         self.flush()
-        with _wrap_ptyprocess_err(): 
-            # PtyProcessError may be raised if it is not possible to terminate 
-            # the child. 
-            self.ptyproc.close(force=force) 
+        with _wrap_ptyprocess_err():
+            # PtyProcessError may be raised if it is not possible to terminate
+            # the child.
+            self.ptyproc.close(force=force)
         self.isalive()  # Update exit status from ptyproc
         self.child_fd = -1
-        self.closed = True 
+        self.closed = True
 
     def isatty(self):
         '''This returns True if the file descriptor is open and connected to a
@@ -540,9 +540,9 @@ class spawn(SpawnBase):
 
         This value may be discovered using fpathconf(3)::
 
-            >>> from os import fpathconf 
-            >>> print(fpathconf(0, 'PC_MAX_CANON')) 
-            256 
+            >>> from os import fpathconf
+            >>> print(fpathconf(0, 'PC_MAX_CANON'))
+            256
 
         On such a system, only 256 bytes may be received per line. Any
         subsequent bytes received will be discarded. BEL (``'\a'``) is then
@@ -553,14 +553,14 @@ class spawn(SpawnBase):
         Canonical input processing may be disabled altogether by executing
         a shell, then stty(1), before executing the final program::
 
-            >>> bash = pexpect.spawn('/bin/bash', echo=False) 
-            >>> bash.sendline('stty -icanon') 
-            >>> bash.sendline('base64') 
-            >>> bash.sendline('x' * 5000) 
+            >>> bash = pexpect.spawn('/bin/bash', echo=False)
+            >>> bash.sendline('stty -icanon')
+            >>> bash.sendline('base64')
+            >>> bash.sendline('x' * 5000)
         '''
 
-        if self.delaybeforesend is not None: 
-            time.sleep(self.delaybeforesend) 
+        if self.delaybeforesend is not None:
+            time.sleep(self.delaybeforesend)
 
         s = self._coerce_send_string(s)
         self._log(s, 'send')
@@ -574,8 +574,8 @@ class spawn(SpawnBase):
         written.  Only a limited number of bytes may be sent for each
         line in the default terminal mode, see docstring of :meth:`send`.
         '''
-        s = self._coerce_send_string(s) 
-        return self.send(s + self.linesep) 
+        s = self._coerce_send_string(s)
+        return self.send(s + self.linesep)
 
     def _log_control(self, s):
         """Write control characters to the appropriate log files"""
@@ -772,10 +772,10 @@ class spawn(SpawnBase):
                 s = struct.pack("HHHH", 0, 0, 0, 0)
                 a = struct.unpack('hhhh', fcntl.ioctl(sys.stdout.fileno(),
                     termios.TIOCGWINSZ , s))
-                if not p.closed: 
-                    p.setwinsize(a[0],a[1]) 
- 
-            # Note this 'p' is global and used in sigwinch_passthrough. 
+                if not p.closed:
+                    p.setwinsize(a[0],a[1])
+
+            # Note this 'p' is global and used in sigwinch_passthrough.
             p = pexpect.spawn('/bin/bash')
             signal.signal(signal.SIGWINCH, sigwinch_passthrough)
             p.interact()
@@ -784,7 +784,7 @@ class spawn(SpawnBase):
         # Flush the buffer.
         self.write_to_stdout(self.buffer)
         self.stdout.flush()
-        self._buffer = self.buffer_type() 
+        self._buffer = self.buffer_type()
         mode = tty.tcgetattr(self.STDIN_FILENO)
         tty.setraw(self.STDIN_FILENO)
         if escape_character is not None and PY3:
@@ -808,20 +808,20 @@ class spawn(SpawnBase):
 
         return os.read(fd, 1000)
 
-    def __interact_copy( 
-        self, escape_character=None, input_filter=None, output_filter=None 
-    ): 
+    def __interact_copy(
+        self, escape_character=None, input_filter=None, output_filter=None
+    ):
 
         '''This is used by the interact() method.
         '''
 
         while self.isalive():
-            if self.use_poll: 
-                r = poll_ignore_interrupts([self.child_fd, self.STDIN_FILENO]) 
-            else: 
-                r, w, e = select_ignore_interrupts( 
-                    [self.child_fd, self.STDIN_FILENO], [], [] 
-                ) 
+            if self.use_poll:
+                r = poll_ignore_interrupts([self.child_fd, self.STDIN_FILENO])
+            else:
+                r, w, e = select_ignore_interrupts(
+                    [self.child_fd, self.STDIN_FILENO], [], []
+                )
             if self.child_fd in r:
                 try:
                     data = self.__interact_read(self.child_fd)

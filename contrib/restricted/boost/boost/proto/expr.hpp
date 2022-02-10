@@ -132,21 +132,21 @@ namespace boost { namespace proto
         // actually defined:
         #include <boost/proto/detail/basic_expr.hpp>
 
-        #if defined(__GNUC__) && __GNUC__ >= 9 || defined(__clang__) && __clang_major__ >= 10 && !defined(__apple_build_version__) 
-            #pragma GCC diagnostic push 
-            // The warning cannot be fixed for aggregates 
-            // Sadly, GCC currently emits the warning at the use location: 
-            // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94492 
-            #pragma GCC diagnostic ignored "-Wdeprecated-copy" 
-        #endif 
- 
+        #if defined(__GNUC__) && __GNUC__ >= 9 || defined(__clang__) && __clang_major__ >= 10 && !defined(__apple_build_version__)
+            #pragma GCC diagnostic push
+            // The warning cannot be fixed for aggregates
+            // Sadly, GCC currently emits the warning at the use location:
+            // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94492
+            #pragma GCC diagnostic ignored "-Wdeprecated-copy"
+        #endif
+
         // This is where the expr specialization are
         // actually defined:
         #include <boost/proto/detail/expr.hpp>
- 
+
         #if defined(__GNUC__) && __GNUC__ >= 9 || defined(__clang__) && __clang_major__ >= 10 && !defined(__apple_build_version__)
-            #pragma GCC diagnostic pop 
-        #endif 
+            #pragma GCC diagnostic pop
+        #endif
     }
 
     /// \brief Lets you inherit the interface of an expression

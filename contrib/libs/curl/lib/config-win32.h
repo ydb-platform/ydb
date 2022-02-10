@@ -185,12 +185,12 @@
 /* Define if you have the ftruncate function. */
 /* #define HAVE_FTRUNCATE 1 */
 
-/* Define to 1 if you have the `getpeername' function. */ 
-#define HAVE_GETPEERNAME 1 
- 
-/* Define to 1 if you have the getsockname function. */ 
-#define HAVE_GETSOCKNAME 1 
- 
+/* Define to 1 if you have the `getpeername' function. */
+#define HAVE_GETPEERNAME 1
+
+/* Define to 1 if you have the getsockname function. */
+#define HAVE_GETSOCKNAME 1
+
 /* Define if you have the gethostbyaddr function. */
 #define HAVE_GETHOSTBYADDR 1
 
@@ -585,9 +585,9 @@ Vista
 #  endif
 #endif
 
-/* Availability of freeaddrinfo, getaddrinfo, getnameinfo and if_nametoindex 
-   functions is quite convoluted, compiler dependent and even build target 
-   dependent. */ 
+/* Availability of freeaddrinfo, getaddrinfo, getnameinfo and if_nametoindex
+   functions is quite convoluted, compiler dependent and even build target
+   dependent. */
 #if defined(HAVE_WS2TCPIP_H)
 #  if defined(__POCC__)
 #    define HAVE_FREEADDRINFO           1
@@ -723,7 +723,7 @@ Vista
 #include <ws2tcpip.h>
 #if !defined(__MINGW32__) || defined(LUP_SECURE)
 /* Define to use Unix sockets. */
-#define USE_UNIX_SOCKETS 
+#define USE_UNIX_SOCKETS
 #if !defined(UNIX_PATH_MAX)
   /* Replicating logic present in afunix.h of newer Windows 10 SDK versions */
 # define UNIX_PATH_MAX 108
@@ -733,7 +733,7 @@ Vista
     char sun_path[UNIX_PATH_MAX];
   } SOCKADDR_UN, *PSOCKADDR_UN;
 #endif
-#endif 
+#endif
 
 /* ---------------------------------------------------------------- */
 /*                       ADDITIONAL DEFINITIONS                     */

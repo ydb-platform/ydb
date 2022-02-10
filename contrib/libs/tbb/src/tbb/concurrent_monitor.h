@@ -1,108 +1,108 @@
-/* 
+/*
     Copyright (c) 2005-2021 Intel Corporation
- 
-    Licensed under the Apache License, Version 2.0 (the "License"); 
-    you may not use this file except in compliance with the License. 
-    You may obtain a copy of the License at 
- 
-        http://www.apache.org/licenses/LICENSE-2.0 
- 
-    Unless required by applicable law or agreed to in writing, software 
-    distributed under the License is distributed on an "AS IS" BASIS, 
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-    See the License for the specific language governing permissions and 
-    limitations under the License. 
-*/ 
- 
-#ifndef __TBB_concurrent_monitor_H 
-#define __TBB_concurrent_monitor_H 
- 
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+*/
+
+#ifndef __TBB_concurrent_monitor_H
+#define __TBB_concurrent_monitor_H
+
 #include "oneapi/tbb/spin_mutex.h"
 #include "oneapi/tbb/detail/_exception.h"
 #include "oneapi/tbb/detail/_aligned_space.h"
 #include "oneapi/tbb/detail/_template_helpers.h"
 #include "scheduler_common.h"
- 
-#include "semaphore.h" 
- 
+
+#include "semaphore.h"
+
 #include <atomic>
 
-namespace tbb { 
+namespace tbb {
 namespace detail {
 namespace r1 {
- 
-//! Circular doubly-linked list with sentinel 
-/** head.next points to the front and head.prev points to the back */ 
-class circular_doubly_linked_list_with_sentinel : no_copy { 
-public: 
+
+//! Circular doubly-linked list with sentinel
+/** head.next points to the front and head.prev points to the back */
+class circular_doubly_linked_list_with_sentinel : no_copy {
+public:
     struct base_node {
         base_node* next;
         base_node* prev;
         explicit base_node() : next((base_node*)(uintptr_t)0xcdcdcdcd), prev((base_node*)(uintptr_t)0xcdcdcdcd) {}
-    }; 
- 
-    // ctor 
+    };
+
+    // ctor
     circular_doubly_linked_list_with_sentinel() { clear(); }
-    // dtor 
+    // dtor
     ~circular_doubly_linked_list_with_sentinel() {
         __TBB_ASSERT(head.next == &head && head.prev == &head, "the list is not empty");
     }
- 
+
     inline std::size_t size() const { return count.load(std::memory_order_relaxed); }
     inline bool empty() const { return size() == 0; }
     inline base_node* front() const { return head.next; }
     inline base_node* last() const { return head.prev; }
     inline const base_node* end() const { return &head; }
- 
-    //! add to the back of the list 
+
+    //! add to the back of the list
     inline void add( base_node* n ) {
         count.store(count.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
-        n->prev = head.prev; 
-        n->next = &head; 
-        head.prev->next = n; 
-        head.prev = n; 
-    } 
- 
-    //! remove node 'n' 
+        n->prev = head.prev;
+        n->next = &head;
+        head.prev->next = n;
+        head.prev = n;
+    }
+
+    //! remove node 'n'
     inline void remove( base_node& n ) {
         __TBB_ASSERT(count.load(std::memory_order_relaxed) > 0, "attempt to remove an item from an empty list");
         count.store(count.load( std::memory_order_relaxed ) - 1, std::memory_order_relaxed);
-        n.prev->next = n.next; 
-        n.next->prev = n.prev; 
-    } 
- 
-    //! move all elements to 'lst' and initialize the 'this' list 
-    inline void flush_to( circular_doubly_linked_list_with_sentinel& lst ) { 
+        n.prev->next = n.next;
+        n.next->prev = n.prev;
+    }
+
+    //! move all elements to 'lst' and initialize the 'this' list
+    inline void flush_to( circular_doubly_linked_list_with_sentinel& lst ) {
         const std::size_t l_count = size();
         if (l_count > 0) {
             lst.count.store(l_count, std::memory_order_relaxed);
-            lst.head.next = head.next; 
-            lst.head.prev = head.prev; 
-            head.next->prev = &lst.head; 
-            head.prev->next = &lst.head; 
-            clear(); 
-        } 
-    } 
- 
+            lst.head.next = head.next;
+            lst.head.prev = head.prev;
+            head.next->prev = &lst.head;
+            head.prev->next = &lst.head;
+            clear();
+        }
+    }
+
     void clear() {
         head.next = &head;
         head.prev = &head;
         count.store(0, std::memory_order_relaxed);
     }
-private: 
+private:
     std::atomic<std::size_t> count;
     base_node head;
-}; 
- 
+};
+
 using base_list = circular_doubly_linked_list_with_sentinel;
 using base_node = circular_doubly_linked_list_with_sentinel::base_node;
- 
+
 template <typename Context>
 class concurrent_monitor_base;
 
 template <typename Context>
 class wait_node : public base_node {
-public: 
+public:
 
 #if __TBB_GLIBCXX_VERSION >= 40800 && __TBB_GLIBCXX_VERSION < 40900
     wait_node(Context ctx) : my_context(ctx), my_is_in_list(false) {}
@@ -154,7 +154,7 @@ public:
         if (this->my_initialized) {
             if (this->my_skipped_wakeup) semaphore().P();
             semaphore().~binary_semaphore();
-        } 
+        }
     }
 
     binary_semaphore& semaphore() { return *sema.begin(); }
@@ -163,9 +163,9 @@ public:
         if (!this->my_initialized) {
             new (sema.begin()) binary_semaphore;
             base_type::init();
-        } 
+        }
     }
- 
+
     void wait() override {
         __TBB_ASSERT(this->my_initialized,
             "Use of commit_wait() without prior prepare_wait()");
@@ -193,17 +193,17 @@ private:
 template <typename Context>
 class concurrent_monitor_base : no_copy {
 public:
-    //! ctor 
+    //! ctor
     concurrent_monitor_base() : my_epoch{}
     {}
- 
-    //! dtor 
+
+    //! dtor
     ~concurrent_monitor_base() {
         abort_all();
         __TBB_ASSERT(my_waitset.empty(), "waitset not empty?");
     }
- 
-    //! prepare wait by inserting 'thr' into the wait queue 
+
+    //! prepare wait by inserting 'thr' into the wait queue
     void prepare_wait( wait_node<Context>& node) {
         // TODO: consider making even more lazy instantiation of the semaphore, that is only when it is actually needed, e.g. move it in node::wait()
         if (!node.my_initialized) {
@@ -213,7 +213,7 @@ public:
         else if (node.my_skipped_wakeup) {
             node.reset();
         }
- 
+
         node.my_is_in_list.store(true, std::memory_order_relaxed);
 
         {
@@ -227,20 +227,20 @@ public:
         atomic_fence(std::memory_order_seq_cst);
     }
 
-    //! Commit wait if event count has not changed; otherwise, cancel wait. 
-    /** Returns true if committed, false if canceled. */ 
+    //! Commit wait if event count has not changed; otherwise, cancel wait.
+    /** Returns true if committed, false if canceled. */
     inline bool commit_wait( wait_node<Context>& node ) {
         const bool do_it = node.my_epoch == my_epoch.load(std::memory_order_relaxed);
-        // this check is just an optimization 
+        // this check is just an optimization
         if (do_it) {
            node.wait();
-        } else { 
+        } else {
             cancel_wait( node );
-        } 
-        return do_it; 
-    } 
+        }
+        return do_it;
+    }
 
-    //! Cancel the wait. Removes the thread from the wait queue if not removed yet. 
+    //! Cancel the wait. Removes the thread from the wait queue if not removed yet.
     void cancel_wait( wait_node<Context>& node ) {
         // possible skipped wakeup will be pumped in the following prepare_wait()
         node.my_skipped_wakeup = true;
@@ -257,7 +257,7 @@ public:
             }
         }
     }
- 
+
     //! Wait for a condition to be satisfied with waiting-on my_context
     template <typename NodeType, typename Pred>
     bool wait(Pred&& pred, NodeType&& node) {
@@ -266,7 +266,7 @@ public:
             if (commit_wait(node)) {
                 return true;
             }
- 
+
             prepare_wait(node);
         }
 
@@ -274,18 +274,18 @@ public:
         return false;
     }
 
-    //! Notify one thread about the event 
+    //! Notify one thread about the event
     void notify_one() {
         atomic_fence(std::memory_order_seq_cst);
         notify_one_relaxed();
     }
- 
-    //! Notify one thread about the event. Relaxed version. 
+
+    //! Notify one thread about the event. Relaxed version.
     void notify_one_relaxed() {
         if (my_waitset.empty()) {
             return;
         }
- 
+
         base_node* n;
         const base_node* end = my_waitset.end();
         {
@@ -297,24 +297,24 @@ public:
                 to_wait_node(n)->my_is_in_list.store(false, std::memory_order_relaxed);
             }
         }
- 
+
         if (n != end) {
             to_wait_node(n)->notify();
         }
     }
- 
+
     //! Notify all waiting threads of the event
     void notify_all() {
         atomic_fence(std::memory_order_seq_cst);
         notify_all_relaxed();
     }
- 
+
     // ! Notify all waiting threads of the event; Relaxed version
     void notify_all_relaxed() {
         if (my_waitset.empty()) {
             return;
         }
- 
+
         base_list temp;
         const base_node* end;
         {
@@ -327,7 +327,7 @@ public:
                 to_wait_node(n)->my_is_in_list.store(false, std::memory_order_relaxed);
             }
         }
- 
+
         base_node* nxt;
         for (base_node* n = temp.front(); n != end; n=nxt) {
             nxt = n->next;
@@ -337,49 +337,49 @@ public:
         temp.clear();
 #endif
     }
- 
+
     //! Notify waiting threads of the event that satisfies the given predicate
     template <typename P>
     void notify( const P& predicate ) {
         atomic_fence(std::memory_order_seq_cst);
         notify_relaxed( predicate );
-    } 
- 
+    }
+
     //! Notify waiting threads of the event that satisfies the given predicate;
     //! the predicate is called under the lock. Relaxed version.
     template<typename P>
     void notify_relaxed( const P& predicate ) {
         if (my_waitset.empty()) {
-            return; 
+            return;
         }
 
         base_list temp;
         base_node* nxt;
         const base_node* end = my_waitset.end();
-        { 
+        {
             tbb::spin_mutex::scoped_lock l(my_mutex);
             my_epoch.store(my_epoch.load( std::memory_order_relaxed ) + 1, std::memory_order_relaxed);
             for (base_node* n = my_waitset.last(); n != end; n = nxt) {
-                nxt = n->prev; 
+                nxt = n->prev;
                 auto* node = static_cast<wait_node<Context>*>(n);
                 if (predicate(node->my_context)) {
                     my_waitset.remove(*n);
                     node->my_is_in_list.store(false, std::memory_order_relaxed);
                     temp.add(n);
-                } 
-            } 
-        } 
- 
-        end = temp.end(); 
+                }
+            }
+        }
+
+        end = temp.end();
         for (base_node* n=temp.front(); n != end; n = nxt) {
-            nxt = n->next; 
+            nxt = n->next;
             to_wait_node(n)->notify();
-        } 
-#if TBB_USE_ASSERT 
-        temp.clear(); 
-#endif 
+        }
+#if TBB_USE_ASSERT
+        temp.clear();
+#endif
     }
- 
+
     //! Abort any sleeping threads at the time of the call
     void abort_all() {
         atomic_fence( std::memory_order_seq_cst );
@@ -524,6 +524,6 @@ public:
 
 } // namespace r1
 } // namespace detail
-} // namespace tbb 
- 
-#endif /* __TBB_concurrent_monitor_H */ 
+} // namespace tbb
+
+#endif /* __TBB_concurrent_monitor_H */

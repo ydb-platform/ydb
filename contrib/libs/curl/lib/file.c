@@ -301,7 +301,7 @@ static CURLcode file_upload(struct connectdata *conn)
     if(result)
       break;
 
-    if(!readcount) 
+    if(!readcount)
       break;
 
     nread = readcount;

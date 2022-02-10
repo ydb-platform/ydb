@@ -5,7 +5,7 @@
 
     Special lexers.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -27,13 +27,13 @@ class TextLexer(Lexer):
     aliases = ['text']
     filenames = ['*.txt']
     mimetypes = ['text/plain']
-    priority = 0.01 
+    priority = 0.01
 
     def get_tokens_unprocessed(self, text):
         yield 0, Text, text
 
-    def analyse_text(text): 
-        return TextLexer.priority 
+    def analyse_text(text):
+        return TextLexer.priority
 
 
 _ttype_cache = {}

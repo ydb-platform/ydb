@@ -1,11 +1,11 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #include <aws/core/config/AWSProfileConfigLoader.h>
 #include <aws/core/internal/AWSHttpResourceClient.h>
-#include <aws/core/auth/AWSCredentialsProvider.h> 
+#include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/utils/memory/stl/AWSList.h>
 #include <aws/core/utils/memory/stl/AWSStreamFwd.h>
 #include <aws/core/utils/StringUtils.h>
@@ -21,24 +21,24 @@ namespace Aws
         using namespace Aws::Auth;
 
         static const char* const CONFIG_LOADER_TAG = "Aws::Config::AWSProfileConfigLoader";
-        #ifdef _MSC_VER 
-            // VS2015 compiler's bug, warning s_CoreErrorsMapper: symbol will be dynamically initialized (implementation limitation) 
-            AWS_SUPPRESS_WARNING(4592, 
-                static Aws::UniquePtr<ConfigAndCredentialsCacheManager> s_configManager(nullptr); 
-            ) 
-        #else 
-            static Aws::UniquePtr<ConfigAndCredentialsCacheManager> s_configManager(nullptr); 
-        #endif 
+        #ifdef _MSC_VER
+            // VS2015 compiler's bug, warning s_CoreErrorsMapper: symbol will be dynamically initialized (implementation limitation)
+            AWS_SUPPRESS_WARNING(4592,
+                static Aws::UniquePtr<ConfigAndCredentialsCacheManager> s_configManager(nullptr);
+            )
+        #else
+            static Aws::UniquePtr<ConfigAndCredentialsCacheManager> s_configManager(nullptr);
+        #endif
 
-        static const char CONFIG_CREDENTIALS_CACHE_MANAGER_TAG[] = "ConfigAndCredentialsCacheManager"; 
- 
+        static const char CONFIG_CREDENTIALS_CACHE_MANAGER_TAG[] = "ConfigAndCredentialsCacheManager";
+
         bool AWSProfileConfigLoader::Load()
         {
             if(LoadInternal())
             {
                 AWS_LOGSTREAM_INFO(CONFIG_LOADER_TAG, "Successfully reloaded configuration.");
                 m_lastLoadTime = DateTime::Now();
-                AWS_LOGSTREAM_TRACE(CONFIG_LOADER_TAG, "reloaded config at " 
+                AWS_LOGSTREAM_TRACE(CONFIG_LOADER_TAG, "reloaded config at "
                         << m_lastLoadTime.ToGmtString(DateFormat::ISO_8601));
                 return true;
             }
@@ -54,7 +54,7 @@ namespace Aws
                 AWS_LOGSTREAM_INFO(CONFIG_LOADER_TAG, "Successfully persisted configuration.");
                 m_profiles = profiles;
                 m_lastLoadTime = DateTime::Now();
-                AWS_LOGSTREAM_TRACE(CONFIG_LOADER_TAG, "persisted config at " 
+                AWS_LOGSTREAM_TRACE(CONFIG_LOADER_TAG, "persisted config at "
                         << m_lastLoadTime.ToGmtString(DateFormat::ISO_8601));
                 return true;
             }
@@ -63,19 +63,19 @@ namespace Aws
             return false;
         }
 
-        static const char REGION_KEY[]                       = "region"; 
-        static const char ACCESS_KEY_ID_KEY[]                = "aws_access_key_id"; 
-        static const char SECRET_KEY_KEY[]                   = "aws_secret_access_key"; 
-        static const char SESSION_TOKEN_KEY[]                = "aws_session_token"; 
-        static const char ROLE_ARN_KEY[]                     = "role_arn"; 
-        static const char EXTERNAL_ID_KEY[]                  = "external_id"; 
-        static const char CREDENTIAL_PROCESS_COMMAND[]       = "credential_process"; 
-        static const char SOURCE_PROFILE_KEY[]               = "source_profile"; 
-        static const char PROFILE_PREFIX[]                   = "profile "; 
-        static const char EQ                                 = '='; 
-        static const char LEFT_BRACKET                       = '['; 
-        static const char RIGHT_BRACKET                      = ']'; 
-        static const char PARSER_TAG[]                       = "Aws::Config::ConfigFileProfileFSM"; 
+        static const char REGION_KEY[]                       = "region";
+        static const char ACCESS_KEY_ID_KEY[]                = "aws_access_key_id";
+        static const char SECRET_KEY_KEY[]                   = "aws_secret_access_key";
+        static const char SESSION_TOKEN_KEY[]                = "aws_session_token";
+        static const char ROLE_ARN_KEY[]                     = "role_arn";
+        static const char EXTERNAL_ID_KEY[]                  = "external_id";
+        static const char CREDENTIAL_PROCESS_COMMAND[]       = "credential_process";
+        static const char SOURCE_PROFILE_KEY[]               = "source_profile";
+        static const char PROFILE_PREFIX[]                   = "profile ";
+        static const char EQ                                 = '=';
+        static const char LEFT_BRACKET                       = '[';
+        static const char RIGHT_BRACKET                      = ']';
+        static const char PARSER_TAG[]                       = "Aws::Config::ConfigFileProfileFSM";
 
         class ConfigFileProfileFSM
         {
@@ -179,7 +179,7 @@ namespace Aws
                         if (sessionTokenIter != m_profileKeyValuePairs.end())
                         {
                             sessionToken = sessionTokenIter->second;
-                        } 
+                        }
 
                         profile.SetCredentials(Aws::Auth::AWSCredentials(accessKey, secretKey, sessionToken));
                     }
@@ -245,7 +245,7 @@ namespace Aws
         AWSConfigFileProfileConfigLoader::AWSConfigFileProfileConfigLoader(const Aws::String& fileName, bool useProfilePrefix) :
                 m_fileName(fileName), m_useProfilePrefix(useProfilePrefix)
         {
-            AWS_LOGSTREAM_INFO(CONFIG_FILE_LOADER, "Initializing config loader against fileName " 
+            AWS_LOGSTREAM_INFO(CONFIG_FILE_LOADER, "Initializing config loader against fileName "
                     << fileName << " and using profilePrefix = " << useProfilePrefix);
         }
 
@@ -325,14 +325,14 @@ namespace Aws
 
         bool EC2InstanceProfileConfigLoader::LoadInternal()
         {
-            auto credentialsStr = m_ec2metadataClient->GetDefaultCredentialsSecurely(); 
+            auto credentialsStr = m_ec2metadataClient->GetDefaultCredentialsSecurely();
             if(credentialsStr.empty()) return false;
 
             Json::JsonValue credentialsDoc(credentialsStr);
-            if (!credentialsDoc.WasParseSuccessful()) 
+            if (!credentialsDoc.WasParseSuccessful())
             {
-                AWS_LOGSTREAM_ERROR(EC2_INSTANCE_PROFILE_LOG_TAG, 
-                        "Failed to parse output from EC2MetadataService."); 
+                AWS_LOGSTREAM_ERROR(EC2_INSTANCE_PROFILE_LOG_TAG,
+                        "Failed to parse output from EC2MetadataService.");
                 return false;
             }
             const char* accessKeyId = "AccessKeyId";
@@ -341,7 +341,7 @@ namespace Aws
 
             auto credentialsView = credentialsDoc.View();
             accessKey = credentialsView.GetString(accessKeyId);
-            AWS_LOGSTREAM_INFO(EC2_INSTANCE_PROFILE_LOG_TAG, 
+            AWS_LOGSTREAM_INFO(EC2_INSTANCE_PROFILE_LOG_TAG,
                     "Successfully pulled credentials from metadata service with access key " << accessKey);
 
             secretKey = credentialsView.GetString(secretAccessKey);
@@ -359,182 +359,182 @@ namespace Aws
             return true;
         }
 
-        ConfigAndCredentialsCacheManager::ConfigAndCredentialsCacheManager() : 
-            m_credentialsFileLoader(Aws::Auth::ProfileConfigFileAWSCredentialsProvider::GetCredentialsProfileFilename()), 
-            m_configFileLoader(Aws::Auth::GetConfigProfileFilename(), true/*use profile prefix*/) 
-        { 
-            ReloadCredentialsFile(); 
-            ReloadConfigFile(); 
-        } 
- 
-        void ConfigAndCredentialsCacheManager::ReloadConfigFile() 
-        { 
-            Aws::Utils::Threading::WriterLockGuard guard(m_configLock); 
-            m_configFileLoader.SetFileName(Aws::Auth::GetConfigProfileFilename()); 
-            m_configFileLoader.Load(); 
-        } 
- 
-        void ConfigAndCredentialsCacheManager::ReloadCredentialsFile() 
-        { 
-            Aws::Utils::Threading::WriterLockGuard guard(m_credentialsLock); 
-            m_credentialsFileLoader.SetFileName(Aws::Auth::ProfileConfigFileAWSCredentialsProvider::GetCredentialsProfileFilename()); 
-            m_credentialsFileLoader.Load(); 
-        } 
- 
-        bool ConfigAndCredentialsCacheManager::HasConfigProfile(const Aws::String& profileName) const 
-        { 
-            Aws::Utils::Threading::ReaderLockGuard guard(m_configLock); 
-            return (m_configFileLoader.GetProfiles().count(profileName) == 1); 
-        } 
- 
-        Aws::Config::Profile ConfigAndCredentialsCacheManager::GetConfigProfile(const Aws::String& profileName) const 
-        { 
-            Aws::Utils::Threading::ReaderLockGuard guard(m_configLock); 
-            const auto& profiles = m_configFileLoader.GetProfiles(); 
-            const auto &iter = profiles.find(profileName); 
-            if (iter == profiles.end()) 
-            { 
-                return {}; 
-            } 
-            return iter->second; 
-        } 
- 
-        Aws::Map<Aws::String, Aws::Config::Profile> ConfigAndCredentialsCacheManager::GetConfigProfiles() const 
-        { 
-            Aws::Utils::Threading::ReaderLockGuard guard(m_configLock); 
-            return m_configFileLoader.GetProfiles(); 
-        } 
- 
-        Aws::String ConfigAndCredentialsCacheManager::GetConfig(const Aws::String& profileName, const Aws::String& key) const 
-        { 
-            Aws::Utils::Threading::ReaderLockGuard guard(m_configLock); 
-            const auto& profiles = m_configFileLoader.GetProfiles(); 
-            const auto &iter = profiles.find(profileName); 
-            if (iter == profiles.end()) 
-            { 
-                return {}; 
-            } 
-            return iter->second.GetValue(key); 
-        } 
- 
-        bool ConfigAndCredentialsCacheManager::HasCredentialsProfile(const Aws::String& profileName) const 
-        { 
-            Aws::Utils::Threading::ReaderLockGuard guard(m_credentialsLock); 
-            return (m_credentialsFileLoader.GetProfiles().count(profileName) == 1); 
-        } 
- 
-        Aws::Config::Profile ConfigAndCredentialsCacheManager::GetCredentialsProfile(const Aws::String& profileName) const 
-        { 
-            Aws::Utils::Threading::ReaderLockGuard guard(m_credentialsLock); 
-            const auto &profiles = m_credentialsFileLoader.GetProfiles(); 
-            const auto &iter = profiles.find(profileName); 
-            if (iter == profiles.end()) 
-            { 
-                return {}; 
-            } 
-            return iter->second; 
-        } 
- 
-        Aws::Map<Aws::String, Aws::Config::Profile> ConfigAndCredentialsCacheManager::GetCredentialsProfiles() const 
-        { 
-            Aws::Utils::Threading::ReaderLockGuard guard(m_credentialsLock); 
-            return m_credentialsFileLoader.GetProfiles(); 
-        } 
- 
-        Aws::Auth::AWSCredentials ConfigAndCredentialsCacheManager::GetCredentials(const Aws::String& profileName) const 
-        { 
-            Aws::Utils::Threading::ReaderLockGuard guard(m_credentialsLock); 
-            const auto& profiles = m_credentialsFileLoader.GetProfiles(); 
-            const auto &iter = profiles.find(profileName); 
-            if (iter == profiles.end()) 
-            { 
-                return {}; 
-            } 
-            return iter->second.GetCredentials(); 
-        } 
- 
-        void InitConfigAndCredentialsCacheManager() 
-        { 
-            if (s_configManager) 
-            { 
-                return; 
-            } 
-            s_configManager = Aws::MakeUnique<ConfigAndCredentialsCacheManager>(CONFIG_CREDENTIALS_CACHE_MANAGER_TAG); 
-        } 
- 
-        void CleanupConfigAndCredentialsCacheManager() 
-        { 
-            if (!s_configManager) 
-            { 
-                return; 
-            } 
-            s_configManager = nullptr; 
-        } 
- 
-        void ReloadCachedConfigFile() 
-        { 
-            assert(s_configManager); 
-            s_configManager->ReloadConfigFile(); 
-        } 
- 
-        void ReloadCachedCredentialsFile() 
-        { 
-            assert(s_configManager); 
-            s_configManager->ReloadCredentialsFile(); 
-        } 
- 
-        bool HasCachedConfigProfile(const Aws::String& profileName) 
-        { 
-            assert(s_configManager); 
-            return s_configManager->HasConfigProfile(profileName); 
-        } 
- 
-        Aws::Config::Profile GetCachedConfigProfile(const Aws::String& profileName) 
-        { 
-            assert(s_configManager); 
-            return s_configManager->GetConfigProfile(profileName); 
-        } 
- 
-        Aws::Map<Aws::String, Aws::Config::Profile> GetCachedConfigProfiles() 
-        { 
-            assert(s_configManager); 
-            return s_configManager->GetConfigProfiles(); 
-        } 
- 
-        Aws::String GetCachedConfigValue(const Aws::String &profileName, const Aws::String &key) 
-        { 
-            assert(s_configManager); 
-            return s_configManager->GetConfig(profileName, key); 
-        } 
- 
-        Aws::String GetCachedConfigValue(const Aws::String &key) 
-        { 
-            assert(s_configManager); 
-            return s_configManager->GetConfig(Aws::Auth::GetConfigProfileName(), key); 
-        } 
- 
-        bool HasCachedCredentialsProfile(const Aws::String& profileName) 
-        { 
-            assert(s_configManager); 
-            return s_configManager->HasCredentialsProfile(profileName); 
-        } 
- 
-        Aws::Config::Profile GetCachedCredentialsProfile(const Aws::String &profileName) 
-        { 
-            assert(s_configManager); 
-            return s_configManager->GetCredentialsProfile(profileName); 
-        } 
- 
-        Aws::Map<Aws::String, Aws::Config::Profile> GetCachedCredentialsProfiles() 
-        { 
-            assert(s_configManager); 
-            return s_configManager->GetCredentialsProfiles(); 
-        } 
- 
-        Aws::Auth::AWSCredentials GetCachedCredentials(const Aws::String &profileName) 
-        { 
-            assert(s_configManager); 
-            return s_configManager->GetCredentials(profileName); 
-        } 
+        ConfigAndCredentialsCacheManager::ConfigAndCredentialsCacheManager() :
+            m_credentialsFileLoader(Aws::Auth::ProfileConfigFileAWSCredentialsProvider::GetCredentialsProfileFilename()),
+            m_configFileLoader(Aws::Auth::GetConfigProfileFilename(), true/*use profile prefix*/)
+        {
+            ReloadCredentialsFile();
+            ReloadConfigFile();
+        }
+
+        void ConfigAndCredentialsCacheManager::ReloadConfigFile()
+        {
+            Aws::Utils::Threading::WriterLockGuard guard(m_configLock);
+            m_configFileLoader.SetFileName(Aws::Auth::GetConfigProfileFilename());
+            m_configFileLoader.Load();
+        }
+
+        void ConfigAndCredentialsCacheManager::ReloadCredentialsFile()
+        {
+            Aws::Utils::Threading::WriterLockGuard guard(m_credentialsLock);
+            m_credentialsFileLoader.SetFileName(Aws::Auth::ProfileConfigFileAWSCredentialsProvider::GetCredentialsProfileFilename());
+            m_credentialsFileLoader.Load();
+        }
+
+        bool ConfigAndCredentialsCacheManager::HasConfigProfile(const Aws::String& profileName) const
+        {
+            Aws::Utils::Threading::ReaderLockGuard guard(m_configLock);
+            return (m_configFileLoader.GetProfiles().count(profileName) == 1);
+        }
+
+        Aws::Config::Profile ConfigAndCredentialsCacheManager::GetConfigProfile(const Aws::String& profileName) const
+        {
+            Aws::Utils::Threading::ReaderLockGuard guard(m_configLock);
+            const auto& profiles = m_configFileLoader.GetProfiles();
+            const auto &iter = profiles.find(profileName);
+            if (iter == profiles.end())
+            {
+                return {};
+            }
+            return iter->second;
+        }
+
+        Aws::Map<Aws::String, Aws::Config::Profile> ConfigAndCredentialsCacheManager::GetConfigProfiles() const
+        {
+            Aws::Utils::Threading::ReaderLockGuard guard(m_configLock);
+            return m_configFileLoader.GetProfiles();
+        }
+
+        Aws::String ConfigAndCredentialsCacheManager::GetConfig(const Aws::String& profileName, const Aws::String& key) const
+        {
+            Aws::Utils::Threading::ReaderLockGuard guard(m_configLock);
+            const auto& profiles = m_configFileLoader.GetProfiles();
+            const auto &iter = profiles.find(profileName);
+            if (iter == profiles.end())
+            {
+                return {};
+            }
+            return iter->second.GetValue(key);
+        }
+
+        bool ConfigAndCredentialsCacheManager::HasCredentialsProfile(const Aws::String& profileName) const
+        {
+            Aws::Utils::Threading::ReaderLockGuard guard(m_credentialsLock);
+            return (m_credentialsFileLoader.GetProfiles().count(profileName) == 1);
+        }
+
+        Aws::Config::Profile ConfigAndCredentialsCacheManager::GetCredentialsProfile(const Aws::String& profileName) const
+        {
+            Aws::Utils::Threading::ReaderLockGuard guard(m_credentialsLock);
+            const auto &profiles = m_credentialsFileLoader.GetProfiles();
+            const auto &iter = profiles.find(profileName);
+            if (iter == profiles.end())
+            {
+                return {};
+            }
+            return iter->second;
+        }
+
+        Aws::Map<Aws::String, Aws::Config::Profile> ConfigAndCredentialsCacheManager::GetCredentialsProfiles() const
+        {
+            Aws::Utils::Threading::ReaderLockGuard guard(m_credentialsLock);
+            return m_credentialsFileLoader.GetProfiles();
+        }
+
+        Aws::Auth::AWSCredentials ConfigAndCredentialsCacheManager::GetCredentials(const Aws::String& profileName) const
+        {
+            Aws::Utils::Threading::ReaderLockGuard guard(m_credentialsLock);
+            const auto& profiles = m_credentialsFileLoader.GetProfiles();
+            const auto &iter = profiles.find(profileName);
+            if (iter == profiles.end())
+            {
+                return {};
+            }
+            return iter->second.GetCredentials();
+        }
+
+        void InitConfigAndCredentialsCacheManager()
+        {
+            if (s_configManager)
+            {
+                return;
+            }
+            s_configManager = Aws::MakeUnique<ConfigAndCredentialsCacheManager>(CONFIG_CREDENTIALS_CACHE_MANAGER_TAG);
+        }
+
+        void CleanupConfigAndCredentialsCacheManager()
+        {
+            if (!s_configManager)
+            {
+                return;
+            }
+            s_configManager = nullptr;
+        }
+
+        void ReloadCachedConfigFile()
+        {
+            assert(s_configManager);
+            s_configManager->ReloadConfigFile();
+        }
+
+        void ReloadCachedCredentialsFile()
+        {
+            assert(s_configManager);
+            s_configManager->ReloadCredentialsFile();
+        }
+
+        bool HasCachedConfigProfile(const Aws::String& profileName)
+        {
+            assert(s_configManager);
+            return s_configManager->HasConfigProfile(profileName);
+        }
+
+        Aws::Config::Profile GetCachedConfigProfile(const Aws::String& profileName)
+        {
+            assert(s_configManager);
+            return s_configManager->GetConfigProfile(profileName);
+        }
+
+        Aws::Map<Aws::String, Aws::Config::Profile> GetCachedConfigProfiles()
+        {
+            assert(s_configManager);
+            return s_configManager->GetConfigProfiles();
+        }
+
+        Aws::String GetCachedConfigValue(const Aws::String &profileName, const Aws::String &key)
+        {
+            assert(s_configManager);
+            return s_configManager->GetConfig(profileName, key);
+        }
+
+        Aws::String GetCachedConfigValue(const Aws::String &key)
+        {
+            assert(s_configManager);
+            return s_configManager->GetConfig(Aws::Auth::GetConfigProfileName(), key);
+        }
+
+        bool HasCachedCredentialsProfile(const Aws::String& profileName)
+        {
+            assert(s_configManager);
+            return s_configManager->HasCredentialsProfile(profileName);
+        }
+
+        Aws::Config::Profile GetCachedCredentialsProfile(const Aws::String &profileName)
+        {
+            assert(s_configManager);
+            return s_configManager->GetCredentialsProfile(profileName);
+        }
+
+        Aws::Map<Aws::String, Aws::Config::Profile> GetCachedCredentialsProfiles()
+        {
+            assert(s_configManager);
+            return s_configManager->GetCredentialsProfiles();
+        }
+
+        Aws::Auth::AWSCredentials GetCachedCredentials(const Aws::String &profileName)
+        {
+            assert(s_configManager);
+            return s_configManager->GetCredentials(profileName);
+        }
     } // Config namespace
 } // Aws namespace

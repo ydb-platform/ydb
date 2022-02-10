@@ -4,7 +4,7 @@ import os
 import errno
 
 from pty import (STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, CHILD)
-from .util import PtyProcessError 
+from .util import PtyProcessError
 
 def fork_pty():
     '''This implements a substitute for the forkpty system call. This
@@ -64,7 +64,7 @@ def pty_make_controlling_tty(tty_fd):
     try:
         fd = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY)
         os.close(fd)
-        raise PtyProcessError("OSError of errno.ENXIO should be raised.") 
+        raise PtyProcessError("OSError of errno.ENXIO should be raised.")
     except OSError as err:
         if err.errno != errno.ENXIO:
             raise
@@ -75,4 +75,4 @@ def pty_make_controlling_tty(tty_fd):
 
     # Verify we now have a controlling tty.
     fd = os.open("/dev/tty", os.O_WRONLY)
-    os.close(fd) 
+    os.close(fd)

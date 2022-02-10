@@ -380,14 +380,14 @@ MEM_STATIC U32 ZSTD_readMINMATCH(const void* memPtr, U32 length)
 /* Update hashTable3 up to ip (excluded)
    Assumption : always within prefix (i.e. not within extDict) */
 static U32 ZSTD_insertAndFindFirstIndexHash3 (const ZSTD_matchState_t* ms,
-                                              U32* nextToUpdate3, 
-                                              const BYTE* const ip) 
+                                              U32* nextToUpdate3,
+                                              const BYTE* const ip)
 {
     U32* const hashTable3 = ms->hashTable3;
     U32 const hashLog3 = ms->hashLog3;
     const BYTE* const base = ms->window.base;
-    U32 idx = *nextToUpdate3; 
-    U32 const target = (U32)(ip - base); 
+    U32 idx = *nextToUpdate3;
+    U32 const target = (U32)(ip - base);
     size_t const hash3 = ZSTD_hash3Ptr(ip, hashLog3);
     assert(hashLog3 > 0);
 
@@ -396,7 +396,7 @@ static U32 ZSTD_insertAndFindFirstIndexHash3 (const ZSTD_matchState_t* ms,
         idx++;
     }
 
-    *nextToUpdate3 = target; 
+    *nextToUpdate3 = target;
     return hashTable3[hash3];
 }
 
@@ -519,11 +519,11 @@ static U32 ZSTD_insertBt1(
     }   }
 
     *smallerPtr = *largerPtr = 0;
-    {   U32 positions = 0; 
-        if (bestLength > 384) positions = MIN(192, (U32)(bestLength - 384));   /* speed optimization */ 
+    {   U32 positions = 0;
+        if (bestLength > 384) positions = MIN(192, (U32)(bestLength - 384));   /* speed optimization */
         assert(matchEndIdx > curr + 8);
         return MAX(positions, matchEndIdx - (curr + 8));
-    } 
+    }
 }
 
 FORCE_INLINE_TEMPLATE
@@ -538,13 +538,13 @@ void ZSTD_updateTree_internal(
     DEBUGLOG(6, "ZSTD_updateTree_internal, from %u to %u  (dictMode:%u)",
                 idx, target, dictMode);
 
-    while(idx < target) { 
+    while(idx < target) {
         U32 const forward = ZSTD_insertBt1(ms, base+idx, iend, target, mls, dictMode == ZSTD_extDict);
-        assert(idx < (U32)(idx + forward)); 
-        idx += forward; 
-    } 
-    assert((size_t)(ip - base) <= (size_t)(U32)(-1)); 
-    assert((size_t)(iend - base) <= (size_t)(U32)(-1)); 
+        assert(idx < (U32)(idx + forward));
+        idx += forward;
+    }
+    assert((size_t)(ip - base) <= (size_t)(U32)(-1));
+    assert((size_t)(iend - base) <= (size_t)(U32)(-1));
     ms->nextToUpdate = target;
 }
 
@@ -554,11 +554,11 @@ void ZSTD_updateTree(ZSTD_matchState_t* ms, const BYTE* ip, const BYTE* iend) {
 
 FORCE_INLINE_TEMPLATE
 U32 ZSTD_insertBtAndGetAllMatches (
-                    ZSTD_match_t* matches,   /* store result (found matches) in this table (presumed large enough) */ 
+                    ZSTD_match_t* matches,   /* store result (found matches) in this table (presumed large enough) */
                     ZSTD_matchState_t* ms,
-                    U32* nextToUpdate3, 
+                    U32* nextToUpdate3,
                     const BYTE* const ip, const BYTE* const iLimit, const ZSTD_dictMode_e dictMode,
-                    const U32 rep[ZSTD_REP_NUM], 
+                    const U32 rep[ZSTD_REP_NUM],
                     U32 const ll0,   /* tells if associated literal length is 0 or not. This value must be 0 or 1 */
                     const U32 lengthToBeat,
                     U32 const mls /* template */)
@@ -616,10 +616,10 @@ U32 ZSTD_insertBtAndGetAllMatches (
             U32 repLen = 0;
             assert(curr >= dictLimit);
             if (repOffset-1 /* intentional overflow, discards 0 and -1 */ < curr-dictLimit) {  /* equivalent to `curr > repIndex >= dictLimit` */
-                /* We must validate the repcode offset because when we're using a dictionary the 
-                 * valid offset range shrinks when the dictionary goes out of bounds. 
-                 */ 
-                if ((repIndex >= windowLow) & (ZSTD_readMINMATCH(ip, minMatch) == ZSTD_readMINMATCH(ip - repOffset, minMatch))) { 
+                /* We must validate the repcode offset because when we're using a dictionary the
+                 * valid offset range shrinks when the dictionary goes out of bounds.
+                 */
+                if ((repIndex >= windowLow) & (ZSTD_readMINMATCH(ip, minMatch) == ZSTD_readMINMATCH(ip - repOffset, minMatch))) {
                     repLen = (U32)ZSTD_count(ip+minMatch, ip+minMatch-repOffset, iLimit) + minMatch;
                 }
             } else {  /* repIndex < dictLimit || repIndex >= curr */
@@ -654,7 +654,7 @@ U32 ZSTD_insertBtAndGetAllMatches (
 
     /* HC3 match finder */
     if ((mls == 3) /*static*/ && (bestLength < mls)) {
-        U32 const matchIndex3 = ZSTD_insertAndFindFirstIndexHash3(ms, nextToUpdate3, ip); 
+        U32 const matchIndex3 = ZSTD_insertAndFindFirstIndexHash3(ms, nextToUpdate3, ip);
         if ((matchIndex3 >= matchLow)
           & (curr - matchIndex3 < (1<<18)) /*heuristic : longer distance likely too expensive*/ ) {
             size_t mlen;
@@ -680,7 +680,7 @@ U32 ZSTD_insertBtAndGetAllMatches (
                      (ip+mlen == iLimit) ) {  /* best possible length */
                     ms->nextToUpdate = curr+1;  /* skip insertion */
                     return 1;
-        }   }   } 
+        }   }   }
         /* no dictMatchState lookup: dicts don't have a populated HC3 table */
     }  /* if (mls == 3) */
 
@@ -1025,7 +1025,7 @@ listStats(const U32* table, int lastEltID)
     int enb;
     for (enb=0; enb < nbElts; enb++) {
         (void)table;
-        /* RAWLOG(2, "%3i:%3i,  ", enb, table[enb]); */ 
+        /* RAWLOG(2, "%3i:%3i,  ", enb, table[enb]); */
         RAWLOG(2, "%4i,", table[enb]);
     }
     RAWLOG(2, " \n");
@@ -1055,7 +1055,7 @@ ZSTD_compressBlock_opt_generic(ZSTD_matchState_t* ms,
 
     U32 const sufficient_len = MIN(cParams->targetLength, ZSTD_OPT_NUM -1);
     U32 const minMatch = (cParams->minMatch == 3) ? 3 : 4;
-    U32 nextToUpdate3 = ms->nextToUpdate; 
+    U32 nextToUpdate3 = ms->nextToUpdate;
 
     ZSTD_optimal_t* const opt = optStatePtr->priceTable;
     ZSTD_match_t* const matches = optStatePtr->matchTable;
@@ -1089,11 +1089,11 @@ ZSTD_compressBlock_opt_generic(ZSTD_matchState_t* ms,
             { U32 i ; for (i=0; i<ZSTD_REP_NUM; i++) opt[0].rep[i] = rep[i]; }
             opt[0].mlen = 0;  /* means is_a_literal */
             opt[0].litlen = litlen;
-            /* We don't need to include the actual price of the literals because 
-             * it is static for the duration of the forward pass, and is included 
-             * in every price. We include the literal length to avoid negative 
-             * prices when we subtract the previous literal length. 
-             */ 
+            /* We don't need to include the actual price of the literals because
+             * it is static for the duration of the forward pass, and is included
+             * in every price. We include the literal length to avoid negative
+             * prices when we subtract the previous literal length.
+             */
             opt[0].price = (int)ZSTD_litLengthPrice(litlen, optStatePtr, optLevel);
 
             /* large match -> immediate encoding */
@@ -1166,21 +1166,21 @@ ZSTD_compressBlock_opt_generic(ZSTD_matchState_t* ms,
                 }
             }
 
-            /* Set the repcodes of the current position. We must do it here 
-             * because we rely on the repcodes of the 2nd to last sequence being 
-             * correct to set the next chunks repcodes during the backward 
-             * traversal. 
-             */ 
-            ZSTD_STATIC_ASSERT(sizeof(opt[cur].rep) == sizeof(repcodes_t)); 
-            assert(cur >= opt[cur].mlen); 
-            if (opt[cur].mlen != 0) { 
-                U32 const prev = cur - opt[cur].mlen; 
+            /* Set the repcodes of the current position. We must do it here
+             * because we rely on the repcodes of the 2nd to last sequence being
+             * correct to set the next chunks repcodes during the backward
+             * traversal.
+             */
+            ZSTD_STATIC_ASSERT(sizeof(opt[cur].rep) == sizeof(repcodes_t));
+            assert(cur >= opt[cur].mlen);
+            if (opt[cur].mlen != 0) {
+                U32 const prev = cur - opt[cur].mlen;
                 repcodes_t const newReps = ZSTD_newRep(opt[prev].rep, opt[cur].off, opt[cur].litlen==0);
                 ZSTD_memcpy(opt[cur].rep, &newReps, sizeof(repcodes_t));
-            } else { 
+            } else {
                 ZSTD_memcpy(opt[cur].rep, opt[cur - 1].rep, sizeof(repcodes_t));
-            } 
- 
+            }
+
             /* last match must start at a minimum distance of 8 from oend */
             if (inr > ilimit) continue;
 
@@ -1260,17 +1260,17 @@ ZSTD_compressBlock_opt_generic(ZSTD_matchState_t* ms,
 _shortestPath:   /* cur, last_pos, best_mlen, best_off have to be set */
         assert(opt[0].mlen == 0);
 
-        /* Set the next chunk's repcodes based on the repcodes of the beginning 
-         * of the last match, and the last sequence. This avoids us having to 
-         * update them while traversing the sequences. 
-         */ 
-        if (lastSequence.mlen != 0) { 
+        /* Set the next chunk's repcodes based on the repcodes of the beginning
+         * of the last match, and the last sequence. This avoids us having to
+         * update them while traversing the sequences.
+         */
+        if (lastSequence.mlen != 0) {
             repcodes_t const reps = ZSTD_newRep(opt[cur].rep, lastSequence.off, lastSequence.litlen==0);
             ZSTD_memcpy(rep, &reps, sizeof(reps));
-        } else { 
+        } else {
             ZSTD_memcpy(rep, opt[cur].rep, sizeof(repcodes_t));
-        } 
- 
+        }
+
         {   U32 const storeEnd = cur + 1;
             U32 storeStart = storeEnd;
             U32 seqPos = cur;
@@ -1318,7 +1318,7 @@ _shortestPath:   /* cur, last_pos, best_mlen, best_off have to be set */
     }   /* while (ip < ilimit) */
 
     /* Return the last literals size */
-    return (size_t)(iend - anchor); 
+    return (size_t)(iend - anchor);
 }
 
 static size_t ZSTD_compressBlock_opt0(

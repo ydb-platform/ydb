@@ -17,9 +17,9 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/exponential_biased
 )
 
-ADDINCL( 
-    GLOBAL contrib/restricted/abseil-cpp-tstring 
-) 
+ADDINCL(
+    GLOBAL contrib/restricted/abseil-cpp-tstring
+)
 
 NO_COMPILER_WARNINGS()
 

@@ -555,9 +555,9 @@
 
 // ABSL_ATTRIBUTE_PACKED
 //
-// Instructs the compiler not to use natural alignment for a tagged data 
+// Instructs the compiler not to use natural alignment for a tagged data
 // structure, but instead to reduce its alignment to 1.
-// 
+//
 // Therefore, DO NOT APPLY THIS ATTRIBUTE TO STRUCTS CONTAINING ATOMICS. Doing
 // so can cause atomic variables to be mis-aligned and silently violate
 // atomicity on x86.
@@ -570,10 +570,10 @@
 // structure. Instead, apply this attribute only to structure members that need
 // it.
 //
-// When applying ABSL_ATTRIBUTE_PACKED only to specific structure members the 
-// natural alignment of structure members not annotated is preserved. Aligned 
-// member accesses are faster than non-aligned member accesses even if the 
-// targeted microprocessor supports non-aligned accesses. 
+// When applying ABSL_ATTRIBUTE_PACKED only to specific structure members the
+// natural alignment of structure members not annotated is preserved. Aligned
+// member accesses are faster than non-aligned member accesses even if the
+// targeted microprocessor supports non-aligned accesses.
 #if ABSL_HAVE_ATTRIBUTE(packed) || (defined(__GNUC__) && !defined(__clang__))
 #define ABSL_ATTRIBUTE_PACKED __attribute__((__packed__))
 #else

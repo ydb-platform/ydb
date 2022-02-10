@@ -1,12 +1,12 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
  */
 
 #pragma once
 
 #include <aws/core/Core_EXPORTS.h>
-#include <aws/core/utils/memory/stl/AWSString.h> 
+#include <aws/core/utils/memory/stl/AWSString.h>
 #include <cstdint>
 struct sockaddr;
 
@@ -26,8 +26,8 @@ namespace Aws
              * @brief Constructor of SimpleUDP
              * @param addressFamily, AF_INET for IPV4 or AF_INET6 for IPV6
              * @param sendBufSize, if nonzero, try set socket's send buffer size to this value.
-             * @param receieveBufSize, if nonzero, try set socket's receive buffer size to this value. 
-             * @param nonBlocking, if it is true, implementation will try to create a non-blocking underlying UDP socket. 
+             * @param receieveBufSize, if nonzero, try set socket's receive buffer size to this value.
+             * @param nonBlocking, if it is true, implementation will try to create a non-blocking underlying UDP socket.
              * Implementation should create and set the underlying udp socket.
              */
             SimpleUDP(int addressFamily, size_t sendBufSize = UDP_BUFFER_SIZE, size_t receiveBufSize = UDP_BUFFER_SIZE, bool nonBlocking = true);
@@ -36,24 +36,24 @@ namespace Aws
             * @brief An easy constructor of an IPV4 or IPV6 SimpleUDP
             * @param addressFamily, either AF_INET for IPV4 or AF_INET6 for IPV6
             * @param sendBufSize, if nonzero, try set socket's send buffer size to this value.
-            * @param receieveBufSize, if nonzero, try set socket's receive buffer size to this value. 
-            * @param nonBlocking, if it is true, implementation will try to create a non-blocking underlying UDP socket. 
+            * @param receieveBufSize, if nonzero, try set socket's receive buffer size to this value.
+            * @param nonBlocking, if it is true, implementation will try to create a non-blocking underlying UDP socket.
             * Implementation should create and set the underlying udp socket.
             */
             SimpleUDP(bool IPV4 = true, size_t sendBufSize = UDP_BUFFER_SIZE, size_t receiveBufSize = UDP_BUFFER_SIZE, bool nonBlocking = true);
 
-            /** 
-            * @brief An easy constructor of SimpleUDP based on host and port 
-            * @param host, the host that packets will be sent to, could be ipv4 or ipv6 address, or a hostname 
-            * Note that "localhost" is not necessarily bind to 127.0.0.1, it could bind to ipv6 address ::1, or other type of ip addresses. If you pass localhost here, we will go through getaddrinfo procedure on Linux and Windows. 
-            * @param port, the port number that the host listens on. 
-            * @param sendBufSize, if nonzero, try set socket's send buffer size to this value. 
-            * @param receieveBufSize, if nonzero, try set socket's receive buffer size to this value. 
-            * @param nonBlocking, if it is true, implementation will try to create a non-blocking underlying UDP socket. 
-            * Implementation should create and set the underlying udp socket. 
-            */ 
-            SimpleUDP(const char* host, unsigned short port, size_t sendBufSize = UDP_BUFFER_SIZE, size_t receiveBufSize = UDP_BUFFER_SIZE, bool nonBlocking = true); 
- 
+            /**
+            * @brief An easy constructor of SimpleUDP based on host and port
+            * @param host, the host that packets will be sent to, could be ipv4 or ipv6 address, or a hostname
+            * Note that "localhost" is not necessarily bind to 127.0.0.1, it could bind to ipv6 address ::1, or other type of ip addresses. If you pass localhost here, we will go through getaddrinfo procedure on Linux and Windows.
+            * @param port, the port number that the host listens on.
+            * @param sendBufSize, if nonzero, try set socket's send buffer size to this value.
+            * @param receieveBufSize, if nonzero, try set socket's receive buffer size to this value.
+            * @param nonBlocking, if it is true, implementation will try to create a non-blocking underlying UDP socket.
+            * Implementation should create and set the underlying udp socket.
+            */
+            SimpleUDP(const char* host, unsigned short port, size_t sendBufSize = UDP_BUFFER_SIZE, size_t receiveBufSize = UDP_BUFFER_SIZE, bool nonBlocking = true);
+
             ~SimpleUDP();
 
             /**
@@ -65,19 +65,19 @@ namespace Aws
             int Connect(const sockaddr* address, size_t addressLength);
 
             /**
-             * @brief An easy way to connect to host 
-             * @param hostIP, a valid ipv4 or ipv6 address. The address type should match the m_addressFamily type settled during construction. 
-             * Otherwise the connection will fail. 
-             * @param port, the port that host listens on. 
+             * @brief An easy way to connect to host
+             * @param hostIP, a valid ipv4 or ipv6 address. The address type should match the m_addressFamily type settled during construction.
+             * Otherwise the connection will fail.
+             * @param port, the port that host listens on.
              */
-            int ConnectToHost(const char* hostIP, unsigned short port) const; 
+            int ConnectToHost(const char* hostIP, unsigned short port) const;
 
             /**
-             * @brief An easy way to connect to 127.0.0.1 or ::1 based on m_addressFamily 
-             */ 
-            int ConnectToLocalHost(unsigned short port) const; 
- 
-            /** 
+             * @brief An easy way to connect to 127.0.0.1 or ::1 based on m_addressFamily
+             */
+            int ConnectToLocalHost(unsigned short port) const;
+
+            /**
              * @brief Bind underlying udp socket to an address.
              * @param address, the server's address info.
              * @param addressLength, length of address, structure of address can vary.
@@ -91,7 +91,7 @@ namespace Aws
             int BindToLocalHost(unsigned short port) const;
 
             /**
-             * @brief Send data to server without specifying address, only usable if hostIP and port are available. 
+             * @brief Send data to server without specifying address, only usable if hostIP and port are available.
              * @param data, the data you want to send.
              * @param dataLen, the length of data you want to send. On Windows, dataLen larger than INT32_MAX will cause undefined behavior
              * @return 0 on success, -1 on error, check errno for detailed error information.
@@ -139,7 +139,7 @@ namespace Aws
             int ReceiveDataFrom(sockaddr* address, size_t* addressLength, uint8_t* buffer, size_t bufferLen) const;
 
             /**
-             * Gets the AddressFamily used for the underlying socket. E.g. AF_INET, AF_INET6 etc. 
+             * Gets the AddressFamily used for the underlying socket. E.g. AF_INET, AF_INET6 etc.
              */
             inline int GetAddressFamily() const { return m_addressFamily; }
 
@@ -154,10 +154,10 @@ namespace Aws
             void SetUnderlyingSocket(int socket) { m_socket = socket; } 
             int m_addressFamily;
             // if not connected, you can't perform SendData, if connected,  SendDataTo will call SendData
-            mutable bool m_connected; 
+            mutable bool m_connected;
             int m_socket;
-            unsigned short m_port; 
-            Aws::String m_hostIP; 
+            unsigned short m_port;
+            Aws::String m_hostIP;
         };
     }
 }

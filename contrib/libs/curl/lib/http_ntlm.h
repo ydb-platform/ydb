@@ -1,5 +1,5 @@
-#ifndef HEADER_CURL_HTTP_NTLM_H 
-#define HEADER_CURL_HTTP_NTLM_H 
+#ifndef HEADER_CURL_HTTP_NTLM_H
+#define HEADER_CURL_HTTP_NTLM_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -33,10 +33,10 @@ CURLcode Curl_input_ntlm(struct connectdata *conn, bool proxy,
 /* this is for creating ntlm header output */
 CURLcode Curl_output_ntlm(struct connectdata *conn, bool proxy);
 
-void Curl_http_auth_cleanup_ntlm(struct connectdata *conn); 
+void Curl_http_auth_cleanup_ntlm(struct connectdata *conn);
 
 #else /* !CURL_DISABLE_HTTP && USE_NTLM */
 #define Curl_http_auth_cleanup_ntlm(x)
 #endif
 
-#endif /* HEADER_CURL_HTTP_NTLM_H */ 
+#endif /* HEADER_CURL_HTTP_NTLM_H */

@@ -306,7 +306,7 @@ Curl_ssl_connect(struct connectdata *conn, int sockindex)
   conn->ssl[sockindex].use = TRUE;
   conn->ssl[sockindex].state = ssl_connection_negotiating;
 
-  result = Curl_ssl->connect_blocking(conn, sockindex); 
+  result = Curl_ssl->connect_blocking(conn, sockindex);
 
   if(!result)
     Curl_pgrsTime(conn->data, TIMER_APPCONNECT); /* SSL is connected */
@@ -577,7 +577,7 @@ void Curl_ssl_close_all(struct Curl_easy *data)
 {
   /* kill the session ID cache if not shared */
   if(data->state.session && !SSLSESSION_SHARED(data)) {
-    size_t i; 
+    size_t i;
     for(i = 0; i < data->set.general_ssl.max_ssl_sessions; i++)
       /* the single-killer function handles empty table slots */
       Curl_ssl_kill_session(&data->state.session[i]);
@@ -592,7 +592,7 @@ void Curl_ssl_close_all(struct Curl_easy *data)
 #if defined(USE_OPENSSL) || defined(USE_GNUTLS) || defined(USE_SCHANNEL) || \
   defined(USE_SECTRANSP) || defined(USE_NSS) || \
   defined(USE_MBEDTLS) || defined(USE_WOLFSSL) || defined(USE_BEARSSL)
-int Curl_ssl_getsock(struct connectdata *conn, curl_socket_t *socks) 
+int Curl_ssl_getsock(struct connectdata *conn, curl_socket_t *socks)
 {
   struct ssl_connect_data *connssl = &conn->ssl[FIRSTSOCKET];
 
@@ -611,13 +611,13 @@ int Curl_ssl_getsock(struct connectdata *conn, curl_socket_t *socks)
 }
 #else
 int Curl_ssl_getsock(struct connectdata *conn,
-                     curl_socket_t *socks) 
+                     curl_socket_t *socks)
 {
   (void)conn;
   (void)socks;
   return GETSOCK_BLANK;
 }
-/* USE_OPENSSL || USE_GNUTLS || USE_SCHANNEL || USE_SECTRANSP || USE_NSS */ 
+/* USE_OPENSSL || USE_GNUTLS || USE_SCHANNEL || USE_SECTRANSP || USE_NSS */
 #endif
 
 void Curl_ssl_close(struct connectdata *conn, int sockindex)
@@ -629,7 +629,7 @@ void Curl_ssl_close(struct connectdata *conn, int sockindex)
 
 CURLcode Curl_ssl_shutdown(struct connectdata *conn, int sockindex)
 {
-  if(Curl_ssl->shut_down(conn, sockindex)) 
+  if(Curl_ssl->shut_down(conn, sockindex))
     return CURLE_SSL_SHUTDOWN_FAILED;
 
   conn->ssl[sockindex].use = FALSE; /* get back to ordinary socket usage */
@@ -720,7 +720,7 @@ void Curl_ssl_free_certinfo(struct Curl_easy *data)
 
   if(ci->num_of_certs) {
     /* free all individual lists used */
-    int i; 
+    int i;
     for(i = 0; i<ci->num_of_certs; i++) {
       curl_slist_free_all(ci->certinfo[i]);
       ci->certinfo[i] = NULL;
@@ -890,11 +890,11 @@ CURLcode Curl_pin_peer_pubkey(struct Curl_easy *data,
 
   /* only do this if pinnedpubkey starts with "sha256//", length 8 */
   if(strncmp(pinnedpubkey, "sha256//", 8) == 0) {
-    CURLcode encode; 
-    size_t encodedlen, pinkeylen; 
-    char *encoded, *pinkeycopy, *begin_pos, *end_pos; 
-    unsigned char *sha256sumdigest; 
- 
+    CURLcode encode;
+    size_t encodedlen, pinkeylen;
+    char *encoded, *pinkeycopy, *begin_pos, *end_pos;
+    unsigned char *sha256sumdigest;
+
     if(!Curl_ssl->sha256sum) {
       /* without sha256 support, this cannot match */
       return result;
@@ -965,10 +965,10 @@ CURLcode Curl_pin_peer_pubkey(struct Curl_easy *data,
     return result;
 
   do {
-    long filesize; 
-    size_t size, pem_len; 
-    CURLcode pem_read; 
- 
+    long filesize;
+    size_t size, pem_len;
+    CURLcode pem_read;
+
     /* Determine the file's size */
     if(fseek(fp, 0, SEEK_END))
       break;
@@ -1188,7 +1188,7 @@ static CURLcode Curl_multissl_connect(struct connectdata *conn, int sockindex)
 {
   if(multissl_init(NULL))
     return CURLE_FAILED_INIT;
-  return Curl_ssl->connect_blocking(conn, sockindex); 
+  return Curl_ssl->connect_blocking(conn, sockindex);
 }
 
 static CURLcode Curl_multissl_connect_nonblocking(struct connectdata *conn,
@@ -1244,10 +1244,10 @@ static const struct Curl_ssl Curl_ssl_multi = {
 const struct Curl_ssl *Curl_ssl =
 #if defined(CURL_WITH_MULTI_SSL)
   &Curl_ssl_multi;
-#elif defined(USE_WOLFSSL) 
-  &Curl_ssl_wolfssl; 
-#elif defined(USE_SECTRANSP) 
-  &Curl_ssl_sectransp; 
+#elif defined(USE_WOLFSSL)
+  &Curl_ssl_wolfssl;
+#elif defined(USE_SECTRANSP)
+  &Curl_ssl_sectransp;
 #elif defined(USE_GNUTLS)
   &Curl_ssl_gnutls;
 #elif defined(USE_GSKIT)
@@ -1269,11 +1269,11 @@ const struct Curl_ssl *Curl_ssl =
 #endif
 
 static const struct Curl_ssl *available_backends[] = {
-#if defined(USE_WOLFSSL) 
-  &Curl_ssl_wolfssl, 
+#if defined(USE_WOLFSSL)
+  &Curl_ssl_wolfssl,
 #endif
-#if defined(USE_SECTRANSP) 
-  &Curl_ssl_sectransp, 
+#if defined(USE_SECTRANSP)
+  &Curl_ssl_sectransp,
 #endif
 #if defined(USE_GNUTLS)
   &Curl_ssl_gnutls,
@@ -1313,7 +1313,7 @@ static size_t Curl_multissl_version(char *buffer, size_t size)
 
   if(current != selected) {
     char *p = backends;
-    char *end = backends + sizeof(backends); 
+    char *end = backends + sizeof(backends);
     int i;
 
     selected = current;
@@ -1368,7 +1368,7 @@ static int multissl_init(const struct Curl_ssl *backend)
     env = CURL_DEFAULT_SSL_BACKEND;
 #endif
   if(env) {
-    int i; 
+    int i;
     for(i = 0; available_backends[i]; i++) {
       if(strcasecompare(env, available_backends[i]->info.name)) {
         Curl_ssl = available_backends[i];

@@ -1,18 +1,18 @@
 /*
  *
- * Copyright 2016 gRPC authors. 
+ * Copyright 2016 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
@@ -22,12 +22,12 @@
 #include <list>
 #include <memory>
 
-#include <grpcpp/support/config.h> 
+#include <grpcpp/support/config.h>
 
 #include "src/core/lib/gprpp/sync.h"
-#include "src/core/lib/gprpp/thd.h" 
+#include "src/core/lib/gprpp/thd.h"
 #include "src/core/lib/iomgr/resource_quota.h"
- 
+
 namespace grpc {
 
 class ThreadManager {
@@ -78,14 +78,14 @@ class ThreadManager {
   // Mark the ThreadManager as shutdown and begin draining the work. This is a
   // non-blocking call and the caller should call Wait(), a blocking call which
   // returns only once the shutdown is complete
-  virtual void Shutdown(); 
+  virtual void Shutdown();
 
   // Has Shutdown() been called
   bool IsShutdown();
 
   // A blocking call that returns only after the ThreadManager has shutdown and
   // all the threads have drained all the outstanding work
-  virtual void Wait(); 
+  virtual void Wait();
 
   // Max number of concurrent threads that were ever active in this thread
   // manager so far. This is useful for debugging purposes (and in unit tests)
@@ -93,8 +93,8 @@ class ThreadManager {
   int GetMaxActiveThreadsSoFar();
 
  private:
-  // Helper wrapper class around grpc_core::Thread. Takes a ThreadManager object 
-  // and starts a new grpc_core::Thread to calls the Run() function. 
+  // Helper wrapper class around grpc_core::Thread. Takes a ThreadManager object
+  // and starts a new grpc_core::Thread to calls the Run() function.
   //
   // The Run() function calls ThreadManager::MainWorkLoop() function and once
   // that completes, it marks the WorkerThread completed by calling
@@ -130,8 +130,8 @@ class ThreadManager {
     // thd_mgr_>MarkAsCompleted(this) to mark the thread as completed
     void Run();
 
-    ThreadManager* const thd_mgr_; 
-    grpc_core::Thread thd_; 
+    ThreadManager* const thd_mgr_;
+    grpc_core::Thread thd_;
     bool created_;
   };
 

@@ -28,8 +28,8 @@
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
-#ifdef LIBXML_ZLIB_ENABLED 
-#include <zlib.h> 
+#ifdef LIBXML_ZLIB_ENABLED
+#include <zlib.h>
 #endif
 
 #include <libxml/xmlmemory.h>

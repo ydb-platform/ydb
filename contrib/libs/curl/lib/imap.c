@@ -28,7 +28,7 @@
  * RFC4959 IMAP Extension for SASL Initial Client Response
  * RFC5092 IMAP URL Scheme
  * RFC6749 OAuth 2.0 Authorization Framework
- * RFC8314 Use of TLS for Email Submission and Access 
+ * RFC8314 Use of TLS for Email Submission and Access
  * Draft   LOGIN SASL Mechanism <draft-murchison-sasl-login-00.txt>
  *
  ***************************************************************************/
@@ -95,7 +95,7 @@ static CURLcode imap_done(struct connectdata *conn, CURLcode status,
 static CURLcode imap_connect(struct connectdata *conn, bool *done);
 static CURLcode imap_disconnect(struct connectdata *conn, bool dead);
 static CURLcode imap_multi_statemach(struct connectdata *conn, bool *done);
-static int imap_getsock(struct connectdata *conn, curl_socket_t *socks); 
+static int imap_getsock(struct connectdata *conn, curl_socket_t *socks);
 static CURLcode imap_doing(struct connectdata *conn, bool *dophase_done);
 static CURLcode imap_setup_connection(struct connectdata *conn);
 static char *imap_atom(const char *str, bool escape_only);
@@ -318,7 +318,7 @@ static bool imap_endofresp(struct connectdata *conn, char *line, size_t len,
      a space and optionally some text as per RFC-3501 for the AUTHENTICATE and
      APPEND commands and as outlined in Section 4. Examples of RFC-4959 but
      some e-mail servers ignore this and only send a single + instead. */
-  if(imap && !imap->custom && ((len == 3 && line[0] == '+') || 
+  if(imap && !imap->custom && ((len == 3 && line[0] == '+') ||
      (len >= 2 && !memcmp("+ ", line, 2)))) {
     switch(imapc->state) {
       /* States which are interested in continuation responses */
@@ -446,7 +446,7 @@ static CURLcode imap_perform_capability(struct connectdata *conn)
 static CURLcode imap_perform_starttls(struct connectdata *conn)
 {
   /* Send the STARTTLS command */
-  CURLcode result = imap_sendf(conn, "STARTTLS"); 
+  CURLcode result = imap_sendf(conn, "STARTTLS");
 
   if(!result)
     state(conn, IMAP_STARTTLS);
@@ -462,10 +462,10 @@ static CURLcode imap_perform_starttls(struct connectdata *conn)
  */
 static CURLcode imap_perform_upgrade_tls(struct connectdata *conn)
 {
-  /* Start the SSL connection */ 
+  /* Start the SSL connection */
   struct imap_conn *imapc = &conn->proto.imapc;
-  CURLcode result = Curl_ssl_connect_nonblocking(conn, FIRSTSOCKET, 
-                                                 &imapc->ssldone); 
+  CURLcode result = Curl_ssl_connect_nonblocking(conn, FIRSTSOCKET,
+                                                 &imapc->ssldone);
 
   if(!result) {
     if(imapc->state != IMAP_UPGRADETLS)
@@ -825,7 +825,7 @@ static CURLcode imap_perform_search(struct connectdata *conn)
 static CURLcode imap_perform_logout(struct connectdata *conn)
 {
   /* Send the LOGOUT command */
-  CURLcode result = imap_sendf(conn, "LOGOUT"); 
+  CURLcode result = imap_sendf(conn, "LOGOUT");
 
   if(!result)
     state(conn, IMAP_LOGOUT);
@@ -1039,7 +1039,7 @@ static CURLcode imap_state_listsearch_resp(struct connectdata *conn,
     line[len] = '\0';
   }
   else if(imapcode != IMAP_RESP_OK)
-    result = CURLE_QUOTE_ERROR; 
+    result = CURLE_QUOTE_ERROR;
   else
     /* End of DO phase */
     state(conn, IMAP_STOP);
@@ -1111,7 +1111,7 @@ static CURLcode imap_state_fetch_resp(struct connectdata *conn, int imapcode,
   if(imapcode != '*') {
     Curl_pgrsSetDownloadSize(data, -1);
     state(conn, IMAP_STOP);
-    return CURLE_REMOTE_FILE_NOT_FOUND; 
+    return CURLE_REMOTE_FILE_NOT_FOUND;
   }
 
   /* Something like this is received "* 1 FETCH (BODY[TEXT] {2021}\r" so parse
@@ -1174,14 +1174,14 @@ static CURLcode imap_state_fetch_resp(struct connectdata *conn, int imapcode,
 
     if(data->req.bytecount == size)
       /* The entire data is already transferred! */
-      Curl_setup_transfer(data, -1, -1, FALSE, -1); 
+      Curl_setup_transfer(data, -1, -1, FALSE, -1);
     else {
       /* IMAP download */
       data->req.maxdownload = size;
       /* force a recv/send check of this connection, as the data might've been
        read off the socket already */
       data->conn->cselect_bits = CURL_CSELECT_IN;
-      Curl_setup_transfer(data, FIRSTSOCKET, size, FALSE, -1); 
+      Curl_setup_transfer(data, FIRSTSOCKET, size, FALSE, -1);
     }
   }
   else {
@@ -1231,7 +1231,7 @@ static CURLcode imap_state_append_resp(struct connectdata *conn, int imapcode,
     Curl_pgrsSetUploadSize(data, data->state.infilesize);
 
     /* IMAP upload */
-    Curl_setup_transfer(data, -1, -1, FALSE, FIRSTSOCKET); 
+    Curl_setup_transfer(data, -1, -1, FALSE, FIRSTSOCKET);
 
     /* End of DO phase */
     state(conn, IMAP_STOP);
@@ -1359,20 +1359,20 @@ static CURLcode imap_multi_statemach(struct connectdata *conn, bool *done)
       return result;
   }
 
-  result = Curl_pp_statemach(&imapc->pp, FALSE, FALSE); 
+  result = Curl_pp_statemach(&imapc->pp, FALSE, FALSE);
   *done = (imapc->state == IMAP_STOP) ? TRUE : FALSE;
 
   return result;
 }
 
-static CURLcode imap_block_statemach(struct connectdata *conn, 
-                                     bool disconnecting) 
+static CURLcode imap_block_statemach(struct connectdata *conn,
+                                     bool disconnecting)
 {
   CURLcode result = CURLE_OK;
   struct imap_conn *imapc = &conn->proto.imapc;
 
   while(imapc->state != IMAP_STOP && !result)
-    result = Curl_pp_statemach(&imapc->pp, TRUE, disconnecting); 
+    result = Curl_pp_statemach(&imapc->pp, TRUE, disconnecting);
 
   return result;
 }
@@ -1393,9 +1393,9 @@ static CURLcode imap_init(struct connectdata *conn)
 }
 
 /* For the IMAP "protocol connect" and "doing" phases only */
-static int imap_getsock(struct connectdata *conn, curl_socket_t *socks) 
+static int imap_getsock(struct connectdata *conn, curl_socket_t *socks)
 {
-  return Curl_pp_getsock(&conn->proto.imapc.pp, socks); 
+  return Curl_pp_getsock(&conn->proto.imapc.pp, socks);
 }
 
 /***********************************************************************
@@ -1489,9 +1489,9 @@ static CURLcode imap_done(struct connectdata *conn, CURLcode status,
         state(conn, IMAP_APPEND_FINAL);
     }
 
-    /* Run the state-machine */ 
+    /* Run the state-machine */
     if(!result)
-      result = imap_block_statemach(conn, FALSE); 
+      result = imap_block_statemach(conn, FALSE);
   }
 
   /* Cleanup our per-request based variables */
@@ -1629,7 +1629,7 @@ static CURLcode imap_disconnect(struct connectdata *conn, bool dead_connection)
      point! */
   if(!dead_connection && imapc->pp.conn && imapc->pp.conn->bits.protoconnstart)
     if(!imap_perform_logout(conn))
-      (void)imap_block_statemach(conn, TRUE); /* ignore errors on LOGOUT */ 
+      (void)imap_block_statemach(conn, TRUE); /* ignore errors on LOGOUT */
 
   /* Disconnect from the server */
   Curl_pp_disconnect(&imapc->pp);
@@ -1654,7 +1654,7 @@ static CURLcode imap_dophase_done(struct connectdata *conn, bool connected)
 
   if(imap->transfer != FTPTRANSFER_BODY)
     /* no data to transfer */
-    Curl_setup_transfer(conn->data, -1, -1, FALSE, -1); 
+    Curl_setup_transfer(conn->data, -1, -1, FALSE, -1);
 
   return CURLE_OK;
 }
@@ -1783,7 +1783,7 @@ static char *imap_atom(const char *str, bool escape_only)
     return NULL;
 
   /* Look for "atom-specials", counting the backslash and quote characters as
-     these will need escaping */ 
+     these will need escaping */
   p1 = str;
   while(*p1) {
     if(*p1 == '\\')

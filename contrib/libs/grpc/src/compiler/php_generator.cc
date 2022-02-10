@@ -1,18 +1,18 @@
 /*
  *
- * Copyright 2016 gRPC authors. 
+ * Copyright 2016 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
@@ -23,10 +23,10 @@
 #include "src/compiler/generator_helpers.h"
 #include "src/compiler/php_generator_helpers.h"
 
-using google::protobuf::compiler::php::GeneratedClassName; 
-using grpc::protobuf::Descriptor; 
+using google::protobuf::compiler::php::GeneratedClassName;
+using grpc::protobuf::Descriptor;
 using grpc::protobuf::FileDescriptor;
-using grpc::protobuf::MethodDescriptor; 
+using grpc::protobuf::MethodDescriptor;
 using grpc::protobuf::ServiceDescriptor;
 using grpc::protobuf::io::Printer;
 using grpc::protobuf::io::StringOutputStream;
@@ -46,34 +46,34 @@ TString ConvertToPhpNamespace(const TString& name) {
 }
 
 TString PackageName(const FileDescriptor* file) {
-  if (file->options().has_php_namespace()) { 
-    return file->options().php_namespace(); 
-  } else { 
-    return ConvertToPhpNamespace(file->package()); 
-  } 
-} 
- 
+  if (file->options().has_php_namespace()) {
+    return file->options().php_namespace();
+  } else {
+    return ConvertToPhpNamespace(file->package());
+  }
+}
+
 TString MessageIdentifierName(const TString& name,
                                   const FileDescriptor* file) {
   std::vector<TString> tokens = grpc_generator::tokenize(name, ".");
-  std::ostringstream oss; 
-  if (PackageName(file) != "") { 
-    oss << PackageName(file) << "\\"; 
-  } 
-  oss << grpc_generator::CapitalizeFirstLetter(tokens[tokens.size() - 1]); 
-  return oss.str(); 
-} 
- 
-void PrintMethod(const MethodDescriptor* method, Printer* out) { 
-  const Descriptor* input_type = method->input_type(); 
-  const Descriptor* output_type = method->output_type(); 
+  std::ostringstream oss;
+  if (PackageName(file) != "") {
+    oss << PackageName(file) << "\\";
+  }
+  oss << grpc_generator::CapitalizeFirstLetter(tokens[tokens.size() - 1]);
+  return oss.str();
+}
+
+void PrintMethod(const MethodDescriptor* method, Printer* out) {
+  const Descriptor* input_type = method->input_type();
+  const Descriptor* output_type = method->output_type();
   map<TString, TString> vars;
   vars["service_name"] = method->service()->full_name();
   vars["name"] = method->name();
-  vars["input_type_id"] = 
-      MessageIdentifierName(GeneratedClassName(input_type), input_type->file()); 
-  vars["output_type_id"] = MessageIdentifierName( 
-      GeneratedClassName(output_type), output_type->file()); 
+  vars["input_type_id"] =
+      MessageIdentifierName(GeneratedClassName(input_type), input_type->file());
+  vars["output_type_id"] = MessageIdentifierName(
+      GeneratedClassName(output_type), output_type->file());
 
   out->Print("/**\n");
   out->Print(GetPHPComments(method, " *").c_str());
@@ -90,7 +90,7 @@ void PrintMethod(const MethodDescriptor* method, Printer* out) {
                "public function $name$($$metadata = [], "
                "$$options = []) {\n");
     out->Indent();
-    out->Indent(); 
+    out->Indent();
     if (method->server_streaming()) {
       out->Print("return $$this->_bidiRequest(");
     } else {
@@ -114,7 +114,7 @@ void PrintMethod(const MethodDescriptor* method, Printer* out) {
                "public function $name$(\\$input_type_id$ $$argument,\n"
                "  $$metadata = [], $$options = []) {\n");
     out->Indent();
-    out->Indent(); 
+    out->Indent();
     if (method->server_streaming()) {
       out->Print("return $$this->_serverStreamRequest(");
     } else {
@@ -127,33 +127,33 @@ void PrintMethod(const MethodDescriptor* method, Printer* out) {
                "$$metadata, $$options);\n");
   }
   out->Outdent();
-  out->Outdent(); 
+  out->Outdent();
   out->Print("}\n\n");
 }
 
 // Prints out the service descriptor object
-void PrintService(const ServiceDescriptor* service, 
+void PrintService(const ServiceDescriptor* service,
                   const TString& class_suffix, Printer* out) {
   map<TString, TString> vars;
-  out->Print("/**\n"); 
-  out->Print(GetPHPComments(service, " *").c_str()); 
-  out->Print(" */\n"); 
-  vars["name"] = GetPHPServiceClassname(service, class_suffix); 
-  out->Print(vars, "class $name$ extends \\Grpc\\BaseStub {\n\n"); 
+  out->Print("/**\n");
+  out->Print(GetPHPComments(service, " *").c_str());
+  out->Print(" */\n");
+  vars["name"] = GetPHPServiceClassname(service, class_suffix);
+  out->Print(vars, "class $name$ extends \\Grpc\\BaseStub {\n\n");
   out->Indent();
-  out->Indent(); 
+  out->Indent();
   out->Print(
       "/**\n * @param string $$hostname hostname\n"
       " * @param array $$opts channel options\n"
-      " * @param \\Grpc\\Channel $$channel (optional) re-use channel " 
+      " * @param \\Grpc\\Channel $$channel (optional) re-use channel "
       "object\n */\n"
       "public function __construct($$hostname, $$opts, "
       "$$channel = null) {\n");
   out->Indent();
-  out->Indent(); 
+  out->Indent();
   out->Print("parent::__construct($$hostname, $$opts, $$channel);\n");
   out->Outdent();
-  out->Outdent(); 
+  out->Outdent();
   out->Print("}\n\n");
   for (int i = 0; i < service->method_count(); i++) {
     TString method_name =
@@ -164,7 +164,7 @@ void PrintService(const ServiceDescriptor* service,
   out->Outdent();
   out->Print("}\n");
 }
-}  // namespace 
+}  // namespace
 
 TString GenerateFile(const FileDescriptor* file,
                          const ServiceDescriptor* service,
@@ -180,15 +180,15 @@ TString GenerateFile(const FileDescriptor* file,
     TString leading_comments = GetPHPComments(file, "//");
     if (!leading_comments.empty()) {
       out.Print("// Original file comments:\n");
-      out.PrintRaw(leading_comments.c_str()); 
+      out.PrintRaw(leading_comments.c_str());
     }
 
     map<TString, TString> vars;
     TString php_namespace = PackageName(file);
-    vars["package"] = php_namespace; 
-    out.Print(vars, "namespace $package$;\n\n"); 
- 
-    PrintService(service, class_suffix, &out); 
+    vars["package"] = php_namespace;
+    out.Print(vars, "namespace $package$;\n\n");
+
+    PrintService(service, class_suffix, &out);
   }
   return output;
 }

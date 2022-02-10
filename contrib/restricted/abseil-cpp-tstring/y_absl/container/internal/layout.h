@@ -165,7 +165,7 @@
 #include <stdint.h>
 
 #include <ostream>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <tuple>
 #include <type_traits>
 #include <typeinfo>
@@ -190,7 +190,7 @@
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // A type wrapper that instructs `Layout` to use the specific alignment for the
@@ -737,7 +737,7 @@ class Layout : public internal_layout::LayoutType<sizeof...(Ts), Ts...> {
 };
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_LAYOUT_H_

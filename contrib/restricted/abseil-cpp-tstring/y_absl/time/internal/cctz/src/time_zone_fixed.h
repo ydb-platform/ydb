@@ -15,13 +15,13 @@
 #ifndef ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_FIXED_H_
 #define ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_FIXED_H_
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
-#include "y_absl/base/config.h" 
+#include "y_absl/base/config.h"
 #include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
 
@@ -46,7 +46,7 @@ TString FixedOffsetToAbbr(const seconds& offset);
 
 }  // namespace cctz
 }  // namespace time_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_FIXED_H_

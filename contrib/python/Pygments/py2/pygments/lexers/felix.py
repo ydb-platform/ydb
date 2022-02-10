@@ -5,7 +5,7 @@
 
     Lexer for the Felix language.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -237,7 +237,7 @@ class FelixLexer(RegexLexer):
         ],
         'strings': [
             (r'%(\([a-zA-Z0-9]+\))?[-#0 +]*([0-9]+|[*])?(\.([0-9]+|[*]))?'
-             '[hlL]?[E-GXc-giorsux%]', String.Interpol), 
+             '[hlL]?[E-GXc-giorsux%]', String.Interpol),
             (r'[^\\\'"%\n]+', String),
             # quotes, percents and backslashes must be parsed one at a time
             (r'[\'"\\]', String),

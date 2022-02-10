@@ -1,65 +1,65 @@
 /*
  *
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
 #ifndef GRPC_CORE_LIB_IOMGR_TIMER_H
 #define GRPC_CORE_LIB_IOMGR_TIMER_H
 
-#include <grpc/support/port_platform.h> 
- 
+#include <grpc/support/port_platform.h>
+
 #include "src/core/lib/iomgr/port.h"
 
 #include <grpc/support/time.h>
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/iomgr.h"
 
-typedef struct grpc_timer { 
+typedef struct grpc_timer {
   grpc_millis deadline;
   // Uninitialized if not using heap, or INVALID_HEAP_INDEX if not in heap.
   uint32_t heap_index;
-  bool pending; 
-  struct grpc_timer* next; 
-  struct grpc_timer* prev; 
-  grpc_closure* closure; 
-#ifndef NDEBUG 
-  struct grpc_timer* hash_table_next; 
-#endif 
+  bool pending;
+  struct grpc_timer* next;
+  struct grpc_timer* prev;
+  grpc_closure* closure;
+#ifndef NDEBUG
+  struct grpc_timer* hash_table_next;
+#endif
 
-  // Optional field used by custom timers 
-  void* custom_timer; 
-} grpc_timer; 
- 
-typedef enum { 
-  GRPC_TIMERS_NOT_CHECKED, 
-  GRPC_TIMERS_CHECKED_AND_EMPTY, 
-  GRPC_TIMERS_FIRED, 
-} grpc_timer_check_result; 
- 
-typedef struct grpc_timer_vtable { 
-  void (*init)(grpc_timer* timer, grpc_millis, grpc_closure* closure); 
-  void (*cancel)(grpc_timer* timer); 
- 
-  /* Internal API */ 
-  grpc_timer_check_result (*check)(grpc_millis* next); 
-  void (*list_init)(); 
-  void (*list_shutdown)(void); 
-  void (*consume_kick)(void); 
-} grpc_timer_vtable; 
- 
+  // Optional field used by custom timers
+  void* custom_timer;
+} grpc_timer;
+
+typedef enum {
+  GRPC_TIMERS_NOT_CHECKED,
+  GRPC_TIMERS_CHECKED_AND_EMPTY,
+  GRPC_TIMERS_FIRED,
+} grpc_timer_check_result;
+
+typedef struct grpc_timer_vtable {
+  void (*init)(grpc_timer* timer, grpc_millis, grpc_closure* closure);
+  void (*cancel)(grpc_timer* timer);
+
+  /* Internal API */
+  grpc_timer_check_result (*check)(grpc_millis* next);
+  void (*list_init)();
+  void (*list_shutdown)(void);
+  void (*consume_kick)(void);
+} grpc_timer_vtable;
+
 /* Initialize *timer. When expired or canceled, closure will be called with
    error set to indicate if it expired (GRPC_ERROR_NONE) or was canceled
    (GRPC_ERROR_CANCELLED). *closure is guaranteed to be called exactly once, and
@@ -67,13 +67,13 @@ typedef struct grpc_timer_vtable {
    application callback is also responsible for maintaining information about
    when to free up any user-level state. Behavior is undefined for a deadline of
    GRPC_MILLIS_INF_FUTURE. */
-void grpc_timer_init(grpc_timer* timer, grpc_millis deadline, 
-                     grpc_closure* closure); 
+void grpc_timer_init(grpc_timer* timer, grpc_millis deadline,
+                     grpc_closure* closure);
 
-/* Initialize *timer without setting it. This can later be passed through 
-   the regular init or cancel */ 
-void grpc_timer_init_unset(grpc_timer* timer); 
- 
+/* Initialize *timer without setting it. This can later be passed through
+   the regular init or cancel */
+void grpc_timer_init_unset(grpc_timer* timer);
+
 /* Note that there is no timer destroy function. This is because the
    timer is a one-time occurrence with a guarantee that the callback will
    be called exactly once, either at expiration or cancellation. Thus, all
@@ -100,7 +100,7 @@ void grpc_timer_init_unset(grpc_timer* timer);
    matches this aim.
 
    Requires: cancel() must happen after init() on a given timer */
-void grpc_timer_cancel(grpc_timer* timer); 
+void grpc_timer_cancel(grpc_timer* timer);
 
 /* iomgr internal api for dealing with timers */
 
@@ -111,17 +111,17 @@ void grpc_timer_cancel(grpc_timer* timer);
    *next is never guaranteed to be updated on any given execution; however,
    with high probability at least one thread in the system will see an update
    at any time slice. */
-grpc_timer_check_result grpc_timer_check(grpc_millis* next); 
-void grpc_timer_list_init(); 
-void grpc_timer_list_shutdown(); 
+grpc_timer_check_result grpc_timer_check(grpc_millis* next);
+void grpc_timer_list_init();
+void grpc_timer_list_shutdown();
 
-/* Consume a kick issued by grpc_kick_poller */ 
-void grpc_timer_consume_kick(void); 
- 
+/* Consume a kick issued by grpc_kick_poller */
+void grpc_timer_consume_kick(void);
+
 /* the following must be implemented by each iomgr implementation */
 void grpc_kick_poller(void);
 
-/* Sets the timer implementation */ 
-void grpc_set_timer_impl(grpc_timer_vtable* vtable); 
- 
+/* Sets the timer implementation */
+void grpc_set_timer_impl(grpc_timer_vtable* vtable);
+
 #endif /* GRPC_CORE_LIB_IOMGR_TIMER_H */

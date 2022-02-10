@@ -39,7 +39,7 @@
 #include <cstddef>
 #include <map>
 #include <set>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <utility>
 #include <vector>
 
@@ -50,7 +50,7 @@
 #include "y_absl/strings/strip.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 //------------------------------------------------------------------------------
 // Delimiters
@@ -542,7 +542,7 @@ StrSplit(StringType&& text, Delimiter d, Predicate p) {
       std::move(text), DelimiterType(d), std::move(p));
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_STR_SPLIT_H_

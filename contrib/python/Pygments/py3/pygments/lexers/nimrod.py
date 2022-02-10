@@ -2,7 +2,7 @@
     pygments.lexers.nimrod
     ~~~~~~~~~~~~~~~~~~~~~~
 
-    Lexer for the Nim language (formerly known as Nimrod). 
+    Lexer for the Nim language (formerly known as Nimrod).
 
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
@@ -19,7 +19,7 @@ __all__ = ['NimrodLexer']
 
 class NimrodLexer(RegexLexer):
     """
-    For `Nim <http://nim-lang.org/>`_ source code. 
+    For `Nim <http://nim-lang.org/>`_ source code.
 
     .. versionadded:: 1.5
     """
@@ -27,7 +27,7 @@ class NimrodLexer(RegexLexer):
     name = 'Nimrod'
     aliases = ['nimrod', 'nim']
     filenames = ['*.nim', '*.nimrod']
-    mimetypes = ['text/x-nim'] 
+    mimetypes = ['text/x-nim']
 
     flags = re.MULTILINE | re.IGNORECASE | re.UNICODE
 
@@ -43,11 +43,11 @@ class NimrodLexer(RegexLexer):
 
     keywords = [
         'addr', 'and', 'as', 'asm', 'bind', 'block', 'break', 'case',
-        'cast', 'concept', 'const', 'continue', 'converter', 'defer', 'discard', 
-        'distinct', 'div', 'do', 'elif', 'else', 'end', 'enum', 'except', 
-        'export', 'finally', 'for', 'func', 'if', 'in', 'yield', 'interface', 
-        'is', 'isnot', 'iterator', 'let', 'macro', 'method', 'mixin', 'mod', 
-        'not', 'notin', 'object', 'of', 'or', 'out', 'proc', 'ptr', 'raise', 
+        'cast', 'concept', 'const', 'continue', 'converter', 'defer', 'discard',
+        'distinct', 'div', 'do', 'elif', 'else', 'end', 'enum', 'except',
+        'export', 'finally', 'for', 'func', 'if', 'in', 'yield', 'interface',
+        'is', 'isnot', 'iterator', 'let', 'macro', 'method', 'mixin', 'mod',
+        'not', 'notin', 'object', 'of', 'or', 'out', 'proc', 'ptr', 'raise',
         'ref', 'return', 'shl', 'shr', 'static', 'template', 'try',
         'tuple', 'type', 'using', 'when', 'while', 'xor'
     ]

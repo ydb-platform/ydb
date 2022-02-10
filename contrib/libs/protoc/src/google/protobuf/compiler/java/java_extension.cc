@@ -60,7 +60,7 @@ ImmutableExtensionGenerator::ImmutableExtensionGenerator(
 ImmutableExtensionGenerator::~ImmutableExtensionGenerator() {}
 
 // Initializes the vars referenced in the generated code templates.
-void ExtensionGenerator::InitTemplateVars( 
+void ExtensionGenerator::InitTemplateVars(
     const FieldDescriptor* descriptor, const TProtoStringType& scope, bool immutable,
     ClassNameResolver* name_resolver,
     std::map<TProtoStringType, TProtoStringType>* vars_pointer) {
@@ -76,7 +76,7 @@ void ExtensionGenerator::InitTemplateVars(
                         ? ""
                         : DefaultValue(descriptor, immutable, name_resolver);
   vars["type_constant"] = FieldTypeName(GetType(descriptor));
-  vars["packed"] = descriptor->is_packed() ? "true" : "false"; 
+  vars["packed"] = descriptor->is_packed() ? "true" : "false";
   vars["enum_map"] = "null";
   vars["prototype"] = "null";
 

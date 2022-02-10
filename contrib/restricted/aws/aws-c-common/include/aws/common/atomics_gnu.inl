@@ -1,9 +1,9 @@
-#ifndef AWS_COMMON_ATOMICS_GNU_INL 
-#define AWS_COMMON_ATOMICS_GNU_INL 
- 
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
+#ifndef AWS_COMMON_ATOMICS_GNU_INL
+#define AWS_COMMON_ATOMICS_GNU_INL
+
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
  */
 
 /* These are implicitly included, but help with editor highlighting */
@@ -13,8 +13,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-AWS_EXTERN_C_BEGIN 
- 
+AWS_EXTERN_C_BEGIN
+
 #ifdef __clang__
 #    pragma clang diagnostic push
 #    pragma clang diagnostic ignored "-Wc11-extensions"
@@ -69,7 +69,7 @@ size_t aws_atomic_load_int_explicit(volatile const struct aws_atomic_var *var, e
 }
 
 /**
- * Reads an atomic var as a pointer, using the specified ordering, and returns the result. 
+ * Reads an atomic var as a pointer, using the specified ordering, and returns the result.
  */
 AWS_STATIC_IMPL
 void *aws_atomic_load_ptr_explicit(volatile const struct aws_atomic_var *var, enum aws_memory_order memory_order) {
@@ -214,5 +214,5 @@ void aws_atomic_thread_fence(enum aws_memory_order order) {
 #endif
 
 #define AWS_ATOMICS_HAVE_THREAD_FENCE
-AWS_EXTERN_C_END 
-#endif /* AWS_COMMON_ATOMICS_GNU_INL */ 
+AWS_EXTERN_C_END
+#endif /* AWS_COMMON_ATOMICS_GNU_INL */

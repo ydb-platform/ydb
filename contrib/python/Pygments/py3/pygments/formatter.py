@@ -64,7 +64,7 @@ class Formatter:
 
     def __init__(self, **options):
         self.style = _lookup_style(options.get('style', 'default'))
-        self.full = get_bool_opt(options, 'full', False) 
+        self.full = get_bool_opt(options, 'full', False)
         self.title = options.get('title', '')
         self.encoding = options.get('encoding', None) or None
         if self.encoding in ('guess', 'chardet'):

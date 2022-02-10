@@ -76,7 +76,7 @@ class JavascriptLexer(RegexLexer):
             # integers
             (r'(\.[0-9]+|[0-9]+\.[0-9]*|[0-9]+)([eE][-+]?[0-9]+)?', Number.Float),
 
-            (r'\.\.\.|=>', Punctuation), 
+            (r'\.\.\.|=>', Punctuation),
             (r'\+\+|--|~|\?\?=?|\?|:|\\(?=\n)|'
              r'(<<|>>>?|==?|!=?|(?:\*\*|\|\||&&|[-<>+*%&|^/]))=?', Operator, 'slashstartsregex'),
             (r'[{(\[;,]', Punctuation, 'slashstartsregex'),
@@ -122,13 +122,13 @@ class JavascriptLexer(RegexLexer):
         'interp': [
             (r'`', String.Backtick, '#pop'),
             (r'\\.', String.Backtick),
-            (r'\$\{', String.Interpol, 'interp-inside'), 
+            (r'\$\{', String.Interpol, 'interp-inside'),
             (r'\$', String.Backtick),
             (r'[^`\\$]+', String.Backtick),
         ],
         'interp-inside': [
             # TODO: should this include single-line comments and allow nesting strings?
-            (r'\}', String.Interpol, '#pop'), 
+            (r'\}', String.Interpol, '#pop'),
             include('root'),
         ],
     }
@@ -528,7 +528,7 @@ class LassoLexer(RegexLexer):
     tokens = {
         'root': [
             (r'^#![ \S]+lasso9\b', Comment.Preproc, 'lasso'),
-            (r'(?=\[|<)', Other, 'delimiters'), 
+            (r'(?=\[|<)', Other, 'delimiters'),
             (r'\s+', Other),
             default(('delimiters', 'lassofile')),
         ],
@@ -536,14 +536,14 @@ class LassoLexer(RegexLexer):
             (r'\[no_square_brackets\]', Comment.Preproc, 'nosquarebrackets'),
             (r'\[noprocess\]', Comment.Preproc, 'noprocess'),
             (r'\[', Comment.Preproc, 'squarebrackets'),
-            (r'<\?(lasso(script)?|=)', Comment.Preproc, 'anglebrackets'), 
+            (r'<\?(lasso(script)?|=)', Comment.Preproc, 'anglebrackets'),
             (r'<(!--.*?-->)?', Other),
             (r'[^[<]+', Other),
         ],
         'nosquarebrackets': [
             (r'\[noprocess\]', Comment.Preproc, 'noprocess'),
             (r'\[', Other),
-            (r'<\?(lasso(script)?|=)', Comment.Preproc, 'anglebrackets'), 
+            (r'<\?(lasso(script)?|=)', Comment.Preproc, 'anglebrackets'),
             (r'<(!--.*?-->)?', Other),
             (r'[^[<]+', Other),
         ],
@@ -585,7 +585,7 @@ class LassoLexer(RegexLexer):
 
             # names
             (r'\$[a-z_][\w.]*', Name.Variable),
-            (r'#([a-z_][\w.]*|\d+\b)', Name.Variable.Instance), 
+            (r'#([a-z_][\w.]*|\d+\b)', Name.Variable.Instance),
             (r"(\.\s*)('[a-z_][\w.]*')",
                 bygroups(Name.Builtin.Pseudo, Name.Variable.Class)),
             (r"(self)(\s*->\s*)('[a-z_][\w.]*')",
@@ -636,20 +636,20 @@ class LassoLexer(RegexLexer):
              r'Database_TableNames|Define_Tag|Define_Type|Email_Batch|'
              r'Encode_Set|HTML_Comment|Handle|Handle_Error|Header|If|Inline|'
              r'Iterate|LJAX_Target|Link|Link_CurrentAction|Link_CurrentGroup|'
-             r'Link_CurrentRecord|Link_Detail|Link_FirstGroup|Link_FirstRecord|' 
-             r'Link_LastGroup|Link_LastRecord|Link_NextGroup|Link_NextRecord|' 
-             r'Link_PrevGroup|Link_PrevRecord|Log|Loop|Output_None|Portal|' 
-             r'Private|Protect|Records|Referer|Referrer|Repeating|ResultSet|' 
-             r'Rows|Search_Args|Search_Arguments|Select|Sort_Args|' 
-             r'Sort_Arguments|Thread_Atomic|Value_List|While|Abort|Case|Else|' 
-             r'Fail_If|Fail_IfNot|Fail|If_Empty|If_False|If_Null|If_True|' 
-             r'Loop_Abort|Loop_Continue|Loop_Count|Params|Params_Up|Return|' 
-             r'Return_Value|Run_Children|SOAP_DefineTag|SOAP_LastRequest|' 
-             r'SOAP_LastResponse|Tag_Name|ascending|average|by|define|' 
-             r'descending|do|equals|frozen|group|handle_failure|import|in|into|' 
-             r'join|let|match|max|min|on|order|parent|protected|provide|public|' 
-             r'require|returnhome|skip|split_thread|sum|take|thread|to|trait|' 
-             r'type|where|with|yield|yieldhome)\b', 
+             r'Link_CurrentRecord|Link_Detail|Link_FirstGroup|Link_FirstRecord|'
+             r'Link_LastGroup|Link_LastRecord|Link_NextGroup|Link_NextRecord|'
+             r'Link_PrevGroup|Link_PrevRecord|Log|Loop|Output_None|Portal|'
+             r'Private|Protect|Records|Referer|Referrer|Repeating|ResultSet|'
+             r'Rows|Search_Args|Search_Arguments|Select|Sort_Args|'
+             r'Sort_Arguments|Thread_Atomic|Value_List|While|Abort|Case|Else|'
+             r'Fail_If|Fail_IfNot|Fail|If_Empty|If_False|If_Null|If_True|'
+             r'Loop_Abort|Loop_Continue|Loop_Count|Params|Params_Up|Return|'
+             r'Return_Value|Run_Children|SOAP_DefineTag|SOAP_LastRequest|'
+             r'SOAP_LastResponse|Tag_Name|ascending|average|by|define|'
+             r'descending|do|equals|frozen|group|handle_failure|import|in|into|'
+             r'join|let|match|max|min|on|order|parent|protected|provide|public|'
+             r'require|returnhome|skip|split_thread|sum|take|thread|to|trait|'
+             r'type|where|with|yield|yieldhome)\b',
                 bygroups(Punctuation, Keyword)),
 
             # other
@@ -974,7 +974,7 @@ class ObjectiveJLexer(RegexLexer):
     }
 
     def analyse_text(text):
-        if re.search(r'^\s*@import\s+[<"]', text, re.MULTILINE): 
+        if re.search(r'^\s*@import\s+[<"]', text, re.MULTILINE):
             # special directive found in most Objective-J files
             return True
         return False
@@ -994,11 +994,11 @@ class CoffeeScriptLexer(RegexLexer):
     filenames = ['*.coffee']
     mimetypes = ['text/coffeescript']
 
-    _operator_re = ( 
-        r'\+\+|~|&&|\band\b|\bor\b|\bis\b|\bisnt\b|\bnot\b|\?|:|' 
-        r'\|\||\\(?=\n)|' 
+    _operator_re = (
+        r'\+\+|~|&&|\band\b|\bor\b|\bis\b|\bisnt\b|\bnot\b|\?|:|'
+        r'\|\||\\(?=\n)|'
         r'(<<|>>>?|==?(?!>)|!=?|=(?!>)|-(?!>)|[<>+*`%&|\^/])=?')
- 
+
     flags = re.DOTALL
     tokens = {
         'commentsandwhitespace': [
@@ -1017,17 +1017,17 @@ class CoffeeScriptLexer(RegexLexer):
             (r'///', String.Regex, ('#pop', 'multilineregex')),
             (r'/(?! )(\\.|[^[/\\\n]|\[(\\.|[^\]\\\n])*])+/'
              r'([gimuysd]+\b|\B)', String.Regex, '#pop'),
-            # This isn't really guarding against mishighlighting well-formed 
-            # code, just the ability to infinite-loop between root and 
-            # slashstartsregex. 
+            # This isn't really guarding against mishighlighting well-formed
+            # code, just the ability to infinite-loop between root and
+            # slashstartsregex.
             (r'/', Operator, '#pop'),
             default('#pop'),
         ],
         'root': [
             include('commentsandwhitespace'),
             (r'\A(?=\s|/)', Text, 'slashstartsregex'),
-            (_operator_re, Operator, 'slashstartsregex'), 
-            (r'(?:\([^()]*\))?\s*[=-]>', Name.Function, 'slashstartsregex'), 
+            (_operator_re, Operator, 'slashstartsregex'),
+            (r'(?:\([^()]*\))?\s*[=-]>', Name.Function, 'slashstartsregex'),
             (r'[{(\[;,]', Punctuation, 'slashstartsregex'),
             (r'[})\].]', Punctuation),
             (r'(?<![.$])(for|own|in|of|while|until|'
@@ -1048,7 +1048,7 @@ class CoffeeScriptLexer(RegexLexer):
             (r'@[$a-zA-Z_][\w.:$]*\s*[:=]\s', Name.Variable.Instance,
              'slashstartsregex'),
             (r'@', Name.Other, 'slashstartsregex'),
-            (r'@?[$a-zA-Z_][\w$]*', Name.Other), 
+            (r'@?[$a-zA-Z_][\w$]*', Name.Other),
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'0x[0-9a-fA-F]+', Number.Hex),
             (r'[0-9]+', Number.Integer),
@@ -1228,32 +1228,32 @@ class EarlGreyLexer(RegexLexer):
             include('control'),
             (r'[^\S\n]+', Text),
             (r';;.*\n', Comment),
-            (r'[\[\]{}:(),;]', Punctuation), 
+            (r'[\[\]{}:(),;]', Punctuation),
             (r'\\\n', Text),
             (r'\\', Text),
             include('errors'),
             (words((
                 'with', 'where', 'when', 'and', 'not', 'or', 'in',
                 'as', 'of', 'is'),
-                prefix=r'(?<=\s|\[)', suffix=r'(?![\w$\-])'), 
+                prefix=r'(?<=\s|\[)', suffix=r'(?![\w$\-])'),
              Operator.Word),
-            (r'[*@]?->', Name.Function), 
+            (r'[*@]?->', Name.Function),
             (r'[+\-*/~^<>%&|?!@#.]*=', Operator.Word),
             (r'\.{2,3}', Operator.Word),  # Range Operator
             (r'([+*/~^<>&|?!]+)|([#\-](?=\s))|@@+(?=\s)|=+', Operator),
-            (r'(?<![\w$\-])(var|let)(?:[^\w$])', Keyword.Declaration), 
+            (r'(?<![\w$\-])(var|let)(?:[^\w$])', Keyword.Declaration),
             include('keywords'),
             include('builtins'),
             include('assignment'),
             (r'''(?x)
-                (?:()([a-zA-Z$_](?:[\w$\-]*[\w$])?)| 
-                   (?<=[\s{\[(])(\.)([a-zA-Z$_](?:[\w$\-]*[\w$])?)) 
+                (?:()([a-zA-Z$_](?:[\w$\-]*[\w$])?)|
+                   (?<=[\s{\[(])(\.)([a-zA-Z$_](?:[\w$\-]*[\w$])?))
                 (?=.*%)''',
              bygroups(Punctuation, Name.Tag, Punctuation, Name.Class.Start), 'dbs'),
             (r'[rR]?`', String.Backtick, 'bt'),
             (r'[rR]?```', String.Backtick, 'tbt'),
-            (r'(?<=[\s\[{(,;])\.([a-zA-Z$_](?:[\w$\-]*[\w$])?)' 
-             r'(?=[\s\]}),;])', String.Symbol), 
+            (r'(?<=[\s\[{(,;])\.([a-zA-Z$_](?:[\w$\-]*[\w$])?)'
+             r'(?=[\s\]}),;])', String.Symbol),
             include('nested'),
             (r'(?:[rR]|[rR]\.[gmi]{1,3})?"', String, combined('stringescape', 'dqs')),
             (r'(?:[rR]|[rR]\.[gmi]{1,3})?\'', String, combined('stringescape', 'sqs')),
@@ -1264,9 +1264,9 @@ class EarlGreyLexer(RegexLexer):
             include('numbers'),
         ],
         'dbs': [
-            (r'(\.)([a-zA-Z$_](?:[\w$\-]*[\w$])?)(?=[.\[\s])', 
+            (r'(\.)([a-zA-Z$_](?:[\w$\-]*[\w$])?)(?=[.\[\s])',
              bygroups(Punctuation, Name.Class.DBS)),
-            (r'(\[)([\^#][a-zA-Z$_](?:[\w$\-]*[\w$])?)(\])', 
+            (r'(\[)([\^#][a-zA-Z$_](?:[\w$\-]*[\w$])?)(\])',
              bygroups(Punctuation, Name.Entity.DBS, Punctuation)),
             (r'\s+', Text),
             (r'%', Operator.DBS, '#pop'),
@@ -1276,29 +1276,29 @@ class EarlGreyLexer(RegexLexer):
              bygroups(Text.Whitespace, Text)),
         ],
         'assignment': [
-            (r'(\.)?([a-zA-Z$_](?:[\w$\-]*[\w$])?)' 
+            (r'(\.)?([a-zA-Z$_](?:[\w$\-]*[\w$])?)'
              r'(?=\s+[+\-*/~^<>%&|?!@#.]*\=\s)',
              bygroups(Punctuation, Name.Variable))
         ],
         'errors': [
             (words(('Error', 'TypeError', 'ReferenceError'),
-                   prefix=r'(?<![\w\-$.])', suffix=r'(?![\w\-$.])'), 
+                   prefix=r'(?<![\w\-$.])', suffix=r'(?![\w\-$.])'),
              Name.Exception),
             (r'''(?x)
-                (?<![\w$]) 
-                E\.[\w$](?:[\w$\-]*[\w$])? 
-                (?:\.[\w$](?:[\w$\-]*[\w$])?)* 
-                (?=[({\[?!\s])''', 
+                (?<![\w$])
+                E\.[\w$](?:[\w$\-]*[\w$])?
+                (?:\.[\w$](?:[\w$\-]*[\w$])?)*
+                (?=[({\[?!\s])''',
              Name.Exception),
         ],
         'control': [
             (r'''(?x)
-                ([a-zA-Z$_](?:[\w$-]*[\w$])?) 
+                ([a-zA-Z$_](?:[\w$-]*[\w$])?)
                 (?!\n)\s+
                 (?!and|as|each\*|each|in|is|mod|of|or|when|where|with)
-                (?=(?:[+\-*/~^<>%&|?!@#.])?[a-zA-Z$_](?:[\w$-]*[\w$])?)''', 
+                (?=(?:[+\-*/~^<>%&|?!@#.])?[a-zA-Z$_](?:[\w$-]*[\w$])?)''',
              Keyword.Control),
-            (r'([a-zA-Z$_](?:[\w$-]*[\w$])?)(?!\n)\s+(?=[\'"\d{\[(])', 
+            (r'([a-zA-Z$_](?:[\w$-]*[\w$])?)(?!\n)\s+(?=[\'"\d{\[(])',
              Keyword.Control),
             (r'''(?x)
                 (?:
@@ -1307,28 +1307,28 @@ class EarlGreyLexer(RegexLexer):
                     (?<=with|each|with)|
                     (?<=each\*|where)
                 )(\s+)
-                ([a-zA-Z$_](?:[\w$-]*[\w$])?)(:)''', 
+                ([a-zA-Z$_](?:[\w$-]*[\w$])?)(:)''',
              bygroups(Text, Keyword.Control, Punctuation)),
             (r'''(?x)
                 (?<![+\-*/~^<>%&|?!@#.])(\s+)
-                ([a-zA-Z$_](?:[\w$-]*[\w$])?)(:)''', 
+                ([a-zA-Z$_](?:[\w$-]*[\w$])?)(:)''',
              bygroups(Text, Keyword.Control, Punctuation)),
         ],
         'nested': [
             (r'''(?x)
-                (?<=[\w$\]})])(\.) 
-                ([a-zA-Z$_](?:[\w$-]*[\w$])?) 
+                (?<=[\w$\]})])(\.)
+                ([a-zA-Z$_](?:[\w$-]*[\w$])?)
                 (?=\s+with(?:\s|\n))''',
              bygroups(Punctuation, Name.Function)),
             (r'''(?x)
                 (?<!\s)(\.)
-                ([a-zA-Z$_](?:[\w$-]*[\w$])?) 
-                (?=[}\]).,;:\s])''', 
+                ([a-zA-Z$_](?:[\w$-]*[\w$])?)
+                (?=[}\]).,;:\s])''',
              bygroups(Punctuation, Name.Field)),
             (r'''(?x)
-                (?<=[\w$\]})])(\.) 
-                ([a-zA-Z$_](?:[\w$-]*[\w$])?) 
-                (?=[\[{(:])''', 
+                (?<=[\w$\]})])(\.)
+                ([a-zA-Z$_](?:[\w$-]*[\w$])?)
+                (?=[\[{(:])''',
              bygroups(Punctuation, Name.Function)),
         ],
         'keywords': [
@@ -1337,15 +1337,15 @@ class EarlGreyLexer(RegexLexer):
                 'continue', 'elif', 'expr-value', 'if', 'match',
                 'return', 'yield', 'pass', 'else', 'require', 'var',
                 'let', 'async', 'method', 'gen'),
-                prefix=r'(?<![\w\-$.])', suffix=r'(?![\w\-$.])'), 
+                prefix=r'(?<![\w\-$.])', suffix=r'(?![\w\-$.])'),
              Keyword.Pseudo),
             (words(('this', 'self', '@'),
-                   prefix=r'(?<![\w\-$.])', suffix=r'(?![\w\-$])'), 
+                   prefix=r'(?<![\w\-$.])', suffix=r'(?![\w\-$])'),
              Keyword.Constant),
             (words((
                 'Function', 'Object', 'Array', 'String', 'Number',
                 'Boolean', 'ErrorFactory', 'ENode', 'Promise'),
-                prefix=r'(?<![\w\-$.])', suffix=r'(?![\w\-$])'), 
+                prefix=r'(?<![\w\-$.])', suffix=r'(?![\w\-$])'),
              Keyword.Type),
         ],
         'builtins': [
@@ -1356,20 +1356,20 @@ class EarlGreyLexer(RegexLexer):
                 'getChecker', 'get-checker', 'getProperty', 'get-property',
                 'getProjector', 'get-projector', 'consume', 'take',
                 'promisify', 'spawn', 'constructor'),
-                prefix=r'(?<![\w\-#.])', suffix=r'(?![\w\-.])'), 
+                prefix=r'(?<![\w\-#.])', suffix=r'(?![\w\-.])'),
              Name.Builtin),
             (words((
                 'true', 'false', 'null', 'undefined'),
-                prefix=r'(?<![\w\-$.])', suffix=r'(?![\w\-$.])'), 
+                prefix=r'(?<![\w\-$.])', suffix=r'(?![\w\-$.])'),
              Name.Constant),
         ],
         'name': [
-            (r'@([a-zA-Z$_](?:[\w$-]*[\w$])?)', Name.Variable.Instance), 
-            (r'([a-zA-Z$_](?:[\w$-]*[\w$])?)(\+\+|\-\-)?', 
+            (r'@([a-zA-Z$_](?:[\w$-]*[\w$])?)', Name.Variable.Instance),
+            (r'([a-zA-Z$_](?:[\w$-]*[\w$])?)(\+\+|\-\-)?',
              bygroups(Name.Symbol, Operator.Word))
         ],
         'tuple': [
-            (r'#[a-zA-Z_][\w\-]*(?=[\s{(,;])', Name.Namespace) 
+            (r'#[a-zA-Z_][\w\-]*(?=[\s{(,;])', Name.Namespace)
         ],
         'interpoling_string': [
             (r'\}', String.Interpol, '#pop'),
@@ -1409,7 +1409,7 @@ class EarlGreyLexer(RegexLexer):
             (r'```', String.Backtick, '#pop'),
             (r'\n', String.Backtick),
             (r'\^=?', String.Escape),
-            (r'[^`]+', String.Backtick), 
+            (r'[^`]+', String.Backtick),
         ],
         'numbers': [
             (r'\d+\.(?!\.)\d*([eE][+-]?[0-9]+)?', Number.Float),
@@ -1422,75 +1422,75 @@ class EarlGreyLexer(RegexLexer):
             (r'\d+', Number.Integer)
         ],
     }
- 
 
-class JuttleLexer(RegexLexer): 
-    """ 
-    For `Juttle`_ source code. 
- 
-    .. _Juttle: https://github.com/juttle/juttle 
- 
+
+class JuttleLexer(RegexLexer):
+    """
+    For `Juttle`_ source code.
+
+    .. _Juttle: https://github.com/juttle/juttle
+
     .. versionadded:: 2.2
-    """ 
- 
-    name = 'Juttle' 
+    """
+
+    name = 'Juttle'
     aliases = ['juttle']
-    filenames = ['*.juttle'] 
-    mimetypes = ['application/juttle', 'application/x-juttle', 
-                 'text/x-juttle', 'text/juttle'] 
- 
-    flags = re.DOTALL | re.UNICODE | re.MULTILINE 
- 
-    tokens = { 
-        'commentsandwhitespace': [ 
-            (r'\s+', Text), 
-            (r'//.*?\n', Comment.Single), 
-            (r'/\*.*?\*/', Comment.Multiline) 
-        ], 
-        'slashstartsregex': [ 
-            include('commentsandwhitespace'), 
-            (r'/(\\.|[^[/\\\n]|\[(\\.|[^\]\\\n])*])+/' 
+    filenames = ['*.juttle']
+    mimetypes = ['application/juttle', 'application/x-juttle',
+                 'text/x-juttle', 'text/juttle']
+
+    flags = re.DOTALL | re.UNICODE | re.MULTILINE
+
+    tokens = {
+        'commentsandwhitespace': [
+            (r'\s+', Text),
+            (r'//.*?\n', Comment.Single),
+            (r'/\*.*?\*/', Comment.Multiline)
+        ],
+        'slashstartsregex': [
+            include('commentsandwhitespace'),
+            (r'/(\\.|[^[/\\\n]|\[(\\.|[^\]\\\n])*])+/'
              r'([gimuysd]+\b|\B)', String.Regex, '#pop'),
-            (r'(?=/)', Text, ('#pop', 'badregex')), 
-            default('#pop') 
-        ], 
-        'badregex': [ 
-            (r'\n', Text, '#pop') 
-        ], 
-        'root': [ 
-            (r'^(?=\s|/)', Text, 'slashstartsregex'), 
-            include('commentsandwhitespace'), 
-            (r':\d{2}:\d{2}:\d{2}(\.\d*)?:', String.Moment), 
-            (r':(now|beginning|end|forever|yesterday|today|tomorrow|' 
-             r'(\d+(\.\d*)?|\.\d+)(ms|[smhdwMy])?):', String.Moment), 
-            (r':\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d*)?)?' 
-             r'(Z|[+-]\d{2}:\d{2}|[+-]\d{4})?:', String.Moment), 
+            (r'(?=/)', Text, ('#pop', 'badregex')),
+            default('#pop')
+        ],
+        'badregex': [
+            (r'\n', Text, '#pop')
+        ],
+        'root': [
+            (r'^(?=\s|/)', Text, 'slashstartsregex'),
+            include('commentsandwhitespace'),
+            (r':\d{2}:\d{2}:\d{2}(\.\d*)?:', String.Moment),
+            (r':(now|beginning|end|forever|yesterday|today|tomorrow|'
+             r'(\d+(\.\d*)?|\.\d+)(ms|[smhdwMy])?):', String.Moment),
+            (r':\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d*)?)?'
+             r'(Z|[+-]\d{2}:\d{2}|[+-]\d{4})?:', String.Moment),
             (r':((\d+(\.\d*)?|\.\d+)[ ]+)?(millisecond|second|minute|hour|'
              r'day|week|month|year)[s]?'
              r'(([ ]+and[ ]+(\d+[ ]+)?(millisecond|second|minute|hour|'
              r'day|week|month|year)[s]?)'
-             r'|[ ]+(ago|from[ ]+now))*:', String.Moment), 
-            (r'\+\+|--|~|&&|\?|:|\|\||\\(?=\n)|' 
-             r'(==?|!=?|[-<>+*%&|^/])=?', Operator, 'slashstartsregex'), 
-            (r'[{(\[;,]', Punctuation, 'slashstartsregex'), 
-            (r'[})\].]', Punctuation), 
-            (r'(import|return|continue|if|else)\b', Keyword, 'slashstartsregex'), 
+             r'|[ ]+(ago|from[ ]+now))*:', String.Moment),
+            (r'\+\+|--|~|&&|\?|:|\|\||\\(?=\n)|'
+             r'(==?|!=?|[-<>+*%&|^/])=?', Operator, 'slashstartsregex'),
+            (r'[{(\[;,]', Punctuation, 'slashstartsregex'),
+            (r'[})\].]', Punctuation),
+            (r'(import|return|continue|if|else)\b', Keyword, 'slashstartsregex'),
             (r'(var|const|function|reducer|sub|input)\b', Keyword.Declaration,
              'slashstartsregex'),
-            (r'(batch|emit|filter|head|join|keep|pace|pass|put|read|reduce|remove|' 
+            (r'(batch|emit|filter|head|join|keep|pace|pass|put|read|reduce|remove|'
              r'sequence|skip|sort|split|tail|unbatch|uniq|view|write)\b',
              Keyword.Reserved),
-            (r'(true|false|null|Infinity)\b', Keyword.Constant), 
+            (r'(true|false|null|Infinity)\b', Keyword.Constant),
             (r'(Array|Date|Juttle|Math|Number|Object|RegExp|String)\b',
              Name.Builtin),
-            (JS_IDENT, Name.Other), 
-            (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float), 
-            (r'[0-9]+', Number.Integer), 
+            (JS_IDENT, Name.Other),
+            (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
+            (r'[0-9]+', Number.Integer),
             (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
             (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
-        ] 
- 
-    } 
+        ]
+
+    }
 
 
 class NodeConsoleLexer(Lexer):

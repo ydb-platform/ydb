@@ -129,7 +129,7 @@ class ActionScript3Lexer(RegexLexer):
                  'text/actionscript3']
 
     identifier = r'[$a-zA-Z_]\w*'
-    typeidentifier = identifier + r'(?:\.<\w+>)?' 
+    typeidentifier = identifier + r'(?:\.<\w+>)?'
 
     flags = re.DOTALL | re.MULTILINE
     tokens = {

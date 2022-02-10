@@ -5,7 +5,7 @@
 
     Lexers for hardware descriptor languages.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -108,8 +108,8 @@ class VerilogLexer(RegexLexer):
                 'trior', 'tri0', 'tri1', 'trireg', 'uwire', 'wire', 'wand', 'wo'
                 'shortreal', 'real', 'realtime'), suffix=r'\b'),
              Keyword.Type),
-            (r'[a-zA-Z_]\w*:(?!:)', Name.Label), 
-            (r'\$?[a-zA-Z_]\w*', Name), 
+            (r'[a-zA-Z_]\w*:(?!:)', Name.Label),
+            (r'\$?[a-zA-Z_]\w*', Name),
         ],
         'string': [
             (r'"', String, '#pop'),
@@ -253,8 +253,8 @@ class SystemVerilogLexer(RegexLexer):
                 'trior', 'tri0', 'tri1', 'trireg', 'uwire', 'wire', 'wand', 'wo'
                 'shortreal', 'real', 'realtime'), suffix=r'\b'),
              Keyword.Type),
-            (r'[a-zA-Z_]\w*:(?!:)', Name.Label), 
-            (r'\$?[a-zA-Z_]\w*', Name), 
+            (r'[a-zA-Z_]\w*:(?!:)', Name.Label),
+            (r'\$?[a-zA-Z_]\w*', Name),
         ],
         'classname': [
             (r'[a-zA-Z_]\w*', Name.Class, '#pop'),
@@ -302,27 +302,27 @@ class VhdlLexer(RegexLexer):
             (r'[~!%^&*+=|?:<>/-]', Operator),
             (r"'[a-z_]\w*", Name.Attribute),
             (r'[()\[\],.;\']', Punctuation),
-            (r'"[^\n\\"]*"', String), 
+            (r'"[^\n\\"]*"', String),
 
             (r'(library)(\s+)([a-z_]\w*)',
              bygroups(Keyword, Text, Name.Namespace)),
             (r'(use)(\s+)(entity)', bygroups(Keyword, Text, Keyword)),
-            (r'(use)(\s+)([a-z_][\w.]*\.)(all)', 
-             bygroups(Keyword, Text, Name.Namespace, Keyword)), 
+            (r'(use)(\s+)([a-z_][\w.]*\.)(all)',
+             bygroups(Keyword, Text, Name.Namespace, Keyword)),
             (r'(use)(\s+)([a-z_][\w.]*)',
              bygroups(Keyword, Text, Name.Namespace)),
-            (r'(std|ieee)(\.[a-z_]\w*)', 
-             bygroups(Name.Namespace, Name.Namespace)), 
-            (words(('std', 'ieee', 'work'), suffix=r'\b'), 
-             Name.Namespace), 
+            (r'(std|ieee)(\.[a-z_]\w*)',
+             bygroups(Name.Namespace, Name.Namespace)),
+            (words(('std', 'ieee', 'work'), suffix=r'\b'),
+             Name.Namespace),
             (r'(entity|component)(\s+)([a-z_]\w*)',
              bygroups(Keyword, Text, Name.Class)),
             (r'(architecture|configuration)(\s+)([a-z_]\w*)(\s+)'
              r'(of)(\s+)([a-z_]\w*)(\s+)(is)',
              bygroups(Keyword, Text, Name.Class, Text, Keyword, Text,
                       Name.Class, Text, Keyword)),
-            (r'([a-z_]\w*)(:)(\s+)(process|for)', 
-             bygroups(Name.Class, Operator, Text, Keyword)), 
+            (r'([a-z_]\w*)(:)(\s+)(process|for)',
+             bygroups(Name.Class, Operator, Text, Keyword)),
             (r'(end)(\s+)', bygroups(using(this), Text), 'endblock'),
 
             include('types'),
@@ -342,7 +342,7 @@ class VhdlLexer(RegexLexer):
                 'boolean', 'bit', 'character', 'severity_level', 'integer', 'time',
                 'delay_length', 'natural', 'positive', 'string', 'bit_vector',
                 'file_open_kind', 'file_open_status', 'std_ulogic', 'std_ulogic_vector',
-                'std_logic', 'std_logic_vector', 'signed', 'unsigned'), suffix=r'\b'), 
+                'std_logic', 'std_logic_vector', 'signed', 'unsigned'), suffix=r'\b'),
              Keyword.Type),
         ],
         'keywords': [
@@ -358,8 +358,8 @@ class VhdlLexer(RegexLexer):
                 'next', 'nor', 'not', 'null', 'of', 'on',
                 'open', 'or', 'others', 'out', 'package', 'port',
                 'postponed', 'procedure', 'process', 'pure', 'range', 'record',
-                'register', 'reject', 'rem', 'return', 'rol', 'ror', 'select', 
-                'severity', 'signal', 'shared', 'sla', 'sll', 'sra', 
+                'register', 'reject', 'rem', 'return', 'rol', 'ror', 'select',
+                'severity', 'signal', 'shared', 'sla', 'sll', 'sra',
                 'srl', 'subtype', 'then', 'to', 'transport', 'type',
                 'units', 'until', 'use', 'variable', 'wait', 'when',
                 'while', 'with', 'xnor', 'xor'), suffix=r'\b'),

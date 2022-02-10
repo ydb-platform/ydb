@@ -1,26 +1,26 @@
 /*
  *
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
 #ifndef GRPC_CORE_LIB_IOMGR_SOCKET_UTILS_POSIX_H
 #define GRPC_CORE_LIB_IOMGR_SOCKET_UTILS_POSIX_H
 
-#include <grpc/support/port_platform.h> 
- 
+#include <grpc/support/port_platform.h>
+
 #include "src/core/lib/iomgr/resolve_address.h"
 
 #include <sys/socket.h>
@@ -28,7 +28,7 @@
 
 #include <grpc/impl/codegen/grpc_types.h>
 #include "src/core/lib/iomgr/error.h"
-#include "src/core/lib/iomgr/socket_factory_posix.h" 
+#include "src/core/lib/iomgr/socket_factory_posix.h"
 #include "src/core/lib/iomgr/socket_mutator.h"
 
 #ifdef GRPC_LINUX_ERRQUEUE
@@ -41,29 +41,29 @@
 #endif /* ifdef GRPC_LINUX_ERRQUEUE */
 
 /* a wrapper for accept or accept4 */
-int grpc_accept4(int sockfd, grpc_resolved_address* resolved_addr, int nonblock, 
+int grpc_accept4(int sockfd, grpc_resolved_address* resolved_addr, int nonblock,
                  int cloexec);
 
 /* set a socket to use zerocopy */
 grpc_error* grpc_set_socket_zerocopy(int fd);
 
 /* set a socket to non blocking mode */
-grpc_error* grpc_set_socket_nonblocking(int fd, int non_blocking); 
+grpc_error* grpc_set_socket_nonblocking(int fd, int non_blocking);
 
 /* set a socket to close on exec */
-grpc_error* grpc_set_socket_cloexec(int fd, int close_on_exec); 
+grpc_error* grpc_set_socket_cloexec(int fd, int close_on_exec);
 
 /* set a socket to reuse old addresses */
-grpc_error* grpc_set_socket_reuse_addr(int fd, int reuse); 
+grpc_error* grpc_set_socket_reuse_addr(int fd, int reuse);
 
-/* return true if SO_REUSEPORT is supported */ 
-bool grpc_is_socket_reuse_port_supported(); 
- 
+/* return true if SO_REUSEPORT is supported */
+bool grpc_is_socket_reuse_port_supported();
+
 /* disable nagle */
-grpc_error* grpc_set_socket_low_latency(int fd, int low_latency); 
+grpc_error* grpc_set_socket_low_latency(int fd, int low_latency);
 
 /* set SO_REUSEPORT */
-grpc_error* grpc_set_socket_reuse_port(int fd, int reuse); 
+grpc_error* grpc_set_socket_reuse_port(int fd, int reuse);
 
 /* Configure the default values for TCP_USER_TIMEOUT */
 void config_default_tcp_user_timeout(bool enable, int timeout, bool is_client);
@@ -84,24 +84,24 @@ int grpc_ipv6_loopback_available(void);
 
 /* Tries to set SO_NOSIGPIPE if available on this platform.
    If SO_NO_SIGPIPE is not available, returns 1. */
-grpc_error* grpc_set_socket_no_sigpipe_if_possible(int fd); 
+grpc_error* grpc_set_socket_no_sigpipe_if_possible(int fd);
 
 /* Tries to set IP_PKTINFO if available on this platform.
    If IP_PKTINFO is not available, returns 1. */
-grpc_error* grpc_set_socket_ip_pktinfo_if_possible(int fd); 
+grpc_error* grpc_set_socket_ip_pktinfo_if_possible(int fd);
 
 /* Tries to set IPV6_RECVPKTINFO if available on this platform.
    If IPV6_RECVPKTINFO is not available, returns 1. */
-grpc_error* grpc_set_socket_ipv6_recvpktinfo_if_possible(int fd); 
+grpc_error* grpc_set_socket_ipv6_recvpktinfo_if_possible(int fd);
 
 /* Tries to set the socket's send buffer to given size. */
-grpc_error* grpc_set_socket_sndbuf(int fd, int buffer_size_bytes); 
+grpc_error* grpc_set_socket_sndbuf(int fd, int buffer_size_bytes);
 
 /* Tries to set the socket's receive buffer to given size. */
-grpc_error* grpc_set_socket_rcvbuf(int fd, int buffer_size_bytes); 
+grpc_error* grpc_set_socket_rcvbuf(int fd, int buffer_size_bytes);
 
 /* Tries to set the socket using a grpc_socket_mutator */
-grpc_error* grpc_set_socket_with_mutator(int fd, grpc_socket_mutator* mutator); 
+grpc_error* grpc_set_socket_with_mutator(int fd, grpc_socket_mutator* mutator);
 
 /* Extracts the first socket mutator from args if any and applies on the fd. */
 grpc_error* grpc_apply_socket_mutator_in_args(int fd,
@@ -149,15 +149,15 @@ int grpc_set_socket_dualstack(int fd);
      IPv4, so that bind() or connect() see the correct family.
    Also, it's important to distinguish between DUALSTACK and IPV6 when
    listening on the [::] wildcard address. */
-grpc_error* grpc_create_dualstack_socket(const grpc_resolved_address* addr, 
+grpc_error* grpc_create_dualstack_socket(const grpc_resolved_address* addr,
                                          int type, int protocol,
-                                         grpc_dualstack_mode* dsmode, 
-                                         int* newfd); 
+                                         grpc_dualstack_mode* dsmode,
+                                         int* newfd);
 
-/* Same as grpc_create_dualstack_socket(), but use the given socket factory (if 
-   non-null) to create the socket, rather than calling socket() directly. */ 
-grpc_error* grpc_create_dualstack_socket_using_factory( 
-    grpc_socket_factory* factory, const grpc_resolved_address* addr, int type, 
-    int protocol, grpc_dualstack_mode* dsmode, int* newfd); 
- 
+/* Same as grpc_create_dualstack_socket(), but use the given socket factory (if
+   non-null) to create the socket, rather than calling socket() directly. */
+grpc_error* grpc_create_dualstack_socket_using_factory(
+    grpc_socket_factory* factory, const grpc_resolved_address* addr, int type,
+    int protocol, grpc_dualstack_mode* dsmode, int* newfd);
+
 #endif /* GRPC_CORE_LIB_IOMGR_SOCKET_UTILS_POSIX_H */

@@ -18,7 +18,7 @@ OWNER(
 VERSION(3.4.0)
 
 ORIGINAL_SOURCE(https://github.com/fastfloat/fast_float/archive/v3.4.0.tar.gz)
- 
+
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()

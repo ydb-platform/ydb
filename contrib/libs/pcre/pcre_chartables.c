@@ -14,19 +14,19 @@ example ISO-8859-1. When dftables is run, it creates these tables in the
 current locale. If PCRE is configured with --enable-rebuild-chartables, this
 happens automatically.
 
-The following #includes are present because without them gcc 4.x may remove the 
+The following #includes are present because without them gcc 4.x may remove the
 array definition from the final binary if PCRE is built into a static library
 and dead code stripping is activated. This leads to link errors. Pulling in the
 header ensures that the array gets flagged as "someone outside this compilation
 unit might reference this" and so it will always be supplied to the linker. */
 
 #ifdef HAVE_CONFIG_H
-#include "pcre_config.h" 
+#include "pcre_config.h"
 #endif
 
 #include "pcre_internal.h"
 
-const pcre_uint8 PRIV(default_tables)[] = { 
+const pcre_uint8 PRIV(default_tables)[] = {
 
 /* This table is a lower casing table. */
 
@@ -163,7 +163,7 @@ graph, print, punct, and cntrl. Other classes are built from combinations. */
 */
 
   0x80,0x00,0x00,0x00,0x00,0x00,0x00,0x00, /*   0-  7 */
-  0x00,0x01,0x01,0x01,0x01,0x01,0x00,0x00, /*   8- 15 */ 
+  0x00,0x01,0x01,0x01,0x01,0x01,0x00,0x00, /*   8- 15 */
   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, /*  16- 23 */
   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, /*  24- 31 */
   0x01,0x00,0x00,0x00,0x80,0x00,0x00,0x00, /*    - '  */

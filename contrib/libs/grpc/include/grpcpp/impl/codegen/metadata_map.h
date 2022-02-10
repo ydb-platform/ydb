@@ -1,39 +1,39 @@
-/* 
- * 
- * Copyright 2015 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#ifndef GRPCPP_IMPL_CODEGEN_METADATA_MAP_H 
-#define GRPCPP_IMPL_CODEGEN_METADATA_MAP_H 
- 
+/*
+ *
+ * Copyright 2015 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#ifndef GRPCPP_IMPL_CODEGEN_METADATA_MAP_H
+#define GRPCPP_IMPL_CODEGEN_METADATA_MAP_H
+
 #include <map>
 
 #include <grpc/impl/codegen/log.h>
-#include <grpcpp/impl/codegen/slice.h> 
- 
-namespace grpc { 
- 
-namespace internal { 
+#include <grpcpp/impl/codegen/slice.h>
+
+namespace grpc {
+
+namespace internal {
 
 const char kBinaryErrorDetailsKey[] = "grpc-status-details-bin";
 
-class MetadataMap { 
- public: 
+class MetadataMap {
+ public:
   MetadataMap() { Setup(); }
- 
+
   ~MetadataMap() { Destroy(); }
 
   TString GetBinaryErrorDetails() {
@@ -82,24 +82,24 @@ class MetadataMap {
   std::multimap<grpc::string_ref, grpc::string_ref> map_;
 
   void Destroy() {
-    g_core_codegen_interface->grpc_metadata_array_destroy(&arr_); 
-  } 
- 
+    g_core_codegen_interface->grpc_metadata_array_destroy(&arr_);
+  }
+
   void Setup() { memset(&arr_, 0, sizeof(arr_)); }
 
-  void FillMap() { 
+  void FillMap() {
     if (filled_) return;
     filled_ = true;
-    for (size_t i = 0; i < arr_.count; i++) { 
-      // TODO(yangg) handle duplicates? 
-      map_.insert(std::pair<grpc::string_ref, grpc::string_ref>( 
-          StringRefFromSlice(&arr_.metadata[i].key), 
-          StringRefFromSlice(&arr_.metadata[i].value))); 
-    } 
-  } 
-}; 
-}  // namespace internal 
- 
-}  // namespace grpc 
- 
-#endif  // GRPCPP_IMPL_CODEGEN_METADATA_MAP_H 
+    for (size_t i = 0; i < arr_.count; i++) {
+      // TODO(yangg) handle duplicates?
+      map_.insert(std::pair<grpc::string_ref, grpc::string_ref>(
+          StringRefFromSlice(&arr_.metadata[i].key),
+          StringRefFromSlice(&arr_.metadata[i].value)));
+    }
+  }
+};
+}  // namespace internal
+
+}  // namespace grpc
+
+#endif  // GRPCPP_IMPL_CODEGEN_METADATA_MAP_H

@@ -5,7 +5,7 @@ RECURSE(
     tcmalloc
     galloc
     jemalloc
-    lockless 
+    lockless
     nalf
     sample-client
     system
@@ -15,10 +15,10 @@ RECURSE(
     hu/link_test
 )
 
-IF (NOT OS_WINDOWS) 
+IF (NOT OS_WINDOWS)
     RECURSE(
-        calloc 
-        calloc/tests 
+        calloc
+        calloc/tests
         calloc/calloc_profile_diff
         calloc/calloc_profile_scan
         calloc/calloc_profile_scan/ut

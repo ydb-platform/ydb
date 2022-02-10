@@ -24,7 +24,7 @@ from collections import defaultdict
 from email import message_from_file
 
 from distutils.errors import DistutilsOptionError, DistutilsSetupError
-from distutils.util import rfc822_escape 
+from distutils.util import rfc822_escape
 
 from setuptools.extern import packaging
 from setuptools.extern import ordered_set
@@ -35,8 +35,8 @@ from . import SetuptoolsDeprecationWarning
 import setuptools
 import setuptools.command
 from setuptools import windows_support
-from setuptools.monkey import get_unpatched 
-from setuptools.config import parse_configuration 
+from setuptools.monkey import get_unpatched
+from setuptools.config import parse_configuration
 import pkg_resources
 from setuptools.extern.packaging import version
 
@@ -49,9 +49,9 @@ __import__('setuptools.extern.packaging.version')
 
 def _get_unpatched(cls):
     warnings.warn("Do not call this function", DistDeprecationWarning)
-    return get_unpatched(cls) 
+    return get_unpatched(cls)
 
- 
+
 def get_metadata_version(self):
     mv = getattr(self, 'metadata_version', None)
     if mv is None:
@@ -159,7 +159,7 @@ def single_line(val):
     return val
 
 
-# Based on Python 3.5 version 
+# Based on Python 3.5 version
 def write_pkg_file(self, file):  # noqa: C901  # is too complex (14)  # FIXME
     """Write the PKG-INFO format data to a file object."""
     version = self.get_metadata_version()
@@ -187,36 +187,36 @@ def write_pkg_file(self, file):  # noqa: C901  # is too complex (14)  # FIXME
 
     license = rfc822_escape(self.get_license())
     write_field('License', license)
-    if self.download_url: 
+    if self.download_url:
         write_field('Download-URL', self.download_url)
     for project_url in self.project_urls.items():
         write_field('Project-URL', '%s, %s' % project_url)
 
-    keywords = ','.join(self.get_keywords()) 
-    if keywords: 
+    keywords = ','.join(self.get_keywords())
+    if keywords:
         write_field('Keywords', keywords)
- 
+
     for platform in self.get_platforms():
         write_field('Platform', platform)
 
-    self._write_list(file, 'Classifier', self.get_classifiers()) 
- 
-    # PEP 314 
-    self._write_list(file, 'Requires', self.get_requires()) 
-    self._write_list(file, 'Provides', self.get_provides()) 
-    self._write_list(file, 'Obsoletes', self.get_obsoletes()) 
- 
-    # Setuptools specific for PEP 345 
-    if hasattr(self, 'python_requires'): 
+    self._write_list(file, 'Classifier', self.get_classifiers())
+
+    # PEP 314
+    self._write_list(file, 'Requires', self.get_requires())
+    self._write_list(file, 'Provides', self.get_provides())
+    self._write_list(file, 'Obsoletes', self.get_obsoletes())
+
+    # Setuptools specific for PEP 345
+    if hasattr(self, 'python_requires'):
         write_field('Requires-Python', self.python_requires)
- 
+
     # PEP 566
     if self.long_description_content_type:
         write_field('Description-Content-Type', self.long_description_content_type)
     if self.provides_extras:
         for extra in self.provides_extras:
             write_field('Provides-Extra', extra)
- 
+
     self._write_list(file, 'License-File', self.license_files or [])
 
     file.write("\n%s\n\n" % self.get_long_description())
@@ -224,10 +224,10 @@ def write_pkg_file(self, file):  # noqa: C901  # is too complex (14)  # FIXME
 
 sequence = tuple, list
 
- 
+
 def check_importable(dist, attr, value):
     try:
-        ep = pkg_resources.EntryPoint.parse('x=' + value) 
+        ep = pkg_resources.EntryPoint.parse('x=' + value)
         assert not ep.extras
     except (TypeError, ValueError, AttributeError, AssertionError) as e:
         raise DistutilsSetupError(
@@ -242,33 +242,33 @@ def assert_string_list(dist, attr, value):
         # or single-use iterables
         assert isinstance(value, (list, tuple))
         # verify that elements of value are strings
-        assert ''.join(value) != value 
+        assert ''.join(value) != value
     except (TypeError, ValueError, AttributeError, AssertionError) as e:
         raise DistutilsSetupError(
-            "%r must be a list of strings (got %r)" % (attr, value) 
+            "%r must be a list of strings (got %r)" % (attr, value)
         ) from e
- 
- 
+
+
 def check_nsp(dist, attr, value):
     """Verify that namespace packages are valid"""
-    ns_packages = value 
-    assert_string_list(dist, attr, ns_packages) 
-    for nsp in ns_packages: 
+    ns_packages = value
+    assert_string_list(dist, attr, ns_packages)
+    for nsp in ns_packages:
         if not dist.has_contents_for(nsp):
             raise DistutilsSetupError(
                 "Distribution contains no modules or packages for "
                 + "namespace package %r" % nsp
             )
-        parent, sep, child = nsp.rpartition('.') 
-        if parent and parent not in ns_packages: 
-            distutils.log.warn( 
-                "WARNING: %r is declared as a package namespace, but %r" 
+        parent, sep, child = nsp.rpartition('.')
+        if parent and parent not in ns_packages:
+            distutils.log.warn(
+                "WARNING: %r is declared as a package namespace, but %r"
                 " is not: please correct this in setup.py",
                 nsp,
                 parent,
-            ) 
+            )
 
- 
+
 def check_extras(dist, attr, value):
     """Verify that extras_require mapping is valid"""
     try:
@@ -280,7 +280,7 @@ def check_extras(dist, attr, value):
             "requirement specifiers."
         ) from e
 
- 
+
 def _check_extra(extra, reqs):
     name, sep, marker = extra.partition(':')
     if marker and pkg_resources.invalid_marker(marker):
@@ -315,18 +315,18 @@ def check_requirements(dist, attr, value):
         )
         raise DistutilsSetupError(tmpl.format(attr=attr, error=error)) from error
 
- 
-def check_specifier(dist, attr, value): 
-    """Verify that value is a valid version specifier""" 
-    try: 
-        packaging.specifiers.SpecifierSet(value) 
+
+def check_specifier(dist, attr, value):
+    """Verify that value is a valid version specifier"""
+    try:
+        packaging.specifiers.SpecifierSet(value)
     except (packaging.specifiers.InvalidSpecifier, AttributeError) as error:
-        tmpl = ( 
+        tmpl = (
             "{attr!r} must be a string " "containing valid version specifiers; {error}"
-        ) 
+        )
         raise DistutilsSetupError(tmpl.format(attr=attr, error=error)) from error
- 
- 
+
+
 def check_entry_points(dist, attr, value):
     """Verify that entry_points map is parseable"""
     try:
@@ -334,12 +334,12 @@ def check_entry_points(dist, attr, value):
     except ValueError as e:
         raise DistutilsSetupError(e) from e
 
- 
+
 def check_test_suite(dist, attr, value):
     if not isinstance(value, str):
         raise DistutilsSetupError("test_suite must be a string")
 
- 
+
 def check_package_data(dist, attr, value):
     """Verify that value is a dictionary of package names to glob lists"""
     if not isinstance(value, dict):
@@ -354,7 +354,7 @@ def check_package_data(dist, attr, value):
             )
         assert_string_list(dist, 'values of {!r} dict'.format(attr), v)
 
- 
+
 def check_packages(dist, attr, value):
     for pkgname in value:
         if not re.match(r'\w+(\.\w+)*', pkgname):
@@ -365,9 +365,9 @@ def check_packages(dist, attr, value):
             )
 
 
-_Distribution = get_unpatched(distutils.core.Distribution) 
- 
- 
+_Distribution = get_unpatched(distutils.core.Distribution)
+
+
 class Distribution(_Distribution):
     """Distribution with support for tests and package data
 
@@ -518,8 +518,8 @@ class Distribution(_Distribution):
         Set `metadata.python_requires` and fix environment markers
         in `install_requires` and `extras_require`.
         """
-        if getattr(self, 'python_requires', None): 
-            self.metadata.python_requires = self.python_requires 
+        if getattr(self, 'python_requires', None):
+            self.metadata.python_requires = self.python_requires
 
         if getattr(self, 'extras_require', None):
             for extra in self.extras_require.keys():
@@ -795,18 +795,18 @@ class Distribution(_Distribution):
                 raise DistutilsOptionError(e) from e
 
     def parse_config_files(self, filenames=None, ignore_option_errors=False):
-        """Parses configuration files from various levels 
-        and loads configuration. 
- 
-        """ 
+        """Parses configuration files from various levels
+        and loads configuration.
+
+        """
         self._parse_config_files(filenames=filenames)
- 
+
         parse_configuration(
             self, self.command_options, ignore_option_errors=ignore_option_errors
         )
         self._finalize_requires()
         self._finalize_license_files()
- 
+
     def fetch_build_eggs(self, requires):
         """Resolve pre-setup requirements"""
         resolved_dists = pkg_resources.working_set.resolve(
@@ -816,7 +816,7 @@ class Distribution(_Distribution):
         )
         for dist in resolved_dists:
             pkg_resources.working_set.add(dist, replace=True)
-        return resolved_dists 
+        return resolved_dists
 
     def finalize_options(self):
         """
@@ -852,7 +852,7 @@ class Distribution(_Distribution):
 
     def _finalize_setup_keywords(self):
         for ep in pkg_resources.iter_entry_points('distutils.setup_keywords'):
-            value = getattr(self, ep.name, None) 
+            value = getattr(self, ep.name, None)
             if value is not None:
                 ep.require(installer=self.fetch_build_egg)
                 ep.load()(self, ep.name, value)
@@ -911,7 +911,7 @@ class Distribution(_Distribution):
                 self.cmdclass[ep.name] = cmdclass
         return _Distribution.get_command_list(self)
 
-    def include(self, **attrs): 
+    def include(self, **attrs):
         """Add items to distribution that are named in keyword arguments
 
         For example, 'dist.include(py_modules=["x"])' would add 'x' to
@@ -926,17 +926,17 @@ class Distribution(_Distribution):
         will try to call 'dist._include_foo({"bar":"baz"})', which can then
         handle whatever special inclusion logic is needed.
         """
-        for k, v in attrs.items(): 
-            include = getattr(self, '_include_' + k, None) 
+        for k, v in attrs.items():
+            include = getattr(self, '_include_' + k, None)
             if include:
                 include(v)
             else:
-                self._include_misc(k, v) 
+                self._include_misc(k, v)
 
-    def exclude_package(self, package): 
+    def exclude_package(self, package):
         """Remove packages, modules, and extensions in named package"""
 
-        pfx = package + '.' 
+        pfx = package + '.'
         if self.packages:
             self.packages = [
                 p for p in self.packages if p != package and not p.startswith(pfx)
@@ -951,55 +951,55 @@ class Distribution(_Distribution):
             self.ext_modules = [
                 p
                 for p in self.ext_modules
-                if p.name != package and not p.name.startswith(pfx) 
+                if p.name != package and not p.name.startswith(pfx)
             ]
 
-    def has_contents_for(self, package): 
+    def has_contents_for(self, package):
         """Return true if 'exclude_package(package)' would do something"""
 
-        pfx = package + '.' 
+        pfx = package + '.'
 
         for p in self.iter_distribution_names():
-            if p == package or p.startswith(pfx): 
+            if p == package or p.startswith(pfx):
                 return True
 
-    def _exclude_misc(self, name, value): 
+    def _exclude_misc(self, name, value):
         """Handle 'exclude()' for list/tuple attrs without a special handler"""
-        if not isinstance(value, sequence): 
+        if not isinstance(value, sequence):
             raise DistutilsSetupError(
                 "%s: setting must be a list or tuple (%r)" % (name, value)
             )
         try:
-            old = getattr(self, name) 
+            old = getattr(self, name)
         except AttributeError as e:
             raise DistutilsSetupError("%s: No such distribution setting" % name) from e
-        if old is not None and not isinstance(old, sequence): 
+        if old is not None and not isinstance(old, sequence):
             raise DistutilsSetupError(
-                name + ": this setting cannot be changed via include/exclude" 
+                name + ": this setting cannot be changed via include/exclude"
             )
         elif old:
-            setattr(self, name, [item for item in old if item not in value]) 
+            setattr(self, name, [item for item in old if item not in value])
 
-    def _include_misc(self, name, value): 
+    def _include_misc(self, name, value):
         """Handle 'include()' for list/tuple attrs without a special handler"""
 
-        if not isinstance(value, sequence): 
+        if not isinstance(value, sequence):
             raise DistutilsSetupError("%s: setting must be a list (%r)" % (name, value))
         try:
-            old = getattr(self, name) 
+            old = getattr(self, name)
         except AttributeError as e:
             raise DistutilsSetupError("%s: No such distribution setting" % name) from e
         if old is None:
-            setattr(self, name, value) 
-        elif not isinstance(old, sequence): 
+            setattr(self, name, value)
+        elif not isinstance(old, sequence):
             raise DistutilsSetupError(
-                name + ": this setting cannot be changed via include/exclude" 
+                name + ": this setting cannot be changed via include/exclude"
             )
         else:
             new = [item for item in value if item not in old]
             setattr(self, name, old + new)
 
-    def exclude(self, **attrs): 
+    def exclude(self, **attrs):
         """Remove items from distribution that are named in keyword arguments
 
         For example, 'dist.exclude(py_modules=["x"])' would remove 'x' from
@@ -1015,15 +1015,15 @@ class Distribution(_Distribution):
         will try to call 'dist._exclude_foo({"bar":"baz"})', which can then
         handle whatever special exclusion logic is needed.
         """
-        for k, v in attrs.items(): 
-            exclude = getattr(self, '_exclude_' + k, None) 
+        for k, v in attrs.items():
+            exclude = getattr(self, '_exclude_' + k, None)
             if exclude:
                 exclude(v)
             else:
-                self._exclude_misc(k, v) 
+                self._exclude_misc(k, v)
 
-    def _exclude_packages(self, packages): 
-        if not isinstance(packages, sequence): 
+    def _exclude_packages(self, packages):
+        if not isinstance(packages, sequence):
             raise DistutilsSetupError(
                 "packages: setting must be a list or tuple (%r)" % (packages,)
             )
@@ -1038,18 +1038,18 @@ class Distribution(_Distribution):
         command = args[0]
         aliases = self.get_option_dict('aliases')
         while command in aliases:
-            src, alias = aliases[command] 
-            del aliases[command]  # ensure each alias can expand only once! 
+            src, alias = aliases[command]
+            del aliases[command]  # ensure each alias can expand only once!
             import shlex
 
-            args[:1] = shlex.split(alias, True) 
+            args[:1] = shlex.split(alias, True)
             command = args[0]
 
         nargs = _Distribution._parse_command_opts(self, parser, args)
 
         # Handle commands that want to consume all remaining arguments
         cmd_class = self.get_command_class(command)
-        if getattr(cmd_class, 'command_consumes_arguments', None): 
+        if getattr(cmd_class, 'command_consumes_arguments', None):
             self.get_option_dict(command)['args'] = ("command line", nargs)
             if nargs is not None:
                 return []
@@ -1068,31 +1068,31 @@ class Distribution(_Distribution):
 
         d = {}
 
-        for cmd, opts in self.command_options.items(): 
+        for cmd, opts in self.command_options.items():
 
-            for opt, (src, val) in opts.items(): 
+            for opt, (src, val) in opts.items():
 
                 if src != "command line":
                     continue
 
-                opt = opt.replace('_', '-') 
+                opt = opt.replace('_', '-')
 
-                if val == 0: 
+                if val == 0:
                     cmdobj = self.get_command_obj(cmd)
                     neg_opt = self.negative_opt.copy()
-                    neg_opt.update(getattr(cmdobj, 'negative_opt', {})) 
-                    for neg, pos in neg_opt.items(): 
-                        if pos == opt: 
-                            opt = neg 
-                            val = None 
+                    neg_opt.update(getattr(cmdobj, 'negative_opt', {}))
+                    for neg, pos in neg_opt.items():
+                        if pos == opt:
+                            opt = neg
+                            val = None
                             break
                     else:
                         raise AssertionError("Shouldn't be able to get here")
 
-                elif val == 1: 
+                elif val == 1:
                     val = None
 
-                d.setdefault(cmd, {})[opt] = val 
+                d.setdefault(cmd, {})[opt] = val
 
         return d
 
@@ -1106,7 +1106,7 @@ class Distribution(_Distribution):
             yield module
 
         for ext in self.ext_modules or ():
-            if isinstance(ext, tuple): 
+            if isinstance(ext, tuple):
                 name, buildinfo = ext
             else:
                 name = ext.name

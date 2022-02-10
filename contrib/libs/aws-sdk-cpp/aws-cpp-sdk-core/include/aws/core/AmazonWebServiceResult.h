@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #pragma once
 
@@ -18,7 +18,7 @@ namespace Aws
     class AmazonWebServiceResult
     {
     public:
-        AmazonWebServiceResult() : m_responseCode(Http::HttpResponseCode::REQUEST_NOT_MADE) {} 
+        AmazonWebServiceResult() : m_responseCode(Http::HttpResponseCode::REQUEST_NOT_MADE) {}
 
         /**
          * Sets payload, header collection and a response code.

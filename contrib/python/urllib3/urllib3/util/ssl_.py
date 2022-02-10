@@ -98,7 +98,7 @@ except ImportError:
 # - https://hynek.me/articles/hardening-your-web-servers-ssl-ciphers/
 #
 # The general intent is:
-# - prefer cipher suites that offer perfect forward secrecy (DHE/ECDHE), 
+# - prefer cipher suites that offer perfect forward secrecy (DHE/ECDHE),
 # - prefer ECDHE over DHE for better performance,
 # - prefer any AES-GCM and ChaCha20 over any AES-CBC for better performance and
 #   security,

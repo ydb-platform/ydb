@@ -136,8 +136,8 @@ void EnumFieldGenerator::GenerateCopyConstructorCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_ = from.$name$_;\n");
-} 
- 
+}
+
 void EnumFieldGenerator::GenerateSerializeWithCachedSizesToArray(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -467,7 +467,7 @@ void RepeatedEnumFieldGenerator::GenerateByteSize(io::Printer* printer) const {
       "int>(this->_internal_$name$_size());");
   format.Indent();
   format(
-      "for (unsigned int i = 0; i < count; i++) {\n" 
+      "for (unsigned int i = 0; i < count; i++) {\n"
       "  data_size += ::$proto_ns$::internal::WireFormatLite::EnumSize(\n"
       "    this->_internal_$name$(static_cast<int>(i)));\n"
       "}\n");

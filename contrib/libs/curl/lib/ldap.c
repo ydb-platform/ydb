@@ -46,9 +46,9 @@
 #else
 # define LDAP_DEPRECATED 1      /* Be sure ldap_init() is defined. */
 # ifdef HAVE_LBER_H
-#  error #include <lber.h> 
+#  error #include <lber.h>
 # endif
-# error #include <ldap.h> 
+# error #include <ldap.h>
 # if (defined(HAVE_LDAP_SSL) && defined(HAVE_LDAP_SSL_H))
 #  include <ldap_ssl.h>
 # endif /* HAVE_LDAP_SSL && HAVE_LDAP_SSL_H */
@@ -728,7 +728,7 @@ quit:
   FREE_ON_WINLDAP(host);
 
   /* no data to transfer */
-  Curl_setup_transfer(data, -1, -1, FALSE, -1); 
+  Curl_setup_transfer(data, -1, -1, FALSE, -1);
   connclose(conn, "LDAP connection always disable re-use");
 
   return result;
@@ -1063,7 +1063,7 @@ static void _ldap_free_urldesc(LDAPURLDesc *ludp)
   free(ludp->lud_filter);
 
   if(ludp->lud_attrs) {
-    size_t i; 
+    size_t i;
     for(i = 0; i < ludp->lud_attrs_dups; i++)
       free(ludp->lud_attrs[i]);
     free(ludp->lud_attrs);

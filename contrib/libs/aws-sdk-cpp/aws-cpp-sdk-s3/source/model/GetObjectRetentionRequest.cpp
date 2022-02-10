@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #include <aws/s3/model/GetObjectRetentionRequest.h>
 #include <aws/core/utils/xml/XmlSerializer.h>
@@ -22,7 +22,7 @@ GetObjectRetentionRequest::GetObjectRetentionRequest() :
     m_versionIdHasBeenSet(false),
     m_requestPayer(RequestPayer::NOT_SET),
     m_requestPayerHasBeenSet(false),
-    m_expectedBucketOwnerHasBeenSet(false), 
+    m_expectedBucketOwnerHasBeenSet(false),
     m_customizedAccessLogTagHasBeenSet(false)
 {
 }
@@ -70,12 +70,12 @@ Aws::Http::HeaderValueCollection GetObjectRetentionRequest::GetRequestSpecificHe
     headers.emplace("x-amz-request-payer", RequestPayerMapper::GetNameForRequestPayer(m_requestPayer));
   }
 
-  if(m_expectedBucketOwnerHasBeenSet) 
-  { 
-    ss << m_expectedBucketOwner; 
-    headers.emplace("x-amz-expected-bucket-owner",  ss.str()); 
-    ss.str(""); 
-  } 
- 
+  if(m_expectedBucketOwnerHasBeenSet)
+  {
+    ss << m_expectedBucketOwner;
+    headers.emplace("x-amz-expected-bucket-owner",  ss.str());
+    ss.str("");
+  }
+
   return headers;
 }

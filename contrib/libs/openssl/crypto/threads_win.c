@@ -31,7 +31,7 @@ CRYPTO_RWLOCK *CRYPTO_THREAD_lock_new(void)
         return NULL;
     }
 # else
-    InitializeCriticalSection(lock); 
+    InitializeCriticalSection(lock);
 # endif
 
     return lock;
@@ -164,8 +164,8 @@ int openssl_init_fork_handlers(void)
     return 0;
 }
 
-int openssl_get_fork_id(void) 
-{ 
-    return 0; 
-} 
+int openssl_get_fork_id(void)
+{
+    return 0;
+}
 #endif

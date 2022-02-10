@@ -57,7 +57,7 @@
 // narrower mantissas.
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace {
 
 template <typename FloatType>
@@ -980,5 +980,5 @@ const int16_t kPower10ExponentTable[] = {
 };
 
 }  // namespace
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

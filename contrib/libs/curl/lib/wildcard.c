@@ -22,8 +22,8 @@
 
 #include "curl_setup.h"
 
-#ifndef CURL_DISABLE_FTP 
- 
+#ifndef CURL_DISABLE_FTP
+
 #include "wildcard.h"
 #include "llist.h"
 #include "fileinfo.h"
@@ -69,5 +69,5 @@ void Curl_wildcard_dtor(struct WildcardData *wc)
   wc->customptr = NULL;
   wc->state = CURLWC_INIT;
 }
- 
-#endif /* if disabled */ 
+
+#endif /* if disabled */

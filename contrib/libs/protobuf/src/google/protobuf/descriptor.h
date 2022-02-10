@@ -107,7 +107,7 @@ class FieldOptions;
 class OneofOptions;
 class EnumOptions;
 class EnumValueOptions;
-class ExtensionRangeOptions; 
+class ExtensionRangeOptions;
 class ServiceOptions;
 class MethodOptions;
 class FileOptions;
@@ -121,7 +121,7 @@ class Reflection;
 // Defined in descriptor.cc
 class DescriptorBuilder;
 class FileDescriptorTables;
-struct Symbol; 
+struct Symbol;
 
 // Defined in unknown_field_set.h.
 class UnknownField;
@@ -177,55 +177,55 @@ struct DebugStringOptions {
   }
 };
 
-// A class to handle the simplest cases of a lazily linked descriptor 
-// for a message type that isn't built at the time of cross linking, 
-// which is needed when a pool has lazily_build_dependencies_ set. 
-// Must be instantiated as mutable in a descriptor. 
-namespace internal { 
+// A class to handle the simplest cases of a lazily linked descriptor
+// for a message type that isn't built at the time of cross linking,
+// which is needed when a pool has lazily_build_dependencies_ set.
+// Must be instantiated as mutable in a descriptor.
+namespace internal {
 class PROTOBUF_EXPORT LazyDescriptor {
- public: 
-  // Init function to be called at init time of a descriptor containing 
-  // a LazyDescriptor. 
-  void Init() { 
+ public:
+  // Init function to be called at init time of a descriptor containing
+  // a LazyDescriptor.
+  void Init() {
     descriptor_ = nullptr;
     name_ = nullptr;
     once_ = nullptr;
     file_ = nullptr;
-  } 
- 
-  // Sets the value of the descriptor if it is known during the descriptor 
-  // building process. Not thread safe, should only be called during the 
-  // descriptor build process. Should not be called after SetLazy has been 
-  // called. 
-  void Set(const Descriptor* descriptor); 
- 
-  // Sets the information needed to lazily cross link the descriptor at a later 
-  // time, SetLazy is not thread safe, should be called only once at descriptor 
-  // build time if the symbol wasn't found and building of the file containing 
-  // that type is delayed because lazily_build_dependencies_ is set on the pool. 
-  // Should not be called after Set() has been called. 
+  }
+
+  // Sets the value of the descriptor if it is known during the descriptor
+  // building process. Not thread safe, should only be called during the
+  // descriptor build process. Should not be called after SetLazy has been
+  // called.
+  void Set(const Descriptor* descriptor);
+
+  // Sets the information needed to lazily cross link the descriptor at a later
+  // time, SetLazy is not thread safe, should be called only once at descriptor
+  // build time if the symbol wasn't found and building of the file containing
+  // that type is delayed because lazily_build_dependencies_ is set on the pool.
+  // Should not be called after Set() has been called.
   void SetLazy(StringPiece name, const FileDescriptor* file);
- 
-  // Returns the current value of the descriptor, thread-safe. If SetLazy(...) 
-  // has been called, will do a one-time cross link of the type specified, 
-  // building the descriptor file that contains the type if necessary. 
-  inline const Descriptor* Get() { 
-    Once(); 
-    return descriptor_; 
-  } 
- 
- private: 
-  static void OnceStatic(LazyDescriptor* lazy); 
-  void OnceInternal(); 
-  void Once(); 
- 
-  const Descriptor* descriptor_; 
+
+  // Returns the current value of the descriptor, thread-safe. If SetLazy(...)
+  // has been called, will do a one-time cross link of the type specified,
+  // building the descriptor file that contains the type if necessary.
+  inline const Descriptor* Get() {
+    Once();
+    return descriptor_;
+  }
+
+ private:
+  static void OnceStatic(LazyDescriptor* lazy);
+  void OnceInternal();
+  void Once();
+
+  const Descriptor* descriptor_;
   const TProtoStringType* name_;
   internal::once_flag* once_;
-  const FileDescriptor* file_; 
-}; 
-}  // namespace internal 
- 
+  const FileDescriptor* file_;
+};
+}  // namespace internal
+
 // Describes a type of protocol message, or a particular group within a
 // message.  To obtain the Descriptor for a given message object, call
 // Message::GetDescriptor().  Generated message classes also have a
@@ -385,15 +385,15 @@ class PROTOBUF_EXPORT Descriptor {
   struct ExtensionRange {
     typedef DescriptorProto_ExtensionRange Proto;
 
-    typedef ExtensionRangeOptions OptionsType; 
- 
+    typedef ExtensionRangeOptions OptionsType;
+
     // See Descriptor::CopyTo().
     void CopyTo(DescriptorProto_ExtensionRange* proto) const;
 
     int start;  // inclusive
     int end;    // exclusive
- 
-    const ExtensionRangeOptions* options_; 
+
+    const ExtensionRangeOptions* options_;
   };
 
   // The number of extension ranges in this message type.
@@ -530,14 +530,14 @@ class PROTOBUF_EXPORT Descriptor {
   const Descriptor* containing_type_;
   const MessageOptions* options_;
 
-  // These arrays are separated from their sizes to minimize padding on 64-bit. 
-  FieldDescriptor* fields_; 
-  OneofDescriptor* oneof_decls_; 
-  Descriptor* nested_types_; 
-  EnumDescriptor* enum_types_; 
-  ExtensionRange* extension_ranges_; 
-  FieldDescriptor* extensions_; 
-  ReservedRange* reserved_ranges_; 
+  // These arrays are separated from their sizes to minimize padding on 64-bit.
+  FieldDescriptor* fields_;
+  OneofDescriptor* oneof_decls_;
+  Descriptor* nested_types_;
+  EnumDescriptor* enum_types_;
+  ExtensionRange* extension_ranges_;
+  FieldDescriptor* extensions_;
+  ReservedRange* reserved_ranges_;
   const TProtoStringType** reserved_names_;
 
   int field_count_;
@@ -549,14 +549,14 @@ class PROTOBUF_EXPORT Descriptor {
   int extension_count_;
   int reserved_range_count_;
   int reserved_name_count_;
- 
-  // True if this is a placeholder for an unknown type. 
-  bool is_placeholder_; 
-  // True if this is a placeholder and the type name wasn't fully-qualified. 
-  bool is_unqualified_placeholder_; 
+
+  // True if this is a placeholder for an unknown type.
+  bool is_placeholder_;
+  // True if this is a placeholder and the type name wasn't fully-qualified.
+  bool is_unqualified_placeholder_;
   // Well known type.  Stored as char to conserve space.
   char well_known_type_;
- 
+
   // IMPORTANT:  If you add a new field, make sure to search for all instances
   // of Allocate<Descriptor>() and AllocateArray<Descriptor>() in descriptor.cc
   // and update them to initialize the field.
@@ -564,7 +564,7 @@ class PROTOBUF_EXPORT Descriptor {
   // Must be constructed using DescriptorPool.
   Descriptor() {}
   friend class DescriptorBuilder;
-  friend class DescriptorPool; 
+  friend class DescriptorPool;
   friend class EnumDescriptor;
   friend class FieldDescriptor;
   friend class OneofDescriptor;
@@ -573,7 +573,7 @@ class PROTOBUF_EXPORT Descriptor {
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(Descriptor);
 };
 
- 
+
 // Describes a single field of a message.  To get the descriptor for a given
 // field, first get the Descriptor for the message in which it is defined,
 // then call Descriptor::FindFieldByName().  To get a FieldDescriptor for
@@ -721,10 +721,10 @@ class PROTOBUF_EXPORT FieldDescriptor {
   // Does this field have an explicitly-declared default value?
   bool has_default_value() const;
 
-  // Whether the user has specified the json_name field option in the .proto 
-  // file. 
-  bool has_json_name() const; 
- 
+  // Whether the user has specified the json_name field option in the .proto
+  // file.
+  bool has_json_name() const;
+
   // Get the field default value if cpp_type() == CPPTYPE_INT32.  If no
   // explicit default was defined, the default is 0.
   int32 default_value_int32() const;
@@ -869,27 +869,27 @@ class PROTOBUF_EXPORT FieldDescriptor {
   const TProtoStringType* lowercase_name_;
   const TProtoStringType* camelcase_name_;
   // If has_json_name_ is true, it's the value specified by the user.
-  // Otherwise, it has the same value as camelcase_name_. 
+  // Otherwise, it has the same value as camelcase_name_.
   const TProtoStringType* json_name_;
   const FileDescriptor* file_;
   internal::once_flag* type_once_;
-  static void TypeOnceInit(const FieldDescriptor* to_init); 
-  void InternalTypeOnceInit() const; 
-  mutable Type type_; 
+  static void TypeOnceInit(const FieldDescriptor* to_init);
+  void InternalTypeOnceInit() const;
+  mutable Type type_;
   Label label_;
-  bool has_default_value_; 
+  bool has_default_value_;
   bool proto3_optional_;
-  // Whether the user has specified the json_name field option in the .proto 
-  // file. 
-  bool has_json_name_; 
+  // Whether the user has specified the json_name field option in the .proto
+  // file.
+  bool has_json_name_;
   bool is_extension_;
-  int number_; 
+  int number_;
   int index_in_oneof_;
   const Descriptor* containing_type_;
   const OneofDescriptor* containing_oneof_;
   const Descriptor* extension_scope_;
-  mutable const Descriptor* message_type_; 
-  mutable const EnumDescriptor* enum_type_; 
+  mutable const Descriptor* message_type_;
+  mutable const EnumDescriptor* enum_type_;
   const FieldOptions* options_;
   const TProtoStringType* type_name_;
   const TProtoStringType* default_value_enum_name_;
@@ -906,7 +906,7 @@ class PROTOBUF_EXPORT FieldDescriptor {
     double default_value_double_;
     bool default_value_bool_;
 
-    mutable const EnumValueDescriptor* default_value_enum_; 
+    mutable const EnumValueDescriptor* default_value_enum_;
     const TProtoStringType* default_value_string_;
     mutable std::atomic<const Message*> default_generated_instance_;
   };
@@ -928,7 +928,7 @@ class PROTOBUF_EXPORT FieldDescriptor {
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(FieldDescriptor);
 };
 
- 
+
 // Describes a oneof defined in a message type.
 class PROTOBUF_EXPORT OneofDescriptor {
  public:
@@ -945,7 +945,7 @@ class PROTOBUF_EXPORT OneofDescriptor {
   bool is_synthetic() const;
 
   // The .proto file in which this oneof was defined.  Never nullptr.
-  const FileDescriptor* file() const; 
+  const FileDescriptor* file() const;
   // The Descriptor for the message containing this oneof.
   const Descriptor* containing_type() const;
 
@@ -1156,7 +1156,7 @@ class PROTOBUF_EXPORT EnumDescriptor {
   friend class FieldDescriptor;
   friend class EnumValueDescriptor;
   friend class FileDescriptor;
-  friend class DescriptorPool; 
+  friend class DescriptorPool;
   friend class Reflection;
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(EnumDescriptor);
 };
@@ -1182,7 +1182,7 @@ class PROTOBUF_EXPORT EnumValueDescriptor {
   const TProtoStringType& full_name() const;
 
   // The .proto file in which this value was defined.  Never nullptr.
-  const FileDescriptor* file() const; 
+  const FileDescriptor* file() const;
   // The type of this value.  Never nullptr.
   const EnumDescriptor* type() const;
 
@@ -1236,7 +1236,7 @@ class PROTOBUF_EXPORT EnumValueDescriptor {
   EnumValueDescriptor() {}
   friend class DescriptorBuilder;
   friend class EnumDescriptor;
-  friend class DescriptorPool; 
+  friend class DescriptorPool;
   friend class FileDescriptorTables;
   friend class Reflection;
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(EnumValueDescriptor);
@@ -1307,7 +1307,7 @@ class PROTOBUF_EXPORT ServiceDescriptor {
   const TProtoStringType* full_name_;
   const FileDescriptor* file_;
   const ServiceOptions* options_;
-  MethodDescriptor* methods_; 
+  MethodDescriptor* methods_;
   int method_count_;
   // IMPORTANT:  If you add a new field, make sure to search for all instances
   // of Allocate<ServiceDescriptor>() and AllocateArray<ServiceDescriptor>() in
@@ -1321,7 +1321,7 @@ class PROTOBUF_EXPORT ServiceDescriptor {
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ServiceDescriptor);
 };
 
- 
+
 // Describes an individual service method.  To obtain a MethodDescriptor given
 // a service, first get its ServiceDescriptor, then call
 // ServiceDescriptor::FindMethodByName().  Use DescriptorPool to construct your
@@ -1338,7 +1338,7 @@ class PROTOBUF_EXPORT MethodDescriptor {
   int index() const;
 
   // The .proto file in which this method was defined.  Never nullptr.
-  const FileDescriptor* file() const; 
+  const FileDescriptor* file() const;
   // Gets the service to which this method belongs.  Never nullptr.
   const ServiceDescriptor* service() const;
 
@@ -1392,8 +1392,8 @@ class PROTOBUF_EXPORT MethodDescriptor {
   const TProtoStringType* name_;
   const TProtoStringType* full_name_;
   const ServiceDescriptor* service_;
-  mutable internal::LazyDescriptor input_type_; 
-  mutable internal::LazyDescriptor output_type_; 
+  mutable internal::LazyDescriptor input_type_;
+  mutable internal::LazyDescriptor output_type_;
   const MethodOptions* options_;
   bool client_streaming_;
   bool server_streaming_;
@@ -1555,11 +1555,11 @@ class PROTOBUF_EXPORT FileDescriptor {
   const TProtoStringType* package_;
   const DescriptorPool* pool_;
   internal::once_flag* dependencies_once_;
-  static void DependenciesOnceInit(const FileDescriptor* to_init); 
-  void InternalDependenciesOnceInit() const; 
- 
+  static void DependenciesOnceInit(const FileDescriptor* to_init);
+  void InternalDependenciesOnceInit() const;
+
   // These are arranged to minimize padding on 64-bit.
-  int dependency_count_; 
+  int dependency_count_;
   int public_dependency_count_;
   int weak_dependency_count_;
   int message_type_count_;
@@ -1568,35 +1568,35 @@ class PROTOBUF_EXPORT FileDescriptor {
   int extension_count_;
   Syntax syntax_;
   bool is_placeholder_;
- 
-  // Indicates the FileDescriptor is completed building. Used to verify 
-  // that type accessor functions that can possibly build a dependent file 
-  // aren't called during the process of building the file. 
-  bool finished_building_; 
- 
-  mutable const FileDescriptor** dependencies_; 
+
+  // Indicates the FileDescriptor is completed building. Used to verify
+  // that type accessor functions that can possibly build a dependent file
+  // aren't called during the process of building the file.
+  bool finished_building_;
+
+  mutable const FileDescriptor** dependencies_;
   const TProtoStringType** dependencies_names_;
-  int* public_dependencies_; 
-  int* weak_dependencies_; 
-  Descriptor* message_types_; 
-  EnumDescriptor* enum_types_; 
-  ServiceDescriptor* services_; 
+  int* public_dependencies_;
+  int* weak_dependencies_;
+  Descriptor* message_types_;
+  EnumDescriptor* enum_types_;
+  ServiceDescriptor* services_;
   FieldDescriptor* extensions_;
   const FileOptions* options_;
 
   const FileDescriptorTables* tables_;
   const SourceCodeInfo* source_code_info_;
- 
+
   // IMPORTANT:  If you add a new field, make sure to search for all instances
   // of Allocate<FileDescriptor>() and AllocateArray<FileDescriptor>() in
   // descriptor.cc and update them to initialize the field.
 
   FileDescriptor() {}
   friend class DescriptorBuilder;
-  friend class DescriptorPool; 
+  friend class DescriptorPool;
   friend class Descriptor;
   friend class FieldDescriptor;
-  friend class internal::LazyDescriptor; 
+  friend class internal::LazyDescriptor;
   friend class OneofDescriptor;
   friend class EnumDescriptor;
   friend class EnumValueDescriptor;
@@ -1605,7 +1605,7 @@ class PROTOBUF_EXPORT FileDescriptor {
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(FileDescriptor);
 };
 
- 
+
 // ===================================================================
 
 // Used to construct descriptors.
@@ -1838,10 +1838,10 @@ class PROTOBUF_EXPORT DescriptorPool {
   static void InternalAddGeneratedFile(const void* encoded_file_descriptor,
                                        int size);
 
-  // Disallow [enforce_utf8 = false] in .proto files. 
-  void DisallowEnforceUtf8() { disallow_enforce_utf8_ = true; } 
+  // Disallow [enforce_utf8 = false] in .proto files.
+  void DisallowEnforceUtf8() { disallow_enforce_utf8_ = true; }
 
- 
+
   // For internal use only:  Gets a non-const pointer to the generated pool.
   // This is called at static-initialization time only, so thread-safety is
   // not a concern.  If both an underlay and a fallback database are present,
@@ -1858,21 +1858,21 @@ class PROTOBUF_EXPORT DescriptorPool {
   // which it did not officially declare as dependencies.
   void InternalDontEnforceDependencies();
 
-  // For internal use only: Enables lazy building of dependencies of a file. 
-  // Delay the building of dependencies of a file descriptor until absolutely 
-  // necessary, like when message_type() is called on a field that is defined 
-  // in that dependency's file. This will cause functional issues if a proto 
+  // For internal use only: Enables lazy building of dependencies of a file.
+  // Delay the building of dependencies of a file descriptor until absolutely
+  // necessary, like when message_type() is called on a field that is defined
+  // in that dependency's file. This will cause functional issues if a proto
   // or one of its dependencies has errors. Should only be enabled for the
-  // generated_pool_ (because no descriptor build errors are guaranteed by 
-  // the compilation generation process), testing, or if a lack of descriptor 
-  // build errors can be guaranteed for a pool. 
-  void InternalSetLazilyBuildDependencies() { 
-    lazily_build_dependencies_ = true; 
-    // This needs to be set when lazily building dependencies, as it breaks 
-    // dependency checking. 
-    InternalDontEnforceDependencies(); 
-  } 
- 
+  // generated_pool_ (because no descriptor build errors are guaranteed by
+  // the compilation generation process), testing, or if a lack of descriptor
+  // build errors can be guaranteed for a pool.
+  void InternalSetLazilyBuildDependencies() {
+    lazily_build_dependencies_ = true;
+    // This needs to be set when lazily building dependencies, as it breaks
+    // dependency checking.
+    InternalDontEnforceDependencies();
+  }
+
   // For internal use only.
   void internal_set_underlay(const DescriptorPool* underlay) {
     underlay_ = underlay;
@@ -1891,13 +1891,13 @@ class PROTOBUF_EXPORT DescriptorPool {
 
  private:
   friend class Descriptor;
-  friend class internal::LazyDescriptor; 
+  friend class internal::LazyDescriptor;
   friend class FieldDescriptor;
   friend class EnumDescriptor;
   friend class ServiceDescriptor;
-  friend class MethodDescriptor; 
+  friend class MethodDescriptor;
   friend class FileDescriptor;
-  friend class StreamDescriptor; 
+  friend class StreamDescriptor;
   friend class DescriptorBuilder;
   friend class FileDescriptorTables;
 
@@ -1927,29 +1927,29 @@ class PROTOBUF_EXPORT DescriptorPool {
   const FileDescriptor* BuildFileFromDatabase(
       const FileDescriptorProto& proto) const;
 
-  // Helper for when lazily_build_dependencies_ is set, can look up a symbol 
-  // after the file's descriptor is built, and can build the file where that 
-  // symbol is defined if necessary. Will create a placeholder if the type 
-  // doesn't exist in the fallback database, or the file doesn't build 
-  // successfully. 
+  // Helper for when lazily_build_dependencies_ is set, can look up a symbol
+  // after the file's descriptor is built, and can build the file where that
+  // symbol is defined if necessary. Will create a placeholder if the type
+  // doesn't exist in the fallback database, or the file doesn't build
+  // successfully.
   Symbol CrossLinkOnDemandHelper(StringPiece name,
                                  bool expecting_enum) const;
- 
-  // Create a placeholder FileDescriptor of the specified name 
+
+  // Create a placeholder FileDescriptor of the specified name
   FileDescriptor* NewPlaceholderFile(StringPiece name) const;
   FileDescriptor* NewPlaceholderFileWithMutexHeld(StringPiece name) const;
- 
-  enum PlaceholderType { 
-    PLACEHOLDER_MESSAGE, 
-    PLACEHOLDER_ENUM, 
-    PLACEHOLDER_EXTENDABLE_MESSAGE 
-  }; 
-  // Create a placeholder Descriptor of the specified name 
+
+  enum PlaceholderType {
+    PLACEHOLDER_MESSAGE,
+    PLACEHOLDER_ENUM,
+    PLACEHOLDER_EXTENDABLE_MESSAGE
+  };
+  // Create a placeholder Descriptor of the specified name
   Symbol NewPlaceholder(StringPiece name,
-                        PlaceholderType placeholder_type) const; 
+                        PlaceholderType placeholder_type) const;
   Symbol NewPlaceholderWithMutexHeld(StringPiece name,
-                                     PlaceholderType placeholder_type) const; 
- 
+                                     PlaceholderType placeholder_type) const;
+
   // If fallback_database_ is nullptr, this is nullptr.  Otherwise, this is a
   // mutex which must be locked while accessing tables_.
   internal::WrappedMutex* mutex_;
@@ -1965,10 +1965,10 @@ class PROTOBUF_EXPORT DescriptorPool {
   std::unique_ptr<Tables> tables_;
 
   bool enforce_dependencies_;
-  bool lazily_build_dependencies_; 
+  bool lazily_build_dependencies_;
   bool allow_unknown_;
   bool enforce_weak_;
-  bool disallow_enforce_utf8_; 
+  bool disallow_enforce_utf8_;
 
   // Set of files to track for unused imports. The bool value when true means
   // unused imports are treated as errors (and as warnings when false).
@@ -1977,7 +1977,7 @@ class PROTOBUF_EXPORT DescriptorPool {
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(DescriptorPool);
 };
 
- 
+
 // inline methods ====================================================
 
 // These macros makes this repetitive code more readable.
@@ -2041,7 +2041,7 @@ PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, index_in_oneof, int)
 PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, extension_scope, const Descriptor*)
 PROTOBUF_DEFINE_OPTIONS_ACCESSOR(FieldDescriptor, FieldOptions)
 PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, has_default_value, bool)
-PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, has_json_name, bool) 
+PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, has_json_name, bool)
 PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_int32, int32)
 PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_int64, int64)
 PROTOBUF_DEFINE_ACCESSOR(FieldDescriptor, default_value_uint32, uint32)
@@ -2213,7 +2213,7 @@ inline bool FieldDescriptor::has_presence() const {
 // in the parent's array of children.
 inline int FieldDescriptor::index() const {
   if (!is_extension_) {
-    return static_cast<int>(this - containing_type()->fields_); 
+    return static_cast<int>(this - containing_type()->fields_);
   } else if (extension_scope_ != nullptr) {
     return static_cast<int>(this - extension_scope_->extensions_);
   } else {
@@ -2229,10 +2229,10 @@ inline int Descriptor::index() const {
   }
 }
 
-inline const FileDescriptor* OneofDescriptor::file() const { 
-  return containing_type()->file(); 
-} 
- 
+inline const FileDescriptor* OneofDescriptor::file() const {
+  return containing_type()->file();
+}
+
 inline int OneofDescriptor::index() const {
   return static_cast<int>(this - containing_type_->oneof_decls_);
 }
@@ -2249,10 +2249,10 @@ inline int EnumDescriptor::index() const {
   }
 }
 
-inline const FileDescriptor* EnumValueDescriptor::file() const { 
-  return type()->file(); 
-} 
- 
+inline const FileDescriptor* EnumValueDescriptor::file() const {
+  return type()->file();
+}
+
 inline int EnumValueDescriptor::index() const {
   return static_cast<int>(this - type_->values_);
 }
@@ -2261,24 +2261,24 @@ inline int ServiceDescriptor::index() const {
   return static_cast<int>(this - file_->services_);
 }
 
-inline const FileDescriptor* MethodDescriptor::file() const { 
-  return service()->file(); 
-} 
- 
+inline const FileDescriptor* MethodDescriptor::file() const {
+  return service()->file();
+}
+
 inline int MethodDescriptor::index() const {
   return static_cast<int>(this - service_->methods_);
 }
 
 inline const char* FieldDescriptor::type_name() const {
-  return kTypeToName[type()]; 
+  return kTypeToName[type()];
 }
 
 inline FieldDescriptor::CppType FieldDescriptor::cpp_type() const {
-  return kTypeToCppTypeMap[type()]; 
+  return kTypeToCppTypeMap[type()];
 }
 
 inline const char* FieldDescriptor::cpp_type_name() const {
-  return kCppTypeToName[kTypeToCppTypeMap[type()]]; 
+  return kCppTypeToName[kTypeToCppTypeMap[type()]];
 }
 
 inline FieldDescriptor::CppType FieldDescriptor::TypeToCppType(Type type) {
@@ -2302,11 +2302,11 @@ inline bool FieldDescriptor::IsTypePackable(Type field_type) {
 
 inline const FileDescriptor* FileDescriptor::public_dependency(
     int index) const {
-  return dependency(public_dependencies_[index]); 
+  return dependency(public_dependencies_[index]);
 }
 
 inline const FileDescriptor* FileDescriptor::weak_dependency(int index) const {
-  return dependency(weak_dependencies_[index]); 
+  return dependency(weak_dependencies_[index]);
 }
 
 inline FileDescriptor::Syntax FileDescriptor::syntax() const { return syntax_; }

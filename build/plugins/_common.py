@@ -115,10 +115,10 @@ def resolve_to_abs_path(path, source_root, build_root):
     return path
 
 
-def resolve_to_ymake_path(path): 
-    return resolve_to_abs_path(path, '${ARCADIA_ROOT}', '${ARCADIA_BUILD_ROOT}') 
- 
- 
+def resolve_to_ymake_path(path):
+    return resolve_to_abs_path(path, '${ARCADIA_ROOT}', '${ARCADIA_BUILD_ROOT}')
+
+
 def join_intl_paths(*args):
     return '/'.join(args)
 
@@ -135,17 +135,17 @@ def make_tuples(arg_list):
     return list(tpl())
 
 
-def resolve_includes(unit, src, paths): 
-    return unit.resolve_include([src] + paths) if paths else [] 
- 
- 
+def resolve_includes(unit, src, paths):
+    return unit.resolve_include([src] + paths) if paths else []
+
+
 def rootrel_arc_src(src, unit):
     if src.startswith('${ARCADIA_ROOT}/'):
         return src[16:]
 
-    if src.startswith('${ARCADIA_BUILD_ROOT}/'): 
-        return src[22:] 
- 
+    if src.startswith('${ARCADIA_BUILD_ROOT}/'):
+        return src[22:]
+
     elif src.startswith('${CURDIR}/'):
         return unit.path()[3:] + '/' + src[10:]
 

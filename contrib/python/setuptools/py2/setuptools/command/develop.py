@@ -9,13 +9,13 @@ from setuptools.extern import six
 
 import pkg_resources
 from setuptools.command.easy_install import easy_install
-from setuptools import namespaces 
+from setuptools import namespaces
 import setuptools
 
 __metaclass__ = type
 
 
-class develop(namespaces.DevelopInstaller, easy_install): 
+class develop(namespaces.DevelopInstaller, easy_install):
     """Set up package for development"""
 
     description = "install package in 'development mode'"
@@ -33,7 +33,7 @@ class develop(namespaces.DevelopInstaller, easy_install):
         if self.uninstall:
             self.multi_version = True
             self.uninstall_link()
-            self.uninstall_namespaces() 
+            self.uninstall_namespaces()
         else:
             self.install_for_development()
         self.warn_deprecated_options()
@@ -81,22 +81,22 @@ class develop(namespaces.DevelopInstaller, easy_install):
             project_name=ei.egg_name
         )
 
-        self.setup_path = self._resolve_setup_path( 
-            self.egg_base, 
-            self.install_dir, 
-            self.egg_path, 
-        ) 
- 
-    @staticmethod 
-    def _resolve_setup_path(egg_base, install_dir, egg_path): 
-        """ 
-        Generate a path from egg_base back to '.' where the 
-        setup script resides and ensure that path points to the 
-        setup path from $install_dir/$egg_path. 
-        """ 
-        path_to_setup = egg_base.replace(os.sep, '/').rstrip('/') 
-        if path_to_setup != os.curdir: 
-            path_to_setup = '../' * (path_to_setup.count('/') + 1) 
+        self.setup_path = self._resolve_setup_path(
+            self.egg_base,
+            self.install_dir,
+            self.egg_path,
+        )
+
+    @staticmethod
+    def _resolve_setup_path(egg_base, install_dir, egg_path):
+        """
+        Generate a path from egg_base back to '.' where the
+        setup script resides and ensure that path points to the
+        setup path from $install_dir/$egg_path.
+        """
+        path_to_setup = egg_base.replace(os.sep, '/').rstrip('/')
+        if path_to_setup != os.curdir:
+            path_to_setup = '../' * (path_to_setup.count('/') + 1)
         resolved = pkg_resources.normalize_path(
             os.path.join(install_dir, egg_path, path_to_setup)
         )
@@ -105,7 +105,7 @@ class develop(namespaces.DevelopInstaller, easy_install):
                 "Can't get a consistent path to setup script from"
                 " installation directory", resolved,
                 pkg_resources.normalize_path(os.curdir))
-        return path_to_setup 
+        return path_to_setup
 
     def install_for_development(self):
         if not six.PY2 and getattr(self.distribution, 'use_2to3', False):
@@ -144,8 +144,8 @@ class develop(namespaces.DevelopInstaller, easy_install):
             self.easy_install(setuptools.bootstrap_install_from)
             setuptools.bootstrap_install_from = None
 
-        self.install_namespaces() 
- 
+        self.install_namespaces()
+
         # create an .egg-link in the installation dir, pointing to our egg
         log.info("Creating %s (link to %s)", self.egg_link, self.egg_base)
         if not self.dry_run:
@@ -210,7 +210,7 @@ class VersionlessRequirement:
     >>> str(adapted_dist.as_requirement())
     'foo'
     """
- 
+
     def __init__(self, dist):
         self.__dist = dist
 

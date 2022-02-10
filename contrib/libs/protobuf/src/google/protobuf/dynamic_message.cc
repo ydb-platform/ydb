@@ -86,11 +86,11 @@
 #include <google/protobuf/wire_format.h>
 
 #include <google/protobuf/port_def.inc>  // NOLINT
- 
+
 namespace google {
 namespace protobuf {
 
-using internal::DynamicMapField; 
+using internal::DynamicMapField;
 using internal::ExtensionSet;
 using internal::MapField;
 
@@ -221,9 +221,9 @@ class DynamicMessage : public Message {
  public:
   explicit DynamicMessage(const DynamicMessageFactory::TypeInfo* type_info);
 
-  // This should only be used by GetPrototypeNoLock() to avoid dead lock. 
+  // This should only be used by GetPrototypeNoLock() to avoid dead lock.
   DynamicMessage(DynamicMessageFactory::TypeInfo* type_info, bool lock_factory);
- 
+
   ~DynamicMessage();
 
   // Called on the prototype after construction to initialize message fields.
@@ -263,8 +263,8 @@ class DynamicMessage : public Message {
   DynamicMessage(const DynamicMessageFactory::TypeInfo* type_info,
                  Arena* arena);
 
-  void SharedCtor(bool lock_factory); 
- 
+  void SharedCtor(bool lock_factory);
+
   // Needed to get the offset of the internal metadata member.
   friend class DynamicMessageFactory;
 
@@ -312,18 +312,18 @@ struct DynamicMessageFactory::TypeInfo {
 
 DynamicMessage::DynamicMessage(const DynamicMessageFactory::TypeInfo* type_info)
     : type_info_(type_info), cached_byte_size_(0) {
-  SharedCtor(true); 
+  SharedCtor(true);
 }
 
 DynamicMessage::DynamicMessage(const DynamicMessageFactory::TypeInfo* type_info,
                                Arena* arena)
     : Message(arena), type_info_(type_info), cached_byte_size_(0) {
-  SharedCtor(true); 
+  SharedCtor(true);
 }
 
 DynamicMessage::DynamicMessage(DynamicMessageFactory::TypeInfo* type_info,
                                bool lock_factory)
-    : type_info_(type_info), cached_byte_size_(0) { 
+    : type_info_(type_info), cached_byte_size_(0) {
   // The prototype in type_info has to be set before creating the prototype
   // instance on memory. e.g., message Foo { map<int32, Foo> a = 1; }. When
   // creating prototype for Foo, prototype of the map entry will also be
@@ -331,10 +331,10 @@ DynamicMessage::DynamicMessage(DynamicMessageFactory::TypeInfo* type_info,
   // map). To break the cyclic dependency, we have to assign the address of
   // prototype into type_info first.
   type_info->prototype = this;
-  SharedCtor(lock_factory); 
-} 
- 
-void DynamicMessage::SharedCtor(bool lock_factory) { 
+  SharedCtor(lock_factory);
+}
+
+void DynamicMessage::SharedCtor(bool lock_factory) {
   // We need to call constructors for various fields manually and set
   // default values where appropriate.  We use placement new to call
   // constructors.  If you haven't heard of placement new, I suggest Googling
@@ -414,10 +414,10 @@ void DynamicMessage::SharedCtor(bool lock_factory) {
           new (field_ptr) Message*(NULL);
         } else {
           if (IsMapFieldInApi(field)) {
-            // We need to lock in most cases to avoid data racing. Only not lock 
-            // when the constructor is called inside GetPrototype(), in which 
-            // case we have already locked the factory. 
-            if (lock_factory) { 
+            // We need to lock in most cases to avoid data racing. Only not lock
+            // when the constructor is called inside GetPrototype(), in which
+            // case we have already locked the factory.
+            if (lock_factory) {
               if (GetArenaForAllocation() != nullptr) {
                 new (field_ptr) DynamicMapField(
                     type_info_->factory->GetPrototype(field->message_type()),
@@ -431,7 +431,7 @@ void DynamicMessage::SharedCtor(bool lock_factory) {
                 new (field_ptr) DynamicMapField(
                     type_info_->factory->GetPrototype(field->message_type()));
               }
-            } else { 
+            } else {
               if (GetArenaForAllocation() != nullptr) {
                 new (field_ptr)
                     DynamicMapField(type_info_->factory->GetPrototypeNoLock(
@@ -447,7 +447,7 @@ void DynamicMessage::SharedCtor(bool lock_factory) {
                     DynamicMapField(type_info_->factory->GetPrototypeNoLock(
                         field->message_type()));
               }
-            } 
+            }
           } else {
             new (field_ptr) RepeatedPtrField<Message>(GetArenaForAllocation());
           }
@@ -748,8 +748,8 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
   }
 
   // All the fields.
-  // 
-  // TODO(b/31226269):  Optimize the order of fields to minimize padding. 
+  //
+  // TODO(b/31226269):  Optimize the order of fields to minimize padding.
   for (int i = 0; i < type->field_count(); i++) {
     // Make sure field is aligned to avoid bus errors.
     // Oneof fields do not use any space.
@@ -770,14 +770,14 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
     }
   }
 
-  type_info->weak_field_map_offset = -1; 
- 
+  type_info->weak_field_map_offset = -1;
+
   // Align the final size to make sure no clever allocators think that
   // alignment is not necessary.
   type_info->size = size;
 
-  // Construct the reflection object. 
- 
+  // Construct the reflection object.
+
   // Compute the size of default oneof instance and offsets of default
   // oneof fields.
   for (int i = 0; i < type->oneof_decl_count(); i++) {
@@ -790,31 +790,31 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
       // Mark the field to prevent unintentional access through reflection.
       // Don't use the top bit because that is for unused fields.
       offsets[field->index()] = internal::kInvalidFieldOffsetTag;
-    } 
-  } 
+    }
+  }
 
   // Allocate the prototype fields.
   void* base = operator new(size);
   memset(base, 0, size);
- 
-  // We have already locked the factory so we should not lock in the constructor 
-  // of dynamic message to avoid dead lock. 
-  DynamicMessage* prototype = new (base) DynamicMessage(type_info, false); 
- 
-  internal::ReflectionSchema schema = { 
-      type_info->prototype, 
-      type_info->offsets.get(), 
-      type_info->has_bits_indices.get(), 
-      type_info->has_bits_offset, 
+
+  // We have already locked the factory so we should not lock in the constructor
+  // of dynamic message to avoid dead lock.
+  DynamicMessage* prototype = new (base) DynamicMessage(type_info, false);
+
+  internal::ReflectionSchema schema = {
+      type_info->prototype,
+      type_info->offsets.get(),
+      type_info->has_bits_indices.get(),
+      type_info->has_bits_offset,
       PROTOBUF_FIELD_OFFSET(DynamicMessage, _internal_metadata_),
-      type_info->extensions_offset, 
-      type_info->oneof_case_offset, 
-      type_info->size, 
-      type_info->weak_field_map_offset}; 
- 
+      type_info->extensions_offset,
+      type_info->oneof_case_offset,
+      type_info->size,
+      type_info->weak_field_map_offset};
+
   type_info->reflection.reset(
       new Reflection(type_info->type, schema, type_info->pool, this));
- 
+
   // Cross link prototypes.
   prototype->CrossLinkPrototypes();
 

@@ -3,7 +3,7 @@
  * Description: internal interfaces for the XML Schemas handling
  *              and schema validity checking
  *		The Schemas development is a Work In Progress.
- *              Some of those interfaces are not guaranteed to be API or ABI stable ! 
+ *              Some of those interfaces are not guaranteed to be API or ABI stable !
  *
  * Copy: See Copyright for the status of this software.
  *
@@ -28,52 +28,52 @@ extern "C" {
 
 typedef enum {
     XML_SCHEMAS_UNKNOWN = 0,
-    XML_SCHEMAS_STRING = 1, 
-    XML_SCHEMAS_NORMSTRING = 2, 
-    XML_SCHEMAS_DECIMAL = 3, 
-    XML_SCHEMAS_TIME = 4, 
-    XML_SCHEMAS_GDAY = 5, 
-    XML_SCHEMAS_GMONTH = 6, 
-    XML_SCHEMAS_GMONTHDAY = 7, 
-    XML_SCHEMAS_GYEAR = 8, 
-    XML_SCHEMAS_GYEARMONTH = 9, 
-    XML_SCHEMAS_DATE = 10, 
-    XML_SCHEMAS_DATETIME = 11, 
-    XML_SCHEMAS_DURATION = 12, 
-    XML_SCHEMAS_FLOAT = 13, 
-    XML_SCHEMAS_DOUBLE = 14, 
-    XML_SCHEMAS_BOOLEAN = 15, 
-    XML_SCHEMAS_TOKEN = 16, 
-    XML_SCHEMAS_LANGUAGE = 17, 
-    XML_SCHEMAS_NMTOKEN = 18, 
-    XML_SCHEMAS_NMTOKENS = 19, 
-    XML_SCHEMAS_NAME = 20, 
-    XML_SCHEMAS_QNAME = 21, 
-    XML_SCHEMAS_NCNAME = 22, 
-    XML_SCHEMAS_ID = 23, 
-    XML_SCHEMAS_IDREF = 24, 
-    XML_SCHEMAS_IDREFS = 25, 
-    XML_SCHEMAS_ENTITY = 26, 
-    XML_SCHEMAS_ENTITIES = 27, 
-    XML_SCHEMAS_NOTATION = 28, 
-    XML_SCHEMAS_ANYURI = 29, 
-    XML_SCHEMAS_INTEGER = 30, 
-    XML_SCHEMAS_NPINTEGER = 31, 
-    XML_SCHEMAS_NINTEGER = 32, 
-    XML_SCHEMAS_NNINTEGER = 33, 
-    XML_SCHEMAS_PINTEGER = 34, 
-    XML_SCHEMAS_INT = 35, 
-    XML_SCHEMAS_UINT = 36, 
-    XML_SCHEMAS_LONG = 37, 
-    XML_SCHEMAS_ULONG = 38, 
-    XML_SCHEMAS_SHORT = 39, 
-    XML_SCHEMAS_USHORT = 40, 
-    XML_SCHEMAS_BYTE = 41, 
-    XML_SCHEMAS_UBYTE = 42, 
-    XML_SCHEMAS_HEXBINARY = 43, 
-    XML_SCHEMAS_BASE64BINARY = 44, 
-    XML_SCHEMAS_ANYTYPE = 45, 
-    XML_SCHEMAS_ANYSIMPLETYPE = 46 
+    XML_SCHEMAS_STRING = 1,
+    XML_SCHEMAS_NORMSTRING = 2,
+    XML_SCHEMAS_DECIMAL = 3,
+    XML_SCHEMAS_TIME = 4,
+    XML_SCHEMAS_GDAY = 5,
+    XML_SCHEMAS_GMONTH = 6,
+    XML_SCHEMAS_GMONTHDAY = 7,
+    XML_SCHEMAS_GYEAR = 8,
+    XML_SCHEMAS_GYEARMONTH = 9,
+    XML_SCHEMAS_DATE = 10,
+    XML_SCHEMAS_DATETIME = 11,
+    XML_SCHEMAS_DURATION = 12,
+    XML_SCHEMAS_FLOAT = 13,
+    XML_SCHEMAS_DOUBLE = 14,
+    XML_SCHEMAS_BOOLEAN = 15,
+    XML_SCHEMAS_TOKEN = 16,
+    XML_SCHEMAS_LANGUAGE = 17,
+    XML_SCHEMAS_NMTOKEN = 18,
+    XML_SCHEMAS_NMTOKENS = 19,
+    XML_SCHEMAS_NAME = 20,
+    XML_SCHEMAS_QNAME = 21,
+    XML_SCHEMAS_NCNAME = 22,
+    XML_SCHEMAS_ID = 23,
+    XML_SCHEMAS_IDREF = 24,
+    XML_SCHEMAS_IDREFS = 25,
+    XML_SCHEMAS_ENTITY = 26,
+    XML_SCHEMAS_ENTITIES = 27,
+    XML_SCHEMAS_NOTATION = 28,
+    XML_SCHEMAS_ANYURI = 29,
+    XML_SCHEMAS_INTEGER = 30,
+    XML_SCHEMAS_NPINTEGER = 31,
+    XML_SCHEMAS_NINTEGER = 32,
+    XML_SCHEMAS_NNINTEGER = 33,
+    XML_SCHEMAS_PINTEGER = 34,
+    XML_SCHEMAS_INT = 35,
+    XML_SCHEMAS_UINT = 36,
+    XML_SCHEMAS_LONG = 37,
+    XML_SCHEMAS_ULONG = 38,
+    XML_SCHEMAS_SHORT = 39,
+    XML_SCHEMAS_USHORT = 40,
+    XML_SCHEMAS_BYTE = 41,
+    XML_SCHEMAS_UBYTE = 42,
+    XML_SCHEMAS_HEXBINARY = 43,
+    XML_SCHEMAS_BASE64BINARY = 44,
+    XML_SCHEMAS_ANYTYPE = 45,
+    XML_SCHEMAS_ANYSIMPLETYPE = 46
 } xmlSchemaValType;
 
 /*
@@ -321,13 +321,13 @@ struct _xmlSchemaWildcard {
 /**
  * XML_SCHEMAS_ATTRGROUP_WILDCARD_BUILDED:
  *
- * The attribute wildcard has been built. 
+ * The attribute wildcard has been built.
  */
 #define XML_SCHEMAS_ATTRGROUP_WILDCARD_BUILDED 1 << 0
 /**
  * XML_SCHEMAS_ATTRGROUP_GLOBAL:
  *
- * The attribute group has been defined. 
+ * The attribute group has been defined.
  */
 #define XML_SCHEMAS_ATTRGROUP_GLOBAL 1 << 1
 /**
@@ -725,7 +725,7 @@ struct _xmlSchemaType {
 /**
  * XML_SCHEMAS_ELEM_BLOCK_SUBSTITUTION:
  *
- * disallowed substitutions: "substitution" 
+ * disallowed substitutions: "substitution"
  */
 #define XML_SCHEMAS_ELEM_BLOCK_SUBSTITUTION        1 << 13
 /**
@@ -789,7 +789,7 @@ struct _xmlSchemaElement {
     xmlRegexpPtr contModel; /* Obsolete for WXS, maybe used for RelaxNG */
     xmlSchemaContentType contentType;
     const xmlChar *refPrefix; /* Deprecated; not used */
-    xmlSchemaValPtr defVal; /* The compiled value constraint. */ 
+    xmlSchemaValPtr defVal; /* The compiled value constraint. */
     void *idcs; /* The identity-constraint defs */
 };
 
@@ -881,7 +881,7 @@ struct _xmlSchemaNotation {
 /**
  * XML_SCHEMAS_FINAL_DEFAULT_LIST:
  *
- * the schema has "list" in the set of finalDefault. 
+ * the schema has "list" in the set of finalDefault.
  */
 #define XML_SCHEMAS_FINAL_DEFAULT_LIST            1 << 4
 /**
@@ -942,7 +942,7 @@ struct _xmlSchema {
     xmlDictPtr      dict;
     void *includes;     /* the includes, this is opaque for now */
     int preserve;        /* whether to free the document */
-    int counter; /* used to give anonymous components unique names */ 
+    int counter; /* used to give anonymous components unique names */
     xmlHashTablePtr idcDef; /* All identity-constraint defs. */
     void *volatiles; /* Obsolete */
 };

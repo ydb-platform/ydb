@@ -75,7 +75,7 @@
 #include "vssh/ssh.h"
 #include "setopt.h"
 #include "http_digest.h"
-#include "system_win32.h" 
+#include "system_win32.h"
 #include "http2.h"
 #include "dynbuf.h"
 #include "altsvc.h"
@@ -150,12 +150,12 @@ static CURLcode global_init(long flags, bool memoryfuncs)
     goto fail;
   }
 
-#ifdef WIN32 
-  if(Curl_win32_init(flags)) { 
-    DEBUGF(fprintf(stderr, "Error: win32_init failed\n")); 
+#ifdef WIN32
+  if(Curl_win32_init(flags)) {
+    DEBUGF(fprintf(stderr, "Error: win32_init failed\n"));
     goto fail;
-  } 
-#endif 
+  }
+#endif
 
 #ifdef __AMIGA__
   if(!Curl_amiga_init()) {
@@ -175,8 +175,8 @@ static CURLcode global_init(long flags, bool memoryfuncs)
     goto fail;
   }
 
-#if defined(USE_SSH) 
-  if(Curl_ssh_init()) { 
+#if defined(USE_SSH)
+  if(Curl_ssh_init()) {
     goto fail;
   }
 #endif
@@ -254,13 +254,13 @@ void curl_global_cleanup(void)
   Curl_ssl_cleanup();
   Curl_resolver_global_cleanup();
 
-#ifdef WIN32 
-  Curl_win32_cleanup(init_flags); 
-#endif 
+#ifdef WIN32
+  Curl_win32_cleanup(init_flags);
+#endif
 
   Curl_amiga_cleanup();
 
-  Curl_ssh_cleanup(); 
+  Curl_ssh_cleanup();
 
 #ifdef USE_WOLFSSH
   (void)wolfSSH_Cleanup();
@@ -411,8 +411,8 @@ static int events_socket(struct Curl_easy *easy,      /* easy handle */
            mask. Convert from libcurl bitmask to the poll one. */
         m->socket.events = socketcb2poll(what);
         infof(easy, "socket cb: socket %d UPDATED as %s%s\n", s,
-              (what&CURL_POLL_IN)?"IN":"", 
-              (what&CURL_POLL_OUT)?"OUT":""); 
+              (what&CURL_POLL_IN)?"IN":"",
+              (what&CURL_POLL_OUT)?"OUT":"");
       }
       break;
     }
@@ -435,8 +435,8 @@ static int events_socket(struct Curl_easy *easy,      /* easy handle */
         m->socket.revents = 0;
         ev->list = m;
         infof(easy, "socket cb: socket %d ADDED as %s%s\n", s,
-              (what&CURL_POLL_IN)?"IN":"", 
-              (what&CURL_POLL_OUT)?"OUT":""); 
+              (what&CURL_POLL_IN)?"IN":"",
+              (what&CURL_POLL_OUT)?"OUT":"");
       }
       else
         return CURLE_OUT_OF_MEMORY;
@@ -543,7 +543,7 @@ static CURLcode wait_or_timeout(struct Curl_multi *multi, struct events *ev)
       return CURLE_RECV_ERROR;
 
     if(mcode)
-      return CURLE_URL_MALFORMAT; 
+      return CURLE_URL_MALFORMAT;
 
     /* we don't really care about the "msgs_in_queue" value returned in the
        second argument */
@@ -587,9 +587,9 @@ static CURLcode easy_transfer(struct Curl_multi *multi)
   while(!done && !mcode) {
     int still_running = 0;
 
-    mcode = curl_multi_poll(multi, NULL, 0, 1000, NULL); 
+    mcode = curl_multi_poll(multi, NULL, 0, 1000, NULL);
 
-    if(!mcode) 
+    if(!mcode)
       mcode = curl_multi_perform(multi, &still_running);
 
     /* only read 'still_running' if curl_multi_perform() return OK */
@@ -975,10 +975,10 @@ void curl_easy_reset(struct Curl_easy *data)
   /* zero out authentication data: */
   memset(&data->state.authhost, 0, sizeof(struct auth));
   memset(&data->state.authproxy, 0, sizeof(struct auth));
- 
-#if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_CRYPTO_AUTH) 
-  Curl_http_auth_cleanup_digest(data); 
-#endif 
+
+#if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_CRYPTO_AUTH)
+  Curl_http_auth_cleanup_digest(data);
+#endif
 }
 
 /*
@@ -1084,9 +1084,9 @@ CURLcode curl_easy_pause(struct Curl_easy *data, int action)
       /* if not pausing again, force a recv/send check of this connection as
          the data might've been read off the socket already */
       data->conn->cselect_bits = CURL_CSELECT_IN | CURL_CSELECT_OUT;
-    if(data->multi) 
-      Curl_update_timer(data->multi); 
-  } 
+    if(data->multi)
+      Curl_update_timer(data->multi);
+  }
 
   if(!data->state.done)
     /* This transfer may have been moved in or out of the bundle, update the
@@ -1186,35 +1186,35 @@ CURLcode curl_easy_send(struct Curl_easy *data, const void *buffer,
 }
 
 /*
- * Wrapper to call functions in Curl_conncache_foreach() 
- * 
- * Returns always 0. 
- */ 
-static int conn_upkeep(struct connectdata *conn, 
-                       void *param) 
-{ 
-  /* Param is unused. */ 
-  (void)param; 
- 
-  if(conn->handler->connection_check) { 
-    /* Do a protocol-specific keepalive check on the connection. */ 
-    conn->handler->connection_check(conn, CONNCHECK_KEEPALIVE); 
-  } 
- 
-  return 0; /* continue iteration */ 
-} 
- 
-static CURLcode upkeep(struct conncache *conn_cache, void *data) 
-{ 
-  /* Loop over every connection and make connection alive. */ 
-  Curl_conncache_foreach(data, 
-                         conn_cache, 
-                         data, 
-                         conn_upkeep); 
-  return CURLE_OK; 
-} 
- 
-/* 
+ * Wrapper to call functions in Curl_conncache_foreach()
+ *
+ * Returns always 0.
+ */
+static int conn_upkeep(struct connectdata *conn,
+                       void *param)
+{
+  /* Param is unused. */
+  (void)param;
+
+  if(conn->handler->connection_check) {
+    /* Do a protocol-specific keepalive check on the connection. */
+    conn->handler->connection_check(conn, CONNCHECK_KEEPALIVE);
+  }
+
+  return 0; /* continue iteration */
+}
+
+static CURLcode upkeep(struct conncache *conn_cache, void *data)
+{
+  /* Loop over every connection and make connection alive. */
+  Curl_conncache_foreach(data,
+                         conn_cache,
+                         data,
+                         conn_upkeep);
+  return CURLE_OK;
+}
+
+/*
  * Performs connection upkeep for the given session handle.
  */
 CURLcode curl_easy_upkeep(struct Curl_easy *data)
@@ -1225,7 +1225,7 @@ CURLcode curl_easy_upkeep(struct Curl_easy *data)
 
   if(data->multi_easy) {
     /* Use the common function to keep connections alive. */
-    return upkeep(&data->multi_easy->conn_cache, data); 
+    return upkeep(&data->multi_easy->conn_cache, data);
   }
   else {
     /* No connections, so just return success */

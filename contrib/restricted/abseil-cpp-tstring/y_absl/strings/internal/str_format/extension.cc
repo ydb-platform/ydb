@@ -17,10 +17,10 @@
 
 #include <errno.h>
 #include <algorithm>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 TString FlagsToString(Flags v) {
@@ -71,5 +71,5 @@ bool FormatSinkImpl::PutPaddedString(string_view value, int width,
 }
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

@@ -1,11 +1,11 @@
-OWNER(g:python-contrib) 
+OWNER(g:python-contrib)
 
 PY23_LIBRARY()
 
 LICENSE(MIT)
 
 VERSION(0.10.2)
- 
+
 PY_SRCS(
     TOP_LEVEL
     toml/__init__.py

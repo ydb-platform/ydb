@@ -47,13 +47,13 @@
 
 #include <stdint.h>
 #include <stdlib.h>  // for size_t.
- 
+
 #include <utility>
 
-#include "y_absl/base/config.h" 
- 
+#include "y_absl/base/config.h"
+
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
 // Hash function for a byte array.
@@ -72,7 +72,7 @@ uint64_t CityHash64WithSeeds(const char *s, size_t len, uint64_t seed0,
 uint32_t CityHash32(const char *s, size_t len);
 
 }  // namespace hash_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_HASH_INTERNAL_CITY_H_

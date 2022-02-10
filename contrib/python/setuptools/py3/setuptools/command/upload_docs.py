@@ -13,23 +13,23 @@ import socket
 import zipfile
 import tempfile
 import shutil
-import itertools 
-import functools 
+import itertools
+import functools
 import http.client
 import urllib.parse
 
 from pkg_resources import iter_entry_points
-from .upload import upload 
+from .upload import upload
 
 
-def _encode(s): 
+def _encode(s):
     return s.encode('utf-8', 'surrogateescape')
 
 
-class upload_docs(upload): 
-    # override the default repository as upload_docs isn't 
-    # supported by Warehouse (and won't be). 
-    DEFAULT_REPOSITORY = 'https://pypi.python.org/pypi/' 
+class upload_docs(upload):
+    # override the default repository as upload_docs isn't
+    # supported by Warehouse (and won't be).
+    DEFAULT_REPOSITORY = 'https://pypi.python.org/pypi/'
 
     description = 'Upload documentation to sites other than PyPi such as devpi'
 
@@ -76,8 +76,8 @@ class upload_docs(upload):
             self.mkpath(self.target_dir)  # just in case
             for root, dirs, files in os.walk(self.target_dir):
                 if root == self.target_dir and not files:
-                    tmpl = "no files found in upload directory '%s'" 
-                    raise DistutilsOptionError(tmpl % self.target_dir) 
+                    tmpl = "no files found in upload directory '%s'"
+                    raise DistutilsOptionError(tmpl % self.target_dir)
                 for name in files:
                     full = os.path.join(root, name)
                     relative = root[len(self.target_dir):].lstrip(os.path.sep)
@@ -100,48 +100,48 @@ class upload_docs(upload):
         finally:
             shutil.rmtree(tmp_dir)
 
-    @staticmethod 
-    def _build_part(item, sep_boundary): 
-        key, values = item 
-        title = '\nContent-Disposition: form-data; name="%s"' % key 
-        # handle multiple entries for the same name 
-        if not isinstance(values, list): 
-            values = [values] 
-        for value in values: 
-            if isinstance(value, tuple): 
-                title += '; filename="%s"' % value[0] 
-                value = value[1] 
-            else: 
-                value = _encode(value) 
-            yield sep_boundary 
-            yield _encode(title) 
-            yield b"\n\n" 
-            yield value 
-            if value and value[-1:] == b'\r': 
-                yield b'\n'  # write an extra newline (lurve Macs) 
- 
-    @classmethod 
-    def _build_multipart(cls, data): 
-        """ 
-        Build up the MIME payload for the POST data 
-        """ 
+    @staticmethod
+    def _build_part(item, sep_boundary):
+        key, values = item
+        title = '\nContent-Disposition: form-data; name="%s"' % key
+        # handle multiple entries for the same name
+        if not isinstance(values, list):
+            values = [values]
+        for value in values:
+            if isinstance(value, tuple):
+                title += '; filename="%s"' % value[0]
+                value = value[1]
+            else:
+                value = _encode(value)
+            yield sep_boundary
+            yield _encode(title)
+            yield b"\n\n"
+            yield value
+            if value and value[-1:] == b'\r':
+                yield b'\n'  # write an extra newline (lurve Macs)
+
+    @classmethod
+    def _build_multipart(cls, data):
+        """
+        Build up the MIME payload for the POST data
+        """
         boundary = '--------------GHSKFJDLGDS7543FJKLFHRE75642756743254'
         sep_boundary = b'\n--' + boundary.encode('ascii')
-        end_boundary = sep_boundary + b'--' 
-        end_items = end_boundary, b"\n", 
-        builder = functools.partial( 
-            cls._build_part, 
-            sep_boundary=sep_boundary, 
-        ) 
-        part_groups = map(builder, data.items()) 
-        parts = itertools.chain.from_iterable(part_groups) 
-        body_items = itertools.chain(parts, end_items) 
+        end_boundary = sep_boundary + b'--'
+        end_items = end_boundary, b"\n",
+        builder = functools.partial(
+            cls._build_part,
+            sep_boundary=sep_boundary,
+        )
+        part_groups = map(builder, data.items())
+        parts = itertools.chain.from_iterable(part_groups)
+        body_items = itertools.chain(parts, end_items)
         content_type = 'multipart/form-data; boundary=%s' % boundary
-        return b''.join(body_items), content_type 
- 
+        return b''.join(body_items), content_type
+
     def upload_file(self, filename):
-        with open(filename, 'rb') as f: 
-            content = f.read() 
+        with open(filename, 'rb') as f:
+            content = f.read()
         meta = self.distribution.metadata
         data = {
             ':action': 'doc_upload',
@@ -149,14 +149,14 @@ class upload_docs(upload):
             'content': (os.path.basename(filename), content),
         }
         # set up the authentication
-        credentials = _encode(self.username + ':' + self.password) 
+        credentials = _encode(self.username + ':' + self.password)
         credentials = standard_b64encode(credentials).decode('ascii')
         auth = "Basic " + credentials
 
-        body, ct = self._build_multipart(data) 
+        body, ct = self._build_multipart(data)
 
-        msg = "Submitting documentation to %s" % (self.repository) 
-        self.announce(msg, log.INFO) 
+        msg = "Submitting documentation to %s" % (self.repository)
+        self.announce(msg, log.INFO)
 
         # build the Request
         # We can't use urllib2 since we need to send the Basic
@@ -175,7 +175,7 @@ class upload_docs(upload):
         try:
             conn.connect()
             conn.putrequest("POST", url)
-            content_type = ct 
+            content_type = ct
             conn.putheader('Content-type', content_type)
             conn.putheader('Content-length', str(len(body)))
             conn.putheader('Authorization', auth)
@@ -187,16 +187,16 @@ class upload_docs(upload):
 
         r = conn.getresponse()
         if r.status == 200:
-            msg = 'Server response (%s): %s' % (r.status, r.reason) 
-            self.announce(msg, log.INFO) 
+            msg = 'Server response (%s): %s' % (r.status, r.reason)
+            self.announce(msg, log.INFO)
         elif r.status == 301:
             location = r.getheader('Location')
             if location is None:
                 location = 'https://pythonhosted.org/%s/' % meta.get_name()
-            msg = 'Upload successful. Visit %s' % location 
-            self.announce(msg, log.INFO) 
+            msg = 'Upload successful. Visit %s' % location
+            self.announce(msg, log.INFO)
         else:
-            msg = 'Upload failed (%s): %s' % (r.status, r.reason) 
-            self.announce(msg, log.ERROR) 
+            msg = 'Upload failed (%s): %s' % (r.status, r.reason)
+            self.announce(msg, log.ERROR)
         if self.show_response:
             print('-' * 75, r.read(), '-' * 75)

@@ -5,11 +5,11 @@
 
     Formatter for Pixmap output.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
-import os 
+import os
 import sys
 
 from pygments.formatter import Formatter
@@ -73,10 +73,10 @@ class FontManager(object):
             if not font_name:
                 self.font_name = DEFAULT_FONT_NAME_WIN
             self._create_win()
-        elif sys.platform.startswith('darwin'): 
-            if not font_name: 
-                self.font_name = DEFAULT_FONT_NAME_MAC 
-            self._create_mac() 
+        elif sys.platform.startswith('darwin'):
+            if not font_name:
+                self.font_name = DEFAULT_FONT_NAME_MAC
+            self._create_mac()
         else:
             if not font_name:
                 self.font_name = DEFAULT_FONT_NAME_NIX
@@ -88,13 +88,13 @@ class FontManager(object):
         stdout, _ = proc.communicate()
         if proc.returncode == 0:
             lines = stdout.splitlines()
-            for line in lines: 
-                if line.startswith(b'Fontconfig warning:'): 
-                    continue 
-                path = line.decode().strip().strip(':') 
-                if path: 
-                    return path 
-            return None 
+            for line in lines:
+                if line.startswith(b'Fontconfig warning:'):
+                    continue
+                path = line.decode().strip().strip(':')
+                if path:
+                    return path
+            return None
 
     def _create_nix(self):
         for name in STYLES['NORMAL']:
@@ -117,37 +117,37 @@ class FontManager(object):
                 else:
                     self.fonts[style] = self.fonts['NORMAL']
 
-    def _get_mac_font_path(self, font_map, name, style): 
-        return font_map.get((name + ' ' + style).strip().lower()) 
- 
-    def _create_mac(self): 
-        font_map = {} 
-        for font_dir in (os.path.join(os.getenv("HOME"), 'Library/Fonts/'), 
-                         '/Library/Fonts/', '/System/Library/Fonts/'): 
-            font_map.update( 
+    def _get_mac_font_path(self, font_map, name, style):
+        return font_map.get((name + ' ' + style).strip().lower())
+
+    def _create_mac(self):
+        font_map = {}
+        for font_dir in (os.path.join(os.getenv("HOME"), 'Library/Fonts/'),
+                         '/Library/Fonts/', '/System/Library/Fonts/'):
+            font_map.update(
                 (os.path.splitext(f)[0].lower(), os.path.join(font_dir, f))
                 for f in os.listdir(font_dir) if f.lower().endswith('ttf'))
- 
-        for name in STYLES['NORMAL']: 
-            path = self._get_mac_font_path(font_map, self.font_name, name) 
-            if path is not None: 
-                self.fonts['NORMAL'] = ImageFont.truetype(path, self.font_size) 
-                break 
-        else: 
-            raise FontNotFound('No usable fonts named: "%s"' % 
-                               self.font_name) 
-        for style in ('ITALIC', 'BOLD', 'BOLDITALIC'): 
-            for stylename in STYLES[style]: 
-                path = self._get_mac_font_path(font_map, self.font_name, stylename) 
-                if path is not None: 
-                    self.fonts[style] = ImageFont.truetype(path, self.font_size) 
-                    break 
-            else: 
-                if style == 'BOLDITALIC': 
-                    self.fonts[style] = self.fonts['BOLD'] 
-                else: 
-                    self.fonts[style] = self.fonts['NORMAL'] 
- 
+
+        for name in STYLES['NORMAL']:
+            path = self._get_mac_font_path(font_map, self.font_name, name)
+            if path is not None:
+                self.fonts['NORMAL'] = ImageFont.truetype(path, self.font_size)
+                break
+        else:
+            raise FontNotFound('No usable fonts named: "%s"' %
+                               self.font_name)
+        for style in ('ITALIC', 'BOLD', 'BOLDITALIC'):
+            for stylename in STYLES[style]:
+                path = self._get_mac_font_path(font_map, self.font_name, stylename)
+                if path is not None:
+                    self.fonts[style] = ImageFont.truetype(path, self.font_size)
+                    break
+            else:
+                if style == 'BOLDITALIC':
+                    self.fonts[style] = self.fonts['BOLD']
+                else:
+                    self.fonts[style] = self.fonts['NORMAL']
+
     def _lookup_win(self, key, basename, styles, fail=False):
         for suffix in ('', ' (TrueType)'):
             for style in styles:

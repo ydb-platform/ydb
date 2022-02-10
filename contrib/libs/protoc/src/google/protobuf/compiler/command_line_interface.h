@@ -66,9 +66,9 @@ class SimpleDescriptorDatabase;  // descriptor_database.h
 
 namespace compiler {
 
-class CodeGenerator;     // code_generator.h 
-class GeneratorContext;  // code_generator.h 
-class DiskSourceTree;    // importer.h 
+class CodeGenerator;     // code_generator.h
+class GeneratorContext;  // code_generator.h
+class DiskSourceTree;    // importer.h
 
 // This class implements the command-line interface to the protocol compiler.
 // It is designed to make it very easy to create a custom protocol compiler
@@ -97,21 +97,21 @@ class DiskSourceTree;    // importer.h
 // The compiler is invoked with syntax like:
 //   protoc --cpp_out=outdir --foo_out=outdir --proto_path=src src/foo.proto
 //
-// The .proto file to compile can be specified on the command line using either 
+// The .proto file to compile can be specified on the command line using either
 // its physical file path, or a virtual path relative to a directory specified
-// in --proto_path. For example, for src/foo.proto, the following two protoc 
-// invocations work the same way: 
-//   1. protoc --proto_path=src src/foo.proto (physical file path) 
-//   2. protoc --proto_path=src foo.proto (virtual path relative to src) 
-// 
-// If a file path can be interpreted both as a physical file path and as a 
+// in --proto_path. For example, for src/foo.proto, the following two protoc
+// invocations work the same way:
+//   1. protoc --proto_path=src src/foo.proto (physical file path)
+//   2. protoc --proto_path=src foo.proto (virtual path relative to src)
+//
+// If a file path can be interpreted both as a physical file path and as a
 // relative virtual path, the physical file path takes precedence.
-// 
+//
 // For a full description of the command-line syntax, invoke it with --help.
 class PROTOC_EXPORT CommandLineInterface {
  public:
-  static const char* const kPathSeparator; 
- 
+  static const char* const kPathSeparator;
+
   CommandLineInterface();
   ~CommandLineInterface();
 
@@ -161,14 +161,14 @@ class PROTOC_EXPORT CommandLineInterface {
   //   plugin [--out=OUTDIR] [--parameter=PARAMETER] PROTO_FILES < DESCRIPTORS
   // --out indicates the output directory (as passed to the --foo_out
   // parameter); if omitted, the current directory should be used.  --parameter
-  // gives the generator parameter, if any was provided (see below).  The 
-  // PROTO_FILES list the .proto files which were given on the compiler 
-  // command-line; these are the files for which the plugin is expected to 
-  // generate output code.  Finally, DESCRIPTORS is an encoded FileDescriptorSet 
-  // (as defined in descriptor.proto).  This is piped to the plugin's stdin. 
-  // The set will include descriptors for all the files listed in PROTO_FILES as 
-  // well as all files that they import.  The plugin MUST NOT attempt to read 
-  // the PROTO_FILES directly -- it must use the FileDescriptorSet. 
+  // gives the generator parameter, if any was provided (see below).  The
+  // PROTO_FILES list the .proto files which were given on the compiler
+  // command-line; these are the files for which the plugin is expected to
+  // generate output code.  Finally, DESCRIPTORS is an encoded FileDescriptorSet
+  // (as defined in descriptor.proto).  This is piped to the plugin's stdin.
+  // The set will include descriptors for all the files listed in PROTO_FILES as
+  // well as all files that they import.  The plugin MUST NOT attempt to read
+  // the PROTO_FILES directly -- it must use the FileDescriptorSet.
   //
   // The plugin should generate whatever files are necessary, as code generators
   // normally do.  It should write the names of all files it generates to
@@ -176,13 +176,13 @@ class PROTOC_EXPORT CommandLineInterface {
   // names or relative to the current directory.  If any errors occur, error
   // messages should be written to stderr.  If an error is fatal, the plugin
   // should exit with a non-zero exit code.
-  // 
-  // Plugins can have generator parameters similar to normal built-in 
-  // generators. Extra generator parameters can be passed in via a matching 
-  // "_opt" parameter. For example: 
-  //   protoc --plug_out=enable_bar:outdir --plug_opt=enable_baz 
-  // This will pass "enable_bar,enable_baz" as the parameter to the plugin. 
-  // 
+  //
+  // Plugins can have generator parameters similar to normal built-in
+  // generators. Extra generator parameters can be passed in via a matching
+  // "_opt" parameter. For example:
+  //   protoc --plug_out=enable_bar:outdir --plug_opt=enable_baz
+  // This will pass "enable_bar,enable_baz" as the parameter to the plugin.
+  //
   void AllowPlugins(const TProtoStringType& exe_name_prefix);
 
   // Run the Protocol Compiler with the given command-line parameters.
@@ -192,11 +192,11 @@ class PROTOC_EXPORT CommandLineInterface {
   // it calls strerror().  I'm not sure why you'd want to do this anyway.
   int Run(int argc, const char* const argv[]);
 
-  // DEPRECATED. Calling this method has no effect. Protocol compiler now 
-  // always try to find the .proto file relative to the current directory 
-  // first and if the file is not found, it will then treat the input path 
+  // DEPRECATED. Calling this method has no effect. Protocol compiler now
+  // always try to find the .proto file relative to the current directory
+  // first and if the file is not found, it will then treat the input path
   // as a virtual path.
-  void SetInputsAreProtoPathRelative(bool /* enable */) {} 
+  void SetInputsAreProtoPathRelative(bool /* enable */) {}
 
   // Provides some text which will be printed when the --version flag is
   // used.  The version of libprotoc will also be printed on the next line
@@ -269,25 +269,25 @@ class PROTOC_EXPORT CommandLineInterface {
   // Print the --help text to stderr.
   void PrintHelpText();
 
-  // Loads proto_path_ into the provided source_tree. 
+  // Loads proto_path_ into the provided source_tree.
   bool InitializeDiskSourceTree(DiskSourceTree* source_tree,
                                 DescriptorDatabase* fallback_database);
- 
+
   // Verify that all the input files exist in the given database.
   bool VerifyInputFilesInDescriptors(DescriptorDatabase* fallback_database);
- 
-  // Parses input_files_ into parsed_files 
-  bool ParseInputFiles(DescriptorPool* descriptor_pool, 
+
+  // Parses input_files_ into parsed_files
+  bool ParseInputFiles(DescriptorPool* descriptor_pool,
                        DiskSourceTree* source_tree,
-                       std::vector<const FileDescriptor*>* parsed_files); 
- 
+                       std::vector<const FileDescriptor*>* parsed_files);
+
   // Generate the given output file from the given input.
   struct OutputDirective;  // see below
   bool GenerateOutput(const std::vector<const FileDescriptor*>& parsed_files,
                       const OutputDirective& output_directive,
                       GeneratorContext* generator_context);
-  bool GeneratePluginOutput( 
-      const std::vector<const FileDescriptor*>& parsed_files, 
+  bool GeneratePluginOutput(
+      const std::vector<const FileDescriptor*>& parsed_files,
       const TProtoStringType& plugin_name, const TProtoStringType& parameter,
       GeneratorContext* generator_context, TProtoStringType* error);
 
@@ -295,8 +295,8 @@ class PROTOC_EXPORT CommandLineInterface {
   bool EncodeOrDecode(const DescriptorPool* pool);
 
   // Implements the --descriptor_set_out option.
-  bool WriteDescriptorSet( 
-      const std::vector<const FileDescriptor*>& parsed_files); 
+  bool WriteDescriptorSet(
+      const std::vector<const FileDescriptor*>& parsed_files);
 
   // Implements the --dependency_out option
   bool GenerateDependencyManifestFile(
@@ -358,7 +358,7 @@ class PROTOC_EXPORT CommandLineInterface {
   //   protoc --foo_out=outputdir --foo_opt=enable_bar ...
   // Then there will be an entry ("--foo_out", "enable_bar") in this map.
   std::map<TProtoStringType, TProtoStringType> generator_parameters_;
-  // Similar to generator_parameters_, but stores the parameters for plugins. 
+  // Similar to generator_parameters_, but stores the parameters for plugins.
   std::map<TProtoStringType, TProtoStringType> plugin_parameters_;
 
   // See AllowPlugins().  If this is empty, plugins aren't allowed.
@@ -405,15 +405,15 @@ class PROTOC_EXPORT CommandLineInterface {
       proto_path_;                        // Search path for proto files.
   std::vector<TProtoStringType> input_files_;  // Names of the input proto files.
 
-  // Names of proto files which are allowed to be imported. Used by build 
-  // systems to enforce depend-on-what-you-import. 
+  // Names of proto files which are allowed to be imported. Used by build
+  // systems to enforce depend-on-what-you-import.
   std::set<TProtoStringType> direct_dependencies_;
   bool direct_dependencies_explicitly_set_ = false;
- 
-  // If there's a violation of depend-on-what-you-import, this string will be 
-  // presented to the user. "%s" will be replaced with the violating import. 
+
+  // If there's a violation of depend-on-what-you-import, this string will be
+  // presented to the user. "%s" will be replaced with the violating import.
   TProtoStringType direct_dependencies_violation_msg_;
- 
+
   // output_directives_ lists all the files we are supposed to output and what
   // generator to use for each.
   struct OutputDirective {
@@ -428,10 +428,10 @@ class PROTOC_EXPORT CommandLineInterface {
   // decoding.  (Empty string indicates --decode_raw.)
   TProtoStringType codec_type_;
 
-  // If --descriptor_set_in was given, these are filenames containing 
-  // parsed FileDescriptorSets to be used for loading protos.  Otherwise, empty. 
+  // If --descriptor_set_in was given, these are filenames containing
+  // parsed FileDescriptorSets to be used for loading protos.  Otherwise, empty.
   std::vector<TProtoStringType> descriptor_set_in_names_;
- 
+
   // If --descriptor_set_out was given, this is the filename to which the
   // FileDescriptorSet should be written.  Otherwise, empty.
   TProtoStringType descriptor_set_out_name_;

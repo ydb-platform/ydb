@@ -34,7 +34,7 @@
     The ``tests/examplefiles`` contains a few test files with data to be
     parsed by these lexers.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -48,32 +48,32 @@ from pygments.util import iteritems
 
 from pygments.lexers._postgres_builtins import KEYWORDS, DATATYPES, \
     PSEUDO_TYPES, PLPGSQL_KEYWORDS
-from pygments.lexers import _tsql_builtins 
+from pygments.lexers import _tsql_builtins
 
 
 __all__ = ['PostgresLexer', 'PlPgsqlLexer', 'PostgresConsoleLexer',
-           'SqlLexer', 'TransactSqlLexer', 'MySqlLexer', 
-           'SqliteConsoleLexer', 'RqlLexer'] 
+           'SqlLexer', 'TransactSqlLexer', 'MySqlLexer',
+           'SqliteConsoleLexer', 'RqlLexer']
 
 line_re  = re.compile('.*?\n')
 
 language_re = re.compile(r"\s+LANGUAGE\s+'?(\w+)'?", re.IGNORECASE)
 
-do_re = re.compile(r'\bDO\b', re.IGNORECASE) 
+do_re = re.compile(r'\bDO\b', re.IGNORECASE)
 
-# Regular expressions for analyse_text() 
-name_between_bracket_re = re.compile(r'\[[a-zA-Z_]\w*\]') 
-name_between_backtick_re = re.compile(r'`[a-zA-Z_]\w*`') 
-tsql_go_re = re.compile(r'\bgo\b', re.IGNORECASE) 
-tsql_declare_re = re.compile(r'\bdeclare\s+@', re.IGNORECASE) 
-tsql_variable_re = re.compile(r'@[a-zA-Z_]\w*\b') 
- 
- 
+# Regular expressions for analyse_text()
+name_between_bracket_re = re.compile(r'\[[a-zA-Z_]\w*\]')
+name_between_backtick_re = re.compile(r'`[a-zA-Z_]\w*`')
+tsql_go_re = re.compile(r'\bgo\b', re.IGNORECASE)
+tsql_declare_re = re.compile(r'\bdeclare\s+@', re.IGNORECASE)
+tsql_variable_re = re.compile(r'@[a-zA-Z_]\w*\b')
+
+
 def language_callback(lexer, match):
     """Parse the content of a $-string using a lexer
 
-    The lexer is chosen looking for a nearby LANGUAGE or assumed as 
-    plpgsql if inside a DO statement and no LANGUAGE has been found. 
+    The lexer is chosen looking for a nearby LANGUAGE or assumed as
+    plpgsql if inside a DO statement and no LANGUAGE has been found.
     """
     lx = None
     m = language_re.match(lexer.text[match.end():match.end()+100])
@@ -84,26 +84,26 @@ def language_callback(lexer, match):
             lexer.text[max(0, match.start()-100):match.start()]))
         if m:
             lx = lexer._get_lexer(m[-1].group(1))
-        else: 
-            m = list(do_re.finditer( 
-                lexer.text[max(0, match.start()-25):match.start()])) 
-            if m: 
+        else:
+            m = list(do_re.finditer(
+                lexer.text[max(0, match.start()-25):match.start()]))
+            if m:
                 lx = lexer._get_lexer('plpgsql')
 
-    # 1 = $, 2 = delimiter, 3 = $ 
-    yield (match.start(1), String, match.group(1)) 
-    yield (match.start(2), String.Delimiter, match.group(2)) 
-    yield (match.start(3), String, match.group(3)) 
-    # 4 = string contents 
+    # 1 = $, 2 = delimiter, 3 = $
+    yield (match.start(1), String, match.group(1))
+    yield (match.start(2), String.Delimiter, match.group(2))
+    yield (match.start(3), String, match.group(3))
+    # 4 = string contents
     if lx:
         for x in lx.get_tokens_unprocessed(match.group(4)):
             yield x
     else:
-        yield (match.start(4), String, match.group(4)) 
-    # 5 = $, 6 = delimiter, 7 = $ 
-    yield (match.start(5), String, match.group(5)) 
-    yield (match.start(6), String.Delimiter, match.group(6)) 
-    yield (match.start(7), String, match.group(7)) 
+        yield (match.start(4), String, match.group(4))
+    # 5 = $, 6 = delimiter, 7 = $
+    yield (match.start(5), String, match.group(5))
+    yield (match.start(6), String.Delimiter, match.group(6))
+    yield (match.start(7), String, match.group(7))
 
 
 class PostgresBase(object):
@@ -160,9 +160,9 @@ class PostgresLexer(PostgresBase, RegexLexer):
     tokens = {
         'root': [
             (r'\s+', Text),
-            (r'--.*\n?', Comment.Single), 
+            (r'--.*\n?', Comment.Single),
             (r'/\*', Comment.Multiline, 'multiline-comments'),
-            (r'(' + '|'.join(s.replace(" ", r"\s+") 
+            (r'(' + '|'.join(s.replace(" ", r"\s+")
                              for s in DATATYPES + PSEUDO_TYPES) + r')\b',
              Name.Builtin),
             (words(KEYWORDS, suffix=r'\b'), Keyword),
@@ -171,10 +171,10 @@ class PostgresLexer(PostgresBase, RegexLexer):
             (r'\$\d+', Name.Variable),
             (r'([0-9]*\.[0-9]*|[0-9]+)(e[+-]?[0-9]+)?', Number.Float),
             (r'[0-9]+', Number.Integer),
-            (r"((?:E|U&)?)(')", bygroups(String.Affix, String.Single), 'string'), 
-            # quoted identifier 
-            (r'((?:U&)?)(")', bygroups(String.Affix, String.Name), 'quoted-ident'), 
-            (r'(?s)(\$)([^$]*)(\$)(.*?)(\$)(\2)(\$)', language_callback), 
+            (r"((?:E|U&)?)(')", bygroups(String.Affix, String.Single), 'string'),
+            # quoted identifier
+            (r'((?:U&)?)(")', bygroups(String.Affix, String.Name), 'quoted-ident'),
+            (r'(?s)(\$)([^$]*)(\$)(.*?)(\$)(\2)(\$)', language_callback),
             (r'[a-z_]\w*', Name),
 
             # psql variable in SQL
@@ -188,16 +188,16 @@ class PostgresLexer(PostgresBase, RegexLexer):
             (r'[^/*]+', Comment.Multiline),
             (r'[/*]', Comment.Multiline)
         ],
-        'string': [ 
-            (r"[^']+", String.Single), 
-            (r"''", String.Single), 
-            (r"'", String.Single, '#pop'), 
-        ], 
-        'quoted-ident': [ 
-            (r'[^"]+', String.Name), 
-            (r'""', String.Name), 
-            (r'"', String.Name, '#pop'), 
-        ], 
+        'string': [
+            (r"[^']+", String.Single),
+            (r"''", String.Single),
+            (r"'", String.Single, '#pop'),
+        ],
+        'quoted-ident': [
+            (r'[^"]+', String.Name),
+            (r'""', String.Name),
+            (r'"', String.Name, '#pop'),
+        ],
     }
 
 
@@ -316,7 +316,7 @@ class PostgresConsoleLexer(Lexer):
             # and continue until the end of command is detected
             curcode = ''
             insertions = []
-            for line in lines: 
+            for line in lines:
                 # Identify a shell prompt in case of psql commandline example
                 if line.startswith('$') and not curcode:
                     lexer = get_lexer_by_name('console', **self.options)
@@ -347,7 +347,7 @@ class PostgresConsoleLexer(Lexer):
 
             # Emit the output lines
             out_token = Generic.Output
-            for line in lines: 
+            for line in lines:
                 mprompt = re_prompt.match(line)
                 if mprompt is not None:
                     # push the line back to have it processed by the prompt
@@ -363,8 +363,8 @@ class PostgresConsoleLexer(Lexer):
                     yield (mmsg.start(2), out_token, mmsg.group(2))
                 else:
                     yield (0, out_token, line)
-            else: 
-                return 
+            else:
+                return
 
 
 class SqlLexer(RegexLexer):
@@ -382,7 +382,7 @@ class SqlLexer(RegexLexer):
     tokens = {
         'root': [
             (r'\s+', Text),
-            (r'--.*\n?', Comment.Single), 
+            (r'--.*\n?', Comment.Single),
             (r'/\*', Comment.Multiline, 'multiline-comments'),
             (words((
                 'ABORT', 'ABS', 'ABSOLUTE', 'ACCESS', 'ADA', 'ADD', 'ADMIN', 'AFTER',
@@ -494,94 +494,94 @@ class SqlLexer(RegexLexer):
         ]
     }
 
-    def analyse_text(text): 
-        return 0.01 
+    def analyse_text(text):
+        return 0.01
 
- 
-class TransactSqlLexer(RegexLexer): 
-    """ 
-    Transact-SQL (T-SQL) is Microsoft's and Sybase's proprietary extension to 
-    SQL. 
- 
-    The list of keywords includes ODBC and keywords reserved for future use.. 
-    """ 
- 
-    name = 'Transact-SQL' 
-    aliases = ['tsql', 't-sql'] 
-    filenames = ['*.sql'] 
-    mimetypes = ['text/x-tsql'] 
- 
-    # Use re.UNICODE to allow non ASCII letters in names. 
-    flags = re.IGNORECASE | re.UNICODE 
-    tokens = { 
-        'root': [ 
-            (r'\s+', Whitespace), 
-            (r'(?m)--.*?$\n?', Comment.Single), 
-            (r'/\*', Comment.Multiline, 'multiline-comments'), 
-            (words(_tsql_builtins.OPERATORS), Operator), 
-            (words(_tsql_builtins.OPERATOR_WORDS, suffix=r'\b'), Operator.Word), 
-            (words(_tsql_builtins.TYPES, suffix=r'\b'), Name.Class), 
-            (words(_tsql_builtins.FUNCTIONS, suffix=r'\b'), Name.Function), 
-            (r'(goto)(\s+)(\w+\b)', bygroups(Keyword, Whitespace, Name.Label)), 
-            (words(_tsql_builtins.KEYWORDS, suffix=r'\b'), Keyword), 
-            (r'(\[)([^]]+)(\])', bygroups(Operator, Name, Operator)), 
-            (r'0x[0-9a-f]+', Number.Hex), 
-            # Float variant 1, for example: 1., 1.e2, 1.2e3 
-            (r'[0-9]+\.[0-9]*(e[+-]?[0-9]+)?', Number.Float), 
-            # Float variant 2, for example: .1, .1e2 
-            (r'\.[0-9]+(e[+-]?[0-9]+)?', Number.Float), 
-            # Float variant 3, for example: 123e45 
-            (r'[0-9]+e[+-]?[0-9]+', Number.Float), 
-            (r'[0-9]+', Number.Integer), 
-            (r"'(''|[^'])*'", String.Single), 
-            (r'"(""|[^"])*"', String.Symbol), 
-            (r'[;(),.]', Punctuation), 
-            # Below we use \w even for the first "real" character because 
-            # tokens starting with a digit have already been recognized 
-            # as Number above. 
-            (r'@@\w+', Name.Builtin), 
-            (r'@\w+', Name.Variable), 
-            (r'(\w+)(:)', bygroups(Name.Label, Punctuation)), 
-            (r'#?#?\w+', Name),  # names for temp tables and anything else 
-            (r'\?', Name.Variable.Magic),  # parameter for prepared statements 
-        ], 
-        'multiline-comments': [ 
-            (r'/\*', Comment.Multiline, 'multiline-comments'), 
-            (r'\*/', Comment.Multiline, '#pop'), 
-            (r'[^/*]+', Comment.Multiline), 
-            (r'[/*]', Comment.Multiline) 
-        ] 
-    } 
- 
-    def analyse_text(text): 
-        rating = 0 
-        if tsql_declare_re.search(text): 
-            # Found T-SQL variable declaration. 
-            rating = 1.0 
-        else: 
-            name_between_backtick_count = len( 
+
+class TransactSqlLexer(RegexLexer):
+    """
+    Transact-SQL (T-SQL) is Microsoft's and Sybase's proprietary extension to
+    SQL.
+
+    The list of keywords includes ODBC and keywords reserved for future use..
+    """
+
+    name = 'Transact-SQL'
+    aliases = ['tsql', 't-sql']
+    filenames = ['*.sql']
+    mimetypes = ['text/x-tsql']
+
+    # Use re.UNICODE to allow non ASCII letters in names.
+    flags = re.IGNORECASE | re.UNICODE
+    tokens = {
+        'root': [
+            (r'\s+', Whitespace),
+            (r'(?m)--.*?$\n?', Comment.Single),
+            (r'/\*', Comment.Multiline, 'multiline-comments'),
+            (words(_tsql_builtins.OPERATORS), Operator),
+            (words(_tsql_builtins.OPERATOR_WORDS, suffix=r'\b'), Operator.Word),
+            (words(_tsql_builtins.TYPES, suffix=r'\b'), Name.Class),
+            (words(_tsql_builtins.FUNCTIONS, suffix=r'\b'), Name.Function),
+            (r'(goto)(\s+)(\w+\b)', bygroups(Keyword, Whitespace, Name.Label)),
+            (words(_tsql_builtins.KEYWORDS, suffix=r'\b'), Keyword),
+            (r'(\[)([^]]+)(\])', bygroups(Operator, Name, Operator)),
+            (r'0x[0-9a-f]+', Number.Hex),
+            # Float variant 1, for example: 1., 1.e2, 1.2e3
+            (r'[0-9]+\.[0-9]*(e[+-]?[0-9]+)?', Number.Float),
+            # Float variant 2, for example: .1, .1e2
+            (r'\.[0-9]+(e[+-]?[0-9]+)?', Number.Float),
+            # Float variant 3, for example: 123e45
+            (r'[0-9]+e[+-]?[0-9]+', Number.Float),
+            (r'[0-9]+', Number.Integer),
+            (r"'(''|[^'])*'", String.Single),
+            (r'"(""|[^"])*"', String.Symbol),
+            (r'[;(),.]', Punctuation),
+            # Below we use \w even for the first "real" character because
+            # tokens starting with a digit have already been recognized
+            # as Number above.
+            (r'@@\w+', Name.Builtin),
+            (r'@\w+', Name.Variable),
+            (r'(\w+)(:)', bygroups(Name.Label, Punctuation)),
+            (r'#?#?\w+', Name),  # names for temp tables and anything else
+            (r'\?', Name.Variable.Magic),  # parameter for prepared statements
+        ],
+        'multiline-comments': [
+            (r'/\*', Comment.Multiline, 'multiline-comments'),
+            (r'\*/', Comment.Multiline, '#pop'),
+            (r'[^/*]+', Comment.Multiline),
+            (r'[/*]', Comment.Multiline)
+        ]
+    }
+
+    def analyse_text(text):
+        rating = 0
+        if tsql_declare_re.search(text):
+            # Found T-SQL variable declaration.
+            rating = 1.0
+        else:
+            name_between_backtick_count = len(
                 name_between_backtick_re.findall(text))
-            name_between_bracket_count = len( 
-                name_between_bracket_re.findall(text)) 
-            # We need to check if there are any names using 
-            # backticks or brackets, as otherwise both are 0 
-            # and 0 >= 2 * 0, so we would always assume it's true 
-            dialect_name_count = name_between_backtick_count + name_between_bracket_count 
+            name_between_bracket_count = len(
+                name_between_bracket_re.findall(text))
+            # We need to check if there are any names using
+            # backticks or brackets, as otherwise both are 0
+            # and 0 >= 2 * 0, so we would always assume it's true
+            dialect_name_count = name_between_backtick_count + name_between_bracket_count
             if dialect_name_count >= 1 and \
                name_between_bracket_count >= 2 * name_between_backtick_count:
-                # Found at least twice as many [name] as `name`. 
-                rating += 0.5 
-            elif name_between_bracket_count > name_between_backtick_count: 
-                rating += 0.2 
-            elif name_between_bracket_count > 0: 
-                rating += 0.1 
-            if tsql_variable_re.search(text) is not None: 
-                rating += 0.1 
-            if tsql_go_re.search(text) is not None: 
-                rating += 0.1 
-        return rating 
- 
- 
+                # Found at least twice as many [name] as `name`.
+                rating += 0.5
+            elif name_between_bracket_count > name_between_backtick_count:
+                rating += 0.2
+            elif name_between_bracket_count > 0:
+                rating += 0.1
+            if tsql_variable_re.search(text) is not None:
+                rating += 0.1
+            if tsql_go_re.search(text) is not None:
+                rating += 0.1
+        return rating
+
+
 class MySqlLexer(RegexLexer):
     """
     Special lexer for MySQL.
@@ -595,7 +595,7 @@ class MySqlLexer(RegexLexer):
     tokens = {
         'root': [
             (r'\s+', Text),
-            (r'(#|--\s+).*\n?', Comment.Single), 
+            (r'(#|--\s+).*\n?', Comment.Single),
             (r'/\*', Comment.Multiline, 'multiline-comments'),
             (r'[0-9]+', Number.Integer),
             (r'[0-9]*\.[0-9]+(e[+-][0-9]+)', Number.Float),
@@ -654,25 +654,25 @@ class MySqlLexer(RegexLexer):
         ]
     }
 
-    def analyse_text(text): 
-        rating = 0 
-        name_between_backtick_count = len( 
+    def analyse_text(text):
+        rating = 0
+        name_between_backtick_count = len(
             name_between_backtick_re.findall(text))
-        name_between_bracket_count = len( 
-            name_between_bracket_re.findall(text)) 
-        # Same logic as above in the TSQL analysis 
-        dialect_name_count = name_between_backtick_count + name_between_bracket_count 
+        name_between_bracket_count = len(
+            name_between_bracket_re.findall(text))
+        # Same logic as above in the TSQL analysis
+        dialect_name_count = name_between_backtick_count + name_between_bracket_count
         if dialect_name_count >= 1 and \
            name_between_backtick_count >= 2 * name_between_bracket_count:
-            # Found at least twice as many `name` as [name]. 
-            rating += 0.5 
-        elif name_between_backtick_count > name_between_bracket_count: 
-            rating += 0.2 
-        elif name_between_backtick_count > 0: 
-            rating += 0.1 
-        return rating 
+            # Found at least twice as many `name` as [name].
+            rating += 0.5
+        elif name_between_backtick_count > name_between_bracket_count:
+            rating += 0.2
+        elif name_between_backtick_count > 0:
+            rating += 0.1
+        return rating
 
- 
+
 class SqliteConsoleLexer(Lexer):
     """
     Lexer for example sessions using sqlite3.

@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #include <aws/core/http/URI.h>
 
@@ -131,8 +131,8 @@ Aws::String URI::URLEncodePathRFC3986(const Aws::String& path)
                 // RFC 3986 §2.2 Reserved characters
                 // NOTE: this implementation does not accurately implement the RFC on purpose to accommodate for
                 // discrepancies in the implementations of URL encoding between AWS services for legacy reasons.
-                case '$': case '&': case ',': 
-                case ':': case '=': case '@': 
+                case '$': case '&': case ',':
+                case ':': case '=': case '@':
                     ss << c;
                     break;
                 default:
@@ -161,42 +161,42 @@ Aws::String URI::URLEncodePath(const Aws::String& path)
     }
 
     //if the last character was also a slash, then add that back here.
-    if (path.length() > 0 && path[path.length() - 1] == '/') 
+    if (path.length() > 0 && path[path.length() - 1] == '/')
     {
         ss << '/';
     }
 
-    if (path.length() > 0 && path[0] != '/') 
-    { 
-        return ss.str().substr(1); 
-    } 
-    else 
-    { 
-        return ss.str(); 
-    } 
+    if (path.length() > 0 && path[0] != '/')
+    {
+        return ss.str().substr(1);
+    }
+    else
+    {
+        return ss.str();
+    }
 }
 
 void URI::SetPath(const Aws::String& value)
-{ 
-    const Aws::Vector<Aws::String> pathParts = StringUtils::Split(value, '/'); 
-    Aws::String path; 
-    path.reserve(value.length() + 1/* in case we have to append slash before the path. */); 
- 
-    for (const auto& segment : pathParts) 
-    { 
-        path.push_back('/'); 
-        path.append(segment); 
-    } 
- 
-    if (value.back() == '/') 
-    { 
-        path.push_back('/'); 
-    } 
-    m_path = std::move(path); 
+{
+    const Aws::Vector<Aws::String> pathParts = StringUtils::Split(value, '/');
+    Aws::String path;
+    path.reserve(value.length() + 1/* in case we have to append slash before the path. */);
+
+    for (const auto& segment : pathParts)
+    {
+        path.push_back('/');
+        path.append(segment);
+    }
+
+    if (value.back() == '/')
+    {
+        path.push_back('/');
+    }
+    m_path = std::move(path);
 }
 
 //ugh, this isn't even part of the canonicalization spec. It is part of how our services have implemented their signers though....
-//it doesn't really hurt anything to reorder it though, so go ahead and sort the values for parameters with the same key 
+//it doesn't really hurt anything to reorder it though, so go ahead and sort the values for parameters with the same key
 void InsertValueOrderedParameter(QueryStringParameterCollection& queryParams, const Aws::String& key, const Aws::String& value)
 {
     auto entriesAtKey = queryParams.equal_range(key);
@@ -204,7 +204,7 @@ void InsertValueOrderedParameter(QueryStringParameterCollection& queryParams, co
     {
         if (entry->second > value)
         {
-            queryParams.emplace_hint(entry, key, value); 
+            queryParams.emplace_hint(entry, key, value);
             return;
         }
     }
@@ -275,7 +275,7 @@ void URI::CanonicalizeQueryString()
         queryStringStream << "?";
     }
 
-    if(m_queryString.find('=') != std::string::npos) 
+    if(m_queryString.find('=') != std::string::npos)
     {
         for (QueryStringParameterCollection::iterator iter = sortedParameters.begin();
              iter != sortedParameters.end(); ++iter)
@@ -320,7 +320,7 @@ void URI::SetQueryString(const Aws::String& str)
     m_queryString = "";
 
     if (str.empty()) return;
- 
+
     if (str.front() != '?')
     {
         m_queryString.append("?").append(str);
@@ -328,7 +328,7 @@ void URI::SetQueryString(const Aws::String& str)
     else
     {
        m_queryString = str;
-    } 
+    }
 }
 
 Aws::String URI::GetURIString(bool includeQueryString) const

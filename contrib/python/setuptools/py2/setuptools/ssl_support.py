@@ -2,7 +2,7 @@ import os
 import socket
 import atexit
 import re
-import functools 
+import functools
 
 from setuptools.extern.six.moves import urllib, http_client, map, filter
 
@@ -26,7 +26,7 @@ cert_paths = """
 /etc/ssl/cert.pem
 /System/Library/OpenSSL/certs/cert.pem
 /usr/local/share/certs/ca-root-nss.crt
-/etc/ssl/ca-bundle.pem 
+/etc/ssl/ca-bundle.pem
 """.strip().split()
 
 try:
@@ -49,13 +49,13 @@ except ImportError:
         match_hostname = None
 
 if not CertificateError:
- 
+
     class CertificateError(ValueError):
         pass
 
- 
+
 if not match_hostname:
- 
+
     def _dnsname_match(dn, hostname, max_wildcards=1):
         """Matching according to RFC 6125, section 6.4.3
 
@@ -164,7 +164,7 @@ class VerifyingHTTPSHandler(HTTPSHandler):
 
 class VerifyingHTTPSConn(HTTPSConnection):
     """Simple verifying connection: no auth, subclasses, timeouts, etc."""
- 
+
     def __init__(self, host, ca_bundle, **kw):
         HTTPSConnection.__init__(self, host, **kw)
         self.ca_bundle = ca_bundle
@@ -201,7 +201,7 @@ class VerifyingHTTPSConn(HTTPSConnection):
             self.sock.close()
             raise
 
- 
+
 def opener_for(ca_bundle=None):
     """Get a urlopen() replacement that uses ca_bundle for verification"""
     return urllib.request.build_opener(
@@ -209,52 +209,52 @@ def opener_for(ca_bundle=None):
     ).open
 
 
-# from jaraco.functools 
-def once(func): 
-    @functools.wraps(func) 
-    def wrapper(*args, **kwargs): 
-        if not hasattr(func, 'always_returns'): 
-            func.always_returns = func(*args, **kwargs) 
-        return func.always_returns 
-    return wrapper 
+# from jaraco.functools
+def once(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if not hasattr(func, 'always_returns'):
+            func.always_returns = func(*args, **kwargs)
+        return func.always_returns
+    return wrapper
 
- 
-@once 
+
+@once
 def get_win_certfile():
     try:
-        import wincertstore 
+        import wincertstore
     except ImportError:
         return None
 
-    class CertFile(wincertstore.CertFile): 
-        def __init__(self): 
-            super(CertFile, self).__init__() 
+    class CertFile(wincertstore.CertFile):
+        def __init__(self):
+            super(CertFile, self).__init__()
             atexit.register(self.close)
 
         def close(self):
             try:
-                super(CertFile, self).close() 
+                super(CertFile, self).close()
             except OSError:
                 pass
 
-    _wincerts = CertFile() 
-    _wincerts.addstore('CA') 
-    _wincerts.addstore('ROOT') 
+    _wincerts = CertFile()
+    _wincerts.addstore('CA')
+    _wincerts.addstore('ROOT')
     return _wincerts.name
 
 
 def find_ca_bundle():
     """Return an existing CA bundle path, or None"""
-    extant_cert_paths = filter(os.path.isfile, cert_paths) 
-    return ( 
-        get_win_certfile() 
-        or next(extant_cert_paths, None) 
-        or _certifi_where() 
-    ) 
- 
- 
-def _certifi_where(): 
+    extant_cert_paths = filter(os.path.isfile, cert_paths)
+    return (
+        get_win_certfile()
+        or next(extant_cert_paths, None)
+        or _certifi_where()
+    )
+
+
+def _certifi_where():
     try:
-        return __import__('certifi').where() 
+        return __import__('certifi').where()
     except (ImportError, ResolutionError, ExtractionError):
-        pass 
+        pass

@@ -19,14 +19,14 @@
 #ifndef ABSL_BASE_INTERNAL_RAW_LOGGING_H_
 #define ABSL_BASE_INTERNAL_RAW_LOGGING_H_
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/config.h" 
+#include "y_absl/base/config.h"
 #include "y_absl/base/internal/atomic_hook.h"
 #include "y_absl/base/log_severity.h"
 #include "y_absl/base/macros.h"
-#include "y_absl/base/optimization.h" 
+#include "y_absl/base/optimization.h"
 #include "y_absl/base/port.h"
 
 // This is similar to LOG(severity) << format..., but
@@ -99,7 +99,7 @@
   ::y_absl::NormalizeLogSeverity(severity)
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace raw_logging_internal {
 
 // Helper function to implement ABSL_RAW_LOG
@@ -160,7 +160,7 @@ using LogPrefixHook = bool (*)(y_absl::LogSeverity severity, const char* file,
 //
 // 'file' and 'line' are the file and line number where the ABSL_RAW_LOG macro
 // was located.
-// The NUL-terminated logged message lives in the buffer between 'buf_start' 
+// The NUL-terminated logged message lives in the buffer between 'buf_start'
 // and 'buf_end'.  'prefix_end' points to the first non-prefix character of the
 // buffer (as written by the LogPrefixHook.)
 using AbortHook = void (*)(const char* file, int line, const char* buf_start,
@@ -175,8 +175,8 @@ using InternalLogFunction = void (*)(y_absl::LogSeverity severity,
                                      const TString& message);
 
 ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES ABSL_DLL extern base_internal::AtomicHook<
-    InternalLogFunction> 
-    internal_log_function; 
+    InternalLogFunction>
+    internal_log_function;
 
 // Registers hooks of the above types.  Only a single hook of each type may be
 // registered.  It is an error to call these functions multiple times with
@@ -189,7 +189,7 @@ void RegisterAbortHook(AbortHook func);
 void RegisterInternalLogFunction(InternalLogFunction func);
 
 }  // namespace raw_logging_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_RAW_LOGGING_H_

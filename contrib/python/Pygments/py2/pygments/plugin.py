@@ -32,7 +32,7 @@
         yourfilter = yourfilter:YourFilter
 
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 LEXER_ENTRY_POINT = 'pygments.lexers'
@@ -41,30 +41,30 @@ STYLE_ENTRY_POINT = 'pygments.styles'
 FILTER_ENTRY_POINT = 'pygments.filters'
 
 
-def iter_entry_points(group_name): 
-    try: 
-        import pkg_resources 
-    except (ImportError, IOError): 
-        return [] 
- 
-    return pkg_resources.iter_entry_points(group_name) 
- 
- 
+def iter_entry_points(group_name):
+    try:
+        import pkg_resources
+    except (ImportError, IOError):
+        return []
+
+    return pkg_resources.iter_entry_points(group_name)
+
+
 def find_plugin_lexers():
-    for entrypoint in iter_entry_points(LEXER_ENTRY_POINT): 
+    for entrypoint in iter_entry_points(LEXER_ENTRY_POINT):
         yield entrypoint.load()
 
 
 def find_plugin_formatters():
-    for entrypoint in iter_entry_points(FORMATTER_ENTRY_POINT): 
+    for entrypoint in iter_entry_points(FORMATTER_ENTRY_POINT):
         yield entrypoint.name, entrypoint.load()
 
 
 def find_plugin_styles():
-    for entrypoint in iter_entry_points(STYLE_ENTRY_POINT): 
+    for entrypoint in iter_entry_points(STYLE_ENTRY_POINT):
         yield entrypoint.name, entrypoint.load()
 
 
 def find_plugin_filters():
-    for entrypoint in iter_entry_points(FILTER_ENTRY_POINT): 
+    for entrypoint in iter_entry_points(FILTER_ENTRY_POINT):
         yield entrypoint.name, entrypoint.load()

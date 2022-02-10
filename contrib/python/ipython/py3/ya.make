@@ -34,8 +34,8 @@ IF (OS_DARWIN)
     )
 ENDIF()
 
-NO_LINT() 
- 
+NO_LINT()
+
 NO_CHECK_IMPORTS(
     IPython.*
 )
@@ -43,7 +43,7 @@ NO_CHECK_IMPORTS(
 PY_SRCS(
     TOP_LEVEL
     IPython/__init__.py
-    IPython/__main__.py 
+    IPython/__main__.py
     IPython/config.py
     IPython/consoleapp.py
     IPython/core/__init__.py

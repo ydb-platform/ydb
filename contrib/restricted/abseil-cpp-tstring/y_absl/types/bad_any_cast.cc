@@ -22,7 +22,7 @@
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 bad_any_cast::~bad_any_cast() = default;
 
@@ -40,7 +40,7 @@ void ThrowBadAnyCast() {
 }
 
 }  // namespace any_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_USES_STD_ANY

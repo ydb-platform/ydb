@@ -1,28 +1,28 @@
-/* 
- * 
- * Copyright 2016 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#include "test/cpp/util/cli_credentials.h" 
- 
-#include <gflags/gflags.h> 
+/*
+ *
+ * Copyright 2016 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#include "test/cpp/util/cli_credentials.h"
+
+#include <gflags/gflags.h>
 #include <grpc/slice.h>
 #include <grpc/support/log.h>
 #include <grpcpp/impl/codegen/slice.h>
- 
+
 #include "src/core/lib/iomgr/load_file.h"
 
 DEFINE_bool(
@@ -31,8 +31,8 @@ DEFINE_bool(
 DEFINE_bool(use_auth, false,
             "Whether to create default google credentials. Deprecated. Use "
             "--channel_creds_type=gdc.");
-DEFINE_string( 
-    access_token, "", 
+DEFINE_string(
+    access_token, "",
     "The access token that will be sent to the server to authenticate RPCs. "
     "Deprecated. Use --call_creds=access_token=<token>.");
 DEFINE_string(
@@ -59,12 +59,12 @@ DEFINE_string(
     call_creds, "",
     "Call credentials to use: none (default), or access_token=<token>. If "
     "provided, the call creds are composited on top of channel creds.");
- 
-namespace grpc { 
-namespace testing { 
- 
+
+namespace grpc {
+namespace testing {
+
 namespace {
- 
+
 const char ACCESS_TOKEN_PREFIX[] = "access_token=";
 constexpr int ACCESS_TOKEN_PREFIX_LEN =
     sizeof(ACCESS_TOKEN_PREFIX) / sizeof(*ACCESS_TOKEN_PREFIX) - 1;
@@ -77,10 +77,10 @@ bool IsAccessToken(const TString& auth) {
 TString AccessToken(const TString& auth) {
   if (!IsAccessToken(auth)) {
     return "";
-  } 
+  }
   return TString(auth.c_str(), ACCESS_TOKEN_PREFIX_LEN);
 }
- 
+
 }  // namespace
 
 TString CliCredentials::GetDefaultChannelCredsType() const {
@@ -138,7 +138,7 @@ CliCredentials::GetChannelCredentials() const {
     }
     return grpc::SslCredentials(ssl_creds_options);
   } else if (FLAGS_channel_creds_type.compare("gdc") == 0) {
-    return grpc::GoogleDefaultCredentials(); 
+    return grpc::GoogleDefaultCredentials();
   } else if (FLAGS_channel_creds_type.compare("alts") == 0) {
     return grpc::experimental::AltsCredentials(
         grpc::experimental::AltsCredentialsOptions());
@@ -152,19 +152,19 @@ CliCredentials::GetChannelCredentials() const {
               "--local_connect_type=%s invalid; must be local_tcp or uds.\n",
               FLAGS_local_connect_type.c_str());
     }
-  } 
+  }
   fprintf(stderr,
           "--channel_creds_type=%s invalid; must be insecure, ssl, gdc, "
           "alts, or local.\n",
           FLAGS_channel_creds_type.c_str());
   return std::shared_ptr<grpc::ChannelCredentials>();
 }
- 
+
 std::shared_ptr<grpc::CallCredentials> CliCredentials::GetCallCredentials()
     const {
   if (IsAccessToken(FLAGS_call_creds.c_str())) {
     return grpc::AccessTokenCredentials(AccessToken(FLAGS_call_creds.c_str()));
-  } 
+  }
   if (FLAGS_call_creds.compare("none") == 0) {
     // Nothing to do; creds, if any, are baked into the channel.
     return std::shared_ptr<grpc::CallCredentials>();
@@ -175,7 +175,7 @@ std::shared_ptr<grpc::CallCredentials> CliCredentials::GetCallCredentials()
           FLAGS_call_creds.c_str());
   return std::shared_ptr<grpc::CallCredentials>();
 }
- 
+
 std::shared_ptr<grpc::ChannelCredentials> CliCredentials::GetCredentials()
     const {
   if (FLAGS_call_creds.empty()) {
@@ -214,15 +214,15 @@ std::shared_ptr<grpc::ChannelCredentials> CliCredentials::GetCredentials()
   return (channel_creds == nullptr || call_creds == nullptr)
              ? channel_creds
              : grpc::CompositeChannelCredentials(channel_creds, call_creds);
-} 
- 
+}
+
 const TString CliCredentials::GetCredentialUsage() const {
   return "    --enable_ssl             ; Set whether to use ssl "
          "(deprecated)\n"
-         "    --use_auth               ; Set whether to create default google" 
-         " credentials\n" 
+         "    --use_auth               ; Set whether to create default google"
+         " credentials\n"
          "                             ; (deprecated)\n"
-         "    --access_token           ; Set the access token in metadata," 
+         "    --access_token           ; Set the access token in metadata,"
          " overrides --use_auth\n"
          "                             ; (deprecated)\n"
          "    --ssl_target             ; Set server host for ssl validation\n"
@@ -233,7 +233,7 @@ const TString CliCredentials::GetCredentialUsage() const {
          "local\n"
          "    --call_creds             ; Set to none, or"
          " access_token=<token>\n";
-} 
+}
 
 const TString CliCredentials::GetSslTargetNameOverride() const {
   bool use_ssl = FLAGS_channel_creds_type.compare("ssl") == 0 ||
@@ -241,5 +241,5 @@ const TString CliCredentials::GetSslTargetNameOverride() const {
   return use_ssl ? FLAGS_ssl_target : "";
 }
 
-}  // namespace testing 
-}  // namespace grpc 
+}  // namespace testing
+}  // namespace grpc

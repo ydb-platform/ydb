@@ -6,18 +6,18 @@ requests.exceptions
 
 This module contains the set of Requests' exceptions.
 """
-from urllib3.exceptions import HTTPError as BaseHTTPError 
+from urllib3.exceptions import HTTPError as BaseHTTPError
 
 from .compat import JSONDecodeError as CompatJSONDecodeError
 
 
 class RequestException(IOError):
     """There was an ambiguous exception that occurred while handling your
-    request. 
-    """ 
+    request.
+    """
 
     def __init__(self, *args, **kwargs):
-        """Initialize RequestException with `request` and `response` objects.""" 
+        """Initialize RequestException with `request` and `response` objects."""
         response = kwargs.pop('response', None)
         self.response = response
         self.request = kwargs.pop('request', None)
@@ -88,13 +88,13 @@ class InvalidSchema(RequestException, ValueError):
 
 
 class InvalidURL(RequestException, ValueError):
-    """The URL provided was somehow invalid.""" 
+    """The URL provided was somehow invalid."""
 
 
-class InvalidHeader(RequestException, ValueError): 
-    """The header value provided was somehow invalid.""" 
- 
- 
+class InvalidHeader(RequestException, ValueError):
+    """The header value provided was somehow invalid."""
+
+
 class InvalidProxyURL(InvalidURL):
     """The proxy URL provided is invalid."""
 
@@ -113,21 +113,21 @@ class StreamConsumedError(RequestException, TypeError):
 
 class RetryError(RequestException):
     """Custom retries logic failed"""
- 
- 
-class UnrewindableBodyError(RequestException): 
+
+
+class UnrewindableBodyError(RequestException):
     """Requests encountered an error when trying to rewind a body."""
- 
-# Warnings 
- 
- 
-class RequestsWarning(Warning): 
-    """Base warning for Requests.""" 
- 
- 
-class FileModeWarning(RequestsWarning, DeprecationWarning): 
-    """A file was opened in text mode, but Requests determined its binary length.""" 
- 
- 
-class RequestsDependencyWarning(RequestsWarning): 
-    """An imported dependency doesn't match the expected version range.""" 
+
+# Warnings
+
+
+class RequestsWarning(Warning):
+    """Base warning for Requests."""
+
+
+class FileModeWarning(RequestsWarning, DeprecationWarning):
+    """A file was opened in text mode, but Requests determined its binary length."""
+
+
+class RequestsDependencyWarning(RequestsWarning):
+    """An imported dependency doesn't match the expected version range."""

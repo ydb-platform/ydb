@@ -12,7 +12,7 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
-#include "y_absl/base/config.h" 
+#include "y_absl/base/config.h"
 #include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
 
 #if defined(__ANDROID__)
@@ -24,7 +24,7 @@
 
 #if defined(__APPLE__)
 #include <CoreFoundation/CFTimeZone.h>
- 
+
 #include <vector>
 #endif
 
@@ -37,13 +37,13 @@
 
 #include <cstdlib>
 #include <cstring>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include "time_zone_fixed.h"
 #include "time_zone_impl.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
 
@@ -76,7 +76,7 @@ int __system_property_get(const char* name, char* value) {
 }  // namespace
 #endif
 
-TString time_zone::name() const { return effective_impl().Name(); } 
+TString time_zone::name() const { return effective_impl().Name(); }
 
 time_zone::absolute_lookup time_zone::lookup(
     const time_point<seconds>& tp) const {
@@ -97,7 +97,7 @@ bool time_zone::prev_transition(const time_point<seconds>& tp,
   return effective_impl().PrevTransition(tp, trans);
 }
 
-TString time_zone::version() const { return effective_impl().Version(); } 
+TString time_zone::version() const { return effective_impl().Version(); }
 
 TString time_zone::description() const {
   return effective_impl().Description();
@@ -232,5 +232,5 @@ time_zone local_time_zone() {
 
 }  // namespace cctz
 }  // namespace time_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

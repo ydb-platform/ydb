@@ -38,7 +38,7 @@
    3. USE_GNUTLS
    4. USE_NSS
    5. USE_MBEDTLS
-   6. USE_SECTRANSP 
+   6. USE_SECTRANSP
    7. USE_OS400CRYPTO
    8. USE_WIN32_CRYPTO
 
@@ -91,9 +91,9 @@
 #elif defined(USE_MBEDTLS)
 
 #  error #include <mbedtls/des.h>
-#  include "curl_md4.h" 
+#  include "curl_md4.h"
 
-#elif defined(USE_SECTRANSP) 
+#elif defined(USE_SECTRANSP)
 
 #  include <CommonCrypto/CommonCryptor.h>
 #  include <CommonCrypto/CommonDigest.h>
@@ -115,7 +115,7 @@
 #include "warnless.h"
 #include "curl_endian.h"
 #include "curl_des.h"
-#include "curl_md4.h" 
+#include "curl_md4.h"
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
 #include "curl_memory.h"
@@ -216,7 +216,7 @@ static bool encrypt_des(const unsigned char *in, unsigned char *out,
   bool rv = FALSE;
 
   /* use internal slot for DES encryption (requires NSS to be initialized) */
-  PK11SlotInfo *slot = PK11_GetInternalKeySlot(); 
+  PK11SlotInfo *slot = PK11_GetInternalKeySlot();
   if(!slot)
     return FALSE;
 
@@ -280,7 +280,7 @@ static bool encrypt_des(const unsigned char *in, unsigned char *out,
   return mbedtls_des_crypt_ecb(&ctx, in, out) == 0;
 }
 
-#elif defined(USE_SECTRANSP) 
+#elif defined(USE_SECTRANSP)
 
 static bool encrypt_des(const unsigned char *in, unsigned char *out,
                         const unsigned char *key_56)
@@ -427,7 +427,7 @@ void Curl_ntlm_core_lm_resp(const unsigned char *keys,
   setup_des_key(keys + 14, &des);
   gcry_cipher_encrypt(des, results + 16, 8, plaintext, 8);
   gcry_cipher_close(des);
-#elif defined(USE_NSS) || defined(USE_MBEDTLS) || defined(USE_SECTRANSP) \ 
+#elif defined(USE_NSS) || defined(USE_MBEDTLS) || defined(USE_SECTRANSP) \
   || defined(USE_OS400CRYPTO) || defined(USE_WIN32_CRYPTO)
   encrypt_des(plaintext, results, keys);
   encrypt_des(plaintext, results + 8, keys + 7);
@@ -491,7 +491,7 @@ CURLcode Curl_ntlm_core_mk_lm_hash(struct Curl_easy *data,
     setup_des_key(pw + 7, &des);
     gcry_cipher_encrypt(des, lmbuffer + 8, 8, magic, 8);
     gcry_cipher_close(des);
-#elif defined(USE_NSS) || defined(USE_MBEDTLS) || defined(USE_SECTRANSP) \ 
+#elif defined(USE_NSS) || defined(USE_MBEDTLS) || defined(USE_SECTRANSP) \
   || defined(USE_OS400CRYPTO) || defined(USE_WIN32_CRYPTO)
     encrypt_des(magic, lmbuffer, pw);
     encrypt_des(magic, lmbuffer + 8, pw + 7);
@@ -541,7 +541,7 @@ CURLcode Curl_ntlm_core_mk_nt_hash(struct Curl_easy *data,
   CURLcode result;
   if(len > SIZE_T_MAX/2) /* avoid integer overflow */
     return CURLE_OUT_OF_MEMORY;
-  pw = len ? malloc(len * 2) : (unsigned char *)strdup(""); 
+  pw = len ? malloc(len * 2) : (unsigned char *)strdup("");
   if(!pw)
     return CURLE_OUT_OF_MEMORY;
 
@@ -555,10 +555,10 @@ CURLcode Curl_ntlm_core_mk_nt_hash(struct Curl_easy *data,
   if(result)
     return result;
 
-  /* Create NT hashed password. */ 
-  Curl_md4it(ntbuffer, pw, 2 * len); 
+  /* Create NT hashed password. */
+  Curl_md4it(ntbuffer, pw, 2 * len);
 
-  memset(ntbuffer + 16, 0, 21 - 16); 
+  memset(ntbuffer + 16, 0, 21 - 16);
 
   free(pw);
 
@@ -680,7 +680,7 @@ CURLcode Curl_ntlm_core_mk_ntlmv2_resp(unsigned char *ntlmv2hash,
   /* Concatenate the Type 2 challenge with the BLOB and do HMAC MD5 */
   memcpy(ptr + 8, &ntlm->nonce[0], 8);
   result = Curl_hmacit(Curl_HMAC_MD5, ntlmv2hash, HMAC_MD5_LENGTH, ptr + 8,
-                    NTLMv2_BLOB_LEN + 8, hmac_output); 
+                    NTLMv2_BLOB_LEN + 8, hmac_output);
   if(result) {
     free(ptr);
     return result;

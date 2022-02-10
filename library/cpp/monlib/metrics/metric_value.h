@@ -16,7 +16,7 @@ namespace NMonitoring {
         template <typename T>
         T FromFloatSafe(double d) {
             static_assert(std::is_integral<T>::value, "this function only converts floats to integers");
-            Y_ENSURE(::IsValidFloat(d) && d >= Min<T>() && d <= MaxFloor<T>(), "Cannot convert " << d << " to an integer value"); 
+            Y_ENSURE(::IsValidFloat(d) && d >= Min<T>() && d <= MaxFloor<T>(), "Cannot convert " << d << " to an integer value");
             return static_cast<T>(d);
         }
 

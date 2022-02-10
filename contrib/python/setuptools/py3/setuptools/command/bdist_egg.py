@@ -8,7 +8,7 @@ from types import CodeType
 import sys
 import os
 import re
-import textwrap 
+import textwrap
 import marshal
 
 from pkg_resources import get_build_platform, Distribution, ensure_directory
@@ -132,7 +132,7 @@ class bdist_egg(Command):
             self.distribution.data_files.append(item)
 
         try:
-            log.info("installing package data to %s", self.bdist_dir) 
+            log.info("installing package data to %s", self.bdist_dir)
             self.call_command('install_data', force=0, root=None)
         finally:
             self.distribution.data_files = old
@@ -155,7 +155,7 @@ class bdist_egg(Command):
         self.run_command("egg_info")
         # We run install_lib before install_data, because some data hacks
         # pull their data path from the install_lib command.
-        log.info("installing library code to %s", self.bdist_dir) 
+        log.info("installing library code to %s", self.bdist_dir)
         instcmd = self.get_finalized_command('install')
         old_root = instcmd.root
         instcmd.root = None
@@ -172,7 +172,7 @@ class bdist_egg(Command):
             pyfile = os.path.join(self.bdist_dir, strip_module(filename) +
                                   '.py')
             self.stubs.append(pyfile)
-            log.info("creating stub loader for %s", ext_name) 
+            log.info("creating stub loader for %s", ext_name)
             if not self.dry_run:
                 write_stub(os.path.basename(ext_name), pyfile)
             to_compile.append(pyfile)
@@ -189,14 +189,14 @@ class bdist_egg(Command):
         self.mkpath(egg_info)
         if self.distribution.scripts:
             script_dir = os.path.join(egg_info, 'scripts')
-            log.info("installing scripts to %s", script_dir) 
+            log.info("installing scripts to %s", script_dir)
             self.call_command('install_scripts', install_dir=script_dir,
                               no_ep=1)
 
         self.copy_metadata_to(egg_info)
         native_libs = os.path.join(egg_info, "native_libs.txt")
         if all_outputs:
-            log.info("writing %s", native_libs) 
+            log.info("writing %s", native_libs)
             if not self.dry_run:
                 ensure_directory(native_libs)
                 libs_file = open(native_libs, 'wt')
@@ -204,7 +204,7 @@ class bdist_egg(Command):
                 libs_file.write('\n')
                 libs_file.close()
         elif os.path.isfile(native_libs):
-            log.info("removing %s", native_libs) 
+            log.info("removing %s", native_libs)
             if not self.dry_run:
                 os.unlink(native_libs)
 
@@ -413,7 +413,7 @@ def can_scan():
     log.warn("Please ask the author to include a 'zip_safe'"
              " setting (either True or False) in the package's setup.py")
 
- 
+
 # Attribute names of options for commands that might need to be convinced to
 # install to the egg build directory
 
@@ -442,7 +442,7 @@ def make_zipfile(zip_filename, base_dir, verbose=0, dry_run=0, compress=True,
                 p = path[len(base_dir) + 1:]
                 if not dry_run:
                     z.write(path, p)
-                log.debug("adding '%s'", p) 
+                log.debug("adding '%s'", p)
 
     compression = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
     if not dry_run:

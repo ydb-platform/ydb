@@ -24,16 +24,16 @@
 #include <initializer_list>
 #include <limits>
 #include <ostream>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <unordered_set>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 using CC = FormatConversionCharInternal;
-using LM = LengthMod; 
- 
+using LM = LengthMod;
+
 // Abbreviations to fit in the table below.
 constexpr auto f_sign = Flags::kSignCol;
 constexpr auto f_alt = Flags::kAlt;
@@ -209,11 +209,11 @@ const char *ConsumeConversion(const char *pos, const char *const end,
     using str_format_internal::LengthMod;
     LengthMod length_mod = tag.as_length();
     ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
-    if (c == 'h' && length_mod == LengthMod::h) { 
-      conv->length_mod = LengthMod::hh; 
+    if (c == 'h' && length_mod == LengthMod::h) {
+      conv->length_mod = LengthMod::hh;
       ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
-    } else if (c == 'l' && length_mod == LengthMod::l) { 
-      conv->length_mod = LengthMod::ll; 
+    } else if (c == 'l' && length_mod == LengthMod::l) {
+      conv->length_mod = LengthMod::ll;
       ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
     } else {
       conv->length_mod = length_mod;
@@ -232,32 +232,32 @@ const char *ConsumeConversion(const char *pos, const char *const end,
 
 }  // namespace
 
-TString LengthModToString(LengthMod v) { 
-  switch (v) { 
-    case LengthMod::h: 
-      return "h"; 
-    case LengthMod::hh: 
-      return "hh"; 
-    case LengthMod::l: 
-      return "l"; 
-    case LengthMod::ll: 
-      return "ll"; 
-    case LengthMod::L: 
-      return "L"; 
-    case LengthMod::j: 
-      return "j"; 
-    case LengthMod::z: 
-      return "z"; 
-    case LengthMod::t: 
-      return "t"; 
-    case LengthMod::q: 
-      return "q"; 
-    case LengthMod::none: 
-      return ""; 
-  } 
-  return ""; 
-} 
- 
+TString LengthModToString(LengthMod v) {
+  switch (v) {
+    case LengthMod::h:
+      return "h";
+    case LengthMod::hh:
+      return "hh";
+    case LengthMod::l:
+      return "l";
+    case LengthMod::ll:
+      return "ll";
+    case LengthMod::L:
+      return "L";
+    case LengthMod::j:
+      return "j";
+    case LengthMod::z:
+      return "z";
+    case LengthMod::t:
+      return "t";
+    case LengthMod::q:
+      return "q";
+    case LengthMod::none:
+      return "";
+  }
+  return "";
+}
+
 const char *ConsumeUnboundConversion(const char *p, const char *end,
                                      UnboundConversion *conv, int *next_arg) {
   if (*next_arg < 0) return ConsumeConversion<true>(p, end, conv, next_arg);
@@ -327,13 +327,13 @@ bool ParsedFormatBase::MatchesConversions(
     if (conv.width.is_from_arg() &&
         !add_if_valid_conv(conv.width.get_from_arg(), '*'))
       return false;
-    if (!add_if_valid_conv(conv.arg_position, 
-                           FormatConversionCharToChar(conv.conv))) 
-      return false; 
+    if (!add_if_valid_conv(conv.arg_position,
+                           FormatConversionCharToChar(conv.conv)))
+      return false;
   }
   return used.size() == convs.size() || allow_ignored;
 }
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

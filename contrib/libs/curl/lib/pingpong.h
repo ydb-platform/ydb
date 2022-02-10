@@ -81,8 +81,8 @@ struct pingpong {
  * called repeatedly until done. Set 'wait' to make it wait a while on the
  * socket if there's no traffic.
  */
-CURLcode Curl_pp_statemach(struct pingpong *pp, bool block, 
-                           bool disconnecting); 
+CURLcode Curl_pp_statemach(struct pingpong *pp, bool block,
+                           bool disconnecting);
 
 /* initialize stuff to prepare for reading a fresh new response */
 void Curl_pp_init(struct pingpong *pp);
@@ -138,7 +138,7 @@ CURLcode Curl_pp_flushsend(struct pingpong *pp);
 /* call this when a pingpong connection is disconnected */
 CURLcode Curl_pp_disconnect(struct pingpong *pp);
 
-int Curl_pp_getsock(struct pingpong *pp, curl_socket_t *socks); 
+int Curl_pp_getsock(struct pingpong *pp, curl_socket_t *socks);
 
 
 /***********************************************************************

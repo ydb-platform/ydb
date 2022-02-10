@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #pragma once
 
@@ -35,7 +35,7 @@ namespace Aws
          */
         enum class TransferLibType
         {
-            DEFAULT_CLIENT = 0, 
+            DEFAULT_CLIENT = 0,
             CURL_CLIENT,
             WIN_INET_CLIENT,
             WIN_HTTP_CLIENT

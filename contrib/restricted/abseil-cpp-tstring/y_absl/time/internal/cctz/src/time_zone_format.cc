@@ -13,18 +13,18 @@
 //   limitations under the License.
 
 #if !defined(HAS_STRPTIME)
-#if !defined(_MSC_VER) && !defined(__MINGW32__) 
-#define HAS_STRPTIME 1  // assume everyone has strptime() except windows 
+#if !defined(_MSC_VER) && !defined(__MINGW32__)
+#define HAS_STRPTIME 1  // assume everyone has strptime() except windows
 #endif
-#endif 
+#endif
 
 #if defined(HAS_STRPTIME) && HAS_STRPTIME
-#if !defined(_XOPEN_SOURCE) 
-#define _XOPEN_SOURCE  // Definedness suffices for strptime. 
+#if !defined(_XOPEN_SOURCE)
+#define _XOPEN_SOURCE  // Definedness suffices for strptime.
 #endif
-#endif 
+#endif
 
-#include "y_absl/base/config.h" 
+#include "y_absl/base/config.h"
 #include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
 
 // Include time.h directly since, by C++ standards, ctime doesn't have to
@@ -38,7 +38,7 @@
 #include <cstring>
 #include <ctime>
 #include <limits>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <vector>
 #if !HAS_STRPTIME
 #include <iomanip>
@@ -49,7 +49,7 @@
 #include "time_zone_if.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
 namespace detail {
@@ -555,9 +555,9 @@ TString format(const TString& format, const time_point<seconds>& tp,
           bp = ep;
           if (n > 0) {
             if (n > kDigits10_64) n = kDigits10_64;
-            bp = Format64(bp, n, 
-                          (n > 15) ? fs.count() * kExp10[n - 15] 
-                                   : fs.count() / kExp10[15 - n]); 
+            bp = Format64(bp, n,
+                          (n > 15) ? fs.count() * kExp10[n - 15]
+                                   : fs.count() / kExp10[15 - n]);
             if (*np == 'S') *--bp = '.';
           }
           if (*np == 'S') bp = Format02d(bp, al.cs.second());
@@ -813,9 +813,9 @@ bool parse(const TString& format, const TString& input,
         data = ParseZone(data, &zone);
         continue;
       case 's':
-        data = 
-            ParseInt(data, 0, std::numeric_limits<std::int_fast64_t>::min(), 
-                     std::numeric_limits<std::int_fast64_t>::max(), &percent_s); 
+        data =
+            ParseInt(data, 0, std::numeric_limits<std::int_fast64_t>::min(),
+                     std::numeric_limits<std::int_fast64_t>::max(), &percent_s);
         if (data != nullptr) saw_percent_s = true;
         continue;
       case ':':
@@ -1025,5 +1025,5 @@ bool parse(const TString& format, const TString& input,
 }  // namespace detail
 }  // namespace cctz
 }  // namespace time_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

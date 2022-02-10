@@ -1,15 +1,15 @@
 /*
  * Copyright (c) Yann Collet, Facebook, Inc.
- * All rights reserved. 
- * 
+ * All rights reserved.
+ *
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
- */ 
+ */
 
-#ifndef ZSTD_V01_H_28739879432 
-#define ZSTD_V01_H_28739879432 
+#ifndef ZSTD_V01_H_28739879432
+#define ZSTD_V01_H_28739879432
 
 #if defined (__cplusplus)
 extern "C" {
@@ -90,5 +90,5 @@ size_t ZSTDv01_decompressContinue(ZSTDv01_Dctx* dctx, void* dst, size_t maxDstSi
 #if defined (__cplusplus)
 }
 #endif
- 
-#endif /* ZSTD_V01_H_28739879432 */ 
+
+#endif /* ZSTD_V01_H_28739879432 */

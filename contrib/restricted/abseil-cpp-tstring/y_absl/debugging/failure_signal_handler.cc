@@ -25,10 +25,10 @@
 #include <unistd.h>
 #endif
 
-#ifdef __APPLE__ 
-#include <TargetConditionals.h> 
-#endif 
- 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 #ifdef ABSL_HAVE_MMAP
 #include <sys/mman.h>
 #endif
@@ -42,7 +42,7 @@
 #include <ctime>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/internal/errno_saver.h" 
+#include "y_absl/base/internal/errno_saver.h"
 #include "y_absl/base/internal/raw_logging.h"
 #include "y_absl/base/internal/sysinfo.h"
 #include "y_absl/debugging/internal/examine_stack.h"
@@ -50,15 +50,15 @@
 
 #ifndef _WIN32
 #define ABSL_HAVE_SIGACTION
-// Apple WatchOS and TVOS don't allow sigaltstack 
-#if !(defined(TARGET_OS_WATCH) && TARGET_OS_WATCH) && \ 
-    !(defined(TARGET_OS_TV) && TARGET_OS_TV) 
-#define ABSL_HAVE_SIGALTSTACK 
+// Apple WatchOS and TVOS don't allow sigaltstack
+#if !(defined(TARGET_OS_WATCH) && TARGET_OS_WATCH) && \
+    !(defined(TARGET_OS_TV) && TARGET_OS_TV)
+#define ABSL_HAVE_SIGALTSTACK
 #endif
-#endif 
+#endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 ABSL_CONST_INIT static FailureSignalHandlerOptions fsh_options;
 
@@ -128,7 +128,7 @@ const char* FailureSignalToString(int signo) {
 
 }  // namespace debugging_internal
 
-#ifdef ABSL_HAVE_SIGALTSTACK 
+#ifdef ABSL_HAVE_SIGALTSTACK
 
 static bool SetupAlternateStackOnce() {
 #if defined(__wasm__) || defined (__asjms__)
@@ -181,7 +181,7 @@ static bool SetupAlternateStackOnce() {
 // Returns the appropriate flag for sig_action.sa_flags
 // if the system supports using an alternate stack.
 static int MaybeSetupAlternateStack() {
-#ifdef ABSL_HAVE_SIGALTSTACK 
+#ifdef ABSL_HAVE_SIGALTSTACK
   ABSL_ATTRIBUTE_UNUSED static const bool kOnce = SetupAlternateStackOnce();
   return SA_ONSTACK;
 #else
@@ -217,7 +217,7 @@ static void InstallOneFailureHandler(FailureSignalData* data,
 #endif
 
 static void WriteToStderr(const char* data) {
-  y_absl::base_internal::ErrnoSaver errno_saver; 
+  y_absl::base_internal::ErrnoSaver errno_saver;
   y_absl::raw_logging_internal::SafeWriteToStderr(data, strlen(data));
 }
 
@@ -384,5 +384,5 @@ void InstallFailureSignalHandler(const FailureSignalHandlerOptions& options) {
   }
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

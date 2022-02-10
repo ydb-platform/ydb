@@ -5,7 +5,7 @@
 
     Lexers for Pascal family languages.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -44,7 +44,7 @@ class DelphiLexer(Lexer):
     """
     name = 'Delphi'
     aliases = ['delphi', 'pas', 'pascal', 'objectpascal']
-    filenames = ['*.pas', '*.dpr'] 
+    filenames = ['*.pas', '*.dpr']
     mimetypes = ['text/x-pascal']
 
     TURBO_PASCAL_KEYWORDS = (
@@ -593,8 +593,8 @@ class AdaLexer(RegexLexer):
         ],
         'end': [
             ('(if|case|record|loop|select)', Keyword.Reserved),
-            (r'"[^"]+"|[\w.]+', Name.Function), 
-            (r'\s+', Text), 
+            (r'"[^"]+"|[\w.]+', Name.Function),
+            (r'\s+', Text),
             (';', Punctuation, '#pop'),
         ],
         'type_def': [
@@ -628,11 +628,11 @@ class AdaLexer(RegexLexer):
         ],
         'package': [
             ('body', Keyword.Declaration),
-            (r'is\s+new|renames', Keyword.Reserved), 
+            (r'is\s+new|renames', Keyword.Reserved),
             ('is', Keyword.Reserved, '#pop'),
             (';', Punctuation, '#pop'),
-            (r'\(', Punctuation, 'package_instantiation'), 
-            (r'([\w.]+)', Name.Class), 
+            (r'\(', Punctuation, 'package_instantiation'),
+            (r'([\w.]+)', Name.Class),
             include('root'),
         ],
         'package_instantiation': [

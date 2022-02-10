@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 #include <aws/core/platform/FileSystem.h>
 
 #include <aws/core/platform/Environment.h>
@@ -9,7 +9,7 @@
 #include <aws/core/utils/DateTime.h>
 #include <aws/core/utils/logging/LogMacros.h>
 #include <aws/core/utils/StringUtils.h>
-#include <aws/core/utils/UUID.h> 
+#include <aws/core/utils/UUID.h>
 
 #include <unistd.h>
 #include <pwd.h>
@@ -19,9 +19,9 @@
 #include <climits>
 
 #include <cassert>
-#ifdef __APPLE__ 
-#include <mach-o/dyld.h> 
-#endif 
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 namespace Aws
 {
 namespace FileSystem
@@ -72,7 +72,7 @@ static const char* FILE_SYSTEM_UTILS_LOG_TAG = "FileSystemUtils";
                 {
                     Aws::String entryName = dirEntry->d_name;
                     if(entryName != ".." && entryName != ".")
-                    { 
+                    {
                         entry = ParseFileInfo(dirEntry, true);
                         invalidEntry = false;
                     }
@@ -117,9 +117,9 @@ static const char* FILE_SYSTEM_UTILS_LOG_TAG = "FileSystemUtils";
                 entry.path = m_directoryEntry.path;
                 entry.relativePath = m_directoryEntry.relativePath;
             }
- 
+
             AWS_LOGSTREAM_TRACE(FILE_SYSTEM_UTILS_LOG_TAG, "Calling stat on path " << entry.path);
- 
+
             struct stat dirInfo;
             if(!lstat(entry.path.c_str(), &dirInfo))
             {
@@ -147,7 +147,7 @@ static const char* FILE_SYSTEM_UTILS_LOG_TAG = "FileSystemUtils";
                 AWS_LOGSTREAM_ERROR(FILE_SYSTEM_UTILS_LOG_TAG, "Failed to stat file path " << entry.path << " with error code " << errno);
             }
 
-            return entry; 
+            return entry;
         }
 
         DIR* m_dir;
@@ -252,8 +252,8 @@ Aws::String CreateTempFilePath()
 {
     Aws::StringStream ss;
     auto dt = Aws::Utils::DateTime::Now();
- 
-    ss << dt.ToGmtString("%Y%m%dT%H%M%S") << dt.Millis() << Aws::String(Aws::Utils::UUID::RandomUUID()); 
+
+    ss << dt.ToGmtString("%Y%m%dT%H%M%S") << dt.Millis() << Aws::String(Aws::Utils::UUID::RandomUUID());
     Aws::String tempFile(ss.str());
 
     AWS_LOGSTREAM_DEBUG(FILE_SYSTEM_UTILS_LOG_TAG, "CreateTempFilePath generated: " << tempFile);
@@ -264,22 +264,22 @@ Aws::String CreateTempFilePath()
 Aws::String GetExecutableDirectory()
 {
     char dest[PATH_MAX];
-    memset(dest, 0, PATH_MAX); 
-#ifdef __APPLE__ 
-    uint32_t destSize = PATH_MAX; 
-    if (_NSGetExecutablePath(dest, &destSize) == 0) 
-#else 
-    size_t destSize = PATH_MAX; 
-    if (readlink("/proc/self/exe", dest, destSize)) 
-#endif 
+    memset(dest, 0, PATH_MAX);
+#ifdef __APPLE__
+    uint32_t destSize = PATH_MAX;
+    if (_NSGetExecutablePath(dest, &destSize) == 0)
+#else
+    size_t destSize = PATH_MAX;
+    if (readlink("/proc/self/exe", dest, destSize))
+#endif
     {
         Aws::String executablePath(dest);
         auto lastSlash = executablePath.find_last_of('/');
         if(lastSlash != std::string::npos)
         {
             return executablePath.substr(0, lastSlash);
-        } 
-    } 
+        }
+    }
     return "./";
 }
 

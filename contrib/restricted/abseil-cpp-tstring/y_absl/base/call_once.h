@@ -41,7 +41,7 @@
 #include "y_absl/base/port.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 class once_flag;
 
@@ -213,7 +213,7 @@ void call_once(y_absl::once_flag& flag, Callable&& fn, Args&&... args) {
   }
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_BASE_CALL_ONCE_H_

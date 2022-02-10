@@ -93,11 +93,11 @@ Used in:  PY_LONG_LONG
  * uint32_t to be such a type unless stdint.h or inttypes.h defines uint32_t.
  * However, it doesn't set HAVE_UINT32_T, so we do that here.
  */
-#ifdef uint32_t 
-#define HAVE_UINT32_T 1 
-#endif 
- 
-#ifdef HAVE_UINT32_T 
+#ifdef uint32_t
+#define HAVE_UINT32_T 1
+#endif
+
+#ifdef HAVE_UINT32_T
 #ifndef PY_UINT32_T
 #define PY_UINT32_T uint32_t
 #endif
@@ -106,32 +106,32 @@ Used in:  PY_LONG_LONG
 /* Macros for a 64-bit unsigned integer type; used for type 'twodigits' in the
  * long integer implementation, when 30-bit digits are enabled.
  */
-#ifdef uint64_t 
-#define HAVE_UINT64_T 1 
-#endif 
- 
-#ifdef HAVE_UINT64_T 
+#ifdef uint64_t
+#define HAVE_UINT64_T 1
+#endif
+
+#ifdef HAVE_UINT64_T
 #ifndef PY_UINT64_T
 #define PY_UINT64_T uint64_t
 #endif
 #endif
 
 /* Signed variants of the above */
-#ifdef int32_t 
-#define HAVE_INT32_T 1 
-#endif 
- 
-#ifdef HAVE_INT32_T 
+#ifdef int32_t
+#define HAVE_INT32_T 1
+#endif
+
+#ifdef HAVE_INT32_T
 #ifndef PY_INT32_T
 #define PY_INT32_T int32_t
 #endif
 #endif
- 
-#ifdef int64_t 
-#define HAVE_INT64_T 1 
-#endif 
- 
-#ifdef HAVE_INT64_T 
+
+#ifdef int64_t
+#define HAVE_INT64_T 1
+#endif
+
+#ifdef HAVE_INT64_T
 #ifndef PY_INT64_T
 #define PY_INT64_T int64_t
 #endif
@@ -265,7 +265,7 @@ typedef Py_intptr_t     Py_ssize_t;
  * for platforms that support that.
  *
  * If PY_LOCAL_AGGRESSIVE is defined before python.h is included, more
- * "aggressive" inlining/optimization is enabled for the entire module.  This 
+ * "aggressive" inlining/optimization is enabled for the entire module.  This
  * may lead to code bloat, and may slow things down for those reasons.  It may
  * also lead to errors, if the code relies on pointer aliasing.  Use with
  * care.
@@ -562,30 +562,30 @@ extern "C" {
         _Py_set_387controlword(old_387controlword)
 #endif
 
-/* get and set x87 control word for VisualStudio/x86 */ 
-#if defined(_MSC_VER) && !defined(_WIN64) /* x87 not supported in 64-bit */ 
-#define HAVE_PY_SET_53BIT_PRECISION 1 
-#define _Py_SET_53BIT_PRECISION_HEADER \ 
-    unsigned int old_387controlword, new_387controlword, out_387controlword 
-/* We use the __control87_2 function to set only the x87 control word. 
-   The SSE control word is unaffected. */ 
-#define _Py_SET_53BIT_PRECISION_START                                   \ 
-    do {                                                                \ 
-        __control87_2(0, 0, &old_387controlword, NULL);                 \ 
-        new_387controlword =                                            \ 
-          (old_387controlword & ~(_MCW_PC | _MCW_RC)) | (_PC_53 | _RC_NEAR); \ 
-        if (new_387controlword != old_387controlword)                   \ 
-            __control87_2(new_387controlword, _MCW_PC | _MCW_RC,        \ 
-                          &out_387controlword, NULL);                   \ 
-    } while (0) 
-#define _Py_SET_53BIT_PRECISION_END                                     \ 
-    do {                                                                \ 
-        if (new_387controlword != old_387controlword)                   \ 
-            __control87_2(old_387controlword, _MCW_PC | _MCW_RC,        \ 
-                          &out_387controlword, NULL);                   \ 
-    } while (0) 
-#endif 
- 
+/* get and set x87 control word for VisualStudio/x86 */
+#if defined(_MSC_VER) && !defined(_WIN64) /* x87 not supported in 64-bit */
+#define HAVE_PY_SET_53BIT_PRECISION 1
+#define _Py_SET_53BIT_PRECISION_HEADER \
+    unsigned int old_387controlword, new_387controlword, out_387controlword
+/* We use the __control87_2 function to set only the x87 control word.
+   The SSE control word is unaffected. */
+#define _Py_SET_53BIT_PRECISION_START                                   \
+    do {                                                                \
+        __control87_2(0, 0, &old_387controlword, NULL);                 \
+        new_387controlword =                                            \
+          (old_387controlword & ~(_MCW_PC | _MCW_RC)) | (_PC_53 | _RC_NEAR); \
+        if (new_387controlword != old_387controlword)                   \
+            __control87_2(new_387controlword, _MCW_PC | _MCW_RC,        \
+                          &out_387controlword, NULL);                   \
+    } while (0)
+#define _Py_SET_53BIT_PRECISION_END                                     \
+    do {                                                                \
+        if (new_387controlword != old_387controlword)                   \
+            __control87_2(old_387controlword, _MCW_PC | _MCW_RC,        \
+                          &out_387controlword, NULL);                   \
+    } while (0)
+#endif
+
 /* default definitions are empty */
 #ifndef HAVE_PY_SET_53BIT_PRECISION
 #define _Py_SET_53BIT_PRECISION_HEADER
@@ -659,7 +659,7 @@ extern char * _getpty(int *, int, mode_t, int);
 /* On QNX 6, struct termio must be declared by including sys/termio.h
    if TCGETA, TCSETA, TCSETAW, or TCSETAF are used.  sys/termio.h must
    be included before termios.h or it will generate an error. */
-#if defined(HAVE_SYS_TERMIO_H) && !defined(__hpux) 
+#if defined(HAVE_SYS_TERMIO_H) && !defined(__hpux)
 #include <sys/termio.h>
 #endif
 
@@ -701,9 +701,9 @@ extern int fdatasync(int);
 
 #ifdef __FreeBSD__
 #include <osreldate.h>
-#if (__FreeBSD_version >= 500040 && __FreeBSD_version < 602113) || \ 
-    (__FreeBSD_version >= 700000 && __FreeBSD_version < 700054) || \ 
-    (__FreeBSD_version >= 800000 && __FreeBSD_version < 800001) 
+#if (__FreeBSD_version >= 500040 && __FreeBSD_version < 602113) || \
+    (__FreeBSD_version >= 700000 && __FreeBSD_version < 700054) || \
+    (__FreeBSD_version >= 800000 && __FreeBSD_version < 800001)
 # define _PY_PORT_CTYPE_UTF8_ISSUE
 #endif
 #endif
@@ -715,11 +715,11 @@ extern int fdatasync(int);
 
 #ifdef _PY_PORT_CTYPE_UTF8_ISSUE
 #ifndef __cplusplus
-   /* The workaround below is unsafe in C++ because 
-    * the <locale> defines these symbols as real functions, 
-    * with a slightly different signature. 
-    * See issue #10910 
-    */ 
+   /* The workaround below is unsafe in C++ because
+    * the <locale> defines these symbols as real functions,
+    * with a slightly different signature.
+    * See issue #10910
+    */
 #include <ctype.h>
 #include <wctype.h>
 #undef isalnum

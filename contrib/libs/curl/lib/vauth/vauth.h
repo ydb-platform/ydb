@@ -60,9 +60,9 @@ bool Curl_auth_user_contains_domain(const char *user);
 
 /* This is used to generate a base64 encoded PLAIN cleartext message */
 CURLcode Curl_auth_create_plain_message(struct Curl_easy *data,
-                                        const char *authzid, 
-                                        const char *authcid, 
-                                        const char *passwd, 
+                                        const char *authzid,
+                                        const char *authcid,
+                                        const char *passwd,
                                         char **outptr, size_t *outlen);
 
 /* This is used to generate a base64 encoded LOGIN cleartext message */
@@ -142,7 +142,7 @@ CURLcode Curl_auth_create_ntlm_type3_message(struct Curl_easy *data,
                                              char **outptr, size_t *outlen);
 
 /* This is used to clean up the NTLM specific data */
-void Curl_auth_cleanup_ntlm(struct ntlmdata *ntlm); 
+void Curl_auth_cleanup_ntlm(struct ntlmdata *ntlm);
 #endif /* USE_NTLM */
 
 /* This is used to generate a base64 encoded OAuth 2.0 message */
@@ -152,13 +152,13 @@ CURLcode Curl_auth_create_oauth_bearer_message(struct Curl_easy *data,
                                                const long port,
                                                const char *bearer,
                                                char **outptr, size_t *outlen);
- 
-/* This is used to generate a base64 encoded XOAuth 2.0 message */ 
-CURLcode Curl_auth_create_xoauth_bearer_message(struct Curl_easy *data, 
-                                                const char *user, 
-                                                const char *bearer, 
-                                                char **outptr, size_t *outlen); 
- 
+
+/* This is used to generate a base64 encoded XOAuth 2.0 message */
+CURLcode Curl_auth_create_xoauth_bearer_message(struct Curl_easy *data,
+                                                const char *user,
+                                                const char *bearer,
+                                                char **outptr, size_t *outlen);
+
 #if defined(USE_KERBEROS5)
 /* This is used to evaluate if GSSAPI (Kerberos V5) is supported */
 bool Curl_auth_is_gssapi_supported(void);
@@ -184,7 +184,7 @@ CURLcode Curl_auth_create_gssapi_security_message(struct Curl_easy *data,
                                                   size_t *outlen);
 
 /* This is used to clean up the GSSAPI specific data */
-void Curl_auth_cleanup_gssapi(struct kerberos5data *krb5); 
+void Curl_auth_cleanup_gssapi(struct kerberos5data *krb5);
 #endif /* USE_KERBEROS5 */
 
 #if defined(USE_SPNEGO)
@@ -208,7 +208,7 @@ CURLcode Curl_auth_create_spnego_message(struct Curl_easy *data,
                                          char **outptr, size_t *outlen);
 
 /* This is used to clean up the SPNEGO specifiec data */
-void Curl_auth_cleanup_spnego(struct negotiatedata *nego); 
+void Curl_auth_cleanup_spnego(struct negotiatedata *nego);
 
 #endif /* USE_SPNEGO */
 

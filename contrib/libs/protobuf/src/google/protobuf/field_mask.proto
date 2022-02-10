@@ -83,7 +83,7 @@ option cc_enable_arenas = true;
 //     }
 //
 // A repeated field is not allowed except at the last position of a
-// paths string. 
+// paths string.
 //
 // If a FieldMask object is not present in a get operation, the
 // operation applies to all fields (as if a FieldMask of all fields

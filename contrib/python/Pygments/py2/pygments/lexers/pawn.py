@@ -5,7 +5,7 @@
 
     Lexers for the Pawn languages.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -36,7 +36,7 @@ class SourcePawnLexer(RegexLexer):
     tokens = {
         'root': [
             # preprocessor directives: without whitespace
-            (r'^#if\s+0', Comment.Preproc, 'if0'), 
+            (r'^#if\s+0', Comment.Preproc, 'if0'),
             ('^#', Comment.Preproc, 'macro'),
             # or with whitespace
             ('^' + _ws1 + r'#if\s+0', Comment.Preproc, 'if0'),
@@ -62,7 +62,7 @@ class SourcePawnLexer(RegexLexer):
              r'public|return|sizeof|static|decl|struct|switch)\b', Keyword),
             (r'(bool|Float)\b', Keyword.Type),
             (r'(true|false)\b', Keyword.Constant),
-            (r'[a-zA-Z_]\w*', Name), 
+            (r'[a-zA-Z_]\w*', Name),
         ],
         'string': [
             (r'"', String, '#pop'),
@@ -148,7 +148,7 @@ class PawnLexer(RegexLexer):
     tokens = {
         'root': [
             # preprocessor directives: without whitespace
-            (r'^#if\s+0', Comment.Preproc, 'if0'), 
+            (r'^#if\s+0', Comment.Preproc, 'if0'),
             ('^#', Comment.Preproc, 'macro'),
             # or with whitespace
             ('^' + _ws1 + r'#if\s+0', Comment.Preproc, 'if0'),
@@ -174,7 +174,7 @@ class PawnLexer(RegexLexer):
              r'public|return|sizeof|tagof|state|goto)\b', Keyword),
             (r'(bool|Float)\b', Keyword.Type),
             (r'(true|false)\b', Keyword.Constant),
-            (r'[a-zA-Z_]\w*', Name), 
+            (r'[a-zA-Z_]\w*', Name),
         ],
         'string': [
             (r'"', String, '#pop'),

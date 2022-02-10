@@ -1,37 +1,37 @@
-/*[clinic input] 
-preserve 
-[clinic start generated code]*/ 
- 
-PyDoc_STRVAR(warnings_warn__doc__, 
-"warn($module, /, message, category=None, stacklevel=1, source=None)\n" 
-"--\n" 
-"\n" 
-"Issue a warning, or maybe ignore it or raise an exception."); 
- 
-#define WARNINGS_WARN_METHODDEF    \ 
+/*[clinic input]
+preserve
+[clinic start generated code]*/
+
+PyDoc_STRVAR(warnings_warn__doc__,
+"warn($module, /, message, category=None, stacklevel=1, source=None)\n"
+"--\n"
+"\n"
+"Issue a warning, or maybe ignore it or raise an exception.");
+
+#define WARNINGS_WARN_METHODDEF    \
     {"warn", (PyCFunction)(void(*)(void))warnings_warn, METH_FASTCALL|METH_KEYWORDS, warnings_warn__doc__},
- 
-static PyObject * 
-warnings_warn_impl(PyObject *module, PyObject *message, PyObject *category, 
-                   Py_ssize_t stacklevel, PyObject *source); 
- 
-static PyObject * 
-warnings_warn(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames) 
-{ 
-    PyObject *return_value = NULL; 
-    static const char * const _keywords[] = {"message", "category", "stacklevel", "source", NULL}; 
+
+static PyObject *
+warnings_warn_impl(PyObject *module, PyObject *message, PyObject *category,
+                   Py_ssize_t stacklevel, PyObject *source);
+
+static PyObject *
+warnings_warn(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    PyObject *return_value = NULL;
+    static const char * const _keywords[] = {"message", "category", "stacklevel", "source", NULL};
     static _PyArg_Parser _parser = {NULL, _keywords, "warn", 0};
     PyObject *argsbuf[4];
     Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
-    PyObject *message; 
-    PyObject *category = Py_None; 
-    Py_ssize_t stacklevel = 1; 
-    PyObject *source = Py_None; 
- 
+    PyObject *message;
+    PyObject *category = Py_None;
+    Py_ssize_t stacklevel = 1;
+    PyObject *source = Py_None;
+
     args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 4, 0, argsbuf);
     if (!args) {
-        goto exit; 
-    } 
+        goto exit;
+    }
     message = args[0];
     if (!noptargs) {
         goto skip_optional_pos;
@@ -66,9 +66,9 @@ warnings_warn(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
     }
     source = args[3];
 skip_optional_pos:
-    return_value = warnings_warn_impl(module, message, category, stacklevel, source); 
- 
-exit: 
-    return return_value; 
-} 
+    return_value = warnings_warn_impl(module, message, category, stacklevel, source);
+
+exit:
+    return return_value;
+}
 /*[clinic end generated code: output=b7bb54c73b5433ec input=a9049054013a1b77]*/

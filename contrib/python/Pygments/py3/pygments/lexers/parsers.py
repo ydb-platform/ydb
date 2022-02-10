@@ -357,13 +357,13 @@ class AntlrLexer(RegexLexer):
             # tokensSpec
             (r'tokens\b', Keyword, 'tokens'),
             # attrScope
-            (r'(scope)(\s*)(' + _id + r')(\s*)(\{)', 
+            (r'(scope)(\s*)(' + _id + r')(\s*)(\{)',
              bygroups(Keyword, Whitespace, Name.Variable, Whitespace,
                       Punctuation), 'action'),
             # exception
             (r'(catch|finally)\b', Keyword, 'exception'),
             # action
-            (r'(@' + _id + r')(\s*)(::)?(\s*)(' + _id + r')(\s*)(\{)', 
+            (r'(@' + _id + r')(\s*)(::)?(\s*)(' + _id + r')(\s*)(\{)',
              bygroups(Name.Label, Whitespace, Punctuation, Whitespace,
                       Name.Label, Whitespace, Punctuation), 'action'),
             # rule
@@ -398,10 +398,10 @@ class AntlrLexer(RegexLexer):
             # L173 ANTLRv3.g from ANTLR book
             (r'(scope)(\s+)(\{)', bygroups(Keyword, Whitespace, Punctuation),
              'action'),
-            (r'(scope)(\s+)(' + _id + r')(\s*)(;)', 
+            (r'(scope)(\s+)(' + _id + r')(\s*)(;)',
              bygroups(Keyword, Whitespace, Name.Label, Whitespace, Punctuation)),
             # ruleAction
-            (r'(@' + _id + r')(\s*)(\{)', 
+            (r'(@' + _id + r')(\s*)(\{)',
              bygroups(Name.Label, Whitespace, Punctuation), 'action'),
             # finished prelims, go to rule alts!
             (r':', Punctuation, '#pop')
@@ -435,7 +435,7 @@ class AntlrLexer(RegexLexer):
             include('comments'),
             (r'\{', Punctuation),
             (r'(' + _TOKEN_REF + r')(\s*)(=)?(\s*)(' + _STRING_LITERAL
-             + r')?(\s*)(;)', 
+             + r')?(\s*)(;)',
              bygroups(Name.Label, Whitespace, Punctuation, Whitespace,
                       String, Whitespace, Punctuation)),
             (r'\}', Punctuation, '#pop'),
@@ -445,7 +445,7 @@ class AntlrLexer(RegexLexer):
             include('comments'),
             (r'\{', Punctuation),
             (r'(' + _id + r')(\s*)(=)(\s*)(' +
-             '|'.join((_id, _STRING_LITERAL, _INT, r'\*')) + r')(\s*)(;)', 
+             '|'.join((_id, _STRING_LITERAL, _INT, r'\*')) + r')(\s*)(;)',
              bygroups(Name.Variable, Whitespace, Punctuation, Whitespace,
                       Text, Whitespace, Punctuation)),
             (r'\}', Punctuation, '#pop'),

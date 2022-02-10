@@ -35,7 +35,7 @@
 #include <google/protobuf/compiler/cpp/cpp_message_field.h>
 #include <google/protobuf/compiler/cpp/cpp_helpers.h>
 #include <google/protobuf/io/printer.h>
- 
+
 #include <google/protobuf/stubs/strutil.h>
 
 namespace google {
@@ -61,7 +61,7 @@ void SetMessageVariables(const FieldDescriptor* descriptor,
   (*variables)["type"] = FieldMessageTypeName(descriptor, options);
   (*variables)["casted_member"] = ReinterpretCast(
       (*variables)["type"] + "*", (*variables)["name"] + "_", implicit_weak);
-  (*variables)["type_default_instance"] = 
+  (*variables)["type_default_instance"] =
       QualifiedDefaultInstanceName(descriptor->message_type(), options);
   (*variables)["type_default_instance_ptr"] =
       QualifiedDefaultInstancePtr(descriptor->message_type(), options);
@@ -386,20 +386,20 @@ void MessageFieldGenerator::GenerateMessageClearingCode(
 
   Formatter format(printer, variables_);
   if (!HasHasbit(descriptor_)) {
-    // If we don't have has-bits, message presence is indicated only by ptr != 
-    // NULL. Thus on clear, we need to delete the object. 
+    // If we don't have has-bits, message presence is indicated only by ptr !=
+    // NULL. Thus on clear, we need to delete the object.
     format(
         "if (GetArenaForAllocation() == nullptr && $name$_ != nullptr) {\n"
         "  delete $name$_;\n"
         "}\n"
         "$name$_ = nullptr;\n");
-  } else { 
+  } else {
     format(
         "$DCHK$($name$_ != nullptr);\n"
         "$name$_->Clear();\n");
-  } 
-} 
- 
+  }
+}
+
 void MessageFieldGenerator::GenerateMergingCode(io::Printer* printer) const {
   GOOGLE_CHECK(!IsFieldStripped(descriptor_, options_));
 
@@ -420,8 +420,8 @@ void MessageFieldGenerator::GenerateSwappingCode(io::Printer* printer) const {
 
   Formatter format(printer, variables_);
   format("swap($name$_, other->$name$_);\n");
-} 
- 
+}
+
 void MessageFieldGenerator::GenerateDestructorCode(io::Printer* printer) const {
   GOOGLE_CHECK(!IsFieldStripped(descriptor_, options_));
 
@@ -440,11 +440,11 @@ void MessageFieldGenerator::GenerateDestructorCode(io::Printer* printer) const {
 void MessageFieldGenerator::GenerateConstructorCode(
     io::Printer* printer) const {
   GOOGLE_CHECK(!IsFieldStripped(descriptor_, options_));
- 
+
   Formatter format(printer, variables_);
   format("$name$_ = nullptr;\n");
-} 
- 
+}
+
 void MessageFieldGenerator::GenerateCopyConstructorCode(
     io::Printer* printer) const {
   GOOGLE_CHECK(!IsFieldStripped(descriptor_, options_));
@@ -621,9 +621,9 @@ void MessageOneofFieldGenerator::GenerateClearingCode(
 
 void MessageOneofFieldGenerator::GenerateMessageClearingCode(
     io::Printer* printer) const {
-  GenerateClearingCode(printer); 
-} 
- 
+  GenerateClearingCode(printer);
+}
+
 void MessageOneofFieldGenerator::GenerateSwappingCode(
     io::Printer* printer) const {
   // Don't print any swapping code. Swapping the union will swap this field.
@@ -631,10 +631,10 @@ void MessageOneofFieldGenerator::GenerateSwappingCode(
 
 void MessageOneofFieldGenerator::GenerateDestructorCode(
     io::Printer* printer) const {
-  // We inherit from MessageFieldGenerator, so we need to override the default 
-  // behavior. 
-} 
- 
+  // We inherit from MessageFieldGenerator, so we need to override the default
+  // behavior.
+}
+
 void MessageOneofFieldGenerator::GenerateConstructorCode(
     io::Printer* printer) const {
   // Don't print any constructor code. The field is in a union. We allocate

@@ -55,7 +55,7 @@
 
 #include <array>
 #include <cstdint>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <type_traits>
 #include <vector>
 
@@ -64,7 +64,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 namespace strings_internal {
 // AlphaNumBuffer allows a way to pass a string to StrCat without having to do
@@ -405,7 +405,7 @@ SixDigits(double d) {
   return result;
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_STR_CAT_H_

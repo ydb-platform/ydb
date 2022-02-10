@@ -16,7 +16,7 @@
 #define ABSL_HASH_INTERNAL_SPY_HASH_STATE_H_
 
 #include <ostream>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <vector>
 
 #include "y_absl/hash/hash.h"
@@ -25,7 +25,7 @@
 #include "y_absl/strings/str_join.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
 // SpyHashState is an implementation of the HashState API that simply
@@ -225,7 +225,7 @@ void AbslHashValue(SpyHashStateImpl<T>, const U&);
 using SpyHashState = SpyHashStateImpl<void>;
 
 }  // namespace hash_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_HASH_INTERNAL_SPY_HASH_STATE_H_

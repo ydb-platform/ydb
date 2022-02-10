@@ -1,9 +1,9 @@
 import sys
 
 template = '''
-struct PyObject; 
-extern "C" int PyImport_AppendInittab(const char* name, PyObject* (*initfunc)()); 
-extern "C" PyObject* {1}(); 
+struct PyObject;
+extern "C" int PyImport_AppendInittab(const char* name, PyObject* (*initfunc)());
+extern "C" PyObject* {1}();
 
 namespace {
     struct TRegistrar {

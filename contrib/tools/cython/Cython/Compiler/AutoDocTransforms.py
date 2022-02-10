@@ -167,7 +167,7 @@ class EmbedSignature(CythonTransform):
                 old_doc = node.py_func.entry.doc
             else:
                 old_doc = None
-            new_doc = self._embed_signature(signature, old_doc) 
+            new_doc = self._embed_signature(signature, old_doc)
             doc_holder.doc = EncodedString(new_doc)
             if not is_constructor and getattr(node, 'py_func', None) is not None:
                 node.py_func.entry.doc = EncodedString(new_doc)

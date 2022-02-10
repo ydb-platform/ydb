@@ -30,15 +30,15 @@
 #include <any>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 using std::bad_any_cast;
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #else  // ABSL_USES_STD_ANY
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // bad_any_cast
@@ -67,7 +67,7 @@ namespace any_internal {
 [[noreturn]] void ThrowBadAnyCast();
 
 }  // namespace any_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_USES_STD_ANY

@@ -1,6 +1,6 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
  */
 
 #include <aws/core/utils/threading/ReaderWriterLock.h>
@@ -10,7 +10,7 @@
 
 using namespace Aws::Utils::Threading;
 
-static const int64_t MaxReaders = (std::numeric_limits<std::int32_t>::max)(); 
+static const int64_t MaxReaders = (std::numeric_limits<std::int32_t>::max)();
 
 ReaderWriterLock::ReaderWriterLock() :
     m_readers(0),

@@ -157,10 +157,10 @@ TProtoStringType DefaultInstanceName(const Descriptor* descriptor,
 TProtoStringType DefaultInstancePtr(const Descriptor* descriptor,
                                const Options& options);
 
-// Fully qualified name of the default_instance of this message. 
+// Fully qualified name of the default_instance of this message.
 TProtoStringType QualifiedDefaultInstanceName(const Descriptor* descriptor,
                                          const Options& options);
- 
+
 // Fully qualified name of the default instance pointer.
 TProtoStringType QualifiedDefaultInstancePtr(const Descriptor* descriptor,
                                         const Options& options);
@@ -291,8 +291,8 @@ TProtoStringType SafeFunctionName(const Descriptor* descriptor,
                              const FieldDescriptor* field,
                              const TProtoStringType& prefix);
 
-// Returns true if generated messages have public unknown fields accessors 
-inline bool PublicUnknownFieldsAccessors(const Descriptor* message) { 
+// Returns true if generated messages have public unknown fields accessors
+inline bool PublicUnknownFieldsAccessors(const Descriptor* message) {
   return message->file()->syntax() != FileDescriptor::SYNTAX_PROTO3;
 }
 
@@ -300,8 +300,8 @@ inline bool PublicUnknownFieldsAccessors(const Descriptor* message) {
 FileOptions_OptimizeMode GetOptimizeFor(const FileDescriptor* file,
                                         const Options& options);
 
-// Determines whether unknown fields will be stored in an UnknownFieldSet or 
-// a string. 
+// Determines whether unknown fields will be stored in an UnknownFieldSet or
+// a string.
 inline bool UseUnknownFieldSet(const FileDescriptor* file,
                                const Options& options) {
   return GetOptimizeFor(file, options) != FileOptions::LITE_RUNTIME;
@@ -523,7 +523,7 @@ inline bool NeedsEagerDescriptorAssignment(const FileDescriptor* file,
   }
 }
 
-// This orders the messages in a .pb.cc as it's outputted by file.cc 
+// This orders the messages in a .pb.cc as it's outputted by file.cc
 void FlattenMessagesInFile(const FileDescriptor* file,
                            std::vector<const Descriptor*>* result);
 inline std::vector<const Descriptor*> FlattenMessagesInFile(
@@ -532,40 +532,40 @@ inline std::vector<const Descriptor*> FlattenMessagesInFile(
   FlattenMessagesInFile(file, &result);
   return result;
 }
- 
+
 bool HasWeakFields(const Descriptor* desc, const Options& options);
 bool HasWeakFields(const FileDescriptor* desc, const Options& options);
- 
-// Returns true if the "required" restriction check should be ignored for the 
-// given field. 
+
+// Returns true if the "required" restriction check should be ignored for the
+// given field.
 inline static bool ShouldIgnoreRequiredFieldCheck(const FieldDescriptor* field,
                                                   const Options& options) {
   // Do not check "required" for lazily verified lazy fields.
   return IsLazilyVerifiedLazy(field, options);
-} 
- 
-struct MessageAnalysis { 
-  bool is_recursive; 
-  bool contains_cord; 
-  bool contains_extension; 
-  bool contains_required; 
+}
+
+struct MessageAnalysis {
+  bool is_recursive;
+  bool contains_cord;
+  bool contains_extension;
+  bool contains_required;
   bool contains_weak;  // Implicit weak as well.
-}; 
- 
-// This class is used in FileGenerator, to ensure linear instead of 
-// quadratic performance, if we do this per message we would get O(V*(V+E)). 
-// Logically this is just only used in message.cc, but in the header for 
-// FileGenerator to help share it. 
+};
+
+// This class is used in FileGenerator, to ensure linear instead of
+// quadratic performance, if we do this per message we would get O(V*(V+E)).
+// Logically this is just only used in message.cc, but in the header for
+// FileGenerator to help share it.
 class PROTOC_EXPORT MessageSCCAnalyzer {
- public: 
+ public:
   explicit MessageSCCAnalyzer(const Options& options) : options_(options) {}
- 
-  MessageAnalysis GetSCCAnalysis(const SCC* scc); 
- 
-  bool HasRequiredFields(const Descriptor* descriptor) { 
-    MessageAnalysis result = GetSCCAnalysis(GetSCC(descriptor)); 
-    return result.contains_required || result.contains_extension; 
-  } 
+
+  MessageAnalysis GetSCCAnalysis(const SCC* scc);
+
+  bool HasRequiredFields(const Descriptor* descriptor) {
+    MessageAnalysis result = GetSCCAnalysis(GetSCC(descriptor));
+    return result.contains_required || result.contains_extension;
+  }
   bool HasWeakField(const Descriptor* descriptor) {
     MessageAnalysis result = GetSCCAnalysis(GetSCC(descriptor));
     return result.contains_weak;
@@ -573,8 +573,8 @@ class PROTOC_EXPORT MessageSCCAnalyzer {
   const SCC* GetSCC(const Descriptor* descriptor) {
     return analyzer_.GetSCC(descriptor);
   }
- 
- private: 
+
+ private:
   struct DepsGenerator {
     std::vector<const Descriptor*> operator()(const Descriptor* desc) const {
       std::vector<const Descriptor*> deps;
@@ -585,12 +585,12 @@ class PROTOC_EXPORT MessageSCCAnalyzer {
       }
       return deps;
     }
-  }; 
+  };
   SCCAnalyzer<DepsGenerator> analyzer_;
-  Options options_; 
-  std::map<const SCC*, MessageAnalysis> analysis_cache_; 
+  Options options_;
+  std::map<const SCC*, MessageAnalysis> analysis_cache_;
 };
- 
+
 void ListAllFields(const Descriptor* d,
                    std::vector<const FieldDescriptor*>* fields);
 void ListAllFields(const FileDescriptor* d,
@@ -600,7 +600,7 @@ template <class T>
 void ForEachField(const Descriptor* d, T&& func) {
   for (int i = 0; i < d->nested_type_count(); i++) {
     ForEachField(d->nested_type(i), std::forward<T&&>(func));
-  } 
+  }
   for (int i = 0; i < d->extension_count(); i++) {
     func(d->extension(i));
   }
@@ -608,7 +608,7 @@ void ForEachField(const Descriptor* d, T&& func) {
     func(d->field(i));
   }
 }
- 
+
 template <class T>
 void ForEachField(const FileDescriptor* d, T&& func) {
   for (int i = 0; i < d->message_type_count(); i++) {
@@ -735,8 +735,8 @@ class PROTOC_EXPORT Formatter {
     annotation.set_source_file(descriptor->file()->name());
     return annotation.SerializeAsString();
   }
-}; 
- 
+};
+
 template <class T>
 void PrintFieldComment(const Formatter& format, const T* field) {
   // Print the field's (or oneof's) proto-syntax definition as a comment.

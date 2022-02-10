@@ -668,14 +668,14 @@ static PyObject* ToStr(PyObject* pself) {
   ScopedPyObjectPtr full_slice(PySlice_New(nullptr, nullptr, nullptr));
   if (full_slice == nullptr) {
     return nullptr;
-  } 
+  }
   ScopedPyObjectPtr list(Subscript(pself, full_slice.get()));
   if (list == nullptr) {
     return nullptr;
-  } 
-  return PyObject_Repr(list.get()); 
-} 
- 
+  }
+  return PyObject_Repr(list.get());
+}
+
 static PyObject* MergeFrom(PyObject* pself, PyObject* arg) {
   return Extend(reinterpret_cast<RepeatedScalarContainer*>(pself), arg);
 }

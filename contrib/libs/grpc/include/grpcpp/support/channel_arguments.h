@@ -1,42 +1,42 @@
-/* 
- * 
- * Copyright 2015 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#ifndef GRPCPP_SUPPORT_CHANNEL_ARGUMENTS_H 
-#define GRPCPP_SUPPORT_CHANNEL_ARGUMENTS_H 
- 
-#if defined(__GNUC__) 
-#pragma GCC system_header 
-#endif 
- 
+/*
+ *
+ * Copyright 2015 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#ifndef GRPCPP_SUPPORT_CHANNEL_ARGUMENTS_H
+#define GRPCPP_SUPPORT_CHANNEL_ARGUMENTS_H
+
+#if defined(__GNUC__)
+#pragma GCC system_header
+#endif
+
 #include <list>
 #include <vector>
- 
+
 #include <grpc/compression.h>
 #include <grpc/grpc.h>
 #include <grpcpp/resource_quota.h>
 #include <grpcpp/support/config.h>
- 
+
 namespace grpc {
 class SecureChannelCredentials;
 namespace testing {
 class ChannelArgumentsTest;
 }  // namespace testing
- 
+
 /// Options for channel creation. The user can use generic setters to pass
 /// key value pairs down to C channel creation code. For gRPC related options,
 /// concrete setters are provided.
@@ -44,13 +44,13 @@ class ChannelArguments {
  public:
   ChannelArguments();
   ~ChannelArguments();
- 
+
   ChannelArguments(const ChannelArguments& other);
   ChannelArguments& operator=(ChannelArguments other) {
     Swap(other);
     return *this;
   }
- 
+
   void Swap(ChannelArguments& other);
 
   /// Dump arguments in this instance to \a channel_args. Does not take
@@ -147,6 +147,6 @@ class ChannelArguments {
   std::list<TString> strings_;
 };
 
-}  // namespace grpc 
- 
-#endif  // GRPCPP_SUPPORT_CHANNEL_ARGUMENTS_H 
+}  // namespace grpc
+
+#endif  // GRPCPP_SUPPORT_CHANNEL_ARGUMENTS_H

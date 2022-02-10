@@ -8,13 +8,13 @@ VERSION(0.13.3)
 
 PEERDIR(
     contrib/python/parso
-    contrib/python/setuptools 
+    contrib/python/setuptools
 )
 
 PY_SRCS(
     TOP_LEVEL
     jedi/__init__.py
-    jedi/__main__.py 
+    jedi/__main__.py
     jedi/_compatibility.py
     jedi/api/__init__.py
     jedi/api/classes.py
@@ -43,7 +43,7 @@ PY_SRCS(
     jedi/evaluate/compiled/getattr_static.py
     jedi/evaluate/compiled/mixed.py
     jedi/evaluate/compiled/subprocess/__init__.py
-    jedi/evaluate/compiled/subprocess/__main__.py 
+    jedi/evaluate/compiled/subprocess/__main__.py
     jedi/evaluate/compiled/subprocess/functions.py
     jedi/evaluate/context/__init__.py
     jedi/evaluate/context/asynchronous.py

@@ -15,14 +15,14 @@
 *  Dependencies
 *********************************************************/
 #include "../common/zstd_deps.h"   /* ZSTD_memcpy, ZSTD_memmove, ZSTD_memset */
-#include "../common/compiler.h"    /* prefetch */ 
-#include "../common/cpu.h"         /* bmi2 */ 
-#include "../common/mem.h"         /* low level memory routines */ 
+#include "../common/compiler.h"    /* prefetch */
+#include "../common/cpu.h"         /* bmi2 */
+#include "../common/mem.h"         /* low level memory routines */
 #define FSE_STATIC_LINKING_ONLY
-#include "../common/fse.h" 
+#include "../common/fse.h"
 #define HUF_STATIC_LINKING_ONLY
-#include "../common/huf.h" 
-#include "../common/zstd_internal.h" 
+#include "../common/huf.h"
+#include "../common/zstd_internal.h"
 #include "zstd_decompress_internal.h"   /* ZSTD_DCtx */
 #include "zstd_ddict.h"  /* ZSTD_DDictDictContent */
 #include "zstd_decompress_block.h"
@@ -56,7 +56,7 @@ static void ZSTD_copy4(void* dst, const void* src) { ZSTD_memcpy(dst, src, 4); }
 size_t ZSTD_getcBlockSize(const void* src, size_t srcSize,
                           blockProperties_t* bpPtr)
 {
-    RETURN_ERROR_IF(srcSize < ZSTD_blockHeaderSize, srcSize_wrong, ""); 
+    RETURN_ERROR_IF(srcSize < ZSTD_blockHeaderSize, srcSize_wrong, "");
 
     {   U32 const cBlockHeader = MEM_readLE24(src);
         U32 const cSize = cBlockHeader >> 3;
@@ -64,7 +64,7 @@ size_t ZSTD_getcBlockSize(const void* src, size_t srcSize,
         bpPtr->blockType = (blockType_e)((cBlockHeader >> 1) & 3);
         bpPtr->origSize = cSize;   /* only useful for RLE */
         if (bpPtr->blockType == bt_rle) return 1;
-        RETURN_ERROR_IF(bpPtr->blockType == bt_reserved, corruption_detected, ""); 
+        RETURN_ERROR_IF(bpPtr->blockType == bt_reserved, corruption_detected, "");
         return cSize;
     }
 }
@@ -121,7 +121,7 @@ size_t ZSTD_decodeLiteralsBlock(ZSTD_DCtx* dctx,
                           void* dst, size_t dstCapacity, const streaming_operation streaming)
 {
     DEBUGLOG(5, "ZSTD_decodeLiteralsBlock");
-    RETURN_ERROR_IF(srcSize < MIN_CBLOCK_SIZE, corruption_detected, ""); 
+    RETURN_ERROR_IF(srcSize < MIN_CBLOCK_SIZE, corruption_detected, "");
 
     {   const BYTE* const istart = (const BYTE*) src;
         symbolEncodingType_e const litEncType = (symbolEncodingType_e)(istart[0] & 3);
@@ -130,7 +130,7 @@ size_t ZSTD_decodeLiteralsBlock(ZSTD_DCtx* dctx,
         {
         case set_repeat:
             DEBUGLOG(5, "set_repeat flag : re-using stats from previous compressed literals block");
-            RETURN_ERROR_IF(dctx->litEntropy==0, dictionary_corrupted, ""); 
+            RETURN_ERROR_IF(dctx->litEntropy==0, dictionary_corrupted, "");
             ZSTD_FALLTHROUGH;
 
         case set_compressed:
@@ -164,8 +164,8 @@ size_t ZSTD_decodeLiteralsBlock(ZSTD_DCtx* dctx,
                     break;
                 }
                 RETURN_ERROR_IF(litSize > 0 && dst == NULL, dstSize_tooSmall, "NULL not handled");
-                RETURN_ERROR_IF(litSize > ZSTD_BLOCKSIZE_MAX, corruption_detected, ""); 
-                RETURN_ERROR_IF(litCSize + lhSize > srcSize, corruption_detected, ""); 
+                RETURN_ERROR_IF(litSize > ZSTD_BLOCKSIZE_MAX, corruption_detected, "");
+                RETURN_ERROR_IF(litCSize + lhSize > srcSize, corruption_detected, "");
                 RETURN_ERROR_IF(expectedWriteSize < litSize , dstSize_tooSmall, "");
                 ZSTD_allocateLiteralsBuffer(dctx, dst, dstCapacity, litSize, streaming, expectedWriteSize, 0);
 
@@ -212,7 +212,7 @@ size_t ZSTD_decodeLiteralsBlock(ZSTD_DCtx* dctx,
                     dctx->litBufferEnd -= WILDCOPY_OVERLENGTH;
                 }
 
-                RETURN_ERROR_IF(HUF_isError(hufSuccess), corruption_detected, ""); 
+                RETURN_ERROR_IF(HUF_isError(hufSuccess), corruption_detected, "");
 
                 dctx->litPtr = dctx->litBuffer;
                 dctx->litSize = litSize;
@@ -245,7 +245,7 @@ size_t ZSTD_decodeLiteralsBlock(ZSTD_DCtx* dctx,
                 RETURN_ERROR_IF(expectedWriteSize < litSize, dstSize_tooSmall, "");
                 ZSTD_allocateLiteralsBuffer(dctx, dst, dstCapacity, litSize, streaming, expectedWriteSize, 1);
                 if (lhSize+litSize+WILDCOPY_OVERLENGTH > srcSize) {  /* risk reading beyond src buffer with wildcopy */
-                    RETURN_ERROR_IF(litSize+lhSize > srcSize, corruption_detected, ""); 
+                    RETURN_ERROR_IF(litSize+lhSize > srcSize, corruption_detected, "");
                     if (dctx->litBufferLocation == ZSTD_split)
                     {
                         ZSTD_memcpy(dctx->litBuffer, istart + lhSize, litSize - ZSTD_LITBUFFEREXTRASIZE);
@@ -288,7 +288,7 @@ size_t ZSTD_decodeLiteralsBlock(ZSTD_DCtx* dctx,
                     break;
                 }
                 RETURN_ERROR_IF(litSize > 0 && dst == NULL, dstSize_tooSmall, "NULL not handled");
-                RETURN_ERROR_IF(litSize > ZSTD_BLOCKSIZE_MAX, corruption_detected, ""); 
+                RETURN_ERROR_IF(litSize > ZSTD_BLOCKSIZE_MAX, corruption_detected, "");
                 RETURN_ERROR_IF(expectedWriteSize < litSize, dstSize_tooSmall, "");
                 ZSTD_allocateLiteralsBuffer(dctx, dst, dstCapacity, litSize, streaming, expectedWriteSize, 1);
                 if (dctx->litBufferLocation == ZSTD_split)
@@ -613,8 +613,8 @@ static size_t ZSTD_buildSeqTable(ZSTD_seqSymbol* DTableSpace, const ZSTD_seqSymb
     switch(type)
     {
     case set_rle :
-        RETURN_ERROR_IF(!srcSize, srcSize_wrong, ""); 
-        RETURN_ERROR_IF((*(const BYTE*)src) > max, corruption_detected, ""); 
+        RETURN_ERROR_IF(!srcSize, srcSize_wrong, "");
+        RETURN_ERROR_IF((*(const BYTE*)src) > max, corruption_detected, "");
         {   U32 const symbol = *(const BYTE*)src;
             U32 const baseline = baseValue[symbol];
             U8 const nbBits = nbAdditionalBits[symbol];
@@ -626,7 +626,7 @@ static size_t ZSTD_buildSeqTable(ZSTD_seqSymbol* DTableSpace, const ZSTD_seqSymb
         *DTablePtr = defaultTable;
         return 0;
     case set_repeat:
-        RETURN_ERROR_IF(!flagRepeatTable, corruption_detected, ""); 
+        RETURN_ERROR_IF(!flagRepeatTable, corruption_detected, "");
         /* prefetch FSE table if used */
         if (ddictIsCold && (nbSeq > 24 /* heuristic */)) {
             const void* const pStart = *DTablePtr;
@@ -638,8 +638,8 @@ static size_t ZSTD_buildSeqTable(ZSTD_seqSymbol* DTableSpace, const ZSTD_seqSymb
         {   unsigned tableLog;
             S16 norm[MaxSeq+1];
             size_t const headerSize = FSE_readNCount(norm, &max, &tableLog, src, srcSize);
-            RETURN_ERROR_IF(FSE_isError(headerSize), corruption_detected, ""); 
-            RETURN_ERROR_IF(tableLog > maxLog, corruption_detected, ""); 
+            RETURN_ERROR_IF(FSE_isError(headerSize), corruption_detected, "");
+            RETURN_ERROR_IF(tableLog > maxLog, corruption_detected, "");
             ZSTD_buildFSETable(DTableSpace, norm, max, baseValue, nbAdditionalBits, tableLog, wksp, wkspSize, bmi2);
             *DTablePtr = DTableSpace;
             return headerSize;
@@ -660,29 +660,29 @@ size_t ZSTD_decodeSeqHeaders(ZSTD_DCtx* dctx, int* nbSeqPtr,
     DEBUGLOG(5, "ZSTD_decodeSeqHeaders");
 
     /* check */
-    RETURN_ERROR_IF(srcSize < MIN_SEQUENCES_SIZE, srcSize_wrong, ""); 
+    RETURN_ERROR_IF(srcSize < MIN_SEQUENCES_SIZE, srcSize_wrong, "");
 
     /* SeqHead */
     nbSeq = *ip++;
     if (!nbSeq) {
         *nbSeqPtr=0;
-        RETURN_ERROR_IF(srcSize != 1, srcSize_wrong, ""); 
+        RETURN_ERROR_IF(srcSize != 1, srcSize_wrong, "");
         return 1;
     }
     if (nbSeq > 0x7F) {
         if (nbSeq == 0xFF) {
-            RETURN_ERROR_IF(ip+2 > iend, srcSize_wrong, ""); 
+            RETURN_ERROR_IF(ip+2 > iend, srcSize_wrong, "");
             nbSeq = MEM_readLE16(ip) + LONGNBSEQ;
             ip+=2;
         } else {
-            RETURN_ERROR_IF(ip >= iend, srcSize_wrong, ""); 
+            RETURN_ERROR_IF(ip >= iend, srcSize_wrong, "");
             nbSeq = ((nbSeq-0x80)<<8) + *ip++;
         }
     }
     *nbSeqPtr = nbSeq;
 
     /* FSE table descriptors */
-    RETURN_ERROR_IF(ip+1 > iend, srcSize_wrong, ""); /* minimum possible size: 1 byte for symbol encoding types */ 
+    RETURN_ERROR_IF(ip+1 > iend, srcSize_wrong, ""); /* minimum possible size: 1 byte for symbol encoding types */
     {   symbolEncodingType_e const LLtype = (symbolEncodingType_e)(*ip >> 6);
         symbolEncodingType_e const OFtype = (symbolEncodingType_e)((*ip >> 4) & 3);
         symbolEncodingType_e const MLtype = (symbolEncodingType_e)((*ip >> 2) & 3);
@@ -697,7 +697,7 @@ size_t ZSTD_decodeSeqHeaders(ZSTD_DCtx* dctx, int* nbSeqPtr,
                                                       dctx->ddictIsCold, nbSeq,
                                                       dctx->workspace, sizeof(dctx->workspace),
                                                       ZSTD_DCtx_get_bmi2(dctx));
-            RETURN_ERROR_IF(ZSTD_isError(llhSize), corruption_detected, "ZSTD_buildSeqTable failed"); 
+            RETURN_ERROR_IF(ZSTD_isError(llhSize), corruption_detected, "ZSTD_buildSeqTable failed");
             ip += llhSize;
         }
 
@@ -709,7 +709,7 @@ size_t ZSTD_decodeSeqHeaders(ZSTD_DCtx* dctx, int* nbSeqPtr,
                                                       dctx->ddictIsCold, nbSeq,
                                                       dctx->workspace, sizeof(dctx->workspace),
                                                       ZSTD_DCtx_get_bmi2(dctx));
-            RETURN_ERROR_IF(ZSTD_isError(ofhSize), corruption_detected, "ZSTD_buildSeqTable failed"); 
+            RETURN_ERROR_IF(ZSTD_isError(ofhSize), corruption_detected, "ZSTD_buildSeqTable failed");
             ip += ofhSize;
         }
 
@@ -721,7 +721,7 @@ size_t ZSTD_decodeSeqHeaders(ZSTD_DCtx* dctx, int* nbSeqPtr,
                                                       dctx->ddictIsCold, nbSeq,
                                                       dctx->workspace, sizeof(dctx->workspace),
                                                       ZSTD_DCtx_get_bmi2(dctx));
-            RETURN_ERROR_IF(ZSTD_isError(mlhSize), corruption_detected, "ZSTD_buildSeqTable failed"); 
+            RETURN_ERROR_IF(ZSTD_isError(mlhSize), corruption_detected, "ZSTD_buildSeqTable failed");
             ip += mlhSize;
         }
     }
@@ -756,7 +756,7 @@ typedef struct {
  *  Precondition: *ip <= *op
  *  Postcondition: *op - *op >= 8
  */
-HINT_INLINE void ZSTD_overlapCopy8(BYTE** op, BYTE const** ip, size_t offset) { 
+HINT_INLINE void ZSTD_overlapCopy8(BYTE** op, BYTE const** ip, size_t offset) {
     assert(*ip <= *op);
     if (offset < 8) {
         /* close range match, overlap */
@@ -869,11 +869,11 @@ size_t ZSTD_execSequenceEnd(BYTE* op,
     const BYTE* match = oLitEnd - sequence.offset;
     BYTE* const oend_w = oend - WILDCOPY_OVERLENGTH;
 
-    /* bounds checks : careful of address space overflow in 32-bit mode */ 
-    RETURN_ERROR_IF(sequenceLength > (size_t)(oend - op), dstSize_tooSmall, "last match must fit within dstBuffer"); 
-    RETURN_ERROR_IF(sequence.litLength > (size_t)(litLimit - *litPtr), corruption_detected, "try to read beyond literal buffer"); 
-    assert(op < op + sequenceLength); 
-    assert(oLitEnd < op + sequenceLength); 
+    /* bounds checks : careful of address space overflow in 32-bit mode */
+    RETURN_ERROR_IF(sequenceLength > (size_t)(oend - op), dstSize_tooSmall, "last match must fit within dstBuffer");
+    RETURN_ERROR_IF(sequence.litLength > (size_t)(litLimit - *litPtr), corruption_detected, "try to read beyond literal buffer");
+    assert(op < op + sequenceLength);
+    assert(oLitEnd < op + sequenceLength);
 
     /* copy literals */
     ZSTD_safecopy(op, oend_w, *litPtr, sequence.litLength, ZSTD_no_overlap);
@@ -883,7 +883,7 @@ size_t ZSTD_execSequenceEnd(BYTE* op,
     /* copy Match */
     if (sequence.offset > (size_t)(oLitEnd - prefixStart)) {
         /* offset beyond prefix */
-        RETURN_ERROR_IF(sequence.offset > (size_t)(oLitEnd - virtualStart), corruption_detected, ""); 
+        RETURN_ERROR_IF(sequence.offset > (size_t)(oLitEnd - virtualStart), corruption_detected, "");
         match = dictEnd - (prefixStart - match);
         if (match + sequence.matchLength <= dictEnd) {
             ZSTD_memmove(oLitEnd, match, sequence.matchLength);
@@ -958,18 +958,18 @@ size_t ZSTD_execSequence(BYTE* op,
     BYTE* const oLitEnd = op + sequence.litLength;
     size_t const sequenceLength = sequence.litLength + sequence.matchLength;
     BYTE* const oMatchEnd = op + sequenceLength;   /* risk : address space overflow (32-bits) */
-    BYTE* const oend_w = oend - WILDCOPY_OVERLENGTH;   /* risk : address space underflow on oend=NULL */ 
+    BYTE* const oend_w = oend - WILDCOPY_OVERLENGTH;   /* risk : address space underflow on oend=NULL */
     const BYTE* const iLitEnd = *litPtr + sequence.litLength;
     const BYTE* match = oLitEnd - sequence.offset;
 
-    assert(op != NULL /* Precondition */); 
-    assert(oend_w < oend /* No underflow */); 
-    /* Handle edge cases in a slow path: 
-     *   - Read beyond end of literals 
-     *   - Match end is within WILDCOPY_OVERLIMIT of oend 
-     *   - 32-bit mode and the match length overflows 
-     */ 
-    if (UNLIKELY( 
+    assert(op != NULL /* Precondition */);
+    assert(oend_w < oend /* No underflow */);
+    /* Handle edge cases in a slow path:
+     *   - Read beyond end of literals
+     *   - Match end is within WILDCOPY_OVERLIMIT of oend
+     *   - 32-bit mode and the match length overflows
+     */
+    if (UNLIKELY(
         iLitEnd > litLimit ||
         oMatchEnd > oend_w ||
         (MEM_32bits() && (size_t)(oend - op) < sequenceLength + WILDCOPY_OVERLENGTH)))
@@ -1062,15 +1062,15 @@ size_t ZSTD_execSequenceSplitLitBuffer(BYTE* op,
      *   - 32-bit mode and the match length overflows
      */
     if (UNLIKELY(
-            iLitEnd > litLimit || 
-            oMatchEnd > oend_w || 
-            (MEM_32bits() && (size_t)(oend - op) < sequenceLength + WILDCOPY_OVERLENGTH))) 
+            iLitEnd > litLimit ||
+            oMatchEnd > oend_w ||
+            (MEM_32bits() && (size_t)(oend - op) < sequenceLength + WILDCOPY_OVERLENGTH)))
         return ZSTD_execSequenceEndSplitLitBuffer(op, oend, oend_w, sequence, litPtr, litLimit, prefixStart, virtualStart, dictEnd);
 
     /* Assumptions (everything else goes into ZSTD_execSequenceEnd()) */
-    assert(op <= oLitEnd /* No overflow */); 
-    assert(oLitEnd < oMatchEnd /* Non-zero match & no overflow */); 
-    assert(oMatchEnd <= oend /* No underflow */); 
+    assert(op <= oLitEnd /* No overflow */);
+    assert(oLitEnd < oMatchEnd /* Non-zero match & no overflow */);
+    assert(oMatchEnd <= oend /* No underflow */);
     assert(iLitEnd <= litLimit /* Literal length is in bounds */);
     assert(oLitEnd <= oend_w /* Can wildcopy literals */);
     assert(oMatchEnd <= oend_w /* Can wildcopy matches */);
@@ -1081,7 +1081,7 @@ size_t ZSTD_execSequenceSplitLitBuffer(BYTE* op,
      */
     assert(WILDCOPY_OVERLENGTH >= 16);
     ZSTD_copy16(op, (*litPtr));
-    if (UNLIKELY(sequence.litLength > 16)) { 
+    if (UNLIKELY(sequence.litLength > 16)) {
         ZSTD_wildcopy(op+16, (*litPtr)+16, sequence.litLength-16, ZSTD_no_overlap);
     }
     op = oLitEnd;
@@ -1090,7 +1090,7 @@ size_t ZSTD_execSequenceSplitLitBuffer(BYTE* op,
     /* Copy Match */
     if (sequence.offset > (size_t)(oLitEnd - prefixStart)) {
         /* offset beyond prefix -> go into extDict */
-        RETURN_ERROR_IF(UNLIKELY(sequence.offset > (size_t)(oLitEnd - virtualStart)), corruption_detected, ""); 
+        RETURN_ERROR_IF(UNLIKELY(sequence.offset > (size_t)(oLitEnd - virtualStart)), corruption_detected, "");
         match = dictEnd + (match - prefixStart);
         if (match + sequence.matchLength <= dictEnd) {
             ZSTD_memmove(oLitEnd, match, sequence.matchLength);
@@ -1112,7 +1112,7 @@ size_t ZSTD_execSequenceSplitLitBuffer(BYTE* op,
     /* Nearly all offsets are >= WILDCOPY_VECLEN bytes, which means we can use wildcopy
      * without overlap checking.
      */
-    if (LIKELY(sequence.offset >= WILDCOPY_VECLEN)) { 
+    if (LIKELY(sequence.offset >= WILDCOPY_VECLEN)) {
         /* We bet on a full wildcopy for matches, since we expect matches to be
          * longer than literals (in general). In silesia, ~10% of matches are longer
          * than 16 bytes.
@@ -1220,7 +1220,7 @@ ZSTD_decodeSequence(seqState_t* seqState, const ZSTD_longOffset_e longOffsets)
                 if (LIKELY((ofBits == 0))) {
                     offset = seqState->prevOffset[ll0];
                     seqState->prevOffset[1] = seqState->prevOffset[!ll0];
-                    seqState->prevOffset[0] = offset; 
+                    seqState->prevOffset[0] = offset;
                 } else {
                     offset = ofBase + ll0 + BIT_readBitsFast(&seqState->DStream, 1);
                     {   size_t temp = (offset==3) ? seqState->prevOffset[0] - 1 : seqState->prevOffset[offset];
@@ -1238,7 +1238,7 @@ ZSTD_decodeSequence(seqState_t* seqState, const ZSTD_longOffset_e longOffsets)
         if (mlBits > 0)
     #endif
             seq.matchLength += BIT_readBitsFast(&seqState->DStream, mlBits/*>0*/);
- 
+
         if (MEM_32bits() && (mlBits+llBits >= STREAM_ACCUMULATOR_MIN_32-LONG_OFFSETS_MAX_EXTRA_BITS_32))
             BIT_reloadDStream(&seqState->DStream);
         if (MEM_64bits() && UNLIKELY(totalBits >= STREAM_ACCUMULATOR_MIN_64-(LLFSELog+MLFSELog+OffFSELog)))
@@ -1252,7 +1252,7 @@ ZSTD_decodeSequence(seqState_t* seqState, const ZSTD_longOffset_e longOffsets)
         if (llBits > 0)
     #endif
             seq.litLength += BIT_readBitsFast(&seqState->DStream, llBits/*>0*/);
- 
+
         if (MEM_32bits())
             BIT_reloadDStream(&seqState->DStream);
 
@@ -1263,67 +1263,67 @@ ZSTD_decodeSequence(seqState_t* seqState, const ZSTD_longOffset_e longOffsets)
         ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlNext, mlnbBits);    /* <=  9 bits */
         if (MEM_32bits()) BIT_reloadDStream(&seqState->DStream);    /* <= 18 bits */
         ZSTD_updateFseStateWithDInfo(&seqState->stateOffb, &seqState->DStream, ofNext, ofnbBits);  /* <=  8 bits */
-    } 
- 
+    }
+
     return seq;
 }
 
-#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION 
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 MEM_STATIC int ZSTD_dictionaryIsActive(ZSTD_DCtx const* dctx, BYTE const* prefixStart, BYTE const* oLitEnd)
-{ 
-    size_t const windowSize = dctx->fParams.windowSize; 
-    /* No dictionary used. */ 
-    if (dctx->dictContentEndForFuzzing == NULL) return 0; 
-    /* Dictionary is our prefix. */ 
-    if (prefixStart == dctx->dictContentBeginForFuzzing) return 1; 
-    /* Dictionary is not our ext-dict. */ 
-    if (dctx->dictEnd != dctx->dictContentEndForFuzzing) return 0; 
-    /* Dictionary is not within our window size. */ 
-    if ((size_t)(oLitEnd - prefixStart) >= windowSize) return 0; 
-    /* Dictionary is active. */ 
-    return 1; 
-} 
- 
-MEM_STATIC void ZSTD_assertValidSequence( 
-        ZSTD_DCtx const* dctx, 
-        BYTE const* op, BYTE const* oend, 
-        seq_t const seq, 
-        BYTE const* prefixStart, BYTE const* virtualStart) 
-{ 
+{
+    size_t const windowSize = dctx->fParams.windowSize;
+    /* No dictionary used. */
+    if (dctx->dictContentEndForFuzzing == NULL) return 0;
+    /* Dictionary is our prefix. */
+    if (prefixStart == dctx->dictContentBeginForFuzzing) return 1;
+    /* Dictionary is not our ext-dict. */
+    if (dctx->dictEnd != dctx->dictContentEndForFuzzing) return 0;
+    /* Dictionary is not within our window size. */
+    if ((size_t)(oLitEnd - prefixStart) >= windowSize) return 0;
+    /* Dictionary is active. */
+    return 1;
+}
+
+MEM_STATIC void ZSTD_assertValidSequence(
+        ZSTD_DCtx const* dctx,
+        BYTE const* op, BYTE const* oend,
+        seq_t const seq,
+        BYTE const* prefixStart, BYTE const* virtualStart)
+{
 #if DEBUGLEVEL >= 1
-    size_t const windowSize = dctx->fParams.windowSize; 
-    size_t const sequenceSize = seq.litLength + seq.matchLength; 
-    BYTE const* const oLitEnd = op + seq.litLength; 
-    DEBUGLOG(6, "Checking sequence: litL=%u matchL=%u offset=%u", 
-            (U32)seq.litLength, (U32)seq.matchLength, (U32)seq.offset); 
-    assert(op <= oend); 
-    assert((size_t)(oend - op) >= sequenceSize); 
-    assert(sequenceSize <= ZSTD_BLOCKSIZE_MAX); 
-    if (ZSTD_dictionaryIsActive(dctx, prefixStart, oLitEnd)) { 
-        size_t const dictSize = (size_t)((char const*)dctx->dictContentEndForFuzzing - (char const*)dctx->dictContentBeginForFuzzing); 
-        /* Offset must be within the dictionary. */ 
-        assert(seq.offset <= (size_t)(oLitEnd - virtualStart)); 
-        assert(seq.offset <= windowSize + dictSize); 
-    } else { 
-        /* Offset must be within our window. */ 
-        assert(seq.offset <= windowSize); 
-    } 
+    size_t const windowSize = dctx->fParams.windowSize;
+    size_t const sequenceSize = seq.litLength + seq.matchLength;
+    BYTE const* const oLitEnd = op + seq.litLength;
+    DEBUGLOG(6, "Checking sequence: litL=%u matchL=%u offset=%u",
+            (U32)seq.litLength, (U32)seq.matchLength, (U32)seq.offset);
+    assert(op <= oend);
+    assert((size_t)(oend - op) >= sequenceSize);
+    assert(sequenceSize <= ZSTD_BLOCKSIZE_MAX);
+    if (ZSTD_dictionaryIsActive(dctx, prefixStart, oLitEnd)) {
+        size_t const dictSize = (size_t)((char const*)dctx->dictContentEndForFuzzing - (char const*)dctx->dictContentBeginForFuzzing);
+        /* Offset must be within the dictionary. */
+        assert(seq.offset <= (size_t)(oLitEnd - virtualStart));
+        assert(seq.offset <= windowSize + dictSize);
+    } else {
+        /* Offset must be within our window. */
+        assert(seq.offset <= windowSize);
+    }
 #else
     (void)dctx, (void)op, (void)oend, (void)seq, (void)prefixStart, (void)virtualStart;
 #endif
-} 
-#endif 
- 
-#ifndef ZSTD_FORCE_DECOMPRESS_SEQUENCES_LONG 
+}
+#endif
+
+#ifndef ZSTD_FORCE_DECOMPRESS_SEQUENCES_LONG
 
 
 FORCE_INLINE_TEMPLATE size_t
-DONT_VECTORIZE 
+DONT_VECTORIZE
 ZSTD_decompressSequences_bodySplitLitBuffer( ZSTD_DCtx* dctx,
                                void* dst, size_t maxDstSize,
                          const void* seqStart, size_t seqSize, int nbSeq,
-                         const ZSTD_longOffset_e isLongOffset, 
-                         const int frame) 
+                         const ZSTD_longOffset_e isLongOffset,
+                         const int frame)
 {
     const BYTE* ip = (const BYTE*)seqStart;
     const BYTE* const iend = ip + seqSize;
@@ -1336,7 +1336,7 @@ ZSTD_decompressSequences_bodySplitLitBuffer( ZSTD_DCtx* dctx,
     const BYTE* const vBase = (const BYTE*) (dctx->virtualStart);
     const BYTE* const dictEnd = (const BYTE*) (dctx->dictEnd);
     DEBUGLOG(5, "ZSTD_decompressSequences_bodySplitLitBuffer");
-    (void)frame; 
+    (void)frame;
 
     /* Regen sequences */
     if (nbSeq) {
@@ -1345,17 +1345,17 @@ ZSTD_decompressSequences_bodySplitLitBuffer( ZSTD_DCtx* dctx,
         { U32 i; for (i=0; i<ZSTD_REP_NUM; i++) seqState.prevOffset[i] = dctx->entropy.rep[i]; }
         RETURN_ERROR_IF(
             ERR_isError(BIT_initDStream(&seqState.DStream, ip, iend-ip)),
-            corruption_detected, ""); 
+            corruption_detected, "");
         ZSTD_initFseState(&seqState.stateLL, &seqState.DStream, dctx->LLTptr);
         ZSTD_initFseState(&seqState.stateOffb, &seqState.DStream, dctx->OFTptr);
         ZSTD_initFseState(&seqState.stateML, &seqState.DStream, dctx->MLTptr);
-        assert(dst != NULL); 
+        assert(dst != NULL);
 
-        ZSTD_STATIC_ASSERT( 
-                BIT_DStream_unfinished < BIT_DStream_completed && 
-                BIT_DStream_endOfBuffer < BIT_DStream_completed && 
-                BIT_DStream_completed < BIT_DStream_overflow); 
- 
+        ZSTD_STATIC_ASSERT(
+                BIT_DStream_unfinished < BIT_DStream_completed &&
+                BIT_DStream_endOfBuffer < BIT_DStream_completed &&
+                BIT_DStream_completed < BIT_DStream_overflow);
+
         /* decompress without overrunning litPtr begins */
         {
             seq_t sequence = ZSTD_decodeSequence(&seqState, isLongOffset);
@@ -1403,7 +1403,7 @@ ZSTD_decompressSequences_bodySplitLitBuffer( ZSTD_DCtx* dctx,
                 *
                 *   https://gist.github.com/terrelln/9889fc06a423fd5ca6e99351564473f4
                 */
-#if defined(__GNUC__) && defined(__x86_64__) 
+#if defined(__GNUC__) && defined(__x86_64__)
             __asm__(".p2align 6");
 #  if __GNUC__ >= 7
 	    /* good for gcc-7, gcc-9, and gcc-11 */
@@ -1483,7 +1483,7 @@ ZSTD_decompressSequences_bodySplitLitBuffer( ZSTD_DCtx* dctx,
             __asm__("nop");
             __asm__(".p2align 3");
 #  endif
-#endif 
+#endif
 
             for (; ; ) {
                 seq_t const sequence = ZSTD_decodeSequence(&seqState, isLongOffset);
@@ -1587,37 +1587,37 @@ ZSTD_decompressSequences_body(ZSTD_DCtx* dctx,
 #  endif
 #endif
 
-        for ( ; ; ) { 
+        for ( ; ; ) {
             seq_t const sequence = ZSTD_decodeSequence(&seqState, isLongOffset);
-            size_t const oneSeqSize = ZSTD_execSequence(op, oend, sequence, &litPtr, litEnd, prefixStart, vBase, dictEnd); 
-#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) && defined(FUZZING_ASSERT_VALID_SEQUENCE) 
-            assert(!ZSTD_isError(oneSeqSize)); 
-            if (frame) ZSTD_assertValidSequence(dctx, op, oend, sequence, prefixStart, vBase); 
-#endif 
+            size_t const oneSeqSize = ZSTD_execSequence(op, oend, sequence, &litPtr, litEnd, prefixStart, vBase, dictEnd);
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) && defined(FUZZING_ASSERT_VALID_SEQUENCE)
+            assert(!ZSTD_isError(oneSeqSize));
+            if (frame) ZSTD_assertValidSequence(dctx, op, oend, sequence, prefixStart, vBase);
+#endif
             if (UNLIKELY(ZSTD_isError(oneSeqSize)))
                 return oneSeqSize;
-            DEBUGLOG(6, "regenerated sequence size : %u", (U32)oneSeqSize); 
+            DEBUGLOG(6, "regenerated sequence size : %u", (U32)oneSeqSize);
             op += oneSeqSize;
             if (UNLIKELY(!--nbSeq))
                 break;
             BIT_reloadDStream(&(seqState.DStream));
-        } 
+        }
 
         /* check if reached exact end */
         DEBUGLOG(5, "ZSTD_decompressSequences_body: after decode loop, remaining nbSeq : %i", nbSeq);
-        RETURN_ERROR_IF(nbSeq, corruption_detected, ""); 
-        RETURN_ERROR_IF(BIT_reloadDStream(&seqState.DStream) < BIT_DStream_completed, corruption_detected, ""); 
+        RETURN_ERROR_IF(nbSeq, corruption_detected, "");
+        RETURN_ERROR_IF(BIT_reloadDStream(&seqState.DStream) < BIT_DStream_completed, corruption_detected, "");
         /* save reps for next block */
         { U32 i; for (i=0; i<ZSTD_REP_NUM; i++) dctx->entropy.rep[i] = (U32)(seqState.prevOffset[i]); }
     }
 
     /* last literal segment */
     {   size_t const lastLLSize = litEnd - litPtr;
-        RETURN_ERROR_IF(lastLLSize > (size_t)(oend-op), dstSize_tooSmall, ""); 
-        if (op != NULL) { 
+        RETURN_ERROR_IF(lastLLSize > (size_t)(oend-op), dstSize_tooSmall, "");
+        if (op != NULL) {
             ZSTD_memcpy(op, litPtr, lastLLSize);
-            op += lastLLSize; 
-        } 
+            op += lastLLSize;
+        }
     }
 
     return op-ostart;
@@ -1627,10 +1627,10 @@ static size_t
 ZSTD_decompressSequences_default(ZSTD_DCtx* dctx,
                                  void* dst, size_t maxDstSize,
                            const void* seqStart, size_t seqSize, int nbSeq,
-                           const ZSTD_longOffset_e isLongOffset, 
-                           const int frame) 
+                           const ZSTD_longOffset_e isLongOffset,
+                           const int frame)
 {
-    return ZSTD_decompressSequences_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame); 
+    return ZSTD_decompressSequences_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
 }
 
 static size_t
@@ -1668,8 +1668,8 @@ ZSTD_decompressSequencesLong_body(
                                ZSTD_DCtx* dctx,
                                void* dst, size_t maxDstSize,
                          const void* seqStart, size_t seqSize, int nbSeq,
-                         const ZSTD_longOffset_e isLongOffset, 
-                         const int frame) 
+                         const ZSTD_longOffset_e isLongOffset,
+                         const int frame)
 {
     const BYTE* ip = (const BYTE*)seqStart;
     const BYTE* const iend = ip + seqSize;
@@ -1681,7 +1681,7 @@ ZSTD_decompressSequencesLong_body(
     const BYTE* const prefixStart = (const BYTE*) (dctx->prefixStart);
     const BYTE* const dictStart = (const BYTE*) (dctx->virtualStart);
     const BYTE* const dictEnd = (const BYTE*) (dctx->dictEnd);
-    (void)frame; 
+    (void)frame;
 
     /* Regen sequences */
     if (nbSeq) {
@@ -1696,11 +1696,11 @@ ZSTD_decompressSequencesLong_body(
 
         dctx->fseEntropy = 1;
         { int i; for (i=0; i<ZSTD_REP_NUM; i++) seqState.prevOffset[i] = dctx->entropy.rep[i]; }
-        assert(dst != NULL); 
+        assert(dst != NULL);
         assert(iend >= ip);
         RETURN_ERROR_IF(
             ERR_isError(BIT_initDStream(&seqState.DStream, ip, iend-ip)),
-            corruption_detected, ""); 
+            corruption_detected, "");
         ZSTD_initFseState(&seqState.stateLL, &seqState.DStream, dctx->LLTptr);
         ZSTD_initFseState(&seqState.stateOffb, &seqState.DStream, dctx->OFTptr);
         ZSTD_initFseState(&seqState.stateML, &seqState.DStream, dctx->MLTptr);
@@ -1711,7 +1711,7 @@ ZSTD_decompressSequencesLong_body(
             prefetchPos = ZSTD_prefetchMatch(prefetchPos, sequence, prefixStart, dictEnd);
             sequences[seqNb] = sequence;
         }
-        RETURN_ERROR_IF(seqNb<seqAdvance, corruption_detected, ""); 
+        RETURN_ERROR_IF(seqNb<seqAdvance, corruption_detected, "");
 
         /* decompress without stomping litBuffer */
         for (; (BIT_reloadDStream(&(seqState.DStream)) <= BIT_DStream_completed) && (seqNb < nbSeq); seqNb++) {
@@ -1733,10 +1733,10 @@ ZSTD_decompressSequencesLong_body(
                 litBufferEnd = dctx->litExtraBuffer + ZSTD_LITBUFFEREXTRASIZE;
                 dctx->litBufferLocation = ZSTD_not_in_dst;
                 oneSeqSize = ZSTD_execSequence(op, oend, sequences[(seqNb - ADVANCED_SEQS) & STORED_SEQS_MASK], &litPtr, litBufferEnd, prefixStart, dictStart, dictEnd);
-#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) && defined(FUZZING_ASSERT_VALID_SEQUENCE) 
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) && defined(FUZZING_ASSERT_VALID_SEQUENCE)
                 assert(!ZSTD_isError(oneSeqSize));
                 if (frame) ZSTD_assertValidSequence(dctx, op, oend, sequences[(seqNb - ADVANCED_SEQS) & STORED_SEQS_MASK], prefixStart, dictStart);
-#endif 
+#endif
                 if (ZSTD_isError(oneSeqSize)) return oneSeqSize;
 
                 prefetchPos = ZSTD_prefetchMatch(prefetchPos, sequence, prefixStart, dictEnd);
@@ -1760,7 +1760,7 @@ ZSTD_decompressSequencesLong_body(
                 op += oneSeqSize;
             }
         }
-        RETURN_ERROR_IF(seqNb<nbSeq, corruption_detected, ""); 
+        RETURN_ERROR_IF(seqNb<nbSeq, corruption_detected, "");
 
         /* finish queue */
         seqNb -= seqAdvance;
@@ -1781,10 +1781,10 @@ ZSTD_decompressSequencesLong_body(
                 dctx->litBufferLocation = ZSTD_not_in_dst;
                 {
                     size_t const oneSeqSize = ZSTD_execSequence(op, oend, *sequence, &litPtr, litBufferEnd, prefixStart, dictStart, dictEnd);
-#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) && defined(FUZZING_ASSERT_VALID_SEQUENCE) 
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) && defined(FUZZING_ASSERT_VALID_SEQUENCE)
                     assert(!ZSTD_isError(oneSeqSize));
                     if (frame) ZSTD_assertValidSequence(dctx, op, oend, sequences[seqNb&STORED_SEQS_MASK], prefixStart, dictStart);
-#endif 
+#endif
                     if (ZSTD_isError(oneSeqSize)) return oneSeqSize;
                     op += oneSeqSize;
                 }
@@ -1820,11 +1820,11 @@ ZSTD_decompressSequencesLong_body(
         litBufferEnd = dctx->litExtraBuffer + ZSTD_LITBUFFEREXTRASIZE;
     }
     {   size_t const lastLLSize = litBufferEnd - litPtr;
-        RETURN_ERROR_IF(lastLLSize > (size_t)(oend-op), dstSize_tooSmall, ""); 
-        if (op != NULL) { 
+        RETURN_ERROR_IF(lastLLSize > (size_t)(oend-op), dstSize_tooSmall, "");
+        if (op != NULL) {
             ZSTD_memmove(op, litPtr, lastLLSize);
-            op += lastLLSize; 
-        } 
+            op += lastLLSize;
+        }
     }
 
     return op-ostart;
@@ -1834,10 +1834,10 @@ static size_t
 ZSTD_decompressSequencesLong_default(ZSTD_DCtx* dctx,
                                  void* dst, size_t maxDstSize,
                            const void* seqStart, size_t seqSize, int nbSeq,
-                           const ZSTD_longOffset_e isLongOffset, 
-                           const int frame) 
+                           const ZSTD_longOffset_e isLongOffset,
+                           const int frame)
 {
-    return ZSTD_decompressSequencesLong_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame); 
+    return ZSTD_decompressSequencesLong_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
 }
 #endif /* ZSTD_FORCE_DECOMPRESS_SEQUENCES_SHORT */
 
@@ -1847,14 +1847,14 @@ ZSTD_decompressSequencesLong_default(ZSTD_DCtx* dctx,
 
 #ifndef ZSTD_FORCE_DECOMPRESS_SEQUENCES_LONG
 static BMI2_TARGET_ATTRIBUTE size_t
-DONT_VECTORIZE 
+DONT_VECTORIZE
 ZSTD_decompressSequences_bmi2(ZSTD_DCtx* dctx,
                                  void* dst, size_t maxDstSize,
                            const void* seqStart, size_t seqSize, int nbSeq,
-                           const ZSTD_longOffset_e isLongOffset, 
-                           const int frame) 
+                           const ZSTD_longOffset_e isLongOffset,
+                           const int frame)
 {
-    return ZSTD_decompressSequences_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame); 
+    return ZSTD_decompressSequences_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
 }
 static BMI2_TARGET_ATTRIBUTE size_t
 DONT_VECTORIZE
@@ -1873,10 +1873,10 @@ static BMI2_TARGET_ATTRIBUTE size_t
 ZSTD_decompressSequencesLong_bmi2(ZSTD_DCtx* dctx,
                                  void* dst, size_t maxDstSize,
                            const void* seqStart, size_t seqSize, int nbSeq,
-                           const ZSTD_longOffset_e isLongOffset, 
-                           const int frame) 
+                           const ZSTD_longOffset_e isLongOffset,
+                           const int frame)
 {
-    return ZSTD_decompressSequencesLong_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame); 
+    return ZSTD_decompressSequencesLong_body(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
 }
 #endif /* ZSTD_FORCE_DECOMPRESS_SEQUENCES_SHORT */
 
@@ -1886,20 +1886,20 @@ typedef size_t (*ZSTD_decompressSequences_t)(
                             ZSTD_DCtx* dctx,
                             void* dst, size_t maxDstSize,
                             const void* seqStart, size_t seqSize, int nbSeq,
-                            const ZSTD_longOffset_e isLongOffset, 
-                            const int frame); 
+                            const ZSTD_longOffset_e isLongOffset,
+                            const int frame);
 
 #ifndef ZSTD_FORCE_DECOMPRESS_SEQUENCES_LONG
 static size_t
 ZSTD_decompressSequences(ZSTD_DCtx* dctx, void* dst, size_t maxDstSize,
                    const void* seqStart, size_t seqSize, int nbSeq,
-                   const ZSTD_longOffset_e isLongOffset, 
-                   const int frame) 
+                   const ZSTD_longOffset_e isLongOffset,
+                   const int frame)
 {
     DEBUGLOG(5, "ZSTD_decompressSequences");
 #if DYNAMIC_BMI2
     if (ZSTD_DCtx_get_bmi2(dctx)) {
-        return ZSTD_decompressSequences_bmi2(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame); 
+        return ZSTD_decompressSequences_bmi2(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
     }
 #endif
     return ZSTD_decompressSequences_default(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
@@ -1931,16 +1931,16 @@ static size_t
 ZSTD_decompressSequencesLong(ZSTD_DCtx* dctx,
                              void* dst, size_t maxDstSize,
                              const void* seqStart, size_t seqSize, int nbSeq,
-                             const ZSTD_longOffset_e isLongOffset, 
-                             const int frame) 
+                             const ZSTD_longOffset_e isLongOffset,
+                             const int frame)
 {
     DEBUGLOG(5, "ZSTD_decompressSequencesLong");
 #if DYNAMIC_BMI2
     if (ZSTD_DCtx_get_bmi2(dctx)) {
-        return ZSTD_decompressSequencesLong_bmi2(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame); 
+        return ZSTD_decompressSequencesLong_bmi2(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
     }
 #endif
-  return ZSTD_decompressSequencesLong_default(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame); 
+  return ZSTD_decompressSequencesLong_default(dctx, dst, maxDstSize, seqStart, seqSize, nbSeq, isLongOffset, frame);
 }
 #endif /* ZSTD_FORCE_DECOMPRESS_SEQUENCES_SHORT */
 
@@ -1989,7 +1989,7 @@ ZSTD_decompressBlock_internal(ZSTD_DCtx* dctx,
     ZSTD_longOffset_e const isLongOffset = (ZSTD_longOffset_e)(MEM_32bits() && (!frame || (dctx->fParams.windowSize > (1ULL << STREAM_ACCUMULATOR_MIN))));
     DEBUGLOG(5, "ZSTD_decompressBlock_internal (size : %u)", (U32)srcSize);
 
-    RETURN_ERROR_IF(srcSize >= ZSTD_BLOCKSIZE_MAX, srcSize_wrong, ""); 
+    RETURN_ERROR_IF(srcSize >= ZSTD_BLOCKSIZE_MAX, srcSize_wrong, "");
 
     /* Decode literals section */
     {   size_t const litCSize = ZSTD_decodeLiteralsBlock(dctx, src, srcSize, dst, dstCapacity, streaming);
@@ -2015,8 +2015,8 @@ ZSTD_decompressBlock_internal(ZSTD_DCtx* dctx,
         ip += seqHSize;
         srcSize -= seqHSize;
 
-        RETURN_ERROR_IF(dst == NULL && nbSeq > 0, dstSize_tooSmall, "NULL not handled"); 
- 
+        RETURN_ERROR_IF(dst == NULL && nbSeq > 0, dstSize_tooSmall, "NULL not handled");
+
 #if !defined(ZSTD_FORCE_DECOMPRESS_SEQUENCES_SHORT) && \
     !defined(ZSTD_FORCE_DECOMPRESS_SEQUENCES_LONG)
         if ( !usePrefetchDecoder
@@ -2035,7 +2035,7 @@ ZSTD_decompressBlock_internal(ZSTD_DCtx* dctx,
         if (usePrefetchDecoder)
 #endif
 #ifndef ZSTD_FORCE_DECOMPRESS_SEQUENCES_SHORT
-            return ZSTD_decompressSequencesLong(dctx, dst, dstCapacity, ip, srcSize, nbSeq, isLongOffset, frame); 
+            return ZSTD_decompressSequencesLong(dctx, dst, dstCapacity, ip, srcSize, nbSeq, isLongOffset, frame);
 #endif
 
 #ifndef ZSTD_FORCE_DECOMPRESS_SEQUENCES_LONG
@@ -2050,16 +2050,16 @@ ZSTD_decompressBlock_internal(ZSTD_DCtx* dctx,
 
 
 void ZSTD_checkContinuity(ZSTD_DCtx* dctx, const void* dst, size_t dstSize)
-{ 
+{
     if (dst != dctx->previousDstEnd && dstSize > 0) {   /* not contiguous */
-        dctx->dictEnd = dctx->previousDstEnd; 
-        dctx->virtualStart = (const char*)dst - ((const char*)(dctx->previousDstEnd) - (const char*)(dctx->prefixStart)); 
-        dctx->prefixStart = dst; 
-        dctx->previousDstEnd = dst; 
-    } 
-} 
- 
- 
+        dctx->dictEnd = dctx->previousDstEnd;
+        dctx->virtualStart = (const char*)dst - ((const char*)(dctx->previousDstEnd) - (const char*)(dctx->prefixStart));
+        dctx->prefixStart = dst;
+        dctx->previousDstEnd = dst;
+    }
+}
+
+
 size_t ZSTD_decompressBlock(ZSTD_DCtx* dctx,
                             void* dst, size_t dstCapacity,
                       const void* src, size_t srcSize)

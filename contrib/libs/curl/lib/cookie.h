@@ -44,16 +44,16 @@ struct Cookie {
   bool livecookie;   /* updated from a server, not a stored file */
   bool httponly;     /* true if the httponly directive is present */
   int creationtime;  /* time when the cookie was written */
-  unsigned char prefix; /* bitmap fields indicating which prefix are set */ 
+  unsigned char prefix; /* bitmap fields indicating which prefix are set */
 };
 
-/* 
- * Available cookie prefixes, as defined in 
- * draft-ietf-httpbis-rfc6265bis-02 
- */ 
-#define COOKIE_PREFIX__SECURE (1<<0) 
-#define COOKIE_PREFIX__HOST (1<<1) 
- 
+/*
+ * Available cookie prefixes, as defined in
+ * draft-ietf-httpbis-rfc6265bis-02
+ */
+#define COOKIE_PREFIX__SECURE (1<<0)
+#define COOKIE_PREFIX__HOST (1<<1)
+
 #define COOKIE_HASH_SIZE 256
 
 struct CookieInfo {
@@ -93,8 +93,8 @@ struct Curl_easy;
 struct Cookie *Curl_cookie_add(struct Curl_easy *data,
                                struct CookieInfo *, bool header, bool noexpiry,
                                char *lineptr,
-                               const char *domain, const char *path, 
-                               bool secure); 
+                               const char *domain, const char *path,
+                               bool secure);
 
 struct Cookie *Curl_cookie_getlist(struct CookieInfo *, const char *,
                                    const char *, bool);

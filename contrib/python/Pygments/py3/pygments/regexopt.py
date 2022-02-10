@@ -53,7 +53,7 @@ def regex_opt_inner(strings, open_paren):
                 return open_paren + regex_opt_inner(rest, '') + '|' \
                     + make_charset(oneletter) + close_paren
             # print '-> only 1-character'
-            return open_paren + make_charset(oneletter) + close_paren 
+            return open_paren + make_charset(oneletter) + close_paren
     prefix = commonprefix(strings)
     if prefix:
         plen = len(prefix)

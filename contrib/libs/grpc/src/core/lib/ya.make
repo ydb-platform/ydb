@@ -3,12 +3,12 @@
 LIBRARY()
 
 OWNER(g:cpp-contrib)
- 
+
 LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-PEERDIR( 
+PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/spinlock_wait
     contrib/restricted/abseil-cpp-tstring/y_absl/container
     contrib/restricted/abseil-cpp-tstring/y_absl/memory
@@ -16,8 +16,8 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format
     contrib/restricted/abseil-cpp-tstring/y_absl/synchronization
     contrib/restricted/abseil-cpp-tstring/y_absl/time
-) 
- 
+)
+
 ADDINCL(
     GLOBAL contrib/libs/grpc/include
     ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc

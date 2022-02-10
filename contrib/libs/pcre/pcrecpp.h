@@ -331,11 +331,11 @@
 
 
 #include <string>
-#include "pcre.h" 
-#include "pcrecpparg.h"   // defines the Arg class 
+#include "pcre.h"
+#include "pcrecpparg.h"   // defines the Arg class
 // This isn't technically needed here, but we include it
 // anyway so folks who include pcrecpp.h don't have to.
-#include "pcre_stringpiece.h" 
+#include "pcre_stringpiece.h"
 
 namespace pcrecpp {
 

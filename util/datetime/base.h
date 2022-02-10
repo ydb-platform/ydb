@@ -468,17 +468,17 @@ public:
     /**
      * Formats the instant using the system time zone, with microsecond precision.
      *
-     * @returns An ISO 8601 / RFC 3339 formatted string, 
-     * e.g. '2015-11-22T04:30:27.991669+05:00'. 
+     * @returns An ISO 8601 / RFC 3339 formatted string,
+     * e.g. '2015-11-22T04:30:27.991669+05:00'.
      */
-    TString ToIsoStringLocal() const; 
- 
-    /** 
-     * Formats the instant using the system time zone, with microsecond precision. 
-     * 
-     * @returns A semi-ISO 8601 formatted string with timezone without colon, 
-     * e.g. '2015-11-22T04:30:27.991669+0500'. 
-     */ 
+    TString ToIsoStringLocal() const;
+
+    /**
+     * Formats the instant using the system time zone, with microsecond precision.
+     *
+     * @returns A semi-ISO 8601 formatted string with timezone without colon,
+     * e.g. '2015-11-22T04:30:27.991669+0500'.
+     */
     TString ToStringLocal() const;
 
     /**
@@ -491,17 +491,17 @@ public:
     /**
      * Formats the instant using the system time zone, with second precision.
      *
-     * @returns An ISO 8601 / RFC 3339 formatted string, 
-     * e.g. '2015-11-22T04:30:27+05:00'. 
+     * @returns An ISO 8601 / RFC 3339 formatted string,
+     * e.g. '2015-11-22T04:30:27+05:00'.
      */
-    TString ToIsoStringLocalUpToSeconds() const; 
- 
-    /** 
-     * Formats the instant using the system time zone, with second precision. 
-     * 
-     * @returns A semi-ISO 8601 formatted string with timezone without colon, 
-     * e.g. '2015-11-22T04:30:27+0500'. 
-     */ 
+    TString ToIsoStringLocalUpToSeconds() const;
+
+    /**
+     * Formats the instant using the system time zone, with second precision.
+     *
+     * @returns A semi-ISO 8601 formatted string with timezone without colon,
+     * e.g. '2015-11-22T04:30:27+0500'.
+     */
     TString ToStringLocalUpToSeconds() const;
 
     TString FormatLocalTime(const char* format) const noexcept;
@@ -567,7 +567,7 @@ struct THash<TInstant> {
 };
 
 namespace NPrivate {
-    template <bool PrintUpToSeconds, bool iso> 
+    template <bool PrintUpToSeconds, bool iso>
     struct TPrintableLocalTime {
         TInstant MomentToPrint;
 
@@ -591,14 +591,14 @@ namespace NPrivate {
  *        TInstant::ToString*() functions.
  */
 ///@{
-/// @see TInstant::ToIsoStringLocal() 
-::NPrivate::TPrintableLocalTime<false, true> FormatIsoLocal(TInstant instant); 
+/// @see TInstant::ToIsoStringLocal()
+::NPrivate::TPrintableLocalTime<false, true> FormatIsoLocal(TInstant instant);
 /// @see TInstant::ToStringLocal()
-::NPrivate::TPrintableLocalTime<false, false> FormatLocal(TInstant instant); 
-/// @see TInstant::ToIsoStringLocalUpToSeconds() 
-::NPrivate::TPrintableLocalTime<true, true> FormatIsoLocalUpToSeconds(TInstant instant); 
+::NPrivate::TPrintableLocalTime<false, false> FormatLocal(TInstant instant);
+/// @see TInstant::ToIsoStringLocalUpToSeconds()
+::NPrivate::TPrintableLocalTime<true, true> FormatIsoLocalUpToSeconds(TInstant instant);
 /// @see TInstant::ToStringLocalUpToSeconds()
-::NPrivate::TPrintableLocalTime<true, false> FormatLocalUpToSeconds(TInstant instant); 
+::NPrivate::TPrintableLocalTime<true, false> FormatLocalUpToSeconds(TInstant instant);
 ///@}
 
 template <class S>
@@ -772,25 +772,25 @@ constexpr TInstant operator-(const TInstant& l, const std::chrono::duration<T, T
 }
 
 template <class T>
-inline TDuration operator*(TDuration d, T t) noexcept { 
+inline TDuration operator*(TDuration d, T t) noexcept {
     Y_ASSERT(t >= T());
     Y_ASSERT(t == T() || Max<TDuration::TValue>() / t >= d.GetValue());
     return TDuration::FromValue(d.GetValue() * t);
 }
 
-template <> 
-inline TDuration operator*(TDuration d, double t) noexcept { 
-    Y_ASSERT(t >= 0 && MaxFloor<TDuration::TValue>() >= d.GetValue() * t); 
-    return TDuration::FromValue(d.GetValue() * t); 
-} 
- 
-template <> 
-inline TDuration operator*(TDuration d, float t) noexcept { 
-    return d * static_cast<double>(t); 
-} 
- 
+template <>
+inline TDuration operator*(TDuration d, double t) noexcept {
+    Y_ASSERT(t >= 0 && MaxFloor<TDuration::TValue>() >= d.GetValue() * t);
+    return TDuration::FromValue(d.GetValue() * t);
+}
+
+template <>
+inline TDuration operator*(TDuration d, float t) noexcept {
+    return d * static_cast<double>(t);
+}
+
 template <class T>
-inline TDuration operator*(T t, TDuration d) noexcept { 
+inline TDuration operator*(T t, TDuration d) noexcept {
     return d * t;
 }
 

@@ -475,7 +475,7 @@ public:
     }
 
     inline size_t Decompress(const char* data, size_t len, char* ptr, size_t max) {
-        int res = LZ4_decompress_safe(data, ptr, len, max); 
+        int res = LZ4_decompress_safe(data, ptr, len, max);
         if (res < 0)
             ythrow TDecompressorError();
         return res;

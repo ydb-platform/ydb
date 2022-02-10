@@ -131,7 +131,7 @@ class PROTOBUF_EXPORT JsonObjectWriter : public StructuredObjectWriter {
                                  StringPiece value) override;
   JsonObjectWriter* RenderBytes(StringPiece name, StringPiece value) override;
   JsonObjectWriter* RenderNull(StringPiece name) override;
-  virtual JsonObjectWriter* RenderNullAsEmpty(StringPiece name); 
+  virtual JsonObjectWriter* RenderNullAsEmpty(StringPiece name);
 
   void set_use_websafe_base64_for_bytes(bool value) {
     use_websafe_base64_for_bytes_ = value;

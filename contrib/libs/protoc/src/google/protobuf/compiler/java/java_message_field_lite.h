@@ -122,7 +122,7 @@ class RepeatedImmutableMessageFieldLiteGenerator
   void GenerateKotlinDslMembers(io::Printer* printer) const override;
 
   TProtoStringType GetBoxedType() const override;
- 
+
  protected:
   const FieldDescriptor* descriptor_;
   std::map<TProtoStringType, TProtoStringType> variables_;

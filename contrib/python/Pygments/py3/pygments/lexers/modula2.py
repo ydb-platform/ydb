@@ -289,7 +289,7 @@ class Modula2Lexer(RegexLexer):
         ],
         'unigraph_punctuation': [
             # Common Punctuation
-            (r'[()\[\]{},.:;|]', Punctuation), 
+            (r'[()\[\]{},.:;|]', Punctuation),
             # Case Label Separator Synonym
             (r'!', Punctuation),  # ISO
             # Blueprint Punctuation

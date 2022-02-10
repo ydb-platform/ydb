@@ -35,6 +35,6 @@ from pygments.lexers.urbi import UrbiscriptLexer
 from pygments.lexers.smalltalk import SmalltalkLexer, NewspeakLexer
 from pygments.lexers.installers import NSISLexer, RPMSpecLexer
 from pygments.lexers.textedit import AwkLexer
-from pygments.lexers.smv import NuSMVLexer 
+from pygments.lexers.smv import NuSMVLexer
 
 __all__ = []

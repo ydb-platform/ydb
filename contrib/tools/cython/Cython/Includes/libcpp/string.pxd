@@ -8,34 +8,34 @@ cdef extern from "<string>" namespace "std::string" nogil:
 cdef extern from "<string>" namespace "std" nogil:
     cdef cppclass string:
 
-        cppclass iterator: 
-            iterator() 
-            char& operator*() 
+        cppclass iterator:
+            iterator()
+            char& operator*()
             iterator(iterator&)
-            iterator operator++() 
-            iterator operator--() 
-            bint operator==(iterator) 
-            bint operator!=(iterator) 
+            iterator operator++()
+            iterator operator--()
+            bint operator==(iterator)
+            bint operator!=(iterator)
 
-        cppclass reverse_iterator: 
-            char& operator*() 
-            iterator operator++() 
-            iterator operator--() 
-            iterator operator+(size_t) 
-            iterator operator-(size_t) 
-            bint operator==(reverse_iterator) 
-            bint operator!=(reverse_iterator) 
-            bint operator<(reverse_iterator) 
-            bint operator>(reverse_iterator) 
-            bint operator<=(reverse_iterator) 
-            bint operator>=(reverse_iterator) 
+        cppclass reverse_iterator:
+            char& operator*()
+            iterator operator++()
+            iterator operator--()
+            iterator operator+(size_t)
+            iterator operator-(size_t)
+            bint operator==(reverse_iterator)
+            bint operator!=(reverse_iterator)
+            bint operator<(reverse_iterator)
+            bint operator>(reverse_iterator)
+            bint operator<=(reverse_iterator)
+            bint operator>=(reverse_iterator)
 
-        cppclass const_iterator(iterator): 
-            pass 
+        cppclass const_iterator(iterator):
+            pass
 
-        cppclass const_reverse_iterator(reverse_iterator): 
-            pass 
- 
+        cppclass const_reverse_iterator(reverse_iterator):
+            pass
+
         string() except +
         string(const string& s) except +
         string(const string& s, size_t pos) except +
@@ -45,15 +45,15 @@ cdef extern from "<string>" namespace "std" nogil:
         string(size_t n, char c) except +
         string(iterator first, iterator last) except +
 
-        iterator begin() 
-        const_iterator const_begin "begin"() 
-        iterator end() 
-        const_iterator const_end "end"() 
-        reverse_iterator rbegin() 
-        const_reverse_iterator const_rbegin "rbegin"() 
-        reverse_iterator rend() 
-        const_reverse_iterator const_rend "rend"() 
- 
+        iterator begin()
+        const_iterator const_begin "begin"()
+        iterator end()
+        const_iterator const_end "end"()
+        reverse_iterator rbegin()
+        const_reverse_iterator const_rbegin "rbegin"()
+        reverse_iterator rend()
+        const_reverse_iterator const_rend "rend"()
+
         const char* c_str()
         const char* data()
         size_t size()

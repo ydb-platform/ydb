@@ -859,7 +859,7 @@ template <class ListItem1, class ListItem2> PairIter<ListItem1, ListItem2>::Pair
 #define CO_RETURN(label) \
 	itState = label; \
 	return; \
-	entry##label: {} 
+	entry##label: {}
 
 /* Return and re-entry for the co-routine iterators. This should ALWAYS be
  * used inside of a block. */
@@ -867,7 +867,7 @@ template <class ListItem1, class ListItem2> PairIter<ListItem1, ListItem2>::Pair
 	itState = label; \
 	userState = uState; \
 	return; \
-	entry##label: {} 
+	entry##label: {}
 
 /* Advance to the next transition. When returns, trans points to the next
  * transition, unless there are no more, in which case end() returns true. */

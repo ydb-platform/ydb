@@ -45,7 +45,7 @@ class CFamilyLexer(RegexLexer):
     tokens = {
         'whitespace': [
             # preprocessor directives: without whitespace
-            (r'^#if\s+0', Comment.Preproc, 'if0'), 
+            (r'^#if\s+0', Comment.Preproc, 'if0'),
             ('^#', Comment.Preproc, 'macro'),
             # or with whitespace
             ('^(' + _ws1 + r')(#if\s+0)',
@@ -57,17 +57,17 @@ class CFamilyLexer(RegexLexer):
             (r'\n', Whitespace),
             (r'[^\S\n]+', Whitespace),
             (r'\\\n', Text),  # line continuation
-            (r'//(\n|[\w\W]*?[^\\]\n)', Comment.Single), 
-            (r'/(\\\n)?[*][\w\W]*?[*](\\\n)?/', Comment.Multiline), 
-            # Open until EOF, so no ending delimeter 
-            (r'/(\\\n)?[*][\w\W]*', Comment.Multiline), 
+            (r'//(\n|[\w\W]*?[^\\]\n)', Comment.Single),
+            (r'/(\\\n)?[*][\w\W]*?[*](\\\n)?/', Comment.Multiline),
+            # Open until EOF, so no ending delimeter
+            (r'/(\\\n)?[*][\w\W]*', Comment.Multiline),
         ],
         'statements': [
             include('keywords'),
             include('types'),
             (r'([LuU]|u8)?(")', bygroups(String.Affix, String), 'string'),
             (r"([LuU]|u8)?(')(\\.|\\[0-7]{1,3}|\\x[a-fA-F0-9]{1,2}|[^\\\'\n])(')",
-             bygroups(String.Affix, String.Char, String.Char, String.Char)), 
+             bygroups(String.Affix, String.Char, String.Char, String.Char)),
 
              # Hexadecimal floating-point literals (C11, C++17)
             (r'0[xX](' + _hexpart + r'\.' + _hexpart + r'|\.' + _hexpart + r'|' + _hexpart + r')[pP][+-]?' + _hexpart + r'[lL]?', Number.Float),
@@ -91,8 +91,8 @@ class CFamilyLexer(RegexLexer):
         ],
         'keywords': [
             (r'(struct|union)(\s+)', bygroups(Keyword, Whitespace), 'classname'),
-            (words(('asm', 'auto', 'break', 'case', 'const', 'continue', 
-                    'default', 'do', 'else', 'enum', 'extern', 'for', 'goto', 
+            (words(('asm', 'auto', 'break', 'case', 'const', 'continue',
+                    'default', 'do', 'else', 'enum', 'extern', 'for', 'goto',
                     'if', 'register', 'restricted', 'return', 'sizeof', 'struct',
                     'static', 'switch', 'typedef', 'volatile', 'while', 'union',
                     'thread_local', 'alignas', 'alignof', 'static_assert', '_Pragma'),
@@ -270,9 +270,9 @@ class CLexer(CFamilyLexer):
     }
 
     def analyse_text(text):
-        if re.search(r'^\s*#include [<"]', text, re.MULTILINE): 
+        if re.search(r'^\s*#include [<"]', text, re.MULTILINE):
             return 0.1
-        if re.search(r'^\s*#ifn?def ', text, re.MULTILINE): 
+        if re.search(r'^\s*#ifn?def ', text, re.MULTILINE):
             return 0.1
 
 
@@ -309,10 +309,10 @@ class CppLexer(CFamilyLexer):
 
     tokens = {
         'statements': [
-            # C++11 raw strings 
+            # C++11 raw strings
             (r'((?:[LuU]|u8)?R)(")([^\\()\s]{,16})(\()((?:.|\n)*?)(\)\3)(")',
-             bygroups(String.Affix, String, String.Delimiter, String.Delimiter, 
-                      String, String.Delimiter, String)), 
+             bygroups(String.Affix, String, String.Delimiter, String.Delimiter,
+                      String, String.Delimiter, String)),
             inherit,
         ],
         'root': [
@@ -362,7 +362,7 @@ class CppLexer(CFamilyLexer):
     }
 
     def analyse_text(text):
-        if re.search('#include <[a-z_]+>', text): 
+        if re.search('#include <[a-z_]+>', text):
             return 0.2
         if re.search('using namespace ', text):
             return 0.4

@@ -25,9 +25,9 @@
 /* to disable DICT */
 /* #undef CURL_DISABLE_DICT */
 
-/* disable DoH */ 
-/* #undef CURL_DISABLE_DOH */ 
- 
+/* disable DoH */
+/* #undef CURL_DISABLE_DOH */
+
 /* to disable FILE */
 /* #undef CURL_DISABLE_FILE */
 
@@ -40,9 +40,9 @@
 /* to disable HTTP */
 /* #undef CURL_DISABLE_HTTP */
 
-/* disable HTTP authentication */ 
-/* #undef CURL_DISABLE_HTTP_AUTH */ 
- 
+/* disable HTTP authentication */
+/* #undef CURL_DISABLE_HTTP_AUTH */
+
 /* to disable IMAP */
 /* #undef CURL_DISABLE_IMAP */
 
@@ -55,33 +55,33 @@
 /* to disable --libcurl C code generation option */
 /* #undef CURL_DISABLE_LIBCURL_OPTION */
 
-/* disable mime API */ 
-/* #undef CURL_DISABLE_MIME */ 
- 
-/* disable netrc parsing */ 
-/* #undef CURL_DISABLE_NETRC */ 
- 
+/* disable mime API */
+/* #undef CURL_DISABLE_MIME */
+
+/* disable netrc parsing */
+/* #undef CURL_DISABLE_NETRC */
+
 /* if the OpenSSL configuration won't be loaded automatically */
 /* #undef CURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG */
 
-/* disable date parsing */ 
-/* #undef CURL_DISABLE_PARSEDATE */ 
- 
+/* disable date parsing */
+/* #undef CURL_DISABLE_PARSEDATE */
+
 /* to disable POP3 */
 /* #undef CURL_DISABLE_POP3 */
 
-/* disable progress-meter */ 
-/* #undef CURL_DISABLE_PROGRESS_METER */ 
- 
+/* disable progress-meter */
+/* #undef CURL_DISABLE_PROGRESS_METER */
+
 /* to disable proxies */
 /* #undef CURL_DISABLE_PROXY */
 
 /* to disable RTSP */
 /* #undef CURL_DISABLE_RTSP */
 
-/* disable DNS shuffling */ 
-/* #undef CURL_DISABLE_SHUFFLE_DNS */ 
- 
+/* disable DNS shuffling */
+/* #undef CURL_DISABLE_SHUFFLE_DNS */
+
 /* to disable SMB/CIFS */
 /* #undef CURL_DISABLE_SMB */
 
@@ -269,9 +269,9 @@
 /* Define to 1 if you have the `getpass_r' function. */
 /* #undef HAVE_GETPASS_R */
 
-/* Define to 1 if you have the getpeername function. */ 
-#define HAVE_GETPEERNAME 1 
- 
+/* Define to 1 if you have the getpeername function. */
+#define HAVE_GETPEERNAME 1
+
 /* Define to 1 if you have the `getppid' function. */
 #define HAVE_GETPPID 1
 
@@ -287,9 +287,9 @@
 /* Define to 1 if you have the getservbyport_r function. */
 /* #undef HAVE_GETSERVBYPORT_R */
 
-/* Define to 1 if you have the getsockname function. */ 
-#define HAVE_GETSOCKNAME 1 
- 
+/* Define to 1 if you have the getsockname function. */
+#define HAVE_GETSOCKNAME 1
+
 /* Define to 1 if you have the `gettimeofday' function. */
 #define HAVE_GETTIMEOFDAY 1
 
@@ -485,17 +485,17 @@
 #define HAVE_NET_IF_H 1
 
 /* Define to 1 if you have the <nghttp2/nghttp2.h> header file. */
-#define HAVE_NGHTTP2_NGHTTP2_H 1 
+#define HAVE_NGHTTP2_NGHTTP2_H 1
 
-/* Define to 1 if you have the <nghttp3/nghttp3.h> header file. */ 
-/* #undef HAVE_NGHTTP3_NGHTTP3_H */ 
- 
-/* Define to 1 if you have the <ngtcp2/ngtcp2_crypto.h> header file. */ 
-/* #undef HAVE_NGTCP2_NGTCP2_CRYPTO_H */ 
- 
-/* Define to 1 if you have the <ngtcp2/ngtcp2.h> header file. */ 
-/* #undef HAVE_NGTCP2_NGTCP2_H */ 
- 
+/* Define to 1 if you have the <nghttp3/nghttp3.h> header file. */
+/* #undef HAVE_NGHTTP3_NGHTTP3_H */
+
+/* Define to 1 if you have the <ngtcp2/ngtcp2_crypto.h> header file. */
+/* #undef HAVE_NGTCP2_NGTCP2_CRYPTO_H */
+
+/* Define to 1 if you have the <ngtcp2/ngtcp2.h> header file. */
+/* #undef HAVE_NGTCP2_NGTCP2_H */
+
 /* if you have an old MIT Kerberos version, lacking GSS_C_NT_HOSTBASED_SERVICE
    */
 /* #undef HAVE_OLD_GSSMIT */
@@ -518,9 +518,9 @@
 /* Define to 1 if you have the <openssl/ssl.h> header file. */
 #define HAVE_OPENSSL_SSL_H 1
 
-/* Define to 1 if you have the `OpenSSL_version' function. */ 
-#define HAVE_OPENSSL_VERSION 1 
- 
+/* Define to 1 if you have the `OpenSSL_version' function. */
+#define HAVE_OPENSSL_VERSION 1
+
 /* Define to 1 if you have the <openssl/x509.h> header file. */
 #define HAVE_OPENSSL_X509_H 1
 
@@ -545,18 +545,18 @@
 /* Define to 1 if you have a working POSIX-style strerror_r function. */
 #define HAVE_POSIX_STRERROR_R 1
 
-/* Define to 1 if you have the <proto/bsdsocket.h> header file. */ 
-/* #undef HAVE_PROTO_BSDSOCKET_H */ 
- 
+/* Define to 1 if you have the <proto/bsdsocket.h> header file. */
+/* #undef HAVE_PROTO_BSDSOCKET_H */
+
 /* if you have <pthread.h> */
 #define HAVE_PTHREAD_H 1
 
 /* Define to 1 if you have the <pwd.h> header file. */
 #define HAVE_PWD_H 1
 
-/* Define to 1 if you have the <quiche.h> header file. */ 
-/* #undef HAVE_QUICHE_H */ 
- 
+/* Define to 1 if you have the <quiche.h> header file. */
+/* #undef HAVE_QUICHE_H */
+
 /* Define to 1 if you have the `RAND_egd' function. */
 /* #undef HAVE_RAND_EGD */
 
@@ -627,7 +627,7 @@
 /* #undef HAVE_SOCKET_H */
 
 /* Define to 1 if you have the `SSLv2_client_method' function. */
-/* #undef HAVE_SSLV2_CLIENT_METHOD */ 
+/* #undef HAVE_SSLV2_CLIENT_METHOD */
 
 /* Define to 1 if you have the <ssl.h> header file. */
 /* #undef HAVE_SSL_H */
@@ -752,9 +752,9 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
-/* Define to 1 if you have the `usleep' function. */ 
-#define HAVE_USLEEP 1 
- 
+/* Define to 1 if you have the `usleep' function. */
+#define HAVE_USLEEP 1
+
 /* Define to 1 if you have the `utime' function. */
 #define HAVE_UTIME 1
 
@@ -915,14 +915,14 @@
 #define SIZEOF_CURL_OFF_T 8
 
 /* The number of bytes in type int */
-#ifndef SIZEOF_INT 
-#error undefined SIZEOF_INT 
-#endif 
+#ifndef SIZEOF_INT
+#error undefined SIZEOF_INT
+#endif
 
 /* The number of bytes in type long */
-#ifndef SIZEOF_LONG 
-#error undefined SIZEOF_LONG 
-#endif 
+#ifndef SIZEOF_LONG
+#error undefined SIZEOF_LONG
+#endif
 
 /* The number of bytes in type long long */
 /* #undef SIZEOF_LONG_LONG */
@@ -931,17 +931,17 @@
 #define SIZEOF_OFF_T 8
 
 /* The number of bytes in type short */
-#ifndef SIZEOF_SHORT 
-#error undefined SIZEOF_SHORT 
-#endif 
+#ifndef SIZEOF_SHORT
+#error undefined SIZEOF_SHORT
+#endif
 
 /* The number of bytes in type size_t */
-#ifndef SIZEOF_SIZE_T 
-#error undefined SIZEOF_SIZE_T 
-#endif 
+#ifndef SIZEOF_SIZE_T
+#error undefined SIZEOF_SIZE_T
+#endif
 
 /* The number of bytes in type time_t */
-#define SIZEOF_TIME_T SIZEOF_LONG 
+#define SIZEOF_TIME_T SIZEOF_LONG
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
@@ -952,12 +952,12 @@
 /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
 #define TIME_WITH_SYS_TIME 1
 
-/* to enable alt-svc */ 
-/* #undef USE_ALTSVC */ 
- 
-/* if AmiSSL is in use */ 
-/* #undef USE_AMISSL */ 
- 
+/* to enable alt-svc */
+/* #undef USE_ALTSVC */
+
+/* if AmiSSL is in use */
+/* #undef USE_AMISSL */
+
 /* Define to enable c-ares support */
 #define USE_ARES 1
 
@@ -992,17 +992,17 @@
 /* #undef USE_METALINK */
 
 /* if nghttp2 is in use */
-#define USE_NGHTTP2 1 
+#define USE_NGHTTP2 1
 
-/* if nghttp3 is in use */ 
-/* #undef USE_NGHTTP3 */ 
- 
-/* if ngtcp2 is in use */ 
-/* #undef USE_NGTCP2 */ 
- 
-/* if ngtcp2_crypto_openssl is in use */ 
-/* #undef USE_NGTCP2_CRYPTO_OPENSSL */ 
- 
+/* if nghttp3 is in use */
+/* #undef USE_NGHTTP3 */
+
+/* if ngtcp2 is in use */
+/* #undef USE_NGTCP2 */
+
+/* if ngtcp2_crypto_openssl is in use */
+/* #undef USE_NGTCP2_CRYPTO_OPENSSL */
+
 /* if NSS is enabled */
 /* #undef USE_NSS */
 
@@ -1012,15 +1012,15 @@
 /* if OpenSSL is in use */
 #define USE_OPENSSL 1
 
-/* if quiche is in use */ 
-/* #undef USE_QUICHE */ 
+/* if quiche is in use */
+/* #undef USE_QUICHE */
 
 /* to enable Windows native SSL/TLS support */
 /* #undef USE_SCHANNEL */
 
-/* enable Secure Transport */ 
-/* #undef USE_SECTRANSP */ 
- 
+/* enable Secure Transport */
+/* #undef USE_SECTRANSP */
+
 /* if you want POSIX threaded DNS lookup */
 #define USE_THREADS_POSIX 1
 
@@ -1050,9 +1050,9 @@
 /* to enable SSPI support */
 /* #undef USE_WINDOWS_SSPI */
 
-/* if wolfSSL is enabled */ 
-/* #undef USE_WOLFSSL */ 
- 
+/* if wolfSSL is enabled */
+/* #undef USE_WOLFSSL */
+
 /* Version number of package */
 #define VERSION "-"
 

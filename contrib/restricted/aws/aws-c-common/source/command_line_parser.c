@@ -1,6 +1,6 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
  */
 #include <aws/common/command_line_parser.h>
 
@@ -85,17 +85,17 @@ int aws_cli_getopt_long(
     if (option) {
         bool has_arg = false;
 
-        char *opt_value = memchr(optstring, option->val, strlen(optstring)); 
-        if (!opt_value) { 
-            return '?'; 
+        char *opt_value = memchr(optstring, option->val, strlen(optstring));
+        if (!opt_value) {
+            return '?';
         }
 
-        if (opt_value[1] == ':') { 
-            has_arg = true; 
-        } 
- 
+        if (opt_value[1] == ':') {
+            has_arg = true;
+        }
+
         if (has_arg) {
-            if (aws_cli_optind >= argc) { 
+            if (aws_cli_optind >= argc) {
                 return '?';
             }
 

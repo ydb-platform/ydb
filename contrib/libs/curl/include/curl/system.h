@@ -1,5 +1,5 @@
-#ifndef CURLINC_SYSTEM_H 
-#define CURLINC_SYSTEM_H 
+#ifndef CURLINC_SYSTEM_H
+#define CURLINC_SYSTEM_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -484,21 +484,21 @@
  */
 
 #if defined(__BORLANDC__) && (__BORLANDC__ == 0x0551)
-#  define CURLINC_OFF_T_C_HLPR2(x) x 
-#  define CURLINC_OFF_T_C_HLPR1(x) CURLINC_OFF_T_C_HLPR2(x) 
-#  define CURL_OFF_T_C(Val)  CURLINC_OFF_T_C_HLPR1(Val) ## \ 
-                             CURLINC_OFF_T_C_HLPR1(CURL_SUFFIX_CURL_OFF_T) 
-#  define CURL_OFF_TU_C(Val) CURLINC_OFF_T_C_HLPR1(Val) ## \ 
-                             CURLINC_OFF_T_C_HLPR1(CURL_SUFFIX_CURL_OFF_TU) 
+#  define CURLINC_OFF_T_C_HLPR2(x) x
+#  define CURLINC_OFF_T_C_HLPR1(x) CURLINC_OFF_T_C_HLPR2(x)
+#  define CURL_OFF_T_C(Val)  CURLINC_OFF_T_C_HLPR1(Val) ## \
+                             CURLINC_OFF_T_C_HLPR1(CURL_SUFFIX_CURL_OFF_T)
+#  define CURL_OFF_TU_C(Val) CURLINC_OFF_T_C_HLPR1(Val) ## \
+                             CURLINC_OFF_T_C_HLPR1(CURL_SUFFIX_CURL_OFF_TU)
 #else
 #  ifdef CURL_ISOCPP
-#    define CURLINC_OFF_T_C_HLPR2(Val,Suffix) Val ## Suffix 
+#    define CURLINC_OFF_T_C_HLPR2(Val,Suffix) Val ## Suffix
 #  else
-#    define CURLINC_OFF_T_C_HLPR2(Val,Suffix) Val/**/Suffix 
+#    define CURLINC_OFF_T_C_HLPR2(Val,Suffix) Val/**/Suffix
 #  endif
-#  define CURLINC_OFF_T_C_HLPR1(Val,Suffix) CURLINC_OFF_T_C_HLPR2(Val,Suffix) 
-#  define CURL_OFF_T_C(Val)  CURLINC_OFF_T_C_HLPR1(Val,CURL_SUFFIX_CURL_OFF_T) 
-#  define CURL_OFF_TU_C(Val) CURLINC_OFF_T_C_HLPR1(Val,CURL_SUFFIX_CURL_OFF_TU) 
+#  define CURLINC_OFF_T_C_HLPR1(Val,Suffix) CURLINC_OFF_T_C_HLPR2(Val,Suffix)
+#  define CURL_OFF_T_C(Val)  CURLINC_OFF_T_C_HLPR1(Val,CURL_SUFFIX_CURL_OFF_T)
+#  define CURL_OFF_TU_C(Val) CURLINC_OFF_T_C_HLPR1(Val,CURL_SUFFIX_CURL_OFF_TU)
 #endif
 
-#endif /* CURLINC_SYSTEM_H */ 
+#endif /* CURLINC_SYSTEM_H */

@@ -11,8 +11,8 @@ OWNER(
 
 VERSION(3.17.3)
 
-ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.17.3.tar.gz) 
- 
+ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.17.3.tar.gz)
+
 LICENSE(
     BSD-3-Clause AND
     Protobuf-License
@@ -44,7 +44,7 @@ IF (OS_ANDROID)
 ENDIF()
 
 SRCS(
-    GLOBAL src/google/protobuf/generated_message_util.cc 
+    GLOBAL src/google/protobuf/generated_message_util.cc
     src/google/protobuf/any.cc
     src/google/protobuf/any.pb.cc
     src/google/protobuf/any_lite.cc

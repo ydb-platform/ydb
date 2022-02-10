@@ -2,23 +2,23 @@ PY2_LIBRARY()
 
 LICENSE(MIT)
 
-OWNER(g:python-contrib borman orivej) 
+OWNER(g:python-contrib borman orivej)
 
 VERSION(44.1.1)
- 
-PEERDIR( 
-    library/python/resource 
-) 
- 
-NO_CHECK_IMPORTS( 
-    setuptools.* 
-) 
- 
-NO_LINT() 
- 
+
+PEERDIR(
+    library/python/resource
+)
+
+NO_CHECK_IMPORTS(
+    setuptools.*
+)
+
+NO_LINT()
+
 PY_SRCS(
     TOP_LEVEL
-    easy_install.py 
+    easy_install.py
     pkg_resources/__init__.py
     pkg_resources/_vendor/__init__.py
     pkg_resources/_vendor/appdirs.py
@@ -59,7 +59,7 @@ PY_SRCS(
     setuptools/command/bdist_egg.py
     setuptools/command/bdist_rpm.py
     setuptools/command/bdist_wininst.py
-    setuptools/command/build_clib.py 
+    setuptools/command/build_clib.py
     setuptools/command/build_ext.py
     setuptools/command/build_py.py
     setuptools/command/develop.py
@@ -70,33 +70,33 @@ PY_SRCS(
     setuptools/command/install_egg_info.py
     setuptools/command/install_lib.py
     setuptools/command/install_scripts.py
-    setuptools/command/py36compat.py 
+    setuptools/command/py36compat.py
     setuptools/command/register.py
     setuptools/command/rotate.py
     setuptools/command/saveopts.py
     setuptools/command/sdist.py
     setuptools/command/setopt.py
     setuptools/command/test.py
-    setuptools/command/upload.py 
+    setuptools/command/upload.py
     setuptools/command/upload_docs.py
-    setuptools/config.py 
-    setuptools/dep_util.py 
+    setuptools/config.py
+    setuptools/dep_util.py
     setuptools/depends.py
     setuptools/dist.py
     setuptools/errors.py
     setuptools/extension.py
     setuptools/extern/__init__.py
-    setuptools/glob.py 
+    setuptools/glob.py
     setuptools/installer.py
     setuptools/launch.py
     setuptools/lib2to3_ex.py
-    setuptools/monkey.py 
-    setuptools/msvc.py 
-    setuptools/namespaces.py 
+    setuptools/monkey.py
+    setuptools/msvc.py
+    setuptools/namespaces.py
     setuptools/package_index.py
     setuptools/py27compat.py
     setuptools/py31compat.py
-    setuptools/py33compat.py 
+    setuptools/py33compat.py
     setuptools/py34compat.py
     setuptools/sandbox.py
     setuptools/site-patch.py

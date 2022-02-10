@@ -132,8 +132,8 @@ static CURLcode ftp_connect(struct connectdata *conn, bool *done);
 static CURLcode ftp_disconnect(struct connectdata *conn, bool dead_connection);
 static CURLcode ftp_do_more(struct connectdata *conn, int *completed);
 static CURLcode ftp_multi_statemach(struct connectdata *conn, bool *done);
-static int ftp_getsock(struct connectdata *conn, curl_socket_t *socks); 
-static int ftp_domore_getsock(struct connectdata *conn, curl_socket_t *socks); 
+static int ftp_getsock(struct connectdata *conn, curl_socket_t *socks);
+static int ftp_domore_getsock(struct connectdata *conn, curl_socket_t *socks);
 static CURLcode ftp_doing(struct connectdata *conn,
                           bool *dophase_done);
 static CURLcode ftp_setup_connection(struct connectdata *conn);
@@ -363,7 +363,7 @@ static CURLcode ReceivedServerConnect(struct connectdata *conn, bool *received)
   struct ftp_conn *ftpc = &conn->proto.ftpc;
   struct pingpong *pp = &ftpc->pp;
   int result;
-  timediff_t timeout_ms; 
+  timediff_t timeout_ms;
   ssize_t nread;
   int ftpcode;
 
@@ -448,12 +448,12 @@ static CURLcode InitiateTransfer(struct connectdata *conn)
     /* set the SO_SNDBUF for the secondary socket for those who need it */
     Curl_sndbufset(conn->sock[SECONDARYSOCKET]);
 
-    Curl_setup_transfer(data, -1, -1, FALSE, SECONDARYSOCKET); 
+    Curl_setup_transfer(data, -1, -1, FALSE, SECONDARYSOCKET);
   }
   else {
     /* FTP download: */
-    Curl_setup_transfer(data, SECONDARYSOCKET, 
-                        conn->proto.ftpc.retr_size_saved, FALSE, -1); 
+    Curl_setup_transfer(data, SECONDARYSOCKET,
+                        conn->proto.ftpc.retr_size_saved, FALSE, -1);
   }
 
   conn->proto.ftpc.pp.pending_resp = TRUE; /* expect server response */
@@ -474,7 +474,7 @@ static CURLcode InitiateTransfer(struct connectdata *conn)
 static CURLcode AllowServerConnect(struct connectdata *conn, bool *connected)
 {
   struct Curl_easy *data = conn->data;
-  timediff_t timeout_ms; 
+  timediff_t timeout_ms;
   CURLcode result = CURLE_OK;
 
   *connected = FALSE;
@@ -547,7 +547,7 @@ static CURLcode ftp_readresp(curl_socket_t sockfd,
   char * const buf = data->state.buffer;
 #endif
   int code;
-  CURLcode result = Curl_pp_readresp(sockfd, pp, &code, size); 
+  CURLcode result = Curl_pp_readresp(sockfd, pp, &code, size);
 
 #if defined(HAVE_GSSAPI)
   /* handle the security-oriented responses 6xx ***/
@@ -787,13 +787,13 @@ static CURLcode ftp_state_pwd(struct connectdata *conn)
 
 /* For the FTP "protocol connect" and "doing" phases only */
 static int ftp_getsock(struct connectdata *conn,
-                       curl_socket_t *socks) 
+                       curl_socket_t *socks)
 {
-  return Curl_pp_getsock(&conn->proto.ftpc.pp, socks); 
+  return Curl_pp_getsock(&conn->proto.ftpc.pp, socks);
 }
 
 /* For the FTP "DO_MORE" phase only */
-static int ftp_domore_getsock(struct connectdata *conn, curl_socket_t *socks) 
+static int ftp_domore_getsock(struct connectdata *conn, curl_socket_t *socks)
 {
   struct ftp_conn *ftpc = &conn->proto.ftpc;
 
@@ -833,7 +833,7 @@ static int ftp_domore_getsock(struct connectdata *conn, curl_socket_t *socks)
 
     return bits;
   }
-  return Curl_pp_getsock(&conn->proto.ftpc.pp, socks); 
+  return Curl_pp_getsock(&conn->proto.ftpc.pp, socks);
 }
 
 /* This is called after the FTP_QUOTE state is passed.
@@ -927,7 +927,7 @@ static CURLcode ftp_state_use_port(struct connectdata *conn,
   unsigned short port_max = 0;
   unsigned short port;
   bool possibly_non_local = TRUE;
-  char buffer[STRERROR_LEN]; 
+  char buffer[STRERROR_LEN];
   char *addr = NULL;
 
   /* Step 1, figure out what is requested,
@@ -1040,7 +1040,7 @@ static CURLcode ftp_state_use_port(struct connectdata *conn,
     sslen = sizeof(ss);
     if(getsockname(conn->sock[FIRSTSOCKET], sa, &sslen)) {
       failf(data, "getsockname() failed: %s",
-            Curl_strerror(SOCKERRNO, buffer, sizeof(buffer))); 
+            Curl_strerror(SOCKERRNO, buffer, sizeof(buffer)));
       free(addr);
       return CURLE_FTP_PORT_FAILED;
     }
@@ -1061,7 +1061,7 @@ static CURLcode ftp_state_use_port(struct connectdata *conn,
   }
 
   /* resolv ip/host to ip */
-  rc = Curl_resolv(conn, host, 0, FALSE, &h); 
+  rc = Curl_resolv(conn, host, 0, FALSE, &h);
   if(rc == CURLRESOLV_PENDING)
     (void)Curl_resolver_wait_resolv(conn, &h);
   if(h) {
@@ -1095,8 +1095,8 @@ static CURLcode ftp_state_use_port(struct connectdata *conn,
     break;
   }
   if(!ai) {
-    failf(data, "socket failure: %s", 
-          Curl_strerror(error, buffer, sizeof(buffer))); 
+    failf(data, "socket failure: %s",
+          Curl_strerror(error, buffer, sizeof(buffer)));
     return CURLE_FTP_PORT_FAILED;
   }
 
@@ -1121,12 +1121,12 @@ static CURLcode ftp_state_use_port(struct connectdata *conn,
          * the control connection instead and restart the port loop
          */
         infof(data, "bind(port=%hu) on non-local address failed: %s\n", port,
-              Curl_strerror(error, buffer, sizeof(buffer))); 
+              Curl_strerror(error, buffer, sizeof(buffer)));
 
         sslen = sizeof(ss);
         if(getsockname(conn->sock[FIRSTSOCKET], sa, &sslen)) {
           failf(data, "getsockname() failed: %s",
-                Curl_strerror(SOCKERRNO, buffer, sizeof(buffer))); 
+                Curl_strerror(SOCKERRNO, buffer, sizeof(buffer)));
           Curl_closesocket(conn, portsock);
           return CURLE_FTP_PORT_FAILED;
         }
@@ -1136,7 +1136,7 @@ static CURLcode ftp_state_use_port(struct connectdata *conn,
       }
       if(error != EADDRINUSE && error != EACCES) {
         failf(data, "bind(port=%hu) failed: %s", port,
-              Curl_strerror(error, buffer, sizeof(buffer))); 
+              Curl_strerror(error, buffer, sizeof(buffer)));
         Curl_closesocket(conn, portsock);
         return CURLE_FTP_PORT_FAILED;
       }
@@ -1159,7 +1159,7 @@ static CURLcode ftp_state_use_port(struct connectdata *conn,
   sslen = sizeof(ss);
   if(getsockname(portsock, (struct sockaddr *)sa, &sslen)) {
     failf(data, "getsockname() failed: %s",
-          Curl_strerror(SOCKERRNO, buffer, sizeof(buffer))); 
+          Curl_strerror(SOCKERRNO, buffer, sizeof(buffer)));
     Curl_closesocket(conn, portsock);
     return CURLE_FTP_PORT_FAILED;
   }
@@ -1167,8 +1167,8 @@ static CURLcode ftp_state_use_port(struct connectdata *conn,
   /* step 4, listen on the socket */
 
   if(listen(portsock, 1)) {
-    failf(data, "socket failure: %s", 
-          Curl_strerror(SOCKERRNO, buffer, sizeof(buffer))); 
+    failf(data, "socket failure: %s",
+          Curl_strerror(SOCKERRNO, buffer, sizeof(buffer)));
     Curl_closesocket(conn, portsock);
     return CURLE_FTP_PORT_FAILED;
   }
@@ -1485,13 +1485,13 @@ static CURLcode ftp_state_list(struct connectdata *conn)
 static CURLcode ftp_state_retr_prequote(struct connectdata *conn)
 {
   /* We've sent the TYPE, now we must send the list of prequote strings */
-  return ftp_state_quote(conn, TRUE, FTP_RETR_PREQUOTE); 
+  return ftp_state_quote(conn, TRUE, FTP_RETR_PREQUOTE);
 }
 
 static CURLcode ftp_state_stor_prequote(struct connectdata *conn)
 {
   /* We've sent the TYPE, now we must send the list of prequote strings */
-  return ftp_state_quote(conn, TRUE, FTP_STOR_PREQUOTE); 
+  return ftp_state_quote(conn, TRUE, FTP_STOR_PREQUOTE);
 }
 
 static CURLcode ftp_state_type(struct connectdata *conn)
@@ -1628,7 +1628,7 @@ static CURLcode ftp_state_ul_setup(struct connectdata *conn,
         infof(data, "File already completely uploaded\n");
 
         /* no data to transfer */
-        Curl_setup_transfer(data, -1, -1, FALSE, -1); 
+        Curl_setup_transfer(data, -1, -1, FALSE, -1);
 
         /* Set ->transfer so that we won't get any error in
          * ftp_done() because we didn't transfer anything! */
@@ -1922,7 +1922,7 @@ static CURLcode ftp_state_pasv_resp(struct connectdata *conn,
      */
     const char * const host_name = conn->bits.socksproxy ?
       conn->socks_proxy.host.name : conn->http_proxy.host.name;
-    rc = Curl_resolv(conn, host_name, (int)conn->port, FALSE, &addr); 
+    rc = Curl_resolv(conn, host_name, (int)conn->port, FALSE, &addr);
     if(rc == CURLRESOLV_PENDING)
       /* BLOCKING, ignores the return code but 'addr' will be NULL in
          case of failure */
@@ -1951,7 +1951,7 @@ static CURLcode ftp_state_pasv_resp(struct connectdata *conn,
         return CURLE_OUT_OF_MEMORY;
     }
 
-    rc = Curl_resolv(conn, ftpc->newhost, ftpc->newport, FALSE, &addr); 
+    rc = Curl_resolv(conn, ftpc->newhost, ftpc->newport, FALSE, &addr);
     if(rc == CURLRESOLV_PENDING)
       /* BLOCKING */
       (void)Curl_resolver_wait_resolv(conn, &addr);
@@ -2223,7 +2223,7 @@ static CURLcode ftp_state_retr(struct connectdata *conn,
 
     if(ftp->downloadsize == 0) {
       /* no data to transfer */
-      Curl_setup_transfer(data, -1, -1, FALSE, -1); 
+      Curl_setup_transfer(data, -1, -1, FALSE, -1);
       infof(data, "File already completely downloaded\n");
 
       /* Set ->transfer so that we won't get any error in ftp_done()
@@ -3060,7 +3060,7 @@ static CURLcode ftp_multi_statemach(struct connectdata *conn,
                                     bool *done)
 {
   struct ftp_conn *ftpc = &conn->proto.ftpc;
-  CURLcode result = Curl_pp_statemach(&ftpc->pp, FALSE, FALSE); 
+  CURLcode result = Curl_pp_statemach(&ftpc->pp, FALSE, FALSE);
 
   /* Check for the state outside of the Curl_socket_check() return code checks
      since at times we are in fact already in this state when this function
@@ -3077,7 +3077,7 @@ static CURLcode ftp_block_statemach(struct connectdata *conn)
   CURLcode result = CURLE_OK;
 
   while(ftpc->state != FTP_STOP) {
-    result = Curl_pp_statemach(pp, TRUE, TRUE /* disconnecting */); 
+    result = Curl_pp_statemach(pp, TRUE, TRUE /* disconnecting */);
     if(result)
       break;
   }
@@ -3324,33 +3324,33 @@ static CURLcode ftp_done(struct connectdata *conn, CURLcode status,
     ;
   else if(data->set.upload) {
     if((-1 != data->state.infilesize) &&
-       (data->state.infilesize != data->req.writebytecount) && 
+       (data->state.infilesize != data->req.writebytecount) &&
        !data->set.crlf &&
        (ftp->transfer == FTPTRANSFER_BODY)) {
       failf(data, "Uploaded unaligned file size (%" CURL_FORMAT_CURL_OFF_T
             " out of %" CURL_FORMAT_CURL_OFF_T " bytes)",
-            data->req.bytecount, data->state.infilesize); 
+            data->req.bytecount, data->state.infilesize);
       result = CURLE_PARTIAL_FILE;
     }
   }
   else {
     if((-1 != data->req.size) &&
-       (data->req.size != data->req.bytecount) && 
+       (data->req.size != data->req.bytecount) &&
 #ifdef CURL_DO_LINEEND_CONV
        /* Most FTP servers don't adjust their file SIZE response for CRLFs, so
         * we'll check to see if the discrepancy can be explained by the number
         * of CRLFs we've changed to LFs.
         */
        ((data->req.size + data->state.crlf_conversions) !=
-        data->req.bytecount) && 
+        data->req.bytecount) &&
 #endif /* CURL_DO_LINEEND_CONV */
-       (data->req.maxdownload != data->req.bytecount)) { 
+       (data->req.maxdownload != data->req.bytecount)) {
       failf(data, "Received only partial file: %" CURL_FORMAT_CURL_OFF_T
-            " bytes", data->req.bytecount); 
+            " bytes", data->req.bytecount);
       result = CURLE_PARTIAL_FILE;
     }
     else if(!ftpc->dont_check &&
-            !data->req.bytecount && 
+            !data->req.bytecount &&
             (data->req.size>0)) {
       failf(data, "No data was received!");
       result = CURLE_FTP_COULDNT_RETR_FILE;
@@ -3514,7 +3514,7 @@ static CURLcode ftp_do_more(struct connectdata *conn, int *completep)
   if(!conn->bits.tcpconnect[SECONDARYSOCKET]) {
     if(Curl_connect_ongoing(conn)) {
       /* As we're in TUNNEL_CONNECT state now, we know the proxy name and port
-         aren't used so we blank their arguments. */ 
+         aren't used so we blank their arguments. */
       result = Curl_proxyCONNECT(conn, SECONDARYSOCKET, NULL, 0);
 
       return result;
@@ -4211,7 +4211,7 @@ static CURLcode ftp_dophase_done(struct connectdata *conn,
 
   if(ftp->transfer != FTPTRANSFER_BODY)
     /* no data to transfer */
-    Curl_setup_transfer(conn->data, -1, -1, FALSE, -1); 
+    Curl_setup_transfer(conn->data, -1, -1, FALSE, -1);
   else if(!connected)
     /* since we didn't connect now, we want do_more to get called */
     conn->bits.do_more = TRUE;

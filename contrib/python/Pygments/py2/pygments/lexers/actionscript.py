@@ -5,7 +5,7 @@
 
     Lexers for ActionScript and MXML.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -125,7 +125,7 @@ class ActionScript3Lexer(RegexLexer):
                  'text/actionscript3']
 
     identifier = r'[$a-zA-Z_]\w*'
-    typeidentifier = identifier + r'(?:\.<\w+>)?' 
+    typeidentifier = identifier + r'(?:\.<\w+>)?'
 
     flags = re.DOTALL | re.MULTILINE
     tokens = {
@@ -232,7 +232,7 @@ class MxmlLexer(RegexLexer):
             (r'/?\s*>', Name.Tag, '#pop'),
         ],
         'attr': [
-            (r'\s+', Text), 
+            (r'\s+', Text),
             ('".*?"', String, '#pop'),
             ("'.*?'", String, '#pop'),
             (r'[^\s>]+', String, '#pop'),

@@ -35,7 +35,7 @@ note that it's necessary to invoke the `-pthread` flag during link stage.
 
 Multithreading capabilities are exposed
 via the [advanced API defined in `lib/zstd.h`](https://github.com/facebook/zstd/blob/v1.4.3/lib/zstd.h#L351).
- 
+
 
 #### API
 
@@ -191,13 +191,13 @@ the Makefile just generates all object files into the same default directory,
 irrespective of compilation flags.
 This functionality only matters if `libzstd` is compiled multiple times
 with different build flags.
- 
+
 The build directory, where object files are stored
 can also be manually controlled using variable `BUILD_DIR`,
 for example `make BUILD_DIR=objectDir/v1`.
 In which case, the hash function doesn't matter.
- 
- 
+
+
 #### Deprecated API
 
 Obsolete API on their way out are stored in directory `lib/deprecated`.

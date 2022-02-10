@@ -799,16 +799,16 @@ struct iterator_types<IIterator, false>
 template<class IIterator, bool IsConst>
 class iterator_from_iiterator
 {
-   typedef typename iterator_types<IIterator, IsConst>::type   types_t; 
-   class nat 
-   { 
-      public: 
-      IIterator get() const 
-      {  return IIterator(); } 
-   }; 
-   typedef typename dtl::if_c< IsConst 
-                             , iterator_from_iiterator<IIterator, false> 
-                             , nat>::type                      nonconst_iterator; 
+   typedef typename iterator_types<IIterator, IsConst>::type   types_t;
+   class nat
+   {
+      public:
+      IIterator get() const
+      {  return IIterator(); }
+   };
+   typedef typename dtl::if_c< IsConst
+                             , iterator_from_iiterator<IIterator, false>
+                             , nat>::type                      nonconst_iterator;
 
    public:
    typedef typename types_t::pointer             pointer;
@@ -825,17 +825,17 @@ class iterator_from_iiterator
       : m_iit(iit)
    {}
 
-   BOOST_CONTAINER_FORCEINLINE iterator_from_iiterator(const iterator_from_iiterator& other) BOOST_NOEXCEPT_OR_NOTHROW 
+   BOOST_CONTAINER_FORCEINLINE iterator_from_iiterator(const iterator_from_iiterator& other) BOOST_NOEXCEPT_OR_NOTHROW
       :  m_iit(other.get())
    {}
 
-   BOOST_CONTAINER_FORCEINLINE iterator_from_iiterator(const nonconst_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW 
-      :  m_iit(other.get()) 
-   {} 
- 
-   BOOST_CONTAINER_FORCEINLINE iterator_from_iiterator& operator=(const iterator_from_iiterator& other) BOOST_NOEXCEPT_OR_NOTHROW 
-   {  m_iit = other.get(); return *this;  } 
- 
+   BOOST_CONTAINER_FORCEINLINE iterator_from_iiterator(const nonconst_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW
+      :  m_iit(other.get())
+   {}
+
+   BOOST_CONTAINER_FORCEINLINE iterator_from_iiterator& operator=(const iterator_from_iiterator& other) BOOST_NOEXCEPT_OR_NOTHROW
+   {  m_iit = other.get(); return *this;  }
+
    BOOST_CONTAINER_FORCEINLINE iterator_from_iiterator& operator++() BOOST_NOEXCEPT_OR_NOTHROW
    {  ++this->m_iit;   return *this;  }
 

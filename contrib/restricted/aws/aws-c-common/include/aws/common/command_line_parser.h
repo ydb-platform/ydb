@@ -1,8 +1,8 @@
-#ifndef AWS_COMMON_COMMAND_LINE_PARSER_H 
-#define AWS_COMMON_COMMAND_LINE_PARSER_H 
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
+#ifndef AWS_COMMON_COMMAND_LINE_PARSER_H
+#define AWS_COMMON_COMMAND_LINE_PARSER_H
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
  */
 #include <aws/common/common.h>
 
@@ -12,8 +12,8 @@ enum aws_cli_options_has_arg {
     AWS_CLI_OPTIONS_OPTIONAL_ARGUMENT = 2,
 };
 
-/* Ignoring padding since we're trying to maintain getopt.h compatibility */ 
-/* NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding) */ 
+/* Ignoring padding since we're trying to maintain getopt.h compatibility */
+/* NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding) */
 struct aws_cli_option {
     const char *name;
     enum aws_cli_options_has_arg has_arg;
@@ -21,7 +21,7 @@ struct aws_cli_option {
     int val;
 };
 
-AWS_EXTERN_C_BEGIN 
+AWS_EXTERN_C_BEGIN
 /**
  * Initialized to 1 (for where the first argument would be). As arguments are parsed, this number is the index
  * of the next argument to parse. Reset this to 1 to parse another set of arguments, or to rerun the parser.
@@ -55,4 +55,4 @@ AWS_COMMON_API int aws_cli_getopt_long(
     int *longindex);
 AWS_EXTERN_C_END
 
-#endif /* AWS_COMMON_COMMAND_LINE_PARSER_H */ 
+#endif /* AWS_COMMON_COMMAND_LINE_PARSER_H */

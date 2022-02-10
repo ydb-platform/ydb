@@ -2,7 +2,7 @@
 
 from posix.types cimport pid_t, sigset_t, uid_t
 
-cdef extern from "<signal.h>" nogil: 
+cdef extern from "<signal.h>" nogil:
 
     cdef union sigval:
         int  sival_int
@@ -12,7 +12,7 @@ cdef extern from "<signal.h>" nogil:
         int    sigev_notify
         int    sigev_signo
         sigval sigev_value
-        void   sigev_notify_function(sigval) 
+        void   sigev_notify_function(sigval)
 
     ctypedef struct siginfo_t:
         int    si_signo
@@ -26,8 +26,8 @@ cdef extern from "<signal.h>" nogil:
         sigval si_value
 
     cdef struct sigaction_t "sigaction":
-        void     sa_handler(int) 
-        void     sa_sigaction(int, siginfo_t *, void *) 
+        void     sa_handler(int)
+        void     sa_sigaction(int, siginfo_t *, void *)
         sigset_t sa_mask
         int      sa_flags
 
@@ -68,6 +68,6 @@ cdef extern from "<signal.h>" nogil:
     int          sigdelset     (sigset_t *, int)
     int          sigemptyset   (sigset_t *)
     int          sigfillset    (sigset_t *)
-    int          sigismember   (const sigset_t *, int) 
+    int          sigismember   (const sigset_t *, int)
 
     int sigaltstack(const stack_t *, stack_t *)

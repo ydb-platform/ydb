@@ -23,7 +23,7 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-NO_RUNTIME() 
+NO_RUNTIME()
 
 SRCS(
     uriparse.c

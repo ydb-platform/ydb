@@ -18,11 +18,11 @@
 namespace NKikimr {
 namespace NWrappers {
 
-struct TS3User { 
-    TS3User(); 
-    ~TS3User(); 
-}; 
- 
+struct TS3User {
+    TS3User();
+    ~TS3User();
+};
+
 struct TEvS3Wrapper {
     template <typename TDerived, ui32 EventType, typename T>
     struct TGenericRequest: public TEventLocal<TDerived, EventType> {
@@ -54,8 +54,8 @@ struct TEvS3Wrapper {
 
     template <typename TDerived, ui32 EventType, typename T, typename U = T>
     struct TGenericResponse: public TEventLocal<TDerived, EventType> {
-        using TOutcome = Aws::Utils::Outcome<T, Aws::S3::S3Error>; 
-        using TResult = Aws::Utils::Outcome<U, Aws::S3::S3Error>; 
+        using TOutcome = Aws::Utils::Outcome<T, Aws::S3::S3Error>;
+        using TResult = Aws::Utils::Outcome<U, Aws::S3::S3Error>;
 
         TResult Result;
 

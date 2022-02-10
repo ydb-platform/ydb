@@ -39,7 +39,7 @@
  *
  * File lib/strdup.c is an exception, given that it provides a strdup
  * clone implementation while using malloc. Extra care needed inside
- * this one. 
+ * this one.
  *
  * The need for curl_memory.h inclusion is due to libcurl's feature
  * of allowing library user to provide memory replacement functions,

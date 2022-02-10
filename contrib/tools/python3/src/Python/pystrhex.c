@@ -1,13 +1,13 @@
-/* bytes to hex implementation */ 
- 
-#include "Python.h" 
- 
+/* bytes to hex implementation */
+
+#include "Python.h"
+
 #include "pystrhex.h"
 
-static PyObject *_Py_strhex_impl(const char* argbuf, const Py_ssize_t arglen, 
+static PyObject *_Py_strhex_impl(const char* argbuf, const Py_ssize_t arglen,
                                  const PyObject* sep, int bytes_per_sep_group,
                                  const int return_bytes)
-{ 
+{
     assert(arglen >= 0);
 
     Py_UCS1 sep_char = 0;
@@ -53,10 +53,10 @@ static PyObject *_Py_strhex_impl(const char* argbuf, const Py_ssize_t arglen,
     }
     /* Bounds checking for our Py_ssize_t indices. */
     if (arglen >= PY_SSIZE_T_MAX / 2 - resultlen) {
-        return PyErr_NoMemory(); 
+        return PyErr_NoMemory();
     }
     resultlen += arglen * 2;
- 
+
     if ((size_t)abs_bytes_per_sep >= (size_t)arglen) {
         bytes_per_sep_group = 0;
         abs_bytes_per_sep = 0;
@@ -64,8 +64,8 @@ static PyObject *_Py_strhex_impl(const char* argbuf, const Py_ssize_t arglen,
 
     PyObject *retval;
     Py_UCS1 *retbuf;
-    if (return_bytes) { 
-        /* If _PyBytes_FromSize() were public we could avoid malloc+copy. */ 
+    if (return_bytes) {
+        /* If _PyBytes_FromSize() were public we could avoid malloc+copy. */
         retval = PyBytes_FromStringAndSize(NULL, resultlen);
         if (!retval) {
             return NULL;
@@ -75,11 +75,11 @@ static PyObject *_Py_strhex_impl(const char* argbuf, const Py_ssize_t arglen,
     else {
         retval = PyUnicode_New(resultlen, 127);
         if (!retval) {
-            return NULL; 
+            return NULL;
         }
-        retbuf = PyUnicode_1BYTE_DATA(retval); 
-    } 
- 
+        retbuf = PyUnicode_1BYTE_DATA(retval);
+    }
+
     /* Hexlify */
     Py_ssize_t i, j;
     unsigned char c;
@@ -134,28 +134,28 @@ static PyObject *_Py_strhex_impl(const char* argbuf, const Py_ssize_t arglen,
             }
             assert(j == -1);
         }
-    } 
- 
-#ifdef Py_DEBUG 
+    }
+
+#ifdef Py_DEBUG
     if (!return_bytes) {
-        assert(_PyUnicode_CheckConsistency(retval, 1)); 
-    } 
-#endif 
- 
-    return retval; 
-} 
- 
+        assert(_PyUnicode_CheckConsistency(retval, 1));
+    }
+#endif
+
+    return retval;
+}
+
 PyObject * _Py_strhex(const char* argbuf, const Py_ssize_t arglen)
-{ 
+{
     return _Py_strhex_impl(argbuf, arglen, NULL, 0, 0);
-} 
- 
-/* Same as above but returns a bytes() instead of str() to avoid the 
- * need to decode the str() when bytes are needed. */ 
+}
+
+/* Same as above but returns a bytes() instead of str() to avoid the
+ * need to decode the str() when bytes are needed. */
 PyObject * _Py_strhex_bytes(const char* argbuf, const Py_ssize_t arglen)
-{ 
+{
     return _Py_strhex_impl(argbuf, arglen, NULL, 0, 1);
-} 
+}
 
 /* These variants include support for a separator between every N bytes: */
 

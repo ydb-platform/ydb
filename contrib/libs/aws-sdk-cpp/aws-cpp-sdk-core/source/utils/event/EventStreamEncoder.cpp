@@ -1,6 +1,6 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
  */
 
 #include <aws/core/utils/event/EventHeader.h>
@@ -9,7 +9,7 @@
 #include <aws/core/utils/logging/LogMacros.h>
 #include <aws/core/auth/AWSAuthSigner.h>
 #include <aws/common/byte_order.h>
-#include <aws/core/utils/memory/AWSMemory.h> 
+#include <aws/core/utils/memory/AWSMemory.h>
 
 #include <cassert>
 
@@ -23,7 +23,7 @@ namespace Aws
 
             static void EncodeHeaders(const Aws::Utils::Event::Message& msg, aws_array_list* headers)
             {
-                aws_array_list_init_dynamic(headers, get_aws_allocator(), msg.GetEventHeaders().size(), sizeof(aws_event_stream_header_value_pair)); 
+                aws_array_list_init_dynamic(headers, get_aws_allocator(), msg.GetEventHeaders().size(), sizeof(aws_event_stream_header_value_pair));
                 for (auto&& header : msg.GetEventHeaders())
                 {
                     const uint8_t headerKeyLen = static_cast<uint8_t>(header.first.length());
@@ -37,18 +37,18 @@ namespace Aws
                             aws_event_stream_add_bool_header(headers, header.first.c_str(), headerKeyLen, header.second.GetEventHeaderValueAsByte());
                             break;
                         case EventHeaderValue::EventHeaderType::INT16:
-                            aws_event_stream_add_int16_header(headers, header.first.c_str(), headerKeyLen, header.second.GetEventHeaderValueAsInt16()); 
+                            aws_event_stream_add_int16_header(headers, header.first.c_str(), headerKeyLen, header.second.GetEventHeaderValueAsInt16());
                             break;
                         case EventHeaderValue::EventHeaderType::INT32:
-                            aws_event_stream_add_int32_header(headers, header.first.c_str(), headerKeyLen, header.second.GetEventHeaderValueAsInt32()); 
+                            aws_event_stream_add_int32_header(headers, header.first.c_str(), headerKeyLen, header.second.GetEventHeaderValueAsInt32());
                             break;
                         case EventHeaderValue::EventHeaderType::INT64:
-                            aws_event_stream_add_int64_header(headers, header.first.c_str(), headerKeyLen, header.second.GetEventHeaderValueAsInt64()); 
+                            aws_event_stream_add_int64_header(headers, header.first.c_str(), headerKeyLen, header.second.GetEventHeaderValueAsInt64());
                             break;
                         case EventHeaderValue::EventHeaderType::BYTE_BUF:
                             {
                                 const auto& bytes = header.second.GetEventHeaderValueAsBytebuf();
-                                aws_event_stream_add_bytebuf_header(headers, header.first.c_str(), headerKeyLen, bytes.GetUnderlyingData(), static_cast<uint16_t>(bytes.GetLength()), 1 /*copy*/); 
+                                aws_event_stream_add_bytebuf_header(headers, header.first.c_str(), headerKeyLen, bytes.GetUnderlyingData(), static_cast<uint16_t>(bytes.GetLength()), 1 /*copy*/);
                             }
                             break;
                         case EventHeaderValue::EventHeaderType::STRING:
@@ -58,7 +58,7 @@ namespace Aws
                             }
                             break;
                         case EventHeaderValue::EventHeaderType::TIMESTAMP:
-                            aws_event_stream_add_timestamp_header(headers, header.first.c_str(), headerKeyLen, header.second.GetEventHeaderValueAsTimestamp()); 
+                            aws_event_stream_add_timestamp_header(headers, header.first.c_str(), headerKeyLen, header.second.GetEventHeaderValueAsTimestamp());
                             break;
                         case EventHeaderValue::EventHeaderType::UUID:
                             {
@@ -104,16 +104,16 @@ namespace Aws
                 payload.allocator = nullptr;
 
                 aws_event_stream_message encoded;
-                if(aws_event_stream_message_init(&encoded, get_aws_allocator(), &headers, &payload) == AWS_OP_ERR) 
+                if(aws_event_stream_message_init(&encoded, get_aws_allocator(), &headers, &payload) == AWS_OP_ERR)
                 {
-                    AWS_LOGSTREAM_ERROR(TAG, "Error creating event-stream message from payload."); 
-                    aws_event_stream_headers_list_cleanup(&headers); 
+                    AWS_LOGSTREAM_ERROR(TAG, "Error creating event-stream message from payload.");
+                    aws_event_stream_headers_list_cleanup(&headers);
                     // GCC 4.9.4 issues a warning with -Wextra if we simply do
                     // return {};
                     aws_event_stream_message empty{nullptr, nullptr, 0};
                     return empty;
                 }
-                aws_event_stream_headers_list_cleanup(&headers); 
+                aws_event_stream_headers_list_cleanup(&headers);
                 return encoded;
             }
 
@@ -143,16 +143,16 @@ namespace Aws
                 payload.allocator = nullptr;
 
                 aws_event_stream_message signedmsg;
-                if(aws_event_stream_message_init(&signedmsg, get_aws_allocator(), &headers, &payload)) 
+                if(aws_event_stream_message_init(&signedmsg, get_aws_allocator(), &headers, &payload))
                 {
-                    AWS_LOGSTREAM_ERROR(TAG, "Error creating event-stream message from payload."); 
-                    aws_event_stream_headers_list_cleanup(&headers); 
+                    AWS_LOGSTREAM_ERROR(TAG, "Error creating event-stream message from payload.");
+                    aws_event_stream_headers_list_cleanup(&headers);
                     // GCC 4.9.4 issues a warning with -Wextra if we simply do
                     // return {};
                     aws_event_stream_message empty{nullptr, nullptr, 0};
                     return empty;
                 }
-                aws_event_stream_headers_list_cleanup(&headers); 
+                aws_event_stream_headers_list_cleanup(&headers);
                 return signedmsg;
             }
 

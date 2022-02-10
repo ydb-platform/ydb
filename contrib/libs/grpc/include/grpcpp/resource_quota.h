@@ -1,31 +1,31 @@
-/* 
- * 
+/*
+ *
  * Copyright 2016 gRPC authors.
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#ifndef GRPCPP_RESOURCE_QUOTA_H 
-#define GRPCPP_RESOURCE_QUOTA_H 
- 
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#ifndef GRPCPP_RESOURCE_QUOTA_H
+#define GRPCPP_RESOURCE_QUOTA_H
+
 struct grpc_resource_quota;
- 
+
 #include <grpcpp/impl/codegen/config.h>
 #include <grpcpp/impl/codegen/grpc_library.h>
 
-namespace grpc { 
- 
+namespace grpc {
+
 /// ResourceQuota represents a bound on memory and thread usage by the gRPC
 /// library. A ResourceQuota can be attached to a server (via \a ServerBuilder),
 /// or a client channel (via \a ChannelArguments).
@@ -63,6 +63,6 @@ class ResourceQuota final : private ::grpc::GrpcLibraryCodegen {
   grpc_resource_quota* const impl_;
 };
 
-}  // namespace grpc 
- 
-#endif  // GRPCPP_RESOURCE_QUOTA_H 
+}  // namespace grpc
+
+#endif  // GRPCPP_RESOURCE_QUOTA_H

@@ -150,7 +150,7 @@ public:
         Alloc.Release();
     }
 
-    virtual ~TEngineHolder() { 
+    virtual ~TEngineHolder() {
         Engine.Reset();
         Alloc.Acquire();
     }

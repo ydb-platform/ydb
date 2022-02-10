@@ -1580,7 +1580,7 @@ static CURLcode telnet_do(struct connectdata *conn, bool *done)
   }
 #endif
   /* mark this as "no further transfer wanted" */
-  Curl_setup_transfer(data, -1, -1, FALSE, -1); 
+  Curl_setup_transfer(data, -1, -1, FALSE, -1);
 
   return result;
 }

@@ -57,15 +57,15 @@ directly instead of this class.
 
 __author__ = 'matthewtoia@google.com (Matt Toia)'
 
-import collections 
+import collections
 import warnings
- 
+
 from google.protobuf import descriptor
 from google.protobuf import descriptor_database
 from google.protobuf import text_encoding
 
 
-_USE_C_DESCRIPTORS = descriptor._USE_C_DESCRIPTORS  # pylint: disable=protected-access 
+_USE_C_DESCRIPTORS = descriptor._USE_C_DESCRIPTORS  # pylint: disable=protected-access
 
 
 def _Deprecated(func):
@@ -99,22 +99,22 @@ def _NormalizeFullyQualifiedName(name):
   return name.lstrip('.')
 
 
-def _OptionsOrNone(descriptor_proto): 
-  """Returns the value of the field `options`, or None if it is not set.""" 
-  if descriptor_proto.HasField('options'): 
-    return descriptor_proto.options 
-  else: 
-    return None 
- 
- 
-def _IsMessageSetExtension(field): 
-  return (field.is_extension and 
-          field.containing_type.has_options and 
-          field.containing_type.GetOptions().message_set_wire_format and 
-          field.type == descriptor.FieldDescriptor.TYPE_MESSAGE and 
-          field.label == descriptor.FieldDescriptor.LABEL_OPTIONAL) 
- 
- 
+def _OptionsOrNone(descriptor_proto):
+  """Returns the value of the field `options`, or None if it is not set."""
+  if descriptor_proto.HasField('options'):
+    return descriptor_proto.options
+  else:
+    return None
+
+
+def _IsMessageSetExtension(field):
+  return (field.is_extension and
+          field.containing_type.has_options and
+          field.containing_type.GetOptions().message_set_wire_format and
+          field.type == descriptor.FieldDescriptor.TYPE_MESSAGE and
+          field.label == descriptor.FieldDescriptor.LABEL_OPTIONAL)
+
+
 class DescriptorPool(object):
   """A collection of protobufs dynamically constructed by descriptor protos."""
 
@@ -141,18 +141,18 @@ class DescriptorPool(object):
     self._descriptor_db = descriptor_db
     self._descriptors = {}
     self._enum_descriptors = {}
-    self._service_descriptors = {} 
+    self._service_descriptors = {}
     self._file_descriptors = {}
-    self._toplevel_extensions = {} 
+    self._toplevel_extensions = {}
     # TODO(jieluo): Remove _file_desc_by_toplevel_extension after
     # maybe year 2020 for compatibility issue (with 3.4.1 only).
-    self._file_desc_by_toplevel_extension = {} 
+    self._file_desc_by_toplevel_extension = {}
     self._top_enum_values = {}
-    # We store extensions in two two-level mappings: The first key is the 
-    # descriptor of the message being extended, the second key is the extension 
-    # full name or its tag number. 
-    self._extensions_by_name = collections.defaultdict(dict) 
-    self._extensions_by_number = collections.defaultdict(dict) 
+    # We store extensions in two two-level mappings: The first key is the
+    # descriptor of the message being extended, the second key is the extension
+    # full name or its tag number.
+    self._extensions_by_name = collections.defaultdict(dict)
+    self._extensions_by_number = collections.defaultdict(dict)
 
   def _CheckConflictRegister(self, desc, desc_name, file_name):
     """Check if the descriptor name conflicts with another of the same name.
@@ -238,7 +238,7 @@ class DescriptorPool(object):
     self._CheckConflictRegister(desc, desc.full_name, desc.file.name)
 
     self._descriptors[desc.full_name] = desc
-    self._AddFileDescriptor(desc.file) 
+    self._AddFileDescriptor(desc.file)
 
   # Add EnumDescriptor to descriptor pool is dreprecated. Please use Add()
   # or AddSerializedFile() to add a FileDescriptorProto instead.
@@ -250,7 +250,7 @@ class DescriptorPool(object):
   def _AddEnumDescriptor(self, enum_desc):
     """Adds an EnumDescriptor to the pool.
 
-    This method also registers the FileDescriptor associated with the enum. 
+    This method also registers the FileDescriptor associated with the enum.
 
     Args:
       enum_desc: An EnumDescriptor.
@@ -279,78 +279,78 @@ class DescriptorPool(object):
             '.'.join((package, enum_value.name)))
         self._CheckConflictRegister(enum_value, full_name, file_name)
         self._top_enum_values[full_name] = enum_value
-    self._AddFileDescriptor(enum_desc.file) 
+    self._AddFileDescriptor(enum_desc.file)
 
   # Add ServiceDescriptor to descriptor pool is dreprecated. Please use Add()
   # or AddSerializedFile() to add a FileDescriptorProto instead.
   @_Deprecated
-  def AddServiceDescriptor(self, service_desc): 
+  def AddServiceDescriptor(self, service_desc):
     self._AddServiceDescriptor(service_desc)
 
   # Never call this method. It is for internal usage only.
   def _AddServiceDescriptor(self, service_desc):
-    """Adds a ServiceDescriptor to the pool. 
- 
-    Args: 
-      service_desc: A ServiceDescriptor. 
-    """ 
- 
-    if not isinstance(service_desc, descriptor.ServiceDescriptor): 
-      raise TypeError('Expected instance of descriptor.ServiceDescriptor.') 
- 
+    """Adds a ServiceDescriptor to the pool.
+
+    Args:
+      service_desc: A ServiceDescriptor.
+    """
+
+    if not isinstance(service_desc, descriptor.ServiceDescriptor):
+      raise TypeError('Expected instance of descriptor.ServiceDescriptor.')
+
     self._CheckConflictRegister(service_desc, service_desc.full_name,
                                 service_desc.file.name)
-    self._service_descriptors[service_desc.full_name] = service_desc 
- 
+    self._service_descriptors[service_desc.full_name] = service_desc
+
   # Add ExtensionDescriptor to descriptor pool is dreprecated. Please use Add()
   # or AddSerializedFile() to add a FileDescriptorProto instead.
   @_Deprecated
-  def AddExtensionDescriptor(self, extension): 
+  def AddExtensionDescriptor(self, extension):
     self._AddExtensionDescriptor(extension)
 
   # Never call this method. It is for internal usage only.
   def _AddExtensionDescriptor(self, extension):
-    """Adds a FieldDescriptor describing an extension to the pool. 
- 
-    Args: 
-      extension: A FieldDescriptor. 
- 
-    Raises: 
-      AssertionError: when another extension with the same number extends the 
-        same message. 
-      TypeError: when the specified extension is not a 
-        descriptor.FieldDescriptor. 
-    """ 
-    if not (isinstance(extension, descriptor.FieldDescriptor) and 
-            extension.is_extension): 
-      raise TypeError('Expected an extension descriptor.') 
- 
-    if extension.extension_scope is None: 
-      self._toplevel_extensions[extension.full_name] = extension 
- 
-    try: 
-      existing_desc = self._extensions_by_number[ 
-          extension.containing_type][extension.number] 
-    except KeyError: 
-      pass 
-    else: 
-      if extension is not existing_desc: 
-        raise AssertionError( 
-            'Extensions "%s" and "%s" both try to extend message type "%s" ' 
-            'with field number %d.' % 
-            (extension.full_name, existing_desc.full_name, 
-             extension.containing_type.full_name, extension.number)) 
- 
-    self._extensions_by_number[extension.containing_type][ 
-        extension.number] = extension 
-    self._extensions_by_name[extension.containing_type][ 
-        extension.full_name] = extension 
- 
-    # Also register MessageSet extensions with the type name. 
-    if _IsMessageSetExtension(extension): 
-      self._extensions_by_name[extension.containing_type][ 
-          extension.message_type.full_name] = extension 
- 
+    """Adds a FieldDescriptor describing an extension to the pool.
+
+    Args:
+      extension: A FieldDescriptor.
+
+    Raises:
+      AssertionError: when another extension with the same number extends the
+        same message.
+      TypeError: when the specified extension is not a
+        descriptor.FieldDescriptor.
+    """
+    if not (isinstance(extension, descriptor.FieldDescriptor) and
+            extension.is_extension):
+      raise TypeError('Expected an extension descriptor.')
+
+    if extension.extension_scope is None:
+      self._toplevel_extensions[extension.full_name] = extension
+
+    try:
+      existing_desc = self._extensions_by_number[
+          extension.containing_type][extension.number]
+    except KeyError:
+      pass
+    else:
+      if extension is not existing_desc:
+        raise AssertionError(
+            'Extensions "%s" and "%s" both try to extend message type "%s" '
+            'with field number %d.' %
+            (extension.full_name, existing_desc.full_name,
+             extension.containing_type.full_name, extension.number))
+
+    self._extensions_by_number[extension.containing_type][
+        extension.number] = extension
+    self._extensions_by_name[extension.containing_type][
+        extension.full_name] = extension
+
+    # Also register MessageSet extensions with the type name.
+    if _IsMessageSetExtension(extension):
+      self._extensions_by_name[extension.containing_type][
+          extension.message_type.full_name] = extension
+
   @_Deprecated
   def AddFileDescriptor(self, file_desc):
     self._InternalAddFileDescriptor(file_desc)
@@ -366,24 +366,24 @@ class DescriptorPool(object):
       file_desc: A FileDescriptor.
     """
 
-    self._AddFileDescriptor(file_desc) 
-    # TODO(jieluo): This is a temporary solution for FieldDescriptor.file. 
+    self._AddFileDescriptor(file_desc)
+    # TODO(jieluo): This is a temporary solution for FieldDescriptor.file.
     # FieldDescriptor.file is added in code gen. Remove this solution after
     # maybe 2020 for compatibility reason (with 3.4.1 only).
-    for extension in file_desc.extensions_by_name.values(): 
-      self._file_desc_by_toplevel_extension[ 
-          extension.full_name] = file_desc 
- 
-  def _AddFileDescriptor(self, file_desc): 
-    """Adds a FileDescriptor to the pool, non-recursively. 
- 
-    If the FileDescriptor contains messages or enums, the caller must explicitly 
-    register them. 
- 
-    Args: 
-      file_desc: A FileDescriptor. 
-    """ 
- 
+    for extension in file_desc.extensions_by_name.values():
+      self._file_desc_by_toplevel_extension[
+          extension.full_name] = file_desc
+
+  def _AddFileDescriptor(self, file_desc):
+    """Adds a FileDescriptor to the pool, non-recursively.
+
+    If the FileDescriptor contains messages or enums, the caller must explicitly
+    register them.
+
+    Args:
+      file_desc: A FileDescriptor.
+    """
+
     if not isinstance(file_desc, descriptor.FileDescriptor):
       raise TypeError('Expected instance of descriptor.FileDescriptor.')
     self._file_descriptors[file_desc.name] = file_desc
@@ -398,7 +398,7 @@ class DescriptorPool(object):
       FileDescriptor: The descriptor for the named file.
 
     Raises:
-      KeyError: if the file cannot be found in the pool. 
+      KeyError: if the file cannot be found in the pool.
     """
 
     try:
@@ -428,7 +428,7 @@ class DescriptorPool(object):
       symbol.
 
     Raises:
-      KeyError: if the file cannot be found in the pool. 
+      KeyError: if the file cannot be found in the pool.
     """
 
     symbol = _NormalizeFullyQualifiedName(symbol)
@@ -468,28 +468,28 @@ class DescriptorPool(object):
       pass
 
     try:
-      return self._service_descriptors[symbol].file 
-    except KeyError: 
-      pass 
- 
-    try: 
+      return self._service_descriptors[symbol].file
+    except KeyError:
+      pass
+
+    try:
       return self._top_enum_values[symbol].type.file
-    except KeyError: 
-      pass 
- 
-    try: 
-      return self._file_desc_by_toplevel_extension[symbol] 
-    except KeyError: 
-      pass 
- 
+    except KeyError:
+      pass
+
+    try:
+      return self._file_desc_by_toplevel_extension[symbol]
+    except KeyError:
+      pass
+
     # Try fields, enum values and nested extensions inside a message.
     top_name, _, sub_name = symbol.rpartition('.')
-    try: 
+    try:
       message = self.FindMessageTypeByName(top_name)
       assert (sub_name in message.extensions_by_name or
               sub_name in message.fields_by_name or
               sub_name in message.enum_values_by_name)
-      return message.file 
+      return message.file
     except (KeyError, AssertionError):
       raise KeyError('Cannot find a file containing %s' % symbol)
 
@@ -501,14 +501,14 @@ class DescriptorPool(object):
 
     Returns:
       Descriptor: The descriptor for the named type.
- 
-    Raises: 
-      KeyError: if the message cannot be found in the pool. 
+
+    Raises:
+      KeyError: if the message cannot be found in the pool.
     """
 
     full_name = _NormalizeFullyQualifiedName(full_name)
     if full_name not in self._descriptors:
-      self._FindFileContainingSymbolInDb(full_name) 
+      self._FindFileContainingSymbolInDb(full_name)
     return self._descriptors[full_name]
 
   def FindEnumTypeByName(self, full_name):
@@ -519,14 +519,14 @@ class DescriptorPool(object):
 
     Returns:
       EnumDescriptor: The enum descriptor for the named type.
- 
-    Raises: 
-      KeyError: if the enum cannot be found in the pool. 
+
+    Raises:
+      KeyError: if the enum cannot be found in the pool.
     """
 
     full_name = _NormalizeFullyQualifiedName(full_name)
     if full_name not in self._enum_descriptors:
-      self._FindFileContainingSymbolInDb(full_name) 
+      self._FindFileContainingSymbolInDb(full_name)
     return self._enum_descriptors[full_name]
 
   def FindFieldByName(self, full_name):
@@ -537,9 +537,9 @@ class DescriptorPool(object):
 
     Returns:
       FieldDescriptor: The field descriptor for the named field.
- 
-    Raises: 
-      KeyError: if the field cannot be found in the pool. 
+
+    Raises:
+      KeyError: if the field cannot be found in the pool.
     """
     full_name = _NormalizeFullyQualifiedName(full_name)
     message_name, _, field_name = full_name.rpartition('.')
@@ -571,63 +571,63 @@ class DescriptorPool(object):
 
     Returns:
       FieldDescriptor: The field descriptor for the named extension.
- 
-    Raises: 
-      KeyError: if the extension cannot be found in the pool. 
+
+    Raises:
+      KeyError: if the extension cannot be found in the pool.
     """
     full_name = _NormalizeFullyQualifiedName(full_name)
-    try: 
-      # The proto compiler does not give any link between the FileDescriptor 
-      # and top-level extensions unless the FileDescriptorProto is added to 
-      # the DescriptorDatabase, but this can impact memory usage. 
-      # So we registered these extensions by name explicitly. 
-      return self._toplevel_extensions[full_name] 
-    except KeyError: 
-      pass 
+    try:
+      # The proto compiler does not give any link between the FileDescriptor
+      # and top-level extensions unless the FileDescriptorProto is added to
+      # the DescriptorDatabase, but this can impact memory usage.
+      # So we registered these extensions by name explicitly.
+      return self._toplevel_extensions[full_name]
+    except KeyError:
+      pass
     message_name, _, extension_name = full_name.rpartition('.')
     try:
       # Most extensions are nested inside a message.
       scope = self.FindMessageTypeByName(message_name)
     except KeyError:
       # Some extensions are defined at file scope.
-      scope = self._FindFileContainingSymbolInDb(full_name) 
+      scope = self._FindFileContainingSymbolInDb(full_name)
     return scope.extensions_by_name[extension_name]
 
-  def FindExtensionByNumber(self, message_descriptor, number): 
-    """Gets the extension of the specified message with the specified number. 
- 
+  def FindExtensionByNumber(self, message_descriptor, number):
+    """Gets the extension of the specified message with the specified number.
+
     Extensions have to be registered to this pool by calling :func:`Add` or
     :func:`AddExtensionDescriptor`.
- 
-    Args: 
+
+    Args:
       message_descriptor (Descriptor): descriptor of the extended message.
       number (int): Number of the extension field.
- 
-    Returns: 
+
+    Returns:
       FieldDescriptor: The descriptor for the extension.
- 
-    Raises: 
-      KeyError: when no extension with the given number is known for the 
-        specified message. 
-    """ 
+
+    Raises:
+      KeyError: when no extension with the given number is known for the
+        specified message.
+    """
     try:
       return self._extensions_by_number[message_descriptor][number]
     except KeyError:
       self._TryLoadExtensionFromDB(message_descriptor, number)
       return self._extensions_by_number[message_descriptor][number]
- 
-  def FindAllExtensions(self, message_descriptor): 
+
+  def FindAllExtensions(self, message_descriptor):
     """Gets all the known extensions of a given message.
- 
+
     Extensions have to be registered to this pool by build related
     :func:`Add` or :func:`AddExtensionDescriptor`.
- 
-    Args: 
+
+    Args:
       message_descriptor (Descriptor): Descriptor of the extended message.
- 
-    Returns: 
+
+    Returns:
       list[FieldDescriptor]: Field descriptors describing the extensions.
-    """ 
+    """
     # Fallback to descriptor db if FindAllExtensionNumbers is provided.
     if self._descriptor_db and hasattr(
         self._descriptor_db, 'FindAllExtensionNumbers'):
@@ -638,8 +638,8 @@ class DescriptorPool(object):
           continue
         self._TryLoadExtensionFromDB(message_descriptor, number)
 
-    return list(self._extensions_by_number[message_descriptor].values()) 
- 
+    return list(self._extensions_by_number[message_descriptor].values())
+
   def _TryLoadExtensionFromDB(self, message_descriptor, number):
     """Try to Load extensions from descriptor db.
 
@@ -668,23 +668,23 @@ class DescriptorPool(object):
                   (file_proto.name, number))
       warnings.warn(warn_msg, RuntimeWarning)
 
-  def FindServiceByName(self, full_name): 
-    """Loads the named service descriptor from the pool. 
- 
-    Args: 
+  def FindServiceByName(self, full_name):
+    """Loads the named service descriptor from the pool.
+
+    Args:
       full_name (str): The full name of the service descriptor to load.
- 
-    Returns: 
+
+    Returns:
       ServiceDescriptor: The service descriptor for the named service.
- 
-    Raises: 
-      KeyError: if the service cannot be found in the pool. 
-    """ 
-    full_name = _NormalizeFullyQualifiedName(full_name) 
-    if full_name not in self._service_descriptors: 
-      self._FindFileContainingSymbolInDb(full_name) 
-    return self._service_descriptors[full_name] 
- 
+
+    Raises:
+      KeyError: if the service cannot be found in the pool.
+    """
+    full_name = _NormalizeFullyQualifiedName(full_name)
+    if full_name not in self._service_descriptors:
+      self._FindFileContainingSymbolInDb(full_name)
+    return self._service_descriptors[full_name]
+
   def FindMethodByName(self, full_name):
     """Loads the named service method descriptor from the pool.
 
@@ -702,29 +702,29 @@ class DescriptorPool(object):
     service_descriptor = self.FindServiceByName(service_name)
     return service_descriptor.methods_by_name[method_name]
 
-  def _FindFileContainingSymbolInDb(self, symbol): 
-    """Finds the file in descriptor DB containing the specified symbol. 
- 
-    Args: 
+  def _FindFileContainingSymbolInDb(self, symbol):
+    """Finds the file in descriptor DB containing the specified symbol.
+
+    Args:
       symbol (str): The name of the symbol to search for.
- 
-    Returns: 
+
+    Returns:
       FileDescriptor: The file that contains the specified symbol.
- 
-    Raises: 
-      KeyError: if the file cannot be found in the descriptor database. 
-    """ 
-    try: 
-      file_proto = self._internal_db.FindFileContainingSymbol(symbol) 
-    except KeyError as error: 
-      if self._descriptor_db: 
-        file_proto = self._descriptor_db.FindFileContainingSymbol(symbol) 
-      else: 
-        raise error 
-    if not file_proto: 
-      raise KeyError('Cannot find a file containing %s' % symbol) 
-    return self._ConvertFileProtoToFileDescriptor(file_proto) 
- 
+
+    Raises:
+      KeyError: if the file cannot be found in the descriptor database.
+    """
+    try:
+      file_proto = self._internal_db.FindFileContainingSymbol(symbol)
+    except KeyError as error:
+      if self._descriptor_db:
+        file_proto = self._descriptor_db.FindFileContainingSymbol(symbol)
+      else:
+        raise error
+    if not file_proto:
+      raise KeyError('Cannot find a file containing %s' % symbol)
+    return self._ConvertFileProtoToFileDescriptor(file_proto)
+
   def _ConvertFileProtoToFileDescriptor(self, file_proto):
     """Creates a FileDescriptor from a proto or returns a cached copy.
 
@@ -747,66 +747,66 @@ class DescriptorPool(object):
           name=file_proto.name,
           package=file_proto.package,
           syntax=file_proto.syntax,
-          options=_OptionsOrNone(file_proto), 
+          options=_OptionsOrNone(file_proto),
           serialized_pb=file_proto.SerializeToString(),
           dependencies=direct_deps,
           public_dependencies=public_deps,
           # pylint: disable=protected-access
           create_key=descriptor._internal_create_key)
-      scope = {} 
+      scope = {}
 
-      # This loop extracts all the message and enum types from all the 
-      # dependencies of the file_proto. This is necessary to create the 
-      # scope of available message types when defining the passed in 
-      # file proto. 
-      for dependency in built_deps: 
-        scope.update(self._ExtractSymbols( 
-            dependency.message_types_by_name.values())) 
-        scope.update((_PrefixWithDot(enum.full_name), enum) 
-                     for enum in dependency.enum_types_by_name.values()) 
+      # This loop extracts all the message and enum types from all the
+      # dependencies of the file_proto. This is necessary to create the
+      # scope of available message types when defining the passed in
+      # file proto.
+      for dependency in built_deps:
+        scope.update(self._ExtractSymbols(
+            dependency.message_types_by_name.values()))
+        scope.update((_PrefixWithDot(enum.full_name), enum)
+                     for enum in dependency.enum_types_by_name.values())
 
-      for message_type in file_proto.message_type: 
-        message_desc = self._ConvertMessageDescriptor( 
-            message_type, file_proto.package, file_descriptor, scope, 
-            file_proto.syntax) 
-        file_descriptor.message_types_by_name[message_desc.name] = ( 
-            message_desc) 
+      for message_type in file_proto.message_type:
+        message_desc = self._ConvertMessageDescriptor(
+            message_type, file_proto.package, file_descriptor, scope,
+            file_proto.syntax)
+        file_descriptor.message_types_by_name[message_desc.name] = (
+            message_desc)
 
-      for enum_type in file_proto.enum_type: 
-        file_descriptor.enum_types_by_name[enum_type.name] = ( 
-            self._ConvertEnumDescriptor(enum_type, file_proto.package, 
+      for enum_type in file_proto.enum_type:
+        file_descriptor.enum_types_by_name[enum_type.name] = (
+            self._ConvertEnumDescriptor(enum_type, file_proto.package,
                                         file_descriptor, None, scope, True))
 
-      for index, extension_proto in enumerate(file_proto.extension): 
-        extension_desc = self._MakeFieldDescriptor( 
-            extension_proto, file_proto.package, index, file_descriptor, 
-            is_extension=True) 
-        extension_desc.containing_type = self._GetTypeFromScope( 
-            file_descriptor.package, extension_proto.extendee, scope) 
-        self._SetFieldType(extension_proto, extension_desc, 
-                           file_descriptor.package, scope) 
-        file_descriptor.extensions_by_name[extension_desc.name] = ( 
-            extension_desc) 
+      for index, extension_proto in enumerate(file_proto.extension):
+        extension_desc = self._MakeFieldDescriptor(
+            extension_proto, file_proto.package, index, file_descriptor,
+            is_extension=True)
+        extension_desc.containing_type = self._GetTypeFromScope(
+            file_descriptor.package, extension_proto.extendee, scope)
+        self._SetFieldType(extension_proto, extension_desc,
+                           file_descriptor.package, scope)
+        file_descriptor.extensions_by_name[extension_desc.name] = (
+            extension_desc)
         self._file_desc_by_toplevel_extension[extension_desc.full_name] = (
             file_descriptor)
 
-      for desc_proto in file_proto.message_type: 
-        self._SetAllFieldTypes(file_proto.package, desc_proto, scope) 
+      for desc_proto in file_proto.message_type:
+        self._SetAllFieldTypes(file_proto.package, desc_proto, scope)
 
-      if file_proto.package: 
-        desc_proto_prefix = _PrefixWithDot(file_proto.package) 
-      else: 
-        desc_proto_prefix = '' 
+      if file_proto.package:
+        desc_proto_prefix = _PrefixWithDot(file_proto.package)
+      else:
+        desc_proto_prefix = ''
 
-      for desc_proto in file_proto.message_type: 
-        desc = self._GetTypeFromScope( 
-            desc_proto_prefix, desc_proto.name, scope) 
-        file_descriptor.message_types_by_name[desc_proto.name] = desc 
+      for desc_proto in file_proto.message_type:
+        desc = self._GetTypeFromScope(
+            desc_proto_prefix, desc_proto.name, scope)
+        file_descriptor.message_types_by_name[desc_proto.name] = desc
 
-      for index, service_proto in enumerate(file_proto.service): 
-        file_descriptor.services_by_name[service_proto.name] = ( 
-            self._MakeServiceDescriptor(service_proto, index, scope, 
-                                        file_proto.package, file_descriptor)) 
+      for index, service_proto in enumerate(file_proto.service):
+        file_descriptor.services_by_name[service_proto.name] = (
+            self._MakeServiceDescriptor(service_proto, index, scope,
+                                        file_proto.package, file_descriptor))
 
       self.Add(file_proto)
       self._file_descriptors[file_proto.name] = file_descriptor
@@ -830,7 +830,7 @@ class DescriptorPool(object):
       package: The package the proto should be located in.
       file_desc: The file containing this message.
       scope: Dict mapping short and full symbols to message and enum types.
-      syntax: string indicating syntax of the file ("proto2" or "proto3") 
+      syntax: string indicating syntax of the file ("proto2" or "proto3")
 
     Returns:
       The added descriptor.
@@ -857,10 +857,10 @@ class DescriptorPool(object):
         self._ConvertEnumDescriptor(enum, desc_name, file_desc, None,
                                     scope, False)
         for enum in desc_proto.enum_type]
-    fields = [self._MakeFieldDescriptor(field, desc_name, index, file_desc) 
+    fields = [self._MakeFieldDescriptor(field, desc_name, index, file_desc)
               for index, field in enumerate(desc_proto.field)]
     extensions = [
-        self._MakeFieldDescriptor(extension, desc_name, index, file_desc, 
+        self._MakeFieldDescriptor(extension, desc_name, index, file_desc,
                                   is_extension=True)
         for index, extension in enumerate(desc_proto.extension)]
     oneofs = [
@@ -885,7 +885,7 @@ class DescriptorPool(object):
         nested_types=nested,
         enum_types=enums,
         extensions=extensions,
-        options=_OptionsOrNone(desc_proto), 
+        options=_OptionsOrNone(desc_proto),
         is_extendable=is_extendable,
         extension_ranges=extension_ranges,
         file=file_desc,
@@ -962,7 +962,7 @@ class DescriptorPool(object):
     return desc
 
   def _MakeFieldDescriptor(self, field_proto, message_name, index,
-                           file_desc, is_extension=False): 
+                           file_desc, is_extension=False):
     """Creates a field descriptor from a FieldDescriptorProto.
 
     For message and enum type fields, this method will do a look up
@@ -975,7 +975,7 @@ class DescriptorPool(object):
       field_proto: The proto describing the field.
       message_name: The name of the containing message.
       index: Index of the field
-      file_desc: The file containing the field descriptor. 
+      file_desc: The file containing the field descriptor.
       is_extension: Indication that this field is for an extension.
 
     Returns:
@@ -1002,7 +1002,7 @@ class DescriptorPool(object):
         default_value=None,
         is_extension=is_extension,
         extension_scope=None,
-        options=_OptionsOrNone(field_proto), 
+        options=_OptionsOrNone(field_proto),
         file=file_desc,
         # pylint: disable=protected-access
         create_key=descriptor._internal_create_key)
@@ -1128,7 +1128,7 @@ class DescriptorPool(object):
         name=value_proto.name,
         index=index,
         number=value_proto.number,
-        options=_OptionsOrNone(value_proto), 
+        options=_OptionsOrNone(value_proto),
         type=None,
         # pylint: disable=protected-access
         create_key=descriptor._internal_create_key)
@@ -1166,7 +1166,7 @@ class DescriptorPool(object):
         # pylint: disable=protected-access
         create_key=descriptor._internal_create_key)
     self._CheckConflictRegister(desc, desc.full_name, desc.file.name)
-    self._service_descriptors[service_name] = desc 
+    self._service_descriptors[service_name] = desc
     return desc
 
   def _MakeMethodDescriptor(self, method_proto, service_name, package, scope,

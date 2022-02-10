@@ -77,7 +77,7 @@ class ConnectionPool(object):
             raise LocationValueError("No host specified.")
 
         self.host = _normalize_host(host, scheme=self.scheme)
-        self._proxy_host = host.lower() 
+        self._proxy_host = host.lower()
         self.port = port
 
     def __str__(self):
@@ -467,7 +467,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
 
         try:
             assert_header_parsing(httplib_response.msg)
-        except (HeaderParsingError, TypeError) as hpe:  # Platform-specific: Python 3 
+        except (HeaderParsingError, TypeError) as hpe:  # Platform-specific: Python 3
             log.warning(
                 "Failed to parse headers (url=%s): %s",
                 self._absolute_url(url),
@@ -747,7 +747,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
             CertificateError,
         ) as e:
             # Discard the connection for these exceptions. It will be
-            # replaced during the next _get_conn() call. 
+            # replaced during the next _get_conn() call.
             clean_exit = False
 
             def _is_ssl_error_message_from_http_proxy(ssl_error):
@@ -776,8 +776,8 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
                     SSLError(e),
                 )
             elif isinstance(e, (BaseSSLError, CertificateError)):
-                e = SSLError(e) 
-            elif isinstance(e, (SocketError, NewConnectionError)) and self.proxy: 
+                e = SSLError(e)
+            elif isinstance(e, (SocketError, NewConnectionError)) and self.proxy:
                 e = ProxyError("Cannot connect to proxy.", e)
             elif isinstance(e, (SocketError, HTTPException)):
                 e = ProtocolError("Connection aborted.", e)
@@ -869,7 +869,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
                     response.drain_conn()
                     raise
                 return response
- 
+
             response.drain_conn()
             retries.sleep(response)
             log.debug("Retry: %s", url)

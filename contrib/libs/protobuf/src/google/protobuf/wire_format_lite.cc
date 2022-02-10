@@ -45,10 +45,10 @@
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
- 
+
 #include <google/protobuf/port_def.inc>
 
-namespace google { 
+namespace google {
 namespace protobuf {
 namespace internal {
 
@@ -63,7 +63,7 @@ const int WireFormatLite::kMessageSetMessageTag;
 #endif
 
 // IBM xlC requires prefixing constants with WireFormatLite::
-const size_t WireFormatLite::kMessageSetItemTagsSize = 
+const size_t WireFormatLite::kMessageSetItemTagsSize =
     io::CodedOutputStream::StaticVarintSize32<
         WireFormatLite::kMessageSetItemStartTag>::value +
     io::CodedOutputStream::StaticVarintSize32<
@@ -121,8 +121,8 @@ const WireFormatLite::WireType
 };
 
 bool WireFormatLite::SkipField(io::CodedInputStream* input, uint32 tag) {
-  // Field number 0 is illegal. 
-  if (WireFormatLite::GetTagFieldNumber(tag) == 0) return false; 
+  // Field number 0 is illegal.
+  if (WireFormatLite::GetTagFieldNumber(tag) == 0) return false;
   switch (WireFormatLite::GetTagWireType(tag)) {
     case WireFormatLite::WIRETYPE_VARINT: {
       uint64 value;
@@ -168,8 +168,8 @@ bool WireFormatLite::SkipField(io::CodedInputStream* input, uint32 tag) {
 
 bool WireFormatLite::SkipField(io::CodedInputStream* input, uint32 tag,
                                io::CodedOutputStream* output) {
-  // Field number 0 is illegal. 
-  if (WireFormatLite::GetTagFieldNumber(tag) == 0) return false; 
+  // Field number 0 is illegal.
+  if (WireFormatLite::GetTagFieldNumber(tag) == 0) return false;
   switch (WireFormatLite::GetTagWireType(tag)) {
     case WireFormatLite::WIRETYPE_VARINT: {
       uint64 value;
@@ -316,94 +316,94 @@ bool WireFormatLite::ReadPackedEnumPreserveUnknowns(
   return true;
 }
 
-#if !defined(PROTOBUF_LITTLE_ENDIAN) 
- 
-namespace { 
-void EncodeFixedSizeValue(float v, uint8* dest) { 
-  WireFormatLite::WriteFloatNoTagToArray(v, dest); 
-} 
- 
-void EncodeFixedSizeValue(double v, uint8* dest) { 
-  WireFormatLite::WriteDoubleNoTagToArray(v, dest); 
-} 
- 
-void EncodeFixedSizeValue(uint32 v, uint8* dest) { 
-  WireFormatLite::WriteFixed32NoTagToArray(v, dest); 
-} 
- 
-void EncodeFixedSizeValue(uint64 v, uint8* dest) { 
-  WireFormatLite::WriteFixed64NoTagToArray(v, dest); 
-} 
- 
-void EncodeFixedSizeValue(int32 v, uint8* dest) { 
-  WireFormatLite::WriteSFixed32NoTagToArray(v, dest); 
-} 
- 
-void EncodeFixedSizeValue(int64 v, uint8* dest) { 
-  WireFormatLite::WriteSFixed64NoTagToArray(v, dest); 
-} 
- 
-void EncodeFixedSizeValue(bool v, uint8* dest) { 
-  WireFormatLite::WriteBoolNoTagToArray(v, dest); 
-} 
-}  // anonymous namespace 
- 
-#endif  // !defined(PROTOBUF_LITTLE_ENDIAN) 
- 
-template <typename CType> 
-static void WriteArray(const CType* a, int n, io::CodedOutputStream* output) { 
-#if defined(PROTOBUF_LITTLE_ENDIAN) 
-  output->WriteRaw(reinterpret_cast<const char*>(a), n * sizeof(a[0])); 
-#else 
-  const int kAtATime = 128; 
-  uint8 buf[sizeof(CType) * kAtATime]; 
-  for (int i = 0; i < n; i += kAtATime) { 
-    int to_do = std::min(kAtATime, n - i); 
-    uint8* ptr = buf; 
-    for (int j = 0; j < to_do; j++) { 
+#if !defined(PROTOBUF_LITTLE_ENDIAN)
+
+namespace {
+void EncodeFixedSizeValue(float v, uint8* dest) {
+  WireFormatLite::WriteFloatNoTagToArray(v, dest);
+}
+
+void EncodeFixedSizeValue(double v, uint8* dest) {
+  WireFormatLite::WriteDoubleNoTagToArray(v, dest);
+}
+
+void EncodeFixedSizeValue(uint32 v, uint8* dest) {
+  WireFormatLite::WriteFixed32NoTagToArray(v, dest);
+}
+
+void EncodeFixedSizeValue(uint64 v, uint8* dest) {
+  WireFormatLite::WriteFixed64NoTagToArray(v, dest);
+}
+
+void EncodeFixedSizeValue(int32 v, uint8* dest) {
+  WireFormatLite::WriteSFixed32NoTagToArray(v, dest);
+}
+
+void EncodeFixedSizeValue(int64 v, uint8* dest) {
+  WireFormatLite::WriteSFixed64NoTagToArray(v, dest);
+}
+
+void EncodeFixedSizeValue(bool v, uint8* dest) {
+  WireFormatLite::WriteBoolNoTagToArray(v, dest);
+}
+}  // anonymous namespace
+
+#endif  // !defined(PROTOBUF_LITTLE_ENDIAN)
+
+template <typename CType>
+static void WriteArray(const CType* a, int n, io::CodedOutputStream* output) {
+#if defined(PROTOBUF_LITTLE_ENDIAN)
+  output->WriteRaw(reinterpret_cast<const char*>(a), n * sizeof(a[0]));
+#else
+  const int kAtATime = 128;
+  uint8 buf[sizeof(CType) * kAtATime];
+  for (int i = 0; i < n; i += kAtATime) {
+    int to_do = std::min(kAtATime, n - i);
+    uint8* ptr = buf;
+    for (int j = 0; j < to_do; j++) {
       EncodeFixedSizeValue(a[i + j], ptr);
-      ptr += sizeof(a[0]); 
-    } 
-    output->WriteRaw(buf, to_do * sizeof(a[0])); 
-  } 
-#endif 
-} 
- 
-void WireFormatLite::WriteFloatArray(const float* a, int n, 
-                                     io::CodedOutputStream* output) { 
-  WriteArray<float>(a, n, output); 
-} 
- 
-void WireFormatLite::WriteDoubleArray(const double* a, int n, 
+      ptr += sizeof(a[0]);
+    }
+    output->WriteRaw(buf, to_do * sizeof(a[0]));
+  }
+#endif
+}
+
+void WireFormatLite::WriteFloatArray(const float* a, int n,
+                                     io::CodedOutputStream* output) {
+  WriteArray<float>(a, n, output);
+}
+
+void WireFormatLite::WriteDoubleArray(const double* a, int n,
                                       io::CodedOutputStream* output) {
-  WriteArray<double>(a, n, output); 
-} 
- 
-void WireFormatLite::WriteFixed32Array(const uint32* a, int n, 
+  WriteArray<double>(a, n, output);
+}
+
+void WireFormatLite::WriteFixed32Array(const uint32* a, int n,
                                        io::CodedOutputStream* output) {
-  WriteArray<uint32>(a, n, output); 
-} 
- 
-void WireFormatLite::WriteFixed64Array(const uint64* a, int n, 
-                                       io::CodedOutputStream* output) { 
-  WriteArray<uint64>(a, n, output); 
-} 
- 
-void WireFormatLite::WriteSFixed32Array(const int32* a, int n, 
+  WriteArray<uint32>(a, n, output);
+}
+
+void WireFormatLite::WriteFixed64Array(const uint64* a, int n,
+                                       io::CodedOutputStream* output) {
+  WriteArray<uint64>(a, n, output);
+}
+
+void WireFormatLite::WriteSFixed32Array(const int32* a, int n,
                                         io::CodedOutputStream* output) {
-  WriteArray<int32>(a, n, output); 
-} 
- 
-void WireFormatLite::WriteSFixed64Array(const int64* a, int n, 
+  WriteArray<int32>(a, n, output);
+}
+
+void WireFormatLite::WriteSFixed64Array(const int64* a, int n,
                                         io::CodedOutputStream* output) {
-  WriteArray<int64>(a, n, output); 
-} 
- 
-void WireFormatLite::WriteBoolArray(const bool* a, int n, 
-                                    io::CodedOutputStream* output) { 
-  WriteArray<bool>(a, n, output); 
-} 
- 
+  WriteArray<int64>(a, n, output);
+}
+
+void WireFormatLite::WriteBoolArray(const bool* a, int n,
+                                    io::CodedOutputStream* output) {
+  WriteArray<bool>(a, n, output);
+}
+
 void WireFormatLite::WriteInt32(int field_number, int32 value,
                                 io::CodedOutputStream* output) {
   WriteTag(field_number, WIRETYPE_VARINT, output);
@@ -604,11 +604,11 @@ bool WireFormatLite::VerifyUtf8String(const char* data, int size, Operation op,
 template <bool ZigZag, bool SignExtended, typename T>
 static size_t VarintSize(const T* data, const int n) {
   static_assert(sizeof(T) == 4, "This routine only works for 32 bit integers");
-  // is_unsigned<T> => !ZigZag 
+  // is_unsigned<T> => !ZigZag
   static_assert(
       (std::is_unsigned<T>::value ^ ZigZag) || std::is_signed<T>::value,
       "Cannot ZigZag encode unsigned types");
-  // is_unsigned<T> => !SignExtended 
+  // is_unsigned<T> => !SignExtended
   static_assert(
       (std::is_unsigned<T>::value ^ SignExtended) || std::is_signed<T>::value,
       "Cannot SignExtended unsigned types");
@@ -618,11 +618,11 @@ static size_t VarintSize(const T* data, const int n) {
   uint32 msb_sum = 0;
   for (int i = 0; i < n; i++) {
     uint32 x = data[i];
-    if (ZigZag) { 
+    if (ZigZag) {
       x = WireFormatLite::ZigZagEncode32(x);
     } else if (SignExtended) {
       msb_sum += x >> 31;
-    } 
+    }
     // clang is so smart that it produces optimal SSE sequence unrolling
     // the loop 8 ints at a time. With a sequence of 4
     // cmpres = cmpgt x, sizeclass  ( -1 or 0)
@@ -631,11 +631,11 @@ static size_t VarintSize(const T* data, const int n) {
     if (x > 0x3FFF) sum++;
     if (x > 0x1FFFFF) sum++;
     if (x > 0xFFFFFFF) sum++;
-  } 
+  }
   if (SignExtended) sum += msb_sum * 5;
   return sum;
 }
- 
+
 template <bool ZigZag, typename T>
 static size_t VarintSize64(const T* data, const int n) {
   static_assert(sizeof(T) == 8, "This routine only works for 64 bit integers");
@@ -645,9 +645,9 @@ static size_t VarintSize64(const T* data, const int n) {
   uint64 sum = n;
   for (int i = 0; i < n; i++) {
     uint64 x = data[i];
-    if (ZigZag) { 
+    if (ZigZag) {
       x = WireFormatLite::ZigZagEncode64(x);
-    } 
+    }
     // First step is a binary search, we can't branch in sse so we use the
     // result of the compare to adjust sum and appropriately. This code is
     // written to make clang recognize the vectorization.
@@ -658,72 +658,72 @@ static size_t VarintSize64(const T* data, const int n) {
     if (x > 0x3FFF) sum++;
     if (x > 0x1FFFFF) sum++;
     if (x > 0xFFFFFFF) sum++;
-  } 
+  }
   return sum;
-} 
- 
+}
+
 // GCC does not recognize the vectorization opportunity
 // and other platforms are untested, in those cases using the optimized
 // varint size routine for each element is faster.
 // Hence we enable it only for clang
 #if defined(__SSE__) && defined(__clang__)
-size_t WireFormatLite::Int32Size(const RepeatedField<int32>& value) { 
+size_t WireFormatLite::Int32Size(const RepeatedField<int32>& value) {
   return VarintSize<false, true>(value.data(), value.size());
-} 
- 
-size_t WireFormatLite::UInt32Size(const RepeatedField<uint32>& value) { 
+}
+
+size_t WireFormatLite::UInt32Size(const RepeatedField<uint32>& value) {
   return VarintSize<false, false>(value.data(), value.size());
-} 
- 
-size_t WireFormatLite::SInt32Size(const RepeatedField<int32>& value) { 
+}
+
+size_t WireFormatLite::SInt32Size(const RepeatedField<int32>& value) {
   return VarintSize<true, false>(value.data(), value.size());
-} 
- 
-size_t WireFormatLite::EnumSize(const RepeatedField<int>& value) { 
-  // On ILP64, sizeof(int) == 8, which would require a different template. 
+}
+
+size_t WireFormatLite::EnumSize(const RepeatedField<int>& value) {
+  // On ILP64, sizeof(int) == 8, which would require a different template.
   return VarintSize<false, true>(value.data(), value.size());
-} 
- 
+}
+
 #else  // !(defined(__SSE4_1__) && defined(__clang__))
 
-size_t WireFormatLite::Int32Size(const RepeatedField<int32>& value) { 
-  size_t out = 0; 
-  const int n = value.size(); 
-  for (int i = 0; i < n; i++) { 
-    out += Int32Size(value.Get(i)); 
-  } 
-  return out; 
-} 
- 
-size_t WireFormatLite::UInt32Size(const RepeatedField<uint32>& value) { 
-  size_t out = 0; 
-  const int n = value.size(); 
-  for (int i = 0; i < n; i++) { 
-    out += UInt32Size(value.Get(i)); 
-  } 
-  return out; 
-} 
- 
-size_t WireFormatLite::SInt32Size(const RepeatedField<int32>& value) { 
-  size_t out = 0; 
-  const int n = value.size(); 
-  for (int i = 0; i < n; i++) { 
-    out += SInt32Size(value.Get(i)); 
-  } 
-  return out; 
-} 
- 
-size_t WireFormatLite::EnumSize(const RepeatedField<int>& value) { 
-  size_t out = 0; 
-  const int n = value.size(); 
-  for (int i = 0; i < n; i++) { 
-    out += EnumSize(value.Get(i)); 
-  } 
-  return out; 
-} 
+size_t WireFormatLite::Int32Size(const RepeatedField<int32>& value) {
+  size_t out = 0;
+  const int n = value.size();
+  for (int i = 0; i < n; i++) {
+    out += Int32Size(value.Get(i));
+  }
+  return out;
+}
 
-#endif 
- 
+size_t WireFormatLite::UInt32Size(const RepeatedField<uint32>& value) {
+  size_t out = 0;
+  const int n = value.size();
+  for (int i = 0; i < n; i++) {
+    out += UInt32Size(value.Get(i));
+  }
+  return out;
+}
+
+size_t WireFormatLite::SInt32Size(const RepeatedField<int32>& value) {
+  size_t out = 0;
+  const int n = value.size();
+  for (int i = 0; i < n; i++) {
+    out += SInt32Size(value.Get(i));
+  }
+  return out;
+}
+
+size_t WireFormatLite::EnumSize(const RepeatedField<int>& value) {
+  size_t out = 0;
+  const int n = value.size();
+  for (int i = 0; i < n; i++) {
+    out += EnumSize(value.Get(i));
+  }
+  return out;
+}
+
+#endif
+
 // Micro benchmarks show that the SSE improved loop only starts beating
 // the normal loop on Haswell platforms and then only for >32 ints. We
 // disable this for now. Some specialized users might find it worthwhile to

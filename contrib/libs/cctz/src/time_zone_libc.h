@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//   https://www.apache.org/licenses/LICENSE-2.0 
+//   https://www.apache.org/licenses/LICENSE-2.0
 //
 //   Unless required by applicable law or agreed to in writing, software
 //   distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,14 +30,14 @@ class TimeZoneLibC : public TimeZoneIf {
 
   // TimeZoneIf implementations.
   time_zone::absolute_lookup BreakTime(
-      const time_point<seconds>& tp) const override; 
+      const time_point<seconds>& tp) const override;
   time_zone::civil_lookup MakeTime(
       const civil_second& cs) const override;
-  bool NextTransition(const time_point<seconds>& tp, 
-                      time_zone::civil_transition* trans) const override; 
-  bool PrevTransition(const time_point<seconds>& tp, 
-                      time_zone::civil_transition* trans) const override; 
-  std::string Version() const override; 
+  bool NextTransition(const time_point<seconds>& tp,
+                      time_zone::civil_transition* trans) const override;
+  bool PrevTransition(const time_point<seconds>& tp,
+                      time_zone::civil_transition* trans) const override;
+  std::string Version() const override;
   std::string Description() const override;
 
  private:

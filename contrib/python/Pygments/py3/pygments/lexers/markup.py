@@ -494,49 +494,49 @@ class MozPreprocCssLexer(DelegatingLexer):
     def __init__(self, **options):
         super().__init__(CssLexer, MozPreprocPercentLexer, **options)
 
- 
-class MarkdownLexer(RegexLexer): 
-    """ 
-    For `Markdown <https://help.github.com/categories/writing-on-github/>`_ markup. 
- 
-    .. versionadded:: 2.2 
-    """ 
+
+class MarkdownLexer(RegexLexer):
+    """
+    For `Markdown <https://help.github.com/categories/writing-on-github/>`_ markup.
+
+    .. versionadded:: 2.2
+    """
     name = 'Markdown'
     aliases = ['markdown', 'md']
     filenames = ['*.md', '*.markdown']
-    mimetypes = ["text/x-markdown"] 
-    flags = re.MULTILINE 
- 
-    def _handle_codeblock(self, match): 
-        """ 
-        match args: 1:backticks, 2:lang_name, 3:newline, 4:code, 5:backticks 
-        """ 
-        from pygments.lexers import get_lexer_by_name 
- 
-        # section header 
+    mimetypes = ["text/x-markdown"]
+    flags = re.MULTILINE
+
+    def _handle_codeblock(self, match):
+        """
+        match args: 1:backticks, 2:lang_name, 3:newline, 4:code, 5:backticks
+        """
+        from pygments.lexers import get_lexer_by_name
+
+        # section header
         yield match.start(1), String.Backtick, match.group(1)
         yield match.start(2), String.Backtick, match.group(2)
         yield match.start(3), Text           , match.group(3)
- 
-        # lookup lexer if wanted and existing 
-        lexer = None 
-        if self.handlecodeblocks: 
-            try: 
-                lexer = get_lexer_by_name( match.group(2).strip() ) 
-            except ClassNotFound: 
-                pass 
-        code = match.group(4) 
- 
-        # no lexer for this language. handle it like it was a code block 
-        if lexer is None: 
-            yield match.start(4), String, code 
-        else: 
+
+        # lookup lexer if wanted and existing
+        lexer = None
+        if self.handlecodeblocks:
+            try:
+                lexer = get_lexer_by_name( match.group(2).strip() )
+            except ClassNotFound:
+                pass
+        code = match.group(4)
+
+        # no lexer for this language. handle it like it was a code block
+        if lexer is None:
+            yield match.start(4), String, code
+        else:
             yield from do_insertions([], lexer.get_tokens_unprocessed(code))
- 
+
         yield match.start(5), String.Backtick, match.group(5)
- 
-    tokens = { 
-        'root': [ 
+
+    tokens = {
+        'root': [
             # heading with '#' prefix (atx-style)
             (r'(^#[^#].+)(\n)', bygroups(Generic.Heading, Text)),
             # subheading with '#' prefix (atx-style)
@@ -545,27 +545,27 @@ class MarkdownLexer(RegexLexer):
             (r'^(.+)(\n)(=+)(\n)', bygroups(Generic.Heading, Text, Generic.Heading, Text)),
             # subheading with '-' underlines (Setext-style)
             (r'^(.+)(\n)(-+)(\n)', bygroups(Generic.Subheading, Text, Generic.Subheading, Text)),
-            # task list 
-            (r'^(\s*)([*-] )(\[[ xX]\])( .+\n)', 
-            bygroups(Text, Keyword, Keyword, using(this, state='inline'))), 
+            # task list
+            (r'^(\s*)([*-] )(\[[ xX]\])( .+\n)',
+            bygroups(Text, Keyword, Keyword, using(this, state='inline'))),
             # bulleted list
-            (r'^(\s*)([*-])(\s)(.+\n)', 
-            bygroups(Text, Keyword, Text, using(this, state='inline'))), 
+            (r'^(\s*)([*-])(\s)(.+\n)',
+            bygroups(Text, Keyword, Text, using(this, state='inline'))),
             # numbered list
-            (r'^(\s*)([0-9]+\.)( .+\n)', 
-            bygroups(Text, Keyword, using(this, state='inline'))), 
-            # quote 
-            (r'^(\s*>\s)(.+\n)', bygroups(Keyword, Generic.Emph)), 
+            (r'^(\s*)([0-9]+\.)( .+\n)',
+            bygroups(Text, Keyword, using(this, state='inline'))),
+            # quote
+            (r'^(\s*>\s)(.+\n)', bygroups(Keyword, Generic.Emph)),
             # code block fenced by 3 backticks
             (r'^(\s*```\n[\w\W]*?^\s*```$\n)', String.Backtick),
-            # code block with language 
+            # code block with language
             (r'^(\s*```)(\w+)(\n)([\w\W]*?)(^\s*```$\n)', _handle_codeblock),
- 
-            include('inline'), 
-        ], 
-        'inline': [ 
-            # escape 
-            (r'\\.', Text), 
+
+            include('inline'),
+        ],
+        'inline': [
+            # escape
+            (r'\\.', Text),
             # inline code
             (r'([^`]?)(`[^`\n]+`)', bygroups(Text, String.Backtick)),
             # warning: the following rules eat outer tags.
@@ -578,30 +578,30 @@ class MarkdownLexer(RegexLexer):
             (r'([^\*]?)(\*[^* \n][^*\n]*\*)', bygroups(Text, Generic.Emph)),
             # italics fenced by '_'
             (r'([^_]?)(_[^_ \n][^_\n]*_)', bygroups(Text, Generic.Emph)),
-            # strikethrough 
+            # strikethrough
             (r'([^~]?)(~~[^~ \n][^~\n]*~~)', bygroups(Text, Generic.Deleted)),
-            # mentions and topics (twitter and github stuff) 
-            (r'[@#][\w/:]+', Name.Entity), 
-            # (image?) links eg: ![Image of Yaktocat](https://octodex.github.com/images/yaktocat.png) 
+            # mentions and topics (twitter and github stuff)
+            (r'[@#][\w/:]+', Name.Entity),
+            # (image?) links eg: ![Image of Yaktocat](https://octodex.github.com/images/yaktocat.png)
             (r'(!?\[)([^]]+)(\])(\()([^)]+)(\))',
              bygroups(Text, Name.Tag, Text, Text, Name.Attribute, Text)),
-            # reference-style links, e.g.: 
-            #   [an example][id] 
-            #   [id]: http://example.com/ 
+            # reference-style links, e.g.:
+            #   [an example][id]
+            #   [id]: http://example.com/
             (r'(\[)([^]]+)(\])(\[)([^]]*)(\])',
              bygroups(Text, Name.Tag, Text, Text, Name.Label, Text)),
             (r'^(\s*\[)([^]]*)(\]:\s*)(.+)',
              bygroups(Text, Name.Label, Text, Name.Attribute)),
- 
-            # general text, must come last! 
-            (r'[^\\\s]+', Text), 
-            (r'.', Text), 
-        ], 
-    } 
- 
-    def __init__(self, **options): 
-        self.handlecodeblocks = get_bool_opt(options, 'handlecodeblocks', True) 
-        RegexLexer.__init__(self, **options) 
+
+            # general text, must come last!
+            (r'[^\\\s]+', Text),
+            (r'.', Text),
+        ],
+    }
+
+    def __init__(self, **options):
+        self.handlecodeblocks = get_bool_opt(options, 'handlecodeblocks', True)
+        RegexLexer.__init__(self, **options)
 
 
 class TiddlyWiki5Lexer(RegexLexer):

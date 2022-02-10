@@ -7,7 +7,7 @@ OWNER(g:cpp-contrib)
 VERSION(2022-02-01)
 
 ORIGINAL_SOURCE(https://github.com/google/re2/archive/2022-02-01.tar.gz)
- 
+
 LICENSE(
     BSD-3-Clause AND
     X11-Lucent

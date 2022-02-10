@@ -92,8 +92,8 @@ class EnumGenerator {
   const bool generate_array_size_;
 
   std::map<TProtoStringType, TProtoStringType> variables_;
- 
-  friend class FileGenerator; 
+
+  friend class FileGenerator;
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(EnumGenerator);
 };
 

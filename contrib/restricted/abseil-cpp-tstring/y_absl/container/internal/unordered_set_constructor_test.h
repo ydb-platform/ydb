@@ -26,7 +26,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 template <class UnordMap>
@@ -490,7 +490,7 @@ REGISTER_TYPED_TEST_CASE_P(
     AssignmentFromInitializerListOverwritesExisting, AssignmentOnSelf);
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_UNORDERED_SET_CONSTRUCTOR_TEST_H_

@@ -62,7 +62,7 @@ on the [Silesia compression corpus].
 The negative compression levels, specified with `--fast=#`,
 offer faster compression and decompression speed
 at the cost of compression ratio (compared to level 1).
- 
+
 Zstd can also offer stronger compression ratios at the cost of compression speed.
 Speed vs Compression trade-off is configurable by small increments.
 Decompression speed is preserved and remains roughly the same at all settings,
@@ -153,16 +153,16 @@ Note that default build type is **release**.
 
 ### VCPKG
 You can build and install zstd [vcpkg](https://github.com/Microsoft/vcpkg/) dependency manager:
- 
+
     git clone https://github.com/Microsoft/vcpkg.git
     cd vcpkg
     ./bootstrap-vcpkg.sh
     ./vcpkg integrate install
     ./vcpkg install zstd
- 
+
 The zstd port in vcpkg is kept up to date by Microsoft team members and community contributors.
 If the version is out of date, please [create an issue or pull request](https://github.com/Microsoft/vcpkg) on the vcpkg repository.
- 
+
 ### Visual Studio (Windows)
 
 Going into `build` directory, you will find additional possibilities:

@@ -103,23 +103,23 @@ static int parsedate(const char *date, time_t *output);
 #if !defined(CURL_DISABLE_PARSEDATE) || !defined(CURL_DISABLE_FTP) || \
   !defined(CURL_DISABLE_FILE)
 /* These names are also used by FTP and FILE code */
-const char * const Curl_wkday[] = 
-{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}; 
-const char * const Curl_month[]= 
-{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" }; 
+const char * const Curl_wkday[] =
+{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+const char * const Curl_month[]=
+{ "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 #endif
- 
+
 #ifndef CURL_DISABLE_PARSEDATE
 static const char * const weekday[] =
 { "Monday", "Tuesday", "Wednesday", "Thursday",
   "Friday", "Saturday", "Sunday" };
 
-struct tzinfo { 
-  char name[5]; 
-  int offset; /* +/- in minutes */ 
-}; 
- 
+struct tzinfo {
+  char name[5];
+  int offset; /* +/- in minutes */
+};
+
 /* Here's a bunch of frequently used time zone names. These were supported
    by the old getdate parser. */
 #define tDAYZONE -60       /* offset for daylight savings time */
@@ -526,15 +526,15 @@ static int parsedate(const char *date, time_t *output)
 
   return PARSEDATE_OK;
 }
-#else 
-/* disabled */ 
-static int parsedate(const char *date, time_t *output) 
-{ 
-  (void)date; 
-  *output = 0; 
-  return PARSEDATE_OK; /* a lie */ 
-} 
-#endif 
+#else
+/* disabled */
+static int parsedate(const char *date, time_t *output)
+{
+  (void)date;
+  *output = 0;
+  return PARSEDATE_OK; /* a lie */
+}
+#endif
 
 time_t curl_getdate(const char *p, const time_t *now)
 {

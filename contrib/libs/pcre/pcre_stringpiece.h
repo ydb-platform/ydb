@@ -42,18 +42,18 @@
 #include <string>
 #include <iosfwd>    // for ostream forward-declaration
 
-#if 0 
-#define HAVE_TYPE_TRAITS 
-#include <type_traits.h> 
-#elif 0 
-#define HAVE_TYPE_TRAITS 
-#error #include <bits/type_traits.h> 
-#endif 
+#if 0
+#define HAVE_TYPE_TRAITS
+#include <type_traits.h>
+#elif 0
+#define HAVE_TYPE_TRAITS
+#error #include <bits/type_traits.h>
+#endif
 
-#include "pcre.h" 
- 
-namespace pcrecpp { 
- 
+#include "pcre.h"
+
+namespace pcrecpp {
+
 using std::memcmp;
 using std::strlen;
 using std::string;

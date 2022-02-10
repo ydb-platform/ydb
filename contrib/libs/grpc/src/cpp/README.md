@@ -163,7 +163,7 @@ You can find out how to build and run our simplest gRPC C++ example in our
 [C++ quick start](../../examples/cpp).
 
 For more detailed documentation on using gRPC in C++ , see our main
-documentation site at [grpc.io](https://grpc.io), specifically: 
+documentation site at [grpc.io](https://grpc.io), specifically:
 
 * [Overview](https://grpc.io/docs): An introduction to gRPC with a simple
   Hello World example in all our supported languages, including C++.

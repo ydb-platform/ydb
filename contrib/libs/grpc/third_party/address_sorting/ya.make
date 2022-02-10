@@ -4,8 +4,8 @@ LIBRARY()
 
 OWNER(g:cpp-contrib)
 
-LICENSE(BSD-3-Clause) 
- 
+LICENSE(BSD-3-Clause)
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 ADDINCL(
@@ -16,8 +16,8 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-NO_RUNTIME() 
- 
+NO_RUNTIME()
+
 IF (OS_LINUX OR OS_DARWIN)
     CFLAGS(
         -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1

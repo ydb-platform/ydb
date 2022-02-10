@@ -211,7 +211,7 @@ bool SimpleDescriptorDatabase::DescriptorIndex<Value>::AddSymbol(
 
   if (iter == by_symbol_.end()) {
     // Apparently the map is currently empty.  Just insert and be done with it.
-    by_symbol_.insert( 
+    by_symbol_.insert(
         typename std::map<TProtoStringType, Value>::value_type(name, value));
     return true;
   }
@@ -594,7 +594,7 @@ bool EncodedDescriptorDatabase::FindNameOfFileContainingSymbol(
       FileDescriptorProto::kNameFieldNumber,
       internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED);
 
-  if (input.ReadTagNoLastTag() == kNameTag) { 
+  if (input.ReadTagNoLastTag() == kNameTag) {
     // Success!
     return internal::WireFormatLite::ReadString(&input, output);
   } else {
@@ -1012,9 +1012,9 @@ bool MergedDescriptorDatabase::FindAllExtensionNumbers(
 
   for (DescriptorDatabase* source : sources_) {
     if (source->FindAllExtensionNumbers(extendee_type, &results)) {
-      std::copy(results.begin(), results.end(), 
-                std::insert_iterator<std::set<int> >(merged_results, 
-                                                     merged_results.begin())); 
+      std::copy(results.begin(), results.end(),
+                std::insert_iterator<std::set<int> >(merged_results,
+                                                     merged_results.begin()));
       success = true;
     }
     results.clear();

@@ -1,13 +1,13 @@
 PY23_LIBRARY()
- 
+
 LICENSE(BSD-3-Clause)
 
-OWNER(g:python-contrib) 
- 
+OWNER(g:python-contrib)
+
 VERSION(2.10)
- 
-NO_LINT() 
- 
+
+NO_LINT()
+
 RESOURCE_FILES(
     PREFIX contrib/python/idna/
     .dist-info/METADATA
@@ -26,7 +26,7 @@ PY_SRCS(
     idna/package_data.py
 )
 
-END() 
+END()
 
 RECURSE_FOR_TESTS(
     tests

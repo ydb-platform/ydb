@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//   https://www.apache.org/licenses/LICENSE-2.0 
+//   https://www.apache.org/licenses/LICENSE-2.0
 //
 //   Unless required by applicable law or agreed to in writing, software
 //   distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,7 @@
 
 #include <string>
 
-#include "cctz/time_zone.h" 
+#include "cctz/time_zone.h"
 
 namespace cctz {
 
@@ -36,9 +36,9 @@ namespace cctz {
 // Note: FixedOffsetFromName() fails on syntax errors or when the parsed
 // offset exceeds 24 hours.  FixedOffsetToName() and FixedOffsetToAbbr()
 // both produce "UTC" when the argument offset exceeds 24 hours.
-bool FixedOffsetFromName(const std::string& name, seconds* offset); 
-std::string FixedOffsetToName(const seconds& offset); 
-std::string FixedOffsetToAbbr(const seconds& offset); 
+bool FixedOffsetFromName(const std::string& name, seconds* offset);
+std::string FixedOffsetToName(const seconds& offset);
+std::string FixedOffsetToAbbr(const seconds& offset);
 
 }  // namespace cctz
 

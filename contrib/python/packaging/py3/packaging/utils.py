@@ -1,13 +1,13 @@
-# This file is dual licensed under the terms of the Apache License, Version 
-# 2.0, and the BSD License. See the LICENSE file in the root of this repository 
-# for complete details. 
- 
-import re 
+# This file is dual licensed under the terms of the Apache License, Version
+# 2.0, and the BSD License. See the LICENSE file in the root of this repository
+# for complete details.
+
+import re
 from typing import FrozenSet, NewType, Tuple, Union, cast
- 
+
 from .tags import Tag, parse_tag
 from .version import InvalidVersion, Version
- 
+
 BuildTag = Union[Tuple[()], Tuple[int, str]]
 NormalizedName = NewType("NormalizedName", str)
 
@@ -24,13 +24,13 @@ class InvalidSdistFilename(ValueError):
     """
 
 
-_canonicalize_regex = re.compile(r"[-_.]+") 
+_canonicalize_regex = re.compile(r"[-_.]+")
 # PEP 427: The build number must start with a digit.
 _build_tag_regex = re.compile(r"(\d+)(.*)")
- 
- 
+
+
 def canonicalize_name(name: str) -> NormalizedName:
-    # This is taken from PEP 503. 
+    # This is taken from PEP 503.
     value = _canonicalize_regex.sub("-", name).lower()
     return cast(NormalizedName, value)
 

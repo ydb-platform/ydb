@@ -163,7 +163,7 @@ struct FieldGeneratorInfo {
   TProtoStringType disambiguated_reason;
 };
 
-// Oneof information used in OneofFieldGenerators. 
+// Oneof information used in OneofFieldGenerators.
 struct OneofGeneratorInfo {
   TProtoStringType name;
   TProtoStringType capitalized_name;

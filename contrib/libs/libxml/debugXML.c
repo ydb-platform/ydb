@@ -44,10 +44,10 @@ struct _xmlDebugCtxt {
     int depth;                  /* current depth */
     xmlDocPtr doc;              /* current document */
     xmlNodePtr node;		/* current node */
-    xmlDictPtr dict;		/* the doc dictionary */ 
+    xmlDictPtr dict;		/* the doc dictionary */
     int check;                  /* do just checkings */
     int errors;                 /* number of errors found */
-    int nodict;			/* if the document has no dictionary */ 
+    int nodict;			/* if the document has no dictionary */
     int options;		/* options */
 };
 
@@ -164,7 +164,7 @@ xmlDebugErr(xmlDebugCtxtPtr ctxt, int error, const char *msg)
 		    NULL, NULL, NULL, 0, 0,
 		    "%s", msg);
 }
-static void LIBXML_ATTR_FORMAT(3,0) 
+static void LIBXML_ATTR_FORMAT(3,0)
 xmlDebugErr2(xmlDebugCtxtPtr ctxt, int error, const char *msg, int extra)
 {
     ctxt->errors++;
@@ -174,7 +174,7 @@ xmlDebugErr2(xmlDebugCtxtPtr ctxt, int error, const char *msg, int extra)
 		    NULL, NULL, NULL, 0, 0,
 		    msg, extra);
 }
-static void LIBXML_ATTR_FORMAT(3,0) 
+static void LIBXML_ATTR_FORMAT(3,0)
 xmlDebugErr3(xmlDebugCtxtPtr ctxt, int error, const char *msg, const char *extra)
 {
     ctxt->errors++;
@@ -243,7 +243,7 @@ xmlCtxtCheckString(xmlDebugCtxtPtr ctxt, const xmlChar * str)
  * @ctxt: the debug context
  * @name: the name
  *
- * Do debugging on the name, for example the dictionary status and 
+ * Do debugging on the name, for example the dictionary status and
  * conformance to the Name production.
  */
 static void
@@ -265,7 +265,7 @@ xmlCtxtCheckName(xmlDebugCtxtPtr ctxt, const xmlChar * name)
             ((ctxt->doc == NULL) ||
              ((ctxt->doc->parseFlags & (XML_PARSE_SAX1 | XML_PARSE_NODICT)) == 0))) {
 	    xmlDebugErr3(ctxt, XML_CHECK_OUTSIDE_DICT,
-			 "Name is not from the document dictionary '%s'", 
+			 "Name is not from the document dictionary '%s'",
 			 (const char *) name);
 	}
     }
@@ -289,10 +289,10 @@ xmlCtxtGenericNodeCheck(xmlDebugCtxtPtr ctxt, xmlNodePtr node) {
 	dict = doc->dict;
 	if ((dict == NULL) && (ctxt->nodict == 0)) {
 #if 0
-            /* deactivated right now as it raises too many errors */ 
+            /* deactivated right now as it raises too many errors */
 	    if (doc->type == XML_DOCUMENT_NODE)
 		xmlDebugErr(ctxt, XML_CHECK_NO_DICT,
-			    "Document has no dictionary\n"); 
+			    "Document has no dictionary\n");
 #endif
 	    ctxt->nodict = 1;
 	}
@@ -1168,7 +1168,7 @@ xmlCtxtDumpDocHead(xmlDebugCtxtPtr ctxt, xmlDocPtr doc)
  * @output:  the FILE * for the output
  * @doc:  the document
  *
- * Dumps debug information concerning the document, not recursive 
+ * Dumps debug information concerning the document, not recursive
  */
 static void
 xmlCtxtDumpDocumentHead(xmlDebugCtxtPtr ctxt, xmlDocPtr doc)
@@ -1229,11 +1229,11 @@ xmlCtxtDumpDocument(xmlDebugCtxtPtr ctxt, xmlDocPtr doc)
 }
 
 static void
-xmlCtxtDumpEntityCallback(void *payload, void *data, 
-                          const xmlChar *name ATTRIBUTE_UNUSED) 
+xmlCtxtDumpEntityCallback(void *payload, void *data,
+                          const xmlChar *name ATTRIBUTE_UNUSED)
 {
-    xmlEntityPtr cur = (xmlEntityPtr) payload; 
-    xmlDebugCtxtPtr ctxt = (xmlDebugCtxtPtr) data; 
+    xmlEntityPtr cur = (xmlEntityPtr) payload;
+    xmlDebugCtxtPtr ctxt = (xmlDebugCtxtPtr) data;
     if (cur == NULL) {
         if (!ctxt->check)
             fprintf(ctxt->output, "Entity is NULL");
@@ -1292,7 +1292,7 @@ xmlCtxtDumpEntities(xmlDebugCtxtPtr ctxt, xmlDocPtr doc)
 
         if (!ctxt->check)
             fprintf(ctxt->output, "Entities in internal subset\n");
-        xmlHashScan(table, xmlCtxtDumpEntityCallback, ctxt); 
+        xmlHashScan(table, xmlCtxtDumpEntityCallback, ctxt);
     } else
         fprintf(ctxt->output, "No entities in internal subset\n");
     if ((doc->extSubset != NULL) && (doc->extSubset->entities != NULL)) {
@@ -1301,7 +1301,7 @@ xmlCtxtDumpEntities(xmlDebugCtxtPtr ctxt, xmlDocPtr doc)
 
         if (!ctxt->check)
             fprintf(ctxt->output, "Entities in external subset\n");
-        xmlHashScan(table, xmlCtxtDumpEntityCallback, ctxt); 
+        xmlHashScan(table, xmlCtxtDumpEntityCallback, ctxt);
     } else if (!ctxt->check)
         fprintf(ctxt->output, "No entities in external subset\n");
 }
@@ -1498,7 +1498,7 @@ xmlDebugDumpNodeList(FILE * output, xmlNodePtr node, int depth)
  * @output:  the FILE * for the output
  * @doc:  the document
  *
- * Dumps debug information concerning the document, not recursive 
+ * Dumps debug information concerning the document, not recursive
  */
 void
 xmlDebugDumpDocumentHead(FILE * output, xmlDocPtr doc)
@@ -2363,7 +2363,7 @@ xmlShellRNGValidate(xmlShellCtxtPtr sctxt, char *schemas,
     int ret;
 
     ctxt = xmlRelaxNGNewParserCtxt(schemas);
-    xmlRelaxNGSetParserErrors(ctxt, xmlGenericError, xmlGenericError, NULL); 
+    xmlRelaxNGSetParserErrors(ctxt, xmlGenericError, xmlGenericError, NULL);
     relaxngschemas = xmlRelaxNGParse(ctxt);
     xmlRelaxNGFreeParserCtxt(ctxt);
     if (relaxngschemas == NULL) {
@@ -2372,7 +2372,7 @@ xmlShellRNGValidate(xmlShellCtxtPtr sctxt, char *schemas,
 	return(-1);
     }
     vctxt = xmlRelaxNGNewValidCtxt(relaxngschemas);
-    xmlRelaxNGSetValidErrors(vctxt, xmlGenericError, xmlGenericError, NULL); 
+    xmlRelaxNGSetValidErrors(vctxt, xmlGenericError, xmlGenericError, NULL);
     ret = xmlRelaxNGValidateDoc(vctxt, sctxt->doc);
     if (ret == 0) {
 	fprintf(stderr, "%s validates\n", sctxt->filename);
@@ -2641,9 +2641,9 @@ xmlShellValidate(xmlShellCtxtPtr ctxt, char *dtd,
     int res = -1;
 
     if ((ctxt == NULL) || (ctxt->doc == NULL)) return(-1);
-    vctxt.userData = NULL; 
-    vctxt.error = xmlGenericError; 
-    vctxt.warning = xmlGenericError; 
+    vctxt.userData = NULL;
+    vctxt.error = xmlGenericError;
+    vctxt.warning = xmlGenericError;
 
     if ((dtd == NULL) || (dtd[0] == 0)) {
         res = xmlValidateDocument(&vctxt, ctxt->doc);
@@ -2910,9 +2910,9 @@ xmlShell(xmlDocPtr doc, char *filename, xmlShellReadlineFunc input,
 		  fprintf(ctxt->output, "\tset xml_fragment replace the current node content with the fragment parsed in context\n");
 #ifdef LIBXML_XPATH_ENABLED
 		  fprintf(ctxt->output, "\txpath expr   evaluate the XPath expression in that context and print the result\n");
-		  fprintf(ctxt->output, "\tsetns nsreg  register a namespace to a prefix in the XPath evaluation context\n"); 
+		  fprintf(ctxt->output, "\tsetns nsreg  register a namespace to a prefix in the XPath evaluation context\n");
 		  fprintf(ctxt->output, "\t             format for nsreg is: prefix=[nsuri] (i.e. prefix= unsets a prefix)\n");
-		  fprintf(ctxt->output, "\tsetrootns    register all namespace found on the root element\n"); 
+		  fprintf(ctxt->output, "\tsetrootns    register all namespace found on the root element\n");
 		  fprintf(ctxt->output, "\t             the default namespace if any uses 'defaultns' prefix\n");
 #endif /* LIBXML_XPATH_ENABLED */
 		  fprintf(ctxt->output, "\tpwd          display current working directory\n");
@@ -2926,7 +2926,7 @@ xmlShell(xmlDocPtr doc, char *filename, xmlShellReadlineFunc input,
 		  fprintf(ctxt->output, "\tvalidate     check the document for errors\n");
 #endif /* LIBXML_VALID_ENABLED */
 #ifdef LIBXML_SCHEMAS_ENABLED
-		  fprintf(ctxt->output, "\trelaxng rng  validate the document against the Relax-NG schemas\n"); 
+		  fprintf(ctxt->output, "\trelaxng rng  validate the document against the Relax-NG schemas\n");
 #endif
 		  fprintf(ctxt->output, "\tgrep string  search for a string in the subtree\n");
 #ifdef LIBXML_VALID_ENABLED

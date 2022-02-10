@@ -1,31 +1,31 @@
-/* 
- * 
+/*
+ *
  * Copyright 2019 gRPC authors.
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#ifndef GRPCPP_IMPL_CODEGEN_SERVER_CONTEXT_H 
-#define GRPCPP_IMPL_CODEGEN_SERVER_CONTEXT_H 
- 
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#ifndef GRPCPP_IMPL_CODEGEN_SERVER_CONTEXT_H
+#define GRPCPP_IMPL_CODEGEN_SERVER_CONTEXT_H
+
 #include <atomic>
 #include <cassert>
 #include <map>
 #include <memory>
 #include <type_traits>
 #include <vector>
- 
+
 #include <grpc/impl/codegen/port_platform.h>
 
 #include <grpc/impl/codegen/compression_types.h>
@@ -48,7 +48,7 @@ struct grpc_metadata;
 struct grpc_call;
 struct census_context;
 
-namespace grpc { 
+namespace grpc {
 template <class W, class R>
 class ServerAsyncReader;
 template <class W>
@@ -61,7 +61,7 @@ template <class R>
 class ServerReader;
 template <class W>
 class ServerWriter;
- 
+
 namespace internal {
 template <class ServiceType, class RequestType, class ResponseType>
 class BidiStreamingHandler;
@@ -89,7 +89,7 @@ class TemplatedBidiStreamingHandler;
 template <::grpc::StatusCode code>
 class ErrorMethodHandler;
 }  // namespace internal
- 
+
 class ClientContext;
 class CompletionQueue;
 class GenericServerContext;
@@ -98,10 +98,10 @@ class ServerInterface;
 
 // TODO(vjpai): Remove namespace experimental when de-experimentalized fully.
 namespace experimental {
- 
+
 typedef ::grpc::ServerContextBase ServerContextBase;
 typedef ::grpc::CallbackServerContext CallbackServerContext;
- 
+
 }  // namespace experimental
 
 #ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
@@ -601,8 +601,8 @@ class CallbackServerContext : public ServerContextBase {
   CallbackServerContext& operator=(const CallbackServerContext&) = delete;
 };
 
-}  // namespace grpc 
- 
+}  // namespace grpc
+
 static_assert(
     std::is_base_of<::grpc::ServerContextBase, ::grpc::ServerContext>::value,
     "improper base class");
@@ -616,4 +616,4 @@ static_assert(sizeof(::grpc::ServerContextBase) ==
                   sizeof(::grpc::CallbackServerContext),
               "wrong size");
 
-#endif  // GRPCPP_IMPL_CODEGEN_SERVER_CONTEXT_H 
+#endif  // GRPCPP_IMPL_CODEGEN_SERVER_CONTEXT_H

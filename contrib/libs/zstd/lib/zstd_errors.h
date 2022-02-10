@@ -1,24 +1,24 @@
 /*
  * Copyright (c) Yann Collet, Facebook, Inc.
- * All rights reserved. 
- * 
+ * All rights reserved.
+ *
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
- */ 
+ */
 
-#ifndef ZSTD_ERRORS_H_398273423 
-#define ZSTD_ERRORS_H_398273423 
+#ifndef ZSTD_ERRORS_H_398273423
+#define ZSTD_ERRORS_H_398273423
 
 #if defined (__cplusplus)
 extern "C" {
 #endif
 
-/*===== dependency =====*/ 
-#include <stddef.h>   /* size_t */ 
+/*===== dependency =====*/
+#include <stddef.h>   /* size_t */
 
- 
+
 /* =====   ZSTDERRORLIB_API : control library symbols visibility   ===== */
 #ifndef ZSTDERRORLIB_VISIBILITY
 #  if defined(__GNUC__) && (__GNUC__ >= 4)
@@ -76,7 +76,7 @@ typedef enum {
   /* following error codes are __NOT STABLE__, they can be removed or changed in future versions */
   ZSTD_error_frameIndex_tooLarge = 100,
   ZSTD_error_seekableIO          = 102,
-  ZSTD_error_dstBuffer_wrong     = 104, 
+  ZSTD_error_dstBuffer_wrong     = 104,
   ZSTD_error_srcBuffer_wrong     = 105,
   ZSTD_error_maxCode = 120  /* never EVER use this value directly, it can change in future versions! Use ZSTD_isError() instead */
 } ZSTD_ErrorCode;
@@ -92,4 +92,4 @@ ZSTDERRORLIB_API const char* ZSTD_getErrorString(ZSTD_ErrorCode code);   /**< Sa
 }
 #endif
 
-#endif /* ZSTD_ERRORS_H_398273423 */ 
+#endif /* ZSTD_ERRORS_H_398273423 */

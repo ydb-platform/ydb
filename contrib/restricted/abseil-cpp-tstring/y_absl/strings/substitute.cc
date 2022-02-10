@@ -23,7 +23,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace substitute_internal {
 
 void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
@@ -168,5 +168,5 @@ Arg::Arg(Dec dec) {
 }
 
 }  // namespace substitute_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

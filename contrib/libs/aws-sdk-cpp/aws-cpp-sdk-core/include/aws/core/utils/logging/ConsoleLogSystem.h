@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #pragma once
 
@@ -30,11 +30,11 @@ namespace Aws
 
                 virtual ~ConsoleLogSystem() {}
 
-                /** 
-                 * Flushes buffered messages to stdout. 
-                 */ 
-                void Flush() override; 
- 
+                /**
+                 * Flushes buffered messages to stdout.
+                 */
+                void Flush() override;
+
             protected:
 
                 virtual void ProcessFormattedStatement(Aws::String&& statement) override;

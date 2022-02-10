@@ -166,9 +166,9 @@ protected:
         // note: I've commented out the above because I didn't get good results.  e.g.
         // in one case I got a difference of 19 units.
         #ifndef BOOST_NO_CXX11_NUMERIC_LIMITS
-        const unsigned int digits = std::numeric_limits<T>::max_digits10; 
+        const unsigned int digits = std::numeric_limits<T>::max_digits10;
         #else
-        const unsigned int digits = std::numeric_limits<T>::digits10 + 2; 
+        const unsigned int digits = std::numeric_limits<T>::digits10 + 2;
         #endif
         os << std::setprecision(digits) << std::scientific << t;
     }

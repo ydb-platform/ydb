@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #pragma once
 #include <aws/s3/S3_EXPORTS.h>
@@ -21,8 +21,8 @@ namespace Model
 {
 
   /**
-   * <p>This data type contains information about progress of an 
-   * operation.</p><p><h3>See Also:</h3>   <a 
+   * <p>This data type contains information about progress of an
+   * operation.</p><p><h3>See Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Progress">AWS API
    * Reference</a></p>
    */

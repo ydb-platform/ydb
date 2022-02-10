@@ -5,7 +5,7 @@
 
     Lexer for resource definition files.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -81,5 +81,5 @@ class ResourceLexer(RegexLexer):
     }
 
     def analyse_text(text):
-        if text.startswith('root:table'): 
-            return 1.0 
+        if text.startswith('root:table'):
+            return 1.0

@@ -53,8 +53,8 @@
 #include "url.h"
 #include "strerror.h"
 #include "strdup.h"
-#include "strcase.h" 
- 
+#include "strcase.h"
+
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
 #include "curl_memory.h"
@@ -125,7 +125,7 @@ static CURLcode ntlm_wb_init(struct Curl_easy *data, struct ntlmdata *ntlm,
   struct passwd pw, *pw_res;
   char pwbuf[1024];
 #endif
-  char buffer[STRERROR_LEN]; 
+  char buffer[STRERROR_LEN];
 
 #if defined(CURL_DISABLE_VERBOSE_STRINGS)
   (void) data;
@@ -185,13 +185,13 @@ static CURLcode ntlm_wb_init(struct Curl_easy *data, struct ntlmdata *ntlm,
 
   if(access(ntlm_auth, X_OK) != 0) {
     failf(data, "Could not access ntlm_auth: %s errno %d: %s",
-          ntlm_auth, errno, Curl_strerror(errno, buffer, sizeof(buffer))); 
+          ntlm_auth, errno, Curl_strerror(errno, buffer, sizeof(buffer)));
     goto done;
   }
 
   if(Curl_socketpair(AF_UNIX, SOCK_STREAM, 0, sockfds)) {
     failf(data, "Could not open socket pair. errno %d: %s",
-          errno, Curl_strerror(errno, buffer, sizeof(buffer))); 
+          errno, Curl_strerror(errno, buffer, sizeof(buffer)));
     goto done;
   }
 
@@ -200,7 +200,7 @@ static CURLcode ntlm_wb_init(struct Curl_easy *data, struct ntlmdata *ntlm,
     sclose(sockfds[0]);
     sclose(sockfds[1]);
     failf(data, "Could not fork. errno %d: %s",
-          errno, Curl_strerror(errno, buffer, sizeof(buffer))); 
+          errno, Curl_strerror(errno, buffer, sizeof(buffer)));
     goto done;
   }
   else if(!child_pid) {
@@ -212,13 +212,13 @@ static CURLcode ntlm_wb_init(struct Curl_easy *data, struct ntlmdata *ntlm,
     sclose_nolog(sockfds[0]);
     if(dup2(sockfds[1], STDIN_FILENO) == -1) {
       failf(data, "Could not redirect child stdin. errno %d: %s",
-            errno, Curl_strerror(errno, buffer, sizeof(buffer))); 
+            errno, Curl_strerror(errno, buffer, sizeof(buffer)));
       exit(1);
     }
 
     if(dup2(sockfds[1], STDOUT_FILENO) == -1) {
       failf(data, "Could not redirect child stdout. errno %d: %s",
-            errno, Curl_strerror(errno, buffer, sizeof(buffer))); 
+            errno, Curl_strerror(errno, buffer, sizeof(buffer)));
       exit(1);
     }
 
@@ -238,7 +238,7 @@ static CURLcode ntlm_wb_init(struct Curl_easy *data, struct ntlmdata *ntlm,
 
     sclose_nolog(sockfds[1]);
     failf(data, "Could not execl(). errno %d: %s",
-          errno, Curl_strerror(errno, buffer, sizeof(buffer))); 
+          errno, Curl_strerror(errno, buffer, sizeof(buffer)));
     exit(1);
   }
 
@@ -329,49 +329,49 @@ done:
   return CURLE_REMOTE_ACCESS_DENIED;
 }
 
-CURLcode Curl_input_ntlm_wb(struct connectdata *conn, 
-                            bool proxy, 
-                            const char *header) 
-{ 
+CURLcode Curl_input_ntlm_wb(struct connectdata *conn,
+                            bool proxy,
+                            const char *header)
+{
   struct ntlmdata *ntlm = proxy ? &conn->proxyntlm : &conn->ntlm;
-  curlntlm *state = proxy ? &conn->proxy_ntlm_state : &conn->http_ntlm_state; 
- 
-  if(!checkprefix("NTLM", header)) 
-    return CURLE_BAD_CONTENT_ENCODING; 
- 
-  header += strlen("NTLM"); 
-  while(*header && ISSPACE(*header)) 
-    header++; 
- 
-  if(*header) { 
+  curlntlm *state = proxy ? &conn->proxy_ntlm_state : &conn->http_ntlm_state;
+
+  if(!checkprefix("NTLM", header))
+    return CURLE_BAD_CONTENT_ENCODING;
+
+  header += strlen("NTLM");
+  while(*header && ISSPACE(*header))
+    header++;
+
+  if(*header) {
     ntlm->challenge = strdup(header);
     if(!ntlm->challenge)
-      return CURLE_OUT_OF_MEMORY; 
- 
-    *state = NTLMSTATE_TYPE2; /* We got a type-2 message */ 
-  } 
-  else { 
-    if(*state == NTLMSTATE_LAST) { 
-      infof(conn->data, "NTLM auth restarted\n"); 
-      Curl_http_auth_cleanup_ntlm_wb(conn); 
-    } 
-    else if(*state == NTLMSTATE_TYPE3) { 
-      infof(conn->data, "NTLM handshake rejected\n"); 
-      Curl_http_auth_cleanup_ntlm_wb(conn); 
-      *state = NTLMSTATE_NONE; 
-      return CURLE_REMOTE_ACCESS_DENIED; 
-    } 
-    else if(*state >= NTLMSTATE_TYPE1) { 
-      infof(conn->data, "NTLM handshake failure (internal error)\n"); 
-      return CURLE_REMOTE_ACCESS_DENIED; 
-    } 
- 
-    *state = NTLMSTATE_TYPE1; /* We should send away a type-1 */ 
-  } 
- 
-  return CURLE_OK; 
-} 
- 
+      return CURLE_OUT_OF_MEMORY;
+
+    *state = NTLMSTATE_TYPE2; /* We got a type-2 message */
+  }
+  else {
+    if(*state == NTLMSTATE_LAST) {
+      infof(conn->data, "NTLM auth restarted\n");
+      Curl_http_auth_cleanup_ntlm_wb(conn);
+    }
+    else if(*state == NTLMSTATE_TYPE3) {
+      infof(conn->data, "NTLM handshake rejected\n");
+      Curl_http_auth_cleanup_ntlm_wb(conn);
+      *state = NTLMSTATE_NONE;
+      return CURLE_REMOTE_ACCESS_DENIED;
+    }
+    else if(*state >= NTLMSTATE_TYPE1) {
+      infof(conn->data, "NTLM handshake failure (internal error)\n");
+      return CURLE_REMOTE_ACCESS_DENIED;
+    }
+
+    *state = NTLMSTATE_TYPE1; /* We should send away a type-1 */
+  }
+
+  return CURLE_OK;
+}
+
 /*
  * This is for creating ntlm header output by delegating challenge/response
  * to Samba's winbind daemon helper ntlm_auth.
@@ -384,7 +384,7 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
   /* point to the name and password for this */
   const char *userp;
   struct ntlmdata *ntlm;
-  curlntlm *state; 
+  curlntlm *state;
   struct auth *authp;
   struct Curl_easy *data = conn->data;
 
@@ -398,7 +398,7 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
     allocuserpwd = &data->state.aptr.proxyuserpwd;
     userp = conn->http_proxy.user;
     ntlm = &conn->proxyntlm;
-    state = &conn->proxy_ntlm_state; 
+    state = &conn->proxy_ntlm_state;
     authp = &conn->data->state.authproxy;
 #else
     return CURLE_NOT_BUILT_IN;
@@ -408,7 +408,7 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
     allocuserpwd = &data->state.aptr.userpwd;
     userp = conn->user;
     ntlm = &conn->ntlm;
-    state = &conn->http_ntlm_state; 
+    state = &conn->http_ntlm_state;
     authp = &conn->data->state.authhost;
   }
   authp->done = FALSE;
@@ -417,7 +417,7 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
   if(!userp)
     userp = "";
 
-  switch(*state) { 
+  switch(*state) {
   case NTLMSTATE_TYPE1:
   default:
     /* Use Samba's 'winbind' daemon to support NTLM authentication,
@@ -449,7 +449,7 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
     if(!*allocuserpwd)
       return CURLE_OUT_OF_MEMORY;
     break;
- 
+
   case NTLMSTATE_TYPE2: {
     char *input = aprintf("TT %s\n", ntlm->challenge);
     if(!input)
@@ -464,9 +464,9 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
                             proxy ? "Proxy-" : "",
                             ntlm->response);
     DEBUG_OUT(fprintf(stderr, "**** %s\n ", *allocuserpwd));
-    *state = NTLMSTATE_TYPE3; /* we sent a type-3 */ 
+    *state = NTLMSTATE_TYPE3; /* we sent a type-3 */
     authp->done = TRUE;
-    Curl_http_auth_cleanup_ntlm_wb(conn); 
+    Curl_http_auth_cleanup_ntlm_wb(conn);
     if(!*allocuserpwd)
       return CURLE_OUT_OF_MEMORY;
     break;
@@ -474,10 +474,10 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
   case NTLMSTATE_TYPE3:
     /* connection is already authenticated,
      * don't send a header in future requests */
-    *state = NTLMSTATE_LAST; 
-    /* FALLTHROUGH */ 
-  case NTLMSTATE_LAST: 
-    Curl_safefree(*allocuserpwd); 
+    *state = NTLMSTATE_LAST;
+    /* FALLTHROUGH */
+  case NTLMSTATE_LAST:
+    Curl_safefree(*allocuserpwd);
     authp->done = TRUE;
     break;
   }

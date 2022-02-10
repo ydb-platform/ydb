@@ -18,7 +18,7 @@
 #include <array>
 #include <cstdio>
 #include <sstream>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include "y_absl/base/port.h"
 #include "y_absl/strings/internal/str_format/arg.h"
@@ -27,7 +27,7 @@
 #include "y_absl/types/span.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 class UntypedFormatSpec;
 
@@ -88,7 +88,7 @@ class FormatSpecTemplate
   using Base = typename MakeDependent<UntypedFormatSpec, Args...>::type;
 
  public:
-#ifdef ABSL_INTERNAL_ENABLE_FORMAT_CHECKER 
+#ifdef ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
 
   // Honeypot overload for when the string is not constexpr.
   // We use the 'unavailable' attribute to give a better compiler error than
@@ -211,7 +211,7 @@ class StreamedWrapper {
 };
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_BIND_H_

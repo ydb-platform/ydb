@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #pragma once
 
@@ -61,7 +61,7 @@ namespace Aws
                 void AddHeader(const Aws::String&, const Aws::String&);
 
             private:
-                StandardHttpResponse(const StandardHttpResponse&); 
+                StandardHttpResponse(const StandardHttpResponse&);
 
                 Aws::Map<Aws::String, Aws::String> headerMap;
                 Utils::Stream::ResponseStream bodyStream;

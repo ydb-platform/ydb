@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 
 #include <aws/core/utils/logging/DefaultLogSystem.h>
@@ -17,7 +17,7 @@ using namespace Aws::Utils::Logging;
 static const char* AllocationTag = "DefaultLogSystem";
 static const int BUFFERED_MSG_COUNT = 100;
 
-static std::shared_ptr<Aws::OFStream> MakeDefaultLogFile(const Aws::String& filenamePrefix) 
+static std::shared_ptr<Aws::OFStream> MakeDefaultLogFile(const Aws::String& filenamePrefix)
 {
     Aws::String newFileName = filenamePrefix + DateTime::CalculateGmtTimestampAsString("%Y-%m-%d-%H") + ".log";
     return Aws::MakeShared<Aws::OFStream>(AllocationTag, newFileName.c_str(), Aws::OFStream::out | Aws::OFStream::app);
@@ -32,7 +32,7 @@ static void LogThread(DefaultLogSystem::LogSynchronizationData* syncData, const 
     for(;;)
     {
         std::unique_lock<std::mutex> locker(syncData->m_logQueueMutex);
-        syncData->m_queueSignal.wait(locker, [&](){ return syncData->m_stopLogging == true || syncData->m_queuedLogMessages.size() > 0; } ); 
+        syncData->m_queueSignal.wait(locker, [&](){ return syncData->m_stopLogging == true || syncData->m_queuedLogMessages.size() > 0; } );
 
         if (syncData->m_stopLogging && syncData->m_queuedLogMessages.size() == 0)
         {
@@ -87,7 +87,7 @@ DefaultLogSystem::~DefaultLogSystem()
 {
     {
         std::lock_guard<std::mutex> locker(m_syncData.m_logQueueMutex);
-        m_syncData.m_stopLogging = true; 
+        m_syncData.m_stopLogging = true;
     }
 
     m_syncData.m_queueSignal.notify_one();
@@ -110,8 +110,8 @@ void DefaultLogSystem::ProcessFormattedStatement(Aws::String&& statement)
     }
 }
 
-void DefaultLogSystem::Flush() 
-{ 
-    m_syncData.m_queueSignal.notify_one(); 
-} 
- 
+void DefaultLogSystem::Flush()
+{
+    m_syncData.m_queueSignal.notify_one();
+}
+

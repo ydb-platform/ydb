@@ -49,7 +49,7 @@ Context::Context(const FileDescriptor* file, const Options& options)
 
 Context::~Context() {}
 
-ClassNameResolver* Context::GetNameResolver() const { 
+ClassNameResolver* Context::GetNameResolver() const {
   return name_resolver_.get();
 }
 
@@ -154,7 +154,7 @@ void Context::InitializeFieldGeneratorInfoForFields(
   for (int i = 0; i < fields.size(); ++i) {
     const FieldDescriptor* field = fields[i];
     FieldGeneratorInfo info;
-    info.name = CamelCaseFieldName(field); 
+    info.name = CamelCaseFieldName(field);
     info.capitalized_name = UnderscoresToCapitalizedCamelCase(field);
     // For fields conflicting with some other fields, we append the field
     // number to their field names in generated code to avoid conflicts.

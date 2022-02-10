@@ -34,7 +34,7 @@
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/generated_message_util.h>
 #include <google/protobuf/message.h>
- 
+
 #include <google/protobuf/port_def.inc>
 
 namespace google {

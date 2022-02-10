@@ -18,7 +18,7 @@
 #include "y_absl/synchronization/mutex.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // Return whether int *arg is zero.
 static bool IsZero(void *arg) {
@@ -48,5 +48,5 @@ bool Barrier::Block() {
   return this->num_to_exit_ == 0;
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

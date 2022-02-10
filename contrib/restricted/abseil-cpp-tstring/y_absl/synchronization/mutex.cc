@@ -76,7 +76,7 @@ ABSL_ATTRIBUTE_WEAK void ABSL_INTERNAL_C_SYMBOL(AbslInternalMutexYield)() {
 }  // extern "C"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 namespace {
 
@@ -90,16 +90,16 @@ ABSL_CONST_INIT std::atomic<OnDeadlockCycle> synch_deadlock_detection(
     kDeadlockDetectionDefault);
 ABSL_CONST_INIT std::atomic<bool> synch_check_invariants(false);
 
-ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES 
+ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES
 y_absl::base_internal::AtomicHook<void (*)(int64_t wait_cycles)>
     submit_profile_data;
-ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES y_absl::base_internal::AtomicHook<void (*)( 
-    const char *msg, const void *obj, int64_t wait_cycles)> 
-    mutex_tracer; 
-ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES 
-    y_absl::base_internal::AtomicHook<void (*)(const char *msg, const void *cv)> 
-        cond_var_tracer; 
-ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES y_absl::base_internal::AtomicHook< 
+ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES y_absl::base_internal::AtomicHook<void (*)(
+    const char *msg, const void *obj, int64_t wait_cycles)>
+    mutex_tracer;
+ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES
+    y_absl::base_internal::AtomicHook<void (*)(const char *msg, const void *cv)>
+        cond_var_tracer;
+ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES y_absl::base_internal::AtomicHook<
     bool (*)(const void *pc, char *out, int out_size)>
     symbolizer(y_absl::Symbolize);
 
@@ -2747,5 +2747,5 @@ bool Condition::GuaranteedEqual(const Condition *a, const Condition *b) {
          a->arg_ == b->arg_ && a->method_ == b->method_;
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

@@ -1,50 +1,50 @@
-/* 
- * 
- * Copyright 2016 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#ifndef GRPC_INTERNAL_CPP_SERVER_DEFAULT_HEALTH_CHECK_SERVICE_H 
-#define GRPC_INTERNAL_CPP_SERVER_DEFAULT_HEALTH_CHECK_SERVICE_H 
- 
+/*
+ *
+ * Copyright 2016 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#ifndef GRPC_INTERNAL_CPP_SERVER_DEFAULT_HEALTH_CHECK_SERVICE_H
+#define GRPC_INTERNAL_CPP_SERVER_DEFAULT_HEALTH_CHECK_SERVICE_H
+
 #include <atomic>
 #include <set>
- 
+
 #include <grpc/support/log.h>
 #include <grpcpp/grpcpp.h>
-#include <grpcpp/health_check_service_interface.h> 
+#include <grpcpp/health_check_service_interface.h>
 #include <grpcpp/impl/codegen/async_generic_service.h>
 #include <grpcpp/impl/codegen/async_unary_call.h>
 #include <grpcpp/impl/codegen/completion_queue.h>
-#include <grpcpp/impl/codegen/service_type.h> 
-#include <grpcpp/support/byte_buffer.h> 
- 
+#include <grpcpp/impl/codegen/service_type.h>
+#include <grpcpp/support/byte_buffer.h>
+
 #include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/gprpp/thd.h"
 
-namespace grpc { 
- 
-// Default implementation of HealthCheckServiceInterface. Server will create and 
-// own it. 
-class DefaultHealthCheckService final : public HealthCheckServiceInterface { 
- public: 
+namespace grpc {
+
+// Default implementation of HealthCheckServiceInterface. Server will create and
+// own it.
+class DefaultHealthCheckService final : public HealthCheckServiceInterface {
+ public:
   enum ServingStatus { NOT_FOUND, SERVING, NOT_SERVING };
 
-  // The service impl to register with the server. 
-  class HealthCheckServiceImpl : public Service { 
-   public: 
+  // The service impl to register with the server.
+  class HealthCheckServiceImpl : public Service {
+   public:
     // Base class for call handlers.
     class CallHandler {
      public:
@@ -52,15 +52,15 @@ class DefaultHealthCheckService final : public HealthCheckServiceInterface {
       virtual void SendHealth(std::shared_ptr<CallHandler> self,
                               ServingStatus status) = 0;
     };
- 
+
     HealthCheckServiceImpl(DefaultHealthCheckService* database,
                            std::unique_ptr<ServerCompletionQueue> cq);
- 
+
     ~HealthCheckServiceImpl();
 
     void StartServingThread();
 
-   private: 
+   private:
     // A tag that can be called with a bool argument. It's tailored for
     // CallHandler's use. Before being used, it should be constructed with a
     // method of CallHandler and a shared pointer to the handler. The
@@ -230,21 +230,21 @@ class DefaultHealthCheckService final : public HealthCheckServiceInterface {
     grpc_core::Mutex cq_shutdown_mu_;
     std::atomic_bool shutdown_{false};
     std::unique_ptr<::grpc_core::Thread> thread_;
-  }; 
- 
-  DefaultHealthCheckService(); 
+  };
+
+  DefaultHealthCheckService();
 
   void SetServingStatus(const TString& service_name, bool serving) override;
-  void SetServingStatus(bool serving) override; 
+  void SetServingStatus(bool serving) override;
 
   void Shutdown() override;
 
   ServingStatus GetServingStatus(const TString& service_name) const;
- 
+
   HealthCheckServiceImpl* GetHealthCheckService(
       std::unique_ptr<ServerCompletionQueue> cq);
 
- private: 
+ private:
   // Stores the current serving status of a service and any call
   // handlers registered for updates when the service's status changes.
   class ServiceData {
@@ -276,9 +276,9 @@ class DefaultHealthCheckService final : public HealthCheckServiceInterface {
   mutable grpc_core::Mutex mu_;
   bool shutdown_ = false;                            // Guarded by mu_.
   std::map<TString, ServiceData> services_map_;  // Guarded by mu_.
-  std::unique_ptr<HealthCheckServiceImpl> impl_; 
-}; 
- 
-}  // namespace grpc 
- 
-#endif  // GRPC_INTERNAL_CPP_SERVER_DEFAULT_HEALTH_CHECK_SERVICE_H 
+  std::unique_ptr<HealthCheckServiceImpl> impl_;
+};
+
+}  // namespace grpc
+
+#endif  // GRPC_INTERNAL_CPP_SERVER_DEFAULT_HEALTH_CHECK_SERVICE_H

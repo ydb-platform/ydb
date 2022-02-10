@@ -1,11 +1,11 @@
-OWNER(g:python-contrib) 
+OWNER(g:python-contrib)
 
 PY2_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
 VERSION(1.1.1)
- 
+
 PY_SRCS(
     TOP_LEVEL
     markupsafe/_compat.py

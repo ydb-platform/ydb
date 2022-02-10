@@ -1066,12 +1066,12 @@ VTimeZone::operator==(const TimeZone& that) const {
     return FALSE;
 }
 
-#if __cplusplus > 201703L 
+#if __cplusplus > 201703L
 UBool
 VTimeZone::operator!=(const TimeZone& that) const {
     return !operator==(that);
 }
-#endif 
+#endif
 
 VTimeZone*
 VTimeZone::createVTimeZoneByID(const UnicodeString& ID) {

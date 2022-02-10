@@ -170,17 +170,17 @@ void ServiceGenerator::GenerateMethodSignatures(VirtualOrNon virtual_or_non,
 void ServiceGenerator::GenerateImplementation(io::Printer* printer) {
   Formatter format(printer, vars_);
   format(
-      "$classname$::~$classname$() {}\n" 
-      "\n" 
+      "$classname$::~$classname$() {}\n"
+      "\n"
       "const ::$proto_ns$::ServiceDescriptor* $classname$::descriptor() {\n"
       "  "
       "::$proto_ns$::internal::AssignDescriptors(&$desc_table$);\n"
       "  return $file_level_service_descriptors$[$1$];\n"
-      "}\n" 
-      "\n" 
+      "}\n"
+      "\n"
       "const ::$proto_ns$::ServiceDescriptor* $classname$::GetDescriptor() {\n"
-      "  return descriptor();\n" 
-      "}\n" 
+      "  return descriptor();\n"
+      "}\n"
       "\n",
       index_in_metadata_);
 
@@ -234,7 +234,7 @@ void ServiceGenerator::GenerateCallMethod(io::Printer* printer) {
       "                             ::$proto_ns$::RpcController* controller,\n"
       "                             const ::$proto_ns$::Message* request,\n"
       "                             ::$proto_ns$::Message* response,\n"
-      "                             ::google::protobuf::Closure* done) {\n" 
+      "                             ::google::protobuf::Closure* done) {\n"
       "  GOOGLE_DCHECK_EQ(method->service(), $file_level_service_descriptors$[$1$]);\n"
       "  switch(method->index()) {\n",
       index_in_metadata_);

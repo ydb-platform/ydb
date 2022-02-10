@@ -30,8 +30,8 @@
 
 #include <google/protobuf/stubs/int128.h>
 
-#include <iomanip> 
-#include <ostream>  // NOLINT(readability/streams) 
+#include <iomanip>
+#include <ostream>  // NOLINT(readability/streams)
 #include <sstream>
 
 #include <google/protobuf/stubs/logging.h>

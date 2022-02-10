@@ -166,19 +166,19 @@ JsonObjectWriter* JsonObjectWriter::RenderNull(StringPiece name) {
   return RenderSimple(name, "null");
 }
 
-JsonObjectWriter* JsonObjectWriter::RenderNullAsEmpty(StringPiece name) { 
-  return RenderSimple(name, ""); 
-} 
- 
+JsonObjectWriter* JsonObjectWriter::RenderNullAsEmpty(StringPiece name) {
+  return RenderSimple(name, "");
+}
+
 void JsonObjectWriter::WritePrefix(StringPiece name) {
   bool not_first = !element()->is_first();
   if (not_first) WriteChar(',');
   if (not_first || !element()->is_root()) NewLine();
   if (!name.empty() || element()->is_json_object()) {
     WriteChar('"');
-    if (!name.empty()) { 
+    if (!name.empty()) {
       JsonEscaping::Escape(name, &sink_);
-    } 
+    }
     WriteRawString("\":");
     if (!indent_string_.empty()) WriteChar(' ');
   }

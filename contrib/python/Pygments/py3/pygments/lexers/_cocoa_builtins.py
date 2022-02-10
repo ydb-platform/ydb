@@ -44,23 +44,23 @@ if __name__ == '__main__':  # pragma: no cover
                 print("Decoding error for file: {0}".format(headerFilePath))
                 continue
                 
-            res = re.findall(r'(?<=@interface )\w+', content) 
+            res = re.findall(r'(?<=@interface )\w+', content)
             for r in res:
                 all_interfaces.add(r)
 
-            res = re.findall(r'(?<=@protocol )\w+', content) 
+            res = re.findall(r'(?<=@protocol )\w+', content)
             for r in res:
                 all_protocols.add(r)
 
-            res = re.findall(r'(?<=typedef enum )\w+', content) 
+            res = re.findall(r'(?<=typedef enum )\w+', content)
             for r in res:
                 all_primitives.add(r)
 
-            res = re.findall(r'(?<=typedef struct )\w+', content) 
+            res = re.findall(r'(?<=typedef struct )\w+', content)
             for r in res:
                 all_primitives.add(r)
 
-            res = re.findall(r'(?<=typedef const struct )\w+', content) 
+            res = re.findall(r'(?<=typedef const struct )\w+', content)
             for r in res:
                 all_primitives.add(r)
 

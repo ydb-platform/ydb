@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//   https://www.apache.org/licenses/LICENSE-2.0 
+//   https://www.apache.org/licenses/LICENSE-2.0
 //
 //   Unless required by applicable law or agreed to in writing, software
 //   distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,23 +13,23 @@
 //   limitations under the License.
 
 #if !defined(HAS_STRPTIME)
-# if !defined(_MSC_VER) && !defined(__MINGW32__) 
+# if !defined(_MSC_VER) && !defined(__MINGW32__)
 #  define HAS_STRPTIME 1  // assume everyone has strptime() except windows
 # endif
 #endif
 
-#if defined(HAS_STRPTIME) && HAS_STRPTIME 
-# if !defined(_XOPEN_SOURCE) 
-#  define _XOPEN_SOURCE  // Definedness suffices for strptime. 
-# endif 
-#endif 
+#if defined(HAS_STRPTIME) && HAS_STRPTIME
+# if !defined(_XOPEN_SOURCE)
+#  define _XOPEN_SOURCE  // Definedness suffices for strptime.
+# endif
+#endif
 
-#include "cctz/time_zone.h" 
- 
-// Include time.h directly since, by C++ standards, ctime doesn't have to 
-// declare strptime. 
-#include <time.h> 
- 
+#include "cctz/time_zone.h"
+
+// Include time.h directly since, by C++ standards, ctime doesn't have to
+// declare strptime.
+#include <time.h>
+
 #include <cctype>
 #include <chrono>
 #include <cstddef>
@@ -44,7 +44,7 @@
 #include <sstream>
 #endif
 
-#include "cctz/civil_time.h" 
+#include "cctz/civil_time.h"
 #include "time_zone_if.h"
 
 namespace cctz {
@@ -58,53 +58,53 @@ char* strptime(const char* s, const char* fmt, std::tm* tm) {
   std::istringstream input(s);
   input >> std::get_time(tm, fmt);
   if (input.fail()) return nullptr;
-  return const_cast<char*>(s) + 
-         (input.eof() ? strlen(s) : static_cast<std::size_t>(input.tellg())); 
+  return const_cast<char*>(s) +
+         (input.eof() ? strlen(s) : static_cast<std::size_t>(input.tellg()));
 }
 #endif
 
-// Convert a cctz::weekday to a tm_wday value (0-6, Sunday = 0). 
-int ToTmWday(weekday wd) { 
-  switch (wd) { 
-    case weekday::sunday: 
-      return 0; 
-    case weekday::monday: 
-      return 1; 
-    case weekday::tuesday: 
-      return 2; 
-    case weekday::wednesday: 
-      return 3; 
-    case weekday::thursday: 
-      return 4; 
-    case weekday::friday: 
-      return 5; 
-    case weekday::saturday: 
-      return 6; 
-  } 
-  return 0; /*NOTREACHED*/ 
-} 
- 
-// Convert a tm_wday value (0-6, Sunday = 0) to a cctz::weekday. 
-weekday FromTmWday(int tm_wday) { 
-  switch (tm_wday) { 
-    case 0: 
-      return weekday::sunday; 
-    case 1: 
-      return weekday::monday; 
-    case 2: 
-      return weekday::tuesday; 
-    case 3: 
-      return weekday::wednesday; 
-    case 4: 
-      return weekday::thursday; 
-    case 5: 
-      return weekday::friday; 
-    case 6: 
-      return weekday::saturday; 
-  } 
-  return weekday::sunday; /*NOTREACHED*/ 
-} 
- 
+// Convert a cctz::weekday to a tm_wday value (0-6, Sunday = 0).
+int ToTmWday(weekday wd) {
+  switch (wd) {
+    case weekday::sunday:
+      return 0;
+    case weekday::monday:
+      return 1;
+    case weekday::tuesday:
+      return 2;
+    case weekday::wednesday:
+      return 3;
+    case weekday::thursday:
+      return 4;
+    case weekday::friday:
+      return 5;
+    case weekday::saturday:
+      return 6;
+  }
+  return 0; /*NOTREACHED*/
+}
+
+// Convert a tm_wday value (0-6, Sunday = 0) to a cctz::weekday.
+weekday FromTmWday(int tm_wday) {
+  switch (tm_wday) {
+    case 0:
+      return weekday::sunday;
+    case 1:
+      return weekday::monday;
+    case 2:
+      return weekday::tuesday;
+    case 3:
+      return weekday::wednesday;
+    case 4:
+      return weekday::thursday;
+    case 5:
+      return weekday::friday;
+    case 6:
+      return weekday::saturday;
+  }
+  return weekday::sunday; /*NOTREACHED*/
+}
+
 std::tm ToTM(const time_zone::absolute_lookup& al) {
   std::tm tm{};
   tm.tm_sec = al.cs.second();
@@ -122,19 +122,19 @@ std::tm ToTM(const time_zone::absolute_lookup& al) {
     tm.tm_year = static_cast<int>(al.cs.year() - 1900);
   }
 
-  tm.tm_wday = ToTmWday(get_weekday(al.cs)); 
-  tm.tm_yday = get_yearday(al.cs) - 1; 
+  tm.tm_wday = ToTmWday(get_weekday(al.cs));
+  tm.tm_yday = get_yearday(al.cs) - 1;
   tm.tm_isdst = al.is_dst ? 1 : 0;
   return tm;
 }
 
-// Returns the week of the year [0:53] given a civil day and the day on 
-// which weeks are defined to start. 
-int ToWeek(const civil_day& cd, weekday week_start) { 
-  const civil_day d(cd.year() % 400, cd.month(), cd.day()); 
-  return static_cast<int>((d - prev_weekday(civil_year(d), week_start)) / 7); 
-} 
- 
+// Returns the week of the year [0:53] given a civil day and the day on
+// which weeks are defined to start.
+int ToWeek(const civil_day& cd, weekday week_start) {
+  const civil_day d(cd.year() % 400, cd.month(), cd.day());
+  return static_cast<int>((d - prev_weekday(civil_year(d), week_start)) / 7);
+}
+
 const char kDigits[] = "0123456789";
 
 // Formats a 64-bit integer in the given field width.  Note that it is up
@@ -175,34 +175,34 @@ char* Format02d(char* ep, int v) {
 }
 
 // Formats a UTC offset, like +00:00.
-char* FormatOffset(char* ep, int offset, const char* mode) { 
-  // TODO: Follow the RFC3339 "Unknown Local Offset Convention" and 
-  // generate a "negative zero" when we're formatting a zero offset 
-  // as the result of a failed load_time_zone(). 
+char* FormatOffset(char* ep, int offset, const char* mode) {
+  // TODO: Follow the RFC3339 "Unknown Local Offset Convention" and
+  // generate a "negative zero" when we're formatting a zero offset
+  // as the result of a failed load_time_zone().
   char sign = '+';
-  if (offset < 0) { 
-    offset = -offset;  // bounded by 24h so no overflow 
+  if (offset < 0) {
+    offset = -offset;  // bounded by 24h so no overflow
     sign = '-';
   }
-  const int seconds = offset % 60; 
-  const int minutes = (offset /= 60) % 60; 
-  const int hours = offset /= 60; 
-  const char sep = mode[0]; 
-  const bool ext = (sep != '\0' && mode[1] == '*'); 
-  const bool ccc = (ext && mode[2] == ':'); 
-  if (ext && (!ccc || seconds != 0)) { 
-    ep = Format02d(ep, seconds); 
-    *--ep = sep; 
-  } else { 
-    // If we're not rendering seconds, sub-minute negative offsets 
-    // should get a positive sign (e.g., offset=-10s => "+00:00"). 
-    if (hours == 0 && minutes == 0) sign = '+'; 
-  } 
-  if (!ccc || minutes != 0 || seconds != 0) { 
-    ep = Format02d(ep, minutes); 
-    if (sep != '\0') *--ep = sep; 
-  } 
-  ep = Format02d(ep, hours); 
+  const int seconds = offset % 60;
+  const int minutes = (offset /= 60) % 60;
+  const int hours = offset /= 60;
+  const char sep = mode[0];
+  const bool ext = (sep != '\0' && mode[1] == '*');
+  const bool ccc = (ext && mode[2] == ':');
+  if (ext && (!ccc || seconds != 0)) {
+    ep = Format02d(ep, seconds);
+    *--ep = sep;
+  } else {
+    // If we're not rendering seconds, sub-minute negative offsets
+    // should get a positive sign (e.g., offset=-10s => "+00:00").
+    if (hours == 0 && minutes == 0) sign = '+';
+  }
+  if (!ccc || minutes != 0 || seconds != 0) {
+    ep = Format02d(ep, minutes);
+    if (sep != '\0') *--ep = sep;
+  }
+  ep = Format02d(ep, hours);
   *--ep = sign;
   return ep;
 }
@@ -211,7 +211,7 @@ char* FormatOffset(char* ep, int offset, const char* mode) {
 void FormatTM(std::string* out, const std::string& fmt, const std::tm& tm) {
   // strftime(3) returns the number of characters placed in the output
   // array (which may be 0 characters).  It also returns 0 to indicate
-  // an error, like the array wasn't large enough.  To accommodate this, 
+  // an error, like the array wasn't large enough.  To accommodate this,
   // the following code grows the buffer size from 2x the format string
   // length up to 32x.
   for (std::size_t i = 2; i != 32; i *= 2) {
@@ -308,12 +308,12 @@ const std::int_fast64_t kExp10[kDigits10_64 + 1] = {
 // Uses strftime(3) to format the given Time.  The following extended format
 // specifiers are also supported:
 //
-//   - %Ez  - RFC3339-compatible numeric UTC offset (+hh:mm or -hh:mm) 
-//   - %E*z - Full-resolution numeric UTC offset (+hh:mm:ss or -hh:mm:ss) 
+//   - %Ez  - RFC3339-compatible numeric UTC offset (+hh:mm or -hh:mm)
+//   - %E*z - Full-resolution numeric UTC offset (+hh:mm:ss or -hh:mm:ss)
 //   - %E#S - Seconds with # digits of fractional precision
 //   - %E*S - Seconds with full fractional precision (a literal '*')
 //   - %E4Y - Four-character years (-999 ... -001, 0000, 0001 ... 9999)
-//   - %ET  - The RFC3339 "date-time" separator "T" 
+//   - %ET  - The RFC3339 "date-time" separator "T"
 //
 // The standard specifiers from RFC3339_* (%Y, %m, %d, %H, %M, and %S) are
 // handled internally for performance reasons.  strftime(3) is slow due to
@@ -326,7 +326,7 @@ const std::int_fast64_t kExp10[kDigits10_64 + 1] = {
 // not support the tm_gmtoff and tm_zone extensions to std::tm.
 //
 // Requires that zero() <= fs < seconds(1).
-std::string format(const std::string& format, const time_point<seconds>& tp, 
+std::string format(const std::string& format, const time_point<seconds>& tp,
                    const detail::femtoseconds& fs, const time_zone& tz) {
   std::string result;
   result.reserve(format.size());  // A reasonable guess for the result size.
@@ -378,7 +378,7 @@ std::string format(const std::string& format, const time_point<seconds>& tp,
     if (cur == end || (cur - percent) % 2 == 0) continue;
 
     // Simple specifiers that we handle ourselves.
-    if (strchr("YmdeUuWwHMSzZs%", *cur)) { 
+    if (strchr("YmdeUuWwHMSzZs%", *cur)) {
       if (cur - 1 != pending) {
         FormatTM(&result, std::string(pending, cur - 1), tm);
       }
@@ -399,22 +399,22 @@ std::string format(const std::string& format, const time_point<seconds>& tp,
           if (*cur == 'e' && *bp == '0') *bp = ' ';  // for Windows
           result.append(bp, static_cast<std::size_t>(ep - bp));
           break;
-        case 'U': 
-          bp = Format02d(ep, ToWeek(civil_day(al.cs), weekday::sunday)); 
-          result.append(bp, static_cast<std::size_t>(ep - bp)); 
-          break; 
-        case 'u': 
-          bp = Format64(ep, 0, tm.tm_wday ? tm.tm_wday : 7); 
-          result.append(bp, static_cast<std::size_t>(ep - bp)); 
-          break; 
-        case 'W': 
-          bp = Format02d(ep, ToWeek(civil_day(al.cs), weekday::monday)); 
-          result.append(bp, static_cast<std::size_t>(ep - bp)); 
-          break; 
-        case 'w': 
-          bp = Format64(ep, 0, tm.tm_wday); 
-          result.append(bp, static_cast<std::size_t>(ep - bp)); 
-          break; 
+        case 'U':
+          bp = Format02d(ep, ToWeek(civil_day(al.cs), weekday::sunday));
+          result.append(bp, static_cast<std::size_t>(ep - bp));
+          break;
+        case 'u':
+          bp = Format64(ep, 0, tm.tm_wday ? tm.tm_wday : 7);
+          result.append(bp, static_cast<std::size_t>(ep - bp));
+          break;
+        case 'W':
+          bp = Format02d(ep, ToWeek(civil_day(al.cs), weekday::monday));
+          result.append(bp, static_cast<std::size_t>(ep - bp));
+          break;
+        case 'w':
+          bp = Format64(ep, 0, tm.tm_wday);
+          result.append(bp, static_cast<std::size_t>(ep - bp));
+          break;
         case 'H':
           bp = Format02d(ep, al.cs.hour());
           result.append(bp, static_cast<std::size_t>(ep - bp));
@@ -428,7 +428,7 @@ std::string format(const std::string& format, const time_point<seconds>& tp,
           result.append(bp, static_cast<std::size_t>(ep - bp));
           break;
         case 'z':
-          bp = FormatOffset(ep, al.offset, ""); 
+          bp = FormatOffset(ep, al.offset, "");
           result.append(bp, static_cast<std::size_t>(ep - bp));
           break;
         case 'Z':
@@ -438,79 +438,79 @@ std::string format(const std::string& format, const time_point<seconds>& tp,
           bp = Format64(ep, 0, ToUnixSeconds(tp));
           result.append(bp, static_cast<std::size_t>(ep - bp));
           break;
-        case '%': 
-          result.push_back('%'); 
-          break; 
+        case '%':
+          result.push_back('%');
+          break;
       }
       pending = ++cur;
       continue;
     }
 
-    // More complex specifiers that we handle ourselves. 
-    if (*cur == ':' && cur + 1 != end) { 
-      if (*(cur + 1) == 'z') { 
-        // Formats %:z. 
-        if (cur - 1 != pending) { 
-          FormatTM(&result, std::string(pending, cur - 1), tm); 
-        } 
-        bp = FormatOffset(ep, al.offset, ":"); 
-        result.append(bp, static_cast<std::size_t>(ep - bp)); 
-        pending = cur += 2; 
-        continue; 
-      } 
-      if (*(cur + 1) == ':' && cur + 2 != end) { 
-        if (*(cur + 2) == 'z') { 
-          // Formats %::z. 
-          if (cur - 1 != pending) { 
-            FormatTM(&result, std::string(pending, cur - 1), tm); 
-          } 
-          bp = FormatOffset(ep, al.offset, ":*"); 
-          result.append(bp, static_cast<std::size_t>(ep - bp)); 
-          pending = cur += 3; 
-          continue; 
-        } 
-        if (*(cur + 2) == ':' && cur + 3 != end) { 
-          if (*(cur + 3) == 'z') { 
-            // Formats %:::z. 
-            if (cur - 1 != pending) { 
-              FormatTM(&result, std::string(pending, cur - 1), tm); 
-            } 
-            bp = FormatOffset(ep, al.offset, ":*:"); 
-            result.append(bp, static_cast<std::size_t>(ep - bp)); 
-            pending = cur += 4; 
-            continue; 
-          } 
-        } 
-      } 
-    } 
- 
+    // More complex specifiers that we handle ourselves.
+    if (*cur == ':' && cur + 1 != end) {
+      if (*(cur + 1) == 'z') {
+        // Formats %:z.
+        if (cur - 1 != pending) {
+          FormatTM(&result, std::string(pending, cur - 1), tm);
+        }
+        bp = FormatOffset(ep, al.offset, ":");
+        result.append(bp, static_cast<std::size_t>(ep - bp));
+        pending = cur += 2;
+        continue;
+      }
+      if (*(cur + 1) == ':' && cur + 2 != end) {
+        if (*(cur + 2) == 'z') {
+          // Formats %::z.
+          if (cur - 1 != pending) {
+            FormatTM(&result, std::string(pending, cur - 1), tm);
+          }
+          bp = FormatOffset(ep, al.offset, ":*");
+          result.append(bp, static_cast<std::size_t>(ep - bp));
+          pending = cur += 3;
+          continue;
+        }
+        if (*(cur + 2) == ':' && cur + 3 != end) {
+          if (*(cur + 3) == 'z') {
+            // Formats %:::z.
+            if (cur - 1 != pending) {
+              FormatTM(&result, std::string(pending, cur - 1), tm);
+            }
+            bp = FormatOffset(ep, al.offset, ":*:");
+            result.append(bp, static_cast<std::size_t>(ep - bp));
+            pending = cur += 4;
+            continue;
+          }
+        }
+      }
+    }
+
     // Loop if there is no E modifier.
     if (*cur != 'E' || ++cur == end) continue;
 
     // Format our extensions.
-    if (*cur == 'T') { 
-      // Formats %ET. 
-      if (cur - 2 != pending) { 
-        FormatTM(&result, std::string(pending, cur - 2), tm); 
-      } 
-      result.append("T"); 
-      pending = ++cur; 
-    } else if (*cur == 'z') { 
+    if (*cur == 'T') {
+      // Formats %ET.
+      if (cur - 2 != pending) {
+        FormatTM(&result, std::string(pending, cur - 2), tm);
+      }
+      result.append("T");
+      pending = ++cur;
+    } else if (*cur == 'z') {
       // Formats %Ez.
       if (cur - 2 != pending) {
         FormatTM(&result, std::string(pending, cur - 2), tm);
       }
-      bp = FormatOffset(ep, al.offset, ":"); 
+      bp = FormatOffset(ep, al.offset, ":");
       result.append(bp, static_cast<std::size_t>(ep - bp));
       pending = ++cur;
-    } else if (*cur == '*' && cur + 1 != end && *(cur + 1) == 'z') { 
-      // Formats %E*z. 
-      if (cur - 2 != pending) { 
-        FormatTM(&result, std::string(pending, cur - 2), tm); 
-      } 
-      bp = FormatOffset(ep, al.offset, ":*"); 
-      result.append(bp, static_cast<std::size_t>(ep - bp)); 
-      pending = cur += 2; 
+    } else if (*cur == '*' && cur + 1 != end && *(cur + 1) == 'z') {
+      // Formats %E*z.
+      if (cur - 2 != pending) {
+        FormatTM(&result, std::string(pending, cur - 2), tm);
+      }
+      bp = FormatOffset(ep, al.offset, ":*");
+      result.append(bp, static_cast<std::size_t>(ep - bp));
+      pending = cur += 2;
     } else if (*cur == '*' && cur + 1 != end &&
                (*(cur + 1) == 'S' || *(cur + 1) == 'f')) {
       // Formats %E*S or %E*F.
@@ -573,32 +573,32 @@ std::string format(const std::string& format, const time_point<seconds>& tp,
 
 namespace {
 
-const char* ParseOffset(const char* dp, const char* mode, int* offset) { 
+const char* ParseOffset(const char* dp, const char* mode, int* offset) {
   if (dp != nullptr) {
-    const char first = *dp++; 
-    if (first == '+' || first == '-') { 
-      char sep = mode[0]; 
+    const char first = *dp++;
+    if (first == '+' || first == '-') {
+      char sep = mode[0];
       int hours = 0;
-      int minutes = 0; 
-      int seconds = 0; 
+      int minutes = 0;
+      int seconds = 0;
       const char* ap = ParseInt(dp, 2, 0, 23, &hours);
       if (ap != nullptr && ap - dp == 2) {
         dp = ap;
         if (sep != '\0' && *ap == sep) ++ap;
         const char* bp = ParseInt(ap, 2, 0, 59, &minutes);
-        if (bp != nullptr && bp - ap == 2) { 
-          dp = bp; 
-          if (sep != '\0' && *bp == sep) ++bp; 
-          const char* cp = ParseInt(bp, 2, 0, 59, &seconds); 
-          if (cp != nullptr && cp - bp == 2) dp = cp; 
-        } 
-        *offset = ((hours * 60 + minutes) * 60) + seconds; 
-        if (first == '-') *offset = -*offset; 
+        if (bp != nullptr && bp - ap == 2) {
+          dp = bp;
+          if (sep != '\0' && *bp == sep) ++bp;
+          const char* cp = ParseInt(bp, 2, 0, 59, &seconds);
+          if (cp != nullptr && cp - bp == 2) dp = cp;
+        }
+        *offset = ((hours * 60 + minutes) * 60) + seconds;
+        if (first == '-') *offset = -*offset;
       } else {
         dp = nullptr;
       }
-    } else if (first == 'Z' || first == 'z') {  // Zulu 
-      *offset = 0; 
+    } else if (first == 'Z' || first == 'z') {  // Zulu
+      *offset = 0;
     } else {
       dp = nullptr;
     }
@@ -648,32 +648,32 @@ const char* ParseTM(const char* dp, const char* fmt, std::tm* tm) {
   return dp;
 }
 
-// Sets year, tm_mon and tm_mday given the year, week_num, and tm_wday, 
-// and the day on which weeks are defined to start.  Returns false if year 
-// would need to move outside its bounds. 
-bool FromWeek(int week_num, weekday week_start, year_t* year, std::tm* tm) { 
-  const civil_year y(*year % 400); 
-  civil_day cd = prev_weekday(y, week_start);  // week 0 
-  cd = next_weekday(cd - 1, FromTmWday(tm->tm_wday)) + (week_num * 7); 
-  if (const year_t shift = cd.year() - y.year()) { 
-    if (shift > 0) { 
-      if (*year > std::numeric_limits<year_t>::max() - shift) return false; 
-    } else { 
-      if (*year < std::numeric_limits<year_t>::min() - shift) return false; 
-    } 
-    *year += shift; 
-  } 
-  tm->tm_mon = cd.month() - 1; 
-  tm->tm_mday = cd.day(); 
-  return true; 
-} 
- 
+// Sets year, tm_mon and tm_mday given the year, week_num, and tm_wday,
+// and the day on which weeks are defined to start.  Returns false if year
+// would need to move outside its bounds.
+bool FromWeek(int week_num, weekday week_start, year_t* year, std::tm* tm) {
+  const civil_year y(*year % 400);
+  civil_day cd = prev_weekday(y, week_start);  // week 0
+  cd = next_weekday(cd - 1, FromTmWday(tm->tm_wday)) + (week_num * 7);
+  if (const year_t shift = cd.year() - y.year()) {
+    if (shift > 0) {
+      if (*year > std::numeric_limits<year_t>::max() - shift) return false;
+    } else {
+      if (*year < std::numeric_limits<year_t>::min() - shift) return false;
+    }
+    *year += shift;
+  }
+  tm->tm_mon = cd.month() - 1;
+  tm->tm_mday = cd.day();
+  return true;
+}
+
 }  // namespace
 
 // Uses strptime(3) to parse the given input.  Supports the same extended
 // format specifiers as format(), although %E#S and %E*S are treated
-// identically (and similarly for %E#f and %E*f).  %Ez and %E*z also accept 
-// the same inputs. %ET accepts either 'T' or 't'. 
+// identically (and similarly for %E#f and %E*f).  %Ez and %E*z also accept
+// the same inputs. %ET accepts either 'T' or 't'.
 //
 // The standard specifiers from RFC3339_* (%Y, %m, %d, %H, %M, and %S) are
 // handled internally so that we can normally avoid strptime() altogether
@@ -685,7 +685,7 @@ bool FromWeek(int week_num, weekday week_start, year_t* year, std::tm* tm) {
 // We also handle the %z specifier to accommodate platforms that do not
 // support the tm_gmtoff extension to std::tm.  %Z is parsed but ignored.
 bool parse(const std::string& format, const std::string& input,
-           const time_zone& tz, time_point<seconds>* sec, 
+           const time_zone& tz, time_point<seconds>* sec,
            detail::femtoseconds* fs, std::string* err) {
   // The unparsed input.
   const char* data = input.c_str();  // NUL terminated
@@ -717,8 +717,8 @@ bool parse(const std::string& format, const std::string& input,
   const char* fmt = format.c_str();  // NUL terminated
   bool twelve_hour = false;
   bool afternoon = false;
-  int week_num = -1; 
-  weekday week_start = weekday::sunday; 
+  int week_num = -1;
+  weekday week_start = weekday::sunday;
 
   bool saw_percent_s = false;
   std::int_fast64_t percent_s = 0;
@@ -757,28 +757,28 @@ bool parse(const std::string& format, const std::string& input,
       case 'm':
         data = ParseInt(data, 2, 1, 12, &tm.tm_mon);
         if (data != nullptr) tm.tm_mon -= 1;
-        week_num = -1; 
+        week_num = -1;
         continue;
       case 'd':
-      case 'e': 
+      case 'e':
         data = ParseInt(data, 2, 1, 31, &tm.tm_mday);
-        week_num = -1; 
+        week_num = -1;
         continue;
-      case 'U': 
-        data = ParseInt(data, 0, 0, 53, &week_num); 
-        week_start = weekday::sunday; 
-        continue; 
-      case 'W': 
-        data = ParseInt(data, 0, 0, 53, &week_num); 
-        week_start = weekday::monday; 
-        continue; 
-      case 'u': 
-        data = ParseInt(data, 0, 1, 7, &tm.tm_wday); 
-        if (data != nullptr) tm.tm_wday %= 7; 
-        continue; 
-      case 'w': 
-        data = ParseInt(data, 0, 0, 6, &tm.tm_wday); 
-        continue; 
+      case 'U':
+        data = ParseInt(data, 0, 0, 53, &week_num);
+        week_start = weekday::sunday;
+        continue;
+      case 'W':
+        data = ParseInt(data, 0, 0, 53, &week_num);
+        week_start = weekday::monday;
+        continue;
+      case 'u':
+        data = ParseInt(data, 0, 1, 7, &tm.tm_wday);
+        if (data != nullptr) tm.tm_wday %= 7;
+        continue;
+      case 'w':
+        data = ParseInt(data, 0, 0, 6, &tm.tm_wday);
+        continue;
       case 'H':
         data = ParseInt(data, 2, 0, 23, &tm.tm_hour);
         twelve_hour = false;
@@ -801,7 +801,7 @@ bool parse(const std::string& format, const std::string& input,
         twelve_hour = false;
         break;
       case 'z':
-        data = ParseOffset(data, "", &offset); 
+        data = ParseOffset(data, "", &offset);
         if (data != nullptr) saw_offset = true;
         continue;
       case 'Z':  // ignored; zone abbreviations are ambiguous
@@ -814,36 +814,36 @@ bool parse(const std::string& format, const std::string& input,
                         &percent_s);
         if (data != nullptr) saw_percent_s = true;
         continue;
-      case ':': 
-        if (fmt[0] == 'z' || 
-            (fmt[0] == ':' && 
-             (fmt[1] == 'z' || (fmt[1] == ':' && fmt[2] == 'z')))) { 
-          data = ParseOffset(data, ":", &offset); 
-          if (data != nullptr) saw_offset = true; 
-          fmt += (fmt[0] == 'z') ? 1 : (fmt[1] == 'z') ? 2 : 3; 
-          continue; 
-        } 
-        break; 
-      case '%': 
-        data = (*data == '%' ? data + 1 : nullptr); 
-        continue; 
-      case 'E':
-        if (fmt[0] == 'T') { 
-          if (*data == 'T' || *data == 't') { 
-            ++data; 
-            ++fmt; 
-          } else {
-            data = nullptr; 
-          }
-          continue; 
-        } 
-        if (fmt[0] == 'z' || (fmt[0] == '*' && fmt[1] == 'z')) { 
-          data = ParseOffset(data, ":", &offset); 
+      case ':':
+        if (fmt[0] == 'z' ||
+            (fmt[0] == ':' &&
+             (fmt[1] == 'z' || (fmt[1] == ':' && fmt[2] == 'z')))) {
+          data = ParseOffset(data, ":", &offset);
           if (data != nullptr) saw_offset = true;
-          fmt += (fmt[0] == 'z') ? 1 : 2; 
+          fmt += (fmt[0] == 'z') ? 1 : (fmt[1] == 'z') ? 2 : 3;
           continue;
         }
-        if (fmt[0] == '*' && fmt[1] == 'S') { 
+        break;
+      case '%':
+        data = (*data == '%' ? data + 1 : nullptr);
+        continue;
+      case 'E':
+        if (fmt[0] == 'T') {
+          if (*data == 'T' || *data == 't') {
+            ++data;
+            ++fmt;
+          } else {
+            data = nullptr;
+          }
+          continue;
+        }
+        if (fmt[0] == 'z' || (fmt[0] == '*' && fmt[1] == 'z')) {
+          data = ParseOffset(data, ":", &offset);
+          if (data != nullptr) saw_offset = true;
+          fmt += (fmt[0] == 'z') ? 1 : 2;
+          continue;
+        }
+        if (fmt[0] == '*' && fmt[1] == 'S') {
           data = ParseInt(data, 2, 0, 60, &tm.tm_sec);
           if (data != nullptr && *data == '.') {
             data = ParseSubSeconds(data + 1, &subseconds);
@@ -851,14 +851,14 @@ bool parse(const std::string& format, const std::string& input,
           fmt += 2;
           continue;
         }
-        if (fmt[0] == '*' && fmt[1] == 'f') { 
+        if (fmt[0] == '*' && fmt[1] == 'f') {
           if (data != nullptr && std::isdigit(*data)) {
             data = ParseSubSeconds(data, &subseconds);
           }
           fmt += 2;
           continue;
         }
-        if (fmt[0] == '4' && fmt[1] == 'Y') { 
+        if (fmt[0] == '4' && fmt[1] == 'Y') {
           const char* bp = data;
           data = ParseInt(data, 4, year_t{-999}, year_t{9999}, &year);
           if (data != nullptr) {
@@ -908,7 +908,7 @@ bool parse(const std::string& format, const std::string& input,
     data = ParseTM(data, spec.c_str(), &tm);
 
     // If we successfully parsed %p we need to remember whether the result
-    // was AM or PM so that we can adjust tm_hour before time_zone::lookup(). 
+    // was AM or PM so that we can adjust tm_hour before time_zone::lookup().
     // So reparse the input with a known AM hour, and check if it is shifted
     // to a PM hour.
     if (spec == "%p" && data != nullptr) {
@@ -947,8 +947,8 @@ bool parse(const std::string& format, const std::string& input,
     return true;
   }
 
-  // If we saw %z, %Ez, or %E*z then we want to interpret the parsed fields 
-  // in UTC and then shift by that offset.  Otherwise we want to interpret 
+  // If we saw %z, %Ez, or %E*z then we want to interpret the parsed fields
+  // in UTC and then shift by that offset.  Otherwise we want to interpret
   // the fields directly in the passed time_zone.
   time_zone ptz = saw_offset ? utc_time_zone() : tz;
 
@@ -969,14 +969,14 @@ bool parse(const std::string& format, const std::string& input,
     year += 1900;
   }
 
-  // Compute year, tm.tm_mon and tm.tm_mday if we parsed a week number. 
-  if (week_num != -1) { 
-    if (!FromWeek(week_num, week_start, &year, &tm)) { 
-      if (err != nullptr) *err = "Out-of-range field"; 
-      return false; 
-    } 
-  } 
- 
+  // Compute year, tm.tm_mon and tm.tm_mday if we parsed a week number.
+  if (week_num != -1) {
+    if (!FromWeek(week_num, week_start, &year, &tm)) {
+      if (err != nullptr) *err = "Out-of-range field";
+      return false;
+    }
+  }
+
   const int month = tm.tm_mon + 1;
   civil_second cs(year, month, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 
@@ -998,15 +998,15 @@ bool parse(const std::string& format, const std::string& input,
 
   const auto tp = ptz.lookup(cs).pre;
   // Checks for overflow/underflow and returns an error as necessary.
-  if (tp == time_point<seconds>::max()) { 
-    const auto al = ptz.lookup(time_point<seconds>::max()); 
+  if (tp == time_point<seconds>::max()) {
+    const auto al = ptz.lookup(time_point<seconds>::max());
     if (cs > al.cs) {
       if (err != nullptr) *err = "Out-of-range field";
       return false;
     }
   }
-  if (tp == time_point<seconds>::min()) { 
-    const auto al = ptz.lookup(time_point<seconds>::min()); 
+  if (tp == time_point<seconds>::min()) {
+    const auto al = ptz.lookup(time_point<seconds>::min());
     if (cs < al.cs) {
       if (err != nullptr) *err = "Out-of-range field";
       return false;

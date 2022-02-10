@@ -34,14 +34,14 @@ Options:
 
   -D, --no-docstrings            Strip docstrings from the compiled module.
   -a, --annotate                 Produce a colorized HTML version of the source.
-  --annotate-coverage <cov.xml>  Annotate and include coverage information from cov.xml. 
+  --annotate-coverage <cov.xml>  Annotate and include coverage information from cov.xml.
   --line-directives              Produce #line directives pointing to the .pyx source
   --cplus                        Output a C++ rather than C file.
   --embed[=<method_name>]        Generate a main() function that embeds the Python interpreter.
   -2                             Compile based on Python-2 syntax and code semantics.
   -3                             Compile based on Python-3 syntax and code semantics.
-  --3str                         Compile based on Python-3 syntax and code semantics without 
-                                 assuming unicode by default for string literals under Python 2. 
+  --3str                         Compile based on Python-3 syntax and code semantics without
+                                 assuming unicode by default for string literals under Python 2.
   --lenient                      Change some compile time errors to runtime errors to
                                  improve Python compatibility
   --capi-reexport-cincludes      Add cincluded headers to any auto-generated header files.
@@ -49,11 +49,11 @@ Options:
   --warning-errors, -Werror      Make all warnings into errors
   --warning-extra, -Wextra       Enable extra warnings
   -X, --directive <name>=<value>[,<name=value,...] Overrides a compiler directive
-  -E, --compile-time-env name=value[,<name=value,...] Provides compile time env like DEF would do. 
+  -E, --compile-time-env name=value[,<name=value,...] Provides compile time env like DEF would do.
 """
 
 
-# The following experimental options are supported only on MacOSX: 
+# The following experimental options are supported only on MacOSX:
 #  -C, --compile    Compile generated .c file to .o file
 #  --link           Link .o file to produce extension module (implies -C)
 #  -+, --cplus      Use C++ compiler for compiling and linking
@@ -67,26 +67,26 @@ def bad_usage():
 def parse_command_line(args):
     from .Main import CompilationOptions, default_options
 
-    pending_arg = [] 
- 
-    def pop_arg():
-        if not args or pending_arg: 
-            bad_usage()
-        if '=' in args[0] and args[0].startswith('--'):  # allow "--long-option=xyz" 
-            name, value = args.pop(0).split('=', 1) 
-            pending_arg.append(value) 
-            return name 
-        return args.pop(0) 
+    pending_arg = []
 
-    def pop_value(default=None): 
-        if pending_arg: 
-            return pending_arg.pop() 
-        elif default is not None: 
-            return default 
-        elif not args: 
-            bad_usage() 
-        return args.pop(0) 
- 
+    def pop_arg():
+        if not args or pending_arg:
+            bad_usage()
+        if '=' in args[0] and args[0].startswith('--'):  # allow "--long-option=xyz"
+            name, value = args.pop(0).split('=', 1)
+            pending_arg.append(value)
+            return name
+        return args.pop(0)
+
+    def pop_value(default=None):
+        if pending_arg:
+            return pending_arg.pop()
+        elif default is not None:
+            return default
+        elif not args:
+            bad_usage()
+        return args.pop(0)
+
     def get_param(option):
         tail = option[2:]
         if tail:
@@ -106,15 +106,15 @@ def parse_command_line(args):
             elif option in ("-+", "--cplus"):
                 options.cplus = 1
             elif option == "--embed":
-                Options.embed = pop_value("main") 
+                Options.embed = pop_value("main")
             elif option.startswith("-I"):
                 options.include_path.append(get_param(option))
             elif option == "--include-dir":
-                options.include_path.append(pop_value()) 
+                options.include_path.append(pop_value())
             elif option in ("-w", "--working"):
-                options.working_path = pop_value() 
+                options.working_path = pop_value()
             elif option in ("-o", "--output-file"):
-                options.output_file = pop_value() 
+                options.output_file = pop_value()
             elif option in ("-t", "--timestamps"):
                 options.timestamps = 1
             elif option in ("-f", "--force"):
@@ -124,16 +124,16 @@ def parse_command_line(args):
             elif option in ("-p", "--embed-positions"):
                 Options.embed_pos_in_docstring = 1
             elif option in ("-z", "--pre-import"):
-                Options.pre_import = pop_value() 
+                Options.pre_import = pop_value()
             elif option == "--cleanup":
-                Options.generate_cleanup_code = int(pop_value()) 
+                Options.generate_cleanup_code = int(pop_value())
             elif option in ("-D", "--no-docstrings"):
                 Options.docstrings = False
             elif option in ("-a", "--annotate"):
                 Options.annotate = True
-            elif option == "--annotate-coverage": 
-                Options.annotate = True 
-                Options.annotate_coverage_xml = pop_value() 
+            elif option == "--annotate-coverage":
+                Options.annotate = True
+                Options.annotate_coverage_xml = pop_value()
             elif option == "--convert-range":
                 Options.convert_range = True
             elif option == "--line-directives":
@@ -145,22 +145,22 @@ def parse_command_line(args):
                 options.output_dir = os.curdir
             elif option == "--gdb-outdir":
                 options.gdb_debug = True
-                options.output_dir = pop_value() 
+                options.output_dir = pop_value()
             elif option == "--lenient":
                 Options.error_on_unknown_names = False
                 Options.error_on_uninitialized = False
-            elif option == '--module-name': 
-                options.module_name = pop_arg() 
-            elif option == '--init-suffix': 
-                options.init_suffix = pop_arg() 
+            elif option == '--module-name':
+                options.module_name = pop_arg()
+            elif option == '--init-suffix':
+                options.init_suffix = pop_arg()
             elif option == '--source-root':
                 Options.source_root = pop_arg()
             elif option == '-2':
                 options.language_level = 2
             elif option == '-3':
                 options.language_level = 3
-            elif option == '--3str': 
-                options.language_level = '3str' 
+            elif option == '--3str':
+                options.language_level = '3str'
             elif option == "--capi-reexport-cincludes":
                 options.capi_reexport_cincludes = True
             elif option == "--fast-fail":
@@ -177,25 +177,25 @@ def parse_command_line(args):
                 if option.startswith('-X') and option[2:].strip():
                     x_args = option[2:]
                 else:
-                    x_args = pop_value() 
+                    x_args = pop_value()
                 try:
                     options.compiler_directives = Options.parse_directive_list(
                         x_args, relaxed_bool=True,
                         current_settings=options.compiler_directives)
-                except ValueError as e: 
+                except ValueError as e:
                     sys.stderr.write("Error in compiler directive: %s\n" % e.args[0])
                     sys.exit(1)
-            elif option == "--compile-time-env" or option.startswith('-E'): 
-                if option.startswith('-E') and option[2:].strip(): 
-                    x_args = option[2:] 
-                else: 
-                    x_args = pop_value() 
-                try: 
-                    options.compile_time_env = Options.parse_compile_time_env( 
-                        x_args, current_settings=options.compile_time_env) 
-                except ValueError as e: 
-                    sys.stderr.write("Error in compile-time-env: %s\n" % e.args[0]) 
-                    sys.exit(1) 
+            elif option == "--compile-time-env" or option.startswith('-E'):
+                if option.startswith('-E') and option[2:].strip():
+                    x_args = option[2:]
+                else:
+                    x_args = pop_value()
+                try:
+                    options.compile_time_env = Options.parse_compile_time_env(
+                        x_args, current_settings=options.compile_time_env)
+                except ValueError as e:
+                    sys.stderr.write("Error in compile-time-env: %s\n" % e.args[0])
+                    sys.exit(1)
             elif option.startswith('--debug'):
                 option = option[2:].replace('-', '_')
                 from . import DebugFlags
@@ -212,10 +212,10 @@ def parse_command_line(args):
                 sys.exit(1)
         else:
             sources.append(pop_arg())
- 
-    if pending_arg: 
-        bad_usage() 
- 
+
+    if pending_arg:
+        bad_usage()
+
     if options.use_listing_file and len(sources) > 1:
         sys.stderr.write(
             "cython: Only one source file allowed when using -o\n")

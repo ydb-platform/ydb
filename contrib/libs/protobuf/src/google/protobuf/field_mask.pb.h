@@ -51,7 +51,7 @@ struct PROTOBUF_EXPORT TableStruct_google_2fprotobuf_2ffield_5fmask_2eproto {
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
   static const ::PROTOBUF_NAMESPACE_ID::uint32 offsets[];
-}; 
+};
 PROTOBUF_EXPORT extern const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_google_2fprotobuf_2ffield_5fmask_2eproto;
 PROTOBUF_NAMESPACE_OPEN
 class FieldMask;
@@ -82,15 +82,15 @@ class PROTOBUF_EXPORT FieldMask final :
     CopyFrom(from);
     return *this;
   }
-  inline FieldMask& operator=(FieldMask&& from) noexcept { 
+  inline FieldMask& operator=(FieldMask&& from) noexcept {
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else { 
-      CopyFrom(from); 
-    } 
-    return *this; 
-  } 
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
@@ -104,16 +104,16 @@ class PROTOBUF_EXPORT FieldMask final :
   static const FieldMask& default_instance() {
     return *internal_default_instance();
   }
-  static inline const FieldMask* internal_default_instance() { 
-    return reinterpret_cast<const FieldMask*>( 
-               &_FieldMask_default_instance_); 
-  } 
+  static inline const FieldMask* internal_default_instance() {
+    return reinterpret_cast<const FieldMask*>(
+               &_FieldMask_default_instance_);
+  }
   static constexpr int kIndexInFileMessages =
-    0; 
- 
-  friend void swap(FieldMask& a, FieldMask& b) { 
-    a.Swap(&b); 
-  } 
+    0;
+
+  friend void swap(FieldMask& a, FieldMask& b) {
+    a.Swap(&b);
+  }
   inline void Swap(FieldMask* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -191,12 +191,12 @@ class PROTOBUF_EXPORT FieldMask final :
   const TProtoStringType& paths(int index) const;
   TProtoStringType* mutable_paths(int index);
   void set_paths(int index, const TProtoStringType& value);
-  void set_paths(int index, TProtoStringType&& value); 
+  void set_paths(int index, TProtoStringType&& value);
   void set_paths(int index, const char* value);
   void set_paths(int index, const char* value, size_t size);
   TProtoStringType* add_paths();
   void add_paths(const TProtoStringType& value);
-  void add_paths(TProtoStringType&& value); 
+  void add_paths(TProtoStringType&& value);
   void add_paths(const char* value);
   void add_paths(const char* value, size_t size);
   const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<TProtoStringType>& paths() const;
@@ -222,10 +222,10 @@ class PROTOBUF_EXPORT FieldMask final :
 
 // ===================================================================
 
-#ifdef __GNUC__ 
-  #pragma GCC diagnostic push 
-  #pragma GCC diagnostic ignored "-Wstrict-aliasing" 
-#endif  // __GNUC__ 
+#ifdef __GNUC__
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif  // __GNUC__
 // FieldMask
 
 // repeated string paths = 1;
@@ -258,10 +258,10 @@ inline void FieldMask::set_paths(int index, const TProtoStringType& value) {
   paths_.Mutable(index)->assign(value);
   // @@protoc_insertion_point(field_set:google.protobuf.FieldMask.paths)
 }
-inline void FieldMask::set_paths(int index, TProtoStringType&& value) { 
+inline void FieldMask::set_paths(int index, TProtoStringType&& value) {
   paths_.Mutable(index)->assign(std::move(value));
-  // @@protoc_insertion_point(field_set:google.protobuf.FieldMask.paths) 
-} 
+  // @@protoc_insertion_point(field_set:google.protobuf.FieldMask.paths)
+}
 inline void FieldMask::set_paths(int index, const char* value) {
   GOOGLE_DCHECK(value != nullptr);
   paths_.Mutable(index)->assign(value);
@@ -279,10 +279,10 @@ inline void FieldMask::add_paths(const TProtoStringType& value) {
   paths_.Add()->assign(value);
   // @@protoc_insertion_point(field_add:google.protobuf.FieldMask.paths)
 }
-inline void FieldMask::add_paths(TProtoStringType&& value) { 
-  paths_.Add(std::move(value)); 
-  // @@protoc_insertion_point(field_add:google.protobuf.FieldMask.paths) 
-} 
+inline void FieldMask::add_paths(TProtoStringType&& value) {
+  paths_.Add(std::move(value));
+  // @@protoc_insertion_point(field_add:google.protobuf.FieldMask.paths)
+}
 inline void FieldMask::add_paths(const char* value) {
   GOOGLE_DCHECK(value != nullptr);
   paths_.Add()->assign(value);
@@ -303,14 +303,14 @@ FieldMask::mutable_paths() {
   return &paths_;
 }
 
-#ifdef __GNUC__ 
-  #pragma GCC diagnostic pop 
-#endif  // __GNUC__ 
+#ifdef __GNUC__
+  #pragma GCC diagnostic pop
+#endif  // __GNUC__
 
 // @@protoc_insertion_point(namespace_scope)
 
 PROTOBUF_NAMESPACE_CLOSE
- 
+
 // @@protoc_insertion_point(global_scope)
 
 #include <google/protobuf/port_undef.inc>

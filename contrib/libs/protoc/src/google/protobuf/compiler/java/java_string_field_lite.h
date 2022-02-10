@@ -77,7 +77,7 @@ class ImmutableStringFieldLiteGenerator : public ImmutableFieldLiteGenerator {
   void GenerateKotlinDslMembers(io::Printer* printer) const override;
 
   TProtoStringType GetBoxedType() const override;
- 
+
  protected:
   const FieldDescriptor* descriptor_;
   std::map<TProtoStringType, TProtoStringType> variables_;
@@ -122,7 +122,7 @@ class RepeatedImmutableStringFieldLiteGenerator
   void GenerateKotlinDslMembers(io::Printer* printer) const override;
 
   TProtoStringType GetBoxedType() const override;
- 
+
  private:
   const FieldDescriptor* descriptor_;
   std::map<TProtoStringType, TProtoStringType> variables_;

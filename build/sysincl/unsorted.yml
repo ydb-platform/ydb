@@ -500,7 +500,7 @@
   - ioLib.h
   - iosLib.h
   - resolvLib.h
-  - rtpLib.h 
+  - rtpLib.h
   - pipeDrv.h
   - selectLib.h
   #endif
@@ -543,7 +543,7 @@
   - perliol.h
   #endif
   #if defined(__NetBSD__)
-  - lwp.h 
+  - lwp.h
   - perfuse.h
   #endif
   #if V8_OS_QNX
@@ -551,7 +551,7 @@
   #endif
   #if V8_OS_AIX
   - sys/systemcfg.h
-  - sys/thread.h 
+  - sys/thread.h
   #endif
   - mbarrier.h
   - iostream.h
@@ -675,7 +675,7 @@
   - tr1/complex
   - tbb/scalable_allocator.h
   - libmemcached/dtrace_probes.h
-  # unknown 
+  # unknown
   - win_stdint.h
   - probes.h
   - thread.h
@@ -965,7 +965,7 @@
   #endif
   - zend_exceptions.h
   #if MATLAB_MEX_FILE
-  # unknown 
+  # unknown
   - GL/glx.h
   - CL/va_ext.h
   - sys/sysconf.h

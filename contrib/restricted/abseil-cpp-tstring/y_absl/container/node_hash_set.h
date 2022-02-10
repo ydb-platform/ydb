@@ -44,7 +44,7 @@
 #include "y_absl/memory/memory.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 template <typename T>
 struct NodeHashSetPolicy;
@@ -77,7 +77,7 @@ struct NodeHashSetPolicy;
 //
 //   // Create a node hash set of three strings
 //   y_absl::node_hash_set<TString> ducks =
-//     {"huey", "dewey", "louie"}; 
+//     {"huey", "dewey", "louie"};
 //
 //  // Insert a new element into the node hash set
 //  ducks.insert("donald");
@@ -111,7 +111,7 @@ class node_hash_set
   // * Initializer List constructor
   //
   //   y_absl::node_hash_set<TString> set2 =
-  //       {{"huey"}, {"dewey"}, {"louie"}}; 
+  //       {{"huey"}, {"dewey"}, {"louie"}};
   //
   // * Copy constructor
   //
@@ -430,14 +430,14 @@ class node_hash_set
   using Base::key_eq;
 };
 
-// erase_if(node_hash_set<>, Pred) 
-// 
-// Erases all elements that satisfy the predicate `pred` from the container `c`. 
-template <typename T, typename H, typename E, typename A, typename Predicate> 
-void erase_if(node_hash_set<T, H, E, A>& c, Predicate pred) { 
-  container_internal::EraseIf(pred, &c); 
-} 
- 
+// erase_if(node_hash_set<>, Pred)
+//
+// Erases all elements that satisfy the predicate `pred` from the container `c`.
+template <typename T, typename H, typename E, typename A, typename Predicate>
+void erase_if(node_hash_set<T, H, E, A>& c, Predicate pred) {
+  container_internal::EraseIf(pred, &c);
+}
+
 namespace container_internal {
 
 template <class T>
@@ -487,7 +487,7 @@ struct IsUnorderedContainer<y_absl::node_hash_set<Key, Hash, KeyEqual, Allocator
     : std::true_type {};
 
 }  // namespace container_algorithm_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_NODE_HASH_SET_H_

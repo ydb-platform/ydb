@@ -10,7 +10,7 @@
   - bits/fenv.h
   - bits/libc-lock.h
   - bits/reg.h
-  - bits/types.h 
+  - bits/types.h
   - bits/wordsize.h
   - error.h
   - execinfo.h
@@ -42,7 +42,7 @@
   - sgtty.h
   - sys/bitypes.h
   - sys/cdefs.h
-  - sys/memfd.h 
+  - sys/memfd.h
   - sys/queue.h
   - sys/platform/ppc.h
   - sys/socketvar.h

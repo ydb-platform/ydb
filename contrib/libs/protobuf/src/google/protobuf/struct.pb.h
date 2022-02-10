@@ -58,16 +58,16 @@ struct PROTOBUF_EXPORT TableStruct_google_2fprotobuf_2fstruct_2eproto {
 };
 PROTOBUF_EXPORT extern const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_google_2fprotobuf_2fstruct_2eproto;
 PROTOBUF_NAMESPACE_OPEN
-class ListValue; 
+class ListValue;
 struct ListValueDefaultTypeInternal;
 PROTOBUF_EXPORT extern ListValueDefaultTypeInternal _ListValue_default_instance_;
-class Struct; 
+class Struct;
 struct StructDefaultTypeInternal;
 PROTOBUF_EXPORT extern StructDefaultTypeInternal _Struct_default_instance_;
 class Struct_FieldsEntry_DoNotUse;
 struct Struct_FieldsEntry_DoNotUseDefaultTypeInternal;
 PROTOBUF_EXPORT extern Struct_FieldsEntry_DoNotUseDefaultTypeInternal _Struct_FieldsEntry_DoNotUse_default_instance_;
-class Value; 
+class Value;
 struct ValueDefaultTypeInternal;
 PROTOBUF_EXPORT extern ValueDefaultTypeInternal _Value_default_instance_;
 PROTOBUF_NAMESPACE_CLOSE
@@ -128,8 +128,8 @@ public:
   ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
 };
 
-// ------------------------------------------------------------------- 
- 
+// -------------------------------------------------------------------
+
 class PROTOBUF_EXPORT Struct final :
     public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:google.protobuf.Struct) */ {
  public:
@@ -147,38 +147,38 @@ class PROTOBUF_EXPORT Struct final :
     CopyFrom(from);
     return *this;
   }
-  inline Struct& operator=(Struct&& from) noexcept { 
+  inline Struct& operator=(Struct&& from) noexcept {
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else { 
-      CopyFrom(from); 
-    } 
-    return *this; 
-  } 
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  } 
+  }
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
-  } 
+  }
   static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
     return default_instance().GetMetadata().reflection;
   }
   static const Struct& default_instance() {
     return *internal_default_instance();
   }
-  static inline const Struct* internal_default_instance() { 
-    return reinterpret_cast<const Struct*>( 
-               &_Struct_default_instance_); 
-  } 
+  static inline const Struct* internal_default_instance() {
+    return reinterpret_cast<const Struct*>(
+               &_Struct_default_instance_);
+  }
   static constexpr int kIndexInFileMessages =
-    1; 
- 
-  friend void swap(Struct& a, Struct& b) { 
-    a.Swap(&b); 
-  } 
+    1;
+
+  friend void swap(Struct& a, Struct& b) {
+    a.Swap(&b);
+  }
   inline void Swap(Struct* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -227,11 +227,11 @@ class PROTOBUF_EXPORT Struct final :
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
     return "google.protobuf.Struct";
   }
-  protected: 
+  protected:
   explicit Struct(::PROTOBUF_NAMESPACE_ID::Arena* arena,
                        bool is_message_owned = false);
   private:
-  static void ArenaDtor(void* object); 
+  static void ArenaDtor(void* object);
   inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
   public:
 
@@ -270,8 +270,8 @@ class PROTOBUF_EXPORT Struct final :
   class _Internal;
 
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
-  typedef void InternalArenaConstructable_; 
-  typedef void DestructorSkippable_; 
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
   ::PROTOBUF_NAMESPACE_ID::internal::MapField<
       Struct_FieldsEntry_DoNotUse,
       TProtoStringType, PROTOBUF_NAMESPACE_ID::Value,
@@ -299,22 +299,22 @@ class PROTOBUF_EXPORT Value final :
     CopyFrom(from);
     return *this;
   }
-  inline Value& operator=(Value&& from) noexcept { 
+  inline Value& operator=(Value&& from) noexcept {
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else { 
-      CopyFrom(from); 
-    } 
-    return *this; 
-  } 
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  } 
+  }
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
-  } 
+  }
   static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
     return default_instance().GetMetadata().reflection;
   }
@@ -331,16 +331,16 @@ class PROTOBUF_EXPORT Value final :
     KIND_NOT_SET = 0,
   };
 
-  static inline const Value* internal_default_instance() { 
-    return reinterpret_cast<const Value*>( 
-               &_Value_default_instance_); 
-  } 
+  static inline const Value* internal_default_instance() {
+    return reinterpret_cast<const Value*>(
+               &_Value_default_instance_);
+  }
   static constexpr int kIndexInFileMessages =
-    2; 
- 
-  friend void swap(Value& a, Value& b) { 
-    a.Swap(&b); 
-  } 
+    2;
+
+  friend void swap(Value& a, Value& b) {
+    a.Swap(&b);
+  }
   inline void Swap(Value* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -389,11 +389,11 @@ class PROTOBUF_EXPORT Value final :
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
     return "google.protobuf.Value";
   }
-  protected: 
+  protected:
   explicit Value(::PROTOBUF_NAMESPACE_ID::Arena* arena,
                        bool is_message_owned = false);
   private:
-  static void ArenaDtor(void* object); 
+  static void ArenaDtor(void* object);
   inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
   public:
 
@@ -414,7 +414,7 @@ class PROTOBUF_EXPORT Value final :
     kStructValueFieldNumber = 5,
     kListValueFieldNumber = 6,
   };
-  // .google.protobuf.NullValue null_value = 1; 
+  // .google.protobuf.NullValue null_value = 1;
   bool has_null_value() const;
   private:
   bool _internal_has_null_value() const;
@@ -427,7 +427,7 @@ class PROTOBUF_EXPORT Value final :
   void _internal_set_null_value(PROTOBUF_NAMESPACE_ID::NullValue value);
   public:
 
-  // double number_value = 2; 
+  // double number_value = 2;
   bool has_number_value() const;
   private:
   bool _internal_has_number_value() const;
@@ -440,7 +440,7 @@ class PROTOBUF_EXPORT Value final :
   void _internal_set_number_value(double value);
   public:
 
-  // string string_value = 3; 
+  // string string_value = 3;
   bool has_string_value() const;
   private:
   bool _internal_has_string_value() const;
@@ -458,7 +458,7 @@ class PROTOBUF_EXPORT Value final :
   TProtoStringType* _internal_mutable_string_value();
   public:
 
-  // bool bool_value = 4; 
+  // bool bool_value = 4;
   bool has_bool_value() const;
   private:
   bool _internal_has_bool_value() const;
@@ -471,7 +471,7 @@ class PROTOBUF_EXPORT Value final :
   void _internal_set_bool_value(bool value);
   public:
 
-  // .google.protobuf.Struct struct_value = 5; 
+  // .google.protobuf.Struct struct_value = 5;
   bool has_struct_value() const;
   private:
   bool _internal_has_struct_value() const;
@@ -481,15 +481,15 @@ class PROTOBUF_EXPORT Value final :
   PROTOBUF_MUST_USE_RESULT PROTOBUF_NAMESPACE_ID::Struct* release_struct_value();
   PROTOBUF_NAMESPACE_ID::Struct* mutable_struct_value();
   void set_allocated_struct_value(PROTOBUF_NAMESPACE_ID::Struct* struct_value);
-  private: 
+  private:
   const PROTOBUF_NAMESPACE_ID::Struct& _internal_struct_value() const;
   PROTOBUF_NAMESPACE_ID::Struct* _internal_mutable_struct_value();
-  public: 
-  void unsafe_arena_set_allocated_struct_value( 
+  public:
+  void unsafe_arena_set_allocated_struct_value(
       PROTOBUF_NAMESPACE_ID::Struct* struct_value);
   PROTOBUF_NAMESPACE_ID::Struct* unsafe_arena_release_struct_value();
 
-  // .google.protobuf.ListValue list_value = 6; 
+  // .google.protobuf.ListValue list_value = 6;
   bool has_list_value() const;
   private:
   bool _internal_has_list_value() const;
@@ -499,11 +499,11 @@ class PROTOBUF_EXPORT Value final :
   PROTOBUF_MUST_USE_RESULT PROTOBUF_NAMESPACE_ID::ListValue* release_list_value();
   PROTOBUF_NAMESPACE_ID::ListValue* mutable_list_value();
   void set_allocated_list_value(PROTOBUF_NAMESPACE_ID::ListValue* list_value);
-  private: 
+  private:
   const PROTOBUF_NAMESPACE_ID::ListValue& _internal_list_value() const;
   PROTOBUF_NAMESPACE_ID::ListValue* _internal_mutable_list_value();
-  public: 
-  void unsafe_arena_set_allocated_list_value( 
+  public:
+  void unsafe_arena_set_allocated_list_value(
       PROTOBUF_NAMESPACE_ID::ListValue* list_value);
   PROTOBUF_NAMESPACE_ID::ListValue* unsafe_arena_release_list_value();
 
@@ -512,19 +512,19 @@ class PROTOBUF_EXPORT Value final :
   // @@protoc_insertion_point(class_scope:google.protobuf.Value)
  private:
   class _Internal;
-  void set_has_null_value(); 
-  void set_has_number_value(); 
-  void set_has_string_value(); 
-  void set_has_bool_value(); 
-  void set_has_struct_value(); 
-  void set_has_list_value(); 
+  void set_has_null_value();
+  void set_has_number_value();
+  void set_has_string_value();
+  void set_has_bool_value();
+  void set_has_struct_value();
+  void set_has_list_value();
 
   inline bool has_kind() const;
   inline void clear_has_kind();
 
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
-  typedef void InternalArenaConstructable_; 
-  typedef void DestructorSkippable_; 
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
   union KindUnion {
     constexpr KindUnion() : _constinit_{} {}
       ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized _constinit_;
@@ -559,38 +559,38 @@ class PROTOBUF_EXPORT ListValue final :
     CopyFrom(from);
     return *this;
   }
-  inline ListValue& operator=(ListValue&& from) noexcept { 
+  inline ListValue& operator=(ListValue&& from) noexcept {
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else { 
-      CopyFrom(from); 
-    } 
-    return *this; 
-  } 
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  } 
+  }
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
-  } 
+  }
   static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
     return default_instance().GetMetadata().reflection;
   }
   static const ListValue& default_instance() {
     return *internal_default_instance();
   }
-  static inline const ListValue* internal_default_instance() { 
-    return reinterpret_cast<const ListValue*>( 
-               &_ListValue_default_instance_); 
-  } 
+  static inline const ListValue* internal_default_instance() {
+    return reinterpret_cast<const ListValue*>(
+               &_ListValue_default_instance_);
+  }
   static constexpr int kIndexInFileMessages =
-    3; 
- 
-  friend void swap(ListValue& a, ListValue& b) { 
-    a.Swap(&b); 
-  } 
+    3;
+
+  friend void swap(ListValue& a, ListValue& b) {
+    a.Swap(&b);
+  }
   inline void Swap(ListValue* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -639,11 +639,11 @@ class PROTOBUF_EXPORT ListValue final :
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
     return "google.protobuf.ListValue";
   }
-  protected: 
+  protected:
   explicit ListValue(::PROTOBUF_NAMESPACE_ID::Arena* arena,
                        bool is_message_owned = false);
   private:
-  static void ArenaDtor(void* object); 
+  static void ArenaDtor(void* object);
   inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
   public:
 
@@ -682,8 +682,8 @@ class PROTOBUF_EXPORT ListValue final :
   class _Internal;
 
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
-  typedef void InternalArenaConstructable_; 
-  typedef void DestructorSkippable_; 
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
   ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< PROTOBUF_NAMESPACE_ID::Value > values_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_google_2fprotobuf_2fstruct_2eproto;
@@ -693,12 +693,12 @@ class PROTOBUF_EXPORT ListValue final :
 
 // ===================================================================
 
-#ifdef __GNUC__ 
-  #pragma GCC diagnostic push 
-  #pragma GCC diagnostic ignored "-Wstrict-aliasing" 
-#endif  // __GNUC__ 
-// ------------------------------------------------------------------- 
- 
+#ifdef __GNUC__
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // Struct
 
 // map<string, .google.protobuf.Value> fields = 1;
@@ -734,7 +734,7 @@ Struct::mutable_fields() {
 
 // Value
 
-// .google.protobuf.NullValue null_value = 1; 
+// .google.protobuf.NullValue null_value = 1;
 inline bool Value::_internal_has_null_value() const {
   return kind_case() == kNullValue;
 }
@@ -772,7 +772,7 @@ inline void Value::set_null_value(PROTOBUF_NAMESPACE_ID::NullValue value) {
   // @@protoc_insertion_point(field_set:google.protobuf.Value.null_value)
 }
 
-// double number_value = 2; 
+// double number_value = 2;
 inline bool Value::_internal_has_number_value() const {
   return kind_case() == kNumberValue;
 }
@@ -810,7 +810,7 @@ inline void Value::set_number_value(double value) {
   // @@protoc_insertion_point(field_set:google.protobuf.Value.number_value)
 }
 
-// string string_value = 3; 
+// string string_value = 3;
 inline bool Value::_internal_has_string_value() const {
   return kind_case() == kStringValue;
 }
@@ -847,7 +847,7 @@ inline TProtoStringType* Value::mutable_string_value() {
 }
 inline const TProtoStringType& Value::_internal_string_value() const {
   if (_internal_has_string_value()) {
-    return kind_.string_value_.Get(); 
+    return kind_.string_value_.Get();
   }
   return ::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited();
 }
@@ -892,7 +892,7 @@ inline void Value::set_allocated_string_value(TProtoStringType* string_value) {
   // @@protoc_insertion_point(field_set_allocated:google.protobuf.Value.string_value)
 }
 
-// bool bool_value = 4; 
+// bool bool_value = 4;
 inline bool Value::_internal_has_bool_value() const {
   return kind_case() == kBoolValue;
 }
@@ -930,7 +930,7 @@ inline void Value::set_bool_value(bool value) {
   // @@protoc_insertion_point(field_set:google.protobuf.Value.bool_value)
 }
 
-// .google.protobuf.Struct struct_value = 5; 
+// .google.protobuf.Struct struct_value = 5;
 inline bool Value::_internal_has_struct_value() const {
   return kind_case() == kStructValue;
 }
@@ -943,8 +943,8 @@ inline void Value::set_has_struct_value() {
 inline void Value::clear_struct_value() {
   if (_internal_has_struct_value()) {
     if (GetArenaForAllocation() == nullptr) {
-      delete kind_.struct_value_; 
-    } 
+      delete kind_.struct_value_;
+    }
     clear_has_kind();
   }
 }
@@ -955,26 +955,26 @@ inline PROTOBUF_NAMESPACE_ID::Struct* Value::release_struct_value() {
       PROTOBUF_NAMESPACE_ID::Struct* temp = kind_.struct_value_;
     if (GetArenaForAllocation() != nullptr) {
       temp = ::PROTOBUF_NAMESPACE_ID::internal::DuplicateIfNonNull(temp);
-    } 
+    }
     kind_.struct_value_ = nullptr;
     return temp;
-  } else { 
+  } else {
     return nullptr;
-  } 
-} 
+  }
+}
 inline const PROTOBUF_NAMESPACE_ID::Struct& Value::_internal_struct_value() const {
   return _internal_has_struct_value()
       ? *kind_.struct_value_
       : reinterpret_cast< PROTOBUF_NAMESPACE_ID::Struct&>(PROTOBUF_NAMESPACE_ID::_Struct_default_instance_);
-} 
+}
 inline const PROTOBUF_NAMESPACE_ID::Struct& Value::struct_value() const {
   // @@protoc_insertion_point(field_get:google.protobuf.Value.struct_value)
   return _internal_struct_value();
 }
 inline PROTOBUF_NAMESPACE_ID::Struct* Value::unsafe_arena_release_struct_value() {
-  // @@protoc_insertion_point(field_unsafe_arena_release:google.protobuf.Value.struct_value) 
+  // @@protoc_insertion_point(field_unsafe_arena_release:google.protobuf.Value.struct_value)
   if (_internal_has_struct_value()) {
-    clear_has_kind(); 
+    clear_has_kind();
     PROTOBUF_NAMESPACE_ID::Struct* temp = kind_.struct_value_;
     kind_.struct_value_ = nullptr;
     return temp;
@@ -988,7 +988,7 @@ inline void Value::unsafe_arena_set_allocated_struct_value(PROTOBUF_NAMESPACE_ID
     set_has_struct_value();
     kind_.struct_value_ = struct_value;
   }
-  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:google.protobuf.Value.struct_value) 
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:google.protobuf.Value.struct_value)
 }
 inline PROTOBUF_NAMESPACE_ID::Struct* Value::_internal_mutable_struct_value() {
   if (!_internal_has_struct_value()) {
@@ -1004,7 +1004,7 @@ inline PROTOBUF_NAMESPACE_ID::Struct* Value::mutable_struct_value() {
   return _msg;
 }
 
-// .google.protobuf.ListValue list_value = 6; 
+// .google.protobuf.ListValue list_value = 6;
 inline bool Value::_internal_has_list_value() const {
   return kind_case() == kListValue;
 }
@@ -1017,8 +1017,8 @@ inline void Value::set_has_list_value() {
 inline void Value::clear_list_value() {
   if (_internal_has_list_value()) {
     if (GetArenaForAllocation() == nullptr) {
-      delete kind_.list_value_; 
-    } 
+      delete kind_.list_value_;
+    }
     clear_has_kind();
   }
 }
@@ -1029,26 +1029,26 @@ inline PROTOBUF_NAMESPACE_ID::ListValue* Value::release_list_value() {
       PROTOBUF_NAMESPACE_ID::ListValue* temp = kind_.list_value_;
     if (GetArenaForAllocation() != nullptr) {
       temp = ::PROTOBUF_NAMESPACE_ID::internal::DuplicateIfNonNull(temp);
-    } 
+    }
     kind_.list_value_ = nullptr;
     return temp;
-  } else { 
+  } else {
     return nullptr;
-  } 
-} 
+  }
+}
 inline const PROTOBUF_NAMESPACE_ID::ListValue& Value::_internal_list_value() const {
   return _internal_has_list_value()
       ? *kind_.list_value_
       : reinterpret_cast< PROTOBUF_NAMESPACE_ID::ListValue&>(PROTOBUF_NAMESPACE_ID::_ListValue_default_instance_);
-} 
+}
 inline const PROTOBUF_NAMESPACE_ID::ListValue& Value::list_value() const {
   // @@protoc_insertion_point(field_get:google.protobuf.Value.list_value)
   return _internal_list_value();
 }
 inline PROTOBUF_NAMESPACE_ID::ListValue* Value::unsafe_arena_release_list_value() {
-  // @@protoc_insertion_point(field_unsafe_arena_release:google.protobuf.Value.list_value) 
+  // @@protoc_insertion_point(field_unsafe_arena_release:google.protobuf.Value.list_value)
   if (_internal_has_list_value()) {
-    clear_has_kind(); 
+    clear_has_kind();
     PROTOBUF_NAMESPACE_ID::ListValue* temp = kind_.list_value_;
     kind_.list_value_ = nullptr;
     return temp;
@@ -1062,7 +1062,7 @@ inline void Value::unsafe_arena_set_allocated_list_value(PROTOBUF_NAMESPACE_ID::
     set_has_list_value();
     kind_.list_value_ = list_value;
   }
-  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:google.protobuf.Value.list_value) 
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:google.protobuf.Value.list_value)
 }
 inline PROTOBUF_NAMESPACE_ID::ListValue* Value::_internal_mutable_list_value() {
   if (!_internal_has_list_value()) {
@@ -1131,20 +1131,20 @@ ListValue::values() const {
   return values_;
 }
 
-#ifdef __GNUC__ 
-  #pragma GCC diagnostic pop 
-#endif  // __GNUC__ 
+#ifdef __GNUC__
+  #pragma GCC diagnostic pop
+#endif  // __GNUC__
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
 
-// ------------------------------------------------------------------- 
+// -------------------------------------------------------------------
 
- 
+
 // @@protoc_insertion_point(namespace_scope)
 
 PROTOBUF_NAMESPACE_CLOSE
- 
+
 PROTOBUF_NAMESPACE_OPEN
 
 template <> struct is_proto_enum< PROTOBUF_NAMESPACE_ID::NullValue> : ::std::true_type {};

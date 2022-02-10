@@ -75,28 +75,28 @@ def find_lexer_class(name):
             return cls
 
 
-def find_lexer_class_by_name(_alias): 
-    """Lookup a lexer class by alias. 
- 
-    Like `get_lexer_by_name`, but does not instantiate the class. 
- 
-    .. versionadded:: 2.2 
-    """ 
-    if not _alias: 
-        raise ClassNotFound('no lexer for alias %r found' % _alias) 
-    # lookup builtin lexers 
+def find_lexer_class_by_name(_alias):
+    """Lookup a lexer class by alias.
+
+    Like `get_lexer_by_name`, but does not instantiate the class.
+
+    .. versionadded:: 2.2
+    """
+    if not _alias:
+        raise ClassNotFound('no lexer for alias %r found' % _alias)
+    # lookup builtin lexers
     for module_name, name, aliases, _, _ in LEXERS.values():
-        if _alias.lower() in aliases: 
-            if name not in _lexer_cache: 
-                _load_lexers(module_name) 
-            return _lexer_cache[name] 
-    # continue with lexers from setuptools entrypoints 
-    for cls in find_plugin_lexers(): 
-        if _alias.lower() in cls.aliases: 
-            return cls 
-    raise ClassNotFound('no lexer for alias %r found' % _alias) 
- 
- 
+        if _alias.lower() in aliases:
+            if name not in _lexer_cache:
+                _load_lexers(module_name)
+            return _lexer_cache[name]
+    # continue with lexers from setuptools entrypoints
+    for cls in find_plugin_lexers():
+        if _alias.lower() in cls.aliases:
+            return cls
+    raise ClassNotFound('no lexer for alias %r found' % _alias)
+
+
 def get_lexer_by_name(_alias, **options):
     """Get a lexer by an alias.
 
@@ -118,41 +118,41 @@ def get_lexer_by_name(_alias, **options):
     raise ClassNotFound('no lexer for alias %r found' % _alias)
 
 
-def load_lexer_from_file(filename, lexername="CustomLexer", **options): 
-    """Load a lexer from a file. 
- 
-    This method expects a file located relative to the current working 
-    directory, which contains a Lexer class. By default, it expects the 
-    Lexer to be name CustomLexer; you can specify your own class name 
-    as the second argument to this function. 
- 
-    Users should be very careful with the input, because this method 
-    is equivalent to running eval on the input file. 
- 
-    Raises ClassNotFound if there are any problems importing the Lexer. 
- 
-    .. versionadded:: 2.2 
-    """ 
-    try: 
-        # This empty dict will contain the namespace for the exec'd file 
-        custom_namespace = {} 
-        with open(filename, 'rb') as f: 
-            exec(f.read(), custom_namespace) 
-        # Retrieve the class `lexername` from that namespace 
-        if lexername not in custom_namespace: 
-            raise ClassNotFound('no valid %s class found in %s' % 
-                                (lexername, filename)) 
-        lexer_class = custom_namespace[lexername] 
-        # And finally instantiate it with the options 
-        return lexer_class(**options) 
+def load_lexer_from_file(filename, lexername="CustomLexer", **options):
+    """Load a lexer from a file.
+
+    This method expects a file located relative to the current working
+    directory, which contains a Lexer class. By default, it expects the
+    Lexer to be name CustomLexer; you can specify your own class name
+    as the second argument to this function.
+
+    Users should be very careful with the input, because this method
+    is equivalent to running eval on the input file.
+
+    Raises ClassNotFound if there are any problems importing the Lexer.
+
+    .. versionadded:: 2.2
+    """
+    try:
+        # This empty dict will contain the namespace for the exec'd file
+        custom_namespace = {}
+        with open(filename, 'rb') as f:
+            exec(f.read(), custom_namespace)
+        # Retrieve the class `lexername` from that namespace
+        if lexername not in custom_namespace:
+            raise ClassNotFound('no valid %s class found in %s' %
+                                (lexername, filename))
+        lexer_class = custom_namespace[lexername]
+        # And finally instantiate it with the options
+        return lexer_class(**options)
     except OSError as err:
         raise ClassNotFound('cannot read %s: %s' % (filename, err))
     except ClassNotFound:
-        raise 
-    except Exception as err: 
-        raise ClassNotFound('error when loading custom lexer: %s' % err) 
- 
- 
+        raise
+    except Exception as err:
+        raise ClassNotFound('error when loading custom lexer: %s' % err)
+
+
 def find_lexer_class_for_filename(_fn, code=None):
     """Get a lexer for a filename.
 
@@ -187,8 +187,8 @@ def find_lexer_class_for_filename(_fn, code=None):
         # gets turned into 0.0.  Run scripts/detect_missing_analyse_text.py
         # to find lexers which need it overridden.
         if code:
-            return cls.analyse_text(code) + bonus, cls.__name__ 
-        return cls.priority + bonus, cls.__name__ 
+            return cls.analyse_text(code) + bonus, cls.__name__
+        return cls.priority + bonus, cls.__name__
 
     if matches:
         matches.sort(key=get_rating)
@@ -292,12 +292,12 @@ def guess_lexer(_text, **options):
     """Guess a lexer by strong distinctions in the text (eg, shebang)."""
 
     if not isinstance(_text, str):
-        inencoding = options.get('inencoding', options.get('encoding')) 
-        if inencoding: 
-            _text = _text.decode(inencoding or 'utf8') 
-        else: 
-            _text, _ = guess_decode(_text) 
- 
+        inencoding = options.get('inencoding', options.get('encoding'))
+        if inencoding:
+            _text = _text.decode(inencoding or 'utf8')
+        else:
+            _text, _ = guess_decode(_text)
+
     # try to get a vim modeline first
     ft = get_filetype_from_buffer(_text)
 

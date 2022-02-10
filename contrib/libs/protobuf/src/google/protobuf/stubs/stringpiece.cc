@@ -33,7 +33,7 @@
 #include <algorithm>
 #include <climits>
 #include <string>
-#include <ostream> 
+#include <ostream>
 
 #include <google/protobuf/stubs/logging.h>
 

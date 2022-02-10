@@ -50,14 +50,14 @@ CURLcode Curl_buffer_send(struct dynbuf *in,
                           size_t included_body_bytes,
                           int socketindex);
 
-CURLcode Curl_add_timecondition(const struct connectdata *conn, 
+CURLcode Curl_add_timecondition(const struct connectdata *conn,
                                 struct dynbuf *buf);
 CURLcode Curl_add_custom_headers(struct connectdata *conn,
                                  bool is_connect,
                                  struct dynbuf *req_buffer);
-CURLcode Curl_http_compile_trailers(struct curl_slist *trailers, 
+CURLcode Curl_http_compile_trailers(struct curl_slist *trailers,
                                     struct dynbuf *buf,
-                                    struct Curl_easy *handle); 
+                                    struct Curl_easy *handle);
 
 /* protocol-specific functions set up to be called by the main engine */
 CURLcode Curl_http(struct connectdata *conn, bool *done);
@@ -102,10 +102,10 @@ CURLcode Curl_http_auth_act(struct connectdata *conn);
 
 #endif /* CURL_DISABLE_HTTP */
 
-#ifdef USE_NGHTTP3 
-struct h3out; /* see ngtcp2 */ 
-#endif 
- 
+#ifdef USE_NGHTTP3
+struct h3out; /* see ngtcp2 */
+#endif
+
 /****************************************************************************
  * HTTP unique setup
  ***************************************************************************/
@@ -152,38 +152,38 @@ struct HTTP {
   int status_code; /* HTTP status code */
   const uint8_t *pausedata; /* pointer to data received in on_data_chunk */
   size_t pauselen; /* the number of bytes left in data */
-  bool close_handled; /* TRUE if stream closure is handled by libcurl */ 
- 
-  char **push_headers;       /* allocated array */ 
-  size_t push_headers_used;  /* number of entries filled in */ 
-  size_t push_headers_alloc; /* number of entries allocated */ 
-#endif 
-#if defined(USE_NGHTTP2) || defined(USE_NGHTTP3) 
+  bool close_handled; /* TRUE if stream closure is handled by libcurl */
+
+  char **push_headers;       /* allocated array */
+  size_t push_headers_used;  /* number of entries filled in */
+  size_t push_headers_alloc; /* number of entries allocated */
+#endif
+#if defined(USE_NGHTTP2) || defined(USE_NGHTTP3)
   bool closed; /* TRUE on HTTP2 stream close */
   char *mem;     /* points to a buffer in memory to store received data */
   size_t len;    /* size of the buffer 'mem' points to */
   size_t memlen; /* size of data copied to mem */
-#endif 
-#if defined(USE_NGHTTP2) || defined(ENABLE_QUIC) 
-  /* fields used by both HTTP/2 and HTTP/3 */ 
+#endif
+#if defined(USE_NGHTTP2) || defined(ENABLE_QUIC)
+  /* fields used by both HTTP/2 and HTTP/3 */
   const uint8_t *upload_mem; /* points to a buffer to read from */
   size_t upload_len; /* size of the buffer 'upload_mem' points to */
   curl_off_t upload_left; /* number of bytes left to upload */
-#endif 
-
-#ifdef ENABLE_QUIC 
-  /*********** for HTTP/3 we store stream-local data here *************/ 
-  int64_t stream3_id; /* stream we are interested in */ 
-  bool firstheader;  /* FALSE until headers arrive */
-  bool firstbody;  /* FALSE until body arrives */ 
-  bool h3req;    /* FALSE until request is issued */ 
-  bool upload_done; 
 #endif
-#ifdef USE_NGHTTP3 
+
+#ifdef ENABLE_QUIC
+  /*********** for HTTP/3 we store stream-local data here *************/
+  int64_t stream3_id; /* stream we are interested in */
+  bool firstheader;  /* FALSE until headers arrive */
+  bool firstbody;  /* FALSE until body arrives */
+  bool h3req;    /* FALSE until request is issued */
+  bool upload_done;
+#endif
+#ifdef USE_NGHTTP3
   size_t unacked_window;
-  struct h3out *h3out; /* per-stream buffers for upload */ 
+  struct h3out *h3out; /* per-stream buffers for upload */
   struct dynbuf overflow; /* excess data received during a single Curl_read */
-#endif 
+#endif
 };
 
 #ifdef USE_NGHTTP2

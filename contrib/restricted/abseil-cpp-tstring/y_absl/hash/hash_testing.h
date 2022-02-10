@@ -28,7 +28,7 @@
 #include "y_absl/types/variant.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // Run the y_absl::Hash algorithm over all the elements passed in and verify that
 // their hash expansion is congruent with their `==` operator.
@@ -372,7 +372,7 @@ VerifyTypeImplementsAbslHashCorrectly(std::initializer_list<T> values,
       equals);
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_HASH_HASH_TESTING_H_

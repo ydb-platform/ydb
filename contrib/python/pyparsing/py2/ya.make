@@ -7,11 +7,11 @@ PROVIDES(pyparsing)
 OWNER(borman orivej g:python-contrib)
 
 VERSION(2.4.7)
- 
+
 LICENSE(MIT)
 
-NO_LINT() 
- 
+NO_LINT()
+
 PY_SRCS(
     TOP_LEVEL
     pyparsing.py

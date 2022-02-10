@@ -479,13 +479,13 @@ bool TParser::doParse(const char* str_beg, size_t length)
 
     %% write init nocs;
 
-    if (0 == (Flags & TFeature::FeatureNoRelPath)) { 
+    if (0 == (Flags & TFeature::FeatureNoRelPath)) {
         cs = TParser_en_URI_ref;
-    } else if (0 == (Flags & TFeature::FeatureAllowRootless)) { 
+    } else if (0 == (Flags & TFeature::FeatureAllowRootless)) {
         cs = TParser_en_URI_ref_no_rootless;
-    } else { 
+    } else {
         cs = TParser_en_URI_ref_no_relpath;
-    } 
+    }
 
     %% write exec;
 

@@ -25,7 +25,7 @@
 #include "curl_setup.h"
 #include "hash.h"
 #include "curl_addrinfo.h"
-#include "timeval.h" /* for timediff_t */ 
+#include "timeval.h" /* for timediff_t */
 #include "asyn.h"
 
 #ifdef HAVE_SETJMP_H
@@ -244,6 +244,6 @@ CURLcode Curl_loadhostpairs(struct Curl_easy *data);
 CURLcode Curl_resolv_check(struct connectdata *conn,
                            struct Curl_dns_entry **dns);
 int Curl_resolv_getsock(struct connectdata *conn,
-                        curl_socket_t *socks); 
+                        curl_socket_t *socks);
 
 #endif /* HEADER_CURL_HOSTIP_H */

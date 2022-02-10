@@ -16,10 +16,10 @@
 #ifndef ABSL_BASE_INTERNAL_IDENTITY_H_
 #define ABSL_BASE_INTERNAL_IDENTITY_H_
 
-#include "y_absl/base/config.h" 
- 
+#include "y_absl/base/config.h"
+
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace internal {
 
 template <typename T>
@@ -31,7 +31,7 @@ template <typename T>
 using identity_t = typename identity<T>::type;
 
 }  // namespace internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_IDENTITY_H_

@@ -178,10 +178,10 @@ class DylanLexer(RegexLexer):
             (valid_name + ':', Keyword),
 
             # class names
-            ('<' + valid_name + '>', Name.Class), 
+            ('<' + valid_name + '>', Name.Class),
 
             # define variable forms.
-            (r'\*' + valid_name + r'\*', Name.Variable.Global), 
+            (r'\*' + valid_name + r'\*', Name.Variable.Global),
 
             # define constant forms.
             (r'\$' + valid_name, Name.Constant),
@@ -259,7 +259,7 @@ class DylanConsoleLexer(Lexer):
     mimetypes = ['text/x-dylan-console']
 
     _line_re = re.compile('.*?\n')
-    _prompt_re = re.compile(r'\?| ') 
+    _prompt_re = re.compile(r'\?| ')
 
     def get_tokens_unprocessed(self, text):
         dylexer = DylanLexer(**self.options)

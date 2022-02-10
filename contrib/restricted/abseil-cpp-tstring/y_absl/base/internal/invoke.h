@@ -45,7 +45,7 @@
 // top of this file for the API documentation.
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 // The five classes below each implement one of the clauses from the definition
@@ -181,7 +181,7 @@ invoke_result_t<F, Args...> invoke(F&& f, Args&&... args) {
                                            std::forward<Args>(args)...);
 }
 }  // namespace base_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_INVOKE_H_

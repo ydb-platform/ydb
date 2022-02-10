@@ -55,7 +55,7 @@
 #include "y_absl/debugging/internal/symbolize.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // InitializeSymbolizer()
 //
@@ -71,7 +71,7 @@ ABSL_NAMESPACE_BEGIN
 //   // Now you can use the symbolizer
 // }
 void InitializeSymbolizer(const char* argv0);
-// 
+//
 // Symbolize()
 //
 // Symbolizes a program counter (instruction pointer value) `pc` and, on
@@ -89,11 +89,11 @@ void InitializeSymbolizer(const char* argv0);
 //     if (y_absl::Symbolize(pc, tmp, sizeof(tmp))) {
 //       symbol = tmp;
 //     }
-//     y_absl::PrintF("%p  %s\n", pc, symbol); 
+//     y_absl::PrintF("%p  %s\n", pc, symbol);
 //  }
 bool Symbolize(const void *pc, char *out, int out_size);
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_DEBUGGING_SYMBOLIZE_H_

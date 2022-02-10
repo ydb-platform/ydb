@@ -117,14 +117,14 @@ def bash(command="bash"):
     bashrc = os.path.join(os.path.dirname(__file__), 'bashrc.sh')
     child = pexpect.spawn(command, ['--rcfile', bashrc], echo=False,
                           encoding='utf-8')
- 
-    # If the user runs 'env', the value of PS1 will be in the output. To avoid 
-    # replwrap seeing that as the next prompt, we'll embed the marker characters 
-    # for invisible characters in the prompt; these show up when inspecting the 
-    # environment variable, but not when bash displays the prompt. 
-    ps1 = PEXPECT_PROMPT[:5] + u'\\[\\]' + PEXPECT_PROMPT[5:] 
-    ps2 = PEXPECT_CONTINUATION_PROMPT[:5] + u'\\[\\]' + PEXPECT_CONTINUATION_PROMPT[5:] 
-    prompt_change = u"PS1='{0}' PS2='{1}' PROMPT_COMMAND=''".format(ps1, ps2) 
- 
-    return REPLWrapper(child, u'\\$', prompt_change, 
+
+    # If the user runs 'env', the value of PS1 will be in the output. To avoid
+    # replwrap seeing that as the next prompt, we'll embed the marker characters
+    # for invisible characters in the prompt; these show up when inspecting the
+    # environment variable, but not when bash displays the prompt.
+    ps1 = PEXPECT_PROMPT[:5] + u'\\[\\]' + PEXPECT_PROMPT[5:]
+    ps2 = PEXPECT_CONTINUATION_PROMPT[:5] + u'\\[\\]' + PEXPECT_CONTINUATION_PROMPT[5:]
+    prompt_change = u"PS1='{0}' PS2='{1}' PROMPT_COMMAND=''".format(ps1, ps2)
+
+    return REPLWrapper(child, u'\\$', prompt_change,
                        extra_init_cmd="export PAGER=cat")

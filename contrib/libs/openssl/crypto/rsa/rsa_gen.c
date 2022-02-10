@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2019 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 1995-2019 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -250,7 +250,7 @@ static int rsa_builtin_keygen(RSA *rsa, int bits, int primes, BIGNUM *e_value,
              *
              * This strategy has the following goals:
              *
-             * 1. 1024-bit factors are efficient when using 3072 and 4096-bit key 
+             * 1. 1024-bit factors are efficient when using 3072 and 4096-bit key
              * 2. stay the same logic with normal 2-prime key
              */
             bitse -= bitsr[i];
@@ -387,7 +387,7 @@ static int rsa_builtin_keygen(RSA *rsa, int bits, int primes, BIGNUM *e_value,
         RSAerr(RSA_F_RSA_BUILTIN_KEYGEN, ERR_LIB_BN);
         ok = 0;
     }
-    BN_CTX_end(ctx); 
+    BN_CTX_end(ctx);
     BN_CTX_free(ctx);
     return ok;
 }

@@ -28,7 +28,7 @@
 #include "y_absl/base/internal/unscaledcycleclock.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 #if ABSL_USE_UNSCALED_CYCLECLOCK
@@ -103,5 +103,5 @@ double CycleClock::Frequency() {
 #endif
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

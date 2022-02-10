@@ -1,17 +1,17 @@
 /*
  * Copyright (c) Yann Collet, Facebook, Inc.
- * All rights reserved. 
- * 
+ * All rights reserved.
+ *
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
- */ 
+ */
 
 
 /*- Dependencies -*/
 #include "zstd_v05.h"
-#include "../common/error_private.h" 
+#include "../common/error_private.h"
 
 
 /* ******************************************************************
@@ -506,7 +506,7 @@ static void ZSTDv05_copy8(void* dst, const void* src) { memcpy(dst, src, 8); }
 
 /*! ZSTDv05_wildcopy() :
 *   custom version of memcpy(), can copy up to 7 bytes too many (8 bytes if length==0) */
-MEM_STATIC void ZSTDv05_wildcopy(void* dst, const void* src, ptrdiff_t length) 
+MEM_STATIC void ZSTDv05_wildcopy(void* dst, const void* src, ptrdiff_t length)
 {
     const BYTE* ip = (const BYTE*)src;
     BYTE* op = (BYTE*)dst;
@@ -647,16 +647,16 @@ void        FSEv05_freeDTable(FSEv05_DTable* dt);
 /*!
 FSEv05_buildDTable():
    Builds 'dt', which must be already allocated, using FSEv05_createDTable()
-   @return : 0, 
-             or an errorCode, which can be tested using FSEv05_isError() */ 
+   @return : 0,
+             or an errorCode, which can be tested using FSEv05_isError() */
 size_t FSEv05_buildDTable (FSEv05_DTable* dt, const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog);
 
 /*!
 FSEv05_decompress_usingDTable():
-   Decompress compressed source @cSrc of size @cSrcSize using `dt` 
-   into `dst` which must be already allocated. 
-   @return : size of regenerated data (necessarily <= @dstCapacity) 
-             or an errorCode, which can be tested using FSEv05_isError() */ 
+   Decompress compressed source @cSrc of size @cSrcSize using `dt`
+   into `dst` which must be already allocated.
+   @return : size of regenerated data (necessarily <= @dstCapacity)
+             or an errorCode, which can be tested using FSEv05_isError() */
 size_t FSEv05_decompress_usingDTable(void* dst, size_t dstCapacity, const void* cSrc, size_t cSrcSize, const FSEv05_DTable* dt);
 
 
@@ -1119,15 +1119,15 @@ MEM_STATIC unsigned FSEv05_endOfDState(const FSEv05_DState_t* DStatePtr)
 #  pragma warning(disable : 4127)        /* disable: C4127: conditional expression is constant */
 #  pragma warning(disable : 4214)        /* disable: C4214: non-int bitfields */
 #else
-#  if defined (__cplusplus) || defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L   /* C99 */ 
-#    ifdef __GNUC__ 
-#      define FORCE_INLINE static inline __attribute__((always_inline)) 
-#    else 
-#      define FORCE_INLINE static inline 
-#    endif 
+#  if defined (__cplusplus) || defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L   /* C99 */
+#    ifdef __GNUC__
+#      define FORCE_INLINE static inline __attribute__((always_inline))
+#    else
+#      define FORCE_INLINE static inline
+#    endif
 #  else
-#    define FORCE_INLINE static 
-#  endif /* __STDC_VERSION__ */ 
+#    define FORCE_INLINE static
+#  endif /* __STDC_VERSION__ */
 #endif
 
 
@@ -1798,13 +1798,13 @@ static size_t HUFv05_readStats(BYTE* huffWeight, size_t hwSize, U32* rankStats,
     U32 weightTotal;
     U32 tableLog;
     const BYTE* ip = (const BYTE*) src;
-    size_t iSize; 
+    size_t iSize;
     size_t oSize;
     U32 n;
 
-    if (!srcSize) return ERROR(srcSize_wrong); 
-    iSize = ip[0]; 
-    /* memset(huffWeight, 0, hwSize); */   /* is not necessary, even though some analyzer complain ... */ 
+    if (!srcSize) return ERROR(srcSize_wrong);
+    iSize = ip[0];
+    /* memset(huffWeight, 0, hwSize); */   /* is not necessary, even though some analyzer complain ... */
 
     if (iSize >= 128)  { /* special header */
         if (iSize >= (242)) {  /* RLE */
@@ -1837,7 +1837,7 @@ static size_t HUFv05_readStats(BYTE* huffWeight, size_t hwSize, U32* rankStats,
         rankStats[huffWeight[n]]++;
         weightTotal += (1 << huffWeight[n]) >> 1;
     }
-    if (weightTotal == 0) return ERROR(corruption_detected); 
+    if (weightTotal == 0) return ERROR(corruption_detected);
 
     /* get last non-null symbol weight (implied, total must be 2^n) */
     tableLog = BITv05_highbit32(weightTotal) + 1;
@@ -1879,7 +1879,7 @@ size_t HUFv05_readDTableX2 (U16* DTable, const void* src, size_t srcSize)
     HUFv05_DEltX2* const dt = (HUFv05_DEltX2*)dtPtr;
 
     HUFv05_STATIC_ASSERT(sizeof(HUFv05_DEltX2) == sizeof(U16));   /* if compilation fails here, assertion is false */
-    /* memset(huffWeight, 0, sizeof(huffWeight)); */   /* is not necessary, even though some analyzer complain ... */ 
+    /* memset(huffWeight, 0, sizeof(huffWeight)); */   /* is not necessary, even though some analyzer complain ... */
 
     iSize = HUFv05_readStats(huffWeight, HUFv05_MAX_SYMBOL_VALUE + 1, rankVal, &nbSymbols, &tableLog, src, srcSize);
     if (HUFv05_isError(iSize)) return iSize;
@@ -1965,10 +1965,10 @@ size_t HUFv05_decompress1X2_usingDTable(
     const HUFv05_DEltX2* const dt = ((const HUFv05_DEltX2*)dtPtr)+1;
     BITv05_DStream_t bitD;
 
-    if (dstSize <= cSrcSize) return ERROR(dstSize_tooSmall); 
-    { size_t const errorCode = BITv05_initDStream(&bitD, cSrc, cSrcSize); 
-      if (HUFv05_isError(errorCode)) return errorCode; } 
- 
+    if (dstSize <= cSrcSize) return ERROR(dstSize_tooSmall);
+    { size_t const errorCode = BITv05_initDStream(&bitD, cSrc, cSrcSize);
+      if (HUFv05_isError(errorCode)) return errorCode; }
+
     HUFv05_decodeStreamX2(op, &bitD, oend, dt, dtLog);
 
     /* check */
@@ -2000,90 +2000,90 @@ size_t HUFv05_decompress4X2_usingDTable(
 {
     /* Check */
     if (cSrcSize < 10) return ERROR(corruption_detected);   /* strict minimum : jump table + 1 byte per stream */
-    { 
-        const BYTE* const istart = (const BYTE*) cSrc; 
-        BYTE* const ostart = (BYTE*) dst; 
-        BYTE* const oend = ostart + dstSize; 
-        const void* const dtPtr = DTable; 
-        const HUFv05_DEltX2* const dt = ((const HUFv05_DEltX2*)dtPtr) +1; 
-        const U32 dtLog = DTable[0]; 
-        size_t errorCode; 
+    {
+        const BYTE* const istart = (const BYTE*) cSrc;
+        BYTE* const ostart = (BYTE*) dst;
+        BYTE* const oend = ostart + dstSize;
+        const void* const dtPtr = DTable;
+        const HUFv05_DEltX2* const dt = ((const HUFv05_DEltX2*)dtPtr) +1;
+        const U32 dtLog = DTable[0];
+        size_t errorCode;
 
-        /* Init */ 
-        BITv05_DStream_t bitD1; 
-        BITv05_DStream_t bitD2; 
-        BITv05_DStream_t bitD3; 
-        BITv05_DStream_t bitD4; 
-        const size_t length1 = MEM_readLE16(istart); 
-        const size_t length2 = MEM_readLE16(istart+2); 
-        const size_t length3 = MEM_readLE16(istart+4); 
-        size_t length4; 
-        const BYTE* const istart1 = istart + 6;  /* jumpTable */ 
-        const BYTE* const istart2 = istart1 + length1; 
-        const BYTE* const istart3 = istart2 + length2; 
-        const BYTE* const istart4 = istart3 + length3; 
-        const size_t segmentSize = (dstSize+3) / 4; 
-        BYTE* const opStart2 = ostart + segmentSize; 
-        BYTE* const opStart3 = opStart2 + segmentSize; 
-        BYTE* const opStart4 = opStart3 + segmentSize; 
-        BYTE* op1 = ostart; 
-        BYTE* op2 = opStart2; 
-        BYTE* op3 = opStart3; 
-        BYTE* op4 = opStart4; 
-        U32 endSignal; 
+        /* Init */
+        BITv05_DStream_t bitD1;
+        BITv05_DStream_t bitD2;
+        BITv05_DStream_t bitD3;
+        BITv05_DStream_t bitD4;
+        const size_t length1 = MEM_readLE16(istart);
+        const size_t length2 = MEM_readLE16(istart+2);
+        const size_t length3 = MEM_readLE16(istart+4);
+        size_t length4;
+        const BYTE* const istart1 = istart + 6;  /* jumpTable */
+        const BYTE* const istart2 = istart1 + length1;
+        const BYTE* const istart3 = istart2 + length2;
+        const BYTE* const istart4 = istart3 + length3;
+        const size_t segmentSize = (dstSize+3) / 4;
+        BYTE* const opStart2 = ostart + segmentSize;
+        BYTE* const opStart3 = opStart2 + segmentSize;
+        BYTE* const opStart4 = opStart3 + segmentSize;
+        BYTE* op1 = ostart;
+        BYTE* op2 = opStart2;
+        BYTE* op3 = opStart3;
+        BYTE* op4 = opStart4;
+        U32 endSignal;
 
-        length4 = cSrcSize - (length1 + length2 + length3 + 6); 
-        if (length4 > cSrcSize) return ERROR(corruption_detected);   /* overflow */ 
-        errorCode = BITv05_initDStream(&bitD1, istart1, length1); 
-        if (HUFv05_isError(errorCode)) return errorCode; 
-        errorCode = BITv05_initDStream(&bitD2, istart2, length2); 
-        if (HUFv05_isError(errorCode)) return errorCode; 
-        errorCode = BITv05_initDStream(&bitD3, istart3, length3); 
-        if (HUFv05_isError(errorCode)) return errorCode; 
-        errorCode = BITv05_initDStream(&bitD4, istart4, length4); 
-        if (HUFv05_isError(errorCode)) return errorCode; 
- 
-        /* 16-32 symbols per loop (4-8 symbols per stream) */ 
+        length4 = cSrcSize - (length1 + length2 + length3 + 6);
+        if (length4 > cSrcSize) return ERROR(corruption_detected);   /* overflow */
+        errorCode = BITv05_initDStream(&bitD1, istart1, length1);
+        if (HUFv05_isError(errorCode)) return errorCode;
+        errorCode = BITv05_initDStream(&bitD2, istart2, length2);
+        if (HUFv05_isError(errorCode)) return errorCode;
+        errorCode = BITv05_initDStream(&bitD3, istart3, length3);
+        if (HUFv05_isError(errorCode)) return errorCode;
+        errorCode = BITv05_initDStream(&bitD4, istart4, length4);
+        if (HUFv05_isError(errorCode)) return errorCode;
+
+        /* 16-32 symbols per loop (4-8 symbols per stream) */
         endSignal = BITv05_reloadDStream(&bitD1) | BITv05_reloadDStream(&bitD2) | BITv05_reloadDStream(&bitD3) | BITv05_reloadDStream(&bitD4);
-        for ( ; (endSignal==BITv05_DStream_unfinished) && (op4<(oend-7)) ; ) { 
-            HUFv05_DECODE_SYMBOLX2_2(op1, &bitD1); 
-            HUFv05_DECODE_SYMBOLX2_2(op2, &bitD2); 
-            HUFv05_DECODE_SYMBOLX2_2(op3, &bitD3); 
-            HUFv05_DECODE_SYMBOLX2_2(op4, &bitD4); 
-            HUFv05_DECODE_SYMBOLX2_1(op1, &bitD1); 
-            HUFv05_DECODE_SYMBOLX2_1(op2, &bitD2); 
-            HUFv05_DECODE_SYMBOLX2_1(op3, &bitD3); 
-            HUFv05_DECODE_SYMBOLX2_1(op4, &bitD4); 
-            HUFv05_DECODE_SYMBOLX2_2(op1, &bitD1); 
-            HUFv05_DECODE_SYMBOLX2_2(op2, &bitD2); 
-            HUFv05_DECODE_SYMBOLX2_2(op3, &bitD3); 
-            HUFv05_DECODE_SYMBOLX2_2(op4, &bitD4); 
-            HUFv05_DECODE_SYMBOLX2_0(op1, &bitD1); 
-            HUFv05_DECODE_SYMBOLX2_0(op2, &bitD2); 
-            HUFv05_DECODE_SYMBOLX2_0(op3, &bitD3); 
-            HUFv05_DECODE_SYMBOLX2_0(op4, &bitD4); 
-            endSignal = BITv05_reloadDStream(&bitD1) | BITv05_reloadDStream(&bitD2) | BITv05_reloadDStream(&bitD3) | BITv05_reloadDStream(&bitD4); 
-        } 
+        for ( ; (endSignal==BITv05_DStream_unfinished) && (op4<(oend-7)) ; ) {
+            HUFv05_DECODE_SYMBOLX2_2(op1, &bitD1);
+            HUFv05_DECODE_SYMBOLX2_2(op2, &bitD2);
+            HUFv05_DECODE_SYMBOLX2_2(op3, &bitD3);
+            HUFv05_DECODE_SYMBOLX2_2(op4, &bitD4);
+            HUFv05_DECODE_SYMBOLX2_1(op1, &bitD1);
+            HUFv05_DECODE_SYMBOLX2_1(op2, &bitD2);
+            HUFv05_DECODE_SYMBOLX2_1(op3, &bitD3);
+            HUFv05_DECODE_SYMBOLX2_1(op4, &bitD4);
+            HUFv05_DECODE_SYMBOLX2_2(op1, &bitD1);
+            HUFv05_DECODE_SYMBOLX2_2(op2, &bitD2);
+            HUFv05_DECODE_SYMBOLX2_2(op3, &bitD3);
+            HUFv05_DECODE_SYMBOLX2_2(op4, &bitD4);
+            HUFv05_DECODE_SYMBOLX2_0(op1, &bitD1);
+            HUFv05_DECODE_SYMBOLX2_0(op2, &bitD2);
+            HUFv05_DECODE_SYMBOLX2_0(op3, &bitD3);
+            HUFv05_DECODE_SYMBOLX2_0(op4, &bitD4);
+            endSignal = BITv05_reloadDStream(&bitD1) | BITv05_reloadDStream(&bitD2) | BITv05_reloadDStream(&bitD3) | BITv05_reloadDStream(&bitD4);
+        }
 
-        /* check corruption */ 
-        if (op1 > opStart2) return ERROR(corruption_detected); 
-        if (op2 > opStart3) return ERROR(corruption_detected); 
-        if (op3 > opStart4) return ERROR(corruption_detected); 
-        /* note : op4 supposed already verified within main loop */ 
+        /* check corruption */
+        if (op1 > opStart2) return ERROR(corruption_detected);
+        if (op2 > opStart3) return ERROR(corruption_detected);
+        if (op3 > opStart4) return ERROR(corruption_detected);
+        /* note : op4 supposed already verified within main loop */
 
-        /* finish bitStreams one by one */ 
-        HUFv05_decodeStreamX2(op1, &bitD1, opStart2, dt, dtLog); 
-        HUFv05_decodeStreamX2(op2, &bitD2, opStart3, dt, dtLog); 
-        HUFv05_decodeStreamX2(op3, &bitD3, opStart4, dt, dtLog); 
-        HUFv05_decodeStreamX2(op4, &bitD4, oend,     dt, dtLog); 
+        /* finish bitStreams one by one */
+        HUFv05_decodeStreamX2(op1, &bitD1, opStart2, dt, dtLog);
+        HUFv05_decodeStreamX2(op2, &bitD2, opStart3, dt, dtLog);
+        HUFv05_decodeStreamX2(op3, &bitD3, opStart4, dt, dtLog);
+        HUFv05_decodeStreamX2(op4, &bitD4, oend,     dt, dtLog);
 
-        /* check */ 
-        endSignal = BITv05_endOfDStream(&bitD1) & BITv05_endOfDStream(&bitD2) & BITv05_endOfDStream(&bitD3) & BITv05_endOfDStream(&bitD4); 
-        if (!endSignal) return ERROR(corruption_detected); 
+        /* check */
+        endSignal = BITv05_endOfDStream(&bitD1) & BITv05_endOfDStream(&bitD2) & BITv05_endOfDStream(&bitD3) & BITv05_endOfDStream(&bitD4);
+        if (!endSignal) return ERROR(corruption_detected);
 
-        /* decoded size */ 
-        return dstSize; 
-    } 
+        /* decoded size */
+        return dstSize;
+    }
 }
 
 
@@ -2210,7 +2210,7 @@ size_t HUFv05_readDTableX4 (unsigned* DTable, const void* src, size_t srcSize)
 
     HUFv05_STATIC_ASSERT(sizeof(HUFv05_DEltX4) == sizeof(unsigned));   /* if compilation fails here, assertion is false */
     if (memLog > HUFv05_ABSOLUTEMAX_TABLELOG) return ERROR(tableLog_tooLarge);
-    /* memset(weightList, 0, sizeof(weightList)); */   /* is not necessary, even though some analyzer complain ... */ 
+    /* memset(weightList, 0, sizeof(weightList)); */   /* is not necessary, even though some analyzer complain ... */
 
     iSize = HUFv05_readStats(weightList, HUFv05_MAX_SYMBOL_VALUE + 1, rankStats, &nbSymbols, &tableLog, src, srcSize);
     if (HUFv05_isError(iSize)) return iSize;
@@ -2539,9 +2539,9 @@ size_t HUFv05_decompress (void* dst, size_t dstSize, const void* cSrc, size_t cS
 
     return decompress[algoNb](dst, dstSize, cSrc, cSrcSize);
 
-    /* return HUFv05_decompress4X2(dst, dstSize, cSrc, cSrcSize); */   /* multi-streams single-symbol decoding */ 
-    /* return HUFv05_decompress4X4(dst, dstSize, cSrc, cSrcSize); */   /* multi-streams double-symbols decoding */ 
-    /* return HUFv05_decompress4X6(dst, dstSize, cSrc, cSrcSize); */   /* multi-streams quad-symbols decoding */ 
+    /* return HUFv05_decompress4X2(dst, dstSize, cSrc, cSrcSize); */   /* multi-streams single-symbol decoding */
+    /* return HUFv05_decompress4X4(dst, dstSize, cSrc, cSrcSize); */   /* multi-streams double-symbols decoding */
+    /* return HUFv05_decompress4X6(dst, dstSize, cSrc, cSrcSize); */   /* multi-streams quad-symbols decoding */
 }
 /*
     zstd - standard compression library
@@ -2873,7 +2873,7 @@ static size_t ZSTDv05_decodeLiteralsBlock(ZSTDv05_DCtx* dctx,
         {
             size_t litSize, litCSize, singleStream=0;
             U32 lhSize = ((istart[0]) >> 4) & 3;
-            if (srcSize < 5) return ERROR(corruption_detected);   /* srcSize >= MIN_CBLOCK_SIZE == 3; here we need up to 5 for case 3 */ 
+            if (srcSize < 5) return ERROR(corruption_detected);   /* srcSize >= MIN_CBLOCK_SIZE == 3; here we need up to 5 for case 3 */
             switch(lhSize)
             {
             case 0: case 1: default:   /* note : default is impossible, since lhSize into [0..3] */
@@ -2897,7 +2897,7 @@ static size_t ZSTDv05_decodeLiteralsBlock(ZSTDv05_DCtx* dctx,
                 break;
             }
             if (litSize > BLOCKSIZE) return ERROR(corruption_detected);
-            if (litCSize + lhSize > srcSize) return ERROR(corruption_detected); 
+            if (litCSize + lhSize > srcSize) return ERROR(corruption_detected);
 
             if (HUFv05_isError(singleStream ?
                             HUFv05_decompress1X2(dctx->litBuffer, litSize, istart+lhSize, litCSize) :
@@ -2906,7 +2906,7 @@ static size_t ZSTDv05_decodeLiteralsBlock(ZSTDv05_DCtx* dctx,
 
             dctx->litPtr = dctx->litBuffer;
             dctx->litSize = litSize;
-            memset(dctx->litBuffer + dctx->litSize, 0, WILDCOPY_OVERLENGTH); 
+            memset(dctx->litBuffer + dctx->litSize, 0, WILDCOPY_OVERLENGTH);
             return litCSize + lhSize;
         }
     case IS_PCH:
@@ -2923,14 +2923,14 @@ static size_t ZSTDv05_decodeLiteralsBlock(ZSTDv05_DCtx* dctx,
             lhSize=3;
             litSize  = ((istart[0] & 15) << 6) + (istart[1] >> 2);
             litCSize = ((istart[1] &  3) << 8) + istart[2];
-            if (litCSize + lhSize > srcSize) return ERROR(corruption_detected); 
+            if (litCSize + lhSize > srcSize) return ERROR(corruption_detected);
 
             errorCode = HUFv05_decompress1X4_usingDTable(dctx->litBuffer, litSize, istart+lhSize, litCSize, dctx->hufTableX4);
             if (HUFv05_isError(errorCode)) return ERROR(corruption_detected);
 
             dctx->litPtr = dctx->litBuffer;
             dctx->litSize = litSize;
-            memset(dctx->litBuffer + dctx->litSize, 0, WILDCOPY_OVERLENGTH); 
+            memset(dctx->litBuffer + dctx->litSize, 0, WILDCOPY_OVERLENGTH);
             return litCSize + lhSize;
         }
     case IS_RAW:
@@ -2956,7 +2956,7 @@ static size_t ZSTDv05_decodeLiteralsBlock(ZSTDv05_DCtx* dctx,
                 memcpy(dctx->litBuffer, istart+lhSize, litSize);
                 dctx->litPtr = dctx->litBuffer;
                 dctx->litSize = litSize;
-                memset(dctx->litBuffer + dctx->litSize, 0, WILDCOPY_OVERLENGTH); 
+                memset(dctx->litBuffer + dctx->litSize, 0, WILDCOPY_OVERLENGTH);
                 return lhSize+litSize;
             }
             /* direct reference into compressed stream */
@@ -2979,11 +2979,11 @@ static size_t ZSTDv05_decodeLiteralsBlock(ZSTDv05_DCtx* dctx,
                 break;
             case 3:
                 litSize = ((istart[0] & 15) << 16) + (istart[1] << 8) + istart[2];
-                if (srcSize<4) return ERROR(corruption_detected);   /* srcSize >= MIN_CBLOCK_SIZE == 3; here we need lhSize+1 = 4 */ 
+                if (srcSize<4) return ERROR(corruption_detected);   /* srcSize >= MIN_CBLOCK_SIZE == 3; here we need lhSize+1 = 4 */
                 break;
             }
             if (litSize > BLOCKSIZE) return ERROR(corruption_detected);
-            memset(dctx->litBuffer, istart[lhSize], litSize + WILDCOPY_OVERLENGTH); 
+            memset(dctx->litBuffer, istart[lhSize], litSize + WILDCOPY_OVERLENGTH);
             dctx->litPtr = dctx->litBuffer;
             dctx->litSize = litSize;
             return lhSize+1;
@@ -2996,7 +2996,7 @@ static size_t ZSTDv05_decodeLiteralsBlock(ZSTDv05_DCtx* dctx,
 
 static size_t ZSTDv05_decodeSeqHeaders(int* nbSeq, const BYTE** dumpsPtr, size_t* dumpsLengthPtr,
                          FSEv05_DTable* DTableLL, FSEv05_DTable* DTableML, FSEv05_DTable* DTableOffb,
-                         const void* src, size_t srcSize, U32 flagStaticTable) 
+                         const void* src, size_t srcSize, U32 flagStaticTable)
 {
     const BYTE* const istart = (const BYTE*)src;
     const BYTE* ip = istart;
@@ -3012,22 +3012,22 @@ static size_t ZSTDv05_decodeSeqHeaders(int* nbSeq, const BYTE** dumpsPtr, size_t
     /* SeqHead */
     *nbSeq = *ip++;
     if (*nbSeq==0) return 1;
-    if (*nbSeq >= 128) { 
-        if (ip >= iend) return ERROR(srcSize_wrong); 
+    if (*nbSeq >= 128) {
+        if (ip >= iend) return ERROR(srcSize_wrong);
         *nbSeq = ((nbSeq[0]-128)<<8) + *ip++;
-    } 
+    }
 
-    if (ip >= iend) return ERROR(srcSize_wrong); 
+    if (ip >= iend) return ERROR(srcSize_wrong);
     LLtype  = *ip >> 6;
     Offtype = (*ip >> 4) & 3;
     MLtype  = (*ip >> 2) & 3;
     if (*ip & 2) {
-        if (ip+3 > iend) return ERROR(srcSize_wrong); 
+        if (ip+3 > iend) return ERROR(srcSize_wrong);
         dumpsLength  = ip[2];
         dumpsLength += ip[1] << 8;
         ip += 3;
     } else {
-        if (ip+2 > iend) return ERROR(srcSize_wrong); 
+        if (ip+2 > iend) return ERROR(srcSize_wrong);
         dumpsLength  = ip[1];
         dumpsLength += (ip[0] & 1) << 8;
         ip += 2;
@@ -3056,17 +3056,17 @@ static size_t ZSTDv05_decodeSeqHeaders(int* nbSeq, const BYTE** dumpsPtr, size_t
             FSEv05_buildDTable_raw(DTableLL, LLbits);
             break;
         case FSEv05_ENCODING_STATIC:
-            if (!flagStaticTable) return ERROR(corruption_detected); 
+            if (!flagStaticTable) return ERROR(corruption_detected);
             break;
         case FSEv05_ENCODING_DYNAMIC :
         default :   /* impossible */
             {   unsigned max = MaxLL;
-                headerSize = FSEv05_readNCount(norm, &max, &LLlog, ip, iend-ip); 
-                if (FSEv05_isError(headerSize)) return ERROR(GENERIC); 
-                if (LLlog > LLFSEv05Log) return ERROR(corruption_detected); 
-                ip += headerSize; 
-                FSEv05_buildDTable(DTableLL, norm, max, LLlog); 
-        }   } 
+                headerSize = FSEv05_readNCount(norm, &max, &LLlog, ip, iend-ip);
+                if (FSEv05_isError(headerSize)) return ERROR(GENERIC);
+                if (LLlog > LLFSEv05Log) return ERROR(corruption_detected);
+                ip += headerSize;
+                FSEv05_buildDTable(DTableLL, norm, max, LLlog);
+        }   }
 
         switch(Offtype)
         {
@@ -3080,17 +3080,17 @@ static size_t ZSTDv05_decodeSeqHeaders(int* nbSeq, const BYTE** dumpsPtr, size_t
             FSEv05_buildDTable_raw(DTableOffb, Offbits);
             break;
         case FSEv05_ENCODING_STATIC:
-            if (!flagStaticTable) return ERROR(corruption_detected); 
+            if (!flagStaticTable) return ERROR(corruption_detected);
             break;
         case FSEv05_ENCODING_DYNAMIC :
         default :   /* impossible */
             {   unsigned max = MaxOff;
-                headerSize = FSEv05_readNCount(norm, &max, &Offlog, ip, iend-ip); 
-                if (FSEv05_isError(headerSize)) return ERROR(GENERIC); 
-                if (Offlog > OffFSEv05Log) return ERROR(corruption_detected); 
-                ip += headerSize; 
-                FSEv05_buildDTable(DTableOffb, norm, max, Offlog); 
-        }   } 
+                headerSize = FSEv05_readNCount(norm, &max, &Offlog, ip, iend-ip);
+                if (FSEv05_isError(headerSize)) return ERROR(GENERIC);
+                if (Offlog > OffFSEv05Log) return ERROR(corruption_detected);
+                ip += headerSize;
+                FSEv05_buildDTable(DTableOffb, norm, max, Offlog);
+        }   }
 
         switch(MLtype)
         {
@@ -3104,17 +3104,17 @@ static size_t ZSTDv05_decodeSeqHeaders(int* nbSeq, const BYTE** dumpsPtr, size_t
             FSEv05_buildDTable_raw(DTableML, MLbits);
             break;
         case FSEv05_ENCODING_STATIC:
-            if (!flagStaticTable) return ERROR(corruption_detected); 
+            if (!flagStaticTable) return ERROR(corruption_detected);
             break;
         case FSEv05_ENCODING_DYNAMIC :
         default :   /* impossible */
             {   unsigned max = MaxML;
-                headerSize = FSEv05_readNCount(norm, &max, &MLlog, ip, iend-ip); 
-                if (FSEv05_isError(headerSize)) return ERROR(GENERIC); 
-                if (MLlog > MLFSEv05Log) return ERROR(corruption_detected); 
-                ip += headerSize; 
-                FSEv05_buildDTable(DTableML, norm, max, MLlog); 
-    }   }   } 
+                headerSize = FSEv05_readNCount(norm, &max, &MLlog, ip, iend-ip);
+                if (FSEv05_isError(headerSize)) return ERROR(GENERIC);
+                if (MLlog > MLFSEv05Log) return ERROR(corruption_detected);
+                ip += headerSize;
+                FSEv05_buildDTable(DTableML, norm, max, MLlog);
+    }   }   }
 
     return ip-istart;
 }
@@ -3151,16 +3151,16 @@ static void ZSTDv05_decodeSequence(seq_t* seq, seqState_t* seqState)
     litLength = FSEv05_peakSymbol(&(seqState->stateLL));
     prevOffset = litLength ? seq->offset : seqState->prevOffset;
     if (litLength == MaxLL) {
-        const U32 add = *dumps++; 
+        const U32 add = *dumps++;
         if (add < 255) litLength += add;
-        else if (dumps + 2 <= de) { 
-            litLength = MEM_readLE16(dumps); 
-            dumps += 2; 
-            if ((litLength & 1) && dumps < de) { 
-                litLength += *dumps << 16; 
-                dumps += 1; 
-            } 
-            litLength>>=1; 
+        else if (dumps + 2 <= de) {
+            litLength = MEM_readLE16(dumps);
+            dumps += 2;
+            if ((litLength & 1) && dumps < de) {
+                litLength += *dumps << 16;
+                dumps += 1;
+            }
+            litLength>>=1;
         }
         if (dumps >= de) { dumps = de-1; }  /* late correction, to avoid read overflow (data is now corrupted anyway) */
     }
@@ -3188,16 +3188,16 @@ static void ZSTDv05_decodeSequence(seq_t* seq, seqState_t* seqState)
     /* MatchLength */
     matchLength = FSEv05_decodeSymbol(&(seqState->stateML), &(seqState->DStream));
     if (matchLength == MaxML) {
-        const U32 add = dumps<de ? *dumps++ : 0; 
+        const U32 add = dumps<de ? *dumps++ : 0;
         if (add < 255) matchLength += add;
-        else if (dumps + 2 <= de) { 
-            matchLength = MEM_readLE16(dumps); 
-            dumps += 2; 
-            if ((matchLength & 1) && dumps < de) { 
-                matchLength += *dumps << 16; 
-                dumps += 1; 
-            } 
-            matchLength >>= 1; 
+        else if (dumps + 2 <= de) {
+            matchLength = MEM_readLE16(dumps);
+            dumps += 2;
+            if ((matchLength & 1) && dumps < de) {
+                matchLength += *dumps << 16;
+                dumps += 1;
+            }
+            matchLength >>= 1;
         }
         if (dumps >= de) { dumps = de-1; }  /* late correction, to avoid read overflow (data is now corrupted anyway) */
     }
@@ -3222,7 +3222,7 @@ static void ZSTDv05_decodeSequence(seq_t* seq, seqState_t* seqState)
 
 static size_t ZSTDv05_execSequence(BYTE* op,
                                 BYTE* const oend, seq_t sequence,
-                                const BYTE** litPtr, const BYTE* const litLimit, 
+                                const BYTE** litPtr, const BYTE* const litLimit,
                                 const BYTE* const base, const BYTE* const vBase, const BYTE* const dictEnd)
 {
     static const int dec32table[] = { 0, 1, 2, 1, 4, 4, 4, 4 };   /* added */
@@ -3237,7 +3237,7 @@ static size_t ZSTDv05_execSequence(BYTE* op,
     /* check */
     if (oLitEnd > oend_8) return ERROR(dstSize_tooSmall);   /* last match must start at a minimum distance of 8 from oend */
     if (oMatchEnd > oend) return ERROR(dstSize_tooSmall);   /* overwrite beyond dst buffer */
-    if (litEnd > litLimit) return ERROR(corruption_detected);   /* risk read beyond lit buffer */ 
+    if (litEnd > litLimit) return ERROR(corruption_detected);   /* risk read beyond lit buffer */
 
     /* copy Literals */
     ZSTDv05_wildcopy(op, *litPtr, sequence.litLength);   /* note : oLitEnd <= oend-8 : no risk of overwrite beyond oend */
@@ -3261,12 +3261,12 @@ static size_t ZSTDv05_execSequence(BYTE* op,
             op = oLitEnd + length1;
             sequence.matchLength -= length1;
             match = base;
-            if (op > oend_8 || sequence.matchLength < MINMATCH) { 
-              while (op < oMatchEnd) *op++ = *match++; 
-              return sequenceLength; 
-            } 
+            if (op > oend_8 || sequence.matchLength < MINMATCH) {
+              while (op < oMatchEnd) *op++ = *match++;
+              return sequenceLength;
+            }
     }   }
-    /* Requirement: op <= oend_8 */ 
+    /* Requirement: op <= oend_8 */
 
     /* match within prefix */
     if (sequence.offset < 8) {
@@ -3284,7 +3284,7 @@ static size_t ZSTDv05_execSequence(BYTE* op,
     }
     op += 8; match += 8;
 
-    if (oMatchEnd > oend-(16-MINMATCH)) { 
+    if (oMatchEnd > oend-(16-MINMATCH)) {
         if (op < oend_8) {
             ZSTDv05_wildcopy(op, match, oend_8 - op);
             match += oend_8 - op;
@@ -3293,7 +3293,7 @@ static size_t ZSTDv05_execSequence(BYTE* op,
         while (op < oMatchEnd)
             *op++ = *match++;
     } else {
-        ZSTDv05_wildcopy(op, match, (ptrdiff_t)sequence.matchLength-8);   /* works even if matchLength < 8 */ 
+        ZSTDv05_wildcopy(op, match, (ptrdiff_t)sequence.matchLength-8);   /* works even if matchLength < 8 */
     }
     return sequenceLength;
 }
@@ -3324,7 +3324,7 @@ static size_t ZSTDv05_decompressSequences(
     /* Build Decoding Tables */
     errorCode = ZSTDv05_decodeSeqHeaders(&nbSeq, &dumps, &dumpsLength,
                                       DTableLL, DTableML, DTableOffb,
-                                      ip, seqSize, dctx->flagStaticTables); 
+                                      ip, seqSize, dctx->flagStaticTables);
     if (ZSTDv05_isError(errorCode)) return errorCode;
     ip += errorCode;
 
@@ -3348,7 +3348,7 @@ static size_t ZSTDv05_decompressSequences(
             size_t oneSeqSize;
             nbSeq--;
             ZSTDv05_decodeSequence(&sequence, &seqState);
-            oneSeqSize = ZSTDv05_execSequence(op, oend, sequence, &litPtr, litEnd, base, vBase, dictEnd); 
+            oneSeqSize = ZSTDv05_execSequence(op, oend, sequence, &litPtr, litEnd, base, vBase, dictEnd);
             if (ZSTDv05_isError(oneSeqSize)) return oneSeqSize;
             op += oneSeqSize;
         }
@@ -3362,10 +3362,10 @@ static size_t ZSTDv05_decompressSequences(
         size_t lastLLSize = litEnd - litPtr;
         if (litPtr > litEnd) return ERROR(corruption_detected);   /* too many literals already used */
         if (op+lastLLSize > oend) return ERROR(dstSize_tooSmall);
-        if (lastLLSize > 0) { 
-            memcpy(op, litPtr, lastLLSize); 
-            op += lastLLSize; 
-        } 
+        if (lastLLSize > 0) {
+            memcpy(op, litPtr, lastLLSize);
+            op += lastLLSize;
+        }
     }
 
     return op-ostart;
@@ -3669,9 +3669,9 @@ static size_t ZSTDv05_loadEntropy(ZSTDv05_DCtx* dctx, const void* dict, size_t d
     short offcodeNCount[MaxOff+1];
     unsigned offcodeMaxValue=MaxOff, offcodeLog;
     short matchlengthNCount[MaxML+1];
-    unsigned matchlengthMaxValue = MaxML, matchlengthLog; 
+    unsigned matchlengthMaxValue = MaxML, matchlengthLog;
     short litlengthNCount[MaxLL+1];
-    unsigned litlengthMaxValue = MaxLL, litlengthLog; 
+    unsigned litlengthMaxValue = MaxLL, litlengthLog;
 
     hSize = HUFv05_readDTableX4(dctx->hufTableX4, dict, dictSize);
     if (HUFv05_isError(hSize)) return ERROR(dictionary_corrupted);
@@ -3680,7 +3680,7 @@ static size_t ZSTDv05_loadEntropy(ZSTDv05_DCtx* dctx, const void* dict, size_t d
 
     offcodeHeaderSize = FSEv05_readNCount(offcodeNCount, &offcodeMaxValue, &offcodeLog, dict, dictSize);
     if (FSEv05_isError(offcodeHeaderSize)) return ERROR(dictionary_corrupted);
-    if (offcodeLog > OffFSEv05Log) return ERROR(dictionary_corrupted); 
+    if (offcodeLog > OffFSEv05Log) return ERROR(dictionary_corrupted);
     errorCode = FSEv05_buildDTable(dctx->OffTable, offcodeNCount, offcodeMaxValue, offcodeLog);
     if (FSEv05_isError(errorCode)) return ERROR(dictionary_corrupted);
     dict = (const char*)dict + offcodeHeaderSize;
@@ -3688,14 +3688,14 @@ static size_t ZSTDv05_loadEntropy(ZSTDv05_DCtx* dctx, const void* dict, size_t d
 
     matchlengthHeaderSize = FSEv05_readNCount(matchlengthNCount, &matchlengthMaxValue, &matchlengthLog, dict, dictSize);
     if (FSEv05_isError(matchlengthHeaderSize)) return ERROR(dictionary_corrupted);
-    if (matchlengthLog > MLFSEv05Log) return ERROR(dictionary_corrupted); 
+    if (matchlengthLog > MLFSEv05Log) return ERROR(dictionary_corrupted);
     errorCode = FSEv05_buildDTable(dctx->MLTable, matchlengthNCount, matchlengthMaxValue, matchlengthLog);
     if (FSEv05_isError(errorCode)) return ERROR(dictionary_corrupted);
     dict = (const char*)dict + matchlengthHeaderSize;
     dictSize -= matchlengthHeaderSize;
 
     litlengthHeaderSize = FSEv05_readNCount(litlengthNCount, &litlengthMaxValue, &litlengthLog, dict, dictSize);
-    if (litlengthLog > LLFSEv05Log) return ERROR(dictionary_corrupted); 
+    if (litlengthLog > LLFSEv05Log) return ERROR(dictionary_corrupted);
     if (FSEv05_isError(litlengthHeaderSize)) return ERROR(dictionary_corrupted);
     errorCode = FSEv05_buildDTable(dctx->LLTable, litlengthNCount, litlengthMaxValue, litlengthLog);
     if (FSEv05_isError(errorCode)) return ERROR(dictionary_corrupted);
@@ -3793,9 +3793,9 @@ static size_t ZBUFFv05_blockHeaderSize = 3;
 static size_t ZBUFFv05_limitCopy(void* dst, size_t maxDstSize, const void* src, size_t srcSize)
 {
     size_t length = MIN(maxDstSize, srcSize);
-    if (length > 0) { 
-        memcpy(dst, src, length); 
-    } 
+    if (length > 0) {
+        memcpy(dst, src, length);
+    }
     return length;
 }
 
@@ -3815,7 +3815,7 @@ static size_t ZBUFFv05_limitCopy(void* dst, size_t maxDstSize, const void* src, 
 *  The function will report how many bytes were read or written by modifying *srcSizePtr and *maxDstSizePtr.
 *  Note that it may not consume the entire input, in which case it's up to the caller to call again the function with remaining input.
 *  The content of dst will be overwritten (up to *maxDstSizePtr) at each function call, so save its content if it matters or change dst .
-*  return : a hint to preferred nb of bytes to use as input for next function call (it's only a hint, to improve latency) 
+*  return : a hint to preferred nb of bytes to use as input for next function call (it's only a hint, to improve latency)
 *            or 0 when a frame is completely decoded
 *            or an error code, which can be tested using ZBUFFv05_isError().
 *
@@ -3932,7 +3932,7 @@ size_t ZBUFFv05_decompressContinue(ZBUFFv05_DCtx* zbc, void* dst, size_t* maxDst
                     *maxDstSizePtr = 0;
                     return headerSize - zbc->hPos;
                 }
-                /* zbc->stage = ZBUFFv05ds_decodeHeader; break; */   /* useless : stage follows */ 
+                /* zbc->stage = ZBUFFv05ds_decodeHeader; break; */   /* useless : stage follows */
             }
 	    /* fall-through */
         case ZBUFFv05ds_decodeHeader:
@@ -4005,7 +4005,7 @@ size_t ZBUFFv05_decompressContinue(ZBUFFv05_DCtx* zbc, void* dst, size_t* maxDst
                     if (!decodedSize) { zbc->stage = ZBUFFv05ds_read; break; }   /* this was just a header */
                     zbc->outEnd = zbc->outStart +  decodedSize;
                     zbc->stage = ZBUFFv05ds_flush;
-                    /* break; */  /* ZBUFFv05ds_flush follows */ 
+                    /* break; */  /* ZBUFFv05ds_flush follows */
                 }
 	    }
 	    /* fall-through */

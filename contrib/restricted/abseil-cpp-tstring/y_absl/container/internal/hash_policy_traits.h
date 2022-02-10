@@ -24,7 +24,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // Defines how slots are initialized/destroyed/moved.
@@ -202,7 +202,7 @@ struct hash_policy_traits {
 };
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_HASH_POLICY_TRAITS_H_

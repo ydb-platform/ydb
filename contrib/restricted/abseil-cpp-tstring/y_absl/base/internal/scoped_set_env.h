@@ -19,10 +19,10 @@
 
 #include <util/generic/string.h>
 
-#include "y_absl/base/config.h" 
- 
+#include "y_absl/base/config.h"
+
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 class ScopedSetEnv {
@@ -39,7 +39,7 @@ class ScopedSetEnv {
 };
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_SCOPED_SET_ENV_H_

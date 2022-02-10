@@ -50,10 +50,10 @@ namespace boost { namespace proto
               : base_type(terminal_type::make(T()))
             {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
-            literal(literal const &) = default; 
-#endif 
- 
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+            literal(literal const &) = default;
+#endif
+
             template<typename U>
             literal(U &u)
               : base_type(terminal_type::make(u))

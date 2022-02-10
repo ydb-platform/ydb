@@ -96,10 +96,10 @@ class vec_iterator
    #ifndef BOOST_CONTAINER_DOXYGEN_INVOKED
    private:
    Pointer m_ptr;
-   class nat; 
-   typedef typename dtl::if_c< IsConst 
-                             , vec_iterator<Pointer, false> 
-                             , nat>::type                                           nonconst_iterator; 
+   class nat;
+   typedef typename dtl::if_c< IsConst
+                             , vec_iterator<Pointer, false>
+                             , nat>::type                                           nonconst_iterator;
 
    public:
    BOOST_CONTAINER_FORCEINLINE const Pointer &get_ptr() const BOOST_NOEXCEPT_OR_NOTHROW
@@ -120,17 +120,17 @@ class vec_iterator
       : m_ptr()   //Value initialization to achieve "null iterators" (N3644)
    {}
 
-   BOOST_CONTAINER_FORCEINLINE vec_iterator(const vec_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW 
+   BOOST_CONTAINER_FORCEINLINE vec_iterator(const vec_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW
       :  m_ptr(other.get_ptr())
    {}
 
-   BOOST_CONTAINER_FORCEINLINE vec_iterator(const nonconst_iterator &other) BOOST_NOEXCEPT_OR_NOTHROW 
-      :  m_ptr(other.get_ptr()) 
-   {} 
- 
-   BOOST_CONTAINER_FORCEINLINE vec_iterator & operator=(const vec_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW 
-   {  m_ptr = other.get_ptr();   return *this;  } 
- 
+   BOOST_CONTAINER_FORCEINLINE vec_iterator(const nonconst_iterator &other) BOOST_NOEXCEPT_OR_NOTHROW
+      :  m_ptr(other.get_ptr())
+   {}
+
+   BOOST_CONTAINER_FORCEINLINE vec_iterator & operator=(const vec_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW
+   {  m_ptr = other.get_ptr();   return *this;  }
+
    //Pointer like operators
    BOOST_CONTAINER_FORCEINLINE reference operator*()   const BOOST_NOEXCEPT_OR_NOTHROW
    {  return *m_ptr;  }

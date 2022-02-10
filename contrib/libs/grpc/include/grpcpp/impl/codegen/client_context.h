@@ -1,21 +1,21 @@
-/* 
- * 
+/*
+ *
  * Copyright 2015 gRPC authors.
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
 /// A ClientContext allows the person implementing a service client to:
 ///
 /// - Add custom metadata key-value pairs that will propagated to the server
@@ -31,13 +31,13 @@
 ///
 /// \warning ClientContext instances should \em not be reused across rpcs.
 
-#ifndef GRPCPP_IMPL_CODEGEN_CLIENT_CONTEXT_H 
-#define GRPCPP_IMPL_CODEGEN_CLIENT_CONTEXT_H 
- 
+#ifndef GRPCPP_IMPL_CODEGEN_CLIENT_CONTEXT_H
+#define GRPCPP_IMPL_CODEGEN_CLIENT_CONTEXT_H
+
 #include <map>
 #include <memory>
 #include <util/generic/string.h>
- 
+
 #include <grpc/impl/codegen/compression_types.h>
 #include <grpc/impl/codegen/propagation_bits.h>
 #include <grpcpp/impl/codegen/client_interceptor.h>
@@ -56,11 +56,11 @@
 struct census_context;
 struct grpc_call;
 
-namespace grpc { 
+namespace grpc {
 class ServerContext;
 class ServerContextBase;
 class CallbackServerContext;
- 
+
 namespace internal {
 template <class InputMessage, class OutputMessage>
 class CallbackUnaryCallImpl;
@@ -73,7 +73,7 @@ class ClientCallbackWriterImpl;
 class ClientCallbackUnaryImpl;
 class ClientContextAccessor;
 }  // namespace internal
- 
+
 template <class R>
 class ClientReader;
 template <class W>
@@ -519,6 +519,6 @@ class ClientContext {
   grpc::experimental::ClientRpcInfo rpc_info_;
 };
 
-}  // namespace grpc 
- 
-#endif  // GRPCPP_IMPL_CODEGEN_CLIENT_CONTEXT_H 
+}  // namespace grpc
+
+#endif  // GRPCPP_IMPL_CODEGEN_CLIENT_CONTEXT_H

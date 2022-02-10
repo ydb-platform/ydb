@@ -5,7 +5,7 @@
 
     Module that implements the default filter.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -34,10 +34,10 @@ def simplefilter(f):
                 yield ttype, value.lower()
     """
     return type(f.__name__, (FunctionFilter,), {
-        '__module__': getattr(f, '__module__'), 
-        '__doc__': f.__doc__, 
-        'function': f, 
-    }) 
+        '__module__': getattr(f, '__module__'),
+        '__doc__': f.__doc__,
+        'function': f,
+    })
 
 
 class Filter(object):

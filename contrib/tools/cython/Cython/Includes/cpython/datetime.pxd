@@ -1,4 +1,4 @@
-from cpython.object cimport PyObject 
+from cpython.object cimport PyObject
 
 cdef extern from "Python.h":
     ctypedef struct PyTypeObject:

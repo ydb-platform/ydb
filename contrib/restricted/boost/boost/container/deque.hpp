@@ -127,12 +127,12 @@ class deque_iterator
       , value_type&
       >::type                                                                       reference;
 
-   class nat; 
-   typedef typename dtl::if_c< IsConst 
-                             , deque_iterator<Pointer, false> 
-                             , nat>::type                                           nonconst_iterator; 
- 
-   BOOST_CONTAINER_FORCEINLINE static std::size_t s_buffer_size() 
+   class nat;
+   typedef typename dtl::if_c< IsConst
+                             , deque_iterator<Pointer, false>
+                             , nat>::type                                           nonconst_iterator;
+
+   BOOST_CONTAINER_FORCEINLINE static std::size_t s_buffer_size()
       { return deque_buf_size<value_type>::value; }
 
    typedef Pointer                                                                  val_alloc_ptr;
@@ -159,22 +159,22 @@ class deque_iterator
       : m_cur(), m_first(), m_last(), m_node()  //Value initialization to achieve "null iterators" (N3644)
    {}
 
-   BOOST_CONTAINER_FORCEINLINE deque_iterator(const deque_iterator& x) BOOST_NOEXCEPT_OR_NOTHROW 
+   BOOST_CONTAINER_FORCEINLINE deque_iterator(const deque_iterator& x) BOOST_NOEXCEPT_OR_NOTHROW
       : m_cur(x.get_cur()), m_first(x.get_first()), m_last(x.get_last()), m_node(x.get_node())
    {}
 
-   BOOST_CONTAINER_FORCEINLINE deque_iterator(const nonconst_iterator& x) BOOST_NOEXCEPT_OR_NOTHROW 
-      : m_cur(x.get_cur()), m_first(x.get_first()), m_last(x.get_last()), m_node(x.get_node()) 
-   {} 
- 
+   BOOST_CONTAINER_FORCEINLINE deque_iterator(const nonconst_iterator& x) BOOST_NOEXCEPT_OR_NOTHROW
+      : m_cur(x.get_cur()), m_first(x.get_first()), m_last(x.get_last()), m_node(x.get_node())
+   {}
+
    deque_iterator(Pointer cur, Pointer first, Pointer last, index_pointer node) BOOST_NOEXCEPT_OR_NOTHROW
       : m_cur(cur), m_first(first), m_last(last), m_node(node)
    {}
 
-   BOOST_CONTAINER_FORCEINLINE deque_iterator& operator=(const deque_iterator& x) BOOST_NOEXCEPT_OR_NOTHROW 
-   {  m_cur = x.get_cur(); m_first = x.get_first(); m_last = x.get_last(); m_node = x.get_node(); return *this; } 
- 
-   BOOST_CONTAINER_FORCEINLINE deque_iterator<Pointer, false> unconst() const BOOST_NOEXCEPT_OR_NOTHROW 
+   BOOST_CONTAINER_FORCEINLINE deque_iterator& operator=(const deque_iterator& x) BOOST_NOEXCEPT_OR_NOTHROW
+   {  m_cur = x.get_cur(); m_first = x.get_first(); m_last = x.get_last(); m_node = x.get_node(); return *this; }
+
+   BOOST_CONTAINER_FORCEINLINE deque_iterator<Pointer, false> unconst() const BOOST_NOEXCEPT_OR_NOTHROW
    {
       return deque_iterator<Pointer, false>(this->get_cur(), this->get_first(), this->get_last(), this->get_node());
    }

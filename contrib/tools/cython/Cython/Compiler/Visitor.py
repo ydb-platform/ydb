@@ -1,14 +1,14 @@
 # cython: infer_types=True
-# cython: language_level=3 
-# cython: auto_pickle=False 
+# cython: language_level=3
+# cython: auto_pickle=False
 
 #
 #   Tree visitor and transform framework
 #
 
-from __future__ import absolute_import, print_function 
+from __future__ import absolute_import, print_function
 
-import sys 
+import sys
 import inspect
 
 from . import TypeSlots
@@ -17,19 +17,19 @@ from . import Nodes
 from . import ExprNodes
 from . import Errors
 from . import DebugFlags
-from . import Future 
+from . import Future
 
 import cython
 
 
-cython.declare(_PRINTABLE=tuple) 
- 
-if sys.version_info[0] >= 3: 
-    _PRINTABLE = (bytes, str, int, float) 
-else: 
-    _PRINTABLE = (str, unicode, long, int, float) 
- 
- 
+cython.declare(_PRINTABLE=tuple)
+
+if sys.version_info[0] >= 3:
+    _PRINTABLE = (bytes, str, int, float)
+else:
+    _PRINTABLE = (str, unicode, long, int, float)
+
+
 class TreeVisitor(object):
     """
     Base class for writing visitors for a Cython tree, contains utilities for
@@ -59,9 +59,9 @@ class TreeVisitor(object):
     >>> tree = SampleNode(0, SampleNode(1), [SampleNode(2), SampleNode(3)])
     >>> class MyVisitor(TreeVisitor):
     ...     def visit_SampleNode(self, node):
-    ...         print("in %s %s" % (node.value, self.access_path)) 
+    ...         print("in %s %s" % (node.value, self.access_path))
     ...         self.visitchildren(node)
-    ...         print("out %s" % node.value) 
+    ...         print("out %s" % node.value)
     ...
     >>> MyVisitor().visit(tree)
     in 0 []
@@ -78,9 +78,9 @@ class TreeVisitor(object):
         self.dispatch_table = {}
         self.access_path = []
 
-    def dump_node(self, node): 
-        ignored = list(node.child_attrs or []) + [ 
-            u'child_attrs', u'pos', u'gil_message', u'cpp_message', u'subexprs'] 
+    def dump_node(self, node):
+        ignored = list(node.child_attrs or []) + [
+            u'child_attrs', u'pos', u'gil_message', u'cpp_message', u'subexprs']
         values = []
         pos = getattr(node, 'pos', None)
         if pos:
@@ -93,7 +93,7 @@ class TreeVisitor(object):
         for attr in attribute_names:
             if attr in ignored:
                 continue
-            if attr.startswith('_') or attr.endswith('_'): 
+            if attr.startswith('_') or attr.endswith('_'):
                 continue
             try:
                 value = getattr(node, attr)
@@ -103,12 +103,12 @@ class TreeVisitor(object):
                 continue
             elif isinstance(value, list):
                 value = u'[...]/%d' % len(value)
-            elif not isinstance(value, _PRINTABLE): 
+            elif not isinstance(value, _PRINTABLE):
                 continue
             else:
                 value = repr(value)
             values.append(u'%s = %s' % (attr, value))
-        return u'%s(%s)' % (node.__class__.__name__, u',\n    '.join(values)) 
+        return u'%s(%s)' % (node.__class__.__name__, u',\n    '.join(values))
 
     def _find_node_path(self, stacktrace):
         import os.path
@@ -159,11 +159,11 @@ class TreeVisitor(object):
             handler_method = getattr(self, pattern % mro_cls.__name__, None)
             if handler_method is not None:
                 return handler_method
-        print(type(self), cls) 
+        print(type(self), cls)
         if self.access_path:
-            print(self.access_path) 
-            print(self.access_path[-1][0].pos) 
-            print(self.access_path[-1][0].__dict__) 
+            print(self.access_path)
+            print(self.access_path[-1][0].pos)
+            print(self.access_path[-1][0].__dict__)
         raise RuntimeError("Visitor %r does not accept object: %s" % (self, obj))
 
     def visit(self, obj):
@@ -182,7 +182,7 @@ class TreeVisitor(object):
             raise
         except Errors.AbortError:
             raise
-        except Exception as e: 
+        except Exception as e:
             if DebugFlags.debug_no_exception_intercept:
                 raise
             self._raise_compiler_error(obj, e)
@@ -244,46 +244,46 @@ class VisitorTransform(TreeVisitor):
     was not, an exception will be raised. (Typically you want to ensure that you
     are within a StatListNode or similar before doing this.)
     """
-    def visitchildren(self, parent, attrs=None, exclude=None): 
-        # generic def entry point for calls from Python subclasses 
-        if exclude is not None: 
-            attrs = self._select_attrs(parent.child_attrs if attrs is None else attrs, exclude) 
-        return self._process_children(parent, attrs) 
- 
-    @cython.final 
-    def _select_attrs(self, attrs, exclude): 
-        return [name for name in attrs if name not in exclude] 
- 
-    @cython.final 
-    def _process_children(self, parent, attrs=None): 
-        # fast cdef entry point for calls from Cython subclasses 
+    def visitchildren(self, parent, attrs=None, exclude=None):
+        # generic def entry point for calls from Python subclasses
+        if exclude is not None:
+            attrs = self._select_attrs(parent.child_attrs if attrs is None else attrs, exclude)
+        return self._process_children(parent, attrs)
+
+    @cython.final
+    def _select_attrs(self, attrs, exclude):
+        return [name for name in attrs if name not in exclude]
+
+    @cython.final
+    def _process_children(self, parent, attrs=None):
+        # fast cdef entry point for calls from Cython subclasses
         result = self._visitchildren(parent, attrs)
-        for attr, newnode in result.items(): 
-            if type(newnode) is list: 
-                newnode = self._flatten_list(newnode) 
-            setattr(parent, attr, newnode) 
+        for attr, newnode in result.items():
+            if type(newnode) is list:
+                newnode = self._flatten_list(newnode)
+            setattr(parent, attr, newnode)
         return result
 
-    @cython.final 
-    def _flatten_list(self, orig_list): 
-        # Flatten the list one level and remove any None 
-        newlist = [] 
-        for x in orig_list: 
-            if x is not None: 
-                if type(x) is list: 
-                    newlist.extend(x) 
-                else: 
-                    newlist.append(x) 
-        return newlist 
- 
+    @cython.final
+    def _flatten_list(self, orig_list):
+        # Flatten the list one level and remove any None
+        newlist = []
+        for x in orig_list:
+            if x is not None:
+                if type(x) is list:
+                    newlist.extend(x)
+                else:
+                    newlist.append(x)
+        return newlist
+
     def recurse_to_children(self, node):
-        self._process_children(node) 
+        self._process_children(node)
         return node
 
     def __call__(self, root):
         return self._visit(root)
 
- 
+
 class CythonTransform(VisitorTransform):
     """
     Certain common conventions and utilities for Cython transforms.
@@ -304,15 +304,15 @@ class CythonTransform(VisitorTransform):
     def visit_CompilerDirectivesNode(self, node):
         old = self.current_directives
         self.current_directives = node.directives
-        self._process_children(node) 
+        self._process_children(node)
         self.current_directives = old
         return node
 
     def visit_Node(self, node):
-        self._process_children(node) 
+        self._process_children(node)
         return node
 
- 
+
 class ScopeTrackingTransform(CythonTransform):
     # Keeps track of type of scopes
     #scope_type: can be either of 'module', 'function', 'cclass', 'pyclass', 'struct'
@@ -321,14 +321,14 @@ class ScopeTrackingTransform(CythonTransform):
     def visit_ModuleNode(self, node):
         self.scope_type = 'module'
         self.scope_node = node
-        self._process_children(node) 
+        self._process_children(node)
         return node
 
     def visit_scope(self, node, scope_type):
         prev = self.scope_type, self.scope_node
         self.scope_type = scope_type
         self.scope_node = node
-        self._process_children(node) 
+        self._process_children(node)
         self.scope_type, self.scope_node = prev
         return node
 
@@ -371,45 +371,45 @@ class EnvTransform(CythonTransform):
 
     def visit_FuncDefNode(self, node):
         self.enter_scope(node, node.local_scope)
-        self._process_children(node) 
+        self._process_children(node)
         self.exit_scope()
         return node
 
     def visit_GeneratorBodyDefNode(self, node):
-        self._process_children(node) 
+        self._process_children(node)
         return node
 
     def visit_ClassDefNode(self, node):
         self.enter_scope(node, node.scope)
-        self._process_children(node) 
+        self._process_children(node)
         self.exit_scope()
         return node
 
     def visit_CStructOrUnionDefNode(self, node):
         self.enter_scope(node, node.scope)
-        self._process_children(node) 
+        self._process_children(node)
         self.exit_scope()
         return node
 
     def visit_ScopedExprNode(self, node):
         if node.expr_scope:
             self.enter_scope(node, node.expr_scope)
-            self._process_children(node) 
+            self._process_children(node)
             self.exit_scope()
         else:
-            self._process_children(node) 
+            self._process_children(node)
         return node
 
     def visit_CArgDeclNode(self, node):
         # default arguments are evaluated in the outer scope
         if node.default:
-            attrs = [attr for attr in node.child_attrs if attr != 'default'] 
-            self._process_children(node, attrs) 
+            attrs = [attr for attr in node.child_attrs if attr != 'default']
+            self._process_children(node, attrs)
             self.enter_scope(node, self.current_env().outer_scope)
             self.visitchildren(node, ('default',))
             self.exit_scope()
         else:
-            self._process_children(node) 
+            self._process_children(node)
         return node
 
 
@@ -430,7 +430,7 @@ class NodeRefCleanupMixin(object):
     def visit_CloneNode(self, node):
         arg = node.arg
         if arg not in self._replacements:
-            self.visitchildren(arg) 
+            self.visitchildren(arg)
         node.arg = self._replacements.get(arg, arg)
         return node
 
@@ -457,7 +457,7 @@ find_special_method_for_binary_operator = {
     '>':  '__gt__',
     '+':  '__add__',
     '&':  '__and__',
-    '/':  '__div__', 
+    '/':  '__div__',
     '//': '__floordiv__',
     '<<': '__lshift__',
     '%':  '__mod__',
@@ -494,7 +494,7 @@ class MethodDispatcherTransform(EnvTransform):
     """
     # only visit call nodes and Python operations
     def visit_GeneralCallNode(self, node):
-        self._process_children(node) 
+        self._process_children(node)
         function = node.function
         if not function.type.is_pyobject:
             return node
@@ -509,7 +509,7 @@ class MethodDispatcherTransform(EnvTransform):
         return self._dispatch_to_handler(node, function, args, keyword_args)
 
     def visit_SimpleCallNode(self, node):
-        self._process_children(node) 
+        self._process_children(node)
         function = node.function
         if function.type.is_pyobject:
             arg_tuple = node.arg_tuple
@@ -523,7 +523,7 @@ class MethodDispatcherTransform(EnvTransform):
     def visit_PrimaryCmpNode(self, node):
         if node.cascade:
             # not currently handled below
-            self._process_children(node) 
+            self._process_children(node)
             return node
         return self._visit_binop_node(node)
 
@@ -531,16 +531,16 @@ class MethodDispatcherTransform(EnvTransform):
         return self._visit_binop_node(node)
 
     def _visit_binop_node(self, node):
-        self._process_children(node) 
+        self._process_children(node)
         # FIXME: could special case 'not_in'
         special_method_name = find_special_method_for_binary_operator(node.operator)
         if special_method_name:
             operand1, operand2 = node.operand1, node.operand2
             if special_method_name == '__contains__':
                 operand1, operand2 = operand2, operand1
-            elif special_method_name == '__div__': 
-                if Future.division in self.current_env().global_scope().context.future_directives: 
-                    special_method_name = '__truediv__' 
+            elif special_method_name == '__div__':
+                if Future.division in self.current_env().global_scope().context.future_directives:
+                    special_method_name = '__truediv__'
             obj_type = operand1.type
             if obj_type.is_builtin_type:
                 type_name = obj_type.name
@@ -552,7 +552,7 @@ class MethodDispatcherTransform(EnvTransform):
         return node
 
     def visit_UnopNode(self, node):
-        self._process_children(node) 
+        self._process_children(node)
         special_method_name = find_special_method_for_unary_operator(node.operator)
         if special_method_name:
             operand = node.operand
@@ -624,19 +624,19 @@ class MethodDispatcherTransform(EnvTransform):
                 return function_handler(node, function, arg_list, kwargs)
             else:
                 return function_handler(node, function, arg_list)
-        elif function.is_attribute: 
+        elif function.is_attribute:
             attr_name = function.attribute
-            if function.type.is_pyobject: 
-                self_arg = function.obj 
-            elif node.self and function.entry: 
-                entry = function.entry.as_variable 
-                if not entry or not entry.is_builtin: 
-                    return node 
-                # C implementation of a Python builtin method - see if we find further matches 
-                self_arg = node.self 
-                arg_list = arg_list[1:]  # drop CloneNode of self argument 
-            else: 
-                return node 
+            if function.type.is_pyobject:
+                self_arg = function.obj
+            elif node.self and function.entry:
+                entry = function.entry.as_variable
+                if not entry or not entry.is_builtin:
+                    return node
+                # C implementation of a Python builtin method - see if we find further matches
+                self_arg = node.self
+                arg_list = arg_list[1:]  # drop CloneNode of self argument
+            else:
+                return node
             obj_type = self_arg.type
             is_unbound_method = False
             if obj_type.is_builtin_type:
@@ -673,12 +673,12 @@ class MethodDispatcherTransform(EnvTransform):
         if self_arg is not None:
             arg_list = [self_arg] + list(arg_list)
         if kwargs:
-            result = method_handler( 
+            result = method_handler(
                 node, function, arg_list, is_unbound_method, kwargs)
         else:
-            result = method_handler( 
+            result = method_handler(
                 node, function, arg_list, is_unbound_method)
-        return result 
+        return result
 
     def _handle_function(self, node, function_name, function, arg_list, kwargs):
         """Fallback handler"""
@@ -699,15 +699,15 @@ class RecursiveNodeReplacer(VisitorTransform):
         super(RecursiveNodeReplacer, self).__init__()
         self.orig_node, self.new_node = orig_node, new_node
 
-    def visit_CloneNode(self, node): 
-        if node is self.orig_node: 
-            return self.new_node 
-        if node.arg is self.orig_node: 
-            node.arg = self.new_node 
-        return node 
- 
+    def visit_CloneNode(self, node):
+        if node is self.orig_node:
+            return self.new_node
+        if node.arg is self.orig_node:
+            node.arg = self.new_node
+        return node
+
     def visit_Node(self, node):
-        self._process_children(node) 
+        self._process_children(node)
         if node is self.orig_node:
             return self.new_node
         else:
@@ -752,22 +752,22 @@ def replace_node(ptr, value):
     else:
         getattr(parent, attrname)[listidx] = value
 
- 
+
 class PrintTree(TreeVisitor):
     """Prints a representation of the tree to standard output.
     Subclass and override repr_of to provide more information
     about nodes. """
-    def __init__(self, start=None, end=None): 
+    def __init__(self, start=None, end=None):
         TreeVisitor.__init__(self)
         self._indent = ""
-        if start is not None or end is not None: 
-            self._line_range = (start or 0, end or 2**30) 
-        else: 
-            self._line_range = None 
+        if start is not None or end is not None:
+            self._line_range = (start or 0, end or 2**30)
+        else:
+            self._line_range = None
 
     def indent(self):
         self._indent += "  "
- 
+
     def unindent(self):
         self._indent = self._indent[:-2]
 
@@ -781,37 +781,37 @@ class PrintTree(TreeVisitor):
     # under the parent-node, not displaying the list itself in
     # the hierarchy.
     def visit_Node(self, node):
-        self._print_node(node) 
+        self._print_node(node)
         self.indent()
         self.visitchildren(node)
         self.unindent()
         return node
 
-    def visit_CloneNode(self, node): 
-        self._print_node(node) 
-        self.indent() 
-        line = node.pos[1] 
-        if self._line_range is None or self._line_range[0] <= line <= self._line_range[1]: 
-            print("%s- %s: %s" % (self._indent, 'arg', self.repr_of(node.arg))) 
-        self.indent() 
-        self.visitchildren(node.arg) 
-        self.unindent() 
-        self.unindent() 
-        return node 
- 
-    def _print_node(self, node): 
-        line = node.pos[1] 
-        if self._line_range is None or self._line_range[0] <= line <= self._line_range[1]: 
-            if len(self.access_path) == 0: 
-                name = "(root)" 
-            else: 
-                parent, attr, idx = self.access_path[-1] 
-                if idx is not None: 
-                    name = "%s[%d]" % (attr, idx) 
-                else: 
-                    name = attr 
-            print("%s- %s: %s" % (self._indent, name, self.repr_of(node))) 
- 
+    def visit_CloneNode(self, node):
+        self._print_node(node)
+        self.indent()
+        line = node.pos[1]
+        if self._line_range is None or self._line_range[0] <= line <= self._line_range[1]:
+            print("%s- %s: %s" % (self._indent, 'arg', self.repr_of(node.arg)))
+        self.indent()
+        self.visitchildren(node.arg)
+        self.unindent()
+        self.unindent()
+        return node
+
+    def _print_node(self, node):
+        line = node.pos[1]
+        if self._line_range is None or self._line_range[0] <= line <= self._line_range[1]:
+            if len(self.access_path) == 0:
+                name = "(root)"
+            else:
+                parent, attr, idx = self.access_path[-1]
+                if idx is not None:
+                    name = "%s[%d]" % (attr, idx)
+                else:
+                    name = attr
+            print("%s- %s: %s" % (self._indent, name, self.repr_of(node)))
+
     def repr_of(self, node):
         if node is None:
             return "(none)"

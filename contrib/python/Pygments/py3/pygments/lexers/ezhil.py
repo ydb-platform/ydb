@@ -3,7 +3,7 @@
     ~~~~~~~~~~~~~~~~~~~~~
 
     Pygments lexers for Ezhil language.
- 
+
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
@@ -15,7 +15,7 @@ from pygments.token import String, Number, Punctuation, Operator, Whitespace
 
 __all__ = ['EzhilLexer']
 
- 
+
 class EzhilLexer(RegexLexer):
     """
     Lexer for `Ezhil, a Tamil script-based programming language <http://ezhillang.org>`_
@@ -62,7 +62,7 @@ class EzhilLexer(RegexLexer):
             (r'(?u)\d+', Number.Integer),
         ]
     }
- 
+
     def analyse_text(text):
         """This language uses Tamil-script. We'll assume that if there's a
         decent amount of Tamil-characters, it's this language. This assumption

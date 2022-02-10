@@ -837,7 +837,7 @@ typedef enum {
  * xmlGenericErrorFunc:
  * @ctx:  a parsing context
  * @msg:  the message
- * @...:  the extra arguments of the varargs to format the message 
+ * @...:  the extra arguments of the varargs to format the message
  *
  * Signature of the function to use when there is an error and
  * no parsing or validity context available .
@@ -937,7 +937,7 @@ XMLPUBFUN void XMLCALL
 				 int code,
 				 xmlNodePtr node,
 				 const char *msg,
-				 const char *extra) LIBXML_ATTR_FORMAT(4,0); 
+				 const char *extra) LIBXML_ATTR_FORMAT(4,0);
 #endif
 #ifdef __cplusplus
 }

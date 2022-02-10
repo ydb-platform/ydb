@@ -92,7 +92,7 @@ namespace boost { namespace proto
 
             std::ostream &sout_;
 
-            BOOST_DELETED_FUNCTION(ostream_wrapper &operator =(ostream_wrapper const &)) 
+            BOOST_DELETED_FUNCTION(ostream_wrapper &operator =(ostream_wrapper const &))
         };
 
         struct named_any
@@ -127,8 +127,8 @@ namespace boost { namespace proto
                 this->impl(expr, mpl::long_<arity_of<Expr>::value>());
             }
 
-            BOOST_DELETED_FUNCTION(display_expr_impl(display_expr_impl const &)) 
-            BOOST_DELETED_FUNCTION(display_expr_impl &operator =(display_expr_impl const &)) 
+            BOOST_DELETED_FUNCTION(display_expr_impl(display_expr_impl const &))
+            BOOST_DELETED_FUNCTION(display_expr_impl &operator =(display_expr_impl const &))
         private:
 
             template<typename Expr>

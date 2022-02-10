@@ -31,7 +31,7 @@
 #include <cassert>
 #include <cstddef>
 
-#include "y_absl/base/attributes.h" 
+#include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
 #include "y_absl/base/optimization.h"
 #include "y_absl/base/port.h"
@@ -45,14 +45,14 @@
   (sizeof(::y_absl::macros_internal::ArraySizeHelper(array)))
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace macros_internal {
 // Note: this internal template function declaration is used by ABSL_ARRAYSIZE.
 // The function doesn't need a definition, as we only use its type.
 template <typename T, size_t N>
 auto ArraySizeHelper(const T (&array)[N]) -> char (&)[N];
 }  // namespace macros_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 // ABSL_BAD_CALL_IF()
@@ -60,7 +60,7 @@ ABSL_NAMESPACE_END
 // Used on a function overload to trap bad calls: any call that matches the
 // overload will cause a compile-time error. This macro uses a clang-specific
 // "enable_if" attribute, as described at
-// https://clang.llvm.org/docs/AttributeReference.html#enable-if 
+// https://clang.llvm.org/docs/AttributeReference.html#enable-if
 //
 // Overloads which use this macro should be bracketed by
 // `#ifdef ABSL_BAD_CALL_IF`.
@@ -73,9 +73,9 @@ ABSL_NAMESPACE_END
 //     ABSL_BAD_CALL_IF(c <= -1 || c > 255,
 //                       "'c' must have the value of an unsigned char or EOF");
 //   #endif // ABSL_BAD_CALL_IF
-#if ABSL_HAVE_ATTRIBUTE(enable_if) 
-#define ABSL_BAD_CALL_IF(expr, msg) \ 
-  __attribute__((enable_if(expr, "Bad call trap"), unavailable(msg))) 
+#if ABSL_HAVE_ATTRIBUTE(enable_if)
+#define ABSL_BAD_CALL_IF(expr, msg) \
+  __attribute__((enable_if(expr, "Bad call trap"), unavailable(msg)))
 #endif
 
 // ABSL_ASSERT()

@@ -10,7 +10,7 @@
 
 import re
 
-from pygments.lexer import RegexLexer, include, bygroups, using, words, \ 
+from pygments.lexer import RegexLexer, include, bygroups, using, words, \
     DelegatingLexer, default
 from pygments.lexers.c_cpp import CppLexer, CLexer
 from pygments.lexers.d import DLexer
@@ -35,7 +35,7 @@ class GasLexer(RegexLexer):
     #: optional Comment or Whitespace
     string = r'"(\\"|[^"])*"'
     char = r'[\w$.@-]'
-    identifier = r'(?:[a-zA-Z$_]' + char + r'*|\.' + char + '+)' 
+    identifier = r'(?:[a-zA-Z$_]' + char + r'*|\.' + char + '+)'
     number = r'(?:0[xX][a-fA-F0-9]+|#?-?\d+)'
     register = '%' + identifier + r'\b'
 
@@ -84,7 +84,7 @@ class GasLexer(RegexLexer):
             (r'([;#]|//).*?\n', Comment.Single, '#pop'),
             (r'/[*].*?[*]/', Comment.Multiline),
             (r'/[*].*?\n[\w\W]*?[*]/', Comment.Multiline, '#pop'),
- 
+
             include('punctuation'),
             include('whitespace')
         ],
@@ -210,141 +210,141 @@ class CObjdumpLexer(DelegatingLexer):
         super().__init__(CLexer, ObjdumpLexer, **options)
 
 
-class HsailLexer(RegexLexer): 
-    """ 
-    For HSAIL assembly code. 
- 
-    .. versionadded:: 2.2 
-    """ 
-    name = 'HSAIL' 
-    aliases = ['hsail', 'hsa'] 
-    filenames = ['*.hsail'] 
-    mimetypes = ['text/x-hsail'] 
- 
-    string = r'"[^"]*?"' 
-    identifier = r'[a-zA-Z_][\w.]*' 
-    # Registers 
-    register_number = r'[0-9]+' 
+class HsailLexer(RegexLexer):
+    """
+    For HSAIL assembly code.
+
+    .. versionadded:: 2.2
+    """
+    name = 'HSAIL'
+    aliases = ['hsail', 'hsa']
+    filenames = ['*.hsail']
+    mimetypes = ['text/x-hsail']
+
+    string = r'"[^"]*?"'
+    identifier = r'[a-zA-Z_][\w.]*'
+    # Registers
+    register_number = r'[0-9]+'
     register = r'(\$(c|s|d|q)' + register_number + r')\b'
-    # Qualifiers 
-    alignQual = r'(align\(\d+\))' 
-    widthQual = r'(width\((\d+|all)\))' 
-    allocQual = r'(alloc\(agent\))' 
-    # Instruction Modifiers 
-    roundingMod = (r'((_ftz)?(_up|_down|_zero|_near))') 
-    datatypeMod = (r'_(' 
-                   # packedTypes 
-                   r'u8x4|s8x4|u16x2|s16x2|u8x8|s8x8|u16x4|s16x4|u32x2|s32x2|' 
-                   r'u8x16|s8x16|u16x8|s16x8|u32x4|s32x4|u64x2|s64x2|' 
-                   r'f16x2|f16x4|f16x8|f32x2|f32x4|f64x2|' 
-                   # baseTypes 
-                   r'u8|s8|u16|s16|u32|s32|u64|s64|' 
-                   r'b128|b8|b16|b32|b64|b1|' 
-                   r'f16|f32|f64|' 
-                   # opaqueType 
-                   r'roimg|woimg|rwimg|samp|sig32|sig64)') 
- 
-    # Numeric Constant 
-    float = r'((\d+\.)|(\d*\.\d+))[eE][+-]?\d+' 
-    hexfloat = r'0[xX](([0-9a-fA-F]+\.[0-9a-fA-F]*)|([0-9a-fA-F]*\.[0-9a-fA-F]+))[pP][+-]?\d+' 
-    ieeefloat = r'0((h|H)[0-9a-fA-F]{4}|(f|F)[0-9a-fA-F]{8}|(d|D)[0-9a-fA-F]{16})' 
- 
-    tokens = { 
-        'root': [ 
-            include('whitespace'), 
-            include('comments'), 
- 
-            (string, String), 
- 
-            (r'@' + identifier + ':?', Name.Label), 
- 
-            (register, Name.Variable.Anonymous), 
- 
-            include('keyword'), 
- 
-            (r'&' + identifier, Name.Variable.Global), 
-            (r'%' + identifier, Name.Variable), 
- 
-            (hexfloat, Number.Hex), 
-            (r'0[xX][a-fA-F0-9]+', Number.Hex), 
-            (ieeefloat, Number.Float), 
-            (float, Number.Float), 
-            (r'\d+', Number.Integer), 
- 
-            (r'[=<>{}\[\]()*.,:;!]|x\b', Punctuation) 
-        ], 
-        'whitespace': [ 
+    # Qualifiers
+    alignQual = r'(align\(\d+\))'
+    widthQual = r'(width\((\d+|all)\))'
+    allocQual = r'(alloc\(agent\))'
+    # Instruction Modifiers
+    roundingMod = (r'((_ftz)?(_up|_down|_zero|_near))')
+    datatypeMod = (r'_('
+                   # packedTypes
+                   r'u8x4|s8x4|u16x2|s16x2|u8x8|s8x8|u16x4|s16x4|u32x2|s32x2|'
+                   r'u8x16|s8x16|u16x8|s16x8|u32x4|s32x4|u64x2|s64x2|'
+                   r'f16x2|f16x4|f16x8|f32x2|f32x4|f64x2|'
+                   # baseTypes
+                   r'u8|s8|u16|s16|u32|s32|u64|s64|'
+                   r'b128|b8|b16|b32|b64|b1|'
+                   r'f16|f32|f64|'
+                   # opaqueType
+                   r'roimg|woimg|rwimg|samp|sig32|sig64)')
+
+    # Numeric Constant
+    float = r'((\d+\.)|(\d*\.\d+))[eE][+-]?\d+'
+    hexfloat = r'0[xX](([0-9a-fA-F]+\.[0-9a-fA-F]*)|([0-9a-fA-F]*\.[0-9a-fA-F]+))[pP][+-]?\d+'
+    ieeefloat = r'0((h|H)[0-9a-fA-F]{4}|(f|F)[0-9a-fA-F]{8}|(d|D)[0-9a-fA-F]{16})'
+
+    tokens = {
+        'root': [
+            include('whitespace'),
+            include('comments'),
+
+            (string, String),
+
+            (r'@' + identifier + ':?', Name.Label),
+
+            (register, Name.Variable.Anonymous),
+
+            include('keyword'),
+
+            (r'&' + identifier, Name.Variable.Global),
+            (r'%' + identifier, Name.Variable),
+
+            (hexfloat, Number.Hex),
+            (r'0[xX][a-fA-F0-9]+', Number.Hex),
+            (ieeefloat, Number.Float),
+            (float, Number.Float),
+            (r'\d+', Number.Integer),
+
+            (r'[=<>{}\[\]()*.,:;!]|x\b', Punctuation)
+        ],
+        'whitespace': [
             (r'(\n|\s)+', Whitespace),
-        ], 
-        'comments': [ 
-            (r'/\*.*?\*/', Comment.Multiline), 
-            (r'//.*?\n', Comment.Single), 
-        ], 
-        'keyword': [ 
-            # Types 
-            (r'kernarg' + datatypeMod, Keyword.Type), 
- 
-            # Regular keywords 
-            (r'\$(full|base|small|large|default|zero|near)', Keyword), 
-            (words(( 
-                'module', 'extension', 'pragma', 'prog', 'indirect', 'signature', 
-                'decl', 'kernel', 'function', 'enablebreakexceptions', 
-                'enabledetectexceptions', 'maxdynamicgroupsize', 'maxflatgridsize', 
-                'maxflatworkgroupsize', 'requireddim', 'requiredgridsize', 
-                'requiredworkgroupsize', 'requirenopartialworkgroups'), 
-                suffix=r'\b'), Keyword), 
- 
-            # instructions 
-            (roundingMod, Keyword), 
-            (datatypeMod, Keyword), 
-            (r'_(' + alignQual + '|' + widthQual + ')', Keyword), 
-            (r'_kernarg', Keyword), 
-            (r'(nop|imagefence)\b', Keyword), 
-            (words(( 
-                'cleardetectexcept', 'clock', 'cuid', 'debugtrap', 'dim', 
-                'getdetectexcept', 'groupbaseptr', 'kernargbaseptr', 'laneid', 
-                'maxcuid', 'maxwaveid', 'packetid', 'setdetectexcept', 'waveid', 
-                'workitemflatabsid', 'workitemflatid', 'nullptr', 'abs', 'bitrev', 
-                'currentworkgroupsize', 'currentworkitemflatid', 'fract', 'ncos', 
-                'neg', 'nexp2', 'nlog2', 'nrcp', 'nrsqrt', 'nsin', 'nsqrt', 
-                'gridgroups', 'gridsize', 'not', 'sqrt', 'workgroupid', 
-                'workgroupsize', 'workitemabsid', 'workitemid', 'ceil', 'floor', 
-                'rint', 'trunc', 'add', 'bitmask', 'borrow', 'carry', 'copysign', 
-                'div', 'rem', 'sub', 'shl', 'shr', 'and', 'or', 'xor', 'unpackhi', 
-                'unpacklo', 'max', 'min', 'fma', 'mad', 'bitextract', 'bitselect', 
-                'shuffle', 'cmov', 'bitalign', 'bytealign', 'lerp', 'nfma', 'mul', 
-                'mulhi', 'mul24hi', 'mul24', 'mad24', 'mad24hi', 'bitinsert', 
-                'combine', 'expand', 'lda', 'mov', 'pack', 'unpack', 'packcvt', 
-                'unpackcvt', 'sad', 'sementp', 'ftos', 'stof', 'cmp', 'ld', 'st', 
-                '_eq', '_ne', '_lt', '_le', '_gt', '_ge', '_equ', '_neu', '_ltu', 
-                '_leu', '_gtu', '_geu', '_num', '_nan', '_seq', '_sne', '_slt', 
-                '_sle', '_sgt', '_sge', '_snum', '_snan', '_sequ', '_sneu', '_sltu', 
-                '_sleu', '_sgtu', '_sgeu', 'atomic', '_ld', '_st', '_cas', '_add', 
-                '_and', '_exch', '_max', '_min', '_or', '_sub', '_wrapdec', 
-                '_wrapinc', '_xor', 'ret', 'cvt', '_readonly', '_kernarg', '_global', 
-                'br', 'cbr', 'sbr', '_scacq', '_screl', '_scar', '_rlx', '_wave', 
-                '_wg', '_agent', '_system', 'ldimage', 'stimage', '_v2', '_v3', '_v4', 
-                '_1d', '_2d', '_3d', '_1da', '_2da', '_1db', '_2ddepth', '_2dadepth', 
-                '_width', '_height', '_depth', '_array', '_channelorder', 
-                '_channeltype', 'querysampler', '_coord', '_filter', '_addressing', 
-                'barrier', 'wavebarrier', 'initfbar', 'joinfbar', 'waitfbar', 
-                'arrivefbar', 'leavefbar', 'releasefbar', 'ldf', 'activelaneid', 
-                'activelanecount', 'activelanemask', 'activelanepermute', 'call', 
-                'scall', 'icall', 'alloca', 'packetcompletionsig', 
-                'addqueuewriteindex', 'casqueuewriteindex', 'ldqueuereadindex', 
-                'stqueuereadindex', 'readonly', 'global', 'private', 'group', 
-                'spill', 'arg', '_upi', '_downi', '_zeroi', '_neari', '_upi_sat', 
-                '_downi_sat', '_zeroi_sat', '_neari_sat', '_supi', '_sdowni', 
-                '_szeroi', '_sneari', '_supi_sat', '_sdowni_sat', '_szeroi_sat', 
-                '_sneari_sat', '_pp', '_ps', '_sp', '_ss', '_s', '_p', '_pp_sat', 
-                '_ps_sat', '_sp_sat', '_ss_sat', '_s_sat', '_p_sat')), Keyword), 
- 
-            # Integer types 
-            (r'i[1-9]\d*', Keyword) 
-        ] 
-    } 
- 
- 
+        ],
+        'comments': [
+            (r'/\*.*?\*/', Comment.Multiline),
+            (r'//.*?\n', Comment.Single),
+        ],
+        'keyword': [
+            # Types
+            (r'kernarg' + datatypeMod, Keyword.Type),
+
+            # Regular keywords
+            (r'\$(full|base|small|large|default|zero|near)', Keyword),
+            (words((
+                'module', 'extension', 'pragma', 'prog', 'indirect', 'signature',
+                'decl', 'kernel', 'function', 'enablebreakexceptions',
+                'enabledetectexceptions', 'maxdynamicgroupsize', 'maxflatgridsize',
+                'maxflatworkgroupsize', 'requireddim', 'requiredgridsize',
+                'requiredworkgroupsize', 'requirenopartialworkgroups'),
+                suffix=r'\b'), Keyword),
+
+            # instructions
+            (roundingMod, Keyword),
+            (datatypeMod, Keyword),
+            (r'_(' + alignQual + '|' + widthQual + ')', Keyword),
+            (r'_kernarg', Keyword),
+            (r'(nop|imagefence)\b', Keyword),
+            (words((
+                'cleardetectexcept', 'clock', 'cuid', 'debugtrap', 'dim',
+                'getdetectexcept', 'groupbaseptr', 'kernargbaseptr', 'laneid',
+                'maxcuid', 'maxwaveid', 'packetid', 'setdetectexcept', 'waveid',
+                'workitemflatabsid', 'workitemflatid', 'nullptr', 'abs', 'bitrev',
+                'currentworkgroupsize', 'currentworkitemflatid', 'fract', 'ncos',
+                'neg', 'nexp2', 'nlog2', 'nrcp', 'nrsqrt', 'nsin', 'nsqrt',
+                'gridgroups', 'gridsize', 'not', 'sqrt', 'workgroupid',
+                'workgroupsize', 'workitemabsid', 'workitemid', 'ceil', 'floor',
+                'rint', 'trunc', 'add', 'bitmask', 'borrow', 'carry', 'copysign',
+                'div', 'rem', 'sub', 'shl', 'shr', 'and', 'or', 'xor', 'unpackhi',
+                'unpacklo', 'max', 'min', 'fma', 'mad', 'bitextract', 'bitselect',
+                'shuffle', 'cmov', 'bitalign', 'bytealign', 'lerp', 'nfma', 'mul',
+                'mulhi', 'mul24hi', 'mul24', 'mad24', 'mad24hi', 'bitinsert',
+                'combine', 'expand', 'lda', 'mov', 'pack', 'unpack', 'packcvt',
+                'unpackcvt', 'sad', 'sementp', 'ftos', 'stof', 'cmp', 'ld', 'st',
+                '_eq', '_ne', '_lt', '_le', '_gt', '_ge', '_equ', '_neu', '_ltu',
+                '_leu', '_gtu', '_geu', '_num', '_nan', '_seq', '_sne', '_slt',
+                '_sle', '_sgt', '_sge', '_snum', '_snan', '_sequ', '_sneu', '_sltu',
+                '_sleu', '_sgtu', '_sgeu', 'atomic', '_ld', '_st', '_cas', '_add',
+                '_and', '_exch', '_max', '_min', '_or', '_sub', '_wrapdec',
+                '_wrapinc', '_xor', 'ret', 'cvt', '_readonly', '_kernarg', '_global',
+                'br', 'cbr', 'sbr', '_scacq', '_screl', '_scar', '_rlx', '_wave',
+                '_wg', '_agent', '_system', 'ldimage', 'stimage', '_v2', '_v3', '_v4',
+                '_1d', '_2d', '_3d', '_1da', '_2da', '_1db', '_2ddepth', '_2dadepth',
+                '_width', '_height', '_depth', '_array', '_channelorder',
+                '_channeltype', 'querysampler', '_coord', '_filter', '_addressing',
+                'barrier', 'wavebarrier', 'initfbar', 'joinfbar', 'waitfbar',
+                'arrivefbar', 'leavefbar', 'releasefbar', 'ldf', 'activelaneid',
+                'activelanecount', 'activelanemask', 'activelanepermute', 'call',
+                'scall', 'icall', 'alloca', 'packetcompletionsig',
+                'addqueuewriteindex', 'casqueuewriteindex', 'ldqueuereadindex',
+                'stqueuereadindex', 'readonly', 'global', 'private', 'group',
+                'spill', 'arg', '_upi', '_downi', '_zeroi', '_neari', '_upi_sat',
+                '_downi_sat', '_zeroi_sat', '_neari_sat', '_supi', '_sdowni',
+                '_szeroi', '_sneari', '_supi_sat', '_sdowni_sat', '_szeroi_sat',
+                '_sneari_sat', '_pp', '_ps', '_sp', '_ss', '_s', '_p', '_pp_sat',
+                '_ps_sat', '_sp_sat', '_ss_sat', '_s_sat', '_p_sat')), Keyword),
+
+            # Integer types
+            (r'i[1-9]\d*', Keyword)
+        ]
+    }
+
+
 class LlvmLexer(RegexLexer):
     """
     For LLVM assembly code.
@@ -388,7 +388,7 @@ class LlvmLexer(RegexLexer):
         ],
         'keyword': [
             # Regular keywords
-            (words(( 
+            (words((
                 'aarch64_sve_vector_pcs', 'aarch64_vector_pcs', 'acq_rel',
                 'acquire', 'add', 'addrspace', 'addrspacecast', 'afn', 'alias',
                 'aliasee', 'align', 'alignLog2', 'alignstack', 'alloca',
@@ -472,7 +472,7 @@ class LlvmLexer(RegexLexer):
                 'x86_mmx', 'x86_regcallcc', 'x86_stdcallcc', 'x86_thiscallcc',
                 'x86_vectorcallcc', 'xchg', 'xor', 'zeroext',
                 'zeroinitializer', 'zext', 'immarg', 'willreturn'),
-                suffix=r'\b'), Keyword), 
+                suffix=r'\b'), Keyword),
 
             # Types
             (words(('void', 'half', 'bfloat', 'float', 'double', 'fp128',
@@ -734,9 +734,9 @@ class NasmLexer(RegexLexer):
                 r'mm[0-7]|cr[0-4]|dr[0-367]|tr[3-7])\b')
     wordop = r'seg|wrt|strict'
     type = r'byte|[dq]?word'
-    # Directives must be followed by whitespace, otherwise CPU will match 
-    # cpuid for instance. 
-    directives = (r'(?:BITS|USE16|USE32|SECTION|SEGMENT|ABSOLUTE|EXTERN|GLOBAL|' 
+    # Directives must be followed by whitespace, otherwise CPU will match
+    # cpuid for instance.
+    directives = (r'(?:BITS|USE16|USE32|SECTION|SEGMENT|ABSOLUTE|EXTERN|GLOBAL|'
                   r'ORG|ALIGN|STRUC|ENDSTRUC|COMMON|CPU|GROUP|UPPERCASE|IMPORT|'
                   r'EXPORT|LIBRARY|MODULE)(?=\s)')
 
@@ -807,90 +807,90 @@ class NasmObjdumpLexer(ObjdumpLexer):
     tokens = _objdump_lexer_tokens(NasmLexer)
 
 
-class TasmLexer(RegexLexer): 
-    """ 
-    For Tasm (Turbo Assembler) assembly code. 
-    """ 
-    name = 'TASM' 
-    aliases = ['tasm'] 
-    filenames = ['*.asm', '*.ASM', '*.tasm'] 
-    mimetypes = ['text/x-tasm'] 
- 
-    identifier = r'[@a-z$._?][\w$.?#@~]*' 
-    hexn = r'(?:0x[0-9a-f]+|$0[0-9a-f]*|[0-9]+[0-9a-f]*h)' 
-    octn = r'[0-7]+q' 
-    binn = r'[01]+b' 
-    decn = r'[0-9]+' 
-    floatn = decn + r'\.e?' + decn 
-    string = r'"(\\"|[^"\n])*"|' + r"'(\\'|[^'\n])*'|" + r"`(\\`|[^`\n])*`" 
-    declkw = r'(?:res|d)[bwdqt]|times' 
+class TasmLexer(RegexLexer):
+    """
+    For Tasm (Turbo Assembler) assembly code.
+    """
+    name = 'TASM'
+    aliases = ['tasm']
+    filenames = ['*.asm', '*.ASM', '*.tasm']
+    mimetypes = ['text/x-tasm']
+
+    identifier = r'[@a-z$._?][\w$.?#@~]*'
+    hexn = r'(?:0x[0-9a-f]+|$0[0-9a-f]*|[0-9]+[0-9a-f]*h)'
+    octn = r'[0-7]+q'
+    binn = r'[01]+b'
+    decn = r'[0-9]+'
+    floatn = decn + r'\.e?' + decn
+    string = r'"(\\"|[^"\n])*"|' + r"'(\\'|[^'\n])*'|" + r"`(\\`|[^`\n])*`"
+    declkw = r'(?:res|d)[bwdqt]|times'
     register = (r'(r[0-9][0-5]?[bwd]|'
-                r'[a-d][lh]|[er]?[a-d]x|[er]?[sb]p|[er]?[sd]i|[c-gs]s|st[0-7]|' 
+                r'[a-d][lh]|[er]?[a-d]x|[er]?[sb]p|[er]?[sd]i|[c-gs]s|st[0-7]|'
                 r'mm[0-7]|cr[0-4]|dr[0-367]|tr[3-7])\b')
-    wordop = r'seg|wrt|strict' 
-    type = r'byte|[dq]?word' 
-    directives = (r'BITS|USE16|USE32|SECTION|SEGMENT|ABSOLUTE|EXTERN|GLOBAL|' 
-                  r'ORG|ALIGN|STRUC|ENDSTRUC|ENDS|COMMON|CPU|GROUP|UPPERCASE|INCLUDE|' 
-                  r'EXPORT|LIBRARY|MODULE|PROC|ENDP|USES|ARG|DATASEG|UDATASEG|END|IDEAL|' 
-                  r'P386|MODEL|ASSUME|CODESEG|SIZE') 
-    # T[A-Z][a-z] is more of a convention. Lexer should filter out STRUC definitions 
-    # and then 'add' them to datatype somehow. 
-    datatype = (r'db|dd|dw|T[A-Z][a-z]+') 
- 
-    flags = re.IGNORECASE | re.MULTILINE 
-    tokens = { 
-        'root': [ 
-            (r'^\s*%', Comment.Preproc, 'preproc'), 
-            include('whitespace'), 
-            (identifier + ':', Name.Label), 
-            (directives, Keyword, 'instruction-args'), 
-            (r'(%s)(\s+)(%s)' % (identifier, datatype), 
+    wordop = r'seg|wrt|strict'
+    type = r'byte|[dq]?word'
+    directives = (r'BITS|USE16|USE32|SECTION|SEGMENT|ABSOLUTE|EXTERN|GLOBAL|'
+                  r'ORG|ALIGN|STRUC|ENDSTRUC|ENDS|COMMON|CPU|GROUP|UPPERCASE|INCLUDE|'
+                  r'EXPORT|LIBRARY|MODULE|PROC|ENDP|USES|ARG|DATASEG|UDATASEG|END|IDEAL|'
+                  r'P386|MODEL|ASSUME|CODESEG|SIZE')
+    # T[A-Z][a-z] is more of a convention. Lexer should filter out STRUC definitions
+    # and then 'add' them to datatype somehow.
+    datatype = (r'db|dd|dw|T[A-Z][a-z]+')
+
+    flags = re.IGNORECASE | re.MULTILINE
+    tokens = {
+        'root': [
+            (r'^\s*%', Comment.Preproc, 'preproc'),
+            include('whitespace'),
+            (identifier + ':', Name.Label),
+            (directives, Keyword, 'instruction-args'),
+            (r'(%s)(\s+)(%s)' % (identifier, datatype),
                 bygroups(Name.Constant, Whitespace, Keyword.Declaration),
-                'instruction-args'), 
-            (declkw, Keyword.Declaration, 'instruction-args'), 
-            (identifier, Name.Function, 'instruction-args'), 
+                'instruction-args'),
+            (declkw, Keyword.Declaration, 'instruction-args'),
+            (identifier, Name.Function, 'instruction-args'),
             (r'[\r\n]+', Whitespace)
-        ], 
-        'instruction-args': [ 
-            (string, String), 
-            (hexn, Number.Hex), 
-            (octn, Number.Oct), 
-            (binn, Number.Bin), 
-            (floatn, Number.Float), 
-            (decn, Number.Integer), 
-            include('punctuation'), 
-            (register, Name.Builtin), 
-            (identifier, Name.Variable), 
-            # Do not match newline when it's preceeded by a backslash 
+        ],
+        'instruction-args': [
+            (string, String),
+            (hexn, Number.Hex),
+            (octn, Number.Oct),
+            (binn, Number.Bin),
+            (floatn, Number.Float),
+            (decn, Number.Integer),
+            include('punctuation'),
+            (register, Name.Builtin),
+            (identifier, Name.Variable),
+            # Do not match newline when it's preceeded by a backslash
             (r'(\\)(\s*)(;.*)([\r\n])', bygroups(Text, Whitespace, Comment.Single, Whitespace)),
             (r'[\r\n]+', Whitespace, '#pop'),
-            include('whitespace') 
-        ], 
-        'preproc': [ 
-            (r'[^;\n]+', Comment.Preproc), 
-            (r';.*?\n', Comment.Single, '#pop'), 
-            (r'\n', Comment.Preproc, '#pop'), 
-        ], 
-        'whitespace': [ 
+            include('whitespace')
+        ],
+        'preproc': [
+            (r'[^;\n]+', Comment.Preproc),
+            (r';.*?\n', Comment.Single, '#pop'),
+            (r'\n', Comment.Preproc, '#pop'),
+        ],
+        'whitespace': [
             (r'[\n\r]', Whitespace),
             (r'(\\)([\n\r])', bygroups(Text, Whitespace)),
             (r'[ \t]+', Whitespace),
-            (r';.*', Comment.Single) 
-        ], 
-        'punctuation': [ 
-            (r'[,():\[\]]+', Punctuation), 
-            (r'[&|^<>+*=/%~-]+', Operator), 
-            (r'[$]+', Keyword.Constant), 
-            (wordop, Operator.Word), 
-            (type, Keyword.Type) 
-        ], 
-    } 
- 
+            (r';.*', Comment.Single)
+        ],
+        'punctuation': [
+            (r'[,():\[\]]+', Punctuation),
+            (r'[&|^<>+*=/%~-]+', Operator),
+            (r'[$]+', Keyword.Constant),
+            (wordop, Operator.Word),
+            (type, Keyword.Type)
+        ],
+    }
+
     def analyse_text(text):
         # See above
         if re.match(r'PROC', text, re.I):
             return True
- 
+
 
 class Ca65Lexer(RegexLexer):
     """
@@ -929,109 +929,109 @@ class Ca65Lexer(RegexLexer):
         # comments in GAS start with "#"
         if re.search(r'^\s*;', text, re.MULTILINE):
             return 0.9
- 
- 
-class Dasm16Lexer(RegexLexer): 
-    """ 
+
+
+class Dasm16Lexer(RegexLexer):
+    """
     For DCPU-16 Assembly.
- 
-    Check http://0x10c.com/doc/dcpu-16.txt 
- 
-    .. versionadded:: 2.4 
-    """ 
-    name = 'DASM16' 
-    aliases = ['dasm16'] 
-    filenames = ['*.dasm16', '*.dasm'] 
-    mimetypes = ['text/x-dasm16'] 
- 
-    INSTRUCTIONS = [ 
-        'SET', 
-        'ADD', 'SUB', 
-        'MUL', 'MLI', 
-        'DIV', 'DVI', 
-        'MOD', 'MDI', 
-        'AND', 'BOR', 'XOR', 
-        'SHR', 'ASR', 'SHL', 
-        'IFB', 'IFC', 'IFE', 'IFN', 'IFG', 'IFA', 'IFL', 'IFU', 
-        'ADX', 'SBX', 
-        'STI', 'STD', 
-        'JSR', 
-        'INT', 'IAG', 'IAS', 'RFI', 'IAQ', 'HWN', 'HWQ', 'HWI', 
-    ] 
- 
-    REGISTERS = [ 
-        'A', 'B', 'C', 
-        'X', 'Y', 'Z', 
-        'I', 'J', 
-        'SP', 'PC', 'EX', 
-        'POP', 'PEEK', 'PUSH' 
-    ] 
- 
-    # Regexes yo 
+
+    Check http://0x10c.com/doc/dcpu-16.txt
+
+    .. versionadded:: 2.4
+    """
+    name = 'DASM16'
+    aliases = ['dasm16']
+    filenames = ['*.dasm16', '*.dasm']
+    mimetypes = ['text/x-dasm16']
+
+    INSTRUCTIONS = [
+        'SET',
+        'ADD', 'SUB',
+        'MUL', 'MLI',
+        'DIV', 'DVI',
+        'MOD', 'MDI',
+        'AND', 'BOR', 'XOR',
+        'SHR', 'ASR', 'SHL',
+        'IFB', 'IFC', 'IFE', 'IFN', 'IFG', 'IFA', 'IFL', 'IFU',
+        'ADX', 'SBX',
+        'STI', 'STD',
+        'JSR',
+        'INT', 'IAG', 'IAS', 'RFI', 'IAQ', 'HWN', 'HWQ', 'HWI',
+    ]
+
+    REGISTERS = [
+        'A', 'B', 'C',
+        'X', 'Y', 'Z',
+        'I', 'J',
+        'SP', 'PC', 'EX',
+        'POP', 'PEEK', 'PUSH'
+    ]
+
+    # Regexes yo
     char = r'[a-zA-Z0-9_$@.]'
-    identifier = r'(?:[a-zA-Z$_]' + char + r'*|\.' + char + '+)' 
-    number = r'[+-]?(?:0[xX][a-zA-Z0-9]+|\d+)' 
-    binary_number = r'0b[01_]+' 
-    instruction = r'(?i)(' + '|'.join(INSTRUCTIONS) + ')' 
-    single_char = r"'\\?" + char + "'" 
-    string = r'"(\\"|[^"])*"' 
- 
-    def guess_identifier(lexer, match): 
-        ident = match.group(0) 
-        klass = Name.Variable if ident.upper() in lexer.REGISTERS else Name.Label 
-        yield match.start(), klass, ident 
- 
-    tokens = { 
-        'root': [ 
-            include('whitespace'), 
-            (':' + identifier, Name.Label), 
-            (identifier + ':', Name.Label), 
-            (instruction, Name.Function, 'instruction-args'), 
-            (r'\.' + identifier, Name.Function, 'data-args'), 
+    identifier = r'(?:[a-zA-Z$_]' + char + r'*|\.' + char + '+)'
+    number = r'[+-]?(?:0[xX][a-zA-Z0-9]+|\d+)'
+    binary_number = r'0b[01_]+'
+    instruction = r'(?i)(' + '|'.join(INSTRUCTIONS) + ')'
+    single_char = r"'\\?" + char + "'"
+    string = r'"(\\"|[^"])*"'
+
+    def guess_identifier(lexer, match):
+        ident = match.group(0)
+        klass = Name.Variable if ident.upper() in lexer.REGISTERS else Name.Label
+        yield match.start(), klass, ident
+
+    tokens = {
+        'root': [
+            include('whitespace'),
+            (':' + identifier, Name.Label),
+            (identifier + ':', Name.Label),
+            (instruction, Name.Function, 'instruction-args'),
+            (r'\.' + identifier, Name.Function, 'data-args'),
             (r'[\r\n]+', Whitespace)
-        ], 
- 
-        'numeric' : [ 
-            (binary_number, Number.Integer), 
-            (number, Number.Integer), 
-            (single_char, String), 
-        ], 
- 
-        'arg' : [ 
-            (identifier, guess_identifier), 
-            include('numeric') 
-        ], 
- 
-        'deref' : [ 
-            (r'\+', Punctuation), 
-            (r'\]', Punctuation, '#pop'), 
-            include('arg'), 
-            include('whitespace') 
-        ], 
- 
-        'instruction-line' : [ 
+        ],
+
+        'numeric' : [
+            (binary_number, Number.Integer),
+            (number, Number.Integer),
+            (single_char, String),
+        ],
+
+        'arg' : [
+            (identifier, guess_identifier),
+            include('numeric')
+        ],
+
+        'deref' : [
+            (r'\+', Punctuation),
+            (r'\]', Punctuation, '#pop'),
+            include('arg'),
+            include('whitespace')
+        ],
+
+        'instruction-line' : [
             (r'[\r\n]+', Whitespace, '#pop'),
-            (r';.*?$', Comment, '#pop'), 
-            include('whitespace') 
-        ], 
- 
-        'instruction-args': [ 
-            (r',', Punctuation), 
-            (r'\[', Punctuation, 'deref'), 
-            include('arg'), 
-            include('instruction-line') 
-        ], 
- 
-        'data-args' : [ 
-            (r',', Punctuation), 
-            include('numeric'), 
-            (string, String), 
-            include('instruction-line') 
-        ], 
- 
-        'whitespace': [ 
+            (r';.*?$', Comment, '#pop'),
+            include('whitespace')
+        ],
+
+        'instruction-args': [
+            (r',', Punctuation),
+            (r'\[', Punctuation, 'deref'),
+            include('arg'),
+            include('instruction-line')
+        ],
+
+        'data-args' : [
+            (r',', Punctuation),
+            include('numeric'),
+            (string, String),
+            include('instruction-line')
+        ],
+
+        'whitespace': [
             (r'\n', Whitespace),
             (r'\s+', Whitespace),
-            (r';.*?\n', Comment) 
-        ], 
-    } 
+            (r';.*?\n', Comment)
+        ],
+    }

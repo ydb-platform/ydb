@@ -1,17 +1,17 @@
 curl and libcurl 7.74.0
- 
+
  Public curl releases:         196
  Command line options:         235
  curl_easy_setopt() options:   284
  Public functions in libcurl:  85
  Contributors:                 2287
- 
-This release includes the following changes: 
- 
+
+This release includes the following changes:
+
  o hsts: add experimental support for Strict-Transport-Security [37]
- 
-This release includes the following bugfixes: 
- 
+
+This release includes the following bugfixes:
+
  o CVE-2020-8286: Inferior OCSP verification [93]
  o CVE-2020-8285: FTP wildcard stack overflow [95]
  o CVE-2020-8284: trusting FTP PASV responses [97]
@@ -119,14 +119,14 @@ This release includes the following bugfixes:
  o urlapi: URL encode a '+' in the query part [14]
  o urldata: remove 'void *protop' and create the union 'p' [86]
  o vquic/ngtcp2.h: define local_addr as sockaddr_storage [73]
- 
-This release includes the following known bugs: 
- 
+
+This release includes the following known bugs:
+
  o see docs/KNOWN_BUGS (https://curl.se/docs/knownbugs.html)
- 
-This release would not have looked like this without help, code, reports and 
-advice from friends like these: 
- 
+
+This release would not have looked like this without help, code, reports and
+advice from friends like these:
+
   Andreas Fischer, asavah on github, b9a1 on github, Baruch Siach,
   Basuke Suzuki, bobmitchell1956 on github, BrumBrum on hackerone,
   Cristian Morales Vega, d4d on hackerone, Daiki Ueno, Daniel Gustafsson,
@@ -139,12 +139,12 @@ advice from friends like these:
   Rikard Falkeborn, Rui LIU, Sergei Nikulov, Thomas Danielsson, Tobias Hieta,
   Tom G. Christensen, Varnavas Papaioannou, Viktor Szakats, Vincent Torri,
   xnynx on github,
-  (46 contributors) 
- 
-        Thanks! (and sorry if I forgot to mention someone) 
- 
-References to bug reports and discussions on issues: 
- 
+  (46 contributors)
+
+        Thanks! (and sorry if I forgot to mention someone)
+
+References to bug reports and discussions on issues:
+
  [1] = https://curl.se/bug/?i=6080
  [2] = https://curl.se/bug/?i=6079
  [3] = https://curl.se/bug/?i=6102

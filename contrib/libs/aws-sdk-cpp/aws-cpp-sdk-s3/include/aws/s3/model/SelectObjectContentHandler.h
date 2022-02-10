@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #pragma once
 #include <aws/core/utils/HashingUtils.h>
@@ -32,16 +32,16 @@ namespace Model
 
     class AWS_S3_API SelectObjectContentHandler : public Aws::Utils::Event::EventStreamHandler
     {
-        typedef std::function<void(const RecordsEvent&)> RecordsEventCallback; 
+        typedef std::function<void(const RecordsEvent&)> RecordsEventCallback;
         typedef std::function<void(const StatsEvent&)> StatsEventCallback;
         typedef std::function<void(const ProgressEvent&)> ProgressEventCallback;
         typedef std::function<void()> ContinuationEventCallback;
         typedef std::function<void()> EndEventCallback;
         typedef std::function<void(const Aws::Client::AWSError<S3Errors>& error)> ErrorCallback;
- 
+
     public:
         SelectObjectContentHandler();
-        SelectObjectContentHandler& operator=(const SelectObjectContentHandler& handler) = default; 
+        SelectObjectContentHandler& operator=(const SelectObjectContentHandler& handler) = default;
 
         virtual void OnEvent() override;
 
@@ -55,7 +55,7 @@ namespace Model
     private:
         void HandleEventInMessage();
         void HandleErrorInMessage();
-        void MarshallError(const Aws::String& errorCode, const Aws::String& errorMessage); 
+        void MarshallError(const Aws::String& errorCode, const Aws::String& errorMessage);
 
         RecordsEventCallback m_onRecordsEvent;
         StatsEventCallback m_onStatsEvent;

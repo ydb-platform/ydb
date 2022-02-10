@@ -1,22 +1,22 @@
-/* 
+/*
     Copyright (c) 2005-2021 Intel Corporation
- 
-    Licensed under the Apache License, Version 2.0 (the "License"); 
-    you may not use this file except in compliance with the License. 
-    You may obtain a copy of the License at 
- 
-        http://www.apache.org/licenses/LICENSE-2.0 
- 
-    Unless required by applicable law or agreed to in writing, software 
-    distributed under the License is distributed on an "AS IS" BASIS, 
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-    See the License for the specific language governing permissions and 
-    limitations under the License. 
-*/ 
- 
-#ifndef _TBB_scheduler_common_H 
-#define _TBB_scheduler_common_H 
- 
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+*/
+
+#ifndef _TBB_scheduler_common_H
+#define _TBB_scheduler_common_H
+
 #include "oneapi/tbb/detail/_utils.h"
 #include "oneapi/tbb/detail/_template_helpers.h"
 #include "oneapi/tbb/detail/_task.h"
@@ -27,46 +27,46 @@
 #include "co_context.h"
 #include "misc.h"
 #include "governor.h"
- 
-#ifndef __TBB_SCHEDULER_MUTEX_TYPE 
-#define __TBB_SCHEDULER_MUTEX_TYPE tbb::spin_mutex 
-#endif 
-// TODO: add conditional inclusion based on specified type 
+
+#ifndef __TBB_SCHEDULER_MUTEX_TYPE
+#define __TBB_SCHEDULER_MUTEX_TYPE tbb::spin_mutex
+#endif
+// TODO: add conditional inclusion based on specified type
 #include "oneapi/tbb/spin_mutex.h"
- 
+
 #if TBB_USE_ASSERT
 #include <atomic>
 #endif
- 
+
 #include <cstdint>
 #include <exception>
- 
+
 //! Mutex type for global locks in the scheduler
 using scheduler_mutex_type = __TBB_SCHEDULER_MUTEX_TYPE;
- 
-#if _MSC_VER && !defined(__INTEL_COMPILER) 
-    // Workaround for overzealous compiler warnings 
-    // These particular warnings are so ubiquitous that no attempt is made to narrow 
-    // the scope of the warnings. 
-    #pragma warning (disable: 4100 4127 4312 4244 4267 4706) 
-#endif 
- 
-namespace tbb { 
+
+#if _MSC_VER && !defined(__INTEL_COMPILER)
+    // Workaround for overzealous compiler warnings
+    // These particular warnings are so ubiquitous that no attempt is made to narrow
+    // the scope of the warnings.
+    #pragma warning (disable: 4100 4127 4312 4244 4267 4706)
+#endif
+
+namespace tbb {
 namespace detail {
 namespace r1 {
- 
-class arena; 
+
+class arena;
 class mail_inbox;
-class mail_outbox; 
-class market; 
-class observer_proxy; 
- 
+class mail_outbox;
+class market;
+class observer_proxy;
+
 enum task_stream_accessor_type { front_accessor = 0, back_nonnull_accessor };
 template<task_stream_accessor_type> class task_stream;
- 
+
 using isolation_type = std::intptr_t;
 constexpr isolation_type no_isolation = 0;
- 
+
 //------------------------------------------------------------------------
 // Extended execute data
 //------------------------------------------------------------------------
@@ -76,8 +76,8 @@ struct execution_data_ext : d1::execution_data {
     task_dispatcher* task_disp{};
     isolation_type isolation{};
     d1::wait_context* wait_ctx{};
-}; 
- 
+};
+
 //------------------------------------------------------------------------
 // Task accessor
 //------------------------------------------------------------------------
@@ -188,8 +188,8 @@ inline std::uint64_t machine_time_stamp() {
     __asm__ __volatile__("rdtsc" : "=d"(hi), "=a"(lo));
     return (std::uint64_t(hi) << 32) | lo;
 #endif
-} 
- 
+}
+
 inline void prolonged_pause_impl() {
     // Assumption based on practice: 1000-2000 ticks seems to be a suitable invariant for the
     // majority of platforms. Currently, skip platforms that define __TBB_STEALING_PAUSE
@@ -205,7 +205,7 @@ inline void prolonged_pause_impl() {
             break;
         prev = curr;
     } while (prev < finish);
-} 
+}
 #else
 inline void prolonged_pause_impl() {
 #ifdef __TBB_ipf
@@ -217,7 +217,7 @@ inline void prolonged_pause_impl() {
     machine_pause(PauseTime);
 }
 #endif
- 
+
 inline void prolonged_pause() {
 #if __TBB_WAITPKG_INTRINSICS_PRESENT && (_WIN32 || _WIN64 || __linux__) && (__TBB_x86_32 || __TBB_x86_64)
     if (governor::wait_package_enabled()) {
@@ -232,7 +232,7 @@ inline void prolonged_pause() {
 #endif
     prolonged_pause_impl();
 }
- 
+
 class stealing_loop_backoff {
     const int my_pause_threshold;
     const int my_yield_threshold;
@@ -274,68 +274,68 @@ public:
 //------------------------------------------------------------------------
 // Exception support
 //------------------------------------------------------------------------
-//! Task group state change propagation global epoch 
-/** Together with generic_scheduler::my_context_state_propagation_epoch forms 
-    cross-thread signaling mechanism that allows to avoid locking at the hot path 
-    of normal execution flow. 
- 
-    When a descendant task group context is registered or unregistered, the global 
-    and local epochs are compared. If they differ, a state change is being propagated, 
-    and thus registration/deregistration routines take slower branch that may block 
-    (at most one thread of the pool can be blocked at any moment). Otherwise the 
-    control path is lock-free and fast. **/ 
+//! Task group state change propagation global epoch
+/** Together with generic_scheduler::my_context_state_propagation_epoch forms
+    cross-thread signaling mechanism that allows to avoid locking at the hot path
+    of normal execution flow.
+
+    When a descendant task group context is registered or unregistered, the global
+    and local epochs are compared. If they differ, a state change is being propagated,
+    and thus registration/deregistration routines take slower branch that may block
+    (at most one thread of the pool can be blocked at any moment). Otherwise the
+    control path is lock-free and fast. **/
 extern std::atomic<std::uintptr_t> the_context_state_propagation_epoch;
- 
-//! Mutex guarding state change propagation across task groups forest. 
-/** Also protects modification of related data structures. **/ 
-typedef scheduler_mutex_type context_state_propagation_mutex_type; 
-extern context_state_propagation_mutex_type the_context_state_propagation_mutex; 
- 
+
+//! Mutex guarding state change propagation across task groups forest.
+/** Also protects modification of related data structures. **/
+typedef scheduler_mutex_type context_state_propagation_mutex_type;
+extern context_state_propagation_mutex_type the_context_state_propagation_mutex;
+
 class tbb_exception_ptr {
     std::exception_ptr my_ptr;
 public:
     static tbb_exception_ptr* allocate() noexcept;
- 
+
     //! Destroys this objects
     /** Note that objects of this type can be created only by the allocate() method. **/
     void destroy() noexcept;
- 
+
     //! Throws the contained exception .
     void throw_self();
- 
+
 private:
     tbb_exception_ptr(const std::exception_ptr& src) : my_ptr(src) {}
 }; // class tbb_exception_ptr
- 
-//------------------------------------------------------------------------ 
-// Debugging support 
-//------------------------------------------------------------------------ 
- 
-#if TBB_USE_ASSERT 
+
+//------------------------------------------------------------------------
+// Debugging support
+//------------------------------------------------------------------------
+
+#if TBB_USE_ASSERT
 static const std::uintptr_t venom = tbb::detail::select_size_t_constant<0xDEADBEEFU, 0xDDEEAADDDEADBEEFULL>::value;
- 
+
 inline void poison_value(std::uintptr_t& val) { val = venom; }
- 
+
 inline void poison_value(std::atomic<std::uintptr_t>& val) { val.store(venom, std::memory_order_relaxed); }
- 
-/** Expected to be used in assertions only, thus no empty form is defined. **/ 
+
+/** Expected to be used in assertions only, thus no empty form is defined. **/
 inline bool is_alive(std::uintptr_t v) { return v != venom; }
- 
-/** Logically, this method should be a member of class task. 
-    But we do not want to publish it, so it is here instead. */ 
+
+/** Logically, this method should be a member of class task.
+    But we do not want to publish it, so it is here instead. */
 inline void assert_task_valid(const d1::task* t) {
     assert_pointer_valid(t);
-} 
-#else /* !TBB_USE_ASSERT */ 
- 
-/** In contrast to debug version poison_value() is a macro here because 
-    the variable used as its argument may be undefined in release builds. **/ 
-#define poison_value(g) ((void)0) 
- 
+}
+#else /* !TBB_USE_ASSERT */
+
+/** In contrast to debug version poison_value() is a macro here because
+    the variable used as its argument may be undefined in release builds. **/
+#define poison_value(g) ((void)0)
+
 inline void assert_task_valid(const d1::task*) {}
- 
-#endif /* !TBB_USE_ASSERT */ 
- 
+
+#endif /* !TBB_USE_ASSERT */
+
 struct suspend_point_type {
 #if __TBB_RESUMABLE_TASKS
     //! The arena related to this task_dispatcher
@@ -348,23 +348,23 @@ struct suspend_point_type {
     bool m_is_critical{ false };
     //! Associated coroutine
     co_context m_co_context;
- 
+
     struct resume_task final : public d1::task {
         task_dispatcher& m_target;
         explicit resume_task(task_dispatcher& target) : m_target(target) {
             task_accessor::set_resume_trait(*this);
-        } 
+        }
         d1::task* execute(d1::execution_data& ed) override;
         d1::task* cancel(d1::execution_data&) override {
             __TBB_ASSERT(false, "The resume task cannot be canceled");
             return nullptr;
         }
     } m_resume_task;
- 
+
     suspend_point_type(arena* a, std::size_t stack_size, task_dispatcher& target);
 #endif /*__TBB_RESUMABLE_TASKS */
 };
- 
+
 class alignas (max_nfs_size) task_dispatcher {
 public:
     // TODO: reconsider low level design to better organize dependencies and files.
@@ -373,26 +373,26 @@ public:
     friend class nested_arena_context;
     friend class delegated_task;
     friend struct base_waiter;
- 
+
     //! The data of the current thread attached to this task_dispatcher
     thread_data* m_thread_data{ nullptr };
- 
+
     //! The current execution data
     execution_data_ext m_execute_data_ext;
- 
+
     //! Properties
     struct properties {
         bool outermost{ true };
         bool fifo_tasks_allowed{ true };
         bool critical_task_allowed{ true };
     } m_properties;
- 
+
     //! Position in the call stack when stealing is still allowed.
     std::uintptr_t m_stealing_threshold{};
- 
+
     //! Suspend point (null if this task dispatcher has been never suspended)
     suspend_point_type* m_suspend_point{ nullptr };
- 
+
     //! Attempt to get a task from the mailbox.
     /** Gets a task only if it has not been executed by its sender or a thief
         that has stolen it from the sender's task pool. Otherwise returns NULL.
@@ -400,22 +400,22 @@ public:
         from its mailbox. (In contrast to local task pool, mailbox can be read only
         by its owner). **/
     d1::task* get_mailbox_task(mail_inbox& my_inbox, execution_data_ext& ed, isolation_type isolation);
- 
+
     d1::task* get_critical_task(d1::task*, execution_data_ext&, isolation_type, bool);
 
     template <bool ITTPossible, typename Waiter>
     d1::task* receive_or_steal_task(thread_data& tls, execution_data_ext& ed, Waiter& waiter,
                                 isolation_type isolation, bool outermost, bool criticality_absence);
- 
+
     template <bool ITTPossible, typename Waiter>
     d1::task* local_wait_for_all(d1::task * t, Waiter& waiter);
- 
+
     task_dispatcher(const task_dispatcher&) = delete;
 
     bool can_steal();
 public:
     task_dispatcher(arena* a);
- 
+
     ~task_dispatcher() {
         if (m_suspend_point) {
             m_suspend_point->~suspend_point_type();
@@ -424,27 +424,27 @@ public:
         poison_pointer(m_thread_data);
         poison_pointer(m_suspend_point);
     }
- 
+
     template <typename Waiter>
     d1::task* local_wait_for_all(d1::task* t, Waiter& waiter);
- 
+
     bool allow_fifo_task(bool new_state) {
         bool old_state = m_properties.fifo_tasks_allowed;
         m_properties.fifo_tasks_allowed = new_state;
         return old_state;
     }
- 
+
     isolation_type set_isolation(isolation_type isolation) {
         isolation_type prev = m_execute_data_ext.isolation;
         m_execute_data_ext.isolation = isolation;
         return prev;
-    } 
- 
+    }
+
     thread_data& get_thread_data() {
         __TBB_ASSERT(m_thread_data, nullptr);
         return *m_thread_data;
-    } 
- 
+    }
+
     static void execute_and_wait(d1::task* t, d1::wait_context& wait_ctx, d1::task_group_context& w_ctx);
 
     void set_stealing_threshold(std::uintptr_t stealing_threshold) {
@@ -452,7 +452,7 @@ public:
                                 (stealing_threshold != 0 && m_stealing_threshold == 0);
         __TBB_ASSERT_EX( assert_condition, nullptr );
         m_stealing_threshold = stealing_threshold;
-    } 
+    }
 
     d1::task* get_inbox_or_critical_task(execution_data_ext&, mail_inbox&, isolation_type, bool);
     d1::task* get_stream_or_critical_task(execution_data_ext&, arena&, task_stream<front_accessor>&,
@@ -470,8 +470,8 @@ public:
     friend void internal_resume(suspend_point_type*);
     void recall_point();
 #endif /* __TBB_RESUMABLE_TASKS */
-}; 
- 
+};
+
 inline std::uintptr_t calculate_stealing_threshold(std::uintptr_t base, std::size_t stack_size) {
     return base - stack_size / 2;
 }
@@ -489,8 +489,8 @@ struct task_group_context_impl {
     static void reset(d1::task_group_context&);
     static void capture_fp_settings(d1::task_group_context&);
     static void copy_fp_settings(d1::task_group_context& ctx, const d1::task_group_context& src);
-}; 
- 
+};
+
 
 //! Forward declaration for scheduler entities
 bool gcc_rethrow_exception_broken();
@@ -500,6 +500,6 @@ void handle_perror(int error_code, const char* aux_info);
 
 } // namespace r1
 } // namespace detail
-} // namespace tbb 
- 
-#endif /* _TBB_scheduler_common_H */ 
+} // namespace tbb
+
+#endif /* _TBB_scheduler_common_H */

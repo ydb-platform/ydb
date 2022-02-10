@@ -22,7 +22,7 @@
  *
  ***************************************************************************/
 
-#if !defined(CURL_DISABLE_HTTP) && defined(USE_SPNEGO) 
+#if !defined(CURL_DISABLE_HTTP) && defined(USE_SPNEGO)
 
 /* this is for Negotiate header input */
 CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
@@ -31,7 +31,7 @@ CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
 /* this is for creating Negotiate header output */
 CURLcode Curl_output_negotiate(struct connectdata *conn, bool proxy);
 
-void Curl_http_auth_cleanup_negotiate(struct connectdata *conn); 
+void Curl_http_auth_cleanup_negotiate(struct connectdata *conn);
 
 #else /* !CURL_DISABLE_HTTP && USE_SPNEGO */
 #define Curl_http_auth_cleanup_negotiate(x)

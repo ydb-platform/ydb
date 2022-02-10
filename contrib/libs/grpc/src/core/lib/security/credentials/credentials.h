@@ -1,26 +1,26 @@
 /*
  *
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
 #ifndef GRPC_CORE_LIB_SECURITY_CREDENTIALS_CREDENTIALS_H
 #define GRPC_CORE_LIB_SECURITY_CREDENTIALS_CREDENTIALS_H
 
-#include <grpc/support/port_platform.h> 
- 
+#include <grpc/support/port_platform.h>
+
 #include <string.h>
 
 #include <util/generic/string.h>
@@ -34,7 +34,7 @@
 #include "src/core/lib/http/httpcli.h"
 #include "src/core/lib/http/parser.h"
 #include "src/core/lib/iomgr/polling_entity.h"
-#include "src/core/lib/security/security_connector/security_connector.h" 
+#include "src/core/lib/security/security_connector/security_connector.h"
 
 struct grpc_http_response;
 
@@ -93,8 +93,8 @@ void grpc_override_well_known_credentials_path_getter(
 
 /* --- grpc_channel_credentials. --- */
 
-#define GRPC_ARG_CHANNEL_CREDENTIALS "grpc.channel_credentials" 
- 
+#define GRPC_ARG_CHANNEL_CREDENTIALS "grpc.channel_credentials"
+
 // This type is forward declared as a C struct and we cannot define it as a
 // class. Otherwise, compiler will complain about type mismatch due to
 // -Wmismatched-tags.
@@ -111,7 +111,7 @@ struct grpc_channel_credentials
   virtual grpc_core::RefCountedPtr<grpc_channel_security_connector>
   create_security_connector(
       grpc_core::RefCountedPtr<grpc_call_credentials> call_creds,
-      const char* target, const grpc_channel_args* args, 
+      const char* target, const grpc_channel_args* args,
       grpc_channel_args** new_args) = 0;
 
   // Creates a version of the channel credentials without any attached call
@@ -137,33 +137,33 @@ struct grpc_channel_credentials
   const char* type_;
 };
 
-/* Util to encapsulate the channel credentials in a channel arg. */ 
-grpc_arg grpc_channel_credentials_to_arg(grpc_channel_credentials* credentials); 
+/* Util to encapsulate the channel credentials in a channel arg. */
+grpc_arg grpc_channel_credentials_to_arg(grpc_channel_credentials* credentials);
 
-/* Util to get the channel credentials from a channel arg. */ 
-grpc_channel_credentials* grpc_channel_credentials_from_arg( 
-    const grpc_arg* arg); 
+/* Util to get the channel credentials from a channel arg. */
+grpc_channel_credentials* grpc_channel_credentials_from_arg(
+    const grpc_arg* arg);
 
-/* Util to find the channel credentials from channel args. */ 
-grpc_channel_credentials* grpc_channel_credentials_find_in_args( 
-    const grpc_channel_args* args); 
- 
-/* --- grpc_credentials_mdelem_array. --- */ 
- 
+/* Util to find the channel credentials from channel args. */
+grpc_channel_credentials* grpc_channel_credentials_find_in_args(
+    const grpc_channel_args* args);
+
+/* --- grpc_credentials_mdelem_array. --- */
+
 struct grpc_credentials_mdelem_array {
   grpc_mdelem* md = nullptr;
   size_t size = 0;
 };
-/// Takes a new ref to \a md. 
-void grpc_credentials_mdelem_array_add(grpc_credentials_mdelem_array* list, 
-                                       grpc_mdelem md); 
+/// Takes a new ref to \a md.
+void grpc_credentials_mdelem_array_add(grpc_credentials_mdelem_array* list,
+                                       grpc_mdelem md);
 
-/// Appends all elements from \a src to \a dst, taking a new ref to each one. 
-void grpc_credentials_mdelem_array_append(grpc_credentials_mdelem_array* dst, 
-                                          grpc_credentials_mdelem_array* src); 
+/// Appends all elements from \a src to \a dst, taking a new ref to each one.
+void grpc_credentials_mdelem_array_append(grpc_credentials_mdelem_array* dst,
+                                          grpc_credentials_mdelem_array* src);
 
-void grpc_credentials_mdelem_array_destroy(grpc_credentials_mdelem_array* list); 
- 
+void grpc_credentials_mdelem_array_destroy(grpc_credentials_mdelem_array* list);
+
 /* --- grpc_call_credentials. --- */
 
 // This type is forward declared as a C struct and we cannot define it as a
@@ -204,7 +204,7 @@ struct grpc_call_credentials
   }
 
   const char* type() const { return type_; }
- 
+
  private:
   const char* type_;
   const grpc_security_level min_security_level_;
@@ -212,8 +212,8 @@ struct grpc_call_credentials
 
 /* Metadata-only credentials with the specified key and value where
    asynchronicity can be simulated for testing. */
-grpc_call_credentials* grpc_md_only_test_credentials_create( 
-    const char* md_key, const char* md_value, bool is_async); 
+grpc_call_credentials* grpc_md_only_test_credentials_create(
+    const char* md_key, const char* md_value, bool is_async);
 
 /* --- grpc_server_credentials. --- */
 
@@ -252,10 +252,10 @@ struct grpc_server_credentials
 
 #define GRPC_SERVER_CREDENTIALS_ARG "grpc.server_credentials"
 
-grpc_arg grpc_server_credentials_to_arg(grpc_server_credentials* c); 
-grpc_server_credentials* grpc_server_credentials_from_arg(const grpc_arg* arg); 
-grpc_server_credentials* grpc_find_server_credentials_in_args( 
-    const grpc_channel_args* args); 
+grpc_arg grpc_server_credentials_to_arg(grpc_server_credentials* c);
+grpc_server_credentials* grpc_server_credentials_from_arg(const grpc_arg* arg);
+grpc_server_credentials* grpc_find_server_credentials_in_args(
+    const grpc_channel_args* args);
 
 /* -- Credentials Metadata Request. -- */
 

@@ -108,9 +108,9 @@ class ServiceGenerator {
   std::map<TProtoStringType, TProtoStringType> vars_;
   const Options& options_;
 
-  int index_in_metadata_; 
- 
-  friend class FileGenerator; 
+  int index_in_metadata_;
+
+  friend class FileGenerator;
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ServiceGenerator);
 };
 

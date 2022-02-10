@@ -1,6 +1,6 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
  */
 
 #pragma once
@@ -19,7 +19,7 @@ namespace Aws
             extern AWS_CORE_API const char MESSAGE_TYPE_HEADER[];
             extern AWS_CORE_API const char ERROR_CODE_HEADER[];
             extern AWS_CORE_API const char ERROR_MESSAGE_HEADER[];
-            extern AWS_CORE_API const char EXCEPTION_TYPE_HEADER[]; 
+            extern AWS_CORE_API const char EXCEPTION_TYPE_HEADER[];
 
             /**
              * A typical message in event stream consists of two parts: Prelude and Data, as well as the prelude CRC and message CRC.
@@ -33,25 +33,25 @@ namespace Aws
                 {
                     UNKNOWN,
                     EVENT,
-                    REQUEST_LEVEL_ERROR, 
-                    REQUEST_LEVEL_EXCEPTION 
+                    REQUEST_LEVEL_ERROR,
+                    REQUEST_LEVEL_EXCEPTION
                 };
 
-                enum class ContentType 
-                { 
-                    UNKNOWN, 
-                    APPLICATION_OCTET_STREAM, 
-                    APPLICATION_JSON, 
-                    TEXT_PLAIN 
-                }; 
- 
+                enum class ContentType
+                {
+                    UNKNOWN,
+                    APPLICATION_OCTET_STREAM,
+                    APPLICATION_JSON,
+                    TEXT_PLAIN
+                };
+
                 static MessageType GetMessageTypeForName(const Aws::String& name);
                 static Aws::String GetNameForMessageType(MessageType value);
 
-                static ContentType GetContentTypeForName(const Aws::String& name); 
-                static Aws::String GetNameForContentType(ContentType value); 
- 
- 
+                static ContentType GetContentTypeForName(const Aws::String& name);
+                static Aws::String GetNameForContentType(ContentType value);
+
+
                 /**
                  * Clean up the message, including the metadata, headers and payload received.
                  */
@@ -94,9 +94,9 @@ namespace Aws
                 /**
                  * Set event payload.
                  */
-                void WriteEventPayload(const unsigned char* data, size_t length); 
+                void WriteEventPayload(const unsigned char* data, size_t length);
                 void WriteEventPayload(const Aws::Vector<unsigned char>& bits);
-                void WriteEventPayload(const Aws::String& bits); 
+                void WriteEventPayload(const Aws::String& bits);
                 /**
                  * Get the byte array of the payload with transferring ownership.
                  */

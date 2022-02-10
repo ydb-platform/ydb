@@ -61,9 +61,9 @@ namespace NProtobufJsonTest {
 #define UNIT_ASSERT_JSON_STRINGS_EQUAL(lhs, rhs)           \
     if (lhs != rhs) {                                      \
         NJson::TJsonValue _lhs_json, _rhs_json;            \
-        UNIT_ASSERT(NJson::ReadJsonTree(lhs, &_lhs_json)); \ 
-        UNIT_ASSERT(NJson::ReadJsonTree(rhs, &_rhs_json)); \ 
+        UNIT_ASSERT(NJson::ReadJsonTree(lhs, &_lhs_json)); \
+        UNIT_ASSERT(NJson::ReadJsonTree(rhs, &_rhs_json)); \
         UNIT_ASSERT_JSONS_EQUAL(_lhs_json, _rhs_json);     \
-    } 
- 
+    }
+
 }

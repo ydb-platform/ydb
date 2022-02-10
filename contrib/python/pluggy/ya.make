@@ -2,7 +2,7 @@ PY23_LIBRARY()
 
 LICENSE(Service-Py23-Proxy)
 
-OWNER(g:python-contrib) 
+OWNER(g:python-contrib)
 
 IF (PYTHON2)
     PEERDIR(contrib/python/pluggy/py2)

@@ -1,5 +1,5 @@
 /**
- * xzlib.c: front end for the transparent support of lzma compression 
+ * xzlib.c: front end for the transparent support of lzma compression
  *          at the I/O layer, based on an example file from lzma project
  *
  * See Copyright for the status of this software.
@@ -8,7 +8,7 @@
  */
 #define IN_LIBXML
 #include "libxml.h"
-#ifdef LIBXML_LZMA_ENABLED 
+#ifdef LIBXML_LZMA_ENABLED
 
 #include <string.h>
 #ifdef HAVE_ERRNO_H
@@ -31,14 +31,14 @@
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
-#ifdef LIBXML_ZLIB_ENABLED 
-#include <zlib.h> 
+#ifdef LIBXML_ZLIB_ENABLED
+#include <zlib.h>
 #endif
-#ifdef LIBXML_LZMA_ENABLED 
+#ifdef LIBXML_LZMA_ENABLED
 #error #include <lzma.h>
-#endif 
+#endif
 
-#error #include "xzlib.h" 
+#error #include "xzlib.h"
 #include <libxml/xmlmemory.h>
 
 /* values for xz_state how */
@@ -71,12 +71,12 @@ typedef struct {
     int err;                    /* error code */
     char *msg;                  /* error message */
     /* lzma stream */
-    int init;                   /* is the inflate stream initialized */ 
+    int init;                   /* is the inflate stream initialized */
     lzma_stream strm;           /* stream structure in-place (not a pointer) */
     char padding1[32];          /* padding allowing to cope with possible
                                    extensions of above structure without
 				   too much side effect */
-#ifdef LIBXML_ZLIB_ENABLED 
+#ifdef LIBXML_ZLIB_ENABLED
     /* zlib inflate or deflate stream */
     z_stream zstrm;             /* stream structure in-place (not a pointer) */
 #endif
@@ -130,7 +130,7 @@ xz_reset(xz_statep state)
     xz_error(state, LZMA_OK, NULL);     /* clear error */
     state->pos = 0;             /* no uncompressed data yet */
     state->strm.avail_in = 0;   /* no input data yet */
-#ifdef LIBXML_ZLIB_ENABLED 
+#ifdef LIBXML_ZLIB_ENABLED
     state->zstrm.avail_in = 0;  /* no input data yet */
 #endif
 }
@@ -272,7 +272,7 @@ xz_avail(xz_statep state)
     return 0;
 }
 
-#ifdef LIBXML_ZLIB_ENABLED 
+#ifdef LIBXML_ZLIB_ENABLED
 static int
 xz_avail_zstrm(xz_statep state)
 {
@@ -349,7 +349,7 @@ is_format_lzma(xz_statep state)
     return 1;
 }
 
-#ifdef LIBXML_ZLIB_ENABLED 
+#ifdef LIBXML_ZLIB_ENABLED
 
 /* Get next byte from input, or -1 if end or error. */
 #define NEXT() ((strm->avail_in == 0 && xz_avail(state) == -1) ? -1 : \
@@ -408,14 +408,14 @@ xz_head(xz_statep state)
         state->strm = init;
         state->strm.avail_in = 0;
         state->strm.next_in = NULL;
-        if (lzma_auto_decoder(&state->strm, 100000000, 0) != LZMA_OK) { 
+        if (lzma_auto_decoder(&state->strm, 100000000, 0) != LZMA_OK) {
             xmlFree(state->out);
             xmlFree(state->in);
             state->size = 0;
             xz_error(state, LZMA_MEM_ERROR, "out of memory");
             return -1;
         }
-#ifdef LIBXML_ZLIB_ENABLED 
+#ifdef LIBXML_ZLIB_ENABLED
         /* allocate inflate memory */
         state->zstrm.zalloc = Z_NULL;
         state->zstrm.zfree = Z_NULL;
@@ -449,7 +449,7 @@ xz_head(xz_statep state)
         state->direct = 0;
         return 0;
     }
-#ifdef LIBXML_ZLIB_ENABLED 
+#ifdef LIBXML_ZLIB_ENABLED
     /* look for the gzip magic header bytes 31 and 139 */
     if (strm->next_in[0] == 31) {
         strm->avail_in--;
@@ -550,7 +550,7 @@ xz_decomp(xz_statep state)
             action = LZMA_FINISH;
 
         /* decompress and handle errors */
-#ifdef LIBXML_ZLIB_ENABLED 
+#ifdef LIBXML_ZLIB_ENABLED
         if (state->how == GZIP) {
             state->zstrm.avail_in = (uInt) state->strm.avail_in;
             state->zstrm.next_in = (Bytef *) state->strm.next_in;
@@ -562,10 +562,10 @@ xz_decomp(xz_statep state)
                          "internal error: inflate stream corrupt");
                 return -1;
             }
-            /* 
-             * FIXME: Remapping a couple of error codes and falling through 
-             * to the LZMA error handling looks fragile. 
-             */ 
+            /*
+             * FIXME: Remapping a couple of error codes and falling through
+             * to the LZMA error handling looks fragile.
+             */
             if (ret == Z_MEM_ERROR)
                 ret = LZMA_MEM_ERROR;
             if (ret == Z_DATA_ERROR)
@@ -587,27 +587,27 @@ xz_decomp(xz_statep state)
             xz_error(state, LZMA_DATA_ERROR, "compressed data error");
             return -1;
         }
-        if (ret == LZMA_PROG_ERROR) { 
-            xz_error(state, LZMA_PROG_ERROR, "compression error"); 
-            return -1; 
-        } 
-        if ((state->how != GZIP) && 
-            (ret != LZMA_OK) && (ret != LZMA_STREAM_END)) { 
-            xz_error(state, ret, "lzma error"); 
-            return -1; 
-        } 
+        if (ret == LZMA_PROG_ERROR) {
+            xz_error(state, LZMA_PROG_ERROR, "compression error");
+            return -1;
+        }
+        if ((state->how != GZIP) &&
+            (ret != LZMA_OK) && (ret != LZMA_STREAM_END)) {
+            xz_error(state, ret, "lzma error");
+            return -1;
+        }
     } while (strm->avail_out && ret != LZMA_STREAM_END);
 
     /* update available output and crc check value */
     state->have = had - strm->avail_out;
     state->next = strm->next_out - state->have;
-#ifdef LIBXML_ZLIB_ENABLED 
+#ifdef LIBXML_ZLIB_ENABLED
     state->zstrm.adler =
         crc32(state->zstrm.adler, state->next, state->have);
 #endif
 
     if (ret == LZMA_STREAM_END) {
-#ifdef LIBXML_ZLIB_ENABLED 
+#ifdef LIBXML_ZLIB_ENABLED
         if (state->how == GZIP) {
             if (gz_next4(state, &crc) == -1 || gz_next4(state, &len) == -1) {
                 xz_error(state, LZMA_DATA_ERROR, "unexpected end of file");
@@ -797,7 +797,7 @@ __libxml2_xzclose(xzFile file)
     /* free memory and close file */
     if (state->size) {
         lzma_end(&(state->strm));
-#ifdef LIBXML_ZLIB_ENABLED 
+#ifdef LIBXML_ZLIB_ENABLED
         if (state->init == 1)
             inflateEnd(&(state->zstrm));
         state->init = 0;
@@ -806,10 +806,10 @@ __libxml2_xzclose(xzFile file)
         xmlFree(state->in);
     }
     xmlFree(state->path);
-    if ((state->msg != NULL) && (state->err != LZMA_MEM_ERROR)) 
-        xmlFree(state->msg); 
+    if ((state->msg != NULL) && (state->err != LZMA_MEM_ERROR))
+        xmlFree(state->msg);
     ret = close(state->fd);
     xmlFree(state);
     return ret ? ret : LZMA_OK;
 }
-#endif /* LIBXML_LZMA_ENABLED */ 
+#endif /* LIBXML_LZMA_ENABLED */

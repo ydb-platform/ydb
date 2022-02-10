@@ -1,6 +1,6 @@
 PROGRAM(python)
 
-OWNER(g:contrib orivej) 
+OWNER(g:contrib orivej)
 
 LICENSE(PSF-2.0)
 
@@ -10,7 +10,7 @@ ORIGINAL_SOURCE(https://github.com/python/cpython)
 
 PEERDIR(
     contrib/tools/python/libpython
-    contrib/tools/python/src/Modules/_sqlite 
+    contrib/tools/python/src/Modules/_sqlite
 )
 
 END()

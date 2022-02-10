@@ -10,8 +10,8 @@
 
 import re
 
-from pygments.lexer import Lexer, RegexLexer, bygroups, do_insertions, \ 
-    words, include 
+from pygments.lexer import Lexer, RegexLexer, bygroups, do_insertions, \
+    words, include
 from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
     Number, Punctuation, Generic
 from pygments.util import shebang_matches
@@ -32,7 +32,7 @@ class JuliaLexer(RegexLexer):
 
     .. versionadded:: 1.6
     """
- 
+
     name = 'Julia'
     aliases = ['julia', 'jl']
     filenames = ['*.jl']
@@ -76,12 +76,12 @@ class JuliaLexer(RegexLexer):
             (words(['.' + o for o in DOTTED_OPERATORS_LIST], suffix=operator_suffixes), Operator),
             (words(['...', '..']), Operator),
 
-            # NOTE 
-            # Patterns below work only for definition sites and thus hardly reliable. 
-            # 
+            # NOTE
+            # Patterns below work only for definition sites and thus hardly reliable.
+            #
             # functions
-            # (r'(function)(\s+)(' + allowed_variable + ')', 
-            #  bygroups(Keyword, Text, Name.Function)), 
+            # (r'(function)(\s+)(' + allowed_variable + ')',
+            #  bygroups(Keyword, Text, Name.Function)),
 
             # chars
             (r"'(\\.|\\[0-7]{1,3}|\\x[a-fA-F0-9]{1,3}|\\u[a-fA-F0-9]{1,4}|"
@@ -93,17 +93,17 @@ class JuliaLexer(RegexLexer):
             # raw strings
             (r'(raw)(""")', bygroups(String.Affix, String), 'tqrawstring'),
             (r'(raw)(")', bygroups(String.Affix, String), 'rawstring'),
-            # regular expressions 
+            # regular expressions
             (r'(r)(""")', bygroups(String.Affix, String.Regex), 'tqregex'),
             (r'(r)(")', bygroups(String.Affix, String.Regex), 'regex'),
             # other strings
             (r'(' + allowed_variable + ')?(""")', bygroups(String.Affix, String), 'tqstring'),
             (r'(' + allowed_variable + ')?(")', bygroups(String.Affix, String), 'string'),
- 
-            # backticks 
+
+            # backticks
             (r'(' + allowed_variable + ')?(```)', bygroups(String.Affix, String.Backtick), 'tqcommand'),
             (r'(' + allowed_variable + ')?(`)', bygroups(String.Affix, String.Backtick), 'command'),
- 
+
             # type names
             # - names that begin a curly expression
             ('(' + allowed_variable + r')(\{)',
@@ -130,7 +130,7 @@ class JuliaLexer(RegexLexer):
             (words(LITERAL_LIST, suffix=r'\b'), Name.Builtin),
 
             # names
-            (allowed_variable, Name), 
+            (allowed_variable, Name),
 
             # numbers
             (r'(\d+((_\d+)+)?\.(?!\.)(\d+((_\d+)+)?)?|\.\d+((_\d+)+)?)([eEf][+-]?[0-9]+)?', Number.Float),
@@ -151,7 +151,7 @@ class JuliaLexer(RegexLexer):
             (r'=#', Comment.Multiline, '#pop'),
             (r'[=#]', Comment.Multiline),
         ],
- 
+
         'curly': [
             (r'\{', Punctuation, '#push'),
             (r'\}', Punctuation, '#pop'),
@@ -184,41 +184,41 @@ class JuliaLexer(RegexLexer):
 
         'string': [
             (r'(")(' + allowed_variable + r'|\d+)?', bygroups(String, String.Affix), '#pop'),
-            # FIXME: This escape pattern is not perfect. 
-            (r'\\([\\"\'$nrbtfav]|(x|u|U)[a-fA-F0-9]+|\d+)', String.Escape), 
+            # FIXME: This escape pattern is not perfect.
+            (r'\\([\\"\'$nrbtfav]|(x|u|U)[a-fA-F0-9]+|\d+)', String.Escape),
             include('interp'),
-            # @printf and @sprintf formats 
-            (r'%[-#0 +]*([0-9]+|[*])?(\.([0-9]+|[*]))?[hlL]?[E-GXc-giorsux%]', 
-             String.Interpol), 
+            # @printf and @sprintf formats
+            (r'%[-#0 +]*([0-9]+|[*])?(\.([0-9]+|[*]))?[hlL]?[E-GXc-giorsux%]',
+             String.Interpol),
             (r'[^"$%\\]+', String),
             (r'.', String),
         ],
-        'tqstring': [ 
+        'tqstring': [
             (r'(""")(' + allowed_variable + r'|\d+)?', bygroups(String, String.Affix), '#pop'),
-            (r'\\([\\"\'$nrbtfav]|(x|u|U)[a-fA-F0-9]+|\d+)', String.Escape), 
+            (r'\\([\\"\'$nrbtfav]|(x|u|U)[a-fA-F0-9]+|\d+)', String.Escape),
             include('interp'),
             (r'[^"$%\\]+', String),
             (r'.', String),
-        ], 
- 
-        'regex': [ 
+        ],
+
+        'regex': [
             (r'(")([imsxa]*)?', bygroups(String.Regex, String.Affix), '#pop'),
-            (r'\\"', String.Regex), 
+            (r'\\"', String.Regex),
             (r'[^\\"]+', String.Regex),
-        ], 
- 
-        'tqregex': [ 
+        ],
+
+        'tqregex': [
             (r'(""")([imsxa]*)?', bygroups(String.Regex, String.Affix), '#pop'),
             (r'[^"]+', String.Regex),
-        ], 
- 
-        'command': [ 
+        ],
+
+        'command': [
             (r'(`)(' + allowed_variable + r'|\d+)?', bygroups(String.Backtick, String.Affix), '#pop'),
             (r'\\[`$]', String.Escape),
             include('interp'),
             (r'[^\\`$]+', String.Backtick),
             (r'.', String.Backtick),
-        ], 
+        ],
         'tqcommand': [
             (r'(```)(' + allowed_variable + r'|\d+)?', bygroups(String.Backtick, String.Affix), '#pop'),
             (r'\\\$', String.Escape),
@@ -243,40 +243,40 @@ class JuliaConsoleLexer(Lexer):
 
     def get_tokens_unprocessed(self, text):
         jllexer = JuliaLexer(**self.options)
-        start = 0 
+        start = 0
         curcode = ''
         insertions = []
-        output = False 
-        error = False 
+        output = False
+        error = False
 
-        for line in text.splitlines(True): 
+        for line in text.splitlines(True):
             if line.startswith('julia>'):
-                insertions.append((len(curcode), [(0, Generic.Prompt, line[:6])])) 
+                insertions.append((len(curcode), [(0, Generic.Prompt, line[:6])]))
                 curcode += line[6:]
-                output = False 
-                error = False 
-            elif line.startswith('help?>') or line.startswith('shell>'): 
-                yield start, Generic.Prompt, line[:6] 
-                yield start + 6, Text, line[6:] 
-                output = False 
-                error = False 
-            elif line.startswith('      ') and not output: 
-                insertions.append((len(curcode), [(0, Text, line[:6])])) 
-                curcode += line[6:] 
+                output = False
+                error = False
+            elif line.startswith('help?>') or line.startswith('shell>'):
+                yield start, Generic.Prompt, line[:6]
+                yield start + 6, Text, line[6:]
+                output = False
+                error = False
+            elif line.startswith('      ') and not output:
+                insertions.append((len(curcode), [(0, Text, line[:6])]))
+                curcode += line[6:]
             else:
                 if curcode:
                     yield from do_insertions(
                         insertions, jllexer.get_tokens_unprocessed(curcode))
                     curcode = ''
                     insertions = []
-                if line.startswith('ERROR: ') or error: 
-                    yield start, Generic.Error, line 
-                    error = True 
-                else: 
-                    yield start, Generic.Output, line 
-                output = True 
-            start += len(line) 
+                if line.startswith('ERROR: ') or error:
+                    yield start, Generic.Error, line
+                    error = True
+                else:
+                    yield start, Generic.Output, line
+                output = True
+            start += len(line)
 
-        if curcode: 
+        if curcode:
             yield from do_insertions(
                 insertions, jllexer.get_tokens_unprocessed(curcode))

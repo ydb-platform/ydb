@@ -28,8 +28,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Defines utilities for the FieldMask well known type. 
- 
+// Defines utilities for the FieldMask well known type.
+
 #ifndef GOOGLE_PROTOBUF_UTIL_FIELD_MASK_UTIL_H__
 #define GOOGLE_PROTOBUF_UTIL_FIELD_MASK_UTIL_H__
 
@@ -78,14 +78,14 @@ class PROTOBUF_EXPORT FieldMaskUtil {
   static bool ToJsonString(const FieldMask& mask, TProtoStringType* out);
   static bool FromJsonString(StringPiece str, FieldMask* out);
 
-  // Get the descriptors of the fields which the given path from the message 
-  // descriptor traverses, if field_descriptors is not null. 
-  // Return false if the path is not valid, and the content of field_descriptors 
-  // is unspecified. 
-  static bool GetFieldDescriptors( 
-      const Descriptor* descriptor, StringPiece path, 
-      std::vector<const FieldDescriptor*>* field_descriptors); 
- 
+  // Get the descriptors of the fields which the given path from the message
+  // descriptor traverses, if field_descriptors is not null.
+  // Return false if the path is not valid, and the content of field_descriptors
+  // is unspecified.
+  static bool GetFieldDescriptors(
+      const Descriptor* descriptor, StringPiece path,
+      std::vector<const FieldDescriptor*>* field_descriptors);
+
   // Checks whether the given path is valid for type T.
   template <typename T>
   static bool IsValidPath(StringPiece path) {
@@ -97,7 +97,7 @@ class PROTOBUF_EXPORT FieldMaskUtil {
   static bool IsValidFieldMask(const FieldMask& mask) {
     for (int i = 0; i < mask.paths_size(); ++i) {
       if (!GetFieldDescriptors(T::descriptor(), mask.paths(i), nullptr))
-        return false; 
+        return false;
     }
     return true;
   }
@@ -165,19 +165,19 @@ class PROTOBUF_EXPORT FieldMaskUtil {
   static void MergeMessageTo(const Message& source, const FieldMask& mask,
                              const MergeOptions& options, Message* destination);
 
-  class TrimOptions; 
+  class TrimOptions;
   // Removes from 'message' any field that is not represented in the given
   // FieldMask. If the FieldMask is empty, does nothing.
   // Returns true if the message is modified.
   static bool TrimMessage(const FieldMask& mask, Message* message);
 
-  // Removes from 'message' any field that is not represented in the given 
-  // FieldMask with customized TrimOptions. 
-  // If the FieldMask is empty, does nothing. 
+  // Removes from 'message' any field that is not represented in the given
+  // FieldMask with customized TrimOptions.
+  // If the FieldMask is empty, does nothing.
   // Returns true if the message is modified.
   static bool TrimMessage(const FieldMask& mask, Message* message,
-                          const TrimOptions& options); 
- 
+                          const TrimOptions& options);
+
  private:
   friend class SnakeCaseCamelCaseTest;
   // Converts a field name from snake_case to camelCase:
@@ -240,19 +240,19 @@ class PROTOBUF_EXPORT FieldMaskUtil::MergeOptions {
 };
 
 class PROTOBUF_EXPORT FieldMaskUtil::TrimOptions {
- public: 
+ public:
   TrimOptions() : keep_required_fields_(false) {}
-  // When trimming message fields, the default behavior is to trim required 
-  // fields of the present message if they are not specified in the field mask. 
-  // If you instead want to keep required fields of the present message even 
+  // When trimming message fields, the default behavior is to trim required
+  // fields of the present message if they are not specified in the field mask.
+  // If you instead want to keep required fields of the present message even
   // they are not specified in the field mask, set this flag to true.
   void set_keep_required_fields(bool value) { keep_required_fields_ = value; }
-  bool keep_required_fields() const { return keep_required_fields_; } 
- 
- private: 
-  bool keep_required_fields_; 
-}; 
- 
+  bool keep_required_fields() const { return keep_required_fields_; }
+
+ private:
+  bool keep_required_fields_;
+};
+
 }  // namespace util
 }  // namespace protobuf
 }  // namespace google

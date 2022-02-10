@@ -1,16 +1,16 @@
-# Copyright 2015 gRPC authors. 
+# Copyright 2015 gRPC authors.
 #
-# Licensed under the Apache License, Version 2.0 (the "License"); 
-# you may not use this file except in compliance with the License. 
-# You may obtain a copy of the License at 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0 
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software 
-# distributed under the License is distributed on an "AS IS" BASIS, 
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-# See the License for the specific language governing permissions and 
-# limitations under the License. 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Provides distutils command classes for the GRPC Python setup process."""
 
 from __future__ import print_function
@@ -76,8 +76,8 @@ def _get_grpc_custom_bdist(decorated_basename, target_bdist_basename):
         with open(bdist_path, 'w') as bdist_file:
             bdist_file.write(bdist_data)
     except IOError as error:
-        raise CommandError('{}\n\nCould not write grpcio bdist: {}'.format( 
-            traceback.format_exc(), error.message)) 
+        raise CommandError('{}\n\nCould not write grpcio bdist: {}'.format(
+            traceback.format_exc(), error.message))
     return bdist_path
 
 
@@ -206,7 +206,7 @@ class BuildExt(build_ext.build_ext):
     """Custom build_ext command to enable compiler-specific flags."""
 
     C_OPTIONS = {
-        'unix': ('-pthread',), 
+        'unix': ('-pthread',),
         'msvc': (),
     }
     LINK_OPTIONS = {}
@@ -238,7 +238,7 @@ class BuildExt(build_ext.build_ext):
         #   for it.
         if not compiler_ok_with_extra_std():
             old_compile = self.compiler._compile
- 
+
             def new_compile(obj, src, ext, cc_args, extra_postargs, pp_opts):
                 if src[-2:] == '.c':
                     extra_postargs = [

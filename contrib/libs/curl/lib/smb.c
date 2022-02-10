@@ -62,7 +62,7 @@ static CURLcode smb_request_state(struct connectdata *conn, bool *done);
 static CURLcode smb_done(struct connectdata *conn, CURLcode status,
                          bool premature);
 static CURLcode smb_disconnect(struct connectdata *conn, bool dead);
-static int smb_getsock(struct connectdata *conn, curl_socket_t *socks); 
+static int smb_getsock(struct connectdata *conn, curl_socket_t *socks);
 static CURLcode smb_parse_url_path(struct connectdata *conn);
 
 /*
@@ -606,7 +606,7 @@ static CURLcode smb_send_and_recv(struct connectdata *conn, void **msg)
 {
   struct smb_conn *smbc = &conn->proto.smbc;
   CURLcode result;
-  *msg = NULL; /* if it returns early */ 
+  *msg = NULL; /* if it returns early */
 
   /* Check if there is data in the transfer buffer */
   if(!smbc->send_size && smbc->upload_size) {
@@ -786,8 +786,8 @@ static CURLcode smb_request_state(struct connectdata *conn, bool *done)
   case SMB_OPEN:
     if(h->status || smbc->got < sizeof(struct smb_nt_create_response)) {
       req->result = CURLE_REMOTE_FILE_NOT_FOUND;
-      if(h->status == smb_swap32(SMB_ERR_NOACCESS)) 
-        req->result = CURLE_REMOTE_ACCESS_DENIED; 
+      if(h->status == smb_swap32(SMB_ERR_NOACCESS))
+        req->result = CURLE_REMOTE_ACCESS_DENIED;
       next_state = SMB_TREE_DISCONNECT;
       break;
     }
@@ -937,7 +937,7 @@ static CURLcode smb_disconnect(struct connectdata *conn, bool dead)
   return CURLE_OK;
 }
 
-static int smb_getsock(struct connectdata *conn, curl_socket_t *socks) 
+static int smb_getsock(struct connectdata *conn, curl_socket_t *socks)
 {
   socks[0] = conn->sock[FIRSTSOCKET];
   return GETSOCK_READSOCK(0) | GETSOCK_WRITESOCK(0);
@@ -949,7 +949,7 @@ static CURLcode smb_do(struct connectdata *conn, bool *done)
 
   *done = FALSE;
   if(smbc->share) {
-    return CURLE_OK; 
+    return CURLE_OK;
   }
   return CURLE_URL_MALFORMAT;
 }
@@ -963,7 +963,7 @@ static CURLcode smb_parse_url_path(struct connectdata *conn)
   char *slash;
 
   /* URL decode the path */
-  CURLcode result = Curl_urldecode(data, data->state.up.path, 0, &path, NULL, 
+  CURLcode result = Curl_urldecode(data, data->state.up.path, 0, &path, NULL,
                                    REJECT_CTRL);
   if(result)
     return result;
@@ -987,7 +987,7 @@ static CURLcode smb_parse_url_path(struct connectdata *conn)
   /* Parse the path for the file path converting any forward slashes into
      backslashes */
   *slash++ = 0;
-  req->path = slash; 
+  req->path = slash;
 
   for(; *slash; slash++) {
     if(*slash == '/')

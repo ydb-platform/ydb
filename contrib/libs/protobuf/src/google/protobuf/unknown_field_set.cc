@@ -104,9 +104,9 @@ void UnknownFieldSet::MergeFromAndDestroy(UnknownFieldSet* other) {
 void UnknownFieldSet::MergeToInternalMetadata(
     const UnknownFieldSet& other, internal::InternalMetadata* metadata) {
   metadata->mutable_unknown_fields<UnknownFieldSet>()->MergeFrom(other);
-} 
- 
-size_t UnknownFieldSet::SpaceUsedExcludingSelfLong() const { 
+}
+
+size_t UnknownFieldSet::SpaceUsedExcludingSelfLong() const {
   if (fields_.empty()) return 0;
 
   size_t total_size = sizeof(fields_) + sizeof(UnknownField) * fields_.size();
@@ -115,11 +115,11 @@ size_t UnknownFieldSet::SpaceUsedExcludingSelfLong() const {
     switch (field.type()) {
       case UnknownField::TYPE_LENGTH_DELIMITED:
         total_size += sizeof(*field.data_.length_delimited_.string_value) +
-                      internal::StringSpaceUsedExcludingSelfLong( 
+                      internal::StringSpaceUsedExcludingSelfLong(
                           *field.data_.length_delimited_.string_value);
         break;
       case UnknownField::TYPE_GROUP:
-        total_size += field.data_.group_->SpaceUsedLong(); 
+        total_size += field.data_.group_->SpaceUsedLong();
         break;
       default:
         break;
@@ -128,7 +128,7 @@ size_t UnknownFieldSet::SpaceUsedExcludingSelfLong() const {
   return total_size;
 }
 
-size_t UnknownFieldSet::SpaceUsedLong() const { 
+size_t UnknownFieldSet::SpaceUsedLong() const {
   return sizeof(*this) + SpaceUsedExcludingSelf();
 }
 
@@ -136,7 +136,7 @@ void UnknownFieldSet::AddVarint(int number, uint64 value) {
   UnknownField field;
   field.number_ = number;
   field.SetType(UnknownField::TYPE_VARINT);
-  field.data_.varint_ = value; 
+  field.data_.varint_ = value;
   fields_.push_back(field);
 }
 
@@ -144,7 +144,7 @@ void UnknownFieldSet::AddFixed32(int number, uint32 value) {
   UnknownField field;
   field.number_ = number;
   field.SetType(UnknownField::TYPE_FIXED32);
-  field.data_.fixed32_ = value; 
+  field.data_.fixed32_ = value;
   fields_.push_back(field);
 }
 
@@ -152,7 +152,7 @@ void UnknownFieldSet::AddFixed64(int number, uint64 value) {
   UnknownField field;
   field.number_ = number;
   field.SetType(UnknownField::TYPE_FIXED64);
-  field.data_.fixed64_ = value; 
+  field.data_.fixed64_ = value;
   fields_.push_back(field);
 }
 
@@ -170,9 +170,9 @@ UnknownFieldSet* UnknownFieldSet::AddGroup(int number) {
   UnknownField field;
   field.number_ = number;
   field.SetType(UnknownField::TYPE_GROUP);
-  field.data_.group_ = new UnknownFieldSet; 
+  field.data_.group_ = new UnknownFieldSet;
   fields_.push_back(field);
-  return field.data_.group_; 
+  return field.data_.group_;
 }
 
 void UnknownFieldSet::AddField(const UnknownField& field) {
@@ -244,7 +244,7 @@ void UnknownField::Delete() {
       delete data_.length_delimited_.string_value;
       break;
     case UnknownField::TYPE_GROUP:
-      delete data_.group_; 
+      delete data_.group_;
       break;
     default:
       break;
@@ -259,8 +259,8 @@ void UnknownField::DeepCopy(const UnknownField& other) {
       break;
     case UnknownField::TYPE_GROUP: {
       UnknownFieldSet* group = new UnknownFieldSet();
-      group->InternalMergeFrom(*data_.group_); 
-      data_.group_ = group; 
+      group->InternalMergeFrom(*data_.group_);
+      data_.group_ = group;
       break;
     }
     default:

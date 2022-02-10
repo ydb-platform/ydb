@@ -329,15 +329,15 @@ PyObject* Clear(PyObject* _self) {
   Py_RETURN_NONE;
 }
 
-PyObject* GetEntryClass(PyObject* _self) { 
-  MapContainer* self = GetMap(_self); 
-  CMessageClass* message_class = message_factory::GetMessageClass( 
-      cmessage::GetFactoryForMessage(self->parent), 
-      self->parent_field_descriptor->message_type()); 
-  Py_XINCREF(message_class); 
-  return reinterpret_cast<PyObject*>(message_class); 
-} 
- 
+PyObject* GetEntryClass(PyObject* _self) {
+  MapContainer* self = GetMap(_self);
+  CMessageClass* message_class = message_factory::GetMessageClass(
+      cmessage::GetFactoryForMessage(self->parent),
+      self->parent_field_descriptor->message_type());
+  Py_XINCREF(message_class);
+  return reinterpret_cast<PyObject*>(message_class);
+}
+
 PyObject* MapReflectionFriend::MergeFrom(PyObject* _self, PyObject* arg) {
   MapContainer* self = GetMap(_self);
   if (!PyObject_TypeCheck(arg, ScalarMapContainer_Type) &&
@@ -550,7 +550,7 @@ static PyMethodDef ScalarMapMethods[] = {
     {NULL, NULL},
 };
 
-PyTypeObject *ScalarMapContainer_Type; 
+PyTypeObject *ScalarMapContainer_Type;
 #if PY_MAJOR_VERSION >= 3
   static PyType_Slot ScalarMapContainer_Type_slots[] = {
       {Py_tp_dealloc, (void *)ScalarMapDealloc},
@@ -577,7 +577,7 @@ PyTypeObject *ScalarMapContainer_Type;
     MapReflectionFriend::ScalarMapSetItem,   // mp_ass_subscript
   };
 
-  PyTypeObject _ScalarMapContainer_Type = { 
+  PyTypeObject _ScalarMapContainer_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     FULL_MODULE_NAME ".ScalarMapContainer",  //  tp_name
     sizeof(MapContainer),                //  tp_basicsize
@@ -639,7 +639,7 @@ MessageMapContainer* NewMessageMapContainer(
     return NULL;
   }
 
-  PyObject* obj = PyType_GenericAlloc(MessageMapContainer_Type, 0); 
+  PyObject* obj = PyType_GenericAlloc(MessageMapContainer_Type, 0);
   if (obj == NULL) {
     PyErr_SetString(PyExc_RuntimeError, "Could not allocate new container.");
     return NULL;
@@ -681,12 +681,12 @@ int MapReflectionFriend::MessageMapSetItem(PyObject* _self, PyObject* key,
   }
 
   // Delete key from map.
-  if (reflection->ContainsMapKey(*message, self->parent_field_descriptor, 
+  if (reflection->ContainsMapKey(*message, self->parent_field_descriptor,
                                  map_key)) {
-    // Delete key from CMessage dict. 
-    MapValueRef value; 
-    reflection->InsertOrLookupMapValue(message, self->parent_field_descriptor, 
-                                       map_key, &value); 
+    // Delete key from CMessage dict.
+    MapValueRef value;
+    reflection->InsertOrLookupMapValue(message, self->parent_field_descriptor,
+                                       map_key, &value);
     Message* sub_message = value.MutableMessageValue();
     // If there is a living weak reference to an item, we "Release" it,
     // otherwise we just discard the C++ value.
@@ -696,10 +696,10 @@ int MapReflectionFriend::MessageMapSetItem(PyObject* _self, PyObject* key,
       released->message = msg->New();
       msg->GetReflection()->Swap(msg, released->message);
     }
- 
-    // Delete key from map. 
-    reflection->DeleteMapValue(message, self->parent_field_descriptor, 
-                               map_key); 
+
+    // Delete key from map.
+    reflection->DeleteMapValue(message, self->parent_field_descriptor,
+                               map_key);
     return 0;
   } else {
     PyErr_Format(PyExc_KeyError, "Key not present in map");
@@ -819,7 +819,7 @@ static PyMethodDef MessageMapMethods[] = {
     {NULL, NULL},
 };
 
-PyTypeObject *MessageMapContainer_Type; 
+PyTypeObject *MessageMapContainer_Type;
 #if PY_MAJOR_VERSION >= 3
   static PyType_Slot MessageMapContainer_Type_slots[] = {
       {Py_tp_dealloc, (void *)MessageMapDealloc},
@@ -846,7 +846,7 @@ PyTypeObject *MessageMapContainer_Type;
     MapReflectionFriend::MessageMapSetItem,   // mp_ass_subscript
   };
 
-  PyTypeObject _MessageMapContainer_Type = { 
+  PyTypeObject _MessageMapContainer_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     FULL_MODULE_NAME ".MessageMapContainer",  //  tp_name
     sizeof(MessageMapContainer),         //  tp_basicsize
@@ -999,61 +999,61 @@ PyTypeObject MapIterator_Type = {
   0,                                   //  tp_init
 };
 
-bool InitMapContainers() { 
-  // ScalarMapContainer_Type derives from our MutableMapping type. 
-  ScopedPyObjectPtr containers(PyImport_ImportModule( 
-      "google.protobuf.internal.containers")); 
-  if (containers == NULL) { 
-    return false; 
-  } 
- 
-  ScopedPyObjectPtr mutable_mapping( 
-      PyObject_GetAttrString(containers.get(), "MutableMapping")); 
-  if (mutable_mapping == NULL) { 
-    return false; 
-  } 
- 
+bool InitMapContainers() {
+  // ScalarMapContainer_Type derives from our MutableMapping type.
+  ScopedPyObjectPtr containers(PyImport_ImportModule(
+      "google.protobuf.internal.containers"));
+  if (containers == NULL) {
+    return false;
+  }
+
+  ScopedPyObjectPtr mutable_mapping(
+      PyObject_GetAttrString(containers.get(), "MutableMapping"));
+  if (mutable_mapping == NULL) {
+    return false;
+  }
+
   Py_INCREF(mutable_mapping.get());
 #if PY_MAJOR_VERSION >= 3
   ScopedPyObjectPtr bases(PyTuple_Pack(1, mutable_mapping.get()));
   if (bases == NULL) {
-    return false; 
-  } 
- 
-  ScalarMapContainer_Type = reinterpret_cast<PyTypeObject*>( 
+    return false;
+  }
+
+  ScalarMapContainer_Type = reinterpret_cast<PyTypeObject*>(
       PyType_FromSpecWithBases(&ScalarMapContainer_Type_spec, bases.get()));
-#else 
-  _ScalarMapContainer_Type.tp_base = 
-      reinterpret_cast<PyTypeObject*>(mutable_mapping.get()); 
- 
-  if (PyType_Ready(&_ScalarMapContainer_Type) < 0) { 
-    return false; 
-  } 
- 
-  ScalarMapContainer_Type = &_ScalarMapContainer_Type; 
-#endif 
- 
-  if (PyType_Ready(&MapIterator_Type) < 0) { 
-    return false; 
-  } 
- 
-#if PY_MAJOR_VERSION >= 3 
-  MessageMapContainer_Type = reinterpret_cast<PyTypeObject*>( 
+#else
+  _ScalarMapContainer_Type.tp_base =
+      reinterpret_cast<PyTypeObject*>(mutable_mapping.get());
+
+  if (PyType_Ready(&_ScalarMapContainer_Type) < 0) {
+    return false;
+  }
+
+  ScalarMapContainer_Type = &_ScalarMapContainer_Type;
+#endif
+
+  if (PyType_Ready(&MapIterator_Type) < 0) {
+    return false;
+  }
+
+#if PY_MAJOR_VERSION >= 3
+  MessageMapContainer_Type = reinterpret_cast<PyTypeObject*>(
       PyType_FromSpecWithBases(&MessageMapContainer_Type_spec, bases.get()));
-#else 
-  Py_INCREF(mutable_mapping.get()); 
-  _MessageMapContainer_Type.tp_base = 
-      reinterpret_cast<PyTypeObject*>(mutable_mapping.get()); 
- 
-  if (PyType_Ready(&_MessageMapContainer_Type) < 0) { 
-    return false; 
-  } 
- 
-  MessageMapContainer_Type = &_MessageMapContainer_Type; 
-#endif 
-  return true; 
-} 
- 
+#else
+  Py_INCREF(mutable_mapping.get());
+  _MessageMapContainer_Type.tp_base =
+      reinterpret_cast<PyTypeObject*>(mutable_mapping.get());
+
+  if (PyType_Ready(&_MessageMapContainer_Type) < 0) {
+    return false;
+  }
+
+  MessageMapContainer_Type = &_MessageMapContainer_Type;
+#endif
+  return true;
+}
+
 }  // namespace python
 }  // namespace protobuf
 }  // namespace google

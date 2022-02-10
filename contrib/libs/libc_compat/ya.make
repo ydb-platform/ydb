@@ -96,7 +96,7 @@ IF (OS_LINUX AND NOT MUSL)
             GLOBAL contrib/libs/libc_compat/include/uchar
         )
     ENDIF()
-    IF (OS_SDK == "ubuntu-12" OR OS_SDK == "ubuntu-14" OR OS_SDK == "ubuntu-16") 
+    IF (OS_SDK == "ubuntu-12" OR OS_SDK == "ubuntu-14" OR OS_SDK == "ubuntu-16")
         ADDINCL(
             GLOBAL contrib/libs/libc_compat/include/random
         )

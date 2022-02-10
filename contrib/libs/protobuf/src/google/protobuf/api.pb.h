@@ -56,13 +56,13 @@ struct PROTOBUF_EXPORT TableStruct_google_2fprotobuf_2fapi_2eproto {
 };
 PROTOBUF_EXPORT extern const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_google_2fprotobuf_2fapi_2eproto;
 PROTOBUF_NAMESPACE_OPEN
-class Api; 
+class Api;
 struct ApiDefaultTypeInternal;
 PROTOBUF_EXPORT extern ApiDefaultTypeInternal _Api_default_instance_;
-class Method; 
+class Method;
 struct MethodDefaultTypeInternal;
 PROTOBUF_EXPORT extern MethodDefaultTypeInternal _Method_default_instance_;
-class Mixin; 
+class Mixin;
 struct MixinDefaultTypeInternal;
 PROTOBUF_EXPORT extern MixinDefaultTypeInternal _Mixin_default_instance_;
 PROTOBUF_NAMESPACE_CLOSE
@@ -92,15 +92,15 @@ class PROTOBUF_EXPORT Api final :
     CopyFrom(from);
     return *this;
   }
-  inline Api& operator=(Api&& from) noexcept { 
+  inline Api& operator=(Api&& from) noexcept {
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else { 
-      CopyFrom(from); 
-    } 
-    return *this; 
-  } 
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
@@ -114,16 +114,16 @@ class PROTOBUF_EXPORT Api final :
   static const Api& default_instance() {
     return *internal_default_instance();
   }
-  static inline const Api* internal_default_instance() { 
-    return reinterpret_cast<const Api*>( 
-               &_Api_default_instance_); 
-  } 
+  static inline const Api* internal_default_instance() {
+    return reinterpret_cast<const Api*>(
+               &_Api_default_instance_);
+  }
   static constexpr int kIndexInFileMessages =
-    0; 
- 
-  friend void swap(Api& a, Api& b) { 
-    a.Swap(&b); 
-  } 
+    0;
+
+  friend void swap(Api& a, Api& b) {
+    a.Swap(&b);
+  }
   inline void Swap(Api* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -234,15 +234,15 @@ class PROTOBUF_EXPORT Api final :
   const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< PROTOBUF_NAMESPACE_ID::Option >&
       options() const;
 
-  // repeated .google.protobuf.Mixin mixins = 6; 
-  int mixins_size() const; 
+  // repeated .google.protobuf.Mixin mixins = 6;
+  int mixins_size() const;
   private:
   int _internal_mixins_size() const;
   public:
-  void clear_mixins(); 
+  void clear_mixins();
   PROTOBUF_NAMESPACE_ID::Mixin* mutable_mixins(int index);
   ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< PROTOBUF_NAMESPACE_ID::Mixin >*
-      mutable_mixins(); 
+      mutable_mixins();
   private:
   const PROTOBUF_NAMESPACE_ID::Mixin& _internal_mixins(int index) const;
   PROTOBUF_NAMESPACE_ID::Mixin* _internal_add_mixins();
@@ -250,23 +250,23 @@ class PROTOBUF_EXPORT Api final :
   const PROTOBUF_NAMESPACE_ID::Mixin& mixins(int index) const;
   PROTOBUF_NAMESPACE_ID::Mixin* add_mixins();
   const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< PROTOBUF_NAMESPACE_ID::Mixin >&
-      mixins() const; 
- 
-  // string name = 1; 
-  void clear_name(); 
-  const TProtoStringType& name() const; 
+      mixins() const;
+
+  // string name = 1;
+  void clear_name();
+  const TProtoStringType& name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name(); 
+  TProtoStringType* mutable_name();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name); 
+  void set_allocated_name(TProtoStringType* name);
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
   TProtoStringType* _internal_mutable_name();
   public:
- 
-  // string version = 4; 
+
+  // string version = 4;
   void clear_version();
   const TProtoStringType& version() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
@@ -280,7 +280,7 @@ class PROTOBUF_EXPORT Api final :
   TProtoStringType* _internal_mutable_version();
   public:
 
-  // .google.protobuf.SourceContext source_context = 5; 
+  // .google.protobuf.SourceContext source_context = 5;
   bool has_source_context() const;
   private:
   bool _internal_has_source_context() const;
@@ -298,7 +298,7 @@ class PROTOBUF_EXPORT Api final :
       PROTOBUF_NAMESPACE_ID::SourceContext* source_context);
   PROTOBUF_NAMESPACE_ID::SourceContext* unsafe_arena_release_source_context();
 
-  // .google.protobuf.Syntax syntax = 7; 
+  // .google.protobuf.Syntax syntax = 7;
   void clear_syntax();
   PROTOBUF_NAMESPACE_ID::Syntax syntax() const;
   void set_syntax(PROTOBUF_NAMESPACE_ID::Syntax value);
@@ -343,15 +343,15 @@ class PROTOBUF_EXPORT Method final :
     CopyFrom(from);
     return *this;
   }
-  inline Method& operator=(Method&& from) noexcept { 
+  inline Method& operator=(Method&& from) noexcept {
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else { 
-      CopyFrom(from); 
-    } 
-    return *this; 
-  } 
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
@@ -365,16 +365,16 @@ class PROTOBUF_EXPORT Method final :
   static const Method& default_instance() {
     return *internal_default_instance();
   }
-  static inline const Method* internal_default_instance() { 
-    return reinterpret_cast<const Method*>( 
-               &_Method_default_instance_); 
-  } 
+  static inline const Method* internal_default_instance() {
+    return reinterpret_cast<const Method*>(
+               &_Method_default_instance_);
+  }
   static constexpr int kIndexInFileMessages =
-    1; 
- 
-  friend void swap(Method& a, Method& b) { 
-    a.Swap(&b); 
-  } 
+    1;
+
+  friend void swap(Method& a, Method& b) {
+    a.Swap(&b);
+  }
   inline void Swap(Method* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -449,15 +449,15 @@ class PROTOBUF_EXPORT Method final :
     kResponseStreamingFieldNumber = 5,
     kSyntaxFieldNumber = 7,
   };
-  // repeated .google.protobuf.Option options = 6; 
-  int options_size() const; 
+  // repeated .google.protobuf.Option options = 6;
+  int options_size() const;
   private:
   int _internal_options_size() const;
   public:
-  void clear_options(); 
+  void clear_options();
   PROTOBUF_NAMESPACE_ID::Option* mutable_options(int index);
   ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< PROTOBUF_NAMESPACE_ID::Option >*
-      mutable_options(); 
+      mutable_options();
   private:
   const PROTOBUF_NAMESPACE_ID::Option& _internal_options(int index) const;
   PROTOBUF_NAMESPACE_ID::Option* _internal_add_options();
@@ -465,9 +465,9 @@ class PROTOBUF_EXPORT Method final :
   const PROTOBUF_NAMESPACE_ID::Option& options(int index) const;
   PROTOBUF_NAMESPACE_ID::Option* add_options();
   const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< PROTOBUF_NAMESPACE_ID::Option >&
-      options() const; 
- 
-  // string name = 1; 
+      options() const;
+
+  // string name = 1;
   void clear_name();
   const TProtoStringType& name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
@@ -481,7 +481,7 @@ class PROTOBUF_EXPORT Method final :
   TProtoStringType* _internal_mutable_name();
   public:
 
-  // string request_type_url = 2; 
+  // string request_type_url = 2;
   void clear_request_type_url();
   const TProtoStringType& request_type_url() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
@@ -495,7 +495,7 @@ class PROTOBUF_EXPORT Method final :
   TProtoStringType* _internal_mutable_request_type_url();
   public:
 
-  // string response_type_url = 4; 
+  // string response_type_url = 4;
   void clear_response_type_url();
   const TProtoStringType& response_type_url() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
@@ -509,16 +509,16 @@ class PROTOBUF_EXPORT Method final :
   TProtoStringType* _internal_mutable_response_type_url();
   public:
 
-  // bool request_streaming = 3; 
-  void clear_request_streaming(); 
-  bool request_streaming() const; 
-  void set_request_streaming(bool value); 
+  // bool request_streaming = 3;
+  void clear_request_streaming();
+  bool request_streaming() const;
+  void set_request_streaming(bool value);
   private:
   bool _internal_request_streaming() const;
   void _internal_set_request_streaming(bool value);
   public:
- 
-  // bool response_streaming = 5; 
+
+  // bool response_streaming = 5;
   void clear_response_streaming();
   bool response_streaming() const;
   void set_response_streaming(bool value);
@@ -527,7 +527,7 @@ class PROTOBUF_EXPORT Method final :
   void _internal_set_response_streaming(bool value);
   public:
 
-  // .google.protobuf.Syntax syntax = 7; 
+  // .google.protobuf.Syntax syntax = 7;
   void clear_syntax();
   PROTOBUF_NAMESPACE_ID::Syntax syntax() const;
   void set_syntax(PROTOBUF_NAMESPACE_ID::Syntax value);
@@ -572,15 +572,15 @@ class PROTOBUF_EXPORT Mixin final :
     CopyFrom(from);
     return *this;
   }
-  inline Mixin& operator=(Mixin&& from) noexcept { 
+  inline Mixin& operator=(Mixin&& from) noexcept {
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else { 
-      CopyFrom(from); 
-    } 
-    return *this; 
-  } 
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
@@ -594,16 +594,16 @@ class PROTOBUF_EXPORT Mixin final :
   static const Mixin& default_instance() {
     return *internal_default_instance();
   }
-  static inline const Mixin* internal_default_instance() { 
-    return reinterpret_cast<const Mixin*>( 
-               &_Mixin_default_instance_); 
-  } 
+  static inline const Mixin* internal_default_instance() {
+    return reinterpret_cast<const Mixin*>(
+               &_Mixin_default_instance_);
+  }
   static constexpr int kIndexInFileMessages =
-    2; 
- 
-  friend void swap(Mixin& a, Mixin& b) { 
-    a.Swap(&b); 
-  } 
+    2;
+
+  friend void swap(Mixin& a, Mixin& b) {
+    a.Swap(&b);
+  }
   inline void Swap(Mixin* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -673,7 +673,7 @@ class PROTOBUF_EXPORT Mixin final :
     kNameFieldNumber = 1,
     kRootFieldNumber = 2,
   };
-  // string name = 1; 
+  // string name = 1;
   void clear_name();
   const TProtoStringType& name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
@@ -687,7 +687,7 @@ class PROTOBUF_EXPORT Mixin final :
   TProtoStringType* _internal_mutable_name();
   public:
 
-  // string root = 2; 
+  // string root = 2;
   void clear_root();
   const TProtoStringType& root() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
@@ -718,13 +718,13 @@ class PROTOBUF_EXPORT Mixin final :
 
 // ===================================================================
 
-#ifdef __GNUC__ 
-  #pragma GCC diagnostic push 
-  #pragma GCC diagnostic ignored "-Wstrict-aliasing" 
-#endif  // __GNUC__ 
+#ifdef __GNUC__
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif  // __GNUC__
 // Api
 
-// string name = 1; 
+// string name = 1;
 inline void Api::clear_name() {
   name_.ClearToEmpty();
 }
@@ -847,7 +847,7 @@ Api::options() const {
   return options_;
 }
 
-// string version = 4; 
+// string version = 4;
 inline void Api::clear_version() {
   version_.ClearToEmpty();
 }
@@ -893,7 +893,7 @@ inline void Api::set_allocated_version(TProtoStringType* version) {
   // @@protoc_insertion_point(field_set_allocated:google.protobuf.Api.version)
 }
 
-// .google.protobuf.SourceContext source_context = 5; 
+// .google.protobuf.SourceContext source_context = 5;
 inline bool Api::_internal_has_source_context() const {
   return this != internal_default_instance() && source_context_ != nullptr;
 }
@@ -1019,7 +1019,7 @@ Api::mixins() const {
   return mixins_;
 }
 
-// .google.protobuf.Syntax syntax = 7; 
+// .google.protobuf.Syntax syntax = 7;
 inline void Api::clear_syntax() {
   syntax_ = 0;
 }
@@ -1043,7 +1043,7 @@ inline void Api::set_syntax(PROTOBUF_NAMESPACE_ID::Syntax value) {
 
 // Method
 
-// string name = 1; 
+// string name = 1;
 inline void Method::clear_name() {
   name_.ClearToEmpty();
 }
@@ -1089,7 +1089,7 @@ inline void Method::set_allocated_name(TProtoStringType* name) {
   // @@protoc_insertion_point(field_set_allocated:google.protobuf.Method.name)
 }
 
-// string request_type_url = 2; 
+// string request_type_url = 2;
 inline void Method::clear_request_type_url() {
   request_type_url_.ClearToEmpty();
 }
@@ -1135,7 +1135,7 @@ inline void Method::set_allocated_request_type_url(TProtoStringType* request_typ
   // @@protoc_insertion_point(field_set_allocated:google.protobuf.Method.request_type_url)
 }
 
-// bool request_streaming = 3; 
+// bool request_streaming = 3;
 inline void Method::clear_request_streaming() {
   request_streaming_ = false;
 }
@@ -1155,7 +1155,7 @@ inline void Method::set_request_streaming(bool value) {
   // @@protoc_insertion_point(field_set:google.protobuf.Method.request_streaming)
 }
 
-// string response_type_url = 4; 
+// string response_type_url = 4;
 inline void Method::clear_response_type_url() {
   response_type_url_.ClearToEmpty();
 }
@@ -1201,7 +1201,7 @@ inline void Method::set_allocated_response_type_url(TProtoStringType* response_t
   // @@protoc_insertion_point(field_set_allocated:google.protobuf.Method.response_type_url)
 }
 
-// bool response_streaming = 5; 
+// bool response_streaming = 5;
 inline void Method::clear_response_streaming() {
   response_streaming_ = false;
 }
@@ -1258,7 +1258,7 @@ Method::options() const {
   return options_;
 }
 
-// .google.protobuf.Syntax syntax = 7; 
+// .google.protobuf.Syntax syntax = 7;
 inline void Method::clear_syntax() {
   syntax_ = 0;
 }
@@ -1282,7 +1282,7 @@ inline void Method::set_syntax(PROTOBUF_NAMESPACE_ID::Syntax value) {
 
 // Mixin
 
-// string name = 1; 
+// string name = 1;
 inline void Mixin::clear_name() {
   name_.ClearToEmpty();
 }
@@ -1328,7 +1328,7 @@ inline void Mixin::set_allocated_name(TProtoStringType* name) {
   // @@protoc_insertion_point(field_set_allocated:google.protobuf.Mixin.name)
 }
 
-// string root = 2; 
+// string root = 2;
 inline void Mixin::clear_root() {
   root_.ClearToEmpty();
 }
@@ -1374,9 +1374,9 @@ inline void Mixin::set_allocated_root(TProtoStringType* root) {
   // @@protoc_insertion_point(field_set_allocated:google.protobuf.Mixin.root)
 }
 
-#ifdef __GNUC__ 
-  #pragma GCC diagnostic pop 
-#endif  // __GNUC__ 
+#ifdef __GNUC__
+  #pragma GCC diagnostic pop
+#endif  // __GNUC__
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
@@ -1385,7 +1385,7 @@ inline void Mixin::set_allocated_root(TProtoStringType* root) {
 // @@protoc_insertion_point(namespace_scope)
 
 PROTOBUF_NAMESPACE_CLOSE
- 
+
 // @@protoc_insertion_point(global_scope)
 
 #include <google/protobuf/port_undef.inc>

@@ -36,10 +36,10 @@ IF (NOT WIN32)
             -DUNQUOTED_PYTHONPATH=:plat-darwin
             -DUNQUOTED_PLATFORM=darwin
         )
-        LDFLAGS( 
-           -framework SystemConfiguration 
-           -framework CoreFoundation 
-        ) 
+        LDFLAGS(
+           -framework SystemConfiguration
+           -framework CoreFoundation
+        )
     ENDIF ()
 ENDIF ()
 

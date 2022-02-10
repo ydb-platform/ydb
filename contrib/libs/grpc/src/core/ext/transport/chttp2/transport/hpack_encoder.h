@@ -1,26 +1,26 @@
 /*
  *
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
 #ifndef GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_ENCODER_H
 #define GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_ENCODER_H
 
-#include <grpc/support/port_platform.h> 
- 
+#include <grpc/support/port_platform.h>
+
 #include <grpc/slice.h>
 #include <grpc/slice_buffer.h>
 #include "src/core/ext/transport/chttp2/transport/frame.h"
@@ -36,8 +36,8 @@
 /* maximum table size we'll actually use */
 #define GRPC_CHTTP2_HPACKC_MAX_TABLE_SIZE (1024 * 1024)
 
-extern grpc_core::TraceFlag grpc_http_trace; 
- 
+extern grpc_core::TraceFlag grpc_http_trace;
+
 struct grpc_chttp2_hpack_compressor {
   uint32_t max_table_size;
   uint32_t max_table_elems;
@@ -83,25 +83,25 @@ struct grpc_chttp2_hpack_compressor {
   } key_table; /* Key table management */
 };
 
-void grpc_chttp2_hpack_compressor_init(grpc_chttp2_hpack_compressor* c); 
-void grpc_chttp2_hpack_compressor_destroy(grpc_chttp2_hpack_compressor* c); 
+void grpc_chttp2_hpack_compressor_init(grpc_chttp2_hpack_compressor* c);
+void grpc_chttp2_hpack_compressor_destroy(grpc_chttp2_hpack_compressor* c);
 void grpc_chttp2_hpack_compressor_set_max_table_size(
-    grpc_chttp2_hpack_compressor* c, uint32_t max_table_size); 
+    grpc_chttp2_hpack_compressor* c, uint32_t max_table_size);
 void grpc_chttp2_hpack_compressor_set_max_usable_size(
-    grpc_chttp2_hpack_compressor* c, uint32_t max_table_size); 
+    grpc_chttp2_hpack_compressor* c, uint32_t max_table_size);
 
 struct grpc_encode_header_options {
-  uint32_t stream_id; 
-  bool is_eof; 
-  bool use_true_binary_metadata; 
-  size_t max_frame_size; 
-  grpc_transport_one_way_stats* stats; 
+  uint32_t stream_id;
+  bool is_eof;
+  bool use_true_binary_metadata;
+  size_t max_frame_size;
+  grpc_transport_one_way_stats* stats;
 };
-void grpc_chttp2_encode_header(grpc_chttp2_hpack_compressor* c, 
-                               grpc_mdelem** extra_headers, 
-                               size_t extra_headers_size, 
-                               grpc_metadata_batch* metadata, 
-                               const grpc_encode_header_options* options, 
-                               grpc_slice_buffer* outbuf); 
- 
+void grpc_chttp2_encode_header(grpc_chttp2_hpack_compressor* c,
+                               grpc_mdelem** extra_headers,
+                               size_t extra_headers_size,
+                               grpc_metadata_batch* metadata,
+                               const grpc_encode_header_options* options,
+                               grpc_slice_buffer* outbuf);
+
 #endif /* GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_ENCODER_H */

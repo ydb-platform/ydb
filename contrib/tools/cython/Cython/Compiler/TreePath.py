@@ -18,14 +18,14 @@ else:
     _unicode = unicode
 
 path_tokenizer = re.compile(
-    r"(" 
-    r"'[^']*'|\"[^\"]*\"|" 
-    r"//?|" 
-    r"\(\)|" 
-    r"==?|" 
-    r"[/.*\[\]()@])|" 
-    r"([^/\[\]()@=\s]+)|" 
-    r"\s+" 
+    r"("
+    r"'[^']*'|\"[^\"]*\"|"
+    r"//?|"
+    r"\(\)|"
+    r"==?|"
+    r"[/.*\[\]()@])|"
+    r"([^/\[\]()@=\s]+)|"
+    r"\s+"
     ).findall
 
 def iterchildren(node, attr_name):

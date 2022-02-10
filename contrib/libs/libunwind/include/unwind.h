@@ -1,12 +1,12 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //
 // C++ ABI Level 1 ABI documented at:
-//   https://itanium-cxx-abi.github.io/cxx-abi/abi-eh.html 
+//   https://itanium-cxx-abi.github.io/cxx-abi/abi-eh.html
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,11 +18,11 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#if defined(__SEH__) && !defined(__USING_SJLJ_EXCEPTIONS__) && defined(_WIN32) 
-#include <windows.h> 
-#include <ntverp.h> 
-#endif 
- 
+#if defined(__SEH__) && !defined(__USING_SJLJ_EXCEPTIONS__) && defined(_WIN32)
+#include <windows.h>
+#include <ntverp.h>
+#endif
+
 #if defined(__APPLE__)
 #define LIBUNWIND_UNAVAIL __attribute__ (( deprecated ))
 #else
@@ -40,7 +40,7 @@ typedef enum {
   _URC_HANDLER_FOUND = 6,
   _URC_INSTALL_CONTEXT = 7,
   _URC_CONTINUE_UNWIND = 8,
-#if defined(_LIBUNWIND_ARM_EHABI) 
+#if defined(_LIBUNWIND_ARM_EHABI)
   _URC_FAILURE = 9
 #endif
 } _Unwind_Reason_Code;
@@ -55,11 +55,11 @@ typedef enum {
 
 typedef struct _Unwind_Context _Unwind_Context;   // opaque
 
-#if defined(_LIBUNWIND_ARM_EHABI) 
+#if defined(_LIBUNWIND_ARM_EHABI)
 #include "unwind_arm_ehabi.h"
-#else 
+#else
 #include "unwind_itanium.h"
-#endif 
+#endif
 
 typedef _Unwind_Reason_Code (*_Unwind_Stop_Fn)
     (int version,
@@ -141,7 +141,7 @@ extern void __deregister_frame(const void *fde);
 
 // _Unwind_Find_FDE() will locate the FDE if the pc is in some function that has
 // an associated FDE. Note, Mac OS X 10.6 and later, introduces "compact unwind
-// info" which the runtime uses in preference to DWARF unwind info.  This 
+// info" which the runtime uses in preference to DWARF unwind info.  This
 // function will only work if the target function has an FDE but no compact
 // unwind info.
 struct dwarf_eh_bases {
@@ -154,7 +154,7 @@ extern const void *_Unwind_Find_FDE(const void *pc, struct dwarf_eh_bases *);
 
 // This function attempts to find the start (address of first instruction) of
 // a function given an address inside the function.  It only works if the
-// function has an FDE (DWARF unwind info). 
+// function has an FDE (DWARF unwind info).
 // This function is unimplemented on Mac OS X 10.6 and later.  Instead, use
 // _Unwind_Find_FDE() and look at the dwarf_eh_bases.func result.
 extern void *_Unwind_FindEnclosingFunction(void *pc);
@@ -185,21 +185,21 @@ extern void *__deregister_frame_info(const void *fde)
 extern void *__deregister_frame_info_bases(const void *fde)
     LIBUNWIND_UNAVAIL;
 
-#if defined(__SEH__) && !defined(__USING_SJLJ_EXCEPTIONS__) 
-#ifndef _WIN32 
-typedef struct _EXCEPTION_RECORD EXCEPTION_RECORD; 
-typedef struct _CONTEXT CONTEXT; 
-typedef struct _DISPATCHER_CONTEXT DISPATCHER_CONTEXT; 
-#elif !defined(__MINGW32__) && VER_PRODUCTBUILD < 8000 
-typedef struct _DISPATCHER_CONTEXT DISPATCHER_CONTEXT; 
-#endif 
-// This is the common wrapper for GCC-style personality functions with SEH. 
-extern EXCEPTION_DISPOSITION _GCC_specific_handler(EXCEPTION_RECORD *exc, 
-                                                   void *frame, CONTEXT *ctx, 
-                                                   DISPATCHER_CONTEXT *disp, 
-                                                   _Unwind_Personality_Fn pers); 
-#endif 
- 
+#if defined(__SEH__) && !defined(__USING_SJLJ_EXCEPTIONS__)
+#ifndef _WIN32
+typedef struct _EXCEPTION_RECORD EXCEPTION_RECORD;
+typedef struct _CONTEXT CONTEXT;
+typedef struct _DISPATCHER_CONTEXT DISPATCHER_CONTEXT;
+#elif !defined(__MINGW32__) && VER_PRODUCTBUILD < 8000
+typedef struct _DISPATCHER_CONTEXT DISPATCHER_CONTEXT;
+#endif
+// This is the common wrapper for GCC-style personality functions with SEH.
+extern EXCEPTION_DISPOSITION _GCC_specific_handler(EXCEPTION_RECORD *exc,
+                                                   void *frame, CONTEXT *ctx,
+                                                   DISPATCHER_CONTEXT *disp,
+                                                   _Unwind_Personality_Fn pers);
+#endif
+
 #ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE
 
 #define _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_SIZE 128

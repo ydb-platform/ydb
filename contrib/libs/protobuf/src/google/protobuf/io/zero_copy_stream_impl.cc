@@ -58,15 +58,15 @@ namespace io {
 // Win32 lseek is broken:  If invoked on a non-seekable file descriptor, its
 // return value is undefined.  We re-define it to always produce an error.
 #define lseek(fd, offset, origin) ((off_t)-1)
-// DO NOT include <io.h>, instead create functions in io_win32.{h,cc} and import 
-// them like we do below. 
+// DO NOT include <io.h>, instead create functions in io_win32.{h,cc} and import
+// them like we do below.
 using google::protobuf::io::win32::access;
 using google::protobuf::io::win32::close;
 using google::protobuf::io::win32::open;
 using google::protobuf::io::win32::read;
 using google::protobuf::io::win32::write;
-#endif 
- 
+#endif
+
 namespace {
 
 // EINTR sucks.
@@ -243,7 +243,7 @@ bool FileOutputStream::CopyingFileOutputStream::Write(const void* buffer,
 // ===================================================================
 
 IstreamInputStream::IstreamInputStream(std::istream* input, int block_size)
-    : copying_input_(input), impl_(&copying_input_, block_size) {} 
+    : copying_input_(input), impl_(&copying_input_, block_size) {}
 
 bool IstreamInputStream::Next(const void** data, int* size) {
   return impl_.Next(data, size);
@@ -257,7 +257,7 @@ int64_t IstreamInputStream::ByteCount() const { return impl_.ByteCount(); }
 
 IstreamInputStream::CopyingIstreamInputStream::CopyingIstreamInputStream(
     std::istream* input)
-    : input_(input) {} 
+    : input_(input) {}
 
 IstreamInputStream::CopyingIstreamInputStream::~CopyingIstreamInputStream() {}
 
@@ -274,7 +274,7 @@ int IstreamInputStream::CopyingIstreamInputStream::Read(void* buffer,
 // ===================================================================
 
 OstreamOutputStream::OstreamOutputStream(std::ostream* output, int block_size)
-    : copying_output_(output), impl_(&copying_output_, block_size) {} 
+    : copying_output_(output), impl_(&copying_output_, block_size) {}
 
 OstreamOutputStream::~OstreamOutputStream() { impl_.Flush(); }
 
@@ -288,7 +288,7 @@ int64_t OstreamOutputStream::ByteCount() const { return impl_.ByteCount(); }
 
 OstreamOutputStream::CopyingOstreamOutputStream::CopyingOstreamOutputStream(
     std::ostream* output)
-    : output_(output) {} 
+    : output_(output) {}
 
 OstreamOutputStream::CopyingOstreamOutputStream::~CopyingOstreamOutputStream() {
 }

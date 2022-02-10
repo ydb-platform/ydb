@@ -19,7 +19,7 @@
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 namespace {
 
@@ -63,5 +63,5 @@ void BlockingCounter::Wait() {
   // after we return from this method.
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

@@ -113,7 +113,7 @@ void ImmutableMessageLiteGenerator::GenerateInterface(io::Printer* printer) {
                                 /* immutable = */ true, "OrBuilder");
   if (descriptor_->extension_range_count() > 0) {
     printer->Print(
-        "$deprecation$public interface ${$$classname$OrBuilder$}$ extends \n" 
+        "$deprecation$public interface ${$$classname$OrBuilder$}$ extends \n"
         "    $extra_interfaces$\n"
         "     com.google.protobuf.GeneratedMessageLite.\n"
         "          ExtendableMessageOrBuilder<\n"
@@ -124,7 +124,7 @@ void ImmutableMessageLiteGenerator::GenerateInterface(io::Printer* printer) {
         "classname", descriptor_->name(), "{", "", "}", "");
   } else {
     printer->Print(
-        "$deprecation$public interface ${$$classname$OrBuilder$}$ extends\n" 
+        "$deprecation$public interface ${$$classname$OrBuilder$}$ extends\n"
         "    $extra_interfaces$\n"
         "    com.google.protobuf.MessageLiteOrBuilder {\n",
         "deprecation",
@@ -132,7 +132,7 @@ void ImmutableMessageLiteGenerator::GenerateInterface(io::Printer* printer) {
         "extra_interfaces", ExtraMessageOrBuilderInterfaces(descriptor_),
         "classname", descriptor_->name(), "{", "", "}", "");
   }
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
 
   printer->Indent();
   for (int i = 0; i < descriptor_->field_count(); i++) {
@@ -170,7 +170,7 @@ void ImmutableMessageLiteGenerator::Generate(io::Printer* printer) {
   MaybePrintGeneratedAnnotation(context_, printer, descriptor_,
                                 /* immutable = */ true);
 
- 
+
   // The builder_type stores the super type name of the nested Builder class.
   TProtoStringType builder_type;
   if (descriptor_->extension_range_count() > 0) {
@@ -187,7 +187,7 @@ void ImmutableMessageLiteGenerator::Generate(io::Printer* printer) {
   } else {
     printer->Print(
         variables,
-        "$deprecation$public $static$final class $classname$ extends\n" 
+        "$deprecation$public $static$final class $classname$ extends\n"
         "    com.google.protobuf.GeneratedMessageLite<\n"
         "        $classname$, $classname$.Builder> implements\n"
         "    $extra_interfaces$\n"
@@ -229,7 +229,7 @@ void ImmutableMessageLiteGenerator::Generate(io::Printer* printer) {
   // oneof
   std::map<TProtoStringType, TProtoStringType> vars;
   for (auto oneof : oneofs_) {
-    vars["oneof_name"] = context_->GetOneofGeneratorInfo(oneof)->name; 
+    vars["oneof_name"] = context_->GetOneofGeneratorInfo(oneof)->name;
     vars["oneof_capitalized_name"] =
         context_->GetOneofGeneratorInfo(oneof)->capitalized_name;
     vars["oneof_index"] = StrCat((oneof)->index());
@@ -321,15 +321,15 @@ void ImmutableMessageLiteGenerator::Generate(io::Printer* printer) {
 
   printer->Print(
       "@java.lang.Override\n"
-      "@java.lang.SuppressWarnings({\"unchecked\", \"fallthrough\"})\n" 
-      "protected final java.lang.Object dynamicMethod(\n" 
-      "    com.google.protobuf.GeneratedMessageLite.MethodToInvoke method,\n" 
-      "    java.lang.Object arg0, java.lang.Object arg1) {\n" 
-      "  switch (method) {\n" 
-      "    case NEW_MUTABLE_INSTANCE: {\n" 
-      "      return new $classname$();\n" 
-      "    }\n", 
-      "classname", name_resolver_->GetImmutableClassName(descriptor_)); 
+      "@java.lang.SuppressWarnings({\"unchecked\", \"fallthrough\"})\n"
+      "protected final java.lang.Object dynamicMethod(\n"
+      "    com.google.protobuf.GeneratedMessageLite.MethodToInvoke method,\n"
+      "    java.lang.Object arg0, java.lang.Object arg1) {\n"
+      "  switch (method) {\n"
+      "    case NEW_MUTABLE_INSTANCE: {\n"
+      "      return new $classname$();\n"
+      "    }\n",
+      "classname", name_resolver_->GetImmutableClassName(descriptor_));
 
   printer->Indent();
   printer->Indent();

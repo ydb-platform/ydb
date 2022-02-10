@@ -1,15 +1,15 @@
 /* ******************************************************************
- * FSE : Finite State Entropy codec 
- * Public Prototypes declaration 
+ * FSE : Finite State Entropy codec
+ * Public Prototypes declaration
  * Copyright (c) Yann Collet, Facebook, Inc.
- * 
- * You can contact the author at : 
- * - Source repository : https://github.com/Cyan4973/FiniteStateEntropy 
- * 
- * This source code is licensed under both the BSD-style license (found in the 
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
- * in the COPYING file in the root directory of this source tree). 
- * You may select, at your option, one of the above-listed licenses. 
+ *
+ * You can contact the author at :
+ * - Source repository : https://github.com/Cyan4973/FiniteStateEntropy
+ *
+ * This source code is licensed under both the BSD-style license (found in the
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found
+ * in the COPYING file in the root directory of this source tree).
+ * You may select, at your option, one of the above-listed licenses.
 ****************************************************************** */
 
 #if defined (__cplusplus)
@@ -304,7 +304,7 @@ If there is an error, the function will return an error code, which can be teste
 #define FSE_BLOCKBOUND(size) ((size) + ((size)>>7) + 4 /* fse states */ + sizeof(size_t) /* bitContainer */)
 #define FSE_COMPRESSBOUND(size) (FSE_NCOUNTBOUND + FSE_BLOCKBOUND(size))   /* Macro version, useful for static allocation */
 
-/* It is possible to statically allocate FSE CTable/DTable as a table of FSE_CTable/FSE_DTable using below macros */ 
+/* It is possible to statically allocate FSE CTable/DTable as a table of FSE_CTable/FSE_DTable using below macros */
 #define FSE_CTABLE_SIZE_U32(maxTableLog, maxSymbolValue)   (1 + (1<<((maxTableLog)-1)) + (((maxSymbolValue)+1)*2))
 #define FSE_DTABLE_SIZE_U32(maxTableLog)                   (1 + (1<<(maxTableLog)))
 
@@ -316,39 +316,39 @@ If there is an error, the function will return an error code, which can be teste
 /* *****************************************
  *  FSE advanced API
  ***************************************** */
- 
+
 unsigned FSE_optimalTableLog_internal(unsigned maxTableLog, size_t srcSize, unsigned maxSymbolValue, unsigned minus);
 /**< same as FSE_optimalTableLog(), which used `minus==2` */
 
-/* FSE_compress_wksp() : 
- * Same as FSE_compress2(), but using an externally allocated scratch buffer (`workSpace`). 
+/* FSE_compress_wksp() :
+ * Same as FSE_compress2(), but using an externally allocated scratch buffer (`workSpace`).
  * FSE_COMPRESS_WKSP_SIZE_U32() provides the minimum size required for `workSpace` as a table of FSE_CTable.
- */ 
+ */
 #define FSE_COMPRESS_WKSP_SIZE_U32(maxTableLog, maxSymbolValue)   ( FSE_CTABLE_SIZE_U32(maxTableLog, maxSymbolValue) + ((maxTableLog > 12) ? (1 << (maxTableLog - 2)) : 1024) )
-size_t FSE_compress_wksp (void* dst, size_t dstSize, const void* src, size_t srcSize, unsigned maxSymbolValue, unsigned tableLog, void* workSpace, size_t wkspSize); 
- 
+size_t FSE_compress_wksp (void* dst, size_t dstSize, const void* src, size_t srcSize, unsigned maxSymbolValue, unsigned tableLog, void* workSpace, size_t wkspSize);
+
 size_t FSE_buildCTable_raw (FSE_CTable* ct, unsigned nbBits);
-/**< build a fake FSE_CTable, designed for a flat distribution, where each symbol uses nbBits */ 
+/**< build a fake FSE_CTable, designed for a flat distribution, where each symbol uses nbBits */
 
 size_t FSE_buildCTable_rle (FSE_CTable* ct, unsigned char symbolValue);
 /**< build a fake FSE_CTable, designed to compress always the same symbolValue */
 
-/* FSE_buildCTable_wksp() : 
- * Same as FSE_buildCTable(), but using an externally allocated scratch buffer (`workSpace`). 
+/* FSE_buildCTable_wksp() :
+ * Same as FSE_buildCTable(), but using an externally allocated scratch buffer (`workSpace`).
  * `wkspSize` must be >= `FSE_BUILD_CTABLE_WORKSPACE_SIZE_U32(maxSymbolValue, tableLog)` of `unsigned`.
  * See FSE_buildCTable_wksp() for breakdown of workspace usage.
- */ 
+ */
 #define FSE_BUILD_CTABLE_WORKSPACE_SIZE_U32(maxSymbolValue, tableLog) (((maxSymbolValue + 2) + (1ull << (tableLog)))/2 + sizeof(U64)/sizeof(U32) /* additional 8 bytes for potential table overwrite */)
 #define FSE_BUILD_CTABLE_WORKSPACE_SIZE(maxSymbolValue, tableLog) (sizeof(unsigned) * FSE_BUILD_CTABLE_WORKSPACE_SIZE_U32(maxSymbolValue, tableLog))
-size_t FSE_buildCTable_wksp(FSE_CTable* ct, const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog, void* workSpace, size_t wkspSize); 
- 
+size_t FSE_buildCTable_wksp(FSE_CTable* ct, const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog, void* workSpace, size_t wkspSize);
+
 #define FSE_BUILD_DTABLE_WKSP_SIZE(maxTableLog, maxSymbolValue) (sizeof(short) * (maxSymbolValue + 1) + (1ULL << maxTableLog) + 8)
 #define FSE_BUILD_DTABLE_WKSP_SIZE_U32(maxTableLog, maxSymbolValue) ((FSE_BUILD_DTABLE_WKSP_SIZE(maxTableLog, maxSymbolValue) + sizeof(unsigned) - 1) / sizeof(unsigned))
 FSE_PUBLIC_API size_t FSE_buildDTable_wksp(FSE_DTable* dt, const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog, void* workSpace, size_t wkspSize);
 /**< Same as FSE_buildDTable(), using an externally allocated `workspace` produced with `FSE_BUILD_DTABLE_WKSP_SIZE_U32(maxSymbolValue)` */
 
 size_t FSE_buildDTable_raw (FSE_DTable* dt, unsigned nbBits);
-/**< build a fake FSE_DTable, designed to read a flat distribution where each symbol uses nbBits */ 
+/**< build a fake FSE_DTable, designed to read a flat distribution where each symbol uses nbBits */
 
 size_t FSE_buildDTable_rle (FSE_DTable* dt, unsigned char symbolValue);
 /**< build a fake FSE_DTable, designed to always generate the same symbolValue */
@@ -366,15 +366,15 @@ typedef enum {
    FSE_repeat_check, /**< Can use the previous table but it must be checked */
    FSE_repeat_valid  /**< Can use the previous table and it is assumed to be valid */
  } FSE_repeat;
- 
+
 /* *****************************************
 *  FSE symbol compression API
 *******************************************/
 /*!
    This API consists of small unitary functions, which highly benefit from being inlined.
-   Hence their body are included in next section. 
+   Hence their body are included in next section.
 */
-typedef struct { 
+typedef struct {
     ptrdiff_t   value;
     const void* stateTable;
     const void* symbolTT;
@@ -434,7 +434,7 @@ If there is an error, it returns an errorCode (which can be tested using FSE_isE
 /* *****************************************
 *  FSE symbol decompression API
 *******************************************/
-typedef struct { 
+typedef struct {
     size_t      state;
     const void* table;   /* precise table may vary, depending on U16 */
 } FSE_DState_t;
@@ -586,8 +586,8 @@ MEM_STATIC U32 FSE_bitCost(const void* symbolTTPtr, U32 tableLog, U32 symbolValu
 }
 
 
-/* ======    Decompression    ====== */ 
- 
+/* ======    Decompression    ====== */
+
 typedef struct {
     U16 tableLog;
     U16 fastMode;
@@ -664,12 +664,12 @@ MEM_STATIC unsigned FSE_endOfDState(const FSE_DState_t* DStatePtr)
 *  Increasing memory usage improves compression ratio
 *  Reduced memory usage can improve speed, due to cache effect
 *  Recommended max value is 14, for 16KB, which nicely fits into Intel x86 L1 cache */
-#ifndef FSE_MAX_MEMORY_USAGE 
-#  define FSE_MAX_MEMORY_USAGE 14 
-#endif 
-#ifndef FSE_DEFAULT_MEMORY_USAGE 
-#  define FSE_DEFAULT_MEMORY_USAGE 13 
-#endif 
+#ifndef FSE_MAX_MEMORY_USAGE
+#  define FSE_MAX_MEMORY_USAGE 14
+#endif
+#ifndef FSE_DEFAULT_MEMORY_USAGE
+#  define FSE_DEFAULT_MEMORY_USAGE 13
+#endif
 #if (FSE_DEFAULT_MEMORY_USAGE > FSE_MAX_MEMORY_USAGE)
 #  error "FSE_DEFAULT_MEMORY_USAGE must be <= FSE_MAX_MEMORY_USAGE"
 #endif
@@ -677,9 +677,9 @@ MEM_STATIC unsigned FSE_endOfDState(const FSE_DState_t* DStatePtr)
 /*!FSE_MAX_SYMBOL_VALUE :
 *  Maximum symbol value authorized.
 *  Required for proper stack allocation */
-#ifndef FSE_MAX_SYMBOL_VALUE 
-#  define FSE_MAX_SYMBOL_VALUE 255 
-#endif 
+#ifndef FSE_MAX_SYMBOL_VALUE
+#  define FSE_MAX_SYMBOL_VALUE 255
+#endif
 
 /* **************************************************************
 *  template functions type & suffix

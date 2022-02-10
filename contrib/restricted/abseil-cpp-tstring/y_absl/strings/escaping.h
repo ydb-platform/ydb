@@ -24,7 +24,7 @@
 #define ABSL_STRINGS_ESCAPING_H_
 
 #include <cstddef>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <vector>
 
 #include "y_absl/base/macros.h"
@@ -33,7 +33,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // CUnescape()
 //
@@ -158,7 +158,7 @@ TString HexStringToBytes(y_absl::string_view from);
 // `2*from.size()`.
 TString BytesToHexString(y_absl::string_view from);
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_ESCAPING_H_

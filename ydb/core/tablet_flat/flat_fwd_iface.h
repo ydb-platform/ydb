@@ -12,7 +12,7 @@ namespace NFwd {
     class IPageLoadingQueue {
     public:
         virtual ~IPageLoadingQueue() = default;
- 
+
         virtual ui64 AddToQueue(ui32 page, ui16 type) noexcept = 0;
     };
 

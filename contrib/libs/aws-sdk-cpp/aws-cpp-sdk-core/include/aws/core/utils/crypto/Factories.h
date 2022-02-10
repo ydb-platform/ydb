@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #pragma once
 
@@ -80,25 +80,25 @@ namespace Aws
             AWS_CORE_API std::shared_ptr<SymmetricCipher> CreateAES_CTRImplementation(CryptoBuffer&& key, CryptoBuffer&& iv);
 
             /**
-             * Create AES in GCM mode off of a 256 bit key. Auto Generates a 12 byte secure random IV. 
+             * Create AES in GCM mode off of a 256 bit key. Auto Generates a 12 byte secure random IV.
              */
             AWS_CORE_API std::shared_ptr<SymmetricCipher> CreateAES_GCMImplementation(const CryptoBuffer& key);
             /**
-             * Create AES in GCM mode off of a 256 bit key. Auto Generates a 12 byte secure random IV and aad. 
-             */ 
-            AWS_CORE_API std::shared_ptr<SymmetricCipher> CreateAES_GCMImplementation(const CryptoBuffer& key, const CryptoBuffer* aad); 
-            /** 
-             * Create AES in GCM mode off of a 256 bit key, a 12 byte secure random IV, and an optional 16 byte Tag. If you are using this 
+             * Create AES in GCM mode off of a 256 bit key. Auto Generates a 12 byte secure random IV and aad.
+             */
+            AWS_CORE_API std::shared_ptr<SymmetricCipher> CreateAES_GCMImplementation(const CryptoBuffer& key, const CryptoBuffer* aad);
+            /**
+             * Create AES in GCM mode off of a 256 bit key, a 12 byte secure random IV, and an optional 16 byte Tag. If you are using this
              * cipher to decrypt an encrypted payload, you must set the tag here.
              */
             AWS_CORE_API std::shared_ptr<SymmetricCipher> CreateAES_GCMImplementation(const CryptoBuffer& key, const CryptoBuffer& iv,
-                                                                                      const CryptoBuffer& tag = CryptoBuffer(0), const CryptoBuffer& aad = CryptoBuffer(0)); 
+                                                                                      const CryptoBuffer& tag = CryptoBuffer(0), const CryptoBuffer& aad = CryptoBuffer(0));
             /**
-             * Create AES in GCM mode off of a 256 bit key, a 16 byte secure random IV, and an optional 16 byte Tag, as well an optional add. If you are using this 
+             * Create AES in GCM mode off of a 256 bit key, a 16 byte secure random IV, and an optional 16 byte Tag, as well an optional add. If you are using this
              * cipher to decrypt an encrypted payload, you must set the tag here.
              */
             AWS_CORE_API std::shared_ptr<SymmetricCipher> CreateAES_GCMImplementation(CryptoBuffer&& key, CryptoBuffer&& iv,
-                                                                                      CryptoBuffer&& tag = CryptoBuffer(0), CryptoBuffer&& aad = CryptoBuffer(0)); 
+                                                                                      CryptoBuffer&& tag = CryptoBuffer(0), CryptoBuffer&& aad = CryptoBuffer(0));
             /**
              * Create AES in Key Wrap mode off of a 256 bit key.
              */

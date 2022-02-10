@@ -41,12 +41,12 @@
 
 #include "y_absl/base/config.h"
 
-// MSVC constructibility traits do not detect destructor properties and so our 
-// implementations should not use them as a source-of-truth. 
-#if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__) 
-#define ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION 1 
-#endif 
- 
+// MSVC constructibility traits do not detect destructor properties and so our
+// implementations should not use them as a source-of-truth.
+#if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__)
+#define ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION 1
+#endif
+
 // Defines the default alignment. `__STDCPP_DEFAULT_NEW_ALIGNMENT__` is a C++17
 // feature.
 #if defined(__STDCPP_DEFAULT_NEW_ALIGNMENT__)
@@ -56,14 +56,14 @@
 #endif  // defined(__STDCPP_DEFAULT_NEW_ALIGNMENT__)
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // Defined and documented later on in this file.
 template <typename T>
-struct is_trivially_destructible; 
- 
-// Defined and documented later on in this file. 
-template <typename T> 
+struct is_trivially_destructible;
+
+// Defined and documented later on in this file.
+template <typename T>
 struct is_trivially_move_assignable;
 
 namespace type_traits_internal {
@@ -85,20 +85,20 @@ union SingleMemberUnion {
 #endif  // defined(_MSC_VER) && !defined(__GNUC__)
 
 template <class T>
-struct IsTriviallyMoveConstructibleObject 
-    : std::integral_constant< 
-          bool, std::is_move_constructible< 
-                    type_traits_internal::SingleMemberUnion<T>>::value && 
-                    y_absl::is_trivially_destructible<T>::value> {}; 
- 
-template <class T> 
-struct IsTriviallyCopyConstructibleObject 
-    : std::integral_constant< 
-          bool, std::is_copy_constructible< 
-                    type_traits_internal::SingleMemberUnion<T>>::value && 
-                    y_absl::is_trivially_destructible<T>::value> {}; 
- 
-template <class T> 
+struct IsTriviallyMoveConstructibleObject
+    : std::integral_constant<
+          bool, std::is_move_constructible<
+                    type_traits_internal::SingleMemberUnion<T>>::value &&
+                    y_absl::is_trivially_destructible<T>::value> {};
+
+template <class T>
+struct IsTriviallyCopyConstructibleObject
+    : std::integral_constant<
+          bool, std::is_copy_constructible<
+                    type_traits_internal::SingleMemberUnion<T>>::value &&
+                    y_absl::is_trivially_destructible<T>::value> {};
+
+template <class T>
 struct IsTriviallyMoveAssignableReference : std::false_type {};
 
 template <class T>
@@ -350,9 +350,9 @@ struct is_trivially_default_constructible
     : std::integral_constant<bool, __has_trivial_constructor(T) &&
                                    std::is_default_constructible<T>::value &&
                                    is_trivially_destructible<T>::value> {
-#if defined(ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \ 
-    !defined(                                            \ 
-        ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION) 
+#if defined(ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \
+    !defined(                                            \
+        ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION)
  private:
   static constexpr bool compliant =
       std::is_trivially_default_constructible<T>::value ==
@@ -383,11 +383,11 @@ template <typename T>
 struct is_trivially_move_constructible
     : std::conditional<
           std::is_object<T>::value && !std::is_array<T>::value,
-          type_traits_internal::IsTriviallyMoveConstructibleObject<T>, 
+          type_traits_internal::IsTriviallyMoveConstructibleObject<T>,
           std::is_reference<T>>::type::type {
-#if defined(ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \ 
-    !defined(                                            \ 
-        ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION) 
+#if defined(ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \
+    !defined(                                            \
+        ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION)
  private:
   static constexpr bool compliant =
       std::is_trivially_move_constructible<T>::value ==
@@ -418,11 +418,11 @@ template <typename T>
 struct is_trivially_copy_constructible
     : std::conditional<
           std::is_object<T>::value && !std::is_array<T>::value,
-          type_traits_internal::IsTriviallyCopyConstructibleObject<T>, 
+          type_traits_internal::IsTriviallyCopyConstructibleObject<T>,
           std::is_lvalue_reference<T>>::type::type {
-#if defined(ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \ 
-    !defined(                                            \ 
-        ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION) 
+#if defined(ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \
+    !defined(                                            \
+        ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION)
  private:
   static constexpr bool compliant =
       std::is_trivially_copy_constructible<T>::value ==
@@ -454,8 +454,8 @@ struct is_trivially_copy_constructible
 template <typename T>
 struct is_trivially_move_assignable
     : std::conditional<
-          std::is_object<T>::value && !std::is_array<T>::value && 
-              std::is_move_assignable<T>::value, 
+          std::is_object<T>::value && !std::is_array<T>::value &&
+              std::is_move_assignable<T>::value,
           std::is_move_assignable<type_traits_internal::SingleMemberUnion<T>>,
           type_traits_internal::IsTriviallyMoveAssignableReference<T>>::type::
           type {
@@ -791,7 +791,7 @@ using swap_internal::Swap;
 using swap_internal::StdSwapIsUnconstrained;
 
 }  // namespace type_traits_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_META_TYPE_TRAITS_H_

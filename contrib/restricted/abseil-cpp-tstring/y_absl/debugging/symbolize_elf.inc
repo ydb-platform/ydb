@@ -82,7 +82,7 @@
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // Value of argv[0]. Used by MaybeInitializeObjFile().
 static char *argv0_value = nullptr;
@@ -1563,7 +1563,7 @@ bool Symbolize(const void *pc, char *out, int out_size) {
   return ok;
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 extern "C" bool YAbslInternalGetFileMappingHint(const void **start,

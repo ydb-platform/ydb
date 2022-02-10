@@ -44,10 +44,10 @@
 #ifndef ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_
 #define ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_
 
-#include "y_absl/base/config.h" 
- 
+#include "y_absl/base/config.h"
+
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // FailureSignalHandlerOptions
 //
@@ -115,7 +115,7 @@ namespace debugging_internal {
 const char* FailureSignalToString(int signo);
 }  // namespace debugging_internal
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_

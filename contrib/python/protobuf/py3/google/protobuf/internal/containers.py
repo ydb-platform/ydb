@@ -285,7 +285,7 @@ class RepeatedScalarFieldContainer(BaseContainer):
     new_values = [self._type_checker.CheckValue(elem) for elem in elem_seq_iter]
     if new_values:
       self._values.extend(new_values)
-    self._message_listener.Modified() 
+    self._message_listener.Modified()
 
   def MergeFrom(self, other):
     """Appends the contents of another repeated field of the same type to this
@@ -463,11 +463,11 @@ class ScalarMap(MutableMapping):
   """Simple, type-checked, dict-like container for holding repeated scalars."""
 
   # Disallows assignment to other attributes.
-  __slots__ = ['_key_checker', '_value_checker', '_values', '_message_listener', 
-               '_entry_descriptor'] 
+  __slots__ = ['_key_checker', '_value_checker', '_values', '_message_listener',
+               '_entry_descriptor']
 
-  def __init__(self, message_listener, key_checker, value_checker, 
-               entry_descriptor): 
+  def __init__(self, message_listener, key_checker, value_checker,
+               entry_descriptor):
     """
     Args:
       message_listener: A MessageListener implementation.
@@ -477,12 +477,12 @@ class ScalarMap(MutableMapping):
         inserted into this container.
       value_checker: A type_checkers.ValueChecker instance to run on values
         inserted into this container.
-      entry_descriptor: The MessageDescriptor of a map entry: key and value. 
+      entry_descriptor: The MessageDescriptor of a map entry: key and value.
     """
     self._message_listener = message_listener
     self._key_checker = key_checker
     self._value_checker = value_checker
-    self._entry_descriptor = entry_descriptor 
+    self._entry_descriptor = entry_descriptor
     self._values = {}
 
   def __getitem__(self, key):
@@ -544,20 +544,20 @@ class ScalarMap(MutableMapping):
     self._values.clear()
     self._message_listener.Modified()
 
-  def GetEntryClass(self): 
-    return self._entry_descriptor._concrete_class 
+  def GetEntryClass(self):
+    return self._entry_descriptor._concrete_class
 
- 
+
 class MessageMap(MutableMapping):
 
   """Simple, type-checked, dict-like container for with submessage values."""
 
   # Disallows assignment to other attributes.
   __slots__ = ['_key_checker', '_values', '_message_listener',
-               '_message_descriptor', '_entry_descriptor'] 
+               '_message_descriptor', '_entry_descriptor']
 
-  def __init__(self, message_listener, message_descriptor, key_checker, 
-               entry_descriptor): 
+  def __init__(self, message_listener, message_descriptor, key_checker,
+               entry_descriptor):
     """
     Args:
       message_listener: A MessageListener implementation.
@@ -567,12 +567,12 @@ class MessageMap(MutableMapping):
         inserted into this container.
       value_checker: A type_checkers.ValueChecker instance to run on values
         inserted into this container.
-      entry_descriptor: The MessageDescriptor of a map entry: key and value. 
+      entry_descriptor: The MessageDescriptor of a map entry: key and value.
     """
     self._message_listener = message_listener
     self._message_descriptor = message_descriptor
     self._key_checker = key_checker
-    self._entry_descriptor = entry_descriptor 
+    self._entry_descriptor = entry_descriptor
     self._values = {}
 
   def __getitem__(self, key):
@@ -653,9 +653,9 @@ class MessageMap(MutableMapping):
   def clear(self):
     self._values.clear()
     self._message_listener.Modified()
- 
-  def GetEntryClass(self): 
-    return self._entry_descriptor._concrete_class 
+
+  def GetEntryClass(self):
+    return self._entry_descriptor._concrete_class
 
 
 class _UnknownField(object):

@@ -122,9 +122,9 @@ class MathematicaLexer(RegexLexer):
             (r'#\d*', Name.Variable),
             (r'([a-zA-Z]+[a-zA-Z0-9]*)', Name),
 
-            (r'-?\d+\.\d*', Number.Float), 
-            (r'-?\d*\.\d+', Number.Float), 
-            (r'-?\d+', Number.Integer), 
+            (r'-?\d+\.\d*', Number.Float),
+            (r'-?\d*\.\d+', Number.Float),
+            (r'-?\d+', Number.Integer),
 
             (words(operators), Operator),
             (words(punctuation), Punctuation),

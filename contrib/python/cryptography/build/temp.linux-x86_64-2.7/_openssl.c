@@ -55688,7 +55688,7 @@ PyInit__openssl(void)
 }
 #else
 PyMODINIT_FUNC
-init_openssl(void) 
+init_openssl(void)
 {
   _cffi_init("_openssl", 0x2601, &_cffi_type_context);
 }

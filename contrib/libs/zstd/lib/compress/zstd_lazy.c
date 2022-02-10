@@ -83,11 +83,11 @@ ZSTD_insertDUBT1(const ZSTD_matchState_t* ms,
     U32* largerPtr  = smallerPtr + 1;
     U32 matchIndex = *smallerPtr;   /* this candidate is unsorted : next sorted candidate is reached through *smallerPtr, while *largerPtr contains previous unsorted candidate (which is already saved and can be overwritten) */
     U32 dummy32;   /* to be nullified at the end */
-    U32 const windowValid = ms->window.lowLimit; 
-    U32 const maxDistance = 1U << cParams->windowLog; 
+    U32 const windowValid = ms->window.lowLimit;
+    U32 const maxDistance = 1U << cParams->windowLog;
     U32 const windowLow = (curr - windowValid > maxDistance) ? curr - maxDistance : windowValid;
 
- 
+
     DEBUGLOG(8, "ZSTD_insertDUBT1(%u) (dictLimit=%u, lowLimit=%u)",
                 curr, dictLimit, windowLow);
     assert(curr >= btLow);
@@ -661,7 +661,7 @@ size_t ZSTD_HcFindBestMatch(
     const BYTE* const prefixStart = base + dictLimit;
     const BYTE* const dictEnd = dictBase + dictLimit;
     const U32 curr = (U32)(ip-base);
-    const U32 maxDistance = 1U << cParams->windowLog; 
+    const U32 maxDistance = 1U << cParams->windowLog;
     const U32 lowestValid = ms->window.lowLimit;
     const U32 withinMaxDistance = (curr - lowestValid > maxDistance) ? curr - maxDistance : lowestValid;
     const U32 isDictionary = (ms->loadedDictEnd != 0);
@@ -1503,7 +1503,7 @@ ZSTD_compressBlock_lazy_generic(
     const U32 dictIndexDelta       = isDxS ?
                                      prefixLowestIndex - (U32)(dictEnd - dictBase) :
                                      0;
-    const U32 dictAndPrefixLength = (U32)((ip - prefixLowest) + (dictEnd - dictLowest)); 
+    const U32 dictAndPrefixLength = (U32)((ip - prefixLowest) + (dictEnd - dictLowest));
 
     assert(searchMax != NULL);
 
@@ -1531,12 +1531,12 @@ ZSTD_compressBlock_lazy_generic(
     }
 
     /* Match Loop */
-#if defined(__GNUC__) && defined(__x86_64__) 
-    /* I've measured random a 5% speed loss on levels 5 & 6 (greedy) when the 
-     * code alignment is perturbed. To fix the instability align the loop on 32-bytes. 
-     */ 
-    __asm__(".p2align 5"); 
-#endif 
+#if defined(__GNUC__) && defined(__x86_64__)
+    /* I've measured random a 5% speed loss on levels 5 & 6 (greedy) when the
+     * code alignment is perturbed. To fix the instability align the loop on 32-bytes.
+     */
+    __asm__(".p2align 5");
+#endif
     while (ip < ilimit) {
         size_t matchLength=0;
         size_t offcode=STORE_REPCODE_1;
@@ -1879,15 +1879,15 @@ size_t ZSTD_compressBlock_lazy_extDict_generic(
     const BYTE* const prefixStart = base + dictLimit;
     const BYTE* const dictBase = ms->window.dictBase;
     const BYTE* const dictEnd  = dictBase + dictLimit;
-    const BYTE* const dictStart  = dictBase + ms->window.lowLimit; 
-    const U32 windowLog = ms->cParams.windowLog; 
+    const BYTE* const dictStart  = dictBase + ms->window.lowLimit;
+    const U32 windowLog = ms->cParams.windowLog;
     const U32 rowLog = ms->cParams.searchLog < 5 ? 4 : 5;
 
     searchMax_f const searchMax = ZSTD_selectLazyVTable(ms, searchMethod, ZSTD_extDict)->searchMax;
     U32 offset_1 = rep[0], offset_2 = rep[1];
 
     DEBUGLOG(5, "ZSTD_compressBlock_lazy_extDict_generic (searchFunc=%u)", (U32)searchMethod);
- 
+
     /* init */
     ip += (ip == prefixStart);
     if (searchMethod == search_rowHash) {
@@ -1897,12 +1897,12 @@ size_t ZSTD_compressBlock_lazy_extDict_generic(
     }
 
     /* Match Loop */
-#if defined(__GNUC__) && defined(__x86_64__) 
-    /* I've measured random a 5% speed loss on levels 5 & 6 (greedy) when the 
-     * code alignment is perturbed. To fix the instability align the loop on 32-bytes. 
-     */ 
-    __asm__(".p2align 5"); 
-#endif 
+#if defined(__GNUC__) && defined(__x86_64__)
+    /* I've measured random a 5% speed loss on levels 5 & 6 (greedy) when the
+     * code alignment is perturbed. To fix the instability align the loop on 32-bytes.
+     */
+    __asm__(".p2align 5");
+#endif
     while (ip < ilimit) {
         size_t matchLength=0;
         size_t offcode=STORE_REPCODE_1;
@@ -2020,9 +2020,9 @@ _storeSequence:
 
         /* check immediate repcode */
         while (ip <= ilimit) {
-            const U32 repCurrent = (U32)(ip-base); 
-            const U32 windowLow = ZSTD_getLowestMatchIndex(ms, repCurrent, windowLog); 
-            const U32 repIndex = repCurrent - offset_2; 
+            const U32 repCurrent = (U32)(ip-base);
+            const U32 windowLow = ZSTD_getLowestMatchIndex(ms, repCurrent, windowLog);
+            const U32 repIndex = repCurrent - offset_2;
             const BYTE* const repBase = repIndex < dictLimit ? dictBase : base;
             const BYTE* const repMatch = repBase + repIndex;
             if ( ((U32)((dictLimit-1) - repIndex) >= 3) /* intentional overflow : do not test positions overlapping 2 memory segments  */

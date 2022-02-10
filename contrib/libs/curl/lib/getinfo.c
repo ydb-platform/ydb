@@ -219,10 +219,10 @@ static CURLcode getinfo_long(struct Curl_easy *data, CURLINFO info,
       *param_longp = (long)data->info.filetime;
     break;
   case CURLINFO_HEADER_SIZE:
-    *param_longp = (long)data->info.header_size; 
+    *param_longp = (long)data->info.header_size;
     break;
   case CURLINFO_REQUEST_SIZE:
-    *param_longp = (long)data->info.request_size; 
+    *param_longp = (long)data->info.request_size;
     break;
   case CURLINFO_SSL_VERIFYRESULT:
     *param_longp = data->set.ssl.certverifyresult;
@@ -299,9 +299,9 @@ static CURLcode getinfo_long(struct Curl_easy *data, CURLINFO info,
     case 20:
       *param_longp = CURL_HTTP_VERSION_2_0;
       break;
-    case 30: 
-      *param_longp = CURL_HTTP_VERSION_3; 
-      break; 
+    case 30:
+      *param_longp = CURL_HTTP_VERSION_3;
+      break;
     default:
       *param_longp = CURL_HTTP_VERSION_NONE;
       break;
@@ -388,9 +388,9 @@ static CURLcode getinfo_offt(struct Curl_easy *data, CURLINFO info,
   case CURLINFO_REDIRECT_TIME_T:
     *param_offt = data->progress.t_redirect;
     break;
-  case CURLINFO_RETRY_AFTER: 
-    *param_offt = data->info.retry_after; 
-    break; 
+  case CURLINFO_RETRY_AFTER:
+    *param_offt = data->info.retry_after;
+    break;
   default:
     return CURLE_UNKNOWN_OPTION;
   }
@@ -500,7 +500,7 @@ static CURLcode getinfo_slist(struct Curl_easy *data, CURLINFO info,
                                           param_slistp;
       struct curl_tlssessioninfo *tsi = &data->tsi;
 #ifdef USE_SSL
-      struct connectdata *conn = data->conn; 
+      struct connectdata *conn = data->conn;
 #endif
 
       *tsip = tsi;

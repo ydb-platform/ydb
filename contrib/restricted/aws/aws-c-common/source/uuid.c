@@ -1,6 +1,6 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
  */
 #include <aws/common/uuid.h>
 
@@ -34,7 +34,7 @@ int aws_uuid_init(struct aws_uuid *uuid) {
 }
 
 int aws_uuid_init_from_str(struct aws_uuid *uuid, const struct aws_byte_cursor *uuid_str) {
-    AWS_ERROR_PRECONDITION(uuid_str->len >= AWS_UUID_STR_LEN - 1, AWS_ERROR_INVALID_BUFFER_SIZE); 
+    AWS_ERROR_PRECONDITION(uuid_str->len >= AWS_UUID_STR_LEN - 1, AWS_ERROR_INVALID_BUFFER_SIZE);
 
     char cpy[AWS_UUID_STR_LEN] = {0};
     memcpy(cpy, uuid_str->ptr, AWS_UUID_STR_LEN - 1);
@@ -67,7 +67,7 @@ int aws_uuid_init_from_str(struct aws_uuid *uuid, const struct aws_byte_cursor *
 }
 
 int aws_uuid_to_str(const struct aws_uuid *uuid, struct aws_byte_buf *output) {
-    AWS_ERROR_PRECONDITION(output->capacity - output->len >= AWS_UUID_STR_LEN, AWS_ERROR_SHORT_BUFFER); 
+    AWS_ERROR_PRECONDITION(output->capacity - output->len >= AWS_UUID_STR_LEN, AWS_ERROR_SHORT_BUFFER);
 
     sprintf(
         (char *)(output->buffer + output->len),

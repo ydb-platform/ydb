@@ -64,8 +64,8 @@ except ImportError:
                     name = os.path.join(dir, thefile)
                     if _access_check(name, mode):
                         return name
-        return None 
- 
- 
-class PtyProcessError(Exception): 
-    """Generic error class for this package.""" 
+        return None
+
+
+class PtyProcessError(Exception):
+    """Generic error class for this package."""

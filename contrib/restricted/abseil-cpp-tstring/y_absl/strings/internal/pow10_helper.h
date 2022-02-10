@@ -22,10 +22,10 @@
 
 #include <vector>
 
-#include "y_absl/base/config.h" 
- 
+#include "y_absl/base/config.h"
+
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 // Computes the precise value of 10^exp. (I.e. the nearest representable
@@ -34,7 +34,7 @@ namespace strings_internal {
 double Pow10(int exp);
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_POW10_HELPER_H_

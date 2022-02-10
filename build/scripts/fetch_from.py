@@ -21,26 +21,26 @@ def make_user_agent():
 
 
 def add_common_arguments(parser):
-    parser.add_argument('--copy-to')  # used by jbuild in fetch_resource 
-    parser.add_argument('--rename-to')  # used by test_node in inject_mds_resource_to_graph 
+    parser.add_argument('--copy-to')  # used by jbuild in fetch_resource
+    parser.add_argument('--rename-to')  # used by test_node in inject_mds_resource_to_graph
     parser.add_argument('--copy-to-dir')
     parser.add_argument('--untar-to')
-    parser.add_argument('--rename', action='append', default=[], metavar='FILE', help='rename FILE to the corresponding output') 
-    parser.add_argument('--executable', action='store_true', help='make outputs executable') 
+    parser.add_argument('--rename', action='append', default=[], metavar='FILE', help='rename FILE to the corresponding output')
+    parser.add_argument('--executable', action='store_true', help='make outputs executable')
     parser.add_argument('--log-path')
     parser.add_argument('-v', '--verbose', action='store_true', default=os.environ.get('YA_VERBOSE_FETCHER'), help='increase stderr verbosity')
     parser.add_argument('outputs', nargs='*', default=[])
 
 
-def ensure_dir(path): 
-    if not (path == '' or os.path.isdir(path)): 
-        os.makedirs(path) 
- 
- 
+def ensure_dir(path):
+    if not (path == '' or os.path.isdir(path)):
+        os.makedirs(path)
+
+
 # Reference code: library/python/fs/__init__.py
 def hardlink_or_copy(src, dst):
-    ensure_dir(os.path.dirname(dst)) 
- 
+    ensure_dir(os.path.dirname(dst))
+
     if os.name == 'nt':
         shutil.copy(src, dst)
     else:
@@ -57,7 +57,7 @@ def hardlink_or_copy(src, dst):
 
 
 def rename_or_copy_and_remove(src, dst):
-    ensure_dir(os.path.dirname(dst)) 
+    ensure_dir(os.path.dirname(dst))
 
     try:
         os.rename(src, dst)
@@ -146,7 +146,7 @@ def report_to_snowden(value):
     try:
         inner()
     except Exception as e:
-        logging.warning('report_to_snowden failed: %s', e) 
+        logging.warning('report_to_snowden failed: %s', e)
 
 
 def copy_stream(read, *writers, **kwargs):
@@ -307,9 +307,9 @@ def chmod(filename, mode):
             raise
 
 
-def process(fetched_file, file_name, args, remove=True): 
-    assert len(args.rename) <= len(args.outputs), ( 
-        'too few outputs to rename', args.rename, 'into', args.outputs) 
+def process(fetched_file, file_name, args, remove=True):
+    assert len(args.rename) <= len(args.outputs), (
+        'too few outputs to rename', args.rename, 'into', args.outputs)
 
     # Forbid changes to the loaded resource
     chmod(fetched_file, 0o444)
@@ -317,21 +317,21 @@ def process(fetched_file, file_name, args, remove=True):
     if not os.path.isfile(fetched_file):
         raise ResourceIsDirectoryError('Resource must be a file, not a directory: %s' % fetched_file)
 
-    if args.copy_to: 
-        hardlink_or_copy(fetched_file, args.copy_to) 
-        if not args.outputs: 
-            args.outputs = [args.copy_to] 
+    if args.copy_to:
+        hardlink_or_copy(fetched_file, args.copy_to)
+        if not args.outputs:
+            args.outputs = [args.copy_to]
 
-    if args.rename_to: 
-        args.rename.append(fetched_file) 
-        if not args.outputs: 
-            args.outputs = [args.rename_to] 
+    if args.rename_to:
+        args.rename.append(fetched_file)
+        if not args.outputs:
+            args.outputs = [args.rename_to]
 
-    if args.copy_to_dir: 
-        hardlink_or_copy(fetched_file, os.path.join(args.copy_to_dir, file_name)) 
+    if args.copy_to_dir:
+        hardlink_or_copy(fetched_file, os.path.join(args.copy_to_dir, file_name))
 
     if args.untar_to:
-        ensure_dir(args.untar_to) 
+        ensure_dir(args.untar_to)
         # Extract only requested files
         try:
             with tarfile.open(fetched_file, mode='r:*') as tar:
@@ -346,14 +346,14 @@ def process(fetched_file, file_name, args, remove=True):
             logging.exception(e)
             raise ResourceUnpackingError('File {} cannot be untared'.format(fetched_file))
 
-    for src, dst in zip(args.rename, args.outputs): 
-        if src == 'RESOURCE': 
-            src = fetched_file 
-        if os.path.abspath(src) == os.path.abspath(fetched_file): 
-            logging.info('Copying %s to %s', src, dst) 
-            hardlink_or_copy(src, dst) 
-        else: 
-            logging.info('Renaming %s to %s', src, dst) 
+    for src, dst in zip(args.rename, args.outputs):
+        if src == 'RESOURCE':
+            src = fetched_file
+        if os.path.abspath(src) == os.path.abspath(fetched_file):
+            logging.info('Copying %s to %s', src, dst)
+            hardlink_or_copy(src, dst)
+        else:
+            logging.info('Renaming %s to %s', src, dst)
             if os.path.exists(dst):
                 raise ResourceUnpackingError("Target file already exists ({} -> {})".format(src, dst))
             if remove:
@@ -361,15 +361,15 @@ def process(fetched_file, file_name, args, remove=True):
             else:
                 hardlink_or_copy(src, dst)
 
-    for path in args.outputs: 
-        if not os.path.exists(path): 
-            raise OutputNotExistError('Output does not exist: %s' % os.path.abspath(path)) 
-        if not os.path.isfile(path): 
-            raise OutputIsDirectoryError('Output must be a file, not a directory: %s' % os.path.abspath(path)) 
-        if args.executable: 
+    for path in args.outputs:
+        if not os.path.exists(path):
+            raise OutputNotExistError('Output does not exist: %s' % os.path.abspath(path))
+        if not os.path.isfile(path):
+            raise OutputIsDirectoryError('Output must be a file, not a directory: %s' % os.path.abspath(path))
+        if args.executable:
             chmod(path, os.stat(path).st_mode | 0o111)
-        if os.path.abspath(path) == os.path.abspath(fetched_file): 
-            remove = False 
+        if os.path.abspath(path) == os.path.abspath(fetched_file):
+            remove = False
 
-    if remove: 
-        os.remove(fetched_file) 
+    if remove:
+        os.remove(fetched_file)

@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2019 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 1995-2019 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -12,8 +12,8 @@
 #include <openssl/bn.h>
 #include "dh_local.h"
 
-# define DH_NUMBER_ITERATIONS_FOR_PRIME 64 
- 
+# define DH_NUMBER_ITERATIONS_FOR_PRIME 64
+
 /*-
  * Check that p and g are suitable enough
  *
@@ -24,8 +24,8 @@ int DH_check_params_ex(const DH *dh)
 {
     int errflags = 0;
 
-    if (!DH_check_params(dh, &errflags)) 
-        return 0; 
+    if (!DH_check_params(dh, &errflags))
+        return 0;
 
     if ((errflags & DH_CHECK_P_NOT_PRIME) != 0)
         DHerr(DH_F_DH_CHECK_PARAMS_EX, DH_R_CHECK_P_NOT_PRIME);
@@ -61,21 +61,21 @@ int DH_check_params(const DH *dh, int *ret)
 
     ok = 1;
  err:
-    BN_CTX_end(ctx); 
-    BN_CTX_free(ctx); 
+    BN_CTX_end(ctx);
+    BN_CTX_free(ctx);
     return ok;
 }
 
 /*-
  * Check that p is a safe prime and
- * g is a suitable generator. 
+ * g is a suitable generator.
  */
 int DH_check_ex(const DH *dh)
 {
     int errflags = 0;
 
-    if (!DH_check(dh, &errflags)) 
-        return 0; 
+    if (!DH_check(dh, &errflags))
+        return 0;
 
     if ((errflags & DH_NOT_SUITABLE_GENERATOR) != 0)
         DHerr(DH_F_DH_CHECK_EX, DH_R_NOT_SUITABLE_GENERATOR);
@@ -101,9 +101,9 @@ int DH_check(const DH *dh, int *ret)
     BN_CTX *ctx = NULL;
     BIGNUM *t1 = NULL, *t2 = NULL;
 
-    if (!DH_check_params(dh, ret)) 
-        return 0; 
- 
+    if (!DH_check_params(dh, ret))
+        return 0;
+
     ctx = BN_CTX_new();
     if (ctx == NULL)
         goto err;
@@ -125,7 +125,7 @@ int DH_check(const DH *dh, int *ret)
             if (!BN_is_one(t1))
                 *ret |= DH_NOT_SUITABLE_GENERATOR;
         }
-        r = BN_is_prime_ex(dh->q, DH_NUMBER_ITERATIONS_FOR_PRIME, ctx, NULL); 
+        r = BN_is_prime_ex(dh->q, DH_NUMBER_ITERATIONS_FOR_PRIME, ctx, NULL);
         if (r < 0)
             goto err;
         if (!r)
@@ -137,9 +137,9 @@ int DH_check(const DH *dh, int *ret)
             *ret |= DH_CHECK_INVALID_Q_VALUE;
         if (dh->j && BN_cmp(dh->j, t1))
             *ret |= DH_CHECK_INVALID_J_VALUE;
-    } 
+    }
 
-    r = BN_is_prime_ex(dh->p, DH_NUMBER_ITERATIONS_FOR_PRIME, ctx, NULL); 
+    r = BN_is_prime_ex(dh->p, DH_NUMBER_ITERATIONS_FOR_PRIME, ctx, NULL);
     if (r < 0)
         goto err;
     if (!r)
@@ -147,7 +147,7 @@ int DH_check(const DH *dh, int *ret)
     else if (!dh->q) {
         if (!BN_rshift1(t1, dh->p))
             goto err;
-        r = BN_is_prime_ex(t1, DH_NUMBER_ITERATIONS_FOR_PRIME, ctx, NULL); 
+        r = BN_is_prime_ex(t1, DH_NUMBER_ITERATIONS_FOR_PRIME, ctx, NULL);
         if (r < 0)
             goto err;
         if (!r)
@@ -155,8 +155,8 @@ int DH_check(const DH *dh, int *ret)
     }
     ok = 1;
  err:
-    BN_CTX_end(ctx); 
-    BN_CTX_free(ctx); 
+    BN_CTX_end(ctx);
+    BN_CTX_free(ctx);
     return ok;
 }
 
@@ -164,8 +164,8 @@ int DH_check_pub_key_ex(const DH *dh, const BIGNUM *pub_key)
 {
     int errflags = 0;
 
-    if (!DH_check_pub_key(dh, pub_key, &errflags)) 
-        return 0; 
+    if (!DH_check_pub_key(dh, pub_key, &errflags))
+        return 0;
 
     if ((errflags & DH_CHECK_PUBKEY_TOO_SMALL) != 0)
         DHerr(DH_F_DH_CHECK_PUB_KEY_EX, DH_R_CHECK_PUBKEY_TOO_SMALL);
@@ -208,7 +208,7 @@ int DH_check_pub_key(const DH *dh, const BIGNUM *pub_key, int *ret)
 
     ok = 1;
  err:
-    BN_CTX_end(ctx); 
-    BN_CTX_free(ctx); 
+    BN_CTX_end(ctx);
+    BN_CTX_free(ctx);
     return ok;
 }

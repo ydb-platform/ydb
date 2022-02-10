@@ -75,14 +75,14 @@ class MessageFactory(object):
     Returns:
       A class describing the passed in descriptor.
     """
-    if descriptor not in self._classes: 
+    if descriptor not in self._classes:
       result_class = self.CreatePrototype(descriptor)
       # The assignment to _classes is redundant for the base implementation, but
       # might avoid confusion in cases where CreatePrototype gets overridden and
       # does not call the base implementation.
-      self._classes[descriptor] = result_class 
+      self._classes[descriptor] = result_class
       return result_class
-    return self._classes[descriptor] 
+    return self._classes[descriptor]
 
   def CreatePrototype(self, descriptor):
     """Builds a proto2 message class based on the passed in descriptor.
@@ -139,8 +139,8 @@ class MessageFactory(object):
     result = {}
     for file_name in files:
       file_desc = self.pool.FindFileByName(file_name)
-      for desc in file_desc.message_types_by_name.values(): 
-        result[desc.full_name] = self.GetPrototype(desc) 
+      for desc in file_desc.message_types_by_name.values():
+        result[desc.full_name] = self.GetPrototype(desc)
 
       # While the extension FieldDescriptors are created by the descriptor pool,
       # the python classes created in the factory need them to be registered
@@ -151,10 +151,10 @@ class MessageFactory(object):
       # ignore the registration if the original was the same, or raise
       # an error if they were different.
 
-      for extension in file_desc.extensions_by_name.values(): 
-        if extension.containing_type not in self._classes: 
+      for extension in file_desc.extensions_by_name.values():
+        if extension.containing_type not in self._classes:
           self.GetPrototype(extension.containing_type)
-        extended_class = self._classes[extension.containing_type] 
+        extended_class = self._classes[extension.containing_type]
         extended_class.RegisterExtension(extension)
     return result
 

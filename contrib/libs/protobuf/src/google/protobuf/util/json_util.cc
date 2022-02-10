@@ -56,28 +56,28 @@ namespace protobuf {
 namespace util {
 
 namespace internal {
-ZeroCopyStreamByteSink::~ZeroCopyStreamByteSink() { 
+ZeroCopyStreamByteSink::~ZeroCopyStreamByteSink() {
   if (buffer_size_ > 0) {
     stream_->BackUp(buffer_size_);
   }
-} 
- 
+}
+
 void ZeroCopyStreamByteSink::Append(const char* bytes, size_t len) {
-  while (true) { 
-    if (len <= buffer_size_) { 
-      memcpy(buffer_, bytes, len); 
-      buffer_ = static_cast<char*>(buffer_) + len; 
-      buffer_size_ -= len; 
-      return; 
-    } 
+  while (true) {
+    if (len <= buffer_size_) {
+      memcpy(buffer_, bytes, len);
+      buffer_ = static_cast<char*>(buffer_) + len;
+      buffer_size_ -= len;
+      return;
+    }
     if (buffer_size_ > 0) {
       memcpy(buffer_, bytes, buffer_size_);
       bytes += buffer_size_;
       len -= buffer_size_;
     }
-    if (!stream_->Next(&buffer_, &buffer_size_)) { 
+    if (!stream_->Next(&buffer_, &buffer_size_)) {
       // There isn't a way for ByteSink to report errors.
-      buffer_size_ = 0; 
+      buffer_size_ = 0;
       return;
     }
   }
@@ -104,8 +104,8 @@ util::Status BinaryToJsonStream(TypeResolver* resolver,
   if (options.always_print_primitive_fields) {
     converter::DefaultValueObjectWriter default_value_writer(resolver, type,
                                                              &json_writer);
-    default_value_writer.set_preserve_proto_field_names( 
-        options.preserve_proto_field_names); 
+    default_value_writer.set_preserve_proto_field_names(
+        options.preserve_proto_field_names);
     default_value_writer.set_print_enums_as_ints(
         options.always_print_enums_as_ints);
     return proto_source.WriteTo(&default_value_writer);
@@ -128,7 +128,7 @@ util::Status BinaryToJsonString(TypeResolver* resolver,
 namespace {
 class StatusErrorListener : public converter::ErrorListener {
  public:
-  StatusErrorListener() {} 
+  StatusErrorListener() {}
   ~StatusErrorListener() override {}
 
   util::Status GetStatus() { return status_; }

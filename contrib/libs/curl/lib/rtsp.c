@@ -52,7 +52,7 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done);
 static CURLcode rtsp_done(struct connectdata *conn, CURLcode, bool premature);
 static CURLcode rtsp_connect(struct connectdata *conn, bool *done);
 static CURLcode rtsp_disconnect(struct connectdata *conn, bool dead);
-static int rtsp_getsock_do(struct connectdata *conn, curl_socket_t *socks); 
+static int rtsp_getsock_do(struct connectdata *conn, curl_socket_t *socks);
 
 /*
  * Parse and write out any available RTP data.
@@ -74,7 +74,7 @@ static unsigned int rtsp_conncheck(struct connectdata *check,
    interface and then we're always _sending_ a request and thus we wait for
    the single socket to become writable only */
 static int rtsp_getsock_do(struct connectdata *conn,
-                           curl_socket_t *socks) 
+                           curl_socket_t *socks)
 {
   /* write mode */
   socks[0] = conn->sock[FIRSTSOCKET];
@@ -131,7 +131,7 @@ static CURLcode rtsp_setup_connection(struct connectdata *conn)
  * Instead, if it is readable, run Curl_connalive() to peek at the socket
  * and distinguish between closed and data.
  */
-static bool rtsp_connisdead(struct connectdata *check) 
+static bool rtsp_connisdead(struct connectdata *check)
 {
   int sval;
   bool ret_val = TRUE;
@@ -308,7 +308,7 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
   }
 
   if(rtspreq == RTSPREQ_RECEIVE) {
-    Curl_setup_transfer(data, FIRSTSOCKET, -1, TRUE, -1); 
+    Curl_setup_transfer(data, FIRSTSOCKET, -1, TRUE, -1);
 
     return result;
   }
@@ -571,15 +571,15 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
     return result;
   }
 
-  Curl_setup_transfer(data, FIRSTSOCKET, -1, TRUE, putsize?FIRSTSOCKET:-1); 
+  Curl_setup_transfer(data, FIRSTSOCKET, -1, TRUE, putsize?FIRSTSOCKET:-1);
 
   /* Increment the CSeq on success */
   data->state.rtsp_next_client_CSeq++;
 
-  if(data->req.writebytecount) { 
+  if(data->req.writebytecount) {
     /* if a request-body has been sent off, we make sure this progress is
        noted properly */
-    Curl_pgrsSetUploadCounter(data, data->req.writebytecount); 
+    Curl_pgrsSetUploadCounter(data, data->req.writebytecount);
     if(Curl_pgrsUpdate(conn))
       result = CURLE_ABORTED_BY_CALLBACK;
   }

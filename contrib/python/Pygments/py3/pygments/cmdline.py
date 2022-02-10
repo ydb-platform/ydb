@@ -8,7 +8,7 @@
     :license: BSD, see LICENSE for details.
 """
 
-import os 
+import os
 import sys
 import shutil
 import argparse
@@ -19,13 +19,13 @@ from pygments.util import ClassNotFound, OptionError, docstring_headline, \
     guess_decode, guess_decode_from_terminal, terminal_encoding, \
     UnclosingTextIOWrapper
 from pygments.lexers import get_all_lexers, get_lexer_by_name, guess_lexer, \
-    load_lexer_from_file, get_lexer_for_filename, find_lexer_class_for_filename 
+    load_lexer_from_file, get_lexer_for_filename, find_lexer_class_for_filename
 from pygments.lexers.special import TextLexer
 from pygments.formatters.latex import LatexEmbeddedLexer, LatexFormatter
 from pygments.formatters import get_all_formatters, get_formatter_by_name, \
-    load_formatter_from_file, get_formatter_for_filename, find_formatter_class 
+    load_formatter_from_file, get_formatter_for_filename, find_formatter_class
 from pygments.formatters.terminal import TerminalFormatter
-from pygments.formatters.terminal256 import Terminal256Formatter 
+from pygments.formatters.terminal256 import Terminal256Formatter
 from pygments.filters import get_all_filters, find_filter_class
 from pygments.styles import get_all_styles, get_style_by_name
 
@@ -300,22 +300,22 @@ def main_inner(parser, argns):
     # parse -F options
     F_opts = _parse_filters(argns.F or [])
 
-    # -x: allow custom (eXternal) lexers and formatters 
+    # -x: allow custom (eXternal) lexers and formatters
     allow_custom_lexer_formatter = bool(argns.x)
- 
+
     # select lexer
     lexer = None
 
     # given by name?
     lexername = argns.l
     if lexername:
-        # custom lexer, located relative to user's cwd 
-        if allow_custom_lexer_formatter and '.py' in lexername: 
-            try: 
+        # custom lexer, located relative to user's cwd
+        if allow_custom_lexer_formatter and '.py' in lexername:
+            try:
                 filename = None
                 name = None
-                if ':' in lexername: 
-                    filename, name = lexername.rsplit(':', 1) 
+                if ':' in lexername:
+                    filename, name = lexername.rsplit(':', 1)
 
                     if '.py' in name:
                         # This can happen on Windows: If the lexername is
@@ -323,19 +323,19 @@ def main_inner(parser, argns):
                         name = None
 
                 if filename and name:
-                    lexer = load_lexer_from_file(filename, name, 
-                                                 **parsed_opts) 
-                else: 
-                    lexer = load_lexer_from_file(lexername, **parsed_opts) 
-            except ClassNotFound as err: 
-                print('Error:', err, file=sys.stderr) 
-                return 1 
-        else: 
-            try: 
-                lexer = get_lexer_by_name(lexername, **parsed_opts) 
-            except (OptionError, ClassNotFound) as err: 
-                print('Error:', err, file=sys.stderr) 
-                return 1 
+                    lexer = load_lexer_from_file(filename, name,
+                                                 **parsed_opts)
+                else:
+                    lexer = load_lexer_from_file(lexername, **parsed_opts)
+            except ClassNotFound as err:
+                print('Error:', err, file=sys.stderr)
+                return 1
+        else:
+            try:
+                lexer = get_lexer_by_name(lexername, **parsed_opts)
+            except (OptionError, ClassNotFound) as err:
+                print('Error:', err, file=sys.stderr)
+                return 1
 
     # read input code
     code = None
@@ -404,12 +404,12 @@ def main_inner(parser, argns):
     outfn = argns.o
     fmter = argns.f
     if fmter:
-        # custom formatter, located relative to user's cwd 
-        if allow_custom_lexer_formatter and '.py' in fmter: 
-            try: 
+        # custom formatter, located relative to user's cwd
+        if allow_custom_lexer_formatter and '.py' in fmter:
+            try:
                 filename = None
                 name = None
-                if ':' in fmter: 
+                if ':' in fmter:
                     # Same logic as above for custom lexer
                     filename, name = fmter.rsplit(':', 1)
 
@@ -419,17 +419,17 @@ def main_inner(parser, argns):
                 if filename and name:
                     fmter = load_formatter_from_file(filename, name,
                                                      **parsed_opts)
-                else: 
-                    fmter = load_formatter_from_file(fmter, **parsed_opts) 
-            except ClassNotFound as err: 
-                print('Error:', err, file=sys.stderr) 
-                return 1 
-        else: 
-            try: 
-                fmter = get_formatter_by_name(fmter, **parsed_opts) 
-            except (OptionError, ClassNotFound) as err: 
-                print('Error:', err, file=sys.stderr) 
-                return 1 
+                else:
+                    fmter = load_formatter_from_file(fmter, **parsed_opts)
+            except ClassNotFound as err:
+                print('Error:', err, file=sys.stderr)
+                return 1
+        else:
+            try:
+                fmter = get_formatter_by_name(fmter, **parsed_opts)
+            except (OptionError, ClassNotFound) as err:
+                print('Error:', err, file=sys.stderr)
+                return 1
 
     if outfn:
         if not fmter:
@@ -445,10 +445,10 @@ def main_inner(parser, argns):
             return 1
     else:
         if not fmter:
-            if '256' in os.environ.get('TERM', ''): 
-                fmter = Terminal256Formatter(**parsed_opts) 
-            else: 
-                fmter = TerminalFormatter(**parsed_opts) 
+            if '256' in os.environ.get('TERM', ''):
+                fmter = Terminal256Formatter(**parsed_opts)
+            else:
+                fmter = TerminalFormatter(**parsed_opts)
         outfile = sys.stdout.buffer
 
     # determine output encoding if not explicitly selected

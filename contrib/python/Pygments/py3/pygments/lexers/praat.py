@@ -26,21 +26,21 @@ class PraatLexer(RegexLexer):
     aliases = ['praat']
     filenames = ['*.praat', '*.proc', '*.psc']
 
-    keywords = ( 
+    keywords = (
         'if', 'then', 'else', 'elsif', 'elif', 'endif', 'fi', 'for', 'from', 'to',
         'endfor', 'endproc', 'while', 'endwhile', 'repeat', 'until', 'select', 'plus',
         'minus', 'demo', 'assert', 'stopwatch', 'nocheck', 'nowarn', 'noprogress',
         'editor', 'endeditor', 'clearinfo',
-    ) 
+    )
 
-    functions_string = ( 
+    functions_string = (
         'backslashTrigraphsToUnicode', 'chooseDirectory', 'chooseReadFile',
         'chooseWriteFile', 'date', 'demoKey', 'do', 'environment', 'extractLine',
         'extractWord', 'fixed', 'info', 'left', 'mid', 'percent', 'readFile', 'replace',
         'replace_regex', 'right', 'selected', 'string', 'unicodeToBackslashTrigraphs',
-    ) 
+    )
 
-    functions_numeric = ( 
+    functions_numeric = (
         'abs', 'appendFile', 'appendFileLine', 'appendInfo', 'appendInfoLine', 'arccos',
         'arccosh', 'arcsin', 'arcsinh', 'arctan', 'arctan2', 'arctanh', 'barkToHertz',
         'beginPause', 'beginSendPraat', 'besselI', 'besselK', 'beta', 'beta2',
@@ -66,13 +66,13 @@ class PraatLexer(RegexLexer):
         'sincpi', 'sinh', 'soundPressureToPhon', 'sqrt', 'startsWith', 'studentP',
         'studentQ', 'tan', 'tanh', 'text', 'variableExists', 'word', 'writeFile', 'writeFileLine',
         'writeInfo', 'writeInfoLine',
-    ) 
+    )
 
-    functions_array = ( 
+    functions_array = (
         'linear', 'randomGauss', 'randomInteger', 'randomUniform', 'zero',
-    ) 
+    )
 
-    objects = ( 
+    objects = (
         'Activation', 'AffineTransform', 'AmplitudeTier', 'Art', 'Artword',
         'Autosegment', 'BarkFilter', 'BarkSpectrogram', 'CCA', 'Categories',
         'Cepstrogram', 'Cepstrum', 'Cepstrumc', 'ChebyshevSeries', 'ClassificationTable',
@@ -99,17 +99,17 @@ class PraatLexer(RegexLexer):
         'Strings', 'StringsIndex', 'Table', 'TableOfReal', 'TextGrid', 'TextInterval',
         'TextPoint', 'TextTier', 'Tier', 'Transition', 'VocalTract', 'VocalTractTier',
         'Weight', 'WordList',
-    ) 
+    )
 
-    variables_numeric = ( 
+    variables_numeric = (
         'macintosh', 'windows', 'unix', 'praatVersion', 'pi', 'e', 'undefined',
-    ) 
+    )
 
-    variables_string = ( 
+    variables_string = (
         'praatVersion', 'tab', 'shellDirectory', 'homeDirectory',
         'preferencesDirectory', 'newline', 'temporaryDirectory',
         'defaultDirectory',
-    ) 
+    )
 
     object_attributes = (
         'ncol', 'nrow', 'xmin', 'ymin', 'xmax', 'ymax', 'nx', 'ny', 'dx', 'dy',
@@ -156,7 +156,7 @@ class PraatLexer(RegexLexer):
 
             (r'\.{3}', Keyword, ('#pop', 'old_arguments')),
             (r':', Keyword, ('#pop', 'comma_list')),
-            (r'\s', Text, '#pop'), 
+            (r'\s', Text, '#pop'),
         ],
         'procedure_call': [
             (r'\s+', Text),
@@ -173,8 +173,8 @@ class PraatLexer(RegexLexer):
         ],
         'function_call': [
             (words(functions_string, suffix=r'\$(?=\s*[:(])'), Name.Function, 'function'),
-            (words(functions_array, suffix=r'#(?=\s*[:(])'),   Name.Function, 'function'), 
-            (words(functions_numeric, suffix=r'(?=\s*[:(])'),  Name.Function, 'function'), 
+            (words(functions_array, suffix=r'#(?=\s*[:(])'),   Name.Function, 'function'),
+            (words(functions_numeric, suffix=r'(?=\s*[:(])'),  Name.Function, 'function'),
         ],
         'function': [
             (r'\s+',   Text),
@@ -195,7 +195,7 @@ class PraatLexer(RegexLexer):
             include('operator'),
             include('number'),
 
-            (r'[()]', Text), 
+            (r'[()]', Text),
             (r',', Punctuation),
         ],
         'old_arguments': [
@@ -209,7 +209,7 @@ class PraatLexer(RegexLexer):
             (r'[^\n]', Text),
         ],
         'number': [
-            (r'\n', Text, '#pop'), 
+            (r'\n', Text, '#pop'),
             (r'\b\d+(\.\d*)?([eE][-+]?\d+)?%?', Number),
         ],
         'object_reference': [
@@ -234,14 +234,14 @@ class PraatLexer(RegexLexer):
              bygroups(Name.Builtin, Name.Builtin),
              'object_reference'),
 
-            (r'\.?_?[a-z][\w.]*(\$|#)?', Text), 
+            (r'\.?_?[a-z][\w.]*(\$|#)?', Text),
             (r'[\[\]]', Punctuation, 'comma_list'),
 
             include('string_interpolated'),
         ],
         'operator': [
-            (r'([+\/*<>=!-]=?|[&*|][&*|]?|\^|<>)',       Operator), 
-            (r'(?<![\w.])(and|or|not|div|mod)(?![\w.])', Operator.Word), 
+            (r'([+\/*<>=!-]=?|[&*|][&*|]?|\^|<>)',       Operator),
+            (r'(?<![\w.])(and|or|not|div|mod)(?![\w.])', Operator.Word),
         ],
         'string_interpolated': [
             (r'\'[_a-z][^\[\]\'":]*(\[([\d,]+|"[\w,]+")\])?(:[0-9]+)?\'',

@@ -8,12 +8,12 @@ from setuptools.extern.packaging import version
 from ._imp import find_module, PY_COMPILED, PY_FROZEN, PY_SOURCE
 from . import _imp
 
- 
+
 __all__ = [
     'Require', 'find_module', 'get_module_constant', 'extract_constant'
 ]
 
- 
+
 class Require:
     """A prerequisite to building or installing a distribution"""
 
@@ -35,7 +35,7 @@ class Require:
     def full_name(self):
         """Return full package/distribution name, w/version"""
         if self.requested_version is not None:
-            return '%s-%s' % (self.name, self.requested_version) 
+            return '%s-%s' % (self.name, self.requested_version)
         return self.name
 
     def version_ok(self, version):
@@ -56,9 +56,9 @@ class Require:
 
         if self.attribute is None:
             try:
-                f, p, i = find_module(self.module, paths) 
-                if f: 
-                    f.close() 
+                f, p, i = find_module(self.module, paths)
+                if f:
+                    f.close()
                 return default
             except ImportError:
                 return None
@@ -107,12 +107,12 @@ def get_module_constant(module, symbol, default=-1, paths=None):
         return None
 
     with maybe_close(f):
-        if kind == PY_COMPILED: 
-            f.read(8)  # skip magic & date 
+        if kind == PY_COMPILED:
+            f.read(8)  # skip magic & date
             code = marshal.load(f)
-        elif kind == PY_FROZEN: 
+        elif kind == PY_FROZEN:
             code = _imp.get_frozen_object(module, paths)
-        elif kind == PY_SOURCE: 
+        elif kind == PY_SOURCE:
             code = compile(f.read(), path, 'exec')
         else:
             # Not something we can parse; we'll have to import it.  :(
@@ -135,7 +135,7 @@ def extract_constant(code, symbol, default=-1):
     must be present in 'code.co_names'.
     """
     if symbol not in code.co_names:
-        # name's not there, can't possibly be an assignment 
+        # name's not there, can't possibly be an assignment
         return None
 
     name_idx = list(code.co_names).index(symbol)
@@ -147,12 +147,12 @@ def extract_constant(code, symbol, default=-1):
     const = default
 
     for byte_code in dis.Bytecode(code):
-        op = byte_code.opcode 
-        arg = byte_code.arg 
+        op = byte_code.opcode
+        arg = byte_code.arg
 
-        if op == LOAD_CONST: 
+        if op == LOAD_CONST:
             const = code.co_consts[arg]
-        elif arg == name_idx and (op == STORE_NAME or op == STORE_GLOBAL): 
+        elif arg == name_idx and (op == STORE_NAME or op == STORE_GLOBAL):
             return const
         else:
             const = default
@@ -172,5 +172,5 @@ def _update_globals():
         del globals()[name]
         __all__.remove(name)
 
- 
+
 _update_globals()

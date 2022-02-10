@@ -309,7 +309,7 @@ struct cons {
       tail (t2, t3, t4, t5, t6, t7, t8, t9, t10, detail::cnull())
       {}
 
-  cons( const cons& u ) : head(u.head), tail(u.tail) {} 
+  cons( const cons& u ) : head(u.head), tail(u.tail) {}
 
   template <class HT2, class TT2>
   cons( const cons<HT2, TT2>& u ) : head(u.head), tail(u.tail) {}
@@ -389,8 +389,8 @@ struct cons<HT, null_type> {
        const null_type&, const null_type&, const null_type&)
   : head () {}
 
-  cons( const cons& u ) : head(u.head) {} 
- 
+  cons( const cons& u ) : head(u.head) {}
+
   template <class HT2>
   cons( const cons<HT2, null_type>& u ) : head(u.head) {}
 

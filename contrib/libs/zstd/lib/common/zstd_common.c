@@ -1,12 +1,12 @@
 /*
  * Copyright (c) Yann Collet, Facebook, Inc.
- * All rights reserved. 
- * 
+ * All rights reserved.
+ *
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
- */ 
+ */
 
 
 
@@ -50,9 +50,9 @@ const char* ZSTD_getErrorString(ZSTD_ErrorCode code) { return ERR_getErrorString
 
 
 
-/*=************************************************************** 
-*  Custom allocator 
-****************************************************************/ 
+/*=**************************************************************
+*  Custom allocator
+****************************************************************/
 void* ZSTD_customMalloc(size_t size, ZSTD_customMem customMem)
 {
     if (customMem.customAlloc)
@@ -71,13 +71,13 @@ void* ZSTD_customCalloc(size_t size, ZSTD_customMem customMem)
     }
     return ZSTD_calloc(1, size);
 }
- 
+
 void ZSTD_customFree(void* ptr, ZSTD_customMem customMem)
-{ 
+{
     if (ptr!=NULL) {
         if (customMem.customFree)
             customMem.customFree(customMem.opaque, ptr);
         else
             ZSTD_free(ptr);
     }
-} 
+}

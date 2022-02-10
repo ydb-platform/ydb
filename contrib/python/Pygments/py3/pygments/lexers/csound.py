@@ -2,17 +2,17 @@
     pygments.lexers.csound
     ~~~~~~~~~~~~~~~~~~~~~~
 
-    Lexers for Csound languages. 
+    Lexers for Csound languages.
 
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
-import re 
+import re
 
 from pygments.lexer import RegexLexer, bygroups, default, include, using, words
-from pygments.token import Comment, Error, Keyword, Name, Number, Operator, Punctuation, \ 
-    String, Text, Whitespace 
+from pygments.token import Comment, Error, Keyword, Name, Number, Operator, Punctuation, \
+    String, Text, Whitespace
 from pygments.lexers._csound_builtins import OPCODES, DEPRECATED_OPCODES, REMOVED_OPCODES
 from pygments.lexers.html import HtmlLexer
 from pygments.lexers.python import PythonLexer
@@ -20,104 +20,104 @@ from pygments.lexers.scripting import LuaLexer
 
 __all__ = ['CsoundScoreLexer', 'CsoundOrchestraLexer', 'CsoundDocumentLexer']
 
-newline = (r'((?:(?:;|//).*)*)(\n)', bygroups(Comment.Single, Text)) 
+newline = (r'((?:(?:;|//).*)*)(\n)', bygroups(Comment.Single, Text))
 
 
 class CsoundLexer(RegexLexer):
     tokens = {
         'whitespace': [
             (r'[ \t]+', Whitespace),
-            (r'/[*](?:.|\n)*?[*]/', Comment.Multiline), 
-            (r'(?:;|//).*$', Comment.Single), 
+            (r'/[*](?:.|\n)*?[*]/', Comment.Multiline),
+            (r'(?:;|//).*$', Comment.Single),
             (r'(\\)(\n)', bygroups(Text, Whitespace))
         ],
 
-        'preprocessor directives': [ 
-            (r'#(?:e(?:nd(?:if)?|lse)\b|##)|@@?[ \t]*\d+', Comment.Preproc), 
+        'preprocessor directives': [
+            (r'#(?:e(?:nd(?:if)?|lse)\b|##)|@@?[ \t]*\d+', Comment.Preproc),
             (r'#includestr', Comment.Preproc, 'includestr directive'),
-            (r'#include', Comment.Preproc, 'include directive'), 
-            (r'#[ \t]*define', Comment.Preproc, 'define directive'), 
-            (r'#(?:ifn?def|undef)\b', Comment.Preproc, 'macro directive') 
+            (r'#include', Comment.Preproc, 'include directive'),
+            (r'#[ \t]*define', Comment.Preproc, 'define directive'),
+            (r'#(?:ifn?def|undef)\b', Comment.Preproc, 'macro directive')
         ],
 
-        'include directive': [ 
+        'include directive': [
             include('whitespace'),
-            (r'([^ \t]).*?\1', String, '#pop') 
+            (r'([^ \t]).*?\1', String, '#pop')
         ],
         'includestr directive': [
             include('whitespace'),
             (r'"', String, ('#pop', 'quoted string'))
         ],
 
-        'define directive': [ 
-            (r'\n', Whitespace),
-            include('whitespace'), 
-            (r'([A-Z_a-z]\w*)(\()', bygroups(Comment.Preproc, Punctuation), 
-             ('#pop', 'macro parameter name list')), 
-            (r'[A-Z_a-z]\w*', Comment.Preproc, ('#pop', 'before macro body')) 
-        ],
-        'macro parameter name list': [ 
-            include('whitespace'),
-            (r'[A-Z_a-z]\w*', Comment.Preproc), 
-            (r"['#]", Punctuation), 
-            (r'\)', Punctuation, ('#pop', 'before macro body')) 
-        ],
-        'before macro body': [ 
+        'define directive': [
             (r'\n', Whitespace),
             include('whitespace'),
-            (r'#', Punctuation, ('#pop', 'macro body')) 
+            (r'([A-Z_a-z]\w*)(\()', bygroups(Comment.Preproc, Punctuation),
+             ('#pop', 'macro parameter name list')),
+            (r'[A-Z_a-z]\w*', Comment.Preproc, ('#pop', 'before macro body'))
         ],
-        'macro body': [ 
-            (r'(?:\\(?!#)|[^#\\]|\n)+', Comment.Preproc), 
-            (r'\\#', Comment.Preproc), 
-            (r'(?<!\\)#', Punctuation, '#pop') 
-        ], 
- 
-        'macro directive': [ 
+        'macro parameter name list': [
             include('whitespace'),
-            (r'[A-Z_a-z]\w*', Comment.Preproc, '#pop') 
+            (r'[A-Z_a-z]\w*', Comment.Preproc),
+            (r"['#]", Punctuation),
+            (r'\)', Punctuation, ('#pop', 'before macro body'))
         ],
- 
-        'macro uses': [ 
-            (r'(\$[A-Z_a-z]\w*\.?)(\()', bygroups(Comment.Preproc, Punctuation), 
-             'macro parameter value list'), 
-            (r'\$[A-Z_a-z]\w*(?:\.|\b)', Comment.Preproc) 
+        'before macro body': [
+            (r'\n', Whitespace),
+            include('whitespace'),
+            (r'#', Punctuation, ('#pop', 'macro body'))
         ],
-        'macro parameter value list': [ 
-            (r'(?:[^\'#"{()]|\{(?!\{))+', Comment.Preproc), 
-            (r"['#]", Punctuation), 
-            (r'"', String, 'macro parameter value quoted string'), 
-            (r'\{\{', String, 'macro parameter value braced string'), 
-            (r'\(', Comment.Preproc, 'macro parameter value parenthetical'), 
-            (r'\)', Punctuation, '#pop') 
+        'macro body': [
+            (r'(?:\\(?!#)|[^#\\]|\n)+', Comment.Preproc),
+            (r'\\#', Comment.Preproc),
+            (r'(?<!\\)#', Punctuation, '#pop')
         ],
-        'macro parameter value quoted string': [ 
-            (r"\\[#'()]", Comment.Preproc), 
-            (r"[#'()]", Error), 
-            include('quoted string') 
+
+        'macro directive': [
+            include('whitespace'),
+            (r'[A-Z_a-z]\w*', Comment.Preproc, '#pop')
         ],
-        'macro parameter value braced string': [ 
-            (r"\\[#'()]", Comment.Preproc), 
-            (r"[#'()]", Error), 
-            include('braced string') 
-        ], 
-        'macro parameter value parenthetical': [ 
-            (r'(?:[^\\()]|\\\))+', Comment.Preproc), 
-            (r'\(', Comment.Preproc, '#push'), 
-            (r'\)', Comment.Preproc, '#pop') 
-        ], 
- 
-        'whitespace and macro uses': [ 
-            include('whitespace'), 
-            include('macro uses') 
-        ], 
- 
-        'numbers': [ 
-            (r'\d+[Ee][+-]?\d+|(\d+\.\d*|\d*\.\d+)([Ee][+-]?\d+)?', Number.Float), 
-            (r'(0[Xx])([0-9A-Fa-f]+)', bygroups(Keyword.Type, Number.Hex)), 
-            (r'\d+', Number.Integer) 
-        ], 
- 
+
+        'macro uses': [
+            (r'(\$[A-Z_a-z]\w*\.?)(\()', bygroups(Comment.Preproc, Punctuation),
+             'macro parameter value list'),
+            (r'\$[A-Z_a-z]\w*(?:\.|\b)', Comment.Preproc)
+        ],
+        'macro parameter value list': [
+            (r'(?:[^\'#"{()]|\{(?!\{))+', Comment.Preproc),
+            (r"['#]", Punctuation),
+            (r'"', String, 'macro parameter value quoted string'),
+            (r'\{\{', String, 'macro parameter value braced string'),
+            (r'\(', Comment.Preproc, 'macro parameter value parenthetical'),
+            (r'\)', Punctuation, '#pop')
+        ],
+        'macro parameter value quoted string': [
+            (r"\\[#'()]", Comment.Preproc),
+            (r"[#'()]", Error),
+            include('quoted string')
+        ],
+        'macro parameter value braced string': [
+            (r"\\[#'()]", Comment.Preproc),
+            (r"[#'()]", Error),
+            include('braced string')
+        ],
+        'macro parameter value parenthetical': [
+            (r'(?:[^\\()]|\\\))+', Comment.Preproc),
+            (r'\(', Comment.Preproc, '#push'),
+            (r'\)', Comment.Preproc, '#pop')
+        ],
+
+        'whitespace and macro uses': [
+            include('whitespace'),
+            include('macro uses')
+        ],
+
+        'numbers': [
+            (r'\d+[Ee][+-]?\d+|(\d+\.\d*|\d*\.\d+)([Ee][+-]?\d+)?', Number.Float),
+            (r'(0[Xx])([0-9A-Fa-f]+)', bygroups(Keyword.Type, Number.Hex)),
+            (r'\d+', Number.Integer)
+        ],
+
         'quoted string': [
             (r'"', String, '#pop'),
             (r'[^"$]+', String),
@@ -125,8 +125,8 @@ class CsoundLexer(RegexLexer):
             (r'[$]', String)
         ],
 
-        'braced string': [ 
-            # Do nothing. This must be defined in subclasses. 
+        'braced string': [
+            # Do nothing. This must be defined in subclasses.
         ]
     }
 
@@ -143,56 +143,56 @@ class CsoundScoreLexer(CsoundLexer):
     filenames = ['*.sco']
 
     tokens = {
-        'root': [ 
+        'root': [
             (r'\n', Whitespace),
-            include('whitespace and macro uses'), 
+            include('whitespace and macro uses'),
             include('preprocessor directives'),
- 
+
             (r'[aBbCdefiqstvxy]', Keyword),
-            # There is also a w statement that is generated internally and should not be 
-            # used; see https://github.com/csound/csound/issues/750. 
- 
-            (r'z', Keyword.Constant), 
-            # z is a constant equal to 800,000,000,000. 800 billion seconds is about 
-            # 25,367.8 years. See also 
+            # There is also a w statement that is generated internally and should not be
+            # used; see https://github.com/csound/csound/issues/750.
+
+            (r'z', Keyword.Constant),
+            # z is a constant equal to 800,000,000,000. 800 billion seconds is about
+            # 25,367.8 years. See also
             # https://csound.com/docs/manual/ScoreTop.html and
-            # https://github.com/csound/csound/search?q=stof+path%3AEngine+filename%3Asread.c. 
- 
-            (r'([nNpP][pP])(\d+)', bygroups(Keyword, Number.Integer)), 
- 
-            (r'[mn]', Keyword, 'mark statement'), 
- 
-            include('numbers'), 
-            (r'[!+\-*/^%&|<>#~.]', Operator), 
-            (r'[()\[\]]', Punctuation), 
-            (r'"', String, 'quoted string'), 
-            (r'\{', Comment.Preproc, 'loop after left brace'), 
+            # https://github.com/csound/csound/search?q=stof+path%3AEngine+filename%3Asread.c.
+
+            (r'([nNpP][pP])(\d+)', bygroups(Keyword, Number.Integer)),
+
+            (r'[mn]', Keyword, 'mark statement'),
+
+            include('numbers'),
+            (r'[!+\-*/^%&|<>#~.]', Operator),
+            (r'[()\[\]]', Punctuation),
+            (r'"', String, 'quoted string'),
+            (r'\{', Comment.Preproc, 'loop after left brace'),
         ],
 
-        'mark statement': [ 
-            include('whitespace and macro uses'), 
-            (r'[A-Z_a-z]\w*', Name.Label), 
+        'mark statement': [
+            include('whitespace and macro uses'),
+            (r'[A-Z_a-z]\w*', Name.Label),
             (r'\n', Whitespace, '#pop')
         ],
 
-        'loop after left brace': [ 
-            include('whitespace and macro uses'), 
-            (r'\d+', Number.Integer, ('#pop', 'loop after repeat count')), 
-        ], 
-        'loop after repeat count': [ 
-            include('whitespace and macro uses'), 
-            (r'[A-Z_a-z]\w*', Comment.Preproc, ('#pop', 'loop')) 
-        ], 
-        'loop': [ 
-            (r'\}', Comment.Preproc, '#pop'), 
-            include('root') 
-        ], 
- 
+        'loop after left brace': [
+            include('whitespace and macro uses'),
+            (r'\d+', Number.Integer, ('#pop', 'loop after repeat count')),
+        ],
+        'loop after repeat count': [
+            include('whitespace and macro uses'),
+            (r'[A-Z_a-z]\w*', Comment.Preproc, ('#pop', 'loop'))
+        ],
+        'loop': [
+            (r'\}', Comment.Preproc, '#pop'),
+            include('root')
+        ],
+
         # Braced strings are not allowed in Csound scores, but this is needed because the
         # superclass includes it.
-        'braced string': [ 
-            (r'\}\}', String, '#pop'), 
-            (r'[^}]|\}(?!\})', String) 
+        'braced string': [
+            (r'\}\}', String, '#pop'),
+            (r'[^}]|\}(?!\})', String)
         ]
     }
 
@@ -206,7 +206,7 @@ class CsoundOrchestraLexer(CsoundLexer):
 
     name = 'Csound Orchestra'
     aliases = ['csound', 'csound-orc']
-    filenames = ['*.orc', '*.udo'] 
+    filenames = ['*.orc', '*.udo']
 
     user_defined_opcodes = set()
 
@@ -218,7 +218,7 @@ class CsoundOrchestraLexer(CsoundLexer):
     def name_callback(lexer, match):
         type_annotation_token = Keyword.Type
 
-        name = match.group(1) 
+        name = match.group(1)
         if name in OPCODES or name in DEPRECATED_OPCODES or name in REMOVED_OPCODES:
             yield match.start(), Name.Builtin, name
         elif name in lexer.user_defined_opcodes:
@@ -235,100 +235,100 @@ class CsoundOrchestraLexer(CsoundLexer):
         if match.group(2):
             yield match.start(2), Punctuation, match.group(2)
             yield match.start(3), type_annotation_token, match.group(3)
- 
+
     tokens = {
-        'root': [ 
+        'root': [
             (r'\n', Whitespace),
- 
+
             (r'^([ \t]*)(\w+)(:)([ \t]+|$)', bygroups(Whitespace, Name.Label, Punctuation, Whitespace)),
- 
-            include('whitespace and macro uses'), 
-            include('preprocessor directives'), 
- 
-            (r'\binstr\b', Keyword.Declaration, 'instrument numbers and identifiers'), 
-            (r'\bopcode\b', Keyword.Declaration, 'after opcode keyword'), 
-            (r'\b(?:end(?:in|op))\b', Keyword.Declaration), 
- 
-            include('partial statements') 
+
+            include('whitespace and macro uses'),
+            include('preprocessor directives'),
+
+            (r'\binstr\b', Keyword.Declaration, 'instrument numbers and identifiers'),
+            (r'\bopcode\b', Keyword.Declaration, 'after opcode keyword'),
+            (r'\b(?:end(?:in|op))\b', Keyword.Declaration),
+
+            include('partial statements')
         ],
 
-        'partial statements': [ 
-            (r'\b(?:0dbfs|A4|k(?:r|smps)|nchnls(?:_i)?|sr)\b', Name.Variable.Global), 
- 
-            include('numbers'), 
- 
-            (r'\+=|-=|\*=|/=|<<|>>|<=|>=|==|!=|&&|\|\||[~¬]|[=!+\-*/^%&|<>#?:]', Operator), 
-            (r'[(),\[\]]', Punctuation), 
- 
-            (r'"', String, 'quoted string'), 
-            (r'\{\{', String, 'braced string'), 
- 
+        'partial statements': [
+            (r'\b(?:0dbfs|A4|k(?:r|smps)|nchnls(?:_i)?|sr)\b', Name.Variable.Global),
+
+            include('numbers'),
+
+            (r'\+=|-=|\*=|/=|<<|>>|<=|>=|==|!=|&&|\|\||[~¬]|[=!+\-*/^%&|<>#?:]', Operator),
+            (r'[(),\[\]]', Punctuation),
+
+            (r'"', String, 'quoted string'),
+            (r'\{\{', String, 'braced string'),
+
             (words((
                 'do', 'else', 'elseif', 'endif', 'enduntil', 'fi', 'if', 'ithen', 'kthen',
                 'od', 'then', 'until', 'while',
                 ), prefix=r'\b', suffix=r'\b'), Keyword),
-            (words(('return', 'rireturn'), prefix=r'\b', suffix=r'\b'), Keyword.Pseudo), 
- 
-            (r'\b[ik]?goto\b', Keyword, 'goto label'), 
-            (r'\b(r(?:einit|igoto)|tigoto)(\(|\b)', bygroups(Keyword.Pseudo, Punctuation), 
-             'goto label'), 
-            (r'\b(c(?:g|in?|k|nk?)goto)(\(|\b)', bygroups(Keyword.Pseudo, Punctuation), 
-             ('goto label', 'goto argument')), 
-            (r'\b(timout)(\(|\b)', bygroups(Keyword.Pseudo, Punctuation), 
-             ('goto label', 'goto argument', 'goto argument')), 
-            (r'\b(loop_[gl][et])(\(|\b)', bygroups(Keyword.Pseudo, Punctuation), 
-             ('goto label', 'goto argument', 'goto argument', 'goto argument')), 
- 
-            (r'\bprintk?s\b', Name.Builtin, 'prints opcode'), 
-            (r'\b(?:readscore|scoreline(?:_i)?)\b', Name.Builtin, 'Csound score opcode'), 
-            (r'\bpyl?run[it]?\b', Name.Builtin, 'Python opcode'), 
-            (r'\blua_(?:exec|opdef)\b', Name.Builtin, 'Lua opcode'), 
-            (r'\bp\d+\b', Name.Variable.Instance), 
-            (r'\b([A-Z_a-z]\w*)(?:(:)([A-Za-z]))?\b', name_callback) 
+            (words(('return', 'rireturn'), prefix=r'\b', suffix=r'\b'), Keyword.Pseudo),
+
+            (r'\b[ik]?goto\b', Keyword, 'goto label'),
+            (r'\b(r(?:einit|igoto)|tigoto)(\(|\b)', bygroups(Keyword.Pseudo, Punctuation),
+             'goto label'),
+            (r'\b(c(?:g|in?|k|nk?)goto)(\(|\b)', bygroups(Keyword.Pseudo, Punctuation),
+             ('goto label', 'goto argument')),
+            (r'\b(timout)(\(|\b)', bygroups(Keyword.Pseudo, Punctuation),
+             ('goto label', 'goto argument', 'goto argument')),
+            (r'\b(loop_[gl][et])(\(|\b)', bygroups(Keyword.Pseudo, Punctuation),
+             ('goto label', 'goto argument', 'goto argument', 'goto argument')),
+
+            (r'\bprintk?s\b', Name.Builtin, 'prints opcode'),
+            (r'\b(?:readscore|scoreline(?:_i)?)\b', Name.Builtin, 'Csound score opcode'),
+            (r'\bpyl?run[it]?\b', Name.Builtin, 'Python opcode'),
+            (r'\blua_(?:exec|opdef)\b', Name.Builtin, 'Lua opcode'),
+            (r'\bp\d+\b', Name.Variable.Instance),
+            (r'\b([A-Z_a-z]\w*)(?:(:)([A-Za-z]))?\b', name_callback)
         ],
 
-        'instrument numbers and identifiers': [ 
-            include('whitespace and macro uses'), 
-            (r'\d+|[A-Z_a-z]\w*', Name.Function), 
-            (r'[+,]', Punctuation), 
+        'instrument numbers and identifiers': [
+            include('whitespace and macro uses'),
+            (r'\d+|[A-Z_a-z]\w*', Name.Function),
+            (r'[+,]', Punctuation),
             (r'\n', Whitespace, '#pop')
         ],
 
-        'after opcode keyword': [ 
-            include('whitespace and macro uses'), 
-            (r'[A-Z_a-z]\w*', opcode_name_callback, ('#pop', 'opcode type signatures')), 
+        'after opcode keyword': [
+            include('whitespace and macro uses'),
+            (r'[A-Z_a-z]\w*', opcode_name_callback, ('#pop', 'opcode type signatures')),
             (r'\n', Whitespace, '#pop')
         ],
-        'opcode type signatures': [ 
-            include('whitespace and macro uses'), 
+        'opcode type signatures': [
+            include('whitespace and macro uses'),
 
-            # https://github.com/csound/csound/search?q=XIDENT+path%3AEngine+filename%3Acsound_orc.lex 
-            (r'0|[afijkKoOpPStV\[\]]+', Keyword.Type), 
- 
+            # https://github.com/csound/csound/search?q=XIDENT+path%3AEngine+filename%3Acsound_orc.lex
+            (r'0|[afijkKoOpPStV\[\]]+', Keyword.Type),
+
             (r',', Punctuation),
             (r'\n', Whitespace, '#pop')
         ],
 
-        'quoted string': [ 
-            (r'"', String, '#pop'), 
-            (r'[^\\"$%)]+', String), 
-            include('macro uses'), 
-            include('escape sequences'), 
-            include('format specifiers'), 
-            (r'[\\$%)]', String) 
+        'quoted string': [
+            (r'"', String, '#pop'),
+            (r'[^\\"$%)]+', String),
+            include('macro uses'),
+            include('escape sequences'),
+            include('format specifiers'),
+            (r'[\\$%)]', String)
         ],
-        'braced string': [ 
-            (r'\}\}', String, '#pop'), 
-            (r'(?:[^\\%)}]|\}(?!\}))+', String), 
-            include('escape sequences'), 
-            include('format specifiers'), 
-            (r'[\\%)]', String) 
+        'braced string': [
+            (r'\}\}', String, '#pop'),
+            (r'(?:[^\\%)}]|\}(?!\}))+', String),
+            include('escape sequences'),
+            include('format specifiers'),
+            (r'[\\%)]', String)
         ],
-        'escape sequences': [ 
-            # https://github.com/csound/csound/search?q=unquote_string+path%3AEngine+filename%3Acsound_orc_compile.c 
-            (r'\\(?:[\\abnrt"]|[0-7]{1,3})', String.Escape) 
+        'escape sequences': [
+            # https://github.com/csound/csound/search?q=unquote_string+path%3AEngine+filename%3Acsound_orc_compile.c
+            (r'\\(?:[\\abnrt"]|[0-7]{1,3})', String.Escape)
         ],
-        # Format specifiers are highlighted in all strings, even though only 
+        # Format specifiers are highlighted in all strings, even though only
         #   fprintks        https://csound.com/docs/manual/fprintks.html
         #   fprints         https://csound.com/docs/manual/fprints.html
         #   printf/printf_i https://csound.com/docs/manual/printf.html
@@ -344,65 +344,65 @@ class CsoundOrchestraLexer(CsoundLexer):
         #     specifiers.
         #   - printf, printf_i, sprintf, and sprintfk don’t accept %a and %A specifiers,
         #     but accept %s specifiers.
-        # See https://github.com/csound/csound/issues/747 for more information. 
-        'format specifiers': [ 
+        # See https://github.com/csound/csound/issues/747 for more information.
+        'format specifiers': [
             (r'%[#0\- +]*\d*(?:\.\d+)?[AE-GXac-giosux]', String.Interpol),
-            (r'%%', String.Escape) 
+            (r'%%', String.Escape)
         ],
 
-        'goto argument': [ 
-            include('whitespace and macro uses'), 
-            (r',', Punctuation, '#pop'), 
-            include('partial statements') 
-        ], 
+        'goto argument': [
+            include('whitespace and macro uses'),
+            (r',', Punctuation, '#pop'),
+            include('partial statements')
+        ],
         'goto label': [
-            include('whitespace and macro uses'), 
+            include('whitespace and macro uses'),
             (r'\w+', Name.Label, '#pop'),
             default('#pop')
         ],
 
-        'prints opcode': [ 
-            include('whitespace and macro uses'), 
-            (r'"', String, 'prints quoted string'), 
-            default('#pop') 
+        'prints opcode': [
+            include('whitespace and macro uses'),
+            (r'"', String, 'prints quoted string'),
+            default('#pop')
         ],
-        'prints quoted string': [ 
-            (r'\\\\[aAbBnNrRtT]', String.Escape), 
-            (r'%[!nNrRtT]|[~^]{1,2}', String.Escape), 
-            include('quoted string') 
-        ],
-
-        'Csound score opcode': [ 
-            include('whitespace and macro uses'), 
-            (r'"', String, 'quoted string'),
-            (r'\{\{', String, 'Csound score'), 
-            (r'\n', Whitespace, '#pop')
-        ],
-        'Csound score': [ 
-            (r'\}\}', String, '#pop'), 
-            (r'([^}]+)|\}(?!\})', using(CsoundScoreLexer)) 
+        'prints quoted string': [
+            (r'\\\\[aAbBnNrRtT]', String.Escape),
+            (r'%[!nNrRtT]|[~^]{1,2}', String.Escape),
+            include('quoted string')
         ],
 
-        'Python opcode': [ 
-            include('whitespace and macro uses'), 
+        'Csound score opcode': [
+            include('whitespace and macro uses'),
             (r'"', String, 'quoted string'),
-            (r'\{\{', String, 'Python'), 
+            (r'\{\{', String, 'Csound score'),
             (r'\n', Whitespace, '#pop')
         ],
-        'Python': [ 
-            (r'\}\}', String, '#pop'), 
-            (r'([^}]+)|\}(?!\})', using(PythonLexer)) 
+        'Csound score': [
+            (r'\}\}', String, '#pop'),
+            (r'([^}]+)|\}(?!\})', using(CsoundScoreLexer))
         ],
 
-        'Lua opcode': [ 
-            include('whitespace and macro uses'), 
+        'Python opcode': [
+            include('whitespace and macro uses'),
             (r'"', String, 'quoted string'),
-            (r'\{\{', String, 'Lua'), 
+            (r'\{\{', String, 'Python'),
             (r'\n', Whitespace, '#pop')
         ],
-        'Lua': [ 
-            (r'\}\}', String, '#pop'), 
-            (r'([^}]+)|\}(?!\})', using(LuaLexer)) 
+        'Python': [
+            (r'\}\}', String, '#pop'),
+            (r'([^}]+)|\}(?!\})', using(PythonLexer))
+        ],
+
+        'Lua opcode': [
+            include('whitespace and macro uses'),
+            (r'"', String, 'quoted string'),
+            (r'\{\{', String, 'Lua'),
+            (r'\n', Whitespace, '#pop')
+        ],
+        'Lua': [
+            (r'\}\}', String, '#pop'),
+            (r'([^}]+)|\}(?!\})', using(LuaLexer))
         ]
     }
 
@@ -411,7 +411,7 @@ class CsoundDocumentLexer(RegexLexer):
     """
     For `Csound <https://csound.com>`_ documents.
 
-    .. versionadded:: 2.1 
+    .. versionadded:: 2.1
     """
 
     name = 'Csound Document'
@@ -428,17 +428,17 @@ class CsoundDocumentLexer(RegexLexer):
     tokens = {
         'root': [
             (r'/[*](.|\n)*?[*]/', Comment.Multiline),
-            (r'(?:;|//).*$', Comment.Single), 
-            (r'[^/;<]+|/(?!/)', Text), 
- 
+            (r'(?:;|//).*$', Comment.Single),
+            (r'[^/;<]+|/(?!/)', Text),
+
             (r'<\s*CsInstruments', Name.Tag, ('orchestra', 'tag')),
             (r'<\s*CsScore', Name.Tag, ('score', 'tag')),
-            (r'<\s*[Hh][Tt][Mm][Ll]', Name.Tag, ('HTML', 'tag')), 
- 
+            (r'<\s*[Hh][Tt][Mm][Ll]', Name.Tag, ('HTML', 'tag')),
+
             (r'<\s*[\w:.-]+', Name.Tag, 'tag'),
             (r'<\s*/\s*[\w:.-]+\s*>', Name.Tag)
         ],
- 
+
         'orchestra': [
             (r'<\s*/\s*CsInstruments\s*>', Name.Tag, '#pop'),
             (r'(.|\n)+?(?=<\s*/\s*CsInstruments\s*>)', using(CsoundOrchestraLexer))
@@ -448,10 +448,10 @@ class CsoundDocumentLexer(RegexLexer):
             (r'(.|\n)+?(?=<\s*/\s*CsScore\s*>)', using(CsoundScoreLexer))
         ],
         'HTML': [
-            (r'<\s*/\s*[Hh][Tt][Mm][Ll]\s*>', Name.Tag, '#pop'), 
-            (r'(.|\n)+?(?=<\s*/\s*[Hh][Tt][Mm][Ll]\s*>)', using(HtmlLexer)) 
+            (r'<\s*/\s*[Hh][Tt][Mm][Ll]\s*>', Name.Tag, '#pop'),
+            (r'(.|\n)+?(?=<\s*/\s*[Hh][Tt][Mm][Ll]\s*>)', using(HtmlLexer))
         ],
- 
+
         'tag': [
             (r'\s+', Whitespace),
             (r'[\w.:-]+\s*=', Name.Attribute, 'attr'),

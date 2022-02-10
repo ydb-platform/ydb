@@ -111,13 +111,13 @@ BOOST_HANA_NAMESPACE_BEGIN
     template <std::size_t n>
     constexpr make_curry_t<n> curry{};
 
-    namespace curry_detail { namespace { 
+    namespace curry_detail { namespace {
         template <std::size_t n>
         constexpr make_curry_t<n> curry_or_call{};
 
         template <>
         constexpr auto curry_or_call<0> = apply;
-    }} 
+    }}
 
     template <std::size_t n, typename F>
     struct curry_t {

@@ -5,7 +5,7 @@
 
     Lexers for data file format.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -14,9 +14,9 @@ import re
 from pygments.lexer import RegexLexer, ExtendedRegexLexer, LexerContext, \
     include, bygroups, inherit
 from pygments.token import Text, Comment, Keyword, Name, String, Number, \
-    Punctuation, Literal, Error 
+    Punctuation, Literal, Error
 
-__all__ = ['YamlLexer', 'JsonLexer', 'JsonBareObjectLexer', 'JsonLdLexer'] 
+__all__ = ['YamlLexer', 'JsonLexer', 'JsonBareObjectLexer', 'JsonLdLexer']
 
 
 class YamlLexerContext(LexerContext):
@@ -205,7 +205,7 @@ class YamlLexer(ExtendedRegexLexer):
              bygroups(Text, Number), 'ignored-line'),
         ],
 
-        # the %TAG directive 
+        # the %TAG directive
         'tag-directive': [
             # a tag handle and the corresponding prefix
             (r'([ ]+)(!|![\w-]*!)'
@@ -218,7 +218,7 @@ class YamlLexer(ExtendedRegexLexer):
         'indentation': [
             # trailing whitespaces are ignored
             (r'[ ]*$', something(Text), '#pop:2'),
-            # whitespaces preceding block collection indicators 
+            # whitespaces preceding block collection indicators
             (r'[ ]+(?=[?:-](?:[ ]|$))', save_indent(Text)),
             # block collection indicators
             (r'[?:-](?=[ ]|$)', set_indent(Punctuation.Indicator)),
@@ -232,9 +232,9 @@ class YamlLexer(ExtendedRegexLexer):
             (r'[ ]*(?=#|$)', something(Text), '#pop'),
             # whitespaces separating tokens
             (r'[ ]+', Text),
-            # key with colon 
+            # key with colon
             (r'''([^#,:?\[\]{}"'\n]+)(:)(?=[ ]|$)''',
-             bygroups(Name.Tag, set_indent(Punctuation, implicit=True))), 
+             bygroups(Name.Tag, set_indent(Punctuation, implicit=True))),
             # tags, anchors and aliases,
             include('descriptors'),
             # block collections and scalars
@@ -250,10 +250,10 @@ class YamlLexer(ExtendedRegexLexer):
         # tags, anchors, aliases
         'descriptors': [
             # a full-form tag
-            (r'!<[\w#;/?:@&=+$,.!~*\'()\[\]%-]+>', Keyword.Type), 
+            (r'!<[\w#;/?:@&=+$,.!~*\'()\[\]%-]+>', Keyword.Type),
             # a tag in the form '!', '!suffix' or '!handle!suffix'
-            (r'!(?:[\w-]+!)?' 
-             r'[\w#;/?:@&=+$,.!~*\'()\[\]%-]*', Keyword.Type), 
+            (r'!(?:[\w-]+!)?'
+             r'[\w#;/?:@&=+$,.!~*\'()\[\]%-]*', Keyword.Type),
             # an anchor
             (r'&[\w-]+', Name.Label),
             # an alias
@@ -311,9 +311,9 @@ class YamlLexer(ExtendedRegexLexer):
 
         # a flow mapping indicated by '{' and '}'
         'flow-mapping': [
-            # key with colon 
-            (r'''([^,:?\[\]{}"'\n]+)(:)(?=[ ]|$)''', 
-             bygroups(Name.Tag, Punctuation)), 
+            # key with colon
+            (r'''([^,:?\[\]{}"'\n]+)(:)(?=[ ]|$)''',
+             bygroups(Name.Tag, Punctuation)),
             # include flow collection rules
             include('flow-collection'),
             # the closing indicator
@@ -482,7 +482,7 @@ class JsonLexer(RegexLexer):
             # comma terminates the attribute but expects more
             (r',', Punctuation, '#pop'),
             # a closing bracket terminates the entire object, so pop twice
-            (r'\}', Punctuation, '#pop:2'), 
+            (r'\}', Punctuation, '#pop:2'),
         ],
 
         # a json object - { attr, attr, ... }
@@ -514,31 +514,31 @@ class JsonLexer(RegexLexer):
         ],
     }
 
- 
-class JsonBareObjectLexer(JsonLexer): 
-    """ 
-    For JSON data structures (with missing object curly braces). 
- 
-    .. versionadded:: 2.2 
-    """ 
- 
-    name = 'JSONBareObject' 
-    aliases = ['json-object'] 
-    filenames = [] 
-    mimetypes = ['application/json-object'] 
- 
-    tokens = { 
-        'root': [ 
-            (r'\}', Error), 
-            include('objectvalue'), 
-        ], 
-        'objectattribute': [ 
-            (r'\}', Error), 
-            inherit, 
-        ], 
-    } 
- 
- 
+
+class JsonBareObjectLexer(JsonLexer):
+    """
+    For JSON data structures (with missing object curly braces).
+
+    .. versionadded:: 2.2
+    """
+
+    name = 'JSONBareObject'
+    aliases = ['json-object']
+    filenames = []
+    mimetypes = ['application/json-object']
+
+    tokens = {
+        'root': [
+            (r'\}', Error),
+            include('objectvalue'),
+        ],
+        'objectattribute': [
+            (r'\}', Error),
+            inherit,
+        ],
+    }
+
+
 class JsonLdLexer(JsonLexer):
     """
     For `JSON-LD <http://json-ld.org/>`_ linked data.

@@ -70,13 +70,13 @@
 #ifndef ABSL_TIME_CIVIL_TIME_H_
 #define ABSL_TIME_CIVIL_TIME_H_
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include "y_absl/strings/string_view.h"
 #include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 namespace time_internal {
 struct second_tag : cctz::detail::second_tag {};
@@ -532,7 +532,7 @@ std::ostream& operator<<(std::ostream& os, CivilSecond s);
 
 }  // namespace time_internal
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_TIME_CIVIL_TIME_H_

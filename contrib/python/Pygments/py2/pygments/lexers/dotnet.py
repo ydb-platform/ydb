@@ -5,13 +5,13 @@
 
     Lexers for .net languages.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 import re
 
 from pygments.lexer import RegexLexer, DelegatingLexer, bygroups, include, \
-    using, this, default, words 
+    using, this, default, words
 from pygments.token import Punctuation, \
     Text, Comment, Operator, Keyword, Name, String, Number, Literal, Other
 from pygments.util import get_choice_opt, iteritems
@@ -58,7 +58,7 @@ class CSharpLexer(RegexLexer):
     # http://www.ecma-international.org/publications/files/ECMA-ST/Ecma-334.pdf
 
     levels = {
-        'none': r'@?[_a-zA-Z]\w*', 
+        'none': r'@?[_a-zA-Z]\w*',
         'basic': ('@?[_' + uni.combine('Lu', 'Ll', 'Lt', 'Lm', 'Nl') + ']' +
                   '[' + uni.combine('Lu', 'Ll', 'Lt', 'Lm', 'Nl', 'Nd', 'Pc',
                                     'Cf', 'Mn', 'Mc') + ']*'),
@@ -97,17 +97,17 @@ class CSharpLexer(RegexLexer):
                  Comment.Preproc),
                 (r'\b(extern)(\s+)(alias)\b', bygroups(Keyword, Text,
                  Keyword)),
-                (r'(abstract|as|async|await|base|break|by|case|catch|' 
+                (r'(abstract|as|async|await|base|break|by|case|catch|'
                  r'checked|const|continue|default|delegate|'
                  r'do|else|enum|event|explicit|extern|false|finally|'
                  r'fixed|for|foreach|goto|if|implicit|in|interface|'
-                 r'internal|is|let|lock|new|null|on|operator|' 
+                 r'internal|is|let|lock|new|null|on|operator|'
                  r'out|override|params|private|protected|public|readonly|'
                  r'ref|return|sealed|sizeof|stackalloc|static|'
                  r'switch|this|throw|true|try|typeof|'
                  r'unchecked|unsafe|virtual|void|while|'
                  r'get|set|new|partial|yield|add|remove|value|alias|ascending|'
-                 r'descending|from|group|into|orderby|select|thenby|where|' 
+                 r'descending|from|group|into|orderby|select|thenby|where|'
                  r'join|equals)\b', Keyword),
                 (r'(global)(::)', bygroups(Keyword, Punctuation)),
                 (r'(bool|byte|char|decimal|double|dynamic|float|int|long|object|'
@@ -171,7 +171,7 @@ class NemerleLexer(RegexLexer):
     # http://www.ecma-international.org/publications/files/ECMA-ST/Ecma-334.pdf
 
     levels = {
-        'none': r'@?[_a-zA-Z]\w*', 
+        'none': r'@?[_a-zA-Z]\w*',
         'basic': ('@?[_' + uni.combine('Lu', 'Ll', 'Lt', 'Lm', 'Nl') + ']' +
                   '[' + uni.combine('Lu', 'Ll', 'Lt', 'Lm', 'Nl', 'Nd', 'Pc',
                                     'Cf', 'Mn', 'Mc') + ']*'),
@@ -352,13 +352,13 @@ class BooLexer(RegexLexer):
             ('[*/]', Comment.Multiline)
         ],
         'funcname': [
-            (r'[a-zA-Z_]\w*', Name.Function, '#pop') 
+            (r'[a-zA-Z_]\w*', Name.Function, '#pop')
         ],
         'classname': [
-            (r'[a-zA-Z_]\w*', Name.Class, '#pop') 
+            (r'[a-zA-Z_]\w*', Name.Class, '#pop')
         ],
         'namespace': [
-            (r'[a-zA-Z_][\w.]*', Name.Namespace, '#pop') 
+            (r'[a-zA-Z_][\w.]*', Name.Namespace, '#pop')
         ]
     }
 
@@ -375,8 +375,8 @@ class VbNetLexer(RegexLexer):
     filenames = ['*.vb', '*.bas']
     mimetypes = ['text/x-vbnet', 'text/x-vba']  # (?)
 
-    uni_name = '[_' + uni.combine('Ll', 'Lt', 'Lm', 'Nl') + ']' + \ 
-               '[' + uni.combine('Ll', 'Lt', 'Lm', 'Nl', 'Nd', 'Pc', 
+    uni_name = '[_' + uni.combine('Ll', 'Lt', 'Lm', 'Nl') + ']' + \
+               '[' + uni.combine('Ll', 'Lt', 'Lm', 'Nl', 'Nd', 'Pc',
                                  'Cf', 'Mn', 'Mc') + ']*'
 
     flags = re.MULTILINE | re.IGNORECASE
@@ -394,26 +394,26 @@ class VbNetLexer(RegexLexer):
             (r'[(){}!#,.:]', Punctuation),
             (r'Option\s+(Strict|Explicit|Compare)\s+'
              r'(On|Off|Binary|Text)', Keyword.Declaration),
-            (words(( 
-                'AddHandler', 'Alias', 'ByRef', 'ByVal', 'Call', 'Case', 
-                'Catch', 'CBool', 'CByte', 'CChar', 'CDate', 'CDec', 'CDbl', 
-                'CInt', 'CLng', 'CObj', 'Continue', 'CSByte', 'CShort', 'CSng', 
-                'CStr', 'CType', 'CUInt', 'CULng', 'CUShort', 'Declare', 
-                'Default', 'Delegate', 'DirectCast', 'Do', 'Each', 'Else', 
-                'ElseIf', 'EndIf', 'Erase', 'Error', 'Event', 'Exit', 'False', 
-                'Finally', 'For', 'Friend', 'Get', 'Global', 'GoSub', 'GoTo', 
-                'Handles', 'If', 'Implements', 'Inherits', 'Interface', 'Let', 
-                'Lib', 'Loop', 'Me', 'MustInherit', 'MustOverride', 'MyBase', 
-                'MyClass', 'Narrowing', 'New', 'Next', 'Not', 'Nothing', 
-                'NotInheritable', 'NotOverridable', 'Of', 'On', 'Operator', 
-                'Option', 'Optional', 'Overloads', 'Overridable', 'Overrides', 
-                'ParamArray', 'Partial', 'Private', 'Protected', 'Public', 
-                'RaiseEvent', 'ReadOnly', 'ReDim', 'RemoveHandler', 'Resume', 
-                'Return', 'Select', 'Set', 'Shadows', 'Shared', 'Single', 
-                'Static', 'Step', 'Stop', 'SyncLock', 'Then', 'Throw', 'To', 
-                'True', 'Try', 'TryCast', 'Wend', 'Using', 'When', 'While', 
-                'Widening', 'With', 'WithEvents', 'WriteOnly'), 
-                   prefix=r'(?<!\.)', suffix=r'\b'), Keyword), 
+            (words((
+                'AddHandler', 'Alias', 'ByRef', 'ByVal', 'Call', 'Case',
+                'Catch', 'CBool', 'CByte', 'CChar', 'CDate', 'CDec', 'CDbl',
+                'CInt', 'CLng', 'CObj', 'Continue', 'CSByte', 'CShort', 'CSng',
+                'CStr', 'CType', 'CUInt', 'CULng', 'CUShort', 'Declare',
+                'Default', 'Delegate', 'DirectCast', 'Do', 'Each', 'Else',
+                'ElseIf', 'EndIf', 'Erase', 'Error', 'Event', 'Exit', 'False',
+                'Finally', 'For', 'Friend', 'Get', 'Global', 'GoSub', 'GoTo',
+                'Handles', 'If', 'Implements', 'Inherits', 'Interface', 'Let',
+                'Lib', 'Loop', 'Me', 'MustInherit', 'MustOverride', 'MyBase',
+                'MyClass', 'Narrowing', 'New', 'Next', 'Not', 'Nothing',
+                'NotInheritable', 'NotOverridable', 'Of', 'On', 'Operator',
+                'Option', 'Optional', 'Overloads', 'Overridable', 'Overrides',
+                'ParamArray', 'Partial', 'Private', 'Protected', 'Public',
+                'RaiseEvent', 'ReadOnly', 'ReDim', 'RemoveHandler', 'Resume',
+                'Return', 'Select', 'Set', 'Shadows', 'Shared', 'Single',
+                'Static', 'Step', 'Stop', 'SyncLock', 'Then', 'Throw', 'To',
+                'True', 'Try', 'TryCast', 'Wend', 'Using', 'When', 'While',
+                'Widening', 'With', 'WithEvents', 'WriteOnly'),
+                   prefix=r'(?<!\.)', suffix=r'\b'), Keyword),
             (r'(?<!\.)End\b', Keyword, 'end'),
             (r'(?<!\.)(Dim|Const)\b', Keyword, 'dim'),
             (r'(?<!\.)(Function|Sub|Property)(\s+)',
@@ -541,13 +541,13 @@ class VbNetAspxLexer(DelegatingLexer):
 # Very close to functional.OcamlLexer
 class FSharpLexer(RegexLexer):
     """
-    For the `F# language <https://fsharp.org/>`_ (version 3.0). 
+    For the `F# language <https://fsharp.org/>`_ (version 3.0).
 
     .. versionadded:: 1.5
     """
 
-    name = 'F#' 
-    aliases = ['fsharp', 'f#'] 
+    name = 'F#'
+    aliases = ['fsharp', 'f#']
     filenames = ['*.fs', '*.fsi']
     mimetypes = ['text/x-fsharp']
 
@@ -571,10 +571,10 @@ class FSharpLexer(RegexLexer):
         'virtual', 'volatile',
     ]
     keyopts = [
-        '!=', '#', '&&', '&', r'\(', r'\)', r'\*', r'\+', ',', r'-\.', 
-        '->', '-', r'\.\.', r'\.', '::', ':=', ':>', ':', ';;', ';', '<-', 
-        r'<\]', '<', r'>\]', '>', r'\?\?', r'\?', r'\[<', r'\[\|', r'\[', r'\]', 
-        '_', '`', r'\{', r'\|\]', r'\|', r'\}', '~', '<@@', '<@', '=', '@>', '@@>', 
+        '!=', '#', '&&', '&', r'\(', r'\)', r'\*', r'\+', ',', r'-\.',
+        '->', '-', r'\.\.', r'\.', '::', ':=', ':>', ':', ';;', ';', '<-',
+        r'<\]', '<', r'>\]', '>', r'\?\?', r'\?', r'\[<', r'\[\|', r'\[', r'\]',
+        '_', '`', r'\{', r'\|\]', r'\|', r'\}', '~', '<@@', '<@', '=', '@>', '@@>',
     ]
 
     operators = r'[!$%&*+\./:<=>?@^|~-]'

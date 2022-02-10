@@ -15,4 +15,4 @@
 
 - source_filter: "^contrib/restricted/boost"
   includes:
-    - ../include/fenv.h: contrib/libs/musl/include/fenv.h 
+    - ../include/fenv.h: contrib/libs/musl/include/fenv.h

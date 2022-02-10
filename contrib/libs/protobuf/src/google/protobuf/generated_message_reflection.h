@@ -62,7 +62,7 @@ class MapValueRef;
 class MessageLayoutInspector;
 class Message;
 struct Metadata;
-}  // namespace protobuf 
+}  // namespace protobuf
 }  // namespace google
 
 namespace google {
@@ -73,131 +73,131 @@ class DefaultEmptyOneof;
 class ExtensionSet;  // extension_set.h
 class WeakFieldMap;  // weak_field_map.h
 
-// This struct describes the internal layout of the message, hence this is 
-// used to act on the message reflectively. 
-//   default_instance:  The default instance of the message.  This is only 
-//                  used to obtain pointers to default instances of embedded 
-//                  messages, which GetMessage() will return if the particular 
-//                  sub-message has not been initialized yet.  (Thus, all 
+// This struct describes the internal layout of the message, hence this is
+// used to act on the message reflectively.
+//   default_instance:  The default instance of the message.  This is only
+//                  used to obtain pointers to default instances of embedded
+//                  messages, which GetMessage() will return if the particular
+//                  sub-message has not been initialized yet.  (Thus, all
 //                  embedded message fields *must* have non-null pointers
-//                  in the default instance.) 
-//   offsets:       An array of ints giving the byte offsets. 
-//                  For each oneof or weak field, the offset is relative to the 
-//                  default_instance. These can be computed at compile time 
-//                  using the 
+//                  in the default instance.)
+//   offsets:       An array of ints giving the byte offsets.
+//                  For each oneof or weak field, the offset is relative to the
+//                  default_instance. These can be computed at compile time
+//                  using the
 //                  PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET()
-//                  macro. For each none oneof field, the offset is related to 
-//                  the start of the message object.  These can be computed at 
-//                  compile time using the 
+//                  macro. For each none oneof field, the offset is related to
+//                  the start of the message object.  These can be computed at
+//                  compile time using the
 //                  PROTO2_GENERATED_MESSAGE_FIELD_OFFSET() macro.
-//                  Besides offsets for all fields, this array also contains 
-//                  offsets for oneof unions. The offset of the i-th oneof union 
-//                  is offsets[descriptor->field_count() + i]. 
-//   has_bit_indices:  Mapping from field indexes to their index in the has 
-//                  bit array. 
-//   has_bits_offset:  Offset in the message of an array of uint32s of size 
-//                  descriptor->field_count()/32, rounded up.  This is a 
-//                  bitfield where each bit indicates whether or not the 
-//                  corresponding field of the message has been initialized. 
-//                  The bit for field index i is obtained by the expression: 
-//                    has_bits[i / 32] & (1 << (i % 32)) 
-//   unknown_fields_offset:  Offset in the message of the UnknownFieldSet for 
-//                  the message. 
-//   extensions_offset:  Offset in the message of the ExtensionSet for the 
-//                  message, or -1 if the message type has no extension 
-//                  ranges. 
-//   oneof_case_offset:  Offset in the message of an array of uint32s of 
-//                  size descriptor->oneof_decl_count().  Each uint32 
-//                  indicates what field is set for each oneof. 
-//   object_size:   The size of a message object of this type, as measured 
-//                  by sizeof(). 
-//   arena_offset:  If a message doesn't have a unknown_field_set that stores 
-//                  the arena, it must have a direct pointer to the arena. 
-//   weak_field_map_offset: If the message proto has weak fields, this is the 
-//                  offset of _weak_field_map_ in the generated proto. Otherwise 
-//                  -1. 
-struct ReflectionSchema { 
- public: 
-  // Size of a google::protobuf::Message object of this type. 
-  uint32 GetObjectSize() const { return static_cast<uint32>(object_size_); } 
- 
+//                  Besides offsets for all fields, this array also contains
+//                  offsets for oneof unions. The offset of the i-th oneof union
+//                  is offsets[descriptor->field_count() + i].
+//   has_bit_indices:  Mapping from field indexes to their index in the has
+//                  bit array.
+//   has_bits_offset:  Offset in the message of an array of uint32s of size
+//                  descriptor->field_count()/32, rounded up.  This is a
+//                  bitfield where each bit indicates whether or not the
+//                  corresponding field of the message has been initialized.
+//                  The bit for field index i is obtained by the expression:
+//                    has_bits[i / 32] & (1 << (i % 32))
+//   unknown_fields_offset:  Offset in the message of the UnknownFieldSet for
+//                  the message.
+//   extensions_offset:  Offset in the message of the ExtensionSet for the
+//                  message, or -1 if the message type has no extension
+//                  ranges.
+//   oneof_case_offset:  Offset in the message of an array of uint32s of
+//                  size descriptor->oneof_decl_count().  Each uint32
+//                  indicates what field is set for each oneof.
+//   object_size:   The size of a message object of this type, as measured
+//                  by sizeof().
+//   arena_offset:  If a message doesn't have a unknown_field_set that stores
+//                  the arena, it must have a direct pointer to the arena.
+//   weak_field_map_offset: If the message proto has weak fields, this is the
+//                  offset of _weak_field_map_ in the generated proto. Otherwise
+//                  -1.
+struct ReflectionSchema {
+ public:
+  // Size of a google::protobuf::Message object of this type.
+  uint32 GetObjectSize() const { return static_cast<uint32>(object_size_); }
+
   bool InRealOneof(const FieldDescriptor* field) const {
     return field->containing_oneof() &&
            !field->containing_oneof()->is_synthetic();
   }
 
-  // Offset of a non-oneof field.  Getting a field offset is slightly more 
-  // efficient when we know statically that it is not a oneof field. 
-  uint32 GetFieldOffsetNonOneof(const FieldDescriptor* field) const { 
+  // Offset of a non-oneof field.  Getting a field offset is slightly more
+  // efficient when we know statically that it is not a oneof field.
+  uint32 GetFieldOffsetNonOneof(const FieldDescriptor* field) const {
     GOOGLE_DCHECK(!InRealOneof(field));
     return OffsetValue(offsets_[field->index()], field->type());
-  } 
- 
-  // Offset of any field. 
-  uint32 GetFieldOffset(const FieldDescriptor* field) const { 
+  }
+
+  // Offset of any field.
+  uint32 GetFieldOffset(const FieldDescriptor* field) const {
     if (InRealOneof(field)) {
-      size_t offset = 
-          static_cast<size_t>(field->containing_type()->field_count() + 
+      size_t offset =
+          static_cast<size_t>(field->containing_type()->field_count() +
                               field->containing_oneof()->index());
       return OffsetValue(offsets_[offset], field->type());
-    } else { 
-      return GetFieldOffsetNonOneof(field); 
-    } 
-  } 
- 
-  uint32 GetOneofCaseOffset(const OneofDescriptor* oneof_descriptor) const { 
-    return static_cast<uint32>(oneof_case_offset_) + 
+    } else {
+      return GetFieldOffsetNonOneof(field);
+    }
+  }
+
+  uint32 GetOneofCaseOffset(const OneofDescriptor* oneof_descriptor) const {
+    return static_cast<uint32>(oneof_case_offset_) +
            static_cast<uint32>(static_cast<size_t>(oneof_descriptor->index()) *
                                sizeof(uint32));
-  } 
- 
-  bool HasHasbits() const { return has_bits_offset_ != -1; } 
- 
-  // Bit index within the bit array of hasbits.  Bit order is low-to-high. 
-  uint32 HasBitIndex(const FieldDescriptor* field) const { 
+  }
+
+  bool HasHasbits() const { return has_bits_offset_ != -1; }
+
+  // Bit index within the bit array of hasbits.  Bit order is low-to-high.
+  uint32 HasBitIndex(const FieldDescriptor* field) const {
     if (has_bits_offset_ == -1) return static_cast<uint32>(-1);
-    GOOGLE_DCHECK(HasHasbits()); 
-    return has_bit_indices_[field->index()]; 
-  } 
- 
-  // Byte offset of the hasbits array. 
-  uint32 HasBitsOffset() const { 
-    GOOGLE_DCHECK(HasHasbits()); 
-    return static_cast<uint32>(has_bits_offset_); 
-  } 
- 
-  // The offset of the InternalMetadataWithArena member. 
-  // For Lite this will actually be an InternalMetadataWithArenaLite. 
-  // The schema doesn't contain enough information to distinguish between 
-  // these two cases. 
-  uint32 GetMetadataOffset() const { 
-    return static_cast<uint32>(metadata_offset_); 
-  } 
- 
-  // Whether this message has an ExtensionSet. 
-  bool HasExtensionSet() const { return extensions_offset_ != -1; } 
- 
-  // The offset of the ExtensionSet in this message. 
-  uint32 GetExtensionSetOffset() const { 
-    GOOGLE_DCHECK(HasExtensionSet()); 
-    return static_cast<uint32>(extensions_offset_); 
-  } 
- 
-  // The off set of WeakFieldMap when the message contains weak fields. 
-  // The default is 0 for now. 
-  int GetWeakFieldMapOffset() const { return weak_field_map_offset_; } 
- 
-  bool IsDefaultInstance(const Message& message) const { 
-    return &message == default_instance_; 
-  } 
- 
-  // Returns a pointer to the default value for this field.  The size and type 
-  // of the underlying data depends on the field's type. 
+    GOOGLE_DCHECK(HasHasbits());
+    return has_bit_indices_[field->index()];
+  }
+
+  // Byte offset of the hasbits array.
+  uint32 HasBitsOffset() const {
+    GOOGLE_DCHECK(HasHasbits());
+    return static_cast<uint32>(has_bits_offset_);
+  }
+
+  // The offset of the InternalMetadataWithArena member.
+  // For Lite this will actually be an InternalMetadataWithArenaLite.
+  // The schema doesn't contain enough information to distinguish between
+  // these two cases.
+  uint32 GetMetadataOffset() const {
+    return static_cast<uint32>(metadata_offset_);
+  }
+
+  // Whether this message has an ExtensionSet.
+  bool HasExtensionSet() const { return extensions_offset_ != -1; }
+
+  // The offset of the ExtensionSet in this message.
+  uint32 GetExtensionSetOffset() const {
+    GOOGLE_DCHECK(HasExtensionSet());
+    return static_cast<uint32>(extensions_offset_);
+  }
+
+  // The off set of WeakFieldMap when the message contains weak fields.
+  // The default is 0 for now.
+  int GetWeakFieldMapOffset() const { return weak_field_map_offset_; }
+
+  bool IsDefaultInstance(const Message& message) const {
+    return &message == default_instance_;
+  }
+
+  // Returns a pointer to the default value for this field.  The size and type
+  // of the underlying data depends on the field's type.
   const void* GetFieldDefault(const FieldDescriptor* field) const {
-    return reinterpret_cast<const uint8*>(default_instance_) + 
+    return reinterpret_cast<const uint8*>(default_instance_) +
            OffsetValue(offsets_[field->index()], field->type());
-  } 
- 
+  }
+
   // Returns true if the field is implicitly backed by LazyField.
   bool IsEagerlyVerifiedLazyField(const FieldDescriptor* field) const {
     GOOGLE_DCHECK_EQ(field->type(), FieldDescriptor::TYPE_MESSAGE);
@@ -211,7 +211,7 @@ struct ReflectionSchema {
     (void)field;
     return true;
   }
- 
+
   bool IsFieldStripped(const FieldDescriptor* field) const {
     (void)field;
     return false;
@@ -223,23 +223,23 @@ struct ReflectionSchema {
   }
 
 
-  bool HasWeakFields() const { return weak_field_map_offset_ > 0; } 
- 
-  // These members are intended to be private, but we cannot actually make them 
-  // private because this prevents us from using aggregate initialization of 
-  // them, ie. 
-  // 
-  //   ReflectionSchema schema = {a, b, c, d, e, ...}; 
+  bool HasWeakFields() const { return weak_field_map_offset_ > 0; }
+
+  // These members are intended to be private, but we cannot actually make them
+  // private because this prevents us from using aggregate initialization of
+  // them, ie.
+  //
+  //   ReflectionSchema schema = {a, b, c, d, e, ...};
   // private:
-  const Message* default_instance_; 
-  const uint32* offsets_; 
-  const uint32* has_bit_indices_; 
-  int has_bits_offset_; 
-  int metadata_offset_; 
-  int extensions_offset_; 
-  int oneof_case_offset_; 
-  int object_size_; 
-  int weak_field_map_offset_; 
+  const Message* default_instance_;
+  const uint32* offsets_;
+  const uint32* has_bit_indices_;
+  int has_bits_offset_;
+  int metadata_offset_;
+  int extensions_offset_;
+  int oneof_case_offset_;
+  int object_size_;
+  int weak_field_map_offset_;
 
   // We tag offset values to provide additional data about fields (such as
   // "unused" or "lazy").
@@ -249,20 +249,20 @@ struct ReflectionSchema {
     }
     return v & 0x7FFFFFFFu;
   }
-}; 
- 
-// Structs that the code generator emits directly to describe a message. 
-// These should never used directly except to build a ReflectionSchema 
-// object. 
-// 
-// EXPERIMENTAL: these are changing rapidly, and may completely disappear 
-// or merge with ReflectionSchema. 
-struct MigrationSchema { 
-  int32 offsets_index; 
-  int32 has_bit_indices_index; 
-  int object_size; 
-}; 
- 
+};
+
+// Structs that the code generator emits directly to describe a message.
+// These should never used directly except to build a ReflectionSchema
+// object.
+//
+// EXPERIMENTAL: these are changing rapidly, and may completely disappear
+// or merge with ReflectionSchema.
+struct MigrationSchema {
+  int32 offsets_index;
+  int32 has_bit_indices_index;
+  int object_size;
+};
+
 // This struct tries to reduce unnecessary padding.
 // The num_xxx might not be close to their respective pointer, but this saves
 // padding.

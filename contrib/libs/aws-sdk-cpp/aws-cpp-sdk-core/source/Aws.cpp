@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 #include <aws/core/Version.h>
 #include <aws/core/utils/logging/LogMacros.h>
 #include <aws/core/Aws.h>
@@ -12,8 +12,8 @@
 #include <aws/core/external/cjson/cJSON.h>
 #include <aws/core/monitoring/MonitoringManager.h>
 #include <aws/core/net/Net.h>
-#include <aws/core/config/AWSProfileConfigLoader.h> 
-#include <aws/core/internal/AWSHttpResourceClient.h> 
+#include <aws/core/config/AWSProfileConfigLoader.h>
+#include <aws/core/internal/AWSHttpResourceClient.h>
 
 namespace Aws
 {
@@ -43,9 +43,9 @@ namespace Aws
             AWS_LOGSTREAM_INFO(ALLOCATION_TAG, "Initiate AWS SDK for C++ with Version:" << Aws::String(Aws::Version::GetVersionString()));
         }
 
-        Aws::Config::InitConfigAndCredentialsCacheManager(); 
- 
-        if (options.cryptoOptions.aes_CBCFactory_create_fn) 
+        Aws::Config::InitConfigAndCredentialsCacheManager();
+
+        if (options.cryptoOptions.aes_CBCFactory_create_fn)
         {
             Aws::Utils::Crypto::SetAES_CBCFactory(options.cryptoOptions.aes_CBCFactory_create_fn());
         }
@@ -102,26 +102,26 @@ namespace Aws
         hooks.free_fn = Aws::Free;
         cJSON_InitHooks(&hooks);
         Aws::Net::InitNetwork();
-        Aws::Internal::InitEC2MetadataClient(); 
+        Aws::Internal::InitEC2MetadataClient();
         Aws::Monitoring::InitMonitoring(options.monitoringOptions.customizedMonitoringFactory_create_fn);
     }
 
     void ShutdownAPI(const SDKOptions& options)
     {
         Aws::Monitoring::CleanupMonitoring();
-        Aws::Internal::CleanupEC2MetadataClient(); 
+        Aws::Internal::CleanupEC2MetadataClient();
         Aws::Net::CleanupNetwork();
         Aws::CleanupEnumOverflowContainer();
         Aws::Http::CleanupHttp();
         Aws::Utils::Crypto::CleanupCrypto();
 
-        Aws::Config::CleanupConfigAndCredentialsCacheManager(); 
- 
+        Aws::Config::CleanupConfigAndCredentialsCacheManager();
+
         if(options.loggingOptions.logLevel != Aws::Utils::Logging::LogLevel::Off)
         {
             Aws::Utils::Logging::ShutdownAWSLogging();
         }
- 
+
         Aws::Client::CoreErrorsMapper::CleanupCoreErrorsMapper();
 
 #ifdef USE_AWS_MEMORY_MANAGEMENT

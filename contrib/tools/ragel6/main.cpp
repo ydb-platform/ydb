@@ -122,20 +122,20 @@ void usage()
 "host language:\n"
 "   -C                   The host language is C, C++, Obj-C or Obj-C++ (default)\n"
 "   -D                   The host language is D\n"
-"   -Z                   The host language is Go\n" 
+"   -Z                   The host language is Go\n"
 "   -J                   The host language is Java\n"
 "   -R                   The host language is Ruby\n"
 "   -A                   The host language is C#\n"
-"   -O                   The host language is OCaml\n" 
-"line directives: (C/D/Ruby/C#/OCaml)\n" 
+"   -O                   The host language is OCaml\n"
+"line directives: (C/D/Ruby/C#/OCaml)\n"
 "   -L                   Inhibit writing of #line directives\n"
-"code style: (C/D/Java/Ruby/C#/OCaml)\n" 
+"code style: (C/D/Java/Ruby/C#/OCaml)\n"
 "   -T0                  Table driven FSM (default)\n"
-"code style: (C/D/Ruby/C#/OCaml)\n" 
+"code style: (C/D/Ruby/C#/OCaml)\n"
 "   -T1                  Faster table driven FSM\n"
 "   -F0                  Flat table driven FSM\n"
 "   -F1                  Faster flat table-driven FSM\n"
-"code style: (C/D/C#/OCaml)\n" 
+"code style: (C/D/C#/OCaml)\n"
 "   -G0                  Goto-driven FSM\n"
 "   -G1                  Faster goto-driven FSM\n"
 "code style: (C/D)\n"
@@ -220,7 +220,7 @@ void escapeLineDirectivePath( std::ostream &out, char *path )
 
 void processArgs( int argc, const char **argv, InputData &id )
 {
-	ParamCheck pc("xo:dnmleabjkS:M:I:CDEJZRAOvHh?-:sT:F:G:P:LpV", argc, argv); 
+	ParamCheck pc("xo:dnmleabjkS:M:I:CDEJZRAOvHh?-:sT:F:G:P:LpV", argc, argv);
 
 	/* FIXME: Need to check code styles VS langauge. */
 
@@ -318,12 +318,12 @@ void processArgs( int argc, const char **argv, InputData &id )
 			case 'D':
 				hostLang = &hostLangD;
 				break;
-			case 'E': 
-				hostLang = &hostLangD2; 
-				break; 
-			case 'Z': 
-				hostLang = &hostLangGo; 
-				break; 
+			case 'E':
+				hostLang = &hostLangD2;
+				break;
+			case 'Z':
+				hostLang = &hostLangGo;
+				break;
 			case 'J':
 				hostLang = &hostLangJava;
 				break;
@@ -333,9 +333,9 @@ void processArgs( int argc, const char **argv, InputData &id )
 			case 'A':
 				hostLang = &hostLangCSharp;
 				break;
-			case 'O': 
-				hostLang = &hostLangOCaml; 
-				break; 
+			case 'O':
+				hostLang = &hostLangOCaml;
+				break;
 
 			/* Version and help. */
 			case 'v':

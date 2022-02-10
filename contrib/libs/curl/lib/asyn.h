@@ -87,25 +87,25 @@ CURLcode Curl_resolver_duphandle(struct Curl_easy *easy, void **to,
  *
  * It is called from inside other functions to cancel currently performing
  * resolver request. Should also free any temporary resources allocated to
- * perform a request.  This never waits for resolver threads to complete. 
- * 
- * It is safe to call this when conn is in any state. 
+ * perform a request.  This never waits for resolver threads to complete.
+ *
+ * It is safe to call this when conn is in any state.
  */
 void Curl_resolver_cancel(struct connectdata *conn);
 
-/* 
- * Curl_resolver_kill(). 
- * 
- * This acts like Curl_resolver_cancel() except it will block until any threads 
- * associated with the resolver are complete.  This never blocks for resolvers 
- * that do not use threads.  This is intended to be the "last chance" function 
- * that cleans up an in-progress resolver completely (before its owner is about 
- * to die). 
- * 
- * It is safe to call this when conn is in any state. 
- */ 
-void Curl_resolver_kill(struct connectdata *conn); 
- 
+/*
+ * Curl_resolver_kill().
+ *
+ * This acts like Curl_resolver_cancel() except it will block until any threads
+ * associated with the resolver are complete.  This never blocks for resolvers
+ * that do not use threads.  This is intended to be the "last chance" function
+ * that cleans up an in-progress resolver completely (before its owner is about
+ * to die).
+ *
+ * It is safe to call this when conn is in any state.
+ */
+void Curl_resolver_kill(struct connectdata *conn);
+
 /* Curl_resolver_getsock()
  *
  * This function is called from the multi_getsock() function.  'sock' is a
@@ -114,7 +114,7 @@ void Curl_resolver_kill(struct connectdata *conn);
  * return bitmask indicating what file descriptors (referring to array indexes
  * in the 'sock' array) to wait for, read/write.
  */
-int Curl_resolver_getsock(struct connectdata *conn, curl_socket_t *sock); 
+int Curl_resolver_getsock(struct connectdata *conn, curl_socket_t *sock);
 
 /*
  * Curl_resolver_is_resolved()
@@ -131,13 +131,13 @@ CURLcode Curl_resolver_is_resolved(struct connectdata *conn,
 /*
  * Curl_resolver_wait_resolv()
  *
- * Waits for a resolve to finish. This function should be avoided since using 
+ * Waits for a resolve to finish. This function should be avoided since using
  * this risk getting the multi interface to "hang".
  *
  * If 'entry' is non-NULL, make it point to the resolved dns entry
  *
- * Returns CURLE_COULDNT_RESOLVE_HOST if the host was not resolved, 
- * CURLE_OPERATION_TIMEDOUT if a time-out occurred, or other errors. 
+ * Returns CURLE_COULDNT_RESOLVE_HOST if the host was not resolved,
+ * CURLE_OPERATION_TIMEDOUT if a time-out occurred, or other errors.
  */
 CURLcode Curl_resolver_wait_resolv(struct connectdata *conn,
                                    struct Curl_dns_entry **dnsentry);
@@ -161,7 +161,7 @@ struct Curl_addrinfo *Curl_resolver_getaddrinfo(struct connectdata *conn,
 #ifndef CURLRES_ASYNCH
 /* convert these functions if an asynch resolver isn't used */
 #define Curl_resolver_cancel(x) Curl_nop_stmt
-#define Curl_resolver_kill(x) Curl_nop_stmt 
+#define Curl_resolver_kill(x) Curl_nop_stmt
 #define Curl_resolver_is_resolved(x,y) CURLE_COULDNT_RESOLVE_HOST
 #define Curl_resolver_wait_resolv(x,y) CURLE_COULDNT_RESOLVE_HOST
 #define Curl_resolver_duphandle(x,y,z) CURLE_OK

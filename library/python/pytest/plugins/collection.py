@@ -69,7 +69,7 @@ class DoctestModule(LoadedModule):
                         parent=self,
                         runner=runner,
                         dtest=test)
-        except Exception: 
+        except Exception:
             import logging
             logging.exception('DoctestModule failed, probably you can add NO_DOCTESTS() macro to ya.make')
             etype, exc, tb = sys.exc_info()

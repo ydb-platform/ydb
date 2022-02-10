@@ -53,24 +53,24 @@
 #define ABSL_STRINGS_ASCII_H_
 
 #include <algorithm>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/config.h" 
+#include "y_absl/base/config.h"
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace ascii_internal {
 
 // Declaration for an array of bitfields holding character information.
-ABSL_DLL extern const unsigned char kPropertyBits[256]; 
+ABSL_DLL extern const unsigned char kPropertyBits[256];
 
 // Declaration for the array of characters to upper-case characters.
-ABSL_DLL extern const char kToUpper[256]; 
+ABSL_DLL extern const char kToUpper[256];
 
 // Declaration for the array of characters to lower-case characters.
-ABSL_DLL extern const char kToLower[256]; 
+ABSL_DLL extern const char kToLower[256];
 
 }  // namespace ascii_internal
 
@@ -236,7 +236,7 @@ inline void StripAsciiWhitespace(TString* str) {
 // Removes leading, trailing, and consecutive internal whitespace.
 void RemoveExtraAsciiWhitespace(TString*);
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_ASCII_H_

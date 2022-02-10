@@ -1,17 +1,17 @@
 /*
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 /*
@@ -20,15 +20,15 @@
  * To make changes to this file, change
  * tools/codegen/core/gen_static_metadata.py, and then re-run it.
  *
- * See metadata.h for an explanation of the interface here, and metadata.cc for 
+ * See metadata.h for an explanation of the interface here, and metadata.cc for
  * an explanation of what's going on.
  */
 
 #ifndef GRPC_CORE_LIB_TRANSPORT_STATIC_METADATA_H
 #define GRPC_CORE_LIB_TRANSPORT_STATIC_METADATA_H
 
-#include <grpc/support/port_platform.h> 
- 
+#include <grpc/support/port_platform.h>
+
 #include <cstdint>
 
 #include "src/core/lib/transport/metadata.h"
@@ -54,80 +54,80 @@ inline const grpc_core::StaticMetadataSlice* grpc_static_slice_table() {
   return grpc_core::g_static_metadata_slice_table;
 }
 
-/* ":path" */ 
+/* ":path" */
 #define GRPC_MDSTR_PATH (grpc_static_slice_table()[0])
-/* ":method" */ 
+/* ":method" */
 #define GRPC_MDSTR_METHOD (grpc_static_slice_table()[1])
-/* ":status" */ 
+/* ":status" */
 #define GRPC_MDSTR_STATUS (grpc_static_slice_table()[2])
-/* ":authority" */ 
+/* ":authority" */
 #define GRPC_MDSTR_AUTHORITY (grpc_static_slice_table()[3])
-/* ":scheme" */ 
+/* ":scheme" */
 #define GRPC_MDSTR_SCHEME (grpc_static_slice_table()[4])
-/* "te" */ 
+/* "te" */
 #define GRPC_MDSTR_TE (grpc_static_slice_table()[5])
-/* "grpc-message" */ 
+/* "grpc-message" */
 #define GRPC_MDSTR_GRPC_MESSAGE (grpc_static_slice_table()[6])
-/* "grpc-status" */ 
+/* "grpc-status" */
 #define GRPC_MDSTR_GRPC_STATUS (grpc_static_slice_table()[7])
-/* "grpc-payload-bin" */ 
+/* "grpc-payload-bin" */
 #define GRPC_MDSTR_GRPC_PAYLOAD_BIN (grpc_static_slice_table()[8])
-/* "grpc-encoding" */ 
+/* "grpc-encoding" */
 #define GRPC_MDSTR_GRPC_ENCODING (grpc_static_slice_table()[9])
-/* "grpc-accept-encoding" */ 
+/* "grpc-accept-encoding" */
 #define GRPC_MDSTR_GRPC_ACCEPT_ENCODING (grpc_static_slice_table()[10])
-/* "grpc-server-stats-bin" */ 
+/* "grpc-server-stats-bin" */
 #define GRPC_MDSTR_GRPC_SERVER_STATS_BIN (grpc_static_slice_table()[11])
-/* "grpc-tags-bin" */ 
+/* "grpc-tags-bin" */
 #define GRPC_MDSTR_GRPC_TAGS_BIN (grpc_static_slice_table()[12])
-/* "grpc-trace-bin" */ 
+/* "grpc-trace-bin" */
 #define GRPC_MDSTR_GRPC_TRACE_BIN (grpc_static_slice_table()[13])
-/* "content-type" */ 
+/* "content-type" */
 #define GRPC_MDSTR_CONTENT_TYPE (grpc_static_slice_table()[14])
-/* "content-encoding" */ 
+/* "content-encoding" */
 #define GRPC_MDSTR_CONTENT_ENCODING (grpc_static_slice_table()[15])
-/* "accept-encoding" */ 
+/* "accept-encoding" */
 #define GRPC_MDSTR_ACCEPT_ENCODING (grpc_static_slice_table()[16])
-/* "grpc-internal-encoding-request" */ 
+/* "grpc-internal-encoding-request" */
 #define GRPC_MDSTR_GRPC_INTERNAL_ENCODING_REQUEST \
   (grpc_static_slice_table()[17])
-/* "grpc-internal-stream-encoding-request" */ 
-#define GRPC_MDSTR_GRPC_INTERNAL_STREAM_ENCODING_REQUEST \ 
+/* "grpc-internal-stream-encoding-request" */
+#define GRPC_MDSTR_GRPC_INTERNAL_STREAM_ENCODING_REQUEST \
   (grpc_static_slice_table()[18])
-/* "user-agent" */ 
+/* "user-agent" */
 #define GRPC_MDSTR_USER_AGENT (grpc_static_slice_table()[19])
-/* "host" */ 
+/* "host" */
 #define GRPC_MDSTR_HOST (grpc_static_slice_table()[20])
-/* "grpc-previous-rpc-attempts" */ 
+/* "grpc-previous-rpc-attempts" */
 #define GRPC_MDSTR_GRPC_PREVIOUS_RPC_ATTEMPTS (grpc_static_slice_table()[21])
-/* "grpc-retry-pushback-ms" */ 
+/* "grpc-retry-pushback-ms" */
 #define GRPC_MDSTR_GRPC_RETRY_PUSHBACK_MS (grpc_static_slice_table()[22])
 /* "x-endpoint-load-metrics-bin" */
 #define GRPC_MDSTR_X_ENDPOINT_LOAD_METRICS_BIN (grpc_static_slice_table()[23])
-/* "grpc-timeout" */ 
+/* "grpc-timeout" */
 #define GRPC_MDSTR_GRPC_TIMEOUT (grpc_static_slice_table()[24])
 /* "1" */
 #define GRPC_MDSTR_1 (grpc_static_slice_table()[25])
 /* "2" */
 #define GRPC_MDSTR_2 (grpc_static_slice_table()[26])
-/* "3" */ 
+/* "3" */
 #define GRPC_MDSTR_3 (grpc_static_slice_table()[27])
-/* "4" */ 
+/* "4" */
 #define GRPC_MDSTR_4 (grpc_static_slice_table()[28])
-/* "" */ 
+/* "" */
 #define GRPC_MDSTR_EMPTY (grpc_static_slice_table()[29])
-/* "grpc.wait_for_ready" */ 
+/* "grpc.wait_for_ready" */
 #define GRPC_MDSTR_GRPC_DOT_WAIT_FOR_READY (grpc_static_slice_table()[30])
-/* "grpc.timeout" */ 
+/* "grpc.timeout" */
 #define GRPC_MDSTR_GRPC_DOT_TIMEOUT (grpc_static_slice_table()[31])
-/* "grpc.max_request_message_bytes" */ 
-#define GRPC_MDSTR_GRPC_DOT_MAX_REQUEST_MESSAGE_BYTES \ 
+/* "grpc.max_request_message_bytes" */
+#define GRPC_MDSTR_GRPC_DOT_MAX_REQUEST_MESSAGE_BYTES \
   (grpc_static_slice_table()[32])
-/* "grpc.max_response_message_bytes" */ 
-#define GRPC_MDSTR_GRPC_DOT_MAX_RESPONSE_MESSAGE_BYTES \ 
+/* "grpc.max_response_message_bytes" */
+#define GRPC_MDSTR_GRPC_DOT_MAX_RESPONSE_MESSAGE_BYTES \
   (grpc_static_slice_table()[33])
-/* "/grpc.lb.v1.LoadBalancer/BalanceLoad" */ 
-#define GRPC_MDSTR_SLASH_GRPC_DOT_LB_DOT_V1_DOT_LOADBALANCER_SLASH_BALANCELOAD \ 
+/* "/grpc.lb.v1.LoadBalancer/BalanceLoad" */
+#define GRPC_MDSTR_SLASH_GRPC_DOT_LB_DOT_V1_DOT_LOADBALANCER_SLASH_BALANCELOAD \
   (grpc_static_slice_table()[34])
 /* "/envoy.service.load_stats.v2.LoadReportingService/StreamLoadStats" */
 #define GRPC_MDSTR_SLASH_ENVOY_DOT_SERVICE_DOT_LOAD_STATS_DOT_V2_DOT_LOADREPORTINGSERVICE_SLASH_STREAMLOADSTATS \
@@ -146,23 +146,23 @@ inline const grpc_core::StaticMetadataSlice* grpc_static_slice_table() {
  */
 #define GRPC_MDSTR_SLASH_ENVOY_DOT_SERVICE_DOT_DISCOVERY_DOT_V3_DOT_AGGREGATEDDISCOVERYSERVICE_SLASH_STREAMAGGREGATEDRESOURCES \
   (grpc_static_slice_table()[39])
-/* "deflate" */ 
+/* "deflate" */
 #define GRPC_MDSTR_DEFLATE (grpc_static_slice_table()[40])
-/* "gzip" */ 
+/* "gzip" */
 #define GRPC_MDSTR_GZIP (grpc_static_slice_table()[41])
-/* "stream/gzip" */ 
+/* "stream/gzip" */
 #define GRPC_MDSTR_STREAM_SLASH_GZIP (grpc_static_slice_table()[42])
 /* "GET" */
 #define GRPC_MDSTR_GET (grpc_static_slice_table()[43])
-/* "POST" */ 
+/* "POST" */
 #define GRPC_MDSTR_POST (grpc_static_slice_table()[44])
 /* "/" */
 #define GRPC_MDSTR_SLASH (grpc_static_slice_table()[45])
 /* "/index.html" */
 #define GRPC_MDSTR_SLASH_INDEX_DOT_HTML (grpc_static_slice_table()[46])
-/* "http" */ 
+/* "http" */
 #define GRPC_MDSTR_HTTP (grpc_static_slice_table()[47])
-/* "https" */ 
+/* "https" */
 #define GRPC_MDSTR_HTTPS (grpc_static_slice_table()[48])
 /* "200" */
 #define GRPC_MDSTR_200 (grpc_static_slice_table()[49])
@@ -180,13 +180,13 @@ inline const grpc_core::StaticMetadataSlice* grpc_static_slice_table() {
 #define GRPC_MDSTR_500 (grpc_static_slice_table()[55])
 /* "accept-charset" */
 #define GRPC_MDSTR_ACCEPT_CHARSET (grpc_static_slice_table()[56])
-/* "gzip, deflate" */ 
+/* "gzip, deflate" */
 #define GRPC_MDSTR_GZIP_COMMA_DEFLATE (grpc_static_slice_table()[57])
 /* "accept-language" */
 #define GRPC_MDSTR_ACCEPT_LANGUAGE (grpc_static_slice_table()[58])
 /* "accept-ranges" */
 #define GRPC_MDSTR_ACCEPT_RANGES (grpc_static_slice_table()[59])
-/* "accept" */ 
+/* "accept" */
 #define GRPC_MDSTR_ACCEPT (grpc_static_slice_table()[60])
 /* "access-control-allow-origin" */
 #define GRPC_MDSTR_ACCESS_CONTROL_ALLOW_ORIGIN (grpc_static_slice_table()[61])
@@ -278,14 +278,14 @@ inline const grpc_core::StaticMetadataSlice* grpc_static_slice_table() {
 #define GRPC_MDSTR_PUT (grpc_static_slice_table()[104])
 /* "lb-cost-bin" */
 #define GRPC_MDSTR_LB_COST_BIN (grpc_static_slice_table()[105])
-/* "identity,deflate" */ 
+/* "identity,deflate" */
 #define GRPC_MDSTR_IDENTITY_COMMA_DEFLATE (grpc_static_slice_table()[106])
-/* "identity,gzip" */ 
+/* "identity,gzip" */
 #define GRPC_MDSTR_IDENTITY_COMMA_GZIP (grpc_static_slice_table()[107])
-/* "deflate,gzip" */ 
+/* "deflate,gzip" */
 #define GRPC_MDSTR_DEFLATE_COMMA_GZIP (grpc_static_slice_table()[108])
-/* "identity,deflate,gzip" */ 
-#define GRPC_MDSTR_IDENTITY_COMMA_DEFLATE_COMMA_GZIP \ 
+/* "identity,deflate,gzip" */
+#define GRPC_MDSTR_IDENTITY_COMMA_DEFLATE_COMMA_GZIP \
   (grpc_static_slice_table()[109])
 
 namespace grpc_core {
@@ -299,14 +299,14 @@ inline grpc_core::StaticSliceRefcount* grpc_static_metadata_refcounts() {
   return grpc_core::g_static_metadata_slice_refcounts;
 }
 
-#define GRPC_IS_STATIC_METADATA_STRING(slice) \ 
-  ((slice).refcount != NULL &&                \ 
+#define GRPC_IS_STATIC_METADATA_STRING(slice) \
+  ((slice).refcount != NULL &&                \
    (slice).refcount->GetType() == grpc_slice_refcount::Type::STATIC)
- 
+
 #define GRPC_STATIC_METADATA_INDEX(static_slice)                              \
   (reinterpret_cast<grpc_core::StaticSliceRefcount*>((static_slice).refcount) \
        ->index)
- 
+
 #define GRPC_STATIC_MDELEM_COUNT 85
 
 namespace grpc_core {
@@ -342,19 +342,19 @@ extern uintptr_t grpc_static_mdelem_user_data[GRPC_STATIC_MDELEM_COUNT];
 #define GRPC_MDELEM_SCHEME_HTTP (grpc_static_mdelem_manifested()[5])
 /* ":scheme": "https" */
 #define GRPC_MDELEM_SCHEME_HTTPS (grpc_static_mdelem_manifested()[6])
-/* ":status": "200" */ 
+/* ":status": "200" */
 #define GRPC_MDELEM_STATUS_200 (grpc_static_mdelem_manifested()[7])
-/* ":status": "204" */ 
+/* ":status": "204" */
 #define GRPC_MDELEM_STATUS_204 (grpc_static_mdelem_manifested()[8])
-/* ":status": "206" */ 
+/* ":status": "206" */
 #define GRPC_MDELEM_STATUS_206 (grpc_static_mdelem_manifested()[9])
-/* ":status": "304" */ 
+/* ":status": "304" */
 #define GRPC_MDELEM_STATUS_304 (grpc_static_mdelem_manifested()[10])
-/* ":status": "400" */ 
+/* ":status": "400" */
 #define GRPC_MDELEM_STATUS_400 (grpc_static_mdelem_manifested()[11])
 /* ":status": "404" */
 #define GRPC_MDELEM_STATUS_404 (grpc_static_mdelem_manifested()[12])
-/* ":status": "500" */ 
+/* ":status": "500" */
 #define GRPC_MDELEM_STATUS_500 (grpc_static_mdelem_manifested()[13])
 /* "accept-charset": "" */
 #define GRPC_MDELEM_ACCEPT_CHARSET_EMPTY (grpc_static_mdelem_manifested()[14])
@@ -365,7 +365,7 @@ extern uintptr_t grpc_static_mdelem_user_data[GRPC_STATIC_MDELEM_COUNT];
 #define GRPC_MDELEM_ACCEPT_LANGUAGE_EMPTY (grpc_static_mdelem_manifested()[16])
 /* "accept-ranges": "" */
 #define GRPC_MDELEM_ACCEPT_RANGES_EMPTY (grpc_static_mdelem_manifested()[17])
-/* "accept": "" */ 
+/* "accept": "" */
 #define GRPC_MDELEM_ACCEPT_EMPTY (grpc_static_mdelem_manifested()[18])
 /* "access-control-allow-origin": "" */
 #define GRPC_MDELEM_ACCESS_CONTROL_ALLOW_ORIGIN_EMPTY \
@@ -379,7 +379,7 @@ extern uintptr_t grpc_static_mdelem_user_data[GRPC_STATIC_MDELEM_COUNT];
 /* "cache-control": "" */
 #define GRPC_MDELEM_CACHE_CONTROL_EMPTY (grpc_static_mdelem_manifested()[23])
 /* "content-disposition": "" */
-#define GRPC_MDELEM_CONTENT_DISPOSITION_EMPTY \ 
+#define GRPC_MDELEM_CONTENT_DISPOSITION_EMPTY \
   (grpc_static_mdelem_manifested()[24])
 /* "content-encoding": "" */
 #define GRPC_MDELEM_CONTENT_ENCODING_EMPTY (grpc_static_mdelem_manifested()[25])
@@ -410,14 +410,14 @@ extern uintptr_t grpc_static_mdelem_user_data[GRPC_STATIC_MDELEM_COUNT];
 /* "if-match": "" */
 #define GRPC_MDELEM_IF_MATCH_EMPTY (grpc_static_mdelem_manifested()[38])
 /* "if-modified-since": "" */
-#define GRPC_MDELEM_IF_MODIFIED_SINCE_EMPTY \ 
+#define GRPC_MDELEM_IF_MODIFIED_SINCE_EMPTY \
   (grpc_static_mdelem_manifested()[39])
 /* "if-none-match": "" */
 #define GRPC_MDELEM_IF_NONE_MATCH_EMPTY (grpc_static_mdelem_manifested()[40])
 /* "if-range": "" */
 #define GRPC_MDELEM_IF_RANGE_EMPTY (grpc_static_mdelem_manifested()[41])
 /* "if-unmodified-since": "" */
-#define GRPC_MDELEM_IF_UNMODIFIED_SINCE_EMPTY \ 
+#define GRPC_MDELEM_IF_UNMODIFIED_SINCE_EMPTY \
   (grpc_static_mdelem_manifested()[42])
 /* "last-modified": "" */
 #define GRPC_MDELEM_LAST_MODIFIED_EMPTY (grpc_static_mdelem_manifested()[43])
@@ -428,10 +428,10 @@ extern uintptr_t grpc_static_mdelem_user_data[GRPC_STATIC_MDELEM_COUNT];
 /* "max-forwards": "" */
 #define GRPC_MDELEM_MAX_FORWARDS_EMPTY (grpc_static_mdelem_manifested()[46])
 /* "proxy-authenticate": "" */
-#define GRPC_MDELEM_PROXY_AUTHENTICATE_EMPTY \ 
+#define GRPC_MDELEM_PROXY_AUTHENTICATE_EMPTY \
   (grpc_static_mdelem_manifested()[47])
 /* "proxy-authorization": "" */
-#define GRPC_MDELEM_PROXY_AUTHORIZATION_EMPTY \ 
+#define GRPC_MDELEM_PROXY_AUTHORIZATION_EMPTY \
   (grpc_static_mdelem_manifested()[48])
 /* "range": "" */
 #define GRPC_MDELEM_RANGE_EMPTY (grpc_static_mdelem_manifested()[49])
@@ -449,7 +449,7 @@ extern uintptr_t grpc_static_mdelem_user_data[GRPC_STATIC_MDELEM_COUNT];
 #define GRPC_MDELEM_STRICT_TRANSPORT_SECURITY_EMPTY \
   (grpc_static_mdelem_manifested()[55])
 /* "transfer-encoding": "" */
-#define GRPC_MDELEM_TRANSFER_ENCODING_EMPTY \ 
+#define GRPC_MDELEM_TRANSFER_ENCODING_EMPTY \
   (grpc_static_mdelem_manifested()[56])
 /* "user-agent": "" */
 #define GRPC_MDELEM_USER_AGENT_EMPTY (grpc_static_mdelem_manifested()[57])
@@ -489,95 +489,95 @@ extern uintptr_t grpc_static_mdelem_user_data[GRPC_STATIC_MDELEM_COUNT];
 #define GRPC_MDELEM_CONTENT_ENCODING_GZIP (grpc_static_mdelem_manifested()[73])
 /* "lb-cost-bin": "" */
 #define GRPC_MDELEM_LB_COST_BIN_EMPTY (grpc_static_mdelem_manifested()[74])
-/* "grpc-accept-encoding": "identity" */ 
-#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_IDENTITY \ 
+/* "grpc-accept-encoding": "identity" */
+#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_IDENTITY \
   (grpc_static_mdelem_manifested()[75])
-/* "grpc-accept-encoding": "deflate" */ 
-#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_DEFLATE \ 
+/* "grpc-accept-encoding": "deflate" */
+#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_DEFLATE \
   (grpc_static_mdelem_manifested()[76])
-/* "grpc-accept-encoding": "identity,deflate" */ 
-#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_IDENTITY_COMMA_DEFLATE \ 
+/* "grpc-accept-encoding": "identity,deflate" */
+#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_IDENTITY_COMMA_DEFLATE \
   (grpc_static_mdelem_manifested()[77])
-/* "grpc-accept-encoding": "gzip" */ 
-#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_GZIP \ 
+/* "grpc-accept-encoding": "gzip" */
+#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_GZIP \
   (grpc_static_mdelem_manifested()[78])
-/* "grpc-accept-encoding": "identity,gzip" */ 
-#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_IDENTITY_COMMA_GZIP \ 
+/* "grpc-accept-encoding": "identity,gzip" */
+#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_IDENTITY_COMMA_GZIP \
   (grpc_static_mdelem_manifested()[79])
-/* "grpc-accept-encoding": "deflate,gzip" */ 
-#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_DEFLATE_COMMA_GZIP \ 
+/* "grpc-accept-encoding": "deflate,gzip" */
+#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_DEFLATE_COMMA_GZIP \
   (grpc_static_mdelem_manifested()[80])
-/* "grpc-accept-encoding": "identity,deflate,gzip" */ 
-#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_IDENTITY_COMMA_DEFLATE_COMMA_GZIP \ 
+/* "grpc-accept-encoding": "identity,deflate,gzip" */
+#define GRPC_MDELEM_GRPC_ACCEPT_ENCODING_IDENTITY_COMMA_DEFLATE_COMMA_GZIP \
   (grpc_static_mdelem_manifested()[81])
-/* "accept-encoding": "identity" */ 
-#define GRPC_MDELEM_ACCEPT_ENCODING_IDENTITY \ 
+/* "accept-encoding": "identity" */
+#define GRPC_MDELEM_ACCEPT_ENCODING_IDENTITY \
   (grpc_static_mdelem_manifested()[82])
-/* "accept-encoding": "gzip" */ 
+/* "accept-encoding": "gzip" */
 #define GRPC_MDELEM_ACCEPT_ENCODING_GZIP (grpc_static_mdelem_manifested()[83])
-/* "accept-encoding": "identity,gzip" */ 
-#define GRPC_MDELEM_ACCEPT_ENCODING_IDENTITY_COMMA_GZIP \ 
+/* "accept-encoding": "identity,gzip" */
+#define GRPC_MDELEM_ACCEPT_ENCODING_IDENTITY_COMMA_GZIP \
   (grpc_static_mdelem_manifested()[84])
 
 grpc_mdelem grpc_static_mdelem_for_static_strings(intptr_t a, intptr_t b);
-typedef enum { 
-  GRPC_BATCH_PATH, 
-  GRPC_BATCH_METHOD, 
-  GRPC_BATCH_STATUS, 
-  GRPC_BATCH_AUTHORITY, 
-  GRPC_BATCH_SCHEME, 
-  GRPC_BATCH_TE, 
-  GRPC_BATCH_GRPC_MESSAGE, 
-  GRPC_BATCH_GRPC_STATUS, 
-  GRPC_BATCH_GRPC_PAYLOAD_BIN, 
-  GRPC_BATCH_GRPC_ENCODING, 
-  GRPC_BATCH_GRPC_ACCEPT_ENCODING, 
-  GRPC_BATCH_GRPC_SERVER_STATS_BIN, 
-  GRPC_BATCH_GRPC_TAGS_BIN, 
-  GRPC_BATCH_GRPC_TRACE_BIN, 
-  GRPC_BATCH_CONTENT_TYPE, 
-  GRPC_BATCH_CONTENT_ENCODING, 
-  GRPC_BATCH_ACCEPT_ENCODING, 
-  GRPC_BATCH_GRPC_INTERNAL_ENCODING_REQUEST, 
-  GRPC_BATCH_GRPC_INTERNAL_STREAM_ENCODING_REQUEST, 
-  GRPC_BATCH_USER_AGENT, 
-  GRPC_BATCH_HOST, 
-  GRPC_BATCH_GRPC_PREVIOUS_RPC_ATTEMPTS, 
-  GRPC_BATCH_GRPC_RETRY_PUSHBACK_MS, 
+typedef enum {
+  GRPC_BATCH_PATH,
+  GRPC_BATCH_METHOD,
+  GRPC_BATCH_STATUS,
+  GRPC_BATCH_AUTHORITY,
+  GRPC_BATCH_SCHEME,
+  GRPC_BATCH_TE,
+  GRPC_BATCH_GRPC_MESSAGE,
+  GRPC_BATCH_GRPC_STATUS,
+  GRPC_BATCH_GRPC_PAYLOAD_BIN,
+  GRPC_BATCH_GRPC_ENCODING,
+  GRPC_BATCH_GRPC_ACCEPT_ENCODING,
+  GRPC_BATCH_GRPC_SERVER_STATS_BIN,
+  GRPC_BATCH_GRPC_TAGS_BIN,
+  GRPC_BATCH_GRPC_TRACE_BIN,
+  GRPC_BATCH_CONTENT_TYPE,
+  GRPC_BATCH_CONTENT_ENCODING,
+  GRPC_BATCH_ACCEPT_ENCODING,
+  GRPC_BATCH_GRPC_INTERNAL_ENCODING_REQUEST,
+  GRPC_BATCH_GRPC_INTERNAL_STREAM_ENCODING_REQUEST,
+  GRPC_BATCH_USER_AGENT,
+  GRPC_BATCH_HOST,
+  GRPC_BATCH_GRPC_PREVIOUS_RPC_ATTEMPTS,
+  GRPC_BATCH_GRPC_RETRY_PUSHBACK_MS,
   GRPC_BATCH_X_ENDPOINT_LOAD_METRICS_BIN,
-  GRPC_BATCH_CALLOUTS_COUNT 
-} grpc_metadata_batch_callouts_index; 
- 
-typedef union { 
-  struct grpc_linked_mdelem* array[GRPC_BATCH_CALLOUTS_COUNT]; 
-  struct { 
-    struct grpc_linked_mdelem* path; 
-    struct grpc_linked_mdelem* method; 
-    struct grpc_linked_mdelem* status; 
-    struct grpc_linked_mdelem* authority; 
-    struct grpc_linked_mdelem* scheme; 
-    struct grpc_linked_mdelem* te; 
-    struct grpc_linked_mdelem* grpc_message; 
-    struct grpc_linked_mdelem* grpc_status; 
-    struct grpc_linked_mdelem* grpc_payload_bin; 
-    struct grpc_linked_mdelem* grpc_encoding; 
-    struct grpc_linked_mdelem* grpc_accept_encoding; 
-    struct grpc_linked_mdelem* grpc_server_stats_bin; 
-    struct grpc_linked_mdelem* grpc_tags_bin; 
-    struct grpc_linked_mdelem* grpc_trace_bin; 
-    struct grpc_linked_mdelem* content_type; 
-    struct grpc_linked_mdelem* content_encoding; 
-    struct grpc_linked_mdelem* accept_encoding; 
-    struct grpc_linked_mdelem* grpc_internal_encoding_request; 
-    struct grpc_linked_mdelem* grpc_internal_stream_encoding_request; 
-    struct grpc_linked_mdelem* user_agent; 
-    struct grpc_linked_mdelem* host; 
-    struct grpc_linked_mdelem* grpc_previous_rpc_attempts; 
-    struct grpc_linked_mdelem* grpc_retry_pushback_ms; 
+  GRPC_BATCH_CALLOUTS_COUNT
+} grpc_metadata_batch_callouts_index;
+
+typedef union {
+  struct grpc_linked_mdelem* array[GRPC_BATCH_CALLOUTS_COUNT];
+  struct {
+    struct grpc_linked_mdelem* path;
+    struct grpc_linked_mdelem* method;
+    struct grpc_linked_mdelem* status;
+    struct grpc_linked_mdelem* authority;
+    struct grpc_linked_mdelem* scheme;
+    struct grpc_linked_mdelem* te;
+    struct grpc_linked_mdelem* grpc_message;
+    struct grpc_linked_mdelem* grpc_status;
+    struct grpc_linked_mdelem* grpc_payload_bin;
+    struct grpc_linked_mdelem* grpc_encoding;
+    struct grpc_linked_mdelem* grpc_accept_encoding;
+    struct grpc_linked_mdelem* grpc_server_stats_bin;
+    struct grpc_linked_mdelem* grpc_tags_bin;
+    struct grpc_linked_mdelem* grpc_trace_bin;
+    struct grpc_linked_mdelem* content_type;
+    struct grpc_linked_mdelem* content_encoding;
+    struct grpc_linked_mdelem* accept_encoding;
+    struct grpc_linked_mdelem* grpc_internal_encoding_request;
+    struct grpc_linked_mdelem* grpc_internal_stream_encoding_request;
+    struct grpc_linked_mdelem* user_agent;
+    struct grpc_linked_mdelem* host;
+    struct grpc_linked_mdelem* grpc_previous_rpc_attempts;
+    struct grpc_linked_mdelem* grpc_retry_pushback_ms;
     struct grpc_linked_mdelem* x_endpoint_load_metrics_bin;
-  } named; 
-} grpc_metadata_batch_callouts; 
- 
+  } named;
+} grpc_metadata_batch_callouts;
+
 #define GRPC_BATCH_INDEX_OF(slice)                                             \
   (GRPC_IS_STATIC_METADATA_STRING((slice)) &&                                  \
            reinterpret_cast<grpc_core::StaticSliceRefcount*>((slice).refcount) \
@@ -586,19 +586,19 @@ typedef union {
              reinterpret_cast<grpc_core::StaticSliceRefcount*>(                \
                  (slice).refcount)                                             \
                  ->index)                                                      \
-       : GRPC_BATCH_CALLOUTS_COUNT) 
- 
+       : GRPC_BATCH_CALLOUTS_COUNT)
+
 extern const uint8_t grpc_static_accept_encoding_metadata[8];
 #define GRPC_MDELEM_ACCEPT_ENCODING_FOR_ALGORITHMS(algs)                \
   (GRPC_MAKE_MDELEM(&grpc_static_mdelem_table()                         \
                          [grpc_static_accept_encoding_metadata[(algs)]] \
                              .data(),                                   \
                     GRPC_MDELEM_STORAGE_STATIC))
- 
-extern const uint8_t grpc_static_accept_stream_encoding_metadata[4]; 
-#define GRPC_MDELEM_ACCEPT_STREAM_ENCODING_FOR_ALGORITHMS(algs)                \ 
+
+extern const uint8_t grpc_static_accept_stream_encoding_metadata[4];
+#define GRPC_MDELEM_ACCEPT_STREAM_ENCODING_FOR_ALGORITHMS(algs)                \
   (GRPC_MAKE_MDELEM(&grpc_static_mdelem_table()                                \
                          [grpc_static_accept_stream_encoding_metadata[(algs)]] \
                              .data(),                                          \
-                    GRPC_MDELEM_STORAGE_STATIC)) 
+                    GRPC_MDELEM_STORAGE_STATIC))
 #endif /* GRPC_CORE_LIB_TRANSPORT_STATIC_METADATA_H */

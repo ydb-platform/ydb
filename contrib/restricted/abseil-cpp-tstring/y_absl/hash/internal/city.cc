@@ -30,7 +30,7 @@
 #include "y_absl/base/optimization.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
 #ifdef ABSL_IS_BIG_ENDIAN
@@ -345,5 +345,5 @@ uint64_t CityHash64WithSeeds(const char *s, size_t len, uint64_t seed0,
 }
 
 }  // namespace hash_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

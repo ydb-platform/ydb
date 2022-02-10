@@ -1,18 +1,18 @@
 /*
  *
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
@@ -166,13 +166,13 @@
 #else /* _LP64 */
 #define GPR_ARCH_32 1
 #endif /* _LP64 */
-#ifdef __GLIBC__ 
-#define GPR_POSIX_CRASH_HANDLER 1 
-#define GPR_LINUX_PTHREAD_NAME 1 
+#ifdef __GLIBC__
+#define GPR_POSIX_CRASH_HANDLER 1
+#define GPR_LINUX_PTHREAD_NAME 1
 #include <linux/version.h>
-#else /* musl libc */ 
-#define GPR_MUSL_LIBC_COMPAT 1 
-#endif 
+#else /* musl libc */
+#define GPR_MUSL_LIBC_COMPAT 1
+#endif
 #elif defined(__ASYLO__)
 #define GPR_ARCH_64 1
 #define GPR_CPU_POSIX 1
@@ -214,25 +214,25 @@
 #define GPR_PTHREAD_TLS 1
 #else /* __MAC_OS_X_VERSION_MIN_REQUIRED < __MAC_10_7 */
 #define GPR_CPU_POSIX 1
-/* TODO(vjpai): there is a reported issue in bazel build for Mac where __thread 
-   in a header is currently not working (bazelbuild/bazel#4341). Remove 
-   the following conditional and use GPR_GCC_TLS when that is fixed */ 
-#ifndef GRPC_BAZEL_BUILD 
+/* TODO(vjpai): there is a reported issue in bazel build for Mac where __thread
+   in a header is currently not working (bazelbuild/bazel#4341). Remove
+   the following conditional and use GPR_GCC_TLS when that is fixed */
+#ifndef GRPC_BAZEL_BUILD
 #define GPR_GCC_TLS 1
-#else /* GRPC_BAZEL_BUILD */ 
-#define GPR_PTHREAD_TLS 1 
-#endif /* GRPC_BAZEL_BUILD */ 
-#define GPR_APPLE_PTHREAD_NAME 1 
+#else /* GRPC_BAZEL_BUILD */
+#define GPR_PTHREAD_TLS 1
+#endif /* GRPC_BAZEL_BUILD */
+#define GPR_APPLE_PTHREAD_NAME 1
 #endif
 #else /* __MAC_OS_X_VERSION_MIN_REQUIRED */
 #define GPR_CPU_POSIX 1
-/* TODO(vjpai): Remove the following conditional and use only GPR_GCC_TLS 
-   when bazelbuild/bazel#4341 is fixed */ 
-#ifndef GRPC_BAZEL_BUILD 
+/* TODO(vjpai): Remove the following conditional and use only GPR_GCC_TLS
+   when bazelbuild/bazel#4341 is fixed */
+#ifndef GRPC_BAZEL_BUILD
 #define GPR_GCC_TLS 1
-#else /* GRPC_BAZEL_BUILD */ 
-#define GPR_PTHREAD_TLS 1 
-#endif /* GRPC_BAZEL_BUILD */ 
+#else /* GRPC_BAZEL_BUILD */
+#define GPR_PTHREAD_TLS 1
+#endif /* GRPC_BAZEL_BUILD */
 #endif
 #define GPR_POSIX_CRASH_HANDLER 1
 #endif
@@ -279,30 +279,30 @@
 #else /* _LP64 */
 #define GPR_ARCH_32 1
 #endif /* _LP64 */
-#elif defined(__OpenBSD__) 
-#define GPR_PLATFORM_STRING "openbsd" 
-#ifndef _BSD_SOURCE 
-#define _BSD_SOURCE 
-#endif 
-#define GPR_OPENBSD 1 
-#define GPR_CPU_POSIX 1 
-#define GPR_GCC_ATOMIC 1 
-#define GPR_GCC_TLS 1 
-#define GPR_POSIX_LOG 1 
-#define GPR_POSIX_ENV 1 
-#define GPR_POSIX_TMPFILE 1 
-#define GPR_POSIX_STRING 1 
-#define GPR_POSIX_SUBPROCESS 1 
-#define GPR_POSIX_SYNC 1 
-#define GPR_POSIX_TIME 1 
+#elif defined(__OpenBSD__)
+#define GPR_PLATFORM_STRING "openbsd"
+#ifndef _BSD_SOURCE
+#define _BSD_SOURCE
+#endif
+#define GPR_OPENBSD 1
+#define GPR_CPU_POSIX 1
+#define GPR_GCC_ATOMIC 1
+#define GPR_GCC_TLS 1
+#define GPR_POSIX_LOG 1
+#define GPR_POSIX_ENV 1
+#define GPR_POSIX_TMPFILE 1
+#define GPR_POSIX_STRING 1
+#define GPR_POSIX_SUBPROCESS 1
+#define GPR_POSIX_SYNC 1
+#define GPR_POSIX_TIME 1
 #define GPR_HAS_PTHREAD_H 1
-#define GPR_GETPID_IN_UNISTD_H 1 
-#define GPR_SUPPORT_CHANNELS_FROM_FD 1 
-#ifdef _LP64 
-#define GPR_ARCH_64 1 
-#else /* _LP64 */ 
-#define GPR_ARCH_32 1 
-#endif /* _LP64 */ 
+#define GPR_GETPID_IN_UNISTD_H 1
+#define GPR_SUPPORT_CHANNELS_FROM_FD 1
+#ifdef _LP64
+#define GPR_ARCH_64 1
+#else /* _LP64 */
+#define GPR_ARCH_32 1
+#endif /* _LP64 */
 #elif defined(__sun) && defined(__SVR4)
 #define GPR_PLATFORM_STRING "solaris"
 #define GPR_SOLARIS 1
@@ -402,7 +402,7 @@
 #endif /* GPR_NO_AUTODETECT_PLATFORM */
 
 #if defined(GPR_BACKWARDS_COMPATIBILITY_MODE)
-/* 
+/*
  * For backward compatibility mode, reset _FORTIFY_SOURCE to prevent
  * a library from having non-standard symbols such as __asprintf_chk.
  * This helps non-glibc systems such as alpine using musl to find symbols.
@@ -414,35 +414,35 @@
 #endif
 
 /*
- *  There are platforms for which TLS should not be used even though the 
- * compiler makes it seem like it's supported (Android NDK < r12b for example). 
- * This is primarily because of linker problems and toolchain misconfiguration: 
- * TLS isn't supported until NDK r12b per 
- * https://developer.android.com/ndk/downloads/revision_history.html 
- * TLS also does not work with Android NDK if GCC is being used as the compiler 
- * instead of Clang. 
- * Since NDK r16, `__NDK_MAJOR__` and `__NDK_MINOR__` are defined in 
- * <android/ndk-version.h>. For NDK < r16, users should define these macros, 
- * e.g. `-D__NDK_MAJOR__=11 -D__NKD_MINOR__=0` for NDK r11. */ 
-#if defined(__ANDROID__) && defined(GPR_GCC_TLS) 
-#if __has_include(<android/ndk-version.h>) 
-#include <android/ndk-version.h> 
-#endif /* __has_include(<android/ndk-version.h>) */ 
-#if (defined(__clang__) && defined(__NDK_MAJOR__) && defined(__NDK_MINOR__) && \ 
-     ((__NDK_MAJOR__ < 12) ||                                                  \ 
-      ((__NDK_MAJOR__ == 12) && (__NDK_MINOR__ < 1)))) ||                      \ 
-    (defined(__GNUC__) && !defined(__clang__)) 
-#undef GPR_GCC_TLS 
-#define GPR_PTHREAD_TLS 1 
-#endif 
-#endif /*defined(__ANDROID__) && defined(GPR_GCC_TLS) */ 
- 
-#if defined(__has_include) 
-#if __has_include(<atomic>) 
-#define GRPC_HAS_CXX11_ATOMIC 
-#endif /* __has_include(<atomic>) */ 
-#endif /* defined(__has_include) */ 
- 
+ *  There are platforms for which TLS should not be used even though the
+ * compiler makes it seem like it's supported (Android NDK < r12b for example).
+ * This is primarily because of linker problems and toolchain misconfiguration:
+ * TLS isn't supported until NDK r12b per
+ * https://developer.android.com/ndk/downloads/revision_history.html
+ * TLS also does not work with Android NDK if GCC is being used as the compiler
+ * instead of Clang.
+ * Since NDK r16, `__NDK_MAJOR__` and `__NDK_MINOR__` are defined in
+ * <android/ndk-version.h>. For NDK < r16, users should define these macros,
+ * e.g. `-D__NDK_MAJOR__=11 -D__NKD_MINOR__=0` for NDK r11. */
+#if defined(__ANDROID__) && defined(GPR_GCC_TLS)
+#if __has_include(<android/ndk-version.h>)
+#include <android/ndk-version.h>
+#endif /* __has_include(<android/ndk-version.h>) */
+#if (defined(__clang__) && defined(__NDK_MAJOR__) && defined(__NDK_MINOR__) && \
+     ((__NDK_MAJOR__ < 12) ||                                                  \
+      ((__NDK_MAJOR__ == 12) && (__NDK_MINOR__ < 1)))) ||                      \
+    (defined(__GNUC__) && !defined(__clang__))
+#undef GPR_GCC_TLS
+#define GPR_PTHREAD_TLS 1
+#endif
+#endif /*defined(__ANDROID__) && defined(GPR_GCC_TLS) */
+
+#if defined(__has_include)
+#if __has_include(<atomic>)
+#define GRPC_HAS_CXX11_ATOMIC
+#endif /* __has_include(<atomic>) */
+#endif /* defined(__has_include) */
+
 #ifndef GPR_PLATFORM_STRING
 #warning "GPR_PLATFORM_STRING not auto-detected"
 #define GPR_PLATFORM_STRING "unknown"
@@ -534,32 +534,32 @@ typedef unsigned __int64 uint64_t;
    power of two */
 #define GPR_MAX_ALIGNMENT 16
 
-#ifndef GRPC_ARES 
-#define GRPC_ARES 1 
-#endif 
+#ifndef GRPC_ARES
+#define GRPC_ARES 1
+#endif
 
 #ifndef GRPC_IF_NAMETOINDEX
 #define GRPC_IF_NAMETOINDEX 1
-#endif 
- 
+#endif
+
 #ifndef GRPC_MUST_USE_RESULT
 #if defined(__GNUC__) && !defined(__MINGW32__)
 #define GRPC_MUST_USE_RESULT __attribute__((warn_unused_result))
-#define GPR_ALIGN_STRUCT(n) __attribute__((aligned(n))) 
+#define GPR_ALIGN_STRUCT(n) __attribute__((aligned(n)))
 #else
 #define GRPC_MUST_USE_RESULT
-#define GPR_ALIGN_STRUCT(n) 
+#define GPR_ALIGN_STRUCT(n)
 #endif
 #endif
 
-#ifndef GRPC_UNUSED 
-#if defined(__GNUC__) && !defined(__MINGW32__) 
-#define GRPC_UNUSED __attribute__((unused)) 
-#else 
-#define GRPC_UNUSED 
-#endif 
-#endif 
- 
+#ifndef GRPC_UNUSED
+#if defined(__GNUC__) && !defined(__MINGW32__)
+#define GRPC_UNUSED __attribute__((unused))
+#else
+#define GRPC_UNUSED
+#endif
+#endif
+
 #ifndef GPR_PRINT_FORMAT_CHECK
 #ifdef __GNUC__
 #define GPR_PRINT_FORMAT_CHECK(FORMAT_STR, ARGS) \
@@ -629,15 +629,15 @@ typedef unsigned __int64 uint64_t;
 #endif
 #endif /* GPR_ATTRIBUTE_WEAK */
 
-#ifndef GPR_ATTRIBUTE_NO_TSAN /* (1) */ 
+#ifndef GPR_ATTRIBUTE_NO_TSAN /* (1) */
 #if GPR_HAS_FEATURE(thread_sanitizer)
-#define GPR_ATTRIBUTE_NO_TSAN __attribute__((no_sanitize("thread"))) 
+#define GPR_ATTRIBUTE_NO_TSAN __attribute__((no_sanitize("thread")))
 #endif                        /* GPR_HAS_FEATURE */
-#ifndef GPR_ATTRIBUTE_NO_TSAN /* (2) */ 
-#define GPR_ATTRIBUTE_NO_TSAN 
-#endif /* GPR_ATTRIBUTE_NO_TSAN (2) */ 
-#endif /* GPR_ATTRIBUTE_NO_TSAN (1) */ 
- 
+#ifndef GPR_ATTRIBUTE_NO_TSAN /* (2) */
+#define GPR_ATTRIBUTE_NO_TSAN
+#endif /* GPR_ATTRIBUTE_NO_TSAN (2) */
+#endif /* GPR_ATTRIBUTE_NO_TSAN (1) */
+
 /* GRPC_TSAN_ENABLED will be defined, when compiled with thread sanitizer. */
 #ifndef GRPC_TSAN_SUPPRESSED
 #if defined(__SANITIZE_THREAD__)
@@ -656,38 +656,38 @@ typedef unsigned __int64 uint64_t;
 #endif
 #endif
 
-/* GRPC_ALLOW_EXCEPTIONS should be 0 or 1 if exceptions are allowed or not */ 
-#ifndef GRPC_ALLOW_EXCEPTIONS 
-#ifdef GPR_WINDOWS 
+/* GRPC_ALLOW_EXCEPTIONS should be 0 or 1 if exceptions are allowed or not */
+#ifndef GRPC_ALLOW_EXCEPTIONS
+#ifdef GPR_WINDOWS
 #if defined(_MSC_VER) && defined(_CPPUNWIND)
-#define GRPC_ALLOW_EXCEPTIONS 1 
+#define GRPC_ALLOW_EXCEPTIONS 1
 #elif defined(__EXCEPTIONS)
 #define GRPC_ALLOW_EXCEPTIONS 1
 #else
 #define GRPC_ALLOW_EXCEPTIONS 0
 #endif
-#else /* GPR_WINDOWS */ 
-#ifdef __EXCEPTIONS 
-#define GRPC_ALLOW_EXCEPTIONS 1 
-#else /* __EXCEPTIONS */ 
-#define GRPC_ALLOW_EXCEPTIONS 0 
-#endif /* __EXCEPTIONS */ 
-#endif /* __GPR_WINDOWS */ 
-#endif /* GRPC_ALLOW_EXCEPTIONS */ 
- 
-/* Use GPR_LIKELY only in cases where you are sure that a certain outcome is the 
- * most likely. Ideally, also collect performance numbers to justify the claim. 
- */ 
-#ifdef __GNUC__ 
-#define GPR_LIKELY(x) __builtin_expect((x), 1) 
-#define GPR_UNLIKELY(x) __builtin_expect((x), 0) 
-#else /* __GNUC__ */ 
-#define GPR_LIKELY(x) (x) 
-#define GPR_UNLIKELY(x) (x) 
-#endif /* __GNUC__ */ 
- 
-#ifndef __STDC_FORMAT_MACROS 
-#define __STDC_FORMAT_MACROS 
-#endif 
- 
+#else /* GPR_WINDOWS */
+#ifdef __EXCEPTIONS
+#define GRPC_ALLOW_EXCEPTIONS 1
+#else /* __EXCEPTIONS */
+#define GRPC_ALLOW_EXCEPTIONS 0
+#endif /* __EXCEPTIONS */
+#endif /* __GPR_WINDOWS */
+#endif /* GRPC_ALLOW_EXCEPTIONS */
+
+/* Use GPR_LIKELY only in cases where you are sure that a certain outcome is the
+ * most likely. Ideally, also collect performance numbers to justify the claim.
+ */
+#ifdef __GNUC__
+#define GPR_LIKELY(x) __builtin_expect((x), 1)
+#define GPR_UNLIKELY(x) __builtin_expect((x), 0)
+#else /* __GNUC__ */
+#define GPR_LIKELY(x) (x)
+#define GPR_UNLIKELY(x) (x)
+#endif /* __GNUC__ */
+
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
+
 #endif /* GRPC_IMPL_CODEGEN_PORT_PLATFORM_H */

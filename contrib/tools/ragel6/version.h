@@ -1,2 +1,2 @@
-#define VERSION "6.10" 
-#define PUBDATE "March 2017" 
+#define VERSION "6.10"
+#define PUBDATE "March 2017"

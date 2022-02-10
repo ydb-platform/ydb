@@ -5,17 +5,17 @@ OWNER(borman orivej g:python-contrib)
 VERSION(59.7.0)
 
 LICENSE(MIT)
- 
-PEERDIR( 
-    library/python/resource 
-) 
- 
+
+PEERDIR(
+    library/python/resource
+)
+
 NO_LINT()
 
-NO_CHECK_IMPORTS( 
-    setuptools.* 
-) 
- 
+NO_CHECK_IMPORTS(
+    setuptools.*
+)
+
 PY_SRCS(
     TOP_LEVEL
     _distutils_hack/__init__.py
@@ -116,7 +116,7 @@ PY_SRCS(
     setuptools/command/alias.py
     setuptools/command/bdist_egg.py
     setuptools/command/bdist_rpm.py
-    setuptools/command/build_clib.py 
+    setuptools/command/build_clib.py
     setuptools/command/build_ext.py
     setuptools/command/build_py.py
     setuptools/command/develop.py
@@ -127,28 +127,28 @@ PY_SRCS(
     setuptools/command/install_egg_info.py
     setuptools/command/install_lib.py
     setuptools/command/install_scripts.py
-    setuptools/command/py36compat.py 
+    setuptools/command/py36compat.py
     setuptools/command/register.py
     setuptools/command/rotate.py
     setuptools/command/saveopts.py
     setuptools/command/sdist.py
     setuptools/command/setopt.py
     setuptools/command/test.py
-    setuptools/command/upload.py 
+    setuptools/command/upload.py
     setuptools/command/upload_docs.py
-    setuptools/config.py 
-    setuptools/dep_util.py 
+    setuptools/config.py
+    setuptools/dep_util.py
     setuptools/depends.py
     setuptools/dist.py
     setuptools/errors.py
     setuptools/extension.py
     setuptools/extern/__init__.py
-    setuptools/glob.py 
+    setuptools/glob.py
     setuptools/installer.py
     setuptools/launch.py
-    setuptools/monkey.py 
-    setuptools/msvc.py 
-    setuptools/namespaces.py 
+    setuptools/monkey.py
+    setuptools/msvc.py
+    setuptools/namespaces.py
     setuptools/package_index.py
     setuptools/py34compat.py
     setuptools/sandbox.py

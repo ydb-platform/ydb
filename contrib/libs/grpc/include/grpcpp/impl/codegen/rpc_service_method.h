@@ -1,44 +1,44 @@
-/* 
- * 
- * Copyright 2016 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#ifndef GRPCPP_IMPL_CODEGEN_RPC_SERVICE_METHOD_H 
-#define GRPCPP_IMPL_CODEGEN_RPC_SERVICE_METHOD_H 
- 
-#include <climits> 
-#include <functional> 
-#include <map> 
-#include <memory> 
-#include <vector> 
- 
+/*
+ *
+ * Copyright 2016 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#ifndef GRPCPP_IMPL_CODEGEN_RPC_SERVICE_METHOD_H
+#define GRPCPP_IMPL_CODEGEN_RPC_SERVICE_METHOD_H
+
+#include <climits>
+#include <functional>
+#include <map>
+#include <memory>
+#include <vector>
+
 #include <grpc/impl/codegen/log.h>
-#include <grpcpp/impl/codegen/byte_buffer.h> 
-#include <grpcpp/impl/codegen/config.h> 
-#include <grpcpp/impl/codegen/rpc_method.h> 
-#include <grpcpp/impl/codegen/status.h> 
- 
+#include <grpcpp/impl/codegen/byte_buffer.h>
+#include <grpcpp/impl/codegen/config.h>
+#include <grpcpp/impl/codegen/rpc_method.h>
+#include <grpcpp/impl/codegen/status.h>
+
 namespace grpc {
 class ServerContextBase;
-namespace internal { 
-/// Base class for running an RPC handler. 
-class MethodHandler { 
- public: 
-  virtual ~MethodHandler() {} 
-  struct HandlerParameter { 
+namespace internal {
+/// Base class for running an RPC handler.
+class MethodHandler {
+ public:
+  virtual ~MethodHandler() {}
+  struct HandlerParameter {
     /// Constructor for HandlerParameter
     ///
     /// \param c : the gRPC Call structure for this server call
@@ -65,8 +65,8 @@ class MethodHandler {
     const Status status;
     void* const internal_data;
     const std::function<void()> call_requester;
-  }; 
-  virtual void RunHandler(const HandlerParameter& param) = 0; 
+  };
+  virtual void RunHandler(const HandlerParameter& param) = 0;
 
   /* Returns a pointer to the deserialized request. \a status reflects the
      result of deserialization. This pointer and the status should be filled in
@@ -78,19 +78,19 @@ class MethodHandler {
     GPR_CODEGEN_ASSERT(req == nullptr);
     return nullptr;
   }
-}; 
- 
-/// Server side rpc method class 
-class RpcServiceMethod : public RpcMethod { 
- public: 
-  /// Takes ownership of the handler 
-  RpcServiceMethod(const char* name, RpcMethod::RpcType type, 
-                   MethodHandler* handler) 
+};
+
+/// Server side rpc method class
+class RpcServiceMethod : public RpcMethod {
+ public:
+  /// Takes ownership of the handler
+  RpcServiceMethod(const char* name, RpcMethod::RpcType type,
+                   MethodHandler* handler)
       : RpcMethod(name, type),
         server_tag_(nullptr),
         api_type_(ApiType::SYNC),
         handler_(handler) {}
- 
+
   enum class ApiType {
     SYNC,
     ASYNC,
@@ -99,12 +99,12 @@ class RpcServiceMethod : public RpcMethod {
     RAW_CALL_BACK,
   };
 
-  void set_server_tag(void* tag) { server_tag_ = tag; } 
-  void* server_tag() const { return server_tag_; } 
-  /// if MethodHandler is nullptr, then this is an async method 
-  MethodHandler* handler() const { return handler_.get(); } 
+  void set_server_tag(void* tag) { server_tag_ = tag; }
+  void* server_tag() const { return server_tag_; }
+  /// if MethodHandler is nullptr, then this is an async method
+  MethodHandler* handler() const { return handler_.get(); }
   ApiType api_type() const { return api_type_; }
-  void SetHandler(MethodHandler* handler) { handler_.reset(handler); } 
+  void SetHandler(MethodHandler* handler) { handler_.reset(handler); }
   void SetServerApiType(RpcServiceMethod::ApiType type) {
     if ((api_type_ == ApiType::SYNC) &&
         (type == ApiType::ASYNC || type == ApiType::RAW)) {
@@ -123,11 +123,11 @@ class RpcServiceMethod : public RpcMethod {
     }
     api_type_ = type;
   }
- 
- private: 
-  void* server_tag_; 
+
+ private:
+  void* server_tag_;
   ApiType api_type_;
-  std::unique_ptr<MethodHandler> handler_; 
+  std::unique_ptr<MethodHandler> handler_;
 
   const char* TypeToString(RpcServiceMethod::ApiType type) {
     switch (type) {
@@ -145,9 +145,9 @@ class RpcServiceMethod : public RpcMethod {
         GPR_UNREACHABLE_CODE(return "unknown");
     }
   }
-}; 
-}  // namespace internal 
- 
-}  // namespace grpc 
- 
-#endif  // GRPCPP_IMPL_CODEGEN_RPC_SERVICE_METHOD_H 
+};
+}  // namespace internal
+
+}  // namespace grpc
+
+#endif  // GRPCPP_IMPL_CODEGEN_RPC_SERVICE_METHOD_H

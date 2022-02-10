@@ -97,9 +97,9 @@ namespace {
            << Pad<2>(theTm.tm_hour) << ':' << Pad<2>(theTm.tm_min) << ':' << Pad<2>(theTm.tm_sec);
     }
 
-    template <bool PrintUpToSeconds, bool iso> 
-    void WritePrintableLocalTimeToStream(IOutputStream& os, const ::NPrivate::TPrintableLocalTime<PrintUpToSeconds, iso>& timeToPrint) { 
-        const TInstant& momentToPrint = timeToPrint.MomentToPrint; 
+    template <bool PrintUpToSeconds, bool iso>
+    void WritePrintableLocalTimeToStream(IOutputStream& os, const ::NPrivate::TPrintableLocalTime<PrintUpToSeconds, iso>& timeToPrint) {
+        const TInstant& momentToPrint = timeToPrint.MomentToPrint;
         struct tm localTime;
         momentToPrint.LocalTime(&localTime);
         WriteTmToStream(os, localTime);
@@ -124,11 +124,11 @@ namespace {
             } else {
                 os << '+';
             }
-            os << Pad<2>(utcOffsetInMinutes / 60); 
-            if (iso) { 
-                os << ':'; 
-            } 
-            os << Pad<2>(utcOffsetInMinutes % 60); 
+            os << Pad<2>(utcOffsetInMinutes / 60);
+            if (iso) {
+                os << ':';
+            }
+            os << Pad<2>(utcOffsetInMinutes % 60);
         }
     }
 }
@@ -163,16 +163,16 @@ void Out<::NPrivate::TPrintableLocalTime<false, true>>(IOutputStream& os, TTypeT
     WritePrintableLocalTimeToStream(os, localTime);
 }
 
-template <> 
+template <>
 void Out<::NPrivate::TPrintableLocalTime<true, false>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<true, false>>::TFuncParam localTime) {
-    WritePrintableLocalTimeToStream(os, localTime); 
-} 
- 
-template <> 
+    WritePrintableLocalTimeToStream(os, localTime);
+}
+
+template <>
 void Out<::NPrivate::TPrintableLocalTime<true, true>>(IOutputStream& os, TTypeTraits<::NPrivate::TPrintableLocalTime<true, true>>::TFuncParam localTime) {
-    WritePrintableLocalTimeToStream(os, localTime); 
-} 
- 
+    WritePrintableLocalTimeToStream(os, localTime);
+}
+
 TString TDuration::ToString() const {
     return ::ToString(*this);
 }
@@ -194,10 +194,10 @@ TString TInstant::ToStringUpToSeconds() const {
     return TString(buf, len);
 }
 
-TString TInstant::ToIsoStringLocal() const { 
-    return ::ToString(FormatIsoLocal(*this)); 
-} 
- 
+TString TInstant::ToIsoStringLocal() const {
+    return ::ToString(FormatIsoLocal(*this));
+}
+
 TString TInstant::ToStringLocal() const {
     return ::ToString(FormatLocal(*this));
 }
@@ -206,10 +206,10 @@ TString TInstant::ToRfc822StringLocal() const {
     return FormatLocalTime("%a, %d %b %Y %H:%M:%S %Z");
 }
 
-TString TInstant::ToIsoStringLocalUpToSeconds() const { 
-    return ::ToString(FormatIsoLocalUpToSeconds(*this)); 
-} 
- 
+TString TInstant::ToIsoStringLocalUpToSeconds() const {
+    return ::ToString(FormatIsoLocalUpToSeconds(*this));
+}
+
 TString TInstant::ToStringLocalUpToSeconds() const {
     return ::ToString(FormatLocalUpToSeconds(*this));
 }
@@ -226,22 +226,22 @@ TString TInstant::FormatGmTime(const char* format) const noexcept {
     return Strftime(format, &theTm);
 }
 
-::NPrivate::TPrintableLocalTime<false, true> FormatIsoLocal(TInstant instant) { 
-    return ::NPrivate::TPrintableLocalTime<false, true>(instant); 
+::NPrivate::TPrintableLocalTime<false, true> FormatIsoLocal(TInstant instant) {
+    return ::NPrivate::TPrintableLocalTime<false, true>(instant);
 }
 
-::NPrivate::TPrintableLocalTime<false, false> FormatLocal(TInstant instant) { 
-    return ::NPrivate::TPrintableLocalTime<false, false>(instant); 
+::NPrivate::TPrintableLocalTime<false, false> FormatLocal(TInstant instant) {
+    return ::NPrivate::TPrintableLocalTime<false, false>(instant);
 }
 
-::NPrivate::TPrintableLocalTime<true, true> FormatIsoLocalUpToSeconds(TInstant instant) { 
-    return ::NPrivate::TPrintableLocalTime<true, true>(instant); 
-} 
- 
-::NPrivate::TPrintableLocalTime<true, false> FormatLocalUpToSeconds(TInstant instant) { 
-    return ::NPrivate::TPrintableLocalTime<true, false>(instant); 
-} 
- 
+::NPrivate::TPrintableLocalTime<true, true> FormatIsoLocalUpToSeconds(TInstant instant) {
+    return ::NPrivate::TPrintableLocalTime<true, true>(instant);
+}
+
+::NPrivate::TPrintableLocalTime<true, false> FormatLocalUpToSeconds(TInstant instant) {
+    return ::NPrivate::TPrintableLocalTime<true, false>(instant);
+}
+
 void Sleep(TDuration duration) {
     NanoSleep(duration.NanoSeconds());
 }

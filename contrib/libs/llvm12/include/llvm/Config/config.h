@@ -1,6 +1,6 @@
-#pragma once 
- 
-#if defined(__ANDROID__) 
+#pragma once
+
+#if defined(__ANDROID__)
 #   include "config-android.h"
 #elif defined(__APPLE__)
 #   include "config-osx.h"
@@ -8,8 +8,8 @@
 #   include "config-win.h"
 #else
 #   include "config-linux.h"
-#endif 
- 
-#if defined(_musl_) 
+#endif
+
+#if defined(_musl_)
 #   include "config-musl.h"
-#endif 
+#endif

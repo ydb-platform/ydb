@@ -32,11 +32,11 @@
 #include "progress.h"
 #include "gopher.h"
 #include "select.h"
-#include "strdup.h" 
+#include "strdup.h"
 #include "url.h"
 #include "escape.h"
 #include "warnless.h"
-#include "curl_printf.h" 
+#include "curl_printf.h"
 #include "curl_memory.h"
 /* The last #include file should be: */
 #include "memdebug.h"
@@ -80,9 +80,9 @@ static CURLcode gopher_do(struct connectdata *conn, bool *done)
   CURLcode result = CURLE_OK;
   struct Curl_easy *data = conn->data;
   curl_socket_t sockfd = conn->sock[FIRSTSOCKET];
-  char *gopherpath; 
+  char *gopherpath;
   char *path = data->state.up.path;
-  char *query = data->state.up.query; 
+  char *query = data->state.up.query;
   char *sel = NULL;
   char *sel_org = NULL;
   timediff_t timeout_ms;
@@ -92,33 +92,33 @@ static CURLcode gopher_do(struct connectdata *conn, bool *done)
 
   *done = TRUE; /* unconditionally */
 
-  /* path is guaranteed non-NULL */ 
-  DEBUGASSERT(path); 
- 
-  if(query) 
-    gopherpath = aprintf("%s?%s", path, query); 
-  else 
-    gopherpath = strdup(path); 
- 
-  if(!gopherpath) 
-    return CURLE_OUT_OF_MEMORY; 
- 
+  /* path is guaranteed non-NULL */
+  DEBUGASSERT(path);
+
+  if(query)
+    gopherpath = aprintf("%s?%s", path, query);
+  else
+    gopherpath = strdup(path);
+
+  if(!gopherpath)
+    return CURLE_OUT_OF_MEMORY;
+
   /* Create selector. Degenerate cases: / and /1 => convert to "" */
-  if(strlen(gopherpath) <= 2) { 
+  if(strlen(gopherpath) <= 2) {
     sel = (char *)"";
     len = strlen(sel);
-    free(gopherpath); 
+    free(gopherpath);
   }
   else {
     char *newp;
 
     /* Otherwise, drop / and the first character (i.e., item type) ... */
-    newp = gopherpath; 
+    newp = gopherpath;
     newp += 2;
 
     /* ... and finally unescape */
     result = Curl_urldecode(data, newp, 0, &sel, &len, REJECT_ZERO);
-    free(gopherpath); 
+    free(gopherpath);
     if(result)
       return result;
     sel_org = sel;
@@ -178,7 +178,7 @@ static CURLcode gopher_do(struct connectdata *conn, bool *done)
   if(result)
     return result;
 
-  Curl_setup_transfer(data, FIRSTSOCKET, -1, FALSE, -1); 
+  Curl_setup_transfer(data, FIRSTSOCKET, -1, FALSE, -1);
   return CURLE_OK;
 }
 #endif /*CURL_DISABLE_GOPHER*/

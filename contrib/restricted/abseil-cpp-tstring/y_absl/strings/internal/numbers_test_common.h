@@ -21,12 +21,12 @@
 #include <array>
 #include <cstdint>
 #include <limits>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
-#include "y_absl/base/config.h" 
- 
+#include "y_absl/base/config.h"
+
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 template <typename IntType>
@@ -178,7 +178,7 @@ inline const std::array<uint64_test_case, 34>& strtouint64_test_cases() {
 }
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_NUMBERS_TEST_COMMON_H_

@@ -1,11 +1,11 @@
 cdef extern from "<deque>" namespace "std" nogil:
-    cdef cppclass deque[T,ALLOCATOR=*]: 
+    cdef cppclass deque[T,ALLOCATOR=*]:
         ctypedef T value_type
         ctypedef ALLOCATOR allocator_type
 
         # these should really be allocator_type.size_type and
         # allocator_type.difference_type to be true to the C++ definition
-        # but cython doesn't support deferred access on template arguments 
+        # but cython doesn't support deferred access on template arguments
         ctypedef size_t size_type
         ctypedef ptrdiff_t difference_type
 
@@ -35,8 +35,8 @@ cdef extern from "<deque>" namespace "std" nogil:
             bint operator>(reverse_iterator)
             bint operator<=(reverse_iterator)
             bint operator>=(reverse_iterator)
-        cppclass const_iterator(iterator): 
-            pass 
+        cppclass const_iterator(iterator):
+            pass
         cppclass const_reverse_iterator(reverse_iterator):
             pass
         deque() except +
@@ -57,11 +57,11 @@ cdef extern from "<deque>" namespace "std" nogil:
         T& at(size_t)
         T& back()
         iterator begin()
-        const_iterator const_begin "begin"() 
+        const_iterator const_begin "begin"()
         void clear()
         bint empty()
         iterator end()
-        const_iterator const_end "end"() 
+        const_iterator const_end "end"()
         iterator erase(iterator)
         iterator erase(iterator, iterator)
         T& front()
@@ -81,6 +81,6 @@ cdef extern from "<deque>" namespace "std" nogil:
         void resize(size_t, T&)
         size_t size()
         void swap(deque&)
- 
-        # C++11 methods 
-        void shrink_to_fit() 
+
+        # C++11 methods
+        void shrink_to_fit()

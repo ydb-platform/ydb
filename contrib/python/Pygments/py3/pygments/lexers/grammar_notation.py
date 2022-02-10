@@ -8,15 +8,15 @@
     :license: BSD, see LICENSE for details.
 """
 
-import re 
+import re
 
-from pygments.lexer import RegexLexer, bygroups, include, this, using, words 
-from pygments.token import Comment, Keyword, Literal, Name, Number, \ 
+from pygments.lexer import RegexLexer, bygroups, include, this, using, words
+from pygments.token import Comment, Keyword, Literal, Name, Number, \
     Operator, Punctuation, String, Text, Whitespace
 
 __all__ = ['BnfLexer', 'AbnfLexer', 'JsgfLexer', 'PegLexer']
 
- 
+
 class BnfLexer(RegexLexer):
     """
     This lexer is for grammar notations which are similar to
@@ -130,86 +130,86 @@ class AbnfLexer(RegexLexer):
             (r'.', Text),
         ],
     }
- 
- 
-class JsgfLexer(RegexLexer): 
-    """ 
-    For `JSpeech Grammar Format <https://www.w3.org/TR/jsgf/>`_ 
-    grammars. 
- 
-    .. versionadded:: 2.2 
-    """ 
-    name = 'JSGF' 
-    aliases = ['jsgf'] 
-    filenames = ['*.jsgf'] 
-    mimetypes = ['application/jsgf', 'application/x-jsgf', 'text/jsgf'] 
- 
-    flags = re.MULTILINE | re.UNICODE 
- 
-    tokens = { 
-        'root': [ 
-            include('comments'), 
-            include('non-comments'), 
-        ], 
-        'comments': [ 
-            (r'/\*\*(?!/)', Comment.Multiline, 'documentation comment'), 
-            (r'/\*[\w\W]*?\*/', Comment.Multiline), 
+
+
+class JsgfLexer(RegexLexer):
+    """
+    For `JSpeech Grammar Format <https://www.w3.org/TR/jsgf/>`_
+    grammars.
+
+    .. versionadded:: 2.2
+    """
+    name = 'JSGF'
+    aliases = ['jsgf']
+    filenames = ['*.jsgf']
+    mimetypes = ['application/jsgf', 'application/x-jsgf', 'text/jsgf']
+
+    flags = re.MULTILINE | re.UNICODE
+
+    tokens = {
+        'root': [
+            include('comments'),
+            include('non-comments'),
+        ],
+        'comments': [
+            (r'/\*\*(?!/)', Comment.Multiline, 'documentation comment'),
+            (r'/\*[\w\W]*?\*/', Comment.Multiline),
             (r'//.*$', Comment.Single),
-        ], 
-        'non-comments': [ 
-            (r'\A#JSGF[^;]*', Comment.Preproc), 
+        ],
+        'non-comments': [
+            (r'\A#JSGF[^;]*', Comment.Preproc),
             (r'\s+', Whitespace),
-            (r';', Punctuation), 
-            (r'[=|()\[\]*+]', Operator), 
-            (r'/[^/]+/', Number.Float), 
-            (r'"', String.Double, 'string'), 
-            (r'\{', String.Other, 'tag'), 
-            (words(('import', 'public'), suffix=r'\b'), Keyword.Reserved), 
-            (r'grammar\b', Keyword.Reserved, 'grammar name'), 
-            (r'(<)(NULL|VOID)(>)', 
-             bygroups(Punctuation, Name.Builtin, Punctuation)), 
-            (r'<', Punctuation, 'rulename'), 
-            (r'\w+|[^\s;=|()\[\]*+/"{<\w]+', Text), 
-        ], 
-        'string': [ 
-            (r'"', String.Double, '#pop'), 
-            (r'\\.', String.Escape), 
-            (r'[^\\"]+', String.Double), 
-        ], 
-        'tag': [ 
-            (r'\}', String.Other, '#pop'), 
-            (r'\\.', String.Escape), 
-            (r'[^\\}]+', String.Other), 
-        ], 
-        'grammar name': [ 
-            (r';', Punctuation, '#pop'), 
+            (r';', Punctuation),
+            (r'[=|()\[\]*+]', Operator),
+            (r'/[^/]+/', Number.Float),
+            (r'"', String.Double, 'string'),
+            (r'\{', String.Other, 'tag'),
+            (words(('import', 'public'), suffix=r'\b'), Keyword.Reserved),
+            (r'grammar\b', Keyword.Reserved, 'grammar name'),
+            (r'(<)(NULL|VOID)(>)',
+             bygroups(Punctuation, Name.Builtin, Punctuation)),
+            (r'<', Punctuation, 'rulename'),
+            (r'\w+|[^\s;=|()\[\]*+/"{<\w]+', Text),
+        ],
+        'string': [
+            (r'"', String.Double, '#pop'),
+            (r'\\.', String.Escape),
+            (r'[^\\"]+', String.Double),
+        ],
+        'tag': [
+            (r'\}', String.Other, '#pop'),
+            (r'\\.', String.Escape),
+            (r'[^\\}]+', String.Other),
+        ],
+        'grammar name': [
+            (r';', Punctuation, '#pop'),
             (r'\s+', Whitespace),
-            (r'\.', Punctuation), 
-            (r'[^;\s.]+', Name.Namespace), 
-        ], 
-        'rulename': [ 
-            (r'>', Punctuation, '#pop'), 
-            (r'\*', Punctuation), 
+            (r'\.', Punctuation),
+            (r'[^;\s.]+', Name.Namespace),
+        ],
+        'rulename': [
+            (r'>', Punctuation, '#pop'),
+            (r'\*', Punctuation),
             (r'\s+', Whitespace),
-            (r'([^.>]+)(\s*)(\.)', bygroups(Name.Namespace, Text, Punctuation)), 
-            (r'[^.>]+', Name.Constant), 
-        ], 
-        'documentation comment': [ 
-            (r'\*/', Comment.Multiline, '#pop'), 
+            (r'([^.>]+)(\s*)(\.)', bygroups(Name.Namespace, Text, Punctuation)),
+            (r'[^.>]+', Name.Constant),
+        ],
+        'documentation comment': [
+            (r'\*/', Comment.Multiline, '#pop'),
             (r'^(\s*)(\*?)(\s*)(@(?:example|see))(\s+)'
-             r'([\w\W]*?(?=(?:^\s*\*?\s*@|\*/)))', 
+             r'([\w\W]*?(?=(?:^\s*\*?\s*@|\*/)))',
              bygroups(Whitespace,Comment.Multiline, Whitespace, Comment.Special,
                       Whitespace, using(this, state='example'))),
-            (r'(^\s*\*?\s*)(@\S*)', 
-             bygroups(Comment.Multiline, Comment.Special)), 
-            (r'[^*\n@]+|\w|\W', Comment.Multiline), 
-        ], 
-        'example': [ 
+            (r'(^\s*\*?\s*)(@\S*)',
+             bygroups(Comment.Multiline, Comment.Special)),
+            (r'[^*\n@]+|\w|\W', Comment.Multiline),
+        ],
+        'example': [
             (r'(\n\s*)(\*)', bygroups(Whitespace, Comment.Multiline)),
-            include('non-comments'), 
-            (r'.', Comment.Multiline), 
-        ], 
-    } 
+            include('non-comments'),
+            (r'.', Comment.Multiline),
+        ],
+    }
 
 
 class PegLexer(RegexLexer):

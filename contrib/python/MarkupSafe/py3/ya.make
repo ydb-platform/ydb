@@ -5,7 +5,7 @@ PY3_LIBRARY()
 OWNER(g:python-contrib)
 
 VERSION(2.0.1)
- 
+
 LICENSE(BSD-3-Clause)
 
 NO_COMPILER_WARNINGS()

@@ -1,53 +1,53 @@
-/* 
- * 
- * Copyright 2015 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#include <grpc/support/port_platform.h> 
- 
-#include "src/core/ext/transport/chttp2/client/chttp2_connector.h" 
- 
-#include <grpc/grpc.h> 
- 
-#include <string.h> 
- 
-#include <grpc/slice_buffer.h> 
-#include <grpc/support/alloc.h> 
-#include <grpc/support/string_util.h> 
- 
-#include "src/core/ext/filters/client_channel/connector.h" 
-#include "src/core/ext/filters/client_channel/http_connect_handshaker.h" 
-#include "src/core/ext/filters/client_channel/subchannel.h" 
-#include "src/core/ext/transport/chttp2/transport/chttp2_transport.h" 
-#include "src/core/lib/channel/channel_args.h" 
-#include "src/core/lib/channel/handshaker.h" 
-#include "src/core/lib/channel/handshaker_registry.h" 
-#include "src/core/lib/iomgr/tcp_client.h" 
-#include "src/core/lib/slice/slice_internal.h" 
- 
+/*
+ *
+ * Copyright 2015 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#include <grpc/support/port_platform.h>
+
+#include "src/core/ext/transport/chttp2/client/chttp2_connector.h"
+
+#include <grpc/grpc.h>
+
+#include <string.h>
+
+#include <grpc/slice_buffer.h>
+#include <grpc/support/alloc.h>
+#include <grpc/support/string_util.h>
+
+#include "src/core/ext/filters/client_channel/connector.h"
+#include "src/core/ext/filters/client_channel/http_connect_handshaker.h"
+#include "src/core/ext/filters/client_channel/subchannel.h"
+#include "src/core/ext/transport/chttp2/transport/chttp2_transport.h"
+#include "src/core/lib/channel/channel_args.h"
+#include "src/core/lib/channel/handshaker.h"
+#include "src/core/lib/channel/handshaker_registry.h"
+#include "src/core/lib/iomgr/tcp_client.h"
+#include "src/core/lib/slice/slice_internal.h"
+
 namespace grpc_core {
- 
+
 Chttp2Connector::Chttp2Connector() {
   GRPC_CLOSURE_INIT(&connected_, Connected, this, grpc_schedule_on_exec_ctx);
 }
- 
+
 Chttp2Connector::~Chttp2Connector() {
   if (endpoint_ != nullptr) grpc_endpoint_destroy(endpoint_);
-} 
- 
+}
+
 void Chttp2Connector::Connect(const Args& args, Result* result,
                               grpc_closure* notify) {
   grpc_resolved_address addr;
@@ -63,7 +63,7 @@ void Chttp2Connector::Connect(const Args& args, Result* result,
     connecting_ = true;
     GPR_ASSERT(endpoint_ == nullptr);
     ep = &endpoint_;
-  } 
+  }
   // In some implementations, the closure can be flushed before
   // grpc_tcp_client_connect() returns, and since the closure requires access
   // to mu_, this can result in a deadlock (see
@@ -73,22 +73,22 @@ void Chttp2Connector::Connect(const Args& args, Result* result,
   Ref().release();  // Ref held by callback.
   grpc_tcp_client_connect(&connected_, ep, args.interested_parties,
                           args.channel_args, &addr, args.deadline);
-} 
- 
+}
+
 void Chttp2Connector::Shutdown(grpc_error* error) {
   MutexLock lock(&mu_);
   shutdown_ = true;
   if (handshake_mgr_ != nullptr) {
     handshake_mgr_->Shutdown(GRPC_ERROR_REF(error));
-  } 
-  // If handshaking is not yet in progress, shutdown the endpoint. 
-  // Otherwise, the handshaker will do this for us. 
+  }
+  // If handshaking is not yet in progress, shutdown the endpoint.
+  // Otherwise, the handshaker will do this for us.
   if (!connecting_ && endpoint_ != nullptr) {
     grpc_endpoint_shutdown(endpoint_, GRPC_ERROR_REF(error));
-  } 
+  }
   GRPC_ERROR_UNREF(error);
-} 
- 
+}
+
 void Chttp2Connector::Connected(void* arg, grpc_error* error) {
   Chttp2Connector* self = static_cast<Chttp2Connector*>(arg);
   bool unref = false;
@@ -110,14 +110,14 @@ void Chttp2Connector::Connected(void* arg, grpc_error* error) {
       self->notify_ = nullptr;
       ExecCtx::Run(DEBUG_LOCATION, notify, error);
       unref = true;
-    } else { 
+    } else {
       GPR_ASSERT(self->endpoint_ != nullptr);
       self->StartHandshakeLocked();
-    } 
-  } 
+    }
+  }
   if (unref) self->Unref();
-} 
- 
+}
+
 void Chttp2Connector::StartHandshakeLocked() {
   handshake_mgr_ = MakeRefCounted<HandshakeManager>();
   HandshakerRegistry::AddHandshakers(HANDSHAKER_CLIENT, args_.channel_args,
@@ -127,8 +127,8 @@ void Chttp2Connector::StartHandshakeLocked() {
   handshake_mgr_->DoHandshake(endpoint_, args_.channel_args, args_.deadline,
                               nullptr /* acceptor */, OnHandshakeDone, this);
   endpoint_ = nullptr;  // Endpoint handed off to handshake manager.
-} 
- 
+}
+
 namespace {
 void NullThenSchedClosure(const DebugLocation& location, grpc_closure** closure,
                           grpc_error* error) {
@@ -182,18 +182,18 @@ void Chttp2Connector::OnHandshakeDone(void* arg, grpc_error* error) {
       GRPC_CLOSURE_INIT(&self->on_timeout_, OnTimeout, self,
                         grpc_schedule_on_exec_ctx);
       grpc_timer_init(&self->timer_, self->args_.deadline, &self->on_timeout_);
-    } else { 
+    } else {
       // If the handshaking succeeded but there is no endpoint, then the
       // handshaker may have handed off the connection to some external
       // code. Just verify that exit_early flag is set.
       GPR_DEBUG_ASSERT(args->exit_early);
       NullThenSchedClosure(DEBUG_LOCATION, &self->notify_, error);
-    } 
+    }
     self->handshake_mgr_.reset();
-  } 
+  }
   self->Unref();
-} 
- 
+}
+
 void Chttp2Connector::OnReceiveSettings(void* arg, grpc_error* error) {
   Chttp2Connector* self = static_cast<Chttp2Connector*>(arg);
   {

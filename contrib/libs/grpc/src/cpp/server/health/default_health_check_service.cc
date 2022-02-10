@@ -1,37 +1,37 @@
-/* 
- * 
- * Copyright 2016 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#include <memory> 
- 
+/*
+ *
+ * Copyright 2016 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#include <memory>
+
 #include "upb/upb.hpp"
 
-#include <grpc/slice.h> 
-#include <grpc/support/alloc.h> 
-#include <grpc/support/log.h> 
+#include <grpc/slice.h>
+#include <grpc/support/alloc.h>
+#include <grpc/support/log.h>
 #include <grpcpp/impl/codegen/method_handler.h>
- 
+
 #include "src/cpp/server/health/default_health_check_service.h"
 #include "src/proto/grpc/health/v1/health.upb.h"
 #include "upb/upb.hpp"
- 
+
 #define MAX_SERVICE_NAME_LENGTH 200
 
-namespace grpc { 
+namespace grpc {
 
 //
 // DefaultHealthCheckService
@@ -144,12 +144,12 @@ void DefaultHealthCheckService::ServiceData::RemoveCallHandler(
 // DefaultHealthCheckService::HealthCheckServiceImpl
 //
 
-namespace { 
-const char kHealthCheckMethodName[] = "/grpc.health.v1.Health/Check"; 
+namespace {
+const char kHealthCheckMethodName[] = "/grpc.health.v1.Health/Check";
 const char kHealthWatchMethodName[] = "/grpc.health.v1.Health/Watch";
-}  // namespace 
- 
-DefaultHealthCheckService::HealthCheckServiceImpl::HealthCheckServiceImpl( 
+}  // namespace
+
+DefaultHealthCheckService::HealthCheckServiceImpl::HealthCheckServiceImpl(
     DefaultHealthCheckService* database,
     std::unique_ptr<ServerCompletionQueue> cq)
     : database_(database), cq_(std::move(cq)) {
@@ -162,8 +162,8 @@ DefaultHealthCheckService::HealthCheckServiceImpl::HealthCheckServiceImpl(
   // Create serving thread.
   thread_ = std::unique_ptr<::grpc_core::Thread>(
       new ::grpc_core::Thread("grpc_health_check_service", Serve, this));
-} 
- 
+}
+
 DefaultHealthCheckService::HealthCheckServiceImpl::~HealthCheckServiceImpl() {
   // We will reach here after the server starts shutting down.
   shutdown_ = true;
@@ -201,28 +201,28 @@ void DefaultHealthCheckService::HealthCheckServiceImpl::Serve(void* arg) {
 
 bool DefaultHealthCheckService::HealthCheckServiceImpl::DecodeRequest(
     const ByteBuffer& request, TString* service_name) {
-  std::vector<Slice> slices; 
+  std::vector<Slice> slices;
   if (!request.Dump(&slices).ok()) return false;
-  uint8_t* request_bytes = nullptr; 
-  size_t request_size = 0; 
+  uint8_t* request_bytes = nullptr;
+  size_t request_size = 0;
   if (slices.size() == 1) {
-    request_bytes = const_cast<uint8_t*>(slices[0].begin()); 
-    request_size = slices[0].size(); 
+    request_bytes = const_cast<uint8_t*>(slices[0].begin());
+    request_size = slices[0].size();
   } else if (slices.size() > 1) {
     request_bytes = static_cast<uint8_t*>(gpr_malloc(request.Length()));
-    uint8_t* copy_to = request_bytes; 
-    for (size_t i = 0; i < slices.size(); i++) { 
-      memcpy(copy_to, slices[i].begin(), slices[i].size()); 
-      copy_to += slices[i].size(); 
-    } 
-  } 
+    uint8_t* copy_to = request_bytes;
+    for (size_t i = 0; i < slices.size(); i++) {
+      memcpy(copy_to, slices[i].begin(), slices[i].size());
+      copy_to += slices[i].size();
+    }
+  }
   upb::Arena arena;
   grpc_health_v1_HealthCheckRequest* request_struct =
       grpc_health_v1_HealthCheckRequest_parse(
           reinterpret_cast<char*>(request_bytes), request_size, arena.ptr());
   if (slices.size() > 1) {
     gpr_free(request_bytes);
-  } 
+  }
   if (request_struct == nullptr) {
     return false;
   }
@@ -234,7 +234,7 @@ bool DefaultHealthCheckService::HealthCheckServiceImpl::DecodeRequest(
   service_name->assign(service.data, service.size);
   return true;
 }
- 
+
 bool DefaultHealthCheckService::HealthCheckServiceImpl::EncodeResponse(
     ServingStatus status, ByteBuffer* response) {
   upb::Arena arena;
@@ -253,12 +253,12 @@ bool DefaultHealthCheckService::HealthCheckServiceImpl::EncodeResponse(
     return false;
   }
   grpc_slice response_slice = grpc_slice_from_copied_buffer(buf, buf_length);
-  Slice encoded_response(response_slice, Slice::STEAL_REF); 
-  ByteBuffer response_buffer(&encoded_response, 1); 
-  response->Swap(&response_buffer); 
+  Slice encoded_response(response_slice, Slice::STEAL_REF);
+  ByteBuffer response_buffer(&encoded_response, 1);
+  response->Swap(&response_buffer);
   return true;
-} 
- 
+}
+
 //
 // DefaultHealthCheckService::HealthCheckServiceImpl::CheckCallHandler
 //
@@ -281,8 +281,8 @@ void DefaultHealthCheckService::HealthCheckServiceImpl::CheckCallHandler::
     service->RequestAsyncUnary(0, &handler->ctx_, &handler->request_,
                                &handler->writer_, cq, cq, &handler->next_);
   }
-} 
- 
+}
+
 DefaultHealthCheckService::HealthCheckServiceImpl::CheckCallHandler::
     CheckCallHandler(ServerCompletionQueue* cq,
                      DefaultHealthCheckService* database,
@@ -329,17 +329,17 @@ void DefaultHealthCheckService::HealthCheckServiceImpl::CheckCallHandler::
       }
     }
   }
-} 
- 
+}
+
 void DefaultHealthCheckService::HealthCheckServiceImpl::CheckCallHandler::
     OnFinishDone(std::shared_ptr<CallHandler> self, bool ok) {
   if (ok) {
     gpr_log(GPR_DEBUG, "[HCS %p] Health check call finished for handler %p",
             service_, this);
-  } 
+  }
   self.reset();  // To appease clang-tidy.
-} 
- 
+}
+
 //
 // DefaultHealthCheckService::HealthCheckServiceImpl::WatchCallHandler
 //
@@ -368,9 +368,9 @@ void DefaultHealthCheckService::HealthCheckServiceImpl::WatchCallHandler::
     service->RequestAsyncServerStreaming(1, &handler->ctx_, &handler->request_,
                                          &handler->stream_, cq, cq,
                                          &handler->next_);
-  } 
-} 
- 
+  }
+}
+
 DefaultHealthCheckService::HealthCheckServiceImpl::WatchCallHandler::
     WatchCallHandler(ServerCompletionQueue* cq,
                      DefaultHealthCheckService* database,
@@ -403,8 +403,8 @@ void DefaultHealthCheckService::HealthCheckServiceImpl::WatchCallHandler::
           "[HCS %p] Health watch started for service \"%s\" (handler: %p)",
           service_, service_name_.c_str(), this);
   database_->RegisterCallHandler(service_name_, std::move(self));
-} 
- 
+}
+
 void DefaultHealthCheckService::HealthCheckServiceImpl::WatchCallHandler::
     SendHealth(std::shared_ptr<CallHandler> self, ServingStatus status) {
   grpc_core::MutexLock lock(&send_mu_);
@@ -501,4 +501,4 @@ void DefaultHealthCheckService::HealthCheckServiceImpl::WatchCallHandler::
   SendFinish(std::move(self), Status::CANCELLED);
 }
 
-}  // namespace grpc 
+}  // namespace grpc

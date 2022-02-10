@@ -5,7 +5,7 @@ LIBRARY()
 WITHOUT_LICENSE_TEXTS()
 
 OWNER(g:cpp-contrib)
- 
+
 LICENSE(Apache-2.0)
 
 PEERDIR(
@@ -14,7 +14,7 @@ PEERDIR(
     contrib/libs/grpc/grpc_unsecure
     contrib/libs/grpc/src/core/lib
     contrib/libs/grpc/third_party/address_sorting
-    contrib/libs/grpc/third_party/upb 
+    contrib/libs/grpc/third_party/upb
 )
 
 ADDINCL(

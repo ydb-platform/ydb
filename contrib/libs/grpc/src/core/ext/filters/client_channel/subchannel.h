@@ -1,88 +1,88 @@
-/* 
- * 
- * Copyright 2015 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#ifndef GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H 
-#define GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H 
- 
-#include <grpc/support/port_platform.h> 
- 
+/*
+ *
+ * Copyright 2015 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#ifndef GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H
+#define GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H
+
+#include <grpc/support/port_platform.h>
+
 #include <deque>
 
 #include "src/core/ext/filters/client_channel/client_channel_channelz.h"
-#include "src/core/ext/filters/client_channel/connector.h" 
+#include "src/core/ext/filters/client_channel/connector.h"
 #include "src/core/ext/filters/client_channel/subchannel_pool_interface.h"
 #include "src/core/lib/backoff/backoff.h"
-#include "src/core/lib/channel/channel_stack.h" 
+#include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/gpr/time_precise.h"
 #include "src/core/lib/gprpp/arena.h"
 #include "src/core/lib/gprpp/map.h"
-#include "src/core/lib/gprpp/ref_counted.h" 
-#include "src/core/lib/gprpp/ref_counted_ptr.h" 
+#include "src/core/lib/gprpp/ref_counted.h"
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/sync.h"
-#include "src/core/lib/iomgr/polling_entity.h" 
+#include "src/core/lib/iomgr/polling_entity.h"
 #include "src/core/lib/iomgr/timer.h"
-#include "src/core/lib/transport/connectivity_state.h" 
-#include "src/core/lib/transport/metadata.h" 
- 
+#include "src/core/lib/transport/connectivity_state.h"
+#include "src/core/lib/transport/metadata.h"
+
 // Channel arg containing a URI indicating the address to connect to.
-#define GRPC_ARG_SUBCHANNEL_ADDRESS "grpc.subchannel_address" 
- 
+#define GRPC_ARG_SUBCHANNEL_ADDRESS "grpc.subchannel_address"
+
 // For debugging refcounting.
-#ifndef NDEBUG 
+#ifndef NDEBUG
 #define GRPC_SUBCHANNEL_REF(p, r) (p)->Ref(__FILE__, __LINE__, (r))
 #define GRPC_SUBCHANNEL_REF_FROM_WEAK_REF(p, r) (p)->RefFromWeakRef()
 #define GRPC_SUBCHANNEL_UNREF(p, r) (p)->Unref(__FILE__, __LINE__, (r))
 #define GRPC_SUBCHANNEL_WEAK_REF(p, r) (p)->WeakRef(__FILE__, __LINE__, (r))
 #define GRPC_SUBCHANNEL_WEAK_UNREF(p, r) (p)->WeakUnref(__FILE__, __LINE__, (r))
-#define GRPC_SUBCHANNEL_REF_EXTRA_ARGS \ 
+#define GRPC_SUBCHANNEL_REF_EXTRA_ARGS \
   const char *file, int line, const char *reason
 #define GRPC_SUBCHANNEL_REF_REASON reason
 #define GRPC_SUBCHANNEL_REF_MUTATE_EXTRA_ARGS \
   , GRPC_SUBCHANNEL_REF_EXTRA_ARGS, const char* purpose
 #define GRPC_SUBCHANNEL_REF_MUTATE_PURPOSE(x) , file, line, reason, x
-#else 
+#else
 #define GRPC_SUBCHANNEL_REF(p, r) (p)->Ref()
 #define GRPC_SUBCHANNEL_REF_FROM_WEAK_REF(p, r) (p)->RefFromWeakRef()
 #define GRPC_SUBCHANNEL_UNREF(p, r) (p)->Unref()
 #define GRPC_SUBCHANNEL_WEAK_REF(p, r) (p)->WeakRef()
 #define GRPC_SUBCHANNEL_WEAK_UNREF(p, r) (p)->WeakUnref()
-#define GRPC_SUBCHANNEL_REF_EXTRA_ARGS 
+#define GRPC_SUBCHANNEL_REF_EXTRA_ARGS
 #define GRPC_SUBCHANNEL_REF_REASON ""
 #define GRPC_SUBCHANNEL_REF_MUTATE_EXTRA_ARGS
 #define GRPC_SUBCHANNEL_REF_MUTATE_PURPOSE(x)
-#endif 
- 
-namespace grpc_core { 
- 
+#endif
+
+namespace grpc_core {
+
 class SubchannelCall;
 
 class ConnectedSubchannel : public RefCounted<ConnectedSubchannel> {
- public: 
+ public:
   ConnectedSubchannel(
       grpc_channel_stack* channel_stack, const grpc_channel_args* args,
       RefCountedPtr<channelz::SubchannelNode> channelz_subchannel);
-  ~ConnectedSubchannel(); 
- 
+  ~ConnectedSubchannel();
+
   void StartWatch(grpc_pollset_set* interested_parties,
                   OrphanablePtr<ConnectivityStateWatcherInterface> watcher);
 
-  void Ping(grpc_closure* on_initiate, grpc_closure* on_ack); 
- 
+  void Ping(grpc_closure* on_initiate, grpc_closure* on_ack);
+
   grpc_channel_stack* channel_stack() const { return channel_stack_; }
   const grpc_channel_args* args() const { return args_; }
   channelz::SubchannelNode* channelz_subchannel() const {
@@ -91,14 +91,14 @@ class ConnectedSubchannel : public RefCounted<ConnectedSubchannel> {
 
   size_t GetInitialCallSizeEstimate(size_t parent_data_size) const;
 
- private: 
-  grpc_channel_stack* channel_stack_; 
+ private:
+  grpc_channel_stack* channel_stack_;
   grpc_channel_args* args_;
   // ref counted pointer to the channelz node in this connected subchannel's
   // owning subchannel.
   RefCountedPtr<channelz::SubchannelNode> channelz_subchannel_;
-}; 
- 
+};
+
 // Implements the interface of RefCounted<>.
 class SubchannelCall {
  public:
@@ -114,22 +114,22 @@ class SubchannelCall {
     size_t parent_data_size;
   };
   static RefCountedPtr<SubchannelCall> Create(Args args, grpc_error** error);
- 
+
   // Continues processing a transport stream op batch.
   void StartTransportStreamOpBatch(grpc_transport_stream_op_batch* batch);
- 
+
   // Returns a pointer to the parent data associated with the subchannel call.
   // The data will be of the size specified in \a parent_data_size field of
   // the args passed to \a ConnectedSubchannel::CreateCall().
   void* GetParentData();
- 
+
   // Returns the call stack of the subchannel call.
   grpc_call_stack* GetCallStack();
- 
+
   // Sets the 'then_schedule_closure' argument for call stack destruction.
   // Must be called once per call.
   void SetAfterCallStackDestroy(grpc_closure* closure);
- 
+
   // Interface of RefCounted<>.
   RefCountedPtr<SubchannelCall> Ref() GRPC_MUST_USE_RESULT;
   RefCountedPtr<SubchannelCall> Ref(const DebugLocation& location,
@@ -138,27 +138,27 @@ class SubchannelCall {
   // but does NOT free the memory because it's in the call arena.
   void Unref();
   void Unref(const DebugLocation& location, const char* reason);
- 
+
   static void Destroy(void* arg, grpc_error* error);
- 
+
  private:
   // Allow RefCountedPtr<> to access IncrementRefCount().
   template <typename T>
   friend class RefCountedPtr;
- 
+
   SubchannelCall(Args args, grpc_error** error);
 
   // If channelz is enabled, intercepts recv_trailing so that we may check the
   // status and associate it to a subchannel.
   void MaybeInterceptRecvTrailingMetadata(
       grpc_transport_stream_op_batch* batch);
- 
+
   static void RecvTrailingMetadataReady(void* arg, grpc_error* error);
- 
+
   // Interface of RefCounted<>.
   void IncrementRefCount();
   void IncrementRefCount(const DebugLocation& location, const char* reason);
- 
+
   RefCountedPtr<ConnectedSubchannel> connected_subchannel_;
   grpc_closure* after_call_stack_destroy_ = nullptr;
   // State needed to support channelz interception of recv trailing metadata.
@@ -166,8 +166,8 @@ class SubchannelCall {
   grpc_closure* original_recv_trailing_metadata_ = nullptr;
   grpc_metadata_batch* recv_trailing_metadata_ = nullptr;
   grpc_millis deadline_;
-}; 
- 
+};
+
 // A subchannel that knows how to connect to exactly one target address. It
 // provides a target for load balancing.
 //
@@ -223,11 +223,11 @@ class Subchannel {
   Subchannel(SubchannelKey* key, OrphanablePtr<SubchannelConnector> connector,
              const grpc_channel_args* args);
   ~Subchannel();
- 
+
   // Creates a subchannel given \a connector and \a args.
   static Subchannel* Create(OrphanablePtr<SubchannelConnector> connector,
                             const grpc_channel_args* args);
- 
+
   // Throttles keepalive time to \a new_keepalive_time iff \a new_keepalive_time
   // is larger than the subchannel's current keepalive time. The updated value
   // will have an affect when the subchannel creates a new ConnectedSubchannel.
@@ -242,7 +242,7 @@ class Subchannel {
   // non-zero. If the strong refcount is zero, does not alter the refcount and
   // returns null.
   Subchannel* RefFromWeakRef();
- 
+
   // Gets the string representing the subchannel address.
   // Caller doesn't take ownership.
   const char* GetTargetAddress();
@@ -436,4 +436,4 @@ class Subchannel {
 
 }  // namespace grpc_core
 
-#endif /* GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H */ 
+#endif /* GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H */

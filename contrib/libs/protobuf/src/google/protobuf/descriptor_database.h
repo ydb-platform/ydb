@@ -108,18 +108,18 @@ class PROTOBUF_EXPORT DescriptorDatabase {
   }
 
 
-  // Finds the file names and appends them to the output in an 
-  // undefined order. This method is best-effort: it's not guaranteed that the 
-  // database will find all files. Returns true if the database supports 
-  // searching all file names, otherwise returns false and leaves output 
-  // unchanged. 
-  // 
-  // This method has a default implementation that always returns 
-  // false. 
+  // Finds the file names and appends them to the output in an
+  // undefined order. This method is best-effort: it's not guaranteed that the
+  // database will find all files. Returns true if the database supports
+  // searching all file names, otherwise returns false and leaves output
+  // unchanged.
+  //
+  // This method has a default implementation that always returns
+  // false.
   virtual bool FindAllFileNames(std::vector<TProtoStringType>* /*output*/) {
-    return false; 
-  } 
- 
+    return false;
+  }
+
   // Finds the package names and appends them to the output in an
   // undefined order. This method is best-effort: it's not guaranteed that the
   // database will find all packages. Returns true if the database supports
@@ -360,8 +360,8 @@ class PROTOBUF_EXPORT MergedDescriptorDatabase : public DescriptorDatabase {
   // Merge more than two databases.  The sources remain property of the caller.
   // The vector may be deleted after the constructor returns but the
   // DescriptorDatabases need to stick around.
-  explicit MergedDescriptorDatabase( 
-      const std::vector<DescriptorDatabase*>& sources); 
+  explicit MergedDescriptorDatabase(
+      const std::vector<DescriptorDatabase*>& sources);
   ~MergedDescriptorDatabase() override;
 
   // implements DescriptorDatabase -----------------------------------

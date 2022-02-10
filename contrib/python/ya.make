@@ -1,7 +1,7 @@
 OWNER(g:contrib g:python-contrib)
 
 RECURSE(
-    absl-py 
+    absl-py
     adblockparser
     aenum
     ago
@@ -64,16 +64,16 @@ RECURSE(
     argon2-cffi-bindings
     argparse-addons
     arq
-    arrow 
+    arrow
     asciitree
     asgiref
     asn1crypto
     astroid
     asttokens
     astunparse
-    async-generator 
+    async-generator
     async-lru
-    async-timeout 
+    async-timeout
     asyncio-pool
     asyncmc
     asyncpg
@@ -83,7 +83,7 @@ RECURSE(
     atomicwrites
     atpublic
     AttrDict
-    attrs 
+    attrs
     Authlib
     autobahn
     Automat
@@ -122,11 +122,11 @@ RECURSE(
     boto3
     botocore
     braceexpand
-    bravado 
+    bravado
     bravado-core
     bsddb3
     bson
-    bz2file 
+    bz2file
     cached-property
     cachelib
     cachetools
@@ -137,9 +137,9 @@ RECURSE(
     celery
     celery-mock
     Cerberus
-    certifi 
-    certipy 
-    cffi 
+    certifi
+    certipy
+    cffi
     channels
     chardet
     charset-normalizer
@@ -150,16 +150,16 @@ RECURSE(
     ciso8601
     clang
     clang/example
-    cli-helpers 
+    cli-helpers
     click
     click-didyoumean
     click-plugins
     click-repl
-    clickhouse-cityhash 
-    clickhouse-driver 
+    clickhouse-cityhash
+    clickhouse-driver
     clickhouse-sqlalchemy
     cloudpickle
-    color 
+    color
     colorama
     coloredlogs
     colorhash
@@ -168,21 +168,21 @@ RECURSE(
     commonmark
     ConfigArgParse
     configobj
-    configparser 
+    configparser
     confluent-kafka
     constantly
     contextdecorator
-    contextlib2 
+    contextlib2
     convertdate
     cookies
     cov-core
     coverage
-    coverage/bin 
+    coverage/bin
     cpu-cores
     crcmod
     croniter
     crontab
-    cryptography 
+    cryptography
     cssselect
     cssutils
     curlify
@@ -212,7 +212,7 @@ RECURSE(
     diff-match-patch
     directio
     distro
-    django 
+    django
     django-admin-inline-paginator
     django-admin-rangefilter
     django-admin-view-permission
@@ -244,7 +244,7 @@ RECURSE(
     django-debug-toolbar
     django-dirtyfields
     django-dynamic-raw-id
-    django-enumfields 
+    django-enumfields
     django-environ
     django-etc
     django-export-action-py3
@@ -258,7 +258,7 @@ RECURSE(
     django-hosts
     django-http-proxy
     django-import-export
-    django-introspection 
+    django-introspection
     django-jinja
     django-js-asset
     django-json-widget
@@ -306,12 +306,12 @@ RECURSE(
     django-webtest
     django-whatever
     django-widget-tweaks
-    djangorestframework 
+    djangorestframework
     djangorestframework-camel-case
-    djangorestframework-csv 
+    djangorestframework-csv
     djangorestframework-filters
     djangorestframework-jsonp
-    djangorestframework-xml 
+    djangorestframework-xml
     dm.xmlsec.binding
     dnspython
     docker
@@ -342,7 +342,7 @@ RECURSE(
     envoy
     ephem
     escapism
-    etcd3 
+    etcd3
     excel-formulas-calculator
     execnet
     executing
@@ -366,7 +366,7 @@ RECURSE(
     fastjsonschema
     fastsnmp
     faulthandler
-    fbprophet 
+    fbprophet
     feedparser
     ffmpeg-python
     fido2
@@ -381,12 +381,12 @@ RECURSE(
     flake8-quotes
     flake8-string-format
     flaky
-    Flask 
+    Flask
     Flask-Admin
     flask-appconfig
     Flask-Babel
-    Flask-Bootstrap 
-    Flask-Bootstrap/example 
+    Flask-Bootstrap
+    Flask-Bootstrap/example
     Flask-Caching
     flask-cors
     flask_graphql
@@ -414,11 +414,11 @@ RECURSE(
     flask-swagger-ui
     Flask-Table
     Flask-UUID
-    Flask-WTF 
+    Flask-WTF
     flatbuffers
     flex
     flup
-    frozendict 
+    frozendict
     frozenlist
     fsspec
     ftfy
@@ -426,28 +426,28 @@ RECURSE(
     funcsigs
     functools32
     furl
-    future 
+    future
     futures
     gast
     gcovr
     GDAL
     gemfileparser
-    gensim 
+    gensim
     GeoAlchemy2
     geobuf
     geoindex
-    gevent 
+    gevent
     gino
     gitdb2
     github3.py
     GitPython
-    glob2 
+    glob2
     glom
-    goerr 
+    goerr
     google-api-core
-    google-api-python-client 
+    google-api-python-client
     google-auth
-    google-auth-httplib2 
+    google-auth-httplib2
     google-auth-oauthlib
     google-cloud-speech
     google-pasta
@@ -477,8 +477,8 @@ RECURSE(
     hijri-converter
     hiredis
     hjson
-    holidays 
-    horovod 
+    holidays
+    horovod
     hpack
     hstspreload
     html2text
@@ -487,11 +487,11 @@ RECURSE(
     http-parser
     httpagentparser
     httpcore
-    httplib2 
+    httplib2
     httpretty
     httptools
     httpx
-    humanfriendly 
+    humanfriendly
     humanize
     humongous
     hurry.filesize
@@ -501,17 +501,17 @@ RECURSE(
     hyperlink
     hyperopt
     hypothesis
-    ibm-db 
+    ibm-db
     icalendar
-    idna 
+    idna
     idna-ssl
     ijson
     imagesize
-    IMAPClient 
+    IMAPClient
     imgkit
     implicit
     importlib-metadata
-    importlib-resources 
+    importlib-resources
     incremental
     infi.clickhouse-orm
     inflect
@@ -520,14 +520,14 @@ RECURSE(
     iniconfig
     iniherit
     Inject
-    inlinestyler 
+    inlinestyler
     intbitset
     intspan
     invoke
     ipaddr
-    ipaddress 
+    ipaddress
     ipadic
-    ipdb 
+    ipdb
     ipykernel
     ipython
     ipython-genutils
@@ -537,25 +537,25 @@ RECURSE(
     iso8601
     isodate
     isort
-    itsdangerous 
+    itsdangerous
     jaeger-client
     janus
     jaraco.functools
     javaproperties
     jdcal
     jedi
-    Jinja2 
+    Jinja2
     jinja2-time
     jmespath
     joblib
     jmespath
-    json-rpc 
+    json-rpc
     json2html
     jsondiff
     jsonfield
     jsonobject
     jsonpath-rw
-    jsonpickle 
+    jsonpickle
     jsonpointer
     jsonref
     jsonschema
@@ -566,7 +566,7 @@ RECURSE(
     jupyter_client
     jupyter_core
     jupyter-telemetry
-    jupyterhub 
+    jupyterhub
     jupyterhub-traefik-proxy
     jupytext
     kaitaistruct
@@ -584,18 +584,18 @@ RECURSE(
     lcov_cobertura/bin
     legacycontour
     license-expression
-    line_profiler 
+    line_profiler
     linecache2
     llist
-    lmdb 
+    lmdb
     localshop
-    lockfile 
+    lockfile
     logging-tree
     loguru
     logutils
-    luigi 
+    luigi
     LunarCalendar
-    lunardate 
+    lunardate
     lunr
     lxml
     lz4
@@ -605,7 +605,7 @@ RECURSE(
     marisa_trie
     markdown2
     Markdown
-    MarkupSafe 
+    MarkupSafe
     marshmallow
     marshmallow_dataclass
     marshmallow-enum
@@ -613,7 +613,7 @@ RECURSE(
     marshmallow-oneofschema
     marshmallow-sqlalchemy
     marshmallow-union
-    matplotlib 
+    matplotlib
     matplotlib-inline
     mccabe
     mecab-python3
@@ -624,7 +624,7 @@ RECURSE(
     mitmproxy
     mkdocs
     mkdocs-material
-    mock 
+    mock
     model-mommy
     Momoko
     MongoDBProxy
@@ -637,7 +637,7 @@ RECURSE(
     moto/standalone
     motor
     mpegdash
-    mpi4py 
+    mpi4py
     mpmath
     msal
     msgpack
@@ -663,11 +663,11 @@ RECURSE(
     nest-asyncio
     nested-diff
     netaddr
-    netifaces 
+    netifaces
     networkx
     nltk
     normality
-    nose 
+    nose
     notebook
     num2words
     numpy
@@ -693,24 +693,24 @@ RECURSE(
     option
     ordered-set
     orderedmultidict
-    orderedset 
+    orderedset
     os-fast-reservoir
     packageurl-python
-    packaging 
+    packaging
     paginate
-    pamela 
+    pamela
     pampy
     pamqp
     panamap
     panamap_proto
-    pandas 
+    pandas
     pandocfilters
     papermill
     parameterized
-    paramiko 
+    paramiko
     paramz
     parse
-    parse-type 
+    parse-type
     parsedatetime
     parsel
     Parsley
@@ -719,7 +719,7 @@ RECURSE(
     passlib
     patch
     patched
-    path.py 
+    path.py
     pathlib2
     pathspec
     pathtools
@@ -740,7 +740,7 @@ RECURSE(
     phonenumbers
     pickleshare
     pika
-    Pillow 
+    Pillow
     pip
     pkginfo
     platformdirs
@@ -749,7 +749,7 @@ RECURSE(
     pluggy
     plugincode
     plumbum
-    ply 
+    ply
     plyvel
     polib
     portalocker
@@ -772,7 +772,7 @@ RECURSE(
     protobuf
     protobuf_std
     protobuf_to_dict
-    psutil 
+    psutil
     psycogreen
     psycopg2
     ptpython
@@ -790,15 +790,15 @@ RECURSE(
     pyaes
     pyahocorasick
     pyaml
-    pyasn1 
+    pyasn1
     pyasn1-modules
     pybreaker
     pycares
     pycbrf
     pycodestyle
     pycollada
-    pycountry 
-    pycparser 
+    pycountry
+    pycparser
     pycrypto
     pycryptodome
     pycurl
@@ -808,9 +808,9 @@ RECURSE(
     PyDispatcher
     pyDOE
     pydocstyle
-    pydot 
-    pydub 
-    pyelftools 
+    pydot
+    pydub
+    pyelftools
     pyelftools/readelf
     pyfakefs
     pyflakes
@@ -836,10 +836,10 @@ RECURSE(
     pymorphy2-dicts-ru
     pymqi
     PyMySQL
-    pynacl 
+    pynacl
     pynetbox
-    pyodbc 
-    pyOpenSSL 
+    pyodbc
+    pyOpenSSL
     pyparsing
     PyPDF2
     pyperclip
@@ -853,8 +853,8 @@ RECURSE(
     pysendfile
     pyserial
     PySocks
-    pystan 
-    pystan/pystan_model 
+    pystan
+    pystan/pystan_model
     pysyncobj
     pyTelegramBotAPI
     pytest
@@ -889,7 +889,7 @@ RECURSE(
     pytest-xprocess
     python-crfsuite
     python-crontab
-    python-daemon 
+    python-daemon
     python-datemath
     python-debian
     python-decouple
@@ -902,13 +902,13 @@ RECURSE(
     python-i18n
     python-jose
     python-json-logger
-    python-ldap 
-    python-libarchive 
+    python-ldap
+    python-libarchive
     python-magic
     python-memcached
     python-mimeparse
     python-multipart
-    python-pptx 
+    python-pptx
     python-prctl
     python-rapidjson
     python-saml
@@ -917,7 +917,7 @@ RECURSE(
     python-utils
     python3-saml
     pytils
-    pytracemalloc 
+    pytracemalloc
     pytz
     pyudev
     pyusb
@@ -927,10 +927,10 @@ RECURSE(
     qemu
     qrcode
     quart
-    queuelib 
+    queuelib
     rarfile
     ratelimit
-    raven 
+    raven
     razdel
     rdflib
     readabilipy
@@ -948,7 +948,7 @@ RECURSE(
     requests-unixsocket
     responses
     respx
-    retry 
+    retry
     retrying
     rfc3986
     rfc3986-validator
@@ -975,8 +975,8 @@ RECURSE(
     schematics
     schwifty
     scikit-image
-    scikit-learn 
-    scipy 
+    scikit-learn
+    scipy
     scour
     scp
     Scrapy
@@ -990,17 +990,17 @@ RECURSE(
     sentry-sdk
     service-identity
     setproctitle
-    setuptools 
+    setuptools
     sgmllib3k
     sh
     Shapely
     shortuuid
     simplediff
-    simplegeneric 
-    simplejson 
-    singledispatch 
+    simplegeneric
+    simplejson
+    singledispatch
     six
-    skynet_pyro4 
+    skynet_pyro4
     slack-sdk
     slackclient
     smart-open
@@ -1034,11 +1034,11 @@ RECURSE(
     stack-data
     starlette
     statsd
-    statsmodels 
+    statsmodels
     stevedore
     StrEnum
     structlog
-    subprocess32 
+    subprocess32
     subword-nmt
     suds-jurko
     supervenn
@@ -1049,10 +1049,10 @@ RECURSE(
     sysv-ipc
     tableauserverclient
     tablib
-    tabulate 
+    tabulate
     tblib
     Telethon
-    tenacity 
+    tenacity
     tensorflow-estimator
     termcolor
     terminado
@@ -1065,7 +1065,7 @@ RECURSE(
     thinc
     threadloop
     thrift
-    timelib 
+    timelib
     timeout-decorator
     tinycss2
     tinyrpc
@@ -1074,15 +1074,15 @@ RECURSE(
     tomli
     toolz
     toposort
-    toredis 
-    tornado 
+    toredis
+    tornado
     tornado-opentracing
-    toro 
+    toro
     tqdm
-    trace_event 
+    trace_event
     traceback2
     traitlets
-    transfer_manager_client 
+    transfer_manager_client
     transitions
     transliterate
     trollius
@@ -1102,9 +1102,9 @@ RECURSE(
     typing-inspect
     tzlocal
     ua-parser
-    udatetime 
+    udatetime
     uhashring
-    ujson 
+    ujson
     ulid2
     umalqurra
     umongo

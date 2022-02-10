@@ -121,7 +121,7 @@ class ChapelLexer(RegexLexer):
             (r'([a-zA-Z_][.\w$]*|'  # regular function name, including secondary
              r'\~[a-zA-Z_][.\w$]*|'  # support for legacy destructors
              r'[+*/!~%<>=&^|\-:]{1,2})',  # operators
-             Name.Function, '#pop'), 
+             Name.Function, '#pop'),
 
             # allow `proc (atomic T).foo`
             (r'\(', Punctuation, "receivertype"),

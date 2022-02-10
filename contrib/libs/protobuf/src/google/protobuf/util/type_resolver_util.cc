@@ -74,11 +74,11 @@ class DescriptorPoolTypeResolver : public TypeResolver {
                                   Type* type) override {
     TProtoStringType type_name;
     util::Status status = ParseTypeUrl(type_url, &type_name);
-    if (!status.ok()) { 
-      return status; 
+    if (!status.ok()) {
+      return status;
     }
- 
-    const Descriptor* descriptor = pool_->FindMessageTypeByName(type_name); 
+
+    const Descriptor* descriptor = pool_->FindMessageTypeByName(type_name);
     if (descriptor == NULL) {
       return util::NotFoundError("Invalid type URL, unknown type: " +
                                  type_name);
@@ -91,10 +91,10 @@ class DescriptorPoolTypeResolver : public TypeResolver {
                                Enum* enum_type) override {
     TProtoStringType type_name;
     util::Status status = ParseTypeUrl(type_url, &type_name);
-    if (!status.ok()) { 
-      return status; 
+    if (!status.ok()) {
+      return status;
     }
- 
+
     const EnumDescriptor* descriptor = pool_->FindEnumTypeByName(type_name);
     if (descriptor == NULL) {
       return util::InvalidArgumentError("Invalid type URL, unknown type: " +
@@ -305,15 +305,15 @@ class DescriptorPoolTypeResolver : public TypeResolver {
 
   util::Status ParseTypeUrl(const TProtoStringType& type_url,
                             TProtoStringType* type_name) {
-    if (type_url.substr(0, url_prefix_.size() + 1) != url_prefix_ + "/") { 
+    if (type_url.substr(0, url_prefix_.size() + 1) != url_prefix_ + "/") {
       return util::InvalidArgumentError(
           StrCat("Invalid type URL, type URLs must be of the form '",
                        url_prefix_, "/<typename>', got: ", type_url));
-    } 
-    *type_name = type_url.substr(url_prefix_.size() + 1); 
+    }
+    *type_name = type_url.substr(url_prefix_.size() + 1);
     return util::Status();
-  } 
- 
+  }
+
   TProtoStringType DefaultValueAsString(const FieldDescriptor* descriptor) {
     switch (descriptor->cpp_type()) {
       case FieldDescriptor::CPPTYPE_INT32:

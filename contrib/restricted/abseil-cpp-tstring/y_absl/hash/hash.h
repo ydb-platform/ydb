@@ -78,7 +78,7 @@
 #include "y_absl/hash/internal/hash.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // `y_absl::Hash`
@@ -341,7 +341,7 @@ class HashState : public hash_internal::HashStateBase<HashState> {
   void (*combine_contiguous_)(void*, const unsigned char*, size_t);
 };
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_HASH_HASH_H_

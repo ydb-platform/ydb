@@ -371,7 +371,7 @@ int ec_scalar_mul_ladder(const EC_GROUP *group, EC_POINT *r,
 
  err:
     EC_POINT_free(p);
-    EC_POINT_clear_free(s); 
+    EC_POINT_clear_free(s);
     BN_CTX_end(ctx);
 
     return ret;
@@ -434,7 +434,7 @@ int ec_wNAF_mul(const EC_GROUP *group, EC_POINT *r, const BIGNUM *scalar,
          * scalar multiplication implementation based on a Montgomery ladder,
          * with various timing attack defenses.
          */
-        if ((scalar != group->order) && (scalar != NULL) && (num == 0)) { 
+        if ((scalar != group->order) && (scalar != NULL) && (num == 0)) {
             /*-
              * In this case we want to compute scalar * GeneratorPoint: this
              * codepath is reached most prominently by (ephemeral) key
@@ -445,7 +445,7 @@ int ec_wNAF_mul(const EC_GROUP *group, EC_POINT *r, const BIGNUM *scalar,
              */
             return ec_scalar_mul_ladder(group, r, scalar, NULL, ctx);
         }
-        if ((scalar == NULL) && (num == 1) && (scalars[0] != group->order)) { 
+        if ((scalar == NULL) && (num == 1) && (scalars[0] != group->order)) {
             /*-
              * In this case we want to compute scalar * VariablePoint: this
              * codepath is reached most prominently by the second half of ECDH,
@@ -955,7 +955,7 @@ int ec_wNAF_precompute_mult(EC_GROUP *group, BN_CTX *ctx)
     ret = 1;
 
  err:
-    BN_CTX_end(ctx); 
+    BN_CTX_end(ctx);
     BN_CTX_free(new_ctx);
     EC_ec_pre_comp_free(pre_comp);
     if (points) {

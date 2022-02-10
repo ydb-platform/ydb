@@ -1,23 +1,23 @@
 /*
  *
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
 #include <map>
-#include <set> 
+#include <set>
 #include <sstream>
 
 #include "src/compiler/config.h"
@@ -27,12 +27,12 @@
 #include <google/protobuf/compiler/objectivec/objectivec_helpers.h>
 
 using ::google::protobuf::compiler::objectivec::ClassName;
-using ::grpc::protobuf::FileDescriptor; 
+using ::grpc::protobuf::FileDescriptor;
 using ::grpc::protobuf::MethodDescriptor;
 using ::grpc::protobuf::ServiceDescriptor;
-using ::grpc::protobuf::io::Printer; 
+using ::grpc::protobuf::io::Printer;
 using ::std::map;
-using ::std::set; 
+using ::std::set;
 
 namespace grpc_objective_c_generator {
 namespace {
@@ -66,7 +66,7 @@ static void PrintAllComments(const DescriptorType* desc, Printer* printer,
     printer->Print(" * ");
     size_t start_pos = it->find_first_not_of(' ');
     if (start_pos != TString::npos) {
-      printer->PrintRaw(it->c_str() + start_pos); 
+      printer->PrintRaw(it->c_str() + start_pos);
     }
     printer->Print("\n");
   }
@@ -80,7 +80,7 @@ static void PrintAllComments(const DescriptorType* desc, Printer* printer,
   printer->Print(" */\n");
 }
 
-void PrintMethodSignature(Printer* printer, const MethodDescriptor* method, 
+void PrintMethodSignature(Printer* printer, const MethodDescriptor* method,
                           const map< ::TString, ::TString>& vars) {
   // Print comment
   PrintAllComments(method, printer, true);
@@ -105,7 +105,7 @@ void PrintMethodSignature(Printer* printer, const MethodDescriptor* method,
   }
 }
 
-void PrintSimpleSignature(Printer* printer, const MethodDescriptor* method, 
+void PrintSimpleSignature(Printer* printer, const MethodDescriptor* method,
                           map< ::TString, ::TString> vars) {
   vars["method_name"] =
       grpc_generator::LowercaseFirstLetter(vars["method_name"]);
@@ -113,7 +113,7 @@ void PrintSimpleSignature(Printer* printer, const MethodDescriptor* method,
   PrintMethodSignature(printer, method, vars);
 }
 
-void PrintAdvancedSignature(Printer* printer, const MethodDescriptor* method, 
+void PrintAdvancedSignature(Printer* printer, const MethodDescriptor* method,
                             map< ::TString, ::TString> vars) {
   vars["method_name"] = "RPCTo" + vars["method_name"];
   vars["return_type"] = "GRPCProtoCall *";
@@ -144,7 +144,7 @@ void PrintV2Signature(Printer* printer, const MethodDescriptor* method,
 }
 
 inline map< ::TString, ::TString> GetMethodVars(
-    const MethodDescriptor* method) { 
+    const MethodDescriptor* method) {
   map< ::TString, ::TString> res;
   res["method_name"] = method->name();
   res["request_type"] = method->input_type()->name();
@@ -154,7 +154,7 @@ inline map< ::TString, ::TString> GetMethodVars(
   return res;
 }
 
-void PrintMethodDeclarations(Printer* printer, const MethodDescriptor* method) { 
+void PrintMethodDeclarations(Printer* printer, const MethodDescriptor* method) {
   map< ::TString, ::TString> vars = GetMethodVars(method);
 
   PrintProtoRpcDeclarationAsPragma(printer, method, vars);
@@ -175,7 +175,7 @@ void PrintV2MethodDeclarations(Printer* printer,
   printer->Print(";\n\n");
 }
 
-void PrintSimpleImplementation(Printer* printer, const MethodDescriptor* method, 
+void PrintSimpleImplementation(Printer* printer, const MethodDescriptor* method,
                                map< ::TString, ::TString> vars) {
   printer->Print("{\n");
   printer->Print(vars, "  [[self RPCTo$method_name$With");
@@ -192,8 +192,8 @@ void PrintSimpleImplementation(Printer* printer, const MethodDescriptor* method,
   printer->Print("}\n");
 }
 
-void PrintAdvancedImplementation(Printer* printer, 
-                                 const MethodDescriptor* method, 
+void PrintAdvancedImplementation(Printer* printer,
+                                 const MethodDescriptor* method,
                                  map< ::TString, ::TString> vars) {
   printer->Print("{\n");
   printer->Print(vars, "  return [self RPCToMethod:@\"$method_name$\"\n");
@@ -236,7 +236,7 @@ void PrintV2Implementation(Printer* printer, const MethodDescriptor* method,
   }
 }
 
-void PrintMethodImplementations(Printer* printer, 
+void PrintMethodImplementations(Printer* printer,
                                 const MethodDescriptor* method,
                                 const Parameters& generator_params) {
   map< ::TString, ::TString> vars = GetMethodVars(method);
@@ -262,20 +262,20 @@ void PrintMethodImplementations(Printer* printer,
 ::TString GetAllMessageClasses(const FileDescriptor* file) {
   ::TString output;
   set< ::TString> classes;
-  for (int i = 0; i < file->service_count(); i++) { 
-    const auto service = file->service(i); 
-    for (int i = 0; i < service->method_count(); i++) { 
-      const auto method = service->method(i); 
-      classes.insert(ClassName(method->input_type())); 
-      classes.insert(ClassName(method->output_type())); 
-    } 
-  } 
-  for (auto one_class : classes) { 
-    output += "@class " + one_class + ";\n"; 
-  } 
+  for (int i = 0; i < file->service_count(); i++) {
+    const auto service = file->service(i);
+    for (int i = 0; i < service->method_count(); i++) {
+      const auto method = service->method(i);
+      classes.insert(ClassName(method->input_type()));
+      classes.insert(ClassName(method->output_type()));
+    }
+  }
+  for (auto one_class : classes) {
+    output += "@class " + one_class + ";\n";
+  }
 
-  return output; 
-} 
+  return output;
+}
 
 ::TString GetProtocol(const ServiceDescriptor* service,
                           const Parameters& generator_params) {
@@ -283,13 +283,13 @@ void PrintMethodImplementations(Printer* printer,
 
   if (generator_params.no_v1_compatibility) return output;
 
-  // Scope the output stream so it closes and finalizes output to the string. 
-  grpc::protobuf::io::StringOutputStream output_stream(&output); 
-  Printer printer(&output_stream, '$'); 
+  // Scope the output stream so it closes and finalizes output to the string.
+  grpc::protobuf::io::StringOutputStream output_stream(&output);
+  Printer printer(&output_stream, '$');
 
   map< ::TString, ::TString> vars = {
-      {"service_class", ServiceClassName(service)}}; 
- 
+      {"service_class", ServiceClassName(service)}};
+
   printer.Print(vars,
                 "/**\n"
                 " * The methods in this protocol belong to a set of old APIs "
@@ -298,11 +298,11 @@ void PrintMethodImplementations(Printer* printer,
                 "the v2 protocol is recommended.\n"
                 " */\n");
   printer.Print(vars, "@protocol $service_class$ <NSObject>\n\n");
-  for (int i = 0; i < service->method_count(); i++) { 
-    PrintMethodDeclarations(&printer, service->method(i)); 
+  for (int i = 0; i < service->method_count(); i++) {
+    PrintMethodDeclarations(&printer, service->method(i));
   }
-  printer.Print("@end\n\n"); 
- 
+  printer.Print("@end\n\n");
+
   return output;
 }
 
@@ -328,31 +328,31 @@ void PrintMethodImplementations(Printer* printer,
 ::TString GetInterface(const ServiceDescriptor* service,
                            const Parameters& generator_params) {
   ::TString output;
- 
-  // Scope the output stream so it closes and finalizes output to the string. 
-  grpc::protobuf::io::StringOutputStream output_stream(&output); 
-  Printer printer(&output_stream, '$'); 
- 
+
+  // Scope the output stream so it closes and finalizes output to the string.
+  grpc::protobuf::io::StringOutputStream output_stream(&output);
+  Printer printer(&output_stream, '$');
+
   map< ::TString, ::TString> vars = {
-      {"service_class", ServiceClassName(service)}}; 
- 
-  printer.Print(vars, 
-                "/**\n" 
-                " * Basic service implementation, over gRPC, that only does\n" 
-                " * marshalling and parsing.\n" 
-                " */\n"); 
-  printer.Print(vars, 
-                "@interface $service_class$ :" 
+      {"service_class", ServiceClassName(service)}};
+
+  printer.Print(vars,
+                "/**\n"
+                " * Basic service implementation, over gRPC, that only does\n"
+                " * marshalling and parsing.\n"
+                " */\n");
+  printer.Print(vars,
+                "@interface $service_class$ :"
                 " GRPCProtoService<$service_class$2");
   if (!generator_params.no_v1_compatibility) {
     printer.Print(vars, ", $service_class$");
   }
   printer.Print(">\n");
-  printer.Print( 
+  printer.Print(
       "- (instancetype)initWithHost:(NSString *)host "
       "callOptions:(GRPCCallOptions "
       "*_Nullable)callOptions"
-      " NS_DESIGNATED_INITIALIZER;\n"); 
+      " NS_DESIGNATED_INITIALIZER;\n");
   printer.Print(
       "+ (instancetype)serviceWithHost:(NSString *)host "
       "callOptions:(GRPCCallOptions *_Nullable)callOptions;\n");
@@ -363,11 +363,11 @@ void PrintMethodImplementations(Printer* printer,
     printer.Print("- (instancetype)initWithHost:(NSString *)host;\n");
     printer.Print("+ (instancetype)serviceWithHost:(NSString *)host;\n");
   }
-  printer.Print("@end\n"); 
- 
-  return output; 
-} 
- 
+  printer.Print("@end\n");
+
+  return output;
+}
+
 ::TString GetSource(const ServiceDescriptor* service,
                         const Parameters& generator_params) {
   ::TString output;
@@ -381,12 +381,12 @@ void PrintMethodImplementations(Printer* printer,
         {"service_class", ServiceClassName(service)},
         {"package", service->file()->package()}};
 
-    printer.Print(vars, 
-                  "@implementation $service_class$\n\n" 
+    printer.Print(vars,
+                  "@implementation $service_class$\n\n"
                   "#pragma clang diagnostic push\n"
                   "#pragma clang diagnostic ignored "
                   "\"-Wobjc-designated-initializers\"\n\n"
-                  "// Designated initializer\n" 
+                  "// Designated initializer\n"
                   "- (instancetype)initWithHost:(NSString *)host "
                   "callOptions:(GRPCCallOptions *_Nullable)callOptions {\n"
                   "  return [super initWithHost:host\n"
@@ -415,12 +415,12 @@ void PrintMethodImplementations(Printer* printer,
           "}\n\n");
     }
     printer.Print(
-        "- (instancetype)initWithHost:(NSString *)host\n" 
-        "                 packageName:(NSString *)packageName\n" 
+        "- (instancetype)initWithHost:(NSString *)host\n"
+        "                 packageName:(NSString *)packageName\n"
         "                 serviceName:(NSString *)serviceName\n"
         "                 callOptions:(GRPCCallOptions *)callOptions {\n"
         "  return [self initWithHost:host callOptions:callOptions];\n"
-        "}\n\n"); 
+        "}\n\n");
 
     printer.Print("#pragma mark - Class Methods\n\n");
     if (!generator_params.no_v1_compatibility) {
@@ -429,14 +429,14 @@ void PrintMethodImplementations(Printer* printer,
           "  return [[self alloc] initWithHost:host];\n"
           "}\n\n");
     }
-    printer.Print( 
+    printer.Print(
         "+ (instancetype)serviceWithHost:(NSString *)host "
         "callOptions:(GRPCCallOptions *_Nullable)callOptions {\n"
         "  return [[self alloc] initWithHost:host callOptions:callOptions];\n"
-        "}\n\n"); 
- 
-    printer.Print("#pragma mark - Method Implementations\n\n"); 
- 
+        "}\n\n");
+
+    printer.Print("#pragma mark - Method Implementations\n\n");
+
     for (int i = 0; i < service->method_count(); i++) {
       PrintMethodImplementations(&printer, service->method(i),
                                  generator_params);

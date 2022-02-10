@@ -1,137 +1,137 @@
-//===- Combine.td - Combine rule definitions ---------------*- tablegen -*-===// 
-// 
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
-// 
-//===----------------------------------------------------------------------===// 
-// 
-// Declare GlobalISel combine rules and provide mechanisms to opt-out. 
-// 
-//===----------------------------------------------------------------------===// 
- 
-// Common base class for GICombineRule and GICombineGroup. 
-class GICombine { 
-  // See GICombineGroup. We only declare it here to make the tablegen pass 
-  // simpler. 
-  list<GICombine> Rules = ?; 
-} 
- 
-// A group of combine rules that can be added to a GICombiner or another group. 
-class GICombineGroup<list<GICombine> rules> : GICombine { 
-  // The rules contained in this group. The rules in a group are flattened into 
-  // a single list and sorted into whatever order is most efficient. However, 
-  // they will never be re-ordered such that behaviour differs from the 
-  // specified order. It is therefore possible to use the order of rules in this 
-  // list to describe priorities. 
-  let Rules = rules; 
-} 
- 
-class GICombinerHelperArg<string type, string name> { 
-  string Type = type; 
-  string Name = name; 
-} 
- 
-// Declares a combiner helper class 
-class GICombinerHelper<string classname, list<GICombine> rules> 
-    : GICombineGroup<rules> { 
-  // The class name to use in the generated output. 
-  string Classname = classname; 
-  // The name of a run-time compiler option that will be generated to disable 
-  // specific rules within this combiner. 
-  string DisableRuleOption = ?; 
-  // The state class to inherit from (if any). The generated helper will inherit 
-  // from this class and will forward arguments to its constructors. 
-  string StateClass = ""; 
-  // Any additional arguments that should be appended to the tryCombine*(). 
-  list<GICombinerHelperArg> AdditionalArguments = 
-      [GICombinerHelperArg<"CombinerHelper &", "Helper">]; 
-} 
-class GICombineRule<dag defs, dag match, dag apply> : GICombine { 
-  /// Defines the external interface of the match rule. This includes: 
-  /// * The names of the root nodes (requires at least one) 
-  /// See GIDefKind for details. 
-  dag Defs = defs; 
- 
-  /// Defines the things which must be true for the pattern to match 
-  /// See GIMatchKind for details. 
-  dag Match = match; 
- 
-  /// Defines the things which happen after the decision is made to apply a 
-  /// combine rule. 
-  /// See GIApplyKind for details. 
-  dag Apply = apply; 
-} 
- 
-/// The operator at the root of a GICombineRule.Defs dag. 
-def defs; 
- 
-/// All arguments of the defs operator must be subclasses of GIDefKind or 
-/// sub-dags whose operator is GIDefKindWithArgs. 
-class GIDefKind; 
-class GIDefKindWithArgs; 
-/// Declare a root node. There must be at least one of these in every combine 
-/// rule. 
-/// TODO: The plan is to elide `root` definitions and determine it from the DAG 
-///       itself with an overide for situations where the usual determination 
-///       is incorrect. 
-def root : GIDefKind; 
- 
-/// Declares data that is passed from the match stage to the apply stage. 
-class GIDefMatchData<string type> : GIDefKind { 
-  /// A C++ type name indicating the storage type. 
-  string Type = type; 
-} 
- 
-def extending_load_matchdata : GIDefMatchData<"PreferredTuple">; 
-def indexed_load_store_matchdata : GIDefMatchData<"IndexedLoadStoreMatchInfo">; 
+//===- Combine.td - Combine rule definitions ---------------*- tablegen -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// Declare GlobalISel combine rules and provide mechanisms to opt-out.
+//
+//===----------------------------------------------------------------------===//
+
+// Common base class for GICombineRule and GICombineGroup.
+class GICombine {
+  // See GICombineGroup. We only declare it here to make the tablegen pass
+  // simpler.
+  list<GICombine> Rules = ?;
+}
+
+// A group of combine rules that can be added to a GICombiner or another group.
+class GICombineGroup<list<GICombine> rules> : GICombine {
+  // The rules contained in this group. The rules in a group are flattened into
+  // a single list and sorted into whatever order is most efficient. However,
+  // they will never be re-ordered such that behaviour differs from the
+  // specified order. It is therefore possible to use the order of rules in this
+  // list to describe priorities.
+  let Rules = rules;
+}
+
+class GICombinerHelperArg<string type, string name> {
+  string Type = type;
+  string Name = name;
+}
+
+// Declares a combiner helper class
+class GICombinerHelper<string classname, list<GICombine> rules>
+    : GICombineGroup<rules> {
+  // The class name to use in the generated output.
+  string Classname = classname;
+  // The name of a run-time compiler option that will be generated to disable
+  // specific rules within this combiner.
+  string DisableRuleOption = ?;
+  // The state class to inherit from (if any). The generated helper will inherit
+  // from this class and will forward arguments to its constructors.
+  string StateClass = "";
+  // Any additional arguments that should be appended to the tryCombine*().
+  list<GICombinerHelperArg> AdditionalArguments =
+      [GICombinerHelperArg<"CombinerHelper &", "Helper">];
+}
+class GICombineRule<dag defs, dag match, dag apply> : GICombine {
+  /// Defines the external interface of the match rule. This includes:
+  /// * The names of the root nodes (requires at least one)
+  /// See GIDefKind for details.
+  dag Defs = defs;
+
+  /// Defines the things which must be true for the pattern to match
+  /// See GIMatchKind for details.
+  dag Match = match;
+
+  /// Defines the things which happen after the decision is made to apply a
+  /// combine rule.
+  /// See GIApplyKind for details.
+  dag Apply = apply;
+}
+
+/// The operator at the root of a GICombineRule.Defs dag.
+def defs;
+
+/// All arguments of the defs operator must be subclasses of GIDefKind or
+/// sub-dags whose operator is GIDefKindWithArgs.
+class GIDefKind;
+class GIDefKindWithArgs;
+/// Declare a root node. There must be at least one of these in every combine
+/// rule.
+/// TODO: The plan is to elide `root` definitions and determine it from the DAG
+///       itself with an overide for situations where the usual determination
+///       is incorrect.
+def root : GIDefKind;
+
+/// Declares data that is passed from the match stage to the apply stage.
+class GIDefMatchData<string type> : GIDefKind {
+  /// A C++ type name indicating the storage type.
+  string Type = type;
+}
+
+def extending_load_matchdata : GIDefMatchData<"PreferredTuple">;
+def indexed_load_store_matchdata : GIDefMatchData<"IndexedLoadStoreMatchInfo">;
 def instruction_steps_matchdata: GIDefMatchData<"InstructionStepsMatchInfo">;
- 
-/// The operator at the root of a GICombineRule.Match dag. 
-def match; 
-/// All arguments of the match operator must be either: 
-/// * A subclass of GIMatchKind 
-/// * A subclass of GIMatchKindWithArgs 
-/// * A subclass of Instruction 
-/// * A MIR code block (deprecated) 
-/// The GIMatchKind and GIMatchKindWithArgs cases are described in more detail 
-/// in their definitions below. 
-/// For the Instruction case, these are collected into a DAG where operand names 
-/// that occur multiple times introduce edges. 
-class GIMatchKind; 
-class GIMatchKindWithArgs; 
- 
-/// In lieu of having proper macro support. Trivial one-off opcode checks can be 
-/// performed with this. 
-def wip_match_opcode : GIMatchKindWithArgs; 
- 
-/// The operator at the root of a GICombineRule.Apply dag. 
-def apply; 
-/// All arguments of the apply operator must be subclasses of GIApplyKind, or 
-/// sub-dags whose operator is GIApplyKindWithArgs, or an MIR block 
-/// (deprecated). 
-class GIApplyKind; 
-class GIApplyKindWithArgs; 
- 
-def copy_prop : GICombineRule< 
-  (defs root:$d), 
-  (match (COPY $d, $s):$mi, 
-         [{ return Helper.matchCombineCopy(*${mi}); }]), 
-  (apply [{ Helper.applyCombineCopy(*${mi}); }])>; 
- 
-def extending_loads : GICombineRule< 
-  (defs root:$root, extending_load_matchdata:$matchinfo), 
-  (match (wip_match_opcode G_LOAD, G_SEXTLOAD, G_ZEXTLOAD):$root, 
-         [{ return Helper.matchCombineExtendingLoads(*${root}, ${matchinfo}); }]), 
-  (apply [{ Helper.applyCombineExtendingLoads(*${root}, ${matchinfo}); }])>; 
-def combines_for_extload: GICombineGroup<[extending_loads]>; 
- 
+
+/// The operator at the root of a GICombineRule.Match dag.
+def match;
+/// All arguments of the match operator must be either:
+/// * A subclass of GIMatchKind
+/// * A subclass of GIMatchKindWithArgs
+/// * A subclass of Instruction
+/// * A MIR code block (deprecated)
+/// The GIMatchKind and GIMatchKindWithArgs cases are described in more detail
+/// in their definitions below.
+/// For the Instruction case, these are collected into a DAG where operand names
+/// that occur multiple times introduce edges.
+class GIMatchKind;
+class GIMatchKindWithArgs;
+
+/// In lieu of having proper macro support. Trivial one-off opcode checks can be
+/// performed with this.
+def wip_match_opcode : GIMatchKindWithArgs;
+
+/// The operator at the root of a GICombineRule.Apply dag.
+def apply;
+/// All arguments of the apply operator must be subclasses of GIApplyKind, or
+/// sub-dags whose operator is GIApplyKindWithArgs, or an MIR block
+/// (deprecated).
+class GIApplyKind;
+class GIApplyKindWithArgs;
+
+def copy_prop : GICombineRule<
+  (defs root:$d),
+  (match (COPY $d, $s):$mi,
+         [{ return Helper.matchCombineCopy(*${mi}); }]),
+  (apply [{ Helper.applyCombineCopy(*${mi}); }])>;
+
+def extending_loads : GICombineRule<
+  (defs root:$root, extending_load_matchdata:$matchinfo),
+  (match (wip_match_opcode G_LOAD, G_SEXTLOAD, G_ZEXTLOAD):$root,
+         [{ return Helper.matchCombineExtendingLoads(*${root}, ${matchinfo}); }]),
+  (apply [{ Helper.applyCombineExtendingLoads(*${root}, ${matchinfo}); }])>;
+def combines_for_extload: GICombineGroup<[extending_loads]>;
+
 def sext_trunc_sextload : GICombineRule<
-  (defs root:$d), 
-  (match (wip_match_opcode G_SEXT_INREG):$d, 
+  (defs root:$d),
+  (match (wip_match_opcode G_SEXT_INREG):$d,
          [{ return Helper.matchSextTruncSextLoad(*${d}); }]),
   (apply [{ Helper.applySextTruncSextLoad(*${d}); }])>;
- 
+
 def sext_inreg_of_load_matchdata : GIDefMatchData<"std::tuple<Register, unsigned>">;
 def sext_inreg_of_load : GICombineRule<
   (defs root:$root, sext_inreg_of_load_matchdata:$matchinfo),
@@ -139,25 +139,25 @@ def sext_inreg_of_load : GICombineRule<
          [{ return Helper.matchSextInRegOfLoad(*${root}, ${matchinfo}); }]),
   (apply [{ return Helper.applySextInRegOfLoad(*${root}, ${matchinfo}); }])>;
 
-def combine_indexed_load_store : GICombineRule< 
-  (defs root:$root, indexed_load_store_matchdata:$matchinfo), 
-  (match (wip_match_opcode G_LOAD, G_SEXTLOAD, G_ZEXTLOAD, G_STORE):$root, 
-         [{ return Helper.matchCombineIndexedLoadStore(*${root}, ${matchinfo}); }]), 
-  (apply [{ Helper.applyCombineIndexedLoadStore(*${root}, ${matchinfo}); }])>; 
- 
+def combine_indexed_load_store : GICombineRule<
+  (defs root:$root, indexed_load_store_matchdata:$matchinfo),
+  (match (wip_match_opcode G_LOAD, G_SEXTLOAD, G_ZEXTLOAD, G_STORE):$root,
+         [{ return Helper.matchCombineIndexedLoadStore(*${root}, ${matchinfo}); }]),
+  (apply [{ Helper.applyCombineIndexedLoadStore(*${root}, ${matchinfo}); }])>;
+
 def opt_brcond_by_inverting_cond : GICombineRule<
-  (defs root:$root), 
-  (match (wip_match_opcode G_BR):$root, 
+  (defs root:$root),
+  (match (wip_match_opcode G_BR):$root,
          [{ return Helper.matchOptBrCondByInvertingCond(*${root}); }]),
   (apply [{ Helper.applyOptBrCondByInvertingCond(*${root}); }])>;
- 
-def ptr_add_immed_matchdata : GIDefMatchData<"PtrAddChain">; 
-def ptr_add_immed_chain : GICombineRule< 
-  (defs root:$d, ptr_add_immed_matchdata:$matchinfo), 
-  (match (wip_match_opcode G_PTR_ADD):$d, 
-         [{ return Helper.matchPtrAddImmedChain(*${d}, ${matchinfo}); }]), 
-  (apply [{ Helper.applyPtrAddImmedChain(*${d}, ${matchinfo}); }])>; 
- 
+
+def ptr_add_immed_matchdata : GIDefMatchData<"PtrAddChain">;
+def ptr_add_immed_chain : GICombineRule<
+  (defs root:$d, ptr_add_immed_matchdata:$matchinfo),
+  (match (wip_match_opcode G_PTR_ADD):$d,
+         [{ return Helper.matchPtrAddImmedChain(*${d}, ${matchinfo}); }]),
+  (apply [{ Helper.applyPtrAddImmedChain(*${d}, ${matchinfo}); }])>;
+
 // Fold shift (shift base x), y -> shift base, (x+y), if shifts are same
 def shift_immed_matchdata : GIDefMatchData<"RegisterImmPair">;
 def shift_immed_chain : GICombineRule<
@@ -175,13 +175,13 @@ def shift_of_shifted_logic_chain : GICombineRule<
          [{ return Helper.matchShiftOfShiftedLogic(*${d}, ${matchinfo}); }]),
   (apply [{ Helper.applyShiftOfShiftedLogic(*${d}, ${matchinfo}); }])>;
 
-def mul_to_shl_matchdata : GIDefMatchData<"unsigned">; 
-def mul_to_shl : GICombineRule< 
-  (defs root:$d, mul_to_shl_matchdata:$matchinfo), 
-  (match (G_MUL $d, $op1, $op2):$mi, 
-         [{ return Helper.matchCombineMulToShl(*${mi}, ${matchinfo}); }]), 
-  (apply [{ Helper.applyCombineMulToShl(*${mi}, ${matchinfo}); }])>; 
- 
+def mul_to_shl_matchdata : GIDefMatchData<"unsigned">;
+def mul_to_shl : GICombineRule<
+  (defs root:$d, mul_to_shl_matchdata:$matchinfo),
+  (match (G_MUL $d, $op1, $op2):$mi,
+         [{ return Helper.matchCombineMulToShl(*${mi}, ${matchinfo}); }]),
+  (apply [{ Helper.applyCombineMulToShl(*${mi}, ${matchinfo}); }])>;
+
 // shl ([asz]ext x), y => zext (shl x, y), if shift does not overflow int
 def reduce_shl_of_extend_matchdata : GIDefMatchData<"RegisterImmPair">;
 def reduce_shl_of_extend : GICombineRule<
@@ -190,62 +190,62 @@ def reduce_shl_of_extend : GICombineRule<
          [{ return Helper.matchCombineShlOfExtend(*${mi}, ${matchinfo}); }]),
   (apply [{ Helper.applyCombineShlOfExtend(*${mi}, ${matchinfo}); }])>;
 
-// [us]itofp(undef) = 0, because the result value is bounded. 
-def undef_to_fp_zero : GICombineRule< 
-  (defs root:$root), 
-  (match (wip_match_opcode G_UITOFP, G_SITOFP):$root, 
-         [{ return Helper.matchAnyExplicitUseIsUndef(*${root}); }]), 
-  (apply [{ Helper.replaceInstWithFConstant(*${root}, 0.0); }])>; 
- 
-def undef_to_int_zero: GICombineRule< 
-  (defs root:$root), 
-  (match (wip_match_opcode G_AND, G_MUL):$root, 
-         [{ return Helper.matchAnyExplicitUseIsUndef(*${root}); }]), 
-  (apply [{ Helper.replaceInstWithConstant(*${root}, 0); }])>; 
- 
-def undef_to_negative_one: GICombineRule< 
-  (defs root:$root), 
-  (match (wip_match_opcode G_OR):$root, 
-         [{ return Helper.matchAnyExplicitUseIsUndef(*${root}); }]), 
-  (apply [{ Helper.replaceInstWithConstant(*${root}, -1); }])>; 
- 
+// [us]itofp(undef) = 0, because the result value is bounded.
+def undef_to_fp_zero : GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_UITOFP, G_SITOFP):$root,
+         [{ return Helper.matchAnyExplicitUseIsUndef(*${root}); }]),
+  (apply [{ Helper.replaceInstWithFConstant(*${root}, 0.0); }])>;
+
+def undef_to_int_zero: GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_AND, G_MUL):$root,
+         [{ return Helper.matchAnyExplicitUseIsUndef(*${root}); }]),
+  (apply [{ Helper.replaceInstWithConstant(*${root}, 0); }])>;
+
+def undef_to_negative_one: GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_OR):$root,
+         [{ return Helper.matchAnyExplicitUseIsUndef(*${root}); }]),
+  (apply [{ Helper.replaceInstWithConstant(*${root}, -1); }])>;
+
 def binop_left_undef_to_zero: GICombineRule<
   (defs root:$root),
   (match (wip_match_opcode G_SHL):$root,
          [{ return Helper.matchOperandIsUndef(*${root}, 1); }]),
   (apply [{ Helper.replaceInstWithConstant(*${root}, 0); }])>;
 
-// Instructions where if any source operand is undef, the instruction can be 
-// replaced with undef. 
-def propagate_undef_any_op: GICombineRule< 
-  (defs root:$root), 
+// Instructions where if any source operand is undef, the instruction can be
+// replaced with undef.
+def propagate_undef_any_op: GICombineRule<
+  (defs root:$root),
   (match (wip_match_opcode G_ADD, G_FPTOSI, G_FPTOUI, G_SUB, G_XOR, G_TRUNC):$root,
-         [{ return Helper.matchAnyExplicitUseIsUndef(*${root}); }]), 
-  (apply [{ Helper.replaceInstWithUndef(*${root}); }])>; 
- 
-// Instructions where if all source operands are undef, the instruction can be 
-// replaced with undef. 
-def propagate_undef_all_ops: GICombineRule< 
-  (defs root:$root), 
-  (match (wip_match_opcode G_SHUFFLE_VECTOR):$root, 
-          [{ return Helper.matchAllExplicitUsesAreUndef(*${root}); }]), 
-  (apply [{ Helper.replaceInstWithUndef(*${root}); }])>; 
- 
-// Replace a G_SHUFFLE_VECTOR with an undef mask with a G_IMPLICIT_DEF. 
-def propagate_undef_shuffle_mask: GICombineRule< 
-  (defs root:$root), 
-  (match (wip_match_opcode G_SHUFFLE_VECTOR):$root, 
-         [{ return Helper.matchUndefShuffleVectorMask(*${root}); }]), 
-  (apply [{ Helper.replaceInstWithUndef(*${root}); }])>; 
- 
-// Fold (cond ? x : x) -> x 
-def select_same_val: GICombineRule< 
-  (defs root:$root), 
-  (match (wip_match_opcode G_SELECT):$root, 
-    [{ return Helper.matchSelectSameVal(*${root}); }]), 
-  (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, 2); }]) 
->; 
- 
+         [{ return Helper.matchAnyExplicitUseIsUndef(*${root}); }]),
+  (apply [{ Helper.replaceInstWithUndef(*${root}); }])>;
+
+// Instructions where if all source operands are undef, the instruction can be
+// replaced with undef.
+def propagate_undef_all_ops: GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_SHUFFLE_VECTOR):$root,
+          [{ return Helper.matchAllExplicitUsesAreUndef(*${root}); }]),
+  (apply [{ Helper.replaceInstWithUndef(*${root}); }])>;
+
+// Replace a G_SHUFFLE_VECTOR with an undef mask with a G_IMPLICIT_DEF.
+def propagate_undef_shuffle_mask: GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_SHUFFLE_VECTOR):$root,
+         [{ return Helper.matchUndefShuffleVectorMask(*${root}); }]),
+  (apply [{ Helper.replaceInstWithUndef(*${root}); }])>;
+
+// Fold (cond ? x : x) -> x
+def select_same_val: GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_SELECT):$root,
+    [{ return Helper.matchSelectSameVal(*${root}); }]),
+  (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, 2); }])
+>;
+
 // Fold (undef ? x : y) -> y
 def select_undef_cmp: GICombineRule<
   (defs root:$root),
@@ -264,14 +264,14 @@ def select_constant_cmp: GICombineRule<
   (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, ${matchinfo}); }])
 >;
 
-// Fold x op 0 -> x 
-def right_identity_zero: GICombineRule< 
-  (defs root:$root), 
-  (match (wip_match_opcode G_SUB, G_ADD, G_OR, G_XOR, G_SHL, G_ASHR, G_LSHR):$root, 
-    [{ return Helper.matchConstantOp(${root}->getOperand(2), 0); }]), 
-  (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, 1); }]) 
->; 
- 
+// Fold x op 0 -> x
+def right_identity_zero: GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_SUB, G_ADD, G_OR, G_XOR, G_SHL, G_ASHR, G_LSHR):$root,
+    [{ return Helper.matchConstantOp(${root}->getOperand(2), 0); }]),
+  (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, 1); }])
+>;
+
 // Fold x op 1 -> x
 def right_identity_one: GICombineRule<
   (defs root:$root),
@@ -280,22 +280,22 @@ def right_identity_one: GICombineRule<
   (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, 1); }])
 >;
 
-// Fold (x op x) - > x 
-def binop_same_val: GICombineRule< 
-  (defs root:$root), 
-  (match (wip_match_opcode G_AND, G_OR):$root, 
-    [{ return Helper.matchBinOpSameVal(*${root}); }]), 
-  (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, 1); }]) 
->; 
- 
-// Fold (0 op x) - > 0 
-def binop_left_to_zero: GICombineRule< 
-  (defs root:$root), 
-  (match (wip_match_opcode G_SDIV, G_UDIV, G_SREM, G_UREM):$root, 
-    [{ return Helper.matchOperandIsZero(*${root}, 1); }]), 
-  (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, 1); }]) 
->; 
- 
+// Fold (x op x) - > x
+def binop_same_val: GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_AND, G_OR):$root,
+    [{ return Helper.matchBinOpSameVal(*${root}); }]),
+  (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, 1); }])
+>;
+
+// Fold (0 op x) - > 0
+def binop_left_to_zero: GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_SDIV, G_UDIV, G_SREM, G_UREM):$root,
+    [{ return Helper.matchOperandIsZero(*${root}, 1); }]),
+  (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, 1); }])
+>;
+
 def urem_pow2_to_mask : GICombineRule<
   (defs root:$root),
   (match (wip_match_opcode G_UREM):$root,
@@ -303,30 +303,30 @@ def urem_pow2_to_mask : GICombineRule<
   (apply [{ return Helper.applySimplifyURemByPow2(*${root}); }])
 >;
 
-// Fold (x op 0) - > 0 
-def binop_right_to_zero: GICombineRule< 
-  (defs root:$root), 
-  (match (wip_match_opcode G_MUL):$root, 
-    [{ return Helper.matchOperandIsZero(*${root}, 2); }]), 
-  (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, 2); }]) 
->; 
- 
-// Erase stores of undef values. 
-def erase_undef_store : GICombineRule< 
-  (defs root:$root), 
-  (match (wip_match_opcode G_STORE):$root, 
-    [{ return Helper.matchUndefStore(*${root}); }]), 
-  (apply [{ return Helper.eraseInst(*${root}); }]) 
->; 
- 
-def simplify_add_to_sub_matchinfo: GIDefMatchData<"std::tuple<Register, Register>">; 
-def simplify_add_to_sub: GICombineRule < 
-  (defs root:$root, simplify_add_to_sub_matchinfo:$info), 
-  (match (wip_match_opcode G_ADD):$root, 
-    [{ return Helper.matchSimplifyAddToSub(*${root}, ${info}); }]), 
-  (apply [{ return Helper.applySimplifyAddToSub(*${root}, ${info});}]) 
->; 
- 
+// Fold (x op 0) - > 0
+def binop_right_to_zero: GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_MUL):$root,
+    [{ return Helper.matchOperandIsZero(*${root}, 2); }]),
+  (apply [{ return Helper.replaceSingleDefInstWithOperand(*${root}, 2); }])
+>;
+
+// Erase stores of undef values.
+def erase_undef_store : GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_STORE):$root,
+    [{ return Helper.matchUndefStore(*${root}); }]),
+  (apply [{ return Helper.eraseInst(*${root}); }])
+>;
+
+def simplify_add_to_sub_matchinfo: GIDefMatchData<"std::tuple<Register, Register>">;
+def simplify_add_to_sub: GICombineRule <
+  (defs root:$root, simplify_add_to_sub_matchinfo:$info),
+  (match (wip_match_opcode G_ADD):$root,
+    [{ return Helper.matchSimplifyAddToSub(*${root}, ${info}); }]),
+  (apply [{ return Helper.applySimplifyAddToSub(*${root}, ${info});}])
+>;
+
 // Fold fp_op(cst) to the constant result of the floating point operation.
 def constant_fp_op_matchinfo: GIDefMatchData<"Optional<APFloat>">;
 def constant_fp_op: GICombineRule <
@@ -557,21 +557,21 @@ def load_or_combine : GICombineRule<
 def insert_vec_elt_combines : GICombineGroup<
                             [combine_insert_vec_elts_build_vector]>;
 
-// FIXME: These should use the custom predicate feature once it lands. 
-def undef_combines : GICombineGroup<[undef_to_fp_zero, undef_to_int_zero, 
-                                     undef_to_negative_one, 
+// FIXME: These should use the custom predicate feature once it lands.
+def undef_combines : GICombineGroup<[undef_to_fp_zero, undef_to_int_zero,
+                                     undef_to_negative_one,
                                      binop_left_undef_to_zero,
-                                     propagate_undef_any_op, 
-                                     propagate_undef_all_ops, 
-                                     propagate_undef_shuffle_mask, 
-                                     erase_undef_store]>; 
- 
-def identity_combines : GICombineGroup<[select_same_val, right_identity_zero, 
-                                        binop_same_val, binop_left_to_zero, 
+                                     propagate_undef_any_op,
+                                     propagate_undef_all_ops,
+                                     propagate_undef_shuffle_mask,
+                                     erase_undef_store]>;
+
+def identity_combines : GICombineGroup<[select_same_val, right_identity_zero,
+                                        binop_same_val, binop_left_to_zero,
                                         binop_right_to_zero, p2i_to_i2p,
                                         i2p_to_p2i, anyext_trunc_fold,
                                         fneg_fneg_fold, right_identity_one]>;
- 
+
 def const_combines : GICombineGroup<[constant_fp_op, const_ptradd_to_i2p]>;
 
 def known_bits_simplifications : GICombineGroup<[

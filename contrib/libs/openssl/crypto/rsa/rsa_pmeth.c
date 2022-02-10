@@ -1,5 +1,5 @@
 /*
- * Copyright 2006-2019 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 2006-2019 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -8,7 +8,7 @@
  */
 
 #include "internal/constant_time.h"
- 
+
 #include <stdio.h>
 #include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
@@ -56,7 +56,7 @@ static int pkey_rsa_init(EVP_PKEY_CTX *ctx)
 
     if (rctx == NULL)
         return 0;
-    rctx->nbits = 2048; 
+    rctx->nbits = 2048;
     rctx->primes = RSA_DEFAULT_PRIME_NUM;
     if (pkey_ctx_is_pss(ctx))
         rctx->pad_mode = RSA_PKCS1_PSS_PADDING;
@@ -342,9 +342,9 @@ static int pkey_rsa_decrypt(EVP_PKEY_CTX *ctx,
         ret = RSA_private_decrypt(inlen, in, out, ctx->pkey->pkey.rsa,
                                   rctx->pad_mode);
     }
-    *outlen = constant_time_select_s(constant_time_msb_s(ret), *outlen, ret); 
-    ret = constant_time_select_int(constant_time_msb(ret), ret, 1); 
-    return ret; 
+    *outlen = constant_time_select_s(constant_time_msb_s(ret), *outlen, ret);
+    ret = constant_time_select_int(constant_time_msb(ret), ret, 1);
+    return ret;
 }
 
 static int check_padding_md(const EVP_MD *md, int padding)

@@ -35,10 +35,10 @@
 
 #include <google/protobuf/message_lite.h>
 
-#include <climits> 
+#include <climits>
 #include <cstdint>
 #include <string>
- 
+
 #include <google/protobuf/stubs/logging.h>
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/stubs/stringprintf.h>
@@ -77,9 +77,9 @@ namespace {
 // protobuf implementation but is more likely caused by concurrent modification
 // of the message.  This function attempts to distinguish between the two and
 // provide a useful error message.
-void ByteSizeConsistencyError(size_t byte_size_before_serialization, 
-                              size_t byte_size_after_serialization, 
-                              size_t bytes_produced_by_serialization, 
+void ByteSizeConsistencyError(size_t byte_size_before_serialization,
+                              size_t byte_size_after_serialization,
+                              size_t bytes_produced_by_serialization,
                               const MessageLite& message) {
   GOOGLE_CHECK_EQ(byte_size_before_serialization, byte_size_after_serialization)
       << message.GetTypeName()
@@ -366,12 +366,12 @@ inline uint8* SerializeToArrayImpl(const MessageLite& msg, uint8* target,
   }
 }
 
-uint8* MessageLite::SerializeWithCachedSizesToArray(uint8* target) const { 
+uint8* MessageLite::SerializeWithCachedSizesToArray(uint8* target) const {
   // We only optimize this when using optimize_for = SPEED.  In other cases
   // we just use the CodedOutputStream path.
   return SerializeToArrayImpl(*this, target, GetCachedSize());
-} 
- 
+}
+
 bool MessageLite::SerializeToCodedStream(io::CodedOutputStream* output) const {
   GOOGLE_DCHECK(IsInitialized()) << InitializationErrorMessage("serialize", *this);
   return SerializePartialToCodedStream(output);
@@ -379,8 +379,8 @@ bool MessageLite::SerializeToCodedStream(io::CodedOutputStream* output) const {
 
 bool MessageLite::SerializePartialToCodedStream(
     io::CodedOutputStream* output) const {
-  const size_t size = ByteSizeLong();  // Force size to be cached. 
-  if (size > INT_MAX) { 
+  const size_t size = ByteSizeLong();  // Force size to be cached.
+  if (size > INT_MAX) {
     GOOGLE_LOG(ERROR) << GetTypeName()
                << " exceeded maximum protobuf size of 2GB: " << size;
     return false;
@@ -455,9 +455,9 @@ bool MessageLite::AppendToString(TProtoStringType* output) const {
 }
 
 bool MessageLite::AppendPartialToString(TProtoStringType* output) const {
-  size_t old_size = output->size(); 
-  size_t byte_size = ByteSizeLong(); 
-  if (byte_size > INT_MAX) { 
+  size_t old_size = output->size();
+  size_t byte_size = ByteSizeLong();
+  if (byte_size > INT_MAX) {
     GOOGLE_LOG(ERROR) << GetTypeName()
                << " exceeded maximum protobuf size of 2GB: " << byte_size;
     return false;
@@ -522,7 +522,7 @@ void MessageLite::ParseFromStringOrThrow(std::string_view s) {
   }
 }
 #endif
- 
+
 #if PROTOBUF_USE_EXCEPTIONS
 TProtoStringType NProtoBuf::MessageLite::SerializeAsStringOrThrow() const {
   TProtoStringType s;
@@ -543,7 +543,7 @@ TProtoStringType NProtoBuf::MessageLite::SerializeAsStringOrThrow() const {
 
 
 namespace internal {
- 
+
 template <>
 MessageLite* GenericTypeHandler<MessageLite>::NewFromPrototype(
     const MessageLite* prototype, Arena* arena) {
@@ -559,19 +559,19 @@ void GenericTypeHandler<TProtoStringType>::Merge(const TProtoStringType& from,
                                             TProtoStringType* to) {
   *to = from;
 }
- 
+
 // Non-inline variants of TProtoStringType specializations for
 // various InternalMetadata routines.
 template <>
 void InternalMetadata::DoClear<TProtoStringType>() {
   mutable_unknown_fields<TProtoStringType>()->clear();
-} 
- 
+}
+
 template <>
 void InternalMetadata::DoMergeFrom<TProtoStringType>(const TProtoStringType& other) {
   mutable_unknown_fields<TProtoStringType>()->append(other);
 }
- 
+
 template <>
 void InternalMetadata::DoSwap<TProtoStringType>(TProtoStringType* other) {
   mutable_unknown_fields<TProtoStringType>()->swap(*other);

@@ -19,7 +19,7 @@ except ImportError:
 # Constants
 from pty import (STDIN_FILENO, CHILD)
 
-from .util import which, PtyProcessError 
+from .util import which, PtyProcessError
 
 _platform = sys.platform.lower()
 
@@ -55,23 +55,23 @@ def _make_eof_intr():
     """
     global _EOF, _INTR
     if (_EOF is not None) and (_INTR is not None):
-        return 
+        return
 
     # inherit EOF and INTR definitions from controlling process.
     try:
         from termios import VEOF, VINTR
-        fd = None 
-        for name in 'stdin', 'stdout': 
-            stream = getattr(sys, '__%s__' % name, None) 
-            if stream is None or not hasattr(stream, 'fileno'): 
-                continue 
-            try: 
-                fd = stream.fileno() 
-            except ValueError: 
-                continue 
-        if fd is None: 
-            # no fd, raise ValueError to fallback on CEOF, CINTR 
-            raise ValueError("No stream has a fileno") 
+        fd = None
+        for name in 'stdin', 'stdout':
+            stream = getattr(sys, '__%s__' % name, None)
+            if stream is None or not hasattr(stream, 'fileno'):
+                continue
+            try:
+                fd = stream.fileno()
+            except ValueError:
+                continue
+        if fd is None:
+            # no fd, raise ValueError to fallback on CEOF, CINTR
+            raise ValueError("No stream has a fileno")
         intr = ord(termios.tcgetattr(fd)[6][VINTR])
         eof = ord(termios.tcgetattr(fd)[6][VEOF])
     except (ImportError, OSError, IOError, ValueError, termios.error):
@@ -92,7 +92,7 @@ def _make_eof_intr():
 # to do this from the child before we exec()
     
 def _setecho(fd, state):
-    errmsg = 'setecho() may not be called on this platform (it may still be possible to enable/disable echo when spawning the child process)' 
+    errmsg = 'setecho() may not be called on this platform (it may still be possible to enable/disable echo when spawning the child process)'
 
     try:
         attr = termios.tcgetattr(fd)
@@ -157,9 +157,9 @@ class PtyProcess(object):
         _make_eof_intr()  # Ensure _EOF and _INTR are calculated
         self.pid = pid
         self.fd = fd
-        readf = io.open(fd, 'rb', buffering=0) 
-        writef = io.open(fd, 'wb', buffering=0, closefd=False) 
-        self.fileobj = io.BufferedRWPair(readf, writef) 
+        readf = io.open(fd, 'rb', buffering=0)
+        writef = io.open(fd, 'wb', buffering=0, closefd=False)
+        self.fileobj = io.BufferedRWPair(readf, writef)
 
         self.terminated = False
         self.closed = False
@@ -260,10 +260,10 @@ class PtyProcess(object):
             # Do not allow child to inherit open file descriptors from parent,
             # with the exception of the exec_err_pipe_write of the pipe
             # and pass_fds.
-            # Impose ceiling on max_fd: AIX bugfix for users with unlimited 
-            # nofiles where resource.RLIMIT_NOFILE is 2^63-1 and os.closerange() 
-            # occasionally raises out of range error 
-            max_fd = min(1048576, resource.getrlimit(resource.RLIMIT_NOFILE)[0]) 
+            # Impose ceiling on max_fd: AIX bugfix for users with unlimited
+            # nofiles where resource.RLIMIT_NOFILE is 2^63-1 and os.closerange()
+            # occasionally raises out of range error
+            max_fd = min(1048576, resource.getrlimit(resource.RLIMIT_NOFILE)[0])
             spass_fds = sorted(set(pass_fds) | {exec_err_pipe_write})
             for pair in zip([2] + spass_fds, spass_fds + [max_fd]):
                 os.closerange(pair[0]+1, pair[1])
@@ -380,7 +380,7 @@ class PtyProcess(object):
             # trigger an exception because os.close may be None.
             try:
                 self.close()
-            # which exception, shouldn't we catch explicitly .. ? 
+            # which exception, shouldn't we catch explicitly .. ?
             except:
                 pass
 
@@ -519,7 +519,7 @@ class PtyProcess(object):
         on recent Solaris.
         """
         try:
-            s = self.fileobj.read1(size) 
+            s = self.fileobj.read1(size)
         except (OSError, IOError) as err:
             if err.args[0] == errno.EIO:
                 # Linux-style EOF
@@ -554,18 +554,18 @@ class PtyProcess(object):
 
         return s
 
-    def _writeb(self, b, flush=True): 
-        n = self.fileobj.write(b) 
-        if flush: 
-            self.fileobj.flush() 
-        return n 
- 
-    def write(self, s, flush=True): 
+    def _writeb(self, b, flush=True):
+        n = self.fileobj.write(b)
+        if flush:
+            self.fileobj.flush()
+        return n
+
+    def write(self, s, flush=True):
         """Write bytes to the pseudoterminal.
         
         Returns the number of bytes written.
         """
-        return self._writeb(s, flush=flush) 
+        return self._writeb(s, flush=flush)
 
     def sendcontrol(self, char):
         '''Helper method that wraps send() with mnemonic access for sending control
@@ -581,7 +581,7 @@ class PtyProcess(object):
         if 97 <= a <= 122:
             a = a - ord('a') + 1
             byte = _byte(a)
-            return self._writeb(byte), byte 
+            return self._writeb(byte), byte
         d = {'@': 0, '`': 0,
             '[': 27, '{': 27,
             '\\': 28, '|': 28,
@@ -593,7 +593,7 @@ class PtyProcess(object):
             return 0, b''
 
         byte = _byte(d[char])
-        return self._writeb(byte), byte 
+        return self._writeb(byte), byte
 
     def sendeof(self):
         '''This sends an EOF to the child. This sends a character which causes
@@ -605,13 +605,13 @@ class PtyProcess(object):
         It is the responsibility of the caller to ensure the eof is sent at the
         beginning of a line. '''
 
-        return self._writeb(_EOF), _EOF 
+        return self._writeb(_EOF), _EOF
 
     def sendintr(self):
         '''This sends a SIGINT to the child. It does not require
         the SIGINT to be the first character on a line. '''
 
-        return self._writeb(_INTR), _INTR 
+        return self._writeb(_INTR), _INTR
 
     def eof(self):
         '''This returns True if the EOF exception was ever raised.

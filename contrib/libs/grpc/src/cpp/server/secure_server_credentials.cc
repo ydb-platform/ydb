@@ -1,18 +1,18 @@
 /*
  *
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
@@ -20,24 +20,24 @@
 #include <map>
 #include <memory>
 
-#include <grpcpp/impl/codegen/slice.h> 
+#include <grpcpp/impl/codegen/slice.h>
 #include <grpcpp/impl/grpc_library.h>
-#include <grpcpp/security/auth_metadata_processor.h> 
- 
+#include <grpcpp/security/auth_metadata_processor.h>
+
 #include "src/cpp/common/secure_auth_context.h"
 #include "src/cpp/server/secure_server_credentials.h"
 
 namespace grpc {
 
 void AuthMetadataProcessorAyncWrapper::Destroy(void* wrapper) {
-  auto* w = static_cast<AuthMetadataProcessorAyncWrapper*>(wrapper); 
+  auto* w = static_cast<AuthMetadataProcessorAyncWrapper*>(wrapper);
   delete w;
 }
 
 void AuthMetadataProcessorAyncWrapper::Process(
     void* wrapper, grpc_auth_context* context, const grpc_metadata* md,
     size_t num_md, grpc_process_auth_metadata_done_cb cb, void* user_data) {
-  auto* w = static_cast<AuthMetadataProcessorAyncWrapper*>(wrapper); 
+  auto* w = static_cast<AuthMetadataProcessorAyncWrapper*>(wrapper);
   if (!w->processor_) {
     // Early exit.
     cb(user_data, nullptr, 0, nullptr, 0, GRPC_STATUS_OK, nullptr);
@@ -59,8 +59,8 @@ void AuthMetadataProcessorAyncWrapper::InvokeProcessor(
     grpc_process_auth_metadata_done_cb cb, void* user_data) {
   AuthMetadataProcessor::InputMetadata metadata;
   for (size_t i = 0; i < num_md; i++) {
-    metadata.insert(std::make_pair(StringRefFromSlice(&md[i].key), 
-                                   StringRefFromSlice(&md[i].value))); 
+    metadata.insert(std::make_pair(StringRefFromSlice(&md[i].key),
+                                   StringRefFromSlice(&md[i].value)));
   }
   SecureAuthContext context(ctx);
   AuthMetadataProcessor::OutputMetadata consumed_metadata;
@@ -125,19 +125,19 @@ std::shared_ptr<ServerCredentials> SslServerCredentials(
       new SecureServerCredentials(c_creds));
 }
 
-namespace experimental { 
- 
-std::shared_ptr<ServerCredentials> AltsServerCredentials( 
+namespace experimental {
+
+std::shared_ptr<ServerCredentials> AltsServerCredentials(
     const AltsServerCredentialsOptions& /* options */) {
-  grpc_alts_credentials_options* c_options = 
-      grpc_alts_credentials_server_options_create(); 
-  grpc_server_credentials* c_creds = 
-      grpc_alts_server_credentials_create(c_options); 
-  grpc_alts_credentials_options_destroy(c_options); 
-  return std::shared_ptr<ServerCredentials>( 
-      new SecureServerCredentials(c_creds)); 
-} 
- 
+  grpc_alts_credentials_options* c_options =
+      grpc_alts_credentials_server_options_create();
+  grpc_server_credentials* c_creds =
+      grpc_alts_server_credentials_create(c_options);
+  grpc_alts_credentials_options_destroy(c_options);
+  return std::shared_ptr<ServerCredentials>(
+      new SecureServerCredentials(c_creds));
+}
+
 std::shared_ptr<ServerCredentials> LocalServerCredentials(
     grpc_local_connect_type type) {
   return std::shared_ptr<ServerCredentials>(
@@ -151,5 +151,5 @@ std::shared_ptr<ServerCredentials> TlsServerCredentials(
       grpc_tls_server_credentials_create(options.c_credentials_options())));
 }
 
-}  // namespace experimental 
+}  // namespace experimental
 }  // namespace grpc

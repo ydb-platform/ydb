@@ -9,7 +9,7 @@
 
     Do not edit the MODULES dict by hand.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -31,7 +31,7 @@ MODULES = {'basic': ('_G',
            'print',
            'rawequal',
            'rawget',
-           'rawlen', 
+           'rawlen',
            'rawset',
            'select',
            'setmetatable',
@@ -39,20 +39,20 @@ MODULES = {'basic': ('_G',
            'tostring',
            'type',
            'xpcall'),
- 'bit32': ('bit32.arshift', 
-           'bit32.band', 
-           'bit32.bnot', 
-           'bit32.bor', 
-           'bit32.btest', 
-           'bit32.bxor', 
-           'bit32.extract', 
-           'bit32.lrotate', 
-           'bit32.lshift', 
-           'bit32.replace', 
-           'bit32.rrotate', 
-           'bit32.rshift'), 
+ 'bit32': ('bit32.arshift',
+           'bit32.band',
+           'bit32.bnot',
+           'bit32.bor',
+           'bit32.btest',
+           'bit32.bxor',
+           'bit32.extract',
+           'bit32.lrotate',
+           'bit32.lshift',
+           'bit32.replace',
+           'bit32.rrotate',
+           'bit32.rshift'),
  'coroutine': ('coroutine.create',
-               'coroutine.isyieldable', 
+               'coroutine.isyieldable',
                'coroutine.resume',
                'coroutine.running',
                'coroutine.status',
@@ -65,15 +65,15 @@ MODULES = {'basic': ('_G',
            'debug.getmetatable',
            'debug.getregistry',
            'debug.getupvalue',
-           'debug.getuservalue', 
+           'debug.getuservalue',
            'debug.sethook',
            'debug.setlocal',
            'debug.setmetatable',
            'debug.setupvalue',
-           'debug.setuservalue', 
-           'debug.traceback', 
-           'debug.upvalueid', 
-           'debug.upvaluejoin'), 
+           'debug.setuservalue',
+           'debug.traceback',
+           'debug.upvalueid',
+           'debug.upvaluejoin'),
  'io': ('io.close',
         'io.flush',
         'io.input',
@@ -82,19 +82,19 @@ MODULES = {'basic': ('_G',
         'io.output',
         'io.popen',
         'io.read',
-        'io.stderr', 
-        'io.stdin', 
-        'io.stdout', 
+        'io.stderr',
+        'io.stdin',
+        'io.stdout',
         'io.tmpfile',
         'io.type',
         'io.write'),
  'math': ('math.abs',
           'math.acos',
           'math.asin',
-          'math.atan', 
+          'math.atan',
           'math.atan2',
           'math.ceil',
-          'math.cos', 
+          'math.cos',
           'math.cosh',
           'math.deg',
           'math.exp',
@@ -105,32 +105,32 @@ MODULES = {'basic': ('_G',
           'math.ldexp',
           'math.log',
           'math.max',
-          'math.maxinteger', 
+          'math.maxinteger',
           'math.min',
-          'math.mininteger', 
+          'math.mininteger',
           'math.modf',
           'math.pi',
           'math.pow',
           'math.rad',
           'math.random',
           'math.randomseed',
-          'math.sin', 
+          'math.sin',
           'math.sinh',
           'math.sqrt',
-          'math.tan', 
+          'math.tan',
           'math.tanh',
-          'math.tointeger', 
-          'math.type', 
-          'math.ult'), 
- 'modules': ('package.config', 
+          'math.tointeger',
+          'math.type',
+          'math.ult'),
+ 'modules': ('package.config',
              'package.cpath',
              'package.loaded',
              'package.loadlib',
              'package.path',
              'package.preload',
-             'package.searchers', 
-             'package.searchpath', 
-             'require'), 
+             'package.searchers',
+             'package.searchpath',
+             'require'),
  'os': ('os.clock',
         'os.date',
         'os.difftime',
@@ -152,37 +152,37 @@ MODULES = {'basic': ('_G',
             'string.len',
             'string.lower',
             'string.match',
-            'string.pack', 
-            'string.packsize', 
+            'string.pack',
+            'string.packsize',
             'string.rep',
             'string.reverse',
             'string.sub',
-            'string.unpack', 
+            'string.unpack',
             'string.upper'),
  'table': ('table.concat',
            'table.insert',
-           'table.move', 
-           'table.pack', 
+           'table.move',
+           'table.pack',
            'table.remove',
-           'table.sort', 
-           'table.unpack'), 
- 'utf8': ('utf8.char', 
-          'utf8.charpattern', 
-          'utf8.codepoint', 
-          'utf8.codes', 
-          'utf8.len', 
-          'utf8.offset')} 
+           'table.sort',
+           'table.unpack'),
+ 'utf8': ('utf8.char',
+          'utf8.charpattern',
+          'utf8.codepoint',
+          'utf8.codes',
+          'utf8.len',
+          'utf8.offset')}
 
 if __name__ == '__main__':  # pragma: no cover
     import re
-    import sys 
- 
-    # urllib ends up wanting to import a module called 'math' -- if 
-    # pygments/lexers is in the path, this ends badly. 
-    for i in range(len(sys.path)-1, -1, -1): 
-        if sys.path[i].endswith('/lexers'): 
-            del sys.path[i] 
- 
+    import sys
+
+    # urllib ends up wanting to import a module called 'math' -- if
+    # pygments/lexers is in the path, this ends badly.
+    for i in range(len(sys.path)-1, -1, -1):
+        if sys.path[i].endswith('/lexers'):
+            del sys.path[i]
+
     try:
         from urllib import urlopen
     except ImportError:
@@ -233,7 +233,7 @@ if __name__ == '__main__':  # pragma: no cover
 
     def get_newest_version():
         f = urlopen('http://www.lua.org/manual/')
-        r = re.compile(r'^<A HREF="(\d\.\d)/">(Lua )?\1</A>') 
+        r = re.compile(r'^<A HREF="(\d\.\d)/">(Lua )?\1</A>')
         for line in f:
             m = r.match(line)
             if m is not None:
@@ -241,7 +241,7 @@ if __name__ == '__main__':  # pragma: no cover
 
     def get_lua_functions(version):
         f = urlopen('http://www.lua.org/manual/%s/' % version)
-        r = re.compile(r'^<A HREF="manual.html#pdf-(?!lua|LUA)([^:]+)">\1</A>') 
+        r = re.compile(r'^<A HREF="manual.html#pdf-(?!lua|LUA)([^:]+)">\1</A>')
         functions = []
         for line in f:
             m = r.match(line)
@@ -273,16 +273,16 @@ if __name__ == '__main__':  # pragma: no cover
 
     def run():
         version = get_newest_version()
-        functions = set() 
-        for v in ('5.2', version): 
-            print('> Downloading function index for Lua %s' % v) 
-            f = get_lua_functions(v) 
-            print('> %d functions found, %d new:' % 
-                  (len(f), len(set(f) - functions))) 
-            functions |= set(f) 
+        functions = set()
+        for v in ('5.2', version):
+            print('> Downloading function index for Lua %s' % v)
+            f = get_lua_functions(v)
+            print('> %d functions found, %d new:' %
+                  (len(f), len(set(f) - functions)))
+            functions |= set(f)
 
-        functions = sorted(functions) 
- 
+        functions = sorted(functions)
+
         modules = {}
         for full_function_name in functions:
             print('>> %s' % full_function_name)

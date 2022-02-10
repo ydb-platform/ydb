@@ -13,8 +13,8 @@
 
 
 void ZSTD_fillHashTable(ZSTD_matchState_t* ms,
-                        const void* const end, 
-                        ZSTD_dictTableLoadMethod_e dtlm) 
+                        const void* const end,
+                        ZSTD_dictTableLoadMethod_e dtlm)
 {
     const ZSTD_compressionParameters* const cParams = &ms->cParams;
     U32* const hashTable = ms->hashTable;
@@ -42,7 +42,7 @@ void ZSTD_fillHashTable(ZSTD_matchState_t* ms,
     }   }   }   }
 }
 
- 
+
 /**
  * If you squint hard enough (and ignore repcodes), the search operation at any
  * given position is broken into 4 stages:
@@ -102,8 +102,8 @@ ZSTD_compressBlock_fast_noDict_generic(
     size_t const stepSize = hasStep ? (cParams->targetLength + !(cParams->targetLength) + 1) : 2;
     const BYTE* const base = ms->window.base;
     const BYTE* const istart = (const BYTE*)src;
-    const U32   endIndex = (U32)((size_t)(istart - base) + srcSize); 
-    const U32   prefixStartIndex = ZSTD_getLowestPrefixIndex(ms, endIndex, cParams->windowLog); 
+    const U32   endIndex = (U32)((size_t)(istart - base) + srcSize);
+    const U32   prefixStartIndex = ZSTD_getLowestPrefixIndex(ms, endIndex, cParams->windowLog);
     const BYTE* const prefixStart = base + prefixStartIndex;
     const BYTE* const iend = istart + srcSize;
     const BYTE* const ilimit = iend - HASH_READ_SIZE;
@@ -147,10 +147,10 @@ ZSTD_compressBlock_fast_noDict_generic(
 
     /* start each op */
 _start: /* Requires: ip0 */
- 
+
     step = stepSize;
     nextStep = ip0 + kStepIncr;
- 
+
     /* calculate positions, ip0 - anchor == 0, so we skip step calc */
     ip1 = ip0 + 1;
     ip2 = ip0 + step;
@@ -181,7 +181,7 @@ _start: /* Requires: ip0 */
             ip0 -= mLength;
             match0 -= mLength;
             offcode = STORE_REPCODE_1;
-            mLength += 4; 
+            mLength += 4;
             goto _match;
         }
 
@@ -400,17 +400,17 @@ size_t ZSTD_compressBlock_fast_dictMatchState_generic(
     const U32 dictAndPrefixLength  = (U32)(ip - prefixStart + dictEnd - dictStart);
     const U32 dictHLog             = dictCParams->hashLog;
 
-    /* if a dictionary is still attached, it necessarily means that 
-     * it is within window size. So we just check it. */ 
-    const U32 maxDistance = 1U << cParams->windowLog; 
-    const U32 endIndex = (U32)((size_t)(ip - base) + srcSize); 
-    assert(endIndex - prefixStartIndex <= maxDistance); 
-    (void)maxDistance; (void)endIndex;   /* these variables are not used when assert() is disabled */ 
- 
+    /* if a dictionary is still attached, it necessarily means that
+     * it is within window size. So we just check it. */
+    const U32 maxDistance = 1U << cParams->windowLog;
+    const U32 endIndex = (U32)((size_t)(ip - base) + srcSize);
+    assert(endIndex - prefixStartIndex <= maxDistance);
+    (void)maxDistance; (void)endIndex;   /* these variables are not used when assert() is disabled */
+
     (void)hasStep; /* not currently specialized on whether it's accelerated */
 
     /* ensure there will be no underflow
-     * when translating a dict index into a local index */ 
+     * when translating a dict index into a local index */
     assert(prefixStartIndex >= (U32)(dictEnd - dictBase));
 
     /* init */
@@ -515,7 +515,7 @@ size_t ZSTD_compressBlock_fast_dictMatchState_generic(
     rep[1] = offset_2 ? offset_2 : offsetSaved;
 
     /* Return the last literals size */
-    return (size_t)(iend - anchor); 
+    return (size_t)(iend - anchor);
 }
 
 
@@ -559,12 +559,12 @@ static size_t ZSTD_compressBlock_fast_extDict_generic(
     const BYTE* const istart = (const BYTE*)src;
     const BYTE* ip = istart;
     const BYTE* anchor = istart;
-    const U32   endIndex = (U32)((size_t)(istart - base) + srcSize); 
+    const U32   endIndex = (U32)((size_t)(istart - base) + srcSize);
     const U32   lowLimit = ZSTD_getLowestMatchIndex(ms, endIndex, cParams->windowLog);
-    const U32   dictStartIndex = lowLimit; 
+    const U32   dictStartIndex = lowLimit;
     const BYTE* const dictStart = dictBase + dictStartIndex;
-    const U32   dictLimit = ms->window.dictLimit; 
-    const U32   prefixStartIndex = dictLimit < lowLimit ? lowLimit : dictLimit; 
+    const U32   dictLimit = ms->window.dictLimit;
+    const U32   prefixStartIndex = dictLimit < lowLimit ? lowLimit : dictLimit;
     const BYTE* const prefixStart = base + prefixStartIndex;
     const BYTE* const dictEnd = dictBase + prefixStartIndex;
     const BYTE* const iend = istart + srcSize;
@@ -573,12 +573,12 @@ static size_t ZSTD_compressBlock_fast_extDict_generic(
 
     (void)hasStep; /* not currently specialized on whether it's accelerated */
 
-    DEBUGLOG(5, "ZSTD_compressBlock_fast_extDict_generic (offset_1=%u)", offset_1); 
+    DEBUGLOG(5, "ZSTD_compressBlock_fast_extDict_generic (offset_1=%u)", offset_1);
 
-    /* switch to "regular" variant if extDict is invalidated due to maxDistance */ 
-    if (prefixStartIndex == dictStartIndex) 
+    /* switch to "regular" variant if extDict is invalidated due to maxDistance */
+    if (prefixStartIndex == dictStartIndex)
         return ZSTD_compressBlock_fast(ms, seqStore, rep, src, srcSize);
- 
+
     /* Search Loop */
     while (ip < ilimit) {  /* < instead of <=, because (ip+1) */
         const size_t h = ZSTD_hashPtr(ip, hlog, mls);
@@ -647,7 +647,7 @@ static size_t ZSTD_compressBlock_fast_extDict_generic(
     rep[1] = offset_2;
 
     /* Return the last literals size */
-    return (size_t)(iend - anchor); 
+    return (size_t)(iend - anchor);
 }
 
 ZSTD_GEN_FAST_FN(extDict, 4, 0)

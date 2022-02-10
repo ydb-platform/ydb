@@ -33,7 +33,7 @@
 #include "y_absl/types/span.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace inlined_vector_internal {
 
 // GCC does not deal very well with the below code
@@ -926,7 +926,7 @@ auto Storage<T, N, A>::Swap(Storage* other_storage_ptr) -> void {
 #endif
 
 }  // namespace inlined_vector_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_INLINED_VECTOR_INTERNAL_H_

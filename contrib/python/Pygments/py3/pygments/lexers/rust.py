@@ -23,14 +23,14 @@ class RustLexer(RegexLexer):
     """
     name = 'Rust'
     filenames = ['*.rs', '*.rs.in']
-    aliases = ['rust', 'rs'] 
+    aliases = ['rust', 'rs']
     mimetypes = ['text/rust', 'text/x-rust']
 
     keyword_types = (words((
         'u8', 'u16', 'u32', 'u64', 'u128', 'i8', 'i16', 'i32', 'i64', 'i128',
         'usize', 'isize', 'f32', 'f64', 'char', 'str', 'bool',
     ), suffix=r'\b'), Keyword.Type)
- 
+
     builtin_funcs_types = (words((
         'Copy', 'Send', 'Sized', 'Sync', 'Unpin',
         'Drop', 'Fn', 'FnMut', 'FnOnce', 'drop',
@@ -43,7 +43,7 @@ class RustLexer(RegexLexer):
         'Result', 'Ok', 'Err',
         'String', 'ToString', 'Vec',
     ), suffix=r'\b'), Name.Builtin)
- 
+
     builtin_macros = (words((
         'asm', 'assert', 'assert_eq', 'assert_ne', 'cfg', 'column',
         'compile_error', 'concat', 'concat_idents', 'dbg', 'debug_assert',
@@ -94,23 +94,23 @@ class RustLexer(RegexLexer):
                    suffix=r'\b'), Keyword.Reserved),
             (r'(true|false)\b', Keyword.Constant),
             (r'self\b', Name.Builtin.Pseudo),
-            (r'mod\b', Keyword, 'modname'), 
+            (r'mod\b', Keyword, 'modname'),
             (r'let\b', Keyword.Declaration),
-            (r'fn\b', Keyword, 'funcname'), 
-            (r'(struct|enum|type|union)\b', Keyword, 'typename'), 
-            (r'(default)(\s+)(type|fn)\b', bygroups(Keyword, Text, Keyword)), 
-            keyword_types, 
+            (r'fn\b', Keyword, 'funcname'),
+            (r'(struct|enum|type|union)\b', Keyword, 'typename'),
+            (r'(default)(\s+)(type|fn)\b', bygroups(Keyword, Text, Keyword)),
+            keyword_types,
             (r'[sS]elf\b', Name.Builtin.Pseudo),
             # Prelude (taken from Rust's src/libstd/prelude.rs)
             builtin_funcs_types,
             builtin_macros,
-            # Path seperators, so types don't catch them. 
-            (r'::\b', Text), 
-            # Types in positions. 
-            (r'(?::|->)', Text, 'typename'), 
+            # Path seperators, so types don't catch them.
+            (r'::\b', Text),
+            # Types in positions.
+            (r'(?::|->)', Text, 'typename'),
             # Labels
             (r'(break|continue)(\b\s*)(\'[A-Za-z_]\w*)?',
-             bygroups(Keyword, Text.Whitespace, Name.Label)), 
+             bygroups(Keyword, Text.Whitespace, Name.Label)),
 
             # Character literals
             (r"""'(\\['"\\nrt]|\\x[0-7][0-9a-fA-F]|\\0"""
@@ -128,8 +128,8 @@ class RustLexer(RegexLexer):
             (r'0[xX][0-9a-fA-F_]+', Number.Hex, 'number_lit'),
             # Decimal literals
             (r'[0-9][0-9_]*(\.[0-9_]+[eE][+\-]?[0-9_]+|'
-             r'\.[0-9_]*(?!\.)|[eE][+\-]?[0-9_]+)', Number.Float, 
-             'number_lit'), 
+             r'\.[0-9_]*(?!\.)|[eE][+\-]?[0-9_]+)', Number.Float,
+             'number_lit'),
             (r'[0-9][0-9_]*', Number.Integer, 'number_lit'),
 
             # String literals
@@ -170,25 +170,25 @@ class RustLexer(RegexLexer):
             (r'\*/', String.Doc, '#pop'),
             (r'[*/]', String.Doc),
         ],
-        'modname': [ 
-            (r'\s+', Text), 
-            (r'[a-zA-Z_]\w*', Name.Namespace, '#pop'), 
-            default('#pop'), 
-        ], 
-        'funcname': [ 
-            (r'\s+', Text), 
-            (r'[a-zA-Z_]\w*', Name.Function, '#pop'), 
-            default('#pop'), 
-        ], 
-        'typename': [ 
-            (r'\s+', Text), 
-            (r'&', Keyword.Pseudo), 
+        'modname': [
+            (r'\s+', Text),
+            (r'[a-zA-Z_]\w*', Name.Namespace, '#pop'),
+            default('#pop'),
+        ],
+        'funcname': [
+            (r'\s+', Text),
+            (r'[a-zA-Z_]\w*', Name.Function, '#pop'),
+            default('#pop'),
+        ],
+        'typename': [
+            (r'\s+', Text),
+            (r'&', Keyword.Pseudo),
             (r"'", Operator, 'lifetime'),
             builtin_funcs_types,
-            keyword_types, 
-            (r'[a-zA-Z_]\w*', Name.Class, '#pop'), 
-            default('#pop'), 
-        ], 
+            keyword_types,
+            (r'[a-zA-Z_]\w*', Name.Class, '#pop'),
+            default('#pop'),
+        ],
         'lifetime': [
             (r"(static|_)", Name.Builtin),
             (r"[a-zA-Z_]+\w*", Name.Attribute),

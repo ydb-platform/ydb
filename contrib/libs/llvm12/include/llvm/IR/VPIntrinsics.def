@@ -1,22 +1,22 @@
-//===-- IR/VPIntrinsics.def - Describes llvm.vp.* Intrinsics -*- C++ -*-===// 
-// 
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
-// See https://llvm.org/LICENSE.txt for license information. 
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
-// 
-//===----------------------------------------------------------------------===// 
-// 
-// This file contains descriptions of the various Vector Predication intrinsics. 
-// This is used as a central place for enumerating the different instructions 
-// and should eventually be the place to put comments about the instructions. 
-// 
-//===----------------------------------------------------------------------===// 
- 
-// NOTE: NO INCLUDE GUARD DESIRED! 
- 
-// Provide definitions of macros so that users of this file do not have to 
-// define everything to use it... 
-// 
+//===-- IR/VPIntrinsics.def - Describes llvm.vp.* Intrinsics -*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file contains descriptions of the various Vector Predication intrinsics.
+// This is used as a central place for enumerating the different instructions
+// and should eventually be the place to put comments about the instructions.
+//
+//===----------------------------------------------------------------------===//
+
+// NOTE: NO INCLUDE GUARD DESIRED!
+
+// Provide definitions of macros so that users of this file do not have to
+// define everything to use it...
+//
 // Register a VP intrinsic and begin its property scope.
 // All VP intrinsic scopes are top level, ie it is illegal to place a
 // BEGIN_REGISTER_VP_INTRINSIC within a VP intrinsic scope.
@@ -25,13 +25,13 @@
 // \p EVLPOS   The explicit vector length operand position.
 #ifndef BEGIN_REGISTER_VP_INTRINSIC
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, MASKPOS, EVLPOS)
-#endif 
- 
+#endif
+
 // End the property scope of a VP intrinsic.
 #ifndef END_REGISTER_VP_INTRINSIC
 #define END_REGISTER_VP_INTRINSIC(VPID)
-#endif 
- 
+#endif
+
 // Register a new VP SDNode and begin its property scope.
 // When the SDNode scope is nested within a VP intrinsic scope, it is implicitly registered as the canonical SDNode for this VP intrinsic.
 // There is one VP intrinsic that maps directly to one SDNode that goes by the
@@ -47,7 +47,7 @@
 #ifndef BEGIN_REGISTER_VP_SDNODE
 #define BEGIN_REGISTER_VP_SDNODE(SDOPC, LEGALPOS, TDNAME, MASKPOS, EVLPOS)
 #endif
- 
+
 // End the property scope of a new VP SDNode.
 #ifndef END_REGISTER_VP_SDNODE
 #define END_REGISTER_VP_SDNODE(SDOPC)
@@ -103,45 +103,45 @@ END_REGISTER_VP(INTRIN, SDOPC)
 
 
 
-// llvm.vp.add(x,y,mask,vlen) 
+// llvm.vp.add(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_add, VP_ADD, Add)
- 
-// llvm.vp.and(x,y,mask,vlen) 
+
+// llvm.vp.and(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_and, VP_AND, And)
- 
-// llvm.vp.ashr(x,y,mask,vlen) 
+
+// llvm.vp.ashr(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_ashr, VP_ASHR, AShr)
- 
-// llvm.vp.lshr(x,y,mask,vlen) 
+
+// llvm.vp.lshr(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_lshr, VP_LSHR, LShr)
- 
-// llvm.vp.mul(x,y,mask,vlen) 
+
+// llvm.vp.mul(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_mul, VP_MUL, Mul)
- 
-// llvm.vp.or(x,y,mask,vlen) 
+
+// llvm.vp.or(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_or, VP_OR, Or)
- 
-// llvm.vp.sdiv(x,y,mask,vlen) 
+
+// llvm.vp.sdiv(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_sdiv, VP_SDIV, SDiv)
- 
-// llvm.vp.shl(x,y,mask,vlen) 
+
+// llvm.vp.shl(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_shl, VP_SHL, Shl)
- 
-// llvm.vp.srem(x,y,mask,vlen) 
+
+// llvm.vp.srem(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_srem, VP_SREM, SRem)
- 
-// llvm.vp.sub(x,y,mask,vlen) 
+
+// llvm.vp.sub(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_sub, VP_SUB, Sub)
- 
-// llvm.vp.udiv(x,y,mask,vlen) 
+
+// llvm.vp.udiv(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_udiv, VP_UDIV, UDiv)
- 
-// llvm.vp.urem(x,y,mask,vlen) 
+
+// llvm.vp.urem(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_urem, VP_UREM, URem)
- 
-// llvm.vp.xor(x,y,mask,vlen) 
+
+// llvm.vp.xor(x,y,mask,vlen)
 HELPER_REGISTER_BINARY_INT_VP(vp_xor, VP_XOR, Xor)
- 
+
 #undef HELPER_REGISTER_BINARY_INT_VP
 
 ///// } Integer Arithmetic

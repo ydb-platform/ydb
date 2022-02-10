@@ -25,16 +25,16 @@ cdef extern from *:
         char* data()
         size_t size()
 
-{{for py_type in ['PyObject', 'PyUnicode', 'PyStr', 'PyBytes', 'PyByteArray']}} 
-cdef extern from *: 
+{{for py_type in ['PyObject', 'PyUnicode', 'PyStr', 'PyBytes', 'PyByteArray']}}
+cdef extern from *:
     cdef object __Pyx_{{py_type}}_FromStringAndSize(const char*, size_t)
 
-@cname("{{cname.replace("PyObject", py_type, 1)}}") 
-cdef inline object {{cname.replace("PyObject", py_type, 1)}}(const string& s): 
-    return __Pyx_{{py_type}}_FromStringAndSize(s.data(), s.size()) 
-{{endfor}} 
+@cname("{{cname.replace("PyObject", py_type, 1)}}")
+cdef inline object {{cname.replace("PyObject", py_type, 1)}}(const string& s):
+    return __Pyx_{{py_type}}_FromStringAndSize(s.data(), s.size())
+{{endfor}}
 
- 
+
 #################### vector.from_py ####################
 
 cdef extern from *:
@@ -209,34 +209,34 @@ cdef object {{cname}}(const map[X,Y]& s):
     return o
 
 
-#################### complex.from_py #################### 
- 
-cdef extern from *: 
-    cdef cppclass std_complex "std::complex" [T]: 
-        std_complex() 
-        std_complex(T, T) except + 
- 
-@cname("{{cname}}") 
-cdef std_complex[X] {{cname}}(object o) except *: 
-    cdef double complex z = o 
-    return std_complex[X](<X>z.real, <X>z.imag) 
- 
- 
-#################### complex.to_py #################### 
- 
-cdef extern from *: 
-    cdef cppclass std_complex "std::complex" [T]: 
-        X real() 
-        X imag() 
- 
-@cname("{{cname}}") 
-cdef object {{cname}}(const std_complex[X]& z): 
-    cdef double complex tmp 
-    tmp.real = <double>z.real() 
-    tmp.imag = <double>z.imag() 
-    return tmp 
- 
- 
+#################### complex.from_py ####################
+
+cdef extern from *:
+    cdef cppclass std_complex "std::complex" [T]:
+        std_complex()
+        std_complex(T, T) except +
+
+@cname("{{cname}}")
+cdef std_complex[X] {{cname}}(object o) except *:
+    cdef double complex z = o
+    return std_complex[X](<X>z.real, <X>z.imag)
+
+
+#################### complex.to_py ####################
+
+cdef extern from *:
+    cdef cppclass std_complex "std::complex" [T]:
+        X real()
+        X imag()
+
+@cname("{{cname}}")
+cdef object {{cname}}(const std_complex[X]& z):
+    cdef double complex tmp
+    tmp.real = <double>z.real()
+    tmp.imag = <double>z.imag()
+    return tmp
+
+
 #################### arcadia_TMaybe.from_py ####################
 
 cdef extern from *:

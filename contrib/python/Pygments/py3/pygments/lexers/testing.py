@@ -149,7 +149,7 @@ class TAPLexer(RegexLexer):
             (r'^TAP version \d+\n', Name.Namespace),
 
             # Specify a plan with a plan line.
-            (r'^1\.\.\d+', Keyword.Declaration, 'plan'), 
+            (r'^1\.\.\d+', Keyword.Declaration, 'plan'),
 
             # A test failure
             (r'^(not ok)([^\S\n]*)(\d*)',

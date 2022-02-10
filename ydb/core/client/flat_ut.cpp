@@ -1480,7 +1480,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         for (ui32 i = 0; i < 20; ++i) {
             Cout << "row " << i << Endl;
             ui32 status = annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), i, TString(6000000, 'A').data()), opts, response);
-            UNIT_ASSERT(status == NMsgBusProxy::MSTATUS_OK || status == NMsgBusProxy::MSTATUS_REJECTED); 
+            UNIT_ASSERT(status == NMsgBusProxy::MSTATUS_OK || status == NMsgBusProxy::MSTATUS_REJECTED);
             if (status == NMsgBusProxy::MSTATUS_REJECTED) {
                 ++errorCount;
             }

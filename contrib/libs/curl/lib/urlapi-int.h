@@ -22,8 +22,8 @@
  *
  ***************************************************************************/
 #include "curl_setup.h"
-/* scheme is not URL encoded, the longest libcurl supported ones are... */ 
-#define MAX_SCHEME_LEN 40 
+/* scheme is not URL encoded, the longest libcurl supported ones are... */
+#define MAX_SCHEME_LEN 40
 
 bool Curl_is_absolute_url(const char *url, char *scheme, size_t buflen);
 

@@ -1,61 +1,61 @@
-""" 
-    pygments.lexers.teraterm 
-    ~~~~~~~~~~~~~~~~~~~~~~~~ 
- 
-    Lexer for Tera Term macro files. 
- 
+"""
+    pygments.lexers.teraterm
+    ~~~~~~~~~~~~~~~~~~~~~~~~
+
+    Lexer for Tera Term macro files.
+
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details. 
-""" 
- 
-import re 
- 
-from pygments.lexer import RegexLexer, include, bygroups 
-from pygments.token import Text, Comment, Operator, Name, String, \ 
-    Number, Keyword 
- 
-__all__ = ['TeraTermLexer'] 
- 
- 
-class TeraTermLexer(RegexLexer): 
-    """ 
-    For `Tera Term <https://ttssh2.osdn.jp/>`_ macro source code. 
- 
-    .. versionadded:: 2.4 
-    """ 
-    name = 'Tera Term macro' 
+    :license: BSD, see LICENSE for details.
+"""
+
+import re
+
+from pygments.lexer import RegexLexer, include, bygroups
+from pygments.token import Text, Comment, Operator, Name, String, \
+    Number, Keyword
+
+__all__ = ['TeraTermLexer']
+
+
+class TeraTermLexer(RegexLexer):
+    """
+    For `Tera Term <https://ttssh2.osdn.jp/>`_ macro source code.
+
+    .. versionadded:: 2.4
+    """
+    name = 'Tera Term macro'
     aliases = ['teratermmacro', 'teraterm', 'ttl']
-    filenames = ['*.ttl'] 
-    mimetypes = ['text/x-teratermmacro'] 
- 
-    tokens = { 
-        'root': [ 
-            include('comments'), 
-            include('labels'), 
-            include('commands'), 
-            include('builtin-variables'), 
-            include('user-variables'), 
-            include('operators'), 
-            include('numeric-literals'), 
-            include('string-literals'), 
-            include('all-whitespace'), 
+    filenames = ['*.ttl']
+    mimetypes = ['text/x-teratermmacro']
+
+    tokens = {
+        'root': [
+            include('comments'),
+            include('labels'),
+            include('commands'),
+            include('builtin-variables'),
+            include('user-variables'),
+            include('operators'),
+            include('numeric-literals'),
+            include('string-literals'),
+            include('all-whitespace'),
             (r'\S', Text),
-        ], 
-        'comments': [ 
-            (r';[^\r\n]*', Comment.Single), 
-            (r'/\*', Comment.Multiline, 'in-comment'), 
-        ], 
-        'in-comment': [ 
-            (r'\*/', Comment.Multiline, '#pop'), 
-            (r'[^*/]+', Comment.Multiline), 
-            (r'[*/]', Comment.Multiline) 
-        ], 
-        'labels': [ 
+        ],
+        'comments': [
+            (r';[^\r\n]*', Comment.Single),
+            (r'/\*', Comment.Multiline, 'in-comment'),
+        ],
+        'in-comment': [
+            (r'\*/', Comment.Multiline, '#pop'),
+            (r'[^*/]+', Comment.Multiline),
+            (r'[*/]', Comment.Multiline)
+        ],
+        'labels': [
             (r'(?i)^(\s*)(:[a-z0-9_]+)', bygroups(Text, Name.Label)),
-        ], 
-        'commands': [ 
-            ( 
-                r'(?i)\b(' 
+        ],
+        'commands': [
+            (
+                r'(?i)\b('
                 r'basename|'
                 r'beep|'
                 r'bplusrecv|'
@@ -255,15 +255,15 @@ class TeraTermLexer(RegexLexer):
                 r'ymodemsend|'
                 r'zmodemrecv|'
                 r'zmodemsend'
-                r')\b', 
-                Keyword, 
-            ), 
+                r')\b',
+                Keyword,
+            ),
             (r'(?i)(call|goto)([ \t]+)([a-z0-9_]+)',
              bygroups(Keyword, Text, Name.Label)),
-        ], 
-        'builtin-variables': [ 
-            ( 
-                r'(?i)(' 
+        ],
+        'builtin-variables': [
+            (
+                r'(?i)('
                 r'groupmatchstr1|'
                 r'groupmatchstr2|'
                 r'groupmatchstr3|'
@@ -289,46 +289,46 @@ class TeraTermLexer(RegexLexer):
                 r'params|'
                 r'result|'
                 r'timeout'
-                r')\b', 
-                Name.Builtin 
-            ), 
-        ], 
-        'user-variables': [ 
+                r')\b',
+                Name.Builtin
+            ),
+        ],
+        'user-variables': [
             (r'(?i)[a-z_][a-z0-9_]*', Name.Variable),
-        ], 
-        'numeric-literals': [ 
-            (r'(-?)([0-9]+)', bygroups(Operator, Number.Integer)), 
-            (r'(?i)\$[0-9a-f]+', Number.Hex), 
-        ], 
-        'string-literals': [ 
-            (r'(?i)#(?:[0-9]+|\$[0-9a-f]+)', String.Char), 
-            (r"'", String.Single, 'in-single-string'), 
-            (r'"', String.Double, 'in-double-string'), 
-        ], 
-        'in-general-string': [ 
+        ],
+        'numeric-literals': [
+            (r'(-?)([0-9]+)', bygroups(Operator, Number.Integer)),
+            (r'(?i)\$[0-9a-f]+', Number.Hex),
+        ],
+        'string-literals': [
+            (r'(?i)#(?:[0-9]+|\$[0-9a-f]+)', String.Char),
+            (r"'", String.Single, 'in-single-string'),
+            (r'"', String.Double, 'in-double-string'),
+        ],
+        'in-general-string': [
             (r'\\[\\nt]', String.Escape),  # Only three escapes are supported.
-            (r'.', String), 
-        ], 
-        'in-single-string': [ 
-            (r"'", String.Single, '#pop'), 
-            include('in-general-string'), 
-        ], 
-        'in-double-string': [ 
-            (r'"', String.Double, '#pop'), 
-            include('in-general-string'), 
-        ], 
-        'operators': [ 
-            (r'and|not|or|xor', Operator.Word), 
-            (r'[!%&*+<=>^~\|\/-]+', Operator), 
-            (r'[()]', String.Symbol), 
-        ], 
-        'all-whitespace': [ 
+            (r'.', String),
+        ],
+        'in-single-string': [
+            (r"'", String.Single, '#pop'),
+            include('in-general-string'),
+        ],
+        'in-double-string': [
+            (r'"', String.Double, '#pop'),
+            include('in-general-string'),
+        ],
+        'operators': [
+            (r'and|not|or|xor', Operator.Word),
+            (r'[!%&*+<=>^~\|\/-]+', Operator),
+            (r'[()]', String.Symbol),
+        ],
+        'all-whitespace': [
             (r'\s+', Text),
-        ], 
-    } 
- 
-    # Turtle and Tera Term macro files share the same file extension 
-    # but each has a recognizable and distinct syntax. 
-    def analyse_text(text): 
-        if re.search(TeraTermLexer.tokens['commands'][0][0], text): 
+        ],
+    }
+
+    # Turtle and Tera Term macro files share the same file extension
+    # but each has a recognizable and distinct syntax.
+    def analyse_text(text):
+        if re.search(TeraTermLexer.tokens['commands'][0][0], text):
             return 0.01

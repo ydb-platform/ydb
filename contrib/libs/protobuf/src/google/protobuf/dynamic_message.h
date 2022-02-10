@@ -38,10 +38,10 @@
 #ifndef GOOGLE_PROTOBUF_DYNAMIC_MESSAGE_H__
 #define GOOGLE_PROTOBUF_DYNAMIC_MESSAGE_H__
 
-#include <algorithm> 
+#include <algorithm>
 #include <memory>
 #include <unordered_map>
-#include <vector> 
+#include <vector>
 
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/message.h>
@@ -139,84 +139,84 @@ class PROTOBUF_EXPORT DynamicMessageFactory : public MessageFactory {
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(DynamicMessageFactory);
 };
 
-// Helper for computing a sorted list of map entries via reflection. 
+// Helper for computing a sorted list of map entries via reflection.
 class PROTOBUF_EXPORT DynamicMapSorter {
- public: 
+ public:
   static std::vector<const Message*> Sort(const Message& message, int map_size,
-                                          const Reflection* reflection, 
-                                          const FieldDescriptor* field) { 
+                                          const Reflection* reflection,
+                                          const FieldDescriptor* field) {
     std::vector<const Message*> result;
     result.reserve(map_size);
     RepeatedFieldRef<Message> map_field =
         reflection->GetRepeatedFieldRef<Message>(message, field);
     for (auto it = map_field.begin(); it != map_field.end(); ++it) {
       result.push_back(&*it);
-    } 
-    MapEntryMessageComparator comparator(field->message_type()); 
-    std::stable_sort(result.begin(), result.end(), comparator); 
-    // Complain if the keys aren't in ascending order. 
-#ifndef NDEBUG 
-    for (size_t j = 1; j < static_cast<size_t>(map_size); j++) { 
-      if (!comparator(result[j - 1], result[j])) { 
+    }
+    MapEntryMessageComparator comparator(field->message_type());
+    std::stable_sort(result.begin(), result.end(), comparator);
+    // Complain if the keys aren't in ascending order.
+#ifndef NDEBUG
+    for (size_t j = 1; j < static_cast<size_t>(map_size); j++) {
+      if (!comparator(result[j - 1], result[j])) {
         GOOGLE_LOG(ERROR) << (comparator(result[j], result[j - 1])
                            ? "internal error in map key sorting"
                            : "map keys are not unique");
-      } 
-    } 
-#endif 
-    return result; 
-  } 
- 
- private: 
+      }
+    }
+#endif
+    return result;
+  }
+
+ private:
   class PROTOBUF_EXPORT MapEntryMessageComparator {
-   public: 
-    explicit MapEntryMessageComparator(const Descriptor* descriptor) 
-        : field_(descriptor->field(0)) {} 
- 
-    bool operator()(const Message* a, const Message* b) { 
-      const Reflection* reflection = a->GetReflection(); 
-      switch (field_->cpp_type()) { 
-        case FieldDescriptor::CPPTYPE_BOOL: { 
-          bool first = reflection->GetBool(*a, field_); 
-          bool second = reflection->GetBool(*b, field_); 
-          return first < second; 
-        } 
-        case FieldDescriptor::CPPTYPE_INT32: { 
-          int32 first = reflection->GetInt32(*a, field_); 
-          int32 second = reflection->GetInt32(*b, field_); 
-          return first < second; 
-        } 
-        case FieldDescriptor::CPPTYPE_INT64: { 
-          int64 first = reflection->GetInt64(*a, field_); 
-          int64 second = reflection->GetInt64(*b, field_); 
-          return first < second; 
-        } 
-        case FieldDescriptor::CPPTYPE_UINT32: { 
-          uint32 first = reflection->GetUInt32(*a, field_); 
-          uint32 second = reflection->GetUInt32(*b, field_); 
-          return first < second; 
-        } 
-        case FieldDescriptor::CPPTYPE_UINT64: { 
-          uint64 first = reflection->GetUInt64(*a, field_); 
-          uint64 second = reflection->GetUInt64(*b, field_); 
-          return first < second; 
-        } 
-        case FieldDescriptor::CPPTYPE_STRING: { 
+   public:
+    explicit MapEntryMessageComparator(const Descriptor* descriptor)
+        : field_(descriptor->field(0)) {}
+
+    bool operator()(const Message* a, const Message* b) {
+      const Reflection* reflection = a->GetReflection();
+      switch (field_->cpp_type()) {
+        case FieldDescriptor::CPPTYPE_BOOL: {
+          bool first = reflection->GetBool(*a, field_);
+          bool second = reflection->GetBool(*b, field_);
+          return first < second;
+        }
+        case FieldDescriptor::CPPTYPE_INT32: {
+          int32 first = reflection->GetInt32(*a, field_);
+          int32 second = reflection->GetInt32(*b, field_);
+          return first < second;
+        }
+        case FieldDescriptor::CPPTYPE_INT64: {
+          int64 first = reflection->GetInt64(*a, field_);
+          int64 second = reflection->GetInt64(*b, field_);
+          return first < second;
+        }
+        case FieldDescriptor::CPPTYPE_UINT32: {
+          uint32 first = reflection->GetUInt32(*a, field_);
+          uint32 second = reflection->GetUInt32(*b, field_);
+          return first < second;
+        }
+        case FieldDescriptor::CPPTYPE_UINT64: {
+          uint64 first = reflection->GetUInt64(*a, field_);
+          uint64 second = reflection->GetUInt64(*b, field_);
+          return first < second;
+        }
+        case FieldDescriptor::CPPTYPE_STRING: {
           TProtoStringType first = reflection->GetString(*a, field_);
           TProtoStringType second = reflection->GetString(*b, field_);
-          return first < second; 
-        } 
-        default: 
-          GOOGLE_LOG(DFATAL) << "Invalid key for map field."; 
-          return true; 
-      } 
-    } 
- 
-   private: 
-    const FieldDescriptor* field_; 
-  }; 
-}; 
- 
+          return first < second;
+        }
+        default:
+          GOOGLE_LOG(DFATAL) << "Invalid key for map field.";
+          return true;
+      }
+    }
+
+   private:
+    const FieldDescriptor* field_;
+  };
+};
+
 }  // namespace protobuf
 }  // namespace google
 

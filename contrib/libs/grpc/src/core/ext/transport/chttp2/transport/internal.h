@@ -1,30 +1,30 @@
 /*
  *
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
 #ifndef GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_INTERNAL_H
 #define GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_INTERNAL_H
 
-#include <grpc/support/port_platform.h> 
- 
+#include <grpc/support/port_platform.h>
+
 #include <assert.h>
 #include <stdbool.h>
 
-#include "src/core/ext/transport/chttp2/transport/flow_control.h" 
+#include "src/core/ext/transport/chttp2/transport/flow_control.h"
 #include "src/core/ext/transport/chttp2/transport/frame.h"
 #include "src/core/ext/transport/chttp2/transport/frame_data.h"
 #include "src/core/ext/transport/chttp2/transport/frame_goaway.h"
@@ -37,11 +37,11 @@
 #include "src/core/ext/transport/chttp2/transport/incoming_metadata.h"
 #include "src/core/ext/transport/chttp2/transport/stream_map.h"
 #include "src/core/lib/channel/channelz.h"
-#include "src/core/lib/compression/stream_compression.h" 
-#include "src/core/lib/gprpp/manual_constructor.h" 
+#include "src/core/lib/compression/stream_compression.h"
+#include "src/core/lib/gprpp/manual_constructor.h"
 #include "src/core/lib/iomgr/combiner.h"
 #include "src/core/lib/iomgr/endpoint.h"
-#include "src/core/lib/iomgr/timer.h" 
+#include "src/core/lib/iomgr/timer.h"
 #include "src/core/lib/transport/connectivity_state.h"
 #include "src/core/lib/transport/transport_impl.h"
 
@@ -59,7 +59,7 @@ typedef enum {
   /* No additional ref is taken for the following refs. Make sure to remove the
      stream from these lists when the stream is removed. */
   GRPC_CHTTP2_LIST_STALLED_BY_TRANSPORT,
-  GRPC_CHTTP2_LIST_STALLED_BY_STREAM, 
+  GRPC_CHTTP2_LIST_STALLED_BY_STREAM,
   /** streams that are waiting to start because there are too many concurrent
       streams on the connection */
   GRPC_CHTTP2_LIST_WAITING_FOR_CONCURRENCY,
@@ -72,64 +72,64 @@ typedef enum {
   GRPC_CHTTP2_WRITE_STATE_WRITING_WITH_MORE,
 } grpc_chttp2_write_state;
 
-typedef enum { 
-  GRPC_CHTTP2_OPTIMIZE_FOR_LATENCY, 
-  GRPC_CHTTP2_OPTIMIZE_FOR_THROUGHPUT, 
-} grpc_chttp2_optimization_target; 
- 
-typedef enum { 
-  GRPC_CHTTP2_PCL_INITIATE = 0, 
-  GRPC_CHTTP2_PCL_NEXT, 
-  GRPC_CHTTP2_PCL_INFLIGHT, 
-  GRPC_CHTTP2_PCL_COUNT /* must be last */ 
-} grpc_chttp2_ping_closure_list; 
- 
-typedef enum { 
-  GRPC_CHTTP2_INITIATE_WRITE_INITIAL_WRITE, 
-  GRPC_CHTTP2_INITIATE_WRITE_START_NEW_STREAM, 
-  GRPC_CHTTP2_INITIATE_WRITE_SEND_MESSAGE, 
-  GRPC_CHTTP2_INITIATE_WRITE_SEND_INITIAL_METADATA, 
-  GRPC_CHTTP2_INITIATE_WRITE_SEND_TRAILING_METADATA, 
-  GRPC_CHTTP2_INITIATE_WRITE_RETRY_SEND_PING, 
-  GRPC_CHTTP2_INITIATE_WRITE_CONTINUE_PINGS, 
-  GRPC_CHTTP2_INITIATE_WRITE_GOAWAY_SENT, 
-  GRPC_CHTTP2_INITIATE_WRITE_RST_STREAM, 
-  GRPC_CHTTP2_INITIATE_WRITE_CLOSE_FROM_API, 
-  GRPC_CHTTP2_INITIATE_WRITE_STREAM_FLOW_CONTROL, 
-  GRPC_CHTTP2_INITIATE_WRITE_TRANSPORT_FLOW_CONTROL, 
-  GRPC_CHTTP2_INITIATE_WRITE_SEND_SETTINGS, 
-  GRPC_CHTTP2_INITIATE_WRITE_FLOW_CONTROL_UNSTALLED_BY_SETTING, 
-  GRPC_CHTTP2_INITIATE_WRITE_FLOW_CONTROL_UNSTALLED_BY_UPDATE, 
-  GRPC_CHTTP2_INITIATE_WRITE_APPLICATION_PING, 
+typedef enum {
+  GRPC_CHTTP2_OPTIMIZE_FOR_LATENCY,
+  GRPC_CHTTP2_OPTIMIZE_FOR_THROUGHPUT,
+} grpc_chttp2_optimization_target;
+
+typedef enum {
+  GRPC_CHTTP2_PCL_INITIATE = 0,
+  GRPC_CHTTP2_PCL_NEXT,
+  GRPC_CHTTP2_PCL_INFLIGHT,
+  GRPC_CHTTP2_PCL_COUNT /* must be last */
+} grpc_chttp2_ping_closure_list;
+
+typedef enum {
+  GRPC_CHTTP2_INITIATE_WRITE_INITIAL_WRITE,
+  GRPC_CHTTP2_INITIATE_WRITE_START_NEW_STREAM,
+  GRPC_CHTTP2_INITIATE_WRITE_SEND_MESSAGE,
+  GRPC_CHTTP2_INITIATE_WRITE_SEND_INITIAL_METADATA,
+  GRPC_CHTTP2_INITIATE_WRITE_SEND_TRAILING_METADATA,
+  GRPC_CHTTP2_INITIATE_WRITE_RETRY_SEND_PING,
+  GRPC_CHTTP2_INITIATE_WRITE_CONTINUE_PINGS,
+  GRPC_CHTTP2_INITIATE_WRITE_GOAWAY_SENT,
+  GRPC_CHTTP2_INITIATE_WRITE_RST_STREAM,
+  GRPC_CHTTP2_INITIATE_WRITE_CLOSE_FROM_API,
+  GRPC_CHTTP2_INITIATE_WRITE_STREAM_FLOW_CONTROL,
+  GRPC_CHTTP2_INITIATE_WRITE_TRANSPORT_FLOW_CONTROL,
+  GRPC_CHTTP2_INITIATE_WRITE_SEND_SETTINGS,
+  GRPC_CHTTP2_INITIATE_WRITE_FLOW_CONTROL_UNSTALLED_BY_SETTING,
+  GRPC_CHTTP2_INITIATE_WRITE_FLOW_CONTROL_UNSTALLED_BY_UPDATE,
+  GRPC_CHTTP2_INITIATE_WRITE_APPLICATION_PING,
   GRPC_CHTTP2_INITIATE_WRITE_BDP_PING,
-  GRPC_CHTTP2_INITIATE_WRITE_KEEPALIVE_PING, 
-  GRPC_CHTTP2_INITIATE_WRITE_TRANSPORT_FLOW_CONTROL_UNSTALLED, 
-  GRPC_CHTTP2_INITIATE_WRITE_PING_RESPONSE, 
-  GRPC_CHTTP2_INITIATE_WRITE_FORCE_RST_STREAM, 
-} grpc_chttp2_initiate_write_reason; 
- 
-const char* grpc_chttp2_initiate_write_reason_string( 
-    grpc_chttp2_initiate_write_reason reason); 
- 
+  GRPC_CHTTP2_INITIATE_WRITE_KEEPALIVE_PING,
+  GRPC_CHTTP2_INITIATE_WRITE_TRANSPORT_FLOW_CONTROL_UNSTALLED,
+  GRPC_CHTTP2_INITIATE_WRITE_PING_RESPONSE,
+  GRPC_CHTTP2_INITIATE_WRITE_FORCE_RST_STREAM,
+} grpc_chttp2_initiate_write_reason;
+
+const char* grpc_chttp2_initiate_write_reason_string(
+    grpc_chttp2_initiate_write_reason reason);
+
 struct grpc_chttp2_ping_queue {
   grpc_closure_list lists[GRPC_CHTTP2_PCL_COUNT] = {};
   uint64_t inflight_id = 0;
 };
 struct grpc_chttp2_repeated_ping_policy {
-  int max_pings_without_data; 
-  int max_ping_strikes; 
-  grpc_millis min_sent_ping_interval_without_data; 
-  grpc_millis min_recv_ping_interval_without_data; 
+  int max_pings_without_data;
+  int max_ping_strikes;
+  grpc_millis min_sent_ping_interval_without_data;
+  grpc_millis min_recv_ping_interval_without_data;
 };
 struct grpc_chttp2_repeated_ping_state {
-  grpc_millis last_ping_sent_time; 
-  int pings_before_data_required; 
-  grpc_timer delayed_ping_timer; 
-  bool is_delayed_ping_timer_set; 
+  grpc_millis last_ping_sent_time;
+  int pings_before_data_required;
+  grpc_timer delayed_ping_timer;
+  bool is_delayed_ping_timer_set;
 };
 struct grpc_chttp2_server_ping_recv_state {
-  grpc_millis last_ping_recv_time; 
-  int ping_strikes; 
+  grpc_millis last_ping_recv_time;
+  int ping_strikes;
 };
 /* deframer state for the overall http2 stream of bytes */
 typedef enum {
@@ -175,12 +175,12 @@ typedef enum {
 } grpc_chttp2_deframe_transport_state;
 
 struct grpc_chttp2_stream_list {
-  grpc_chttp2_stream* head; 
-  grpc_chttp2_stream* tail; 
+  grpc_chttp2_stream* head;
+  grpc_chttp2_stream* tail;
 };
 struct grpc_chttp2_stream_link {
-  grpc_chttp2_stream* next; 
-  grpc_chttp2_stream* prev; 
+  grpc_chttp2_stream* next;
+  grpc_chttp2_stream* prev;
 };
 /* We keep several sets of connection wide parameters */
 typedef enum {
@@ -203,89 +203,89 @@ typedef enum {
 
 typedef struct grpc_chttp2_write_cb {
   int64_t call_at_byte;
-  grpc_closure* closure; 
-  struct grpc_chttp2_write_cb* next; 
+  grpc_closure* closure;
+  struct grpc_chttp2_write_cb* next;
 } grpc_chttp2_write_cb;
 
-namespace grpc_core { 
+namespace grpc_core {
 
-class Chttp2IncomingByteStream : public ByteStream { 
- public: 
-  Chttp2IncomingByteStream(grpc_chttp2_transport* transport, 
-                           grpc_chttp2_stream* stream, uint32_t frame_size, 
-                           uint32_t flags); 
+class Chttp2IncomingByteStream : public ByteStream {
+ public:
+  Chttp2IncomingByteStream(grpc_chttp2_transport* transport,
+                           grpc_chttp2_stream* stream, uint32_t frame_size,
+                           uint32_t flags);
 
-  void Orphan() override; 
+  void Orphan() override;
 
-  bool Next(size_t max_size_hint, grpc_closure* on_complete) override; 
-  grpc_error* Pull(grpc_slice* slice) override; 
-  void Shutdown(grpc_error* error) override; 
- 
-  // TODO(roth): When I converted this class to C++, I wanted to make it 
-  // inherit from RefCounted or InternallyRefCounted instead of continuing 
-  // to use its own custom ref-counting code.  However, that would require 
+  bool Next(size_t max_size_hint, grpc_closure* on_complete) override;
+  grpc_error* Pull(grpc_slice* slice) override;
+  void Shutdown(grpc_error* error) override;
+
+  // TODO(roth): When I converted this class to C++, I wanted to make it
+  // inherit from RefCounted or InternallyRefCounted instead of continuing
+  // to use its own custom ref-counting code.  However, that would require
   // using multiple inheritance, which sucks in general.  And to make matters
-  // worse, it causes problems with our New<> and Delete<> wrappers. 
-  // Specifically, unless RefCounted is first in the list of parent classes, 
-  // it will see a different value of the address of the object than the one 
-  // we actually allocated, in which case gpr_free() will be called on a 
-  // different address than the one we got from gpr_malloc(), thus causing a 
-  // crash.  Given the fragility of depending on that, as well as a desire to 
+  // worse, it causes problems with our New<> and Delete<> wrappers.
+  // Specifically, unless RefCounted is first in the list of parent classes,
+  // it will see a different value of the address of the object than the one
+  // we actually allocated, in which case gpr_free() will be called on a
+  // different address than the one we got from gpr_malloc(), thus causing a
+  // crash.  Given the fragility of depending on that, as well as a desire to
   // avoid multiple inheritance in general, I've decided to leave this
-  // alone for now.  We can revisit this once we're able to link against 
-  // libc++, at which point we can eliminate New<> and Delete<> and 
-  // switch to std::shared_ptr<>. 
+  // alone for now.  We can revisit this once we're able to link against
+  // libc++, at which point we can eliminate New<> and Delete<> and
+  // switch to std::shared_ptr<>.
   void Ref() { refs_.Ref(); }
   void Unref() {
     if (GPR_UNLIKELY(refs_.Unref())) {
       delete this;
     }
   }
- 
-  void PublishError(grpc_error* error); 
- 
+
+  void PublishError(grpc_error* error);
+
   grpc_error* Push(const grpc_slice& slice, grpc_slice* slice_out);
- 
-  grpc_error* Finished(grpc_error* error, bool reset_on_error); 
- 
-  uint32_t remaining_bytes() const { return remaining_bytes_; } 
- 
- private: 
-  static void NextLocked(void* arg, grpc_error* error_ignored); 
-  static void OrphanLocked(void* arg, grpc_error* error_ignored); 
- 
+
+  grpc_error* Finished(grpc_error* error, bool reset_on_error);
+
+  uint32_t remaining_bytes() const { return remaining_bytes_; }
+
+ private:
+  static void NextLocked(void* arg, grpc_error* error_ignored);
+  static void OrphanLocked(void* arg, grpc_error* error_ignored);
+
   void MaybeCreateStreamDecompressionCtx();
 
-  grpc_chttp2_transport* transport_;  // Immutable. 
-  grpc_chttp2_stream* stream_;        // Immutable. 
- 
+  grpc_chttp2_transport* transport_;  // Immutable.
+  grpc_chttp2_stream* stream_;        // Immutable.
+
   grpc_core::RefCount refs_;
- 
-  /* Accessed only by transport thread when stream->pending_byte_stream == false 
-   * Accessed only by application thread when stream->pending_byte_stream == 
-   * true */ 
-  uint32_t remaining_bytes_; 
- 
-  /* Accessed only by transport thread when stream->pending_byte_stream == false 
-   * Accessed only by application thread when stream->pending_byte_stream == 
-   * true */ 
+
+  /* Accessed only by transport thread when stream->pending_byte_stream == false
+   * Accessed only by application thread when stream->pending_byte_stream ==
+   * true */
+  uint32_t remaining_bytes_;
+
+  /* Accessed only by transport thread when stream->pending_byte_stream == false
+   * Accessed only by application thread when stream->pending_byte_stream ==
+   * true */
   struct {
     grpc_closure closure;
     size_t max_size_hint;
-    grpc_closure* on_complete; 
-  } next_action_; 
-  grpc_closure destroy_action_; 
+    grpc_closure* on_complete;
+  } next_action_;
+  grpc_closure destroy_action_;
 };
 
-}  // namespace grpc_core 
- 
-typedef enum { 
-  GRPC_CHTTP2_KEEPALIVE_STATE_WAITING, 
-  GRPC_CHTTP2_KEEPALIVE_STATE_PINGING, 
-  GRPC_CHTTP2_KEEPALIVE_STATE_DYING, 
-  GRPC_CHTTP2_KEEPALIVE_STATE_DISABLED, 
-} grpc_chttp2_keepalive_state; 
- 
+}  // namespace grpc_core
+
+typedef enum {
+  GRPC_CHTTP2_KEEPALIVE_STATE_WAITING,
+  GRPC_CHTTP2_KEEPALIVE_STATE_PINGING,
+  GRPC_CHTTP2_KEEPALIVE_STATE_DYING,
+  GRPC_CHTTP2_KEEPALIVE_STATE_DISABLED,
+} grpc_chttp2_keepalive_state;
+
 struct grpc_chttp2_transport {
   grpc_chttp2_transport(const grpc_channel_args* channel_args,
                         grpc_endpoint* ep, bool is_client,
@@ -294,7 +294,7 @@ struct grpc_chttp2_transport {
 
   grpc_transport base; /* must be first */
   grpc_core::RefCount refs;
-  grpc_endpoint* ep; 
+  grpc_endpoint* ep;
   TString peer_string;
 
   grpc_resource_user* resource_user;
@@ -302,7 +302,7 @@ struct grpc_chttp2_transport {
   grpc_core::Combiner* combiner;
 
   grpc_closure* notify_on_receive_settings = nullptr;
- 
+
   /** write execution state of the transport */
   grpc_chttp2_write_state write_state = GRPC_CHTTP2_WRITE_STATE_IDLE;
 
@@ -347,7 +347,7 @@ struct grpc_chttp2_transport {
   /** hpack encoding */
   grpc_chttp2_hpack_compressor hpack_compressor;
   /** is this a client? */
-  bool is_client; 
+  bool is_client;
 
   /** data to write next write */
   grpc_slice_buffer qbuf;
@@ -356,10 +356,10 @@ struct grpc_chttp2_transport {
    */
   uint32_t write_buffer_size = grpc_core::chttp2::kDefaultWindow;
 
-  /** Set to a grpc_error object if a goaway frame is received. By default, set 
-   * to GRPC_ERROR_NONE */ 
+  /** Set to a grpc_error object if a goaway frame is received. By default, set
+   * to GRPC_ERROR_NONE */
   grpc_error* goaway_error = GRPC_ERROR_NONE;
- 
+
   grpc_chttp2_sent_goaway_state sent_goaway_state = GRPC_CHTTP2_NO_GOAWAY_SEND;
 
   /** are the local settings dirty and need to be sent? */
@@ -380,19 +380,19 @@ struct grpc_chttp2_transport {
   /** last new stream id */
   uint32_t last_new_stream_id = 0;
 
-  /** ping queues for various ping insertion points */ 
+  /** ping queues for various ping insertion points */
   grpc_chttp2_ping_queue ping_queue = grpc_chttp2_ping_queue();
-  grpc_chttp2_repeated_ping_policy ping_policy; 
-  grpc_chttp2_repeated_ping_state ping_state; 
+  grpc_chttp2_repeated_ping_policy ping_policy;
+  grpc_chttp2_repeated_ping_state ping_state;
   uint64_t ping_ctr = 0; /* unique id for pings */
-  grpc_closure retry_initiate_ping_locked; 
+  grpc_closure retry_initiate_ping_locked;
 
-  /** ping acks */ 
+  /** ping acks */
   size_t ping_ack_count = 0;
   size_t ping_ack_capacity = 0;
   uint64_t* ping_acks = nullptr;
-  grpc_chttp2_server_ping_recv_state ping_recv_state; 
- 
+  grpc_chttp2_server_ping_recv_state ping_recv_state;
+
   /** parser for headers */
   grpc_chttp2_hpack_parser hpack_parser;
   /** simple one shot parsers */
@@ -405,15 +405,15 @@ struct grpc_chttp2_transport {
   /** parser for goaway frames */
   grpc_chttp2_goaway_parser goaway_parser;
 
-  grpc_core::PolymorphicManualConstructor< 
-      grpc_core::chttp2::TransportFlowControlBase, 
-      grpc_core::chttp2::TransportFlowControl, 
-      grpc_core::chttp2::TransportFlowControlDisabled> 
-      flow_control; 
-  /** initial window change. This is tracked as we parse settings frames from 
-   * the remote peer. If there is a positive delta, then we will make all 
-   * streams readable since they may have become unstalled */ 
-  int64_t initial_window_update = 0; 
+  grpc_core::PolymorphicManualConstructor<
+      grpc_core::chttp2::TransportFlowControlBase,
+      grpc_core::chttp2::TransportFlowControl,
+      grpc_core::chttp2::TransportFlowControlDisabled>
+      flow_control;
+  /** initial window change. This is tracked as we parse settings frames from
+   * the remote peer. If there is a positive delta, then we will make all
+   * streams readable since they may have become unstalled */
+  int64_t initial_window_update = 0;
 
   /* deframing */
   grpc_chttp2_deframe_transport_state deframe_state = GRPC_DTS_CLIENT_PREFIX_0;
@@ -428,18 +428,18 @@ struct grpc_chttp2_transport {
   /* active parser */
   void* parser_data = nullptr;
   grpc_chttp2_stream* incoming_stream = nullptr;
-  grpc_error* (*parser)(void* parser_user_data, grpc_chttp2_transport* t, 
+  grpc_error* (*parser)(void* parser_user_data, grpc_chttp2_transport* t,
                         grpc_chttp2_stream* s, const grpc_slice& slice,
                         int is_last);
 
   grpc_chttp2_write_cb* write_cb_pool = nullptr;
 
-  /* bdp estimator */ 
+  /* bdp estimator */
   bool bdp_ping_blocked =
       false; /* Is the BDP blocked due to not receiving any data? */
-  grpc_closure next_bdp_ping_timer_expired_locked; 
-  grpc_closure start_bdp_ping_locked; 
-  grpc_closure finish_bdp_ping_locked; 
+  grpc_closure next_bdp_ping_timer_expired_locked;
+  grpc_closure start_bdp_ping_locked;
+  grpc_closure finish_bdp_ping_locked;
 
   /* if non-NULL, close the transport with this error when writes are finished
    */
@@ -457,36 +457,36 @@ struct grpc_chttp2_transport {
   grpc_closure benign_reclaimer_locked;
   /** destructive cleanup closure */
   grpc_closure destructive_reclaimer_locked;
- 
-  /* next bdp ping timer */ 
+
+  /* next bdp ping timer */
   bool have_next_bdp_ping_timer = false;
   /** If start_bdp_ping_locked has been called */
   bool bdp_ping_started = false;
-  grpc_timer next_bdp_ping_timer; 
- 
-  /* keep-alive ping support */ 
-  /** Closure to initialize a keepalive ping */ 
-  grpc_closure init_keepalive_ping_locked; 
-  /** Closure to run when the keepalive ping is sent */ 
-  grpc_closure start_keepalive_ping_locked; 
-  /** Cousure to run when the keepalive ping ack is received */ 
-  grpc_closure finish_keepalive_ping_locked; 
-  /** Closrue to run when the keepalive ping timeouts */ 
-  grpc_closure keepalive_watchdog_fired_locked; 
-  /** timer to initiate ping events */ 
-  grpc_timer keepalive_ping_timer; 
-  /** watchdog to kill the transport when waiting for the keepalive ping */ 
-  grpc_timer keepalive_watchdog_timer; 
-  /** time duration in between pings */ 
-  grpc_millis keepalive_time; 
-  /** grace period for a ping to complete before watchdog kicks in */ 
-  grpc_millis keepalive_timeout; 
-  /** if keepalive pings are allowed when there's no outstanding streams */ 
+  grpc_timer next_bdp_ping_timer;
+
+  /* keep-alive ping support */
+  /** Closure to initialize a keepalive ping */
+  grpc_closure init_keepalive_ping_locked;
+  /** Closure to run when the keepalive ping is sent */
+  grpc_closure start_keepalive_ping_locked;
+  /** Cousure to run when the keepalive ping ack is received */
+  grpc_closure finish_keepalive_ping_locked;
+  /** Closrue to run when the keepalive ping timeouts */
+  grpc_closure keepalive_watchdog_fired_locked;
+  /** timer to initiate ping events */
+  grpc_timer keepalive_ping_timer;
+  /** watchdog to kill the transport when waiting for the keepalive ping */
+  grpc_timer keepalive_watchdog_timer;
+  /** time duration in between pings */
+  grpc_millis keepalive_time;
+  /** grace period for a ping to complete before watchdog kicks in */
+  grpc_millis keepalive_timeout;
+  /** if keepalive pings are allowed when there's no outstanding streams */
   bool keepalive_permit_without_calls = false;
   /** If start_keepalive_ping_locked has been called */
   bool keepalive_ping_started = false;
-  /** keep-alive state machine state */ 
-  grpc_chttp2_keepalive_state keepalive_state; 
+  /** keep-alive state machine state */
+  grpc_chttp2_keepalive_state keepalive_state;
   grpc_core::ContextList* cl = nullptr;
   grpc_core::RefCountedPtr<grpc_core::channelz::SocketNode> channelz_socket;
   uint32_t num_messages_in_next_write = 0;
@@ -512,8 +512,8 @@ struct grpc_chttp2_stream {
   ~grpc_chttp2_stream();
 
   void* context;
-  grpc_chttp2_transport* t; 
-  grpc_stream_refcount* refcount; 
+  grpc_chttp2_transport* t;
+  grpc_stream_refcount* refcount;
   // Reffer is a 0-len structure, simply reffing `t` and `refcount` in its ctor
   // before initializing the rest of the stream, to avoid cache misses. This
   // field MUST be right after `t` and `refcount`.
@@ -522,7 +522,7 @@ struct grpc_chttp2_stream {
   } reffer;
 
   grpc_closure destroy_stream;
-  grpc_closure* destroy_stream_arg; 
+  grpc_closure* destroy_stream_arg;
 
   grpc_chttp2_stream_link links[STREAM_LIST_COUNT];
   uint8_t included[STREAM_LIST_COUNT] = {};
@@ -543,7 +543,7 @@ struct grpc_chttp2_stream {
   bool* sent_trailing_metadata_op = nullptr;
   grpc_closure* send_trailing_metadata_finished = nullptr;
 
-  grpc_core::OrphanablePtr<grpc_core::ByteStream> fetching_send_message; 
+  grpc_core::OrphanablePtr<grpc_core::ByteStream> fetching_send_message;
   uint32_t fetched_send_message_length = 0;
   grpc_slice fetching_slice = grpc_empty_slice();
   int64_t next_message_end_offset;
@@ -552,12 +552,12 @@ struct grpc_chttp2_stream {
   grpc_closure complete_fetch_locked;
   grpc_closure* fetching_send_message_finished = nullptr;
 
-  grpc_metadata_batch* recv_initial_metadata; 
+  grpc_metadata_batch* recv_initial_metadata;
   grpc_closure* recv_initial_metadata_ready = nullptr;
   bool* trailing_metadata_available = nullptr;
-  grpc_core::OrphanablePtr<grpc_core::ByteStream>* recv_message; 
+  grpc_core::OrphanablePtr<grpc_core::ByteStream>* recv_message;
   grpc_closure* recv_message_ready = nullptr;
-  grpc_metadata_batch* recv_trailing_metadata; 
+  grpc_metadata_batch* recv_trailing_metadata;
   grpc_closure* recv_trailing_metadata_finished = nullptr;
 
   grpc_transport_stream_stats* collecting_stats = nullptr;
@@ -590,66 +590,66 @@ struct grpc_chttp2_stream {
 
   grpc_chttp2_incoming_metadata_buffer metadata_buffer[2];
 
-  grpc_slice_buffer frame_storage; /* protected by t combiner */ 
+  grpc_slice_buffer frame_storage; /* protected by t combiner */
 
   grpc_closure* on_next = nullptr;  /* protected by t combiner */
   bool pending_byte_stream = false; /* protected by t combiner */
-  // cached length of buffer to be used by the transport thread in cases where 
-  // stream->pending_byte_stream == true. The value is saved before 
-  // application threads are allowed to modify 
-  // unprocessed_incoming_frames_buffer 
+  // cached length of buffer to be used by the transport thread in cases where
+  // stream->pending_byte_stream == true. The value is saved before
+  // application threads are allowed to modify
+  // unprocessed_incoming_frames_buffer
   size_t unprocessed_incoming_frames_buffer_cached_length = 0;
   /* Accessed only by transport thread when stream->pending_byte_stream == false
    * Accessed only by application thread when stream->pending_byte_stream ==
    * true */
   grpc_slice_buffer unprocessed_incoming_frames_buffer;
-  grpc_closure reset_byte_stream; 
+  grpc_closure reset_byte_stream;
   grpc_error* byte_stream_error = GRPC_ERROR_NONE; /* protected by t combiner */
   bool received_last_frame = false;                /* protected by t combiner */
 
   grpc_millis deadline = GRPC_MILLIS_INF_FUTURE;
- 
+
   /** saw some stream level error */
   grpc_error* forced_close_error = GRPC_ERROR_NONE;
   /** how many header frames have we received? */
   uint8_t header_frames_received = 0;
   /** parsing state for data frames */
-  /* Accessed only by transport thread when stream->pending_byte_stream == false 
-   * Accessed only by application thread when stream->pending_byte_stream == 
-   * true */ 
+  /* Accessed only by transport thread when stream->pending_byte_stream == false
+   * Accessed only by application thread when stream->pending_byte_stream ==
+   * true */
   grpc_chttp2_data_parser data_parser;
   /** number of bytes received - reset at end of parse thread execution */
   int64_t received_bytes = 0;
 
   bool sent_initial_metadata = false;
   bool sent_trailing_metadata = false;
- 
-  grpc_core::PolymorphicManualConstructor< 
-      grpc_core::chttp2::StreamFlowControlBase, 
-      grpc_core::chttp2::StreamFlowControl, 
-      grpc_core::chttp2::StreamFlowControlDisabled> 
-      flow_control; 
- 
+
+  grpc_core::PolymorphicManualConstructor<
+      grpc_core::chttp2::StreamFlowControlBase,
+      grpc_core::chttp2::StreamFlowControl,
+      grpc_core::chttp2::StreamFlowControlDisabled>
+      flow_control;
+
   grpc_slice_buffer flow_controlled_buffer;
 
   grpc_chttp2_write_cb* on_flow_controlled_cbs = nullptr;
   grpc_chttp2_write_cb* on_write_finished_cbs = nullptr;
   grpc_chttp2_write_cb* finish_after_write = nullptr;
   size_t sending_bytes = 0;
- 
-  /* Stream compression method to be used. */ 
+
+  /* Stream compression method to be used. */
   grpc_stream_compression_method stream_compression_method =
       GRPC_STREAM_COMPRESSION_IDENTITY_COMPRESS;
-  /* Stream decompression method to be used. */ 
+  /* Stream decompression method to be used. */
   grpc_stream_compression_method stream_decompression_method =
       GRPC_STREAM_COMPRESSION_IDENTITY_DECOMPRESS;
- 
-  /** Whether bytes stored in unprocessed_incoming_byte_stream is decompressed 
-   */ 
+
+  /** Whether bytes stored in unprocessed_incoming_byte_stream is decompressed
+   */
   bool unprocessed_incoming_frames_decompressed = false;
   /** Whether the bytes needs to be traced using Fathom */
   bool traced = false;
-  /** gRPC header bytes that are already decompressed */ 
+  /** gRPC header bytes that are already decompressed */
   size_t decompressed_header_bytes = 0;
   /** Byte counter for number of bytes written */
   size_t byte_counter = 0;
@@ -683,105 +683,105 @@ struct grpc_chttp2_stream {
 
     The actual call chain is documented in the implementation of this function.
     */
-void grpc_chttp2_initiate_write(grpc_chttp2_transport* t, 
-                                grpc_chttp2_initiate_write_reason reason); 
+void grpc_chttp2_initiate_write(grpc_chttp2_transport* t,
+                                grpc_chttp2_initiate_write_reason reason);
 
 struct grpc_chttp2_begin_write_result {
-  /** are we writing? */ 
-  bool writing; 
-  /** if writing: was it a complete flush (false) or a partial flush (true) */ 
-  bool partial; 
-  /** did we queue any completions as part of beginning the write */ 
-  bool early_results_scheduled; 
+  /** are we writing? */
+  bool writing;
+  /** if writing: was it a complete flush (false) or a partial flush (true) */
+  bool partial;
+  /** did we queue any completions as part of beginning the write */
+  bool early_results_scheduled;
 };
-grpc_chttp2_begin_write_result grpc_chttp2_begin_write( 
-    grpc_chttp2_transport* t); 
-void grpc_chttp2_end_write(grpc_chttp2_transport* t, grpc_error* error); 
- 
+grpc_chttp2_begin_write_result grpc_chttp2_begin_write(
+    grpc_chttp2_transport* t);
+void grpc_chttp2_end_write(grpc_chttp2_transport* t, grpc_error* error);
+
 /** Process one slice of incoming data; return 1 if the connection is still
     viable after reading, or 0 if the connection should be torn down */
-grpc_error* grpc_chttp2_perform_read(grpc_chttp2_transport* t, 
+grpc_error* grpc_chttp2_perform_read(grpc_chttp2_transport* t,
                                      const grpc_slice& slice);
 
-bool grpc_chttp2_list_add_writable_stream(grpc_chttp2_transport* t, 
-                                          grpc_chttp2_stream* s); 
+bool grpc_chttp2_list_add_writable_stream(grpc_chttp2_transport* t,
+                                          grpc_chttp2_stream* s);
 /** Get a writable stream
     returns non-zero if there was a stream available */
-bool grpc_chttp2_list_pop_writable_stream(grpc_chttp2_transport* t, 
-                                          grpc_chttp2_stream** s); 
-bool grpc_chttp2_list_remove_writable_stream(grpc_chttp2_transport* t, 
-                                             grpc_chttp2_stream* s); 
+bool grpc_chttp2_list_pop_writable_stream(grpc_chttp2_transport* t,
+                                          grpc_chttp2_stream** s);
+bool grpc_chttp2_list_remove_writable_stream(grpc_chttp2_transport* t,
+                                             grpc_chttp2_stream* s);
 
-bool grpc_chttp2_list_add_writing_stream(grpc_chttp2_transport* t, 
-                                         grpc_chttp2_stream* s); 
-bool grpc_chttp2_list_have_writing_streams(grpc_chttp2_transport* t); 
-bool grpc_chttp2_list_pop_writing_stream(grpc_chttp2_transport* t, 
-                                         grpc_chttp2_stream** s); 
+bool grpc_chttp2_list_add_writing_stream(grpc_chttp2_transport* t,
+                                         grpc_chttp2_stream* s);
+bool grpc_chttp2_list_have_writing_streams(grpc_chttp2_transport* t);
+bool grpc_chttp2_list_pop_writing_stream(grpc_chttp2_transport* t,
+                                         grpc_chttp2_stream** s);
 
-void grpc_chttp2_list_add_written_stream(grpc_chttp2_transport* t, 
-                                         grpc_chttp2_stream* s); 
-bool grpc_chttp2_list_pop_written_stream(grpc_chttp2_transport* t, 
-                                         grpc_chttp2_stream** s); 
+void grpc_chttp2_list_add_written_stream(grpc_chttp2_transport* t,
+                                         grpc_chttp2_stream* s);
+bool grpc_chttp2_list_pop_written_stream(grpc_chttp2_transport* t,
+                                         grpc_chttp2_stream** s);
 
-void grpc_chttp2_list_add_waiting_for_concurrency(grpc_chttp2_transport* t, 
-                                                  grpc_chttp2_stream* s); 
-bool grpc_chttp2_list_pop_waiting_for_concurrency(grpc_chttp2_transport* t, 
-                                                  grpc_chttp2_stream** s); 
-void grpc_chttp2_list_remove_waiting_for_concurrency(grpc_chttp2_transport* t, 
-                                                     grpc_chttp2_stream* s); 
+void grpc_chttp2_list_add_waiting_for_concurrency(grpc_chttp2_transport* t,
+                                                  grpc_chttp2_stream* s);
+bool grpc_chttp2_list_pop_waiting_for_concurrency(grpc_chttp2_transport* t,
+                                                  grpc_chttp2_stream** s);
+void grpc_chttp2_list_remove_waiting_for_concurrency(grpc_chttp2_transport* t,
+                                                     grpc_chttp2_stream* s);
 
-void grpc_chttp2_list_add_stalled_by_transport(grpc_chttp2_transport* t, 
-                                               grpc_chttp2_stream* s); 
-bool grpc_chttp2_list_pop_stalled_by_transport(grpc_chttp2_transport* t, 
-                                               grpc_chttp2_stream** s); 
-void grpc_chttp2_list_remove_stalled_by_transport(grpc_chttp2_transport* t, 
-                                                  grpc_chttp2_stream* s); 
+void grpc_chttp2_list_add_stalled_by_transport(grpc_chttp2_transport* t,
+                                               grpc_chttp2_stream* s);
+bool grpc_chttp2_list_pop_stalled_by_transport(grpc_chttp2_transport* t,
+                                               grpc_chttp2_stream** s);
+void grpc_chttp2_list_remove_stalled_by_transport(grpc_chttp2_transport* t,
+                                                  grpc_chttp2_stream* s);
 
-void grpc_chttp2_list_add_stalled_by_stream(grpc_chttp2_transport* t, 
-                                            grpc_chttp2_stream* s); 
-bool grpc_chttp2_list_pop_stalled_by_stream(grpc_chttp2_transport* t, 
-                                            grpc_chttp2_stream** s); 
-bool grpc_chttp2_list_remove_stalled_by_stream(grpc_chttp2_transport* t, 
-                                               grpc_chttp2_stream* s); 
- 
-/********* Flow Control ***************/ 
- 
-// Takes in a flow control action and performs all the needed operations. 
-void grpc_chttp2_act_on_flowctl_action( 
-    const grpc_core::chttp2::FlowControlAction& action, 
-    grpc_chttp2_transport* t, grpc_chttp2_stream* s); 
- 
-/********* End of Flow Control ***************/ 
- 
+void grpc_chttp2_list_add_stalled_by_stream(grpc_chttp2_transport* t,
+                                            grpc_chttp2_stream* s);
+bool grpc_chttp2_list_pop_stalled_by_stream(grpc_chttp2_transport* t,
+                                            grpc_chttp2_stream** s);
+bool grpc_chttp2_list_remove_stalled_by_stream(grpc_chttp2_transport* t,
+                                               grpc_chttp2_stream* s);
+
+/********* Flow Control ***************/
+
+// Takes in a flow control action and performs all the needed operations.
+void grpc_chttp2_act_on_flowctl_action(
+    const grpc_core::chttp2::FlowControlAction& action,
+    grpc_chttp2_transport* t, grpc_chttp2_stream* s);
+
+/********* End of Flow Control ***************/
+
 inline grpc_chttp2_stream* grpc_chttp2_parsing_lookup_stream(
     grpc_chttp2_transport* t, uint32_t id) {
   return static_cast<grpc_chttp2_stream*>(
       grpc_chttp2_stream_map_find(&t->stream_map, id));
 }
-grpc_chttp2_stream* grpc_chttp2_parsing_accept_stream(grpc_chttp2_transport* t, 
+grpc_chttp2_stream* grpc_chttp2_parsing_accept_stream(grpc_chttp2_transport* t,
                                                       uint32_t id);
 
-void grpc_chttp2_add_incoming_goaway(grpc_chttp2_transport* t, 
+void grpc_chttp2_add_incoming_goaway(grpc_chttp2_transport* t,
                                      uint32_t goaway_error,
                                      uint32_t last_stream_id,
                                      const grpc_slice& goaway_text);
 
-void grpc_chttp2_parsing_become_skip_parser(grpc_chttp2_transport* t); 
+void grpc_chttp2_parsing_become_skip_parser(grpc_chttp2_transport* t);
 
-void grpc_chttp2_complete_closure_step(grpc_chttp2_transport* t, 
-                                       grpc_chttp2_stream* s, 
-                                       grpc_closure** pclosure, 
-                                       grpc_error* error, const char* desc); 
+void grpc_chttp2_complete_closure_step(grpc_chttp2_transport* t,
+                                       grpc_chttp2_stream* s,
+                                       grpc_closure** pclosure,
+                                       grpc_error* error, const char* desc);
 
-#define GRPC_HEADER_SIZE_IN_BYTES 5 
-#define MAX_SIZE_T (~(size_t)0) 
- 
+#define GRPC_HEADER_SIZE_IN_BYTES 5
+#define MAX_SIZE_T (~(size_t)0)
+
 #define GRPC_CHTTP2_CLIENT_CONNECT_STRING "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 #define GRPC_CHTTP2_CLIENT_CONNECT_STRLEN \
   (sizeof(GRPC_CHTTP2_CLIENT_CONNECT_STRING) - 1)
 
-// extern grpc_core::TraceFlag grpc_http_trace; 
-// extern grpc_core::TraceFlag grpc_flowctl_trace; 
+// extern grpc_core::TraceFlag grpc_http_trace;
+// extern grpc_core::TraceFlag grpc_flowctl_trace;
 
 #define GRPC_CHTTP2_IF_TRACING(stmt)                \
   do {                                              \
@@ -790,33 +790,33 @@ void grpc_chttp2_complete_closure_step(grpc_chttp2_transport* t,
     }                                               \
   } while (0)
 
-void grpc_chttp2_fake_status(grpc_chttp2_transport* t, 
-                             grpc_chttp2_stream* stream, grpc_error* error); 
-void grpc_chttp2_mark_stream_closed(grpc_chttp2_transport* t, 
-                                    grpc_chttp2_stream* s, int close_reads, 
-                                    int close_writes, grpc_error* error); 
-void grpc_chttp2_start_writing(grpc_chttp2_transport* t); 
+void grpc_chttp2_fake_status(grpc_chttp2_transport* t,
+                             grpc_chttp2_stream* stream, grpc_error* error);
+void grpc_chttp2_mark_stream_closed(grpc_chttp2_transport* t,
+                                    grpc_chttp2_stream* s, int close_reads,
+                                    int close_writes, grpc_error* error);
+void grpc_chttp2_start_writing(grpc_chttp2_transport* t);
 
-#ifndef NDEBUG 
+#ifndef NDEBUG
 #define GRPC_CHTTP2_STREAM_REF(stream, reason) \
   grpc_chttp2_stream_ref(stream, reason)
-#define GRPC_CHTTP2_STREAM_UNREF(stream, reason) \ 
-  grpc_chttp2_stream_unref(stream, reason) 
-void grpc_chttp2_stream_ref(grpc_chttp2_stream* s, const char* reason); 
-void grpc_chttp2_stream_unref(grpc_chttp2_stream* s, const char* reason); 
+#define GRPC_CHTTP2_STREAM_UNREF(stream, reason) \
+  grpc_chttp2_stream_unref(stream, reason)
+void grpc_chttp2_stream_ref(grpc_chttp2_stream* s, const char* reason);
+void grpc_chttp2_stream_unref(grpc_chttp2_stream* s, const char* reason);
 #else
 #define GRPC_CHTTP2_STREAM_REF(stream, reason) grpc_chttp2_stream_ref(stream)
-#define GRPC_CHTTP2_STREAM_UNREF(stream, reason) \ 
-  grpc_chttp2_stream_unref(stream) 
-void grpc_chttp2_stream_ref(grpc_chttp2_stream* s); 
-void grpc_chttp2_stream_unref(grpc_chttp2_stream* s); 
+#define GRPC_CHTTP2_STREAM_UNREF(stream, reason) \
+  grpc_chttp2_stream_unref(stream)
+void grpc_chttp2_stream_ref(grpc_chttp2_stream* s);
+void grpc_chttp2_stream_unref(grpc_chttp2_stream* s);
 #endif
 
-#ifndef NDEBUG 
+#ifndef NDEBUG
 #define GRPC_CHTTP2_REF_TRANSPORT(t, r) \
   grpc_chttp2_ref_transport(t, r, __FILE__, __LINE__)
-#define GRPC_CHTTP2_UNREF_TRANSPORT(t, r) \ 
-  grpc_chttp2_unref_transport(t, r, __FILE__, __LINE__) 
+#define GRPC_CHTTP2_UNREF_TRANSPORT(t, r) \
+  grpc_chttp2_unref_transport(t, r, __FILE__, __LINE__)
 inline void grpc_chttp2_unref_transport(grpc_chttp2_transport* t,
                                         const char* reason, const char* file,
                                         int line) {
@@ -831,7 +831,7 @@ inline void grpc_chttp2_ref_transport(grpc_chttp2_transport* t,
 }
 #else
 #define GRPC_CHTTP2_REF_TRANSPORT(t, r) grpc_chttp2_ref_transport(t)
-#define GRPC_CHTTP2_UNREF_TRANSPORT(t, r) grpc_chttp2_unref_transport(t) 
+#define GRPC_CHTTP2_UNREF_TRANSPORT(t, r) grpc_chttp2_unref_transport(t)
 inline void grpc_chttp2_unref_transport(grpc_chttp2_transport* t) {
   if (t->refs.Unref()) {
     delete t;
@@ -842,13 +842,13 @@ inline void grpc_chttp2_ref_transport(grpc_chttp2_transport* t) {
 }
 #endif
 
-void grpc_chttp2_ack_ping(grpc_chttp2_transport* t, uint64_t id); 
+void grpc_chttp2_ack_ping(grpc_chttp2_transport* t, uint64_t id);
 
-/** Add a new ping strike to ping_recv_state.ping_strikes. If 
-    ping_recv_state.ping_strikes > ping_policy.max_ping_strikes, it sends GOAWAY 
-    with error code ENHANCE_YOUR_CALM and additional debug data resembling 
-    "too_many_pings" followed by immediately closing the connection. */ 
-void grpc_chttp2_add_ping_strike(grpc_chttp2_transport* t); 
+/** Add a new ping strike to ping_recv_state.ping_strikes. If
+    ping_recv_state.ping_strikes > ping_policy.max_ping_strikes, it sends GOAWAY
+    with error code ENHANCE_YOUR_CALM and additional debug data resembling
+    "too_many_pings" followed by immediately closing the connection. */
+void grpc_chttp2_add_ping_strike(grpc_chttp2_transport* t);
 
 /** Resets ping clock. Should be called when flushing window updates,
  * initial/trailing metadata or data frames. For a server, it resets the number
@@ -858,27 +858,27 @@ void grpc_chttp2_reset_ping_clock(grpc_chttp2_transport* t);
 
 /** add a ref to the stream and add it to the writable list;
     ref will be dropped in writing.c */
-void grpc_chttp2_mark_stream_writable(grpc_chttp2_transport* t, 
-                                      grpc_chttp2_stream* s); 
+void grpc_chttp2_mark_stream_writable(grpc_chttp2_transport* t,
+                                      grpc_chttp2_stream* s);
 
-void grpc_chttp2_cancel_stream(grpc_chttp2_transport* t, grpc_chttp2_stream* s, 
-                               grpc_error* due_to_error); 
+void grpc_chttp2_cancel_stream(grpc_chttp2_transport* t, grpc_chttp2_stream* s,
+                               grpc_error* due_to_error);
 
-void grpc_chttp2_maybe_complete_recv_initial_metadata(grpc_chttp2_transport* t, 
-                                                      grpc_chttp2_stream* s); 
-void grpc_chttp2_maybe_complete_recv_message(grpc_chttp2_transport* t, 
-                                             grpc_chttp2_stream* s); 
-void grpc_chttp2_maybe_complete_recv_trailing_metadata(grpc_chttp2_transport* t, 
-                                                       grpc_chttp2_stream* s); 
+void grpc_chttp2_maybe_complete_recv_initial_metadata(grpc_chttp2_transport* t,
+                                                      grpc_chttp2_stream* s);
+void grpc_chttp2_maybe_complete_recv_message(grpc_chttp2_transport* t,
+                                             grpc_chttp2_stream* s);
+void grpc_chttp2_maybe_complete_recv_trailing_metadata(grpc_chttp2_transport* t,
+                                                       grpc_chttp2_stream* s);
 
-void grpc_chttp2_fail_pending_writes(grpc_chttp2_transport* t, 
-                                     grpc_chttp2_stream* s, grpc_error* error); 
+void grpc_chttp2_fail_pending_writes(grpc_chttp2_transport* t,
+                                     grpc_chttp2_stream* s, grpc_error* error);
 
-/** Set the default keepalive configurations, must only be called at 
-    initialization */ 
-void grpc_chttp2_config_default_keepalive_args(grpc_channel_args* args, 
-                                               bool is_client); 
- 
+/** Set the default keepalive configurations, must only be called at
+    initialization */
+void grpc_chttp2_config_default_keepalive_args(grpc_channel_args* args,
+                                               bool is_client);
+
 void grpc_chttp2_retry_initiate_ping(void* tp, grpc_error* error);
 
 void schedule_bdp_ping_locked(grpc_chttp2_transport* t);

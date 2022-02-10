@@ -142,7 +142,7 @@ class MapTypeHandler<WireFormatLite::TYPE_MESSAGE, Type> {
       MapWireFieldTypeTraits<WireFormatLite::TYPE_MESSAGE, Type>::kIsEnum;
 
   // Functions used in parsing and serialization. ===================
-  static inline size_t ByteSize(const MapEntryAccessorType& value); 
+  static inline size_t ByteSize(const MapEntryAccessorType& value);
   static inline int GetCachedSize(const MapEntryAccessorType& value);
   static inline bool Read(io::CodedInputStream* input,
                           MapEntryAccessorType* value);
@@ -162,7 +162,7 @@ class MapTypeHandler<WireFormatLite::TYPE_MESSAGE, Type> {
   static inline Type* EnsureMutable(Type** value, Arena* arena);
   // SpaceUsedInMapEntry: Return bytes used by value in MapEntry, excluding
   // those already calculate in sizeof(MapField).
-  static inline size_t SpaceUsedInMapEntryLong(const Type* value); 
+  static inline size_t SpaceUsedInMapEntryLong(const Type* value);
   // Return default instance if value is not initialized when calling const
   // reference accessor.
   static inline const Type& DefaultIfNotInitialized(const Type* value);
@@ -202,7 +202,7 @@ class MapTypeHandler<WireFormatLite::TYPE_MESSAGE, Type> {
     static inline void Merge(const MapEntryAccessorType& from,                \
                              TypeOnMemory* to, Arena* arena);                 \
     static inline void Clear(TypeOnMemory* value, Arena* arena);              \
-    static inline size_t SpaceUsedInMapEntryLong(const TypeOnMemory& value);  \ 
+    static inline size_t SpaceUsedInMapEntryLong(const TypeOnMemory& value);  \
     static inline const MapEntryAccessorType& DefaultIfNotInitialized(        \
         const TypeOnMemory& value);                                           \
     static inline bool IsInitialized(const TypeOnMemory& value);              \
@@ -239,7 +239,7 @@ inline size_t MapTypeHandler<WireFormatLite::TYPE_MESSAGE, Type>::ByteSize(
   template <typename Type>                                                     \
   inline int MapTypeHandler<WireFormatLite::TYPE_##FieldType, Type>::ByteSize( \
       const MapEntryAccessorType& value) {                                     \
-    return static_cast<int>(WireFormatLite::DeclaredType##Size(value));        \ 
+    return static_cast<int>(WireFormatLite::DeclaredType##Size(value));        \
   }
 
 GOOGLE_PROTOBUF_BYTE_SIZE(STRING, String)
@@ -257,7 +257,7 @@ GOOGLE_PROTOBUF_BYTE_SIZE(ENUM, Enum)
 #define FIXED_BYTE_SIZE(FieldType, DeclaredType)                               \
   template <typename Type>                                                     \
   inline int MapTypeHandler<WireFormatLite::TYPE_##FieldType, Type>::ByteSize( \
-      const MapEntryAccessorType& /* value */) {                               \ 
+      const MapEntryAccessorType& /* value */) {                               \
     return WireFormatLite::k##DeclaredType##Size;                              \
   }
 
@@ -283,7 +283,7 @@ inline int MapTypeHandler<WireFormatLite::TYPE_MESSAGE, Type>::GetCachedSize(
   inline int                                                             \
   MapTypeHandler<WireFormatLite::TYPE_##FieldType, Type>::GetCachedSize( \
       const MapEntryAccessorType& value) {                               \
-    return static_cast<int>(WireFormatLite::DeclaredType##Size(value));  \ 
+    return static_cast<int>(WireFormatLite::DeclaredType##Size(value));  \
   }
 
 GET_CACHED_SIZE(STRING, String)
@@ -302,7 +302,7 @@ GET_CACHED_SIZE(ENUM, Enum)
   template <typename Type>                                               \
   inline int                                                             \
   MapTypeHandler<WireFormatLite::TYPE_##FieldType, Type>::GetCachedSize( \
-      const MapEntryAccessorType& /* value */) {                         \ 
+      const MapEntryAccessorType& /* value */) {                         \
     return WireFormatLite::k##DeclaredType##Size;                        \
   }
 
@@ -499,19 +499,19 @@ MapTypeHandler<WireFormatLite::TYPE_MESSAGE, Type>::GetExternalReference(
 }
 
 template <typename Type>
-inline size_t MapTypeHandler<WireFormatLite::TYPE_MESSAGE, 
-                             Type>::SpaceUsedInMapEntryLong(const Type* value) { 
-  return value->SpaceUsedLong(); 
+inline size_t MapTypeHandler<WireFormatLite::TYPE_MESSAGE,
+                             Type>::SpaceUsedInMapEntryLong(const Type* value) {
+  return value->SpaceUsedLong();
 }
 
 template <typename Type>
 inline void MapTypeHandler<WireFormatLite::TYPE_MESSAGE, Type>::Clear(
-    Type** value, Arena* /* arena */) { 
+    Type** value, Arena* /* arena */) {
   if (*value != NULL) (*value)->Clear();
 }
 template <typename Type>
 inline void MapTypeHandler<WireFormatLite::TYPE_MESSAGE, Type>::Merge(
-    const Type& from, Type** to, Arena* /* arena */) { 
+    const Type& from, Type** to, Arena* /* arena */) {
   (*to)->MergeFrom(from);
 }
 

@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #include <aws/core/client/AWSErrorMarshaller.h>
 #include <aws/core/utils/logging/LogMacros.h>
@@ -18,54 +18,54 @@ using namespace Aws::Http;
 using namespace Aws::Utils;
 using namespace Aws::Client;
 
-static const char AWS_ERROR_MARSHALLER_LOG_TAG[] = "AWSErrorMarshaller"; 
-AWS_CORE_API extern const char MESSAGE_LOWER_CASE[]     = "message"; 
-AWS_CORE_API extern const char MESSAGE_CAMEL_CASE[]     = "Message"; 
-AWS_CORE_API extern const char ERROR_TYPE_HEADER[]      = "x-amzn-ErrorType"; 
-AWS_CORE_API extern const char REQUEST_ID_HEADER[]      = "x-amzn-RequestId"; 
-AWS_CORE_API extern const char TYPE[]                   = "__type"; 
+static const char AWS_ERROR_MARSHALLER_LOG_TAG[] = "AWSErrorMarshaller";
+AWS_CORE_API extern const char MESSAGE_LOWER_CASE[]     = "message";
+AWS_CORE_API extern const char MESSAGE_CAMEL_CASE[]     = "Message";
+AWS_CORE_API extern const char ERROR_TYPE_HEADER[]      = "x-amzn-ErrorType";
+AWS_CORE_API extern const char REQUEST_ID_HEADER[]      = "x-amzn-RequestId";
+AWS_CORE_API extern const char TYPE[]                   = "__type";
 
 AWSError<CoreErrors> JsonErrorMarshaller::Marshall(const Aws::Http::HttpResponse& httpResponse) const
 {
     JsonValue exceptionPayload(httpResponse.GetResponseBody());
     JsonView payloadView(exceptionPayload);
-    AWSError<CoreErrors> error; 
-    if (exceptionPayload.WasParseSuccessful()) 
+    AWSError<CoreErrors> error;
+    if (exceptionPayload.WasParseSuccessful())
     {
-        AWS_LOGSTREAM_TRACE(AWS_ERROR_MARSHALLER_LOG_TAG, "Error response is " << payloadView.WriteReadable()); 
+        AWS_LOGSTREAM_TRACE(AWS_ERROR_MARSHALLER_LOG_TAG, "Error response is " << payloadView.WriteReadable());
 
-        Aws::String message(payloadView.ValueExists(MESSAGE_CAMEL_CASE) ? payloadView.GetString(MESSAGE_CAMEL_CASE) : 
-                payloadView.ValueExists(MESSAGE_LOWER_CASE) ? payloadView.GetString(MESSAGE_LOWER_CASE) : ""); 
+        Aws::String message(payloadView.ValueExists(MESSAGE_CAMEL_CASE) ? payloadView.GetString(MESSAGE_CAMEL_CASE) :
+                payloadView.ValueExists(MESSAGE_LOWER_CASE) ? payloadView.GetString(MESSAGE_LOWER_CASE) : "");
 
-        if (httpResponse.HasHeader(ERROR_TYPE_HEADER)) 
-        { 
-            error = Marshall(httpResponse.GetHeader(ERROR_TYPE_HEADER), message); 
-        } 
-        else if (payloadView.ValueExists(TYPE)) 
-        { 
-            error = Marshall(payloadView.GetString(TYPE), message); 
-        } 
-        else 
-        { 
-            error = FindErrorByHttpResponseCode(httpResponse.GetResponseCode()); 
-            error.SetMessage(message); 
-        } 
+        if (httpResponse.HasHeader(ERROR_TYPE_HEADER))
+        {
+            error = Marshall(httpResponse.GetHeader(ERROR_TYPE_HEADER), message);
+        }
+        else if (payloadView.ValueExists(TYPE))
+        {
+            error = Marshall(payloadView.GetString(TYPE), message);
+        }
+        else
+        {
+            error = FindErrorByHttpResponseCode(httpResponse.GetResponseCode());
+            error.SetMessage(message);
+        }
     }
     else
     {
-        error = AWSError<CoreErrors>(CoreErrors::UNKNOWN, "", "Failed to parse error payload", false); 
+        error = AWSError<CoreErrors>(CoreErrors::UNKNOWN, "", "Failed to parse error payload", false);
     }
- 
-    error.SetRequestId(httpResponse.HasHeader(REQUEST_ID_HEADER) ? httpResponse.GetHeader(REQUEST_ID_HEADER) : ""); 
-    error.SetJsonPayload(std::move(exceptionPayload)); 
-    return error; 
+
+    error.SetRequestId(httpResponse.HasHeader(REQUEST_ID_HEADER) ? httpResponse.GetHeader(REQUEST_ID_HEADER) : "");
+    error.SetJsonPayload(std::move(exceptionPayload));
+    return error;
 }
 
-const JsonValue& JsonErrorMarshaller::GetJsonPayloadFromError(const AWSError<CoreErrors>& error) const 
-{ 
-    return error.GetJsonPayload(); 
-} 
- 
+const JsonValue& JsonErrorMarshaller::GetJsonPayloadFromError(const AWSError<CoreErrors>& error) const
+{
+    return error.GetJsonPayload();
+}
+
 AWSError<CoreErrors> XmlErrorMarshaller::Marshall(const Aws::Http::HttpResponse& httpResponse) const
 {
     XmlDocument doc = XmlDocument::CreateFromXmlStream(httpResponse.GetResponseBody());
@@ -75,10 +75,10 @@ AWSError<CoreErrors> XmlErrorMarshaller::Marshall(const Aws::Http::HttpResponse&
     if (doc.WasParseSuccessful() && !doc.GetRootElement().IsNull())
     {
         XmlNode errorNode = doc.GetRootElement();
- 
-        Aws::String requestId(!errorNode.FirstChild("RequestId").IsNull() ? errorNode.FirstChild("RequestId").GetText() : 
-            !errorNode.FirstChild("RequestID").IsNull() ? errorNode.FirstChild("RequestID").GetText() : ""); 
- 
+
+        Aws::String requestId(!errorNode.FirstChild("RequestId").IsNull() ? errorNode.FirstChild("RequestId").GetText() :
+            !errorNode.FirstChild("RequestID").IsNull() ? errorNode.FirstChild("RequestID").GetText() : "");
+
         if (errorNode.GetName() != "Error")
         {
             errorNode = doc.GetRootElement().FirstChild("Error");
@@ -94,9 +94,9 @@ AWSError<CoreErrors> XmlErrorMarshaller::Marshall(const Aws::Http::HttpResponse&
 
         if (!errorNode.IsNull())
         {
-            requestId = !requestId.empty() ? requestId : !errorNode.FirstChild("RequestId").IsNull() ? errorNode.FirstChild("RequestId").GetText() : 
-                !errorNode.FirstChild("RequestID").IsNull() ? errorNode.FirstChild("RequestID").GetText() : ""; 
- 
+            requestId = !requestId.empty() ? requestId : !errorNode.FirstChild("RequestId").IsNull() ? errorNode.FirstChild("RequestId").GetText() :
+                !errorNode.FirstChild("RequestID").IsNull() ? errorNode.FirstChild("RequestID").GetText() : "";
+
             XmlNode codeNode = errorNode.FirstChild("Code");
             XmlNode messageNode = errorNode.FirstChild("Message");
 
@@ -107,8 +107,8 @@ AWSError<CoreErrors> XmlErrorMarshaller::Marshall(const Aws::Http::HttpResponse&
                 errorParsed = true;
             }
         }
- 
-        error.SetRequestId(requestId); 
+
+        error.SetRequestId(requestId);
     }
 
     if(!errorParsed)
@@ -120,15 +120,15 @@ AWSError<CoreErrors> XmlErrorMarshaller::Marshall(const Aws::Http::HttpResponse&
         error = FindErrorByHttpResponseCode(httpResponse.GetResponseCode());
     }
 
-    error.SetXmlPayload(std::move(doc)); 
+    error.SetXmlPayload(std::move(doc));
     return error;
 }
 
-const XmlDocument& XmlErrorMarshaller::GetXmlPayloadFromError(const AWSError<CoreErrors>& error) const 
-{ 
-    return error.GetXmlPayload(); 
-} 
- 
+const XmlDocument& XmlErrorMarshaller::GetXmlPayloadFromError(const AWSError<CoreErrors>& error) const
+{
+    return error.GetXmlPayload();
+}
+
 AWSError<CoreErrors> AWSErrorMarshaller::Marshall(const Aws::String& exceptionName, const Aws::String& message) const
 {
     if(exceptionName.empty())
@@ -142,11 +142,11 @@ AWSError<CoreErrors> AWSErrorMarshaller::Marshall(const Aws::String& exceptionNa
 
     if (locationOfPound != Aws::String::npos)
     {
-        formalExceptionName = exceptionName.substr(locationOfPound + 1); 
+        formalExceptionName = exceptionName.substr(locationOfPound + 1);
     }
     else if (locationOfColon != Aws::String::npos)
     {
-        formalExceptionName = exceptionName.substr(0, locationOfColon); 
+        formalExceptionName = exceptionName.substr(0, locationOfColon);
     }
     else
     {
@@ -161,7 +161,7 @@ AWSError<CoreErrors> AWSErrorMarshaller::Marshall(const Aws::String& exceptionNa
         error.SetExceptionName(formalExceptionName);
         error.SetMessage(message);
         return error;
-    } 
+    }
 
     AWS_LOGSTREAM_WARN(AWS_ERROR_MARSHALLER_LOG_TAG, "Encountered Unknown AWSError '" << exceptionName.c_str() <<
             "': " <<  message.c_str());

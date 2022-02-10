@@ -30,7 +30,7 @@
 // Author: Sanjay Ghemawat
 
 #ifdef HAVE_CONFIG_H
-#include "pcre_config.h" 
+#include "pcre_config.h"
 #endif
 
 #include <vector>

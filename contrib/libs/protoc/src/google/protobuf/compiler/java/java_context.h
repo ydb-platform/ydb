@@ -69,7 +69,7 @@ class Context {
 
   // Get the name resolver associated with this context. The resolver
   // can be used to map descriptors to Java class names.
-  ClassNameResolver* GetNameResolver() const; 
+  ClassNameResolver* GetNameResolver() const;
 
   // Get the FieldGeneratorInfo for a given field.
   const FieldGeneratorInfo* GetFieldGeneratorInfo(
@@ -97,10 +97,10 @@ class Context {
       const std::vector<const FieldDescriptor*>& fields);
 
   std::unique_ptr<ClassNameResolver> name_resolver_;
-  std::map<const FieldDescriptor*, FieldGeneratorInfo> 
-      field_generator_info_map_; 
-  std::map<const OneofDescriptor*, OneofGeneratorInfo> 
-      oneof_generator_info_map_; 
+  std::map<const FieldDescriptor*, FieldGeneratorInfo>
+      field_generator_info_map_;
+  std::map<const OneofDescriptor*, OneofGeneratorInfo>
+      oneof_generator_info_map_;
   Options options_;
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(Context);
 };

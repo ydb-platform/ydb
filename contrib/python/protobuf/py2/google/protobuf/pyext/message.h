@@ -56,7 +56,7 @@ class MessageFactory;
 namespace python {
 
 struct ExtensionDict;
-struct PyMessageFactory; 
+struct PyMessageFactory;
 struct CMessageClass;
 
 // Most of the complexity of the Message class comes from the "Release"
@@ -122,12 +122,12 @@ typedef struct CMessage : public ContainerBase {
   // This avoid the creation of similar maps in each of those containers.
   typedef std::unordered_map<const Message*, CMessage*> SubMessagesMap;
   SubMessagesMap* child_submessages;
- 
+
   // A reference to PyUnknownFields.
   PyObject* unknown_field_set;
 
-  // Implements the "weakref" protocol for this object. 
-  PyObject* weakreflist; 
+  // Implements the "weakref" protocol for this object.
+  PyObject* weakreflist;
 
   // Return a *borrowed* reference to the message class.
   CMessageClass* GetMessageClass() {
@@ -158,11 +158,11 @@ struct CMessageClass {
   // This reference must stay alive until all message pointers are destructed.
   PyObject* py_message_descriptor;
 
-  // The Python MessageFactory used to create the class. It is needed to resolve 
+  // The Python MessageFactory used to create the class. It is needed to resolve
   // fields descriptors, including extensions fields; its C++ MessageFactory is
   // used to instantiate submessages.
   // This reference must stay alive until all message pointers are destructed.
-  PyMessageFactory* py_message_factory; 
+  PyMessageFactory* py_message_factory;
 
   PyObject* AsPyObject() {
     return reinterpret_cast<PyObject*>(this);
@@ -251,10 +251,10 @@ int InitAttributes(CMessage* self, PyObject* args, PyObject* kwargs);
 
 PyObject* MergeFrom(CMessage* self, PyObject* arg);
 
-// This method does not do anything beyond checking that no other extension 
-// has been registered with the same field number on this class. 
-PyObject* RegisterExtension(PyObject* cls, PyObject* extension_handle); 
- 
+// This method does not do anything beyond checking that no other extension
+// has been registered with the same field number on this class.
+PyObject* RegisterExtension(PyObject* cls, PyObject* extension_handle);
+
 // Get a field from a message.
 PyObject* GetFieldValue(CMessage* self,
                         const FieldDescriptor* field_descriptor);
@@ -267,13 +267,13 @@ PyObject* FindInitializationErrors(CMessage* self);
 
 int AssureWritable(CMessage* self);
 
-// Returns the message factory for the given message. 
-// This is equivalent to message.MESSAGE_FACTORY 
+// Returns the message factory for the given message.
+// This is equivalent to message.MESSAGE_FACTORY
 //
-// The returned factory is suitable for finding fields and building submessages, 
+// The returned factory is suitable for finding fields and building submessages,
 // even in the case of extensions.
-// Returns a *borrowed* reference, and never fails because we pass a CMessage. 
-PyMessageFactory* GetFactoryForMessage(CMessage* message); 
+// Returns a *borrowed* reference, and never fails because we pass a CMessage.
+PyMessageFactory* GetFactoryForMessage(CMessage* message);
 
 PyObject* SetAllowOversizeProtos(PyObject* m, PyObject* arg);
 
@@ -332,7 +332,7 @@ PyObject* SetAllowOversizeProtos(PyObject* m, PyObject* arg);
 
 void FormatTypeError(PyObject* arg, const char* expected_types);
 template<class T>
-bool CheckAndGetInteger(PyObject* arg, T* value); 
+bool CheckAndGetInteger(PyObject* arg, T* value);
 bool CheckAndGetDouble(PyObject* arg, double* value);
 bool CheckAndGetFloat(PyObject* arg, float* value);
 bool CheckAndGetBool(PyObject* arg, bool* value);

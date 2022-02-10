@@ -1,12 +1,12 @@
 /*
  * Copyright (c) Yann Collet, Facebook, Inc.
- * All rights reserved. 
- * 
+ * All rights reserved.
+ *
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
- */ 
+ */
 
 #ifndef MEM_H_MODULE
 #define MEM_H_MODULE
@@ -64,7 +64,7 @@ extern "C" {
 #if CHAR_BIT != 8
 #  error "this implementation requires char to be exactly 8-bit type"
 #endif
-  typedef unsigned char      BYTE; 
+  typedef unsigned char      BYTE;
   typedef unsigned char      U8;
   typedef   signed char      S8;
 #if USHRT_MAX != 65535
@@ -192,19 +192,19 @@ MEM_STATIC void MEM_write64(void* memPtr, U64 value) { *(U64*)memPtr = value; }
 
 /* __pack instructions are safer, but compiler specific, hence potentially problematic for some compilers */
 /* currently only defined for gcc and icc */
-#if defined(_MSC_VER) || (defined(__INTEL_COMPILER) && defined(WIN32)) 
+#if defined(_MSC_VER) || (defined(__INTEL_COMPILER) && defined(WIN32))
     __pragma( pack(push, 1) )
     typedef struct { U16 v; } unalign16;
     typedef struct { U32 v; } unalign32;
     typedef struct { U64 v; } unalign64;
     typedef struct { size_t v; } unalignArch;
-    __pragma( pack(pop) ) 
-#else 
+    __pragma( pack(pop) )
+#else
     typedef struct { U16 v; } __attribute__((packed)) unalign16;
     typedef struct { U32 v; } __attribute__((packed)) unalign32;
     typedef struct { U64 v; } __attribute__((packed)) unalign64;
     typedef struct { size_t v; } __attribute__((packed)) unalignArch;
-#endif 
+#endif
 
 MEM_STATIC U16 MEM_read16(const void* ptr) { return ((const unalign16*)ptr)->v; }
 MEM_STATIC U32 MEM_read32(const void* ptr) { return ((const unalign32*)ptr)->v; }

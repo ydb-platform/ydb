@@ -3,44 +3,44 @@
 #            anywhere else in particular
 #
 
-from __future__ import absolute_import 
- 
-try: 
-    from __builtin__ import basestring 
-except ImportError: 
-    basestring = str 
- 
-try: 
-    FileNotFoundError 
-except NameError: 
-    FileNotFoundError = OSError 
- 
+from __future__ import absolute_import
+
+try:
+    from __builtin__ import basestring
+except ImportError:
+    basestring = str
+
+try:
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = OSError
+
 import os
 import sys
 import re
 import io
 import codecs
-import shutil 
+import shutil
 import tempfile
 from contextlib import contextmanager
 
 modification_time = os.path.getmtime
 
-_function_caches = [] 
-def clear_function_caches(): 
-    for cache in _function_caches: 
-        cache.clear() 
+_function_caches = []
+def clear_function_caches():
+    for cache in _function_caches:
+        cache.clear()
 
 def cached_function(f):
     cache = {}
-    _function_caches.append(cache) 
+    _function_caches.append(cache)
     uncomputed = object()
     def wrapper(*args):
         res = cache.get(args, uncomputed)
         if res is uncomputed:
             res = cache[args] = f(*args)
         return res
-    wrapper.uncached = f 
+    wrapper.uncached = f
     return wrapper
 
 def cached_method(f):
@@ -96,34 +96,34 @@ def file_newer_than(path, time):
     ftime = modification_time(path)
     return ftime > time
 
- 
-def safe_makedirs(path): 
-    try: 
-        os.makedirs(path) 
-    except OSError: 
-        if not os.path.isdir(path): 
-            raise 
- 
- 
-def copy_file_to_dir_if_newer(sourcefile, destdir): 
-    """ 
-    Copy file sourcefile to directory destdir (creating it if needed), 
-    preserving metadata. If the destination file exists and is not 
-    older than the source file, the copying is skipped. 
-    """ 
-    destfile = os.path.join(destdir, os.path.basename(sourcefile)) 
-    try: 
-        desttime = modification_time(destfile) 
-    except OSError: 
-        # New file does not exist, destdir may or may not exist 
-        safe_makedirs(destdir) 
-    else: 
-        # New file already exists 
-        if not file_newer_than(sourcefile, desttime): 
-            return 
-    shutil.copy2(sourcefile, destfile) 
- 
- 
+
+def safe_makedirs(path):
+    try:
+        os.makedirs(path)
+    except OSError:
+        if not os.path.isdir(path):
+            raise
+
+
+def copy_file_to_dir_if_newer(sourcefile, destdir):
+    """
+    Copy file sourcefile to directory destdir (creating it if needed),
+    preserving metadata. If the destination file exists and is not
+    older than the source file, the copying is skipped.
+    """
+    destfile = os.path.join(destdir, os.path.basename(sourcefile))
+    try:
+        desttime = modification_time(destfile)
+    except OSError:
+        # New file does not exist, destdir may or may not exist
+        safe_makedirs(destdir)
+    else:
+        # New file already exists
+        if not file_newer_than(sourcefile, desttime):
+            return
+    shutil.copy2(sourcefile, destfile)
+
+
 @cached_function
 def find_root_package_dir(file_path):
     dir = os.path.dirname(file_path)
@@ -179,40 +179,40 @@ def path_exists(path):
 # file name encodings
 
 def decode_filename(filename):
-    if isinstance(filename, bytes): 
-        try: 
-            filename_encoding = sys.getfilesystemencoding() 
-            if filename_encoding is None: 
-                filename_encoding = sys.getdefaultencoding() 
-            filename = filename.decode(filename_encoding) 
-        except UnicodeDecodeError: 
-            pass 
+    if isinstance(filename, bytes):
+        try:
+            filename_encoding = sys.getfilesystemencoding()
+            if filename_encoding is None:
+                filename_encoding = sys.getdefaultencoding()
+            filename = filename.decode(filename_encoding)
+        except UnicodeDecodeError:
+            pass
     return filename
 
 # support for source file encoding detection
 
-_match_file_encoding = re.compile(br"(\w*coding)[:=]\s*([-\w.]+)").search 
+_match_file_encoding = re.compile(br"(\w*coding)[:=]\s*([-\w.]+)").search
 
 
 def detect_opened_file_encoding(f):
     # PEPs 263 and 3120
-    # Most of the time the first two lines fall in the first couple of hundred chars, 
+    # Most of the time the first two lines fall in the first couple of hundred chars,
     # and this bulk read/split is much faster.
-    lines = () 
-    start = b'' 
-    while len(lines) < 3: 
-        data = f.read(500) 
-        start += data 
-        lines = start.split(b"\n") 
-        if not data: 
-            break 
-    m = _match_file_encoding(lines[0]) 
-    if m and m.group(1) != b'c_string_encoding': 
-        return m.group(2).decode('iso8859-1') 
-    elif len(lines) > 1: 
-        m = _match_file_encoding(lines[1]) 
+    lines = ()
+    start = b''
+    while len(lines) < 3:
+        data = f.read(500)
+        start += data
+        lines = start.split(b"\n")
+        if not data:
+            break
+    m = _match_file_encoding(lines[0])
+    if m and m.group(1) != b'c_string_encoding':
+        return m.group(2).decode('iso8859-1')
+    elif len(lines) > 1:
+        m = _match_file_encoding(lines[1])
         if m:
-            return m.group(2).decode('iso8859-1') 
+            return m.group(2).decode('iso8859-1')
     return "UTF-8"
 
 
@@ -226,40 +226,40 @@ def skip_bom(f):
         f.seek(0)
 
 
-def open_source_file(source_filename, encoding=None, error_handling=None): 
-    stream = None 
-    try: 
-        if encoding is None: 
-            # Most of the time the encoding is not specified, so try hard to open the file only once. 
-            f = io.open(source_filename, 'rb') 
-            encoding = detect_opened_file_encoding(f) 
+def open_source_file(source_filename, encoding=None, error_handling=None):
+    stream = None
+    try:
+        if encoding is None:
+            # Most of the time the encoding is not specified, so try hard to open the file only once.
+            f = io.open(source_filename, 'rb')
+            encoding = detect_opened_file_encoding(f)
             f.seek(0)
-            stream = io.TextIOWrapper(f, encoding=encoding, errors=error_handling) 
+            stream = io.TextIOWrapper(f, encoding=encoding, errors=error_handling)
         else:
-            stream = io.open(source_filename, encoding=encoding, errors=error_handling) 
+            stream = io.open(source_filename, encoding=encoding, errors=error_handling)
 
-    except OSError: 
-        if os.path.exists(source_filename): 
-            raise  # File is there, but something went wrong reading from it. 
-        # Allow source files to be in zip files etc. 
+    except OSError:
+        if os.path.exists(source_filename):
+            raise  # File is there, but something went wrong reading from it.
+        # Allow source files to be in zip files etc.
         try:
             loader = __loader__
             if source_filename.startswith(loader.archive):
-                stream = open_source_from_loader( 
+                stream = open_source_from_loader(
                     loader, source_filename,
-                    encoding, error_handling) 
+                    encoding, error_handling)
         except (NameError, AttributeError):
             pass
 
-    if stream is None: 
-        raise FileNotFoundError(source_filename) 
+    if stream is None:
+        raise FileNotFoundError(source_filename)
     skip_bom(stream)
     return stream
 
 
 def open_source_from_loader(loader,
                             source_filename,
-                            encoding=None, error_handling=None): 
+                            encoding=None, error_handling=None):
     nrmpath = os.path.normpath(source_filename)
     arcname = nrmpath[len(loader.archive)+1:]
     data = loader.get_data(arcname)
@@ -270,22 +270,22 @@ def open_source_from_loader(loader,
 
 def str_to_number(value):
     # note: this expects a string as input that was accepted by the
-    # parser already, with an optional "-" sign in front 
-    is_neg = False 
-    if value[:1] == '-': 
-        is_neg = True 
-        value = value[1:] 
+    # parser already, with an optional "-" sign in front
+    is_neg = False
+    if value[:1] == '-':
+        is_neg = True
+        value = value[1:]
     if len(value) < 2:
         value = int(value, 0)
     elif value[0] == '0':
-        literal_type = value[1]  # 0'o' - 0'b' - 0'x' 
-        if literal_type in 'xX': 
+        literal_type = value[1]  # 0'o' - 0'b' - 0'x'
+        if literal_type in 'xX':
             # hex notation ('0x1AF')
             value = int(value[2:], 16)
-        elif literal_type in 'oO': 
+        elif literal_type in 'oO':
             # Py3 octal notation ('0o136')
             value = int(value[2:], 8)
-        elif literal_type in 'bB': 
+        elif literal_type in 'bB':
             # Py3 binary notation ('0b101')
             value = int(value[2:], 2)
         else:
@@ -293,7 +293,7 @@ def str_to_number(value):
             value = int(value, 8)
     else:
         value = int(value, 0)
-    return -value if is_neg else value 
+    return -value if is_neg else value
 
 
 def long_literal(value):
@@ -304,8 +304,8 @@ def long_literal(value):
 
 @cached_function
 def get_cython_cache_dir():
-    r""" 
-    Return the base directory containing Cython's caches. 
+    r"""
+    Return the base directory containing Cython's caches.
 
     Priority:
 
@@ -358,9 +358,9 @@ def captured_fd(stream=2, encoding=None):
         os.close(orig_stream)
 
 
-def print_bytes(s, header_text=None, end=b'\n', file=sys.stdout, flush=True): 
-    if header_text: 
-        file.write(header_text)  # note: text! => file.write() instead of out.write() 
+def print_bytes(s, header_text=None, end=b'\n', file=sys.stdout, flush=True):
+    if header_text:
+        file.write(header_text)  # note: text! => file.write() instead of out.write()
     file.flush()
     try:
         out = file.buffer  # Py3
@@ -384,7 +384,7 @@ class LazyStr:
     def __radd__(self, left):
         return left + self.callback()
 
- 
+
 class OrderedSet(object):
   def __init__(self, elements=()):
     self._list = []
@@ -401,49 +401,49 @@ class OrderedSet(object):
       self._set.add(e)
 
 
-# Class decorator that adds a metaclass and recreates the class with it. 
-# Copied from 'six'. 
-def add_metaclass(metaclass): 
-    """Class decorator for creating a class with a metaclass.""" 
-    def wrapper(cls): 
-        orig_vars = cls.__dict__.copy() 
-        slots = orig_vars.get('__slots__') 
-        if slots is not None: 
-            if isinstance(slots, str): 
-                slots = [slots] 
-            for slots_var in slots: 
-                orig_vars.pop(slots_var) 
-        orig_vars.pop('__dict__', None) 
-        orig_vars.pop('__weakref__', None) 
-        return metaclass(cls.__name__, cls.__bases__, orig_vars) 
-    return wrapper 
- 
- 
-def raise_error_if_module_name_forbidden(full_module_name): 
-    #it is bad idea to call the pyx-file cython.pyx, so fail early 
-    if full_module_name == 'cython' or full_module_name.startswith('cython.'): 
-        raise ValueError('cython is a special module, cannot be used as a module name') 
- 
- 
-def build_hex_version(version_string): 
-    """ 
+# Class decorator that adds a metaclass and recreates the class with it.
+# Copied from 'six'.
+def add_metaclass(metaclass):
+    """Class decorator for creating a class with a metaclass."""
+    def wrapper(cls):
+        orig_vars = cls.__dict__.copy()
+        slots = orig_vars.get('__slots__')
+        if slots is not None:
+            if isinstance(slots, str):
+                slots = [slots]
+            for slots_var in slots:
+                orig_vars.pop(slots_var)
+        orig_vars.pop('__dict__', None)
+        orig_vars.pop('__weakref__', None)
+        return metaclass(cls.__name__, cls.__bases__, orig_vars)
+    return wrapper
+
+
+def raise_error_if_module_name_forbidden(full_module_name):
+    #it is bad idea to call the pyx-file cython.pyx, so fail early
+    if full_module_name == 'cython' or full_module_name.startswith('cython.'):
+        raise ValueError('cython is a special module, cannot be used as a module name')
+
+
+def build_hex_version(version_string):
+    """
     Parse and translate '4.3a1' into the readable hex representation '0x040300A1' (like PY_VERSION_HEX).
-    """ 
-    # First, parse '4.12a1' into [4, 12, 0, 0xA01]. 
-    digits = [] 
-    release_status = 0xF0 
-    for digit in re.split('([.abrc]+)', version_string): 
-        if digit in ('a', 'b', 'rc'): 
-            release_status = {'a': 0xA0, 'b': 0xB0, 'rc': 0xC0}[digit] 
-            digits = (digits + [0, 0])[:3]  # 1.2a1 -> 1.2.0a1 
-        elif digit != '.': 
-            digits.append(int(digit)) 
-    digits = (digits + [0] * 3)[:4] 
-    digits[3] += release_status 
- 
-    # Then, build a single hex value, two hex digits per version part. 
-    hexversion = 0 
-    for digit in digits: 
-        hexversion = (hexversion << 8) + digit 
- 
-    return '0x%08X' % hexversion 
+    """
+    # First, parse '4.12a1' into [4, 12, 0, 0xA01].
+    digits = []
+    release_status = 0xF0
+    for digit in re.split('([.abrc]+)', version_string):
+        if digit in ('a', 'b', 'rc'):
+            release_status = {'a': 0xA0, 'b': 0xB0, 'rc': 0xC0}[digit]
+            digits = (digits + [0, 0])[:3]  # 1.2a1 -> 1.2.0a1
+        elif digit != '.':
+            digits.append(int(digit))
+    digits = (digits + [0] * 3)[:4]
+    digits[3] += release_status
+
+    # Then, build a single hex value, two hex digits per version part.
+    hexversion = 0
+    for digit in digits:
+        hexversion = (hexversion << 8) + digit
+
+    return '0x%08X' % hexversion

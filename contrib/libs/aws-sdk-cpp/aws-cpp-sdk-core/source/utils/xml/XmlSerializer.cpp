@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #include <aws/core/utils/xml/XmlSerializer.h>
 
@@ -56,8 +56,8 @@ void XmlNode::SetName(const Aws::String& name)
 
 const Aws::String XmlNode::GetAttributeValue(const Aws::String& name) const
 {
-    auto pointer =  m_node->ToElement()->Attribute(name.c_str(), nullptr); 
-    return pointer ? pointer : ""; 
+    auto pointer =  m_node->ToElement()->Attribute(name.c_str(), nullptr);
+    return pointer ? pointer : "";
 }
 
 void XmlNode::SetAttributeValue(const Aws::String& name, const Aws::String& value)
@@ -158,106 +158,106 @@ static const char* XML_SERIALIZER_ALLOCATION_TAG = "XmlDocument";
 
 XmlDocument::XmlDocument()
 {
-    m_doc = nullptr; 
+    m_doc = nullptr;
 }
 
-XmlDocument::XmlDocument(const XmlDocument& doc) 
-{ 
-    if (doc.m_doc == nullptr) 
-    { 
-        m_doc = nullptr; 
-    } 
-    else 
-    { 
-        InitDoc(); 
-        doc.m_doc->DeepCopy(m_doc); 
-    } 
-} 
- 
-XmlDocument::XmlDocument(XmlDocument&& doc) : m_doc{ doc.m_doc } // take the innards 
+XmlDocument::XmlDocument(const XmlDocument& doc)
+{
+    if (doc.m_doc == nullptr)
+    {
+        m_doc = nullptr;
+    }
+    else
+    {
+        InitDoc();
+        doc.m_doc->DeepCopy(m_doc);
+    }
+}
+
+XmlDocument::XmlDocument(XmlDocument&& doc) : m_doc{ doc.m_doc } // take the innards
 {
     doc.m_doc = nullptr; // leave nothing behind
 }
 
-XmlDocument& XmlDocument::operator=(const XmlDocument& other) 
-{ 
-    if (this == &other) 
-    { 
-        return *this; 
-    } 
- 
-    if (other.m_doc == nullptr) 
-    { 
-        if (m_doc != nullptr) 
-        { 
-            m_doc->Clear(); 
-            m_doc = nullptr; 
-        } 
-    } 
-    else 
-    { 
-        if (m_doc == nullptr) 
-        { 
-            InitDoc(); 
-        } 
-        else 
-        { 
-            m_doc->Clear(); 
-        } 
-        other.m_doc->DeepCopy(m_doc); 
-    } 
- 
-    return *this; 
-} 
- 
-XmlDocument& XmlDocument::operator=(XmlDocument&& other) 
-{ 
-    if (this == &other) 
-    { 
-        return *this; 
-    } 
- 
-    std::swap(m_doc, other.m_doc); 
-    return *this; 
-} 
- 
-XmlDocument::~XmlDocument()
+XmlDocument& XmlDocument::operator=(const XmlDocument& other)
 {
-    if (m_doc) 
-    { 
-        Aws::Delete(m_doc); 
-    } 
+    if (this == &other)
+    {
+        return *this;
+    }
+
+    if (other.m_doc == nullptr)
+    {
+        if (m_doc != nullptr)
+        {
+            m_doc->Clear();
+            m_doc = nullptr;
+        }
+    }
+    else
+    {
+        if (m_doc == nullptr)
+        {
+            InitDoc();
+        }
+        else
+        {
+            m_doc->Clear();
+        }
+        other.m_doc->DeepCopy(m_doc);
+    }
+
+    return *this;
 }
 
-void XmlDocument::InitDoc() 
-{ 
-    m_doc = Aws::New<Aws::External::tinyxml2::XMLDocument>(XML_SERIALIZER_ALLOCATION_TAG, true, Aws::External::tinyxml2::Whitespace::PRESERVE_WHITESPACE); 
-} 
- 
+XmlDocument& XmlDocument::operator=(XmlDocument&& other)
+{
+    if (this == &other)
+    {
+        return *this;
+    }
+
+    std::swap(m_doc, other.m_doc);
+    return *this;
+}
+
+XmlDocument::~XmlDocument()
+{
+    if (m_doc)
+    {
+        Aws::Delete(m_doc);
+    }
+}
+
+void XmlDocument::InitDoc()
+{
+    m_doc = Aws::New<Aws::External::tinyxml2::XMLDocument>(XML_SERIALIZER_ALLOCATION_TAG, true, Aws::External::tinyxml2::Whitespace::PRESERVE_WHITESPACE);
+}
+
 XmlNode XmlDocument::GetRootElement() const
 {
-    if (m_doc) 
-    { 
-        return XmlNode(m_doc->FirstChildElement(), *this); 
-    } 
-    else 
-    { 
-        return XmlNode(nullptr, *this); 
-    } 
- 
+    if (m_doc)
+    {
+        return XmlNode(m_doc->FirstChildElement(), *this);
+    }
+    else
+    {
+        return XmlNode(nullptr, *this);
+    }
+
 }
 
 bool XmlDocument::WasParseSuccessful() const
 {
-    if (m_doc) 
-    { 
-        return !m_doc->Error(); 
-    } 
-    else 
-    { 
-        return true; 
-    } 
- 
+    if (m_doc)
+    {
+        return !m_doc->Error();
+    }
+    else
+    {
+        return true;
+    }
+
 }
 
 Aws::String XmlDocument::GetErrorMessage() const
@@ -267,8 +267,8 @@ Aws::String XmlDocument::GetErrorMessage() const
 
 Aws::String XmlDocument::ConvertToString() const
 {
-    if (!m_doc) return ""; 
- 
+    if (!m_doc) return "";
+
     Aws::External::tinyxml2::XMLPrinter printer;
     printer.PushHeader(false, true);
     m_doc->Accept(&printer);
@@ -285,7 +285,7 @@ XmlDocument XmlDocument::CreateFromXmlStream(Aws::IOStream& xmlStream)
 XmlDocument XmlDocument::CreateFromXmlString(const Aws::String& xmlText)
 {
     XmlDocument xmlDocument;
-    xmlDocument.InitDoc(); 
+    xmlDocument.InitDoc();
     xmlDocument.m_doc->Parse(xmlText.c_str(), xmlText.size());
     return xmlDocument;
 }
@@ -293,7 +293,7 @@ XmlDocument XmlDocument::CreateFromXmlString(const Aws::String& xmlText)
 XmlDocument XmlDocument::CreateWithRootNode(const Aws::String& rootNodeName)
 {
     XmlDocument xmlDocument;
-    xmlDocument.InitDoc(); 
+    xmlDocument.InitDoc();
     Aws::External::tinyxml2::XMLElement* rootNode = xmlDocument.m_doc->NewElement(rootNodeName.c_str());
     xmlDocument.m_doc->LinkEndChild(rootNode);
 

@@ -18,7 +18,7 @@ from pygments.util import shebang_matches
 
 
 __all__ = ['BashLexer', 'BashSessionLexer', 'TcshLexer', 'BatchLexer',
-           'SlurmBashLexer', 'MSDOSSessionLexer', 'PowerShellLexer', 
+           'SlurmBashLexer', 'MSDOSSessionLexer', 'PowerShellLexer',
            'PowerShellSessionLexer', 'TcshSessionLexer', 'FishShellLexer',
            'ExeclineLexer']
 
@@ -27,19 +27,19 @@ line_re = re.compile('.*?\n')
 
 class BashLexer(RegexLexer):
     """
-    Lexer for (ba|k|z|)sh shell scripts. 
+    Lexer for (ba|k|z|)sh shell scripts.
 
     .. versionadded:: 0.6
     """
 
     name = 'Bash'
-    aliases = ['bash', 'sh', 'ksh', 'zsh', 'shell'] 
+    aliases = ['bash', 'sh', 'ksh', 'zsh', 'shell']
     filenames = ['*.sh', '*.ksh', '*.bash', '*.ebuild', '*.eclass',
-                 '*.exheres-0', '*.exlib', '*.zsh', 
-                 '.bashrc', 'bashrc', '.bash_*', 'bash_*', 'zshrc', '.zshrc', 
+                 '*.exheres-0', '*.exlib', '*.zsh',
+                 '.bashrc', 'bashrc', '.bash_*', 'bash_*', 'zshrc', '.zshrc',
                  '.kshrc', 'kshrc',
-                 'PKGBUILD'] 
-    mimetypes = ['application/x-sh', 'application/x-shellscript', 'text/x-shellscript'] 
+                 'PKGBUILD']
+    mimetypes = ['application/x-sh', 'application/x-shellscript', 'text/x-shellscript']
 
     tokens = {
         'root': [
@@ -52,7 +52,7 @@ class BashLexer(RegexLexer):
             (r'\$\(\(', Keyword, 'math'),
             (r'\$\(', Keyword, 'paren'),
             (r'\$\{#?', String.Interpol, 'curly'),
-            (r'\$[a-zA-Z_]\w*', Name.Variable),  # user variable 
+            (r'\$[a-zA-Z_]\w*', Name.Variable),  # user variable
             (r'\$(?:\d+|[#$?!_*@-])', Name.Variable),      # builtin
             (r'\$', Text),
         ],
@@ -70,14 +70,14 @@ class BashLexer(RegexLexer):
             (r'\A#!.+\n', Comment.Hashbang),
             (r'#.*\n', Comment.Single),
             (r'\\[\w\W]', String.Escape),
-            (r'(\b\w+)(\s*)(\+?=)', bygroups(Name.Variable, Text, Operator)), 
+            (r'(\b\w+)(\s*)(\+?=)', bygroups(Name.Variable, Text, Operator)),
             (r'[\[\]{}()=]', Operator),
             (r'<<<', Operator),  # here-string
             (r'<<-?\s*(\'?)\\?(\w+)[\w\W]+?\2', String),
             (r'&&|\|\|', Operator),
         ],
         'data': [
-            (r'(?s)\$?"(\\.|[^"\\$])*"', String.Double), 
+            (r'(?s)\$?"(\\.|[^"\\$])*"', String.Double),
             (r'"', String.Double, 'string'),
             (r"(?s)\$'(\\\\|\\[0-7]+|\\.|[^'\\])*'", String.Single),
             (r"(?s)'.*?'", String.Single),
@@ -85,7 +85,7 @@ class BashLexer(RegexLexer):
             (r'&', Punctuation),
             (r'\|', Punctuation),
             (r'\s+', Text),
-            (r'\d+\b', Number), 
+            (r'\d+\b', Number),
             (r'[^=\s\[\]{}()$"\'`\\<&|;]+', Text),
             (r'<', Text),
         ],
@@ -127,28 +127,28 @@ class BashLexer(RegexLexer):
             return 0.2
 
 
-class SlurmBashLexer(BashLexer): 
-    """ 
-    Lexer for (ba|k|z|)sh Slurm scripts. 
- 
-    .. versionadded:: 2.4 
-    """ 
- 
-    name = 'Slurm' 
-    aliases = ['slurm', 'sbatch'] 
-    filenames = ['*.sl'] 
-    mimetypes = [] 
-    EXTRA_KEYWORDS = {'srun'} 
- 
-    def get_tokens_unprocessed(self, text): 
-        for index, token, value in BashLexer.get_tokens_unprocessed(self, text): 
-            if token is Text and value in self.EXTRA_KEYWORDS: 
-                yield index, Name.Builtin, value 
-            elif token is Comment.Single and 'SBATCH' in value: 
-                yield index, Keyword.Pseudo, value 
-            else: 
-                yield index, token, value 
- 
+class SlurmBashLexer(BashLexer):
+    """
+    Lexer for (ba|k|z|)sh Slurm scripts.
+
+    .. versionadded:: 2.4
+    """
+
+    name = 'Slurm'
+    aliases = ['slurm', 'sbatch']
+    filenames = ['*.sl']
+    mimetypes = []
+    EXTRA_KEYWORDS = {'srun'}
+
+    def get_tokens_unprocessed(self, text):
+        for index, token, value in BashLexer.get_tokens_unprocessed(self, text):
+            if token is Text and value in self.EXTRA_KEYWORDS:
+                yield index, Name.Builtin, value
+            elif token is Comment.Single and 'SBATCH' in value:
+                yield index, Keyword.Pseudo, value
+            else:
+                yield index, token, value
+
 
 class ShellSessionBaseLexer(Lexer):
     """
@@ -165,7 +165,7 @@ class ShellSessionBaseLexer(Lexer):
         pos = 0
         curcode = ''
         insertions = []
-        backslash_continuation = False 
+        backslash_continuation = False
 
         for match in line_re.finditer(text):
             line = match.group()
@@ -192,7 +192,7 @@ class ShellSessionBaseLexer(Lexer):
                 insertions.append((len(curcode),
                                    [(0, Generic.Prompt, m.group(1))]))
                 curcode += m.group(2)
-                backslash_continuation = curcode.endswith('\\\n') 
+                backslash_continuation = curcode.endswith('\\\n')
             elif backslash_continuation:
                 if line.startswith(self._ps2):
                     insertions.append((len(curcode),
@@ -200,7 +200,7 @@ class ShellSessionBaseLexer(Lexer):
                     curcode += line[len(self._ps2):]
                 else:
                     curcode += line
-                backslash_continuation = curcode.endswith('\\\n') 
+                backslash_continuation = curcode.endswith('\\\n')
             else:
                 if insertions:
                     toks = innerlexer.get_tokens_unprocessed(curcode)
@@ -261,7 +261,7 @@ class BatchLexer(RegexLexer):
     _label_compound = r'(?:(?:[^%s%s+:^)]|\^[%s]?[^)])*)' % (_nlws, _punct, _nl)
     _number = r'(?:-?(?:0[0-7]+|0x[\da-f]+|\d+)%s)' % _token_terminator
     _opword = r'(?:equ|geq|gtr|leq|lss|neq)'
-    _string = r'(?:"[^%s"]*(?:"|(?=[%s])))' % (_nl, _nl) 
+    _string = r'(?:"[^%s"]*(?:"|(?=[%s])))' % (_nl, _nl)
     _variable = (r'(?:(?:%%(?:\*|(?:~[a-z]*(?:\$[^:]+:)?)?\d|'
                  r'[^%%:%s]+(?::(?:~(?:-?\d+)?(?:,(?:-?\d+)?)?|(?:[^%%%s^]|'
                  r'\^[^%%%s])[^=%s]*=(?:[^%%%s^]|\^[^%%%s])*)?)?%%))|'
@@ -522,13 +522,13 @@ class BatchLexer(RegexLexer):
             (r'(%s%s)(%s)(%s%s)' % (_number, _space, _opword, _space, _number),
              bygroups(using(this, state='arithmetic'), Operator.Word,
                       using(this, state='arithmetic')), '#pop'),
-            (_stoken, using(this, state='text'), ('#pop', 'if2')), 
-        ], 
-        'if2': [ 
-            (r'(%s?)(==)(%s?%s)' % (_space, _space, _stoken), 
-             bygroups(using(this, state='text'), Operator, 
-                      using(this, state='text')), '#pop'), 
-            (r'(%s)(%s)(%s%s)' % (_space, _opword, _space, _stoken), 
+            (_stoken, using(this, state='text'), ('#pop', 'if2')),
+        ],
+        'if2': [
+            (r'(%s?)(==)(%s?%s)' % (_space, _space, _stoken),
+             bygroups(using(this, state='text'), Operator,
+                      using(this, state='text')), '#pop'),
+            (r'(%s)(%s)(%s%s)' % (_space, _opword, _space, _stoken),
              bygroups(using(this, state='text'), Operator.Word,
                       using(this, state='text')), '#pop')
         ],
@@ -680,30 +680,30 @@ class PowerShellLexer(RegexLexer):
         'wildcard').split()
 
     verbs = (
-        'write where watch wait use update unregister unpublish unprotect ' 
-        'unlock uninstall undo unblock trace test tee take sync switch ' 
-        'suspend submit stop step start split sort skip show set send select ' 
-        'search scroll save revoke resume restore restart resolve resize ' 
-        'reset request repair rename remove register redo receive read push ' 
-        'publish protect pop ping out optimize open new move mount merge ' 
-        'measure lock limit join invoke install initialize import hide group ' 
-        'grant get format foreach find export expand exit enter enable edit ' 
-        'dismount disconnect disable deny debug cxnew copy convertto ' 
-        'convertfrom convert connect confirm compress complete compare close ' 
-        'clear checkpoint block backup assert approve aggregate add').split() 
+        'write where watch wait use update unregister unpublish unprotect '
+        'unlock uninstall undo unblock trace test tee take sync switch '
+        'suspend submit stop step start split sort skip show set send select '
+        'search scroll save revoke resume restore restart resolve resize '
+        'reset request repair rename remove register redo receive read push '
+        'publish protect pop ping out optimize open new move mount merge '
+        'measure lock limit join invoke install initialize import hide group '
+        'grant get format foreach find export expand exit enter enable edit '
+        'dismount disconnect disable deny debug cxnew copy convertto '
+        'convertfrom convert connect confirm compress complete compare close '
+        'clear checkpoint block backup assert approve aggregate add').split()
 
-    aliases_ = ( 
-        'ac asnp cat cd cfs chdir clc clear clhy cli clp cls clv cnsn ' 
-        'compare copy cp cpi cpp curl cvpa dbp del diff dir dnsn ebp echo epal ' 
-        'epcsv epsn erase etsn exsn fc fhx fl foreach ft fw gal gbp gc gci gcm ' 
-        'gcs gdr ghy gi gjb gl gm gmo gp gps gpv group gsn gsnp gsv gu gv gwmi ' 
-        'h history icm iex ihy ii ipal ipcsv ipmo ipsn irm ise iwmi iwr kill lp ' 
-        'ls man md measure mi mount move mp mv nal ndr ni nmo npssc nsn nv ogv ' 
-        'oh popd ps pushd pwd r rbp rcjb rcsn rd rdr ren ri rjb rm rmdir rmo ' 
-        'rni rnp rp rsn rsnp rujb rv rvpa rwmi sajb sal saps sasv sbp sc select ' 
-        'set shcm si sl sleep sls sort sp spjb spps spsv start sujb sv swmi tee ' 
-        'trcm type wget where wjb write').split() 
- 
+    aliases_ = (
+        'ac asnp cat cd cfs chdir clc clear clhy cli clp cls clv cnsn '
+        'compare copy cp cpi cpp curl cvpa dbp del diff dir dnsn ebp echo epal '
+        'epcsv epsn erase etsn exsn fc fhx fl foreach ft fw gal gbp gc gci gcm '
+        'gcs gdr ghy gi gjb gl gm gmo gp gps gpv group gsn gsnp gsv gu gv gwmi '
+        'h history icm iex ihy ii ipal ipcsv ipmo ipsn irm ise iwmi iwr kill lp '
+        'ls man md measure mi mount move mp mv nal ndr ni nmo npssc nsn nv ogv '
+        'oh popd ps pushd pwd r rbp rcjb rcsn rd rdr ren ri rjb rm rmdir rmo '
+        'rni rnp rp rsn rsnp rujb rv rvpa rwmi sajb sal saps sasv sbp sc select '
+        'set shcm si sl sleep sls sort sp spjb spps spsv start sujb sv swmi tee '
+        'trcm type wget where wjb write').split()
+
     commenthelp = (
         'component description example externalhelp forwardhelpcategory '
         'forwardhelptargetname functionality inputs link '
@@ -730,7 +730,7 @@ class PowerShellLexer(RegexLexer):
             (r'(%s)\b' % '|'.join(keywords), Keyword),
             (r'-(%s)\b' % '|'.join(operators), Operator),
             (r'(%s)-[a-z_]\w*\b' % '|'.join(verbs), Name.Builtin),
-            (r'(%s)\s' % '|'.join(aliases_), Name.Builtin), 
+            (r'(%s)\s' % '|'.join(aliases_), Name.Builtin),
             (r'\[[a-z_\[][\w. `,\[\]]*\]', Name.Constant),  # .net [type]s
             (r'-[a-z_]\w*', Name),
             (r'\w+', Name),

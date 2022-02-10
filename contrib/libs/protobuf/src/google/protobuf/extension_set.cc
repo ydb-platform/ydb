@@ -1505,8 +1505,8 @@ uint8* ExtensionSet::InternalSerializeMessageSetWithCachedSizesToArray(
   return target;
 }
 
-size_t ExtensionSet::ByteSize() const { 
-  size_t total_size = 0; 
+size_t ExtensionSet::ByteSize() const {
+  size_t total_size = 0;
   ForEach([&total_size](int number, const Extension& ext) {
     total_size += ext.ByteSize(number);
   });
@@ -1573,8 +1573,8 @@ void ExtensionSet::Extension::Clear() {
   }
 }
 
-size_t ExtensionSet::Extension::ByteSize(int number) const { 
-  size_t result = 0; 
+size_t ExtensionSet::Extension::ByteSize(int number) const {
+  size_t result = 0;
 
   if (is_repeated) {
     if (is_packed) {
@@ -1619,14 +1619,14 @@ size_t ExtensionSet::Extension::ByteSize(int number) const {
           break;
       }
 
-      cached_size = ToCachedSize(result); 
+      cached_size = ToCachedSize(result);
       if (result > 0) {
         result += io::CodedOutputStream::VarintSize32(result);
         result += io::CodedOutputStream::VarintSize32(WireFormatLite::MakeTag(
             number, WireFormatLite::WIRETYPE_LENGTH_DELIMITED));
       }
     } else {
-      size_t tag_size = WireFormatLite::TagSize(number, real_type(type)); 
+      size_t tag_size = WireFormatLite::TagSize(number, real_type(type));
 
       switch (real_type(type)) {
 #define HANDLE_TYPE(UPPERCASE, CAMELCASE, LOWERCASE)                        \

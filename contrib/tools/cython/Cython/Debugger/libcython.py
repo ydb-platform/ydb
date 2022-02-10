@@ -4,11 +4,11 @@ GDB extension that adds Cython support.
 
 from __future__ import print_function
 
-try: 
-    input = raw_input 
-except NameError: 
-    pass 
- 
+try:
+    input = raw_input
+except NameError:
+    pass
+
 import sys
 import textwrap
 import traceback
@@ -346,12 +346,12 @@ class CythonBase(object):
         except RuntimeError:
             func_address = 0
         else:
-            func_address = gdb_value.address 
-            if not isinstance(func_address, int): 
-                # Seriously? Why is the address not an int? 
-                if not isinstance(func_address, (str, bytes)): 
-                    func_address = str(func_address) 
-                func_address = int(func_address.split()[0], 0) 
+            func_address = gdb_value.address
+            if not isinstance(func_address, int):
+                # Seriously? Why is the address not an int?
+                if not isinstance(func_address, (str, bytes)):
+                    func_address = str(func_address)
+                func_address = int(func_address.split()[0], 0)
 
         a = ', '.join('%s=%s' % (name, val) for name, val in func_args)
         sys.stdout.write('#%-2d 0x%016x in %s(%s)' % (index, func_address, func_name, a))
@@ -392,7 +392,7 @@ class CythonBase(object):
 
         result = {}
         seen = set()
-        for k, v in pyobject_dict.items(): 
+        for k, v in pyobject_dict.items():
             result[k.proxyval(seen)] = v
 
         return result
@@ -416,7 +416,7 @@ class CythonBase(object):
             # Closed over free variable
             if cur_lineno > cython_func.lineno:
                 if cyvar.type == PythonObject:
-                    return int(gdb.parse_and_eval(cyvar.cname)) 
+                    return int(gdb.parse_and_eval(cyvar.cname))
                 return True
             return False
 
@@ -743,7 +743,7 @@ class CyImport(CythonCommand):
 
                 for marker in module.find('LineNumberMapping'):
                     cython_lineno = int(marker.attrib['cython_lineno'])
-                    c_linenos = list(map(int, marker.attrib['c_linenos'].split())) 
+                    c_linenos = list(map(int, marker.attrib['c_linenos'].split()))
                     cython_module.lineno_cy2c[cython_lineno] = min(c_linenos)
                     for c_lineno in c_linenos:
                         cython_module.lineno_c2cy[c_lineno] = cython_lineno
@@ -816,7 +816,7 @@ class CyBreak(CythonCommand):
 
                 while True:
                     try:
-                        result = input( 
+                        result = input(
                             "Select a function, press 'a' for all "
                             "functions or press 'q' or '^D' to quit: ")
                     except EOFError:
@@ -863,10 +863,10 @@ class CyBreak(CythonCommand):
     def complete(self, text, word):
         # Filter init-module functions (breakpoints can be set using
         # modulename:linenumber).
-        names =  [n for n, L in self.cy.functions_by_name.items() 
-                  if any(not f.is_initmodule_function for f in L)] 
-        qnames = [n for n, f in self.cy.functions_by_qualified_name.items() 
-                  if not f.is_initmodule_function] 
+        names =  [n for n, L in self.cy.functions_by_name.items()
+                  if any(not f.is_initmodule_function for f in L)]
+        qnames = [n for n, f in self.cy.functions_by_qualified_name.items()
+                  if not f.is_initmodule_function]
 
         if parameters.complete_unqualified:
             all_names = itertools.chain(qnames, names)
@@ -1156,7 +1156,7 @@ class CyLocals(CythonCommand):
 
         local_cython_vars = cython_function.locals
         max_name_length = len(max(local_cython_vars, key=len))
-        for name, cyvar in sorted(local_cython_vars.items(), key=sortkey): 
+        for name, cyvar in sorted(local_cython_vars.items(), key=sortkey):
             if self.is_initialized(self.get_cython_function(), cyvar.name):
                 value = gdb.parse_and_eval(cyvar.cname)
                 if not value.is_optimized_out:
@@ -1189,13 +1189,13 @@ class CyGlobals(CyLocals):
 
         seen = set()
         print('Python globals:')
-        for k, v in sorted(global_python_dict.items(), key=sortkey): 
+        for k, v in sorted(global_python_dict.items(), key=sortkey):
             v = v.get_truncated_repr(libpython.MAX_OUTPUT_LEN)
             seen.add(k)
             print('    %-*s = %s' % (max_name_length, k, v))
 
         print('C globals:')
-        for name, cyvar in sorted(module_globals.items(), key=sortkey): 
+        for name, cyvar in sorted(module_globals.items(), key=sortkey):
             if name not in seen:
                 try:
                     value = gdb.parse_and_eval(cyvar.cname)
@@ -1218,8 +1218,8 @@ class EvaluateOrExecuteCodeMixin(object):
         "Fill a remotely allocated dict with values from the Cython C stack"
         cython_func = self.get_cython_function()
 
-        for name, cyvar in cython_func.locals.items(): 
-            if cyvar.type == PythonObject and self.is_initialized(cython_func, name): 
+        for name, cyvar in cython_func.locals.items():
+            if cyvar.type == PythonObject and self.is_initialized(cython_func, name):
                 try:
                     val = gdb.parse_and_eval(cyvar.cname)
                 except RuntimeError:

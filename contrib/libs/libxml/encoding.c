@@ -97,7 +97,7 @@ xmlEncodingErrMemory(const char *extra)
  *
  * n encoding error
  */
-static void LIBXML_ATTR_FORMAT(2,0) 
+static void LIBXML_ATTR_FORMAT(2,0)
 xmlEncodingErr(xmlParserErrors error, const char *msg, const char *val)
 {
     __xmlRaiseError(NULL, NULL, NULL, NULL, NULL,
@@ -114,9 +114,9 @@ openIcuConverter(const char* name, int toUnicode)
   if (conv == NULL)
     return NULL;
 
-  conv->pivot_source = conv->pivot_buf; 
-  conv->pivot_target = conv->pivot_buf; 
- 
+  conv->pivot_source = conv->pivot_buf;
+  conv->pivot_target = conv->pivot_buf;
+
   conv->uconv = ucnv_open(name, &status);
   if (U_FAILURE(status))
     goto error;
@@ -361,14 +361,14 @@ UTF8ToUTF8(unsigned char* out, int *outlen,
 {
     int len;
 
-    if ((out == NULL) || (outlen == NULL) || (inlenb == NULL)) 
+    if ((out == NULL) || (outlen == NULL) || (inlenb == NULL))
 	return(-1);
-    if (inb == NULL) { 
-        /* inb == NULL means output is initialized. */ 
-        *outlen = 0; 
-        *inlenb = 0; 
-        return(0); 
-    } 
+    if (inb == NULL) {
+        /* inb == NULL means output is initialized. */
+        *outlen = 0;
+        *inlenb = 0;
+        return(0);
+    }
     if (*outlen > *inlenb) {
 	len = *inlenb;
     } else {
@@ -1805,7 +1805,7 @@ xmlFindCharEncodingHandler(const char *name) {
  *
  * The value of @inlen after return is the number of octets consumed
  *     as the return value is positive, else unpredictable.
- * The value of @outlen after return is the number of octets consumed. 
+ * The value of @outlen after return is the number of octets consumed.
  */
 static int
 xmlIconvWrapper(iconv_t cd, unsigned char *out, int *outlen,
@@ -1863,7 +1863,7 @@ xmlIconvWrapper(iconv_t cd, unsigned char *out, int *outlen,
  * @outlen:  the length of @out
  * @in:  a pointer to an array of ISO Latin 1 chars
  * @inlen:  the length of @in
- * @flush: if true, indicates end of input 
+ * @flush: if true, indicates end of input
  *
  * Returns 0 if success, or
  *     -1 by lack of space, or
@@ -1873,11 +1873,11 @@ xmlIconvWrapper(iconv_t cd, unsigned char *out, int *outlen,
  *
  * The value of @inlen after return is the number of octets consumed
  *     as the return value is positive, else unpredictable.
- * The value of @outlen after return is the number of octets consumed. 
+ * The value of @outlen after return is the number of octets consumed.
  */
 static int
 xmlUconvWrapper(uconv_t *cd, int toUnicode, unsigned char *out, int *outlen,
-                const unsigned char *in, int *inlen, int flush) { 
+                const unsigned char *in, int *inlen, int flush) {
     const char *ucv_in = (const char *) in;
     char *ucv_out = (char *) out;
     UErrorCode err = U_ZERO_ERROR;
@@ -1890,24 +1890,24 @@ xmlUconvWrapper(uconv_t *cd, int toUnicode, unsigned char *out, int *outlen,
     if (toUnicode) {
         /* encoding => UTF-16 => UTF-8 */
         ucnv_convertEx(cd->utf8, cd->uconv, &ucv_out, ucv_out + *outlen,
-                       &ucv_in, ucv_in + *inlen, cd->pivot_buf, 
-                       &cd->pivot_source, &cd->pivot_target, 
-                       cd->pivot_buf + ICU_PIVOT_BUF_SIZE, 0, flush, &err); 
+                       &ucv_in, ucv_in + *inlen, cd->pivot_buf,
+                       &cd->pivot_source, &cd->pivot_target,
+                       cd->pivot_buf + ICU_PIVOT_BUF_SIZE, 0, flush, &err);
     } else {
         /* UTF-8 => UTF-16 => encoding */
         ucnv_convertEx(cd->uconv, cd->utf8, &ucv_out, ucv_out + *outlen,
-                       &ucv_in, ucv_in + *inlen, cd->pivot_buf, 
-                       &cd->pivot_source, &cd->pivot_target, 
-                       cd->pivot_buf + ICU_PIVOT_BUF_SIZE, 0, flush, &err); 
+                       &ucv_in, ucv_in + *inlen, cd->pivot_buf,
+                       &cd->pivot_source, &cd->pivot_target,
+                       cd->pivot_buf + ICU_PIVOT_BUF_SIZE, 0, flush, &err);
     }
     *inlen = ucv_in - (const char*) in;
     *outlen = ucv_out - (char *) out;
-    if (U_SUCCESS(err)) { 
-        /* reset pivot buf if this is the last call for input (flush==TRUE) */ 
-        if (flush) 
-            cd->pivot_source = cd->pivot_target = cd->pivot_buf; 
+    if (U_SUCCESS(err)) {
+        /* reset pivot buf if this is the last call for input (flush==TRUE) */
+        if (flush)
+            cd->pivot_source = cd->pivot_target = cd->pivot_buf;
         return 0;
-    } 
+    }
     if (err == U_BUFFER_OVERFLOW_ERROR)
         return -1;
     if (err == U_INVALID_CHAR_FOUND || err == U_ILLEGAL_CHAR_FOUND)
@@ -1922,67 +1922,67 @@ xmlUconvWrapper(uconv_t *cd, int toUnicode, unsigned char *out, int *outlen,
  *									*
  ************************************************************************/
 
-static int 
-xmlEncInputChunk(xmlCharEncodingHandler *handler, unsigned char *out, 
-                 int *outlen, const unsigned char *in, int *inlen, int flush) { 
-    int ret; 
-    (void)flush; 
- 
-    if (handler->input != NULL) { 
-        ret = handler->input(out, outlen, in, inlen); 
-    } 
-#ifdef LIBXML_ICONV_ENABLED 
-    else if (handler->iconv_in != NULL) { 
-        ret = xmlIconvWrapper(handler->iconv_in, out, outlen, in, inlen); 
-    } 
-#endif /* LIBXML_ICONV_ENABLED */ 
-#ifdef LIBXML_ICU_ENABLED 
-    else if (handler->uconv_in != NULL) { 
-        ret = xmlUconvWrapper(handler->uconv_in, 1, out, outlen, in, inlen, 
-                              flush); 
-    } 
-#endif /* LIBXML_ICU_ENABLED */ 
-    else { 
-        *outlen = 0; 
-        *inlen = 0; 
-        ret = -2; 
-    } 
- 
-    return(ret); 
-} 
- 
-/* Returns -4 if no output function was found. */ 
-static int 
-xmlEncOutputChunk(xmlCharEncodingHandler *handler, unsigned char *out, 
-                  int *outlen, const unsigned char *in, int *inlen) { 
-    int ret; 
- 
-    if (handler->output != NULL) { 
-        ret = handler->output(out, outlen, in, inlen); 
-    } 
-#ifdef LIBXML_ICONV_ENABLED 
-    else if (handler->iconv_out != NULL) { 
-        ret = xmlIconvWrapper(handler->iconv_out, out, outlen, in, inlen); 
-    } 
-#endif /* LIBXML_ICONV_ENABLED */ 
-#ifdef LIBXML_ICU_ENABLED 
-    else if (handler->uconv_out != NULL) { 
-        ret = xmlUconvWrapper(handler->uconv_out, 0, out, outlen, in, inlen, 
-                              TRUE); 
-    } 
-#endif /* LIBXML_ICU_ENABLED */ 
-    else { 
-        *outlen = 0; 
-        *inlen = 0; 
-        ret = -4; 
-    } 
- 
-    return(ret); 
-} 
- 
+static int
+xmlEncInputChunk(xmlCharEncodingHandler *handler, unsigned char *out,
+                 int *outlen, const unsigned char *in, int *inlen, int flush) {
+    int ret;
+    (void)flush;
+
+    if (handler->input != NULL) {
+        ret = handler->input(out, outlen, in, inlen);
+    }
+#ifdef LIBXML_ICONV_ENABLED
+    else if (handler->iconv_in != NULL) {
+        ret = xmlIconvWrapper(handler->iconv_in, out, outlen, in, inlen);
+    }
+#endif /* LIBXML_ICONV_ENABLED */
+#ifdef LIBXML_ICU_ENABLED
+    else if (handler->uconv_in != NULL) {
+        ret = xmlUconvWrapper(handler->uconv_in, 1, out, outlen, in, inlen,
+                              flush);
+    }
+#endif /* LIBXML_ICU_ENABLED */
+    else {
+        *outlen = 0;
+        *inlen = 0;
+        ret = -2;
+    }
+
+    return(ret);
+}
+
+/* Returns -4 if no output function was found. */
+static int
+xmlEncOutputChunk(xmlCharEncodingHandler *handler, unsigned char *out,
+                  int *outlen, const unsigned char *in, int *inlen) {
+    int ret;
+
+    if (handler->output != NULL) {
+        ret = handler->output(out, outlen, in, inlen);
+    }
+#ifdef LIBXML_ICONV_ENABLED
+    else if (handler->iconv_out != NULL) {
+        ret = xmlIconvWrapper(handler->iconv_out, out, outlen, in, inlen);
+    }
+#endif /* LIBXML_ICONV_ENABLED */
+#ifdef LIBXML_ICU_ENABLED
+    else if (handler->uconv_out != NULL) {
+        ret = xmlUconvWrapper(handler->uconv_out, 0, out, outlen, in, inlen,
+                              TRUE);
+    }
+#endif /* LIBXML_ICU_ENABLED */
+    else {
+        *outlen = 0;
+        *inlen = 0;
+        ret = -4;
+    }
+
+    return(ret);
+}
+
 /**
  * xmlCharEncFirstLineInt:
- * @handler:	char encoding transformation data structure 
+ * @handler:	char encoding transformation data structure
  * @out:  an xmlBuffer for the output.
  * @in:  an xmlBuffer for the input
  * @len:  number of bytes to convert for the first line, or -1
@@ -1998,7 +1998,7 @@ xmlEncOutputChunk(xmlCharEncodingHandler *handler, unsigned char *out,
 int
 xmlCharEncFirstLineInt(xmlCharEncodingHandler *handler, xmlBufferPtr out,
                        xmlBufferPtr in, int len) {
-    int ret; 
+    int ret;
     int written;
     int toconv;
 
@@ -2029,13 +2029,13 @@ xmlCharEncFirstLineInt(xmlCharEncodingHandler *handler, xmlBufferPtr out,
 	written = out->size - out->use - 1;
     }
 
-    ret = xmlEncInputChunk(handler, &out->content[out->use], &written, 
-                           in->content, &toconv, 0); 
-    xmlBufferShrink(in, toconv); 
-    out->use += written; 
-    out->content[out->use] = 0; 
-    if (ret == -1) ret = -3; 
- 
+    ret = xmlEncInputChunk(handler, &out->content[out->use], &written,
+                           in->content, &toconv, 0);
+    xmlBufferShrink(in, toconv);
+    out->use += written;
+    out->content[out->use] = 0;
+    if (ret == -1) ret = -3;
+
 #ifdef DEBUG_ENCODING
     switch (ret) {
         case 0:
@@ -2069,7 +2069,7 @@ xmlCharEncFirstLineInt(xmlCharEncodingHandler *handler, xmlBufferPtr out,
 
 /**
  * xmlCharEncFirstLine:
- * @handler:	char encoding transformation data structure 
+ * @handler:	char encoding transformation data structure
  * @out:  an xmlBuffer for the output.
  * @in:  an xmlBuffer for the input
  *
@@ -2105,7 +2105,7 @@ xmlCharEncFirstLine(xmlCharEncodingHandler *handler, xmlBufferPtr out,
 int
 xmlCharEncFirstLineInput(xmlParserInputBufferPtr input, int len)
 {
-    int ret; 
+    int ret;
     size_t written;
     size_t toconv;
     int c_in;
@@ -2147,13 +2147,13 @@ xmlCharEncFirstLineInput(xmlParserInputBufferPtr input, int len)
 
     c_in = toconv;
     c_out = written;
-    ret = xmlEncInputChunk(input->encoder, xmlBufEnd(out), &c_out, 
-                           xmlBufContent(in), &c_in, 0); 
-    xmlBufShrink(in, c_in); 
-    xmlBufAddLen(out, c_out); 
-    if (ret == -1) 
-        ret = -3; 
- 
+    ret = xmlEncInputChunk(input->encoder, xmlBufEnd(out), &c_out,
+                           xmlBufContent(in), &c_in, 0);
+    xmlBufShrink(in, c_in);
+    xmlBufAddLen(out, c_out);
+    if (ret == -1)
+        ret = -3;
+
     switch (ret) {
         case 0:
 #ifdef DEBUG_ENCODING
@@ -2212,7 +2212,7 @@ xmlCharEncFirstLineInput(xmlParserInputBufferPtr input, int len)
 int
 xmlCharEncInput(xmlParserInputBufferPtr input, int flush)
 {
-    int ret; 
+    int ret;
     size_t written;
     size_t toconv;
     int c_in;
@@ -2245,13 +2245,13 @@ xmlCharEncInput(xmlParserInputBufferPtr input, int flush)
 
     c_in = toconv;
     c_out = written;
-    ret = xmlEncInputChunk(input->encoder, xmlBufEnd(out), &c_out, 
-                           xmlBufContent(in), &c_in, flush); 
-    xmlBufShrink(in, c_in); 
-    xmlBufAddLen(out, c_out); 
-    if (ret == -1) 
-        ret = -3; 
- 
+    ret = xmlEncInputChunk(input->encoder, xmlBufEnd(out), &c_out,
+                           xmlBufContent(in), &c_in, flush);
+    xmlBufShrink(in, c_in);
+    xmlBufAddLen(out, c_out);
+    if (ret == -1)
+        ret = -3;
+
     switch (ret) {
         case 0:
 #ifdef DEBUG_ENCODING
@@ -2312,7 +2312,7 @@ int
 xmlCharEncInFunc(xmlCharEncodingHandler * handler, xmlBufferPtr out,
                  xmlBufferPtr in)
 {
-    int ret; 
+    int ret;
     int written;
     int toconv;
 
@@ -2331,14 +2331,14 @@ xmlCharEncInFunc(xmlCharEncodingHandler * handler, xmlBufferPtr out,
         xmlBufferGrow(out, out->size + toconv * 2);
         written = out->size - out->use - 1;
     }
-    ret = xmlEncInputChunk(handler, &out->content[out->use], &written, 
-                           in->content, &toconv, 1); 
-    xmlBufferShrink(in, toconv); 
-    out->use += written; 
-    out->content[out->use] = 0; 
-    if (ret == -1) 
-        ret = -3; 
- 
+    ret = xmlEncInputChunk(handler, &out->content[out->use], &written,
+                           in->content, &toconv, 1);
+    xmlBufferShrink(in, toconv);
+    out->use += written;
+    out->content[out->use] = 0;
+    if (ret == -1)
+        ret = -3;
+
     switch (ret) {
         case 0:
 #ifdef DEBUG_ENCODING
@@ -2402,7 +2402,7 @@ xmlCharEncInFunc(xmlCharEncodingHandler * handler, xmlBufferPtr out,
 int
 xmlCharEncOutput(xmlOutputBufferPtr output, int init)
 {
-    int ret; 
+    int ret;
     size_t written;
     size_t writtentot = 0;
     size_t toconv;
@@ -2429,10 +2429,10 @@ retry:
     if (init) {
         c_in = 0;
         c_out = written;
-        /* TODO: Check return value. */ 
-        xmlEncOutputChunk(output->encoder, xmlBufEnd(out), &c_out, 
-                          NULL, &c_in); 
-        xmlBufAddLen(out, c_out); 
+        /* TODO: Check return value. */
+        xmlEncOutputChunk(output->encoder, xmlBufEnd(out), &c_out,
+                          NULL, &c_in);
+        xmlBufAddLen(out, c_out);
 #ifdef DEBUG_ENCODING
 	xmlGenericError(xmlGenericErrorContext,
 		"initialized encoder\n");
@@ -2457,17 +2457,17 @@ retry:
 
     c_in = toconv;
     c_out = written;
-    ret = xmlEncOutputChunk(output->encoder, xmlBufEnd(out), &c_out, 
-                            xmlBufContent(in), &c_in); 
-    xmlBufShrink(in, c_in); 
-    xmlBufAddLen(out, c_out); 
-    writtentot += c_out; 
-    if (ret == -1) { 
+    ret = xmlEncOutputChunk(output->encoder, xmlBufEnd(out), &c_out,
+                            xmlBufContent(in), &c_in);
+    xmlBufShrink(in, c_in);
+    xmlBufAddLen(out, c_out);
+    writtentot += c_out;
+    if (ret == -1) {
         if (c_out > 0) {
-            /* Can be a limitation of iconv or uconv */ 
-            goto retry; 
+            /* Can be a limitation of iconv or uconv */
+            goto retry;
         }
-        ret = -3; 
+        ret = -3;
     }
 
     /*
@@ -2493,44 +2493,44 @@ retry:
 	            c_in, c_out, (int) xmlBufUse(in));
 #endif
 	    break;
-        case -4: 
-            xmlEncodingErr(XML_I18N_NO_OUTPUT, 
-                           "xmlCharEncOutFunc: no output function !\n", NULL); 
-            ret = -1; 
-            break; 
+        case -4:
+            xmlEncodingErr(XML_I18N_NO_OUTPUT,
+                           "xmlCharEncOutFunc: no output function !\n", NULL);
+            ret = -1;
+            break;
         case -2: {
-	    xmlChar charref[20]; 
+	    xmlChar charref[20];
 	    int len = (int) xmlBufUse(in);
             xmlChar *content = xmlBufContent(in);
-	    int cur, charrefLen; 
+	    int cur, charrefLen;
 
 	    cur = xmlGetUTF8Char(content, &len);
-	    if (cur <= 0) 
+	    if (cur <= 0)
                 break;
 
 #ifdef DEBUG_ENCODING
-            xmlGenericError(xmlGenericErrorContext, 
-                    "handling output conversion error\n"); 
-            xmlGenericError(xmlGenericErrorContext, 
-                    "Bytes: 0x%02X 0x%02X 0x%02X 0x%02X\n", 
-                    content[0], content[1], 
-                    content[2], content[3]); 
+            xmlGenericError(xmlGenericErrorContext,
+                    "handling output conversion error\n");
+            xmlGenericError(xmlGenericErrorContext,
+                    "Bytes: 0x%02X 0x%02X 0x%02X 0x%02X\n",
+                    content[0], content[1],
+                    content[2], content[3]);
 #endif
-            /* 
-             * Removes the UTF8 sequence, and replace it by a charref 
-             * and continue the transcoding phase, hoping the error 
-             * did not mangle the encoder state. 
-             */ 
-            charrefLen = snprintf((char *) &charref[0], sizeof(charref), 
-                             "&#%d;", cur); 
-            xmlBufShrink(in, len); 
-            xmlBufGrow(out, charrefLen * 4); 
-            c_out = xmlBufAvail(out) - 1; 
-            c_in = charrefLen; 
-            ret = xmlEncOutputChunk(output->encoder, xmlBufEnd(out), &c_out, 
-                                    charref, &c_in); 
+            /*
+             * Removes the UTF8 sequence, and replace it by a charref
+             * and continue the transcoding phase, hoping the error
+             * did not mangle the encoder state.
+             */
+            charrefLen = snprintf((char *) &charref[0], sizeof(charref),
+                             "&#%d;", cur);
+            xmlBufShrink(in, len);
+            xmlBufGrow(out, charrefLen * 4);
+            c_out = xmlBufAvail(out) - 1;
+            c_in = charrefLen;
+            ret = xmlEncOutputChunk(output->encoder, xmlBufEnd(out), &c_out,
+                                    charref, &c_in);
 
-	    if ((ret < 0) || (c_in != charrefLen)) { 
+	    if ((ret < 0) || (c_in != charrefLen)) {
 		char buf[50];
 
 		snprintf(&buf[0], 49, "0x%02X 0x%02X 0x%02X 0x%02X",
@@ -2542,12 +2542,12 @@ retry:
 			       buf);
 		if (xmlBufGetAllocationScheme(in) != XML_BUFFER_ALLOC_IMMUTABLE)
 		    content[0] = ' ';
-                break; 
+                break;
 	    }
- 
-            xmlBufAddLen(out, c_out); 
-            writtentot += c_out; 
-            goto retry; 
+
+            xmlBufAddLen(out, c_out);
+            writtentot += c_out;
+            goto retry;
 	}
     }
     return(ret);
@@ -2556,7 +2556,7 @@ retry:
 
 /**
  * xmlCharEncOutFunc:
- * @handler:	char encoding transformation data structure 
+ * @handler:	char encoding transformation data structure
  * @out:  an xmlBuffer for the output.
  * @in:  an xmlBuffer for the input
  *
@@ -2575,7 +2575,7 @@ retry:
 int
 xmlCharEncOutFunc(xmlCharEncodingHandler *handler, xmlBufferPtr out,
                   xmlBufferPtr in) {
-    int ret; 
+    int ret;
     int written;
     int writtentot = 0;
     int toconv;
@@ -2596,11 +2596,11 @@ retry:
      */
     if (in == NULL) {
         toconv = 0;
-        /* TODO: Check return value. */ 
-        xmlEncOutputChunk(handler, &out->content[out->use], &written, 
-                          NULL, &toconv); 
-        out->use += written; 
-        out->content[out->use] = 0; 
+        /* TODO: Check return value. */
+        xmlEncOutputChunk(handler, &out->content[out->use], &written,
+                          NULL, &toconv);
+        out->use += written;
+        out->content[out->use] = 0;
 #ifdef DEBUG_ENCODING
 	xmlGenericError(xmlGenericErrorContext,
 		"initialized encoder\n");
@@ -2618,18 +2618,18 @@ retry:
         xmlBufferGrow(out, toconv * 4);
 	written = out->size - out->use - 1;
     }
-    ret = xmlEncOutputChunk(handler, &out->content[out->use], &written, 
-                            in->content, &toconv); 
-    xmlBufferShrink(in, toconv); 
-    out->use += written; 
-    writtentot += written; 
-    out->content[out->use] = 0; 
-    if (ret == -1) { 
-        if (written > 0) { 
-            /* Can be a limitation of iconv or uconv */ 
-            goto retry; 
-        } 
-        ret = -3; 
+    ret = xmlEncOutputChunk(handler, &out->content[out->use], &written,
+                            in->content, &toconv);
+    xmlBufferShrink(in, toconv);
+    out->use += written;
+    writtentot += written;
+    out->content[out->use] = 0;
+    if (ret == -1) {
+        if (written > 0) {
+            /* Can be a limitation of iconv or uconv */
+            goto retry;
+        }
+        ret = -3;
     }
 
     if (ret >= 0) output += ret;
@@ -2657,44 +2657,44 @@ retry:
 	            toconv, written, in->use);
 #endif
 	    break;
-        case -4: 
-	    xmlEncodingErr(XML_I18N_NO_OUTPUT, 
-		           "xmlCharEncOutFunc: no output function !\n", NULL); 
-	    ret = -1; 
-            break; 
+        case -4:
+	    xmlEncodingErr(XML_I18N_NO_OUTPUT,
+		           "xmlCharEncOutFunc: no output function !\n", NULL);
+	    ret = -1;
+            break;
         case -2: {
-	    xmlChar charref[20]; 
+	    xmlChar charref[20];
 	    int len = in->use;
 	    const xmlChar *utf = (const xmlChar *) in->content;
-	    int cur, charrefLen; 
+	    int cur, charrefLen;
 
 	    cur = xmlGetUTF8Char(utf, &len);
-	    if (cur <= 0) 
+	    if (cur <= 0)
                 break;
 
 #ifdef DEBUG_ENCODING
-            xmlGenericError(xmlGenericErrorContext, 
-                    "handling output conversion error\n"); 
-            xmlGenericError(xmlGenericErrorContext, 
-                    "Bytes: 0x%02X 0x%02X 0x%02X 0x%02X\n", 
-                    in->content[0], in->content[1], 
-                    in->content[2], in->content[3]); 
+            xmlGenericError(xmlGenericErrorContext,
+                    "handling output conversion error\n");
+            xmlGenericError(xmlGenericErrorContext,
+                    "Bytes: 0x%02X 0x%02X 0x%02X 0x%02X\n",
+                    in->content[0], in->content[1],
+                    in->content[2], in->content[3]);
 #endif
-            /* 
-             * Removes the UTF8 sequence, and replace it by a charref 
-             * and continue the transcoding phase, hoping the error 
-             * did not mangle the encoder state. 
-             */ 
-            charrefLen = snprintf((char *) &charref[0], sizeof(charref), 
-                             "&#%d;", cur); 
-            xmlBufferShrink(in, len); 
-            xmlBufferGrow(out, charrefLen * 4); 
-	    written = out->size - out->use - 1; 
-            toconv = charrefLen; 
-            ret = xmlEncOutputChunk(handler, &out->content[out->use], &written, 
-                                    charref, &toconv); 
+            /*
+             * Removes the UTF8 sequence, and replace it by a charref
+             * and continue the transcoding phase, hoping the error
+             * did not mangle the encoder state.
+             */
+            charrefLen = snprintf((char *) &charref[0], sizeof(charref),
+                             "&#%d;", cur);
+            xmlBufferShrink(in, len);
+            xmlBufferGrow(out, charrefLen * 4);
+	    written = out->size - out->use - 1;
+            toconv = charrefLen;
+            ret = xmlEncOutputChunk(handler, &out->content[out->use], &written,
+                                    charref, &toconv);
 
-	    if ((ret < 0) || (toconv != charrefLen)) { 
+	    if ((ret < 0) || (toconv != charrefLen)) {
 		char buf[50];
 
 		snprintf(&buf[0], 49, "0x%02X 0x%02X 0x%02X 0x%02X",
@@ -2706,13 +2706,13 @@ retry:
 			       buf);
 		if (in->alloc != XML_BUFFER_ALLOC_IMMUTABLE)
 		    in->content[0] = ' ';
-	        break; 
+	        break;
 	    }
- 
-            out->use += written; 
-            writtentot += written; 
-            out->content[out->use] = 0; 
-            goto retry; 
+
+            out->use += written;
+            writtentot += written;
+            out->content[out->use] = 0;
+            goto retry;
 	}
     }
     return(ret);
@@ -2720,7 +2720,7 @@ retry:
 
 /**
  * xmlCharEncCloseFunc:
- * @handler:	char encoding transformation data structure 
+ * @handler:	char encoding transformation data structure
  *
  * Generic front-end for encoding handler close function
  *
@@ -2821,7 +2821,7 @@ xmlByteConsumed(xmlParserCtxtPtr ctxt) {
 	xmlCharEncodingHandler * handler = in->buf->encoder;
         /*
 	 * Encoding conversion, compute the number of unused original
-	 * bytes from the input not consumed and subtract that from 
+	 * bytes from the input not consumed and subtract that from
 	 * the raw consumed value, this is not a cheap operation
 	 */
         if (in->end - in->cur > 0) {
@@ -2831,20 +2831,20 @@ xmlByteConsumed(xmlParserCtxtPtr ctxt) {
 
 	    int ret;
 
-            do { 
-                toconv = in->end - cur; 
-                written = 32000; 
-                ret = xmlEncOutputChunk(handler, &convbuf[0], &written, 
-                                        cur, &toconv); 
-                if (ret < 0) { 
-                    if (written > 0) 
-                        ret = -2; 
-                    else 
-                        return(-1); 
-                } 
-                unused += written; 
-                cur += toconv; 
-            } while (ret == -2); 
+            do {
+                toconv = in->end - cur;
+                written = 32000;
+                ret = xmlEncOutputChunk(handler, &convbuf[0], &written,
+                                        cur, &toconv);
+                if (ret < 0) {
+                    if (written > 0)
+                        ret = -2;
+                    else
+                        return(-1);
+                }
+                unused += written;
+                cur += toconv;
+            } while (ret == -2);
 	}
 	if (in->buf->rawconsumed < unused)
 	    return(-1);
@@ -2870,7 +2870,7 @@ xmlByteConsumed(xmlParserCtxtPtr ctxt) {
  * Returns 0 if success, -2 if the transcoding fails, or -1 otherwise
  * The value of @inlen after return is the number of octets consumed
  *     as the return value is positive, else unpredictable.
- * The value of @outlen after return is the number of octets consumed. 
+ * The value of @outlen after return is the number of octets consumed.
  */
 static int
 UTF8ToISO8859x(unsigned char* out, int *outlen,
@@ -2986,7 +2986,7 @@ UTF8ToISO8859x(unsigned char* out, int *outlen,
  * block of chars out.
  * Returns 0 if success, or -1 otherwise
  * The value of @inlen after return is the number of octets consumed
- * The value of @outlen after return is the number of octets produced. 
+ * The value of @outlen after return is the number of octets produced.
  */
 static int
 ISO8859xToUTF8(unsigned char* out, int *outlen,

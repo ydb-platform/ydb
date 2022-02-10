@@ -25,8 +25,8 @@
 #include "urldata.h"
 #include "curl_addrinfo.h"
 
-#ifndef CURL_DISABLE_DOH 
- 
+#ifndef CURL_DISABLE_DOH
+
 /*
  * Curl_doh() resolve a name using DoH (DNS-over-HTTPS). It resolves a name
  * and returns a 'Curl_addrinfo *' with the address information.
@@ -40,7 +40,7 @@ struct Curl_addrinfo *Curl_doh(struct connectdata *conn,
 CURLcode Curl_doh_is_resolved(struct connectdata *conn,
                               struct Curl_dns_entry **dns);
 
-int Curl_doh_getsock(struct connectdata *conn, curl_socket_t *socks); 
+int Curl_doh_getsock(struct connectdata *conn, curl_socket_t *socks);
 
 typedef enum {
   DOH_OK,
@@ -100,10 +100,10 @@ DOHcode doh_decode(const unsigned char *doh,
 void de_init(struct dohentry *d);
 void de_cleanup(struct dohentry *d);
 #endif
- 
-#else /* if DOH is disabled */ 
-#define Curl_doh(a,b,c,d) NULL 
-#define Curl_doh_is_resolved(x,y) CURLE_COULDNT_RESOLVE_HOST 
-#endif 
- 
+
+#else /* if DOH is disabled */
+#define Curl_doh(a,b,c,d) NULL
+#define Curl_doh_is_resolved(x,y) CURLE_COULDNT_RESOLVE_HOST
+#endif
+
 #endif /* HEADER_CURL_DOH_H */

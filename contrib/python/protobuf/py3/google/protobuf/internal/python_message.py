@@ -51,7 +51,7 @@ this file*.
 __author__ = 'robinson@google.com (Will Robinson)'
 
 from io import BytesIO
-import struct 
+import struct
 import sys
 import weakref
 
@@ -59,7 +59,7 @@ import six
 from six.moves import range
 
 # We use "as" to avoid name collisions with variables.
-from google.protobuf.internal import api_implementation 
+from google.protobuf.internal import api_implementation
 from google.protobuf.internal import containers
 from google.protobuf.internal import decoder
 from google.protobuf.internal import encoder
@@ -189,7 +189,7 @@ class GeneratedProtocolMessageType(type):
     if (descriptor.has_options and
         descriptor.GetOptions().message_set_wire_format):
       cls._decoders_by_tag[decoder.MESSAGE_SET_ITEM_TAG] = (
-          decoder.MessageSetItemDecoder(descriptor), None) 
+          decoder.MessageSetItemDecoder(descriptor), None)
 
     # Attach stuff to each FieldDescriptor for quick lookup later on.
     for field in descriptor.fields:
@@ -310,8 +310,8 @@ def _AttachFieldHelpers(cls, field_descriptor):
 
   if is_map_entry:
     field_encoder = encoder.MapEncoder(field_descriptor)
-    sizer = encoder.MapSizer(field_descriptor, 
-                             _IsMessageMapField(field_descriptor)) 
+    sizer = encoder.MapSizer(field_descriptor,
+                             _IsMessageMapField(field_descriptor))
   elif _IsMessageSetExtension(field_descriptor):
     field_encoder = encoder.MessageSetItemEncoder(field_descriptor.number)
     sizer = encoder.MessageSetItemSizer(field_descriptor.number)
@@ -408,15 +408,15 @@ def _GetInitializeDefaultForMap(field):
   if _IsMessageMapField(field):
     def MakeMessageMapDefault(message):
       return containers.MessageMap(
-          message._listener_for_children, value_field.message_type, key_checker, 
-          field.message_type) 
+          message._listener_for_children, value_field.message_type, key_checker,
+          field.message_type)
     return MakeMessageMapDefault
   else:
     value_checker = type_checkers.GetTypeChecker(value_field)
     def MakePrimitiveMapDefault(message):
       return containers.ScalarMap(
-          message._listener_for_children, key_checker, value_checker, 
-          field.message_type) 
+          message._listener_for_children, key_checker, value_checker,
+          field.message_type)
     return MakePrimitiveMapDefault
 
 def _DefaultValueConstructorForField(field):
@@ -789,19 +789,19 @@ def _AddPropertiesForExtensions(descriptor, cls):
     constant_name = extension_name.upper() + '_FIELD_NUMBER'
     setattr(cls, constant_name, extension_field.number)
 
-  # TODO(amauryfa): Migrate all users of these attributes to functions like 
-  #   pool.FindExtensionByNumber(descriptor). 
-  if descriptor.file is not None: 
-    # TODO(amauryfa): Use cls.MESSAGE_FACTORY.pool when available. 
-    pool = descriptor.file.pool 
-    cls._extensions_by_number = pool._extensions_by_number[descriptor] 
-    cls._extensions_by_name = pool._extensions_by_name[descriptor] 
+  # TODO(amauryfa): Migrate all users of these attributes to functions like
+  #   pool.FindExtensionByNumber(descriptor).
+  if descriptor.file is not None:
+    # TODO(amauryfa): Use cls.MESSAGE_FACTORY.pool when available.
+    pool = descriptor.file.pool
+    cls._extensions_by_number = pool._extensions_by_number[descriptor]
+    cls._extensions_by_name = pool._extensions_by_name[descriptor]
 
 def _AddStaticMethods(cls):
   # TODO(robinson): This probably needs to be thread-safe(?)
   def RegisterExtension(extension_handle):
     extension_handle.containing_type = cls.DESCRIPTOR
-    # TODO(amauryfa): Use cls.MESSAGE_FACTORY.pool when available. 
+    # TODO(amauryfa): Use cls.MESSAGE_FACTORY.pool when available.
     # pylint: disable=protected-access
     cls.DESCRIPTOR.file.pool._AddExtensionDescriptor(extension_handle)
     _AttachFieldHelpers(cls, extension_handle)
@@ -949,7 +949,7 @@ def _AddHasExtensionMethod(cls):
 def _InternalUnpackAny(msg):
   """Unpacks Any message and returns the unpacked message.
 
-  This internal method is different from public Any Unpack method which takes 
+  This internal method is different from public Any Unpack method which takes
   the target message as argument. _InternalUnpackAny method does not have
   target message type and need to find the message type in descriptor pool.
 
@@ -1088,31 +1088,31 @@ def _AddByteSizeMethod(message_descriptor, cls):
 def _AddSerializeToStringMethod(message_descriptor, cls):
   """Helper for _AddMessageMethods()."""
 
-  def SerializeToString(self, **kwargs): 
+  def SerializeToString(self, **kwargs):
     # Check if the message has all of its required fields set.
     if not self.IsInitialized():
       raise message_mod.EncodeError(
           'Message %s is missing required fields: %s' % (
           self.DESCRIPTOR.full_name, ','.join(self.FindInitializationErrors())))
-    return self.SerializePartialToString(**kwargs) 
+    return self.SerializePartialToString(**kwargs)
   cls.SerializeToString = SerializeToString
 
 
 def _AddSerializePartialToStringMethod(message_descriptor, cls):
   """Helper for _AddMessageMethods()."""
 
-  def SerializePartialToString(self, **kwargs): 
+  def SerializePartialToString(self, **kwargs):
     out = BytesIO()
-    self._InternalSerialize(out.write, **kwargs) 
+    self._InternalSerialize(out.write, **kwargs)
     return out.getvalue()
   cls.SerializePartialToString = SerializePartialToString
 
-  def InternalSerialize(self, write_bytes, deterministic=None): 
-    if deterministic is None: 
-      deterministic = ( 
-          api_implementation.IsPythonDefaultSerializationDeterministic()) 
-    else: 
-      deterministic = bool(deterministic) 
+  def InternalSerialize(self, write_bytes, deterministic=None):
+    if deterministic is None:
+      deterministic = (
+          api_implementation.IsPythonDefaultSerializationDeterministic())
+    else:
+      deterministic = bool(deterministic)
 
     descriptor = self.DESCRIPTOR
     if descriptor.GetOptions().map_entry:
@@ -1313,7 +1313,7 @@ def _AddMergeFromMethod(cls):
     if not isinstance(msg, cls):
       raise TypeError(
           'Parameter to MergeFrom() must be instance of same class: '
-          'expected %s got %s.' % (cls.__name__, msg.__class__.__name__)) 
+          'expected %s got %s.' % (cls.__name__, msg.__class__.__name__))
 
     assert msg is not self
     self._Modified()

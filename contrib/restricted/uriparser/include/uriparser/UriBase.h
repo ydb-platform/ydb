@@ -5,32 +5,32 @@
  * Copyright (C) 2007, Sebastian Pipping <sebastian@pipping.org>
  * All rights reserved.
  *
- * Redistribution and use in source  and binary forms, with or without 
- * modification, are permitted provided  that the following conditions 
+ * Redistribution and use in source  and binary forms, with or without
+ * modification, are permitted provided  that the following conditions
  * are met:
  *
- *     1. Redistributions  of  source  code   must  retain  the  above 
- *        copyright notice, this list  of conditions and the following 
- *        disclaimer. 
+ *     1. Redistributions  of  source  code   must  retain  the  above
+ *        copyright notice, this list  of conditions and the following
+ *        disclaimer.
  *
- *     2. Redistributions  in binary  form  must  reproduce the  above 
- *        copyright notice, this list  of conditions and the following 
- *        disclaimer  in  the  documentation  and/or  other  materials 
- *        provided with the distribution. 
+ *     2. Redistributions  in binary  form  must  reproduce the  above
+ *        copyright notice, this list  of conditions and the following
+ *        disclaimer  in  the  documentation  and/or  other  materials
+ *        provided with the distribution.
  *
- *     3. Neither the  name of the  copyright holder nor the  names of 
- *        its contributors may be used  to endorse or promote products 
- *        derived from  this software  without specific  prior written 
- *        permission. 
+ *     3. Neither the  name of the  copyright holder nor the  names of
+ *        its contributors may be used  to endorse or promote products
+ *        derived from  this software  without specific  prior written
+ *        permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND  ANY EXPRESS OR IMPLIED WARRANTIES,  INCLUDING, BUT NOT 
- * LIMITED TO,  THE IMPLIED WARRANTIES OF  MERCHANTABILITY AND FITNESS 
- * FOR  A  PARTICULAR  PURPOSE  ARE  DISCLAIMED.  IN  NO  EVENT  SHALL 
- * THE  COPYRIGHT HOLDER  OR CONTRIBUTORS  BE LIABLE  FOR ANY  DIRECT, 
- * INDIRECT, INCIDENTAL, SPECIAL,  EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
- * (INCLUDING, BUT NOT LIMITED TO,  PROCUREMENT OF SUBSTITUTE GOODS OR 
- * SERVICES; LOSS OF USE, DATA,  OR PROFITS; OR BUSINESS INTERRUPTION) 
+ * "AS IS" AND  ANY EXPRESS OR IMPLIED WARRANTIES,  INCLUDING, BUT NOT
+ * LIMITED TO,  THE IMPLIED WARRANTIES OF  MERCHANTABILITY AND FITNESS
+ * FOR  A  PARTICULAR  PURPOSE  ARE  DISCLAIMED.  IN  NO  EVENT  SHALL
+ * THE  COPYRIGHT HOLDER  OR CONTRIBUTORS  BE LIABLE  FOR ANY  DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL,  EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO,  PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA,  OR PROFITS; OR BUSINESS INTERRUPTION)
  * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
  * STRICT  LIABILITY,  OR  TORT (INCLUDING  NEGLIGENCE  OR  OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
@@ -97,30 +97,30 @@
 
 
 
-/* Import/export decorator */ 
-#define URI_STATIC_BUILD 
-#if defined(URI_STATIC_BUILD) 
-# define URI_PUBLIC 
-#else 
-# if defined(URI_LIBRARY_BUILD) 
-#  if defined(_MSC_VER) 
-#   define URI_PUBLIC __declspec(dllexport) 
-#  elif defined(URI_VISIBILITY) 
-#   define URI_PUBLIC __attribute__ ((visibility("default"))) 
-#  else 
-#   define URI_PUBLIC 
-#  endif 
-# else 
-#  if defined(_MSC_VER) 
-#   define URI_PUBLIC __declspec(dllimport) 
-#  else 
-#   define URI_PUBLIC 
-#  endif 
-# endif 
-#endif 
- 
- 
- 
+/* Import/export decorator */
+#define URI_STATIC_BUILD
+#if defined(URI_STATIC_BUILD)
+# define URI_PUBLIC
+#else
+# if defined(URI_LIBRARY_BUILD)
+#  if defined(_MSC_VER)
+#   define URI_PUBLIC __declspec(dllexport)
+#  elif defined(URI_VISIBILITY)
+#   define URI_PUBLIC __attribute__ ((visibility("default")))
+#  else
+#   define URI_PUBLIC
+#  endif
+# else
+#  if defined(_MSC_VER)
+#   define URI_PUBLIC __declspec(dllimport)
+#  else
+#   define URI_PUBLIC
+#  endif
+# endif
+#endif
+
+
+
 typedef int UriBool; /**< Boolean type */
 
 #define URI_TRUE     1
@@ -307,7 +307,7 @@ typedef enum UriResolutionOptionsEnum {
  * @see UriMemoryManager
  * @since 0.9.0
  */
-URI_PUBLIC int uriCompleteMemoryManager(UriMemoryManager * memory, 
+URI_PUBLIC int uriCompleteMemoryManager(UriMemoryManager * memory,
 		UriMemoryManager * backend);
 
 
@@ -326,7 +326,7 @@ URI_PUBLIC int uriCompleteMemoryManager(UriMemoryManager * memory,
  * @see UriMemoryManager
  * @since 0.9.0
  */
-URI_PUBLIC void * uriEmulateCalloc(UriMemoryManager * memory, 
+URI_PUBLIC void * uriEmulateCalloc(UriMemoryManager * memory,
 		size_t nmemb, size_t size);
 
 
@@ -346,7 +346,7 @@ URI_PUBLIC void * uriEmulateCalloc(UriMemoryManager * memory,
  * @see UriMemoryManager
  * @since 0.9.0
  */
-URI_PUBLIC void * uriEmulateReallocarray(UriMemoryManager * memory, 
+URI_PUBLIC void * uriEmulateReallocarray(UriMemoryManager * memory,
 		void * ptr, size_t nmemb, size_t size);
 
 
@@ -371,7 +371,7 @@ URI_PUBLIC void * uriEmulateReallocarray(UriMemoryManager * memory,
  * @see UriMemoryManager
  * @since 0.9.0
  */
-URI_PUBLIC int uriTestMemoryManager(UriMemoryManager * memory); 
+URI_PUBLIC int uriTestMemoryManager(UriMemoryManager * memory);
 
 
 

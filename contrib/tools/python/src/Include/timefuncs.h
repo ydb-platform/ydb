@@ -16,10 +16,10 @@ extern "C" {
  */
 PyAPI_FUNC(time_t) _PyTime_DoubleToTimet(double x);
 
-/* Get the current time since the epoch in seconds */ 
-PyAPI_FUNC(double) _PyTime_FloatTime(void); 
+/* Get the current time since the epoch in seconds */
+PyAPI_FUNC(double) _PyTime_FloatTime(void);
 
- 
+
 #ifdef __cplusplus
 }
 #endif

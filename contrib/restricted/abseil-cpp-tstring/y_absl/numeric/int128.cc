@@ -20,17 +20,17 @@
 #include <iomanip>
 #include <ostream>  // NOLINT(readability/streams)
 #include <sstream>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <type_traits>
 
 #include "y_absl/base/optimization.h"
 #include "y_absl/numeric/bits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
-ABSL_DLL const uint128 kuint128max = MakeUint128( 
-    std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max()); 
+ABSL_DLL const uint128 kuint128max = MakeUint128(
+    std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max());
 
 namespace {
 
@@ -197,7 +197,7 @@ TString Uint128ToFormattedString(uint128 v, std::ios_base::fmtflags flags) {
     os << std::noshowbase << std::setfill('0') << std::setw(div_base_log);
   }
   os << Uint128Low64(low);
-  return TString(os.str()); 
+  return TString(os.str());
 }
 
 }  // namespace
@@ -329,7 +329,7 @@ std::ostream& operator<<(std::ostream& os, int128 v) {
   return os << rep;
 }
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 namespace std {

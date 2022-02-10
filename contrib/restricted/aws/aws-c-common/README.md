@@ -1,7 +1,7 @@
 ## AWS C Common
 
 
-[![GitHub](https://img.shields.io/github/license/awslabs/aws-c-common.svg)](https://github.com/awslabs/aws-c-common/blob/main/LICENSE) 
+[![GitHub](https://img.shields.io/github/license/awslabs/aws-c-common.svg)](https://github.com/awslabs/aws-c-common/blob/main/LICENSE)
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/awslabs/aws-c-common.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/awslabs/aws-c-common/context:cpp)
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/awslabs/aws-c-common.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/awslabs/aws-c-common/alerts/)
 
@@ -44,7 +44,7 @@ Or on windows,
 * -DENABLE_SANITIZERS=ON - Enables gcc/clang sanitizers, by default this adds -fsanitizer=address,undefined to the compile flags for projects that call aws_add_sanitizers.
 * -DENABLE_FUZZ_TESTS=ON - Includes fuzz tests in the unit test suite. Off by default, because fuzz tests can take a long time. Set -DFUZZ_TESTS_MAX_TIME=N to determine how long to run each fuzz test (default 60s).
 * -DCMAKE_INSTALL_PREFIX=/path/to/install - Standard way of installing to a user defined path. If specified when configuring aws-c-common, ensure the same prefix is specified when configuring other aws-c-* SDKs.
-* -DSTATIC_CRT=ON - On MSVC, use /MT(d) to link MSVCRT 
+* -DSTATIC_CRT=ON - On MSVC, use /MT(d) to link MSVCRT
 
 ### API style and conventions
 Every API has a specific set of styles and conventions. We'll outline them here. These conventions are followed in every
@@ -61,16 +61,16 @@ and `aws_set_thread_local_error_handler_fn()` functions.
 All error functions are in the `include/aws/common/error.h` header file.
 
 #### Naming
-Any function that allocates and initializes an object will be suffixed with `new` (e.g. `aws_myobj_new()`). Similarly, these objects will always 
+Any function that allocates and initializes an object will be suffixed with `new` (e.g. `aws_myobj_new()`). Similarly, these objects will always
 have a corresponding function with a `destroy` suffix. The `new` functions will return the allocated object
 on success and `NULL` on failure. To respond to the error, call `aws_last_error()`. If several `new` or `destroy`
-functions are available, the variants should be named like `new_x` or `destroy_x` (e.g. `aws_myobj_new_copy()` or `aws_myobj_destroy_secure()`). 
+functions are available, the variants should be named like `new_x` or `destroy_x` (e.g. `aws_myobj_new_copy()` or `aws_myobj_destroy_secure()`).
 
-Any function that initializes an existing object will be suffixed with `init` (e.g. `aws_myobj_init()`. These objects will have a corresponding 
+Any function that initializes an existing object will be suffixed with `init` (e.g. `aws_myobj_init()`. These objects will have a corresponding
 `clean_up` function if necessary. In these cases, you are responsible for making the decisions for how your object is
 allocated. The `init` functions return `AWS_OP_SUCCESS` ( 0 ) or `AWS_OP_ERR` (-1) on failure. If several `init` or
-`clean_up` functions are available, they should be named like `init_x` or `clean_up_x` (e.g. `aws_myobj_init_static()` or 
-`aws_myobj_clean_up_secure()`). 
+`clean_up` functions are available, they should be named like `init_x` or `clean_up_x` (e.g. `aws_myobj_init_static()` or
+`aws_myobj_clean_up_secure()`).
 
 ## Contributing
 
@@ -103,7 +103,7 @@ returning control to the caller, if you have an error to raise, use the `aws_rai
 
 #### Log Subjects & Error Codes
 The logging & error handling infrastructure is designed to support multiple libraries. For this to work, AWS maintained libraries
-have pre-slotted log subjects & error codes for each library. The currently allocated ranges are: 
+have pre-slotted log subjects & error codes for each library. The currently allocated ranges are:
 
 | Range | Library Name |
 | --- | --- |
@@ -113,21 +113,21 @@ have pre-slotted log subjects & error codes for each library. The currently allo
 | [0x0C00, 0x1000) | aws-c-compression |
 | [0x1000, 0x1400) | aws-c-eventstream |
 | [0x1400, 0x1800) | aws-c-mqtt |
-| [0x1800, 0x1C00) | aws-c-auth | 
-| [0x1C00, 0x2000) | aws-c-cal | 
-| [0x2000, 0x2400) | aws-crt-cpp | 
-| [0x2400, 0x2800) | aws-crt-java | 
-| [0x2800, 0x2C00) | aws-crt-python | 
-| [0x2C00, 0x3000) | aws-crt-nodejs | 
-| [0x3000, 0x3400) | aws-crt-dotnet | 
-| [0x3400, 0x3800) | aws-c-iot | 
+| [0x1800, 0x1C00) | aws-c-auth |
+| [0x1C00, 0x2000) | aws-c-cal |
+| [0x2000, 0x2400) | aws-crt-cpp |
+| [0x2400, 0x2800) | aws-crt-java |
+| [0x2800, 0x2C00) | aws-crt-python |
+| [0x2C00, 0x3000) | aws-crt-nodejs |
+| [0x3000, 0x3400) | aws-crt-dotnet |
+| [0x3400, 0x3800) | aws-c-iot |
 | [0x3800, 0x3C00) | (reserved for future project) |
 | [0x3C00, 0x4000) | (reserved for future project) |
-| [0x4000, 0x4400) | (reserved for future project) | 
-| [0x4400, 0x4800) | (reserved for future project) | 
+| [0x4000, 0x4400) | (reserved for future project) |
+| [0x4400, 0x4800) | (reserved for future project) |
 
-Each library should begin its error and log subject values at the beginning of its range and follow in sequence (don't skip codes). Upon 
-adding an AWS maintained library, a new enum range must be approved and added to the above table. 
+Each library should begin its error and log subject values at the beginning of its range and follow in sequence (don't skip codes). Upon
+adding an AWS maintained library, a new enum range must be approved and added to the above table.
 
 ### Testing
 We have a high bar for test coverage, and PRs fixing bugs or introducing new functionality need to have tests before
@@ -141,7 +141,7 @@ memory leaks, as well as some `ASSERT` macros. To write a test:
 * Implement one or more tests with the signature `int test_case_name(struct aws_allocator *, void *ctx)`
 * Use the `AWS_TEST_CASE` macro to declare the test.
 * Include your test in the `tests/main.c` file.
-* Include your test in the `tests/CMakeLists.txt` file. 
+* Include your test in the `tests/CMakeLists.txt` file.
 
 ### Coding Style
 * No Tabs.
@@ -233,23 +233,23 @@ explicitly mandates a character set).
 * If you are adding/using a compiler specific keyword, macro, or intrinsic, hide it behind a platform independent macro
 definition. This mainly applies to header files. Obviously, if you are writing a file that will only be built on a certain
 platform, you have more liberty on this.
-* When checking more than one error condition, check and log each condition separately with a unique message. 
+* When checking more than one error condition, check and log each condition separately with a unique message.
 
-Example: 
+Example:
 
-    if (options->callback == NULL) { 
-        AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - callback is null"); 
-        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT); 
-    } 
+    if (options->callback == NULL) {
+        AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - callback is null");
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }
 
-    if (options->allocator == NULL) { 
-        AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - allocator is null"); 
-        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT); 
-    } 
- 
-Not: 
- 
-    if (options->callback == NULL || options->allocator == NULL) { 
-        AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - something is null"); 
-        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT); 
-    } 
+    if (options->allocator == NULL) {
+        AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - allocator is null");
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }
+
+Not:
+
+    if (options->callback == NULL || options->allocator == NULL) {
+        AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - something is null");
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }

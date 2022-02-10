@@ -73,8 +73,8 @@ ImmutableFieldGenerator* MakeImmutableGenerator(const FieldDescriptor* field,
           return new ImmutableMapFieldGenerator(field, messageBitIndex,
                                                 builderBitIndex, context);
         } else {
-          return new RepeatedImmutableMessageFieldGenerator( 
-              field, messageBitIndex, builderBitIndex, context); 
+          return new RepeatedImmutableMessageFieldGenerator(
+              field, messageBitIndex, builderBitIndex, context);
         }
       case JAVATYPE_ENUM:
         return new RepeatedImmutableEnumFieldGenerator(
@@ -90,8 +90,8 @@ ImmutableFieldGenerator* MakeImmutableGenerator(const FieldDescriptor* field,
     if (IsRealOneof(field)) {
       switch (GetJavaType(field)) {
         case JAVATYPE_MESSAGE:
-          return new ImmutableMessageOneofFieldGenerator( 
-              field, messageBitIndex, builderBitIndex, context); 
+          return new ImmutableMessageOneofFieldGenerator(
+              field, messageBitIndex, builderBitIndex, context);
         case JAVATYPE_ENUM:
           return new ImmutableEnumOneofFieldGenerator(field, messageBitIndex,
                                                       builderBitIndex, context);
@@ -130,7 +130,7 @@ ImmutableFieldLiteGenerator* MakeImmutableLiteGenerator(
           return new ImmutableMapFieldLiteGenerator(field, messageBitIndex,
                                                     context);
         } else {
-          return new RepeatedImmutableMessageFieldLiteGenerator( 
+          return new RepeatedImmutableMessageFieldLiteGenerator(
               field, messageBitIndex, context);
         }
       case JAVATYPE_ENUM:
@@ -147,7 +147,7 @@ ImmutableFieldLiteGenerator* MakeImmutableLiteGenerator(
     if (IsRealOneof(field)) {
       switch (GetJavaType(field)) {
         case JAVATYPE_MESSAGE:
-          return new ImmutableMessageOneofFieldLiteGenerator( 
+          return new ImmutableMessageOneofFieldLiteGenerator(
               field, messageBitIndex, context);
         case JAVATYPE_ENUM:
           return new ImmutableEnumOneofFieldLiteGenerator(
@@ -246,18 +246,18 @@ void SetCommonFieldVariables(const FieldDescriptor* descriptor,
                              std::map<TProtoStringType, TProtoStringType>* variables) {
   (*variables)["field_name"] = descriptor->name();
   (*variables)["name"] = info->name;
-  (*variables)["classname"] = descriptor->containing_type()->name(); 
+  (*variables)["classname"] = descriptor->containing_type()->name();
   (*variables)["capitalized_name"] = info->capitalized_name;
   (*variables)["disambiguated_reason"] = info->disambiguated_reason;
   (*variables)["constant_name"] = FieldConstantName(descriptor);
   (*variables)["number"] = StrCat(descriptor->number());
   (*variables)["kt_dsl_builder"] = "_builder";
-  // These variables are placeholders to pick out the beginning and ends of 
-  // identifiers for annotations (when doing so with existing variables would 
-  // be ambiguous or impossible). They should never be set to anything but the 
-  // empty string. 
-  (*variables)["{"] = ""; 
-  (*variables)["}"] = ""; 
+  // These variables are placeholders to pick out the beginning and ends of
+  // identifiers for annotations (when doing so with existing variables would
+  // be ambiguous or impossible). They should never be set to anything but the
+  // empty string.
+  (*variables)["{"] = "";
+  (*variables)["}"] = "";
   (*variables)["kt_name"] =
       IsForbiddenKotlin(info->name) ? info->name + "_" : info->name;
   (*variables)["kt_capitalized_name"] = IsForbiddenKotlin(info->name)

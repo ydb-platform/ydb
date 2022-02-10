@@ -1,6 +1,6 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
  */
 
 #include <aws/common/clock.h>
@@ -35,9 +35,9 @@ static int s_legacy_get_time(uint64_t *timestamp) {
         return aws_raise_error(AWS_ERROR_CLOCK_FAILURE);
     }
 
-    uint64_t secs = (uint64_t)tv.tv_sec; 
-    uint64_t u_secs = (uint64_t)tv.tv_usec; 
-    *timestamp = (secs * NS_PER_SEC) + (u_secs * 1000); 
+    uint64_t secs = (uint64_t)tv.tv_sec;
+    uint64_t u_secs = (uint64_t)tv.tv_usec;
+    *timestamp = (secs * NS_PER_SEC) + (u_secs * 1000);
     return AWS_OP_SUCCESS;
 }
 
@@ -45,13 +45,13 @@ static int s_legacy_get_time(uint64_t *timestamp) {
 static aws_thread_once s_thread_once_flag = AWS_THREAD_ONCE_STATIC_INIT;
 static int (*s_gettime_fn)(clockid_t __clock_id, struct timespec *__tp) = NULL;
 
-static void s_do_osx_loads(void *user_data) { 
-    (void)user_data; 
+static void s_do_osx_loads(void *user_data) {
+    (void)user_data;
     s_gettime_fn = (int (*)(clockid_t __clock_id, struct timespec * __tp)) dlsym(RTLD_DEFAULT, "clock_gettime");
 }
 
 int aws_high_res_clock_get_ticks(uint64_t *timestamp) {
-    aws_thread_call_once(&s_thread_once_flag, s_do_osx_loads, NULL); 
+    aws_thread_call_once(&s_thread_once_flag, s_do_osx_loads, NULL);
     int ret_val = 0;
 
     if (s_gettime_fn) {
@@ -62,9 +62,9 @@ int aws_high_res_clock_get_ticks(uint64_t *timestamp) {
             return aws_raise_error(AWS_ERROR_CLOCK_FAILURE);
         }
 
-        uint64_t secs = (uint64_t)ts.tv_sec; 
-        uint64_t n_secs = (uint64_t)ts.tv_nsec; 
-        *timestamp = (secs * NS_PER_SEC) + n_secs; 
+        uint64_t secs = (uint64_t)ts.tv_sec;
+        uint64_t n_secs = (uint64_t)ts.tv_nsec;
+        *timestamp = (secs * NS_PER_SEC) + n_secs;
         return AWS_OP_SUCCESS;
     }
 
@@ -72,7 +72,7 @@ int aws_high_res_clock_get_ticks(uint64_t *timestamp) {
 }
 
 int aws_sys_clock_get_ticks(uint64_t *timestamp) {
-    aws_thread_call_once(&s_thread_once_flag, s_do_osx_loads, NULL); 
+    aws_thread_call_once(&s_thread_once_flag, s_do_osx_loads, NULL);
     int ret_val = 0;
 
     if (s_gettime_fn) {
@@ -82,9 +82,9 @@ int aws_sys_clock_get_ticks(uint64_t *timestamp) {
             return aws_raise_error(AWS_ERROR_CLOCK_FAILURE);
         }
 
-        uint64_t secs = (uint64_t)ts.tv_sec; 
-        uint64_t n_secs = (uint64_t)ts.tv_nsec; 
-        *timestamp = (secs * NS_PER_SEC) + n_secs; 
+        uint64_t secs = (uint64_t)ts.tv_sec;
+        uint64_t n_secs = (uint64_t)ts.tv_nsec;
+        *timestamp = (secs * NS_PER_SEC) + n_secs;
         return AWS_OP_SUCCESS;
     }
     return s_legacy_get_time(timestamp);
@@ -112,9 +112,9 @@ int aws_high_res_clock_get_ticks(uint64_t *timestamp) {
         return aws_raise_error(AWS_ERROR_CLOCK_FAILURE);
     }
 
-    uint64_t secs = (uint64_t)ts.tv_sec; 
-    uint64_t n_secs = (uint64_t)ts.tv_nsec; 
-    *timestamp = (secs * NS_PER_SEC) + n_secs; 
+    uint64_t secs = (uint64_t)ts.tv_sec;
+    uint64_t n_secs = (uint64_t)ts.tv_nsec;
+    *timestamp = (secs * NS_PER_SEC) + n_secs;
     return AWS_OP_SUCCESS;
 }
 
@@ -127,10 +127,10 @@ int aws_sys_clock_get_ticks(uint64_t *timestamp) {
         return aws_raise_error(AWS_ERROR_CLOCK_FAILURE);
     }
 
-    uint64_t secs = (uint64_t)ts.tv_sec; 
-    uint64_t n_secs = (uint64_t)ts.tv_nsec; 
-    *timestamp = (secs * NS_PER_SEC) + n_secs; 
- 
+    uint64_t secs = (uint64_t)ts.tv_sec;
+    uint64_t n_secs = (uint64_t)ts.tv_nsec;
+    *timestamp = (secs * NS_PER_SEC) + n_secs;
+
     return AWS_OP_SUCCESS;
 }
 #endif /* defined(__MACH__) */

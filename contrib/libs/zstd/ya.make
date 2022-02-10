@@ -9,9 +9,9 @@ OWNER(
 )
 
 VERSION(1.5.2)
- 
+
 ORIGINAL_SOURCE(https://github.com/facebook/zstd/archive/v1.5.2.tar.gz)
- 
+
 LICENSE(
     "(BSD-2-Clause OR GPL-2.0-only)" AND
     "(BSD-3-Clause OR GPL-2.0-only)" AND
@@ -22,22 +22,22 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-PEERDIR( 
-    contrib/libs/xxhash 
-) 
- 
+PEERDIR(
+    contrib/libs/xxhash
+)
+
 ADDINCL(
     contrib/libs/zstd/lib
     contrib/libs/zstd/lib/common
     contrib/libs/zstd/lib/legacy
 )
 
-NO_COMPILER_WARNINGS() 
- 
-NO_RUNTIME() 
+NO_COMPILER_WARNINGS()
 
-CFLAGS( 
-    -DZSTD_LEGACY_SUPPORT=1 
+NO_RUNTIME()
+
+CFLAGS(
+    -DZSTD_LEGACY_SUPPORT=1
     -DZSTD_MULTITHREAD
 )
 

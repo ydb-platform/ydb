@@ -1,23 +1,23 @@
-/* 
- * 
- * Copyright 2015 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#include <grpc/support/port_platform.h> 
- 
+/*
+ *
+ * Copyright 2015 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#include <grpc/support/port_platform.h>
+
 #if GPR_LINUX
 #include <fcntl.h>
 #include <unistd.h>
@@ -26,11 +26,11 @@
 #include <algorithm>
 
 #include <grpc/impl/codegen/gpr_types.h>
-#include <grpc/support/log.h> 
-#include <grpc/support/time.h> 
- 
-#include "src/core/lib/gpr/time_precise.h" 
- 
+#include <grpc/support/log.h>
+#include <grpc/support/time.h>
+
+#include "src/core/lib/gpr/time_precise.h"
+
 #ifndef GPR_CYCLE_COUNTER_CUSTOM
 #if GPR_CYCLE_COUNTER_RDTSC_32 || GPR_CYCLE_COUNTER_RDTSC_64
 #if GPR_LINUX
@@ -53,9 +53,9 @@ static bool read_freq_from_kernel(double* freq) {
   }
   close(fd);
   return ret;
-} 
+}
 #endif /* GPR_LINUX */
- 
+
 static double cycles_per_second = 0;
 static gpr_cycle_counter start_cycle;
 
@@ -69,10 +69,10 @@ static bool is_fake_clock() {
   }
   // If the clock doesn't move even a nano after 8 tries, it's a fake one.
   return sum == 0;
-} 
- 
-void gpr_precise_clock_init(void) { 
-  gpr_log(GPR_DEBUG, "Calibrating timers"); 
+}
+
+void gpr_precise_clock_init(void) {
+  gpr_log(GPR_DEBUG, "Calibrating timers");
 
 #if GPR_LINUX
   if (read_freq_from_kernel(&cycles_per_second)) {
@@ -110,9 +110,9 @@ void gpr_precise_clock_init(void) {
     last_freq = freq;
   }
   cycles_per_second = last_freq;
-  gpr_log(GPR_DEBUG, "... cycles_per_second = %f\n", cycles_per_second); 
-} 
- 
+  gpr_log(GPR_DEBUG, "... cycles_per_second = %f\n", cycles_per_second);
+}
+
 gpr_timespec gpr_cycle_counter_to_time(gpr_cycle_counter cycles) {
   const double secs =
       static_cast<double>(cycles - start_cycle) / cycles_per_second;
@@ -134,13 +134,13 @@ gpr_timespec gpr_cycle_counter_sub(gpr_cycle_counter a, gpr_cycle_counter b) {
   return ts;
 }
 
-void gpr_precise_clock_now(gpr_timespec* clk) { 
+void gpr_precise_clock_now(gpr_timespec* clk) {
   int64_t counter = gpr_get_cycle_counter();
   *clk = gpr_cycle_counter_to_time(counter);
-} 
+}
 #elif GPR_CYCLE_COUNTER_FALLBACK
-void gpr_precise_clock_init(void) {} 
- 
+void gpr_precise_clock_init(void) {}
+
 gpr_cycle_counter gpr_get_cycle_counter() {
   gpr_timespec ts = gpr_now(GPR_CLOCK_REALTIME);
   return gpr_timespec_to_micros(ts);
@@ -154,10 +154,10 @@ gpr_timespec gpr_cycle_counter_to_time(gpr_cycle_counter cycles) {
   return ts;
 }
 
-void gpr_precise_clock_now(gpr_timespec* clk) { 
-  *clk = gpr_now(GPR_CLOCK_REALTIME); 
-  clk->clock_type = GPR_CLOCK_PRECISE; 
-} 
+void gpr_precise_clock_now(gpr_timespec* clk) {
+  *clk = gpr_now(GPR_CLOCK_REALTIME);
+  clk->clock_type = GPR_CLOCK_PRECISE;
+}
 
 gpr_timespec gpr_cycle_counter_sub(gpr_cycle_counter a, gpr_cycle_counter b) {
   return gpr_time_sub(gpr_cycle_counter_to_time(a),

@@ -51,15 +51,15 @@ class TempRefNode(AtomicExprNode):
     def generate_result_code(self, code):
         pass
 
-    def generate_assignment_code(self, rhs, code, overloaded_assignment=False): 
+    def generate_assignment_code(self, rhs, code, overloaded_assignment=False):
         if self.type.is_pyobject:
             rhs.make_owned_reference(code)
             # TODO: analyse control flow to see if this is necessary
             code.put_xdecref(self.result(), self.ctype())
-        code.putln('%s = %s;' % ( 
-            self.result(), 
-            rhs.result() if overloaded_assignment else rhs.result_as(self.ctype()), 
-        )) 
+        code.putln('%s = %s;' % (
+            self.result(),
+            rhs.result() if overloaded_assignment else rhs.result_as(self.ctype()),
+        ))
         rhs.generate_post_assignment_code(code)
         rhs.free_temps(code)
 
@@ -142,15 +142,15 @@ class ResultRefNode(AtomicExprNode):
         else:
             return ()
 
-    def update_expression(self, expression): 
-        self.expression = expression 
-        if hasattr(expression, "type"): 
-            self.type = expression.type 
- 
+    def update_expression(self, expression):
+        self.expression = expression
+        if hasattr(expression, "type"):
+            self.type = expression.type
+
     def analyse_types(self, env):
         if self.expression is not None:
-            if not self.expression.type: 
-              self.expression = self.expression.analyse_types(env) 
+            if not self.expression.type:
+              self.expression = self.expression.analyse_types(env)
             self.type = self.expression.type
         return self
 
@@ -197,15 +197,15 @@ class ResultRefNode(AtomicExprNode):
     def generate_disposal_code(self, code):
         pass
 
-    def generate_assignment_code(self, rhs, code, overloaded_assignment=False): 
+    def generate_assignment_code(self, rhs, code, overloaded_assignment=False):
         if self.type.is_pyobject:
             rhs.make_owned_reference(code)
             if not self.lhs_of_first_assignment:
                 code.put_decref(self.result(), self.ctype())
-        code.putln('%s = %s;' % ( 
-            self.result(), 
-            rhs.result() if overloaded_assignment else rhs.result_as(self.ctype()), 
-        )) 
+        code.putln('%s = %s;' % (
+            self.result(),
+            rhs.result() if overloaded_assignment else rhs.result_as(self.ctype()),
+        ))
         rhs.generate_post_assignment_code(code)
         rhs.free_temps(code)
 
@@ -250,7 +250,7 @@ class LetNodeMixin:
                 code.put_decref_clear(self.temp, self.temp_type)
             code.funcstate.release_temp(self.temp)
 
- 
+
 class EvalWithTempExprNode(ExprNodes.ExprNode, LetNodeMixin):
     # A wrapper around a subexpression that moves an expression into a
     # temp variable and provides it to the subexpression.
@@ -275,7 +275,7 @@ class EvalWithTempExprNode(ExprNodes.ExprNode, LetNodeMixin):
 
     def analyse_types(self, env):
         self.temp_expression = self.temp_expression.analyse_types(env)
-        self.lazy_temp.update_expression(self.temp_expression)  # overwrite in case it changed 
+        self.lazy_temp.update_expression(self.temp_expression)  # overwrite in case it changed
         self.subexpression = self.subexpression.analyse_types(env)
         self.type = self.subexpression.type
         return self
@@ -291,10 +291,10 @@ class EvalWithTempExprNode(ExprNodes.ExprNode, LetNodeMixin):
         self.subexpression.generate_evaluation_code(code)
         self.teardown_temp_expr(code)
 
- 
+
 LetRefNode = ResultRefNode
 
- 
+
 class LetNode(Nodes.StatNode, LetNodeMixin):
     # Implements a local temporary variable scope. Imagine this
     # syntax being present:

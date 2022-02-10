@@ -32,7 +32,7 @@ using namespace NWrappers;
 using namespace Aws::S3;
 using namespace Aws;
 
-class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User { 
+class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
     class TReadController {
         static constexpr ui64 SumWithSaturation(ui64 a, ui64 b) {
             return Max<ui64>() - a < b ? Max<ui64>() : a + b;

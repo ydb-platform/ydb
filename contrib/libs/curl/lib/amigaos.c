@@ -22,22 +22,22 @@
 
 #include "curl_setup.h"
 
-#ifdef __AMIGA__ 
-#  include "amigaos.h" 
-#  if defined(HAVE_PROTO_BSDSOCKET_H) && !defined(USE_AMISSL) 
-#    include <amitcp/socketbasetags.h> 
-#  endif 
-#  ifdef __libnix__ 
-#    include <stabs.h> 
-#  endif 
-#endif 
+#ifdef __AMIGA__
+#  include "amigaos.h"
+#  if defined(HAVE_PROTO_BSDSOCKET_H) && !defined(USE_AMISSL)
+#    include <amitcp/socketbasetags.h>
+#  endif
+#  ifdef __libnix__
+#    include <stabs.h>
+#  endif
+#endif
 
-/* The last #include files should be: */ 
-#include "curl_memory.h" 
-#include "memdebug.h" 
+/* The last #include files should be: */
+#include "curl_memory.h"
+#include "memdebug.h"
 
-#ifdef __AMIGA__ 
-#if defined(HAVE_PROTO_BSDSOCKET_H) && !defined(USE_AMISSL) 
+#ifdef __AMIGA__
+#if defined(HAVE_PROTO_BSDSOCKET_H) && !defined(USE_AMISSL)
 struct Library *SocketBase = NULL;
 extern int errno, h_errno;
 
@@ -83,13 +83,13 @@ bool Curl_amiga_init()
 ADD2EXIT(Curl_amiga_cleanup, -50);
 #endif
 
-#endif /* HAVE_PROTO_BSDSOCKET_H */ 
- 
-#ifdef USE_AMISSL 
-void Curl_amiga_X509_free(X509 *a) 
-{ 
-  X509_free(a); 
-} 
-#endif /* USE_AMISSL */ 
-#endif /* __AMIGA__ */ 
- 
+#endif /* HAVE_PROTO_BSDSOCKET_H */
+
+#ifdef USE_AMISSL
+void Curl_amiga_X509_free(X509 *a)
+{
+  X509_free(a);
+}
+#endif /* USE_AMISSL */
+#endif /* __AMIGA__ */
+

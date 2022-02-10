@@ -172,7 +172,7 @@ typedef OSSL_STORE_INFO *(*file_try_decode_fn)(const char *pem_name,
 typedef int (*file_eof_fn)(void *handler_ctx);
 /*
  * The destroy_ctx function is used to destroy the handler_ctx that was
- * initiated by a repeatable try_decode function.  This is only used when 
+ * initiated by a repeatable try_decode function.  This is only used when
  * the handler is marked repeatable.
  */
 typedef void (*file_destroy_ctx_fn)(void **handler_ctx);
@@ -507,7 +507,7 @@ static FILE_HANDLER PrivateKey_handler = {
 };
 
 /*
- * Public key decoder.  Only supports SubjectPublicKeyInfo formatted keys. 
+ * Public key decoder.  Only supports SubjectPublicKeyInfo formatted keys.
  */
 static OSSL_STORE_INFO *try_decode_PUBKEY(const char *pem_name,
                                           const char *pem_header,
@@ -897,10 +897,10 @@ static OSSL_STORE_LOADER_CTX *file_open(const OSSL_STORE_LOADER *loader,
         if (ctx->_.dir.last_entry == NULL) {
             if (ctx->_.dir.last_errno != 0) {
                 char errbuf[256];
-                OSSL_STOREerr(OSSL_STORE_F_FILE_OPEN, ERR_R_SYS_LIB); 
+                OSSL_STOREerr(OSSL_STORE_F_FILE_OPEN, ERR_R_SYS_LIB);
                 errno = ctx->_.dir.last_errno;
-                if (openssl_strerror_r(errno, errbuf, sizeof(errbuf))) 
-                    ERR_add_error_data(1, errbuf); 
+                if (openssl_strerror_r(errno, errbuf, sizeof(errbuf)))
+                    ERR_add_error_data(1, errbuf);
                 goto err;
             }
             ctx->_.dir.end_reached = 1;
@@ -1297,11 +1297,11 @@ static OSSL_STORE_INFO *file_load(OSSL_STORE_LOADER_CTX *ctx,
                 if (!ctx->_.dir.end_reached) {
                     char errbuf[256];
                     assert(ctx->_.dir.last_errno != 0);
-                    OSSL_STOREerr(OSSL_STORE_F_FILE_LOAD, ERR_R_SYS_LIB); 
+                    OSSL_STOREerr(OSSL_STORE_F_FILE_LOAD, ERR_R_SYS_LIB);
                     errno = ctx->_.dir.last_errno;
                     ctx->errcnt++;
-                    if (openssl_strerror_r(errno, errbuf, sizeof(errbuf))) 
-                        ERR_add_error_data(1, errbuf); 
+                    if (openssl_strerror_r(errno, errbuf, sizeof(errbuf)))
+                        ERR_add_error_data(1, errbuf);
                 }
                 return NULL;
             }

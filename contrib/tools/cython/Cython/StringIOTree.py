@@ -1,5 +1,5 @@
-# cython: auto_pickle=False 
- 
+# cython: auto_pickle=False
+
 r"""
 Implements a buffer with insertion points. When you know you need to
 "get back" to a place and write more later, simply call insertion_point()
@@ -34,13 +34,13 @@ EXAMPLE:
 
 from __future__ import absolute_import  #, unicode_literals
 
-try: 
+try:
     # Prefer cStringIO since io.StringIO() does not support writing 'str' in Py2.
-    from cStringIO import StringIO 
-except ImportError: 
+    from cStringIO import StringIO
+except ImportError:
     from io import StringIO
 
- 
+
 class StringIOTree(object):
     """
     See module docs.

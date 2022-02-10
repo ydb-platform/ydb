@@ -5,7 +5,7 @@
 
     Lexers for Makefiles and similar.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -90,7 +90,7 @@ class BaseMakefileLexer(RegexLexer):
              bygroups(Keyword, Text), 'export'),
             (r'export\s+', Keyword),
             # assignment
-            (r'([\w${}().-]+)(\s*)([!?:+]?=)([ \t]*)((?:.*\\\n)+|.*\n)', 
+            (r'([\w${}().-]+)(\s*)([!?:+]?=)([ \t]*)((?:.*\\\n)+|.*\n)',
              bygroups(Name.Variable, Text, Operator, Text, using(BashLexer))),
             # strings
             (r'(?s)"(\\\\|\\.|[^"\\])*"', String.Double),
@@ -102,8 +102,8 @@ class BaseMakefileLexer(RegexLexer):
             (r'\$\(', Keyword, 'expansion'),
         ],
         'expansion': [
-            (r'[^\w$().-]+', Text), 
-            (r'[\w.-]+', Name.Variable), 
+            (r'[^\w$().-]+', Text),
+            (r'[\w.-]+', Name.Variable),
             (r'\$', Keyword),
             (r'\(', Keyword, '#push'),
             (r'\)', Keyword, '#pop'),

@@ -1,16 +1,16 @@
-# Copyright 2016 gRPC authors. 
+# Copyright 2016 gRPC authors.
 #
-# Licensed under the Apache License, Version 2.0 (the "License"); 
-# you may not use this file except in compliance with the License. 
-# You may obtain a copy of the License at 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0 
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software 
-# distributed under the License is distributed on an "AS IS" BASIS, 
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-# See the License for the specific language governing permissions and 
-# limitations under the License. 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """GRPCAuthMetadataPlugins for standard authentication."""
 
 import inspect
@@ -31,7 +31,7 @@ class GoogleCallCredentials(grpc.AuthMetadataPlugin):
         # Hack to determine if these are JWT creds and we need to pass
         # additional_claims when getting a token
         self._is_jwt = 'additional_claims' in inspect.getargspec(  # pylint: disable=deprecated-method
-            credentials.get_access_token).args 
+            credentials.get_access_token).args
 
     def __call__(self, context, callback):
         try:
@@ -48,7 +48,7 @@ class GoogleCallCredentials(grpc.AuthMetadataPlugin):
             _sign_request(callback, access_token, None)
 
 
-class AccessTokenAuthMetadataPlugin(grpc.AuthMetadataPlugin): 
+class AccessTokenAuthMetadataPlugin(grpc.AuthMetadataPlugin):
     """Metadata wrapper for raw access token credentials."""
 
     def __init__(self, access_token):

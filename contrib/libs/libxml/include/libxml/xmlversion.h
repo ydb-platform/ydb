@@ -29,28 +29,28 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  *
  * the version string like "1.2.3"
  */
-#define LIBXML_DOTTED_VERSION "2.9.10" 
+#define LIBXML_DOTTED_VERSION "2.9.10"
 
 /**
  * LIBXML_VERSION:
  *
  * the version number: 1.2.3 value is 10203
  */
-#define LIBXML_VERSION 20910 
+#define LIBXML_VERSION 20910
 
 /**
  * LIBXML_VERSION_STRING:
  *
  * the version number string, 1.2.3 value is "10203"
  */
-#define LIBXML_VERSION_STRING "20910" 
+#define LIBXML_VERSION_STRING "20910"
 
 /**
  * LIBXML_VERSION_EXTRA:
  *
  * extra version information, used to show a CVS compilation
  */
-#define LIBXML_VERSION_EXTRA "" 
+#define LIBXML_VERSION_EXTRA ""
 
 /**
  * LIBXML_TEST_VERSION:
@@ -58,7 +58,7 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  * Macro to check that the libxml version in use is compatible with
  * the version the software has been compiled against
  */
-#define LIBXML_TEST_VERSION xmlCheckVersion(20910); 
+#define LIBXML_TEST_VERSION xmlCheckVersion(20910);
 
 #ifndef VMS
 #if 0
@@ -288,7 +288,7 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  *
  * Whether ISO-8859-* support is made available in case iconv is not
  */
-#if 1 
+#if 1
 #define LIBXML_ISO8859X_ENABLED
 #endif
 
@@ -350,10 +350,10 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  * LIBXML_EXPR_ENABLED:
  *
  * Whether the formal expressions interfaces are compiled in
- * 
- * This code is unused and disabled unconditionally for now. 
+ *
+ * This code is unused and disabled unconditionally for now.
  */
-#if 0 
+#if 0
 #define LIBXML_EXPR_ENABLED
 #endif
 
@@ -387,7 +387,7 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  *
  * the string suffix used by dynamic modules (usually shared libraries)
  */
-#define LIBXML_MODULE_EXTENSION ".so"  
+#define LIBXML_MODULE_EXTENSION ".so" 
 #endif
 
 /**
@@ -395,7 +395,7 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  *
  * Whether the Zlib support is compiled in
  */
-#if 1 
+#if 1
 #define LIBXML_ZLIB_ENABLED
 #endif
 
@@ -404,7 +404,7 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  *
  * Whether the Lzma support is compiled in
  */
-#if 0 
+#if 0
 #define LIBXML_LZMA_ENABLED
 #endif
 
@@ -431,7 +431,7 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  */
 
 #ifndef LIBXML_ATTR_ALLOC_SIZE
-# if (!defined(__clang__) && ((__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 3)))) 
+# if (!defined(__clang__) && ((__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 3))))
 #  define LIBXML_ATTR_ALLOC_SIZE(x) __attribute__((alloc_size(x)))
 # else
 #  define LIBXML_ATTR_ALLOC_SIZE(x)

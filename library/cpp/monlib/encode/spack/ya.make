@@ -17,7 +17,7 @@ PEERDIR(
     library/cpp/monlib/exception
 
     contrib/libs/lz4
-    contrib/libs/xxhash 
+    contrib/libs/xxhash
     contrib/libs/zlib
     contrib/libs/zstd
 )

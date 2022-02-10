@@ -65,7 +65,7 @@ struct hash<const char*> {
   inline size_t operator()(const char* str) const {
     size_t result = 0;
     for (; *str != '\0'; str++) {
-      result = 5 * result + static_cast<size_t>(*str); 
+      result = 5 * result + static_cast<size_t>(*str);
     }
     return result;
   }

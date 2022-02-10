@@ -61,7 +61,7 @@ _NANOS_PER_MICROSECOND = 1000
 _MILLIS_PER_SECOND = 1000
 _MICROS_PER_SECOND = 1000000
 _SECONDS_PER_DAY = 24 * 3600
-_DURATION_SECONDS_MAX = 315576000000 
+_DURATION_SECONDS_MAX = 315576000000
 
 
 class Any(object):
@@ -269,7 +269,7 @@ class Duration(object):
       represent the exact Duration value. For example: "1s", "1.010s",
       "1.000000100s", "-3.100s"
     """
-    _CheckDurationValid(self.seconds, self.nanos) 
+    _CheckDurationValid(self.seconds, self.nanos)
     if self.seconds < 0 or self.nanos < 0:
       result = '-'
       seconds = - self.seconds + int((0 - self.nanos) // 1e9)
@@ -309,17 +309,17 @@ class Duration(object):
     try:
       pos = value.find('.')
       if pos == -1:
-        seconds = int(value[:-1]) 
-        nanos = 0 
+        seconds = int(value[:-1])
+        nanos = 0
       else:
-        seconds = int(value[:pos]) 
+        seconds = int(value[:pos])
         if value[0] == '-':
-          nanos = int(round(float('-0{0}'.format(value[pos: -1])) *1e9)) 
+          nanos = int(round(float('-0{0}'.format(value[pos: -1])) *1e9))
         else:
-          nanos = int(round(float('0{0}'.format(value[pos: -1])) *1e9)) 
-      _CheckDurationValid(seconds, nanos) 
-      self.seconds = seconds 
-      self.nanos = nanos 
+          nanos = int(round(float('0{0}'.format(value[pos: -1])) *1e9))
+      _CheckDurationValid(seconds, nanos)
+      self.seconds = seconds
+      self.nanos = nanos
     except ValueError as e:
       raise ValueError(
           'Couldn\'t parse duration: {0} : {1}.'.format(value, e))
@@ -371,12 +371,12 @@ class Duration(object):
             self.nanos, _NANOS_PER_MICROSECOND))
 
   def FromTimedelta(self, td):
-    """Converts timedelta to Duration.""" 
+    """Converts timedelta to Duration."""
     self._NormalizeDuration(td.seconds + td.days * _SECONDS_PER_DAY,
                             td.microseconds * _NANOS_PER_MICROSECOND)
 
   def _NormalizeDuration(self, seconds, nanos):
-    """Set Duration by seconds and nanos.""" 
+    """Set Duration by seconds and nanos."""
     # Force nanos to be negative if the duration is negative.
     if seconds < 0 and nanos > 0:
       seconds += 1
@@ -385,20 +385,20 @@ class Duration(object):
     self.nanos = nanos
 
 
-def _CheckDurationValid(seconds, nanos): 
-  if seconds < -_DURATION_SECONDS_MAX or seconds > _DURATION_SECONDS_MAX: 
+def _CheckDurationValid(seconds, nanos):
+  if seconds < -_DURATION_SECONDS_MAX or seconds > _DURATION_SECONDS_MAX:
     raise ValueError(
-        'Duration is not valid: Seconds {0} must be in range ' 
-        '[-315576000000, 315576000000].'.format(seconds)) 
-  if nanos <= -_NANOS_PER_SECOND or nanos >= _NANOS_PER_SECOND: 
+        'Duration is not valid: Seconds {0} must be in range '
+        '[-315576000000, 315576000000].'.format(seconds))
+  if nanos <= -_NANOS_PER_SECOND or nanos >= _NANOS_PER_SECOND:
     raise ValueError(
-        'Duration is not valid: Nanos {0} must be in range ' 
-        '[-999999999, 999999999].'.format(nanos)) 
+        'Duration is not valid: Nanos {0} must be in range '
+        '[-999999999, 999999999].'.format(nanos))
   if (nanos < 0 and seconds > 0) or (nanos > 0 and seconds < 0):
     raise ValueError(
         'Duration is not valid: Sign mismatch.')
- 
- 
+
+
 def _RoundTowardZero(value, divider):
   """Truncates the remainder part after division."""
   # For some languages, the sign of the remainder is implementation
@@ -421,10 +421,10 @@ class FieldMask(object):
 
   def ToJsonString(self):
     """Converts FieldMask to string according to proto3 JSON spec."""
-    camelcase_paths = [] 
-    for path in self.paths: 
-      camelcase_paths.append(_SnakeCaseToCamelCase(path)) 
-    return ','.join(camelcase_paths) 
+    camelcase_paths = []
+    for path in self.paths:
+      camelcase_paths.append(_SnakeCaseToCamelCase(path))
+    return ','.join(camelcase_paths)
 
   def FromJsonString(self, value):
     """Converts string to FieldMask according to proto3 JSON spec."""
@@ -518,50 +518,50 @@ def _CheckFieldMaskMessage(message):
         message_descriptor.full_name))
 
 
-def _SnakeCaseToCamelCase(path_name): 
-  """Converts a path name from snake_case to camelCase.""" 
-  result = [] 
-  after_underscore = False 
-  for c in path_name: 
-    if c.isupper(): 
+def _SnakeCaseToCamelCase(path_name):
+  """Converts a path name from snake_case to camelCase."""
+  result = []
+  after_underscore = False
+  for c in path_name:
+    if c.isupper():
       raise ValueError(
           'Fail to print FieldMask to Json string: Path name '
           '{0} must not contain uppercase letters.'.format(path_name))
-    if after_underscore: 
-      if c.islower(): 
-        result.append(c.upper()) 
-        after_underscore = False 
-      else: 
+    if after_underscore:
+      if c.islower():
+        result.append(c.upper())
+        after_underscore = False
+      else:
         raise ValueError(
             'Fail to print FieldMask to Json string: The '
             'character after a "_" must be a lowercase letter '
             'in path name {0}.'.format(path_name))
-    elif c == '_': 
-      after_underscore = True 
-    else: 
-      result += c 
- 
-  if after_underscore: 
+    elif c == '_':
+      after_underscore = True
+    else:
+      result += c
+
+  if after_underscore:
     raise ValueError('Fail to print FieldMask to Json string: Trailing "_" '
                      'in path name {0}.'.format(path_name))
-  return ''.join(result) 
- 
- 
-def _CamelCaseToSnakeCase(path_name): 
-  """Converts a field name from camelCase to snake_case.""" 
-  result = [] 
-  for c in path_name: 
-    if c == '_': 
+  return ''.join(result)
+
+
+def _CamelCaseToSnakeCase(path_name):
+  """Converts a field name from camelCase to snake_case."""
+  result = []
+  for c in path_name:
+    if c == '_':
       raise ValueError('Fail to parse FieldMask: Path name '
-                       '{0} must not contain "_"s.'.format(path_name)) 
-    if c.isupper(): 
-      result += '_' 
-      result += c.lower() 
-    else: 
-      result += c 
-  return ''.join(result) 
- 
- 
+                       '{0} must not contain "_"s.'.format(path_name))
+    if c.isupper():
+      result += '_'
+      result += c.lower()
+    else:
+      result += c
+  return ''.join(result)
+
+
 class _FieldMaskTree(object):
   """Represents a FieldMask in a tree structure.
 

@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 #include <aws/core/utils/crypto/CryptoStream.h>
 
 namespace Aws
@@ -44,7 +44,7 @@ namespace Aws
 
             void SymmetricCryptoStream::Finalize()
             {
-                assert(m_cryptoBuf); 
+                assert(m_cryptoBuf);
                 m_cryptoBuf->Finalize();
             }
         }

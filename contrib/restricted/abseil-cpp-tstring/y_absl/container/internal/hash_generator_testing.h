@@ -35,7 +35,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 namespace hash_internal {
 namespace generator_internal {
@@ -176,7 +176,7 @@ struct UniqueGenerator {
 
 }  // namespace hash_internal
 }  // namespace container_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_HASH_GENERATOR_TESTING_H_

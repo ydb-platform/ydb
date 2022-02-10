@@ -1,6 +1,6 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
  */
 #include <aws/common/device_random.h>
 
@@ -18,8 +18,8 @@ static aws_thread_once s_rand_init = AWS_THREAD_ONCE_STATIC_INIT;
 #else
 #    define OPEN_FLAGS (O_RDONLY)
 #endif
-static void s_init_rand(void *user_data) { 
-    (void)user_data; 
+static void s_init_rand(void *user_data) {
+    (void)user_data;
     s_rand_fd = open("/dev/urandom", OPEN_FLAGS);
 
     if (s_rand_fd == -1) {
@@ -37,7 +37,7 @@ static void s_init_rand(void *user_data) {
 
 static int s_fallback_device_random_buffer(struct aws_byte_buf *output) {
 
-    aws_thread_call_once(&s_rand_init, s_init_rand, NULL); 
+    aws_thread_call_once(&s_rand_init, s_init_rand, NULL);
 
     size_t diff = output->capacity - output->len;
 

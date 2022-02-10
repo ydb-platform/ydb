@@ -56,8 +56,8 @@ class DescriptorDatabase(object):
     Args:
       file_desc_proto: The FileDescriptorProto to add.
     Raises:
-      DescriptorDatabaseConflictingDefinitionError: if an attempt is made to 
-        add a proto with the same name but different definition than an 
+      DescriptorDatabaseConflictingDefinitionError: if an attempt is made to
+        add a proto with the same name but different definition than an
         existing proto in the database.
     """
     proto_name = file_desc_proto.name
@@ -69,7 +69,7 @@ class DescriptorDatabase(object):
     else:
       return
 
-    # Add all the top-level descriptors to the index. 
+    # Add all the top-level descriptors to the index.
     package = file_desc_proto.package
     for message in file_desc_proto.message_type:
       for name in _ExtractSymbols(message, package):
@@ -81,7 +81,7 @@ class DescriptorDatabase(object):
             '.'.join((package, enum_value.name))] = file_desc_proto
     for extension in file_desc_proto.extension:
       self._AddSymbol(('.'.join((package, extension.name))), file_desc_proto)
-    for service in file_desc_proto.service: 
+    for service in file_desc_proto.service:
       self._AddSymbol(('.'.join((package, service.name))), file_desc_proto)
 
   def FindFileByName(self, name):
@@ -168,7 +168,7 @@ def _ExtractSymbols(desc_proto, package):
   Yields:
     The fully qualified name found in the descriptor.
   """
-  message_name = package + '.' + desc_proto.name if package else desc_proto.name 
+  message_name = package + '.' + desc_proto.name if package else desc_proto.name
   yield message_name
   for nested_type in desc_proto.nested_type:
     for symbol in _ExtractSymbols(nested_type, message_name):

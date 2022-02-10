@@ -1,18 +1,18 @@
 /*
  *
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
@@ -27,13 +27,13 @@
 extern "C" {
 #endif
 
-/** String utility functions */ 
+/** String utility functions */
 
-/** Returns a copy of src that can be passed to gpr_free(). 
+/** Returns a copy of src that can be passed to gpr_free().
    If allocation fails or if src is NULL, returns NULL. */
-GPRAPI char* gpr_strdup(const char* src); 
+GPRAPI char* gpr_strdup(const char* src);
 
-/** printf to a newly-allocated string.  The set of supported formats may vary 
+/** printf to a newly-allocated string.  The set of supported formats may vary
    between platforms.
 
    On success, returns the number of bytes printed (excluding the final '\0'),
@@ -41,7 +41,7 @@ GPRAPI char* gpr_strdup(const char* src);
 
    On error, returns -1 and sets *strp to NULL. If the format string is bad,
    the result is undefined. */
-GPRAPI int gpr_asprintf(char** strp, const char* format, ...) 
+GPRAPI int gpr_asprintf(char** strp, const char* format, ...)
     GPR_PRINT_FORMAT_CHECK(2, 3);
 
 #ifdef __cplusplus

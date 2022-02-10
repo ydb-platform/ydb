@@ -645,7 +645,7 @@ static ssize_t gskit_recv(struct connectdata *conn, int num, char *buf,
   CURLcode cc = CURLE_RECV_ERROR;
 
   if(pipe_ssloverssl(conn, num, SOS_READ) >= 0) {
-    int buffsize = buffersize > (size_t) INT_MAX? INT_MAX: (int) buffersize; 
+    int buffsize = buffersize > (size_t) INT_MAX? INT_MAX: (int) buffersize;
     cc = gskit_status(data, gsk_secure_soc_read(BACKEND->handle,
                                                 buf, buffsize, &nread),
                       "gsk_secure_soc_read()", CURLE_RECV_ERROR);
@@ -990,8 +990,8 @@ static CURLcode gskit_connect_step3(struct connectdata *conn, int sockindex)
                                                     &cdev, &cdec),
                   "gsk_attribute_get_cert_info()", CURLE_SSL_CONNECT_ERROR) ==
      CURLE_OK) {
-    int i; 
- 
+    int i;
+
     infof(data, "Server certificate:\n");
     p = cdev;
     for(i = 0; i++ < cdec; p++)
@@ -1173,10 +1173,10 @@ static int Curl_gskit_shutdown(struct connectdata *conn, int sockindex)
   if(!BACKEND->handle)
     return 0;
 
-#ifndef CURL_DISABLE_FTP 
+#ifndef CURL_DISABLE_FTP
   if(data->set.ftp_ccc != CURLFTPSSL_CCC_ACTIVE)
     return 0;
-#endif 
+#endif
 
   close_one(connssl, conn, sockindex);
   rc = 0;
@@ -1184,8 +1184,8 @@ static int Curl_gskit_shutdown(struct connectdata *conn, int sockindex)
                          SSL_SHUTDOWN_TIMEOUT);
 
   for(;;) {
-    ssize_t nread; 
- 
+    ssize_t nread;
+
     if(what < 0) {
       /* anything that gets here is fatally bad */
       failf(data, "select/poll on SSL socket, errno: %d", SOCKERRNO);

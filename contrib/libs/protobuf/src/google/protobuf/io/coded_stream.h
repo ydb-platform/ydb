@@ -113,7 +113,7 @@
 #include <assert.h>
 
 #include <atomic>
-#include <climits> 
+#include <climits>
 #include <cstddef>
 #include <cstring>
 #include <string>
@@ -166,7 +166,7 @@ namespace internal {
 void MapTestForceDeterministic();
 class EpsCopyByteStream;
 }  // namespace internal
- 
+
 namespace io {
 
 // Defined in this file.
@@ -209,7 +209,7 @@ class PROTOBUF_EXPORT CodedInputStream {
 
   // Skips a number of bytes.  Returns false if an underlying read error
   // occurs.
-  inline bool Skip(int count); 
+  inline bool Skip(int count);
 
   // Sets *data to point directly at the unread part of the CodedInputStream's
   // underlying buffer, and *size to the size of that buffer, but does not
@@ -265,17 +265,17 @@ class PROTOBUF_EXPORT CodedInputStream {
   bool ReadVarintSizeAsInt(int* value);
 
   // Read a tag.  This calls ReadVarint32() and returns the result, or returns
-  // zero (which is not a valid tag) if ReadVarint32() fails.  Also, ReadTag 
-  // (but not ReadTagNoLastTag) updates the last tag value, which can be checked 
-  // with LastTagWas(). 
-  // 
+  // zero (which is not a valid tag) if ReadVarint32() fails.  Also, ReadTag
+  // (but not ReadTagNoLastTag) updates the last tag value, which can be checked
+  // with LastTagWas().
+  //
   // Always inline because this is only called in one place per parse loop
   // but it is called for every iteration of said loop, so it should be fast.
   // GCC doesn't want to inline this by default.
   PROTOBUF_ALWAYS_INLINE uint32 ReadTag() {
-    return last_tag_ = ReadTagNoLastTag(); 
-  } 
- 
+    return last_tag_ = ReadTagNoLastTag();
+  }
+
   PROTOBUF_ALWAYS_INLINE uint32 ReadTagNoLastTag();
 
   // This usually a faster alternative to ReadTag() when cutoff is a manifest
@@ -288,11 +288,11 @@ class PROTOBUF_EXPORT CodedInputStream {
   // to avoid an extra "is tag == 0?" check here.)
   PROTOBUF_ALWAYS_INLINE
   std::pair<uint32, bool> ReadTagWithCutoff(uint32 cutoff) {
-    std::pair<uint32, bool> result = ReadTagWithCutoffNoLastTag(cutoff); 
-    last_tag_ = result.first; 
-    return result; 
-  } 
- 
+    std::pair<uint32, bool> result = ReadTagWithCutoffNoLastTag(cutoff);
+    last_tag_ = result.first;
+    return result;
+  }
+
   PROTOBUF_ALWAYS_INLINE
   std::pair<uint32, bool> ReadTagWithCutoffNoLastTag(uint32 cutoff);
 
@@ -321,10 +321,10 @@ class PROTOBUF_EXPORT CodedInputStream {
   // zero, and ConsumedEntireMessage() will return true.
   bool ExpectAtEnd();
 
-  // If the last call to ReadTag() or ReadTagWithCutoff() returned the given 
-  // value, returns true.  Otherwise, returns false. 
-  // ReadTagNoLastTag/ReadTagWithCutoffNoLastTag do not preserve the last 
-  // returned value. 
+  // If the last call to ReadTag() or ReadTagWithCutoff() returned the given
+  // value, returns true.  Otherwise, returns false.
+  // ReadTagNoLastTag/ReadTagWithCutoffNoLastTag do not preserve the last
+  // returned value.
   //
   // This is needed because parsers for some types of embedded messages
   // (with field type TYPE_GROUP) don't actually know that they've reached the
@@ -333,7 +333,7 @@ class PROTOBUF_EXPORT CodedInputStream {
   // tag to make sure it had the right number, so it calls LastTagWas() on
   // return from the embedded parser to check.
   bool LastTagWas(uint32 expected);
-  void SetLastTag(uint32 tag) { last_tag_ = tag; } 
+  void SetLastTag(uint32 tag) { last_tag_ = tag; }
 
   // When parsing message (but NOT a group), this method must be called
   // immediately after MergeFromCodedStream() returns (if it returns true)
@@ -586,9 +586,9 @@ class PROTOBUF_EXPORT CodedInputStream {
 
   // Private member functions.
 
-  // Fallback when Skip() goes past the end of the current buffer. 
-  bool SkipFallback(int count, int original_buffer_size); 
- 
+  // Fallback when Skip() goes past the end of the current buffer.
+  bool SkipFallback(int count, int original_buffer_size);
+
   // Advance the buffer by a given number of bytes.
   void Advance(int amount);
 
@@ -625,7 +625,7 @@ class PROTOBUF_EXPORT CodedInputStream {
   int ReadVarintSizeAsIntSlow();
   bool ReadLittleEndian32Fallback(uint32* value);
   bool ReadLittleEndian64Fallback(uint64* value);
- 
+
   // Fallback/slow methods for reading tags. These do not update last_tag_,
   // but will set legitimate_message_end_ if we are at the end of the input
   // stream.
@@ -636,7 +636,7 @@ class PROTOBUF_EXPORT CodedInputStream {
   // Return the size of the buffer.
   int BufferSize() const;
 
-  static const int kDefaultTotalBytesLimit = INT_MAX; 
+  static const int kDefaultTotalBytesLimit = INT_MAX;
 
   static int default_recursion_limit_;  // 100 by default.
 
@@ -1173,12 +1173,12 @@ class PROTOBUF_EXPORT CodedOutputStream {
   static uint8* WriteTagToArray(uint32 value, uint8* target);
 
   // Returns the number of bytes needed to encode the given value as a varint.
-  static size_t VarintSize32(uint32 value); 
+  static size_t VarintSize32(uint32 value);
   // Returns the number of bytes needed to encode the given value as a varint.
-  static size_t VarintSize64(uint64 value); 
+  static size_t VarintSize64(uint64 value);
 
   // If negative, 10 bytes.  Otherwise, same as VarintSize32().
-  static size_t VarintSize32SignExtended(int32 value); 
+  static size_t VarintSize32SignExtended(int32 value);
 
   // Compile-time equivalent of VarintSize32().
   template <uint32 Value>
@@ -1232,15 +1232,15 @@ class PROTOBUF_EXPORT CodedOutputStream {
   }
 
   // Return whether the user wants deterministic serialization. See above.
-  bool IsSerializationDeterministic() const { 
+  bool IsSerializationDeterministic() const {
     return impl_.IsSerializationDeterministic();
   }
 
-  static bool IsDefaultSerializationDeterministic() { 
+  static bool IsDefaultSerializationDeterministic() {
     return default_serialization_deterministic_.load(
                std::memory_order_relaxed) != 0;
-  } 
- 
+  }
+
   template <typename Func>
   void Serialize(const Func& func);
 
@@ -1255,12 +1255,12 @@ class PROTOBUF_EXPORT CodedOutputStream {
   static std::atomic<bool> default_serialization_deterministic_;
 
   // See above.  Other projects may use "friend" to allow them to call this.
-  // After SetDefaultSerializationDeterministic() completes, all protocol 
-  // buffer serializations will be deterministic by default.  Thread safe. 
-  // However, the meaning of "after" is subtle here: to be safe, each thread 
-  // that wants deterministic serialization by default needs to call 
-  // SetDefaultSerializationDeterministic() or ensure on its own that another 
-  // thread has done so. 
+  // After SetDefaultSerializationDeterministic() completes, all protocol
+  // buffer serializations will be deterministic by default.  Thread safe.
+  // However, the meaning of "after" is subtle here: to be safe, each thread
+  // that wants deterministic serialization by default needs to call
+  // SetDefaultSerializationDeterministic() or ensure on its own that another
+  // thread has done so.
   friend void internal::MapTestForceDeterministic();
   static void SetDefaultSerializationDeterministic() {
     default_serialization_deterministic_.store(true, std::memory_order_relaxed);
@@ -1350,7 +1350,7 @@ inline const uint8* CodedInputStream::ReadLittleEndian64FromArray(
 inline bool CodedInputStream::ReadLittleEndian32(uint32* value) {
 #if defined(PROTOBUF_LITTLE_ENDIAN)
   if (PROTOBUF_PREDICT_TRUE(BufferSize() >= static_cast<int>(sizeof(*value)))) {
-    buffer_ = ReadLittleEndian32FromArray(buffer_, value); 
+    buffer_ = ReadLittleEndian32FromArray(buffer_, value);
     return true;
   } else {
     return ReadLittleEndian32Fallback(value);
@@ -1363,7 +1363,7 @@ inline bool CodedInputStream::ReadLittleEndian32(uint32* value) {
 inline bool CodedInputStream::ReadLittleEndian64(uint64* value) {
 #if defined(PROTOBUF_LITTLE_ENDIAN)
   if (PROTOBUF_PREDICT_TRUE(BufferSize() >= static_cast<int>(sizeof(*value)))) {
-    buffer_ = ReadLittleEndian64FromArray(buffer_, value); 
+    buffer_ = ReadLittleEndian64FromArray(buffer_, value);
     return true;
   } else {
     return ReadLittleEndian64Fallback(value);
@@ -1373,7 +1373,7 @@ inline bool CodedInputStream::ReadLittleEndian64(uint64* value) {
 #endif
 }
 
-inline uint32 CodedInputStream::ReadTagNoLastTag() { 
+inline uint32 CodedInputStream::ReadTagNoLastTag() {
   uint32 v = 0;
   if (PROTOBUF_PREDICT_TRUE(buffer_ < buffer_end_)) {
     v = *buffer_;
@@ -1382,12 +1382,12 @@ inline uint32 CodedInputStream::ReadTagNoLastTag() {
       return v;
     }
   }
-  v = ReadTagFallback(v); 
-  return v; 
+  v = ReadTagFallback(v);
+  return v;
 }
 
-inline std::pair<uint32, bool> CodedInputStream::ReadTagWithCutoffNoLastTag( 
-    uint32 cutoff) { 
+inline std::pair<uint32, bool> CodedInputStream::ReadTagWithCutoffNoLastTag(
+    uint32 cutoff) {
   // In performance-sensitive code we can expect cutoff to be a compile-time
   // constant, and things like "cutoff >= kMax1ByteVarint" to be evaluated at
   // compile time.
@@ -1399,7 +1399,7 @@ inline std::pair<uint32, bool> CodedInputStream::ReadTagWithCutoffNoLastTag(
     first_byte_or_zero = buffer_[0];
     if (static_cast<int8>(buffer_[0]) > 0) {
       const uint32 kMax1ByteVarint = 0x7f;
-      uint32 tag = buffer_[0]; 
+      uint32 tag = buffer_[0];
       Advance(1);
       return std::make_pair(tag, cutoff >= kMax1ByteVarint || tag <= cutoff);
     }
@@ -1409,7 +1409,7 @@ inline std::pair<uint32, bool> CodedInputStream::ReadTagWithCutoffNoLastTag(
     if (cutoff >= 0x80 && PROTOBUF_PREDICT_TRUE(buffer_ + 1 < buffer_end_) &&
         PROTOBUF_PREDICT_TRUE((buffer_[0] & ~buffer_[1]) >= 0x80)) {
       const uint32 kMax2ByteVarint = (0x7f << 7) + 0x7f;
-      uint32 tag = (1u << 7) * buffer_[1] + (buffer_[0] - 0x80); 
+      uint32 tag = (1u << 7) * buffer_[1] + (buffer_[0] - 0x80);
       Advance(2);
       // It might make sense to test for tag == 0 now, but it is so rare that
       // that we don't bother.  A varint-encoded 0 should be one byte unless
@@ -1422,8 +1422,8 @@ inline std::pair<uint32, bool> CodedInputStream::ReadTagWithCutoffNoLastTag(
     }
   }
   // Slow path
-  const uint32 tag = ReadTagFallback(first_byte_or_zero); 
-  return std::make_pair(tag, static_cast<uint32>(tag - 1) < cutoff); 
+  const uint32 tag = ReadTagFallback(first_byte_or_zero);
+  return std::make_pair(tag, static_cast<uint32>(tag - 1) < cutoff);
 }
 
 inline bool CodedInputStream::LastTagWas(uint32 expected) {
@@ -1607,18 +1607,18 @@ inline uint8* CodedOutputStream::WriteVarint32ToArrayOutOfLine(uint32 value,
   }
 }
 
-inline uint8* CodedOutputStream::WriteVarint64ToArray(uint64 value, 
-                                                      uint8* target) { 
+inline uint8* CodedOutputStream::WriteVarint64ToArray(uint64 value,
+                                                      uint8* target) {
   return EpsCopyOutputStream::UnsafeVarint(value, target);
 }
 
-inline void CodedOutputStream::WriteVarint32SignExtended(int32 value) { 
-  WriteVarint64(static_cast<uint64>(value)); 
-} 
- 
+inline void CodedOutputStream::WriteVarint32SignExtended(int32 value) {
+  WriteVarint64(static_cast<uint64>(value));
+}
+
 inline uint8* CodedOutputStream::WriteVarint32SignExtendedToArray(
     int32 value, uint8* target) {
-  return WriteVarint64ToArray(static_cast<uint64>(value), target); 
+  return WriteVarint64ToArray(static_cast<uint64>(value), target);
 }
 
 inline uint8* CodedOutputStream::WriteLittleEndian32ToArray(uint32 value,
@@ -1659,38 +1659,38 @@ inline void CodedOutputStream::WriteVarint32(uint32 value) {
   SetCur(WriteVarint32ToArray(value, Cur()));
 }
 
-inline void CodedOutputStream::WriteVarint64(uint64 value) { 
+inline void CodedOutputStream::WriteVarint64(uint64 value) {
   cur_ = impl_.EnsureSpace(cur_);
   SetCur(WriteVarint64ToArray(value, Cur()));
-} 
- 
+}
+
 inline void CodedOutputStream::WriteTag(uint32 value) { WriteVarint32(value); }
 
 inline uint8* CodedOutputStream::WriteTagToArray(uint32 value, uint8* target) {
   return WriteVarint32ToArray(value, target);
 }
 
-inline size_t CodedOutputStream::VarintSize32(uint32 value) { 
-  // This computes value == 0 ? 1 : floor(log2(value)) / 7 + 1 
-  // Use an explicit multiplication to implement the divide of 
-  // a number in the 1..31 range. 
-  // Explicit OR 0x1 to avoid calling Bits::Log2FloorNonZero(0), which is 
-  // undefined. 
-  uint32 log2value = Bits::Log2FloorNonZero(value | 0x1); 
-  return static_cast<size_t>((log2value * 9 + 73) / 64); 
+inline size_t CodedOutputStream::VarintSize32(uint32 value) {
+  // This computes value == 0 ? 1 : floor(log2(value)) / 7 + 1
+  // Use an explicit multiplication to implement the divide of
+  // a number in the 1..31 range.
+  // Explicit OR 0x1 to avoid calling Bits::Log2FloorNonZero(0), which is
+  // undefined.
+  uint32 log2value = Bits::Log2FloorNonZero(value | 0x1);
+  return static_cast<size_t>((log2value * 9 + 73) / 64);
 }
 
-inline size_t CodedOutputStream::VarintSize64(uint64 value) { 
-  // This computes value == 0 ? 1 : floor(log2(value)) / 7 + 1 
-  // Use an explicit multiplication to implement the divide of 
-  // a number in the 1..63 range. 
-  // Explicit OR 0x1 to avoid calling Bits::Log2FloorNonZero(0), which is 
-  // undefined. 
-  uint32 log2value = Bits::Log2FloorNonZero64(value | 0x1); 
-  return static_cast<size_t>((log2value * 9 + 73) / 64); 
-} 
- 
-inline size_t CodedOutputStream::VarintSize32SignExtended(int32 value) { 
+inline size_t CodedOutputStream::VarintSize64(uint64 value) {
+  // This computes value == 0 ? 1 : floor(log2(value)) / 7 + 1
+  // Use an explicit multiplication to implement the divide of
+  // a number in the 1..63 range.
+  // Explicit OR 0x1 to avoid calling Bits::Log2FloorNonZero(0), which is
+  // undefined.
+  uint32 log2value = Bits::Log2FloorNonZero64(value | 0x1);
+  return static_cast<size_t>((log2value * 9 + 73) / 64);
+}
+
+inline size_t CodedOutputStream::VarintSize32SignExtended(int32 value) {
   if (value < 0) {
     return 10;  // TODO(kenton):  Make this a symbolic constant.
   } else {
@@ -1722,7 +1722,7 @@ inline uint8* CodedOutputStream::WriteStringToArray(const TProtoStringType& str,
 }  // namespace protobuf
 }  // namespace google
 
-#if defined(_MSC_VER) && _MSC_VER >= 1300 && !defined(__INTEL_COMPILER) 
+#if defined(_MSC_VER) && _MSC_VER >= 1300 && !defined(__INTEL_COMPILER)
 #pragma runtime_checks("c", restore)
 #endif  // _MSC_VER && !defined(__INTEL_COMPILER)
 

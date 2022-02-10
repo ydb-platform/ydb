@@ -1,31 +1,31 @@
-/* 
- * 
- * Copyright 2016 gRPC authors. 
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- * 
- */ 
- 
-#include <grpc/support/port_platform.h> 
- 
+/*
+ *
+ * Copyright 2016 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+#include <grpc/support/port_platform.h>
+
 #include "src/core/ext/filters/client_channel/lb_policy/grpclb/load_balancer_api.h"
 #include "src/core/lib/gpr/useful.h"
- 
+
 #include "google/protobuf/duration.upb.h"
 #include "google/protobuf/timestamp.upb.h"
 
-#include <grpc/support/alloc.h> 
- 
+#include <grpc/support/alloc.h>
+
 namespace grpc_core {
 
 bool GrpcLbServer::operator==(const GrpcLbServer& other) const {
@@ -60,18 +60,18 @@ grpc_slice GrpcLbRequestCreate(const char* lb_service_name, upb_arena* arena) {
   grpc_lb_v1_InitialLoadBalanceRequest_set_name(
       initial_request, upb_strview_make(lb_service_name, name_len));
   return grpc_grpclb_request_encode(req, arena);
-} 
- 
+}
+
 namespace {
- 
+
 void google_protobuf_Timestamp_assign(google_protobuf_Timestamp* timestamp,
                                       const gpr_timespec& value) {
   google_protobuf_Timestamp_set_seconds(timestamp, value.tv_sec);
   google_protobuf_Timestamp_set_nanos(timestamp, value.tv_nsec);
-} 
- 
+}
+
 }  // namespace
- 
+
 grpc_slice GrpcLbLoadReportRequestCreate(
     int64_t num_calls_started, int64_t num_calls_finished,
     int64_t num_calls_finished_with_client_failed_to_send,
@@ -101,13 +101,13 @@ grpc_slice GrpcLbLoadReportRequestCreate(
       grpc_lb_v1_ClientStatsPerToken_set_load_balance_token(
           cur_msg, upb_strview_make(token, token_len));
       grpc_lb_v1_ClientStatsPerToken_set_num_calls(cur_msg, cur.count);
-    } 
-  } 
+    }
+  }
   return grpc_grpclb_request_encode(req, arena);
-} 
- 
+}
+
 namespace {
- 
+
 bool ParseServerList(const grpc_lb_v1_LoadBalanceResponse& response,
                      std::vector<GrpcLbServer>* server_list) {
   // Determine the number of servers.
@@ -141,20 +141,20 @@ bool ParseServerList(const grpc_lb_v1_LoadBalanceResponse& response,
                 token.size);
       }
       cur.drop = grpc_lb_v1_Server_drop(servers[i]);
-    } 
-  } 
+    }
+  }
   return true;
-} 
- 
+}
+
 grpc_millis grpc_grpclb_duration_to_millis(
     const google_protobuf_Duration* duration_pb) {
   return static_cast<grpc_millis>(
       (google_protobuf_Duration_seconds(duration_pb) * GPR_MS_PER_SEC) +
       (google_protobuf_Duration_nanos(duration_pb) / GPR_NS_PER_MS));
-} 
- 
+}
+
 }  // namespace
- 
+
 bool GrpcLbResponseParse(const grpc_slice& encoded_grpc_grpclb_response,
                          upb_arena* arena, GrpcLbResponse* result) {
   grpc_lb_v1_LoadBalanceResponse* response =
@@ -166,7 +166,7 @@ bool GrpcLbResponseParse(const grpc_slice& encoded_grpc_grpclb_response,
   if (ParseServerList(*response, &result->serverlist)) {
     result->type = result->SERVERLIST;
     return true;
-  } 
+  }
   // Handle initial responses.
   auto* initial_response =
       grpc_lb_v1_LoadBalanceResponse_initial_response(response);
@@ -178,9 +178,9 @@ bool GrpcLbResponseParse(const grpc_slice& encoded_grpc_grpclb_response,
     if (client_stats_report_interval != nullptr) {
       result->client_stats_report_interval =
           grpc_grpclb_duration_to_millis(client_stats_report_interval);
-    } 
+    }
     return true;
-  } 
+  }
   // Handle fallback.
   if (grpc_lb_v1_LoadBalanceResponse_has_fallback_response(response)) {
     result->type = result->FALLBACK;
@@ -188,6 +188,6 @@ bool GrpcLbResponseParse(const grpc_slice& encoded_grpc_grpclb_response,
   }
   // Unknown response type.
   return false;
-} 
- 
+}
+
 }  // namespace grpc_core

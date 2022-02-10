@@ -76,7 +76,7 @@ RECURSE(
     mkdocs_builder/mkdocs_yandex
     mkdocs_builder/theme
     mstand
-    mtime0 
+    mtime0
     mx_bin2info
     nehc
     nlp_test
@@ -141,7 +141,7 @@ RECURSE(
     shutter_jing_plugin
     snipmake
     spamfilt
-    stdin 
+    stdin
     struct2fieldcalc
     syntaxer
     tarccreate

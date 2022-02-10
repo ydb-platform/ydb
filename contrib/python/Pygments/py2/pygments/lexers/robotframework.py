@@ -5,7 +5,7 @@
 
     Lexer for Robot Framework.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -161,7 +161,7 @@ class RowTokenizer(object):
 
 class RowSplitter(object):
     _space_splitter = re.compile('( {2,})')
-    _pipe_splitter = re.compile(r'((?:^| +)\|(?: +|$))') 
+    _pipe_splitter = re.compile(r'((?:^| +)\|(?: +|$))')
 
     def split(self, row):
         splitter = (row.startswith('| ') and self._split_from_pipes

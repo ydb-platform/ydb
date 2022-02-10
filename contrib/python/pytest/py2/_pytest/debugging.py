@@ -37,11 +37,11 @@ def tty():
     if os.isatty(1):
         return
 
-    fd = os.open('/dev/tty', os.O_RDWR) 
+    fd = os.open('/dev/tty', os.O_RDWR)
     os.dup2(fd, 0)
     os.dup2(fd, 1)
     os.dup2(fd, 2)
-    os.close(fd) 
+    os.close(fd)
 
     old_sys_path = sys.path
     sys.path = list(sys.path)

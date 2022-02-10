@@ -62,11 +62,11 @@ using google::protobuf::io::win32::setmode;
 
 class GeneratorResponseContext : public GeneratorContext {
  public:
-  GeneratorResponseContext( 
+  GeneratorResponseContext(
       const Version& compiler_version, CodeGeneratorResponse* response,
-      const std::vector<const FileDescriptor*>& parsed_files) 
-      : compiler_version_(compiler_version), 
-        response_(response), 
+      const std::vector<const FileDescriptor*>& parsed_files)
+      : compiler_version_(compiler_version),
+        response_(response),
         parsed_files_(parsed_files) {}
   virtual ~GeneratorResponseContext() {}
 
@@ -100,12 +100,12 @@ class GeneratorResponseContext : public GeneratorContext {
     *output = parsed_files_;
   }
 
-  void GetCompilerVersion(Version* version) const { 
-    *version = compiler_version_; 
-  } 
- 
+  void GetCompilerVersion(Version* version) const {
+    *version = compiler_version_;
+  }
+
  private:
-  Version compiler_version_; 
+  Version compiler_version_;
   CodeGeneratorResponse* response_;
   const std::vector<const FileDescriptor*>& parsed_files_;
 };
@@ -137,21 +137,21 @@ bool GenerateCode(const CodeGeneratorRequest& request,
   GeneratorResponseContext context(request.compiler_version(), response,
                                    parsed_files);
 
- 
+
   TProtoStringType error;
   bool succeeded = generator.GenerateAll(parsed_files, request.parameter(),
                                          &context, &error);
 
   response->set_supported_features(generator.GetSupportedFeatures());
 
-  if (!succeeded && error.empty()) { 
+  if (!succeeded && error.empty()) {
     error =
         "Code generator returned false but provided no error "
         "description.";
   }
-  if (!error.empty()) { 
-    response->set_error(error); 
-  } 
+  if (!error.empty()) {
+    response->set_error(error);
+  }
 
   return true;
 }
@@ -164,8 +164,8 @@ int PluginMain(int argc, char* argv[], const CodeGenerator* generator) {
   }
 
 #ifdef _WIN32
-  setmode(STDIN_FILENO, _O_BINARY); 
-  setmode(STDOUT_FILENO, _O_BINARY); 
+  setmode(STDIN_FILENO, _O_BINARY);
+  setmode(STDOUT_FILENO, _O_BINARY);
 #endif
 
   CodeGeneratorRequest request;

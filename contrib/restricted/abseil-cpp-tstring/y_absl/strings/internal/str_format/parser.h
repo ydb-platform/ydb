@@ -20,25 +20,25 @@
 #include <stdlib.h>
 
 #include <cassert>
-#include <cstdint> 
+#include <cstdint>
 #include <initializer_list>
 #include <iosfwd>
 #include <iterator>
 #include <memory>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <vector>
 
 #include "y_absl/strings/internal/str_format/checker.h"
 #include "y_absl/strings/internal/str_format/extension.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
-enum class LengthMod : std::uint8_t { h, hh, l, ll, L, j, z, t, q, none }; 
- 
-TString LengthModToString(LengthMod v); 
- 
+enum class LengthMod : std::uint8_t { h, hh, l, ll, L, j, z, t, q, none };
+
+TString LengthModToString(LengthMod v);
+
 // The analyzed properties of a single specified conversion.
 struct UnboundConversion {
   UnboundConversion() {}
@@ -77,7 +77,7 @@ struct UnboundConversion {
   InputValue precision;
 
   Flags flags = Flags::kBasic;
-  LengthMod length_mod = LengthMod::none; 
+  LengthMod length_mod = LengthMod::none;
   FormatConversionChar conv = FormatConversionCharInternal::kNone;
 };
 
@@ -91,12 +91,12 @@ const char* ConsumeUnboundConversion(const char* p, const char* end,
 
 // Helper tag class for the table below.
 // It allows fast `char -> ConversionChar/LengthMod/Flags` checking and
-// conversions. 
+// conversions.
 class ConvTag {
  public:
   constexpr ConvTag(FormatConversionChar conversion_char)  // NOLINT
       : tag_(static_cast<uint8_t>(conversion_char)) {}
-  constexpr ConvTag(LengthMod length_mod)  // NOLINT 
+  constexpr ConvTag(LengthMod length_mod)  // NOLINT
       : tag_(0x80 | static_cast<uint8_t>(length_mod)) {}
   constexpr ConvTag(Flags flags)  // NOLINT
       : tag_(0xc0 | static_cast<uint8_t>(flags)) {}
@@ -308,7 +308,7 @@ template <FormatConversionCharSet... C>
 class ExtendedParsedFormat : public str_format_internal::ParsedFormatBase {
  public:
   explicit ExtendedParsedFormat(string_view format)
-#ifdef ABSL_INTERNAL_ENABLE_FORMAT_CHECKER 
+#ifdef ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
       __attribute__((
           enable_if(str_format_internal::EnsureConstexpr(format),
                     "Format string is not constexpr."),
@@ -351,7 +351,7 @@ class ExtendedParsedFormat : public str_format_internal::ParsedFormatBase {
       : ParsedFormatBase(s, allow_ignored, {C...}) {}
 };
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_PARSER_H_

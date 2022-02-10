@@ -1,4 +1,4 @@
-from io import StringIO, BytesIO 
+from io import StringIO, BytesIO
 import codecs
 import os
 import sys
@@ -61,7 +61,7 @@ class SpawnBase(object):
         # Data before searchwindowsize point is preserved, but not searched.
         self.searchwindowsize = searchwindowsize
         # Delay used before sending data to child. Time in seconds.
-        # Set this to None to skip the time.sleep() call completely. 
+        # Set this to None to skip the time.sleep() call completely.
         self.delaybeforesend = 0.05
         # Used by close() to give kernel time to update process status.
         # Time in seconds.
@@ -69,12 +69,12 @@ class SpawnBase(object):
         # Used by terminate() to give kernel time to update process status.
         # Time in seconds.
         self.delayafterterminate = 0.1
-        # Delay in seconds to sleep after each call to read_nonblocking(). 
-        # Set this to None to skip the time.sleep() call completely: that 
-        # would restore the behavior from pexpect-2.0 (for performance 
-        # reasons or because you don't want to release Python's global 
-        # interpreter lock). 
-        self.delayafterread = 0.0001 
+        # Delay in seconds to sleep after each call to read_nonblocking().
+        # Set this to None to skip the time.sleep() call completely: that
+        # would restore the behavior from pexpect-2.0 (for performance
+        # reasons or because you don't want to release Python's global
+        # interpreter lock).
+        self.delayafterread = 0.0001
         self.softspace = False
         self.name = '<' + repr(self) + '>'
         self.closed = True
@@ -86,7 +86,7 @@ class SpawnBase(object):
             # bytes mode (accepts some unicode for backwards compatibility)
             self._encoder = self._decoder = _NullCoder()
             self.string_type = bytes
-            self.buffer_type = BytesIO 
+            self.buffer_type = BytesIO
             self.crlf = b'\r\n'
             if PY3:
                 self.allowed_string_types = (bytes, str)
@@ -107,7 +107,7 @@ class SpawnBase(object):
             self._encoder = codecs.getincrementalencoder(encoding)(codec_errors)
             self._decoder = codecs.getincrementaldecoder(encoding)(codec_errors)
             self.string_type = text_type
-            self.buffer_type = StringIO 
+            self.buffer_type = StringIO
             self.crlf = u'\r\n'
             self.allowed_string_types = (text_type, )
             if PY3:
@@ -116,10 +116,10 @@ class SpawnBase(object):
                 self.linesep = os.linesep.decode('ascii')
             # This can handle unicode in both Python 2 and 3
             self.write_to_stdout = sys.stdout.write
-        # storage for async transport 
-        self.async_pw_transport = None 
-        # This is the read buffer. See maxread. 
-        self._buffer = self.buffer_type() 
+        # storage for async transport
+        self.async_pw_transport = None
+        # This is the read buffer. See maxread.
+        self._buffer = self.buffer_type()
         # The buffer may be trimmed for efficiency reasons.  This is the
         # untrimmed buffer, used to create the before attribute.
         self._before = self.buffer_type()
@@ -146,17 +146,17 @@ class SpawnBase(object):
             return s.encode('utf-8')
         return s
 
-    def _get_buffer(self): 
-        return self._buffer.getvalue() 
- 
-    def _set_buffer(self, value): 
-        self._buffer = self.buffer_type() 
-        self._buffer.write(value) 
- 
-    # This property is provided for backwards compatability (self.buffer used 
-    # to be a string/bytes object) 
-    buffer = property(_get_buffer, _set_buffer) 
- 
+    def _get_buffer(self):
+        return self._buffer.getvalue()
+
+    def _set_buffer(self, value):
+        self._buffer = self.buffer_type()
+        self._buffer.write(value)
+
+    # This property is provided for backwards compatability (self.buffer used
+    # to be a string/bytes object)
+    buffer = property(_get_buffer, _set_buffer)
+
     def read_nonblocking(self, size=1, timeout=None):
         """This reads data from the file descriptor.
 
@@ -240,7 +240,7 @@ class SpawnBase(object):
                 self._pattern_type_err(p)
         return compiled_pattern_list
 
-    def expect(self, pattern, timeout=-1, searchwindowsize=-1, async_=False, **kw): 
+    def expect(self, pattern, timeout=-1, searchwindowsize=-1, async_=False, **kw):
         '''This seeks through the stream until a pattern is matched. The
         pattern is overloaded and may take several types. The pattern can be a
         StringType, EOF, a compiled re, or a list of any of those types.
@@ -265,7 +265,7 @@ class SpawnBase(object):
             # the input is 'foobar'
             index = p.expect(['foobar', 'foo'])
             # returns 0('foobar') if all input is available at once,
-            # but returns 1('foo') if parts of the final 'bar' arrive late 
+            # but returns 1('foo') if parts of the final 'bar' arrive late
 
         When a match is found for the given pattern, the class instance
         attribute *match* becomes an re.MatchObject result.  Should an EOF
@@ -324,7 +324,7 @@ class SpawnBase(object):
         If you are trying to optimize for speed then see expect_list().
 
         On Python 3.4, or Python 3.3 with asyncio installed, passing
-        ``async_=True``  will make this return an :mod:`asyncio` coroutine, 
+        ``async_=True``  will make this return an :mod:`asyncio` coroutine,
         which you can yield from to get the same result that this method would
         normally give directly. So, inside a coroutine, you can replace this code::
 
@@ -332,19 +332,19 @@ class SpawnBase(object):
 
         With this non-blocking form::
 
-            index = yield from p.expect(patterns, async_=True) 
+            index = yield from p.expect(patterns, async_=True)
         '''
-        if 'async' in kw: 
-            async_ = kw.pop('async') 
-        if kw: 
-            raise TypeError("Unknown keyword arguments: {}".format(kw)) 
+        if 'async' in kw:
+            async_ = kw.pop('async')
+        if kw:
+            raise TypeError("Unknown keyword arguments: {}".format(kw))
 
         compiled_pattern_list = self.compile_pattern_list(pattern)
         return self.expect_list(compiled_pattern_list,
-                timeout, searchwindowsize, async_) 
+                timeout, searchwindowsize, async_)
 
     def expect_list(self, pattern_list, timeout=-1, searchwindowsize=-1,
-                    async_=False, **kw): 
+                    async_=False, **kw):
         '''This takes a list of compiled regular expressions and returns the
         index into the pattern_list that matched the child output. The list may
         also contain EOF or TIMEOUT(which are not compiled regular
@@ -354,25 +354,25 @@ class SpawnBase(object):
         the expect() method.  This is called by expect().
 
 
-        Like :meth:`expect`, passing ``async_=True`` will make this return an 
+        Like :meth:`expect`, passing ``async_=True`` will make this return an
         asyncio coroutine.
         '''
         if timeout == -1:
             timeout = self.timeout
-        if 'async' in kw: 
-            async_ = kw.pop('async') 
-        if kw: 
-            raise TypeError("Unknown keyword arguments: {}".format(kw)) 
+        if 'async' in kw:
+            async_ = kw.pop('async')
+        if kw:
+            raise TypeError("Unknown keyword arguments: {}".format(kw))
 
         exp = Expecter(self, searcher_re(pattern_list), searchwindowsize)
-        if async_: 
-            from ._async import expect_async 
+        if async_:
+            from ._async import expect_async
             return expect_async(exp, timeout)
         else:
             return exp.expect_loop(timeout)
 
     def expect_exact(self, pattern_list, timeout=-1, searchwindowsize=-1,
-                     async_=False, **kw): 
+                     async_=False, **kw):
 
         '''This is similar to expect(), but uses plain string matching instead
         of compiled regular expressions in 'pattern_list'. The 'pattern_list'
@@ -386,15 +386,15 @@ class SpawnBase(object):
         This method is also useful when you don't want to have to worry about
         escaping regular expression characters that you want to match.
 
-        Like :meth:`expect`, passing ``async_=True`` will make this return an 
+        Like :meth:`expect`, passing ``async_=True`` will make this return an
         asyncio coroutine.
         '''
         if timeout == -1:
             timeout = self.timeout
-        if 'async' in kw: 
-            async_ = kw.pop('async') 
-        if kw: 
-            raise TypeError("Unknown keyword arguments: {}".format(kw)) 
+        if 'async' in kw:
+            async_ = kw.pop('async')
+        if kw:
+            raise TypeError("Unknown keyword arguments: {}".format(kw))
 
         if (isinstance(pattern_list, self.allowed_string_types) or
                 pattern_list in (TIMEOUT, EOF)):
@@ -414,8 +414,8 @@ class SpawnBase(object):
         pattern_list = [prepare_pattern(p) for p in pattern_list]
 
         exp = Expecter(self, searcher_string(pattern_list), searchwindowsize)
-        if async_: 
-            from ._async import expect_async 
+        if async_:
+            from ._async import expect_async
             return expect_async(exp, timeout)
         else:
             return exp.expect_loop(timeout)
@@ -446,7 +446,7 @@ class SpawnBase(object):
 
         # I could have done this more directly by not using expect(), but
         # I deliberately decided to couple read() to expect() so that
-        # I would catch any bugs early and ensure consistent behavior. 
+        # I would catch any bugs early and ensure consistent behavior.
         # It's a little less efficient, but there is less for me to
         # worry about if I have to later modify read() or expect().
         # Note, it's OK if size==-1 in the regex. That just means it
@@ -518,7 +518,7 @@ class SpawnBase(object):
     # For 'with spawn(...) as child:'
     def __enter__(self):
         return self
- 
+
     def __exit__(self, etype, evalue, tb):
         # We rely on subclasses to implement close(). If they don't, it's not
         # clear what a context manager should do.

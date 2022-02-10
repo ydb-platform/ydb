@@ -18,8 +18,8 @@
 #ifndef ABSL_DEBUGGING_INTERNAL_STACK_CONSUMPTION_H_
 #define ABSL_DEBUGGING_INTERNAL_STACK_CONSUMPTION_H_
 
-#include "y_absl/base/config.h" 
- 
+#include "y_absl/base/config.h"
+
 // The code in this module is not portable.
 // Use this feature test macro to detect its availability.
 #ifdef ABSL_INTERNAL_HAVE_DEBUGGING_STACK_CONSUMPTION
@@ -30,7 +30,7 @@
 #define ABSL_INTERNAL_HAVE_DEBUGGING_STACK_CONSUMPTION 1
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
 // Returns the stack consumption in bytes for the code exercised by
@@ -42,7 +42,7 @@ namespace debugging_internal {
 int GetSignalHandlerStackConsumption(void (*signal_handler)(int));
 
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_INTERNAL_HAVE_DEBUGGING_STACK_CONSUMPTION

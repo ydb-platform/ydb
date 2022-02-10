@@ -1,12 +1,12 @@
-""" 
-Commonly useful converters. 
-""" 
- 
-from __future__ import absolute_import, division, print_function 
- 
+"""
+Commonly useful converters.
+"""
+
+from __future__ import absolute_import, division, print_function
+
 from ._compat import PY2
 from ._make import NOTHING, Factory, pipe
- 
+
 
 if not PY2:
     import inspect
@@ -20,25 +20,25 @@ __all__ = [
 ]
 
 
-def optional(converter): 
-    """ 
-    A converter that allows an attribute to be optional. An optional attribute 
-    is one which can be set to ``None``. 
- 
+def optional(converter):
+    """
+    A converter that allows an attribute to be optional. An optional attribute
+    is one which can be set to ``None``.
+
     Type annotations will be inferred from the wrapped converter's, if it
     has any.
 
-    :param callable converter: the converter that is used for non-``None`` 
-        values. 
- 
+    :param callable converter: the converter that is used for non-``None``
+        values.
+
     .. versionadded:: 17.1.0
-    """ 
- 
-    def optional_converter(val): 
-        if val is None: 
-            return None 
-        return converter(val) 
- 
+    """
+
+    def optional_converter(val):
+        if val is None:
+            return None
+        return converter(val)
+
     if not PY2:
         sig = None
         try:
@@ -56,7 +56,7 @@ def optional(converter):
                     sig.return_annotation
                 ]
 
-    return optional_converter 
+    return optional_converter
 
 
 def default_if_none(default=NOTHING, factory=None):

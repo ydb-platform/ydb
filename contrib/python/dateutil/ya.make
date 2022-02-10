@@ -2,7 +2,7 @@
 
 PY23_LIBRARY()
 
-OWNER(g:python-contrib) 
+OWNER(g:python-contrib)
 
 VERSION(2.8.2)
 
@@ -14,11 +14,11 @@ PEERDIR(
 
 NO_LINT()
 
-NO_CHECK_IMPORTS( 
-    dateutil.tz.win 
-    dateutil.tzwin 
-) 
- 
+NO_CHECK_IMPORTS(
+    dateutil.tz.win
+    dateutil.tzwin
+)
+
 PY_SRCS(
     TOP_LEVEL
     dateutil/__init__.py

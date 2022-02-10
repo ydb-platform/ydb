@@ -17,7 +17,7 @@
 #include <contrib/libs/highwayhash/highwayhash/sip_hash.h>
 
 #include <contrib/libs/farmhash/farmhash.h>
-#include <contrib/libs/xxhash/xxhash.h> 
+#include <contrib/libs/xxhash/xxhash.h>
 
 #include <contrib/libs/openssl/include/openssl/sha.h>
 

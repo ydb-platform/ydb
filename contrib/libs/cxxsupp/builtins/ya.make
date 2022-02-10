@@ -29,20 +29,20 @@ OWNER(
     g:cpp-contrib
 )
 
-# Check MUSL before NO_PLATFORM() disables it. 
-IF (MUSL) 
-    # We use C headers despite NO_PLATFORM, but we do not propagate 
-    # them with ADDINCL GLOBAL because we do not have an API, and we 
-    # can not propagate them because libcxx has to put its own 
-    # includes before musl includes for its include_next to work. 
-    ADDINCL( 
-        contrib/libs/musl/arch/x86_64 
-        contrib/libs/musl/arch/generic 
-        contrib/libs/musl/include 
-        contrib/libs/musl/extra 
-    ) 
-ENDIF() 
- 
+# Check MUSL before NO_PLATFORM() disables it.
+IF (MUSL)
+    # We use C headers despite NO_PLATFORM, but we do not propagate
+    # them with ADDINCL GLOBAL because we do not have an API, and we
+    # can not propagate them because libcxx has to put its own
+    # includes before musl includes for its include_next to work.
+    ADDINCL(
+        contrib/libs/musl/arch/x86_64
+        contrib/libs/musl/arch/generic
+        contrib/libs/musl/include
+        contrib/libs/musl/extra
+    )
+ENDIF()
+
 NO_UTIL()
 
 NO_RUNTIME()
@@ -64,7 +64,7 @@ ENDIF()
 
 SRCS(
     addtf3.c
-    ashlti3.c 
+    ashlti3.c
     clzti2.c
     comparetf2.c
     divdc3.c
@@ -78,9 +78,9 @@ SRCS(
     fixsfti.c
     fixtfdi.c
     fixtfsi.c
-    fixunsdfti.c 
-    fixunssfti.c 
-    fixunstfdi.c 
+    fixunsdfti.c
+    fixunssfti.c
+    fixunstfdi.c
     fixunstfsi.c
     fixunstfti.c
     fixunsxfti.c
@@ -90,11 +90,11 @@ SRCS(
     floattisf.c
     floatunditf.c
     floatunsitf.c
-    floatuntidf.c 
+    floatuntidf.c
     floatuntisf.c
     gcc_personality_v0.c
     int_util.c
-    lshrti3.c 
+    lshrti3.c
     modti3.c
     muldc3.c
     muloti4.c

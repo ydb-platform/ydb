@@ -18,7 +18,7 @@
 #include "y_absl/strings/internal/str_format/extension.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 bool ConvertFloatImpl(float v, const FormatConversionSpecImpl &conv,
@@ -31,7 +31,7 @@ bool ConvertFloatImpl(long double v, const FormatConversionSpecImpl &conv,
                       FormatSinkImpl *sink);
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_FLOAT_CONVERSION_H_

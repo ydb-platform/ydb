@@ -5,7 +5,7 @@
 
     Lexers for misc. web stuff.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -358,10 +358,10 @@ class XQueryLexer(ExtendedRegexLexer):
              bygroups(Keyword, Text, Keyword), 'itemtype'),
             (r'(treat)(\s+)(as)\b',
              bygroups(Keyword, Text, Keyword), 'itemtype'),
-            (r'(case)(\s+)(' + stringdouble + ')', 
-             bygroups(Keyword, Text, String.Double), 'itemtype'), 
-            (r'(case)(\s+)(' + stringsingle + ')', 
-             bygroups(Keyword, Text, String.Single), 'itemtype'), 
+            (r'(case)(\s+)(' + stringdouble + ')',
+             bygroups(Keyword, Text, String.Double), 'itemtype'),
+            (r'(case)(\s+)(' + stringsingle + ')',
+             bygroups(Keyword, Text, String.Single), 'itemtype'),
             (r'(case|as)\b', Keyword, 'itemtype'),
             (r'(\))(\s*)(as)',
              bygroups(Punctuation, Text, Keyword), 'itemtype'),
@@ -369,8 +369,8 @@ class XQueryLexer(ExtendedRegexLexer):
             (r'(for|let|previous|next)(\s+)(\$)',
              bygroups(Keyword, Text, Name.Variable), 'varname'),
             (r'(for)(\s+)(tumbling|sliding)(\s+)(window)(\s+)(\$)',
-             bygroups(Keyword, Text, Keyword, Text, Keyword, Text, Name.Variable), 
-             'varname'), 
+             bygroups(Keyword, Text, Keyword, Text, Keyword, Text, Name.Variable),
+             'varname'),
             # (r'\)|\?|\]', Punctuation, '#push'),
             (r'\)|\?|\]', Punctuation),
             (r'(empty)(\s+)(greatest|least)', bygroups(Keyword, Text, Keyword)),
@@ -420,25 +420,25 @@ class XQueryLexer(ExtendedRegexLexer):
             (r'preserve|no-preserve', Keyword),
             (r',', Punctuation),
         ],
-        'annotationname': [ 
+        'annotationname': [
             (r'\(:', Comment, 'comment'),
             (qname, Name.Decorator),
             (r'(\()(' + stringdouble + ')', bygroups(Punctuation, String.Double)),
             (r'(\()(' + stringsingle + ')', bygroups(Punctuation, String.Single)),
-            (r'(\,)(\s+)(' + stringdouble + ')', 
-             bygroups(Punctuation, Text, String.Double)), 
-            (r'(\,)(\s+)(' + stringsingle + ')', 
-             bygroups(Punctuation, Text, String.Single)), 
+            (r'(\,)(\s+)(' + stringdouble + ')',
+             bygroups(Punctuation, Text, String.Double)),
+            (r'(\,)(\s+)(' + stringsingle + ')',
+             bygroups(Punctuation, Text, String.Single)),
             (r'\)', Punctuation),
             (r'(\s+)(\%)', bygroups(Text, Name.Decorator), 'annotationname'),
-            (r'(\s+)(variable)(\s+)(\$)', 
-             bygroups(Text, Keyword.Declaration, Text, Name.Variable), 'varname'), 
-            (r'(\s+)(function)(\s+)', 
-             bygroups(Text, Keyword.Declaration, Text), 'root') 
+            (r'(\s+)(variable)(\s+)(\$)',
+             bygroups(Text, Keyword.Declaration, Text, Name.Variable), 'varname'),
+            (r'(\s+)(function)(\s+)',
+             bygroups(Text, Keyword.Declaration, Text), 'root')
         ],
         'varname': [
             (r'\(:', Comment, 'comment'),
-            (r'(' + qname + r')(\()?', bygroups(Name, Punctuation), 'operator'), 
+            (r'(' + qname + r')(\()?', bygroups(Name, Punctuation), 'operator'),
         ],
         'singletype': [
             include('whitespace'),
@@ -480,10 +480,10 @@ class XQueryLexer(ExtendedRegexLexer):
              bygroups(Keyword, Text, Keyword), 'singletype'),
             (r'(treat)(\s+)(as)', bygroups(Keyword, Text, Keyword)),
             (r'(instance)(\s+)(of)', bygroups(Keyword, Text, Keyword)),
-            (r'(case)(\s+)(' + stringdouble + ')', 
-             bygroups(Keyword, Text, String.Double), 'itemtype'), 
-            (r'(case)(\s+)(' + stringsingle + ')', 
-             bygroups(Keyword, Text, String.Single), 'itemtype'), 
+            (r'(case)(\s+)(' + stringdouble + ')',
+             bygroups(Keyword, Text, String.Double), 'itemtype'),
+            (r'(case)(\s+)(' + stringsingle + ')',
+             bygroups(Keyword, Text, String.Single), 'itemtype'),
             (r'case|as', Keyword, 'itemtype'),
             (r'(\))(\s*)(as)', bygroups(Operator, Text, Keyword), 'itemtype'),
             (ncname + r':\*', Keyword.Type, 'operator'),
@@ -643,9 +643,9 @@ class XQueryLexer(ExtendedRegexLexer):
              bygroups(Keyword.Declaration, Text, Keyword.Declaration, Text, Keyword.Declaration), 'operator'),
             (r'(declare)(\s+)(context)(\s+)(item)',
              bygroups(Keyword.Declaration, Text, Keyword.Declaration, Text, Keyword.Declaration), 'operator'),
-            (ncname + r':\*', Name, 'operator'), 
-            (r'\*:'+ncname, Name.Tag, 'operator'), 
-            (r'\*', Name.Tag, 'operator'), 
+            (ncname + r':\*', Name, 'operator'),
+            (r'\*:'+ncname, Name.Tag, 'operator'),
+            (r'\*', Name.Tag, 'operator'),
             (stringdouble, String.Double, 'operator'),
             (stringsingle, String.Single, 'operator'),
 
@@ -661,8 +661,8 @@ class XQueryLexer(ExtendedRegexLexer):
 
             # NAMESPACE KEYWORD
             (r'(declare)(\s+)(default)(\s+)(element|function)',
-             bygroups(Keyword.Declaration, Text, Keyword.Declaration, Text, Keyword.Declaration), 
-             'namespacekeyword'), 
+             bygroups(Keyword.Declaration, Text, Keyword.Declaration, Text, Keyword.Declaration),
+             'namespacekeyword'),
             (r'(import)(\s+)(schema|module)',
              bygroups(Keyword.Pseudo, Text, Keyword.Pseudo), 'namespacekeyword'),
             (r'(declare)(\s+)(copy-namespaces)',
@@ -862,7 +862,7 @@ class QmlLexer(RegexLexer):
 
 
 class CirruLexer(RegexLexer):
-    r""" 
+    r"""
     Syntax rules of Cirru can be found at:
     http://cirru.org/
 

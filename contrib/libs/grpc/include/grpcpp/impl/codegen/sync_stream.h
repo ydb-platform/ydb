@@ -1,23 +1,23 @@
-/* 
- * 
+/*
+ *
  * Copyright 2019 gRPC authors.
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- */ 
- 
-#ifndef GRPCPP_IMPL_CODEGEN_SYNC_STREAM_H 
-#define GRPCPP_IMPL_CODEGEN_SYNC_STREAM_H 
- 
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef GRPCPP_IMPL_CODEGEN_SYNC_STREAM_H
+#define GRPCPP_IMPL_CODEGEN_SYNC_STREAM_H
+
 #include <grpcpp/impl/codegen/call.h>
 #include <grpcpp/impl/codegen/channel_interface.h>
 #include <grpcpp/impl/codegen/client_context.h>
@@ -26,15 +26,15 @@
 #include <grpcpp/impl/codegen/server_context.h>
 #include <grpcpp/impl/codegen/service_type.h>
 #include <grpcpp/impl/codegen/status.h>
- 
-namespace grpc { 
- 
-namespace internal { 
+
+namespace grpc {
+
+namespace internal {
 /// Common interface for all synchronous client side streaming.
 class ClientStreamingInterface {
  public:
   virtual ~ClientStreamingInterface() {}
- 
+
   /// Block waiting until the stream finishes and a final status of the call is
   /// available.
   ///
@@ -61,12 +61,12 @@ class ClientStreamingInterface {
   ///     possible trailing metadata sent from the server.
   virtual ::grpc::Status Finish() = 0;
 };
- 
+
 /// Common interface for all synchronous server side streaming.
 class ServerStreamingInterface {
  public:
   virtual ~ServerStreamingInterface() {}
- 
+
   /// Block to send initial metadata to client.
   /// This call is optional, but if it is used, it cannot be used concurrently
   /// with or after the \a Finish method.
@@ -77,15 +77,15 @@ class ServerStreamingInterface {
 };
 
 /// An interface that yields a sequence of messages of type \a R.
-template <class R> 
+template <class R>
 class ReaderInterface {
  public:
   virtual ~ReaderInterface() {}
- 
+
   /// Get an upper bound on the next message size available for reading on this
   /// stream.
   virtual bool NextMessageSize(uint32_t* sz) = 0;
- 
+
   /// Block to read a message and parse to \a msg. Returns \a true on success.
   /// This is thread-safe with respect to \a Write or \WritesDone methods on
   /// the same stream. It should not be called concurrently with another \a
@@ -98,13 +98,13 @@ class ReaderInterface {
   /// (or been cancelled).
   virtual bool Read(R* msg) = 0;
 };
- 
+
 /// An interface that can be fed a sequence of messages of type \a W.
-template <class W> 
+template <class W>
 class WriterInterface {
  public:
   virtual ~WriterInterface() {}
- 
+
   /// Block to write \a msg to the stream with WriteOptions \a options.
   /// This is thread-safe with respect to \a ReaderInterface::Read
   ///
@@ -113,7 +113,7 @@ class WriterInterface {
   ///
   /// \return \a true on success, \a false when the stream has been closed.
   virtual bool Write(const W& msg, ::grpc::WriteOptions options) = 0;
- 
+
   /// Block to write \a msg to the stream with default write options.
   /// This is thread-safe with respect to \a ReaderInterface::Read
   ///
@@ -141,10 +141,10 @@ class WriterInterface {
   }
 };
 
-}  // namespace internal 
- 
+}  // namespace internal
+
 /// Client-side interface for streaming reads of message of type \a R.
-template <class R> 
+template <class R>
 class ClientReaderInterface : public internal::ClientStreamingInterface,
                               public internal::ReaderInterface<R> {
  public:
@@ -154,9 +154,9 @@ class ClientReaderInterface : public internal::ClientStreamingInterface,
   /// the metadata will be available in ClientContext after the first read.
   virtual void WaitForInitialMetadata() = 0;
 };
- 
+
 namespace internal {
-template <class R> 
+template <class R>
 class ClientReaderFactory {
  public:
   template <class W>
@@ -168,7 +168,7 @@ class ClientReaderFactory {
   }
 };
 }  // namespace internal
- 
+
 /// Synchronous (blocking) client-side API for doing server-streaming RPCs,
 /// where the stream of messages coming from the server has messages
 /// of type \a R.
@@ -262,7 +262,7 @@ class ClientReader final : public ClientReaderInterface<R> {
 };
 
 /// Client-side interface for streaming writes of message type \a W.
-template <class W> 
+template <class W>
 class ClientWriterInterface : public internal::ClientStreamingInterface,
                               public internal::WriterInterface<W> {
  public:
@@ -274,9 +274,9 @@ class ClientWriterInterface : public internal::ClientStreamingInterface,
   /// \return Whether the writes were successful.
   virtual bool WritesDone() = 0;
 };
- 
+
 namespace internal {
-template <class W> 
+template <class W>
 class ClientWriterFactory {
  public:
   template <class R>
@@ -287,7 +287,7 @@ class ClientWriterFactory {
   }
 };
 }  // namespace internal
- 
+
 /// Synchronous (blocking) client-side API for doing client-streaming RPCs,
 /// where the outgoing message stream coming from the client has messages of
 /// type \a W.
@@ -406,7 +406,7 @@ class ClientWriter : public ClientWriterInterface<W> {
 /// Client-side interface for bi-directional streaming with
 /// client-to-server stream messages of type \a W and
 /// server-to-client stream messages of type \a R.
-template <class W, class R> 
+template <class W, class R>
 class ClientReaderWriterInterface : public internal::ClientStreamingInterface,
                                     public internal::WriterInterface<W>,
                                     public internal::ReaderInterface<R> {
@@ -416,7 +416,7 @@ class ClientReaderWriterInterface : public internal::ClientStreamingInterface,
   /// the first read. Calling this method is optional, and if it is not called
   /// the metadata will be available in ClientContext after the first read.
   virtual void WaitForInitialMetadata() = 0;
- 
+
   /// Half close writing from the client. (signal that the stream of messages
   /// coming from the client is complete).
   /// Blocks until currently-pending writes are completed.
@@ -427,7 +427,7 @@ class ClientReaderWriterInterface : public internal::ClientStreamingInterface,
 };
 
 namespace internal {
-template <class W, class R> 
+template <class W, class R>
 class ClientReaderWriterFactory {
  public:
   static ClientReaderWriter<W, R>* Create(
@@ -438,7 +438,7 @@ class ClientReaderWriterFactory {
   }
 };
 }  // namespace internal
- 
+
 /// Synchronous (blocking) client-side API for bi-directional streaming RPCs,
 /// where the outgoing message stream coming from the client has messages of
 /// type \a W, and the incoming messages stream coming from the server has
@@ -569,14 +569,14 @@ class ClientReaderWriter final : public ClientReaderWriterInterface<W, R> {
 };
 
 /// Server-side interface for streaming reads of message of type \a R.
-template <class R> 
+template <class R>
 class ServerReaderInterface : public internal::ServerStreamingInterface,
                               public internal::ReaderInterface<R> {};
- 
+
 /// Synchronous (blocking) server-side API for doing client-streaming RPCs,
 /// where the incoming message stream coming from the client has messages of
 /// type \a R.
-template <class R> 
+template <class R>
 class ServerReader final : public ServerReaderInterface<R> {
  public:
   /// See the \a ServerStreamingInterface.SendInitialMetadata method
@@ -584,7 +584,7 @@ class ServerReader final : public ServerReaderInterface<R> {
   /// \a ServerContext associated with this call.
   void SendInitialMetadata() override {
     GPR_CODEGEN_ASSERT(!ctx_->sent_initial_metadata_);
- 
+
     ::grpc::internal::CallOpSet<::grpc::internal::CallOpSendInitialMetadata>
         ops;
     ops.SendInitialMetadata(&ctx_->initial_metadata_,
@@ -622,14 +622,14 @@ class ServerReader final : public ServerReaderInterface<R> {
 };
 
 /// Server-side interface for streaming writes of message of type \a W.
-template <class W> 
+template <class W>
 class ServerWriterInterface : public internal::ServerStreamingInterface,
                               public internal::WriterInterface<W> {};
- 
+
 /// Synchronous (blocking) server-side API for doing for doing a
 /// server-streaming RPCs, where the outgoing message stream coming from the
 /// server has messages of type \a W.
-template <class W> 
+template <class W>
 class ServerWriter final : public ServerWriterInterface<W> {
  public:
   /// See the \a ServerStreamingInterface.SendInitialMetadata method
@@ -638,7 +638,7 @@ class ServerWriter final : public ServerWriterInterface<W> {
   /// \a ServerContext associated with this call.
   void SendInitialMetadata() override {
     GPR_CODEGEN_ASSERT(!ctx_->sent_initial_metadata_);
- 
+
     ::grpc::internal::CallOpSet<::grpc::internal::CallOpSendInitialMetadata>
         ops;
     ops.SendInitialMetadata(&ctx_->initial_metadata_,
@@ -697,19 +697,19 @@ class ServerWriter final : public ServerWriterInterface<W> {
 };
 
 /// Server-side interface for bi-directional streaming.
-template <class W, class R> 
+template <class W, class R>
 class ServerReaderWriterInterface : public internal::ServerStreamingInterface,
                                     public internal::WriterInterface<W>,
                                     public internal::ReaderInterface<R> {};
- 
+
 /// Actual implementation of bi-directional streaming
 namespace internal {
-template <class W, class R> 
+template <class W, class R>
 class ServerReaderWriterBody final {
  public:
   ServerReaderWriterBody(grpc::internal::Call* call, ::grpc::ServerContext* ctx)
       : call_(call), ctx_(ctx) {}
- 
+
   void SendInitialMetadata() {
     GPR_CODEGEN_ASSERT(!ctx_->sent_initial_metadata_);
 
@@ -816,7 +816,7 @@ class ServerReaderWriter final : public ServerReaderWriterInterface<W, R> {
 /// the message. A key difference relative to streaming: ServerUnaryStreamer
 /// must have exactly 1 Read and exactly 1 Write, in that order, to function
 /// correctly. Otherwise, the RPC is in error.
-template <class RequestType, class ResponseType> 
+template <class RequestType, class ResponseType>
 class ServerUnaryStreamer final
     : public ServerReaderWriterInterface<ResponseType, RequestType> {
  public:
@@ -825,7 +825,7 @@ class ServerUnaryStreamer final
   ///    - the \a ServerContext associated with this call will be used for
   ///      sending initial metadata.
   void SendInitialMetadata() override { body_.SendInitialMetadata(); }
- 
+
   /// Get an upper bound on the request message size from the client.
   bool NextMessageSize(uint32_t* sz) override {
     return body_.NextMessageSize(sz);
@@ -882,7 +882,7 @@ class ServerUnaryStreamer final
 /// This is invoked through a server-side streaming call on the client side,
 /// but the server responds to it as though it were a bidi streaming call that
 /// must first have exactly 1 Read and then any number of Writes.
-template <class RequestType, class ResponseType> 
+template <class RequestType, class ResponseType>
 class ServerSplitStreamer final
     : public ServerReaderWriterInterface<ResponseType, RequestType> {
  public:
@@ -891,7 +891,7 @@ class ServerSplitStreamer final
   ///    - the \a ServerContext associated with this call will be used for
   ///      sending initial metadata.
   void SendInitialMetadata() override { body_.SendInitialMetadata(); }
- 
+
   /// Get an upper bound on the request message size from the client.
   bool NextMessageSize(uint32_t* sz) override {
     return body_.NextMessageSize(sz);
@@ -938,6 +938,6 @@ class ServerSplitStreamer final
       : body_(call, ctx), read_done_(false) {}
 };
 
-}  // namespace grpc 
- 
-#endif  // GRPCPP_IMPL_CODEGEN_SYNC_STREAM_H 
+}  // namespace grpc
+
+#endif  // GRPCPP_IMPL_CODEGEN_SYNC_STREAM_H

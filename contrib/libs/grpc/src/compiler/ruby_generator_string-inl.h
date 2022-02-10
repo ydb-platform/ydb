@@ -1,18 +1,18 @@
 /*
  *
- * Copyright 2015 gRPC authors. 
+ * Copyright 2015 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  */
 
@@ -81,23 +81,23 @@ inline bool ReplacePrefix(TString* s, const TString& from,
   return true;
 }
 
-// Modularize converts a string into a ruby module compatible name 
+// Modularize converts a string into a ruby module compatible name
 inline TString Modularize(TString s) {
   if (s.empty()) {
     return s;
   }
   TString new_string = "";
-  bool was_last_underscore = false; 
-  new_string.append(1, ::toupper(s[0])); 
+  bool was_last_underscore = false;
+  new_string.append(1, ::toupper(s[0]));
   for (TString::size_type i = 1; i < s.size(); ++i) {
-    if (was_last_underscore && s[i] != '_') { 
-      new_string.append(1, ::toupper(s[i])); 
-    } else if (s[i] != '_') { 
-      new_string.append(1, s[i]); 
-    } 
-    was_last_underscore = s[i] == '_'; 
-  } 
-  return new_string; 
+    if (was_last_underscore && s[i] != '_') {
+      new_string.append(1, ::toupper(s[i]));
+    } else if (s[i] != '_') {
+      new_string.append(1, s[i]);
+    }
+    was_last_underscore = s[i] == '_';
+  }
+  return new_string;
 }
 
 // RubyPackage gets the ruby package in either proto or ruby_package format
@@ -135,7 +135,7 @@ inline TString RubyTypeOf(const grpc::protobuf::Descriptor* descriptor) {
         res += "::";  // switch '.' to the ruby module delim
       }
       if (i < prefixes_and_type.size() - 1) {
-        res += Modularize(prefixes_and_type[i]);  // capitalize pkgs 
+        res += Modularize(prefixes_and_type[i]);  // capitalize pkgs
       } else {
         res += prefixes_and_type[i];
       }

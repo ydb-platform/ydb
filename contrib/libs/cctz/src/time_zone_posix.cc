@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//   https://www.apache.org/licenses/LICENSE-2.0 
+//   https://www.apache.org/licenses/LICENSE-2.0
 //
 //   Unless required by applicable law or agreed to in writing, software
 //   distributed under the License is distributed on an "AS IS" BASIS,
@@ -98,9 +98,9 @@ const char* ParseDateTime(const char* p, PosixTransition* res) {
           int weekday = 0;
           if ((p = ParseInt(p + 1, 0, 6, &weekday)) != nullptr) {
             res->date.fmt = PosixTransition::M;
-            res->date.m.month = static_cast<std::int_fast8_t>(month); 
-            res->date.m.week = static_cast<std::int_fast8_t>(week); 
-            res->date.m.weekday = static_cast<std::int_fast8_t>(weekday); 
+            res->date.m.month = static_cast<std::int_fast8_t>(month);
+            res->date.m.week = static_cast<std::int_fast8_t>(week);
+            res->date.m.weekday = static_cast<std::int_fast8_t>(weekday);
           }
         }
       }
@@ -108,13 +108,13 @@ const char* ParseDateTime(const char* p, PosixTransition* res) {
       int day = 0;
       if ((p = ParseInt(p + 1, 1, 365, &day)) != nullptr) {
         res->date.fmt = PosixTransition::J;
-        res->date.j.day = static_cast<std::int_fast16_t>(day); 
+        res->date.j.day = static_cast<std::int_fast16_t>(day);
       }
     } else {
       int day = 0;
       if ((p = ParseInt(p, 0, 365, &day)) != nullptr) {
         res->date.fmt = PosixTransition::N;
-        res->date.n.day = static_cast<std::int_fast16_t>(day); 
+        res->date.n.day = static_cast<std::int_fast16_t>(day);
       }
     }
   }

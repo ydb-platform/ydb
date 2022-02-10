@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #include <aws/core/http/standard/StandardHttpRequest.h>
 
@@ -35,13 +35,13 @@ StandardHttpRequest::StandardHttpRequest(const URI& uri, HttpMethod method) :
 {
     if(IsDefaultPort(uri))
     {
-        StandardHttpRequest::SetHeaderValue(HOST_HEADER, uri.GetAuthority()); 
+        StandardHttpRequest::SetHeaderValue(HOST_HEADER, uri.GetAuthority());
     }
     else
     {
         Aws::StringStream host;
         host << uri.GetAuthority() << ":" << uri.GetPort();
-        StandardHttpRequest::SetHeaderValue(HOST_HEADER, host.str()); 
+        StandardHttpRequest::SetHeaderValue(HOST_HEADER, host.str());
     }
 }
 

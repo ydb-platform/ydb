@@ -18,10 +18,10 @@
 #include <cstdint>
 #include <memory>
 
-#include "y_absl/base/config.h" 
- 
+#include "y_absl/base/config.h"
+
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // This is a stateful allocator, but the state lives outside of the
@@ -108,7 +108,7 @@ class CountingAllocator {
 };
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_COUNTING_ALLOCATOR_H_

@@ -21,7 +21,7 @@
 #include <cassert>
 #include <cerrno>
 #include <cstdlib>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <type_traits>
 
 #include "y_absl/base/port.h"
@@ -29,7 +29,7 @@
 #include "y_absl/strings/numbers.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 namespace {
 
@@ -334,7 +334,7 @@ template <typename T>
 bool ConvertFloatArg(T v, const FormatConversionSpecImpl conv,
                      FormatSinkImpl *sink) {
   return FormatConversionCharIsFloat(conv.conversion_char()) &&
-         ConvertFloatImpl(v, conv, sink); 
+         ConvertFloatImpl(v, conv, sink);
 }
 
 inline bool ConvertStringArg(string_view v, const FormatConversionSpecImpl conv,
@@ -374,7 +374,7 @@ FormatConvertImpl(const char *v, const FormatConversionSpecImpl conv,
   } else if (conv.precision() < 0) {
     len = std::strlen(v);
   } else {
-    // If precision is set, we look for the NUL-terminator on the valid range. 
+    // If precision is set, we look for the NUL-terminator on the valid range.
     len = std::find(v, v + conv.precision(), '\0') - v;
   }
   return {ConvertStringArg(string_view(v, len), conv, sink)};
@@ -484,5 +484,5 @@ ABSL_INTERNAL_FORMAT_DISPATCH_OVERLOADS_EXPAND_();
 
 }  // namespace str_format_internal
 
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl

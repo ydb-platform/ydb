@@ -82,17 +82,17 @@ namespace {
         THolder<TApiInitializer> ApiInitializer;
     };
 
-} // anonymous 
+} // anonymous
 
-TS3User::TS3User() { 
-    Singleton<TApiOwner>()->Ref(); 
-} 
+TS3User::TS3User() {
+    Singleton<TApiOwner>()->Ref();
+}
 
-TS3User::~TS3User() { 
-    Singleton<TApiOwner>()->UnRef(); 
-} 
+TS3User::~TS3User() {
+    Singleton<TApiOwner>()->UnRef();
+}
 
-class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User { 
+class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
     template <typename TEvRequest, typename TEvResponse>
     class TContextBase: public AsyncCallerContext {
     public:

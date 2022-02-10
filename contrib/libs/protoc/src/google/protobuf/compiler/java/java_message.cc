@@ -259,7 +259,7 @@ void ImmutableMessageGenerator::GenerateInterface(io::Printer* printer) {
                                 /* immutable = */ true, "OrBuilder");
   if (descriptor_->extension_range_count() > 0) {
     printer->Print(
-        "$deprecation$public interface ${$$classname$OrBuilder$}$ extends\n" 
+        "$deprecation$public interface ${$$classname$OrBuilder$}$ extends\n"
         "    $extra_interfaces$\n"
         "    com.google.protobuf.GeneratedMessage$ver$.\n"
         "        ExtendableMessageOrBuilder<$classname$> {\n",
@@ -270,7 +270,7 @@ void ImmutableMessageGenerator::GenerateInterface(io::Printer* printer) {
         GeneratedCodeVersionSuffix());
   } else {
     printer->Print(
-        "$deprecation$public interface ${$$classname$OrBuilder$}$ extends\n" 
+        "$deprecation$public interface ${$$classname$OrBuilder$}$ extends\n"
         "    $extra_interfaces$\n"
         "    com.google.protobuf.MessageOrBuilder {\n",
         "deprecation",
@@ -278,7 +278,7 @@ void ImmutableMessageGenerator::GenerateInterface(io::Printer* printer) {
         "extra_interfaces", ExtraMessageOrBuilderInterfaces(descriptor_),
         "classname", descriptor_->name(), "{", "", "}", "");
   }
-  printer->Annotate("{", "}", descriptor_); 
+  printer->Annotate("{", "}", descriptor_);
 
   printer->Indent();
   for (int i = 0; i < descriptor_->field_count(); i++) {
@@ -320,9 +320,9 @@ void ImmutableMessageGenerator::Generate(io::Printer* printer) {
   // The builder_type stores the super type name of the nested Builder class.
   TProtoStringType builder_type;
   if (descriptor_->extension_range_count() > 0) {
-    printer->Print( 
-        variables, 
-        "$deprecation$public $static$final class $classname$ extends\n"); 
+    printer->Print(
+        variables,
+        "$deprecation$public $static$final class $classname$ extends\n");
     printer->Annotate("classname", descriptor_);
     printer->Print(
         variables,
@@ -335,9 +335,9 @@ void ImmutableMessageGenerator::Generate(io::Printer* printer) {
         name_resolver_->GetImmutableClassName(descriptor_),
         GeneratedCodeVersionSuffix());
   } else {
-    printer->Print( 
-        variables, 
-        "$deprecation$public $static$final class $classname$ extends\n"); 
+    printer->Print(
+        variables,
+        "$deprecation$public $static$final class $classname$ extends\n");
     printer->Annotate("classname", descriptor_);
     printer->Print(variables,
                    "    com.google.protobuf.GeneratedMessage$ver$ implements\n"
@@ -348,7 +348,7 @@ void ImmutableMessageGenerator::Generate(io::Printer* printer) {
                          GeneratedCodeVersionSuffix());
   }
   printer->Print("private static final long serialVersionUID = 0L;\n");
- 
+
   printer->Indent();
   // Using builder_type, instead of Builder, prevents the Builder class from
   // being loaded into PermGen space when the default instance is created.
@@ -635,9 +635,9 @@ void ImmutableMessageGenerator::GenerateMessageSerializationMethods(
     }
   }
 
-  if (descriptor_->options().message_set_wire_format()) { 
+  if (descriptor_->options().message_set_wire_format()) {
     printer->Print("unknownFields.writeAsMessageSetTo(output);\n");
-  } else { 
+  } else {
     printer->Print("unknownFields.writeTo(output);\n");
   }
 
@@ -666,9 +666,9 @@ void ImmutableMessageGenerator::GenerateMessageSerializationMethods(
     }
   }
 
-  if (descriptor_->options().message_set_wire_format()) { 
+  if (descriptor_->options().message_set_wire_format()) {
     printer->Print("size += unknownFields.getSerializedSizeAsMessageSet();\n");
-  } else { 
+  } else {
     printer->Print("size += unknownFields.getSerializedSize();\n");
   }
 
@@ -1062,10 +1062,10 @@ void ImmutableMessageGenerator::GenerateEqualsAndHashCode(
     printer->Print("}\n");
   }
 
-  // Always consider unknown fields for equality. This will sometimes return 
-  // false for non-canonical ordering when running in LITE_RUNTIME but it's 
-  // the best we can do. 
-  printer->Print( 
+  // Always consider unknown fields for equality. This will sometimes return
+  // false for non-canonical ordering when running in LITE_RUNTIME but it's
+  // the best we can do.
+  printer->Print(
       "if (!unknownFields.equals(other.unknownFields)) return false;\n");
   if (descriptor_->extension_range_count() > 0) {
     printer->Print(
@@ -1090,12 +1090,12 @@ void ImmutableMessageGenerator::GenerateEqualsAndHashCode(
       "}\n"
       "int hash = 41;\n");
 
-  // If we output a getDescriptor() method, use that as it is more efficient. 
-  if (descriptor_->options().no_standard_descriptor_accessor()) { 
-    printer->Print("hash = (19 * hash) + getDescriptorForType().hashCode();\n"); 
-  } else { 
-    printer->Print("hash = (19 * hash) + getDescriptor().hashCode();\n"); 
-  } 
+  // If we output a getDescriptor() method, use that as it is more efficient.
+  if (descriptor_->options().no_standard_descriptor_accessor()) {
+    printer->Print("hash = (19 * hash) + getDescriptorForType().hashCode();\n");
+  } else {
+    printer->Print("hash = (19 * hash) + getDescriptor().hashCode();\n");
+  }
 
   // hashCode non-oneofs.
   for (int i = 0; i < descriptor_->field_count(); i++) {
@@ -1199,7 +1199,7 @@ void ImmutableMessageGenerator::GenerateParsingConstructor(
                    GetBitFieldName(i));
   }
 
-  printer->Print( 
+  printer->Print(
       "com.google.protobuf.UnknownFieldSet.Builder unknownFields =\n"
       "    com.google.protobuf.UnknownFieldSet.newBuilder();\n");
 
@@ -1286,8 +1286,8 @@ void ImmutableMessageGenerator::GenerateParsingConstructor(
     field_generators_.get(field).GenerateParsingDoneCode(printer);
   }
 
-  // Make unknown fields immutable. 
-  printer->Print("this.unknownFields = unknownFields.build();\n"); 
+  // Make unknown fields immutable.
+  printer->Print("this.unknownFields = unknownFields.build();\n");
 
   // Make extensions immutable.
   printer->Print("makeExtensionsImmutable();\n");

@@ -159,7 +159,7 @@ public:
                           is_direct<Source>(), is_direct<Sink>() );
     }
 private:
-    BOOST_DELETED_FUNCTION(copy_operation& operator=(const copy_operation&)); 
+    BOOST_DELETED_FUNCTION(copy_operation& operator=(const copy_operation&));
     Source&          src_;
     Sink&            snk_;
     std::streamsize  buffer_size_;

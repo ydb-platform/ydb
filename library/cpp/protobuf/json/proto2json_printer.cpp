@@ -22,12 +22,12 @@ namespace NProtobufJson {
 
             if (config.UseJsonName) {
                 Y_ASSERT(!field.json_name().empty());
-                NewKeyStr = field.json_name(); 
-                if (!field.has_json_name() && !NewKeyStr.empty()) { 
-                    // FIXME: https://st.yandex-team.ru/CONTRIB-139 
-                    NewKeyStr[0] = AsciiToLower(NewKeyStr[0]); 
-                } 
-                NewKeyBuf = NewKeyStr; 
+                NewKeyStr = field.json_name();
+                if (!field.has_json_name() && !NewKeyStr.empty()) {
+                    // FIXME: https://st.yandex-team.ru/CONTRIB-139
+                    NewKeyStr[0] = AsciiToLower(NewKeyStr[0]);
+                }
+                NewKeyBuf = NewKeyStr;
                 return;
             }
 
@@ -53,7 +53,7 @@ namespace NProtobufJson {
 
                 case TProto2JsonConfig::FieldNameCamelCase: {
                     NewKeyStr = field.name();
-                    if (!NewKeyStr.empty()) { 
+                    if (!NewKeyStr.empty()) {
                         NewKeyStr[0] = AsciiToLower(NewKeyStr[0]);
                     }
                     NewKeyBuf = NewKeyStr;

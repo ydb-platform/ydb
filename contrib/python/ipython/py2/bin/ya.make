@@ -1,11 +1,11 @@
-PROGRAM(ipython) 
+PROGRAM(ipython)
 
-OWNER(g:python-contrib borman nslus) 
+OWNER(g:python-contrib borman nslus)
 
-PEERDIR( 
+PEERDIR(
     contrib/python/ipython
 )
 
-PY_MAIN(IPython:start_ipython) 
+PY_MAIN(IPython:start_ipython)
 
 END()

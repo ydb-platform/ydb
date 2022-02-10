@@ -274,7 +274,7 @@ public:
 		alloc(m_finals, m.statesCount);
 
 		// Build letter translation table
-		Fill(m_letters, m_letters + MaxChar, 0); 
+		Fill(m_letters, m_letters + MaxChar, 0);
 		for (auto&& letter : fsm.Letters())
 			for (auto&& character : letter.second.second)
 				m_letters[character] = letter.second.first;

@@ -5,7 +5,7 @@
 {"_bisect", init_bisect},
 {"_collections", init_collections},
 {"_csv", init_csv},
-{"_elementtree", init_elementtree}, 
+{"_elementtree", init_elementtree},
 {"_functools", init_functools},
 {"_hashlib", init_hashlib},
 {"_heapq", init_heapq},
@@ -54,7 +54,7 @@
 #ifdef _DARWIN_
 #ifndef __IOS__
 {"_multiprocessing", init_multiprocessing},
-{"_scproxy", init_scproxy}, 
+{"_scproxy", init_scproxy},
 #endif
 #endif
 

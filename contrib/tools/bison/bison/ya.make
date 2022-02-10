@@ -2,13 +2,13 @@ OWNER(g:contrib)
 
 PROGRAM()
 
-LICENSE( 
-    GPL-3.0-or-later AND 
-    GPL-3.0-or-later WITH Bison-exception-2.2 
-) 
- 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE(
+    GPL-3.0-or-later AND
+    GPL-3.0-or-later WITH Bison-exception-2.2
+)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 IF (NOT MUSL)
     NO_RUNTIME()
 ENDIF()

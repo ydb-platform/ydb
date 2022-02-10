@@ -411,18 +411,18 @@ class LatexFormatter(Formatter):
         outfile.write('\\end{' + self.envname + '}\n')
 
         if self.full:
-            encoding = self.encoding or 'utf8' 
-            # map known existings encodings from LaTeX distribution 
-            encoding = { 
-                'utf_8': 'utf8', 
-                'latin_1': 'latin1', 
-                'iso_8859_1': 'latin1', 
-            }.get(encoding.replace('-', '_'), encoding) 
+            encoding = self.encoding or 'utf8'
+            # map known existings encodings from LaTeX distribution
+            encoding = {
+                'utf_8': 'utf8',
+                'latin_1': 'latin1',
+                'iso_8859_1': 'latin1',
+            }.get(encoding.replace('-', '_'), encoding)
             realoutfile.write(DOC_TEMPLATE %
                 dict(docclass  = self.docclass,
                      preamble  = self.preamble,
                      title     = self.title,
-                     encoding  = encoding, 
+                     encoding  = encoding,
                      styledefs = self.get_style_defs(),
                      code      = outfile.getvalue()))
 

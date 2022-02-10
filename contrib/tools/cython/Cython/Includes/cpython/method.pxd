@@ -1,5 +1,5 @@
-from .object cimport PyObject 
- 
+from .object cimport PyObject
+
 cdef extern from "Python.h":
     ############################################################################
     # 7.5.4 Method Objects

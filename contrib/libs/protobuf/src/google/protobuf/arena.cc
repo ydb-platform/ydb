@@ -30,25 +30,25 @@
 
 #include <google/protobuf/arena.h>
 
-#include <algorithm> 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <limits> 
+#include <limits>
 #include <typeinfo>
- 
+
 #include <google/protobuf/arena_impl.h>
- 
+
 #include <google/protobuf/stubs/mutex.h>
-#ifdef ADDRESS_SANITIZER 
-#include <sanitizer/asan_interface.h> 
-#endif  // ADDRESS_SANITIZER 
- 
+#ifdef ADDRESS_SANITIZER
+#include <sanitizer/asan_interface.h>
+#endif  // ADDRESS_SANITIZER
+
 #include <google/protobuf/port_def.inc>
 
 namespace google {
 namespace protobuf {
-namespace internal { 
+namespace internal {
 
 static SerialArena::Memory AllocateMemory(const AllocationPolicy* policy_ptr,
                                           size_t last_size, size_t min_bytes) {
@@ -163,9 +163,9 @@ void SerialArena::AllocateNewBlock(size_t n, const AllocationPolicy* policy) {
   ptr_ = head_->Pointer(kBlockHeaderSize);
   limit_ = head_->Pointer(head_->size);
 
-#ifdef ADDRESS_SANITIZER 
+#ifdef ADDRESS_SANITIZER
   ASAN_POISON_MEMORY_REGION(ptr_, limit_ - ptr_);
-#endif  // ADDRESS_SANITIZER 
+#endif  // ADDRESS_SANITIZER
 }
 
 uint64 SerialArena::SpaceUsed() const {
@@ -222,9 +222,9 @@ void ThreadSafeArena::InitializeFrom(void* mem, size_t size) {
   if (mem != nullptr && size >= kBlockHeaderSize + kSerialArenaSize) {
     alloc_policy_ |= kUserOwnedInitialBlock;
     SetInitialBlock(mem, size);
-  } 
-} 
- 
+  }
+}
+
 void ThreadSafeArena::InitializeWithPolicy(void* mem, size_t size,
                                            bool record_allocs,
                                            AllocationPolicy policy) {
@@ -244,9 +244,9 @@ void ThreadSafeArena::InitializeWithPolicy(void* mem, size_t size,
     auto tmp = AllocateMemory(&policy, 0, kMinimumSize);
     mem = tmp.ptr;
     size = tmp.size;
-  } 
+  }
   SetInitialBlock(mem, size);
- 
+
   auto sa = threads_.load(std::memory_order_relaxed);
   // We ensured enough space so this cannot fail.
   void* p;
@@ -257,7 +257,7 @@ void ThreadSafeArena::InitializeWithPolicy(void* mem, size_t size,
   new (p) AllocationPolicy{policy};
   alloc_policy_ |= reinterpret_cast<intptr_t>(p);
 }
- 
+
 void ThreadSafeArena::Init(bool record_allocs) {
   ThreadCache& tc = thread_cache();
   auto id = tc.next_lifecycle_id;
@@ -283,7 +283,7 @@ void ThreadSafeArena::SetInitialBlock(void* mem, size_t size) {
   serial->set_next(NULL);
   threads_.store(serial, std::memory_order_relaxed);
   CacheSerialArena(serial);
-} 
+}
 
 ThreadSafeArena::~ThreadSafeArena() {
   // Have to do this in a first pass, because some of the destructors might
@@ -304,8 +304,8 @@ ThreadSafeArena::~ThreadSafeArena() {
   }
 
   if (collector) collector->OnDestroy(space_allocated);
-} 
- 
+}
+
 SerialArena::Memory ThreadSafeArena::Free(size_t* space_allocated) {
   SerialArena::Memory mem = {nullptr, 0};
   auto deallocator = GetDeallocator(AllocPolicy(), space_allocated);
@@ -313,14 +313,14 @@ SerialArena::Memory ThreadSafeArena::Free(size_t* space_allocated) {
     if (mem.ptr) deallocator(mem);
     mem = a->Free(deallocator);
   });
-  return mem; 
-} 
- 
+  return mem;
+}
+
 uint64 ThreadSafeArena::Reset() {
   // Have to do this in a first pass, because some of the destructors might
   // refer to memory in other blocks.
   CleanupList();
- 
+
   // Discard all blocks except the special block (if present).
   size_t space_allocated = 0;
   auto mem = Free(&space_allocated);
@@ -384,7 +384,7 @@ void* ThreadSafeArena::AllocateAlignedFallback(size_t n,
   return GetSerialArenaFallback(&thread_cache())
       ->AllocateAligned(n, AllocPolicy());
 }
- 
+
 PROTOBUF_NOINLINE
 std::pair<void*, SerialArena::CleanupNode*>
 ThreadSafeArena::AllocateAlignedWithCleanupFallback(
@@ -394,7 +394,7 @@ ThreadSafeArena::AllocateAlignedWithCleanupFallback(
     SerialArena* arena;
     if (GetSerialArenaFast(LifeCycleId(), &arena)) {
       return arena->AllocateAlignedWithCleanup(n, AllocPolicy());
-    } 
+    }
   }
   return GetSerialArenaFallback(&thread_cache())
       ->AllocateAlignedWithCleanup(n, AllocPolicy());
@@ -427,7 +427,7 @@ uint64 ThreadSafeArena::SpaceUsed() const {
 void ThreadSafeArena::CleanupList() {
   PerSerialArena([](SerialArena* a) { a->CleanupList(); });
 }
- 
+
 PROTOBUF_NOINLINE
 SerialArena* ThreadSafeArena::GetSerialArenaFallback(void* me) {
   // Look for this SerialArena in our linked list.
@@ -455,13 +455,13 @@ SerialArena* ThreadSafeArena::GetSerialArenaFallback(void* me) {
   return serial;
 }
 
-}  // namespace internal 
- 
+}  // namespace internal
+
 PROTOBUF_FUNC_ALIGN(32)
 void* Arena::AllocateAlignedNoHook(size_t n) {
   return impl_.AllocateAligned(n, nullptr);
-} 
- 
+}
+
 PROTOBUF_FUNC_ALIGN(32)
 void* Arena::AllocateAlignedWithHook(size_t n, const std::type_info* type) {
   return impl_.AllocateAligned(n, type);

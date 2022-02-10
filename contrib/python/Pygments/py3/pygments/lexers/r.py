@@ -83,7 +83,7 @@ class SLexer(RegexLexer):
             (r'#.*$', Comment.Single),
         ],
         'valid_name': [
-            (valid_name, Name), 
+            (valid_name, Name),
         ],
         'punctuation': [
             (r'\[{1,2}|\]{1,2}|\(|\)|;|,', Punctuation),
@@ -95,7 +95,7 @@ class SLexer(RegexLexer):
         ],
         'operators': [
             (r'<<?-|->>?|-|==|<=|>=|<|>|&&?|!=|\|\|?|\?', Operator),
-            (r'\*|\+|\^|/|!|%[^%]*%|=|~|\$|@|:{1,3}', Operator), 
+            (r'\*|\+|\^|/|!|%[^%]*%|=|~|\$|@|:{1,3}', Operator),
         ],
         'builtin_symbols': [
             (r'(NULL|NA(_(integer|real|complex|character)_)?|'
@@ -118,15 +118,15 @@ class SLexer(RegexLexer):
             (r'\'', String, 'string_squote'),
             (r'\"', String, 'string_dquote'),
             include('builtin_symbols'),
-            include('valid_name'), 
+            include('valid_name'),
             include('numbers'),
             include('keywords'),
             include('punctuation'),
             include('operators'),
         ],
         'root': [
-            # calls: 
-            (r'(%s)\s*(?=\()' % valid_name, Name.Function), 
+            # calls:
+            (r'(%s)\s*(?=\()' % valid_name, Name.Function),
             include('statements'),
             # blocks:
             (r'\{|\}', Punctuation),
@@ -158,7 +158,7 @@ class RdLexer(RegexLexer):
     This is a very minimal implementation, highlighting little more
     than the macros. A description of Rd syntax is found in `Writing R
     Extensions <http://cran.r-project.org/doc/manuals/R-exts.html>`_
-    and `Parsing Rd files <http://developer.r-project.org/parseRd.pdf>`_. 
+    and `Parsing Rd files <http://developer.r-project.org/parseRd.pdf>`_.
 
     .. versionadded:: 1.6
     """

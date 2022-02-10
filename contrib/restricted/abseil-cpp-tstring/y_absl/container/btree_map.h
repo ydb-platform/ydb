@@ -51,7 +51,7 @@
 #include "y_absl/container/internal/btree_container.h"  // IWYU pragma: export
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 
 // y_absl::btree_map<>
 //
@@ -226,30 +226,30 @@ class btree_map
   //   Inserts the elements within the initializer list `ilist`.
   using Base::insert;
 
-  // btree_map::insert_or_assign() 
-  // 
-  // Inserts an element of the specified value into the `btree_map` provided 
-  // that a value with the given key does not already exist, or replaces the 
-  // corresponding mapped type with the forwarded `obj` argument if a key for 
-  // that value already exists, returning an iterator pointing to the newly 
-  // inserted element. Overloads are listed below. 
-  // 
-  // pair<iterator, bool> insert_or_assign(const key_type& k, M&& obj): 
-  // pair<iterator, bool> insert_or_assign(key_type&& k, M&& obj): 
-  // 
-  //   Inserts/Assigns (or moves) the element of the specified key into the 
-  //   `btree_map`. If the returned bool is true, insertion took place, and if 
-  //   it's false, assignment took place. 
-  // 
-  // iterator insert_or_assign(const_iterator hint, 
-  //                           const key_type& k, M&& obj): 
-  // iterator insert_or_assign(const_iterator hint, key_type&& k, M&& obj): 
-  // 
-  //   Inserts/Assigns (or moves) the element of the specified key into the 
-  //   `btree_map` using the position of `hint` as a non-binding suggestion 
-  //   for where to begin the insertion search. 
-  using Base::insert_or_assign; 
- 
+  // btree_map::insert_or_assign()
+  //
+  // Inserts an element of the specified value into the `btree_map` provided
+  // that a value with the given key does not already exist, or replaces the
+  // corresponding mapped type with the forwarded `obj` argument if a key for
+  // that value already exists, returning an iterator pointing to the newly
+  // inserted element. Overloads are listed below.
+  //
+  // pair<iterator, bool> insert_or_assign(const key_type& k, M&& obj):
+  // pair<iterator, bool> insert_or_assign(key_type&& k, M&& obj):
+  //
+  //   Inserts/Assigns (or moves) the element of the specified key into the
+  //   `btree_map`. If the returned bool is true, insertion took place, and if
+  //   it's false, assignment took place.
+  //
+  // iterator insert_or_assign(const_iterator hint,
+  //                           const key_type& k, M&& obj):
+  // iterator insert_or_assign(const_iterator hint, key_type&& k, M&& obj):
+  //
+  //   Inserts/Assigns (or moves) the element of the specified key into the
+  //   `btree_map` using the position of `hint` as a non-binding suggestion
+  //   for where to begin the insertion search.
+  using Base::insert_or_assign;
+
   // btree_map::emplace()
   //
   // Inserts an element of the specified value by constructing it in-place
@@ -464,20 +464,20 @@ void swap(btree_map<K, V, C, A> &x, btree_map<K, V, C, A> &y) {
   return x.swap(y);
 }
 
-// y_absl::erase_if(y_absl::btree_map<>, Pred) 
-// 
-// Erases all elements that satisfy the predicate pred from the container. 
-template <typename K, typename V, typename C, typename A, typename Pred> 
-void erase_if(btree_map<K, V, C, A> &map, Pred pred) { 
-  for (auto it = map.begin(); it != map.end();) { 
-    if (pred(*it)) { 
-      it = map.erase(it); 
-    } else { 
-      ++it; 
-    } 
-  } 
-} 
- 
+// y_absl::erase_if(y_absl::btree_map<>, Pred)
+//
+// Erases all elements that satisfy the predicate pred from the container.
+template <typename K, typename V, typename C, typename A, typename Pred>
+void erase_if(btree_map<K, V, C, A> &map, Pred pred) {
+  for (auto it = map.begin(); it != map.end();) {
+    if (pred(*it)) {
+      it = map.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
 // y_absl::btree_multimap
 //
 // An `y_absl::btree_multimap<K, V>` is an ordered associative container of
@@ -795,21 +795,21 @@ void swap(btree_multimap<K, V, C, A> &x, btree_multimap<K, V, C, A> &y) {
   return x.swap(y);
 }
 
-// y_absl::erase_if(y_absl::btree_multimap<>, Pred) 
-// 
-// Erases all elements that satisfy the predicate pred from the container. 
-template <typename K, typename V, typename C, typename A, typename Pred> 
-void erase_if(btree_multimap<K, V, C, A> &map, Pred pred) { 
-  for (auto it = map.begin(); it != map.end();) { 
-    if (pred(*it)) { 
-      it = map.erase(it); 
-    } else { 
-      ++it; 
-    } 
-  } 
-} 
- 
-ABSL_NAMESPACE_END 
+// y_absl::erase_if(y_absl::btree_multimap<>, Pred)
+//
+// Erases all elements that satisfy the predicate pred from the container.
+template <typename K, typename V, typename C, typename A, typename Pred>
+void erase_if(btree_multimap<K, V, C, A> &map, Pred pred) {
+  for (auto it = map.begin(); it != map.end();) {
+    if (pred(*it)) {
+      it = map.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_BTREE_MAP_H_

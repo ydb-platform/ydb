@@ -5,7 +5,7 @@
 
     Lexer for ParaSail.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -60,7 +60,7 @@ class ParaSailLexer(RegexLexer):
             (r'[a-zA-Z]\w*', Name),
             # Operators and Punctuation
             (r'(<==|==>|<=>|\*\*=|<\|=|<<=|>>=|==|!=|=\?|<=|>=|'
-             r'\*\*|<<|>>|=>|:=|\+=|-=|\*=|\|=|\||/=|\+|-|\*|/|' 
+             r'\*\*|<<|>>|=>|:=|\+=|-=|\*=|\|=|\||/=|\+|-|\*|/|'
              r'\.\.|<\.\.|\.\.<|<\.\.<)',
              Operator),
             (r'(<|>|\[|\]|\(|\)|\||:|;|,|.|\{|\}|->)',

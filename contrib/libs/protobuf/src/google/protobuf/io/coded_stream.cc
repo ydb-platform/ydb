@@ -122,13 +122,13 @@ CodedInputStream::Limit CodedInputStream::PushLimit(int byte_limit) {
   Limit old_limit = current_limit_;
 
   // security: byte_limit is possibly evil, so check for negative values
-  // and overflow. Also check that the new requested limit is before the 
-  // previous limit; otherwise we continue to enforce the previous limit. 
+  // and overflow. Also check that the new requested limit is before the
+  // previous limit; otherwise we continue to enforce the previous limit.
   if (PROTOBUF_PREDICT_TRUE(byte_limit >= 0 &&
                             byte_limit <= INT_MAX - current_position &&
                             byte_limit < current_limit_ - current_position)) {
     current_limit_ = current_position + byte_limit;
-    RecomputeBufferLimits(); 
+    RecomputeBufferLimits();
   }
 
   return old_limit;
@@ -199,7 +199,7 @@ void CodedInputStream::PrintTotalBytesLimitError() {
          "in third_party/protobuf/src/google/protobuf/io/coded_stream.h.";
 }
 
-bool CodedInputStream::SkipFallback(int count, int original_buffer_size) { 
+bool CodedInputStream::SkipFallback(int count, int original_buffer_size) {
   if (buffer_size_after_limit_ > 0) {
     // We hit a limit inside this buffer.  Advance to the limit and fail.
     Advance(original_buffer_size);
@@ -574,15 +574,15 @@ bool CodedInputStream::ReadVarint64Slow(uint64* value) {
   uint32 b;
 
   do {
-    if (count == kMaxVarintBytes) { 
-      *value = 0; 
-      return false; 
-    } 
+    if (count == kMaxVarintBytes) {
+      *value = 0;
+      return false;
+    }
     while (buffer_ == buffer_end_) {
-      if (!Refresh()) { 
-        *value = 0; 
-        return false; 
-      } 
+      if (!Refresh()) {
+        *value = 0;
+        return false;
+      }
     }
     b = *buffer_;
     result |= static_cast<uint64>(b & 0x7F) << (7 * count);

@@ -48,7 +48,7 @@
 #include <stdint.h>
 #include <cstddef>
 #include <memory>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <type_traits>
 
 #include "y_absl/base/config.h"
@@ -57,7 +57,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // The hash of an object of type T is computed by using y_absl::Hash.
@@ -157,7 +157,7 @@ template <class T>
 using hash_default_eq = typename container_internal::HashEq<T>::Eq;
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_HASH_FUNCTION_DEFAULTS_H_

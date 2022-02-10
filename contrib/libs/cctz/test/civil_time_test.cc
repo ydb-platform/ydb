@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//   https://www.apache.org/licenses/LICENSE-2.0 
+//   https://www.apache.org/licenses/LICENSE-2.0
 //
 //   Unless required by applicable law or agreed to in writing, software
 //   distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,7 +12,7 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
-#include "cctz/civil_time.h" 
+#include "cctz/civil_time.h"
 
 #include <iomanip>
 #include <limits>
@@ -20,7 +20,7 @@
 #include <string>
 #include <type_traits>
 
-#include "gtest/gtest.h" 
+#include "gtest/gtest.h"
 
 namespace cctz {
 
@@ -35,7 +35,7 @@ std::string Format(const T& t) {
 
 }  // namespace
 
-#if __cpp_constexpr >= 201304 || (defined(_MSC_VER) && _MSC_VER >= 1910) 
+#if __cpp_constexpr >= 201304 || (defined(_MSC_VER) && _MSC_VER >= 1910)
 // Construction constexpr tests
 
 TEST(CivilTime, Normal) {
@@ -223,7 +223,7 @@ TEST(CivilTime, Subtraction) {
   static_assert(cs2.second() == 22, "Subtraction.second");
 }
 
-TEST(CivilTime, Difference) { 
+TEST(CivilTime, Difference) {
   constexpr civil_day cd1(2016, 1, 28);
   constexpr civil_day cd2(2015, 1, 28);
   constexpr int diff = cd1 - cd2;
@@ -231,16 +231,16 @@ TEST(CivilTime, Difference) {
 }
 
 // NOTE: Run this with --copt=-ftrapv to detect overflow problems.
-TEST(CivilTime, ConstructionWithHugeYear) { 
-  constexpr civil_hour h(-9223372036854775807, 1, 1, -1); 
-  static_assert(h.year() == -9223372036854775807 - 1, 
-                "ConstructionWithHugeYear"); 
-  static_assert(h.month() == 12, "ConstructionWithHugeYear"); 
-  static_assert(h.day() == 31, "ConstructionWithHugeYear"); 
-  static_assert(h.hour() == 23, "ConstructionWithHugeYear"); 
-} 
- 
-// NOTE: Run this with --copt=-ftrapv to detect overflow problems. 
+TEST(CivilTime, ConstructionWithHugeYear) {
+  constexpr civil_hour h(-9223372036854775807, 1, 1, -1);
+  static_assert(h.year() == -9223372036854775807 - 1,
+                "ConstructionWithHugeYear");
+  static_assert(h.month() == 12, "ConstructionWithHugeYear");
+  static_assert(h.day() == 31, "ConstructionWithHugeYear");
+  static_assert(h.hour() == 23, "ConstructionWithHugeYear");
+}
+
+// NOTE: Run this with --copt=-ftrapv to detect overflow problems.
 TEST(CivilTime, DifferenceWithHugeYear) {
   {
     constexpr civil_day d1(9223372036854775807, 1, 1);
@@ -327,7 +327,7 @@ TEST(CivilTime, YearDay) {
   constexpr int yd = get_yearday(cd);
   static_assert(yd == 28, "YearDay");
 }
-#endif  // __cpp_constexpr >= 201304 || (defined(_MSC_VER) && _MSC_VER >= 1910) 
+#endif  // __cpp_constexpr >= 201304 || (defined(_MSC_VER) && _MSC_VER >= 1910)
 
 // The remaining tests do not use constexpr.
 
@@ -628,7 +628,7 @@ TEST(CivilTime, Relational) {
   TEST_RELATIONAL(civil_second(2014, 1, 1, 1, 1, 0),
                   civil_second(2014, 1, 1, 1, 1, 1));
 
-  // Tests the relational operators of two different civil-time types. 
+  // Tests the relational operators of two different civil-time types.
   TEST_RELATIONAL(civil_day(2014, 1, 1), civil_minute(2014, 1, 1, 1, 1));
   TEST_RELATIONAL(civil_day(2014, 1, 1), civil_month(2014, 2));
 
@@ -768,7 +768,7 @@ TEST(CivilTime, ArithmeticLimits) {
   EXPECT_EQ("0", Format(year));
 }
 
-TEST(CivilTime, ArithmeticDifference) { 
+TEST(CivilTime, ArithmeticDifference) {
   civil_second second(2015, 1, 2, 3, 4, 5);
   EXPECT_EQ(0, second - second);
   EXPECT_EQ(10, (second + 10) - second);
@@ -829,8 +829,8 @@ TEST(CivilTime, Properties) {
   EXPECT_EQ(4, ss.hour());
   EXPECT_EQ(5, ss.minute());
   EXPECT_EQ(6, ss.second());
-  EXPECT_EQ(weekday::tuesday, get_weekday(ss)); 
-  EXPECT_EQ(34, get_yearday(ss)); 
+  EXPECT_EQ(weekday::tuesday, get_weekday(ss));
+  EXPECT_EQ(34, get_yearday(ss));
 
   civil_minute mm(2015, 2, 3, 4, 5, 6);
   EXPECT_EQ(2015, mm.year());
@@ -839,8 +839,8 @@ TEST(CivilTime, Properties) {
   EXPECT_EQ(4, mm.hour());
   EXPECT_EQ(5, mm.minute());
   EXPECT_EQ(0, mm.second());
-  EXPECT_EQ(weekday::tuesday, get_weekday(mm)); 
-  EXPECT_EQ(34, get_yearday(mm)); 
+  EXPECT_EQ(weekday::tuesday, get_weekday(mm));
+  EXPECT_EQ(34, get_yearday(mm));
 
   civil_hour hh(2015, 2, 3, 4, 5, 6);
   EXPECT_EQ(2015, hh.year());
@@ -849,8 +849,8 @@ TEST(CivilTime, Properties) {
   EXPECT_EQ(4, hh.hour());
   EXPECT_EQ(0, hh.minute());
   EXPECT_EQ(0, hh.second());
-  EXPECT_EQ(weekday::tuesday, get_weekday(hh)); 
-  EXPECT_EQ(34, get_yearday(hh)); 
+  EXPECT_EQ(weekday::tuesday, get_weekday(hh));
+  EXPECT_EQ(34, get_yearday(hh));
 
   civil_day d(2015, 2, 3, 4, 5, 6);
   EXPECT_EQ(2015, d.year());
@@ -869,8 +869,8 @@ TEST(CivilTime, Properties) {
   EXPECT_EQ(0, m.hour());
   EXPECT_EQ(0, m.minute());
   EXPECT_EQ(0, m.second());
-  EXPECT_EQ(weekday::sunday, get_weekday(m)); 
-  EXPECT_EQ(32, get_yearday(m)); 
+  EXPECT_EQ(weekday::sunday, get_weekday(m));
+  EXPECT_EQ(32, get_yearday(m));
 
   civil_year y(2015, 2, 3, 4, 5, 6);
   EXPECT_EQ(2015, y.year());
@@ -879,8 +879,8 @@ TEST(CivilTime, Properties) {
   EXPECT_EQ(0, y.hour());
   EXPECT_EQ(0, y.minute());
   EXPECT_EQ(0, y.second());
-  EXPECT_EQ(weekday::thursday, get_weekday(y)); 
-  EXPECT_EQ(1, get_yearday(y)); 
+  EXPECT_EQ(weekday::thursday, get_weekday(y));
+  EXPECT_EQ(1, get_yearday(y));
 }
 
 TEST(CivilTime, OutputStream) {
@@ -966,37 +966,37 @@ TEST(CivilTime, NextPrevWeekday) {
 
   // Thursday -> Thursday
   civil_day d = next_weekday(thursday, weekday::thursday);
-  EXPECT_EQ(7, d - thursday) << Format(d); 
+  EXPECT_EQ(7, d - thursday) << Format(d);
   EXPECT_EQ(d - 14, prev_weekday(thursday, weekday::thursday));
 
   // Thursday -> Friday
   d = next_weekday(thursday, weekday::friday);
-  EXPECT_EQ(1, d - thursday) << Format(d); 
+  EXPECT_EQ(1, d - thursday) << Format(d);
   EXPECT_EQ(d - 7, prev_weekday(thursday, weekday::friday));
 
   // Thursday -> Saturday
   d = next_weekday(thursday, weekday::saturday);
-  EXPECT_EQ(2, d - thursday) << Format(d); 
+  EXPECT_EQ(2, d - thursday) << Format(d);
   EXPECT_EQ(d - 7, prev_weekday(thursday, weekday::saturday));
 
   // Thursday -> Sunday
   d = next_weekday(thursday, weekday::sunday);
-  EXPECT_EQ(3, d - thursday) << Format(d); 
+  EXPECT_EQ(3, d - thursday) << Format(d);
   EXPECT_EQ(d - 7, prev_weekday(thursday, weekday::sunday));
 
   // Thursday -> Monday
   d = next_weekday(thursday, weekday::monday);
-  EXPECT_EQ(4, d - thursday) << Format(d); 
+  EXPECT_EQ(4, d - thursday) << Format(d);
   EXPECT_EQ(d - 7, prev_weekday(thursday, weekday::monday));
 
   // Thursday -> Tuesday
   d = next_weekday(thursday, weekday::tuesday);
-  EXPECT_EQ(5, d - thursday) << Format(d); 
+  EXPECT_EQ(5, d - thursday) << Format(d);
   EXPECT_EQ(d - 7, prev_weekday(thursday, weekday::tuesday));
 
   // Thursday -> Wednesday
   d = next_weekday(thursday, weekday::wednesday);
-  EXPECT_EQ(6, d - thursday) << Format(d); 
+  EXPECT_EQ(6, d - thursday) << Format(d);
   EXPECT_EQ(d - 7, prev_weekday(thursday, weekday::wednesday));
 }
 
@@ -1053,7 +1053,7 @@ TEST(CivilTime, LeapYears) {
 
 TEST(CivilTime, FirstThursdayInMonth) {
   const civil_day nov1(2014, 11, 1);
-  const civil_day thursday = next_weekday(nov1 - 1, weekday::thursday); 
+  const civil_day thursday = next_weekday(nov1 - 1, weekday::thursday);
   EXPECT_EQ("2014-11-06", Format(thursday));
 
   // Bonus: Date of Thanksgiving in the United States

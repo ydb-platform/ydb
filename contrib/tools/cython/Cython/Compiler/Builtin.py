@@ -124,12 +124,12 @@ builtin_function_table = [
                                   PyrexTypes.c_double_complex_type,
                                   PyrexTypes.c_longdouble_complex_type)
                         ) + [
-    BuiltinFunction('abs',        "O",    "O",     "__Pyx_PyNumber_Absolute", 
-                    utility_code=UtilityCode.load("py_abs", "Builtins.c")), 
-    #('all',       "",     "",      ""), 
-    #('any',       "",     "",      ""), 
-    #('ascii',     "",     "",      ""), 
-    #('bin',       "",     "",      ""), 
+    BuiltinFunction('abs',        "O",    "O",     "__Pyx_PyNumber_Absolute",
+                    utility_code=UtilityCode.load("py_abs", "Builtins.c")),
+    #('all',       "",     "",      ""),
+    #('any',       "",     "",      ""),
+    #('ascii',     "",     "",      ""),
+    #('bin',       "",     "",      ""),
     BuiltinFunction('callable',   "O",    "b",     "__Pyx_PyCallable_Check",
                     utility_code = UtilityCode.load("CallableCheck", "ObjectHandling.c")),
     #('chr',       "",     "",      ""),
@@ -176,26 +176,26 @@ builtin_function_table = [
                     utility_code = iter_next_utility_code),  # not available in Py2 => implemented here
     #('oct',       "",     "",      ""),
     #('open',       "ss",   "O",     "PyFile_FromString"),   # not in Py3
-] + [ 
-    BuiltinFunction('ord',        None,    None,   "__Pyx_long_cast", 
-                    func_type=PyrexTypes.CFuncType( 
-                        PyrexTypes.c_long_type, [PyrexTypes.CFuncTypeArg("c", c_type, None)], 
-                        is_strict_signature=True)) 
-    for c_type in [PyrexTypes.c_py_ucs4_type, PyrexTypes.c_py_unicode_type] 
-] + [ 
-    BuiltinFunction('ord',        None,    None,   "__Pyx_uchar_cast", 
-                    func_type=PyrexTypes.CFuncType( 
-                        PyrexTypes.c_uchar_type, [PyrexTypes.CFuncTypeArg("c", c_type, None)], 
-                        is_strict_signature=True)) 
-    for c_type in [PyrexTypes.c_char_type, PyrexTypes.c_schar_type, PyrexTypes.c_uchar_type] 
-] + [ 
-    BuiltinFunction('ord',        None,    None,   "__Pyx_PyObject_Ord", 
-                    utility_code=UtilityCode.load_cached("object_ord", "Builtins.c"), 
-                    func_type=PyrexTypes.CFuncType( 
-                        PyrexTypes.c_long_type, [ 
-                            PyrexTypes.CFuncTypeArg("c", PyrexTypes.py_object_type, None) 
-                        ], 
-                        exception_value="(long)(Py_UCS4)-1")), 
+] + [
+    BuiltinFunction('ord',        None,    None,   "__Pyx_long_cast",
+                    func_type=PyrexTypes.CFuncType(
+                        PyrexTypes.c_long_type, [PyrexTypes.CFuncTypeArg("c", c_type, None)],
+                        is_strict_signature=True))
+    for c_type in [PyrexTypes.c_py_ucs4_type, PyrexTypes.c_py_unicode_type]
+] + [
+    BuiltinFunction('ord',        None,    None,   "__Pyx_uchar_cast",
+                    func_type=PyrexTypes.CFuncType(
+                        PyrexTypes.c_uchar_type, [PyrexTypes.CFuncTypeArg("c", c_type, None)],
+                        is_strict_signature=True))
+    for c_type in [PyrexTypes.c_char_type, PyrexTypes.c_schar_type, PyrexTypes.c_uchar_type]
+] + [
+    BuiltinFunction('ord',        None,    None,   "__Pyx_PyObject_Ord",
+                    utility_code=UtilityCode.load_cached("object_ord", "Builtins.c"),
+                    func_type=PyrexTypes.CFuncType(
+                        PyrexTypes.c_long_type, [
+                            PyrexTypes.CFuncTypeArg("c", PyrexTypes.py_object_type, None)
+                        ],
+                        exception_value="(long)(Py_UCS4)-1")),
     BuiltinFunction('pow',        "OOO",  "O",     "PyNumber_Power"),
     BuiltinFunction('pow',        "OO",   "O",     "__Pyx_PyNumber_Power2",
                     utility_code = UtilityCode.load("pow2", "Builtins.c")),
@@ -207,7 +207,7 @@ builtin_function_table = [
     #('round',     "",     "",      ""),
     BuiltinFunction('setattr',    "OOO",  "r",     "PyObject_SetAttr"),
     #('sum',       "",     "",      ""),
-    #('sorted',    "",     "",      ""), 
+    #('sorted',    "",     "",      ""),
     #('type',       "O",    "O",     "PyObject_Type"),
     #('unichr',    "",     "",      ""),
     #('unicode',   "",     "",      ""),
@@ -219,10 +219,10 @@ builtin_function_table = [
 
     # Put in namespace append optimization.
     BuiltinFunction('__Pyx_PyObject_Append', "OO",  "O",     "__Pyx_PyObject_Append"),
- 
-    # This is conditionally looked up based on a compiler directive. 
-    BuiltinFunction('__Pyx_Globals',    "",     "O",     "__Pyx_Globals", 
-                    utility_code=globals_utility_code), 
+
+    # This is conditionally looked up based on a compiler directive.
+    BuiltinFunction('__Pyx_Globals',    "",     "O",     "__Pyx_Globals",
+                    utility_code=globals_utility_code),
 ]
 
 
@@ -339,7 +339,7 @@ builtin_types_table = [
                                     BuiltinMethod("add",     "TO", "r", "PySet_Add"),
                                     BuiltinMethod("pop",     "T",  "O", "PySet_Pop")]),
     ("frozenset", "PyFrozenSet_Type", []),
-    ("Exception", "((PyTypeObject*)PyExc_Exception)[0]", []), 
+    ("Exception", "((PyTypeObject*)PyExc_Exception)[0]", []),
     ("StopAsyncIteration", "((PyTypeObject*)__Pyx_PyExc_StopAsyncIteration)[0]", []),
 ]
 
@@ -396,8 +396,8 @@ def init_builtin_types():
             objstruct_cname = 'PyByteArrayObject'
         elif name == 'bool':
             objstruct_cname = None
-        elif name == 'Exception': 
-            objstruct_cname = "PyBaseExceptionObject" 
+        elif name == 'Exception':
+            objstruct_cname = "PyBaseExceptionObject"
         elif name == 'StopAsyncIteration':
             objstruct_cname = "PyBaseExceptionObject"
         else:
@@ -421,11 +421,11 @@ def init_builtins():
     init_builtin_structs()
     init_builtin_types()
     init_builtin_funcs()
- 
+
     builtin_scope.declare_var(
         '__debug__', PyrexTypes.c_const_type(PyrexTypes.c_bint_type),
         pos=None, cname='(!Py_OptimizeFlag)', is_cdef=True)
- 
+
     global list_type, tuple_type, dict_type, set_type, frozenset_type
     global bytes_type, str_type, unicode_type, basestring_type, slice_type
     global float_type, bool_type, type_type, complex_type, bytearray_type

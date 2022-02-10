@@ -489,35 +489,35 @@ static const OPT_PAIR rsa_choices[] = {
 static double rsa_results[RSA_NUM][2];  /* 2 ops: sign then verify */
 #endif /* OPENSSL_NO_RSA */
 
-enum { 
-    R_EC_P160, 
-    R_EC_P192, 
-    R_EC_P224, 
-    R_EC_P256, 
-    R_EC_P384, 
-    R_EC_P521, 
-#ifndef OPENSSL_NO_EC2M 
-    R_EC_K163, 
-    R_EC_K233, 
-    R_EC_K283, 
-    R_EC_K409, 
-    R_EC_K571, 
-    R_EC_B163, 
-    R_EC_B233, 
-    R_EC_B283, 
-    R_EC_B409, 
-    R_EC_B571, 
-#endif 
-    R_EC_BRP256R1, 
-    R_EC_BRP256T1, 
-    R_EC_BRP384R1, 
-    R_EC_BRP384T1, 
-    R_EC_BRP512R1, 
-    R_EC_BRP512T1, 
-    R_EC_X25519, 
-    R_EC_X448 
-}; 
- 
+enum {
+    R_EC_P160,
+    R_EC_P192,
+    R_EC_P224,
+    R_EC_P256,
+    R_EC_P384,
+    R_EC_P521,
+#ifndef OPENSSL_NO_EC2M
+    R_EC_K163,
+    R_EC_K233,
+    R_EC_K283,
+    R_EC_K409,
+    R_EC_K571,
+    R_EC_B163,
+    R_EC_B233,
+    R_EC_B283,
+    R_EC_B409,
+    R_EC_B571,
+#endif
+    R_EC_BRP256R1,
+    R_EC_BRP256T1,
+    R_EC_BRP384R1,
+    R_EC_BRP384T1,
+    R_EC_BRP512R1,
+    R_EC_BRP512T1,
+    R_EC_X25519,
+    R_EC_X448
+};
+
 #ifndef OPENSSL_NO_EC
 static OPT_PAIR ecdsa_choices[] = {
     {"ecdsap160", R_EC_P160},
@@ -526,7 +526,7 @@ static OPT_PAIR ecdsa_choices[] = {
     {"ecdsap256", R_EC_P256},
     {"ecdsap384", R_EC_P384},
     {"ecdsap521", R_EC_P521},
-# ifndef OPENSSL_NO_EC2M 
+# ifndef OPENSSL_NO_EC2M
     {"ecdsak163", R_EC_K163},
     {"ecdsak233", R_EC_K233},
     {"ecdsak283", R_EC_K283},
@@ -537,7 +537,7 @@ static OPT_PAIR ecdsa_choices[] = {
     {"ecdsab283", R_EC_B283},
     {"ecdsab409", R_EC_B409},
     {"ecdsab571", R_EC_B571},
-# endif 
+# endif
     {"ecdsabrp256r1", R_EC_BRP256R1},
     {"ecdsabrp256t1", R_EC_BRP256T1},
     {"ecdsabrp384r1", R_EC_BRP384R1},
@@ -556,7 +556,7 @@ static const OPT_PAIR ecdh_choices[] = {
     {"ecdhp256", R_EC_P256},
     {"ecdhp384", R_EC_P384},
     {"ecdhp521", R_EC_P521},
-# ifndef OPENSSL_NO_EC2M 
+# ifndef OPENSSL_NO_EC2M
     {"ecdhk163", R_EC_K163},
     {"ecdhk233", R_EC_K233},
     {"ecdhk283", R_EC_K283},
@@ -567,7 +567,7 @@ static const OPT_PAIR ecdh_choices[] = {
     {"ecdhb283", R_EC_B283},
     {"ecdhb409", R_EC_B409},
     {"ecdhb571", R_EC_B571},
-# endif 
+# endif
     {"ecdhbrp256r1", R_EC_BRP256R1},
     {"ecdhbrp256t1", R_EC_BRP256T1},
     {"ecdhbrp384r1", R_EC_BRP384R1},
@@ -1508,7 +1508,7 @@ int speed_main(int argc, char **argv)
         {"nistp256", NID_X9_62_prime256v1, 256},
         {"nistp384", NID_secp384r1, 384},
         {"nistp521", NID_secp521r1, 521},
-# ifndef OPENSSL_NO_EC2M 
+# ifndef OPENSSL_NO_EC2M
         /* Binary Curves */
         {"nistk163", NID_sect163k1, 163},
         {"nistk233", NID_sect233k1, 233},
@@ -1520,7 +1520,7 @@ int speed_main(int argc, char **argv)
         {"nistb283", NID_sect283r1, 283},
         {"nistb409", NID_sect409r1, 409},
         {"nistb571", NID_sect571r1, 571},
-# endif 
+# endif
         {"brainpoolP256r1", NID_brainpoolP256r1, 256},
         {"brainpoolP256t1", NID_brainpoolP256t1, 256},
         {"brainpoolP384r1", NID_brainpoolP384r1, 384},
@@ -1788,7 +1788,7 @@ int speed_main(int argc, char **argv)
         }
 
         buflen = lengths[size_num - 1];
-        if (buflen < 36)    /* size of random vector in RSA benchmark */ 
+        if (buflen < 36)    /* size of random vector in RSA benchmark */
             buflen = 36;
         buflen += MAX_MISALIGNMENT + 1;
         loopargs[i].buf_malloc = app_malloc(buflen, "input buffer");
@@ -2040,7 +2040,7 @@ int speed_main(int argc, char **argv)
             }
         }
     }
-#   ifndef OPENSSL_NO_EC2M 
+#   ifndef OPENSSL_NO_EC2M
     ecdsa_c[R_EC_K163][0] = count / 1000;
     ecdsa_c[R_EC_K163][1] = count / 1000 / 2;
     for (i = R_EC_K233; i <= R_EC_K571; i++) {
@@ -2069,7 +2069,7 @@ int speed_main(int argc, char **argv)
             }
         }
     }
-#   endif 
+#   endif
 
     ecdh_c[R_EC_P160][0] = count / 1000;
     for (i = R_EC_P192; i <= R_EC_P521; i++) {
@@ -2082,7 +2082,7 @@ int speed_main(int argc, char **argv)
             }
         }
     }
-#   ifndef OPENSSL_NO_EC2M 
+#   ifndef OPENSSL_NO_EC2M
     ecdh_c[R_EC_K163][0] = count / 1000;
     for (i = R_EC_K233; i <= R_EC_K571; i++) {
         ecdh_c[i][0] = ecdh_c[i - 1][0] / 2;
@@ -2105,7 +2105,7 @@ int speed_main(int argc, char **argv)
             }
         }
     }
-#   endif 
+#   endif
     /* repeated code good to factorize */
     ecdh_c[R_EC_BRP256R1][0] = count / 1000;
     for (i = R_EC_BRP384R1; i <= R_EC_BRP512R1; i += 2) {
@@ -2627,28 +2627,28 @@ int speed_main(int argc, char **argv)
 
                 for (k = 0; k < loopargs_len; k++) {
                     loopargs[k].ctx = EVP_CIPHER_CTX_new();
-                    if (loopargs[k].ctx == NULL) { 
-                        BIO_printf(bio_err, "\nEVP_CIPHER_CTX_new failure\n"); 
-                        exit(1); 
-                    } 
-                    if (!EVP_CipherInit_ex(loopargs[k].ctx, evp_cipher, NULL, 
-                                           NULL, iv, decrypt ? 0 : 1)) { 
-                        BIO_printf(bio_err, "\nEVP_CipherInit_ex failure\n"); 
-                        ERR_print_errors(bio_err); 
-                        exit(1); 
-                    } 
+                    if (loopargs[k].ctx == NULL) {
+                        BIO_printf(bio_err, "\nEVP_CIPHER_CTX_new failure\n");
+                        exit(1);
+                    }
+                    if (!EVP_CipherInit_ex(loopargs[k].ctx, evp_cipher, NULL,
+                                           NULL, iv, decrypt ? 0 : 1)) {
+                        BIO_printf(bio_err, "\nEVP_CipherInit_ex failure\n");
+                        ERR_print_errors(bio_err);
+                        exit(1);
+                    }
 
                     EVP_CIPHER_CTX_set_padding(loopargs[k].ctx, 0);
 
                     keylen = EVP_CIPHER_CTX_key_length(loopargs[k].ctx);
                     loopargs[k].key = app_malloc(keylen, "evp_cipher key");
                     EVP_CIPHER_CTX_rand_key(loopargs[k].ctx, loopargs[k].key);
-                    if (!EVP_CipherInit_ex(loopargs[k].ctx, NULL, NULL, 
-                                           loopargs[k].key, NULL, -1)) { 
-                        BIO_printf(bio_err, "\nEVP_CipherInit_ex failure\n"); 
-                        ERR_print_errors(bio_err); 
-                        exit(1); 
-                    } 
+                    if (!EVP_CipherInit_ex(loopargs[k].ctx, NULL, NULL,
+                                           loopargs[k].key, NULL, -1)) {
+                        BIO_printf(bio_err, "\nEVP_CipherInit_ex failure\n");
+                        ERR_print_errors(bio_err);
+                        exit(1);
+                    }
                     OPENSSL_clear_free(loopargs[k].key, keylen);
                 }
 

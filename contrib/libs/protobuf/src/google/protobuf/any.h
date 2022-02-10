@@ -90,7 +90,7 @@ class PROTOBUF_EXPORT AnyMetadata {
 
   // Unpacks the payload into the given message. Returns false if the message's
   // type doesn't match the type specified in the type URL (i.e., the full
-  // name after the last "/" of the type URL doesn't match the message's actual 
+  // name after the last "/" of the type URL doesn't match the message's actual
   // full name) or parsing the payload has failed.
   template <typename T>
   bool UnpackTo(T* message) const {
@@ -124,8 +124,8 @@ class PROTOBUF_EXPORT AnyMetadata {
 
 // Get the proto type name from Any::type_url value. For example, passing
 // "type.googleapis.com/rpc.QueryOrigin" will return "rpc.QueryOrigin" in
-// *full_type_name. Returns false if the type_url does not have a "/" 
-// in the type url separating the full type name. 
+// *full_type_name. Returns false if the type_url does not have a "/"
+// in the type url separating the full type name.
 //
 // NOTE: this function is available publicly as:
 //   google::protobuf::Any()  // static method on the generated message type.

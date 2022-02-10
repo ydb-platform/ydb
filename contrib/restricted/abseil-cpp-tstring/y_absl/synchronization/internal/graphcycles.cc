@@ -45,7 +45,7 @@
 // Do not use STL.   This module does not use standard memory allocation.
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 namespace {
@@ -692,7 +692,7 @@ int GraphCycles::GetStackTrace(GraphId id, void*** ptr) {
 }
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // ABSL_LOW_LEVEL_ALLOC_MISSING

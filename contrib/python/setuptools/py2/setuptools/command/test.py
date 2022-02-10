@@ -1,11 +1,11 @@
-import os 
-import operator 
-import sys 
-import contextlib 
-import itertools 
+import os
+import operator
+import sys
+import contextlib
+import itertools
 import unittest
-from distutils.errors import DistutilsError, DistutilsOptionError 
-from distutils import log 
+from distutils.errors import DistutilsError, DistutilsOptionError
+from distutils import log
 from unittest import TestLoader
 
 from setuptools.extern import six
@@ -121,14 +121,14 @@ class test(Command):
             yield self.test_suite
 
     def with_project_on_sys_path(self, func):
-        """ 
-        Backward compatibility for project_on_sys_path context. 
-        """ 
-        with self.project_on_sys_path(): 
-            func() 
- 
-    @contextlib.contextmanager 
-    def project_on_sys_path(self, include_dists=[]): 
+        """
+        Backward compatibility for project_on_sys_path context.
+        """
+        with self.project_on_sys_path():
+            func()
+
+    @contextlib.contextmanager
+    def project_on_sys_path(self, include_dists=[]):
         with_2to3 = not six.PY2 and getattr(self.distribution, 'use_2to3', False)
 
         if with_2to3:
@@ -160,59 +160,59 @@ class test(Command):
         old_modules = sys.modules.copy()
 
         try:
-            project_path = normalize_path(ei_cmd.egg_base) 
-            sys.path.insert(0, project_path) 
+            project_path = normalize_path(ei_cmd.egg_base)
+            sys.path.insert(0, project_path)
             working_set.__init__()
             add_activation_listener(lambda dist: dist.activate())
             require('%s==%s' % (ei_cmd.egg_name, ei_cmd.egg_version))
-            with self.paths_on_pythonpath([project_path]): 
-                yield 
+            with self.paths_on_pythonpath([project_path]):
+                yield
         finally:
             sys.path[:] = old_path
             sys.modules.clear()
             sys.modules.update(old_modules)
             working_set.__init__()
 
-    @staticmethod 
-    @contextlib.contextmanager 
-    def paths_on_pythonpath(paths): 
-        """ 
-        Add the indicated paths to the head of the PYTHONPATH environment 
-        variable so that subprocesses will also see the packages at 
-        these paths. 
- 
-        Do this in a context that restores the value on exit. 
-        """ 
-        nothing = object() 
-        orig_pythonpath = os.environ.get('PYTHONPATH', nothing) 
-        current_pythonpath = os.environ.get('PYTHONPATH', '') 
-        try: 
+    @staticmethod
+    @contextlib.contextmanager
+    def paths_on_pythonpath(paths):
+        """
+        Add the indicated paths to the head of the PYTHONPATH environment
+        variable so that subprocesses will also see the packages at
+        these paths.
+
+        Do this in a context that restores the value on exit.
+        """
+        nothing = object()
+        orig_pythonpath = os.environ.get('PYTHONPATH', nothing)
+        current_pythonpath = os.environ.get('PYTHONPATH', '')
+        try:
             prefix = os.pathsep.join(_unique_everseen(paths))
-            to_join = filter(None, [prefix, current_pythonpath]) 
-            new_path = os.pathsep.join(to_join) 
-            if new_path: 
-                os.environ['PYTHONPATH'] = new_path 
-            yield 
-        finally: 
-            if orig_pythonpath is nothing: 
-                os.environ.pop('PYTHONPATH', None) 
-            else: 
-                os.environ['PYTHONPATH'] = orig_pythonpath 
- 
-    @staticmethod 
-    def install_dists(dist): 
-        """ 
-        Install the requirements indicated by self.distribution and 
-        return an iterable of the dists that were built. 
-        """ 
+            to_join = filter(None, [prefix, current_pythonpath])
+            new_path = os.pathsep.join(to_join)
+            if new_path:
+                os.environ['PYTHONPATH'] = new_path
+            yield
+        finally:
+            if orig_pythonpath is nothing:
+                os.environ.pop('PYTHONPATH', None)
+            else:
+                os.environ['PYTHONPATH'] = orig_pythonpath
+
+    @staticmethod
+    def install_dists(dist):
+        """
+        Install the requirements indicated by self.distribution and
+        return an iterable of the dists that were built.
+        """
         ir_d = dist.fetch_build_eggs(dist.install_requires)
-        tr_d = dist.fetch_build_eggs(dist.tests_require or []) 
+        tr_d = dist.fetch_build_eggs(dist.tests_require or [])
         er_d = dist.fetch_build_eggs(
             v for k, v in dist.extras_require.items()
             if k.startswith(':') and evaluate_marker(k[1:])
         )
         return itertools.chain(ir_d, tr_d, er_d)
- 
+
     def run(self):
         self.announce(
             "WARNING: Testing via this command is deprecated and will be "
@@ -222,20 +222,20 @@ class test(Command):
             log.WARN,
         )
 
-        installed_dists = self.install_dists(self.distribution) 
+        installed_dists = self.install_dists(self.distribution)
 
         cmd = ' '.join(self._argv)
         if self.dry_run:
             self.announce('skipping "%s" (dry run)' % cmd)
-            return 
+            return
 
-        self.announce('running "%s"' % cmd) 
- 
-        paths = map(operator.attrgetter('location'), installed_dists) 
-        with self.paths_on_pythonpath(paths): 
-            with self.project_on_sys_path(): 
-                self.run_tests() 
- 
+        self.announce('running "%s"' % cmd)
+
+        paths = map(operator.attrgetter('location'), installed_dists)
+        with self.paths_on_pythonpath(paths):
+            with self.project_on_sys_path():
+                self.run_tests()
+
     def run_tests(self):
         # Purge modules under test from sys.modules. The test loader will
         # re-import them from the build location. Required when 2to3 is used
@@ -258,10 +258,10 @@ class test(Command):
             testRunner=self._resolve_as_ep(self.test_runner),
             exit=False,
         )
-        if not test.result.wasSuccessful(): 
-            msg = 'Test failed: %s' % test.result 
-            self.announce(msg, log.ERROR) 
-            raise DistutilsError(msg) 
+        if not test.result.wasSuccessful():
+            msg = 'Test failed: %s' % test.result
+            self.announce(msg, log.ERROR)
+            raise DistutilsError(msg)
 
     @property
     def _argv(self):

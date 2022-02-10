@@ -80,5 +80,5 @@ class ResourceLexer(RegexLexer):
     }
 
     def analyse_text(text):
-        if text.startswith('root:table'): 
-            return 1.0 
+        if text.startswith('root:table'):
+            return 1.0

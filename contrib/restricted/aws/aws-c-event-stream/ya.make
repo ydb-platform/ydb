@@ -2,34 +2,34 @@
 
 LIBRARY()
 
-OWNER(g:cpp-contrib) 
+OWNER(g:cpp-contrib)
 
-VERSION(0.2.6) 
+VERSION(0.2.6)
 
 LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/restricted/aws/aws-c-common 
-    contrib/restricted/aws/aws-c-io 
-    contrib/restricted/aws/aws-checksums 
+    contrib/restricted/aws/aws-c-common
+    contrib/restricted/aws/aws-c-io
+    contrib/restricted/aws/aws-checksums
 )
 
 ADDINCL(
-    GLOBAL contrib/restricted/aws/aws-c-event-stream/include 
+    GLOBAL contrib/restricted/aws/aws-c-event-stream/include
 )
 
 NO_COMPILER_WARNINGS()
 
-NO_RUNTIME() 
+NO_RUNTIME()
 
 SRCS(
     source/event_stream.c
-    source/event_stream_channel_handler.c 
-    source/event_stream_rpc.c 
-    source/event_stream_rpc_client.c 
-    source/event_stream_rpc_server.c 
+    source/event_stream_channel_handler.c
+    source/event_stream_rpc.c
+    source/event_stream_rpc_client.c
+    source/event_stream_rpc_server.c
 )
 
 END()

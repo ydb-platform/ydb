@@ -4,8 +4,8 @@
     ~~~~~~~~~~~~~~~~~~~~~
 
     Pygments lexers for Ezhil language.
- 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
+
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -16,7 +16,7 @@ from pygments.token import String, Number, Punctuation, Operator
 
 __all__ = ['EzhilLexer']
 
- 
+
 class EzhilLexer(RegexLexer):
     """
     Lexer for `Ezhil, a Tamil script-based programming language <http://ezhillang.org>`_
@@ -37,13 +37,13 @@ class EzhilLexer(RegexLexer):
             (r'#.*\n', Comment.Single),
             (r'[@+/*,^\-%]|[!<>=]=?|&&?|\|\|?', Operator),
             (u'இல்', Operator.Word),
-            (words((u'assert', u'max', u'min', 
-                    u'நீளம்', u'சரம்_இடமாற்று', u'சரம்_கண்டுபிடி', 
-                    u'பட்டியல்', u'பின்இணை', u'வரிசைப்படுத்து', 
-                    u'எடு', u'தலைகீழ்', u'நீட்டிக்க', u'நுழைக்க', u'வை', 
-                    u'கோப்பை_திற', u'கோப்பை_எழுது', u'கோப்பை_மூடு', 
-                    u'pi', u'sin', u'cos', u'tan', u'sqrt', u'hypot', u'pow', 
-                    u'exp', u'log', u'log10', u'exit', 
+            (words((u'assert', u'max', u'min',
+                    u'நீளம்', u'சரம்_இடமாற்று', u'சரம்_கண்டுபிடி',
+                    u'பட்டியல்', u'பின்இணை', u'வரிசைப்படுத்து',
+                    u'எடு', u'தலைகீழ்', u'நீட்டிக்க', u'நுழைக்க', u'வை',
+                    u'கோப்பை_திற', u'கோப்பை_எழுது', u'கோப்பை_மூடு',
+                    u'pi', u'sin', u'cos', u'tan', u'sqrt', u'hypot', u'pow',
+                    u'exp', u'log', u'log10', u'exit',
                     ), suffix=r'\b'), Name.Builtin),
             (r'(True|False)\b', Keyword.Constant),
             (r'[^\S\n]+', Text),
@@ -63,7 +63,7 @@ class EzhilLexer(RegexLexer):
             (r'(?u)\d+', Number.Integer),
         ]
     }
- 
+
     def __init__(self, **options):
         super(EzhilLexer, self).__init__(**options)
         self.encoding = options.get('encoding', 'utf-8')

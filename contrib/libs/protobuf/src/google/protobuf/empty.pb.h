@@ -51,7 +51,7 @@ struct PROTOBUF_EXPORT TableStruct_google_2fprotobuf_2fempty_2eproto {
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
   static const ::PROTOBUF_NAMESPACE_ID::uint32 offsets[];
-}; 
+};
 PROTOBUF_EXPORT extern const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_google_2fprotobuf_2fempty_2eproto;
 PROTOBUF_NAMESPACE_OPEN
 class Empty;
@@ -82,19 +82,19 @@ class PROTOBUF_EXPORT Empty final :
     CopyFrom(from);
     return *this;
   }
-  inline Empty& operator=(Empty&& from) noexcept { 
+  inline Empty& operator=(Empty&& from) noexcept {
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else { 
-      CopyFrom(from); 
-    } 
-    return *this; 
-  } 
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  } 
+  }
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
   }
@@ -104,16 +104,16 @@ class PROTOBUF_EXPORT Empty final :
   static const Empty& default_instance() {
     return *internal_default_instance();
   }
-  static inline const Empty* internal_default_instance() { 
-    return reinterpret_cast<const Empty*>( 
-               &_Empty_default_instance_); 
-  } 
+  static inline const Empty* internal_default_instance() {
+    return reinterpret_cast<const Empty*>(
+               &_Empty_default_instance_);
+  }
   static constexpr int kIndexInFileMessages =
-    0; 
- 
-  friend void swap(Empty& a, Empty& b) { 
-    a.Swap(&b); 
-  } 
+    0;
+
+  friend void swap(Empty& a, Empty& b) {
+    a.Swap(&b);
+  }
   inline void Swap(Empty* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -194,20 +194,20 @@ class PROTOBUF_EXPORT Empty final :
 
 // ===================================================================
 
-#ifdef __GNUC__ 
-  #pragma GCC diagnostic push 
-  #pragma GCC diagnostic ignored "-Wstrict-aliasing" 
-#endif  // __GNUC__ 
+#ifdef __GNUC__
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif  // __GNUC__
 // Empty
 
-#ifdef __GNUC__ 
-  #pragma GCC diagnostic pop 
-#endif  // __GNUC__ 
+#ifdef __GNUC__
+  #pragma GCC diagnostic pop
+#endif  // __GNUC__
 
 // @@protoc_insertion_point(namespace_scope)
 
 PROTOBUF_NAMESPACE_CLOSE
- 
+
 // @@protoc_insertion_point(global_scope)
 
 #include <google/protobuf/port_undef.inc>

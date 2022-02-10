@@ -38,17 +38,17 @@ if __name__ == '__main__':
     unittest.main(testRunner=xmlrunner.XMLTestRunner(output='test-reports'))
 """
 
-from __future__ import absolute_import 
- 
+from __future__ import absolute_import
+
 import os
 import sys
 import time
 from unittest import TestResult, TextTestResult, TextTestRunner
 import xml.dom.minidom
-try: 
-    from StringIO import StringIO 
-except ImportError: 
-    from io import StringIO  # doesn't accept 'str' in Py2 
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO  # doesn't accept 'str' in Py2
 
 
 class XMLDocument(xml.dom.minidom.Document):
@@ -186,27 +186,27 @@ class _XMLTestResult(TextTestResult):
         for test_info in errors:
             if isinstance(test_info, tuple):
                 test_info, exc_info = test_info
- 
-            try: 
-                t = test_info.get_elapsed_time() 
-            except AttributeError: 
-                t = 0 
-            try: 
-                descr = test_info.get_description() 
-            except AttributeError: 
-                try: 
-                    descr = test_info.getDescription() 
-                except AttributeError: 
-                    descr = str(test_info) 
-            try: 
-                err_info = test_info.get_error_info() 
-            except AttributeError: 
-                err_info = str(test_info) 
- 
+
+            try:
+                t = test_info.get_elapsed_time()
+            except AttributeError:
+                t = 0
+            try:
+                descr = test_info.get_description()
+            except AttributeError:
+                try:
+                    descr = test_info.getDescription()
+                except AttributeError:
+                    descr = str(test_info)
+            try:
+                err_info = test_info.get_error_info()
+            except AttributeError:
+                err_info = str(test_info)
+
             self.stream.writeln(self.separator1)
-            self.stream.writeln('%s [%.3fs]: %s' % (flavour, t, descr)) 
+            self.stream.writeln('%s [%.3fs]: %s' % (flavour, t, descr))
             self.stream.writeln(self.separator2)
-            self.stream.writeln('%s' % err_info) 
+            self.stream.writeln('%s' % err_info)
 
     def _get_info_by_testcase(self):
         """This method organizes test results by TestCase module. This
@@ -217,9 +217,9 @@ class _XMLTestResult(TextTestResult):
 
         for tests in (self.successes, self.failures, self.errors):
             for test_info in tests:
-                if not isinstance(test_info, _TestInfo): 
-                    print("Unexpected test result type: %r" % (test_info,)) 
-                    continue 
+                if not isinstance(test_info, _TestInfo):
+                    print("Unexpected test result type: %r" % (test_info,))
+                    continue
                 testcase = type(test_info.test_method)
 
                 # Ignore module name if it is '__main__'
@@ -335,10 +335,10 @@ class _XMLTestResult(TextTestResult):
 class XMLTestRunner(TextTestRunner):
     """A test runner class that outputs the results in JUnit like XML files.
     """
-    def __init__(self, output='.', stream=None, descriptions=True, verbose=False, elapsed_times=True): 
+    def __init__(self, output='.', stream=None, descriptions=True, verbose=False, elapsed_times=True):
         "Create a new instance of XMLTestRunner."
-        if stream is None: 
-            stream = sys.stderr 
+        if stream is None:
+            stream = sys.stderr
         verbosity = (1, 2)[verbose]
         TextTestRunner.__init__(self, stream, descriptions, verbosity)
         self.output = output
@@ -367,11 +367,11 @@ class XMLTestRunner(TextTestRunner):
         stop_time = time.time()
         time_taken = stop_time - start_time
 
-        # Generate reports 
-        self.stream.writeln() 
-        self.stream.writeln('Generating XML reports...') 
-        result.generate_reports(self) 
- 
+        # Generate reports
+        self.stream.writeln()
+        self.stream.writeln('Generating XML reports...')
+        result.generate_reports(self)
+
         # Print results
         result.printErrors()
         self.stream.writeln(result.separator2)

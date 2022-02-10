@@ -510,7 +510,7 @@ struct Curl_addrinfo *Curl_unix2addr(const char *path, bool *longpath,
 #if defined(CURLDEBUG) && defined(HAVE_GETADDRINFO) &&  \
   defined(HAVE_FREEADDRINFO)
 /*
- * curl_dbg_freeaddrinfo() 
+ * curl_dbg_freeaddrinfo()
  *
  * This is strictly for memory tracing and are using the same style as the
  * family otherwise present in memdebug.c. I put these ones here since they
@@ -518,11 +518,11 @@ struct Curl_addrinfo *Curl_unix2addr(const char *path, bool *longpath,
  */
 
 void
-curl_dbg_freeaddrinfo(struct addrinfo *freethis, 
-                      int line, const char *source) 
+curl_dbg_freeaddrinfo(struct addrinfo *freethis,
+                      int line, const char *source)
 {
-  curl_dbg_log("ADDR %s:%d freeaddrinfo(%p)\n", 
-               source, line, (void *)freethis); 
+  curl_dbg_log("ADDR %s:%d freeaddrinfo(%p)\n",
+               source, line, (void *)freethis);
 #ifdef USE_LWIPSOCK
   lwip_freeaddrinfo(freethis);
 #else
@@ -534,7 +534,7 @@ curl_dbg_freeaddrinfo(struct addrinfo *freethis,
 
 #if defined(CURLDEBUG) && defined(HAVE_GETADDRINFO)
 /*
- * curl_dbg_getaddrinfo() 
+ * curl_dbg_getaddrinfo()
  *
  * This is strictly for memory tracing and are using the same style as the
  * family otherwise present in memdebug.c. I put these ones here since they
@@ -542,11 +542,11 @@ curl_dbg_freeaddrinfo(struct addrinfo *freethis,
  */
 
 int
-curl_dbg_getaddrinfo(const char *hostname, 
-                    const char *service, 
-                    const struct addrinfo *hints, 
-                    struct addrinfo **result, 
-                    int line, const char *source) 
+curl_dbg_getaddrinfo(const char *hostname,
+                    const char *service,
+                    const struct addrinfo *hints,
+                    struct addrinfo **result,
+                    int line, const char *source)
 {
 #ifdef USE_LWIPSOCK
   int res = lwip_getaddrinfo(hostname, service, hints, result);
@@ -555,11 +555,11 @@ curl_dbg_getaddrinfo(const char *hostname,
 #endif
   if(0 == res)
     /* success */
-    curl_dbg_log("ADDR %s:%d getaddrinfo() = %p\n", 
-                 source, line, (void *)*result); 
+    curl_dbg_log("ADDR %s:%d getaddrinfo() = %p\n",
+                 source, line, (void *)*result);
   else
-    curl_dbg_log("ADDR %s:%d getaddrinfo() failed\n", 
-                 source, line); 
+    curl_dbg_log("ADDR %s:%d getaddrinfo() failed\n",
+                 source, line);
   return res;
 }
 #endif /* defined(CURLDEBUG) && defined(HAVE_GETADDRINFO) */

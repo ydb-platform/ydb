@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
 #pragma once
 
@@ -37,16 +37,16 @@ namespace Aws
             virtual ~HttpClient() {}
 
             /**
-             * Takes an http request, makes it, and returns the newly allocated HttpResponse. 
+             * Takes an http request, makes it, and returns the newly allocated HttpResponse.
              */
-            virtual std::shared_ptr<HttpResponse> MakeRequest(const std::shared_ptr<HttpRequest>& request, 
+            virtual std::shared_ptr<HttpResponse> MakeRequest(const std::shared_ptr<HttpRequest>& request,
                 Aws::Utils::RateLimits::RateLimiterInterface* readLimiter = nullptr,
                 Aws::Utils::RateLimits::RateLimiterInterface* writeLimiter = nullptr) const = 0;
 
             /**
-             * If yes, the http client supports transfer-encoding:chunked. 
+             * If yes, the http client supports transfer-encoding:chunked.
              */
-            virtual bool SupportsChunkedTransferEncoding() const { return true; } 
+            virtual bool SupportsChunkedTransferEncoding() const { return true; }
 
             /**
              * Stops all requests in progress and prevents any others from initiating.

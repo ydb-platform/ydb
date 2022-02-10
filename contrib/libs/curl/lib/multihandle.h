@@ -47,16 +47,16 @@ typedef enum {
   CURLM_STATE_SENDPROTOCONNECT, /* 6 - initiate protocol connect procedure */
   CURLM_STATE_PROTOCONNECT, /* 7 - completing the protocol-specific connect
                                    phase */
-  CURLM_STATE_DO,           /* 8 - start send off the request (part 1) */ 
-  CURLM_STATE_DOING,        /* 9 - sending off the request (part 1) */ 
-  CURLM_STATE_DO_MORE,      /* 10 - send off the request (part 2) */ 
-  CURLM_STATE_DO_DONE,      /* 11 - done sending off request */ 
-  CURLM_STATE_PERFORM,      /* 12 - transfer data */ 
-  CURLM_STATE_TOOFAST,      /* 13 - wait because limit-rate exceeded */ 
-  CURLM_STATE_DONE,         /* 14 - post data transfer operation */ 
-  CURLM_STATE_COMPLETED,    /* 15 - operation complete */ 
-  CURLM_STATE_MSGSENT,      /* 16 - the operation complete message is sent */ 
-  CURLM_STATE_LAST          /* 17 - not a true state, never use this */ 
+  CURLM_STATE_DO,           /* 8 - start send off the request (part 1) */
+  CURLM_STATE_DOING,        /* 9 - sending off the request (part 1) */
+  CURLM_STATE_DO_MORE,      /* 10 - send off the request (part 2) */
+  CURLM_STATE_DO_DONE,      /* 11 - done sending off request */
+  CURLM_STATE_PERFORM,      /* 12 - transfer data */
+  CURLM_STATE_TOOFAST,      /* 13 - wait because limit-rate exceeded */
+  CURLM_STATE_DONE,         /* 14 - post data transfer operation */
+  CURLM_STATE_COMPLETED,    /* 15 - operation complete */
+  CURLM_STATE_MSGSENT,      /* 16 - the operation complete message is sent */
+  CURLM_STATE_LAST          /* 17 - not a true state, never use this */
 } CURLMstate;
 
 /* we support N sockets per easy handle. Set the corresponding bit to what
@@ -65,7 +65,7 @@ typedef enum {
 #define GETSOCK_READABLE (0x00ff)
 #define GETSOCK_WRITABLE (0xff00)
 
-#define CURLPIPE_ANY (CURLPIPE_MULTIPLEX) 
+#define CURLPIPE_ANY (CURLPIPE_MULTIPLEX)
 
 #if defined(USE_SOCKETPAIR) && !defined(USE_BLOCKING_SOCKETS) &&        \
   !defined(CURL_DISABLE_SOCKETPAIR)

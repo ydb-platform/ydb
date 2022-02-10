@@ -1,122 +1,122 @@
---- a/api/NodeConcepts.hh 
-+++ b/api/NodeConcepts.hh 
-@@ -56,14 +56,14 @@ struct NoAttribute 
-         return 0; 
-     } 
-  
--    void add( const Attribute &attr) { 
-+    void add( const Attribute &) { 
-         // There must be an add function for the generic NodeImpl, but the 
-         // Node APIs ensure that it is never called, the throw here is 
-         // just in case 
-         throw Exception("This type does not have attribute"); 
-     } 
-  
--    const Attribute &get(size_t index = 0) const { 
-+    const Attribute &get(size_t = 0) const { 
-         // There must be an get function for the generic NodeImpl, but the 
-         // Node APIs ensure that it is never called, the throw here is 
-         // just in case 
-@@ -73,7 +73,7 @@ struct NoAttribute 
-         return empty; 
-     } 
-  
--    Attribute &get(size_t index = 0) { 
-+    Attribute &get(size_t = 0) { 
-         // There must be an get function for the generic NodeImpl, but the 
-         // Node APIs ensure that it is never called, the throw here is 
-         // just in case 
-@@ -97,7 +97,7 @@ struct SingleAttribute 
-     { } 
-  
-     // copy constructing from a no attribute is allowed 
--    SingleAttribute(const NoAttribute<Attribute> &rhs) : 
-+    SingleAttribute(const NoAttribute<Attribute> &) : 
-         attr_() 
-     { } 
-  
-@@ -150,7 +150,7 @@ struct MultiAttribute 
-         attrs_(rhs.attrs_) 
-     { } 
-  
--    MultiAttribute(const NoAttribute<Attribute> &rhs) 
-+    MultiAttribute(const NoAttribute<Attribute> &) 
-     {} 
-  
-     size_t size() const { 
-@@ -178,12 +178,12 @@ struct MultiAttribute 
- template<typename T> 
- struct NameIndexConcept { 
-  
--    bool lookup(const std::string &name, size_t &index) const { 
-+    bool lookup(const std::string &, size_t &) const { 
-         throw Exception("Name index does not exist"); 
-         return 0; 
-     } 
-  
--    bool add(const::std::string &name, size_t index) { 
-+    bool add(const::std::string &, size_t) { 
-         throw Exception("Name index does not exist"); 
-         return false; 
-     } 
---- a/api/Validator.hh 
-+++ b/api/Validator.hh 
-@@ -33,12 +33,12 @@ class AVRO_DECL NullValidator : private boost::noncopyable 
- { 
-   public: 
-  
--    explicit NullValidator(const ValidSchema &schema) {} 
-+    explicit NullValidator(const ValidSchema &) {} 
-     NullValidator() {} 
-  
--    void setCount(int64_t val) {} 
-+    void setCount(int64_t) {} 
-  
--    bool typeIsExpected(Type type) const { 
-+    bool typeIsExpected(Type) const { 
-         return true; 
-     } 
-  
-@@ -50,16 +50,16 @@ class AVRO_DECL NullValidator : private boost::noncopyable 
-         return 0; 
-     } 
-  
--    bool getCurrentRecordName(std::string &name) const { 
-+    bool getCurrentRecordName(std::string &) const { 
-         return true; 
-     } 
-  
--    bool getNextFieldName(std::string &name) const { 
-+    bool getNextFieldName(std::string &) const { 
-         return true; 
-     } 
-  
--    void checkTypeExpected(Type type) { } 
--    void checkFixedSizeExpected(int size) { } 
-+    void checkTypeExpected(Type) { } 
-+    void checkFixedSizeExpected(int) { } 
-  
-  
- }; 
---- a/api/buffer/BufferReader.hh 
-+++ b/api/buffer/BufferReader.hh 
-@@ -254,7 +254,7 @@ class AVRO_DECL BufferReader : private boost::noncopyable 
-  
-     /// An uninstantiable function, that is if boost::is_fundamental check fails 
-     template<typename T> 
--    bool read(T &val, const std::false_type&) 
-+    bool read(T &, const std::false_type&) 
-     { 
-         static_assert(sizeof(T) == 0, "Not a valid type to read"); 
-         return false; 
---- a/api/buffer/detail/BufferDetail.hh 
-+++ b/api/buffer/detail/BufferDetail.hh 
-@@ -364,7 +364,7 @@ class BufferImpl : boost::noncopyable 
-     /// An uninstantiable function, this is if boost::is_fundamental check fails, 
-     /// and will compile-time assert. 
-     template<typename T> 
--    void writeTo(T val, const std::false_type&) 
-+    void writeTo(T, const std::false_type&) 
-     { 
-         BOOST_STATIC_ASSERT(sizeof(T)==0); 
-     } 
+--- a/api/NodeConcepts.hh
++++ b/api/NodeConcepts.hh
+@@ -56,14 +56,14 @@ struct NoAttribute
+         return 0;
+     }
+ 
+-    void add( const Attribute &attr) {
++    void add( const Attribute &) {
+         // There must be an add function for the generic NodeImpl, but the
+         // Node APIs ensure that it is never called, the throw here is
+         // just in case
+         throw Exception("This type does not have attribute");
+     }
+ 
+-    const Attribute &get(size_t index = 0) const {
++    const Attribute &get(size_t = 0) const {
+         // There must be an get function for the generic NodeImpl, but the
+         // Node APIs ensure that it is never called, the throw here is
+         // just in case
+@@ -73,7 +73,7 @@ struct NoAttribute
+         return empty;
+     }
+ 
+-    Attribute &get(size_t index = 0) {
++    Attribute &get(size_t = 0) {
+         // There must be an get function for the generic NodeImpl, but the
+         // Node APIs ensure that it is never called, the throw here is
+         // just in case
+@@ -97,7 +97,7 @@ struct SingleAttribute
+     { }
+ 
+     // copy constructing from a no attribute is allowed
+-    SingleAttribute(const NoAttribute<Attribute> &rhs) :
++    SingleAttribute(const NoAttribute<Attribute> &) :
+         attr_()
+     { }
+ 
+@@ -150,7 +150,7 @@ struct MultiAttribute
+         attrs_(rhs.attrs_)
+     { }
+ 
+-    MultiAttribute(const NoAttribute<Attribute> &rhs)
++    MultiAttribute(const NoAttribute<Attribute> &)
+     {}
+ 
+     size_t size() const {
+@@ -178,12 +178,12 @@ struct MultiAttribute
+ template<typename T>
+ struct NameIndexConcept {
+ 
+-    bool lookup(const std::string &name, size_t &index) const {
++    bool lookup(const std::string &, size_t &) const {
+         throw Exception("Name index does not exist");
+         return 0;
+     }
+ 
+-    bool add(const::std::string &name, size_t index) {
++    bool add(const::std::string &, size_t) {
+         throw Exception("Name index does not exist");
+         return false;
+     }
+--- a/api/Validator.hh
++++ b/api/Validator.hh
+@@ -33,12 +33,12 @@ class AVRO_DECL NullValidator : private boost::noncopyable
+ {
+   public:
+ 
+-    explicit NullValidator(const ValidSchema &schema) {}
++    explicit NullValidator(const ValidSchema &) {}
+     NullValidator() {}
+ 
+-    void setCount(int64_t val) {}
++    void setCount(int64_t) {}
+ 
+-    bool typeIsExpected(Type type) const {
++    bool typeIsExpected(Type) const {
+         return true;
+     }
+ 
+@@ -50,16 +50,16 @@ class AVRO_DECL NullValidator : private boost::noncopyable
+         return 0;
+     }
+ 
+-    bool getCurrentRecordName(std::string &name) const {
++    bool getCurrentRecordName(std::string &) const {
+         return true;
+     }
+ 
+-    bool getNextFieldName(std::string &name) const {
++    bool getNextFieldName(std::string &) const {
+         return true;
+     }
+ 
+-    void checkTypeExpected(Type type) { }
+-    void checkFixedSizeExpected(int size) { }
++    void checkTypeExpected(Type) { }
++    void checkFixedSizeExpected(int) { }
+ 
+ 
+ };
+--- a/api/buffer/BufferReader.hh
++++ b/api/buffer/BufferReader.hh
+@@ -254,7 +254,7 @@ class AVRO_DECL BufferReader : private boost::noncopyable
+ 
+     /// An uninstantiable function, that is if boost::is_fundamental check fails
+     template<typename T>
+-    bool read(T &val, const std::false_type&)
++    bool read(T &, const std::false_type&)
+     {
+         static_assert(sizeof(T) == 0, "Not a valid type to read");
+         return false;
+--- a/api/buffer/detail/BufferDetail.hh
++++ b/api/buffer/detail/BufferDetail.hh
+@@ -364,7 +364,7 @@ class BufferImpl : boost::noncopyable
+     /// An uninstantiable function, this is if boost::is_fundamental check fails,
+     /// and will compile-time assert.
+     template<typename T>
+-    void writeTo(T val, const std::false_type&)
++    void writeTo(T, const std::false_type&)
+     {
+         BOOST_STATIC_ASSERT(sizeof(T)==0);
+     }

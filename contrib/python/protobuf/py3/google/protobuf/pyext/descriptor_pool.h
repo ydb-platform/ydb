@@ -40,8 +40,8 @@ namespace google {
 namespace protobuf {
 namespace python {
 
-struct PyMessageFactory; 
- 
+struct PyMessageFactory;
+
 // The (meta) type of all Messages classes.
 struct CMessageClass;
 
@@ -71,10 +71,10 @@ typedef struct PyDescriptorPool {
   // This pointer is owned.
   const DescriptorDatabase* database;
 
-  // The preferred MessageFactory to be used by descriptors. 
-  // TODO(amauryfa): Don't create the Factory from the DescriptorPool, but 
-  // use the one passed while creating message classes. And remove this member. 
-  PyMessageFactory* py_message_factory; 
+  // The preferred MessageFactory to be used by descriptors.
+  // TODO(amauryfa): Don't create the Factory from the DescriptorPool, but
+  // use the one passed while creating message classes. And remove this member.
+  PyMessageFactory* py_message_factory;
 
   // Cache the options for any kind of descriptor.
   // Descriptor pointers are owned by the DescriptorPool above.
@@ -87,7 +87,7 @@ extern PyTypeObject PyDescriptorPool_Type;
 
 namespace cdescriptor_pool {
 
- 
+
 // The functions below are also exposed as methods of the DescriptorPool type.
 
 // Looks up a field by name. Returns a PyFieldDescriptor corresponding to

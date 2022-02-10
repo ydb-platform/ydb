@@ -624,7 +624,7 @@ DEFAULT_MMAP_THRESHOLD       default: 256K
 /* #define HAVE_USR_INCLUDE_MALLOC_H */
 
 #ifdef HAVE_USR_INCLUDE_MALLOC_H
-#error #include "/usr/include/malloc.h" 
+#error #include "/usr/include/malloc.h"
 #else /* HAVE_USR_INCLUDE_MALLOC_H */
 
 /* HP-UX's stdlib.h redefines mallinfo unless _STRUCT_MALLINFO is defined */

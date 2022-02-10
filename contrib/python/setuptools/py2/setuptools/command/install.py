@@ -8,7 +8,7 @@ import distutils.command.install as orig
 import setuptools
 
 # Prior to numpy 1.9, NumPy relies on the '_install' name, so provide it for
-# now. See https://github.com/pypa/setuptools/issues/199/ 
+# now. See https://github.com/pypa/setuptools/issues/199/
 _install = orig.install
 
 

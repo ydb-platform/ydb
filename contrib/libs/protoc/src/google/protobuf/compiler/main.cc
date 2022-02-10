@@ -63,14 +63,14 @@ int ProtobufMain(int argc, char* argv[]) {
 
   // Proto2 Java
   java::JavaGenerator java_generator;
-  cli.RegisterGenerator("--java_out", "--java_opt", &java_generator, 
+  cli.RegisterGenerator("--java_out", "--java_opt", &java_generator,
                         "Generate Java source file.");
 
   // Proto2 Kotlin
   java::KotlinGenerator kt_generator;
   cli.RegisterGenerator("--kotlin_out", "--kotlin_opt", &kt_generator,
                         "Generate Kotlin file.");
- 
+
 
   // Proto2 Python
   python::Generator py_generator;

@@ -60,8 +60,8 @@ public:
 protected:
 	bool useAgainLabel();
 
-	void EOF_CHECK( ostream &ret, int gotoDest ); 
- 
+	void EOF_CHECK( ostream &ret, int gotoDest );
+
 	/* Called from GotoCodeGen::STATE_GOTOS just before writing the gotos for
 	 * each state. */
 	bool IN_TRANS_ACTIONS( RedStateAp *state );
@@ -94,14 +94,14 @@ struct DIpGotoCodeGen
 		FsmCodeGen(out), IpGotoCodeGen(out), DCodeGen(out) {}
 };
 
-/* 
- * class D2IpGotoCodeGen 
- */ 
-struct D2IpGotoCodeGen 
-	: public IpGotoCodeGen, public D2CodeGen 
-{ 
-	D2IpGotoCodeGen( ostream &out ) :  
-		FsmCodeGen(out), IpGotoCodeGen(out), D2CodeGen(out) {} 
-}; 
- 
+/*
+ * class D2IpGotoCodeGen
+ */
+struct D2IpGotoCodeGen
+	: public IpGotoCodeGen, public D2CodeGen
+{
+	D2IpGotoCodeGen( ostream &out ) : 
+		FsmCodeGen(out), IpGotoCodeGen(out), D2CodeGen(out) {}
+};
+
 #endif

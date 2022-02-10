@@ -673,7 +673,7 @@ bool Parser::Parse(io::Tokenizer* input, FileDescriptorProto* file) {
 
   input_ = NULL;
   source_code_info_ = NULL;
-  assert(file != NULL); 
+  assert(file != NULL);
   source_code_info.Swap(file->mutable_source_code_info());
   return !had_errors_;
 }
@@ -810,7 +810,7 @@ bool Parser::ParseMessageDefinition(
 
 namespace {
 
-const int kMaxRangeSentinel = -1; 
+const int kMaxRangeSentinel = -1;
 
 bool IsMessageSetWireFormatMessage(const DescriptorProto& message) {
   const MessageOptions& options = message.options();
@@ -834,27 +834,27 @@ void AdjustExtensionRangesWithMaxEndNumber(DescriptorProto* message) {
                                        ? std::numeric_limits<int32_t>::max()
                                        : FieldDescriptor::kMaxNumber + 1;
   for (int i = 0; i < message->extension_range_size(); ++i) {
-    if (message->extension_range(i).end() == kMaxRangeSentinel) { 
+    if (message->extension_range(i).end() == kMaxRangeSentinel) {
       message->mutable_extension_range(i)->set_end(max_extension_number);
     }
   }
 }
 
-// Modifies any reserved ranges that specified 'max' as the end of the 
-// reserved range, and sets them to the type-specific maximum. The actual max 
-// tag number can only be determined after all options have been parsed. 
-void AdjustReservedRangesWithMaxEndNumber(DescriptorProto* message) { 
-  const bool is_message_set = IsMessageSetWireFormatMessage(*message); 
+// Modifies any reserved ranges that specified 'max' as the end of the
+// reserved range, and sets them to the type-specific maximum. The actual max
+// tag number can only be determined after all options have been parsed.
+void AdjustReservedRangesWithMaxEndNumber(DescriptorProto* message) {
+  const bool is_message_set = IsMessageSetWireFormatMessage(*message);
   const int max_field_number = is_message_set
                                    ? std::numeric_limits<int32_t>::max()
                                    : FieldDescriptor::kMaxNumber + 1;
-  for (int i = 0; i < message->reserved_range_size(); ++i) { 
-    if (message->reserved_range(i).end() == kMaxRangeSentinel) { 
-      message->mutable_reserved_range(i)->set_end(max_field_number); 
-    } 
-  } 
-} 
- 
+  for (int i = 0; i < message->reserved_range_size(); ++i) {
+    if (message->reserved_range(i).end() == kMaxRangeSentinel) {
+      message->mutable_reserved_range(i)->set_end(max_field_number);
+    }
+  }
+}
+
 }  // namespace
 
 bool Parser::ParseMessageBlock(DescriptorProto* message,
@@ -878,9 +878,9 @@ bool Parser::ParseMessageBlock(DescriptorProto* message,
   if (message->extension_range_size() > 0) {
     AdjustExtensionRangesWithMaxEndNumber(message);
   }
-  if (message->reserved_range_size() > 0) { 
-    AdjustReservedRangesWithMaxEndNumber(message); 
-  } 
+  if (message->reserved_range_size() > 0) {
+    AdjustReservedRangesWithMaxEndNumber(message);
+  }
   return true;
 }
 
@@ -1598,8 +1598,8 @@ bool Parser::ParseExtensions(DescriptorProto* message,
   // Parse the declaration.
   DO(Consume("extensions"));
 
-  int old_range_size = message->extension_range_size(); 
- 
+  int old_range_size = message->extension_range_size();
+
   do {
     // Note that kExtensionRangeFieldNumber was already pushed by the parent.
     LocationRecorder location(extensions_location,
@@ -1626,7 +1626,7 @@ bool Parser::ParseExtensions(DescriptorProto* message,
         // Set to the sentinel value - 1 since we increment the value below.
         // The actual value of the end of the range should be set with
         // AdjustExtensionRangesWithMaxEndNumber.
-        end = kMaxRangeSentinel - 1; 
+        end = kMaxRangeSentinel - 1;
       } else {
         DO(ConsumeInteger(&end, "Expected integer."));
       }
@@ -1646,14 +1646,14 @@ bool Parser::ParseExtensions(DescriptorProto* message,
     range->set_end(end);
   } while (TryConsume(","));
 
-  if (LookingAt("[")) { 
+  if (LookingAt("[")) {
     int range_number_index = extensions_location.CurrentPathSize();
     SourceCodeInfo info;
- 
-    // Parse extension range options in the first range. 
-    ExtensionRangeOptions* options = 
-        message->mutable_extension_range(old_range_size)->mutable_options(); 
- 
+
+    // Parse extension range options in the first range.
+    ExtensionRangeOptions* options =
+        message->mutable_extension_range(old_range_size)->mutable_options();
+
     {
       LocationRecorder index_location(
           extensions_location, 0 /* we fill this in w/ actual index below */,
@@ -1661,7 +1661,7 @@ bool Parser::ParseExtensions(DescriptorProto* message,
       LocationRecorder location(
           index_location, DescriptorProto::ExtensionRange::kOptionsFieldNumber);
       DO(Consume("["));
- 
+
       do {
         DO(ParseOption(options, location, containing_file, OPTION_ASSIGNMENT));
       } while (TryConsume(","));
@@ -1669,12 +1669,12 @@ bool Parser::ParseExtensions(DescriptorProto* message,
       DO(Consume("]"));
     }
 
-    // Then copy the extension range options to all of the other ranges we've 
-    // parsed. 
-    for (int i = old_range_size + 1; i < message->extension_range_size(); i++) { 
+    // Then copy the extension range options to all of the other ranges we've
+    // parsed.
+    for (int i = old_range_size + 1; i < message->extension_range_size(); i++) {
       message->mutable_extension_range(i)->mutable_options()->CopyFrom(
           *options);
-    } 
+    }
     // and copy source locations to the other ranges, too
     for (int i = old_range_size; i < message->extension_range_size(); i++) {
       for (int j = 0; j < info.location_size(); j++) {
@@ -1688,14 +1688,14 @@ bool Parser::ParseExtensions(DescriptorProto* message,
         dest->set_path(range_number_index, i);
       }
     }
-  } 
- 
+  }
+
   DO(ConsumeEndOfDeclaration(";", &extensions_location));
   return true;
 }
 
-// This is similar to extension range parsing, except that it accepts field 
-// name literals. 
+// This is similar to extension range parsing, except that it accepts field
+// name literals.
 bool Parser::ParseReserved(DescriptorProto* message,
                            const LocationRecorder& message_location) {
   io::Tokenizer::Token start_token = input_->current();
@@ -1744,14 +1744,14 @@ bool Parser::ParseReservedNumbers(DescriptorProto* message,
     if (TryConsume("to")) {
       LocationRecorder end_location(
           location, DescriptorProto::ReservedRange::kEndFieldNumber);
-      if (TryConsume("max")) { 
-        // Set to the sentinel value - 1 since we increment the value below. 
-        // The actual value of the end of the range should be set with 
-        // AdjustExtensionRangesWithMaxEndNumber. 
-        end = kMaxRangeSentinel - 1; 
-      } else { 
-        DO(ConsumeInteger(&end, "Expected integer.")); 
-      } 
+      if (TryConsume("max")) {
+        // Set to the sentinel value - 1 since we increment the value below.
+        // The actual value of the end of the range should be set with
+        // AdjustExtensionRangesWithMaxEndNumber.
+        end = kMaxRangeSentinel - 1;
+      } else {
+        DO(ConsumeInteger(&end, "Expected integer."));
+      }
     } else {
       LocationRecorder end_location(
           location, DescriptorProto::ReservedRange::kEndFieldNumber);

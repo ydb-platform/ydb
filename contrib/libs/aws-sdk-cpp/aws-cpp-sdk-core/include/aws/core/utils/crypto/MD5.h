@@ -1,7 +1,7 @@
-/** 
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
- * SPDX-License-Identifier: Apache-2.0. 
- */ 
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0.
+ */
 
   /*
   * Interface for Sha256 encryptor and hmac
@@ -40,7 +40,7 @@ namespace Aws
             {
             public:
                 /**
-                 * Initializes platform crypto libs for md5 
+                 * Initializes platform crypto libs for md5
                  */
                 MD5();
                 virtual ~MD5();

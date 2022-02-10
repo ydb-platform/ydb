@@ -35,7 +35,7 @@
 #include "y_absl/base/thread_annotations.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 Time Now() {
   // TODO(bww): Get a timespec instead so we don't have to divide.
   int64_t n = y_absl::GetCurrentTimeNanos();
@@ -45,7 +45,7 @@ Time Now() {
   }
   return time_internal::FromUnixDuration(y_absl::Nanoseconds(n));
 }
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 // Decide if we should use the fast GetCurrentTimeNanos() algorithm
@@ -74,9 +74,9 @@ ABSL_NAMESPACE_END
 
 #if !ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 int64_t GetCurrentTimeNanos() { return GET_CURRENT_TIME_NANOS_FROM_SYSTEM(); }
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 #else  // Use the cyclecounter-based implementation below.
 
@@ -87,7 +87,7 @@ ABSL_NAMESPACE_END
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 // This is a friend wrapper around UnscaledCycleClock::Now()
 // (needed to access UnscaledCycleClock).
@@ -535,12 +535,12 @@ static uint64_t UpdateLastSample(uint64_t now_cycles, uint64_t now_ns,
 
   return estimated_base_ns;
 }
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 #endif  // ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN 
+ABSL_NAMESPACE_BEGIN
 namespace {
 
 // Returns the maximum duration that SleepOnce() can sleep for.
@@ -568,7 +568,7 @@ void SleepOnce(y_absl::Duration to_sleep) {
 }
 
 }  // namespace
-ABSL_NAMESPACE_END 
+ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 extern "C" {

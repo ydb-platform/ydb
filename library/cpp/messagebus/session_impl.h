@@ -1,24 +1,24 @@
 #pragma once
 
-#include "acceptor_status.h" 
-#include "async_result.h" 
-#include "event_loop.h" 
+#include "acceptor_status.h"
+#include "async_result.h"
+#include "event_loop.h"
 #include "netaddr.h"
-#include "remote_connection.h" 
+#include "remote_connection.h"
 #include "remote_connection_status.h"
 #include "session_job_count.h"
 #include "shutdown_state.h"
-#include "ybus.h" 
+#include "ybus.h"
 
 #include <library/cpp/messagebus/actor/actor.h>
 #include <library/cpp/messagebus/actor/queue_in_actor.h>
 #include <library/cpp/messagebus/monitoring/mon_proto.pb.h>
 
 #include <library/cpp/threading/future/legacy_future.h>
- 
-#include <util/generic/array_ref.h> 
-#include <util/generic/string.h> 
- 
+
+#include <util/generic/array_ref.h>
+#include <util/generic/string.h>
+
 namespace NBus {
     namespace NPrivate {
         typedef TIntrusivePtr<TRemoteClientConnection> TRemoteClientConnectionPtr;

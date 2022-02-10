@@ -6,7 +6,7 @@
 #include <locale.h>
 
 void Py_InitArgcArgv(int argc, wchar_t **argv);
-char* GetPyMain(); 
+char* GetPyMain();
 
 static const char* env_entry_point = "Y_PYTHON_ENTRY_POINT";
 static const char* env_bytes_warning = "Y_PYTHON_BYTES_WARNING";
@@ -135,26 +135,26 @@ static int pymain(int argc, char** argv) {
     }
 
     const char* entry_point = getenv(env_entry_point);
-    if (entry_point) { 
-        entry_point_copy = strdup(entry_point); 
-        if (!entry_point_copy) { 
-            fprintf(stderr, "out of memory\n"); 
-            goto error; 
-        } 
-    } else { 
-        entry_point_copy = GetPyMain(); 
-    } 
- 
-    if (entry_point_copy == NULL) { 
-        fprintf(stderr, "No entry point, did you forget PY_MAIN?\n"); 
-        goto error; 
-    } 
- 
-    if (entry_point_copy && !strcmp(entry_point_copy, ":main")) { 
+    if (entry_point) {
+        entry_point_copy = strdup(entry_point);
+        if (!entry_point_copy) {
+            fprintf(stderr, "out of memory\n");
+            goto error;
+        }
+    } else {
+        entry_point_copy = GetPyMain();
+    }
+
+    if (entry_point_copy == NULL) {
+        fprintf(stderr, "No entry point, did you forget PY_MAIN?\n");
+        goto error;
+    }
+
+    if (entry_point_copy && !strcmp(entry_point_copy, ":main")) {
         unsetenv(env_entry_point);
-        sts = Py_Main(argc, argv_copy); 
-        free(entry_point_copy); 
-        return sts; 
+        sts = Py_Main(argc, argv_copy);
+        free(entry_point_copy);
+        return sts;
     }
 
     Py_InitArgcArgv(argc, argv_copy);

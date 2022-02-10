@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/messagebus/network.h>
- 
+
 #include <util/network/sock.h>
 
 class THangingServer {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/system/atomic.h> 
+#include <util/system/atomic.h>
 #include <util/system/yassert.h>
 
 namespace NActor {

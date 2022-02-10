@@ -3,9 +3,9 @@
 #include "remote_client_session_semaphore.h"
 #include "session_impl.h"
 
-#include <util/generic/array_ref.h> 
-#include <util/generic/object_counter.h> 
- 
+#include <util/generic/array_ref.h>
+#include <util/generic/object_counter.h>
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4250) //  'NBus::NPrivate::TRemoteClientSession' : inherits 'NBus::NPrivate::TBusSessionImpl::NBus::NPrivate::TBusSessionImpl::GetConfig' via dominance

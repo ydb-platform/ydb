@@ -1,7 +1,7 @@
 #pragma once
 
-#include "message_status.h" 
- 
+#include "message_status.h"
+
 #include <library/cpp/messagebus/monitoring/mon_proto.pb.h>
 
 #include <util/generic/string.h>

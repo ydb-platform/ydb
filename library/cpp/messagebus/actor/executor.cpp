@@ -1,14 +1,14 @@
-#include "executor.h" 
+#include "executor.h"
 
 #include "thread_extra.h"
 #include "what_thread_does.h"
 #include "what_thread_does_guard.h"
 
-#include <util/generic/utility.h> 
-#include <util/random/random.h> 
-#include <util/stream/str.h> 
-#include <util/system/tls.h> 
-#include <util/system/yassert.h> 
+#include <util/generic/utility.h>
+#include <util/random/random.h>
+#include <util/stream/str.h>
+#include <util/system/tls.h>
+#include <util/system/yassert.h>
 
 #include <array>
 

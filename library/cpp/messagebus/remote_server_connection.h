@@ -1,7 +1,7 @@
 #pragma once
 
-#include "session_impl.h" 
- 
+#include "session_impl.h"
+
 #include <util/generic/object_counter.h>
 
 namespace NBus {

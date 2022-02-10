@@ -1,13 +1,13 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "messagebus_client.h" 
- 
+#include "messagebus_client.h"
+
 #include <library/cpp/messagebus/rain_check/test/ut/test.h>
- 
+
 #include <library/cpp/messagebus/test/helper/example.h>
 #include <library/cpp/messagebus/test/helper/object_count_check.h>
 
-#include <util/generic/cast.h> 
+#include <util/generic/cast.h>
 
 using namespace NBus;
 using namespace NBus::NTest;

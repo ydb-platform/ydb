@@ -1,5 +1,5 @@
-#include "messagebus_server.h" 
- 
+#include "messagebus_server.h"
+
 #include <library/cpp/messagebus/rain_check/core/spawn.h>
 
 using namespace NRainCheck;

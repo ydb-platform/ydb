@@ -2,7 +2,7 @@
 
 #include <library/cpp/messagebus/test_utils.h>
 #include <library/cpp/messagebus/ybus.h>
- 
+
 class TLocatorRegisterUniqTest: public TTestBase {
     UNIT_TEST_SUITE(TLocatorRegisterUniqTest);
     UNIT_TEST(TestRegister);

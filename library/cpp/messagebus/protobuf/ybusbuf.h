@@ -5,9 +5,9 @@
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
 
-#include <util/generic/cast.h> 
-#include <util/generic/vector.h> 
-#include <util/stream/mem.h> 
+#include <util/generic/cast.h>
+#include <util/generic/vector.h>
+#include <util/stream/mem.h>
 
 #include <array>
 

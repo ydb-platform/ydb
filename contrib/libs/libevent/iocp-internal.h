@@ -24,8 +24,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef IOCP_INTERNAL_H_INCLUDED_ 
-#define IOCP_INTERNAL_H_INCLUDED_ 
+#ifndef IOCP_INTERNAL_H_INCLUDED_
+#define IOCP_INTERNAL_H_INCLUDED_
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,7 +39,7 @@ typedef void (*iocp_callback)(struct event_overlapped *, ev_uintptr_t, ev_ssize_
 /* This whole file is actually win32 only. We wrap the structures in a win32
  * ifdef so that we can test-compile code that uses these interfaces on
  * non-win32 platforms. */
-#ifdef _WIN32 
+#ifdef _WIN32
 
 /**
    Internal use only.  Wraps an OVERLAPPED that we're using for libevent
@@ -92,8 +92,8 @@ struct event_iocp_port {
 	HANDLE *shutdownSemaphore;
 };
 
-EVENT2_EXPORT_SYMBOL 
-const struct win32_extension_fns *event_get_win32_extension_fns_(void); 
+EVENT2_EXPORT_SYMBOL
+const struct win32_extension_fns *event_get_win32_extension_fns_(void);
 #else
 /* Dummy definition so we can test-compile more things on unix. */
 struct event_overlapped {
@@ -107,69 +107,69 @@ struct event_overlapped {
     @param cb The callback that should be invoked once the IO operation has
 	finished.
  */
-EVENT2_EXPORT_SYMBOL 
-void event_overlapped_init_(struct event_overlapped *, iocp_callback cb); 
+EVENT2_EXPORT_SYMBOL
+void event_overlapped_init_(struct event_overlapped *, iocp_callback cb);
 
 /** Allocate and return a new evbuffer that supports overlapped IO on a given
     socket.  The socket must be associated with an IO completion port using
-    event_iocp_port_associate_. 
+    event_iocp_port_associate_.
 */
-EVENT2_EXPORT_SYMBOL 
-struct evbuffer *evbuffer_overlapped_new_(evutil_socket_t fd); 
+EVENT2_EXPORT_SYMBOL
+struct evbuffer *evbuffer_overlapped_new_(evutil_socket_t fd);
 
 /** XXXX Document (nickm) */
-evutil_socket_t evbuffer_overlapped_get_fd_(struct evbuffer *buf); 
+evutil_socket_t evbuffer_overlapped_get_fd_(struct evbuffer *buf);
 
-void evbuffer_overlapped_set_fd_(struct evbuffer *buf, evutil_socket_t fd); 
+void evbuffer_overlapped_set_fd_(struct evbuffer *buf, evutil_socket_t fd);
 
 /** Start reading data onto the end of an overlapped evbuffer.
 
     An evbuffer can only have one read pending at a time.  While the read
     is in progress, no other data may be added to the end of the buffer.
-    The buffer must be created with event_overlapped_init_(). 
-    evbuffer_commit_read_() must be called in the completion callback. 
+    The buffer must be created with event_overlapped_init_().
+    evbuffer_commit_read_() must be called in the completion callback.
 
     @param buf The buffer to read onto
     @param n The number of bytes to try to read.
     @param ol Overlapped object with associated completion callback.
     @return 0 on success, -1 on error.
  */
-EVENT2_EXPORT_SYMBOL 
-int evbuffer_launch_read_(struct evbuffer *buf, size_t n, struct event_overlapped *ol); 
+EVENT2_EXPORT_SYMBOL
+int evbuffer_launch_read_(struct evbuffer *buf, size_t n, struct event_overlapped *ol);
 
 /** Start writing data from the start of an evbuffer.
 
     An evbuffer can only have one write pending at a time.  While the write is
     in progress, no other data may be removed from the front of the buffer.
-    The buffer must be created with event_overlapped_init_(). 
-    evbuffer_commit_write_() must be called in the completion callback. 
+    The buffer must be created with event_overlapped_init_().
+    evbuffer_commit_write_() must be called in the completion callback.
 
     @param buf The buffer to read onto
     @param n The number of bytes to try to read.
     @param ol Overlapped object with associated completion callback.
     @return 0 on success, -1 on error.
  */
-EVENT2_EXPORT_SYMBOL 
-int evbuffer_launch_write_(struct evbuffer *buf, ev_ssize_t n, struct event_overlapped *ol); 
+EVENT2_EXPORT_SYMBOL
+int evbuffer_launch_write_(struct evbuffer *buf, ev_ssize_t n, struct event_overlapped *ol);
 
 /** XXX document */
-EVENT2_EXPORT_SYMBOL 
-void evbuffer_commit_read_(struct evbuffer *, ev_ssize_t); 
-EVENT2_EXPORT_SYMBOL 
-void evbuffer_commit_write_(struct evbuffer *, ev_ssize_t); 
+EVENT2_EXPORT_SYMBOL
+void evbuffer_commit_read_(struct evbuffer *, ev_ssize_t);
+EVENT2_EXPORT_SYMBOL
+void evbuffer_commit_write_(struct evbuffer *, ev_ssize_t);
 
 /** Create an IOCP, and launch its worker threads.  Internal use only.
 
     This interface is unstable, and will change.
  */
-EVENT2_EXPORT_SYMBOL 
-struct event_iocp_port *event_iocp_port_launch_(int n_cpus); 
+EVENT2_EXPORT_SYMBOL
+struct event_iocp_port *event_iocp_port_launch_(int n_cpus);
 
 /** Associate a file descriptor with an iocp, such that overlapped IO on the
     fd will happen on one of the iocp's worker threads.
 */
-EVENT2_EXPORT_SYMBOL 
-int event_iocp_port_associate_(struct event_iocp_port *port, evutil_socket_t fd, 
+EVENT2_EXPORT_SYMBOL
+int event_iocp_port_associate_(struct event_iocp_port *port, evutil_socket_t fd,
     ev_uintptr_t key);
 
 /** Tell all threads serving an iocp to stop.  Wait for up to waitMsec for all
@@ -178,34 +178,34 @@ int event_iocp_port_associate_(struct event_iocp_port *port, evutil_socket_t fd,
     0. Otherwise, return -1.  If you get a -1 return value, it is safe to call
     this function again.
 */
-EVENT2_EXPORT_SYMBOL 
-int event_iocp_shutdown_(struct event_iocp_port *port, long waitMsec); 
+EVENT2_EXPORT_SYMBOL
+int event_iocp_shutdown_(struct event_iocp_port *port, long waitMsec);
 
 /* FIXME document. */
-EVENT2_EXPORT_SYMBOL 
-int event_iocp_activate_overlapped_(struct event_iocp_port *port, 
+EVENT2_EXPORT_SYMBOL
+int event_iocp_activate_overlapped_(struct event_iocp_port *port,
     struct event_overlapped *o,
     ev_uintptr_t key, ev_uint32_t n_bytes);
 
 struct event_base;
 /* FIXME document. */
-EVENT2_EXPORT_SYMBOL 
-struct event_iocp_port *event_base_get_iocp_(struct event_base *base); 
+EVENT2_EXPORT_SYMBOL
+struct event_iocp_port *event_base_get_iocp_(struct event_base *base);
 
 /* FIXME document. */
-EVENT2_EXPORT_SYMBOL 
-int event_base_start_iocp_(struct event_base *base, int n_cpus); 
-void event_base_stop_iocp_(struct event_base *base); 
+EVENT2_EXPORT_SYMBOL
+int event_base_start_iocp_(struct event_base *base, int n_cpus);
+void event_base_stop_iocp_(struct event_base *base);
 
 /* FIXME document. */
-EVENT2_EXPORT_SYMBOL 
-struct bufferevent *bufferevent_async_new_(struct event_base *base, 
+EVENT2_EXPORT_SYMBOL
+struct bufferevent *bufferevent_async_new_(struct event_base *base,
     evutil_socket_t fd, int options);
 
 /* FIXME document. */
-void bufferevent_async_set_connected_(struct bufferevent *bev); 
-int bufferevent_async_can_connect_(struct bufferevent *bev); 
-int bufferevent_async_connect_(struct bufferevent *bev, evutil_socket_t fd, 
+void bufferevent_async_set_connected_(struct bufferevent *bev);
+int bufferevent_async_can_connect_(struct bufferevent *bev);
+int bufferevent_async_connect_(struct bufferevent *bev, evutil_socket_t fd,
 	const struct sockaddr *sa, int socklen);
 
 #ifdef __cplusplus

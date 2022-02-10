@@ -1,5 +1,5 @@
-#include "hanging_server.h" 
- 
+#include "hanging_server.h"
+
 #include <util/system/yassert.h>
 
 using namespace NBus;

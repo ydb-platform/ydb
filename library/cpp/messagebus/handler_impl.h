@@ -1,7 +1,7 @@
 #pragma once
 
-#include "handler.h" 
-#include "local_flags.h" 
+#include "handler.h"
+#include "local_flags.h"
 #include "session.h"
 
 namespace NBus {

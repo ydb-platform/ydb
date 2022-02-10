@@ -12,10 +12,10 @@
 
 #include <util/generic/object_counter.h>
 #include <util/system/type_name.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 
-#include <typeinfo> 
- 
+#include <typeinfo>
+
 struct TObjectCountCheck {
     bool Enabled;
 

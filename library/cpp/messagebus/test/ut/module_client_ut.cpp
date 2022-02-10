@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "count_down_latch.h" 
+#include "count_down_latch.h"
 #include "moduletest.h"
 
 #include <library/cpp/messagebus/test/helper/example.h>
@@ -10,10 +10,10 @@
 
 #include <library/cpp/messagebus/misc/test_sync.h>
 #include <library/cpp/messagebus/oldmodule/module.h>
- 
-#include <util/generic/cast.h> 
-#include <util/system/event.h> 
- 
+
+#include <util/generic/cast.h>
+#include <util/system/event.h>
+
 using namespace NBus;
 using namespace NBus::NTest;
 

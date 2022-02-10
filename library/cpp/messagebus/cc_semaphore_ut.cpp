@@ -2,8 +2,8 @@
 
 #include "cc_semaphore.h"
 
-#include <util/system/atomic.h> 
- 
+#include <util/system/atomic.h>
+
 namespace {
     struct TTestSemaphore: public TComplexConditionSemaphore<TTestSemaphore> {
         TAtomic Current;

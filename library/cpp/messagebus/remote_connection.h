@@ -1,18 +1,18 @@
 #pragma once
 
 #include "async_result.h"
-#include "defs.h" 
+#include "defs.h"
 #include "event_loop.h"
-#include "left_right_buffer.h" 
-#include "lfqueue_batch.h" 
-#include "message_ptr_and_header.h" 
+#include "left_right_buffer.h"
+#include "lfqueue_batch.h"
+#include "message_ptr_and_header.h"
 #include "nondestroying_holder.h"
 #include "remote_connection_status.h"
 #include "scheduler_actor.h"
 #include "socket_addr.h"
-#include "storage.h" 
+#include "storage.h"
 #include "vector_swaps.h"
-#include "ybus.h" 
+#include "ybus.h"
 #include "misc/granup.h"
 #include "misc/tokenquota.h"
 
@@ -21,11 +21,11 @@
 #include <library/cpp/messagebus/actor/queue_for_actor.h>
 #include <library/cpp/messagebus/actor/queue_in_actor.h>
 #include <library/cpp/messagebus/scheduler/scheduler.h>
- 
-#include <util/system/atomic.h> 
-#include <util/system/event.h> 
-#include <util/thread/lfstack.h> 
- 
+
+#include <util/system/atomic.h>
+#include <util/system/event.h>
+#include <util/thread/lfstack.h>
+
 namespace NBus {
     namespace NPrivate {
         class TRemoteConnection;

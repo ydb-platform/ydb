@@ -130,7 +130,7 @@ RECURSE(
     kyotocabinet
     lang_detect
     lbfgs
-    lcms2 
+    lcms2
     lepton
     leveldb
     libarchive
@@ -140,24 +140,24 @@ RECURSE(
     libc_userver_workarounds
     libcpuid
     libcroco
-    libde265 
+    libde265
     libdivide
     libdivsufsort2
     libeatmydata/dynamic
     libev
-    libevent 
+    libevent
     libexslt
     libfdk-aac
     libfuzzer12
     libgeotiff
     libgit2
     libgraphqlparser
-    libheif 
+    libheif
     libical
     libiconv
     libidn
     libidn2
-    libjpeg-turbo 
+    libjpeg-turbo
     libjwt
     liblinear
     libm
@@ -174,7 +174,7 @@ RECURSE(
     libpq
     libpqxx
     libpsl
-    libraw 
+    libraw
     librdkafka
     librosa-cpp
     librsvg
@@ -338,7 +338,7 @@ RECURSE(
     tf-2.4/tensorflow/python
     thrax
     tinyalsa
-    tlsh 
+    tlsh
     trace_viewer
     tralics
     tree_sitter

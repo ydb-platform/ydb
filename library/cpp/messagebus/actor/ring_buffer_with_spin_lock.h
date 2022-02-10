@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ring_buffer.h" 
- 
+#include "ring_buffer.h"
+
 #include <util/system/spinlock.h>
 
 template <typename T>

@@ -1,10 +1,10 @@
-#include "coro_stack.h" 
+#include "coro_stack.h"
 
 #include <util/generic/singleton.h>
 #include <util/system/valgrind.h>
 
 #include <cstdlib>
-#include <stdio.h> 
+#include <stdio.h>
 
 using namespace NRainCheck;
 using namespace NRainCheck::NPrivate;

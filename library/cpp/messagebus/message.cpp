@@ -1,11 +1,11 @@
-#include "remote_server_connection.h" 
-#include "ybus.h" 
+#include "remote_server_connection.h"
+#include "ybus.h"
 
-#include <util/random/random.h> 
-#include <util/string/printf.h> 
+#include <util/random/random.h>
+#include <util/string/printf.h>
 #include <util/system/atomic.h>
 
-#include <string.h> 
+#include <string.h>
 
 using namespace NBus;
 

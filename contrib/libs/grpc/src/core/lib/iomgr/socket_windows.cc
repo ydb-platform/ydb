@@ -22,15 +22,15 @@
 
 #ifdef GRPC_WINSOCK_SOCKET
 
-#define OPTIONAL 
- 
+#define OPTIONAL
+
 #include <winsock2.h>
 
 // must be included after winsock2.h
 #include <mswsock.h>
 
-#undef OPTIONAL 
- 
+#undef OPTIONAL
+
 #include "y_absl/strings/str_format.h"
 
 #include <grpc/support/alloc.h>

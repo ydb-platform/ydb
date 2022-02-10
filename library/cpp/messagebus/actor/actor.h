@@ -1,11 +1,11 @@
 #pragma once
 
-#include "executor.h" 
+#include "executor.h"
 #include "tasks.h"
 #include "what_thread_does.h"
 
-#include <util/system/yassert.h> 
- 
+#include <util/system/yassert.h>
+
 namespace NActor {
     class IActor: protected  IWorkItem {
     public:

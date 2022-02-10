@@ -1,10 +1,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "netaddr.h" 
+#include "netaddr.h"
 #include "socket_addr.h"
 
-#include <util/string/cast.h> 
- 
+#include <util/string/cast.h>
+
 using namespace NBus;
 using namespace NBus::NPrivate;
 

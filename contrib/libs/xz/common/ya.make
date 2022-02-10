@@ -19,7 +19,7 @@ CFLAGS(-DTUKLIB_SYMBOL_PREFIX=lzma_)
 
 ADDINCL(
     contrib/libs/xz
-    contrib/libs/xz/common 
+    contrib/libs/xz/common
 )
 
 SRCS(

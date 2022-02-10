@@ -1,17 +1,17 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "count_down_latch.h" 
+#include "count_down_latch.h"
 #include "moduletest.h"
 
 #include <library/cpp/messagebus/test/helper/example.h>
 #include <library/cpp/messagebus/test/helper/example_module.h>
 #include <library/cpp/messagebus/test/helper/object_count_check.h>
 #include <library/cpp/messagebus/test/helper/wait_for.h>
- 
+
 #include <library/cpp/messagebus/oldmodule/module.h>
- 
-#include <util/generic/cast.h> 
- 
+
+#include <util/generic/cast.h>
+
 using namespace NBus;
 using namespace NBus::NTest;
 

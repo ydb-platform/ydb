@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/object_counter.h> 
+#include <util/generic/object_counter.h>
 #include <util/generic/ptr.h>
 #include <util/network/init.h>
 #include <util/network/socket.h>

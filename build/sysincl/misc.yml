@@ -14,18 +14,18 @@
   - libelf/libelf.h: contrib/restricted/libelf/include/libelf/libelf.h
   - libelf/sys_elf.h: contrib/restricted/libelf/include/libelf/sys_elf.h
 
-# We have lots of ADDINCLs to contrib/libs/libiconv all around the repo 
-# so we need to add it to sysincl for consistent resolving. 
-# We can go the other way here and remove iconv.h from all sysincl configs 
-# and try to fix all places where we really need iconv.h from libc 
-# Btw: seems that this ADDINCL should be made global and removed from projects 
-# that use this header 
-- includes: 
+# We have lots of ADDINCLs to contrib/libs/libiconv all around the repo
+# so we need to add it to sysincl for consistent resolving.
+# We can go the other way here and remove iconv.h from all sysincl configs
+# and try to fix all places where we really need iconv.h from libc
+# Btw: seems that this ADDINCL should be made global and removed from projects
+# that use this header
+- includes:
     - iconv.h:       contrib/libs/libiconv/include/iconv.h
 
-- includes: 
-  - cudnn.h:         contrib/libs/nvidia/cudnn/cudnn.h 
- 
+- includes:
+  - cudnn.h:         contrib/libs/nvidia/cudnn/cudnn.h
+
 # _cgo_export.h is generated into build dir of go package which uses cgo
 # and we are unable to resolve it correctly to whcih build dir to resolve
 # in the case when tests are also built for this package
@@ -47,74 +47,74 @@
     - contrib/libs/jdk/include/linux/jni_md.h
     - contrib/libs/jdk/include/win32/jni_md.h
 
-# libunistring has its own libc header wrappers that are added to ADDINCL and 
-# need to be added here for consistensy between ADDINCL and sysincl resolving. 
-# Btw: we don't parse include_next, so we might lose real dependency to musl, 
-# but sysincl resolving will save us here, as it will resolve to both of them. 
-- source_filter: "^contrib/libs/libunistring" 
-  includes: 
-    - alloca.h:      contrib/libs/libunistring/alloca.h 
-    - langinfo.h:    contrib/libs/libunistring/langinfo.h 
-    - limits.h:      contrib/libs/libunistring/limits.h 
-    - math.h:        contrib/libs/libunistring/math.h 
-    - minmax.h:      contrib/libs/libunistring/minmax.h 
-    - stdlib.h:      contrib/libs/libunistring/stdlib.h 
-    - string.h:      contrib/libs/libunistring/string.h 
-    - sys/types.h:   contrib/libs/libunistring/sys/types.h 
-    - unistd.h:      contrib/libs/libunistring/unistd.h 
-    - wchar.h:       contrib/libs/libunistring/wchar.h 
-    - wctype.h:      contrib/libs/libunistring/wctype.h 
- 
+# libunistring has its own libc header wrappers that are added to ADDINCL and
+# need to be added here for consistensy between ADDINCL and sysincl resolving.
+# Btw: we don't parse include_next, so we might lose real dependency to musl,
+# but sysincl resolving will save us here, as it will resolve to both of them.
+- source_filter: "^contrib/libs/libunistring"
+  includes:
+    - alloca.h:      contrib/libs/libunistring/alloca.h
+    - langinfo.h:    contrib/libs/libunistring/langinfo.h
+    - limits.h:      contrib/libs/libunistring/limits.h
+    - math.h:        contrib/libs/libunistring/math.h
+    - minmax.h:      contrib/libs/libunistring/minmax.h
+    - stdlib.h:      contrib/libs/libunistring/stdlib.h
+    - string.h:      contrib/libs/libunistring/string.h
+    - sys/types.h:   contrib/libs/libunistring/sys/types.h
+    - unistd.h:      contrib/libs/libunistring/unistd.h
+    - wchar.h:       contrib/libs/libunistring/wchar.h
+    - wctype.h:      contrib/libs/libunistring/wctype.h
+
 - source_filter: "^contrib/libs/libidn2/"
   includes:
     - error.h:  contrib/libs/libidn2/gl/error.h
     - unistd.h: contrib/libs/libunistring/include/unistd.h
 
-# Same as libunistring - lftp has own libc header wrappers/replacements. 
-# However here we have GLOBAL ADDINCL to contrib/libs/lftp{,/trio,/lib} 
-# that can poison resolving in PEERDIRing projects. 
-# Fortunately lftp is used only in contrib/tools/lftp. 
-# Probably we should add PEERDIR restriction rule to it. 
-- source_filter: "^contrib/libs/lftp" 
-  includes: 
-    - alloca.h:      contrib/libs/lftp/alloca.h 
-    - error.h:       contrib/libs/lftp/lib/error.h 
-    - fnmatch.h:     contrib/libs/lftp/lib/fnmatch.h 
-    - regex.h:       contrib/libs/lftp/lib/regex.h 
-    - sys/socket.h:  contrib/libs/lftp/lib/sys/socket.h 
-    - sys/stat.h:    contrib/libs/lftp/lib/sys/stat.h 
-    - sys/time.h:    contrib/libs/lftp/lib/sys/time.h 
- 
-# Another sysincl/addincl clash. Here we also have GLOBAL ADDINCL that will 
-# produce sysincl/addincl mismatch configure errors when someone writes 
-# #include <math.h> and enables USE_ARCADIA_LIBM. Now we have no instances of this. 
-- source_filter: "^contrib/libs/libm/.*\\.c" 
-  includes: 
-    - complex.h:     contrib/libs/libm/include/complex.h 
-    - math.h:        contrib/libs/libm/include/math.h 
- 
-# Some more sysincl/addincl clashes. 
-- source_filter: "^contrib/tools/bison/(bison|gnulib|m4)/src" 
-  includes: 
-    - error.h:       contrib/tools/bison/gnulib/src/error.h 
-    - fcntl.h:       contrib/tools/bison/gnulib/platform/posix/fcntl.h 
-    - getopt.h:      contrib/tools/bison/gnulib/platform/posix/getopt.h 
-    - obstack.h:     contrib/tools/bison/gnulib/src/obstack.h 
-    - regex.h:       contrib/tools/bison/gnulib/src/regex.h 
-    - system.h 
-    - unlocked-io.h: contrib/tools/bison/gnulib/src/unlocked-io.h 
-- source_filter: "^contrib/tools/make" 
-  includes: 
-    - fnmatch.h:     contrib/tools/make/glob/fnmatch.h 
-    - glob.h:        contrib/tools/make/glob/glob.h 
-- source_filter: "^contrib/tools/tre" 
-  includes: 
-    - regex.h:       contrib/tools/tre/lib/regex.h 
- 
+# Same as libunistring - lftp has own libc header wrappers/replacements.
+# However here we have GLOBAL ADDINCL to contrib/libs/lftp{,/trio,/lib}
+# that can poison resolving in PEERDIRing projects.
+# Fortunately lftp is used only in contrib/tools/lftp.
+# Probably we should add PEERDIR restriction rule to it.
+- source_filter: "^contrib/libs/lftp"
+  includes:
+    - alloca.h:      contrib/libs/lftp/alloca.h
+    - error.h:       contrib/libs/lftp/lib/error.h
+    - fnmatch.h:     contrib/libs/lftp/lib/fnmatch.h
+    - regex.h:       contrib/libs/lftp/lib/regex.h
+    - sys/socket.h:  contrib/libs/lftp/lib/sys/socket.h
+    - sys/stat.h:    contrib/libs/lftp/lib/sys/stat.h
+    - sys/time.h:    contrib/libs/lftp/lib/sys/time.h
+
+# Another sysincl/addincl clash. Here we also have GLOBAL ADDINCL that will
+# produce sysincl/addincl mismatch configure errors when someone writes
+# #include <math.h> and enables USE_ARCADIA_LIBM. Now we have no instances of this.
+- source_filter: "^contrib/libs/libm/.*\\.c"
+  includes:
+    - complex.h:     contrib/libs/libm/include/complex.h
+    - math.h:        contrib/libs/libm/include/math.h
+
+# Some more sysincl/addincl clashes.
+- source_filter: "^contrib/tools/bison/(bison|gnulib|m4)/src"
+  includes:
+    - error.h:       contrib/tools/bison/gnulib/src/error.h
+    - fcntl.h:       contrib/tools/bison/gnulib/platform/posix/fcntl.h
+    - getopt.h:      contrib/tools/bison/gnulib/platform/posix/getopt.h
+    - obstack.h:     contrib/tools/bison/gnulib/src/obstack.h
+    - regex.h:       contrib/tools/bison/gnulib/src/regex.h
+    - system.h
+    - unlocked-io.h: contrib/tools/bison/gnulib/src/unlocked-io.h
+- source_filter: "^contrib/tools/make"
+  includes:
+    - fnmatch.h:     contrib/tools/make/glob/fnmatch.h
+    - glob.h:        contrib/tools/make/glob/glob.h
+- source_filter: "^contrib/tools/tre"
+  includes:
+    - regex.h:       contrib/tools/tre/lib/regex.h
+
 - source_filter: "^contrib/libs/cppkafka"
-  includes: 
+  includes:
     - error.h:       contrib/libs/cppkafka/include/cppkafka/error.h
- 
+
 - source_filter: "^contrib/libs/clang11-rt"
   includes:
     - xray/xray_interface.h: contrib/libs/clang11-rt/include/xray/xray_interface.h
@@ -128,39 +128,39 @@
     - plugin-api.h # GNU linker plugin API.
 
 - source_filter: "^contrib/libs/musl"
-  includes: 
+  includes:
     - atomic.h:      contrib/libs/musl/src/internal/atomic.h
     - bits/fenv.h:   contrib/libs/musl/arch/x86_64/bits/fenv.h
- 
-- source_filter: "^contrib/libs/zbar" 
-  includes: 
-    - error.h:       contrib/libs/zbar/zbar/error.h 
- 
-- source_filter: "^contrib/libs/curl" 
-  includes: 
+
+- source_filter: "^contrib/libs/zbar"
+  includes:
+    - error.h:       contrib/libs/zbar/zbar/error.h
+
+- source_filter: "^contrib/libs/curl"
+  includes:
     - http.h:        contrib/libs/curl/lib/http.h
     - inet_ntop.h:   contrib/libs/curl/lib/inet_ntop.h
-    - share.h:       contrib/libs/curl/lib/share.h 
- 
-- source_filter: "^contrib/libs/zeromq" 
-  includes: 
-    - atomic.h:      contrib/libs/zeromq/missing_includes/atomic.h 
-    - Mstcpip.h:     contrib/libs/zeromq/missing_includes/Mstcpip.h 
- 
+    - share.h:       contrib/libs/curl/lib/share.h
+
+- source_filter: "^contrib/libs/zeromq"
+  includes:
+    - atomic.h:      contrib/libs/zeromq/missing_includes/atomic.h
+    - Mstcpip.h:     contrib/libs/zeromq/missing_includes/Mstcpip.h
+
 - source_filter: "^contrib/restricted/openal-soft"
   includes:
     - atomic.h: contrib/restricted/openal-soft/common/atomic.h
 
-- source_filter: "^contrib/libs/ffmpeg-3" 
-  includes: 
+- source_filter: "^contrib/libs/ffmpeg-3"
+  includes:
     - fontconfig/fontconfig.h
-    - fribidi.h 
-    - stdatomic.h:   contrib/libs/ffmpeg-3.4.1/compat/atomics/win32/stdatomic.h 
- 
-- source_filter: "^contrib/libs/glog" 
-  includes: 
-    - port.h:        contrib/libs/glog/missing_includes/port.h 
- 
+    - fribidi.h
+    - stdatomic.h:   contrib/libs/ffmpeg-3.4.1/compat/atomics/win32/stdatomic.h
+
+- source_filter: "^contrib/libs/glog"
+  includes:
+    - port.h:        contrib/libs/glog/missing_includes/port.h
+
 - source_filter: "^contrib/(deprecated/onednn|libs/intel/onednn)"
   includes:
     - mkl_cblas.h: contrib/libs/intel/mkl/include/mkl_cblas.h
@@ -168,54 +168,54 @@
     - mkl_vml_defines.h: contrib/libs/intel/mkl/include/mkl_vml_defines.h
     - mkl_vml_functions.h: contrib/libs/intel/mkl/include/mkl_vml_functions.h
 
-- source_filter: "^contrib/libs/nsync" 
-  includes: 
-    - atomic.h:      contrib/libs/nsync/platform/c++11/atomic.h 
- 
+- source_filter: "^contrib/libs/nsync"
+  includes:
+    - atomic.h:      contrib/libs/nsync/platform/c++11/atomic.h
+
 - source_filter: "^contrib/python/numpy/py3"
   includes:
     - numpy/random.pxd
 
-- source_filter: "^contrib/tools/python/src/Objects/exceptions.c" 
-  includes: 
-    - errmap.h:      contrib/tools/python/src/PC/errmap.h 
- 
-- source_filter: "^contrib/libs/(speex|tf)" 
-  includes: 
-    - mkl.h:         contrib/libs/intel/mkl/include/mkl.h 
- 
-# deprecated contrib with ADDINCL to libintl 
+- source_filter: "^contrib/tools/python/src/Objects/exceptions.c"
+  includes:
+    - errmap.h:      contrib/tools/python/src/PC/errmap.h
+
+- source_filter: "^contrib/libs/(speex|tf)"
+  includes:
+    - mkl.h:         contrib/libs/intel/mkl/include/mkl.h
+
+# deprecated contrib with ADDINCL to libintl
 - source_filter: "^contrib/(deprecated/glib/glib|libs/gdk-pixbuf)"
-  includes: 
-    - libintl.h:     contrib/deprecated/libintl/libintl.h 
- 
-- source_filter: "^contrib/libs/poco/Data/ODBC" 
-  includes: 
-    - sql.h:         contrib/libs/unixodbc/include/sql.h 
-    - sqlext.h:      contrib/libs/unixodbc/include/sqlext.h 
-    - sqltypes.h:    contrib/libs/unixodbc/include/sqltypes.h 
-    - sqlucode.h:    contrib/libs/unixodbc/include/sqlucode.h 
- 
-- source_filter: "^contrib/libs/icu" 
-  includes: 
-    - util.h:        contrib/libs/icu/common/util.h 
- 
-- source_filter: "^contrib/tools/yasm" 
-  includes: 
-    - util.h:        contrib/tools/yasm/util.h 
- 
-- source_filter: "^contrib/libs/libgit2" 
-  includes: 
-    - util.h:        contrib/libs/libgit2/src/util.h 
- 
+  includes:
+    - libintl.h:     contrib/deprecated/libintl/libintl.h
+
+- source_filter: "^contrib/libs/poco/Data/ODBC"
+  includes:
+    - sql.h:         contrib/libs/unixodbc/include/sql.h
+    - sqlext.h:      contrib/libs/unixodbc/include/sqlext.h
+    - sqltypes.h:    contrib/libs/unixodbc/include/sqltypes.h
+    - sqlucode.h:    contrib/libs/unixodbc/include/sqlucode.h
+
+- source_filter: "^contrib/libs/icu"
+  includes:
+    - util.h:        contrib/libs/icu/common/util.h
+
+- source_filter: "^contrib/tools/yasm"
+  includes:
+    - util.h:        contrib/tools/yasm/util.h
+
+- source_filter: "^contrib/libs/libgit2"
+  includes:
+    - util.h:        contrib/libs/libgit2/src/util.h
+
 - source_filter: "^contrib/libs/nodejs_12"
   includes:
     - util.h:        contrib/libs/nodejs_12/src/util.h
 
-- source_filter: "^contrib/libs/numa" 
-  includes: 
-    - util.h:        contrib/libs/numa/internal/util.h 
- 
+- source_filter: "^contrib/libs/numa"
+  includes:
+    - util.h:        contrib/libs/numa/internal/util.h
+
 - source_filter: "^contrib/libs/systemd"
   includes:
     - util.h:        contrib/libs/systemd/src/basic/util.h
@@ -224,175 +224,175 @@
   includes:
     - socket.h:      contrib/libs/nvidia/nccl/src/include/socket.h
 
-- source_filter: "^contrib/libs/tf/tensorflow" 
-  includes: 
-    - cuda.h:        contrib/libs/tf/tensorflow/core/platform/cuda.h 
- 
-# unused legacy include in boost 
+- source_filter: "^contrib/libs/tf/tensorflow"
+  includes:
+    - cuda.h:        contrib/libs/tf/tensorflow/core/platform/cuda.h
+
+# unused legacy include in boost
 - source_filter: "^contrib/restricted/boost"
-  includes: 
+  includes:
     - atomic.h
-    - fstream.h 
+    - fstream.h
     - ../include/fenv.h
- 
+
 - source_filter: "^contrib/restricted/boost/boost/stacktrace/detail"
   includes:
     - backtrace.h: contrib/libs/backtrace/backtrace.h
 
-# windows sdk includes that we do not want to apply for whole arcadia 
-- source_filter: "^contrib" 
-  includes: 
-    - process.h 
-- source_filter: "^contrib/tools/tpce-benchmark" 
-  includes: 
-    - sql.h 
-    - sqlext.h 
-    - sqltypes.h 
-    - sqlucode.h 
- 
-- source_filter: "^contrib/libs/libmemcached" 
-  includes: 
-    - sasl/sasl.h 
-    - sasl/saslutil.h 
- 
+# windows sdk includes that we do not want to apply for whole arcadia
+- source_filter: "^contrib"
+  includes:
+    - process.h
+- source_filter: "^contrib/tools/tpce-benchmark"
+  includes:
+    - sql.h
+    - sqlext.h
+    - sqltypes.h
+    - sqlucode.h
+
+- source_filter: "^contrib/libs/libmemcached"
+  includes:
+    - sasl/sasl.h
+    - sasl/saslutil.h
+
 - source_filter: "^contrib/libs/apr"
   includes:
     - atomic.h
 
-- source_filter: "^contrib/libs/(apr|httpd|llvm)" 
-  includes: 
-    - uuid.h 
-    - uuid/uuid.h 
- 
-- source_filter: "^contrib/libs/(kenlm|libxml|re2|sqlite3)" 
-  includes: 
-    - unicode/ucnv.h 
-    - unicode/ucol.h 
-    - unicode/uniset.h 
-    - unicode/unistr.h 
-    - unicode/ustring.h 
-    - unicode/utf16.h 
-    - unicode/utypes.h 
-    - unicode/uversion.h 
- 
-- source_filter: "^contrib/deprecated/glib" 
-  includes: 
-    - configmake.h 
- 
-- source_filter: "^contrib/libs/ImageMagick" 
-  includes: 
-    - ltdl.h 
- 
-- source_filter: "^contrib/libs/authparser" 
-  includes: 
-    - settings.h 
- 
-- source_filter: "^contrib/libs/ceres-solver" 
-  includes: 
-    - tbb/tbb_stddef.h 
- 
-- source_filter: "^contrib/libs/deprecated" 
-  includes: 
-    - hdf5.h 
- 
-- source_filter: "^contrib/libs/freetype" 
-  includes: 
+- source_filter: "^contrib/libs/(apr|httpd|llvm)"
+  includes:
+    - uuid.h
+    - uuid/uuid.h
+
+- source_filter: "^contrib/libs/(kenlm|libxml|re2|sqlite3)"
+  includes:
+    - unicode/ucnv.h
+    - unicode/ucol.h
+    - unicode/uniset.h
+    - unicode/unistr.h
+    - unicode/ustring.h
+    - unicode/utf16.h
+    - unicode/utypes.h
+    - unicode/uversion.h
+
+- source_filter: "^contrib/deprecated/glib"
+  includes:
+    - configmake.h
+
+- source_filter: "^contrib/libs/ImageMagick"
+  includes:
+    - ltdl.h
+
+- source_filter: "^contrib/libs/authparser"
+  includes:
+    - settings.h
+
+- source_filter: "^contrib/libs/ceres-solver"
+  includes:
+    - tbb/tbb_stddef.h
+
+- source_filter: "^contrib/libs/deprecated"
+  includes:
+    - hdf5.h
+
+- source_filter: "^contrib/libs/freetype"
+  includes:
     - hb-ot.h
-    - hb-ft.h 
-    - hb.h 
- 
-- source_filter: "^contrib/libs/httpd" 
-  includes: 
-    - nginx.h 
-    - ngx_config.h 
-    - ngx_core.h 
-    - ngx_http.h 
-    - ngx_log.h 
- 
-- source_filter: "^contrib/libs/leptonica-1.70" 
-  includes: 
-    - gif_lib.h 
-    - webp/decode.h 
-    - webp/encode.h 
- 
-- source_filter: "^contrib/libs/libpcap" 
-  includes: 
-    - strerror.h 
- 
-- source_filter: "^contrib/libs/libxml" 
-  includes: 
-    - lzma.h 
-    - win32config.h 
- 
-- source_filter: "^contrib/libs/mod_perl2" 
-  includes: 
-    - config.h 
- 
-- source_filter: "^contrib/libs/(apr|httpd|openssl)" 
-  includes: 
-    - netinet/sctp.h 
- 
-- source_filter: "^contrib/libs/subversion" 
-  includes: 
-    - magic.h 
-    - xmlparse.h 
- 
-- source_filter: "^contrib/python/scipy" 
-  includes: 
-    - matrix.h 
- 
-- source_filter: "^contrib/python/uwsgi" 
-  includes: 
-    - libxml/parser.h 
-    - libxml/tree.h 
-    - uuid/uuid.h 
- 
-- source_filter: "^contrib/tools/python" 
-  includes: 
-    - ioctl.h 
-    - utils.h 
- 
-- source_filter: "^(contrib/libs/cxxsupp/openmp|catboost/cuda/cuda_lib)" 
-  includes: 
-    - hwloc.h 
-    - hwloc/cudart.h 
- 
+    - hb-ft.h
+    - hb.h
+
+- source_filter: "^contrib/libs/httpd"
+  includes:
+    - nginx.h
+    - ngx_config.h
+    - ngx_core.h
+    - ngx_http.h
+    - ngx_log.h
+
+- source_filter: "^contrib/libs/leptonica-1.70"
+  includes:
+    - gif_lib.h
+    - webp/decode.h
+    - webp/encode.h
+
+- source_filter: "^contrib/libs/libpcap"
+  includes:
+    - strerror.h
+
+- source_filter: "^contrib/libs/libxml"
+  includes:
+    - lzma.h
+    - win32config.h
+
+- source_filter: "^contrib/libs/mod_perl2"
+  includes:
+    - config.h
+
+- source_filter: "^contrib/libs/(apr|httpd|openssl)"
+  includes:
+    - netinet/sctp.h
+
+- source_filter: "^contrib/libs/subversion"
+  includes:
+    - magic.h
+    - xmlparse.h
+
+- source_filter: "^contrib/python/scipy"
+  includes:
+    - matrix.h
+
+- source_filter: "^contrib/python/uwsgi"
+  includes:
+    - libxml/parser.h
+    - libxml/tree.h
+    - uuid/uuid.h
+
+- source_filter: "^contrib/tools/python"
+  includes:
+    - ioctl.h
+    - utils.h
+
+- source_filter: "^(contrib/libs/cxxsupp/openmp|catboost/cuda/cuda_lib)"
+  includes:
+    - hwloc.h
+    - hwloc/cudart.h
+
 - source_filter: "^contrib/libs/(deprecated|tf)"
-  includes: 
-    - cblas.h 
- 
-- source_filter: "^contrib/libs/(aws-sdk-cpp|c-ares|proj)" 
-  includes: 
-    - jni.h 
- 
+  includes:
+    - cblas.h
+
+- source_filter: "^contrib/libs/(aws-sdk-cpp|c-ares|proj)"
+  includes:
+    - jni.h
+
 - source_filter: "^contrib/(libs/(ffmpeg-3|kenlm|kyotocabinet)|tools/ag)"
-  includes: 
-    - lzma.h 
- 
+  includes:
+    - lzma.h
+
 - source_filter: "^contrib/libs/(kyotocabinet|minilzo)"
-  includes: 
-    - lzo/lzo1x.h 
- 
+  includes:
+    - lzo/lzo1x.h
+
 - source_filter: "^contrib/libs/(gtest|libpng|opencv)"
-  includes: 
-    - mem.h 
- 
+  includes:
+    - mem.h
+
 - source_filter: "^contrib/libs/(authparser|libcoro-perl|libev-perl|libevent-perl|uatraits)"
-  includes: 
-    - patchlevel.h 
- 
+  includes:
+    - patchlevel.h
+
 - source_filter: "^contrib/tools/watchman"
-  includes: 
-    - pcre.h 
- 
+  includes:
+    - pcre.h
+
 - source_filter: "^contrib/libs/(freetype|leptonica-1.70|libtheora|zbar)"
-  includes: 
-    - png.h 
- 
+  includes:
+    - png.h
+
 - source_filter: "^(contrib/restricted/boost/boost/mpi|catboost/cuda/cuda_lib/mpi)"
-  includes: 
-    - mpi.h 
- 
+  includes:
+    - mpi.h
+
 - source_filter: "^contrib/libs/libf2c"
   includes:
     - local.h
@@ -404,9 +404,9 @@
 - source_filter: "^contrib/libs/breakpad"
   includes:
     - stab.h
- 
-- source_filter: "^contrib/tools/fluent-bit" 
-  includes: 
+
+- source_filter: "^contrib/tools/fluent-bit"
+  includes:
     - backtrace.h: contrib/libs/backtrace/backtrace.h
 
 - source_filter: "^contrib/restricted/libelf"

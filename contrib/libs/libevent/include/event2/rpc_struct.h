@@ -24,8 +24,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef EVENT2_RPC_STRUCT_H_INCLUDED_ 
-#define EVENT2_RPC_STRUCT_H_INCLUDED_ 
+#ifndef EVENT2_RPC_STRUCT_H_INCLUDED_
+#define EVENT2_RPC_STRUCT_H_INCLUDED_
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,16 +38,16 @@ extern "C" {
 
  */
 
-/* Fix so that people don't have to run with <sys/queue.h> */ 
-#ifndef TAILQ_ENTRY 
-#define EVENT_DEFINED_TQENTRY_ 
-#define TAILQ_ENTRY(type)						\ 
-struct {								\ 
-	struct type *tqe_next;	/* next element */			\ 
-	struct type **tqe_prev;	/* address of previous next element */	\ 
-} 
-#endif /* !TAILQ_ENTRY */ 
- 
+/* Fix so that people don't have to run with <sys/queue.h> */
+#ifndef TAILQ_ENTRY
+#define EVENT_DEFINED_TQENTRY_
+#define TAILQ_ENTRY(type)						\
+struct {								\
+	struct type *tqe_next;	/* next element */			\
+	struct type **tqe_prev;	/* address of previous next element */	\
+}
+#endif /* !TAILQ_ENTRY */
+
 /**
  * provides information about the completed RPC request.
  */
@@ -103,12 +103,12 @@ struct evrpc {
 	struct evrpc_base *base;
 };
 
-#ifdef EVENT_DEFINED_TQENTRY_ 
-#undef TAILQ_ENTRY 
-#endif 
- 
+#ifdef EVENT_DEFINED_TQENTRY_
+#undef TAILQ_ENTRY
+#endif
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* EVENT2_RPC_STRUCT_H_INCLUDED_ */ 
+#endif /* EVENT2_RPC_STRUCT_H_INCLUDED_ */

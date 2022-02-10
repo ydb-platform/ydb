@@ -11,20 +11,20 @@ LICENSE(Service-Dll-Harness)
 
 WITHOUT_LICENSE_TEXTS()
 
-NO_RUNTIME() 
+NO_RUNTIME()
 
 IF (USE_DYNAMIC_ICONV)
     PEERDIR(
         contrib/libs/libiconv/dynamic
-    ) 
+    )
 ELSE()
     PEERDIR(
         contrib/libs/libiconv/static
     )
-ENDIF() 
- 
+ENDIF()
+
 END()
- 
+
 RECURSE(
     dynamic
     static

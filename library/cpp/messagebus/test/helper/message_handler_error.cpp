@@ -1,5 +1,5 @@
-#include "message_handler_error.h" 
- 
+#include "message_handler_error.h"
+
 #include <util/system/yassert.h>
 
 using namespace NBus;

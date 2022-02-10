@@ -20,7 +20,7 @@ PEERDIR(
 END()
 
 RECURSE(
-    conf_fatal_error 
+    conf_fatal_error
     config
     docs/empty
     external_resources

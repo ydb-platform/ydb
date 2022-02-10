@@ -1,16 +1,16 @@
 #pragma once
 
-#include "base.h" 
-#include "local_flags.h" 
-#include "message_status.h" 
-#include "netaddr.h" 
-#include "socket_addr.h" 
- 
-#include <util/generic/array_ref.h> 
-#include <util/generic/noncopyable.h> 
+#include "base.h"
+#include "local_flags.h"
+#include "message_status.h"
+#include "netaddr.h"
+#include "socket_addr.h"
+
+#include <util/generic/array_ref.h>
+#include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 #include <util/system/type_name.h>
 #include <util/system/yassert.h>
 

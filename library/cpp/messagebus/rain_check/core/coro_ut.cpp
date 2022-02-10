@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "coro.h" 
+#include "coro.h"
 #include "spawn.h"
 
 #include <library/cpp/messagebus/rain_check/test/ut/test.h>

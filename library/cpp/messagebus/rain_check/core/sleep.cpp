@@ -1,5 +1,5 @@
-#include "rain_check.h" 
- 
+#include "rain_check.h"
+
 #include <util/system/yassert.h>
 
 using namespace NRainCheck;

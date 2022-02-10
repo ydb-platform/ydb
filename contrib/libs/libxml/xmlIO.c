@@ -37,7 +37,7 @@
 #include <zlib.h>
 #endif
 #ifdef LIBXML_LZMA_ENABLED
-#error #include <lzma.h> 
+#error #include <lzma.h>
 #endif
 
 #if defined(_WIN32) && !defined(__CYGWIN__)

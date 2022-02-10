@@ -11,7 +11,7 @@ ALLOW mds -> contrib/deprecated/wangle
 
 # Use newer version from contrib/libs/mongo-cxx-driver instead
 ALLOW mds/mastermind/ -> contrib/deprecated/mongo-cxx-driver
- 
+
 # libpqtypes is not being developed since 2016 and is known to have bugs.
 # Consider using libpqxx / maps/libs/sql_chemistry instread.
 ALLOW mds/libs/postgres -> contrib/deprecated/libpqtypes
@@ -24,7 +24,7 @@ ALLOW quasar/backend/ -> contrib/deprecated/jsoncpp
 ALLOW smart_devices/ -> contrib/deprecated/jsoncpp
 ALLOW speechkit/ -> contrib/deprecated/jsoncpp
 ALLOW yandex_io/ -> contrib/deprecated/jsoncpp
- 
+
 # mimepp is not being developed since 2012 and requires paid license
 ALLOW mail/so/ -> contrib/deprecated/mimepp
 ALLOW mail/so/spamstop/ -> contrib/deprecated/udns

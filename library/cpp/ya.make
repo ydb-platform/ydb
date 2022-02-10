@@ -1,6 +1,6 @@
-OWNER(g:cpp-contrib) 
- 
-RECURSE( 
+OWNER(g:cpp-contrib)
+
+RECURSE(
     accurate_accumulate
     accurate_accumulate/benchmark
     accurate_accumulate/benchmark/metrics
@@ -417,8 +417,8 @@ RECURSE(
     yson_pull
     yson_pull/ut
     yt
-    zipatch 
-) 
+    zipatch
+)
 
 IF (OS_LINUX)
     RECURSE(
@@ -437,7 +437,7 @@ IF (OS_WINDOWS)
     )
 ELSE()
     RECURSE(
-        fuse 
+        fuse
         sse/ut
         tf
         xdelta3

@@ -1,16 +1,16 @@
 #pragma once
 
 #include "codegen.h"
-#include "duration_histogram.h" 
-#include "message_counter.h" 
+#include "duration_histogram.h"
+#include "message_counter.h"
 #include "message_status_counter.h"
 #include "queue_config.h"
 #include "session_config.h"
 
 #include <library/cpp/messagebus/actor/executor.h>
- 
+
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
- 
+
 namespace NBus {
     class TConnectionStatusMonRecord;
 }

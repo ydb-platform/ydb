@@ -1,5 +1,5 @@
-#include "message_status_counter.h" 
- 
+#include "message_status_counter.h"
+
 #include "key_value_printer.h"
 #include "text_utils.h"
 

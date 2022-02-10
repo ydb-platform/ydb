@@ -6,9 +6,9 @@
 #include <library/cpp/messagebus/actor/queue_in_actor.h>
 #include <library/cpp/messagebus/actor/what_thread_does.h>
 #include <library/cpp/messagebus/actor/what_thread_does_guard.h>
- 
-#include <util/generic/singleton.h> 
-#include <util/string/printf.h> 
+
+#include <util/generic/singleton.h>
+#include <util/string/printf.h>
 #include <util/system/event.h>
 
 using namespace NActor;

@@ -1,8 +1,8 @@
-#include "mb_lwtrace.h" 
+#include "mb_lwtrace.h"
 
 #include <library/cpp/lwtrace/all.h>
 
-#include <util/generic/singleton.h> 
+#include <util/generic/singleton.h>
 
 LWTRACE_DEFINE_PROVIDER(LWTRACE_MESSAGEBUS_PROVIDER)
 

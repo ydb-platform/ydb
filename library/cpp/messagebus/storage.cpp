@@ -1,5 +1,5 @@
-#include "storage.h" 
- 
+#include "storage.h"
+
 #include <typeinfo>
 
 namespace NBus {

@@ -391,7 +391,7 @@ RECURSE(
     flask-cors
     flask_graphql
     Flask-Humanize
-    Flask-Log-Request-ID 
+    Flask-Log-Request-ID
     Flask-Login
     Flask-Mail
     flask-marshmallow
@@ -415,7 +415,7 @@ RECURSE(
     Flask-Table
     Flask-UUID
     Flask-WTF
-    flatbuffers 
+    flatbuffers
     flex
     flup
     frozendict
@@ -465,7 +465,7 @@ RECURSE(
     greenify
     greenlet
     grequests
-    grpcio-opentracing 
+    grpcio-opentracing
     gspread
     gunicorn
     h11

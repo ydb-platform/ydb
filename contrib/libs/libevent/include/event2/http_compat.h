@@ -24,8 +24,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef EVENT2_HTTP_COMPAT_H_INCLUDED_ 
-#define EVENT2_HTTP_COMPAT_H_INCLUDED_ 
+#ifndef EVENT2_HTTP_COMPAT_H_INCLUDED_
+#define EVENT2_HTTP_COMPAT_H_INCLUDED_
 
 /** @file event2/http_compat.h
 
@@ -39,10 +39,10 @@ extern "C" {
 #endif
 
 #include <event2/event-config.h>
-#ifdef EVENT__HAVE_SYS_TYPES_H 
+#ifdef EVENT__HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
-#ifdef EVENT__HAVE_SYS_TIME_H 
+#ifdef EVENT__HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
 
@@ -56,11 +56,11 @@ extern "C" {
  *
  * @param address the address to which the HTTP server should be bound
  * @param port the port number on which the HTTP server should listen
- * @return a pointer to a newly initialized evhttp server structure 
- *   or NULL on error 
+ * @return a pointer to a newly initialized evhttp server structure
+ *   or NULL on error
  */
-EVENT2_EXPORT_SYMBOL 
-struct evhttp *evhttp_start(const char *address, ev_uint16_t port); 
+EVENT2_EXPORT_SYMBOL
+struct evhttp *evhttp_start(const char *address, ev_uint16_t port);
 
 /**
  * A connection object that can be used to for making HTTP requests.  The
@@ -69,9 +69,9 @@ struct evhttp *evhttp_start(const char *address, ev_uint16_t port);
  *
  * @deprecated It does not allow an event base to be specified
  */
-EVENT2_EXPORT_SYMBOL 
+EVENT2_EXPORT_SYMBOL
 struct evhttp_connection *evhttp_connection_new(
-	const char *address, ev_uint16_t port); 
+	const char *address, ev_uint16_t port);
 
 /**
  * Associates an event base with the connection - can only be called
@@ -79,7 +79,7 @@ struct evhttp_connection *evhttp_connection_new(
  *
  * @deprecated XXXX Why?
  */
-EVENT2_EXPORT_SYMBOL 
+EVENT2_EXPORT_SYMBOL
 void evhttp_connection_set_base(struct evhttp_connection *evcon,
     struct event_base *base);
 
@@ -91,4 +91,4 @@ void evhttp_connection_set_base(struct evhttp_connection *evcon,
 }
 #endif
 
-#endif /* EVENT2_EVENT_COMPAT_H_INCLUDED_ */ 
+#endif /* EVENT2_EVENT_COMPAT_H_INCLUDED_ */

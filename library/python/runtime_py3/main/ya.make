@@ -7,7 +7,7 @@ OWNER(
 
 PEERDIR(
     contrib/tools/python3/src
-    library/cpp/resource 
+    library/cpp/resource
 )
 
 ADDINCL(
@@ -20,7 +20,7 @@ CFLAGS(
 
 SRCS(
     main.c
-    get_py_main.cpp 
+    get_py_main.cpp
 )
 
 END()

@@ -5,7 +5,7 @@ RECURSE(
 
     crypto
     libc
-    libmagic 
+    libmagic
     python
     uuid
     win_unicode_console

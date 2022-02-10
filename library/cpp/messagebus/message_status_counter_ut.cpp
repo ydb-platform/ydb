@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "message_status_counter.h" 
- 
+#include "message_status_counter.h"
+
 #include <library/cpp/messagebus/monitoring/mon_proto.pb.h>
 
 using namespace NBus;

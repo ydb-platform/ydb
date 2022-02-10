@@ -25,13 +25,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "event2/event-config.h"
-#include "evconfig-private.h" 
+#include "evconfig-private.h"
 
-#ifdef EVENT__HAVE_DEVPOLL 
- 
+#ifdef EVENT__HAVE_DEVPOLL
+
 #include <sys/types.h>
 #include <sys/resource.h>
-#ifdef EVENT__HAVE_SYS_TIME_H 
+#ifdef EVENT__HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
 #include <sys/queue.h>
@@ -132,7 +132,7 @@ devpoll_init(struct event_base *base)
 		nfiles = rl.rlim_cur;
 
 	/* Initialize the kernel queue */
-	if ((dpfd = evutil_open_closeonexec_("/dev/poll", O_RDWR, 0)) == -1) { 
+	if ((dpfd = evutil_open_closeonexec_("/dev/poll", O_RDWR, 0)) == -1) {
 		event_warn("open: /dev/poll");
 		mm_free(devpollop);
 		return (NULL);
@@ -159,7 +159,7 @@ devpoll_init(struct event_base *base)
 		return (NULL);
 	}
 
-	evsig_init_(base); 
+	evsig_init_(base);
 
 	return (devpollop);
 }
@@ -217,7 +217,7 @@ devpoll_dispatch(struct event_base *base, struct timeval *tv)
 			continue;
 
 		/* XXX(niels): not sure if this works for devpoll */
-		evmap_io_active_(base, events[i].fd, which); 
+		evmap_io_active_(base, events[i].fd, which);
 	}
 
 	return (0);
@@ -296,7 +296,7 @@ devpoll_dealloc(struct event_base *base)
 {
 	struct devpollop *devpollop = base->evbase;
 
-	evsig_dealloc_(base); 
+	evsig_dealloc_(base);
 	if (devpollop->events)
 		mm_free(devpollop->events);
 	if (devpollop->changes)
@@ -307,5 +307,5 @@ devpoll_dealloc(struct event_base *base)
 	memset(devpollop, 0, sizeof(struct devpollop));
 	mm_free(devpollop);
 }
- 
-#endif /* EVENT__HAVE_DEVPOLL */ 
+
+#endif /* EVENT__HAVE_DEVPOLL */

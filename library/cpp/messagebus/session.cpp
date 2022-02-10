@@ -1,5 +1,5 @@
-#include "ybus.h" 
- 
+#include "ybus.h"
+
 #include <util/generic/cast.h>
 
 using namespace NBus;

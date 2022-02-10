@@ -2,8 +2,8 @@
 
 #include "ring_buffer.h"
 
-#include <util/random/random.h> 
- 
+#include <util/random/random.h>
+
 Y_UNIT_TEST_SUITE(RingBuffer) {
     struct TRingBufferTester {
         TRingBuffer<unsigned> RingBuffer;

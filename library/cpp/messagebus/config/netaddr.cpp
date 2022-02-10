@@ -1,5 +1,5 @@
-#include "netaddr.h" 
- 
+#include "netaddr.h"
+
 #include <util/network/address.h>
 
 #include <cstdlib>

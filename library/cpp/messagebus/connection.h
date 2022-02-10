@@ -3,8 +3,8 @@
 #include "defs.h"
 #include "message.h"
 
-#include <util/generic/ptr.h> 
- 
+#include <util/generic/ptr.h>
+
 namespace NBus {
     struct TBusClientConnection {
         /// if you want to open connection early

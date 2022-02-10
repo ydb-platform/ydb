@@ -1,6 +1,6 @@
-#include "duration_histogram.h" 
- 
-#include <util/generic/singleton.h> 
+#include "duration_histogram.h"
+
+#include <util/generic/singleton.h>
 #include <util/stream/str.h>
 
 namespace {

@@ -1,12 +1,12 @@
 #include "remote_client_session.h"
 
-#include "mb_lwtrace.h" 
+#include "mb_lwtrace.h"
 #include "remote_client_connection.h"
 
 #include <library/cpp/messagebus/scheduler/scheduler.h>
 
-#include <util/generic/cast.h> 
-#include <util/system/defaults.h> 
+#include <util/generic/cast.h>
+#include <util/system/defaults.h>
 
 LWTRACE_USING(LWTRACE_MESSAGEBUS_PROVIDER)
 

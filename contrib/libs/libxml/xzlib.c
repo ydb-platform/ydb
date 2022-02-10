@@ -35,7 +35,7 @@
 #include <zlib.h>
 #endif
 #ifdef LIBXML_LZMA_ENABLED
-#error #include <lzma.h> 
+#error #include <lzma.h>
 #endif
 
 #error #include "xzlib.h"

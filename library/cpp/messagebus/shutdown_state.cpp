@@ -1,5 +1,5 @@
-#include "shutdown_state.h" 
- 
+#include "shutdown_state.h"
+
 #include <util/system/yassert.h>
 
 void TAtomicShutdownState::ShutdownCommand() {

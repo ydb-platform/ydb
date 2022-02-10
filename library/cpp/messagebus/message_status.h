@@ -1,8 +1,8 @@
 #pragma once
 
-#include "codegen.h" 
-#include "defs.h" 
- 
+#include "codegen.h"
+#include "defs.h"
+
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
 namespace NBus {

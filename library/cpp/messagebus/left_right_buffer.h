@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/generic/buffer.h> 
-#include <util/generic/noncopyable.h> 
+#include <util/generic/buffer.h>
+#include <util/generic/noncopyable.h>
 #include <util/system/yassert.h>
 
 namespace NBus {

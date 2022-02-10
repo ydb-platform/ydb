@@ -1,13 +1,13 @@
 #pragma once
 
-#include "ring_buffer_with_spin_lock.h" 
- 
+#include "ring_buffer_with_spin_lock.h"
+
 #include <util/generic/array_ref.h>
 #include <util/generic/vector.h>
 #include <util/system/condvar.h>
 #include <util/system/event.h>
-#include <util/system/mutex.h> 
-#include <util/system/thread.h> 
+#include <util/system/mutex.h>
+#include <util/system/thread.h>
 #include <util/thread/lfqueue.h>
 
 namespace NActor {

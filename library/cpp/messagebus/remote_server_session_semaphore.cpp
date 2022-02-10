@@ -1,6 +1,6 @@
-#include "remote_server_session_semaphore.h" 
- 
-#include <util/stream/output.h> 
+#include "remote_server_session_semaphore.h"
+
+#include <util/stream/output.h>
 #include <util/system/yassert.h>
 
 using namespace NBus;

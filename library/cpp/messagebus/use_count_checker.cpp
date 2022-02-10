@@ -1,6 +1,6 @@
-#include "use_count_checker.h" 
- 
-#include <util/generic/utility.h> 
+#include "use_count_checker.h"
+
+#include <util/generic/utility.h>
 #include <util/system/yassert.h>
 
 TUseCountChecker::TUseCountChecker() {

@@ -1,7 +1,7 @@
-#include "thread_extra.h" 
- 
-#include <util/stream/str.h> 
-#include <util/system/execpath.h> 
+#include "thread_extra.h"
+
+#include <util/stream/str.h>
+#include <util/system/execpath.h>
 #include <util/system/platform.h>
 #include <util/system/thread.h>
 

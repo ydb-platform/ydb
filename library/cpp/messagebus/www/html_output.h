@@ -1,8 +1,8 @@
 #pragma once
 
-#include "concat_strings.h" 
- 
-#include <util/generic/string.h> 
+#include "concat_strings.h"
+
+#include <util/generic/string.h>
 #include <util/stream/output.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <util/system/tls.h>

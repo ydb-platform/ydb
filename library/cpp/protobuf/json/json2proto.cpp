@@ -7,7 +7,7 @@
 #include <google/protobuf/descriptor.h>
 
 #include <util/generic/hash.h>
-#include <util/generic/maybe.h> 
+#include <util/generic/maybe.h>
 #include <util/string/ascii.h>
 #include <util/string/cast.h>
 
@@ -265,7 +265,7 @@ Json2RepeatedFieldValue(const NJson::TJsonValue& jsonValue,
                         const google::protobuf::FieldDescriptor& field,
                         const NProtobufJson::TJson2ProtoConfig& config,
                         const google::protobuf::Reflection* reflection,
-                        const TMaybe<TString>& key = {}) { 
+                        const TMaybe<TString>& key = {}) {
     using namespace google::protobuf;
 
     switch (field.cpp_type()) {
@@ -290,10 +290,10 @@ Json2RepeatedFieldValue(const NJson::TJsonValue& jsonValue,
         case FieldDescriptor::CPPTYPE_MESSAGE: {
             Message* innerProto = reflection->AddMessage(&proto, &field);
             Y_ASSERT(!!innerProto);
-            if (key.Defined()) { 
+            if (key.Defined()) {
                 const FieldDescriptor* keyField = innerProto->GetDescriptor()->FindFieldByName("key");
                 Y_ENSURE(keyField, "Map entry key field not found: " << field.name());
-                SetKey(*innerProto, *keyField, *key); 
+                SetKey(*innerProto, *keyField, *key);
 
                 const FieldDescriptor* valueField = innerProto->GetDescriptor()->FindFieldByName("value");
                 Y_ENSURE(valueField, "Map entry value field not found.");

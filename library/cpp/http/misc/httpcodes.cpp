@@ -132,7 +132,7 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("510 Not Extended");
         case HTTP_NETWORK_AUTHENTICATION_REQUIRED:
             return TStringBuf("511 Network Authentication Required");
-        case HTTP_UNASSIGNED_512: 
+        case HTTP_UNASSIGNED_512:
             return TStringBuf("512 Unassigned");
 
         default:

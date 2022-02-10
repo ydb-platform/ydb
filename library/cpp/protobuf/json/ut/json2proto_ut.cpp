@@ -886,9 +886,9 @@ Y_UNIT_TEST(TestComplexMapAsObject_String) {
             items["key1"] = "value1";
             items["key2"] = "value2";
             items["key3"] = "value3";
-            items[""] = "value4"; 
+            items[""] = "value4";
         },
-        R"_({"String":{"key1":"value1","key2":"value2","key3":"value3","":"value4"}})_"); 
+        R"_({"String":{"key1":"value1","key2":"value2","key3":"value3","":"value4"}})_");
 } // TestComplexMapAsObject_String
 
 Y_UNIT_TEST(TestComplexMapAsObject_Enum) {

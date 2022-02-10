@@ -258,16 +258,16 @@ def run(endpoint, database, path):
 
         with ydb.SessionPool(driver, size=10) as session_pool:
             ensure_path_exists(driver, database, path)
-            full_path = os.path.join(database, path)
+            full_path = os.path.join(database, path) 
 
-            create_tables(session_pool, full_path)
+            create_tables(session_pool, full_path) 
 
-            fill_data(session_pool, full_path)
+            fill_data(session_pool, full_path) 
 
-            peter_series = select_by_username(session_pool, full_path, "Peter Dinklage")
+            peter_series = select_by_username(session_pool, full_path, "Peter Dinklage") 
 
             assert len(peter_series) == 2
 
-            emilia_series = select_by_username(session_pool, full_path, "Emilia Clarke")
+            emilia_series = select_by_username(session_pool, full_path, "Emilia Clarke") 
 
             assert len(emilia_series) == 3

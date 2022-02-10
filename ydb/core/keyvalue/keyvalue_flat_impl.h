@@ -38,7 +38,7 @@ constexpr ui64 CollectorMaxErrors = 20;
 constexpr ui64 PeriodicRefreshMs = 15000;
 
 class TKeyValueFlat : public TActor<TKeyValueFlat>, public NTabletFlatExecutor::TTabletExecutedFlat {
-protected:
+protected: 
     struct TTxInit : public NTabletFlatExecutor::ITransaction {
         TActorId KeyValueActorId;
         TKeyValueFlat &Self;
@@ -64,7 +64,7 @@ protected:
                 // Init log batching settings
                 alter.SetExecutorAllowLogBatching(true);
                 alter.SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
-                Self.State.Clear();
+                Self.State.Clear(); 
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat ReadDb Tree");
                 if (!LoadStateFromDB(Self.State, txc.DB)) {
@@ -84,7 +84,7 @@ protected:
         }
 
         static bool LoadStateFromDB(TKeyValueState& state, NTable::TDatabase& db) {
-            state.Clear();
+            state.Clear(); 
             // Just walk through the DB and read all the keys and values
             const std::array<ui32, 2> tags {{ KEY_TAG, VALUE_TAG }};
             auto mode = NTable::ELookup::GreaterOrEqualThan;
@@ -107,11 +107,11 @@ protected:
 
             return iter->Last() != NTable::EReady::Page;
         }
-
-        void Complete(const TActorContext &ctx) override {
-            Self.InitSchemeComplete(ctx);
-            Self.CreatedHook(ctx);
-        }
+ 
+        void Complete(const TActorContext &ctx) override { 
+            Self.InitSchemeComplete(ctx); 
+            Self.CreatedHook(ctx); 
+        } 
     };
 
     struct TTxRequest : public NTabletFlatExecutor::ITransaction {
@@ -252,13 +252,13 @@ protected:
 
     void OnDetach(const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " OnDetach");
-        HandleDie(ctx);
+        HandleDie(ctx); 
     }
 
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " OnTabletDead " << ev->Get()->ToString());
-        HandleDie(ctx);
+        HandleDie(ctx); 
     }
 
     void OnActivateExecutor(const TActorContext &ctx) override {
@@ -424,38 +424,38 @@ public:
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     {
-        TAutoPtr<TTabletCountersBase> counters(
-        new TProtobufTabletCounters<
-                ESimpleCounters_descriptor,
-                ECumulativeCounters_descriptor,
-                EPercentileCounters_descriptor,
-                ETxTypes_descriptor
-            >());
-        State.SetupTabletCounters(counters);
-        State.Clear();
+        TAutoPtr<TTabletCountersBase> counters( 
+        new TProtobufTabletCounters< 
+                ESimpleCounters_descriptor, 
+                ECumulativeCounters_descriptor, 
+                EPercentileCounters_descriptor, 
+                ETxTypes_descriptor 
+            >()); 
+        State.SetupTabletCounters(counters); 
+        State.Clear(); 
     }
 
-    virtual void HandleDie(const TActorContext &ctx)
-    {
+    virtual void HandleDie(const TActorContext &ctx) 
+    { 
         if (CollectorActorId) {
             ctx.Send(CollectorActorId, new TEvents::TEvPoisonPill);
         }
         State.Terminate(ctx);
-        Die(ctx);
-    }
-
-    virtual void CreatedHook(const TActorContext &ctx)
-    {
-        Y_UNUSED(ctx);
-    }
-
-    virtual bool HandleHook(STFUNC_SIG)
-    {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
-        return false;
-    }
-
+        Die(ctx); 
+    } 
+ 
+    virtual void CreatedHook(const TActorContext &ctx) 
+    { 
+        Y_UNUSED(ctx); 
+    } 
+ 
+    virtual bool HandleHook(STFUNC_SIG) 
+    { 
+        Y_UNUSED(ev); 
+        Y_UNUSED(ctx); 
+        return false; 
+    } 
+ 
     STFUNC(StateInit) {
         RestoreActorActivity();
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
@@ -465,8 +465,8 @@ public:
     }
 
     STFUNC(StateWork) {
-        if (HandleHook(ev, ctx))
-            return;
+        if (HandleHook(ev, ctx)) 
+            return; 
         RestoreActorActivity();
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKeyValue::TEvRead, Handle);

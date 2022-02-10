@@ -12,8 +12,8 @@
 namespace NKikimr {
 namespace NPQ {
 
-static const ui32 MAX_BLOB_SIZE = 8 << 20; //8mb
-
+static const ui32 MAX_BLOB_SIZE = 8 << 20; //8mb 
+ 
 struct TL2Counters {
     NMonitoring::TDynamicCounters::TCounterPtr TotalSize;
     NMonitoring::TDynamicCounters::TCounterPtr TotalCount;
@@ -46,13 +46,13 @@ public:
         TString TopicName;
         ui32 Partition;
         ui64 Offset;
-        ui16 PartNo;
+        ui16 PartNo; 
 
         TKey(TString topicName, const TCacheBlobL2& blob)
             : TopicName(topicName)
             , Partition(blob.Partition)
             , Offset(blob.Offset)
-            , PartNo(blob.PartNo)
+            , PartNo(blob.PartNo) 
         {
             KeyHash = Hash128to32(ComputeHash(topicName), (static_cast<ui64>(Partition) << 16) + PartNo);
             KeyHash = Hash128to32(KeyHash, Offset);
@@ -61,8 +61,8 @@ public:
         bool operator == (const TKey& key) const {
             return TopicName == key.TopicName &&
                 Partition == key.Partition &&
-                Offset == key.Offset &&
-                PartNo == key.PartNo;
+                Offset == key.Offset && 
+                PartNo == key.PartNo; 
         }
 
         ui64 Hash() const noexcept {

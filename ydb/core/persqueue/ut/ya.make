@@ -1,12 +1,12 @@
 UNITTEST_FOR(ydb/core/persqueue)
-
+ 
 OWNER(
     alexnick
     g:kikimr
     g:logbroker
 )
-
-FORK_SUBTESTS()
+ 
+FORK_SUBTESTS() 
 
 SPLIT_FACTOR(40)
 
@@ -19,24 +19,24 @@ ELSE()
     TIMEOUT(600)
 ENDIF()
 
-PEERDIR(
+PEERDIR( 
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib
     ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-SRCS(
+SRCS( 
     internals_ut.cpp
     mirrorer_ut.cpp
-    pq_ut.cpp
+    pq_ut.cpp 
     type_codecs_ut.cpp
-    pq_ut.h
+    pq_ut.h 
     sourceid_ut.cpp
     user_info_ut.cpp
-)
-
-END()
+) 
+ 
+END() 

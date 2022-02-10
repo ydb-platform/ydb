@@ -1342,7 +1342,7 @@ namespace NSchemeShardUT_Private {
         SetSchemeshardSchemaLimits(runtime, limits, TTestTxConfig::SchemeShard);
     }
 
-
+ 
     TString EscapedDoubleQoute(const TString src) {
         auto result = src;
 
@@ -1376,14 +1376,14 @@ namespace NSchemeShardUT_Private {
                                         (let consCopy '('ConsistentCopyingTargetsLimit (Uint64 '%lu)))
                                         (let maxPathLength '('PathElementLength (Uint64 '%lu)))
                                         (let extraSymbols '('ExtraPathSymbolsAllowed (Utf8 '"%s")))
-                                        (let pqPartitions '('PQPartitionsLimit (Uint64 '%lu)))
-                                        (let ret (AsList (UpdateRow 'SubDomains key '(depth paths child acl columns colName keyCols indices shards pathShards consCopy maxPathLength extraSymbols pqPartitions))))
+                                        (let pqPartitions '('PQPartitionsLimit (Uint64 '%lu))) 
+                                        (let ret (AsList (UpdateRow 'SubDomains key '(depth paths child acl columns colName keyCols indices shards pathShards consCopy maxPathLength extraSymbols pqPartitions)))) 
                                         (return ret)
                                     )
                                  )", domainId, limits.MaxDepth, limits.MaxPaths, limits.MaxChildrenInDir, limits.MaxAclBytesSize,
                                limits.MaxTableColumns, limits.MaxTableColumnNameLength, limits.MaxTableKeyColumns, limits.MaxTableIndices,
                                limits.MaxShards, limits.MaxShardsInPath, limits.MaxConsistentCopyTargets,
-                               limits.MaxPathElementLength, escapedStr.c_str(), limits.MaxPQPartitions);
+                               limits.MaxPathElementLength, escapedStr.c_str(), limits.MaxPQPartitions); 
         Cdbg << prog << "\n";
         NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShard, prog, result, err);
         Cdbg << result << "\n";
@@ -1393,37 +1393,37 @@ namespace NSchemeShardUT_Private {
         RebootTablet(runtime, schemeShard, sender);
     }
 
-    void SetSchemeshardDatabaseQuotas(TTestActorRuntime& runtime, Ydb::Cms::DatabaseQuotas databaseQuotas, ui64 domainId) {
-
+    void SetSchemeshardDatabaseQuotas(TTestActorRuntime& runtime, Ydb::Cms::DatabaseQuotas databaseQuotas, ui64 domainId) { 
+ 
         SetSchemeshardDatabaseQuotas(runtime, databaseQuotas, domainId, TTestTxConfig::SchemeShard);
-    }
-
-    void SetSchemeshardDatabaseQuotas(TTestActorRuntime& runtime, Ydb::Cms::DatabaseQuotas databaseQuotas, ui64 domainId, ui64 schemeShard) {
-        NKikimrMiniKQL::TResult result;
-        TString err;
-
-        TString serialized;
-        Y_VERIFY(databaseQuotas.SerializeToString(&serialized));
-        TString prog = Sprintf(R"(
-                                   (
-                                        (let key '('('PathId (Uint64 '%lu)))) # RootPathId
-                                        (let quotas '('DatabaseQuotas (String '%s)))
-                                        (let ret (AsList (UpdateRow 'SubDomains key '(quotas))))
-                                        (return ret)
-                                    )
-                                 )", domainId, serialized.c_str());
-        Cdbg << prog << "\n";
+    } 
+ 
+    void SetSchemeshardDatabaseQuotas(TTestActorRuntime& runtime, Ydb::Cms::DatabaseQuotas databaseQuotas, ui64 domainId, ui64 schemeShard) { 
+        NKikimrMiniKQL::TResult result; 
+        TString err; 
+ 
+        TString serialized; 
+        Y_VERIFY(databaseQuotas.SerializeToString(&serialized)); 
+        TString prog = Sprintf(R"( 
+                                   ( 
+                                        (let key '('('PathId (Uint64 '%lu)))) # RootPathId 
+                                        (let quotas '('DatabaseQuotas (String '%s))) 
+                                        (let ret (AsList (UpdateRow 'SubDomains key '(quotas)))) 
+                                        (return ret) 
+                                    ) 
+                                 )", domainId, serialized.c_str()); 
+        Cdbg << prog << "\n"; 
         NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShard, prog, result, err);
-
-        Cdbg << result << "\n";
+ 
+        Cdbg << result << "\n"; 
         UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
-
-        TActorId sender = runtime.AllocateEdgeActor();
+ 
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, schemeShard, sender);
-
-    }
-
-
+ 
+    } 
+ 
+ 
     NKikimrSchemeOp::TTableDescription GetDatashardSchema(TTestActorRuntime& runtime, ui64 tabletId, ui64 tid) {
         NKikimrMiniKQL::TResult result;
         TString err;

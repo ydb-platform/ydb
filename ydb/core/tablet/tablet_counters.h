@@ -295,29 +295,29 @@ private:
 template <typename T>
 class TCountersArray : TNonCopyable {
     friend class TTabletCountersBase;
-    friend class TTabletLabeledCountersBase;
+    friend class TTabletLabeledCountersBase; 
 public:
     typedef std::shared_ptr<T> TCountersHolder;
     //
     TCountersArray(ui32 countersQnt)
         : CountersQnt(countersQnt)
-        , CountersHolder(nullptr)
+        , CountersHolder(nullptr) 
         , Counters(nullptr)
     {
-        if (CountersQnt) {
+        if (CountersQnt) { 
             CountersHolder.reset(new T[CountersQnt](), &CheckedArrayDelete<T>);
             Counters = CountersHolder.get();
-        }
+        } 
     }
-
-    //not owning constructor - can refer to part of other counters
-    TCountersArray(TCountersHolder& countersHolder, T* counters, const ui32 countersQnt)
-        : CountersQnt(countersQnt)
-        , CountersHolder(countersHolder)
-        , Counters(counters)
-    {
-    }
-
+ 
+    //not owning constructor - can refer to part of other counters 
+    TCountersArray(TCountersHolder& countersHolder, T* counters, const ui32 countersQnt) 
+        : CountersQnt(countersQnt) 
+        , CountersHolder(countersHolder) 
+        , Counters(counters) 
+    { 
+    } 
+ 
     ~TCountersArray()
     {
         Counters = nullptr;
@@ -352,10 +352,10 @@ private:
         Counters = nullptr;
 
         CountersQnt = rp.CountersQnt;
-        if (CountersQnt) {
+        if (CountersQnt) { 
             CountersHolder.reset(new T[CountersQnt](), &CheckedArrayDelete<T>);
             Counters = CountersHolder.get();
-        }
+        } 
 
         for (ui32 i = 0, e = CountersQnt; i < e; ++i) {
             Counters[i].Initialize(rp.Counters[i]);
@@ -389,7 +389,7 @@ private:
 
     //
     ui32 CountersQnt;
-    TCountersHolder CountersHolder;
+    TCountersHolder CountersHolder; 
     T* Counters;
 };
 
@@ -422,24 +422,24 @@ public:
         , PercentileCountersMetaInfo(percentileCountersMetaInfo)
     {}
 
-    //Constructor only for access of other counters. Lifetime of class constructed this way must not exceed lifetime of existed one.
-    TTabletCountersBase(const ui32 simpleOffset, const ui32 cumulativeOffset, const ui32 percentileOffset, TTabletCountersBase* counters)
-        : SimpleCounters(counters->Simple().CountersHolder, counters->Simple().Counters + simpleOffset,
-                         counters->Simple().Size() - simpleOffset)
-        , CumulativeCounters(counters->Cumulative().CountersHolder, counters->Cumulative().Counters + cumulativeOffset,
-                             counters->Cumulative().Size() - cumulativeOffset)
-        , PercentileCounters(counters->Percentile().CountersHolder, counters->Percentile().Counters + percentileOffset,
-                             counters->Percentile().Size() - percentileOffset)
-        , SimpleCountersMetaInfo(counters->SimpleCountersMetaInfo + simpleOffset)
-        , CumulativeCountersMetaInfo(counters->CumulativeCountersMetaInfo + cumulativeOffset)
-        , PercentileCountersMetaInfo(counters->PercentileCountersMetaInfo + percentileOffset)
-
-    {
-        Y_VERIFY_DEBUG(counters->Simple().Size() > simpleOffset);
-        Y_VERIFY_DEBUG(counters->Cumulative().Size() > cumulativeOffset);
-        Y_VERIFY_DEBUG(counters->Percentile().Size() > percentileOffset);
-    }
-
+    //Constructor only for access of other counters. Lifetime of class constructed this way must not exceed lifetime of existed one. 
+    TTabletCountersBase(const ui32 simpleOffset, const ui32 cumulativeOffset, const ui32 percentileOffset, TTabletCountersBase* counters) 
+        : SimpleCounters(counters->Simple().CountersHolder, counters->Simple().Counters + simpleOffset, 
+                         counters->Simple().Size() - simpleOffset) 
+        , CumulativeCounters(counters->Cumulative().CountersHolder, counters->Cumulative().Counters + cumulativeOffset, 
+                             counters->Cumulative().Size() - cumulativeOffset) 
+        , PercentileCounters(counters->Percentile().CountersHolder, counters->Percentile().Counters + percentileOffset, 
+                             counters->Percentile().Size() - percentileOffset) 
+        , SimpleCountersMetaInfo(counters->SimpleCountersMetaInfo + simpleOffset) 
+        , CumulativeCountersMetaInfo(counters->CumulativeCountersMetaInfo + cumulativeOffset) 
+        , PercentileCountersMetaInfo(counters->PercentileCountersMetaInfo + percentileOffset) 
+ 
+    { 
+        Y_VERIFY_DEBUG(counters->Simple().Size() > simpleOffset); 
+        Y_VERIFY_DEBUG(counters->Cumulative().Size() > cumulativeOffset); 
+        Y_VERIFY_DEBUG(counters->Percentile().Size() > percentileOffset); 
+    } 
+ 
     virtual ~TTabletCountersBase()
     {}
 
@@ -525,148 +525,148 @@ private:
     const char* const * PercentileCountersMetaInfo;
 };
 
-
-////////////////////////////////////////////
-/// The TTabletLabeledCountersBase class
-////////////////////////////////////////////
-
-//labeled counters are aggregated by Label across all tablets
-//Id - identificator of tablet or whatever you want
-//You can have severel counters for different labels inside one tablet
-
-class TTabletLabeledCountersBase {
-public:
-    //
-    enum EAggregateFunc {
-        EAF_MAX = 1,
-        EAF_MIN = 2,
-        EAF_SUM = 3
-    };
-
-    TTabletLabeledCountersBase()
-        : Counters(0)
-        , Ids(0)
-        , MetaInfo(nullptr)
-        , Types(nullptr)
-        , AggregateFunc(nullptr)
-        , Group("")
-        , GroupNames(nullptr)
-        , Drop(false)
-    {}
-
-    //metaInfo - counters names
-    //types - NKikimr::TLabeledCounterOptions::ECounterType
-    //aggrFuncs - EAggreagteFunc-s casted to ui8
-    //group - '/' separated list of group-values (user1/topic1/...)
-    //groupNames - groups names (clientId,topic,...)
-    //id - id for this user counter groups (tabletID or whatever, if there is several concurrent labeledCounters-generators inside one tablet)
-    TTabletLabeledCountersBase(ui32 countersQnt,
-        const char* const * metaInfo,
-        const ui8* types,
-        const ui8* aggrFunc,
+ 
+//////////////////////////////////////////// 
+/// The TTabletLabeledCountersBase class 
+//////////////////////////////////////////// 
+ 
+//labeled counters are aggregated by Label across all tablets 
+//Id - identificator of tablet or whatever you want 
+//You can have severel counters for different labels inside one tablet 
+ 
+class TTabletLabeledCountersBase { 
+public: 
+    // 
+    enum EAggregateFunc { 
+        EAF_MAX = 1, 
+        EAF_MIN = 2, 
+        EAF_SUM = 3 
+    }; 
+ 
+    TTabletLabeledCountersBase() 
+        : Counters(0) 
+        , Ids(0) 
+        , MetaInfo(nullptr) 
+        , Types(nullptr) 
+        , AggregateFunc(nullptr) 
+        , Group("") 
+        , GroupNames(nullptr) 
+        , Drop(false) 
+    {} 
+ 
+    //metaInfo - counters names 
+    //types - NKikimr::TLabeledCounterOptions::ECounterType 
+    //aggrFuncs - EAggreagteFunc-s casted to ui8 
+    //group - '/' separated list of group-values (user1/topic1/...) 
+    //groupNames - groups names (clientId,topic,...) 
+    //id - id for this user counter groups (tabletID or whatever, if there is several concurrent labeledCounters-generators inside one tablet) 
+    TTabletLabeledCountersBase(ui32 countersQnt, 
+        const char* const * metaInfo, 
+        const ui8* types, 
+        const ui8* aggrFunc, 
         const TString& group, const char* const * groupNames, const ui64 id)
-        : Counters(countersQnt)
-        , Ids(countersQnt)
-        , MetaInfo(metaInfo)
-        , Types(types)
-        , AggregateFunc(aggrFunc)
-        , Group(group)
-        , GroupNames(groupNames)
-        , Drop(false)
-    {
-        for (ui32 i = 0; i < countersQnt; ++i)
-            Ids[i].Set(id);
-    }
-
-    virtual ~TTabletLabeledCountersBase()
-    {}
-
-    bool HasCounters() const {
-        return (bool)Counters;
-    }
-
-    // counters
-    TCountersArray<TTabletSimpleCounter>& GetCounters() {
-        return Counters;
-    }
-
-    const TCountersArray<TTabletSimpleCounter>& GetCounters() const {
-        return Counters;
-    }
-
+        : Counters(countersQnt) 
+        , Ids(countersQnt) 
+        , MetaInfo(metaInfo) 
+        , Types(types) 
+        , AggregateFunc(aggrFunc) 
+        , Group(group) 
+        , GroupNames(groupNames) 
+        , Drop(false) 
+    { 
+        for (ui32 i = 0; i < countersQnt; ++i) 
+            Ids[i].Set(id); 
+    } 
+ 
+    virtual ~TTabletLabeledCountersBase() 
+    {} 
+ 
+    bool HasCounters() const { 
+        return (bool)Counters; 
+    } 
+ 
+    // counters 
+    TCountersArray<TTabletSimpleCounter>& GetCounters() { 
+        return Counters; 
+    } 
+ 
+    const TCountersArray<TTabletSimpleCounter>& GetCounters() const { 
+        return Counters; 
+    } 
+ 
     const TString& GetGroup() const {
-        return Group;
-    }
-
-
-    void SetGroup(const TString& group) {
-        Group = group;
-    }
-
-    const TCountersArray<TTabletSimpleCounter>& GetIds() const {
-        return Ids;
-    }
-
-    TCountersArray<TTabletSimpleCounter>& GetIds() {
-        return Ids;
-    }
-
-    ui8 GetCounterType(ui32 index) const {
-        return Types[index];
-    }
-
-    const ui8* GetTypes() const {
-        return Types;
-    }
-
-    const char * const * GetNames() const {
-        return MetaInfo;
-    }
-
-    const ui8* GetAggrFuncs() const {
-        return AggregateFunc;
-    }
-
+        return Group; 
+    } 
+ 
+ 
+    void SetGroup(const TString& group) { 
+        Group = group; 
+    } 
+ 
+    const TCountersArray<TTabletSimpleCounter>& GetIds() const { 
+        return Ids; 
+    } 
+ 
+    TCountersArray<TTabletSimpleCounter>& GetIds() { 
+        return Ids; 
+    } 
+ 
+    ui8 GetCounterType(ui32 index) const { 
+        return Types[index]; 
+    } 
+ 
+    const ui8* GetTypes() const { 
+        return Types; 
+    } 
+ 
+    const char * const * GetNames() const { 
+        return MetaInfo; 
+    } 
+ 
+    const ui8* GetAggrFuncs() const { 
+        return AggregateFunc; 
+    } 
+ 
     void OutputHtml(IOutputStream &os) const;
-
-    //
-    const char* GetCounterName(ui32 index) const {
-        return MetaInfo[index];
-    }
-
-    const char* GetGroupName(ui32 index) const {
-        return GroupNames[index];
-    }
-
-    void SetDrop() {
-        Drop = true;
-    }
-
-    bool GetDrop() const {
-        return Drop;
-    }
-
-    //Counters will be filled with aggragated value by AggregateFunc, Ids will be filled with id from user counters with winning value
-    void AggregateWith(const TTabletLabeledCountersBase& rp);
-
-    TTabletLabeledCountersBase(const TTabletLabeledCountersBase&);
-    TTabletLabeledCountersBase& operator = (const TTabletLabeledCountersBase&);
-
-private:
-    //
-    TCountersArray<TTabletSimpleCounter> Counters;
-    TCountersArray<TTabletSimpleCounter> Ids;
-    const char* const * MetaInfo;
-    const ui8* Types;
-    const ui8* AggregateFunc;
+ 
+    // 
+    const char* GetCounterName(ui32 index) const { 
+        return MetaInfo[index]; 
+    } 
+ 
+    const char* GetGroupName(ui32 index) const { 
+        return GroupNames[index]; 
+    } 
+ 
+    void SetDrop() { 
+        Drop = true; 
+    } 
+ 
+    bool GetDrop() const { 
+        return Drop; 
+    } 
+ 
+    //Counters will be filled with aggragated value by AggregateFunc, Ids will be filled with id from user counters with winning value 
+    void AggregateWith(const TTabletLabeledCountersBase& rp); 
+ 
+    TTabletLabeledCountersBase(const TTabletLabeledCountersBase&); 
+    TTabletLabeledCountersBase& operator = (const TTabletLabeledCountersBase&); 
+ 
+private: 
+    // 
+    TCountersArray<TTabletSimpleCounter> Counters; 
+    TCountersArray<TTabletSimpleCounter> Ids; 
+    const char* const * MetaInfo; 
+    const ui8* Types; 
+    const ui8* AggregateFunc; 
     TString Group;
-    const char* const * GroupNames;
-    bool Drop;
-};
-
-
+    const char* const * GroupNames; 
+    bool Drop; 
+}; 
+ 
+ 
 IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase::EAggregateFunc& func);
-
-
+ 
+ 
 } // end of NKikimr
 

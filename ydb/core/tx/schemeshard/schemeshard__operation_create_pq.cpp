@@ -40,7 +40,7 @@ TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     }
 
     if (partitionCount == 0 || partitionCount > TSchemeShard::MaxPQGroupPartitionsCount) {
-        status = NKikimrScheme::StatusInvalidParameter;
+        status = NKikimrScheme::StatusInvalidParameter; 
         errStr = Sprintf("Invalid total partition count specified: %u", partitionCount);
         return nullptr;
     }
@@ -51,22 +51,22 @@ TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    if ((ui32)op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond() > TSchemeShard::MaxPQWriteSpeedPerPartition) {
-        status = NKikimrScheme::StatusInvalidParameter;
-        errStr = TStringBuilder()
-                << "Invalid write speed per second in partition specified: " << op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
-                << " vs " << TSchemeShard::MaxPQWriteSpeedPerPartition;
-        return nullptr;
-    }
-
-    if ((ui32)op.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds() > TSchemeShard::MaxPQLifetimeSeconds) {
-        status = NKikimrScheme::StatusInvalidParameter;
-        errStr = TStringBuilder()
-                << "Invalid retention period specified: " << op.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds()
-                << " vs " << TSchemeShard::MaxPQLifetimeSeconds;
-        return nullptr;
-    }
-
+    if ((ui32)op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond() > TSchemeShard::MaxPQWriteSpeedPerPartition) { 
+        status = NKikimrScheme::StatusInvalidParameter; 
+        errStr = TStringBuilder() 
+                << "Invalid write speed per second in partition specified: " << op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond() 
+                << " vs " << TSchemeShard::MaxPQWriteSpeedPerPartition; 
+        return nullptr; 
+    } 
+ 
+    if ((ui32)op.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds() > TSchemeShard::MaxPQLifetimeSeconds) { 
+        status = NKikimrScheme::StatusInvalidParameter; 
+        errStr = TStringBuilder() 
+                << "Invalid retention period specified: " << op.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds() 
+                << " vs " << TSchemeShard::MaxPQLifetimeSeconds; 
+        return nullptr; 
+    } 
+ 
     if (op.GetPQTabletConfig().PartitionKeySchemaSize()) {
         if (op.PartitionBoundariesSize() != (partitionCount - 1)) {
             status = NKikimrScheme::StatusInvalidParameter;
@@ -385,25 +385,25 @@ public:
         }
 
         const ui64 shardsToCreate = pqGroup->ExpectedShardCount() + 1;
-        const ui64 partitionsToCreate = pqGroup->TotalPartitionCount;
+        const ui64 partitionsToCreate = pqGroup->TotalPartitionCount; 
+ 
+        auto tabletConfig = pqGroup->TabletConfig; 
+        NKikimrPQ::TPQTabletConfig config; 
+        Y_VERIFY(!tabletConfig.empty()); 
 
-        auto tabletConfig = pqGroup->TabletConfig;
-        NKikimrPQ::TPQTabletConfig config;
-        Y_VERIFY(!tabletConfig.empty());
-
-        bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
-        Y_VERIFY(parseOk);
-
-        ui64 throughput = ((ui64)partitionsToCreate) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-        ui64 storage = throughput * config.GetPartitionConfig().GetLifetimeSeconds();
-        ui64 storageToReserve = storage;
+        bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig); 
+        Y_VERIFY(parseOk); 
+ 
+        ui64 throughput = ((ui64)partitionsToCreate) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(); 
+        ui64 storage = throughput * config.GetPartitionConfig().GetLifetimeSeconds(); 
+        ui64 storageToReserve = storage; 
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks
                 .ShardsLimit(shardsToCreate)
-                .PathShardsLimit(shardsToCreate)
-                .PQPartitionsLimit(partitionsToCreate)
-                .PQReservedStorageLimit(storageToReserve);
+                .PathShardsLimit(shardsToCreate) 
+                .PQPartitionsLimit(partitionsToCreate) 
+                .PQReservedStorageLimit(storageToReserve); 
 
             if (!checks) {
                 TString explain = TStringBuilder() << "dst path fail checks"
@@ -539,14 +539,14 @@ public:
 
         dstPath.DomainInfo()->IncPathsInside();
         dstPath.DomainInfo()->AddInternalShards(txState);
-        dstPath.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
-        dstPath.DomainInfo()->IncPQReservedStorage(storageToReserve);
-
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput);
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(storage);
-
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionsToCreate);
-
+        dstPath.DomainInfo()->IncPQPartitionsInside(partitionsToCreate); 
+        dstPath.DomainInfo()->IncPQReservedStorage(storageToReserve); 
+ 
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput); 
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(storage); 
+ 
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionsToCreate); 
+ 
         dstPath.Base()->IncShardsInside(shardsToCreate);
         parentPath.Base()->IncAliveChildren();
 

@@ -294,11 +294,11 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
             return Message(offset, Compress(sourceData, codec), codec, seqNo, createTimestamp);
         }
 
-        TServerReadInfo& BrokenCompressMessage(ui64 offset, const TString& sourceData, Ydb::PersQueue::V1::Codec codec = Ydb::PersQueue::V1::CODEC_GZIP, ui64 seqNo = 1, TInstant createTimestamp = TInstant::MilliSeconds(42)) {
-            return Message(offset, "broken_header_" + Compress(sourceData, codec), codec, seqNo, createTimestamp);
-        }
-
-
+        TServerReadInfo& BrokenCompressMessage(ui64 offset, const TString& sourceData, Ydb::PersQueue::V1::Codec codec = Ydb::PersQueue::V1::CODEC_GZIP, ui64 seqNo = 1, TInstant createTimestamp = TInstant::MilliSeconds(42)) { 
+            return Message(offset, "broken_header_" + Compress(sourceData, codec), codec, seqNo, createTimestamp); 
+        } 
+ 
+ 
         TServerReadInfo& PartitionStreamStatus(ui64 committedOffset, ui64 endOffset, TInstant writeWatermark, const TString& topic = "TestTopic", const TString& cluster = "TestCluster", const ui64 partition = 1, const ui64 assignId = 1) {
             auto* req = Response.mutable_partition_status();
             req->mutable_topic()->set_path(topic);
@@ -487,7 +487,7 @@ public:
     std::shared_ptr<TReadSessionEventsQueue> GetEventsQueue();
     ::IExecutor::TPtr GetDefaultExecutor();
 
-    void SuccessfulInit(bool flag = true);
+    void SuccessfulInit(bool flag = true); 
     TPartitionStream::TPtr CreatePartitionStream(const TString& topic = "TestTopic", const TString& cluster = "TestCluster", ui64 partition = 1, ui64 assignId = 1);
 
     // Assertions.
@@ -582,10 +582,10 @@ TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
         .Counters(MakeIntrusive<NYdb::NPersQueue::TReaderCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()));
 
     Log.SetFormatter(GetPrefixLogFormatter(""));
-
-    Mock::AllowLeak(MockProcessor.Get());
-    Mock::AllowLeak(MockProcessorFactory.get());
-    Mock::AllowLeak(MockErrorHandler.Get());
+ 
+    Mock::AllowLeak(MockProcessor.Get()); 
+    Mock::AllowLeak(MockProcessorFactory.get()); 
+    Mock::AllowLeak(MockErrorHandler.Get()); 
 }
 
 TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
@@ -637,11 +637,11 @@ std::shared_ptr<TReadSessionEventsQueue> TReadSessionImplTestSetup::GetEventsQue
     return EventsQueue;
 }
 
-void TReadSessionImplTestSetup::SuccessfulInit(bool hasInitRequest) {
+void TReadSessionImplTestSetup::SuccessfulInit(bool hasInitRequest) { 
     EXPECT_CALL(*MockProcessorFactory, OnCreateProcessor(1))
         .WillOnce([&](){ MockProcessorFactory->CreateProcessor(MockProcessor); });
-    if (hasInitRequest)
-        EXPECT_CALL(*MockProcessor, OnInitRequest(_));
+    if (hasInitRequest) 
+        EXPECT_CALL(*MockProcessor, OnInitRequest(_)); 
     MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo().InitResponse("123-session-id-321"));
     GetSession()->Start();
     MockProcessorFactory->Wait();
@@ -676,14 +676,14 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         }
         std::shared_ptr<IReadSession> session = setup.GetPersQueueClient().CreateReadSession(settings);
 
-        TDeferredCommit dc;
+        TDeferredCommit dc; 
         // Event 1: create partition stream.
         {
             TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TCreatePartitionStreamEvent);
             std::get<TReadSessionEvent::TCreatePartitionStreamEvent>(*event).Confirm();
-            Cerr << "create event " << DebugString(*event) << Endl;
+            Cerr << "create event " << DebugString(*event) << Endl; 
         }
         // Event 2: data.
         {
@@ -695,46 +695,46 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
             for (auto& msg : dataEvent.GetMessages()) {
                 UNIT_ASSERT(msg.GetData() == "message1" || msg.GetData() == "message2");
             }
-            Cerr << "data event " << DebugString(*event) << Endl;
+            Cerr << "data event " << DebugString(*event) << Endl; 
             if (commit) {
-                dc.Add(dataEvent);
+                dc.Add(dataEvent); 
             }
         }
-        setup.WriteToTopic({"message3"});
-        // Event 3: data.
-        {
-            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true);
-            UNIT_ASSERT(event);
-            UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
-            TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
-            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages().size(), 1);
-            for (auto& msg : dataEvent.GetMessages()) {
-                UNIT_ASSERT(msg.GetData() == "message3");
-            }
-            Cerr << "data event " << DebugString(*event) << Endl;
+        setup.WriteToTopic({"message3"}); 
+        // Event 3: data. 
+        { 
+            TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(true); 
+            UNIT_ASSERT(event); 
+            UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent); 
+            TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event); 
+            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages().size(), 1); 
+            for (auto& msg : dataEvent.GetMessages()) { 
+                UNIT_ASSERT(msg.GetData() == "message3"); 
+            } 
+            Cerr << "data event " << DebugString(*event) << Endl; 
 
-            dataEvent.Commit(); // Commit right now!
-        }
-
-        dc.Commit();
-
+            dataEvent.Commit(); // Commit right now! 
+        } 
+ 
+        dc.Commit(); 
+ 
         if (close) {
             session->Close(TDuration::Seconds(30));
         }
 
-        // Event 4: commit ack.
+        // Event 4: commit ack. 
         if (commit) {
             TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(!close); // Event is expected to be already in queue if closed.
             UNIT_ASSERT(event);
-            Cerr << "commit ack event " << DebugString(*event) << Endl;
-            UNIT_ASSERT(std::holds_alternative<TReadSessionEvent::TCommitAcknowledgementEvent>(*event));
+            Cerr << "commit ack event " << DebugString(*event) << Endl; 
+            UNIT_ASSERT(std::holds_alternative<TReadSessionEvent::TCommitAcknowledgementEvent>(*event)); 
         }
 
         if (close) {
             TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(false);
             UNIT_ASSERT(event);
-            Cerr << "close event " << DebugString(*event) << Endl;
-            UNIT_ASSERT(std::holds_alternative<TSessionClosedEvent>(*event));
+            Cerr << "close event " << DebugString(*event) << Endl; 
+            UNIT_ASSERT(std::holds_alternative<TSessionClosedEvent>(*event)); 
             UNIT_ASSERT_STRING_CONTAINS(DebugString(*event), "Session was gracefully closed");
         }
     }
@@ -1190,18 +1190,18 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         setup.AssertNoEvents();
     }
 
-    Y_UNIT_TEST(BrokenCompressedData) {
-        TReadSessionImplTestSetup setup;
-        setup.Settings.DecompressionExecutor(new TReorderingExecutor(1));
-        setup.SuccessfulInit();
-        TPartitionStream::TPtr stream = setup.CreatePartitionStream();
-        setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
-                                                   .PartitionData(1)
-                                                   .Batch("src_id")
+    Y_UNIT_TEST(BrokenCompressedData) { 
+        TReadSessionImplTestSetup setup; 
+        setup.Settings.DecompressionExecutor(new TReorderingExecutor(1)); 
+        setup.SuccessfulInit(); 
+        TPartitionStream::TPtr stream = setup.CreatePartitionStream(); 
+        setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo() 
+                                                   .PartitionData(1) 
+                                                   .Batch("src_id") 
                                                    .BrokenCompressMessage(1, "message")
                                                    .CompressMessage(2, "message2")
                                                    .CompressMessage(3, "message3"));
-
+ 
         // Exception was passed during decompression.
         {
             TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
@@ -1214,19 +1214,19 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages()[1].GetData(), "message2");
             UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages()[2].GetData(), "message3");
         }
-
-        setup.AssertNoEvents();
-    }
-
+ 
+        setup.AssertNoEvents(); 
+    } 
+ 
     void DecompressImpl(Ydb::PersQueue::V1::Codec codec, const TString& data = "msg", ::IExecutor::TPtr executor = nullptr) {
         TReadSessionImplTestSetup setup;
         if (executor) {
             setup.Settings.DecompressionExecutor(executor);
         }
-        setup.SuccessfulInit(false);
+        setup.SuccessfulInit(false); 
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
-
-        EXPECT_CALL(*setup.MockProcessor, OnReadRequest(_));
+ 
+        EXPECT_CALL(*setup.MockProcessor, OnReadRequest(_)); 
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
                                                .PartitionData(1)
                                                .Batch("src_id")
@@ -1308,18 +1308,18 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         ui64 offset = 1;
         ui64 seqNo = 42;
         THashSet<ui64> committedCookies;
-        THashSet<ui64> committedOffsets;
+        THashSet<ui64> committedOffsets; 
         EXPECT_CALL(*setup.MockProcessor, OnCommitRequest(_))
-            .WillRepeatedly(Invoke([&committedCookies, &committedOffsets](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
+            .WillRepeatedly(Invoke([&committedCookies, &committedOffsets](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) { 
                 for (const auto& commit : req.cookies()) {
                     committedCookies.insert(commit.partition_cookie());
                 }
-                for (const auto& range : req.offset_ranges()) {
-                    Cerr << "GOT RANGE " << range.start_offset() << " " << range.end_offset() << "\n";
-                    for (ui64 i = range.start_offset(); i < range.end_offset(); ++i) {
-                        committedOffsets.insert(i);
-                    }
-                }
+                for (const auto& range : req.offset_ranges()) { 
+                    Cerr << "GOT RANGE " << range.start_offset() << " " << range.end_offset() << "\n"; 
+                    for (ui64 i = range.start_offset(); i < range.end_offset(); ++i) { 
+                        committedOffsets.insert(i); 
+                    } 
+                } 
             }));
 
         for (ui64 i = 1; i <= serverBatchesCount; ++i) {
@@ -1368,16 +1368,16 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             }
             dataEvent.Commit();
         }
-        if (committedOffsets.empty()) {
-            UNIT_ASSERT_VALUES_EQUAL(committedCookies.size(), serverBatchesCount);
-            for (ui64 i = 1; i <= serverBatchesCount; ++i) {
-                UNIT_ASSERT(committedCookies.contains(i));
-            }
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(committedOffsets.size(), batches * messagesInBatch + 1);
-            for (ui64 i = 0; i <= batches * messagesInBatch; ++i) {
-                UNIT_ASSERT(committedOffsets.contains(i));
-            }
+        if (committedOffsets.empty()) { 
+            UNIT_ASSERT_VALUES_EQUAL(committedCookies.size(), serverBatchesCount); 
+            for (ui64 i = 1; i <= serverBatchesCount; ++i) { 
+                UNIT_ASSERT(committedCookies.contains(i)); 
+            } 
+        } else { 
+            UNIT_ASSERT_VALUES_EQUAL(committedOffsets.size(), batches * messagesInBatch + 1); 
+            for (ui64 i = 0; i <= batches * messagesInBatch; ++i) { 
+                UNIT_ASSERT(committedOffsets.contains(i)); 
+            } 
 
         }
         UNIT_ASSERT_VALUES_EQUAL(executor->GetTasksAdded(), expectedTasks);
@@ -1451,13 +1451,13 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     Y_UNIT_TEST(UnpackBigBatchWithTwoPartitions) {
         TReadSessionImplTestSetup setup;
-
+ 
         setup.Settings.MaxMemoryUsageBytes(5000);
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream1 = setup.CreatePartitionStream("TestTopic", "TestCluster", 1, 1);
         TPartitionStream::TPtr stream2 = setup.CreatePartitionStream("TestTopic", "TestCluster", 2, 2);
 
-
+ 
         const TString messageData = GenerateMessageData(100);
         const TString compressedMessageData = Compress(messageData);
         ui64 offset = 1;
@@ -1568,7 +1568,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         bool has2 = false;
         EXPECT_CALL(*setup.MockProcessor, OnCommitRequest(_))
             .WillRepeatedly(Invoke([&](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
-                Cerr << "Got commit req " << req << "\n";
+                Cerr << "Got commit req " << req << "\n"; 
                 for (const auto& commit : req.cookies()) {
                     if (commit.partition_cookie() == 1) {
                         has1 = true;
@@ -1578,12 +1578,12 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                         UNIT_ASSERT(false);
                     }
                 }
-                for (const auto& range : req.offset_ranges()) {
-                    Cerr << "RANGE " << range.start_offset() << " " << range.end_offset() << "\n";
-                    if (range.start_offset() == 10 && range.end_offset() == 12) has1 = true;
-                    else if (range.start_offset() == 0 && range.end_offset() == 10) has2 = true;
-                    else UNIT_ASSERT(false);
-                }
+                for (const auto& range : req.offset_ranges()) { 
+                    Cerr << "RANGE " << range.start_offset() << " " << range.end_offset() << "\n"; 
+                    if (range.start_offset() == 10 && range.end_offset() == 12) has1 = true; 
+                    else if (range.start_offset() == 0 && range.end_offset() == 10) has2 = true; 
+                    else UNIT_ASSERT(false); 
+                } 
             }));
 
         for (int i = 0; i < 2; ++i) {
@@ -1616,43 +1616,43 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
 
         // First time.
-        dataEvent.GetMessages()[0].Commit();
+        dataEvent.GetMessages()[0].Commit(); 
 
         UNIT_ASSERT_EXCEPTION(dataEvent.GetMessages()[0].Commit(), NYdb::TContractViolation);
     }
 
-    Y_UNIT_TEST(DataReceivedCallbackReal) {
-        NYdb::NPersQueue::NTests::TPersQueueYdbSdkTestSetup setup("ReadSession");
-        auto settings = setup.GetReadSessionSettings();
-
-        auto calledPromise = NThreading::NewPromise<void>();
-        int time = 0;
-
-        settings.EventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& event) {
-            for (auto& message: event.GetMessages()) {
-                ++time;
-                Cerr << "GOT MESSAGE: " << message.DebugString(true) << "\n";
-                UNIT_ASSERT_VALUES_EQUAL(message.GetData(), TStringBuilder() << "message" << time);
-                if (time == 3) {
-                    calledPromise.SetValue();
-                }
-            }
-            UNIT_ASSERT(time <= 3);
-        }, true);
-
-        std::shared_ptr<IReadSession> session = setup.GetPersQueueClient().CreateReadSession(settings);
-
-        UNIT_ASSERT(!calledPromise.GetFuture().Wait(TDuration::Seconds(5)));
-
-        setup.WriteToTopic({"message1"}, false);
-        setup.WriteToTopic({"message2"}, false);
-        Sleep(TDuration::Seconds(1));
-        setup.WriteToTopic({"message3"}, false);
-
-        calledPromise.GetFuture().Wait();
-        Sleep(TDuration::Seconds(10));
-    }
-
+    Y_UNIT_TEST(DataReceivedCallbackReal) { 
+        NYdb::NPersQueue::NTests::TPersQueueYdbSdkTestSetup setup("ReadSession"); 
+        auto settings = setup.GetReadSessionSettings(); 
+ 
+        auto calledPromise = NThreading::NewPromise<void>(); 
+        int time = 0; 
+ 
+        settings.EventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& event) { 
+            for (auto& message: event.GetMessages()) { 
+                ++time; 
+                Cerr << "GOT MESSAGE: " << message.DebugString(true) << "\n"; 
+                UNIT_ASSERT_VALUES_EQUAL(message.GetData(), TStringBuilder() << "message" << time); 
+                if (time == 3) { 
+                    calledPromise.SetValue(); 
+                } 
+            } 
+            UNIT_ASSERT(time <= 3); 
+        }, true); 
+ 
+        std::shared_ptr<IReadSession> session = setup.GetPersQueueClient().CreateReadSession(settings); 
+ 
+        UNIT_ASSERT(!calledPromise.GetFuture().Wait(TDuration::Seconds(5))); 
+ 
+        setup.WriteToTopic({"message1"}, false); 
+        setup.WriteToTopic({"message2"}, false); 
+        Sleep(TDuration::Seconds(1)); 
+        setup.WriteToTopic({"message3"}, false); 
+ 
+        calledPromise.GetFuture().Wait(); 
+        Sleep(TDuration::Seconds(10)); 
+    } 
+ 
     Y_UNIT_TEST(DataReceivedCallback) {
         TReadSessionImplTestSetup setup;
         setup.Settings.DecompressionExecutor(MakeIntrusive<TReorderingExecutor>(2ull));
@@ -1770,9 +1770,9 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         auto commitCalled = std::make_shared<NThreading::TPromise<void>>(NThreading::NewPromise<void>());
         auto commitCalledFuture = commitCalled->GetFuture();
-
-        Mock::AllowLeak(setup.MockProcessor.Get());
-
+ 
+        Mock::AllowLeak(setup.MockProcessor.Get()); 
+ 
         EXPECT_CALL(*setup.MockProcessor, OnCommitRequest(_))
             .WillOnce([=](){ commitCalled->SetValue(); });
 
@@ -1810,15 +1810,15 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         if (!withCommit && withGracefulRelease) {
             UNIT_ASSERT(!destroyCalledFuture.Wait(TDuration::MilliSeconds(100)));
 
-            (*dataReceivedEvent)->Commit();
+            (*dataReceivedEvent)->Commit(); 
             UNIT_ASSERT(!destroyCalledFuture.Wait(TDuration::MilliSeconds(100)));
         }
 
         if (withCommit) {
             commitCalledFuture.Wait();
-        } if (withCommit || withGracefulRelease) {
-            setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
-                                                   .CommitAcknowledgement(1));
+        } if (withCommit || withGracefulRelease) { 
+            setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo() 
+                                                   .CommitAcknowledgement(1)); 
         }
 
         destroyCalledFuture.Wait();

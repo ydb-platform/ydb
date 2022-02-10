@@ -36,7 +36,7 @@ public:
             NYdb::TDriverConfig cfg;
             cfg.SetEndpoint(TStringBuilder() << "localhost:" << Server.GrpcPort);
             cfg.SetDatabase("/Root");
-            cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+            cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)); 
             Driver = MakeHolder<NYdb::TDriver>(cfg);
         }
         return *Driver;
@@ -61,9 +61,9 @@ public:
 
     NYdb::NPersQueue::TWriteSessionSettings GetWriteSessionSettings() {
         TWriteSessionSettings settings;
-        settings
-                .Path(GetTestTopic())
-                .MessageGroupId(GetTestMessageGroupId());
+        settings 
+                .Path(GetTestTopic()) 
+                .MessageGroupId(GetTestMessageGroupId()); 
         return settings;
     }
 };

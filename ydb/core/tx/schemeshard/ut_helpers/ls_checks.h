@@ -33,11 +33,11 @@ namespace NLs {
     TCheckFunc PathVersionOneOf(TSet<ui64> versions);
 
     TCheckFunc PathsInsideDomain(ui64 count);
-    TCheckFunc PQPartitionsInsideDomain(ui64 count);
+    TCheckFunc PQPartitionsInsideDomain(ui64 count); 
     TCheckFunc PathsInsideDomainOneOf(TSet<ui64> variants);
     TCheckFunc ShardsInsideDomain(ui64 count);
     TCheckFunc ShardsInsideDomainOneOf(TSet<ui64> variants);
-    TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions = 0);
+    TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions = 0); 
 
     TCheckFunc FreezeStateEqual(NKikimrSchemeOp::EFreezeState expectedState);
 
@@ -125,8 +125,8 @@ namespace NLs {
     TCheckFunc HasNotEffectiveRight(const TString& right);
 
     TCheckFunc KesusConfigIs(ui64 self_check_period_millis, ui64 session_grace_period_millis);
-    TCheckFunc DatabaseQuotas(ui64 dataStreamShards);
-
+    TCheckFunc DatabaseQuotas(ui64 dataStreamShards); 
+ 
     template<class TCheck>
     void PerformAllChecks(const NKikimrScheme::TEvDescribeSchemeResult& result, TCheck&& check) {
         check(result);

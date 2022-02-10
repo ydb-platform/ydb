@@ -16,23 +16,23 @@ namespace NKikimr {
 
         struct TEvGetUserById : TEventLocal<TEvGetUserById, EvGetUserById> {
             const ui64 UID;
-            const TString UserNameHint;
+            const TString UserNameHint; 
 
-            TEvGetUserById(const ui64 uid, const TString& userNameHint = "")
+            TEvGetUserById(const ui64 uid, const TString& userNameHint = "") 
                 : UID(uid)
-                , UserNameHint(userNameHint)
+                , UserNameHint(userNameHint) 
             {}
         };
 
         struct TEvGetUserByIdResult : TEventLocal<TEvGetUserByIdResult, EvGetUserByIdResult> {
             const ui64 UID;
-            const TString UserNameHint;
+            const TString UserNameHint; 
             const TString User;
             const TString Error;
 
-            TEvGetUserByIdResult(const ui64 uid, const TString& userNameHint, const TString& user = "", const TString& error = "")
+            TEvGetUserByIdResult(const ui64 uid, const TString& userNameHint, const TString& user = "", const TString& error = "") 
                 : UID(uid)
-                , UserNameHint(userNameHint)
+                , UserNameHint(userNameHint) 
                 , User(user)
                 , Error(error)
             {}

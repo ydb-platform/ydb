@@ -1,33 +1,33 @@
-#include "percentile_counter.h"
-
+#include "percentile_counter.h" 
+ 
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/counters.h>
 
-namespace NKikimr {
-
-namespace NPQ {
-
+namespace NKikimr { 
+ 
+namespace NPQ { 
+ 
 NMonitoring::TDynamicCounterPtr GetCounters(NMonitoring::TDynamicCounterPtr counters,
                                             const TString& subsystem, const TString& topic)
-{
-    auto pos = topic.find("--");
+{ 
+    auto pos = topic.find("--"); 
     Y_VERIFY(pos != TString::npos);
-
-    TString origDC = topic.substr(4, pos - 4);
-    origDC.to_title();
-    TString realTopic = topic.substr(pos + 2);
-    pos = realTopic.find("--");
-    TString producer = realTopic.substr(0, pos);
-    TString topicPath = NPersQueue::ConvertOldTopicName(realTopic);
-    TString account = topicPath.substr(0, topicPath.find("/"));
-    return GetServiceCounters(counters, "pqproxy|" + subsystem)
+ 
+    TString origDC = topic.substr(4, pos - 4); 
+    origDC.to_title(); 
+    TString realTopic = topic.substr(pos + 2); 
+    pos = realTopic.find("--"); 
+    TString producer = realTopic.substr(0, pos); 
+    TString topicPath = NPersQueue::ConvertOldTopicName(realTopic); 
+    TString account = topicPath.substr(0, topicPath.find("/")); 
+    return GetServiceCounters(counters, "pqproxy|" + subsystem) 
         ->GetSubgroup("OriginDC", origDC)
         ->GetSubgroup("Producer", producer)
         ->GetSubgroup("TopicPath", topicPath)
         ->GetSubgroup("Account", account)
         ->GetSubgroup("Topic", realTopic);
-}
-
+} 
+ 
 NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounterPtr counters,
                                                      const TString& subsystem)
 {
@@ -35,37 +35,37 @@ NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounte
         ->GetSubgroup("subsystem", subsystem);
 }
 
-TVector<TLabelsInfo> GetLabels(const TString& topic)
-{
-    auto pos = topic.find("--");
-    if (pos == TString::npos)
-        return {};
-    Y_VERIFY(pos != TString::npos);
+TVector<TLabelsInfo> GetLabels(const TString& topic) 
+{ 
+    auto pos = topic.find("--"); 
+    if (pos == TString::npos) 
+        return {}; 
+    Y_VERIFY(pos != TString::npos); 
+ 
+    TString origDC = topic.substr(4, pos - 4); 
+ 
+    return GetLabels(origDC, topic.substr(pos + 2)); 
+} 
 
-    TString origDC = topic.substr(4, pos - 4);
-
-    return GetLabels(origDC, topic.substr(pos + 2));
-}
-
-TVector<TLabelsInfo> GetLabels(const TString& cluster, const TString& realTopic)
-{
-    TString origDC = cluster;
-    origDC.to_title();
-    auto pos = realTopic.find("--");
-    if (pos == TString::npos)
-        return {};
-    TString producer = realTopic.substr(0, pos);
-    TString topicPath = NPersQueue::ConvertOldTopicName(realTopic);
-    TString account = topicPath.substr(0, topicPath.find("/"));
-    TVector<TLabelsInfo> res = {
-            {{{"Account", account}}, {"total"}},
-            {{{"Producer", producer}}, {"total"}},
-            {{{"Topic", realTopic}, {"TopicPath", topicPath}}, {"total", "total"}},
-            {{{"OriginDC", origDC}}, {"cluster"}}
-        };
-    return res;
-}
-
+TVector<TLabelsInfo> GetLabels(const TString& cluster, const TString& realTopic) 
+{ 
+    TString origDC = cluster; 
+    origDC.to_title(); 
+    auto pos = realTopic.find("--"); 
+    if (pos == TString::npos) 
+        return {}; 
+    TString producer = realTopic.substr(0, pos); 
+    TString topicPath = NPersQueue::ConvertOldTopicName(realTopic); 
+    TString account = topicPath.substr(0, topicPath.find("/")); 
+    TVector<TLabelsInfo> res = { 
+            {{{"Account", account}}, {"total"}}, 
+            {{{"Producer", producer}}, {"total"}}, 
+            {{{"Topic", realTopic}, {"TopicPath", topicPath}}, {"total", "total"}}, 
+            {{{"OriginDC", origDC}}, {"cluster"}} 
+        }; 
+    return res; 
+} 
+ 
 TVector<TLabelsInfo> GetLabelsForStream(const TString& topic, const TString& cloudId,
                                         const TString& dbId, const TString& folderId) {
     TVector<TLabelsInfo> res = {
@@ -75,7 +75,7 @@ TVector<TLabelsInfo> GetLabelsForStream(const TString& topic, const TString& clo
             {{{"stream", topic}}, {topic}}};
     return res;
 }
-
+ 
 TMultiCounter::TMultiCounter(NMonitoring::TDynamicCounterPtr counters,
                              const TVector<TLabelsInfo>& labels,
                              const TVector<std::pair<TString, TString>>& subgroups,
@@ -131,20 +131,20 @@ TMultiCounter::operator bool() {
 }
 
 
-TPercentileCounter::TPercentileCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TVector<TLabelsInfo>& labels, const TVector<std::pair<TString, TString>>& subgroups, const TString& sensor,
+TPercentileCounter::TPercentileCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TVector<TLabelsInfo>& labels, const TVector<std::pair<TString, TString>>& subgroups, const TString& sensor, 
                     const TVector<std::pair<ui64, TString>>& intervals, const bool deriv, bool expiring)
-{
-    Y_VERIFY(!intervals.empty());
-    Counters.reserve(intervals.size());
-    Ranges.reserve(intervals.size());
-    for (auto& interval : intervals) {
-        Ranges.push_back(interval.first);
+{ 
+    Y_VERIFY(!intervals.empty()); 
+    Counters.reserve(intervals.size()); 
+    Ranges.reserve(intervals.size()); 
+    for (auto& interval : intervals) { 
+        Ranges.push_back(interval.first); 
         Counters.push_back(TMultiCounter(counters, labels, subgroups, {interval.second}, deriv, sensor, expiring));
-    }
-    Ranges.back() = Max<ui64>();
-}
-
-void TPercentileCounter::IncFor(ui64 key, ui64 value) {
+    } 
+    Ranges.back() = Max<ui64>(); 
+} 
+ 
+void TPercentileCounter::IncFor(ui64 key, ui64 value) { 
     if (!Ranges.empty()) {
         ui32 i = 0;
         // The last range value is Max<ui64>().
@@ -152,11 +152,11 @@ void TPercentileCounter::IncFor(ui64 key, ui64 value) {
             ++i;
         }
         Y_ASSERT(i < Ranges.size());
-        Counters[i].Inc(value);
+        Counters[i].Inc(value); 
     }
-}
-
-void TPercentileCounter::DecFor(ui64 key, ui64 value) {
+} 
+ 
+void TPercentileCounter::DecFor(ui64 key, ui64 value) { 
     if (!Ranges.empty()) {
         ui32 i = 0;
         // The last range value is Max<ui64>().
@@ -164,34 +164,34 @@ void TPercentileCounter::DecFor(ui64 key, ui64 value) {
             ++i;
         }
         Y_ASSERT(i < Ranges.size());
-        Counters[i].Dec(value);
+        Counters[i].Dec(value); 
     }
-}
-
-NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TVector<NPQ::TLabelsInfo> aggr, const TString name, ui32 border, TVector<ui32> durations)
-{
-    bool found = false;
-    for (auto it = durations.begin(); it != durations.end(); ++it) {
-        if (*it == border) {
-            found = true;
-            break;
-        }
-        if (*it > border) {
-            found = true;
-            durations.insert(it, border);
-            break;
-        }
-    }
-    if (!found)
-        durations.push_back(border);
-    TVector<std::pair<ui64, TString>> buckets;
-    for (auto& dur : durations) {
-        buckets.emplace_back(dur, TStringBuilder() << dur << "ms");
-    }
-    return NKikimr::NPQ::TPercentileCounter(counters->GetSubgroup("sensor", name), aggr, {}, "Duration", buckets, true, false);
-}
-
-
-
-} // NPQ
-} // NKikimr
+} 
+ 
+NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TVector<NPQ::TLabelsInfo> aggr, const TString name, ui32 border, TVector<ui32> durations) 
+{ 
+    bool found = false; 
+    for (auto it = durations.begin(); it != durations.end(); ++it) { 
+        if (*it == border) { 
+            found = true; 
+            break; 
+        } 
+        if (*it > border) { 
+            found = true; 
+            durations.insert(it, border); 
+            break; 
+        } 
+    } 
+    if (!found) 
+        durations.push_back(border); 
+    TVector<std::pair<ui64, TString>> buckets; 
+    for (auto& dur : durations) { 
+        buckets.emplace_back(dur, TStringBuilder() << dur << "ms"); 
+    } 
+    return NKikimr::NPQ::TPercentileCounter(counters->GetSubgroup("sensor", name), aggr, {}, "Duration", buckets, true, false); 
+} 
+ 
+ 
+ 
+} // NPQ 
+} // NKikimr 

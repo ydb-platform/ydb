@@ -29,8 +29,8 @@
 #include "json_bscontrollerinfo.h"
 #include "json_config.h"
 #include "json_counters.h"
-#include "json_topicinfo.h"
-#include "json_pqconsumerinfo.h"
+#include "json_topicinfo.h" 
+#include "json_pqconsumerinfo.h" 
 #include "json_tabletcounters.h"
 #include "json_storage.h"
 #include "json_metainfo.h"
@@ -188,8 +188,8 @@ public:
             JsonHandlers["/json/bscontrollerinfo"] = new TJsonHandler<TJsonBSControllerInfo>;
             JsonHandlers["/json/config"] = new TJsonHandler<TJsonConfig>;
             JsonHandlers["/json/counters"] = new TJsonHandler<TJsonCounters>;
-            JsonHandlers["/json/topicinfo"] = new TJsonHandler<TJsonTopicInfo>;
-            JsonHandlers["/json/pqconsumerinfo"] = new TJsonHandler<TJsonPQConsumerInfo>;
+            JsonHandlers["/json/topicinfo"] = new TJsonHandler<TJsonTopicInfo>; 
+            JsonHandlers["/json/pqconsumerinfo"] = new TJsonHandler<TJsonPQConsumerInfo>; 
             JsonHandlers["/json/tabletcounters"] = new TJsonHandler<TJsonTabletCounters>;
             JsonHandlers["/json/storage"] = new TJsonHandler<TJsonStorage>;
             JsonHandlers["/json/metainfo"] = new TJsonHandler<TJsonMetaInfo>;

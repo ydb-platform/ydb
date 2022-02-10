@@ -76,7 +76,7 @@ public:
     }
 
     void WaitInit(const TString& topic) {
-        AnnoyingClient->WaitTopicInit(topic);
+        AnnoyingClient->WaitTopicInit(topic); 
     }
 
     bool PrepareNetDataFile(const TString& content = "::1/128\tdc1") {
@@ -89,10 +89,10 @@ public:
         return true;
     }
 
-    void UpdateDC(const TString& name, bool local, bool enabled) {
-        AnnoyingClient->UpdateDC(name, local, enabled);
-    }
-
+    void UpdateDC(const TString& name, bool local, bool enabled) { 
+        AnnoyingClient->UpdateDC(name, local, enabled); 
+    } 
+ 
 public:
     TSimpleSharedPtr<TPortManager> PortManager;
     ui16 Port;

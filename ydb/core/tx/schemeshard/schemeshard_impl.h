@@ -60,7 +60,7 @@ extern const ui64 NEW_TABLE_ALTER_VERSION;
 class TSchemeShard
     : public TActor<TSchemeShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
-    , public IQuotaCounters
+    , public IQuotaCounters 
 {
 private:
     class TPipeClientFactory : public NTabletPipe::IClientFactory {
@@ -102,9 +102,9 @@ public:
     static constexpr ui32 DefaultPQTabletPartitionsCount = 1;
     static constexpr ui32 MaxPQTabletPartitionsCount = 1000;
     static constexpr ui32 MaxPQGroupTabletsCount = 10*1000;
-    static constexpr ui32 MaxPQGroupPartitionsCount = 20*1000;
-    static constexpr ui32 MaxPQWriteSpeedPerPartition = 50*1024*1024;
-    static constexpr ui32 MaxPQLifetimeSeconds = 31 * 86400;
+    static constexpr ui32 MaxPQGroupPartitionsCount = 20*1000; 
+    static constexpr ui32 MaxPQWriteSpeedPerPartition = 50*1024*1024; 
+    static constexpr ui32 MaxPQLifetimeSeconds = 31 * 86400; 
     static constexpr ui32 PublishChunkSize = 1000;
 
     static const TSchemeLimits DefaultLimits;
@@ -195,7 +195,7 @@ public:
     TAutoPtr<NTabletPipe::IClientCache> PipeClientCache;
     TPipeTracker PipeTracker;
 
-    TCompactionStarter CompactionStarter;
+    TCompactionStarter CompactionStarter; 
     TCompactionQueue* CompactionQueue = nullptr;
     bool EnableBackgroundCompaction = false;
     bool EnableBackgroundCompactionServerless = false;
@@ -1049,17 +1049,17 @@ public:
     // } //NIndexBuilder
 
 public:
-    void ChangeStreamShardsCount(i64 delta) override;
-    void ChangeStreamShardsQuota(i64 delta) override;
-    void ChangeStreamReservedStorageCount(i64 delta) override;
-    void ChangeStreamReservedStorageQuota(i64 delta) override;
+    void ChangeStreamShardsCount(i64 delta) override; 
+    void ChangeStreamShardsQuota(i64 delta) override; 
+    void ChangeStreamReservedStorageCount(i64 delta) override; 
+    void ChangeStreamReservedStorageQuota(i64 delta) override; 
     void ChangeDiskSpaceTablesDataBytes(i64 delta) override;
     void ChangeDiskSpaceTablesIndexBytes(i64 delta) override;
     void ChangeDiskSpaceTablesTotalBytes(i64 delta) override;
     void ChangeDiskSpaceQuotaExceeded(i64 delta) override;
     void ChangeDiskSpaceHardQuotaBytes(i64 delta) override;
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
-
+ 
     NLogin::TLoginProvider LoginProvider;
 
 private:

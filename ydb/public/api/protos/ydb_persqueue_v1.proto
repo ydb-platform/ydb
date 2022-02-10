@@ -1,16 +1,16 @@
-syntax = "proto3";
+syntax = "proto3"; 
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
-
+ 
 package Ydb.PersQueue.V1;
-
+ 
 option java_package = "com.yandex.ydb.persqueue";
 
-option cc_enable_arenas = true;
-
+option cc_enable_arenas = true; 
+ 
 // NOTE:
 // * We use 'ms' suffix instead of google.protobuf.Timestamp and google.protobuf.Duration in order to utilize
 // packed encoding ('message' types can't be packed encoded). In non-repeated fields we use 'ms' for consistency.
@@ -26,44 +26,44 @@ enum Codec {
 
 message SessionMetaValue {
     map<string, string> value = 1;
-}
-
+} 
+ 
 /**
  * Represents range [start_offset, end_offset).
  */
 message OffsetsRange {
     int64 start_offset = 1;
     int64 end_offset = 2;
-}
-
-/**
+} 
+ 
+/** 
  * Request for write session. Contains one of:
  *      InitRequest - handshake request.
  *      WriteRequest - portion of data to be written.
  *      UpdateTokenRequest - user credentials if update is needed.
- */
+ */ 
 message StreamingWriteClientMessage {
     oneof client_message {
         InitRequest init_request = 1;
         WriteRequest write_request = 2;
         UpdateTokenRequest update_token_request = 3;
     }
+ 
 
-
-    // Handshake request that must be sent to server first.
+    // Handshake request that must be sent to server first. 
     message InitRequest {
-        // Path of topic to write to.
+        // Path of topic to write to. 
         string topic = 1;
         // message group identifier of client data stream a.k.a. sourceId.
         string message_group_id = 2;
         // Some user metadata attached to this write session.
         map<string, string> session_meta = 3;
-        // Partition group to write to.
+        // Partition group to write to. 
         // Zero means any group.
         int64 partition_group_id = 4;
-
+ 
         int64 max_supported_block_format_version = 5;
-
+ 
         string session_id = 100;
         // 0 for first init message and incremental value for connect retries. Used for server logging.
         int64 connection_attempt = 101;
@@ -75,8 +75,8 @@ message StreamingWriteClientMessage {
 
         // Sanity check option. When no writing activity is done in idle_timeout_sec seconds, then session will be destroyed. Zero means infinity.
         int64 idle_timeout_ms = 200;
-    }
-
+    } 
+ 
     // Represents portion of client messages.
     message WriteRequest {
         // Sequence numbers of messages in order that client will provide to server.
@@ -110,46 +110,46 @@ message StreamingWriteClientMessage {
         // In block format version 0 each byte contains only block codec identifier
         repeated bytes blocks_headers = 10;
         repeated bytes blocks_data = 11;
-    }
-
+    } 
+ 
     // In-session reauthentication and reauthorization, lets user increase session lifetime. You should wait for 'update_token_response' before sending next 'update_token_request'.
     message UpdateTokenRequest {
         string token = 1;
     }
-}
-
-/**
+} 
+ 
+/** 
  * Response for write session. Contains one of:
  *      InitResponse - correct handshake response.
  *      BatchWriteResponse - acknowledgment of storing client messages.
  *      UpdateTokenResponse - acknowledgment of reauthentication and reauthorization.
- */
+ */ 
 message StreamingWriteServerMessage {
     oneof server_message {
         InitResponse init_response = 3;
         BatchWriteResponse batch_write_response = 4;
         UpdateTokenResponse update_token_response = 5;
     }
-
+ 
     // Server status of response.
     Ydb.StatusIds.StatusCode status = 1;
 
     // Issues if any.
     repeated Ydb.Issue.IssueMessage issues = 2;
 
-    // Response for handshake.
+    // Response for handshake. 
     message InitResponse {
         // Last persisted message's sequence number for this message group.
         int64 last_sequence_number = 1;
-        // Unique identifier of write session. Used for debug purposes.
-        string session_id = 2;
-        // Path of topic that matched for this write session. Used for debug purposes, will be the same as in Init request from client.
+        // Unique identifier of write session. Used for debug purposes. 
+        string session_id = 2; 
+        // Path of topic that matched for this write session. Used for debug purposes, will be the same as in Init request from client. 
         string topic = 3;
-        // Write session is established to this cluster. Client data will be in instance of topic in this cluster.
-        string cluster = 4;
+        // Write session is established to this cluster. Client data will be in instance of topic in this cluster. 
+        string cluster = 4; 
         // Identifier of partition that is matched for this write session.
         int64 partition_id = 5;
-
+ 
         // Block (see StreamingWriteClientMessage.WriteRequest.blocks_data) format version supported by server or configured for a topic. Client must write data only with them.
         int64 block_format_version = 6;
         // Client can only use compression codecs from this set to write messages to topic, session will be closed with BAD_REQUEST otherwise.
@@ -163,8 +163,8 @@ message StreamingWriteServerMessage {
 
         // Opaque blob, used for fast reconnects.
         bytes connection_meta = 9;
-    }
-
+    } 
+ 
     // Message that represents acknowledgment for sequence of client messages. This sequence is persisted together so write statistics is for messages batch.
     message BatchWriteResponse {
         // Sequence numbers of persisted client messages.
@@ -185,58 +185,58 @@ message StreamingWriteServerMessage {
     message UpdateTokenResponse {
     }
 
-    // Message with write statistics.
+    // Message with write statistics. 
     message WriteStatistics {
-        // Time spent in persisting of data.
+        // Time spent in persisting of data. 
         int64 persist_duration_ms = 1;
-        // Time spent in queue before persisting.
+        // Time spent in queue before persisting. 
         int64 queued_in_partition_duration_ms = 2;
-        // Time spent awaiting for partition write quota.
+        // Time spent awaiting for partition write quota. 
         int64 throttled_on_partition_duration_ms = 3;
         // Time spent awaiting for topic write quota.
         int64 throttled_on_topic_duration_ms = 4;
-    }
+    } 
 }
-
-
+ 
+ 
 message Path {
     // Path of object (topic/consumer).
     string path = 1;
 }
-
+ 
 message KeyValue {
     string key = 1;
     string value = 2;
-}
-
-/**
- * Single read parameters for server.
- */
-message ReadParams {
-    // Max messages to give to client in one read request.
-    uint32 max_read_messages_count = 1;
-    // Max size in bytes to give to client in one read request.
-    uint32 max_read_size = 2;
-}
-
-/**
- * Message that is used for addressing read for commiting.
- */
-message CommitCookie {
-    // Assign identitifier of assigned partition from which read was done.
-    uint64 assign_id = 1;
-    // Incremental identifier of concrete partition read batch.
-    uint64 partition_cookie = 2;
-}
-
-message CommitOffsetRange {
-    uint64 assign_id = 1;
-    uint64 start_offset = 2;
-    uint64 end_offset = 3;
-}
-
+} 
+ 
+/** 
+ * Single read parameters for server. 
+ */ 
+message ReadParams { 
+    // Max messages to give to client in one read request. 
+    uint32 max_read_messages_count = 1; 
+    // Max size in bytes to give to client in one read request. 
+    uint32 max_read_size = 2; 
+} 
+ 
+/** 
+ * Message that is used for addressing read for commiting. 
+ */ 
+message CommitCookie { 
+    // Assign identitifier of assigned partition from which read was done. 
+    uint64 assign_id = 1; 
+    // Incremental identifier of concrete partition read batch. 
+    uint64 partition_cookie = 2; 
+} 
+ 
+message CommitOffsetRange { 
+    uint64 assign_id = 1; 
+    uint64 start_offset = 2; 
+    uint64 end_offset = 3; 
+} 
+ 
 // TODO: replace with it actual protocol client message
-/**
+/** 
  * Request for read session. Contains one of:
  *      InitRequest - handshake request.
  *      ReadRequest - request for data.
@@ -657,14 +657,14 @@ message PartitionStream {
 }
 
 /**
- * Request for read session. Contains one of :
- *      Init - handshake request.
- *      Read - request for data.
- *      Commit - request for commit of some read data.
- *      Start_read - signal for server that client is ready to get data from partition.
- *      Released - signal for server that client finished working with partition. Must be sent only after corresponding Release request from server.
- */
-
+ * Request for read session. Contains one of : 
+ *      Init - handshake request. 
+ *      Read - request for data. 
+ *      Commit - request for commit of some read data. 
+ *      Start_read - signal for server that client is ready to get data from partition. 
+ *      Released - signal for server that client finished working with partition. Must be sent only after corresponding Release request from server. 
+ */ 
+ 
 message MigrationStreamingReadClientMessage {
     message TopicReadSettings {
         // Topic path.
@@ -676,31 +676,31 @@ message MigrationStreamingReadClientMessage {
         int64 start_from_written_at_ms = 3;
     }
 
-    // Handshake request.
+    // Handshake request. 
     message InitRequest {
         // Message that describes topic to read.
-        // Topics that will be read by this session.
+        // Topics that will be read by this session. 
         repeated TopicReadSettings topics_read_settings = 1;
-        // Flag that indicates reading only of original topics in cluster or all including mirrored.
-        bool read_only_original = 2;
+        // Flag that indicates reading only of original topics in cluster or all including mirrored. 
+        bool read_only_original = 2; 
         // Path of consumer that is used for reading by this session.
         string consumer = 3;
-
+ 
         // Skip all messages that has write timestamp smaller than now - max_time_lag_ms.
         int64 max_lag_duration_ms = 4;
         // Read data only after this timestamp from all topics.
         int64 start_from_written_at_ms = 5;
-
+ 
         // Maximum block format version supported by the client. Server will asses this parameter and return actual data blocks version in
         // StreamingReadServerMessage.InitResponse.block_format_version_by_topic (and StreamingReadServerMessage.AddTopicResponse.block_format_version)
         // or error if client will not be able to read data.
         int64 max_supported_block_format_version = 6;
-
+ 
         // Maximal size of client cache for message_group_id, ip and meta, per partition.
         // There is separate caches for each partition partition streams.
         // There is separate caches for message group identifiers, ip and meta inside one partition partition stream.
         int64 max_meta_cache_size = 10;
-
+ 
         // State of client read session. Could be provided to server for retries.
         message State {
             message PartitionStreamState {
@@ -742,103 +742,103 @@ message MigrationStreamingReadClientMessage {
         // TODO: remove after refactoring
         // Single read request params.
         ReadParams read_params = 42;
-
-        bool ranges_mode = 442;
+ 
+        bool ranges_mode = 442; 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    }
-
-    // Request of single read.
-    message Read {
-    }
-
-    message StartRead {
-        // Topic path of partition.
-        Path topic = 1;
-        // Cluster of topic instance.
-        string cluster = 2;
-        // Partition identifier. Explicit only for debug purposes.
-        uint64 partition = 3;
-
-        // Assign identifier of Assign request from server. Used for mathing Assign requests from server with StartRead responses from client.
-        uint64 assign_id = 5;
-
-        // Start reading from partition offset that is not less than read_offset.
-        // ReadParams.max_time_lag_ms and ReadParams.read_timestamp_ms could lead to skip of more messages.
-        // The same with actual committed offset. Regardless of set read_offset server will return data from maximal offset from read_offset, actual committed offset
-        // and offsets calculated from ReadParams.max_time_lag_ms and ReadParams.read_timestamp_ms.
-        uint64 read_offset = 6;
-        // All messages with offset less than commit_offset are processed by client. Server will commit this position if this is not done yet.
-        uint64 commit_offset = 7;
-
-        // This option will enable sanity check on server for read_offset. Server will verify that read_offset is no less that actual committed offset.
-        // If verification will fail then server will kill this read session and client will find out error in reading logic.
-        // If client is not setting read_offset, sanity check will fail so do not set verify_read_offset if you not setting correct read_offset.
-        bool verify_read_offset = 8; //if true then check that committed position is <= ReadOffset; otherwise it means error in client logic
-
-    }
-    // Signal for server that client finished working with this partition. Must be sent only after corresponding Release request from server.
-    // Server will give this partition to other read session only after Released signal.
-    message Released {
-        // Topic path of partition.
-        Path topic = 1;
-        // Cluster of topic instance.
-        string cluster = 2;
-        // Partition identifier. Explicit only for debug purposes.
-        uint64 partition = 3;
-
-        // Assign identifier of Assign request from server. Used for mathing Assign requests from server with Released responses from client.
-        uint64 assign_id = 5;
-    }
-
-    // Signal for server that client processed some read data.
-    message Commit {
-        // Partition read cookies that indicates processed data.
-        repeated CommitCookie cookies = 1;
-
-        repeated CommitOffsetRange offset_ranges = 2;
-    }
-
-    message Status {
-        // Topic path of partition.
-        Path topic = 1;
-        // Cluster of topic instance.
-        string cluster = 2;
-        // Partition identifier. Explicit only for debug purposes.
-        uint64 partition = 3;
-
-        // Assign identifier of Assign request from server. Used for mathing Assign requests from server with Released responses from client.
-        uint64 assign_id = 5;
-
-    }
-
-    oneof request {
+    } 
+ 
+    // Request of single read. 
+    message Read { 
+    } 
+ 
+    message StartRead { 
+        // Topic path of partition. 
+        Path topic = 1; 
+        // Cluster of topic instance. 
+        string cluster = 2; 
+        // Partition identifier. Explicit only for debug purposes. 
+        uint64 partition = 3; 
+ 
+        // Assign identifier of Assign request from server. Used for mathing Assign requests from server with StartRead responses from client. 
+        uint64 assign_id = 5; 
+ 
+        // Start reading from partition offset that is not less than read_offset. 
+        // ReadParams.max_time_lag_ms and ReadParams.read_timestamp_ms could lead to skip of more messages. 
+        // The same with actual committed offset. Regardless of set read_offset server will return data from maximal offset from read_offset, actual committed offset 
+        // and offsets calculated from ReadParams.max_time_lag_ms and ReadParams.read_timestamp_ms. 
+        uint64 read_offset = 6; 
+        // All messages with offset less than commit_offset are processed by client. Server will commit this position if this is not done yet. 
+        uint64 commit_offset = 7; 
+ 
+        // This option will enable sanity check on server for read_offset. Server will verify that read_offset is no less that actual committed offset. 
+        // If verification will fail then server will kill this read session and client will find out error in reading logic. 
+        // If client is not setting read_offset, sanity check will fail so do not set verify_read_offset if you not setting correct read_offset. 
+        bool verify_read_offset = 8; //if true then check that committed position is <= ReadOffset; otherwise it means error in client logic 
+ 
+    } 
+    // Signal for server that client finished working with this partition. Must be sent only after corresponding Release request from server. 
+    // Server will give this partition to other read session only after Released signal. 
+    message Released { 
+        // Topic path of partition. 
+        Path topic = 1; 
+        // Cluster of topic instance. 
+        string cluster = 2; 
+        // Partition identifier. Explicit only for debug purposes. 
+        uint64 partition = 3; 
+ 
+        // Assign identifier of Assign request from server. Used for mathing Assign requests from server with Released responses from client. 
+        uint64 assign_id = 5; 
+    } 
+ 
+    // Signal for server that client processed some read data. 
+    message Commit { 
+        // Partition read cookies that indicates processed data. 
+        repeated CommitCookie cookies = 1; 
+ 
+        repeated CommitOffsetRange offset_ranges = 2; 
+    } 
+ 
+    message Status { 
+        // Topic path of partition. 
+        Path topic = 1; 
+        // Cluster of topic instance. 
+        string cluster = 2; 
+        // Partition identifier. Explicit only for debug purposes. 
+        uint64 partition = 3; 
+ 
+        // Assign identifier of Assign request from server. Used for mathing Assign requests from server with Released responses from client. 
+        uint64 assign_id = 5; 
+ 
+    } 
+ 
+    oneof request { 
         InitRequest init_request = 1;
-        Read read = 2;
-        StartRead start_read = 3;
-        Commit commit = 4;
-        Released released = 5;
-        Status status = 6;
-    }
-
-    // User credentials if update is needed or empty string.
-    bytes token = 20;
-}
-
-
-
-/**
- * Response for read session. Contains one of :
- *      Inited - handshake response from server.
- *      Batched_data - result of single read.
- *      Committed - acknowledgment for commit.
- *      Assigned - signal from server for assigning of partition.
- *      Release - signal from server for releasing of partition.
- */
-
+        Read read = 2; 
+        StartRead start_read = 3; 
+        Commit commit = 4; 
+        Released released = 5; 
+        Status status = 6; 
+    } 
+ 
+    // User credentials if update is needed or empty string. 
+    bytes token = 20; 
+} 
+ 
+ 
+ 
+/** 
+ * Response for read session. Contains one of : 
+ *      Inited - handshake response from server. 
+ *      Batched_data - result of single read. 
+ *      Committed - acknowledgment for commit. 
+ *      Assigned - signal from server for assigning of partition. 
+ *      Release - signal from server for releasing of partition. 
+ */ 
+ 
 message MigrationStreamingReadServerMessage {
-    // Handshake response.
+    // Handshake response. 
     message InitResponse {
-        // Read session identifier for debug purposes.
+        // Read session identifier for debug purposes. 
         string session_id = 1;
         // Block format version of data client will receive from topics.
         map<string, int64> block_format_version_by_topic = 2;
@@ -846,268 +846,268 @@ message MigrationStreamingReadServerMessage {
         // Choosed maximan cache size by server.
         // Client must use cache of this size. Could change on retries - reduce size of cache in this case.
         int64 max_meta_cache_size = 10;
-    }
-
-    // Signal that partition is assigned to this read session. Client must react on this signal by sending StartRead when ready.
-    message Assigned {
-        // Partition's topic path.
-        Path topic = 1;
-        // Topic's instance cluster name.
-        string cluster = 2;
-        // Partition identifier. topic:cluster:partition is unique addressing of partition.
-        uint64 partition = 3;
-
-        // Assign idenfier. Is not unique between diffrent partitions. Used for matching Assigned request from server and StartRead response from client.
-        uint64 assign_id = 5;
-
-        // Actual read offset. Equeal to last committed offset.
-        uint64 read_offset = 6;
-        // Offset of first not existing message in partition at this time.
-        uint64 end_offset = 7;
-    }
-
-    // Partition release request from server.
-    message Release {
-        // Partition's topic path.
-        Path topic = 1;
-        // Topic's instance cluster name.
-        string cluster = 2;
-        // Partition identifier. topic:cluster:partition is unique addressing of partition.
-        uint64 partition = 3;
-
-        // Assign idenfier. Used for matching Assigned and Release requests from server.
-        uint64 assign_id = 5;
-
-        // If False then server is waiting for Released signal from client before giving of this partition for other read session.
-        // If True then server gives partition for other session right now. All futher commits for this partition has no effect. Server is not waiting for Released signal.
-        bool forceful_release = 6;
-        // Last known committed offset.
-        uint64 commit_offset = 7;
-    }
-
-    // Acknowledgement for commits.
-    message Committed {
-        // List of cookies that correspond to commit of processing read data.
-        repeated CommitCookie cookies = 1;
-
-        repeated CommitOffsetRange offset_ranges = 2;
-
-    }
-
-    // Readed data.
-    message DataBatch {
-        // One client message representation.
-        message MessageData {
-            // Partition offset in partition that assigned for message.
-            uint64 offset = 1; //unique value for clientside deduplication - Topic:Cluster:Partition:Offset
-            // Sequence number that provided with message on write from client.
-            uint64 seq_no = 2;
-            // Timestamp of creation of message provided on write from client.
-            uint64 create_timestamp_ms = 3;
-            // Codec that is used for data compressing.
+    } 
+ 
+    // Signal that partition is assigned to this read session. Client must react on this signal by sending StartRead when ready. 
+    message Assigned { 
+        // Partition's topic path. 
+        Path topic = 1; 
+        // Topic's instance cluster name. 
+        string cluster = 2; 
+        // Partition identifier. topic:cluster:partition is unique addressing of partition. 
+        uint64 partition = 3; 
+ 
+        // Assign idenfier. Is not unique between diffrent partitions. Used for matching Assigned request from server and StartRead response from client. 
+        uint64 assign_id = 5; 
+ 
+        // Actual read offset. Equeal to last committed offset. 
+        uint64 read_offset = 6; 
+        // Offset of first not existing message in partition at this time. 
+        uint64 end_offset = 7; 
+    } 
+ 
+    // Partition release request from server. 
+    message Release { 
+        // Partition's topic path. 
+        Path topic = 1; 
+        // Topic's instance cluster name. 
+        string cluster = 2; 
+        // Partition identifier. topic:cluster:partition is unique addressing of partition. 
+        uint64 partition = 3; 
+ 
+        // Assign idenfier. Used for matching Assigned and Release requests from server. 
+        uint64 assign_id = 5; 
+ 
+        // If False then server is waiting for Released signal from client before giving of this partition for other read session. 
+        // If True then server gives partition for other session right now. All futher commits for this partition has no effect. Server is not waiting for Released signal. 
+        bool forceful_release = 6; 
+        // Last known committed offset. 
+        uint64 commit_offset = 7; 
+    } 
+ 
+    // Acknowledgement for commits. 
+    message Committed { 
+        // List of cookies that correspond to commit of processing read data. 
+        repeated CommitCookie cookies = 1; 
+ 
+        repeated CommitOffsetRange offset_ranges = 2; 
+ 
+    } 
+ 
+    // Readed data. 
+    message DataBatch { 
+        // One client message representation. 
+        message MessageData { 
+            // Partition offset in partition that assigned for message. 
+            uint64 offset = 1; //unique value for clientside deduplication - Topic:Cluster:Partition:Offset 
+            // Sequence number that provided with message on write from client. 
+            uint64 seq_no = 2; 
+            // Timestamp of creation of message provided on write from client. 
+            uint64 create_timestamp_ms = 3; 
+            // Codec that is used for data compressing. 
             Codec codec = 4;
-            // Compressed client message body.
-            bytes data = 5;
-            // Uncompressed size of client message body.
-            uint64 uncompressed_size = 6;
+            // Compressed client message body. 
+            bytes data = 5; 
+            // Uncompressed size of client message body. 
+            uint64 uncompressed_size = 6; 
             // kinesis data
             string partition_key = 7;
             bytes explicit_hash = 8;
-        }
-
-        // Representation of sequence of client messages from one write session.
-        message Batch {
-            // Source identifier provided by client for this batch of client messages.
-            bytes source_id = 2;
-            // Client metadata attached to write session, the same for all messages in batch.
-            repeated KeyValue extra_fields = 3;
-            // Persist timestamp on server for batch.
-            uint64 write_timestamp_ms = 4;
-            // Peer address of node that created write session.
-            string ip = 5;
-
-            // List of client messages.
-            repeated MessageData message_data = 1;
-        }
-
-        // Representation of sequence of messages from one partition.
-        message PartitionData {
-            // Partition's topic path.
-            Path topic = 1;
-            // Topic's instance cluster name.
-            string cluster = 2;
-            // Partition identifier. topic:cluster:partition is unique addressing for partition.
-            uint64 partition = 3;
-
-            // Client messages, divided by write sessions.
-            repeated Batch batches = 4;
-
-            // Cookie for addressing this partition messages batch for committing.
-            CommitCookie cookie = 5;
-
-             // Old formatted topic name with cluster inside.
-            string deprecated_topic = 10;
-        }
-
-        // Client messages, divided by partitions.
-        repeated PartitionData partition_data = 1;
-    }
-
-    // Response for status requst.
-    message PartitionStatus {
-        // Partition's topic path.
-        Path topic = 1;
-        // Topic's instance cluster name.
-        string cluster = 2;
-        // Partition identifier. topic:cluster:partition is unique addressing of partition.
-        uint64 partition = 3;
-
-        // Assign idenfier. Used for matching Assigned and Release requests from server.
-        uint64 assign_id = 5;
-
-        uint64 committed_offset = 6;
-        uint64 end_offset = 7;
-        uint64 write_watermark_ms = 8;
-    }
-    Ydb.StatusIds.StatusCode status = 1;
-
-    repeated Ydb.Issue.IssueMessage issues = 2;
-
-    oneof response {
+        } 
+ 
+        // Representation of sequence of client messages from one write session. 
+        message Batch { 
+            // Source identifier provided by client for this batch of client messages. 
+            bytes source_id = 2; 
+            // Client metadata attached to write session, the same for all messages in batch. 
+            repeated KeyValue extra_fields = 3; 
+            // Persist timestamp on server for batch. 
+            uint64 write_timestamp_ms = 4; 
+            // Peer address of node that created write session. 
+            string ip = 5; 
+ 
+            // List of client messages. 
+            repeated MessageData message_data = 1; 
+        } 
+ 
+        // Representation of sequence of messages from one partition. 
+        message PartitionData { 
+            // Partition's topic path. 
+            Path topic = 1; 
+            // Topic's instance cluster name. 
+            string cluster = 2; 
+            // Partition identifier. topic:cluster:partition is unique addressing for partition. 
+            uint64 partition = 3; 
+ 
+            // Client messages, divided by write sessions. 
+            repeated Batch batches = 4; 
+ 
+            // Cookie for addressing this partition messages batch for committing. 
+            CommitCookie cookie = 5; 
+ 
+             // Old formatted topic name with cluster inside. 
+            string deprecated_topic = 10; 
+        } 
+ 
+        // Client messages, divided by partitions. 
+        repeated PartitionData partition_data = 1; 
+    } 
+ 
+    // Response for status requst. 
+    message PartitionStatus { 
+        // Partition's topic path. 
+        Path topic = 1; 
+        // Topic's instance cluster name. 
+        string cluster = 2; 
+        // Partition identifier. topic:cluster:partition is unique addressing of partition. 
+        uint64 partition = 3; 
+ 
+        // Assign idenfier. Used for matching Assigned and Release requests from server. 
+        uint64 assign_id = 5; 
+ 
+        uint64 committed_offset = 6; 
+        uint64 end_offset = 7; 
+        uint64 write_watermark_ms = 8; 
+    } 
+    Ydb.StatusIds.StatusCode status = 1; 
+ 
+    repeated Ydb.Issue.IssueMessage issues = 2; 
+ 
+    oneof response { 
         InitResponse init_response = 3;
-        DataBatch data_batch = 4;
-        Assigned assigned = 5;
-        Release release = 6;
-        Committed committed = 7;
-        PartitionStatus partition_status = 8;
-    }
-}
-
-/**
- * Reading information request sent from client to server.
- */
-
-message ReadInfoRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    // List of topics that are beeing read.
-    repeated Path topics = 2;
-    // If get_only_original == false then return info about mirrored topics too.
-    bool get_only_original = 3;
-    // Consumer path that is reading specified topics.
-    Path consumer = 4;
-}
-
-
-/**
- * Reading information response sent from server to client.
- */
-
-message ReadInfoResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
-
-/**
- * Reading information message that will be inside ReadInfoResponse.operation.
- */
-
-message ReadInfoResult {
-    // Message containing information about concrete topic reading.
-    message TopicInfo {
-        // Message containing information about concrete topic's partition reading.
-        message PartitionInfo {
-            // Patition identifier inside topic.
-            uint64 partition = 1;
-
-            // Request status of partition.
-            Ydb.StatusIds.StatusCode status = 2;
-            // Issues if any.
-            repeated Ydb.Issue.IssueMessage issues = 3;
-
-            // Offset of first message in partition.
-            uint64 start_offset = 4;
-            // Offset of next not yet existing message in partition.
-            uint64 end_offset = 5;
-
-            // Offset of consumer committed message a.k.a. first not processed message.
-            // If commit_offset == end_offset then all messages from partition are processed.
-            uint64 commit_offset = 6;
-            // Consumer lag in time between committed and last messages in partition.
-            uint64 commit_time_lag_ms = 7;
-
-            // Offset of first not read message by consumer from this partition.
-            // read_offset can be bigger that committed_offset - consumer could read some messages but not yet commit them.
-            uint64 read_offset = 8;
-            // Consumer lag in time between read and last messages in partition.
-            uint64 read_time_lag_ms = 9;
-
-            // Session identifier that locked and reading this partition right now.
-            string session_id = 10;
-            // Ip if node that created reading this session.
-            string client_node = 11;
-            // Host name of proxy node that processing this reading session.
-            string proxy_node = 12;
+        DataBatch data_batch = 4; 
+        Assigned assigned = 5; 
+        Release release = 6; 
+        Committed committed = 7; 
+        PartitionStatus partition_status = 8; 
+    } 
+} 
+ 
+/** 
+ * Reading information request sent from client to server. 
+ */ 
+ 
+message ReadInfoRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    // List of topics that are beeing read. 
+    repeated Path topics = 2; 
+    // If get_only_original == false then return info about mirrored topics too. 
+    bool get_only_original = 3; 
+    // Consumer path that is reading specified topics. 
+    Path consumer = 4; 
+} 
+ 
+ 
+/** 
+ * Reading information response sent from server to client. 
+ */ 
+ 
+message ReadInfoResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+/** 
+ * Reading information message that will be inside ReadInfoResponse.operation. 
+ */ 
+ 
+message ReadInfoResult { 
+    // Message containing information about concrete topic reading. 
+    message TopicInfo { 
+        // Message containing information about concrete topic's partition reading. 
+        message PartitionInfo { 
+            // Patition identifier inside topic. 
+            uint64 partition = 1; 
+ 
+            // Request status of partition. 
+            Ydb.StatusIds.StatusCode status = 2; 
+            // Issues if any. 
+            repeated Ydb.Issue.IssueMessage issues = 3; 
+ 
+            // Offset of first message in partition. 
+            uint64 start_offset = 4; 
+            // Offset of next not yet existing message in partition. 
+            uint64 end_offset = 5; 
+ 
+            // Offset of consumer committed message a.k.a. first not processed message. 
+            // If commit_offset == end_offset then all messages from partition are processed. 
+            uint64 commit_offset = 6; 
+            // Consumer lag in time between committed and last messages in partition. 
+            uint64 commit_time_lag_ms = 7; 
+ 
+            // Offset of first not read message by consumer from this partition. 
+            // read_offset can be bigger that committed_offset - consumer could read some messages but not yet commit them. 
+            uint64 read_offset = 8; 
+            // Consumer lag in time between read and last messages in partition. 
+            uint64 read_time_lag_ms = 9; 
+ 
+            // Session identifier that locked and reading this partition right now. 
+            string session_id = 10; 
+            // Ip if node that created reading this session. 
+            string client_node = 11; 
+            // Host name of proxy node that processing this reading session. 
+            string proxy_node = 12; 
             // Host name of node where partition leader is running.
-            string tablet_node = 13;
-
-            // Assign identifier of actual partition assignment.
-            uint64 assign_id = 14;
-            // Timestamp of assignment.
-            uint64 assign_timestamp_ms = 15;
-            // Cookie of last performed read in session.
-            uint64 last_read_cookie = 16;
-            // Cookie upto whitch commits done.
-            uint64 committed_read_cookie = 17;
-            // Cookie that client wants to commit, but server is waiting for committed_read_cookie + 1.
-            repeated uint64 out_of_order_read_cookies_to_commit = 18;
-        }
-        // Topic path.
-        Path topic = 1;
-        // Topic original cluster.
-        string cluster = 2;
-
-        // Status of whole topic.
-        Ydb.StatusIds.StatusCode status = 3;
-        // Issues if any.
-        repeated Ydb.Issue.IssueMessage issues = 4;
-
-        // Reading info for partitions of this topic.
-        repeated PartitionInfo partitions = 5;
-    }
-
-    // List of topics info.
-    repeated TopicInfo topics = 1;
-}
-
-
-/**
- * Drop topic request sent from client to server.
- */
-
-message DropTopicRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    // Topic path.
-    string path = 2;
-}
-
-
-/**
- * Drop topic response sent from server to client. If topic is not existed then response status will be "SCHEME_ERROR".
- */
-
-message DropTopicResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
-
-/**
- * Drop topic result message that will be inside DropTopicResponse.operation.
- */
-
-message DropTopicResult {
-}
-
-/**
+            string tablet_node = 13; 
+ 
+            // Assign identifier of actual partition assignment. 
+            uint64 assign_id = 14; 
+            // Timestamp of assignment. 
+            uint64 assign_timestamp_ms = 15; 
+            // Cookie of last performed read in session. 
+            uint64 last_read_cookie = 16; 
+            // Cookie upto whitch commits done. 
+            uint64 committed_read_cookie = 17; 
+            // Cookie that client wants to commit, but server is waiting for committed_read_cookie + 1. 
+            repeated uint64 out_of_order_read_cookies_to_commit = 18; 
+        } 
+        // Topic path. 
+        Path topic = 1; 
+        // Topic original cluster. 
+        string cluster = 2; 
+ 
+        // Status of whole topic. 
+        Ydb.StatusIds.StatusCode status = 3; 
+        // Issues if any. 
+        repeated Ydb.Issue.IssueMessage issues = 4; 
+ 
+        // Reading info for partitions of this topic. 
+        repeated PartitionInfo partitions = 5; 
+    } 
+ 
+    // List of topics info. 
+    repeated TopicInfo topics = 1; 
+} 
+ 
+ 
+/** 
+ * Drop topic request sent from client to server. 
+ */ 
+ 
+message DropTopicRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    // Topic path. 
+    string path = 2; 
+} 
+ 
+ 
+/** 
+ * Drop topic response sent from server to client. If topic is not existed then response status will be "SCHEME_ERROR". 
+ */ 
+ 
+message DropTopicResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+/** 
+ * Drop topic result message that will be inside DropTopicResponse.operation. 
+ */ 
+ 
+message DropTopicResult { 
+} 
+ 
+/** 
  * Credentials settings
  */
 
@@ -1124,66 +1124,66 @@ message Credentials {
 }
 
 /**
- * Message for describing topic internals.
- */
-
-message TopicSettings {
-    enum Format {
-        FORMAT_UNSPECIFIED = 0;
-        FORMAT_BASE = 1;
-    }
-
-    // How many partitions in topic. Must less than database limit. Default limit - 10.
+ * Message for describing topic internals. 
+ */ 
+ 
+message TopicSettings { 
+    enum Format { 
+        FORMAT_UNSPECIFIED = 0; 
+        FORMAT_BASE = 1; 
+    } 
+ 
+    // How many partitions in topic. Must less than database limit. Default limit - 10. 
     int32 partitions_count = 1 [(value) = "> 0"];
-    // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.  Default limit - 36 hours.
+    // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.  Default limit - 36 hours. 
     int64 retention_period_ms = 2 [(value) = "> 0"];
     // How long last written seqno for message group should be stored. Must be greater then retention_period_ms and less then limit for this database.  Default limit - 16 days.
     int64 message_group_seqno_retention_period_ms = 12 [(value) = ">= 0"];
     // How many last written seqno for various message groups should be stored per partition. Must be less than limit for this database.  Default limit - 6*10^6 values.
     int64 max_partition_message_groups_seqno_stored = 13 [(value) = ">= 0"];
-    // Max format version that is allowed for writers. Must be value from enum FormatVersion.
-    // Writes with greater format version are forbiden.
-    Format supported_format = 3;
-    // List of allowed codecs for writers.
-    // Writes with codec not from this list are forbiden.
-    repeated Codec supported_codecs = 4 [(size).le = 100];
-    // Max storage usage for each topic's partition. Must be less than database limit. Default limit - 130 GB.
+    // Max format version that is allowed for writers. Must be value from enum FormatVersion. 
+    // Writes with greater format version are forbiden. 
+    Format supported_format = 3; 
+    // List of allowed codecs for writers. 
+    // Writes with codec not from this list are forbiden. 
+    repeated Codec supported_codecs = 4 [(size).le = 100]; 
+    // Max storage usage for each topic's partition. Must be less than database limit. Default limit - 130 GB. 
     int64 max_partition_storage_size = 5 [(value) = ">= 0"];
-    // Partition write speed in bytes per second. Must be less than database limit. Default limit - 1 MB/s.
+    // Partition write speed in bytes per second. Must be less than database limit. Default limit - 1 MB/s. 
     int64 max_partition_write_speed = 6 [(value) = ">= 0"];
-    // Burst size for write in partition, in bytes. Must be less than database limit. Default limit - 1 MB.
+    // Burst size for write in partition, in bytes. Must be less than database limit. Default limit - 1 MB. 
     int64 max_partition_write_burst = 7 [(value) = ">= 0"];
-
-    // Disallows client writes. Used for mirrored topics in federation.
-    bool client_write_disabled = 8;
-    // Message for read rules description.
-    message ReadRule {
-        // For what consumer this read rule is. Must be valid not empty consumer name.
-        // Is key for read rules. There could be only one read rule with corresponding consumer name.
-        string consumer_name = 1 [(required) = true];
-        // Flag that this consumer is important.
-        bool important = 2;
-        // All messages with smaller timestamp of write will be skipped.
+ 
+    // Disallows client writes. Used for mirrored topics in federation. 
+    bool client_write_disabled = 8; 
+    // Message for read rules description. 
+    message ReadRule { 
+        // For what consumer this read rule is. Must be valid not empty consumer name. 
+        // Is key for read rules. There could be only one read rule with corresponding consumer name. 
+        string consumer_name = 1 [(required) = true]; 
+        // Flag that this consumer is important. 
+        bool important = 2; 
+        // All messages with smaller timestamp of write will be skipped. 
         int64 starting_message_timestamp_ms = 3 [(value) = ">= 0"];
-        // Max format version that is supported by this consumer.
-        // supported_format on topic must not be greater.
-        Format supported_format = 4;
-        // List of supported codecs by this consumer.
-        // supported_codecs on topic must be contained inside this list.
-        repeated Codec supported_codecs = 5 [(size).le = 100];
-
-        // Read rule version. Any non-negative integer.
+        // Max format version that is supported by this consumer. 
+        // supported_format on topic must not be greater. 
+        Format supported_format = 4; 
+        // List of supported codecs by this consumer. 
+        // supported_codecs on topic must be contained inside this list. 
+        repeated Codec supported_codecs = 5 [(size).le = 100]; 
+ 
+        // Read rule version. Any non-negative integer. 
         int64 version = 6 [(value) = ">= 0"];
 
         // Client service type.
         string service_type = 7;
-    }
-
-    // List of consumer read rules for this topic.
-    repeated ReadRule read_rules = 9 [(size).le = 3000];
-
-    // User and server attributes of topic. Server attributes starts from "_" and will be validated by server.
-    map<string, string> attributes = 10;
+    } 
+ 
+    // List of consumer read rules for this topic. 
+    repeated ReadRule read_rules = 9 [(size).le = 3000]; 
+ 
+    // User and server attributes of topic. Server attributes starts from "_" and will be validated by server. 
+    map<string, string> attributes = 10; 
 
     // Message for remote mirror rule description.
     message RemoteMirrorRule {
@@ -1202,66 +1202,66 @@ message TopicSettings {
     }
     // remote mirror rule for this topic.
     RemoteMirrorRule remote_mirror_rule = 11;
-}
-
-/**
- * Create topic request sent from client to server.
- */
-
-message CreateTopicRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    // Topic path.
-    string path = 2 [(required) = true];
-    // Topic settings.
-    TopicSettings settings = 4;
-}
-
-
-/**
- * Create topic response sent from server to client. If topic is already exists then response status will be "ALREADY_EXISTS".
- */
-
-message CreateTopicResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
-
-/**
- * Create topic result message that will be inside CreateTopicResponse.operation.
- */
-
-message CreateTopicResult {
-}
-
-/**
- * Update existing topic request sent from client to server.
- */
-
-message AlterTopicRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    // Topic path.
-    string path = 2 [(required) = true];
-    // New topic settings to be set. All options inside should be set despite same value.
-    TopicSettings settings = 4;
-}
-
-
-/**
- * Update topic response sent from server to client.
- */
-
-message AlterTopicResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
-
-/**
- * Update topic result message that will be inside UpdateTopicResponse.operation.
- */
-message AlterTopicResult {
-}
-
-/**
+} 
+ 
+/** 
+ * Create topic request sent from client to server. 
+ */ 
+ 
+message CreateTopicRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    // Topic path. 
+    string path = 2 [(required) = true]; 
+    // Topic settings. 
+    TopicSettings settings = 4; 
+} 
+ 
+ 
+/** 
+ * Create topic response sent from server to client. If topic is already exists then response status will be "ALREADY_EXISTS". 
+ */ 
+ 
+message CreateTopicResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+/** 
+ * Create topic result message that will be inside CreateTopicResponse.operation. 
+ */ 
+ 
+message CreateTopicResult { 
+} 
+ 
+/** 
+ * Update existing topic request sent from client to server. 
+ */ 
+ 
+message AlterTopicRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    // Topic path. 
+    string path = 2 [(required) = true]; 
+    // New topic settings to be set. All options inside should be set despite same value. 
+    TopicSettings settings = 4; 
+} 
+ 
+ 
+/** 
+ * Update topic response sent from server to client. 
+ */ 
+ 
+message AlterTopicResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+/** 
+ * Update topic result message that will be inside UpdateTopicResponse.operation. 
+ */ 
+message AlterTopicResult { 
+} 
+ 
+/** 
  * Add read rules for existing topic request.
  */
 message AddReadRuleRequest {
@@ -1314,34 +1314,34 @@ message RemoveReadRuleResult {
 
 
 /**
- * Describe topic request sent from client to server.
- */
-
-message DescribeTopicRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    // Topic path.
-    string path = 2 [(required) = true];
-}
-
-
-/**
- * Describe topic response sent from server to client. If topic is not existed then response status will be "SCHEME_ERROR".
- */
-
-message DescribeTopicResponse {
-    // Result of request will be inside operation.
-    Ydb.Operations.Operation operation = 1;
-}
-
-/**
- * Describe topic result message that will be inside DescribeTopicResponse.operation.
- */
-
-message DescribeTopicResult {
-    // Topic path.
-    Ydb.Scheme.Entry self = 1;
-    // Settings of topic.
-    TopicSettings settings = 2;
-
-}
+ * Describe topic request sent from client to server. 
+ */ 
+ 
+message DescribeTopicRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    // Topic path. 
+    string path = 2 [(required) = true]; 
+} 
+ 
+ 
+/** 
+ * Describe topic response sent from server to client. If topic is not existed then response status will be "SCHEME_ERROR". 
+ */ 
+ 
+message DescribeTopicResponse { 
+    // Result of request will be inside operation. 
+    Ydb.Operations.Operation operation = 1; 
+} 
+ 
+/** 
+ * Describe topic result message that will be inside DescribeTopicResponse.operation. 
+ */ 
+ 
+message DescribeTopicResult { 
+    // Topic path. 
+    Ydb.Scheme.Entry self = 1; 
+    // Settings of topic. 
+    TopicSettings settings = 2; 
+ 
+} 
 

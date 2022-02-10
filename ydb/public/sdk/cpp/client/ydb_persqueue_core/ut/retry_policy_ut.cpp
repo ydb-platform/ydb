@@ -17,31 +17,31 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         helper.Write(true);
         helper.Policy->Initialized(); // Thus ignoring possible early retries on "cluster initializing"
         auto doBreakDown = [&] () {
-            helper.Policy->ExpectBreakDown();
-            NThreading::TPromise<void> retriesPromise = NThreading::NewPromise();
-            Cerr << "WAIT for retries...\n";
-            helper.Policy->WaitForRetries(30, retriesPromise);
-            Cerr << "KICK tablets\n";
-            helper.Setup->KickTablets();
-
+            helper.Policy->ExpectBreakDown(); 
+            NThreading::TPromise<void> retriesPromise = NThreading::NewPromise(); 
+            Cerr << "WAIT for retries...\n"; 
+            helper.Policy->WaitForRetries(30, retriesPromise); 
+            Cerr << "KICK tablets\n"; 
+            helper.Setup->KickTablets(); 
+ 
             auto f1 = helper.Write(false);
             auto f2 = helper.Write();
-
+ 
             auto retriesFuture = retriesPromise.GetFuture();
             retriesFuture.Wait();
-            Cerr << "WAIT for retries done\n";
-
+            Cerr << "WAIT for retries done\n"; 
+ 
             NThreading::TPromise<void> repairPromise = NThreading::NewPromise();
             auto repairFuture = repairPromise.GetFuture();
             helper.Policy->WaitForRepair(repairPromise);
-
-
-            Cerr << "ALLOW tablets\n";
-            helper.Setup->AllowTablets();
-
-            Cerr << "WAIT for repair\n";
-            repairFuture.Wait();
-            Cerr << "REPAIR done\n";
+ 
+ 
+            Cerr << "ALLOW tablets\n"; 
+            helper.Setup->AllowTablets(); 
+ 
+            Cerr << "WAIT for repair\n"; 
+            repairFuture.Wait(); 
+            Cerr << "REPAIR done\n"; 
             f1.Wait();
             f2.Wait();
             helper.Write(true);
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         setup2.AddDataCenter("dc1", *setup1, true);
         setup1->AddDataCenter("dc2", setup2, true);
         setup1->Start();
-        setup2.Start(false);
+        setup2.Start(false); 
         Cerr << "=== Start session 1\n";
         auto helper = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, TString(), setup1);
         helper->Write(true);
@@ -121,15 +121,15 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         auto waitForReconnect = [&](bool enable) {
             Cerr << "=== Expect breakdown\n";
             retryPolicy->ExpectBreakDown();
-
-            NThreading::TPromise<void> retriesPromise = NThreading::NewPromise();
-            auto retriesFuture = retriesPromise.GetFuture();
-            retryPolicy->WaitForRetries(1, retriesPromise);
-
-            NThreading::TPromise<void> repairPromise = NThreading::NewPromise();
-            auto repairFuture = repairPromise.GetFuture();
-            retryPolicy->WaitForRepair(repairPromise);
-
+ 
+            NThreading::TPromise<void> retriesPromise = NThreading::NewPromise(); 
+            auto retriesFuture = retriesPromise.GetFuture(); 
+            retryPolicy->WaitForRetries(1, retriesPromise); 
+ 
+            NThreading::TPromise<void> repairPromise = NThreading::NewPromise(); 
+            auto repairFuture = repairPromise.GetFuture(); 
+            retryPolicy->WaitForRepair(repairPromise); 
+ 
             if (enable) {
                 Cerr << "===Enabled DC1\n";
                 setup1->EnableDataCenter("dc1");
@@ -139,10 +139,10 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
                 setup1->DisableDataCenter("dc1");
                 setup2.DisableDataCenter("dc1");
             }
-            Sleep(TDuration::Seconds(5));
-
-            retriesFuture.Wait();
-            repairFuture.Wait();
+            Sleep(TDuration::Seconds(5)); 
+ 
+            retriesFuture.Wait(); 
+            repairFuture.Wait(); 
         };
         Cerr << "===Wait for 1st reconnect\n";
         waitForReconnect(false);
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         auto setup1 = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
         SDKTestSetup setup2("SeqNoShift_Dc2", false);
         setup2.SetSingleDataCenter("dc2");
-        setup2.AddDataCenter("dc1", *setup1, true);
+        setup2.AddDataCenter("dc1", *setup1, true); 
         setup2.Start();
         setup1->AddDataCenter("dc2", setup2, true);
         setup1->Start();
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         auto CheckSeqNo = [&] (const TString& dcName, ui64 expectedSeqNo) {
             settings.PreferredCluster(dcName);
             settings.AllowFallbackToOtherClusters(false);
-            settings.RetryPolicy(nullptr); //switch to default policy;
+            settings.RetryPolicy(nullptr); //switch to default policy; 
             auto writer = client.CreateWriteSession(settings);
             auto seqNo = writer->GetInitSeqNo().GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(seqNo, expectedSeqNo);
@@ -348,21 +348,21 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         auto& client = setup->GetPersQueueClient();
         auto writer = client.CreateWriteSession(settings);
         auto event = *writer->GetEvent(true);
-        Cerr << NYdb::NPersQueue::DebugString(event) << "\n";
-        UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
+        Cerr << NYdb::NPersQueue::DebugString(event) << "\n"; 
+        UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)); 
         auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken);
         TString message = "1234567890";
         ui64 seqNo = 0;
-        setup->KickTablets();
+        setup->KickTablets(); 
         writer->Write(std::move(continueToken), message, ++seqNo);
         retryPolicy->ExpectBreakDown();
         retryPolicy->WaitForRetriesSync(3);
-        while (seqNo < 10) {
-            auto event = *writer->GetEvent(true);
-            Cerr << NYdb::NPersQueue::DebugString(event) << "\n";
-            UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
+        while (seqNo < 10) { 
+            auto event = *writer->GetEvent(true); 
+            Cerr << NYdb::NPersQueue::DebugString(event) << "\n"; 
+            UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)); 
             writer->Write(
-                    std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken),
+                    std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken), 
                     message, ++seqNo
             );
         }

@@ -11,7 +11,7 @@ RECURSE(
     aws-cpp-sdk-s3
     aws-cpp-sdk-s3-integration-tests
     aws-cpp-sdk-sqs
-    aws-cpp-sdk-kinesis
+    aws-cpp-sdk-kinesis 
     aws-cpp-sdk-transfer
     testing-resources
 )

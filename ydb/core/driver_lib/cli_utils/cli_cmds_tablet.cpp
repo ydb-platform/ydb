@@ -92,7 +92,7 @@ public:
     TString Program;
     TString Params;
 
-    virtual void Config(TConfig& config) override {
+    virtual void Config(TConfig& config) override { 
         TClientCommand::Config(config);
         config.Opts->AddLongOption("follower", "connect to follower").NoArgument();
         config.Opts->AddLongOption("json-ui64-as-string", "json output ui64 as string").NoArgument();
@@ -102,7 +102,7 @@ public:
         SetFreeArgTitle(1, "<PARAMS>", "Parameters of the program");
     }
 
-    virtual void Parse(TConfig& config) override {
+    virtual void Parse(TConfig& config) override { 
         TClientCommand::Parse(config);
 
         Program = GetMiniKQL(config.ParseResult->GetFreeArgs().at(0));
@@ -132,7 +132,7 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        return MessageBusCall(config, Request);
+        return MessageBusCall(config, Request); 
     }
 };
 

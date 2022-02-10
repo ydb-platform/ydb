@@ -108,7 +108,7 @@ class Assertions(object):
                     ),
                     PersQueueGroup=has_properties(
                         Name=name or anything(),
-                        TotalGroupCount=total_partition_count or greater_than(0),
+                        TotalGroupCount=total_partition_count or greater_than(0), 
                         PartitionPerTablet=partition_per_tablet or greater_than(0),
                         AlterVersion=alter_version or greater_than(0),
                         BalancerTabletID=balancer or greater_than(0),

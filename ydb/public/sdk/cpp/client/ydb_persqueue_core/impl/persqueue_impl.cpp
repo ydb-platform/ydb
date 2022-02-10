@@ -1,4 +1,4 @@
-#include "persqueue_impl.h"
+#include "persqueue_impl.h" 
 #include "read_session.h"
 #include "write_session.h"
 
@@ -26,7 +26,7 @@ std::shared_ptr<IWriteSession> TPersQueueClient::TImpl::CreateWriteSession(
         const TWriteSessionSettings& settings
 ) {
     TMaybe<TWriteSessionSettings> maybeSettings;
-    if (!settings.CompressionExecutor_ || !settings.EventHandlers_.HandlersExecutor_ || !settings.ClusterDiscoveryMode_) {
+    if (!settings.CompressionExecutor_ || !settings.EventHandlers_.HandlersExecutor_ || !settings.ClusterDiscoveryMode_) { 
         maybeSettings = settings;
         with_lock (Lock) {
             if (!settings.CompressionExecutor_) {
@@ -35,9 +35,9 @@ std::shared_ptr<IWriteSession> TPersQueueClient::TImpl::CreateWriteSession(
             if (!settings.EventHandlers_.HandlersExecutor_) {
                 maybeSettings->EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
             }
-            if (!settings.ClusterDiscoveryMode_) {
-                maybeSettings->ClusterDiscoveryMode(Settings.ClusterDiscoveryMode_);
-            }
+            if (!settings.ClusterDiscoveryMode_) { 
+                maybeSettings->ClusterDiscoveryMode(Settings.ClusterDiscoveryMode_); 
+            } 
         }
     }
     auto session = std::make_shared<TWriteSession>(

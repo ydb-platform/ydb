@@ -542,25 +542,25 @@ TCheckFunc PathsInsideDomain(ui64 count) {
     };
 }
 
-TCheckFunc PQPartitionsInsideDomain(ui64 count) {
+TCheckFunc PQPartitionsInsideDomain(ui64 count) { 
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
 
-        const auto& pathDescr = record.GetPathDescription();
-        const auto& domain = pathDescr.GetDomainDescription();
-        const auto& curCount = domain.GetPQPartitionsInside();
-
-        UNIT_ASSERT_EQUAL_C(curCount, count,
-                            "pq partitions inside domain count mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
-                                " has count " << curCount <<
-                                " but expected " << count);
-    };
-}
-
+        const auto& pathDescr = record.GetPathDescription(); 
+        const auto& domain = pathDescr.GetDomainDescription(); 
+        const auto& curCount = domain.GetPQPartitionsInside(); 
+ 
+        UNIT_ASSERT_EQUAL_C(curCount, count, 
+                            "pq partitions inside domain count mistmach, domain with id " << domain.GetDomainKey().GetPathId() << 
+                                " has count " << curCount << 
+                                " but expected " << count); 
+    }; 
+} 
+ 
 TCheckFunc PathsInsideDomainOneOf(TSet<ui64> variants) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
-
+ 
         const auto& pathDescr = record.GetPathDescription();
         const auto& domain = pathDescr.GetDomainDescription();
         const auto& curCount = domain.GetPathsInside();
@@ -602,29 +602,29 @@ TCheckFunc ShardsInsideDomainOneOf(TSet<ui64> variants) {
     };
 }
 
-TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions) {
+TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions) { 
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
         const auto& pathDescr = record.GetPathDescription();
         const auto& domain = pathDescr.GetDomainDescription();
         const auto& pathLimit = domain.GetPathsLimit();
         const auto& shardsLimit = domain.GetShardsLimit();
-        const auto& pqPartitionsLimit = domain.GetPQPartitionsLimit();
+        const auto& pqPartitionsLimit = domain.GetPQPartitionsLimit(); 
 
         UNIT_ASSERT_C(pathLimit == maxPaths,
                       "paths limit mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
-                          " has limit " << pathLimit <<
+                          " has limit " << pathLimit << 
                           " but expected " << maxPaths);
 
         UNIT_ASSERT_C(shardsLimit == maxShards,
                       "shards limit mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
-                          " has limit " << shardsLimit <<
+                          " has limit " << shardsLimit << 
                           " but expected " << maxShards);
-
-        UNIT_ASSERT_C(!maxPQPartitions || pqPartitionsLimit == maxPQPartitions,
-                      "pq partitions limit mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
-                          " has limit " << pqPartitionsLimit <<
-                          " but expected " << maxPQPartitions);
+ 
+        UNIT_ASSERT_C(!maxPQPartitions || pqPartitionsLimit == maxPQPartitions, 
+                      "pq partitions limit mistmach, domain with id " << domain.GetDomainKey().GetPathId() << 
+                          " has limit " << pqPartitionsLimit << 
+                          " but expected " << maxPQPartitions); 
     };
 }
 
@@ -959,21 +959,21 @@ TCheckFunc KesusConfigIs(ui64 self_check_period_millis, ui64 session_grace_perio
     };
 }
 
-TCheckFunc DatabaseQuotas(ui64 dataStreamShards) {
+TCheckFunc DatabaseQuotas(ui64 dataStreamShards) { 
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
 
-        const auto& pathDescr = record.GetPathDescription();
-        const auto& domain = pathDescr.GetDomainDescription();
+        const auto& pathDescr = record.GetPathDescription(); 
+        const auto& domain = pathDescr.GetDomainDescription(); 
         const auto count = domain.GetDatabaseQuotas().data_stream_shards_quota();
-
-        UNIT_ASSERT_C(count == dataStreamShards,
-                      "data stream shards inside domain count mistmach, domain with id " << domain.GetDomainKey().GetPathId() <<
-                          " has data stream shards " << count <<
-                          " but expected " << dataStreamShards);
-    };
+ 
+        UNIT_ASSERT_C(count == dataStreamShards, 
+                      "data stream shards inside domain count mistmach, domain with id " << domain.GetDomainKey().GetPathId() << 
+                          " has data stream shards " << count << 
+                          " but expected " << dataStreamShards); 
+    }; 
 }
-
+ 
 TCheckFunc PartitionKeys(TVector<TString> lastShardKeys) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& pathDescr = record.GetPathDescription();

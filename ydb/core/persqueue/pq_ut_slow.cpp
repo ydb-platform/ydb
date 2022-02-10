@@ -1,5 +1,5 @@
-#include "pq_ut.h"
-
+#include "pq_ut.h" 
+ 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -10,53 +10,53 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/security/ticket_parser.h>
-
+ 
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <util/system/sanitizers.h>
-#include <util/system/valgrind.h>
-
-namespace NKikimr {
-Y_UNIT_TEST_SUITE(TPQTestSlow) {
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// SINGLE COMMAND TEST FUNCTIONS
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-Y_UNIT_TEST(TestWriteVeryBigMessage) {
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc);
-        tc.Prepare(dispatchName, setup, activeZone);
-        tc.Runtime->SetScheduledLimit(200);
-        activeZone = false;
-
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //always delete
-
-        TVector<std::pair<ui64, TString>> data;
-        data.push_back({1, TString{10, 'b'}});
-        CmdWrite(1, "sourceIdx", data, tc, false, {}, false, "", -1, 40000);
-        data.clear();
-        const ui32 size  = PlainOrSoSlow(40*1024*1024, 1*1024*1024);
-        const ui32 so = PlainOrSoSlow(1, 0);
-        data.push_back({2, TString{size, 'a'}});
-        CmdWrite(1, "sourceIdx", data, tc, false, {}, false, "", -1, 80000);
-        CmdWrite(0, "sourceIdx", data, tc, false, {}, false, "", -1, 0);
+ 
+#include <util/system/sanitizers.h> 
+#include <util/system/valgrind.h> 
+ 
+namespace NKikimr { 
+Y_UNIT_TEST_SUITE(TPQTestSlow) { 
+ 
+ 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+// SINGLE COMMAND TEST FUNCTIONS 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+ 
+ 
+Y_UNIT_TEST(TestWriteVeryBigMessage) { 
+    TTestContext tc; 
+    RunTestWithReboots(tc.TabletIds, [&]() { 
+        return tc.InitialEventsFilter.Prepare(); 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+        TFinalizer finalizer(tc); 
+        tc.Prepare(dispatchName, setup, activeZone); 
+        tc.Runtime->SetScheduledLimit(200); 
+        activeZone = false; 
+ 
+        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //always delete 
+ 
+        TVector<std::pair<ui64, TString>> data; 
+        data.push_back({1, TString{10, 'b'}}); 
+        CmdWrite(1, "sourceIdx", data, tc, false, {}, false, "", -1, 40000); 
+        data.clear(); 
+        const ui32 size  = PlainOrSoSlow(40*1024*1024, 1*1024*1024); 
+        const ui32 so = PlainOrSoSlow(1, 0); 
+        data.push_back({2, TString{size, 'a'}}); 
+        CmdWrite(1, "sourceIdx", data, tc, false, {}, false, "", -1, 80000); 
+        CmdWrite(0, "sourceIdx", data, tc, false, {}, false, "", -1, 0); 
         activeZone = true;
-        PQGetPartInfo(so, 1, tc);
-        RestartTablet(tc);
-        PQGetPartInfo(so, 1, tc);
-    });
-}
-
-
+        PQGetPartInfo(so, 1, tc); 
+        RestartTablet(tc); 
+        PQGetPartInfo(so, 1, tc); 
+    }); 
+} 
+ 
+ 
 Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -65,8 +65,8 @@ Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
-
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 6*1024*1024, true, 0, 3); //no important client, lifetimeseconds=0 - delete right now
+ 
+        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 6*1024*1024, true, 0, 3); //no important client, lifetimeseconds=0 - delete right now 
 
         TVector<TString> writtenSourceIds;
 
@@ -158,5 +158,5 @@ Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
 
 
 
-} // TKeyValueTest
-} // NKikimr
+} // TKeyValueTest 
+} // NKikimr 

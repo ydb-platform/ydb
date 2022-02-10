@@ -7,7 +7,7 @@
 #define TEST_CASE_NAME (this->Name_)
 
 namespace NPersQueue {
-
+ 
 class SDKTestSetup {
 protected:
     TString TestCaseName;
@@ -41,7 +41,7 @@ public:
         Server.ServerSettings.PQConfig.SetEnabled(true);
         Server.ServerSettings.PQConfig.SetRemoteClusterEnabledDelaySec(1);
         Server.ServerSettings.PQConfig.SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(1);
-        Server.ServerSettings.PQClusterDiscoveryConfig.SetEnabled(true);
+        Server.ServerSettings.PQClusterDiscoveryConfig.SetEnabled(true); 
         SetNetDataViaFile("::1/128\t" + GetLocalCluster());
 
         auto seed = TInstant::Now().MicroSeconds();
@@ -50,9 +50,9 @@ public:
         std::srand(seed);
     }
 
-    void Start(bool waitInit = true, bool addBrokenDatacenter = false) {
+    void Start(bool waitInit = true, bool addBrokenDatacenter = false) { 
         Server.StartServer(false);
-        //Server.EnableLogs({NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
+        //Server.EnableLogs({NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY}); 
         Server.AnnoyingClient->InitRoot();
         if (DataCenters.empty()) {
             THashMap<TString, NKikimr::NPersQueueTests::TPQTestClusterInfo> dataCenters;
@@ -66,9 +66,9 @@ public:
         }
         Server.AnnoyingClient->InitSourceIds();
         CreateTopic(GetTestTopic(), GetLocalCluster());
-        if (waitInit) {
-            Server.WaitInit(GetTestTopic());
-        }
+        if (waitInit) { 
+            Server.WaitInit(GetTestTopic()); 
+        } 
     }
 
     TString GetTestTopic() const {
@@ -114,20 +114,20 @@ public:
         UNIT_ASSERT_C(!initResponse.Response.HasError(), "Failed to start: " << initResponse.Response);
     }
 
-    void WriteToTopic(const TVector<TString>& data, bool compress = true) {
+    void WriteToTopic(const TVector<TString>& data, bool compress = true) { 
 
-        auto client = NYdb::NPersQueue::TPersQueueClient(*(Server.AnnoyingClient->GetDriver()));
-        NYdb::NPersQueue::TWriteSessionSettings settings;
-        settings.Path(GetTestTopic()).MessageGroupId(GetTestMessageGroupId());
-        if (!compress) settings.Codec(NYdb::NPersQueue::ECodec::RAW);
-        auto writer = client.CreateSimpleBlockingWriteSession(settings);
+        auto client = NYdb::NPersQueue::TPersQueueClient(*(Server.AnnoyingClient->GetDriver())); 
+        NYdb::NPersQueue::TWriteSessionSettings settings; 
+        settings.Path(GetTestTopic()).MessageGroupId(GetTestMessageGroupId()); 
+        if (!compress) settings.Codec(NYdb::NPersQueue::ECodec::RAW); 
+        auto writer = client.CreateSimpleBlockingWriteSession(settings); 
 
         for (const TString& d : data) {
             Log << TLOG_INFO << "WriteToTopic: " << d;
-            auto res = writer->Write(d);
-            UNIT_ASSERT(res);
+            auto res = writer->Write(d); 
+            UNIT_ASSERT(res); 
         }
-        writer->Close();
+        writer->Close(); 
     }
 
     void SetSingleDataCenter(const TString& name = "dc1") {
@@ -176,15 +176,15 @@ public:
     }
 
     void KickTablets() {
-        for (ui32 i = 0; i < Server.CleverServer->StaticNodes() + Server.CleverServer->DynamicNodes(); i++) {
+        for (ui32 i = 0; i < Server.CleverServer->StaticNodes() + Server.CleverServer->DynamicNodes(); i++) { 
             Server.AnnoyingClient->MarkNodeInHive(Server.CleverServer->GetRuntime(), i, false);
-        }
-        for (ui32 i = 0; i < Server.CleverServer->StaticNodes() + Server.CleverServer->DynamicNodes(); i++) {
+        } 
+        for (ui32 i = 0; i < Server.CleverServer->StaticNodes() + Server.CleverServer->DynamicNodes(); i++) { 
             Server.AnnoyingClient->KickNodeInHive(Server.CleverServer->GetRuntime(), i);
         }
     }
     void AllowTablets() {
-        for (ui32 i = 0; i < Server.CleverServer->StaticNodes() + Server.CleverServer->DynamicNodes(); i++) {
+        for (ui32 i = 0; i < Server.CleverServer->StaticNodes() + Server.CleverServer->DynamicNodes(); i++) { 
             Server.AnnoyingClient->MarkNodeInHive(Server.CleverServer->GetRuntime(), i, true);
         }
     }

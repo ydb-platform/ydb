@@ -1,21 +1,21 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/actors/core/actor.h>
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 #include <ydb/core/base/path.h>
 #include <ydb/library/persqueue/topic_parser_public/topic_parser.h>
 
-namespace NPersQueue {
-
+namespace NPersQueue { 
+ 
 TString GetFullTopicPath(const NActors::TActorContext& ctx, TMaybe<TString> database, const TString& topicPath);
 TString ConvertNewConsumerName(const TString& consumer, const NActors::TActorContext& ctx);
 TString ConvertOldConsumerName(const TString& consumer, const NActors::TActorContext& ctx);
 TString MakeConsumerPath(const TString& consumer);
-
-
+ 
+ 
 #define CHECK_SET_VALID(cond, reason, statement) \
     if (!(cond)) {                               \
         Valid = false;                           \
@@ -350,5 +350,5 @@ private:
 TString NormalizeFullPath(const TString& fullPath);
 
 
-} // namespace NPersQueue
+} // namespace NPersQueue 
 

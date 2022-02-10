@@ -161,12 +161,12 @@ public:
 };
 
 class TGRpcProxyStatusInitializer : public IKikimrServicesInitializer {
-public:
-    TGRpcProxyStatusInitializer(const TKikimrRunConfig& runConfig);
-
+public: 
+    TGRpcProxyStatusInitializer(const TKikimrRunConfig& runConfig); 
+ 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
+}; 
+ 
 class TRestartsCountPublisher : public IKikimrServicesInitializer {
     static void PublishRestartsCount(const NMonitoring::TDynamicCounters::TCounterPtr& counter,
                                      const TString& restartsCountFile);

@@ -265,4 +265,4 @@ namespace NYdb::NConsoleClient {
         ThrowOnError(status);
         return EXIT_SUCCESS;
     }
-}// namespace NYdb::NConsoleClient
+}// namespace NYdb::NConsoleClient 

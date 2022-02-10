@@ -93,19 +93,19 @@ void TRateLimiterTestSetup::CreateQuotaResources(const TString& path, const TStr
     }
 }
 
-/*
+/* 
 THolder<Ydb::PersQueue::IProducer> TRateLimiterTestSetup::StartProducer(const TString& topicPath, bool compress) {
     Ydb::PersQueue::TProducerSettings producerSettings;
     producerSettings.Server = Ydb::PersQueue::TServerSetting("localhost", Server->GrpcPort);
     producerSettings.Topic = topicPath;
     producerSettings.SourceId = "TRateLimiterTestSetupSourceId";
-    producerSettings.Codec = compress ? "gzip" : "raw";
+    producerSettings.Codec = compress ? "gzip" : "raw"; 
     THolder<Ydb::PersQueue::IProducer> producer = PQLib->CreateProducer(producerSettings);
     auto startResult = producer->Start();
     UNIT_ASSERT_EQUAL_C(Ydb::StatusIds::SUCCESS, startResult.GetValueSync().Response.status(), "Response: " << startResult.GetValueSync().Response);
     return producer;
 }
-*/
+*/ 
 
 void TRateLimiterTestSetup::Start(bool enableReadQuoting) {
     InitServer(enableReadQuoting);

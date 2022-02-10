@@ -1,33 +1,33 @@
-#include "config.h"
-#include <util/generic/hash_set.h>
-#include <util/string/printf.h>
-namespace NKikimr {
-
+#include "config.h" 
+#include <util/generic/hash_set.h> 
+#include <util/string/printf.h> 
+namespace NKikimr { 
+ 
 bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool shouldHavePartitionsList, TString *error) {
-    if (!config.HasPartitionConfig()) {
-        if (error)
-            *error = "no PartitionConfig";
-        return false;
-    }
+    if (!config.HasPartitionConfig()) { 
+        if (error) 
+            *error = "no PartitionConfig"; 
+        return false; 
+    } 
 
     const auto& partitionIds = config.GetPartitionIds();
     const auto& partitions = config.GetPartitions();
 
-    if (shouldHavePartitionsList) {
+    if (shouldHavePartitionsList) { 
         if (partitionIds.empty() && partitions.empty()) {
-            if (error)
-                *error = "empty Partitions list";
-            return false;
-        }
-
+            if (error) 
+                *error = "empty Partitions list"; 
+            return false; 
+        } 
+ 
         THashSet<ui32> parts;
         for (const auto partitionId : partitionIds) {
             if (!parts.insert(partitionId).second) {
-                if (error)
+                if (error) 
                     *error = Sprintf("duplicate partitions with id %u", partitionId);
-                return false;
-            }
-        }
+                return false; 
+            } 
+        } 
 
         parts.clear();
         for (const auto& partition : partitions) {
@@ -38,22 +38,22 @@ bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool s
                 return false;
             }
         }
-    } else {
+    } else { 
         if (!partitionIds.empty() || !partitions.empty()) {
-            if (error)
-                *error = "Partitions list must be empty";
-            return false;
-        }
-    }
+            if (error) 
+                *error = "Partitions list must be empty"; 
+            return false; 
+        } 
+    } 
+ 
+    const auto& partCfg = config.GetPartitionConfig(); 
+    if (!partCfg.HasLifetimeSeconds()) { 
+        if (error) 
+            *error = "no lifetimeSeconds specified in TPartitionConfig"; 
+        return false; 
+    } 
 
-    const auto& partCfg = config.GetPartitionConfig();
-    if (!partCfg.HasLifetimeSeconds()) {
-        if (error)
-            *error = "no lifetimeSeconds specified in TPartitionConfig";
-        return false;
-    }
-
-    return true;
-}
-
-} // NKikimr
+    return true; 
+} 
+ 
+} // NKikimr 

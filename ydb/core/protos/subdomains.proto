@@ -71,9 +71,9 @@ message TDomainDescription {
     optional TDiskSpaceUsage DiskSpaceUsage = 11; // TODO: temp for SLYDB-95
 
     optional TSchemeQuotas DeclaredSchemeQuotas = 12;
-
-    optional uint64 PQPartitionsInside = 13;
-    optional uint64 PQPartitionsLimit = 14;
+ 
+    optional uint64 PQPartitionsInside = 13; 
+    optional uint64 PQPartitionsLimit = 14; 
 
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 15;
     optional TDomainState DomainState = 16;

@@ -1166,9 +1166,9 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &CreateKeyValueFlat, DataGroupErasure);
                 } else if (type == defaultTabletTypes.ColumnShard) {
                     bootstrapperActorId = Boot(ctx, type, &CreateColumnShard, DataGroupErasure);
-                } else if (type == defaultTabletTypes.PersQueue) {
+                } else if (type == defaultTabletTypes.PersQueue) { 
                     bootstrapperActorId = Boot(ctx, type, &CreatePersQueue, DataGroupErasure);
-                } else if (type == defaultTabletTypes.PersQueueReadBalancer) {
+                } else if (type == defaultTabletTypes.PersQueueReadBalancer) { 
                     bootstrapperActorId = Boot(ctx, type, &CreatePersQueueReadBalancer, DataGroupErasure);
                 } else if (type == defaultTabletTypes.Coordinator) {
                     bootstrapperActorId = Boot(ctx, type, &CreateFlatTxCoordinator, DataGroupErasure);

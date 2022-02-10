@@ -143,109 +143,109 @@ void TTabletCountersBase::OutputProto(NKikimrTabletBase::TTabletCountersBase& op
     }
 }
 
-////////////////////////////////////////////
-/// The TTabletLabeledCountersBase class
-////////////////////////////////////////////
-
-////////////////////////////////////////////
-// private
-////////////////////////////////////////////
-TTabletLabeledCountersBase::TTabletLabeledCountersBase(const TTabletLabeledCountersBase& rp)
-    : TTabletLabeledCountersBase()
-{
-    *this = rp;
-}
-
-////////////////////////////////////////////
-TTabletLabeledCountersBase&
-TTabletLabeledCountersBase::operator = (const TTabletLabeledCountersBase& rp) {
-    if (&rp == this)
-        return *this;
-
-    if (!HasCounters()) {
-        Counters.Reset(rp.Counters);
-        Ids.Reset(rp.Ids);
-        MetaInfo = rp.MetaInfo;
-        Types = rp.Types;
-        GroupNames = rp.GroupNames;
-        AggregateFunc = rp.AggregateFunc;
-    } else {
-        Counters.SetTo(rp.Counters);
-        Ids.SetTo(rp.Ids);
-    }
-    Group = rp.Group;
-    Drop = rp.Drop;
-    return *this;
-}
-
+//////////////////////////////////////////// 
+/// The TTabletLabeledCountersBase class 
+//////////////////////////////////////////// 
+ 
+//////////////////////////////////////////// 
+// private 
+//////////////////////////////////////////// 
+TTabletLabeledCountersBase::TTabletLabeledCountersBase(const TTabletLabeledCountersBase& rp) 
+    : TTabletLabeledCountersBase() 
+{ 
+    *this = rp; 
+} 
+ 
+//////////////////////////////////////////// 
+TTabletLabeledCountersBase& 
+TTabletLabeledCountersBase::operator = (const TTabletLabeledCountersBase& rp) { 
+    if (&rp == this) 
+        return *this; 
+ 
+    if (!HasCounters()) { 
+        Counters.Reset(rp.Counters); 
+        Ids.Reset(rp.Ids); 
+        MetaInfo = rp.MetaInfo; 
+        Types = rp.Types; 
+        GroupNames = rp.GroupNames; 
+        AggregateFunc = rp.AggregateFunc; 
+    } else { 
+        Counters.SetTo(rp.Counters); 
+        Ids.SetTo(rp.Ids); 
+    } 
+    Group = rp.Group; 
+    Drop = rp.Drop; 
+    return *this; 
+} 
+ 
 void TTabletLabeledCountersBase::OutputHtml(IOutputStream &os) const {
     HTML(os) {
         DIV_CLASS("row") {
             DIV_CLASS("col-md-12") {H3() {os << Group; }}
-
+ 
         }
         DIV_CLASS("row") {
-            for (ui32 i = 0, e = Counters.Size(); i < e; ++i) {
+            for (ui32 i = 0, e = Counters.Size(); i < e; ++i) { 
                 if (MetaInfo[i]) {
                     DIV_CLASS("col-md-3") {Counters[i].OutputHtml(os, MetaInfo[i]);}
                     DIV_CLASS("col-md-3") {Ids[i].OutputHtml(os, "id");}
                 }
-            }
+            } 
         }
     }
-}
-
-void TTabletLabeledCountersBase::AggregateWith(const TTabletLabeledCountersBase& rp) {
-    if (!HasCounters()) {
-        *this = rp;
-        return;
-    }
-    if (rp.Counters.Size() != Counters.Size()) //do not merge different versions of counters; this can be on rolling update
-        return;
-    for (ui32 i = 0, e = Counters.Size(); i < e; ++i) {
-        if (AggregateFunc[i] != rp.AggregateFunc[i]) //do not merge different versions of counters
-            return;
-        switch (AggregateFunc[i]) {
-            case EAF_MIN:
-                if (Counters[i].Get() > rp.Counters[i].Get()) {
-                    Counters[i].Set(rp.Counters[i].Get());
-                    Ids[i].Set(rp.Ids[i].Get());
-                }
-                break;
-            case EAF_MAX:
-                if (Counters[i].Get() < rp.Counters[i].Get()) {
-                    Counters[i].Set(rp.Counters[i].Get());
-                    Ids[i].Set(rp.Ids[i].Get());
-                }
-                break;
-            case EAF_SUM:
-                Counters[i].Add(rp.GetCounters()[i].Get());
-                Ids[i].Set(0);
-                break;
-            default:
-                Y_FAIL("unknown aggregate func");
-        }
-    }
-    Drop = Drop || rp.Drop;
-}
-
+} 
+ 
+void TTabletLabeledCountersBase::AggregateWith(const TTabletLabeledCountersBase& rp) { 
+    if (!HasCounters()) { 
+        *this = rp; 
+        return; 
+    } 
+    if (rp.Counters.Size() != Counters.Size()) //do not merge different versions of counters; this can be on rolling update 
+        return; 
+    for (ui32 i = 0, e = Counters.Size(); i < e; ++i) { 
+        if (AggregateFunc[i] != rp.AggregateFunc[i]) //do not merge different versions of counters 
+            return; 
+        switch (AggregateFunc[i]) { 
+            case EAF_MIN: 
+                if (Counters[i].Get() > rp.Counters[i].Get()) { 
+                    Counters[i].Set(rp.Counters[i].Get()); 
+                    Ids[i].Set(rp.Ids[i].Get()); 
+                } 
+                break; 
+            case EAF_MAX: 
+                if (Counters[i].Get() < rp.Counters[i].Get()) { 
+                    Counters[i].Set(rp.Counters[i].Get()); 
+                    Ids[i].Set(rp.Ids[i].Get()); 
+                } 
+                break; 
+            case EAF_SUM: 
+                Counters[i].Add(rp.GetCounters()[i].Get()); 
+                Ids[i].Set(0); 
+                break; 
+            default: 
+                Y_FAIL("unknown aggregate func"); 
+        } 
+    } 
+    Drop = Drop || rp.Drop; 
+} 
+ 
 IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase::EAggregateFunc& func) {
-    switch(func) {
-        case TTabletLabeledCountersBase::EAF_MIN:
-            out << "EAF_MIN";
-            break;
-        case TTabletLabeledCountersBase::EAF_MAX:
-            out << "EAF_MAX";
-            break;
-        case TTabletLabeledCountersBase::EAF_SUM:
-            out << "EAF_SUM";
-            break;
-        default:
-            out << (ui32)func;
-    }
-    return out;
-}
-
-
+    switch(func) { 
+        case TTabletLabeledCountersBase::EAF_MIN: 
+            out << "EAF_MIN"; 
+            break; 
+        case TTabletLabeledCountersBase::EAF_MAX: 
+            out << "EAF_MAX"; 
+            break; 
+        case TTabletLabeledCountersBase::EAF_SUM: 
+            out << "EAF_SUM"; 
+            break; 
+        default: 
+            out << (ui32)func; 
+    } 
+    return out; 
+} 
+ 
+ 
 } // end of NKikimr namespace
 

@@ -7,8 +7,8 @@
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
-#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
-
+#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h> 
+ 
 #include <util/digest/numeric.h>
 #include <util/generic/hash.h>
 #include <util/system/condvar.h>
@@ -62,7 +62,7 @@ public:
     void DeferAbortSession(const IErrorHandler::TPtr& errorHandler, EStatus statusCode, const TString& message);
     void DeferAbortSession(const IErrorHandler::TPtr& errorHandler, TPlainStatus&& status);
     void DeferReconnection(std::shared_ptr<TSingleClusterReadSessionImpl> session, const IErrorHandler::TPtr& errorHandler, TPlainStatus&& status);
-    void DeferSignalWaiter(TWaiter&& waiter);
+    void DeferSignalWaiter(TWaiter&& waiter); 
 
 private:
     void DoActions();
@@ -71,7 +71,7 @@ private:
     void StartExecutorTasks();
     void AbortSession();
     void Reconnect();
-    void SignalWaiters();
+    void SignalWaiters(); 
 
 private:
     // Read.
@@ -86,8 +86,8 @@ private:
     IErrorHandler::TPtr ErrorHandler;
     TMaybe<TSessionClosedEvent> SessionClosedEvent;
 
-    // Waiters.
-    std::vector<TWaiter> Waiters;
+    // Waiters. 
+    std::vector<TWaiter> Waiters; 
 
     // Reconnection.
     std::shared_ptr<TSingleClusterReadSessionImpl> Session;
@@ -188,9 +188,9 @@ private:
         size_t AddedDataSize() const {
             return SourceDataSize;
         }
-        size_t AddedMessagesCount() const {
-            return Messages.size();
-        }
+        size_t AddedMessagesCount() const { 
+            return Messages.size(); 
+        } 
 
     private:
         TDataDecompressionInfo* Parent;
@@ -341,8 +341,8 @@ struct TRawPartitionStreamEvent {
     void Signal(TPartitionStreamImpl* partitionStream, TReadSessionEventsQueue* queue, TDeferredActions& deferred);
 };
 
-
-
+ 
+ 
 class TPartitionStreamImpl : public TPartitionStream {
 public:
     struct TKey { // Hash<TKey> is defined later in this file.
@@ -364,12 +364,12 @@ public:
                          ui64 partitionGroupId,
                          ui64 partitionId,
                          ui64 assignId,
-                         ui64 readOffset,
+                         ui64 readOffset, 
                          std::weak_ptr<TSingleClusterReadSessionImpl> parentSession,
                          IErrorHandler::TPtr errorHandler)
         : Key{topicPath, cluster, partitionId}
         , AssignId(assignId)
-        , FirstNotReadOffset(readOffset)
+        , FirstNotReadOffset(readOffset) 
         , Session(std::move(parentSession))
         , ErrorHandler(std::move(errorHandler))
     {
@@ -378,20 +378,20 @@ public:
         Cluster = std::move(cluster);
         PartitionGroupId = partitionGroupId;
         PartitionId = partitionId;
-        MaxCommittedOffset = readOffset;
+        MaxCommittedOffset = readOffset; 
     }
 
     ~TPartitionStreamImpl();
 
-    ui64 GetFirstNotReadOffset() const {
-        return FirstNotReadOffset;
-    }
-
-    void SetFirstNotReadOffset(const ui64 offset) {
-        FirstNotReadOffset = offset;
-    }
-
-    void Commit(ui64 startOffset, ui64 endOffset) /*override*/;
+    ui64 GetFirstNotReadOffset() const { 
+        return FirstNotReadOffset; 
+    } 
+ 
+    void SetFirstNotReadOffset(const ui64 offset) { 
+        FirstNotReadOffset = offset; 
+    } 
+ 
+    void Commit(ui64 startOffset, ui64 endOffset) /*override*/; 
     void RequestStatus() override;
 
     void ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset);
@@ -472,264 +472,264 @@ public:
 
     void UpdateMaxCommittedOffset(ui64 offset) {
         if (offset > MaxCommittedOffset) {
-            ClientCommits.EraseInterval(MaxCommittedOffset, offset);
+            ClientCommits.EraseInterval(MaxCommittedOffset, offset); 
             MaxCommittedOffset = offset;
         }
     }
 
-    bool HasCommitsInflight() const {
-        if (ClientCommits.Empty())
-            return false;
-        auto range = *ClientCommits.begin();
-        if (range.first > MaxCommittedOffset)
-            return false;
-        // Here we got first range that can be committed by server.
-        // If offset to commit is from same position - then nothing is inflight.
-        if (!Commits.Empty() && Commits.begin()->first == range.first)
-            return false;
-        return true;
-    }
-
-    bool AddToCommitRanges(const ui64 startOffset, const ui64 endOffset, bool rangesMode) {
-        if (ClientCommits.Intersects(startOffset, endOffset) || startOffset < MaxCommittedOffset) {
+    bool HasCommitsInflight() const { 
+        if (ClientCommits.Empty()) 
+            return false; 
+        auto range = *ClientCommits.begin(); 
+        if (range.first > MaxCommittedOffset) 
+            return false; 
+        // Here we got first range that can be committed by server. 
+        // If offset to commit is from same position - then nothing is inflight. 
+        if (!Commits.Empty() && Commits.begin()->first == range.first) 
+            return false; 
+        return true; 
+    } 
+ 
+    bool AddToCommitRanges(const ui64 startOffset, const ui64 endOffset, bool rangesMode) { 
+        if (ClientCommits.Intersects(startOffset, endOffset) || startOffset < MaxCommittedOffset) { 
             ThrowFatalError(TStringBuilder() << "Invalid offset range [" << startOffset << ", " << endOffset << ") : range must start from "
-                                             << MaxCommittedOffset << " or has some offsets that are committed already. Partition stream id: " << PartitionStreamId << Endl);
-            return false;
-        }
-        if (rangesMode) { // Otherwise no need to send it to server.
-            Y_VERIFY(!Commits.Intersects(startOffset, endOffset));
-            Commits.InsertInterval(startOffset, endOffset);
-        }
-        ClientCommits.InsertInterval(startOffset, endOffset);
-        return true;
-    }
-
-
+                                             << MaxCommittedOffset << " or has some offsets that are committed already. Partition stream id: " << PartitionStreamId << Endl); 
+            return false; 
+        } 
+        if (rangesMode) { // Otherwise no need to send it to server. 
+            Y_VERIFY(!Commits.Intersects(startOffset, endOffset)); 
+            Commits.InsertInterval(startOffset, endOffset); 
+        } 
+        ClientCommits.InsertInterval(startOffset, endOffset); 
+        return true; 
+    } 
+ 
+ 
 private:
     const TKey Key;
     ui64 AssignId;
-    ui64 FirstNotReadOffset;
+    ui64 FirstNotReadOffset; 
     std::weak_ptr<TSingleClusterReadSessionImpl> Session;
     IErrorHandler::TPtr ErrorHandler;
     std::deque<TRawPartitionStreamEvent> EventsQueue;
     size_t DataDecompressionEventsCount = 0;
     ui64 MaxReadOffset = 0;
     ui64 MaxCommittedOffset = 0;
-
-    TDisjointIntervalTree<ui64> Commits;
-    TDisjointIntervalTree<ui64> ClientCommits;
+ 
+    TDisjointIntervalTree<ui64> Commits; 
+    TDisjointIntervalTree<ui64> ClientCommits; 
 };
 
-
-class TReadSessionEventsQueue : public TBaseSessionEventsQueue<TReadSessionSettings, TReadSessionEvent::TEvent, TReadSessionEventInfo> {
-    using TParent = TBaseSessionEventsQueue<TReadSessionSettings, TReadSessionEvent::TEvent, TReadSessionEventInfo>;
-
-public:
-    explicit TReadSessionEventsQueue(const TSettings& settings, std::weak_ptr<IUserRetrievedEventCallback> session);
-
-    TMaybe<TEventInfo> GetDataEventImpl(TEventInfo& srcDataEventInfo, size_t* maxByteSize); // Assumes that we're under lock.
-
-    TMaybe<TEventInfo> TryGetEventImpl(size_t* maxByteSize) { // Assumes that we're under lock.
-        Y_ASSERT(HasEventsImpl());
-        TVector<TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
-        if (!Events.empty()) {
-            TEventInfo event = std::move(Events.front());
-            Events.pop();
-            RenewWaiterImpl();
-            auto partitionStream = event.PartitionStream;
-
-            if (!partitionStream->HasEvents()) {
-                Y_FAIL("can't be here - got events in global queue, but nothing in partition queue");
-                return Nothing();
-            }
-
-            if (partitionStream->TopEvent().IsDataEvent()) {
-                return GetDataEventImpl(event, maxByteSize);
-            }
-
-            event = TReadSessionEventInfo(partitionStream.Get(), event.Session, partitionStream->TopEvent().GetEvent());
-            partitionStream->PopEvent();
-            return event;
-        }
-
-        Y_ASSERT(CloseEvent);
-        return TEventInfo(*CloseEvent, Session);
-    }
-
-    TMaybe<TEventInfo> GetEventImpl(size_t* maxByteSize) { // Assumes that we're under lock and that the event queue has events.
-        do {
-            TMaybe<TEventInfo> result = TryGetEventImpl(maxByteSize); // We could have read all the data in current message previous time.
-            if (result) {
-                return result;
-            }
-        } while (HasEventsImpl());
-        return Nothing();
-    }
-
-    TVector<TEvent> GetEvents(bool block = false, TMaybe<size_t> maxEventsCount = Nothing(), size_t maxByteSize = std::numeric_limits<size_t>::max()) {
-        TVector<TEventInfo> eventInfos;
-        const size_t maxCount = maxEventsCount ? *maxEventsCount : std::numeric_limits<size_t>::max();
-        TDeferredActions deferred;
-        std::vector<TIntrusivePtr<TPartitionStreamImpl>> partitionStreamsForSignalling;
-        with_lock (Mutex) {
-            eventInfos.reserve(Min(Events.size() + CloseEvent.Defined(), maxCount));
-            do {
-                if (block) {
-                    WaitEventsImpl();
-                }
-
-                ApplyCallbacksToReadyEventsImpl(deferred);
-
-                while (HasEventsImpl() && eventInfos.size() < maxCount && maxByteSize > 0) {
-                    TMaybe<TEventInfo> event = GetEventImpl(&maxByteSize);
-                    if (event) {
-                        const TIntrusivePtr<TPartitionStreamImpl> partitionStreamForSignalling = event->IsDataEvent() ? event->PartitionStream : nullptr;
-                        eventInfos.emplace_back(std::move(*event));
-                        if (eventInfos.back().IsSessionClosedEvent()) {
-                            break;
-                        }
-                        if (partitionStreamForSignalling) {
-                            partitionStreamsForSignalling.emplace_back(std::move(partitionStreamForSignalling));
-                        }
-                    }
-                }
-            } while (block && (eventInfos.empty() || eventInfos.back().IsSessionClosedEvent()));
-            ApplyCallbacksToReadyEventsImpl(deferred);
-            for (const auto& partitionStreamForSignalling : partitionStreamsForSignalling) {
-                SignalReadyEventsImpl(partitionStreamForSignalling.Get(), deferred);
-            }
-        }
-
-        TVector<TEvent> result;
-        result.reserve(eventInfos.size());
-        for (TEventInfo& eventInfo : eventInfos) {
-            eventInfo.OnUserRetrievedEvent();
-            result.emplace_back(std::move(eventInfo.GetEvent()));
-        }
-        return result;
-    }
-
-    TMaybe<TEvent> GetEvent(bool block = false, size_t maxByteSize = std::numeric_limits<size_t>::max()) {
-        TMaybe<TEventInfo> eventInfo;
-        TDeferredActions deferred;
-        with_lock (Mutex) {
-            TIntrusivePtr<TPartitionStreamImpl> partitionStreamForSignalling;
-            do {
-                if (block) {
-                    WaitEventsImpl();
-                }
-
-                const bool appliedCallbacks = ApplyCallbacksToReadyEventsImpl(deferred);
-
-                if (HasEventsImpl()) {
-                    eventInfo = GetEventImpl(&maxByteSize);
-                    if (eventInfo && eventInfo->IsDataEvent()) {
-                        partitionStreamForSignalling = eventInfo->PartitionStream;
-                    }
-                } else if (!appliedCallbacks) {
-                    return Nothing();
-                }
-            } while (block && !eventInfo);
-            ApplyCallbacksToReadyEventsImpl(deferred);
-            if (partitionStreamForSignalling) {
-                SignalReadyEventsImpl(partitionStreamForSignalling.Get(), deferred);
-            }
-        }
-        if (eventInfo) {
-            eventInfo->OnUserRetrievedEvent();
-            return std::move(eventInfo->Event);
-        } else {
-            return Nothing();
-        }
-    }
-
-    void Close(const TSessionClosedEvent& event, TDeferredActions& deferred) {
-        TWaiter waiter;
-        with_lock (Mutex) {
-            CloseEvent = event;
-            Closed = true;
-            waiter = TWaiter(Waiter.ExtractPromise(), this);
-        }
-
-        TEventInfo info(event);
-        ApplyHandler(info, deferred);
-
-        waiter.Signal();
-    }
-
-    bool HasCallbackForNextEventImpl() const;
-    bool ApplyCallbacksToReadyEventsImpl(TDeferredActions& deferred);
-
-    // Push usual event.
-    void PushEvent(TReadSessionEventInfo eventInfo, TDeferredActions& deferred);
-
-    // Push data event.
-    TDataDecompressionInfo* PushDataEvent(TIntrusivePtr<TPartitionStreamImpl> partitionStream, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData&& msg);
-
-    void SignalEventImpl(TIntrusivePtr<TPartitionStreamImpl> partitionStream, TDeferredActions& deferred); // Assumes that we're under lock.
-
-    void SignalReadyEvents(TPartitionStreamImpl* partitionStream);
-
-    void SignalReadyEventsImpl(TPartitionStreamImpl* partitionStream, TDeferredActions& deferred); // Assumes that we're under lock.
-
-    void SignalWaiterImpl(TDeferredActions& deferred) {
-        TWaiter waiter = PopWaiterImpl();
-        deferred.DeferSignalWaiter(std::move(waiter)); // No effect if waiter is empty.
-    }
-
-    void ClearAllEvents();
-
-private:
-    struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
-        THandlersVisitor(const TSettings& settings, TEventInfo& eventInfo, TDeferredActions& deferred)
-            : TBaseHandlersVisitor(settings, eventInfo)
-            , Deferred(deferred)
-        {}
-
-#define DECLARE_HANDLER(type, handler, answer)                          \
-        bool operator()(type&) {                                        \
-            if (PushHandler<type>(                                      \
-                std::move(EventInfo),                                   \
-                Settings.EventHandlers_.handler,                        \
-                Settings.EventHandlers_.CommonHandler_)) {              \
-                return answer;                                          \
-            }                                                           \
-            return false;                                               \
-        }                                                               \
-        /**/
-
-        DECLARE_HANDLER(TReadSessionEvent::TDataReceivedEvent, DataReceivedHandler_, true);
-        DECLARE_HANDLER(TReadSessionEvent::TCommitAcknowledgementEvent, CommitAcknowledgementHandler_, true);
-        DECLARE_HANDLER(TReadSessionEvent::TCreatePartitionStreamEvent, CreatePartitionStreamHandler_, true);
-        DECLARE_HANDLER(TReadSessionEvent::TDestroyPartitionStreamEvent, DestroyPartitionStreamHandler_, true);
-        DECLARE_HANDLER(TReadSessionEvent::TPartitionStreamStatusEvent, PartitionStreamStatusHandler_, true);
-        DECLARE_HANDLER(TReadSessionEvent::TPartitionStreamClosedEvent, PartitionStreamClosedHandler_, true);
-        DECLARE_HANDLER(TSessionClosedEvent, SessionClosedHandler_, false); // Not applied
-#undef DECLARE_HANDLER
-
-        bool Visit() {
-            return std::visit(*this, EventInfo.GetEvent());
-        }
-
-        void Post(const IExecutor::TPtr& executor, IExecutor::TFunction&& f) {
-            Deferred.DeferStartExecutorTask(executor, std::move(f));
-        }
-
-        TDeferredActions& Deferred;
-    };
-
-    bool ApplyHandler(TEventInfo& eventInfo, TDeferredActions& deferred) {
-        THandlersVisitor visitor(Settings, eventInfo, deferred);
-        return visitor.Visit();
-    }
-
-private:
-    bool HasEventCallbacks;
-    std::weak_ptr<IUserRetrievedEventCallback> Session;
-};
-
-
-
+ 
+class TReadSessionEventsQueue : public TBaseSessionEventsQueue<TReadSessionSettings, TReadSessionEvent::TEvent, TReadSessionEventInfo> { 
+    using TParent = TBaseSessionEventsQueue<TReadSessionSettings, TReadSessionEvent::TEvent, TReadSessionEventInfo>; 
+ 
+public: 
+    explicit TReadSessionEventsQueue(const TSettings& settings, std::weak_ptr<IUserRetrievedEventCallback> session); 
+ 
+    TMaybe<TEventInfo> GetDataEventImpl(TEventInfo& srcDataEventInfo, size_t* maxByteSize); // Assumes that we're under lock. 
+ 
+    TMaybe<TEventInfo> TryGetEventImpl(size_t* maxByteSize) { // Assumes that we're under lock. 
+        Y_ASSERT(HasEventsImpl()); 
+        TVector<TReadSessionEvent::TDataReceivedEvent::TMessage> messages; 
+        if (!Events.empty()) { 
+            TEventInfo event = std::move(Events.front()); 
+            Events.pop(); 
+            RenewWaiterImpl(); 
+            auto partitionStream = event.PartitionStream; 
+ 
+            if (!partitionStream->HasEvents()) { 
+                Y_FAIL("can't be here - got events in global queue, but nothing in partition queue"); 
+                return Nothing(); 
+            } 
+ 
+            if (partitionStream->TopEvent().IsDataEvent()) { 
+                return GetDataEventImpl(event, maxByteSize); 
+            } 
+ 
+            event = TReadSessionEventInfo(partitionStream.Get(), event.Session, partitionStream->TopEvent().GetEvent()); 
+            partitionStream->PopEvent(); 
+            return event; 
+        } 
+ 
+        Y_ASSERT(CloseEvent); 
+        return TEventInfo(*CloseEvent, Session); 
+    } 
+ 
+    TMaybe<TEventInfo> GetEventImpl(size_t* maxByteSize) { // Assumes that we're under lock and that the event queue has events. 
+        do { 
+            TMaybe<TEventInfo> result = TryGetEventImpl(maxByteSize); // We could have read all the data in current message previous time. 
+            if (result) { 
+                return result; 
+            } 
+        } while (HasEventsImpl()); 
+        return Nothing(); 
+    } 
+ 
+    TVector<TEvent> GetEvents(bool block = false, TMaybe<size_t> maxEventsCount = Nothing(), size_t maxByteSize = std::numeric_limits<size_t>::max()) { 
+        TVector<TEventInfo> eventInfos; 
+        const size_t maxCount = maxEventsCount ? *maxEventsCount : std::numeric_limits<size_t>::max(); 
+        TDeferredActions deferred; 
+        std::vector<TIntrusivePtr<TPartitionStreamImpl>> partitionStreamsForSignalling; 
+        with_lock (Mutex) { 
+            eventInfos.reserve(Min(Events.size() + CloseEvent.Defined(), maxCount)); 
+            do { 
+                if (block) { 
+                    WaitEventsImpl(); 
+                } 
+ 
+                ApplyCallbacksToReadyEventsImpl(deferred); 
+ 
+                while (HasEventsImpl() && eventInfos.size() < maxCount && maxByteSize > 0) { 
+                    TMaybe<TEventInfo> event = GetEventImpl(&maxByteSize); 
+                    if (event) { 
+                        const TIntrusivePtr<TPartitionStreamImpl> partitionStreamForSignalling = event->IsDataEvent() ? event->PartitionStream : nullptr; 
+                        eventInfos.emplace_back(std::move(*event)); 
+                        if (eventInfos.back().IsSessionClosedEvent()) { 
+                            break; 
+                        } 
+                        if (partitionStreamForSignalling) { 
+                            partitionStreamsForSignalling.emplace_back(std::move(partitionStreamForSignalling)); 
+                        } 
+                    } 
+                } 
+            } while (block && (eventInfos.empty() || eventInfos.back().IsSessionClosedEvent())); 
+            ApplyCallbacksToReadyEventsImpl(deferred); 
+            for (const auto& partitionStreamForSignalling : partitionStreamsForSignalling) { 
+                SignalReadyEventsImpl(partitionStreamForSignalling.Get(), deferred); 
+            } 
+        } 
+ 
+        TVector<TEvent> result; 
+        result.reserve(eventInfos.size()); 
+        for (TEventInfo& eventInfo : eventInfos) { 
+            eventInfo.OnUserRetrievedEvent(); 
+            result.emplace_back(std::move(eventInfo.GetEvent())); 
+        } 
+        return result; 
+    } 
+ 
+    TMaybe<TEvent> GetEvent(bool block = false, size_t maxByteSize = std::numeric_limits<size_t>::max()) { 
+        TMaybe<TEventInfo> eventInfo; 
+        TDeferredActions deferred; 
+        with_lock (Mutex) { 
+            TIntrusivePtr<TPartitionStreamImpl> partitionStreamForSignalling; 
+            do { 
+                if (block) { 
+                    WaitEventsImpl(); 
+                } 
+ 
+                const bool appliedCallbacks = ApplyCallbacksToReadyEventsImpl(deferred); 
+ 
+                if (HasEventsImpl()) { 
+                    eventInfo = GetEventImpl(&maxByteSize); 
+                    if (eventInfo && eventInfo->IsDataEvent()) { 
+                        partitionStreamForSignalling = eventInfo->PartitionStream; 
+                    } 
+                } else if (!appliedCallbacks) { 
+                    return Nothing(); 
+                } 
+            } while (block && !eventInfo); 
+            ApplyCallbacksToReadyEventsImpl(deferred); 
+            if (partitionStreamForSignalling) { 
+                SignalReadyEventsImpl(partitionStreamForSignalling.Get(), deferred); 
+            } 
+        } 
+        if (eventInfo) { 
+            eventInfo->OnUserRetrievedEvent(); 
+            return std::move(eventInfo->Event); 
+        } else { 
+            return Nothing(); 
+        } 
+    } 
+ 
+    void Close(const TSessionClosedEvent& event, TDeferredActions& deferred) { 
+        TWaiter waiter; 
+        with_lock (Mutex) { 
+            CloseEvent = event; 
+            Closed = true; 
+            waiter = TWaiter(Waiter.ExtractPromise(), this); 
+        } 
+ 
+        TEventInfo info(event); 
+        ApplyHandler(info, deferred); 
+ 
+        waiter.Signal(); 
+    } 
+ 
+    bool HasCallbackForNextEventImpl() const; 
+    bool ApplyCallbacksToReadyEventsImpl(TDeferredActions& deferred); 
+ 
+    // Push usual event. 
+    void PushEvent(TReadSessionEventInfo eventInfo, TDeferredActions& deferred); 
+ 
+    // Push data event. 
+    TDataDecompressionInfo* PushDataEvent(TIntrusivePtr<TPartitionStreamImpl> partitionStream, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData&& msg); 
+ 
+    void SignalEventImpl(TIntrusivePtr<TPartitionStreamImpl> partitionStream, TDeferredActions& deferred); // Assumes that we're under lock. 
+ 
+    void SignalReadyEvents(TPartitionStreamImpl* partitionStream); 
+ 
+    void SignalReadyEventsImpl(TPartitionStreamImpl* partitionStream, TDeferredActions& deferred); // Assumes that we're under lock. 
+ 
+    void SignalWaiterImpl(TDeferredActions& deferred) { 
+        TWaiter waiter = PopWaiterImpl(); 
+        deferred.DeferSignalWaiter(std::move(waiter)); // No effect if waiter is empty. 
+    } 
+ 
+    void ClearAllEvents(); 
+ 
+private: 
+    struct THandlersVisitor : public TParent::TBaseHandlersVisitor { 
+        THandlersVisitor(const TSettings& settings, TEventInfo& eventInfo, TDeferredActions& deferred) 
+            : TBaseHandlersVisitor(settings, eventInfo) 
+            , Deferred(deferred) 
+        {} 
+ 
+#define DECLARE_HANDLER(type, handler, answer)                          \ 
+        bool operator()(type&) {                                        \ 
+            if (PushHandler<type>(                                      \ 
+                std::move(EventInfo),                                   \ 
+                Settings.EventHandlers_.handler,                        \ 
+                Settings.EventHandlers_.CommonHandler_)) {              \ 
+                return answer;                                          \ 
+            }                                                           \ 
+            return false;                                               \ 
+        }                                                               \ 
+        /**/ 
+ 
+        DECLARE_HANDLER(TReadSessionEvent::TDataReceivedEvent, DataReceivedHandler_, true); 
+        DECLARE_HANDLER(TReadSessionEvent::TCommitAcknowledgementEvent, CommitAcknowledgementHandler_, true); 
+        DECLARE_HANDLER(TReadSessionEvent::TCreatePartitionStreamEvent, CreatePartitionStreamHandler_, true); 
+        DECLARE_HANDLER(TReadSessionEvent::TDestroyPartitionStreamEvent, DestroyPartitionStreamHandler_, true); 
+        DECLARE_HANDLER(TReadSessionEvent::TPartitionStreamStatusEvent, PartitionStreamStatusHandler_, true); 
+        DECLARE_HANDLER(TReadSessionEvent::TPartitionStreamClosedEvent, PartitionStreamClosedHandler_, true); 
+        DECLARE_HANDLER(TSessionClosedEvent, SessionClosedHandler_, false); // Not applied 
+#undef DECLARE_HANDLER 
+ 
+        bool Visit() { 
+            return std::visit(*this, EventInfo.GetEvent()); 
+        } 
+ 
+        void Post(const IExecutor::TPtr& executor, IExecutor::TFunction&& f) { 
+            Deferred.DeferStartExecutorTask(executor, std::move(f)); 
+        } 
+ 
+        TDeferredActions& Deferred; 
+    }; 
+ 
+    bool ApplyHandler(TEventInfo& eventInfo, TDeferredActions& deferred) { 
+        THandlersVisitor visitor(Settings, eventInfo, deferred); 
+        return visitor.Visit(); 
+    } 
+ 
+private: 
+    bool HasEventCallbacks; 
+    std::weak_ptr<IUserRetrievedEventCallback> Session; 
+}; 
+ 
+ 
+ 
 } // namespace NYdb::NPersQueue
 
 template <>
@@ -755,8 +755,8 @@ public:
     using TPtr = std::shared_ptr<TSingleClusterReadSessionImpl>;
     using IProcessor = IReadSessionConnectionProcessorFactory::IProcessor;
 
-    friend class TPartitionStreamImpl;
-
+    friend class TPartitionStreamImpl; 
+ 
     TSingleClusterReadSessionImpl(
         const TReadSessionSettings& settings,
         const TString& clusterName,
@@ -823,8 +823,8 @@ private:
         BreakConnectionAndReconnectImpl(TPlainStatus(statusCode, message), deferred);
     }
 
-    bool HasCommitsInflightImpl() const;
-
+    bool HasCommitsInflightImpl() const; 
+ 
     void OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void OnConnect(TPlainStatus&&, typename IProcessor::TPtr&&, const NGrpc::IQueueClientContextPtr& connectContext);
     void DestroyAllPartitionStreamsImpl(TDeferredActions& deferred); // Destroy all streams before setting new connection // Assumes that we're under lock.
@@ -981,7 +981,7 @@ private:
 
     bool WaitingReadResponse = false;
     std::shared_ptr<Ydb::PersQueue::V1::MigrationStreamingReadServerMessage> ServerMessage; // Server message to write server response to.
-    THashMap<ui64, TIntrusivePtr<TPartitionStreamImpl>> PartitionStreams; // assignId -> Partition stream.
+    THashMap<ui64, TIntrusivePtr<TPartitionStreamImpl>> PartitionStreams; // assignId -> Partition stream. 
     TPartitionCookieMapping CookieMapping;
     std::deque<TDecompressionQueueItem> DecompressionQueue;
     bool DataReadingSuspended = false;
@@ -1071,11 +1071,11 @@ private:
     Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest MakeClusterDiscoveryRequest() const;
     void StartClusterDiscovery();
     void OnClusterDiscovery(const TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result);
-    void ProceedWithoutClusterDiscovery();
+    void ProceedWithoutClusterDiscovery(); 
     void RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions& deferred);
-    void CreateClusterSessionsImpl();
+    void CreateClusterSessionsImpl(); 
 
-
+ 
     // Shutdown.
     void Abort(EStatus statusCode, NYql::TIssues&& issues);
     void Abort(EStatus statusCode, const TString& message);

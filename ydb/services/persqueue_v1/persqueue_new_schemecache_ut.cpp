@@ -39,7 +39,7 @@ namespace NKikimr::NPersQueueTests {
     using namespace Ydb::PersQueue::V1;
     using namespace NThreading;
     using namespace NNetClassifier;
-    using namespace NYdb::NPersQueue;
+    using namespace NYdb::NPersQueue; 
     using namespace NPersQueue;
 
     NJson::TJsonValue GetCountersNewSchemeCache(ui16 port, const TString& counters, const TString& subsystem, const TString& topicPath) {
@@ -76,7 +76,7 @@ namespace NKikimr::NPersQueueTests {
             annoyingClient.MkDir("/Root/PQ", "account1");
             annoyingClient.CreateTopicNoLegacy(DEFAULT_TOPIC_PATH, 5, false);
             annoyingClient.CreateTopicNoLegacy("/Root/PQ/account1/topic1", 5, false);
-            annoyingClient.CreateTopicNoLegacy("/Root/account2/topic2", 5);
+            annoyingClient.CreateTopicNoLegacy("/Root/account2/topic2", 5); 
         }
 
         Y_UNIT_TEST(CheckGrpcWriteNoDC) {
@@ -92,16 +92,16 @@ namespace NKikimr::NPersQueueTests {
 
             TPQDataWriter writer("source1", server, DEFAULT_TOPIC_PATH);
 
-            writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
+            writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN); 
             writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
 
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "topic1@" BUILTIN_ACL_DOMAIN);
-            server.AnnoyingClient->ModifyACL("/Root/account2", "topic2", acl.SerializeAsString());
+            server.AnnoyingClient->ModifyACL("/Root/account2", "topic2", acl.SerializeAsString()); 
             server.AnnoyingClient->ModifyACL("/Root/PQ/account1", "topic1", acl.SerializeAsString());
 
             WaitACLModification();
-            writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
+            writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN); 
 
             writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
             writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue2"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
@@ -116,130 +116,130 @@ namespace NKikimr::NPersQueueTests {
             PrepareForGrpcNoDC(*server.AnnoyingClient);
             NYdb::TDriverConfig driverCfg;
 
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
-
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root"); 
+ 
             auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
             auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
 
-            {
-                auto res = persQueueClient->AddReadRule("/Root/account2/topic2", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
-                res.Wait();
-                UNIT_ASSERT(res.GetValue().IsSuccess());
-            }
+            { 
+                auto res = persQueueClient->AddReadRule("/Root/account2/topic2", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1"))); 
+                res.Wait(); 
+                UNIT_ASSERT(res.GetValue().IsSuccess()); 
+            } 
 
             {
                 NACLib::TDiffACL acl;
                 acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@" BUILTIN_ACL_DOMAIN);
-                server.AnnoyingClient->ModifyACL("/Root/account2", "topic2", acl.SerializeAsString());
+                server.AnnoyingClient->ModifyACL("/Root/account2", "topic2", acl.SerializeAsString()); 
             }
 
             WaitACLModification();
 
             {
-                auto writer = CreateSimpleWriter(*ydbDriver, "/Root/account2/topic2", "123", 1);
+                auto writer = CreateSimpleWriter(*ydbDriver, "/Root/account2/topic2", "123", 1); 
                 for (int i = 0; i < 4; ++i) {
-                    bool res = writer->Write(TString(10, 'a'));
-                    UNIT_ASSERT(res);
+                    bool res = writer->Write(TString(10, 'a')); 
+                    UNIT_ASSERT(res); 
                 }
-                bool res = writer->Close(TDuration::Seconds(10));
-                UNIT_ASSERT(res);
+                bool res = writer->Close(TDuration::Seconds(10)); 
+                UNIT_ASSERT(res); 
             }
 
             auto testReadFromTopic = [&](const TString& topicPath) {
-                NYdb::NPersQueue::TReadSessionSettings settings;
-                settings.ConsumerName("user1").AppendTopics(topicPath);
-                auto reader = CreateReader(*ydbDriver, settings);
+                NYdb::NPersQueue::TReadSessionSettings settings; 
+                settings.ConsumerName("user1").AppendTopics(topicPath); 
+                auto reader = CreateReader(*ydbDriver, settings); 
 
-                for (int i = 0; i < 4; ++i) {
-                    auto msg = GetNextMessageSkipAssignment(reader);
-                    UNIT_ASSERT(msg);
-                    Cerr << "GOT MESSAGE: " << DebugString(*msg) << "\n";
+                for (int i = 0; i < 4; ++i) { 
+                    auto msg = GetNextMessageSkipAssignment(reader); 
+                    UNIT_ASSERT(msg); 
+                    Cerr << "GOT MESSAGE: " << DebugString(*msg) << "\n"; 
                 }
             };
 
-            testReadFromTopic("/Root/account2/topic2");
-            testReadFromTopic("account2/topic2");
+            testReadFromTopic("/Root/account2/topic2"); 
+            testReadFromTopic("account2/topic2"); 
         }
 
     }
 
-
-    Y_UNIT_TEST_SUITE(TPersqueueDataPlaneTestSuite) {
+ 
+    Y_UNIT_TEST_SUITE(TPersqueueDataPlaneTestSuite) { 
         Y_UNIT_TEST(WriteSession) {
             TPersQueueV1TestServer server(true);
-
-            TString topic = "/Root/account1/write_topic";
-            TString consumer = "consumer_aba";
-            {
+ 
+            TString topic = "/Root/account1/write_topic"; 
+            TString consumer = "consumer_aba"; 
+            { 
                 auto res = server.PersQueueClient->CreateTopic(topic);
-                res.Wait();
-                UNIT_ASSERT(res.GetValue().IsSuccess());
-            }
-
-            {
+                res.Wait(); 
+                UNIT_ASSERT(res.GetValue().IsSuccess()); 
+            } 
+ 
+            { 
                 auto res = server.PersQueueClient->AddReadRule(topic, TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName(consumer)));
-                res.Wait();
-                UNIT_ASSERT(res.GetValue().IsSuccess());
-            }
-
-            {
+                res.Wait(); 
+                UNIT_ASSERT(res.GetValue().IsSuccess()); 
+            } 
+ 
+            { 
                 auto writer = server.PersQueueClient->CreateSimpleBlockingWriteSession(TWriteSessionSettings()
-                                                                    .Path(topic).MessageGroupId("my_group_1")
-                                                                    .ClusterDiscoveryMode(EClusterDiscoveryMode::Off)
-                                                                    .RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
-                Cerr << "InitSeqNO " << writer->GetInitSeqNo() << "\n";
-                writer->Write("somedata", 1);
-                writer->Close();
-            }
-            {
+                                                                    .Path(topic).MessageGroupId("my_group_1") 
+                                                                    .ClusterDiscoveryMode(EClusterDiscoveryMode::Off) 
+                                                                    .RetryPolicy(IRetryPolicy::GetNoRetryPolicy())); 
+                Cerr << "InitSeqNO " << writer->GetInitSeqNo() << "\n"; 
+                writer->Write("somedata", 1); 
+                writer->Close(); 
+            } 
+            { 
                 auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName("non_existing")
-                                                                        .AppendTopics(topic).DisableClusterDiscovery(true)
-                                                                        .RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
-
-
-                auto future = reader->WaitEvent();
-                future.Wait(TDuration::Seconds(10));
-                UNIT_ASSERT(future.HasValue());
-
-                TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false);
-                UNIT_ASSERT(event.Defined());
-
-                Cerr << "Got new read session event: " << DebugString(*event) << Endl;
-
-                UNIT_ASSERT(std::get_if<TSessionClosedEvent>(&*event));
-            }
-            {
+                                                                        .AppendTopics(topic).DisableClusterDiscovery(true) 
+                                                                        .RetryPolicy(IRetryPolicy::GetNoRetryPolicy())); 
+ 
+ 
+                auto future = reader->WaitEvent(); 
+                future.Wait(TDuration::Seconds(10)); 
+                UNIT_ASSERT(future.HasValue()); 
+ 
+                TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false); 
+                UNIT_ASSERT(event.Defined()); 
+ 
+                Cerr << "Got new read session event: " << DebugString(*event) << Endl; 
+ 
+                UNIT_ASSERT(std::get_if<TSessionClosedEvent>(&*event)); 
+            } 
+            { 
                 auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName(consumer)
-                                                                        .AppendTopics(topic).DisableClusterDiscovery(true)
-                                                                        .RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
-
-
-                auto future = reader->WaitEvent();
-                future.Wait(TDuration::Seconds(10));
-                UNIT_ASSERT(future.HasValue());
-
-                TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false);
-                UNIT_ASSERT(event.Defined());
-
-                Cerr << "Got new read session event: " << DebugString(*event) << Endl;
-
-                UNIT_ASSERT(std::get_if<TReadSessionEvent::TCreatePartitionStreamEvent>(&*event));
-            }
-        }
-    }
-
-    Y_UNIT_TEST_SUITE(TPersqueueControlPlaneTestSuite) {
+                                                                        .AppendTopics(topic).DisableClusterDiscovery(true) 
+                                                                        .RetryPolicy(IRetryPolicy::GetNoRetryPolicy())); 
+ 
+ 
+                auto future = reader->WaitEvent(); 
+                future.Wait(TDuration::Seconds(10)); 
+                UNIT_ASSERT(future.HasValue()); 
+ 
+                TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(false); 
+                UNIT_ASSERT(event.Defined()); 
+ 
+                Cerr << "Got new read session event: " << DebugString(*event) << Endl; 
+ 
+                UNIT_ASSERT(std::get_if<TReadSessionEvent::TCreatePartitionStreamEvent>(&*event)); 
+            } 
+        } 
+    } 
+ 
+    Y_UNIT_TEST_SUITE(TPersqueueControlPlaneTestSuite) { 
         Y_UNIT_TEST(SetupReadLockSessionWithDatabase) {
             TPersQueueV1TestServer server;
-
-            {
+ 
+            { 
                 auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user")));
-                res.Wait();
-                Cerr << "ADD RESULT " << res.GetValue().GetIssues().ToString() << "\n";
-                UNIT_ASSERT(res.GetValue().IsSuccess());
-            }
-
-
+                res.Wait(); 
+                Cerr << "ADD RESULT " << res.GetValue().GetIssues().ToString() << "\n"; 
+                UNIT_ASSERT(res.GetValue().IsSuccess()); 
+            } 
+ 
+ 
             auto stub = Ydb::PersQueue::V1::PersQueueService::NewStub(server.InsecureChannel);
             grpc::ClientContext grpcContext;
             grpcContext.AddMetadata("x-ydb-database", "/Root/acc");
@@ -309,12 +309,12 @@ namespace NKikimr::NPersQueueTests {
                 addRuleRequest.set_path("topic1");
                 auto* rr = addRuleRequest.mutable_read_rule();
                 rr->set_consumer_name("goodUser");
-                rr->set_version(0);
+                rr->set_version(0); 
                 rr->set_important(true);
                 rr->set_supported_format(TopicSettings::FORMAT_BASE);
                 rr->add_supported_codecs(CODEC_ZSTD);
                 auto status = stub->AddReadRule(&grpcContext, addRuleRequest, &addRuleResponse);
-                Cerr << "ADD RR RESPONSE " << addRuleResponse << "\n";
+                Cerr << "ADD RR RESPONSE " << addRuleResponse << "\n"; 
                 UNIT_ASSERT(status.ok() && addRuleResponse.operation().status() == Ydb::StatusIds::SUCCESS);
                 addRuleRequest.set_path(path);
             }
@@ -337,11 +337,11 @@ namespace NKikimr::NPersQueueTests {
                 auto status = stub->RemoveReadRule(&grpcContext, removeRuleRequest, &removeRuleResponse);
                 UNIT_ASSERT(status.ok() && removeRuleResponse.operation().status() == Ydb::StatusIds::NOT_FOUND);
             }
-            auto findReadRule = [&](const TString& consumerName, const TMaybe<i64> version, const TopicSettings& settings) {
+            auto findReadRule = [&](const TString& consumerName, const TMaybe<i64> version, const TopicSettings& settings) { 
                 for (const auto& rr : settings.read_rules()) {
                     if (rr.consumer_name() == consumerName) {
-                        Cerr << rr << "\n";
-                        return !version || rr.version() == *version;
+                        Cerr << rr << "\n"; 
+                        return !version || rr.version() == *version; 
                     }
                 }
                 return false;
@@ -358,7 +358,7 @@ namespace NKikimr::NPersQueueTests {
                 Ydb::PersQueue::V1::DescribeTopicResult res;
                 UNIT_ASSERT(status.ok() && describeTopicResponse.operation().status() == Ydb::StatusIds::SUCCESS);
                 describeTopicResponse.operation().result().UnpackTo(&res);
-                UNIT_ASSERT(findReadRule("goodUser", 1, res.settings()));
+                UNIT_ASSERT(findReadRule("goodUser", 1, res.settings())); 
                 addRuleRequest.set_path(path);
             }
 
@@ -376,31 +376,31 @@ namespace NKikimr::NPersQueueTests {
                 stub->DescribeTopic(&grpcContext, describeTopicRequest, &describeTopicResponse);
                 Ydb::PersQueue::V1::DescribeTopicResult res;
                 describeTopicResponse.operation().result().UnpackTo(&res);
-                UNIT_ASSERT(!findReadRule("goodUser", {}, res.settings()));
+                UNIT_ASSERT(!findReadRule("goodUser", {}, res.settings())); 
             }
-
-            {
-                grpc::ClientContext grpcContext;
-                auto* rr = addRuleRequest.mutable_read_rule();
-                rr->set_consumer_name("goodUser");
-                rr->set_version(0);
-                rr->set_important(true);
-                rr->set_supported_format(TopicSettings::FORMAT_BASE);
-                rr->add_supported_codecs(CODEC_ZSTD);
-                auto status = stub->AddReadRule(&grpcContext, addRuleRequest, &addRuleResponse);
-                Cerr << addRuleResponse << "\n";
-                UNIT_ASSERT(status.ok() && addRuleResponse.operation().status() == Ydb::StatusIds::SUCCESS);
-            }
-
-            {
-                grpc::ClientContext grpcContext;
-                auto status = stub->DescribeTopic(&grpcContext, describeTopicRequest, &describeTopicResponse);
-                Ydb::PersQueue::V1::DescribeTopicResult res;
-                UNIT_ASSERT(status.ok() && describeTopicResponse.operation().status() == Ydb::StatusIds::SUCCESS);
-                describeTopicResponse.operation().result().UnpackTo(&res);
-                UNIT_ASSERT(findReadRule("goodUser", 3, res.settings())); // version is 3 : add, remove and add
-            }
-
+ 
+            { 
+                grpc::ClientContext grpcContext; 
+                auto* rr = addRuleRequest.mutable_read_rule(); 
+                rr->set_consumer_name("goodUser"); 
+                rr->set_version(0); 
+                rr->set_important(true); 
+                rr->set_supported_format(TopicSettings::FORMAT_BASE); 
+                rr->add_supported_codecs(CODEC_ZSTD); 
+                auto status = stub->AddReadRule(&grpcContext, addRuleRequest, &addRuleResponse); 
+                Cerr << addRuleResponse << "\n"; 
+                UNIT_ASSERT(status.ok() && addRuleResponse.operation().status() == Ydb::StatusIds::SUCCESS); 
+            } 
+ 
+            { 
+                grpc::ClientContext grpcContext; 
+                auto status = stub->DescribeTopic(&grpcContext, describeTopicRequest, &describeTopicResponse); 
+                Ydb::PersQueue::V1::DescribeTopicResult res; 
+                UNIT_ASSERT(status.ok() && describeTopicResponse.operation().status() == Ydb::StatusIds::SUCCESS); 
+                describeTopicResponse.operation().result().UnpackTo(&res); 
+                UNIT_ASSERT(findReadRule("goodUser", 3, res.settings())); // version is 3 : add, remove and add 
+            } 
+ 
         }
     }
 }

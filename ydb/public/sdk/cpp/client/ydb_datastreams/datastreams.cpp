@@ -83,7 +83,7 @@ namespace NYdb::NDataStreams::V1 {
                                                              [&](Ydb::DataStreams::V1::ListStreamsRequest& req) {
                                                                  req.set_exclusive_start_stream_name(settings.ExclusiveStartStreamName_);
                                                                  req.set_limit(settings.Limit_);
-                                                                 req.set_recurse(settings.Recurse_);
+                                                                 req.set_recurse(settings.Recurse_); 
                                                              });
         }
 

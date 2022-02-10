@@ -1627,10 +1627,10 @@ public:
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
-    TSession GetSession() const {
-        return Session_;
-    }
-
+    TSession GetSession() const { 
+        return Session_; 
+    } 
+ 
 private:
     TTransaction(const TSession& session, const TString& txId);
 

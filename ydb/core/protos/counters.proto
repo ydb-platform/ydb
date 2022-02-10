@@ -22,37 +22,37 @@ message TTxTypeOptions {
     optional string Name = 1;
 }
 
-message TLabeledCounterOptions {
-    enum ECounterType {
-        CT_SIMPLE = 1;
-        CT_TIMELAG = 2;
-        CT_DERIV = 3;
-    }
-
-    enum EAggregateFunc { //must be consistent with TTabletLabeledCountersBase::EAggreagateFunc
-        EAF_MAX = 1;
-        EAF_MIN = 2;
-        EAF_SUM = 3;
-    }
-
-    optional string Name = 1;
-    optional EAggregateFunc AggrFunc = 2;
-    optional ECounterType Type = 3 [default = CT_SIMPLE];
-}
-
-message TLabeledCounterGroupNamesOptions {
-    repeated string Names = 1;
-}
-
+message TLabeledCounterOptions { 
+    enum ECounterType { 
+        CT_SIMPLE = 1; 
+        CT_TIMELAG = 2; 
+        CT_DERIV = 3; 
+    } 
+ 
+    enum EAggregateFunc { //must be consistent with TTabletLabeledCountersBase::EAggreagateFunc 
+        EAF_MAX = 1; 
+        EAF_MIN = 2; 
+        EAF_SUM = 3; 
+    } 
+ 
+    optional string Name = 1; 
+    optional EAggregateFunc AggrFunc = 2; 
+    optional ECounterType Type = 3 [default = CT_SIMPLE]; 
+} 
+ 
+message TLabeledCounterGroupNamesOptions { 
+    repeated string Names = 1; 
+} 
+ 
 extend google.protobuf.EnumValueOptions {
     optional TCounterOptions CounterOpts = 56672;
     optional TTxTypeOptions TxTypeOpts = 56673;
-    optional TLabeledCounterOptions LabeledCounterOpts = 56676;
+    optional TLabeledCounterOptions LabeledCounterOpts = 56676; 
 }
 
 extend google.protobuf.EnumOptions {
     optional TCounterOptions GlobalCounterOpts = 56674;
-    optional TLabeledCounterGroupNamesOptions GlobalGroupNamesOpts = 56677;
+    optional TLabeledCounterGroupNamesOptions GlobalGroupNamesOpts = 56677; 
 }
 
 extend google.protobuf.FileOptions {

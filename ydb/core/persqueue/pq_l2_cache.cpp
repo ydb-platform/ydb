@@ -57,7 +57,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
         }
 
         Y_VERIFY(key.TopicName == resp->TopicName, "PQ L2. Multiple topics in one PQ tablet.");
-        resp->Removed.push_back({key.Partition, key.Offset, key.PartNo, evicted});
+        resp->Removed.push_back({key.Partition, key.Offset, key.PartNo, evicted}); 
 
         RetentionTime = now - evicted->GetAccessTime();
         if (RetentionTime < KeepTime)
@@ -88,7 +88,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, TString topic, const 
             continue;
         }
 
-        Y_VERIFY(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE);
+        Y_VERIFY(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE); 
 
         CurrentSize += blob.Value->DataSize();
 

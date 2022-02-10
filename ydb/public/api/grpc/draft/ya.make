@@ -14,7 +14,7 @@ OWNER(
 SRCS(
     dummy.proto
     ydb_clickhouse_internal_v1.proto
-    ydb_persqueue_v1.proto
+    ydb_persqueue_v1.proto 
     ydb_datastreams_v1.proto
     ydb_experimental_v1.proto
     ydb_s3_internal_v1.proto

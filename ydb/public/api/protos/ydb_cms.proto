@@ -86,11 +86,11 @@ message DatabaseQuotas {
     // again. This is useful to help avoid database from rapidly entering and
     // exiting from the overloaded state.
     uint64 data_size_soft_quota = 2;
-
-    // A maximum count of shards in all data streams.
-    uint64 data_stream_shards_quota = 3;
-    // A maximum storage that will be reserved for all data stream shards.
-    uint64 data_stream_reserved_storage_quota = 5;
+ 
+    // A maximum count of shards in all data streams. 
+    uint64 data_stream_shards_quota = 3; 
+    // A maximum storage that will be reserved for all data stream shards. 
+    uint64 data_stream_reserved_storage_quota = 5; 
     // A minimum value of `TtlSettings.run_interval_seconds` that can be specified.
     // Default is 1800 (15 minutes).
     uint32 ttl_min_run_internal_seconds = 4;

@@ -36,9 +36,9 @@ enum EStatus  {
     StatusPreconditionFailed = 14;
     StatusRedirectDomain = 15;
     StatusQuotaExceeded = 16;
-    StatusResourceExhausted = 17;
+    StatusResourceExhausted = 17; 
     StatusReserved18 = 18;
-    StatusReserved19 = 19;
+    StatusReserved19 = 19; 
     // when adding a new status and keeping parse compatibility with the old version
     // rename existing reserved status to desired one, and add new reserved status to
     // the end of reserved statuses
@@ -141,8 +141,8 @@ message TSchemeLimits {
 
     optional uint64 MaxPathElementLength = 12;
     optional string ExtraPathSymbolsAllowed = 13;
-
-    optional uint64 MaxPQPartitions = 14;
+ 
+    optional uint64 MaxPQPartitions = 14; 
 }
 
 message TEvInitTenantSchemeShard {

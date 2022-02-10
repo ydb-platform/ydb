@@ -32,13 +32,13 @@ namespace NKikimr {
     XX(EDM_COMPILE_AND_EXEC_MINIKQL, "minikql-exec", "compile and execute MiniKQL program") \
     XX(EDM_TRACE, "mb-trace", "control message bus trace") \
     XX(EDM_KEYVALUE_REQUEST, "keyvalue-request", "send protobuf request to a keyvalue tablet") \
-    XX(EDM_PERSQUEUE_REQUEST, "persqueue-request", "send protobuf request to a persqueue tablet") \
-    XX(EDM_PERSQUEUE_STRESS, "persqueue-stress", "stress read or write to a persqueue tablet") \
+    XX(EDM_PERSQUEUE_REQUEST, "persqueue-request", "send protobuf request to a persqueue tablet") \ 
+    XX(EDM_PERSQUEUE_STRESS, "persqueue-stress", "stress read or write to a persqueue tablet") \ 
     XX(EDM_PERSQUEUE_DISCOVER_CLUSTERS, "persqueue-discover-clusters", "persqueue session clusters discovery") \
     XX(EDM_LOAD_REQUEST, "bs-load-test", "send protobuf request to blobstorage test load actor (https://wiki.yandex-team.ru/kikimr/developers/BSLoadTest/)") \
     XX(EDM_ACTORSYS_PERFTEST, "actorsys-perf-test", "make actorsystem performance test") \
 
-
+ 
 CLI_MODES_IMPL(EDriverMode, EDM_NO, MODE_MAP);
 
 }

@@ -12,7 +12,7 @@ message TExecutorSettings {
         optional uint32 TabletChannelIndex = 4;
         optional bool KeepInMemory = 5;
     }
-
+ 
     message TCompactionPolicy {
         message TGenerationPolicy {
             optional uint32 GenerationId = 1;

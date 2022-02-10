@@ -257,7 +257,7 @@ namespace Tests {
 
         GRpcServerRootCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto& counters = GRpcServerRootCounters;
-
+ 
         auto& appData = Runtime->GetAppData();
 
         // Setup discovery for typically used services on the node
@@ -282,8 +282,8 @@ namespace Tests {
         auto future = grpcService->Prepare(
             system,
             NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
-            NMsgBusProxy::CreateMsgBusProxyId(),
-            counters
+            NMsgBusProxy::CreateMsgBusProxyId(), 
+            counters 
         );
         auto startCb = [grpcService] (NThreading::TFuture<void> result) {
             if (result.HasException()) {
@@ -1556,19 +1556,19 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::DeleteTopic(const TString& parent, const TString& name) {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
+    NMsgBusProxy::EResponseStatus TClient::DeleteTopic(const TString& parent, const TString& name) { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
-        op->SetWorkingDir(parent);
-        op->MutableDrop()->SetName(name);
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
+        op->SetWorkingDir(parent); 
+        op->MutableDrop()->SetName(name); 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::TryDropPersQueueGroup(const TString& parent, const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto * op = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -2026,7 +2026,7 @@ namespace Tests {
             TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"));
             if (!res.empty() && !res.Contains("Error"))
                 return res;
-
+ 
         }
         UNIT_ASSERT_C(false, "Failed to mark node in hive");
         return TString();

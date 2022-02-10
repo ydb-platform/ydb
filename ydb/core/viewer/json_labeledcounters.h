@@ -21,9 +21,9 @@ class TJsonLabeledCounters : public TActorBootstrapped<TJsonLabeledCounters> {
     TJsonSettings JsonSettings;
     TString Groups;
     TString GroupNames;
-    TString Topic;
-    TString Consumer;
-    TString DC;
+    TString Topic; 
+    TString Consumer; 
+    TString DC; 
     TVector<TString> Counters;
     ui32 Version = 1;
     ui32 Timeout = 0;
@@ -44,29 +44,29 @@ public:
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Groups = params.Get("group");
-        Topic = NPersQueue::ConvertNewTopicName(params.Get("topic"));
-        if (Topic.empty())
-            Topic = "*";
+        Topic = NPersQueue::ConvertNewTopicName(params.Get("topic")); 
+        if (Topic.empty()) 
+            Topic = "*"; 
         Consumer = NPersQueue::ConvertNewConsumerName(params.Get("consumer"), ctx);
-        DC = params.Get("dc");
-        if (DC.empty())
-            DC = "*";
+        DC = params.Get("dc"); 
+        if (DC.empty()) 
+            DC = "*"; 
         GroupNames = params.Get("group_names");
         Split(params.Get("counters"), ",", Counters);
         Version = FromStringWithDefault<ui32>(params.Get("version"), Version);
         Sort(Counters);
-        if (Version >= 3) {
-            TString topic = "rt3." + DC + "--" + Topic;
-            if (!Consumer.empty()) {
-                Groups = Consumer + "/*/" + topic;
-                if (Topic != "*") {
-                    Groups += "," + topic;
-                }
-            } else {
-                Groups = topic;
-            }
-        }
-        CreateClusterLabeledCountersAggregator(ctx.SelfID, TTabletTypes::PERSQUEUE, ctx, Version, Version >= 2 ? Groups : TString());
+        if (Version >= 3) { 
+            TString topic = "rt3." + DC + "--" + Topic; 
+            if (!Consumer.empty()) { 
+                Groups = Consumer + "/*/" + topic; 
+                if (Topic != "*") { 
+                    Groups += "," + topic; 
+                } 
+            } else { 
+                Groups = topic; 
+            } 
+        } 
+        CreateClusterLabeledCountersAggregator(ctx.SelfID, TTabletTypes::PERSQUEUE, ctx, Version, Version >= 2 ? Groups : TString()); 
         Become(&TThis::StateRequestedTopicInfo, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
@@ -104,7 +104,7 @@ public:
                     }
                 }
             }
-        } else if (Version >= 2) {
+        } else if (Version >= 2) { 
             const NKikimrTabletCountersAggregator::TEvTabletLabeledCountersResponse& source(ev->Get()->Record);
             TVector<TMaybe<ui32>> counterNamesMapping;
             counterNamesMapping.reserve(source.CounterNamesSize());

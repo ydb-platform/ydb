@@ -345,8 +345,8 @@ namespace NSchemeShardUT_Private {
     void SetSchemeshardReadOnlyMode(TTestActorRuntime& runtime, bool isReadOnly);
     void SetSchemeshardSchemaLimits(TTestActorRuntime& runtime, NSchemeShard::TSchemeLimits limits);
     void SetSchemeshardSchemaLimits(TTestActorRuntime& runtime, NSchemeShard::TSchemeLimits limits, ui64 schemeShard);
-    void SetSchemeshardDatabaseQuotas(TTestActorRuntime& runtime, Ydb::Cms::DatabaseQuotas databaseQuotas, ui64 domainId);
-    void SetSchemeshardDatabaseQuotas(TTestActorRuntime& runtime, Ydb::Cms::DatabaseQuotas databaseQuotas, ui64 dimainId, ui64 schemeShard);
+    void SetSchemeshardDatabaseQuotas(TTestActorRuntime& runtime, Ydb::Cms::DatabaseQuotas databaseQuotas, ui64 domainId); 
+    void SetSchemeshardDatabaseQuotas(TTestActorRuntime& runtime, Ydb::Cms::DatabaseQuotas databaseQuotas, ui64 dimainId, ui64 schemeShard); 
 
     NKikimrSchemeOp::TTableDescription GetDatashardSchema(TTestActorRuntime& runtime, ui64 tabletId, ui64 tid);
 

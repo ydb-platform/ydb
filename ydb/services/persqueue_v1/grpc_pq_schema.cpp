@@ -1,126 +1,126 @@
-#include "grpc_pq_schema.h"
-#include "grpc_pq_actor.h"
-
+#include "grpc_pq_schema.h" 
+#include "grpc_pq_actor.h" 
+ 
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-
+ 
 #include <ydb/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
-
-#include <algorithm>
-
-using namespace NActors;
-using namespace NKikimrClient;
-
-using grpc::Status;
-
+ 
+#include <algorithm> 
+ 
+using namespace NActors; 
+using namespace NKikimrClient; 
+ 
+using grpc::Status; 
+ 
 namespace NKikimr::NGRpcProxy::V1 {
-
+ 
 constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
 
-///////////////////////////////////////////////////////////////////////////////
-
-using namespace PersQueue::V1;
-
-
+/////////////////////////////////////////////////////////////////////////////// 
+ 
+using namespace PersQueue::V1; 
+ 
+ 
 IActor* CreatePQSchemaService(const TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
-    return new TPQSchemaService(schemeCache, counters);
-}
-
-
-
+    return new TPQSchemaService(schemeCache, counters); 
+} 
+ 
+ 
+ 
 TPQSchemaService::TPQSchemaService(const TActorId& schemeCache,
-                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
-    : SchemeCache(schemeCache)
-    , Counters(counters)
-    , LocalCluster("")
-{
-}
-
-
-void TPQSchemaService::Bootstrap(const TActorContext& ctx) {
+                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters) 
+    : SchemeCache(schemeCache) 
+    , Counters(counters) 
+    , LocalCluster("") 
+{ 
+} 
+ 
+ 
+void TPQSchemaService::Bootstrap(const TActorContext& ctx) { 
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { // ToDo[migration]: switch to haveClusters
         ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
                  new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
-    }
-
-    Become(&TThis::StateFunc);
-}
-
-
-void TPQSchemaService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev) {
-    Y_VERIFY(ev->Get()->ClustersList);
-    Y_VERIFY(ev->Get()->ClustersList->Clusters.size());
-
-    const auto& clusters = ev->Get()->ClustersList->Clusters;
-
-    LocalCluster = {};
-
-    auto it = std::find_if(begin(clusters), end(clusters), [](const auto& cluster) { return cluster.IsLocal; });
-    if (it != end(clusters)) {
-        LocalCluster = it->Name;
-    }
-
-    Clusters.resize(clusters.size());
-    for (size_t i = 0; i < clusters.size(); ++i) {
-        Clusters[i] = clusters[i].Name;
-    }
-}
-
-
-google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> FillResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
-    google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> res;
-    FillIssue(res.Add(), code, errorReason);
-    return res;
-}
-
-
-void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQDropTopicRequest::TPtr& ev, const TActorContext& ctx) {
-
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new drop topic request");
-
-    ctx.Register(new TDropTopicActor(ev->Release().Release()));
-}
-
-
-
-
-TDropTopicActor::TDropTopicActor(NKikimr::NGRpcService::TEvPQDropTopicRequest* request)
+    } 
+ 
+    Become(&TThis::StateFunc); 
+} 
+ 
+ 
+void TPQSchemaService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev) { 
+    Y_VERIFY(ev->Get()->ClustersList); 
+    Y_VERIFY(ev->Get()->ClustersList->Clusters.size()); 
+ 
+    const auto& clusters = ev->Get()->ClustersList->Clusters; 
+ 
+    LocalCluster = {}; 
+ 
+    auto it = std::find_if(begin(clusters), end(clusters), [](const auto& cluster) { return cluster.IsLocal; }); 
+    if (it != end(clusters)) { 
+        LocalCluster = it->Name; 
+    } 
+ 
+    Clusters.resize(clusters.size()); 
+    for (size_t i = 0; i < clusters.size(); ++i) { 
+        Clusters[i] = clusters[i].Name; 
+    } 
+} 
+ 
+ 
+google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> FillResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) { 
+    google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> res; 
+    FillIssue(res.Add(), code, errorReason); 
+    return res; 
+} 
+ 
+ 
+void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQDropTopicRequest::TPtr& ev, const TActorContext& ctx) { 
+ 
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new drop topic request"); 
+ 
+    ctx.Register(new TDropTopicActor(ev->Release().Release())); 
+} 
+ 
+ 
+ 
+ 
+TDropTopicActor::TDropTopicActor(NKikimr::NGRpcService::TEvPQDropTopicRequest* request) 
     : TBase(request, request->GetProtoRequest()->path())
-{
-}
-
-void TDropTopicActor::Bootstrap(const NActors::TActorContext& ctx)
-{
-    TBase::Bootstrap(ctx);
-    SendProposeRequest(ctx);
-    Become(&TDropTopicActor::StateWork);
-}
-
-
+{ 
+} 
+ 
+void TDropTopicActor::Bootstrap(const NActors::TActorContext& ctx) 
+{ 
+    TBase::Bootstrap(ctx); 
+    SendProposeRequest(ctx); 
+    Become(&TDropTopicActor::StateWork); 
+} 
+ 
+ 
 void TDropTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                          const TString& workingDir, const TString& name)
 {
     Y_UNUSED(ctx);
     NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-    modifyScheme.SetWorkingDir(workingDir);
+    modifyScheme.SetWorkingDir(workingDir); 
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
-    modifyScheme.MutableDrop()->SetName(name);
-}
-
-TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvPQDescribeTopicRequest* request)
+    modifyScheme.MutableDrop()->SetName(name); 
+} 
+ 
+TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvPQDescribeTopicRequest* request) 
     : TBase(request, request->GetProtoRequest()->path())
-{
-}
-
-void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-    switch (ev->GetTypeRewrite()) {
-        default: TBase::StateWork(ev, ctx);
-    }
-}
-
-
+{ 
+} 
+ 
+void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
+    switch (ev->GetTypeRewrite()) { 
+        default: TBase::StateWork(ev, ctx); 
+    } 
+} 
+ 
+ 
 void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
     Y_VERIFY(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev, ctx)) {
@@ -130,9 +130,9 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
     const auto& response = ev->Get()->Request.Get()->ResultSet.front();
 
     const TString path = JoinSeq("/", response.Path);
-
+ 
     Ydb::PersQueue::V1::DescribeTopicResult result;
-
+ 
     auto settings = result.mutable_settings();
     Ydb::Scheme::Entry *selfEntry = result.mutable_self();
     const auto& selfInfo = response.Self->Info;
@@ -142,16 +142,16 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
     if (response.PQGroupInfo) {
         const auto &pqDescr = response.PQGroupInfo->Description;
         settings->set_partitions_count(pqDescr.GetTotalGroupCount());
-
+ 
         const auto &config = pqDescr.GetPQTabletConfig();
         if (!config.GetRequireAuthWrite()) {
             (*settings->mutable_attributes())["_allow_unauthenticated_write"] = "true";
         }
-
+ 
         if (!config.GetRequireAuthRead()) {
             (*settings->mutable_attributes())["_allow_unauthenticated_read"] = "true";
         }
-
+ 
         if (pqDescr.GetPartitionPerTablet() != 2) {
             (*settings->mutable_attributes())["_partitions_per_tablet"] =
                 TStringBuilder() << pqDescr.GetPartitionPerTablet();
@@ -171,15 +171,15 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         settings->set_retention_period_ms(partConfig.GetLifetimeSeconds() * 1000);
         settings->set_message_group_seqno_retention_period_ms(partConfig.GetSourceIdLifetimeSeconds() * 1000);
         settings->set_max_partition_message_groups_seqno_stored(partConfig.GetSourceIdMaxCounts());
-
+ 
         if (local) {
             settings->set_max_partition_write_speed(partConfig.GetWriteSpeedInBytesPerSecond());
             settings->set_max_partition_write_burst(partConfig.GetBurstSize());
         }
-
+ 
         settings->set_supported_format(
                                        (Ydb::PersQueue::V1::TopicSettings::Format) (config.GetFormatVersion() + 1));
-
+ 
         for (const auto &codec : config.GetCodecs().GetIds()) {
             settings->add_supported_codecs((Ydb::PersQueue::V1::Codec) (codec + 1));
         }
@@ -201,7 +201,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
                 if (c == config.GetReadRules(i)) {
                     important = true;
                     break;
-                }
+                } 
             }
             rr->set_important(important);
 
@@ -251,34 +251,34 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
                                                                                                                    partConfig.GetMirrorFrom().GetCredentials().GetIam().GetServiceAccountKey())
                                                                                        );
                 }
-            }
+            } 
             rmr->set_database(partConfig.GetMirrorFrom().GetDatabase());
-        }
-    }
+        } 
+    } 
     return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
-}
-
-
-void TDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx)
-{
-    TBase::Bootstrap(ctx);
+} 
+ 
+ 
+void TDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx) 
+{ 
+    TBase::Bootstrap(ctx); 
 
     SendDescribeProposeRequest(ctx);
-    Become(&TDescribeTopicActor::StateWork);
-}
-
-
+    Become(&TDescribeTopicActor::StateWork); 
+} 
+ 
+ 
 TAddReadRuleActor::TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest* request)
     : TBase(request, request->GetProtoRequest()->path())
 {
 }
-
+ 
 void TAddReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
     TBase::Bootstrap(ctx);
     SendDescribeProposeRequest(ctx);
     Become(&TBase::StateWork);
-}
-
+} 
+ 
 void TAddReadRuleActor::ModifyPersqueueConfig(
     const TActorContext& ctx,
     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
@@ -289,20 +289,20 @@ void TAddReadRuleActor::ModifyPersqueueConfig(
 
     auto* pqConfig = groupConfig.MutablePQTabletConfig();
     auto rule = GetProtoRequest()->read_rule();
-
-    if (rule.version() == 0) {
+ 
+    if (rule.version() == 0) { 
         rule.set_version(selfInfo.GetVersion().GetPQVersion());
-    }
-    auto serviceTypes = GetSupportedClientServiceTypes(ctx);
-    TString error = AddReadRuleToConfig(pqConfig, rule, serviceTypes, ctx);
-    bool hasDuplicates = false;
+    } 
+    auto serviceTypes = GetSupportedClientServiceTypes(ctx); 
+    TString error = AddReadRuleToConfig(pqConfig, rule, serviceTypes, ctx); 
+    bool hasDuplicates = false; 
     if (error.Empty()) {
-        hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error);
+        hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error); 
     }
 
     if (!error.Empty()) {
         return ReplyWithError(hasDuplicates ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::BAD_REQUEST,
-                              hasDuplicates ? Ydb::PersQueue::ErrorCode::OK : Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
+                              hasDuplicates ? Ydb::PersQueue::ErrorCode::OK : Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx); 
     }
 }
 
@@ -337,41 +337,41 @@ void TRemoveReadRuleActor::ModifyPersqueueConfig(
     }
 }
 
-TCreateTopicActor::TCreateTopicActor(NKikimr::NGRpcService::TEvPQCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters)
+TCreateTopicActor::TCreateTopicActor(NKikimr::NGRpcService::TEvPQCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters) 
     : TBase(request, request->GetProtoRequest()->path())
-    , LocalCluster(localCluster)
-    , Clusters(clusters)
-{
-    Y_ASSERT(request);
-}
-
-void TCreateTopicActor::Bootstrap(const NActors::TActorContext& ctx)
-{
-    TBase::Bootstrap(ctx);
-    SendProposeRequest(ctx);
-    Become(&TCreateTopicActor::StateWork);
-}
-
-
-TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::TEvPQAlterTopicRequest* request)
+    , LocalCluster(localCluster) 
+    , Clusters(clusters) 
+{ 
+    Y_ASSERT(request); 
+} 
+ 
+void TCreateTopicActor::Bootstrap(const NActors::TActorContext& ctx) 
+{ 
+    TBase::Bootstrap(ctx); 
+    SendProposeRequest(ctx); 
+    Become(&TCreateTopicActor::StateWork); 
+} 
+ 
+ 
+TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::TEvPQAlterTopicRequest* request) 
     : TBase(request, request->GetProtoRequest()->path())
-{
-    Y_ASSERT(request);
-}
-
-void TAlterTopicActor::Bootstrap(const NActors::TActorContext& ctx)
-{
-    TBase::Bootstrap(ctx);
-    SendProposeRequest(ctx);
-    Become(&TAlterTopicActor::StateWork);
-}
-
+{ 
+    Y_ASSERT(request); 
+} 
+ 
+void TAlterTopicActor::Bootstrap(const NActors::TActorContext& ctx) 
+{ 
+    TBase::Bootstrap(ctx); 
+    SendProposeRequest(ctx); 
+    Become(&TAlterTopicActor::StateWork); 
+} 
+ 
 void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                             const TString& workingDir, const TString& name)
 {
     NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-    modifyScheme.SetWorkingDir(workingDir);
-
+    modifyScheme.SetWorkingDir(workingDir); 
+ 
     {
         TString error;
         auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, false, error);
@@ -380,48 +380,48 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
             return ReplyWithResult(status, ctx);
         }
     }
-
-    const auto& pqDescr = modifyScheme.GetCreatePersQueueGroup();
-    const auto& config = pqDescr.GetPQTabletConfig();
-
-    if (!LocalCluster.empty() && config.GetLocalDC() && config.GetDC() != LocalCluster) {
-        Request_->RaiseIssue(FillIssue(TStringBuilder() << "Local cluster is not correct - provided '" << config.GetDC()
-                                    << "' instead of " << LocalCluster, PersQueue::ErrorCode::BAD_REQUEST));
-        return ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, ctx);
-    }
+ 
+    const auto& pqDescr = modifyScheme.GetCreatePersQueueGroup(); 
+    const auto& config = pqDescr.GetPQTabletConfig(); 
+ 
+    if (!LocalCluster.empty() && config.GetLocalDC() && config.GetDC() != LocalCluster) { 
+        Request_->RaiseIssue(FillIssue(TStringBuilder() << "Local cluster is not correct - provided '" << config.GetDC() 
+                                    << "' instead of " << LocalCluster, PersQueue::ErrorCode::BAD_REQUEST)); 
+        return ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, ctx); 
+    } 
     if (Count(Clusters, config.GetDC()) == 0 && !Clusters.empty()) {
         Request_->RaiseIssue(FillIssue(TStringBuilder() << "Unknown cluster '" << config.GetDC() << "'", PersQueue::ErrorCode::BAD_REQUEST));
-        return ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, ctx);
-    }
-}
-
-
+        return ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, ctx); 
+    } 
+} 
+ 
+ 
 void TAlterTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                             const TString& workingDir, const TString& name) {
     NKikimrSchemeOp::TModifyScheme &modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-    modifyScheme.SetWorkingDir(workingDir);
+    modifyScheme.SetWorkingDir(workingDir); 
     TString error;
     auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, true, error);
     if (!error.empty()) {
         Request_->RaiseIssue(FillIssue(error, PersQueue::ErrorCode::BAD_REQUEST));
 
         return ReplyWithResult(status, ctx);
-    }
-}
-
-
-
-
-void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQAlterTopicRequest::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Alter topic request");
-    ctx.Register(new TAlterTopicActor(ev->Release().Release()));
-}
-
+    } 
+} 
+ 
+ 
+ 
+ 
+void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQAlterTopicRequest::TPtr& ev, const TActorContext& ctx) { 
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Alter topic request"); 
+    ctx.Register(new TAlterTopicActor(ev->Release().Release())); 
+} 
+ 
 void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Add read rules request");
     ctx.Register(new TAddReadRuleActor(ev->Release().Release()));
 }
-
+ 
 void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Remove read rules request");
     ctx.Register(new TRemoveReadRuleActor(ev->Release().Release()));
@@ -432,30 +432,30 @@ void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQCreateTopicRequest::TP
     ctx.Register(new TCreateTopicActor(ev->Release().Release(), LocalCluster, Clusters));
 }
 
-void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
-    ctx.Register(new TDescribeTopicActor(ev->Release().Release()));
-}
-
-
-}
-
-
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQDropTopicRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
-}
-
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQCreateTopicRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
-}
-
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQAlterTopicRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
-}
-
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
-}
+void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx) { 
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Describe topic request"); 
+    ctx.Register(new TDescribeTopicActor(ev->Release().Release())); 
+} 
+ 
+ 
+} 
+ 
+ 
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQDropTopicRequest::TPtr& ev, const TActorContext& ctx) { 
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release()); 
+} 
+ 
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQCreateTopicRequest::TPtr& ev, const TActorContext& ctx) { 
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release()); 
+} 
+ 
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQAlterTopicRequest::TPtr& ev, const TActorContext& ctx) { 
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release()); 
+} 
+ 
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx) { 
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release()); 
+} 
 
 void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());

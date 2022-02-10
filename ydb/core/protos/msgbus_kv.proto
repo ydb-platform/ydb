@@ -6,14 +6,14 @@ message TKeyValueRequest {
     enum EStorageChannel {
         MAIN = 0;
         EXTRA = 1;
-        EXTRA2 = 2;
+        EXTRA2 = 2; 
         EXTRA3 = 3;
         EXTRA4 = 4;
         EXTRA5 = 5;
-        EXTRA6 = 6;
-        EXTRA7 = 7;
-        EXTRA8 = 8;
-        EXTRA9 = 9;
+        EXTRA6 = 6; 
+        EXTRA7 = 7; 
+        EXTRA8 = 8; 
+        EXTRA9 = 9; 
 
         INLINE = 65535;
     }

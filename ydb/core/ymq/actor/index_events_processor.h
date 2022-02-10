@@ -11,7 +11,7 @@
 
 
 
-namespace NKikimr::NSQS {
+namespace NKikimr::NSQS { 
 
 
 
@@ -145,4 +145,4 @@ private:
 
 
 };
-} // namespace NKikimr::NSQS
+} // namespace NKikimr::NSQS 

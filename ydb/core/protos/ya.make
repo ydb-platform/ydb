@@ -1,6 +1,6 @@
 PROTO_LIBRARY()
 
-GRPC()
+GRPC() 
 
 OWNER(
     fomichev
@@ -45,7 +45,7 @@ SRCS(
     counters_kesus.proto
     counters_keyvalue.proto
     counters_olapshard.proto
-    counters_pq.proto
+    counters_pq.proto 
     counters_replication.proto
     counters_schemeshard.proto
     counters_sequenceshard.proto
@@ -77,10 +77,10 @@ SRCS(
     msgbus.proto
     msgbus_health.proto
     msgbus_kv.proto
-    msgbus_pq.proto
+    msgbus_pq.proto 
     netclassifier.proto
     node_broker.proto
-    node_limits.proto
+    node_limits.proto 
     profiler.proto
     query_stats.proto
     replication.proto
@@ -118,12 +118,12 @@ SRCS(
     tx_scheme.proto
     tx_sequenceshard.proto
     pdiskfit.proto
-    pqconfig.proto
+    pqconfig.proto 
     auth.proto
     key.proto
-    grpc.proto
-    grpc_pq_old.proto
-    grpc_status_proxy.proto
+    grpc.proto 
+    grpc_pq_old.proto 
+    grpc_status_proxy.proto 
     ydb_result_set_old.proto
     ydb_table_impl.proto
     scheme_board.proto

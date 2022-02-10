@@ -28,9 +28,9 @@ struct TSchemeLimits {
     ui64 MaxShardsInPath = 35*1000; // In each path in database
     ui64 MaxConsistentCopyTargets = 1000;
 
-    // pq group
-    ui64 MaxPQPartitions = 1000000;
-
+    // pq group 
+    ui64 MaxPQPartitions = 1000000; 
+ 
     TSchemeLimits() = default;
     explicit TSchemeLimits(const NKikimrScheme::TSchemeLimits& proto);
 

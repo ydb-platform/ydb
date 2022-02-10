@@ -83,7 +83,7 @@ public:
         , IntermediateResults(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
     {
-        IntermediateResults->Stat.KeyvalueStorageRequestSentAt = TAppData::TimeProvider->Now();
+        IntermediateResults->Stat.KeyvalueStorageRequestSentAt = TAppData::TimeProvider->Now(); 
     }
 
     void CheckYellow(const TStorageStatusFlags &statusFlags, ui32 currentGroup) {
@@ -227,7 +227,7 @@ public:
 
         InFlightQueries -= request.ReadQueue.size();
 
-        ui64 durationMs = (TAppData::TimeProvider->Now() - request.SentAt).MilliSeconds();
+        ui64 durationMs = (TAppData::TimeProvider->Now() - request.SentAt).MilliSeconds(); 
         IntermediateResults->Stat.GetLatencies.push_back(durationMs);
 
         auto resetReadItems = [&](NKikimrProto::EReplyStatus status) {

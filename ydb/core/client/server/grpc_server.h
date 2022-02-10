@@ -86,7 +86,7 @@ private:
     size_t PersQueueWriteSessionsMaxCount = 1000000;
     size_t PersQueueReadSessionsMaxCount  = 100000;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters; 
 
     std::function<void()> InitCb_;
     // In flight request management.

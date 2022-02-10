@@ -26,22 +26,22 @@ static const THashSet<TString> DATABASE_SERVICES
          TString("utils"),
          TString("auth"),
          TString("ydb"),
-         TString("pqproxy|writeInfo"),
-         TString("pqproxy|writeTimeLag"),
-         TString("pqproxy|writeSession"),
-         TString("pqproxy|writingTime"),
-         TString("pqproxy|SLI"),
-         TString("pqproxy|cache"),
-         TString("pqproxy|partitionWriteQuotaWait"),
-         TString("pqproxy|topicWriteQuotaWait"),
-         TString("pqproxy|readTimeLag"),
-         TString("pqproxy|readingTime"),
-         TString("pqproxy|readSession"),
-         TString("pqproxy|schemecache"),
-         TString("pqproxy|mirrorWriteTimeLag"),
+         TString("pqproxy|writeInfo"), 
+         TString("pqproxy|writeTimeLag"), 
+         TString("pqproxy|writeSession"), 
+         TString("pqproxy|writingTime"), 
+         TString("pqproxy|SLI"), 
+         TString("pqproxy|cache"), 
+         TString("pqproxy|partitionWriteQuotaWait"), 
+         TString("pqproxy|topicWriteQuotaWait"), 
+         TString("pqproxy|readTimeLag"), 
+         TString("pqproxy|readingTime"), 
+         TString("pqproxy|readSession"), 
+         TString("pqproxy|schemecache"), 
+         TString("pqproxy|mirrorWriteTimeLag"), 
     }};
 
-
+ 
 static const THashSet<TString> DATABASE_ATTRIBUTE_SERVICES
     = {{ TString("ydb") }};
 
@@ -58,14 +58,14 @@ const THashSet<TString> &GetDatabaseSensorServices()
     return DATABASE_SERVICES;
 }
 
-void ReplaceSubgroup(TIntrusivePtr<TDynamicCounters> root, const TString &service)
-{
-    auto serviceGroup = GetServiceCounters(root, service);
-    const auto &[svc, subSvc] = ExtractSubServiceName(service);
-    auto rt = GetServiceCountersRoot(root, service);
-    rt->ReplaceSubgroup(subSvc.empty() ? "counters" : "subsystem", subSvc.empty() ? svc : subSvc, serviceGroup);
-}
-
+void ReplaceSubgroup(TIntrusivePtr<TDynamicCounters> root, const TString &service) 
+{ 
+    auto serviceGroup = GetServiceCounters(root, service); 
+    const auto &[svc, subSvc] = ExtractSubServiceName(service); 
+    auto rt = GetServiceCountersRoot(root, service); 
+    rt->ReplaceSubgroup(subSvc.empty() ? "counters" : "subsystem", subSvc.empty() ? svc : subSvc, serviceGroup); 
+} 
+ 
 const THashSet<TString> &GetDatabaseAttributeSensorServices()
 {
     return DATABASE_ATTRIBUTE_SERVICES;
@@ -99,23 +99,23 @@ void OnCounterLookup(const char *methodName, const TString &name, const TString 
     GLOBAL_LWPROBE(MONITORING_PROVIDER, MonitoringCounterLookup, methodName, name, value);
 }
 
-
-std::pair<TString, TString> ExtractSubServiceName(const TString &service)
-{
-    TStringBuf svc = TStringBuf(service);
-    TStringBuf subSvc = svc.SplitOff('|');
-    return {TString(svc), TString(subSvc)};
-}
-
-TIntrusivePtr<TDynamicCounters> GetServiceCountersRoot(TIntrusivePtr<TDynamicCounters> root,
+ 
+std::pair<TString, TString> ExtractSubServiceName(const TString &service) 
+{ 
+    TStringBuf svc = TStringBuf(service); 
+    TStringBuf subSvc = svc.SplitOff('|'); 
+    return {TString(svc), TString(subSvc)}; 
+} 
+ 
+TIntrusivePtr<TDynamicCounters> GetServiceCountersRoot(TIntrusivePtr<TDynamicCounters> root, 
                                                    const TString &service)
 {
-    auto pair = ExtractSubServiceName(service);
-    if (pair.second.empty())
-        return root;
-    return root->GetSubgroup("counters", pair.first);
-}
-
+    auto pair = ExtractSubServiceName(service); 
+    if (pair.second.empty()) 
+        return root; 
+    return root->GetSubgroup("counters", pair.first); 
+} 
+ 
 static THashSet<TString> MakeServiceCountersExtraLabels() {
     THashSet<TString> extraLabels;
     extraLabels.insert(DATABASE_LABEL);
@@ -128,17 +128,17 @@ static THashSet<TString> MakeServiceCountersExtraLabels() {
 
 static const THashSet<TString> SERVICE_COUNTERS_EXTRA_LABELS = MakeServiceCountersExtraLabels();
 
-TIntrusivePtr<TDynamicCounters> GetServiceCounters(TIntrusivePtr<TDynamicCounters> root,
-                                                   const TString &service, bool skipAddedLabels)
-{
-    const auto &[svc, subSvc]  = ExtractSubServiceName(service);
-    auto res = root->GetSubgroup("counters", svc);
-    if (!subSvc.empty()) {
-        res = res->GetSubgroup("subsystem", subSvc);
-    }
-    if (!skipAddedLabels)
-        return res;
-
+TIntrusivePtr<TDynamicCounters> GetServiceCounters(TIntrusivePtr<TDynamicCounters> root, 
+                                                   const TString &service, bool skipAddedLabels) 
+{ 
+    const auto &[svc, subSvc]  = ExtractSubServiceName(service); 
+    auto res = root->GetSubgroup("counters", svc); 
+    if (!subSvc.empty()) { 
+        res = res->GetSubgroup("subsystem", subSvc); 
+    } 
+    if (!skipAddedLabels) 
+        return res; 
+ 
     res = SkipLabels(res, SERVICE_COUNTERS_EXTRA_LABELS);
 
     auto utils = root->GetSubgroup("counters", "utils");

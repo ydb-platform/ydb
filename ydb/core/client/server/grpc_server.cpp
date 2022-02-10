@@ -1,5 +1,5 @@
 #include "grpc_server.h"
-#include "grpc_proxy_status.h"
+#include "grpc_proxy_status.h" 
 
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
@@ -45,7 +45,7 @@ using TGrpcBaseAsyncContext = NGrpc::TBaseAsyncContext<NGRpcProxy::TGRpcService>
 template <typename TIn, typename TOut = TResponse>
 class TSimpleRequest
     : public IQueueEvent
-    , public TGrpcBaseAsyncContext
+    , public TGrpcBaseAsyncContext 
     , public IRequestContext
 {
     using TOnRequest = std::function<void (IRequestContext* ctx)>;
@@ -63,15 +63,15 @@ public:
                    TActorSystem& as,
                    const char* name,
                    NGrpc::ICounterBlockPtr counters)
-        : TGrpcBaseAsyncContext(service, cq)
-        , Server(server)
-        , Cb(cb)
-        , RequestCallback(requestCallback)
+        : TGrpcBaseAsyncContext(service, cq) 
+        , Server(server) 
+        , Cb(cb) 
+        , RequestCallback(requestCallback) 
         , ActorSystem(as)
         , Name(name)
         , Counters(std::move(counters))
         , Writer(new ServerAsyncResponseWriter<TOut>(&Context))
-        , StateFunc(&TSimpleRequest::RequestDone)
+        , StateFunc(&TSimpleRequest::RequestDone) 
         , RequestSize(0)
         , ResponseSize(0)
         , ResponseStatus(0)
@@ -111,7 +111,7 @@ public:
     }
 
     bool Execute(bool ok) override {
-        return (this->*StateFunc)(ok);
+        return (this->*StateFunc)(ok); 
     }
 
     void DestroyRequest() override {
@@ -125,7 +125,7 @@ public:
 public:
     //! Get pointer to the request's message.
     const NProtoBuf::Message* GetRequest() const override {
-        return &Request;
+        return &Request; 
     }
 
     //! Send reply.
@@ -237,7 +237,7 @@ public:
     }
 
     NMsgBusProxy::TBusMessageContext BindBusContext(int type) override {
-        return BusContext.ConstructInPlace(this, type);
+        return BusContext.ConstructInPlace(this, type); 
     }
 
     TString GetPeer() const override {
@@ -305,11 +305,11 @@ private:
 
         Clone();
 
-        if (!ok) {
+        if (!ok) { 
             Counters->CountNotOkRequest();
-            return false;
-        }
-
+            return false; 
+        } 
+ 
         if (Server->IncRequest()) {
 
             RequestSize = Request.ByteSize();
@@ -347,22 +347,22 @@ private:
     using TStateFunc = bool (TSimpleRequest::*)(bool);
 
     TGRpcService* const Server;
-    TOnRequest Cb;
-    TRequestCallback RequestCallback;
+    TOnRequest Cb; 
+    TRequestCallback RequestCallback; 
     TActorSystem& ActorSystem;
     const char* const Name;
     NGrpc::ICounterBlockPtr Counters;
 
     THolder<ServerAsyncResponseWriter<TOut>> Writer;
 
-    TStateFunc StateFunc;
-    TIn Request;
+    TStateFunc StateFunc; 
+    TIn Request; 
     ui32 RequestSize;
     ui32 ResponseSize;
     ui32 ResponseStatus;
     THPTimer RequestTimer;
 
-    TMaybe<NMsgBusProxy::TBusMessageContext> BusContext;
+    TMaybe<NMsgBusProxy::TBusMessageContext> BusContext; 
     bool InProgress_;
     bool RequestRegistered_ = false;
 };
@@ -416,7 +416,7 @@ i64 TGRpcService::GetCurrentInFlight() const {
 
 void TGRpcService::Start() {
     Y_VERIFY(ActorSystem);
-    ui32 nodeId = ActorSystem->NodeId;
+    ui32 nodeId = ActorSystem->NodeId; 
     ActorSystem->Send(MakeGRpcProxyStatusID(nodeId), new TEvGRpcProxyStatus::TEvSetup(true, PersQueueWriteSessionsMaxCount,
                                         PersQueueReadSessionsMaxCount));
     SetupIncomingRequests();
@@ -445,7 +445,7 @@ void TGRpcService::SetupIncomingRequests() {
         RegisterRequestActor(CreateMessageBus ## NAME(msg)); \
     })
 
-
+ 
     // actor requests
     ADD_ACTOR_REQUEST(BSAdm,                     TBSAdm,                            MTYPE_CLIENT_BSADM)
     ADD_ACTOR_REQUEST(BlobStorageConfig,         TBlobStorageConfigRequest,         MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST)
@@ -459,7 +459,7 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_ACTOR_REQUEST(SchemeOperationStatus,     TSchemeOperationStatus,            MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST)
     ADD_ACTOR_REQUEST(BlobStorageLoadRequest,    TBsTestLoadRequest,                MTYPE_CLIENT_LOAD_REQUEST)
     ADD_ACTOR_REQUEST(BlobStorageGetRequest,     TBsGetRequest,                     MTYPE_CLIENT_GET_REQUEST)
-    ADD_ACTOR_REQUEST(ChooseProxy,               TChooseProxyRequest,               MTYPE_CLIENT_CHOOSE_PROXY)
+    ADD_ACTOR_REQUEST(ChooseProxy,               TChooseProxyRequest,               MTYPE_CLIENT_CHOOSE_PROXY) 
     ADD_ACTOR_REQUEST(WhoAmI,                    TWhoAmI,                           MTYPE_CLIENT_WHOAMI)
     ADD_ACTOR_REQUEST(ResolveNode,               TResolveNodeRequest,               MTYPE_CLIENT_RESOLVE_NODE)
     ADD_ACTOR_REQUEST(FillNode,                  TFillNodeRequest,                  MTYPE_CLIENT_FILL_NODE)
@@ -499,9 +499,9 @@ void TGRpcService::SetupIncomingRequests() {
 
 #define ADD_PROXY_REQUEST_BASE(NAME, TYPE, RES_TYPE, EVENT_TYPE, MTYPE) \
     ADD_REQUEST(NAME, TYPE, RES_TYPE, { \
-        if (MsgBusProxy) { \
+        if (MsgBusProxy) { \ 
             NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE)); \
-            ActorSystem->Send(MsgBusProxy, new NMsgBusProxy::EVENT_TYPE(msg)); \
+            ActorSystem->Send(MsgBusProxy, new NMsgBusProxy::EVENT_TYPE(msg)); \ 
         } else { \
             ctx->ReplyError("no MessageBus proxy"); \
         } \
@@ -513,11 +513,11 @@ void TGRpcService::SetupIncomingRequests() {
     // proxy requests
     ADD_PROXY_REQUEST(SchemeInitRoot,  TSchemeInitRoot,  TEvBusProxy::TEvInitRoot,            MTYPE_CLIENT_SCHEME_INITROOT)
 
-    ADD_PROXY_REQUEST(PersQueueRequest, TPersQueueRequest, TEvBusProxy::TEvPersQueue,           MTYPE_CLIENT_PERSQUEUE)
-    ADD_PROXY_REQUEST(Request,          TRequest,          TEvBusProxy::TEvRequest,             MTYPE_CLIENT_REQUEST)
-    ADD_PROXY_REQUEST(SchemeOperation,  TSchemeOperation,  TEvBusProxy::TEvFlatTxRequest,       MTYPE_CLIENT_FLAT_TX_REQUEST)
-    ADD_PROXY_REQUEST(SchemeDescribe,   TSchemeDescribe,   TEvBusProxy::TEvFlatDescribeRequest, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST)
-
+    ADD_PROXY_REQUEST(PersQueueRequest, TPersQueueRequest, TEvBusProxy::TEvPersQueue,           MTYPE_CLIENT_PERSQUEUE) 
+    ADD_PROXY_REQUEST(Request,          TRequest,          TEvBusProxy::TEvRequest,             MTYPE_CLIENT_REQUEST) 
+    ADD_PROXY_REQUEST(SchemeOperation,  TSchemeOperation,  TEvBusProxy::TEvFlatTxRequest,       MTYPE_CLIENT_FLAT_TX_REQUEST) 
+    ADD_PROXY_REQUEST(SchemeDescribe,   TSchemeDescribe,   TEvBusProxy::TEvFlatDescribeRequest, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST) 
+ 
 #define ADD_PROXY_REQUEST_JJ(NAME, EVENT_TYPE, MTYPE) \
     ADD_PROXY_REQUEST_BASE(NAME, TJSON, TJSON, EVENT_TYPE, MTYPE)
 

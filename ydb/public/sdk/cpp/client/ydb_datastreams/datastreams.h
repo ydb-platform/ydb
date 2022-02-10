@@ -102,7 +102,7 @@ namespace NYdb::NDataStreams::V1 {
     struct TListStreamsSettings : public NYdb::TOperationRequestSettings<TListStreamsSettings> {
         FLUENT_SETTING(ui32, Limit);
         FLUENT_SETTING(TString, ExclusiveStartStreamName);
-        FLUENT_SETTING_DEFAULT(bool, Recurse, false);
+        FLUENT_SETTING_DEFAULT(bool, Recurse, false); 
     };
     struct TDeleteStreamSettings : public NYdb::TOperationRequestSettings<TDeleteStreamSettings> {
         FLUENT_SETTING_DEFAULT(bool, EnforceConsumerDeletion, false);

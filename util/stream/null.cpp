@@ -3,7 +3,7 @@
 #include <util/generic/singleton.h>
 
 TNullIO& NPrivate::StdNullStream() noexcept {
-    return *SingletonWithPriority<TNullIO, 4>();
+    return *SingletonWithPriority<TNullIO, 4>(); 
 }
 
 TNullInput::TNullInput() noexcept {

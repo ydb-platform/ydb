@@ -18,8 +18,8 @@ void Cancel(NGrpc::IQueueClientContextPtr& context);
 
 NYql::TIssues MakeIssueWithSubIssues(const TString& description, const NYql::TIssues& subissues);
 
-TString IssuesSingleLineString(const NYql::TIssues& issues);
-
+TString IssuesSingleLineString(const NYql::TIssues& issues); 
+ 
 size_t CalcDataSize(const TReadSessionEvent::TEvent& event);
 
 template <class TMessage>
@@ -184,8 +184,8 @@ std::shared_ptr<ISessionConnectionProcessorFactory<TRequest, TResponse>>
     return std::make_shared<TSessionConnectionProcessorFactory<TService, TRequest, TResponse>>(rpc, std::move(connections), std::move(dbState));
 }
 
-
-
+ 
+ 
 template <class TEvent_>
 struct TBaseEventInfo {
     using TEvent = TEvent_;
@@ -205,66 +205,66 @@ struct TBaseEventInfo {
     {}
 };
 
-
-class ISignalable {
-public:
-    ISignalable() = default;
-    virtual ~ISignalable() {}
-    virtual void Signal() = 0;
-};
-
-// Waiter on queue.
-// Future or GetEvent call
-class TWaiter {
-public:
-    TWaiter() = default;
-
-    TWaiter(const TWaiter&) = delete;
-    TWaiter& operator=(const TWaiter&) = delete;
-    TWaiter(TWaiter&&) = default;
-    TWaiter& operator=(TWaiter&&) = default;
-
-    TWaiter(NThreading::TPromise<void>&& promise, ISignalable* self)
-        : Promise(promise)
-        , Future(promise.Initialized() ? Promise.GetFuture() : NThreading::TFuture<void>())
-        , Self(self)
-    {
-    }
-
-    void Signal() {
-        if (Self) {
-            Self->Signal();
-        }
-        if (Promise.Initialized() && !Promise.HasValue()) {
-            Promise.SetValue();
-        }
-    }
-
-    bool Valid() const {
-        if (!Future.Initialized()) return false;
-        return !Promise.Initialized() || Promise.GetFuture().StateId() == Future.StateId();
-    }
-
-    NThreading::TPromise<void> ExtractPromise() {
-        NThreading::TPromise<void> promise;
-        Y_VERIFY(!promise.Initialized());
-        std::swap(Promise, promise);
-        return promise;
-    }
-
-    NThreading::TFuture<void> GetFuture() {
-        Y_VERIFY(Future.Initialized());
-        return Future;
-    }
-
-private:
-    NThreading::TPromise<void> Promise;
-    NThreading::TFuture<void> Future;
-    ISignalable* Self = nullptr;
-};
-
-
-
+ 
+class ISignalable { 
+public: 
+    ISignalable() = default; 
+    virtual ~ISignalable() {} 
+    virtual void Signal() = 0; 
+}; 
+ 
+// Waiter on queue. 
+// Future or GetEvent call 
+class TWaiter { 
+public: 
+    TWaiter() = default; 
+ 
+    TWaiter(const TWaiter&) = delete; 
+    TWaiter& operator=(const TWaiter&) = delete; 
+    TWaiter(TWaiter&&) = default; 
+    TWaiter& operator=(TWaiter&&) = default; 
+ 
+    TWaiter(NThreading::TPromise<void>&& promise, ISignalable* self) 
+        : Promise(promise) 
+        , Future(promise.Initialized() ? Promise.GetFuture() : NThreading::TFuture<void>()) 
+        , Self(self) 
+    { 
+    } 
+ 
+    void Signal() { 
+        if (Self) { 
+            Self->Signal(); 
+        } 
+        if (Promise.Initialized() && !Promise.HasValue()) { 
+            Promise.SetValue(); 
+        } 
+    } 
+ 
+    bool Valid() const { 
+        if (!Future.Initialized()) return false; 
+        return !Promise.Initialized() || Promise.GetFuture().StateId() == Future.StateId(); 
+    } 
+ 
+    NThreading::TPromise<void> ExtractPromise() { 
+        NThreading::TPromise<void> promise; 
+        Y_VERIFY(!promise.Initialized()); 
+        std::swap(Promise, promise); 
+        return promise; 
+    } 
+ 
+    NThreading::TFuture<void> GetFuture() { 
+        Y_VERIFY(Future.Initialized()); 
+        return Future; 
+    } 
+ 
+private: 
+    NThreading::TPromise<void> Promise; 
+    NThreading::TFuture<void> Future; 
+    ISignalable* Self = nullptr; 
+}; 
+ 
+ 
+ 
 // Class that is responsible for:
 // - events queue;
 // - signalling futures that wait for events;
@@ -272,7 +272,7 @@ private:
 // - waking up waiters.
 // Thread safe.
 template <class TSettings_, class TEvent_, class TEventInfo_ = TBaseEventInfo<TEvent_>>
-class TBaseSessionEventsQueue : public ISignalable {
+class TBaseSessionEventsQueue : public ISignalable { 
 protected:
     using TSelf = TBaseSessionEventsQueue<TSettings_, TEvent_, TEventInfo_>;
     using TSettings = TSettings_;
@@ -316,7 +316,7 @@ protected:
             });
         }
 
-        virtual void Post(const IExecutor::TPtr& executor, IExecutor::TFunction&& f) {
+        virtual void Post(const IExecutor::TPtr& executor, IExecutor::TFunction&& f) { 
             executor->Post(std::move(f));
         }
 
@@ -324,28 +324,28 @@ protected:
         TEventInfo& EventInfo;
     };
 
-
+ 
 public:
     TBaseSessionEventsQueue(const TSettings& settings)
         : Settings(settings)
-        , Waiter(NThreading::NewPromise<void>(), this)
+        , Waiter(NThreading::NewPromise<void>(), this) 
     {}
 
     virtual ~TBaseSessionEventsQueue() = default;
 
-
-    void Signal() override {
-        CondVar.Signal();
-    }
-
+ 
+    void Signal() override { 
+        CondVar.Signal(); 
+    } 
+ 
 protected:
     virtual bool HasEventsImpl() const {  // Assumes that we're under lock.
         return !Events.empty() || CloseEvent;
     }
 
     TWaiter PopWaiterImpl() { // Assumes that we're under lock.
-        TWaiter waiter(Waiter.ExtractPromise(), this);
-        return std::move(waiter);
+        TWaiter waiter(Waiter.ExtractPromise(), this); 
+        return std::move(waiter); 
     }
 
     void WaitEventsImpl() { // Assumes that we're under lock. Posteffect: HasEventsImpl() is true.
@@ -354,28 +354,28 @@ protected:
         }
     }
 
-    void RenewWaiterImpl() {
-        if (Events.empty() && Waiter.GetFuture().HasValue()) {
-            Waiter = TWaiter(NThreading::NewPromise<void>(), this);
-        }
-    }
-
+    void RenewWaiterImpl() { 
+        if (Events.empty() && Waiter.GetFuture().HasValue()) { 
+            Waiter = TWaiter(NThreading::NewPromise<void>(), this); 
+        } 
+    } 
+ 
 public:
     NThreading::TFuture<void> WaitEvent() {
         with_lock (Mutex) {
             if (HasEventsImpl()) {
                 return NThreading::MakeFuture(); // Signalled
             } else {
-                Y_VERIFY(Waiter.Valid());
-                auto res = Waiter.GetFuture();
-                return res;
+                Y_VERIFY(Waiter.Valid()); 
+                auto res = Waiter.GetFuture(); 
+                return res; 
             }
         }
     }
 
 protected:
     const TSettings& Settings;
-    TWaiter Waiter;
+    TWaiter Waiter; 
     std::queue<TEventInfo> Events;
     TCondVar CondVar;
     TMutex Mutex;

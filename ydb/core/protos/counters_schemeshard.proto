@@ -16,7 +16,7 @@ enum ESimpleCounters {
     COUNTER_TABLE_SHARD_ACTIVE_COUNT = 5                  [(CounterOpts) = {Name: "TableShardsActive"}];
     COUNTER_TABLE_SHARD_INACTIVE_COUNT = 6                [(CounterOpts) = {Name: "TableShardsInactive"}];
     COUNTER_PQ_SHARD_COUNT = 7                            [(CounterOpts) = {Name: "PqGroupShards"}];
-    COUNTER_PQ_RB_SHARD_COUNT = 8                         [(CounterOpts) = {Name: "PqReadBalancerShards"}];
+    COUNTER_PQ_RB_SHARD_COUNT = 8                         [(CounterOpts) = {Name: "PqReadBalancerShards"}]; 
     COUNTER_SUB_DOMAIN_COUNT = 9                          [(CounterOpts) = {Name: "SubDomains"}];
     COUNTER_SUB_DOMAIN_COORDINATOR_COUNT = 10             [(CounterOpts) = {Name: "SubDomainsCoordinators"}];
     COUNTER_SUB_DOMAIN_MEDIATOR_COUNT = 11                [(CounterOpts) = {Name: "SubDomainsMediators"}];
@@ -133,15 +133,15 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateSequence = 109          [(CounterOpts) = {Name: "InFlightOps/CreateSequence"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterSequence = 110           [(CounterOpts) = {Name: "InFlightOps/AlterSequence"}];
     COUNTER_IN_FLIGHT_OPS_TxDropSequence = 111            [(CounterOpts) = {Name: "InFlightOps/DropSequence"}];
-
-    COUNTER_STREAM_SHARDS_COUNT = 112                     [(CounterOpts) = {Name: "StreamShardsCount"}];
-    COUNTER_STREAM_SHARDS_QUOTA = 113                     [(CounterOpts) = {Name: "StreamShardsQuota"}];
+ 
+    COUNTER_STREAM_SHARDS_COUNT = 112                     [(CounterOpts) = {Name: "StreamShardsCount"}]; 
+    COUNTER_STREAM_SHARDS_QUOTA = 113                     [(CounterOpts) = {Name: "StreamShardsQuota"}]; 
 
     COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE = 114        [(CounterOpts) = {Name: "BackgroundCompactionQueueSize"}];
-
-    COUNTER_STREAM_RESERVED_THROUGHPUT = 115              [(CounterOpts) = {Name: "StreamReservedThroughput"}];
-    COUNTER_STREAM_RESERVED_STORAGE = 116                 [(CounterOpts) = {Name: "StreamReservedStorage"}];
-    COUNTER_STREAM_RESERVED_STORAGE_QUOTA = 117            [(CounterOpts) = {Name: "StreamReservedStorageQuota"}];
+ 
+    COUNTER_STREAM_RESERVED_THROUGHPUT = 115              [(CounterOpts) = {Name: "StreamReservedThroughput"}]; 
+    COUNTER_STREAM_RESERVED_STORAGE = 116                 [(CounterOpts) = {Name: "StreamReservedStorage"}]; 
+    COUNTER_STREAM_RESERVED_STORAGE_QUOTA = 117            [(CounterOpts) = {Name: "StreamReservedStorageQuota"}]; 
 
     COUNTER_REPLICATION_COUNT = 118                       [(CounterOpts) = {Name: "Replications"}];
     COUNTER_REPLICATION_CONTROLLER_COUNT = 119            [(CounterOpts) = {Name: "ReplicationControllers"}];

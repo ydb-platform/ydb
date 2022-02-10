@@ -84,7 +84,7 @@ SRCS(
     tracing.h
     tx_processing.h
     tx_processing.cpp
-    user_registry.h
+    user_registry.h 
     blobstorage_grouptype.cpp
 )
 

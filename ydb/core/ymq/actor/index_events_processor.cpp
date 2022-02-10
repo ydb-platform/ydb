@@ -490,4 +490,4 @@ void IEventsWriterWrapper::Close() {
     }
 }
 
-}; // namespace NKikimr::NSQS
+}; // namespace NKikimr::NSQS 

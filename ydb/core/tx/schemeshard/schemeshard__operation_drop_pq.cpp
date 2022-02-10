@@ -197,9 +197,9 @@ public:
         Y_VERIFY(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
-        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(pathId);
-        Y_VERIFY(pqGroup);
-
+        TPersQueueGroupInfo::TPtr pqGroup = context.SS->PersQueueGroups.at(pathId); 
+        Y_VERIFY(pqGroup); 
+ 
         // KIKIMR-13173
         // Repeat it here for a waile, delete it from TDeleteParts after
         // Initiate asynchonous deletion of all shards
@@ -207,25 +207,25 @@ public:
             context.OnComplete.DeleteShard(shard.Idx);
         }
 
-        auto tabletConfig = pqGroup->TabletConfig;
-        NKikimrPQ::TPQTabletConfig config;
-        Y_VERIFY(!tabletConfig.empty());
-        bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
-        Y_VERIFY(parseOk);
-
-        ui64 throughput = ((ui64)pqGroup->TotalPartitionCount) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-        ui64 storage = throughput * config.GetPartitionConfig().GetLifetimeSeconds();
-
-        auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
-        domainInfo->DecPQPartitionsInside(pqGroup->TotalPartitionCount);
-        domainInfo->DecPQReservedStorage(storage);
-
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(throughput);
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(storage);
-
+        auto tabletConfig = pqGroup->TabletConfig; 
+        NKikimrPQ::TPQTabletConfig config; 
+        Y_VERIFY(!tabletConfig.empty()); 
+        bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig); 
+        Y_VERIFY(parseOk); 
+ 
+        ui64 throughput = ((ui64)pqGroup->TotalPartitionCount) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(); 
+        ui64 storage = throughput * config.GetPartitionConfig().GetLifetimeSeconds(); 
+ 
+        auto domainInfo = context.SS->ResolveDomainInfo(pathId); 
+        domainInfo->DecPathsInside(); 
+        domainInfo->DecPQPartitionsInside(pqGroup->TotalPartitionCount); 
+        domainInfo->DecPQReservedStorage(storage); 
+ 
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(throughput); 
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(storage); 
+ 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Sub(pqGroup->TotalPartitionCount);
-
+ 
         parentDir->DecAliveChildren();
 
         if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {

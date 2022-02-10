@@ -9,8 +9,8 @@
 #include <util/generic/queue.h>
 #include <util/string/join.h>
 #include <util/system/event.h>
-#include <util/stream/zlib.h>
-#include <util/stream/str.h>
+#include <util/stream/zlib.h> 
+#include <util/stream/str.h> 
 
 #include <atomic>
 
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     using TWriteCallable = std::function<TFuture<TWriteResult>(TString& data, ui64 sequenceNumber, TInstant createdAt)>;
 
-    void WriteAndReadAndCommitRandomMessages(TPersQueueYdbSdkTestSetup* setup, TWriteCallable write, bool disableClusterDiscovery = false) {
+    void WriteAndReadAndCommitRandomMessages(TPersQueueYdbSdkTestSetup* setup, TWriteCallable write, bool disableClusterDiscovery = false) { 
         auto log = setup->GetLog();
         const TInstant start = TInstant::Now();
         TVector<TString> messages;
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         log.Write(TLOG_INFO, "All messages are written");
 
         std::shared_ptr<IReadSession> readSession = setup->GetPersQueueClient().CreateReadSession(
-                setup->GetReadSessionSettings().DisableClusterDiscovery(disableClusterDiscovery)
+                setup->GetReadSessionSettings().DisableClusterDiscovery(disableClusterDiscovery) 
         );
 //            auto isStarted = consumer->Start().ExtractValueSync();
 //            AssertStreamingMessageCase(TReadResponse::kInit, isStarted.Response);
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TMaybe<ui32> committedOffset;
         ui32 previousOffset = 0;
         bool closed = false;
-        while ((readMessageCount < messageCount || committedOffset <= previousOffset) && !closed) {
+        while ((readMessageCount < messageCount || committedOffset <= previousOffset) && !closed) { 
             Cerr << "Get event on client\n";
             auto event = *readSession->GetEvent(true);
             std::visit(TOverloaded {
@@ -123,12 +123,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                              << previousOffset << ")";
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(previousOffset + 1, committedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(previousOffset + 1, committedOffset); 
         UNIT_ASSERT_VALUES_EQUAL(readMessageCount, messageCount);
         log.Write(TLOG_INFO, Sprintf("Time took to write and read %u messages, %u [MiB] in total is %lu [s]", messageCount, (totalSize / 1024 / 1024), (TInstant::Now() - start).Seconds()));
     }
 
-
+ 
     void SimpleWriteAndValidateData(
             TPersQueueYdbSdkTestSetup* setup, TWriteSessionSettings& writeSettings, ui64 count,
             TMaybe<bool> shouldCaptureData = Nothing()
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
         TString messageBase = "message-";
         TVector<TString> sentMessages;
-
+ 
         for (auto i = 0u; i < count; i++) {
             sentMessages.emplace_back(messageBase * (i+1) + ToString(i));
             auto res = session->Write(sentMessages.back());
@@ -218,23 +218,23 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteAndReadAndCommitRandomMessages(setup.get(), std::move(clientWrite));
     }
 
-    Y_UNIT_TEST(TWriteSession_WriteAndReadAndCommitRandomMessagesNoClusterDiscovery) {
-        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
-        auto log = setup->GetLog();
-        TYDBClientEventLoop clientEventLoop{setup};
-
-        TAutoEvent messagesWrittenToBuffer;
-        auto clientWrite = [&](TString& message, ui64 sequenceNumber, TInstant createdAt) {
-            auto promise = NewPromise<TWriteResult>();
-            //log << TLOG_INFO << "Enqueue message with sequence number " << sequenceNumber;
-            clientEventLoop.MessageBuffer.Enqueue(TAcknowledgableMessage{message, sequenceNumber, createdAt, promise});
-            messagesWrittenToBuffer.Signal();
-            return promise.GetFuture();
-        };
-
-        WriteAndReadAndCommitRandomMessages(setup.get(), std::move(clientWrite), true);
-    }
-
+    Y_UNIT_TEST(TWriteSession_WriteAndReadAndCommitRandomMessagesNoClusterDiscovery) { 
+        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME); 
+        auto log = setup->GetLog(); 
+        TYDBClientEventLoop clientEventLoop{setup}; 
+ 
+        TAutoEvent messagesWrittenToBuffer; 
+        auto clientWrite = [&](TString& message, ui64 sequenceNumber, TInstant createdAt) { 
+            auto promise = NewPromise<TWriteResult>(); 
+            //log << TLOG_INFO << "Enqueue message with sequence number " << sequenceNumber; 
+            clientEventLoop.MessageBuffer.Enqueue(TAcknowledgableMessage{message, sequenceNumber, createdAt, promise}); 
+            messagesWrittenToBuffer.Signal(); 
+            return promise.GetFuture(); 
+        }; 
+ 
+        WriteAndReadAndCommitRandomMessages(setup.get(), std::move(clientWrite), true); 
+    } 
+ 
     Y_UNIT_TEST(TSimpleWriteSession_AutoSeqNo_BasicUsage) {
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         auto& client = setup->GetPersQueueClient();
@@ -255,8 +255,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(res);
     }
 
-
-
+ 
+ 
     Y_UNIT_TEST(TWriteSession_AutoBatching) {
         // ToDo: Re-enable once batching takes more than 1 message at once
         return;
@@ -278,107 +278,107 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
         WaitMessagesAcked(writer, 1, seqNo);
     }
-
-    Y_UNIT_TEST(TWriteSession_WriteEncoded) {
-        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
-        auto& client = setup->GetPersQueueClient();
-        auto settings = setup->GetWriteSessionSettings();
-        size_t batchSize = 100000000;
-        settings.BatchFlushInterval(TDuration::Seconds(1000)); // Batch on size, not on time.
-        settings.BatchFlushSizeBytes(batchSize);
-        auto writer = client.CreateWriteSession(settings);
-        TString message = "message";
-        TString packed;
-        {
-            TStringOutput so(packed);
-            TZLibCompress oss(&so, ZLib::GZip, 6);
-            oss << message;
-        }
-
-        Cerr << message << " " << packed << "\n";
-
-        {
-            auto event = *writer->GetEvent(true);
-            UNIT_ASSERT(!writer->WaitEvent().Wait(TDuration::Seconds(1)));
-            auto ev = writer->WaitEvent();
-            UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
-            auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken);
-            writer->Write(std::move(continueToken), message);
-            UNIT_ASSERT(ev.Wait(TDuration::Seconds(1)));
-        }
-        {
-            auto event = *writer->GetEvent(true);
-            UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
-            auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken);
-            writer->Write(std::move(continueToken), "");
-        }
-        {
-            auto event = *writer->GetEvent(true);
-            UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
-            auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken);
-            writer->WriteEncoded(std::move(continueToken), packed, ECodec::GZIP, message.size());
-        }
-
-        ui32 acks = 0, tokens = 0;
-        while(acks < 4 || tokens < 2)  {
-            auto event = *writer->GetEvent(true);
-            if (std::holds_alternative<TWriteSessionEvent::TAcksEvent>(event)) acks += std::get<TWriteSessionEvent::TAcksEvent>(event).Acks.size();
-            if (std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)) {
-                if (tokens == 0) {
-                    auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken);
-                    writer->WriteEncoded(std::move(continueToken), "", ECodec::RAW, 0);
-                }
-                ++tokens;
-            }
-            Cerr << "GOT EVENT " << acks << " " << tokens << "\n";
-
-        }
-        UNIT_ASSERT(!writer->WaitEvent().Wait(TDuration::Seconds(5)));
-
-        UNIT_ASSERT_VALUES_EQUAL(acks, 4);
-        UNIT_ASSERT_VALUES_EQUAL(tokens, 2);
-
-        std::shared_ptr<IReadSession> readSession = setup->GetPersQueueClient().CreateReadSession(
-                setup->GetReadSessionSettings().DisableClusterDiscovery(true)
-        );
-        ui32 readMessageCount = 0;
-        while (readMessageCount < 4) {
-            Cerr << "Get event on client\n";
-            auto event = *readSession->GetEvent(true);
-            std::visit(TOverloaded {
-                [&](TReadSessionEvent::TDataReceivedEvent& event) {
-                    for (auto& message: event.GetMessages()) {
-                        TString sourceId = message.GetMessageGroupId();
-                        ui32 seqNo = message.GetSeqNo();
-                        UNIT_ASSERT_VALUES_EQUAL(readMessageCount + 1, seqNo);
-                        ++readMessageCount;
-                        UNIT_ASSERT_VALUES_EQUAL(message.GetData(), (seqNo % 2) == 1 ? "message" : "");
-                    }
-                },
-                [&](TReadSessionEvent::TCommitAcknowledgementEvent&) {
-                    UNIT_FAIL("no commits in test");
-                },
-                [&](TReadSessionEvent::TCreatePartitionStreamEvent& event) {
-                    event.Confirm();
-                },
-                [&](TReadSessionEvent::TDestroyPartitionStreamEvent& event) {
-                    event.Confirm();
-                },
-                [&](TReadSessionEvent::TPartitionStreamStatusEvent&) {
-                    UNIT_FAIL("Test does not support lock sessions yet");
-                },
-                [&](TReadSessionEvent::TPartitionStreamClosedEvent&) {
-                    UNIT_FAIL("Test does not support lock sessions yet");
-                },
-                [&](TSessionClosedEvent&) {
-                    UNIT_FAIL("Session closed");
-                }
-
-            }, event);
-        }
-    }
-
-
+ 
+    Y_UNIT_TEST(TWriteSession_WriteEncoded) { 
+        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME); 
+        auto& client = setup->GetPersQueueClient(); 
+        auto settings = setup->GetWriteSessionSettings(); 
+        size_t batchSize = 100000000; 
+        settings.BatchFlushInterval(TDuration::Seconds(1000)); // Batch on size, not on time. 
+        settings.BatchFlushSizeBytes(batchSize); 
+        auto writer = client.CreateWriteSession(settings); 
+        TString message = "message"; 
+        TString packed; 
+        { 
+            TStringOutput so(packed); 
+            TZLibCompress oss(&so, ZLib::GZip, 6); 
+            oss << message; 
+        } 
+ 
+        Cerr << message << " " << packed << "\n"; 
+ 
+        { 
+            auto event = *writer->GetEvent(true); 
+            UNIT_ASSERT(!writer->WaitEvent().Wait(TDuration::Seconds(1))); 
+            auto ev = writer->WaitEvent(); 
+            UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)); 
+            auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken); 
+            writer->Write(std::move(continueToken), message); 
+            UNIT_ASSERT(ev.Wait(TDuration::Seconds(1))); 
+        } 
+        { 
+            auto event = *writer->GetEvent(true); 
+            UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)); 
+            auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken); 
+            writer->Write(std::move(continueToken), ""); 
+        } 
+        { 
+            auto event = *writer->GetEvent(true); 
+            UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)); 
+            auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken); 
+            writer->WriteEncoded(std::move(continueToken), packed, ECodec::GZIP, message.size()); 
+        } 
+ 
+        ui32 acks = 0, tokens = 0; 
+        while(acks < 4 || tokens < 2)  { 
+            auto event = *writer->GetEvent(true); 
+            if (std::holds_alternative<TWriteSessionEvent::TAcksEvent>(event)) acks += std::get<TWriteSessionEvent::TAcksEvent>(event).Acks.size(); 
+            if (std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)) { 
+                if (tokens == 0) { 
+                    auto continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken); 
+                    writer->WriteEncoded(std::move(continueToken), "", ECodec::RAW, 0); 
+                } 
+                ++tokens; 
+            } 
+            Cerr << "GOT EVENT " << acks << " " << tokens << "\n"; 
+ 
+        } 
+        UNIT_ASSERT(!writer->WaitEvent().Wait(TDuration::Seconds(5))); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(acks, 4); 
+        UNIT_ASSERT_VALUES_EQUAL(tokens, 2); 
+ 
+        std::shared_ptr<IReadSession> readSession = setup->GetPersQueueClient().CreateReadSession( 
+                setup->GetReadSessionSettings().DisableClusterDiscovery(true) 
+        ); 
+        ui32 readMessageCount = 0; 
+        while (readMessageCount < 4) { 
+            Cerr << "Get event on client\n"; 
+            auto event = *readSession->GetEvent(true); 
+            std::visit(TOverloaded { 
+                [&](TReadSessionEvent::TDataReceivedEvent& event) { 
+                    for (auto& message: event.GetMessages()) { 
+                        TString sourceId = message.GetMessageGroupId(); 
+                        ui32 seqNo = message.GetSeqNo(); 
+                        UNIT_ASSERT_VALUES_EQUAL(readMessageCount + 1, seqNo); 
+                        ++readMessageCount; 
+                        UNIT_ASSERT_VALUES_EQUAL(message.GetData(), (seqNo % 2) == 1 ? "message" : ""); 
+                    } 
+                }, 
+                [&](TReadSessionEvent::TCommitAcknowledgementEvent&) { 
+                    UNIT_FAIL("no commits in test"); 
+                }, 
+                [&](TReadSessionEvent::TCreatePartitionStreamEvent& event) { 
+                    event.Confirm(); 
+                }, 
+                [&](TReadSessionEvent::TDestroyPartitionStreamEvent& event) { 
+                    event.Confirm(); 
+                }, 
+                [&](TReadSessionEvent::TPartitionStreamStatusEvent&) { 
+                    UNIT_FAIL("Test does not support lock sessions yet"); 
+                }, 
+                [&](TReadSessionEvent::TPartitionStreamClosedEvent&) { 
+                    UNIT_FAIL("Test does not support lock sessions yet"); 
+                }, 
+                [&](TSessionClosedEvent&) { 
+                    UNIT_FAIL("Session closed"); 
+                } 
+ 
+            }, event); 
+        } 
+    } 
+ 
+ 
     Y_UNIT_TEST(TWriteSession_BatchingProducesContinueTokens) {
         // ToDo: Re-enable once batching takes more than 1 message at once
         return;

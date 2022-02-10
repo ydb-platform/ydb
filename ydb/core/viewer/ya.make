@@ -40,8 +40,8 @@ SRCS(
     json_tabletinfo.h
     json_tenants.h
     json_tenantinfo.h
-    json_topicinfo.h
-    json_pqconsumerinfo.h
+    json_topicinfo.h 
+    json_pqconsumerinfo.h 
     json_vdiskinfo.h
     json_wb_req.h
     json_whoami.h

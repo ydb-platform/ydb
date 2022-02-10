@@ -1070,7 +1070,7 @@ public:
         case TTabletTypes::PersQueue:
             return "PQ";
         case TTabletTypes::PersQueueReadBalancer:
-            return "PQRB";
+            return "PQRB"; 
         case TTabletTypes::Dummy:
             return "DY";
         case TTabletTypes::Coordinator:

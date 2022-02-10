@@ -1708,13 +1708,13 @@ namespace NActors {
         Y_FAIL("Don't use this method.");
     }
 
-    TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeId) {
-        auto it = Nodes.find(GetNodeId(nodeId));
-        Y_VERIFY(it != Nodes.end());
-        return it->second->ActorSystem.Get();
-    }
+    TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeId) { 
+        auto it = Nodes.find(GetNodeId(nodeId)); 
+        Y_VERIFY(it != Nodes.end()); 
+        return it->second->ActorSystem.Get(); 
+    } 
 
-
+ 
     TEventMailBox& TTestActorRuntimeBase::GetMailbox(ui32 nodeId, ui32 hint) {
         TGuard<TMutex> guard(Mutex);
         auto mboxId = TEventMailboxId(nodeId, hint);

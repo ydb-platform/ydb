@@ -32,38 +32,38 @@ class TMessageBusServerSchemeRequest : public TMessageBusSecureRequest<TMessageB
 
     void ReplyWithResult(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result, const TActorContext &ctx);
 
-    void FillStatus(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result, TBusResponse* response)
-    {
-        response->Record.SetStatus(status);
-        if (result.HasPathId()) {
-            response->Record.MutableFlatTxId()->SetPathId(result.GetPathId());
-        }
-
-        if (result.HasPathCreateTxId()) {
-            response->Record.MutableFlatTxId()->SetTxId(result.GetPathCreateTxId());
+    void FillStatus(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result, TBusResponse* response) 
+    { 
+        response->Record.SetStatus(status); 
+        if (result.HasPathId()) { 
+            response->Record.MutableFlatTxId()->SetPathId(result.GetPathId()); 
+        } 
+ 
+        if (result.HasPathCreateTxId()) { 
+            response->Record.MutableFlatTxId()->SetTxId(result.GetPathCreateTxId()); 
         } else if (result.HasPathDropTxId()) {
             response->Record.MutableFlatTxId()->SetTxId(result.GetPathDropTxId());
-        } else if (result.HasTxId()) {
-            response->Record.MutableFlatTxId()->SetTxId(result.GetTxId());
-        }
-
-        if (result.HasSchemeShardTabletId())
-            response->Record.MutableFlatTxId()->SetSchemeShardTabletId(result.GetSchemeShardTabletId());
-
-        if (result.HasSchemeShardReason()) {
-            response->Record.SetErrorReason(result.GetSchemeShardReason());
-        }
-
-        if (result.HasSchemeShardStatus()) {
-            response->Record.SetSchemeStatus(result.GetSchemeShardStatus());
-        }
-
-        if (result.HasStatus()) {
-            response->Record.SetProxyErrorCode(result.GetStatus());
-        }
-    }
-
-
+        } else if (result.HasTxId()) { 
+            response->Record.MutableFlatTxId()->SetTxId(result.GetTxId()); 
+        } 
+ 
+        if (result.HasSchemeShardTabletId()) 
+            response->Record.MutableFlatTxId()->SetSchemeShardTabletId(result.GetSchemeShardTabletId()); 
+ 
+        if (result.HasSchemeShardReason()) { 
+            response->Record.SetErrorReason(result.GetSchemeShardReason()); 
+        } 
+ 
+        if (result.HasSchemeShardStatus()) { 
+            response->Record.SetSchemeStatus(result.GetSchemeShardStatus()); 
+        } 
+ 
+        if (result.HasStatus()) { 
+            response->Record.SetProxyErrorCode(result.GetStatus()); 
+        } 
+    } 
+ 
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_SCHEME_REQUEST; }
 
@@ -99,24 +99,24 @@ void TMessageBusServerSchemeRequest<TBusPersQueue>::SendProposeRequest(const TAc
     if (Request->Record.HasMetaRequest() && Request->Record.GetMetaRequest().HasCmdCreateTopic()) {
         const auto& cmd = Request->Record.GetMetaRequest().GetCmdCreateTopic();
         auto *transaction = record.MutableTransaction()->MutableModifyScheme();
-        transaction->SetWorkingDir(TopicPrefix(ctx));
+        transaction->SetWorkingDir(TopicPrefix(ctx)); 
         transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup);
         auto *pqgroup = transaction->MutableCreatePersQueueGroup();
         pqgroup->SetName(cmd.GetTopic());
-        pqgroup->SetTotalGroupCount(cmd.GetNumPartitions());
-        pqgroup->SetPartitionPerTablet(cmd.GetNumPartitionsPerTablet());
+        pqgroup->SetTotalGroupCount(cmd.GetNumPartitions()); 
+        pqgroup->SetPartitionPerTablet(cmd.GetNumPartitionsPerTablet()); 
         pqgroup->MutablePQTabletConfig()->MergeFrom(cmd.GetConfig());
     }
 
     if (Request->Record.HasMetaRequest() && Request->Record.GetMetaRequest().HasCmdChangeTopic()) {
         const auto& cmd = Request->Record.GetMetaRequest().GetCmdChangeTopic();
         auto *transaction = record.MutableTransaction()->MutableModifyScheme();
-        transaction->SetWorkingDir(TopicPrefix(ctx));
+        transaction->SetWorkingDir(TopicPrefix(ctx)); 
         transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
         auto *pqgroup = transaction->MutableAlterPersQueueGroup();
         pqgroup->SetName(cmd.GetTopic());
         if (cmd.HasNumPartitions())
-            pqgroup->SetTotalGroupCount(cmd.GetNumPartitions());
+            pqgroup->SetTotalGroupCount(cmd.GetNumPartitions()); 
         if (cmd.HasConfig())
             pqgroup->MutablePQTabletConfig()->MergeFrom(cmd.GetConfig());
     }
@@ -124,7 +124,7 @@ void TMessageBusServerSchemeRequest<TBusPersQueue>::SendProposeRequest(const TAc
     if (Request->Record.HasMetaRequest() && Request->Record.GetMetaRequest().HasCmdDeleteTopic()) {
         const auto& cmd = Request->Record.GetMetaRequest().GetCmdDeleteTopic();
         auto *transaction = record.MutableTransaction()->MutableModifyScheme();
-        transaction->SetWorkingDir(TopicPrefix(ctx));
+        transaction->SetWorkingDir(TopicPrefix(ctx)); 
         transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
         auto *pqgroup = transaction->MutableDrop();
         pqgroup->SetName(cmd.GetTopic());
@@ -138,13 +138,13 @@ void TMessageBusServerSchemeRequest<TBusPersQueue>::SendProposeRequest(const TAc
 template <>
 void TMessageBusServerSchemeRequest<TBusPersQueue>::ReplyWithResult(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result, const TActorContext &ctx) {
     TAutoPtr<TBusResponse> response(new TBusResponse());
-    FillStatus(status, result, response.Get());
+    FillStatus(status, result, response.Get()); 
     if (result.GetSchemeShardStatus() == NKikimrScheme::StatusPathDoesNotExist) {
-        response->Record.SetErrorCode(NPersQueue::NErrorCode::UNKNOWN_TOPIC);
-    } else if (status == MSTATUS_OK || status == MSTATUS_INPROGRESS)
-        response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+        response->Record.SetErrorCode(NPersQueue::NErrorCode::UNKNOWN_TOPIC); 
+    } else if (status == MSTATUS_OK || status == MSTATUS_INPROGRESS) 
+        response->Record.SetErrorCode(NPersQueue::NErrorCode::OK); 
     else
-        response->Record.SetErrorCode(NPersQueue::NErrorCode::ERROR);
+        response->Record.SetErrorCode(NPersQueue::NErrorCode::ERROR); 
     if (result.HasSchemeShardReason()) {
         response->Record.SetErrorReason(result.GetSchemeShardReason());
     }
@@ -197,12 +197,12 @@ void TMessageBusServerSchemeRequest<TBusSchemeOperation>::SendProposeRequest(con
     req->Record.SetUserToken(TBase::GetSerializedToken());
     ctx.Send(MakeTxProxyID(), req.Release());
 }
-
+ 
 template <>
 void TMessageBusServerSchemeRequest<TBusSchemeOperation>::ReplyWithResult(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result, const TActorContext &ctx) {
     TAutoPtr<TBusResponse> response(new TBusResponse());
 
-    FillStatus(status, result, response.Get());
+    FillStatus(status, result, response.Get()); 
 
     SendReplyAutoPtr(response);
     Request.Destroy();

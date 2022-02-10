@@ -60,11 +60,11 @@ void TMirrorer::Bootstrap(const TActorContext& ctx) {
             auto counters = AppData(ctx)->Counters;
             TString suffix = LocalDC ? "Remote" : "Internal";
             MirrorerErrors = NKikimr::NPQ::TMultiCounter(
-                GetServiceCounters(counters, "pqproxy|writeSession"),
+                GetServiceCounters(counters, "pqproxy|writeSession"), 
                 GetLabels(TopicName), {}, {"MirrorerErrors" + suffix}, true
             );
             MirrorerTimeLags = THolder<TPercentileCounter>(new TPercentileCounter(
-                GetServiceCounters(counters, "pqproxy|mirrorWriteTimeLag"),
+                GetServiceCounters(counters, "pqproxy|mirrorWriteTimeLag"), 
                 GetLabels(TopicName),
                 {{"sensor", "TimeLags" + suffix}},
                 "Interval", lagsIntervals, true
@@ -91,7 +91,7 @@ void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) 
     LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " killed");
     ReadSession = nullptr;
     PartitionStream = nullptr;
-    CredentialsProvider = nullptr;
+    CredentialsProvider = nullptr; 
     Die(ctx);
 }
 
@@ -335,7 +335,7 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
     LastInitStageTimestamp = ctx.Now();
     try {
-        RecreateCredentialsProvider(ctx);
+        RecreateCredentialsProvider(ctx); 
     } catch(...) {
         ProcessError(ctx, "cannot initialize credentials provider: " + CurrentExceptionMessage());
         ScheduleWithIncreasingTimeout<TEvPQ::TEvInitCredentials>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
@@ -387,10 +387,10 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     Y_VERIFY(factory);
 
     ReadSession = factory->GetReadSession(Config, Partition, CredentialsProvider, MAX_BYTES_IN_FLIGHT);
-
+ 
     LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
             << " read session created: " << ReadSession->GetSessionId());
-
+ 
     Send(SelfId(), new TEvents::TEvWakeup());
     Become(&TThis::StateWork);
 }
@@ -434,7 +434,7 @@ void TMirrorer::AddMessagesToQueue(TVector<TPersQueueReadEvent::TDataReceivedEve
     }
 }
 
-void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
+void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) { 
     LastInitStageTimestamp = ctx.Now();
     ReadSession = nullptr;
     PartitionStream = nullptr;
@@ -444,9 +444,9 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
 }
 
-void TMirrorer::RecreateCredentialsProvider(const TActorContext& ctx) {
-    CredentialsProvider = nullptr;
-
+void TMirrorer::RecreateCredentialsProvider(const TActorContext& ctx) { 
+    CredentialsProvider = nullptr; 
+ 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     Y_VERIFY(factory);
     CredentialsProvider = factory->GetCredentialsProvider(Config.GetCredentials());

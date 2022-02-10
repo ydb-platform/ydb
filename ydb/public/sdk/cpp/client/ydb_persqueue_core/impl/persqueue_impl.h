@@ -64,8 +64,8 @@ public:
         (*props.mutable_attributes())["_partitions_per_tablet"] = TStringBuilder() << settings.PartitionsPerTablet_;
         (*props.mutable_attributes())["_allow_unauthenticated_read"] = settings.AllowUnauthenticatedRead_ ? "true" : "false";
         (*props.mutable_attributes())["_allow_unauthenticated_write"] = settings.AllowUnauthenticatedWrite_ ? "true" : "false";
-        if (settings.AbcId_) (*props.mutable_attributes())["_abc_id"] = TStringBuilder() << *settings.AbcId_;
-        if (settings.AbcSlug_) (*props.mutable_attributes())["_abc_slug"] = TStringBuilder() << *settings.AbcSlug_;
+        if (settings.AbcId_) (*props.mutable_attributes())["_abc_id"] = TStringBuilder() << *settings.AbcId_; 
+        if (settings.AbcSlug_) (*props.mutable_attributes())["_abc_slug"] = TStringBuilder() << *settings.AbcSlug_; 
 
         for (const auto& readRule : settings.ReadRules_) {
 

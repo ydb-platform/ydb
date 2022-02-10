@@ -6,7 +6,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/http/http_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_reader.h> 
 
 #include <util/stream/zlib.h>
 
@@ -173,22 +173,22 @@ private:
         }
     }
 
-    auto FormNetDataFromJson(TStringBuf jsonData) const {
-        NKikimrNetClassifier::TNetData netData;
+    auto FormNetDataFromJson(TStringBuf jsonData) const { 
+        NKikimrNetClassifier::TNetData netData; 
         TVector<TString> tagsToFilter(UpdaterConfig().GetNetBoxTags().begin(), UpdaterConfig().GetNetBoxTags().end());
-        NJson::TJsonValue value;
-        bool res = NJson::ReadJsonTree(jsonData, &value);
-        if (!res)
-            return netData;
-        if (!value["results"].IsArray())
-            return netData;
-        for (auto& v : value["results"].GetArray()) {
-            if (!v["prefix"].IsString())
-                return NKikimrNetClassifier::TNetData{};
-            TString mask = v["prefix"].GetString();
+        NJson::TJsonValue value; 
+        bool res = NJson::ReadJsonTree(jsonData, &value); 
+        if (!res) 
+            return netData; 
+        if (!value["results"].IsArray()) 
+            return netData; 
+        for (auto& v : value["results"].GetArray()) { 
+            if (!v["prefix"].IsString()) 
+                return NKikimrNetClassifier::TNetData{}; 
+            TString mask = v["prefix"].GetString(); 
 
-            if (!v["tags"].IsArray() || v["tags"].GetArray().size() == 0)
-                return NKikimrNetClassifier::TNetData{};
+            if (!v["tags"].IsArray() || v["tags"].GetArray().size() == 0) 
+                return NKikimrNetClassifier::TNetData{}; 
             const auto& tags = v["tags"].GetArray();
             TString label;
             for (auto& tag : tags) {
@@ -205,13 +205,13 @@ private:
             if (!label) {
                 continue;
             }
-            auto& subnet = *netData.AddSubnets();
-            subnet.SetMask(mask);
-            subnet.SetLabel(label);
-        }
-        return netData;
-    }
-
+            auto& subnet = *netData.AddSubnets(); 
+            subnet.SetMask(mask); 
+            subnet.SetLabel(label); 
+        } 
+        return netData; 
+    } 
+ 
     auto FormNetData(TStringBuf tsvData) const {
         NKikimrNetClassifier::TNetData netData;
 
@@ -260,11 +260,11 @@ private:
                 }
             } else {
                 BLOG_ERROR("NetClassifierUpdater failed to get subnets: http_status=" <<ev->Get()->Response->Status);
-            }
+            } 
         } else {
             BLOG_ERROR("NetClassifierUpdater failed to get subnets: " << ev->Get()->Error);
         }
-        InitializeAgain();
+        InitializeAgain(); 
     }
 
     void HandleWhileWorking(TEvConsole::TEvConfigureResponse::TPtr& ev) {

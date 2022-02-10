@@ -418,7 +418,7 @@ class CreateTopicRequest(AbstractTSchemeOperationRequest):
         assert isinstance(options, self.Options)
 
         if options.partitions_count is not None:
-            self._pers_queue.TotalGroupCount = options.partitions_count
+            self._pers_queue.TotalGroupCount = options.partitions_count 
 
         if options.partition_per_table is not None:
             self._pers_queue.PartitionPerTablet = options.partition_per_table

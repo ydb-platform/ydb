@@ -977,8 +977,8 @@ struct TPersQueueGroupInfo : TSimpleRefCount<TPersQueueGroupInfo> {
         };
     };
 
-    ui64 TotalGroupCount = 0;
-    ui64 TotalPartitionCount = 0;
+    ui64 TotalGroupCount = 0; 
+    ui64 TotalPartitionCount = 0; 
     ui32 NextPartitionId = 0;
     THashSet<TPartitionToAdd, TPartitionToAdd::THash> PartitionsToAdd;
     THashSet<ui32> PartitionsToDelete;
@@ -1117,11 +1117,11 @@ struct TSchemeQuotas : public TVector<TSchemeQuota> {
     mutable size_t LastKnownSize = 0;
 };
 
-struct IQuotaCounters {
-    virtual void ChangeStreamShardsCount(i64 delta) = 0;
-    virtual void ChangeStreamShardsQuota(i64 delta) = 0;
-    virtual void ChangeStreamReservedStorageQuota(i64 delta) = 0;
-    virtual void ChangeStreamReservedStorageCount(i64 delta) = 0;
+struct IQuotaCounters { 
+    virtual void ChangeStreamShardsCount(i64 delta) = 0; 
+    virtual void ChangeStreamShardsQuota(i64 delta) = 0; 
+    virtual void ChangeStreamReservedStorageQuota(i64 delta) = 0; 
+    virtual void ChangeStreamReservedStorageCount(i64 delta) = 0; 
     virtual void ChangeDiskSpaceTablesDataBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesIndexBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0;
@@ -1289,54 +1289,54 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         PathsInsideCount -= delta;
     }
 
-    ui64 GetPQPartitionsInside() const {
-        return PQPartitionsInsideCount;
-    }
-
-    void SetPQPartitionsInside(ui64 val) {
-        PQPartitionsInsideCount = val;
-    }
-
-    void IncPQPartitionsInside(ui64 delta = 1) {
-        Y_VERIFY(Max<ui64>() - PQPartitionsInsideCount >= delta);
-        PQPartitionsInsideCount += delta;
-    }
-
-    void DecPQPartitionsInside(ui64 delta = 1) {
+    ui64 GetPQPartitionsInside() const { 
+        return PQPartitionsInsideCount; 
+    } 
+ 
+    void SetPQPartitionsInside(ui64 val) { 
+        PQPartitionsInsideCount = val; 
+    } 
+ 
+    void IncPQPartitionsInside(ui64 delta = 1) { 
+        Y_VERIFY(Max<ui64>() - PQPartitionsInsideCount >= delta); 
+        PQPartitionsInsideCount += delta; 
+    } 
+ 
+    void DecPQPartitionsInside(ui64 delta = 1) { 
         Y_VERIFY_S(PQPartitionsInsideCount >= delta, "PQPartitionsInsideCount: " << PQPartitionsInsideCount << " delta: " << delta);
         PQPartitionsInsideCount -= delta;
-    }
-
-    ui64 GetPQReservedStorage() const {
-        return PQReservedStorage;
-    }
-
-    void SetPQReservedStorage(ui64 val) {
-        PQReservedStorage = val;
-    }
-
-    void IncPQReservedStorage(ui64 delta = 1) {
-        Y_VERIFY(Max<ui64>() - PQReservedStorage >= delta);
-        PQReservedStorage += delta;
-    }
-
-    void DecPQReservedStorage(ui64 delta = 1) {
-        Y_VERIFY_S(PQReservedStorage >= delta, "PQReservedStorage: " << PQReservedStorage << " delta: " << delta);
-        PQReservedStorage -= delta;
-    }
-
-    void UpdatePQReservedStorage(ui64 oldStorage, ui64 newStorage) {
-        if (oldStorage == newStorage)
-            return;
-        DecPQReservedStorage(oldStorage);
-        IncPQReservedStorage(newStorage);
-    }
-
+    } 
+ 
+    ui64 GetPQReservedStorage() const { 
+        return PQReservedStorage; 
+    } 
+ 
+    void SetPQReservedStorage(ui64 val) { 
+        PQReservedStorage = val; 
+    } 
+ 
+    void IncPQReservedStorage(ui64 delta = 1) { 
+        Y_VERIFY(Max<ui64>() - PQReservedStorage >= delta); 
+        PQReservedStorage += delta; 
+    } 
+ 
+    void DecPQReservedStorage(ui64 delta = 1) { 
+        Y_VERIFY_S(PQReservedStorage >= delta, "PQReservedStorage: " << PQReservedStorage << " delta: " << delta); 
+        PQReservedStorage -= delta; 
+    } 
+ 
+    void UpdatePQReservedStorage(ui64 oldStorage, ui64 newStorage) { 
+        if (oldStorage == newStorage) 
+            return; 
+        DecPQReservedStorage(oldStorage); 
+        IncPQReservedStorage(newStorage); 
+    } 
+ 
     ui64 GetShardsInside() const {
         return InternalShards.size();
     }
 
-    void ActualizeAlterData(const THashMap<TShardIdx, TShardInfo>& allShards, TInstant now, bool isExternal, IQuotaCounters* counters) {
+    void ActualizeAlterData(const THashMap<TShardIdx, TShardInfo>& allShards, TInstant now, bool isExternal, IQuotaCounters* counters) { 
         Y_VERIFY(AlterData);
 
         AlterData->SetPathsInside(GetPathsInside());
@@ -1364,19 +1364,19 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         AlterData->CheckDiskSpaceQuotas(counters);
 
         CountDiskSpaceQuotas(counters, GetDiskSpaceQuotas(), AlterData->GetDiskSpaceQuotas());
-        CountStreamShardsQuota(counters, GetStreamShardsQuota(), AlterData->GetStreamShardsQuota());
-        CountStreamReservedStorageQuota(counters, GetStreamReservedStorageQuota(), AlterData->GetStreamReservedStorageQuota());
-
+        CountStreamShardsQuota(counters, GetStreamShardsQuota(), AlterData->GetStreamShardsQuota()); 
+        CountStreamReservedStorageQuota(counters, GetStreamReservedStorageQuota(), AlterData->GetStreamReservedStorageQuota()); 
+ 
     }
 
-    ui64 GetStreamShardsQuota() const {
-        return DatabaseQuotas ? DatabaseQuotas->data_stream_shards_quota() : 0;
-    }
-
-    ui64 GetStreamReservedStorageQuota() const {
-        return DatabaseQuotas ? DatabaseQuotas->data_stream_reserved_storage_quota() : 0;
-    }
-
+    ui64 GetStreamShardsQuota() const { 
+        return DatabaseQuotas ? DatabaseQuotas->data_stream_shards_quota() : 0; 
+    } 
+ 
+    ui64 GetStreamReservedStorageQuota() const { 
+        return DatabaseQuotas ? DatabaseQuotas->data_stream_reserved_storage_quota() : 0; 
+    } 
+ 
     TDuration GetTtlMinRunInterval() const {
         static constexpr auto TtlMinRunInterval = TDuration::Minutes(15);
 
@@ -1406,7 +1406,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TDiskSpaceQuotas{ hardQuota, softQuota };
     }
 
-    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) {
+    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) { 
         if (quotas.HardQuota != 0) {
             counters->ChangeDiskSpaceHardQuotaBytes(quotas.HardQuota);
         }
@@ -1415,7 +1415,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         }
     }
 
-    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next) {
+    static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next) { 
         i64 hardDelta = i64(next.HardQuota) - i64(prev.HardQuota);
         if (hardDelta != 0) {
             counters->ChangeDiskSpaceHardQuotaBytes(hardDelta);
@@ -1426,30 +1426,30 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         }
     }
 
-    static void CountStreamShardsQuota(IQuotaCounters* counters, const i64 delta) {
-        counters->ChangeStreamShardsQuota(delta);
-    }
-
-    static void CountStreamReservedStorageQuota(IQuotaCounters* counters, const i64 delta) {
-        counters->ChangeStreamReservedStorageQuota(delta);
-    }
-
-    static void CountStreamShardsQuota(IQuotaCounters* counters, const i64& prev, const i64& next) {
-        counters->ChangeStreamShardsQuota(next - prev);
-    }
-
-    static void CountStreamReservedStorageQuota(IQuotaCounters* counters, const i64& prev, const i64& next) {
-        counters->ChangeStreamReservedStorageQuota(next - prev);
-    }
-
-
+    static void CountStreamShardsQuota(IQuotaCounters* counters, const i64 delta) { 
+        counters->ChangeStreamShardsQuota(delta); 
+    } 
+ 
+    static void CountStreamReservedStorageQuota(IQuotaCounters* counters, const i64 delta) { 
+        counters->ChangeStreamReservedStorageQuota(delta); 
+    } 
+ 
+    static void CountStreamShardsQuota(IQuotaCounters* counters, const i64& prev, const i64& next) { 
+        counters->ChangeStreamShardsQuota(next - prev); 
+    } 
+ 
+    static void CountStreamReservedStorageQuota(IQuotaCounters* counters, const i64& prev, const i64& next) { 
+        counters->ChangeStreamReservedStorageQuota(next - prev); 
+    } 
+ 
+ 
     /**
      * Checks current disk usage against disk quotas
      *
      * Returns true when DiskQuotaExceeded value has changed and needs to be
      * persisted and pushed to scheme board.
      */
-    bool CheckDiskSpaceQuotas(IQuotaCounters* counters) {
+    bool CheckDiskSpaceQuotas(IQuotaCounters* counters) { 
         auto quotas = GetDiskSpaceQuotas();
         if (!quotas) {
             if (DiskQuotaExceeded) {
@@ -1628,7 +1628,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         CoordinatorSelector = new TCoordinators(ProcessingParams);
     }
 
-    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TTableInfo::TPartitionStats& newAggr, const TTableInfo::TPartitionStats& oldAggr = TTableInfo::TPartitionStats()) {
+    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TTableInfo::TPartitionStats& newAggr, const TTableInfo::TPartitionStats& oldAggr = TTableInfo::TPartitionStats()) { 
         DiskSpaceUsage.Tables.DataSize += (newAggr.DataSize - oldAggr.DataSize);
         counters->ChangeDiskSpaceTablesDataBytes(newAggr.DataSize - oldAggr.DataSize);
 
@@ -1661,17 +1661,17 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         DatabaseQuotas.ConstructInPlace(databaseQuotas);
     }
 
-    void SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas, IQuotaCounters* counters) {
+    void SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas, IQuotaCounters* counters) { 
         auto prev = GetDiskSpaceQuotas();
-        auto prevs = GetStreamShardsQuota();
-        auto prevrs = GetStreamReservedStorageQuota();
+        auto prevs = GetStreamShardsQuota(); 
+        auto prevrs = GetStreamReservedStorageQuota(); 
         DatabaseQuotas.ConstructInPlace(databaseQuotas);
         auto next = GetDiskSpaceQuotas();
-        auto nexts = GetStreamShardsQuota();
-        auto nextrs = GetStreamReservedStorageQuota();
+        auto nexts = GetStreamShardsQuota(); 
+        auto nextrs = GetStreamReservedStorageQuota(); 
         CountDiskSpaceQuotas(counters, prev, next);
-        CountStreamShardsQuota(counters, prevs, nexts);
-        CountStreamReservedStorageQuota(counters, prevrs, nextrs);
+        CountStreamShardsQuota(counters, prevs, nexts); 
+        CountStreamReservedStorageQuota(counters, prevrs, nextrs); 
     }
 
     void ApplyDeclaredSchemeQuotas(const NKikimrSubDomains::TSchemeQuotas& declaredSchemeQuotas, TInstant now) {
@@ -1799,9 +1799,9 @@ private:
     THashSet<TShardIdx> SequenceShards;
     THashSet<TShardIdx> ReplicationControllers;
 
-    ui64 PQPartitionsInsideCount = 0;
-    ui64 PQReservedStorage = 0;
-
+    ui64 PQPartitionsInsideCount = 0; 
+    ui64 PQReservedStorage = 0; 
+ 
     TPathId ResourcesDomainId;
     TTabletId SharedHive = InvalidTabletId;
 

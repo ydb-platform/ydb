@@ -96,12 +96,12 @@ struct TEvBusProxy {
         EvNavigate,
         EvFlatTxRequest,
         EvFlatDescribeRequest,
-        EvPersQueue,
+        EvPersQueue, 
         EvDbSchema,
         EvDbOperation,
         EvDbBatch,
         EvInitRoot,
-        EvChooseProxy,
+        EvChooseProxy, 
 
         EvStreamIsReadyNotUsed = EvRequest + 512,
         EvStreamIsDeadNotUsed,
@@ -122,8 +122,8 @@ struct TEvBusProxy {
     typedef TEvMsgBusRequest<EvNavigate> TEvNavigate;
     typedef TEvMsgBusRequest<EvFlatTxRequest> TEvFlatTxRequest;
     typedef TEvMsgBusRequest<EvFlatDescribeRequest> TEvFlatDescribeRequest;
-    typedef TEvMsgBusRequest<EvPersQueue> TEvPersQueue;
-    typedef TEvMsgBusRequest<EvChooseProxy> TEvChooseProxy;
+    typedef TEvMsgBusRequest<EvPersQueue> TEvPersQueue; 
+    typedef TEvMsgBusRequest<EvChooseProxy> TEvChooseProxy; 
     typedef TEvMsgBusRequest<EvDbSchema> TEvDbSchema;
     typedef TEvMsgBusRequest<EvDbOperation> TEvDbOperation;
     typedef TEvMsgBusRequest<EvDbBatch> TEvDbBatch;
@@ -289,8 +289,8 @@ IActor* CreateMessageBusGetTypes(TBusMessageContext &msg);
 IActor* CreateMessageBusHiveCreateTablet(TBusMessageContext &msg);
 IActor* CreateMessageBusLocalEnumerateTablets(TBusMessageContext &msg);
 IActor* CreateMessageBusKeyValue(TBusMessageContext &msg);
-IActor* CreateMessageBusPersQueue(TBusMessageContext &msg);
-IActor* CreateMessageBusChooseProxy(TBusMessageContext &msg);
+IActor* CreateMessageBusPersQueue(TBusMessageContext &msg); 
+IActor* CreateMessageBusChooseProxy(TBusMessageContext &msg); 
 IActor* CreateMessageBusTabletStateRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletKillRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeOperationStatus(TBusMessageContext &msg);

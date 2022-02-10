@@ -5930,12 +5930,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", "");
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot/DirA",
                         "Name: \"PQGroup_2\""
-                        "TotalGroupCount: 10 "
+                        "TotalGroupCount: 10 " 
                         "PartitionPerTablet: 10 "
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot/DirA",
                         "Name: \"PQGroup_3\""
-                        "TotalGroupCount: 10 "
+                        "TotalGroupCount: 10 " 
                         "PartitionPerTablet: 3 "
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
         TestModificationResult(runtime, txId-3, NKikimrScheme::StatusAccepted);
@@ -5955,7 +5955,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot/DirA",
                         "Name: \"PQGroup_1\""
-                        "TotalGroupCount: 100 "
+                        "TotalGroupCount: 100 " 
                         "PartitionPerTablet: 10 "
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"
                         );
@@ -5986,7 +5986,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot",
                         "Name: \"PQGroup\""
-                        "TotalGroupCount: 4 "
+                        "TotalGroupCount: 4 " 
                         "PartitionPerTablet: 3 "
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
         env.TestWaitNotification(runtime, txId);
@@ -5998,12 +5998,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // invalid params
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
                         "Name: \"PQGroup\""
-                        "TotalGroupCount: 3 "
+                        "TotalGroupCount: 3 " 
                         "PartitionPerTablet: 3 ",
                          {NKikimrScheme::StatusInvalidParameter});
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
                         "Name: \"PQGroup\""
-                        "TotalGroupCount: 4 "
+                        "TotalGroupCount: 4 " 
                         "PartitionPerTablet: 2 ",
                          {NKikimrScheme::StatusInvalidParameter});
 
@@ -6012,7 +6012,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // same sizes - reconfig
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
                         "Name: \"PQGroup\""
-                        "PartitionPerTablet: 3 "); // do not change TotalGroupCount
+                        "PartitionPerTablet: 3 "); // do not change TotalGroupCount 
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
@@ -6022,7 +6022,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
                         "Name: \"PQGroup\""
-                        "TotalGroupCount: 6 "
+                        "TotalGroupCount: 6 " 
                         "PartitionPerTablet: 3 "
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 42}}");
         env.TestWaitNotification(runtime, txId);
@@ -6034,7 +6034,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
                         "Name: \"PQGroup\""
-                        "TotalGroupCount: 8 "); // do not change PartitionPerTablet
+                        "TotalGroupCount: 8 "); // do not change PartitionPerTablet 
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
@@ -6044,7 +6044,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
                         "Name: \"PQGroup\""
-                        "TotalGroupCount: 8 "
+                        "TotalGroupCount: 8 " 
                         "PartitionPerTablet: 4 ");
         env.TestWaitNotification(runtime, txId);
 
@@ -6055,7 +6055,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
                         "Name: \"PQGroup\""
-                        "TotalGroupCount: 14 "
+                        "TotalGroupCount: 14 " 
                         "PartitionPerTablet: 4 ");
         env.TestWaitNotification(runtime, txId);
 
@@ -6067,7 +6067,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // Alter + Alter + reboot
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
                         "Name: \"PQGroup\""
-                        "TotalGroupCount: 400 "
+                        "TotalGroupCount: 400 " 
                         "PartitionPerTablet: 10 ");
         TestAlterPQGroup(runtime, ++txId, "/MyRoot", "Name: \"PQGroup\"",
                          {NKikimrScheme::StatusMultipleModifications});
@@ -6339,17 +6339,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             "KeyColumnNames: [\"RowId\"]";
 
         TString pqGroupConfig = "Name: \"DropMeBaby\""
-            "TotalGroupCount: 100 "
+            "TotalGroupCount: 100 " 
             "PartitionPerTablet: 10 "
             "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
 
         TString pqGroupConfig1 = "Name: \"DropMeBaby\""
-            "TotalGroupCount: 2 "
+            "TotalGroupCount: 2 " 
             "PartitionPerTablet: 1 "
             "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
 
         TString pqGroupAlter = "Name: \"DropMeBaby\""
-                "TotalGroupCount: 3 ";
+                "TotalGroupCount: 3 "; 
 
         TestMkDir(runtime, ++txId, "/MyRoot", "Ops");
 
@@ -6456,12 +6456,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         ui64 txId = 1000;
 
         TString pqGroupConfig = "Name: \"Isolda\""
-            "TotalGroupCount: 40 "
+            "TotalGroupCount: 40 " 
             "PartitionPerTablet: 10 "
             "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
 
         TString pqGroupAlter = "Name: \"Isolda\""
-            "TotalGroupCount: 100 ";
+            "TotalGroupCount: 100 "; 
 
         Cdbg << "Create + Drop + Create" << Endl;
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
@@ -6609,17 +6609,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         const TString pqPath = basePath + "/Isolda";
 
         TString pqGroupConfig = "Name: \"Isolda\""
-            "TotalGroupCount: 1 "
+            "TotalGroupCount: 1 " 
             "PartitionPerTablet: 10 "
             "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
 
         TString pqGroupBigConfig = "Name: \"Isolda\""
-            "TotalGroupCount: 1000 "
+            "TotalGroupCount: 1000 " 
             "PartitionPerTablet: 10 "
             "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
 
         TString pqGroupBigAlter = "Name: \"Isolda\""
-            "TotalGroupCount: 1000 ";
+            "TotalGroupCount: 1000 "; 
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "A");
         AsyncMkDir(runtime, ++txId, "/MyRoot/A", "B");
@@ -7826,7 +7826,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::CheckMountToken("BSVolume", "Owner124")});
 
-        // AssignVolume using TokenVersion
+        // AssignVolume using TokenVersion 
         TestAssignBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", "Owner125", 2);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),

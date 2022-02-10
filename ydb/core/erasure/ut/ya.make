@@ -1,8 +1,8 @@
 UNITTEST_FOR(ydb/core/erasure)
-
-FORK_SUBTESTS()
+ 
+FORK_SUBTESTS() 
 SPLIT_FACTOR(30)
-
+ 
 IF (WITH_VALGRIND)
     TIMEOUT(1800)
     SIZE(LARGE)
@@ -13,13 +13,13 @@ ELSE()
 ENDIF()
 
 OWNER(ddoarn cthulhu fomichev g:kikimr)
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/digest/crc32c
-)
-
-SRCS(
-    erasure_ut.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    erasure_ut.cpp 
+) 
+ 
+END() 

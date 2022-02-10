@@ -1,5 +1,5 @@
 UNITTEST_FOR(ydb/services/persqueue_v1)
-
+ 
 OWNER(
     alexnick
     g:kikimr
@@ -9,30 +9,30 @@ OWNER(
 CFLAGS(
     -DACTORLIB_HUGE_PB_SIZE
 )
-
-FORK_SUBTESTS()
+ 
+FORK_SUBTESTS() 
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(1800)
-    SIZE(LARGE)
+    TIMEOUT(1800) 
+    SIZE(LARGE) 
     TAG(ya:fat)
     REQUIREMENTS(ram:32)
-ELSE()
-    TIMEOUT(600)
-    SIZE(MEDIUM)
-ENDIF()
-
-SRCS(
-    persqueue_ut.cpp
+ELSE() 
+    TIMEOUT(600) 
+    SIZE(MEDIUM) 
+ENDIF() 
+ 
+SRCS( 
+    persqueue_ut.cpp 
     persqueue_common_ut.cpp
     test_utils.h
     pq_data_writer.h
     api_test_setup.h
     rate_limiter_test_setup.h
     rate_limiter_test_setup.cpp
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     library/cpp/getopt
     library/cpp/svnversion
     ydb/core/testlib
@@ -43,8 +43,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_persqueue_public
     ydb/public/sdk/cpp/client/ydb_table
     ydb/services/persqueue_v1
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-END()
+END() 

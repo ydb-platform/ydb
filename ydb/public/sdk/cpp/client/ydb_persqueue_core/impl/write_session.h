@@ -1,12 +1,12 @@
 #pragma once
 
 #include "common.h"
-#include "persqueue_impl.h"
+#include "persqueue_impl.h" 
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
-#include <util/generic/buffer.h>
-
+#include <util/generic/buffer.h> 
+ 
 
 namespace NYdb::NPersQueue {
 
@@ -85,17 +85,17 @@ public:
     }
 
     void Close(const TSessionClosedEvent& event) {
-        TWaiter waiter;
+        TWaiter waiter; 
         with_lock (Mutex) {
             CloseEvent = event;
             Closed = true;
-            waiter = TWaiter(Waiter.ExtractPromise(), this);
+            waiter = TWaiter(Waiter.ExtractPromise(), this); 
         }
 
         TEventInfo info(event);
         ApplyHandler(info);
 
-        waiter.Signal();
+        waiter.Signal(); 
     }
 
 private:
@@ -131,7 +131,7 @@ private:
         if (!Events.empty()) {
             TEventInfo event = std::move(Events.front());
             Events.pop();
-            RenewWaiterImpl();
+            RenewWaiterImpl(); 
             return event;
         }
         Y_ASSERT(CloseEvent);
@@ -165,14 +165,14 @@ private:
         ui64 SeqNo;
         TInstant CreatedAt;
         TStringBuf DataRef;
-        TMaybe<ECodec> Codec;
-        ui32 OriginalSize; // only for coded messages
-        TMessage(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec = {}, ui32 originalSize = 0)
+        TMaybe<ECodec> Codec; 
+        ui32 OriginalSize; // only for coded messages 
+        TMessage(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec = {}, ui32 originalSize = 0) 
             : SeqNo(seqNo)
             , CreatedAt(createdAt)
             , DataRef(data)
-            , Codec(codec)
-            , OriginalSize(originalSize)
+            , Codec(codec) 
+            , OriginalSize(originalSize) 
         {}
     };
 
@@ -183,18 +183,18 @@ private:
         TInstant StartedAt = TInstant::Zero();
         bool Acquired = false;
         bool FlushRequested = false;
-        void Add(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize) {
+        void Add(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize) { 
             if (StartedAt == TInstant::Zero())
                 StartedAt = TInstant::Now();
-            CurrentSize += codec ? originalSize : data.size();
-            Messages.emplace_back(seqNo, createdAt, data, codec, originalSize);
+            CurrentSize += codec ? originalSize : data.size(); 
+            Messages.emplace_back(seqNo, createdAt, data, codec, originalSize); 
             Acquired = false;
         }
 
-        bool HasCodec() const {
-            return Messages.empty() ? false : Messages.front().Codec.Defined();
-        }
-
+        bool HasCodec() const { 
+            return Messages.empty() ? false : Messages.front().Codec.Defined(); 
+        } 
+ 
         bool Acquire() {
             if (Acquired || Messages.empty())
                 return false;
@@ -226,30 +226,30 @@ private:
         size_t OriginalSize = 0;
         size_t OriginalMemoryUsage = 0;
         TString CodecID = GetCodecId(ECodec::RAW);
-        mutable TVector<TStringBuf> OriginalDataRefs;
-        mutable TBuffer Data;
+        mutable TVector<TStringBuf> OriginalDataRefs; 
+        mutable TBuffer Data; 
         bool Compressed = false;
-        mutable bool Valid = true;
-
-        TBlock& operator=(TBlock&&) = default;
-        TBlock(TBlock&&) = default;
-        TBlock() = default;
-
-        //For taking ownership by copying from const object, f.e. lambda -> std::function, priority_queue
-        void Move(const TBlock& rhs) {
-            Offset = rhs.Offset;
-            MessageCount = rhs.MessageCount;
-            PartNumber = rhs.PartNumber;
-            OriginalSize = rhs.OriginalSize;
-            OriginalMemoryUsage = rhs.OriginalMemoryUsage;
-            CodecID = rhs.CodecID;
-            OriginalDataRefs.swap(rhs.OriginalDataRefs);
-            Data.Swap(rhs.Data);
-            Compressed = rhs.Compressed;
-
-            rhs.Data.Clear();
-            rhs.OriginalDataRefs.clear();
-        }
+        mutable bool Valid = true; 
+ 
+        TBlock& operator=(TBlock&&) = default; 
+        TBlock(TBlock&&) = default; 
+        TBlock() = default; 
+ 
+        //For taking ownership by copying from const object, f.e. lambda -> std::function, priority_queue 
+        void Move(const TBlock& rhs) { 
+            Offset = rhs.Offset; 
+            MessageCount = rhs.MessageCount; 
+            PartNumber = rhs.PartNumber; 
+            OriginalSize = rhs.OriginalSize; 
+            OriginalMemoryUsage = rhs.OriginalMemoryUsage; 
+            CodecID = rhs.CodecID; 
+            OriginalDataRefs.swap(rhs.OriginalDataRefs); 
+            Data.Swap(rhs.Data); 
+            Compressed = rhs.Compressed; 
+ 
+            rhs.Data.Clear(); 
+            rhs.OriginalDataRefs.clear(); 
+        } 
     };
 
     struct TOriginalMessage {
@@ -299,10 +299,10 @@ public:
     void Write(TContinuationToken&& continuationToken, TStringBuf data,
                TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
 
-    void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,
-               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
-
-
+    void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize, 
+               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override; 
+ 
+ 
     NThreading::TFuture<void> WaitEvent() override;
 
     // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration.
@@ -313,14 +313,14 @@ public:
     ~TWriteSession(); // will not call close - destroy everything without acks
 
 private:
-
-    TString LogPrefix() const;
-
-    void UpdateTokenIfNeededImpl();
-
-    void WriteInternal(TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize,
-               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing());
-
+ 
+    TString LogPrefix() const; 
+ 
+    void UpdateTokenIfNeededImpl(); 
+ 
+    void WriteInternal(TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize, 
+               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()); 
+ 
     void FlushWriteIfRequiredImpl();
     size_t WriteBatchImpl();
     void Start(const TDuration& delay);
@@ -333,7 +333,7 @@ private:
     void OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void ResetForRetryImpl();
     THandleResult RestartImpl(const TPlainStatus& status);
-    void DoConnect(const TDuration& delay, const TString& endpoint);
+    void DoConnect(const TDuration& delay, const TString& endpoint); 
     void InitImpl();
     void ReadFromProcessor(); // Assumes that we're under lock.
     void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock.
@@ -351,7 +351,7 @@ private:
     bool IsReadyToSendNextImpl() const;
     ui64 GetNextSeqNoImpl(const TMaybe<ui64>& seqNo);
     void SendImpl();
-    void AbortImpl();
+    void AbortImpl(); 
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
     void CloseImpl(EStatus statusCode, const TString& message);
     void CloseImpl(TPlainStatus&& status);
@@ -372,12 +372,12 @@ private:
     TString InitialCluster;
     TString CurrentCluster;
     bool OnSeqNoShift = false;
-    TString PreferredClusterByCDS;
+    TString PreferredClusterByCDS; 
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
-    TStringType PrevToken;
-    bool UpdateTokenInProgress = false;
-    TInstant LastTokenUpdate = TInstant::Zero();
+    TStringType PrevToken; 
+    bool UpdateTokenInProgress = false; 
+    TInstant LastTokenUpdate = TInstant::Zero(); 
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
     NGrpc::IQueueClientContextPtr ClientContext; // Common client context.
     NGrpc::IQueueClientContextPtr ConnectContext;
@@ -397,11 +397,11 @@ private:
 
     TMessageBatch CurrentBatch;
 
-    std::queue<TOriginalMessage> OriginalMessagesToSend;
-    std::priority_queue<TBlock, std::vector<TBlock>, Greater> PackedMessagesToSend;
+    std::queue<TOriginalMessage> OriginalMessagesToSend; 
+    std::priority_queue<TBlock, std::vector<TBlock>, Greater> PackedMessagesToSend; 
     //! Messages that are sent but yet not acknowledged
-    std::queue<TOriginalMessage> SentOriginalMessages;
-    std::queue<TBlock> SentPackedMessage;
+    std::queue<TOriginalMessage> SentOriginalMessages; 
+    std::queue<TBlock> SentPackedMessage; 
 
     const size_t MaxBlockSize = std::numeric_limits<size_t>::max();
     const size_t MaxBlockMessageCount = 1; //!< Max message count that can be packed into a single block. In block version 0 is equal to 1 for compatibility
@@ -464,7 +464,7 @@ private:
     void HandleClosed(const TSessionClosedEvent&);
 
     TAdaptiveLock Lock;
-    std::queue<TContinuationToken> ContinueTokens;
+    std::queue<TContinuationToken> ContinueTokens; 
     bool Closed = false;
 };
 

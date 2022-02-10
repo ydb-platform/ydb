@@ -16,13 +16,13 @@ PEERDIR(
 SRCS(
     draft/datastreams.proto
     draft/persqueue_common.proto
-    draft/persqueue_error_codes.proto
+    draft/persqueue_error_codes.proto 
     draft/ydb_long_tx.proto
     draft/ydb_logstore.proto
     draft/yq_private.proto
-    persqueue_error_codes_v1.proto
+    persqueue_error_codes_v1.proto 
     ydb_auth.proto
-    ydb_persqueue_v1.proto
+    ydb_persqueue_v1.proto 
     ydb_persqueue_cluster_discovery.proto
     ydb_clickhouse_internal.proto
     ydb_cms.proto
@@ -48,12 +48,12 @@ SRCS(
 )
 
 CPP_PROTO_PLUGIN0(validation ydb/core/grpc_services/validation)
-
+ 
 # .pb.h are only available in C++ variant of PROTO_LIBRARY
 IF (MODULE_TAG == "CPP_PROTO")
     GENERATE_ENUM_SERIALIZATION(draft/persqueue_common.pb.h)
     GENERATE_ENUM_SERIALIZATION(ydb_persqueue_cluster_discovery.pb.h)
-    GENERATE_ENUM_SERIALIZATION(draft/datastreams.pb.h)
+    GENERATE_ENUM_SERIALIZATION(draft/datastreams.pb.h) 
 ENDIF()
 
 EXCLUDE_TAGS(GO_PROTO)

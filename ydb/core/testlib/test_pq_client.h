@@ -15,59 +15,59 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/printf.h>
-#include <util/system/tempfile.h>
+#include <util/system/tempfile.h> 
 
 namespace NKikimr {
 namespace NPersQueueTests {
 
-using namespace NNetClassifier;
-using namespace NKikimr::Tests;
-
-
-inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool roundrobin = true, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
+using namespace NNetClassifier; 
+using namespace NKikimr::Tests; 
+ 
+ 
+inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool roundrobin = true, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) { 
     NKikimrPQ::TPQConfig pqConfig;
-    NKikimrProto::TAuthConfig authConfig;
-    authConfig.SetUseBlackBox(false);
-    authConfig.SetUseAccessService(false);
-    authConfig.SetUseAccessServiceTLS(false);
-    authConfig.SetUseStaff(false);
-    authConfig.MutableTVMConfig()->SetEnabled(true);
-    authConfig.MutableTVMConfig()->SetServiceTVMId(10);
+    NKikimrProto::TAuthConfig authConfig; 
+    authConfig.SetUseBlackBox(false); 
+    authConfig.SetUseAccessService(false); 
+    authConfig.SetUseAccessServiceTLS(false); 
+    authConfig.SetUseStaff(false); 
+    authConfig.MutableTVMConfig()->SetEnabled(true); 
+    authConfig.MutableTVMConfig()->SetServiceTVMId(10); 
     authConfig.MutableTVMConfig()->SetPublicKeys(NTvmAuth::NUnittest::TVMKNIFE_PUBLIC_KEYS);
-    authConfig.MutableTVMConfig()->SetUpdatePublicKeys(false);
-    pqConfig.SetRoundRobinPartitionMapping(roundrobin);
-    const TString query = R"___(
-             DECLARE $userNameHint AS Utf8; DECLARE $uid AS Uint64;
-             SELECT DISTINCT(name) FROM (SELECT name FROM [/Root/PQ/Config/V2/Producer] WHERE tvmClientId = YQL::ToString($uid) AND ($userNameHint = name OR $userNameHint = "")
-                                UNION ALL SELECT name FROM [/Root/PQ/Config/V2/Consumer] WHERE tvmClientId = YQL::ToString($uid) AND ($userNameHint = name OR $userNameHint = ""));
-        )___";
-
-    authConfig.MutableUserRegistryConfig()->SetQuery(query);
-
+    authConfig.MutableTVMConfig()->SetUpdatePublicKeys(false); 
+    pqConfig.SetRoundRobinPartitionMapping(roundrobin); 
+    const TString query = R"___( 
+             DECLARE $userNameHint AS Utf8; DECLARE $uid AS Uint64; 
+             SELECT DISTINCT(name) FROM (SELECT name FROM [/Root/PQ/Config/V2/Producer] WHERE tvmClientId = YQL::ToString($uid) AND ($userNameHint = name OR $userNameHint = "") 
+                                UNION ALL SELECT name FROM [/Root/PQ/Config/V2/Consumer] WHERE tvmClientId = YQL::ToString($uid) AND ($userNameHint = name OR $userNameHint = "")); 
+        )___"; 
+ 
+    authConfig.MutableUserRegistryConfig()->SetQuery(query); 
+ 
     pqConfig.SetEnabled(true);
     pqConfig.SetMaxReadCookies(10);
-    for (int i = 0; i < 12; ++i) {
-        auto profile = pqConfig.AddChannelProfiles();
-        Y_UNUSED(profile);
-        profile->SetPoolKind("test");
-    }
-
-    Tests::TServerSettings settings(port, authConfig, pqConfig);
+    for (int i = 0; i < 12; ++i) { 
+        auto profile = pqConfig.AddChannelProfiles(); 
+        Y_UNUSED(profile); 
+        profile->SetPoolKind("test"); 
+    } 
+ 
+    Tests::TServerSettings settings(port, authConfig, pqConfig); 
     settings.SetDomainName("Root").SetNodeCount(nodesCount);
 
-    TVector<NKikimrKqp::TKqpSetting> kqpSettings;
-    NKikimrKqp::TKqpSetting kqpSetting;
-    kqpSetting.SetName("_KqpQueryTimeout");
-
-    kqpSetting.SetValue(yql_timeout);
-    kqpSettings.push_back(kqpSetting);
-    settings.SetKqpSettings(kqpSettings);
+    TVector<NKikimrKqp::TKqpSetting> kqpSettings; 
+    NKikimrKqp::TKqpSetting kqpSetting; 
+    kqpSetting.SetName("_KqpQueryTimeout"); 
+ 
+    kqpSetting.SetValue(yql_timeout); 
+    kqpSettings.push_back(kqpSetting); 
+    settings.SetKqpSettings(kqpSettings); 
     settings.PQClusterDiscoveryConfig.SetEnabled(true);
     settings.PQClusterDiscoveryConfig.SetTimedCountersUpdateIntervalSeconds(1);
 
-    if (netDataFile)
-        settings.NetClassifierConfig.SetNetDataFilePath(netDataFile->Name());
-
+    if (netDataFile) 
+        settings.NetClassifierConfig.SetNetDataFilePath(netDataFile->Name()); 
+ 
     return settings;
 }
 
@@ -117,9 +117,9 @@ struct TRequestCreatePQ {
     TString User;
     ui64 ReadSpeed;
 
-    TVector<TString> ReadRules;
-    TVector<TString> Important;
-
+    TVector<TString> ReadRules; 
+    TVector<TString> Important; 
+ 
     std::optional<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom;
 
     ui64 SourceIdMaxCount;
@@ -138,29 +138,29 @@ struct TRequestCreatePQ {
         config->MutablePartitionConfig()->SetSourceIdMaxCounts(SourceIdMaxCount);
         config->MutablePartitionConfig()->SetLowWatermark(LowWatermark);
 
-        config->SetLocalDC(true);
+        config->SetLocalDC(true); 
 
-        auto codec = config->MutableCodecs();
-        codec->AddIds(0);
-        codec->AddCodecs("raw");
-        codec->AddIds(1);
-        codec->AddCodecs("gzip");
-        codec->AddIds(2);
-        codec->AddCodecs("lzop");
-
-        for (auto& i : Important) {
-            config->MutablePartitionConfig()->AddImportantClientId(i);
-        }
-
+        auto codec = config->MutableCodecs(); 
+        codec->AddIds(0); 
+        codec->AddCodecs("raw"); 
+        codec->AddIds(1); 
+        codec->AddCodecs("gzip"); 
+        codec->AddIds(2); 
+        codec->AddCodecs("lzop"); 
+ 
+        for (auto& i : Important) { 
+            config->MutablePartitionConfig()->AddImportantClientId(i); 
+        } 
+ 
         config->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(WriteSpeed);
         config->MutablePartitionConfig()->SetBurstSize(WriteSpeed);
-        for (auto& rr : ReadRules) {
-            config->AddReadRules(rr);
+        for (auto& rr : ReadRules) { 
+            config->AddReadRules(rr); 
             config->AddReadFromTimestampsMs(0);
             config->AddConsumerFormatVersions(0);
             config->AddReadRuleVersions(0);
             config->AddConsumerCodecs()->AddIds(0);
-        }
+        } 
         if (!ReadRules.empty()) {
             config->SetRequireAuthRead(true);
         }
@@ -524,8 +524,8 @@ public:
         , Kikimr(GetClientConfig())
     {
         auto driverConfig = NYdb::TDriverConfig()
-                .SetEndpoint(TStringBuilder() << "localhost:" << GRpcPort)
-                .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+                .SetEndpoint(TStringBuilder() << "localhost:" << GRpcPort) 
+                .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)); 
         if (databaseName) {
             driverConfig.SetDatabase(*databaseName);
         }
@@ -558,10 +558,10 @@ public:
         MkDir("/Root", "PQ");
     }
 
-    NYdb::TDriver* GetDriver() {
-        return Driver.Get();
-    }
-
+    NYdb::TDriver* GetDriver() { 
+        return Driver.Get(); 
+    } 
+ 
     void InitSourceIds(const TString& path = DEFAULT_SRC_IDS_PATH) {
         TFsPath fsPath(path);
         CreateTable(fsPath.Dirname(),
@@ -676,35 +676,35 @@ public:
         return info;
     }
 
-    void InitUserRegistry() {
-        MkDir("/Root/PQ", "Config");
-        MkDir("/Root/PQ/Config", "V2");
-
+    void InitUserRegistry() { 
+        MkDir("/Root/PQ", "Config"); 
+        MkDir("/Root/PQ/Config", "V2"); 
+ 
         RunYqlSchemeQuery(R"___(
-            CREATE TABLE [/Root/PQ/Config/V2/Consumer] (
-                name Utf8,
-                tvmClientId Utf8,
-                PRIMARY KEY (name)
-            );
-            CREATE TABLE [/Root/PQ/Config/V2/Producer] (
-                name Utf8,
-                tvmClientId Utf8,
-                PRIMARY KEY (name)
-            );
+            CREATE TABLE [/Root/PQ/Config/V2/Consumer] ( 
+                name Utf8, 
+                tvmClientId Utf8, 
+                PRIMARY KEY (name) 
+            ); 
+            CREATE TABLE [/Root/PQ/Config/V2/Producer] ( 
+                name Utf8, 
+                tvmClientId Utf8, 
+                PRIMARY KEY (name) 
+            ); 
         )___");
-
+ 
         RunYqlDataQuery(R"___(
-            UPSERT INTO [/Root/PQ/Config/V2/Consumer] (name, tvmClientId) VALUES
-                ("user1", "1"),
-                ("user2", "1"),
-                ("user5", "1"),
-                ("user3", "2");
-            UPSERT INTO [/Root/PQ/Config/V2/Producer] (name, tvmClientId) VALUES
+            UPSERT INTO [/Root/PQ/Config/V2/Consumer] (name, tvmClientId) VALUES 
+                ("user1", "1"), 
+                ("user2", "1"), 
+                ("user5", "1"), 
+                ("user3", "2"); 
+            UPSERT INTO [/Root/PQ/Config/V2/Producer] (name, tvmClientId) VALUES 
                 ("user4", "2"),
                 ("topic1", "1");
         )___");
-    }
-
+    } 
+ 
     void UpdateDC(const TString& name, bool local, bool enabled) {
         const TString query = Sprintf(
             R"___(
@@ -781,25 +781,25 @@ public:
     }
 
 
-    void RestartPartitionTablets(TTestActorRuntime* runtime, const TString& topic) {
-        TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls("/Root/PQ/" + topic);
-        Cerr << res->Record << "\n";
-        const auto& pq = res->Record.GetPathDescription().GetPersQueueGroup();
-        THashSet<ui64> tablets;
-        for (ui32 i = 0; i < pq.PartitionsSize(); ++i) {
-            tablets.insert(pq.GetPartitions(i).GetTabletId());
-        }
+    void RestartPartitionTablets(TTestActorRuntime* runtime, const TString& topic) { 
+        TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls("/Root/PQ/" + topic); 
+        Cerr << res->Record << "\n"; 
+        const auto& pq = res->Record.GetPathDescription().GetPersQueueGroup(); 
+        THashSet<ui64> tablets; 
+        for (ui32 i = 0; i < pq.PartitionsSize(); ++i) { 
+            tablets.insert(pq.GetPartitions(i).GetTabletId()); 
+        } 
         TActorId sender = runtime->AllocateEdgeActor();
-        for (auto & tablet : tablets) {
+        for (auto & tablet : tablets) { 
             ForwardToTablet(*runtime, tablet, sender, new TEvents::TEvPoisonPill(), 0);
-            TDispatchOptions options;
-            try {
-                runtime->DispatchEvents(options);
-            } catch (TEmptyEventQueueException&) {
-            }
-        }
-    }
-
+            TDispatchOptions options; 
+            try { 
+                runtime->DispatchEvents(options); 
+            } catch (TEmptyEventQueueException&) { 
+            } 
+        } 
+    } 
+ 
     bool TopicDeleted(const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableMetaRequest()->MutableCmdGetTopicMetadata();
@@ -826,7 +826,7 @@ public:
             TAutoPtr<NBus::TBusMessage>& reply, ui64 maxPrintSize = 0) {
         NBus::EMessageStatus status = SyncCall(request, reply);
         TString msgStr;
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
         if (maxPrintSize) {
             msgStr = PrintResult<NMsgBusProxy::TBusResponse>(reply.Get(), maxPrintSize);
         } else {
@@ -836,31 +836,31 @@ public:
         return dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get());
     }
 
-    void CreateConsumer(const TString& oldName) {
+    void CreateConsumer(const TString& oldName) { 
         auto name = NPersQueue::ConvertOldConsumerName(oldName);
         RunYqlSchemeQuery("CREATE TABLE [/Root/PQ/" + name + "] (" + "Topic Utf8, Partition Uint32, Offset Uint64,  PRIMARY KEY (Topic,Partition) );");
-    }
+    } 
 
-    void GrantConsumerAccess(const TString& oldName, const TString& subj) {
-        NACLib::TDiffACL acl;
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::ReadAttributes, subj);
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::WriteAttributes, subj);
+    void GrantConsumerAccess(const TString& oldName, const TString& subj) { 
+        NACLib::TDiffACL acl; 
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::ReadAttributes, subj); 
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::WriteAttributes, subj); 
         auto name = NPersQueue::ConvertOldConsumerName(oldName);
-        auto pos = name.rfind("/");
-        Y_VERIFY(pos != TString::npos);
-        auto pref = "/Root/PQ/" + name.substr(0, pos);
-        ModifyACL(pref, name.substr(pos + 1), acl.SerializeAsString());
-    }
+        auto pos = name.rfind("/"); 
+        Y_VERIFY(pos != TString::npos); 
+        auto pref = "/Root/PQ/" + name.substr(0, pos); 
+        ModifyACL(pref, name.substr(pos + 1), acl.SerializeAsString()); 
+    } 
+ 
 
-
-    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true) {
+    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true) { 
         TString path = name;
         if (UseConfigTables) {
             path = TStringBuilder() << "/Root/PQ/" << name;
         }
 
         auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
-        auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(partsCount).ClientWriteDisabled(!canWrite);
+        auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(partsCount).ClientWriteDisabled(!canWrite); 
         Cerr << "===Create topic: " << path << Endl;
         auto res = pqClient.CreateTopic(path, settings);
         //ToDo - hack, cannot avoid legacy compat yet as PQv1 still uses RequestProcessor from core/client/server
@@ -869,26 +869,26 @@ public:
         }
         if (doWait) {
             res.Wait();
-            Cerr << "Create topic result: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
-            UNIT_ASSERT(res.GetValue().IsSuccess());
+            Cerr << "Create topic result: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n"; 
+            UNIT_ASSERT(res.GetValue().IsSuccess()); 
         }
     }
 
-    void WaitTopicInit(const TString& topic) {
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
-        do {
-            auto writer = pqClient.CreateWriteSession(NYdb::NPersQueue::TWriteSessionSettings().Path(topic)
-                                    .MessageGroupId("src").ClusterDiscoveryMode(NYdb::NPersQueue::EClusterDiscoveryMode::Off));
-            auto ev = *(writer->GetEvent(true));
-            if (std::holds_alternative<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent>(ev))
-                break;
-            if (std::holds_alternative<NYdb::NPersQueue::TSessionClosedEvent>(ev)) {
-                Cerr << std::get<NYdb::NPersQueue::TSessionClosedEvent>(ev).DebugString() << "\n";
-            }
-            Sleep(TDuration::MilliSeconds(100));
-        } while (true);
-    }
-
+    void WaitTopicInit(const TString& topic) { 
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver); 
+        do { 
+            auto writer = pqClient.CreateWriteSession(NYdb::NPersQueue::TWriteSessionSettings().Path(topic) 
+                                    .MessageGroupId("src").ClusterDiscoveryMode(NYdb::NPersQueue::EClusterDiscoveryMode::Off)); 
+            auto ev = *(writer->GetEvent(true)); 
+            if (std::holds_alternative<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent>(ev)) 
+                break; 
+            if (std::holds_alternative<NYdb::NPersQueue::TSessionClosedEvent>(ev)) { 
+                Cerr << std::get<NYdb::NPersQueue::TSessionClosedEvent>(ev).DebugString() << "\n"; 
+            } 
+            Sleep(TDuration::MilliSeconds(100)); 
+        } while (true); 
+    } 
+ 
     void CreateTopic(
             const TRequestCreatePQ& createRequest,
             bool doWait = true
@@ -1003,7 +1003,7 @@ public:
         return;
     }
 
-    void DeleteTopic2(const TString& name, NPersQueue::NErrorCode::EErrorCode expectedStatus = NPersQueue::NErrorCode::OK, bool waitForTopicDeletion = true) {
+    void DeleteTopic2(const TString& name, NPersQueue::NErrorCode::EErrorCode expectedStatus = NPersQueue::NErrorCode::OK, bool waitForTopicDeletion = true) { 
         Y_VERIFY(name.StartsWith("rt3."));
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestDeletePQ{name}.GetRequest();
 
@@ -1028,7 +1028,7 @@ public:
         }
         RemoveTopic(name);
         const TInstant start = TInstant::Now();
-        while (waitForTopicDeletion && !TopicDeleted(name)) {
+        while (waitForTopicDeletion && !TopicDeleted(name)) { 
             Sleep(TDuration::MilliSeconds(50));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
@@ -1107,7 +1107,7 @@ public:
             response.CopyFrom(busResponse->Record);
         }
 
-        Cerr << response << "\n";
+        Cerr << response << "\n"; 
         UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), expectedStatus,
                                    "proxy failure");
         if (expectedStatus == NMsgBusProxy::MSTATUS_OK) {
@@ -1235,7 +1235,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(clientOffsetCount, hasClientOffset);
     }
 
-    NKikimrClient::TResponse GetClientInfo(const TVector<TString>& topics, const TString& user, bool ok, const TVector<TString>& badTopics = {}) {
+    NKikimrClient::TResponse GetClientInfo(const TVector<TString>& topics, const TString& user, bool ok, const TVector<TString>& badTopics = {}) { 
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestGetClientInfo().GetRequest(topics, user);
         Cerr << "Request: " << request->Record << Endl;
 
@@ -1245,24 +1245,24 @@ public:
         Cerr << "Response: " << response->Record << "\n";
         UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response->Record.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
                                    "proxy failure");
-        THashSet<TString> good;
-        THashSet<TString> bad;
-        for (auto& t : badTopics) {
-            bad.insert(t);
-        }
-        for (auto& t : topics) {
-            if (!bad.contains(t)) {
-                good.insert(t);
-            }
-        }
-        for (auto& tt : response->Record.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult()) {
-            const auto& topic = tt.GetTopic();
-            if (bad.contains(topic)) {
-                UNIT_ASSERT(tt.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
-            } else {
-                UNIT_ASSERT(tt.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK);
-            }
-        }
+        THashSet<TString> good; 
+        THashSet<TString> bad; 
+        for (auto& t : badTopics) { 
+            bad.insert(t); 
+        } 
+        for (auto& t : topics) { 
+            if (!bad.contains(t)) { 
+                good.insert(t); 
+            } 
+        } 
+        for (auto& tt : response->Record.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult()) { 
+            const auto& topic = tt.GetTopic(); 
+            if (bad.contains(topic)) { 
+                UNIT_ASSERT(tt.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK); 
+            } else { 
+                UNIT_ASSERT(tt.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK); 
+            } 
+        } 
         return response->Record;
     }
 
@@ -1315,8 +1315,8 @@ public:
 
             for (ui32 i = 0; i < res.TopicResultSize(); ++i) {
                 auto t = res.GetTopicResult(i);
-                if (t.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING)
-                    doRetry = true;
+                if (t.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) 
+                    doRetry = true; 
                 for (ui32 pi = 0; pi < t.PartitionLocationSize(); ++pi) {
                     if (!t.GetPartitionLocation(pi).HasHostId()) {
                         // Retry until the requested partiotions are successfully resolved
@@ -1335,36 +1335,36 @@ public:
         return nodeIds;
     }
 
-     NKikimrClient::TPersQueueMetaResponse::TCmdGetTopicMetadataResult DescribeTopic(const TVector<TString>& topics, bool error = false) {
+     NKikimrClient::TPersQueueMetaResponse::TCmdGetTopicMetadataResult DescribeTopic(const TVector<TString>& topics, bool error = false) { 
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestDescribePQ().GetRequest(topics);
 
         TAutoPtr<NBus::TBusMessage> reply;
         const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
         UNIT_ASSERT(response);
-        if ((NMsgBusProxy::EResponseStatus)response->Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-            UNIT_ASSERT(error);
-            return {};
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK,
+        if ((NMsgBusProxy::EResponseStatus)response->Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) { 
+            UNIT_ASSERT(error); 
+            return {}; 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK, 
                                    "proxy failure");
 
         auto res = response->Record.GetMetaResponse().GetCmdGetTopicMetadataResult();
-
-        UNIT_ASSERT(topics.size() <= res.TopicInfoSize());
-        for (ui32 i = 0; i < res.TopicInfoSize(); ++i) {
-            const auto& topicInfo = res.GetTopicInfo(i);
-            if (error) {
-                UNIT_ASSERT(topicInfo.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING);
-            } else {
+ 
+        UNIT_ASSERT(topics.size() <= res.TopicInfoSize()); 
+        for (ui32 i = 0; i < res.TopicInfoSize(); ++i) { 
+            const auto& topicInfo = res.GetTopicInfo(i); 
+            if (error) { 
+                UNIT_ASSERT(topicInfo.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING); 
+            } else { 
                 UNIT_ASSERT(topicInfo.GetNumPartitions() > 0 || topicInfo.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
                 UNIT_ASSERT(topicInfo.GetConfig().HasPartitionConfig() || topicInfo.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
             }
-            ui32 j = 0;
-            for (; j < topics.size() && topics[j] != topicInfo.GetTopic(); ++j);
-            UNIT_ASSERT(j == 0 || j != topics.size());
+            ui32 j = 0; 
+            for (; j < topics.size() && topics[j] != topicInfo.GetTopic(); ++j); 
+            UNIT_ASSERT(j == 0 || j != topics.size()); 
         }
-        return res;
+        return res; 
     }
 
     void TestCase(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts, ui32 resCount, ui32 hasClientOffset, bool ok) {

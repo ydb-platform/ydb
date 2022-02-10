@@ -99,8 +99,8 @@ struct TRpcServices {
         EvRefreshTokenRequest, // internal call
         EvGetShardLocations,
         EvExperimentalStreamQuery,
-        EvStreamPQWrite,
-        EvStreamPQRead,
+        EvStreamPQWrite, 
+        EvStreamPQRead, 
         EvPQReadInfo,
         EvListOperations,
         EvExportToYt,
@@ -120,10 +120,10 @@ struct TRpcServices {
         EvExportToS3,
         EvSelfCheck,
         EvStreamExecuteScanQuery,
-        EvPQDropTopic,
-        EvPQCreateTopic,
-        EvPQAlterTopic,
-        EvPQDescribeTopic,
+        EvPQDropTopic, 
+        EvPQCreateTopic, 
+        EvPQAlterTopic, 
+        EvPQDescribeTopic, 
         EvPQAddReadRule,
         EvPQRemoveReadRule,
         EvGetDiskSpaceUsage,
@@ -880,9 +880,9 @@ public:
     }
 
     TString GetPeerName() const override {
-        return Ctx_->GetPeer();
-    }
-
+        return Ctx_->GetPeer(); 
+    } 
+ 
     bool SslServer() const {
         return Ctx_->SslServer();
     }

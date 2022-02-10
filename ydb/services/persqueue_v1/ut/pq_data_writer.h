@@ -192,37 +192,37 @@ public:
         }
     }
 
-    ui32 InitSession(const TString& sourceId, ui32 pg, bool success, ui32 step = 0) {
-        Ydb::PersQueue::V1::StreamingWriteClientMessage  req;
-        Ydb::PersQueue::V1::StreamingWriteServerMessage resp;
-
-        grpc::ClientContext context;
-
-        auto stream = StubP_->StreamingWrite(&context);
-
-        UNIT_ASSERT(stream);
-        req.mutable_init_request()->set_topic("topic1");
-        req.mutable_init_request()->set_message_group_id(sourceId);
-        req.mutable_init_request()->set_partition_group_id(pg);
-
-        UNIT_ASSERT(stream->Write(req));
-        UNIT_ASSERT(stream->Read(&resp));
-        Cerr << "Init result: " << resp << "\n";
-        if (!success) {
-            UNIT_ASSERT(resp.status() != Ydb::StatusIds::SUCCESS);
-            return 0;
-        } else {
-            if (resp.status() != Ydb::StatusIds::SUCCESS && step < 5) {
-                Sleep(TDuration::MilliSeconds(100));
-                return InitSession(sourceId, pg, success, step + 1);
-            }
-            UNIT_ASSERT(resp.status() == Ydb::StatusIds::SUCCESS);
-
-            return resp.init_response().partition_id();
-        }
-        return 0;
-    }
-
+    ui32 InitSession(const TString& sourceId, ui32 pg, bool success, ui32 step = 0) { 
+        Ydb::PersQueue::V1::StreamingWriteClientMessage  req; 
+        Ydb::PersQueue::V1::StreamingWriteServerMessage resp; 
+ 
+        grpc::ClientContext context; 
+ 
+        auto stream = StubP_->StreamingWrite(&context); 
+ 
+        UNIT_ASSERT(stream); 
+        req.mutable_init_request()->set_topic("topic1"); 
+        req.mutable_init_request()->set_message_group_id(sourceId); 
+        req.mutable_init_request()->set_partition_group_id(pg); 
+ 
+        UNIT_ASSERT(stream->Write(req)); 
+        UNIT_ASSERT(stream->Read(&resp)); 
+        Cerr << "Init result: " << resp << "\n"; 
+        if (!success) { 
+            UNIT_ASSERT(resp.status() != Ydb::StatusIds::SUCCESS); 
+            return 0; 
+        } else { 
+            if (resp.status() != Ydb::StatusIds::SUCCESS && step < 5) { 
+                Sleep(TDuration::MilliSeconds(100)); 
+                return InitSession(sourceId, pg, success, step + 1); 
+            } 
+            UNIT_ASSERT(resp.status() == Ydb::StatusIds::SUCCESS); 
+ 
+            return resp.init_response().partition_id(); 
+        } 
+        return 0; 
+    } 
+ 
     ui32 Write(const TString& topic, const TVector<TString>& data, bool error = false, const TMaybe<TString>& ticket = {}) {
         return WriteImpl(topic, {data}, error, ticket);
     }

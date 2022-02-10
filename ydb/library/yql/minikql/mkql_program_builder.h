@@ -521,7 +521,7 @@ public:
 
     //-- bit logical functions
     TRuntimeNode BitNot(TRuntimeNode data);
-    TRuntimeNode CountBits(TRuntimeNode data);
+    TRuntimeNode CountBits(TRuntimeNode data); 
     TRuntimeNode BitAnd(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode BitOr(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode BitXor(TRuntimeNode data1, TRuntimeNode data2);

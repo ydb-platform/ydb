@@ -2676,15 +2676,15 @@ function onTopicNodeComplete(result, obj) {
     var panelSchema = $("#panel-schema").find(".panel-body").get(0);
     panelSchema.innerHTML = "<table class='proplist'><table>";
     var tab = $(panelSchema).find("table").get(0);
-    for (var i = 0; i < result.LabeledCountersByGroup.length; ++i) {
-        var labeledCountersByGroup = result.LabeledCountersByGroup[i];
+    for (var i = 0; i < result.LabeledCountersByGroup.length; ++i) { 
+        var labeledCountersByGroup = result.LabeledCountersByGroup[i]; 
         var row = tab.insertRow();
-        row.insertCell(-1).innerHTML = labeledCountersByGroup.Group;
-        for (var idx = 0; idx < labeledCountersByGroup.LabeledCounter.length; ++idx) {
-            var row = tab.insertRow();
-            row.insertCell(-1).innerHTML = labeledCountersByGroup.LabeledCounter[idx].Name;
-            row.insertCell(-1).innerHTML = labeledCountersByGroup.LabeledCounter[idx].Value;
-        }
+        row.insertCell(-1).innerHTML = labeledCountersByGroup.Group; 
+        for (var idx = 0; idx < labeledCountersByGroup.LabeledCounter.length; ++idx) { 
+            var row = tab.insertRow(); 
+            row.insertCell(-1).innerHTML = labeledCountersByGroup.LabeledCounter[idx].Name; 
+            row.insertCell(-1).innerHTML = labeledCountersByGroup.LabeledCounter[idx].Value; 
+        } 
     }
 }
 

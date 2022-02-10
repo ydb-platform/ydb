@@ -511,7 +511,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["yql_internal"] = &hasYqlInternal;
         bool hasPQ = services.empty();
         names["pq"] = &hasPQ;
-        bool hasPQv1 = false;
+        bool hasPQv1 = false; 
         names["pqv1"] = &hasPQv1;
         bool hasPQCD = false;
         names["pqcd"] = &hasPQCD;
@@ -673,10 +673,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NKesus::TKesusGRpcService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
-        if (hasPQv1) {
+        if (hasPQv1) { 
             server.AddService(new NGRpcService::V1::TGRpcPersQueueService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
-        }
-
+        } 
+ 
         if (hasPQCD) {
             // the service has its own flag since it should be capable of using custom grpc port
             const auto& pqcdConfig = AppData->PQClusterDiscoveryConfig;
@@ -854,7 +854,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
-
+ 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
         : nullptr;
@@ -1190,9 +1190,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableTabletCountersAggregator) {
         sil->AddServiceInitializer(new TTabletCountersAggregatorInitializer(runConfig));
     }
-    if (serviceMask.EnableGRpcProxyStatus) {
-        sil->AddServiceInitializer(new TGRpcProxyStatusInitializer(runConfig));
-    }
+    if (serviceMask.EnableGRpcProxyStatus) { 
+        sil->AddServiceInitializer(new TGRpcProxyStatusInitializer(runConfig)); 
+    } 
     if (serviceMask.EnableRestartsCountPublisher) {
         sil->AddServiceInitializer(new TRestartsCountPublisher(runConfig));
     }

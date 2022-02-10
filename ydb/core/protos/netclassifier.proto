@@ -3,15 +3,15 @@ package NKikimrNetClassifier;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TNetClassifierUpdaterConfig {
-    enum EFormat {
-        TSV = 0;
-        NETBOX = 1;
-    }
-
+    enum EFormat { 
+        TSV = 0; 
+        NETBOX = 1; 
+    } 
+ 
     optional string NetDataSourceUrl = 1;
     optional uint32 RetryIntervalSeconds = 2;
     optional uint32 NetDataUpdateIntervalSeconds = 3;
-    optional EFormat Format = 4 [default = TSV];
+    optional EFormat Format = 4 [default = TSV]; 
     repeated string NetBoxTags = 5;
 }
 

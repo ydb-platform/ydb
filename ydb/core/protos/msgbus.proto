@@ -188,10 +188,10 @@ message TResponse {
     optional TFlatTxId FlatTxId = 700;
 
     // TPersQueueRequest
-    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 800; // TODO: rename to something more PQ-specific
+    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 800; // TODO: rename to something more PQ-specific 
     optional TPersQueuePartitionResponse PartitionResponse = 801;
     optional TPersQueueMetaResponse MetaResponse = 802;
-    optional TPersQueueFetchResponse FetchResponse = 803;
+    optional TPersQueueFetchResponse FetchResponse = 803; 
 
     // TKeyValueRequest
     optional uint64 Cookie = 900;
@@ -238,11 +238,11 @@ message TResponse {
     optional NKikimrBlobStorage.TConfigResponse BlobStorageConfigResponse = 1030;
 
     optional TResolveNodeResponse ResolveNodeResponse = 1040;
-
-    // TChooseProxyRequest
-    optional string ProxyName = 1050;
-    optional uint64 ProxyCookie = 1051;
-
+ 
+    // TChooseProxyRequest 
+    optional string ProxyName = 1050; 
+    optional uint64 ProxyCookie = 1051; 
+ 
     // TWhoAmI
     optional string UserName = 1100;
     repeated string Groups = 1101;
@@ -498,12 +498,12 @@ message TJSON {
     optional TJsonSettings JsonSettings = 3;
 };
 
-message TChooseProxyRequest {
+message TChooseProxyRequest { 
     optional uint32 DataCenterNum = 1;
     optional string DataCenter = 3;
-    optional bool PreferLocalProxy = 2 [default = false];
-}
-
+    optional bool PreferLocalProxy = 2 [default = false]; 
+} 
+ 
 message TWhoAmI {
     optional bool ReturnGroups = 1;
     optional string SecurityToken = 5;

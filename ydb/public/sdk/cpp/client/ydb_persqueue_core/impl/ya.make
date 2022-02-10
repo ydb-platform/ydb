@@ -11,7 +11,7 @@ SRCS(
     write_session.cpp
     read_session.cpp
     persqueue.cpp
-    persqueue_impl.cpp
+    persqueue_impl.cpp 
 )
 
 PEERDIR(

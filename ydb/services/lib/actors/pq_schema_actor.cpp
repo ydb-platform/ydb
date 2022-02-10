@@ -20,18 +20,18 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     constexpr i32 MAX_SUPPORTED_CODECS_COUNT = 100;
 
-    TClientServiceTypes GetSupportedClientServiceTypes(const TActorContext& ctx) {
-        TClientServiceTypes serviceTypes;
+    TClientServiceTypes GetSupportedClientServiceTypes(const TActorContext& ctx) { 
+        TClientServiceTypes serviceTypes; 
         const auto& pqConfig = AppData(ctx)->PQConfig;
-        ui32 count = pqConfig.GetDefaultClientServiceType().GetMaxReadRulesCountPerTopic();
-        if (count == 0) count = Max<ui32>();
-        TString name = pqConfig.GetDefaultClientServiceType().GetName();
-        serviceTypes.insert({name, {name, count}});
+        ui32 count = pqConfig.GetDefaultClientServiceType().GetMaxReadRulesCountPerTopic(); 
+        if (count == 0) count = Max<ui32>(); 
+        TString name = pqConfig.GetDefaultClientServiceType().GetName(); 
+        serviceTypes.insert({name, {name, count}}); 
         for (const auto& serviceType : pqConfig.GetClientServiceType()) {
-            ui32 count = serviceType.GetMaxReadRulesCountPerTopic();
-            if (count == 0) count = Max<ui32>();
-            TString name = serviceType.GetName();
-            serviceTypes.insert({name, {name, count}});
+            ui32 count = serviceType.GetMaxReadRulesCountPerTopic(); 
+            if (count == 0) count = Max<ui32>(); 
+            TString name = serviceType.GetName(); 
+            serviceTypes.insert({name, {name, count}}); 
         }
         return serviceTypes;
     }
@@ -57,20 +57,20 @@ namespace NKikimr::NGRpcProxy::V1 {
     TString AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig* config,
         const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr,
-        const TClientServiceTypes& supportedClientServiceTypes,
+        const TClientServiceTypes& supportedClientServiceTypes, 
         const TActorContext& ctx
     ) {
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.consumer_name(), ctx);
-        if(consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
-            return TStringBuilder() << "consumer '" << rr.consumer_name() << "' has illegal symbols";
-        }
+        if(consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) { 
+            return TStringBuilder() << "consumer '" << rr.consumer_name() << "' has illegal symbols"; 
+        } 
         {
             TString migrationError = ReadRuleServiceTypeMigration(config, ctx);
             if (migrationError) {
                 return migrationError;
             }
         }
-
+ 
         config->AddReadRules(consumerName);
 
         if (rr.starting_message_timestamp_ms() < 0) {
@@ -103,7 +103,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             config->MutablePartitionConfig()->AddImportantClientId(consumerName);
 
         if (!rr.service_type().empty()) {
-            if (!supportedClientServiceTypes.contains(rr.service_type())) {
+            if (!supportedClientServiceTypes.contains(rr.service_type())) { 
                 return TStringBuilder() << "Unknown read rule service type '" << rr.service_type()
                                         << "' for consumer '" << rr.consumer_name() << "'";
             }
@@ -162,7 +162,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 config->AddReadRuleServiceTypes(originalConfig.GetReadRuleServiceTypes(i));
             } else {
                 if (pqConfig.GetDisallowDefaultClientServiceType()) {
-                    return TStringBuilder() << "service type cannot be empty for consumer '"
+                    return TStringBuilder() << "service type cannot be empty for consumer '" 
                         << originalConfig.GetReadRules(i) << "'";
                 }
                 config->AddReadRuleServiceTypes(pqConfig.GetDefaultClientServiceType().GetName());
@@ -176,15 +176,15 @@ namespace NKikimr::NGRpcProxy::V1 {
         return "";
     }
 
-    bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedClientServiceTypes,
-                                TString& error) {
-
-        if (config.GetReadRules().size() > MAX_READ_RULES_COUNT) {
-            error = TStringBuilder() << "read rules count cannot be more than "
-                                     << MAX_SUPPORTED_CODECS_COUNT << ", provided " << config.GetReadRules().size();
-            return false;
-        }
-
+    bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedClientServiceTypes, 
+                                TString& error) { 
+ 
+        if (config.GetReadRules().size() > MAX_READ_RULES_COUNT) { 
+            error = TStringBuilder() << "read rules count cannot be more than " 
+                                     << MAX_SUPPORTED_CODECS_COUNT << ", provided " << config.GetReadRules().size(); 
+            return false; 
+        } 
+ 
         THashSet<TString> readRuleConsumers;
         for (auto consumerName : config.GetReadRules()) {
             if (readRuleConsumers.find(consumerName) != readRuleConsumers.end()) {
@@ -193,21 +193,21 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
             readRuleConsumers.insert(consumerName);
         }
-
-        for (const auto& t : supportedClientServiceTypes) {
-
-            auto type = t.first;
-            auto count = std::count_if(config.GetReadRuleServiceTypes().begin(), config.GetReadRuleServiceTypes().end(),
-                        [type](const TString& cType){
-                            return type == cType;
-                        });
-            auto limit = t.second.MaxCount;
-            if (count > limit) {
-                error = TStringBuilder() << "Count of consumers with service type '" << type << "' is limited for " << limit << " for stream\n";
-                return false;
-            }
-        }
-
+ 
+        for (const auto& t : supportedClientServiceTypes) { 
+ 
+            auto type = t.first; 
+            auto count = std::count_if(config.GetReadRuleServiceTypes().begin(), config.GetReadRuleServiceTypes().end(), 
+                        [type](const TString& cType){ 
+                            return type == cType; 
+                        }); 
+            auto limit = t.second.MaxCount; 
+            if (count > limit) { 
+                error = TStringBuilder() << "Count of consumers with service type '" << type << "' is limited for " << limit << " for stream\n"; 
+                return false; 
+            } 
+        } 
+ 
         return false;
     }
 
@@ -266,15 +266,15 @@ namespace NKikimr::NGRpcProxy::V1 {
                     error = TStringBuilder() << "Attirbute allow_unauthenticated_write is " << pair.second << ", which is not bool";
                     return Ydb::StatusIds::BAD_REQUEST;
                 }
-            } else if (pair.first == "_abc_slug") {
-                config->SetAbcSlug(pair.second);
-            } else if (pair.first == "_abc_id") {
-                try {
-                    config->SetAbcId(!FromString<ui32>(pair.second));
-                } catch(...) {
-                    error = TStringBuilder() << "Attirbute abc_id is " << pair.second << ", which is not integer";
-                    return Ydb::StatusIds::BAD_REQUEST;
-                }
+            } else if (pair.first == "_abc_slug") { 
+                config->SetAbcSlug(pair.second); 
+            } else if (pair.first == "_abc_id") { 
+                try { 
+                    config->SetAbcId(!FromString<ui32>(pair.second)); 
+                } catch(...) { 
+                    error = TStringBuilder() << "Attirbute abc_id is " << pair.second << ", which is not integer"; 
+                    return Ydb::StatusIds::BAD_REQUEST; 
+                } 
             } else {
                 error = TStringBuilder() << "Attirbute " << pair.first << " is not supported";
                 return Ydb::StatusIds::BAD_REQUEST;
@@ -481,8 +481,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        CheckReadRulesConfig(*config, supportedClientServiceTypes, error);
-        return error.empty() ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST;
+        CheckReadRulesConfig(*config, supportedClientServiceTypes, error); 
+        return error.empty() ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST; 
     }
 
-}
+} 

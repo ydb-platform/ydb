@@ -21,7 +21,7 @@ public:
     TPersQueueGetTopicMetadataTopicWorker(const TActorId& parent, const TSchemeEntry& topicEntry, const TString& name);
 
     void BootstrapImpl(const TActorContext& ctx) override;
-    void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
+    void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override; 
 };
 
 
@@ -49,7 +49,7 @@ public:
 
     void BootstrapImpl(const TActorContext& ctx) override;
     bool OnPipeEventsAreReady(const TActorContext& ctx) override;
-    void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
+    void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override; 
 
 private:
     std::shared_ptr<THashSet<ui64>> PartitionsToRequest;
@@ -82,7 +82,7 @@ public:
 
     void BootstrapImpl(const TActorContext& ctx) override;
     bool OnPipeEventsAreReady(const TActorContext& ctx) override;
-    void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
+    void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override; 
 
 private:
     std::shared_ptr<THashSet<ui64>> PartitionsToRequest;
@@ -115,7 +115,7 @@ public:
 
     void BootstrapImpl(const TActorContext& ctx) override;
     bool OnPipeEventsAreReady(const TActorContext& ctx) override;
-    void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
+    void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override; 
 
 private:
     std::shared_ptr<THashSet<ui64>> PartitionsToRequest;
@@ -137,47 +137,47 @@ public:
         std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
     );
 
-    bool ReadyForAnswer(const TActorContext& ctx) override {
-        if (TPersQueueBaseRequestProcessor::ReadyForAnswer(ctx)) {
-            if (HasSessionsRequest || ReadSessions.empty()) {
-                return true;
-            }
-            HasSessionsRequest = true;
-            auto actorId = ctx.Register(CreateSessionsSubactor(std::move(ReadSessions)).Release());
-            Children.emplace(actorId, MakeHolder<TPerTopicInfo>());
-        }
-        return false;
-    }
-
-    void Handle(TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext&) {
-        for (auto & s : ev->Get()->Record.GetReadSessions()) {
-            if (!s.GetSession().empty()) {
+    bool ReadyForAnswer(const TActorContext& ctx) override { 
+        if (TPersQueueBaseRequestProcessor::ReadyForAnswer(ctx)) { 
+            if (HasSessionsRequest || ReadSessions.empty()) { 
+                return true; 
+            } 
+            HasSessionsRequest = true; 
+            auto actorId = ctx.Register(CreateSessionsSubactor(std::move(ReadSessions)).Release()); 
+            Children.emplace(actorId, MakeHolder<TPerTopicInfo>()); 
+        } 
+        return false; 
+    } 
+ 
+    void Handle(TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext&) { 
+        for (auto & s : ev->Get()->Record.GetReadSessions()) { 
+            if (!s.GetSession().empty()) { 
                 TActorId actor = ActorIdFromProto(s.GetSessionActor());
-                ReadSessions.insert(std::make_pair(s.GetSession(), actor));
-            }
-        }
-    }
-
-
-    STFUNC(StateFunc) override {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
-            default:
-                TPersQueueBaseRequestProcessor::StateFunc(ev, ctx);
-        }
-    }
-
+                ReadSessions.insert(std::make_pair(s.GetSession(), actor)); 
+            } 
+        } 
+    } 
+ 
+ 
+    STFUNC(StateFunc) override { 
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(TEvPersQueue::TEvReadSessionsInfoResponse, Handle); 
+            default: 
+                TPersQueueBaseRequestProcessor::StateFunc(ev, ctx); 
+        } 
+    } 
+ 
 private:
-
+ 
     THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
     THolder<IActor> CreateSessionsSubactor(const THashMap<TString, TActorId>&& readSessions);
-
+ 
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
-    mutable bool HasSessionsRequest = false;
+    mutable bool HasSessionsRequest = false; 
     THashMap<TString, TActorId> ReadSessions;
 };
 
-
+ 
 class TPersQueueGetReadSessionsInfoTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>> {
 public:
     TPersQueueGetReadSessionsInfoTopicWorker(const TActorId& parent,
@@ -186,7 +186,7 @@ public:
                                              std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo);
 
     void BootstrapImpl(const TActorContext& ctx) override;
-    void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
+    void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override; 
     bool OnPipeEventsAreReady(const TActorContext& ctx) override;
 
     void Die(const TActorContext& ctx) override;

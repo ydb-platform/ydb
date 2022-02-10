@@ -1,8 +1,8 @@
-#pragma once
+#pragma once 
 
 #include "grpc_server.h"
-#include "msgbus_tabletreq.h"
-
+#include "msgbus_tabletreq.h" 
+ 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -12,11 +12,11 @@
 #include <util/generic/ptr.h>
 #include <util/system/compiler.h>
 
-namespace NKikimr {
-namespace NMsgBusProxy {
-
-const TString& TopicPrefix(const TActorContext& ctx);
-
+namespace NKikimr { 
+namespace NMsgBusProxy { 
+ 
+const TString& TopicPrefix(const TActorContext& ctx); 
+ 
 struct TProcessingResult {
     EResponseStatus Status = MSTATUS_OK;
     NPersQueue::NErrorCode::EErrorCode ErrorCode;
@@ -39,19 +39,19 @@ IActor* CreateActorServerPersQueue(
     const TActorId& schemeCache,
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory = nullptr
 );
+ 
 
-
-NKikimrClient::TResponse CreateErrorReply(EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason);
+NKikimrClient::TResponse CreateErrorReply(EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason); 
 
 template <class TResponseEvent>
 inline ui64 GetTabletId(const TResponseEvent* ev) {
     return ev->Record.GetTabletId();
-}
+} 
 
 template <>
 inline ui64 GetTabletId<TEvTabletPipe::TEvClientConnected>(const TEvTabletPipe::TEvClientConnected* ev) {
     return ev->TabletId;
-}
+} 
 
 // Base class for PQ requests. It requests EvGetNode and creates worker actors for concrete topics.
 // Than it starts merge over children responses.
@@ -65,8 +65,8 @@ protected:
     using ESchemeStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
 
     struct TPerTopicInfo {
-        TPerTopicInfo()
-        { }
+        TPerTopicInfo() 
+        { } 
         explicit TPerTopicInfo(const TSchemeEntry& topicEntry)
             : TopicEntry(topicEntry)
         {
@@ -89,13 +89,13 @@ public:
 public:
     static const TDuration TIMEOUT;
 
-    TInstant StartTimestamp = TInstant::Zero();
-    bool NeedChildrenCreation = false;
-
-    ui32 ChildrenCreated = 0;
-
-    std::deque<THolder<TPerTopicInfo>> ChildrenToCreate;
-
+    TInstant StartTimestamp = TInstant::Zero(); 
+    bool NeedChildrenCreation = false; 
+ 
+    ui32 ChildrenCreated = 0; 
+ 
+    std::deque<THolder<TPerTopicInfo>> ChildrenToCreate; 
+ 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PQ_BASE_REQUEST_PROCESSOR;
     }
@@ -103,30 +103,30 @@ public:
 protected:
     TPersQueueBaseRequestProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& pqMetaCacheId, bool listNodes);
 
-    ~TPersQueueBaseRequestProcessor();
-
+    ~TPersQueueBaseRequestProcessor(); 
+ 
 public:
     void Bootstrap(const TActorContext& ctx);
 
 protected:
-    bool CreateChildrenIfNeeded(const TActorContext& ctx);
-
+    bool CreateChildrenIfNeeded(const TActorContext& ctx); 
+ 
     virtual THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) = 0; // Creates actor for processing one concrete topic.
     virtual NKikimrClient::TResponse MergeSubactorReplies();
 
     virtual void SendReplyAndDie(NKikimrClient::TResponse&& record, const TActorContext& ctx) = 0;
-    void SendErrorReplyAndDie(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason);
+    void SendErrorReplyAndDie(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason); 
 
     bool ReadyToCreateChildren() const;
 
     // true returned from this function means that we called Die().
     [[nodiscard]] bool CreateChildren(const TActorContext& ctx);
 
-    virtual bool ReadyForAnswer(const TActorContext& ctx);
+    virtual bool ReadyForAnswer(const TActorContext& ctx); 
     void AnswerAndDie(const TActorContext& ctx);
     void GetTopicsListOrThrow(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests, THashMap<TString, std::shared_ptr<THashSet<ui64>>>& partitionsToRequest);
 
-    virtual STFUNC(StateFunc);
+    virtual STFUNC(StateFunc); 
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
@@ -162,7 +162,7 @@ protected:
     TTopicInfoBasedActor(const TSchemeEntry& topicEntry, const TString& topicName);
 
     virtual void BootstrapImpl(const TActorContext& ctx) = 0;
-    virtual void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) = 0;
+    virtual void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) = 0; 
 
     virtual void SendReplyAndDie(NKikimrClient::TResponse&& record, const TActorContext& ctx) = 0;
 
@@ -198,13 +198,13 @@ protected:
 
         ctx.Send(Parent, result.Release());
 
-        Die(ctx);
-    }
-    void Die(const TActorContext& ctx) override {
+        Die(ctx); 
+    } 
+    void Die(const TActorContext& ctx) override { 
         TBase::Die(ctx);
     }
 
-    void SendErrorReplyAndDie(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) {
+    void SendErrorReplyAndDie(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) { 
         SendReplyAndDie(CreateErrorReply(status, code, errorReason), ctx);
     }
 

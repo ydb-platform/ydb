@@ -21,25 +21,25 @@ namespace NKikimr::NGRpcProxy::V1 {
         TString& error
     );
 
-    struct TClientServiceType {
-        TString Name;
-        ui32 MaxCount;
-    };
-    typedef std::map<TString, TClientServiceType> TClientServiceTypes;
-    TClientServiceTypes GetSupportedClientServiceTypes(const TActorContext& ctx);
+    struct TClientServiceType { 
+        TString Name; 
+        ui32 MaxCount; 
+    }; 
+    typedef std::map<TString, TClientServiceType> TClientServiceTypes; 
+    TClientServiceTypes GetSupportedClientServiceTypes(const TActorContext& ctx); 
 
-    // Returns true if have duplicated read rules
-    bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedReadRuleServiceTypes, TString& error);
+    // Returns true if have duplicated read rules 
+    bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedReadRuleServiceTypes, TString& error); 
 
     TString AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig *config,
         const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr,
-        const TClientServiceTypes& supportedReadRuleServiceTypes,
+        const TClientServiceTypes& supportedReadRuleServiceTypes, 
         const TActorContext& ctx
     );
     TString RemoveReadRuleFromConfig(
         NKikimrPQ::TPQTabletConfig *config,
-        const NKikimrPQ::TPQTabletConfig& originalConfig,
+        const NKikimrPQ::TPQTabletConfig& originalConfig, 
         const TString& consumerName,
         const TActorContext& ctx
     );
@@ -107,13 +107,13 @@ namespace NKikimr::NGRpcProxy::V1 {
             PrepareTopicPath(ctx);
             auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             navigateRequest->DatabaseName = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
-
+ 
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Path = NKikimr::SplitPath(TopicPath);
             entry.SyncVersion = true;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTopic;
             navigateRequest->ResultSet.emplace_back(entry);
-
+ 
             if (this->Request_->GetInternalToken().empty()) {
                 if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                     return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
@@ -126,7 +126,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()));
             }
         }
-
+ 
         bool ReplyIfNotTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
             Y_VERIFY(result->ResultSet.size() == 1);

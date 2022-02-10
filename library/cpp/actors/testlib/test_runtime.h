@@ -286,7 +286,7 @@ namespace NActors {
 
         TActorSystem* SingleSys() const;
         TActorSystem* GetAnyNodeActorSystem();
-        TActorSystem* GetActorSystem(ui32 nodeId);
+        TActorSystem* GetActorSystem(ui32 nodeId); 
         template <typename TEvent>
         TEvent* GrabEdgeEventIf(TAutoPtr<IEventHandle>& handle, std::function<bool(const TEvent&)> predicate, TDuration simTimeout = TDuration::Max()) {
             handle.Destroy();

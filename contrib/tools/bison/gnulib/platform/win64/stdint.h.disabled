@@ -38,11 +38,11 @@
 #ifndef _MSC_STDINT_H_
 
 #if _MSC_VER >= 1600
-#  ifndef __clang__ 
-#     include <../include/stdint.h> 
-#  else 
-#     include_next <stdint.h> 
-#  endif 
+#  ifndef __clang__
+#     include <../include/stdint.h>
+#  else
+#     include_next <stdint.h>
+#  endif
 #endif
 
 #ifndef _MSC_STDINT_H_

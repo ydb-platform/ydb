@@ -1638,9 +1638,9 @@ class GnuCompiler(Compiler):
             append('CFLAGS', '-march=pentiumpro')
             append('CFLAGS', '-mtune=pentiumpro')
 
-        append('BC_CFLAGS', '$CFLAGS') 
-        append('BC_CXXFLAGS', '$CXXFLAGS') 
- 
+        append('BC_CFLAGS', '$CFLAGS')
+        append('BC_CXXFLAGS', '$CXXFLAGS')
+
         append('C_DEFINES', '-D__LONG_LONG_SUPPORTED')
 
         emit('OBJ_CROSS_SUF', '$OBJ_SUF%s' % self.cross_suffix)
@@ -2043,7 +2043,7 @@ class LD(Linker):
 
         arch_flag = '--arch={arch}'.format(arch=self.target.os_compat)
         soname_flag = '-Wl,{option},${{_SONAME}}'.format(option=self.soname_option)
-        shared_flag = '-shared' 
+        shared_flag = '-shared'
         exec_shared_flag = '-pie -fPIE -Wl,--unresolved-symbols=ignore-all -rdynamic' if self.target.is_linux else ''
         if self.whole_archive:
             srcs_globals = self.whole_archive + ' ${rootrel;ext=.a:SRCS_GLOBAL} ' + self.no_whole_archive \
@@ -2089,8 +2089,8 @@ class LD(Linker):
                  )
             emit('REAL_LINK_EXE', '$REAL_LINK_EXE_IMPL($_WHOLE_ARCHIVE_PEERS_VALUE)')
 
-        # Executable Shared Library 
- 
+        # Executable Shared Library
+
         emit('REAL_LINK_EXEC_DYN_LIB_CMDLINE',
              '$YMAKE_PYTHON ${input:"build/scripts/link_dyn_lib.py"}',
              '--target $TARGET',
@@ -2108,7 +2108,7 @@ class LD(Linker):
              ld_env_style,
              )
         emit('REAL_LINK_EXEC_DYN_LIB', '$REAL_LINK_EXEC_DYN_LIB_IMPL($_WHOLE_ARCHIVE_PEERS_VALUE)')
- 
+
         # Shared Library
 
         emit('LINK_DYN_LIB_FLAGS')
@@ -2436,7 +2436,7 @@ class MSVCCompiler(MSVC, Compiler):
             "/Zc:__cplusplus"
         ]
 
-        if self.tc.use_clang: 
+        if self.tc.use_clang:
             flags += [
                 # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
                 '-fcase-insensitive-paths',
@@ -2477,10 +2477,10 @@ class MSVCCompiler(MSVC, Compiler):
 
             cxx_warnings += [
                 '-Woverloaded-virtual',
-                '-Wno-register',  # IGNIETFERRO-722 needed for contrib 
-                '-Wimport-preprocessor-directive-pedantic', 
-                '-Wno-undefined-var-template', 
-            ] 
+                '-Wno-register',  # IGNIETFERRO-722 needed for contrib
+                '-Wimport-preprocessor-directive-pedantic',
+                '-Wno-undefined-var-template',
+            ]
             if self.tc.version_at_least(2019):
                 cxx_warnings += [
                     '-Wno-deprecated-volatile',
@@ -2502,11 +2502,11 @@ class MSVCCompiler(MSVC, Compiler):
                 if self.tc.version_exactly(2019):
                     flags.append('-fms-compatibility-version=19.21')
 
-            if self.tc.ide_msvs: 
+            if self.tc.ide_msvs:
                 cxx_warnings += [
-                    '-Wno-unused-command-line-argument', 
-                ] 
- 
+                    '-Wno-unused-command-line-argument',
+                ]
+
         if target.is_armv7:
             masm_io = '-o ${output;suf=${OBJECT_SUF}:SRC} ${input;msvs_source:SRC}'
         else:
@@ -2540,22 +2540,22 @@ class MSVCCompiler(MSVC, Compiler):
                 flags.append(include_flag(os.path.join(self.tc.kit_includes, name)))
             flags.append(include_flag(vc_include))
 
-        flags_msvs_only = [] 
- 
+        flags_msvs_only = []
+
         if self.tc.ide_msvs:
-            if not self.tc.use_clang: 
-                flags_msvs_only += ['/FD', '/MP'] 
+            if not self.tc.use_clang:
+                flags_msvs_only += ['/FD', '/MP']
             debug_info_flags = '/Zi /FS'
         else:
             debug_info_flags = '/Z7'
 
-        if self.tc.use_clang: 
-            emit('CLANG_CL', 'yes') 
-        if self.tc.ide_msvs: 
-            emit('IDE_MSVS', 'yes') 
-        if self.tc.use_arcadia_toolchain: 
-            emit('USE_ARCADIA_TOOLCHAIN', 'yes') 
- 
+        if self.tc.use_clang:
+            emit('CLANG_CL', 'yes')
+        if self.tc.ide_msvs:
+            emit('IDE_MSVS', 'yes')
+        if self.tc.use_arcadia_toolchain:
+            emit('USE_ARCADIA_TOOLCHAIN', 'yes')
+
         emit('CXX_COMPILER', self.tc.cxx_compiler)
         emit('C_COMPILER', self.tc.c_compiler)
         emit('MASM_COMPILER', self.tc.masm_compiler)
@@ -2580,7 +2580,7 @@ class MSVCCompiler(MSVC, Compiler):
 
         append('BC_CFLAGS', '$CFLAGS')
         append('BC_CXXFLAGS', '$BC_CFLAGS', '$CXXFLAGS')
- 
+
         ucrt_include = os.path.join(self.tc.kit_includes, 'ucrt') if not self.tc.ide_msvs else "$(UniversalCRT_IncludePath.Split(';')[0].Replace('\\','/'))"
 
         # clang-cl has '#include_next', and MSVC hasn't. It needs separately specified CRT and VC include directories for libc++ to include second in order standard C and C++ headers.
@@ -2813,7 +2813,7 @@ class MSVCLinker(MSVC, Linker):
         emit('LINK_PEERS_FAT_OBJECT', '${TOOLCHAIN_ENV} ${cwd:ARCADIA_BUILD_ROOT} ${LIB_WRAPPER} ${LINK_LIB_CMD} /OUT:${qe;rootrel;output:REALPRJNAME.lib} \
             --ya-start-command-file ${qe;rootrel:PEERS} $LINK_LIB_FLAGS --ya-end-command-file')
         emit('LINK_FAT_OBJECT', '${GENERATE_MF} && $GENERATE_VCS_C_INFO_NODEP && $LINK_GLOBAL_FAT_OBJECT && $LINK_PEERS_FAT_OBJECT ${kv;hide:"p LD"} ${requirements;hide:LD_REQUIREMENTS} ${kv;hide:"pc light-blue"} ${kv;hide:"show_out"}')  # noqa E501
- 
+
 
 # TODO(somov): Rename!
 Compilers = {

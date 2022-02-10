@@ -114,8 +114,8 @@ WIN32 is still required for the locale module.
  */
 #define _Py_PASTE_VERSION(SUFFIX) \
 	("[MSC v." _Py_STRINGIZE(_MSC_VER) " " SUFFIX "]")
- 
-#ifndef __clang__ 
+
+#ifndef __clang__
 /* e.g., this produces, after compile-time string catenation,
  * 	("[MSC v.1200 32 bit (Intel)]")
  *
@@ -130,11 +130,11 @@ WIN32 is still required for the locale module.
 #define _Py_STRINGIZE1(X) _Py_STRINGIZE2 ## X
 #define _Py_STRINGIZE2(X) #X
 
-#else 
-#define _Py_STRINGIZE(X) _Py_STRINGIZE1(X) 
-#define _Py_STRINGIZE1(X) #X 
-#endif 
- 
+#else
+#define _Py_STRINGIZE(X) _Py_STRINGIZE1(X)
+#define _Py_STRINGIZE1(X) #X
+#endif
+
 /* MSVC defines _WINxx to differentiate the windows platform types
 
    Note that for compatibility reasons _WIN32 is defined on Win32

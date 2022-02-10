@@ -133,13 +133,13 @@ Y_UNIT_TEST_SUITE(TRegExp) {
     }
 
     Y_UNIT_TEST(Capture5) {
-        TCapturingFsm fsm("away\\.php\\?to=http:([^\"])+\"");
-        TSearcher searcher(fsm);
-        searcher.Search("\"/away.php?to=http:some.addr\"&id=1");
-        UNIT_ASSERT(searcher.Captured());
+        TCapturingFsm fsm("away\\.php\\?to=http:([^\"])+\""); 
+        TSearcher searcher(fsm); 
+        searcher.Search("\"/away.php?to=http:some.addr\"&id=1"); 
+        UNIT_ASSERT(searcher.Captured()); 
         //UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("some.addr"));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(Capture6) {
         TCapturingFsm fsm("(/to-match-with)");
         TSearcher searcher(fsm);

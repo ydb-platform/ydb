@@ -67,7 +67,7 @@ namespace NPire {
 
         const NPire::TEncoding& Koi8r();
         const NPire::TEncoding& Cp1251();
-        const NPire::TEncoding& Get(ECharset encoding);
+        const NPire::TEncoding& Get(ECharset encoding); 
     }
 
     namespace NTokenTypes {

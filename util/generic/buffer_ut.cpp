@@ -56,22 +56,22 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
 
         buf.Resize(10);
         UNIT_ASSERT_VALUES_EQUAL(buf.size(), 10u);
-
+ 
         buf.Resize(0);
         UNIT_ASSERT_VALUES_EQUAL(buf.size(), 0u);
-
+ 
         buf.Resize(9);
         memcpy(buf.data(), content, 9);
         UNIT_ASSERT_VALUES_EQUAL(TString(buf.data(), buf.size()), "some text");
-
+ 
         buf.Resize(4);
         UNIT_ASSERT_VALUES_EQUAL(TString(buf.data(), buf.size()), "some");
     }
-
+ 
     Y_UNIT_TEST(TestReserve) {
         TBuffer buf;
         UNIT_ASSERT_EQUAL(buf.Capacity(), 0);
-
+ 
         buf.Reserve(4);
         UNIT_ASSERT_EQUAL(buf.Capacity(), 4);
 

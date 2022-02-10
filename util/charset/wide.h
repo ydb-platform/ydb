@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "recode_result.h"
 #include "unidata.h"
 #include "utf8.h"
@@ -257,7 +257,7 @@ public:
         return Begin;
     }
 };
-
+ 
 namespace NDetail {
     template <bool robust, typename TCharType>
     inline void UTF8ToWideImplScalar(const unsigned char*& cur, const unsigned char* last, TCharType*& dest) noexcept {
@@ -622,7 +622,7 @@ template <typename TChar1, typename TChar2>
 inline void Copy(const TChar1* first, size_t len, TChar2* result) {
     Copy(first, first + len, result);
 }
-
+ 
 //! copies symbols from one character sequence to another without any conversion
 //! @note this function can be used instead of the template constructor of @c std::basic_string:
 //!       template <typename InputIterator>
@@ -635,7 +635,7 @@ inline TStringType CopyTo(const TChar* first, const TChar* last) {
     Copy(first, last, str.begin());
     return str;
 }
-
+ 
 template <typename TStringType, typename TChar>
 inline TStringType CopyTo(const TChar* s, size_t n) {
     TStringType str = TStringType::Uninitialized(n);

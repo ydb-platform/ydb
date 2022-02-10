@@ -1,5 +1,5 @@
-#include "wide.h"
-
+#include "wide.h" 
+ 
 #include <util/generic/mem_copy.h>
 #include <util/string/strip.h>
 

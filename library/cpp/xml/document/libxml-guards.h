@@ -6,7 +6,7 @@
 #include <libxml/tree.h>
 #include <libxml/xpath.h>
 #include <libxml/uri.h>
-#include <libxml/xmlsave.h>
+#include <libxml/xmlsave.h> 
 
 namespace NXml {
     namespace NDetail {
@@ -28,12 +28,12 @@ namespace NXml {
             }
         };
 
-        struct TSaveCtxtPtrTraits {
-            static void Destroy(xmlSaveCtxtPtr handle) {
-                xmlSaveClose(handle);
-            }
-        };
-
+        struct TSaveCtxtPtrTraits { 
+            static void Destroy(xmlSaveCtxtPtr handle) { 
+                xmlSaveClose(handle); 
+            } 
+        }; 
+ 
     }
 
     typedef TxmlXPathContextPtr TXPathContextPtr;
@@ -45,6 +45,6 @@ namespace NXml {
     typedef TxmlNodePtr TNodePtr;
     typedef TAutoPtr<xmlOutputBuffer, NDetail::TOutputBufferPtrTraits> TOutputBufferPtr;
     typedef TxmlParserCtxtPtr TParserCtxtPtr;
-    typedef TAutoPtr<xmlSaveCtxt, NDetail::TSaveCtxtPtrTraits> TSaveCtxtPtr;
+    typedef TAutoPtr<xmlSaveCtxt, NDetail::TSaveCtxtPtrTraits> TSaveCtxtPtr; 
 
 }

@@ -48,7 +48,7 @@ Tr::Tr(const char* from, const char* to) {
         Map[(ui8)*from] = *to;
     }
 }
-
+ 
 size_t Tr::FindFirstChangePosition(const TString& str) const {
     for (auto it = str.begin(); it != str.end(); ++it) {
         if (ConvertChar(*it) != *it) {

@@ -21,10 +21,10 @@ void TFsPath::CheckDefined() const {
     }
 }
 
-bool TFsPath::IsSubpathOf(const TFsPath& that) const {
-    const TSplit& split = GetSplit();
-    const TSplit& rsplit = that.GetSplit();
-
+bool TFsPath::IsSubpathOf(const TFsPath& that) const { 
+    const TSplit& split = GetSplit(); 
+    const TSplit& rsplit = that.GetSplit(); 
+ 
     if (rsplit.IsAbsolute != split.IsAbsolute) {
         return false;
     }
@@ -34,12 +34,12 @@ bool TFsPath::IsSubpathOf(const TFsPath& that) const {
     }
 
     if (rsplit.size() >= split.size()) {
-        return false;
+        return false; 
     }
-
+ 
     return std::equal(rsplit.begin(), rsplit.end(), split.begin());
-}
-
+} 
+ 
 bool TFsPath::IsNonStrictSubpathOf(const TFsPath& that) const {
     const TSplit& split = GetSplit();
     const TSplit& rsplit = that.GetSplit();
@@ -59,12 +59,12 @@ bool TFsPath::IsNonStrictSubpathOf(const TFsPath& that) const {
     return std::equal(rsplit.begin(), rsplit.end(), split.begin());
 }
 
-TFsPath TFsPath::RelativeTo(const TFsPath& root) const {
-    TSplit split = GetSplit();
-    const TSplit& rsplit = root.GetSplit();
+TFsPath TFsPath::RelativeTo(const TFsPath& root) const { 
+    TSplit split = GetSplit(); 
+    const TSplit& rsplit = root.GetSplit(); 
 
     if (split.Reconstruct() == rsplit.Reconstruct()) {
-        return TFsPath();
+        return TFsPath(); 
     }
 
     if (!this->IsSubpathOf(root)) {
@@ -74,9 +74,9 @@ TFsPath TFsPath::RelativeTo(const TFsPath& root) const {
     split.erase(split.begin(), split.begin() + rsplit.size());
     split.IsAbsolute = false;
 
-    return TFsPath(split.Reconstruct());
-}
-
+    return TFsPath(split.Reconstruct()); 
+} 
+ 
 TFsPath TFsPath::RelativePath(const TFsPath& root) const {
     TSplit split = GetSplit();
     const TSplit& rsplit = root.GetSplit();
@@ -100,22 +100,22 @@ TFsPath TFsPath::RelativePath(const TFsPath& root) const {
     return r.size() ? TFsPath(r) : TFsPath();
 }
 
-TFsPath TFsPath::Parent() const {
+TFsPath TFsPath::Parent() const { 
     if (!IsDefined()) {
         return TFsPath();
     }
 
-    TSplit split = GetSplit();
+    TSplit split = GetSplit(); 
     if (split.size()) {
         split.pop_back();
     }
     if (!split.size() && !split.IsAbsolute) {
-        return TFsPath(".");
+        return TFsPath("."); 
     }
-    return TFsPath(split.Reconstruct());
-}
-
-TFsPath& TFsPath::operator/=(const TFsPath& that) {
+    return TFsPath(split.Reconstruct()); 
+} 
+ 
+TFsPath& TFsPath::operator/=(const TFsPath& that) { 
     if (!IsDefined()) {
         *this = that;
 
@@ -127,18 +127,18 @@ TFsPath& TFsPath::operator/=(const TFsPath& that) {
         TSplit split = GetSplit();
         const TSplit& rsplit = that.GetSplit();
         split.insert(split.end(), rsplit.begin(), rsplit.end());
-        *this = TFsPath(split.Reconstruct());
-    }
-    return *this;
-}
-
-TFsPath& TFsPath::Fix() {
-    // just normalize via reconstruction
+        *this = TFsPath(split.Reconstruct()); 
+    } 
+    return *this; 
+} 
+ 
+TFsPath& TFsPath::Fix() { 
+    // just normalize via reconstruction 
     TFsPath(GetSplit().Reconstruct()).Swap(*this);
 
-    return *this;
-}
-
+    return *this; 
+} 
+ 
 TString TFsPath::GetName() const {
     if (!IsDefined()) {
         return TString();
@@ -194,20 +194,20 @@ TFsPath::TFsPath() {
 }
 
 TFsPath::TFsPath(const TString& path)
-    : Path_(path)
-{
+    : Path_(path) 
+{ 
     VerifyPath(Path_);
 }
 
 TFsPath::TFsPath(const TStringBuf path)
-    : Path_(ToString(path))
-{
+    : Path_(ToString(path)) 
+{ 
     VerifyPath(Path_);
-}
-
-TFsPath::TFsPath(const char* path)
-    : Path_(path)
-{
+} 
+ 
+TFsPath::TFsPath(const char* path) 
+    : Path_(path) 
+{ 
 }
 
 TFsPath TFsPath::Child(const TString& name) const {
@@ -215,7 +215,7 @@ TFsPath TFsPath::Child(const TString& name) const {
         ythrow TIoException() << "child name must not be empty";
     }
 
-    return *this / name;
+    return *this / name; 
 }
 
 struct TClosedir {

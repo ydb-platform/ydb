@@ -51,7 +51,7 @@ namespace NXml {
             int bufferSize = 0;
             xmlChar* xmlBuff = nullptr;
             const char* encoding = enc.size() ? enc.data() : Doc->encoding ? nullptr : "UTF-8";
-            xmlDocDumpFormatMemoryEnc(Doc.Get(), &xmlBuff, &bufferSize, encoding, shouldFormat);
+            xmlDocDumpFormatMemoryEnc(Doc.Get(), &xmlBuff, &bufferSize, encoding, shouldFormat); 
             TCharPtr xmlCharBuffPtr(xmlBuff);
             stream.Write(xmlBuff, bufferSize);
         }
@@ -233,7 +233,7 @@ namespace NXml {
         * For historical reasons, this only works for *element* nodes.
         * Use the XPath function if you need other kinds of nodes.
         */
-        /// @todo: quiet should be default, empty nodeset is not an error
+        /// @todo: quiet should be default, empty nodeset is not an error 
         TNode Node(TZtStringBuf xpath, bool quiet = false, const TNamespacesForXPath& ns = TNamespacesForXPath());
         TConstNode Node(TZtStringBuf xpath, bool quiet = false, const TNamespacesForXPath& ns = TNamespacesForXPath()) const;
 
@@ -300,13 +300,13 @@ namespace NXml {
         TNode AddChild(TZtStringBuf name, TZtStringBuf value);
 
         /**
-        * add child node, making recursive copy of original
-        * @param node: node to copy from
-        * returns added node
-        */
-        TNode AddChild(const TConstNode& node);
-
-        /**
+        * add child node, making recursive copy of original 
+        * @param node: node to copy from 
+        * returns added node 
+        */ 
+        TNode AddChild(const TConstNode& node); 
+ 
+        /** 
         * create text child node
         * @param name: child name
         * @param value: node value
@@ -392,12 +392,12 @@ namespace NXml {
         void SetAttr(TZtStringBuf name);
 
         /**
-        * delete node attribute
-        * @param name: attribute name
-        */
+        * delete node attribute 
+        * @param name: attribute name 
+        */ 
         void DelAttr(TZtStringBuf name);
-
-        /**
+ 
+        /** 
         * set node application data
         * @param priv: new application data pointer
         */
@@ -409,27 +409,27 @@ namespace NXml {
         void* GetPrivate() const;
 
         /**
-        * get node name
-        */
+        * get node name 
+        */ 
         TString Name() const;
-
-        /**
+ 
+        /** 
         * get node xpath
         */
         TString Path() const;
 
         /**
-        * get node xml representation
-        */
+        * get node xml representation 
+        */ 
         TString ToString(TZtStringBuf enc = "") const {
-            TStringStream s;
-            Save(s, enc);
+            TStringStream s; 
+            Save(s, enc); 
             return s.Str();
-        }
+        } 
         void Save(IOutputStream& stream, TZtStringBuf enc = "", bool shouldFormat = false) const;
         void SaveAsHtml(IOutputStream& stream, TZtStringBuf enc = "", bool shouldFormat = false) const;
-
-        /**
+ 
+        /** 
         * get pointer to internal node
         */
         xmlNode* GetPtr();
@@ -454,9 +454,9 @@ namespace NXml {
         {
         }
 
-    private:
-        friend class TConstNodes;
-
+    private: 
+        friend class TConstNodes; 
+ 
         TNode(xmlDoc* doc, xmlNode* node)
             : NodePointer(node)
             , DocPointer(doc)
@@ -660,13 +660,13 @@ namespace NXml {
         }
 
         /**
-        * get node name
-        */
+        * get node name 
+        */ 
         TString Name() const {
-            return ActualNode.Name();
-        }
-
-        /**
+            return ActualNode.Name(); 
+        } 
+ 
+        /** 
         * @return application data pointer, passed by SetPrivate
         */
         void* GetPrivate() const {
@@ -694,14 +694,14 @@ namespace NXml {
             return ActualNode.Path();
         }
 
-        /**
-        * get node xml representation
-        */
+        /** 
+        * get node xml representation 
+        */ 
         TString ToString(TZtStringBuf enc = "") const {
-            return ActualNode.ToString(enc);
-        }
-
-        TConstNode() = default;
+            return ActualNode.ToString(enc); 
+        } 
+ 
+        TConstNode() = default; 
         TConstNode(TNode node)
             : ActualNode(node)
         {

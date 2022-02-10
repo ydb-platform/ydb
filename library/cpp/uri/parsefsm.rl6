@@ -141,7 +141,7 @@
     ext_ascii     = (VALID - ascii) >{ REQ(fpc, FeatureEncodeExtendedASCII) };
     ext_delims    = ( "[" | "]" | "|" |  "{" | "}" | "`" | "^" | "<" | ">"
                   | ( ["\\] >act_req_enc_sql )
-                  ) >{ REQ(fpc, FeatureEncodeExtendedDelim) }; # " fix hilite
+                  ) >{ REQ(fpc, FeatureEncodeExtendedDelim) }; # " fix hilite 
     ext_space     = " " >{ REQ(fpc, FeatureEncodeSpace) };
     ext_cntrl     = cntrl >{ REQ(fpc, FeatureEncodeCntrl) };
 
@@ -206,13 +206,13 @@
     dec_octet     = DIGIT+;
     IPv4address   = dec_octet "." dec_octet "." dec_octet "." dec_octet;
 
-    # MOD: non-empty; will use host?
+    # MOD: non-empty; will use host? 
     # reg-name      = *( unreserved / pct-encoded / sub-delims )
-    ### todo: allow ':' (need to fix grammar to disambiguate port)
-    achar         = any - (0x00 .. 0x20) - '/' - '#' - '?' - ':' - '%';
-    upperhalf     = any - (0x00 .. 0x7F);
-    hostname      = (((achar | pct_encoded)+) & (any* (alnum | upperhalf) any*));
-    reg_name      = hostname - IPv4address - IP_literal;
+    ### todo: allow ':' (need to fix grammar to disambiguate port) 
+    achar         = any - (0x00 .. 0x20) - '/' - '#' - '?' - ':' - '%'; 
+    upperhalf     = any - (0x00 .. 0x7F); 
+    hostname      = (((achar | pct_encoded)+) & (any* (alnum | upperhalf) any*)); 
+    reg_name      = hostname - IPv4address - IP_literal; 
 
     # uses first-match-wins approach
     host          = IP_literal | IPv4address | (reg_name - IPv4address);

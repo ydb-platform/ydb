@@ -23,7 +23,7 @@ SRCS(
     extra/count.cpp
     extra/glyphs.cpp
     re_lexer.cpp
-    re_parser.y
+    re_parser.y 
     read_unicode.cpp
     extraencodings.cpp
     approx_matching.cpp

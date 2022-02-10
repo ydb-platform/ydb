@@ -5,8 +5,8 @@
 #include <util/charset/utf8.h>
 #include <util/charset/wide.h>
 
-/// @todo: escape trigraphs (eg "??/" is "\")
-
+/// @todo: escape trigraphs (eg "??/" is "\") 
+ 
 /* REFEREBCES FOR ESCAPE SEQUENCE INTERPRETATION:
  *   C99 p. 6.4.3   Universal character names.
  *   C99 p. 6.4.4.4 Character constants.
@@ -31,14 +31,14 @@
  *  - Hexadecimal escape sequence spans until rightmost non-hexadecimal-digit character.
  *  - Universal character name consists of exactly 4 or 8 hexadecimal digit.
  *
- * by kerzum@
- * It is also required to escape trigraphs that are enabled in compilers by default and
- * are also processed inside string literals
- *      The nine trigraphs and their replacements are
- *
- *      Trigraph:       ??(  ??)  ??<  ??>  ??=  ??/  ??'  ??!  ??-
- *      Replacement:      [    ]    {    }    #    \    ^    |    ~
- *
+ * by kerzum@ 
+ * It is also required to escape trigraphs that are enabled in compilers by default and 
+ * are also processed inside string literals 
+ *      The nine trigraphs and their replacements are 
+ * 
+ *      Trigraph:       ??(  ??)  ??<  ??>  ??=  ??/  ??'  ??!  ??- 
+ *      Replacement:      [    ]    {    }    #    \    ^    |    ~ 
+ * 
  */
 namespace {
     template <typename TChar>

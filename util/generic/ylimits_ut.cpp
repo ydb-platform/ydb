@@ -133,7 +133,7 @@ void TLimitTest::TestLimits() {
     UNIT_ASSERT(TestFloatLimits(float()));
     UNIT_ASSERT(TestFloatLimits(double()));
     using long_double = long double;
-    UNIT_ASSERT(RUNNING_ON_VALGRIND || TestFloatLimits(long_double()));
+    UNIT_ASSERT(RUNNING_ON_VALGRIND || TestFloatLimits(long_double())); 
 }
 
 void TLimitTest::TestNan() {

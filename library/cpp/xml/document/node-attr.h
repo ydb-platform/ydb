@@ -145,12 +145,12 @@ namespace NXml {
     }
 
     inline void TNode::DelAttr(TZtStringBuf name) {
-        if (xmlUnsetProp(NodePointer, XMLCHAR(name.c_str())) < 0)
+        if (xmlUnsetProp(NodePointer, XMLCHAR(name.c_str())) < 0) 
             THROW(XmlException, "Can't delete node attribute <"
                                     << name
                                     << ">");
-    }
-
+    } 
+ 
     template <class T>
     typename std::enable_if<!std::is_convertible_v<T, TZtStringBuf>, TNode>::type
     TNode::AddChild(TZtStringBuf name, const T& value) {

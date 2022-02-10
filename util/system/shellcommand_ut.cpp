@@ -17,16 +17,16 @@
 #include <util/string/strip.h>
 #include <util/folder/tempdir.h>
 
-#if defined(_win_)
+#if defined(_win_) 
     #define NL "\r\n"
 const char catCommand[] = "sort"; // not really cat but ok
 const size_t textSize = 1;
-#else
+#else 
     #define NL "\n"
 const char catCommand[] = "/bin/cat";
 const size_t textSize = 20000;
-#endif
-
+#endif 
+ 
 class TGuardedStringStream: public IInputStream, public IOutputStream {
 public:
     TGuardedStringStream() {
@@ -72,18 +72,18 @@ Y_UNIT_TEST_SUITE(TShellQuoteTest) {
 
 Y_UNIT_TEST_SUITE(TShellCommandTest) {
     Y_UNIT_TEST(TestNoQuotes) {
-        TShellCommandOptions options;
-        options.SetQuoteArguments(false);
-        TShellCommand cmd("echo hello");
-        cmd.Run();
-        UNIT_ASSERT_VALUES_EQUAL(cmd.GetError(), "");
-        UNIT_ASSERT_VALUES_EQUAL(cmd.GetOutput(), "hello" NL);
-        UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
+        TShellCommandOptions options; 
+        options.SetQuoteArguments(false); 
+        TShellCommand cmd("echo hello"); 
+        cmd.Run(); 
+        UNIT_ASSERT_VALUES_EQUAL(cmd.GetError(), ""); 
+        UNIT_ASSERT_VALUES_EQUAL(cmd.GetOutput(), "hello" NL); 
+        UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus()); 
         UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode());
 
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetQuotedCommand(), "echo hello");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestOnlyNecessaryQuotes) {
         TShellCommandOptions options;
         options.SetQuoteArguments(true);
@@ -98,75 +98,75 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
     }
 
     Y_UNIT_TEST(TestRun) {
-        TShellCommand cmd("echo");
-        cmd << "hello";
-        cmd.Run();
-        UNIT_ASSERT_VALUES_EQUAL(cmd.GetError(), "");
-#if defined(_win_)
-        UNIT_ASSERT_VALUES_EQUAL(cmd.GetOutput(), "\"hello\"\r\n");
-#else
-        UNIT_ASSERT_VALUES_EQUAL(cmd.GetOutput(), "hello\n");
-#endif
-        UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
+        TShellCommand cmd("echo"); 
+        cmd << "hello"; 
+        cmd.Run(); 
+        UNIT_ASSERT_VALUES_EQUAL(cmd.GetError(), ""); 
+#if defined(_win_) 
+        UNIT_ASSERT_VALUES_EQUAL(cmd.GetOutput(), "\"hello\"\r\n"); 
+#else 
+        UNIT_ASSERT_VALUES_EQUAL(cmd.GetOutput(), "hello\n"); 
+#endif 
+        UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus()); 
         UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode());
-    }
-    // running with no shell is not implemented for win
-    // there should be no problem with it as long as SearchPath is on
+    } 
+    // running with no shell is not implemented for win 
+    // there should be no problem with it as long as SearchPath is on 
     Y_UNIT_TEST(TestNoShell) {
-#if defined(_win_)
-        const char dir[] = "dir";
-#else
-        const char dir[] = "ls";
-#endif
-
+#if defined(_win_) 
+        const char dir[] = "dir"; 
+#else 
+        const char dir[] = "ls"; 
+#endif 
+ 
         TShellCommandOptions options;
-        options.SetQuoteArguments(false);
-
-        {
-            options.SetUseShell(false);
-            TShellCommand cmd(dir, options);
+        options.SetQuoteArguments(false); 
+ 
+        { 
+            options.SetUseShell(false); 
+            TShellCommand cmd(dir, options); 
             cmd << "|"
                 << "sort";
-
-            cmd.Run();
-            UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus());
+ 
+            cmd.Run(); 
+            UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus()); 
             UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 != cmd.GetExitCode());
-        }
-        {
-            options.SetUseShell(true);
-            TShellCommand cmd(dir, options);
+        } 
+        { 
+            options.SetUseShell(true); 
+            TShellCommand cmd(dir, options); 
             cmd << "|"
                 << "sort";
-            cmd.Run();
-            UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
+            cmd.Run(); 
+            UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus()); 
             UNIT_ASSERT_VALUES_EQUAL(cmd.GetError().size(), 0u);
             UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode());
-        }
-    }
+        } 
+    } 
     Y_UNIT_TEST(TestAsyncRun) {
-        TShellCommandOptions options;
+        TShellCommandOptions options; 
         options.SetAsync(true);
-#if defined(_win_)
-        // fails with weird error "Input redirection is not supported"
-        // TShellCommand cmd("sleep", options);
-        // cmd << "3";
-        TShellCommand cmd("ping 1.1.1.1 -n 1 -w 2000", options);
-#else
-        TShellCommand cmd("sleep", options);
-        cmd << "2";
-#endif
+#if defined(_win_) 
+        // fails with weird error "Input redirection is not supported" 
+        // TShellCommand cmd("sleep", options); 
+        // cmd << "3"; 
+        TShellCommand cmd("ping 1.1.1.1 -n 1 -w 2000", options); 
+#else 
+        TShellCommand cmd("sleep", options); 
+        cmd << "2"; 
+#endif 
         UNIT_ASSERT(TShellCommand::SHELL_NONE == cmd.GetStatus());
         cmd.Run();
         sleep(1);
         UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus());
         cmd.Wait();
-        UNIT_ASSERT(TShellCommand::SHELL_RUNNING != cmd.GetStatus());
-        UNIT_ASSERT_VALUES_EQUAL(cmd.GetError(), "");
-#if !defined(_win_)
+        UNIT_ASSERT(TShellCommand::SHELL_RUNNING != cmd.GetStatus()); 
+        UNIT_ASSERT_VALUES_EQUAL(cmd.GetError(), ""); 
+#if !defined(_win_) 
         UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetOutput().size(), 0u);
         UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode());
-#endif
+#endif 
     }
     Y_UNIT_TEST(TestQuotes) {
         TShellCommandOptions options;
@@ -174,15 +174,15 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         TString output;
         TStringOutput outputStream(output);
         options.SetOutputStream(&outputStream);
-        TShellCommand cmd("echo", options);
+        TShellCommand cmd("echo", options); 
         cmd << input;
         cmd.Run().Wait();
         output = StripString(output);
-#if defined(_win_)
-        UNIT_ASSERT_VALUES_EQUAL("\"a\\\"a a\"", output);
-#else
+#if defined(_win_) 
+        UNIT_ASSERT_VALUES_EQUAL("\"a\\\"a a\"", output); 
+#else 
         UNIT_ASSERT_VALUES_EQUAL(input, output);
-#endif
+#endif 
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetError().size(), 0u);
     }
     Y_UNIT_TEST(TestRunNonexistent) {
@@ -199,13 +199,13 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         UNIT_ASSERT_VALUES_UNEQUAL(cmd.GetError().size(), 0u);
         UNIT_ASSERT(cmd.GetExitCode().Defined() && 2 == cmd.GetExitCode());
     }
-    // 'type con' and 'copy con con' want real console, not stdin, use sort
+    // 'type con' and 'copy con con' want real console, not stdin, use sort 
     Y_UNIT_TEST(TestInput) {
         TShellCommandOptions options;
         TString input = (TString("a") * 2000).append(NL) * textSize;
         TStringInput inputStream(input);
         options.SetInputStream(&inputStream);
-        TShellCommand cmd(catCommand, options);
+        TShellCommand cmd(catCommand, options); 
         cmd.Run().Wait();
         UNIT_ASSERT_VALUES_EQUAL(input, cmd.GetOutput());
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetError().size(), 0u);
@@ -218,28 +218,28 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         TString output;
         TStringOutput outputStream(output);
         options.SetOutputStream(&outputStream);
-        TShellCommand cmd(catCommand, options);
+        TShellCommand cmd(catCommand, options); 
         cmd.Run().Wait();
         UNIT_ASSERT_VALUES_EQUAL(input, output);
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetError().size(), 0u);
     }
     Y_UNIT_TEST(TestIO) {
-        // descriptive test: use all options
-        TShellCommandOptions options;
+        // descriptive test: use all options 
+        TShellCommandOptions options; 
         options.SetAsync(true);
-        options.SetQuoteArguments(false);
-        options.SetLatency(10);
+        options.SetQuoteArguments(false); 
+        options.SetLatency(10); 
         options.SetClearSignalMask(true);
-        options.SetCloseAllFdsOnExec(true);
+        options.SetCloseAllFdsOnExec(true); 
         options.SetCloseInput(false);
         TGuardedStringStream write;
-        options.SetInputStream(&write);
+        options.SetInputStream(&write); 
         TGuardedStringStream read;
-        options.SetOutputStream(&read);
-        options.SetUseShell(true);
-
+        options.SetOutputStream(&read); 
+        options.SetUseShell(true); 
+ 
         TShellCommand cmd("cat", options);
-        cmd.Run();
+        cmd.Run(); 
 
         write << "alpha" << NL;
         while (read.Str() != "alpha" NL) {
@@ -252,50 +252,50 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         }
 
         write << "zeta" << NL;
-        cmd.CloseInput();
-        cmd.Wait();
-
-        UNIT_ASSERT_VALUES_EQUAL(cmd.GetError(), "");
-        UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
-        UNIT_ASSERT_VALUES_EQUAL(read.Str(), "alpha" NL "omega" NL "zeta" NL);
+        cmd.CloseInput(); 
+        cmd.Wait(); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(cmd.GetError(), ""); 
+        UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus()); 
+        UNIT_ASSERT_VALUES_EQUAL(read.Str(), "alpha" NL "omega" NL "zeta" NL); 
         UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode());
-    }
+    } 
     Y_UNIT_TEST(TestStreamClose) {
         struct TStream: public IOutputStream {
-            size_t NumCloses = 0;
+            size_t NumCloses = 0; 
             void DoWrite(const void* buf, size_t len) override {
                 Y_UNUSED(buf);
                 Y_UNUSED(len);
             }
             void DoFinish() override {
-                ++NumCloses;
-            }
-        } stream;
-
-        auto options1 = TShellCommandOptions().SetCloseStreams(false).SetOutputStream(&stream).SetErrorStream(&stream);
-        TShellCommand("echo hello", options1).Run().Wait();
-        UNIT_ASSERT_VALUES_EQUAL(stream.NumCloses, 0);
-
-        auto options = TShellCommandOptions().SetCloseStreams(true).SetOutputStream(&stream).SetErrorStream(&stream);
-        TShellCommand("echo hello", options).Run().Wait();
+                ++NumCloses; 
+            } 
+        } stream; 
+ 
+        auto options1 = TShellCommandOptions().SetCloseStreams(false).SetOutputStream(&stream).SetErrorStream(&stream); 
+        TShellCommand("echo hello", options1).Run().Wait(); 
+        UNIT_ASSERT_VALUES_EQUAL(stream.NumCloses, 0); 
+ 
+        auto options = TShellCommandOptions().SetCloseStreams(true).SetOutputStream(&stream).SetErrorStream(&stream); 
+        TShellCommand("echo hello", options).Run().Wait(); 
         UNIT_ASSERT_VALUES_EQUAL(stream.NumCloses, 2);
-    }
+    } 
     Y_UNIT_TEST(TestInterruptSimple) {
-        TShellCommandOptions options;
-        options.SetAsync(true);
+        TShellCommandOptions options; 
+        options.SetAsync(true); 
         options.SetCloseInput(false);
         TGuardedStringStream write;
         options.SetInputStream(&write); // set input stream that will be waited by cat
-        TShellCommand cmd(catCommand, options);
-        cmd.Run();
+        TShellCommand cmd(catCommand, options); 
+        cmd.Run(); 
         sleep(1);
-        UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus());
-        cmd.Terminate();
-        cmd.Wait();
-        UNIT_ASSERT(TShellCommand::SHELL_RUNNING != cmd.GetStatus());
-    }
-#if !defined(_win_)
-    // this ut is unix-only, port to win using %TEMP%
+        UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus()); 
+        cmd.Terminate(); 
+        cmd.Wait(); 
+        UNIT_ASSERT(TShellCommand::SHELL_RUNNING != cmd.GetStatus()); 
+    } 
+#if !defined(_win_) 
+    // this ut is unix-only, port to win using %TEMP% 
     Y_UNIT_TEST(TestInterrupt) {
         TString tmpfile = TString("shellcommand_ut.interrupt.") + ToString(RandomNumber<ui32>());
 
@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
         UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode());
     }
-#endif
+#endif 
     Y_UNIT_TEST(TestInternalError) {
         TString input = (TString("a") * 2000).append("\n");
         TStringInput inputStream(input);
@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         TShellCommandOptions options;
         options.SetInputStream(&inputStream);
         options.SetOutputStream(&outputStream);
-        TShellCommand cmd(catCommand, options);
+        TShellCommand cmd(catCommand, options); 
         cmd.Run().Wait();
         UNIT_ASSERT(TShellCommand::SHELL_INTERNAL_ERROR == cmd.GetStatus());
         UNIT_ASSERT_VALUES_UNEQUAL(cmd.GetInternalError().size(), 0u);

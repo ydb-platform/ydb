@@ -110,6 +110,6 @@ namespace NUri {
         if (!info.Str.empty())
             return info.Str.data();
         return TScheme::SchemeEmpty == t ? "empty" : "unknown";
-    }
-
+    } 
+ 
 }

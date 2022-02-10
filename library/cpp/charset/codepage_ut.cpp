@@ -56,7 +56,7 @@ public:
     void TestCanEncode();
 
     inline void TestUpperLower() {
-        const CodePage* cp = CodePageByCharset(CODES_ASCII);
+        const CodePage* cp = CodePageByCharset(CODES_ASCII); 
         char tmp[100];
 
         TStringBuf s = "abcde";
@@ -161,13 +161,13 @@ void TCodepageTest::TestUTF() {
 }
 
 void TCodepageTest::TestBrokenMultibyte() {
-    const ECharset cp = CODES_EUC_JP;
-
+    const ECharset cp = CODES_EUC_JP; 
+ 
     const char sampletext[] = {'\xe3'};
     wchar32 recodeResult[100];
-
-    size_t nwritten = 0;
-    size_t nread = 0;
+ 
+    size_t nwritten = 0; 
+    size_t nread = 0; 
 
     RECODE_RESULT res = RecodeToUnicode(cp, sampletext, recodeResult, Y_ARRAY_SIZE(sampletext), Y_ARRAY_SIZE(recodeResult), nread, nwritten);
     UNIT_ASSERT(res == RECODE_OK);
@@ -178,8 +178,8 @@ void TCodepageTest::TestBrokenMultibyte() {
     res = RecodeToUnicode(cp, bigSample, recodeResult, Y_ARRAY_SIZE(bigSample), Y_ARRAY_SIZE(recodeResult), nread, nwritten);
     UNIT_ASSERT(res == RECODE_OK);
     UNIT_ASSERT(nread == Y_ARRAY_SIZE(bigSample));
-}
-
+} 
+ 
 void TCodepageTest::TestUTFFromUnknownPlane() {
     static const wchar32 sampletext[] = {0x61, 0x62, 0x63, 0x20,
                                          0x430, 0x431, 0x432, 0x20,
@@ -250,21 +250,21 @@ void TCodepageTest::TestUTFFromUnknownPlane() {
     }
     UNIT_ASSERT(0x1234 == charbuffer[samplelen]);
     UNIT_ASSERT(0x5678 == charbuffer[2 * samplelen + 1]);
-
-    // test TChar version
-    // bytebuffer of len writtenbytes contains sampletext of len samplelen chars in utf8
+ 
+    // test TChar version 
+    // bytebuffer of len writtenbytes contains sampletext of len samplelen chars in utf8 
     TUtf16String wtr = CharToWide(TStringBuf(bytebuffer, writtenbytes), CODES_UNKNOWNPLANE);
     TChar* strend = wtr.begin() + wtr.size();
-    DecodeUnknownPlane(wtr.begin(), strend, CODES_UTF8);
+    DecodeUnknownPlane(wtr.begin(), strend, CODES_UTF8); 
     wtr.resize(strend - wtr.data(), 'Q');
     UNIT_ASSERT_VALUES_EQUAL(wtr.size(), samplelen);
     for (size_t i = 0; i < wtr.size(); ++i) {
-        if (sampletext[i] >= 0x10000) {
-            UNIT_ASSERT_VALUES_EQUAL(wtr[i], ' ');
+        if (sampletext[i] >= 0x10000) { 
+            UNIT_ASSERT_VALUES_EQUAL(wtr[i], ' '); 
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(wtr[i], sampletext[i]);
-        }
-    }
+            UNIT_ASSERT_VALUES_EQUAL(wtr[i], sampletext[i]); 
+        } 
+    } 
 }
 
 static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize) {

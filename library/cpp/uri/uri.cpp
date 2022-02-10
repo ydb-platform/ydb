@@ -384,7 +384,7 @@ namespace NUri {
                     if (!v.empty())
                         TEncoder::EncodeNotAlnum(out, v);
                 }
-
+ 
                 if (flags & FlagPass) {
                     v = Fields[FieldPass];
                     if (v.IsInited()) {
@@ -492,7 +492,7 @@ namespace NUri {
         for (char* p_rd = p_prev; p_rd; p_rd = p_prev) {
             Y_ASSERT(p_rd == pathEnd || p_rd[0] == '/');
             p_prev = nullptr;
-
+ 
             char* p = p_rd;
 
             if (p > pathPtr) {
@@ -618,4 +618,4 @@ namespace NUri {
         return "";
     }
 
-}
+} 

@@ -1,5 +1,5 @@
 # this test in not linked into build tree with ReCURSE and is built by unittest/library
-
+ 
 UNITTEST()
 
 OWNER(
@@ -11,9 +11,9 @@ SET(PIRETESTSDIR contrib/libs/pire/ut)
 
 CFLAGS(-DPIRE_NO_CONFIG)
 
-PEERDIR(
+PEERDIR( 
     library/cpp/regex/pire
-)
+) 
 
 SRCDIR(
     ${PIRETESTSDIR}

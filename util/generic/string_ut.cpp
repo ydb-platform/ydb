@@ -23,9 +23,9 @@ static_assert(sizeof(TString) == sizeof(const char*), "expect sizeof(TString) ==
 class TStringTestZero: public TTestBase {
     UNIT_TEST_SUITE(TStringTestZero);
     UNIT_TEST(TestZero);
-    UNIT_TEST_SUITE_END();
+    UNIT_TEST_SUITE_END(); 
 
-public:
+public: 
     void TestZero() {
         const char data[] = "abc\0def\0";
         TString s(data, sizeof(data));
@@ -33,7 +33,7 @@ public:
         UNIT_ASSERT(s.StartsWith(s));
         UNIT_ASSERT(s.EndsWith(s));
         UNIT_ASSERT(s.Contains('\0'));
-
+ 
         const char raw_def[] = "def";
         const char raw_zero[] = "\0";
         TString def(raw_def, sizeof(raw_def) - 1);
@@ -52,7 +52,7 @@ public:
         UNIT_ASSERT(s != copy);
         copy.replace(copy.size() - 1, 1, "\0", 0, 1);
         UNIT_ASSERT(s == copy);
-
+ 
         TString prefix(data, 5);
         UNIT_ASSERT(s.StartsWith(prefix));
         UNIT_ASSERT(s != prefix);
@@ -60,7 +60,7 @@ public:
         UNIT_ASSERT(s > s.data());
         UNIT_ASSERT(s == TString(s.data(), s.size()));
         UNIT_ASSERT(data < s);
-
+ 
         s.remove(5);
         UNIT_ASSERT(s == prefix);
     }

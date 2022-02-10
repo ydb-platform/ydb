@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/generic/map.h>
+#include <util/generic/map.h> 
 
 #include "xml-document.h"
 
@@ -55,34 +55,34 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
                                 "    <emshort>Emily Short</emshort>\n"
                                 "  </authors>\n"
                                 "</frob>\n");
-        // check default utf8 output with ru
-        {
+        // check default utf8 output with ru 
+        { 
             NXml::TDocument xml2("frob", NXml::TDocument::RootName);
             xml2.Root().SetAttr("xyzzy", "привет =)");
             UNIT_ASSERT_VALUES_EQUAL(xml2.ToString(), "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                                       "<frob xyzzy=\"привет =)\"/>\n");
-        }
+        } 
     }
     Y_UNIT_TEST(XPathNs) {
-        using namespace NXml;
-        TDocument xml(
+        using namespace NXml; 
+        TDocument xml( 
             "<?xml version=\"1.0\"?>\n"
             "<root xmlns='http://hello.com/hello'>\n"
             "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n"
             "<text>Некоторый текст</text>\n"
             "</root>",
             TDocument::String);
-
-        TNamespacesForXPath nss;
-        TNamespaceForXPath ns = {"h", "http://hello.com/hello"};
-        nss.push_back(ns);
-
-        TConstNode root = xml.Root();
-        TConstNode b = root.Node("h:a/h:b", false, nss);
-        UNIT_ASSERT_EQUAL(b.Attr<int>("len"), 15);
-        UNIT_ASSERT_EQUAL(b.Attr<bool>("correct"), true);
-
-        TConstNode text = root.Node("h:text", false, nss);
+ 
+        TNamespacesForXPath nss; 
+        TNamespaceForXPath ns = {"h", "http://hello.com/hello"}; 
+        nss.push_back(ns); 
+ 
+        TConstNode root = xml.Root(); 
+        TConstNode b = root.Node("h:a/h:b", false, nss); 
+        UNIT_ASSERT_EQUAL(b.Attr<int>("len"), 15); 
+        UNIT_ASSERT_EQUAL(b.Attr<bool>("correct"), true); 
+ 
+        TConstNode text = root.Node("h:text", false, nss); 
         UNIT_ASSERT_EQUAL(text.Value<TString>(), "Некоторый текст");
 
         // For performance you can create xpath context once using nss and pass it.
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT(root.Node("text", true, *ctxt).IsNull());
         UNIT_ASSERT_EXCEPTION(root.Node("text", false, *ctxt), yexception);
         UNIT_ASSERT_EQUAL(root.Node("h:text", false, *ctxt).Value<TString>(), "Некоторый текст");
-    }
+    } 
     Y_UNIT_TEST(XmlNodes) {
         using namespace NXml;
         TDocument xml("<?xml version=\"1.0\"?>\n"
@@ -176,65 +176,65 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         UNIT_ASSERT_STRINGS_EQUAL(xml.Root().Node("/root/a").Value<TString>(), "first");
     }
     Y_UNIT_TEST(CopyNode) {
-        using namespace NXml;
-        // default-construct empty node
-        TNode empty;
-        // put to container
+        using namespace NXml; 
+        // default-construct empty node 
+        TNode empty; 
+        // put to container 
         TMap<int, TNode> nmap;
-        nmap[2];
-
-        // do copy
-        TDocument xml("<?xml version=\"1.0\"?>\n"
+        nmap[2]; 
+ 
+        // do copy 
+        TDocument xml("<?xml version=\"1.0\"?>\n" 
                       "<root><a></a></root>",
                       TDocument::String);
-
-        TDocument xml2("<?xml version=\"1.0\"?>\n"
+ 
+        TDocument xml2("<?xml version=\"1.0\"?>\n" 
                        "<root><node><b>bold</b><i>ita</i></node></root>",
                        TDocument::String);
-
-        TNode node = xml2.Root().Node("//node");
-        TNode place = xml.Root().Node("//a");
-
-        place.AddChild(node);
-
-        TStringStream s;
-        xml.Save(s, "", false);
-        UNIT_ASSERT_VALUES_EQUAL(s.Str(),
+ 
+        TNode node = xml2.Root().Node("//node"); 
+        TNode place = xml.Root().Node("//a"); 
+ 
+        place.AddChild(node); 
+ 
+        TStringStream s; 
+        xml.Save(s, "", false); 
+        UNIT_ASSERT_VALUES_EQUAL(s.Str(), 
                                  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                                  "<root><a><node><b>bold</b><i>ita</i></node></a></root>\n");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(RenderNode) {
-        using namespace NXml;
-        {
-            // no namespaces
-            TDocument xml(
-                "<?xml version=\"1.0\"?>\n"
-                "<root>\n"
-                "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n"
-                "<text>Некоторый текст</text>\n"
+        using namespace NXml; 
+        { 
+            // no namespaces 
+            TDocument xml( 
+                "<?xml version=\"1.0\"?>\n" 
+                "<root>\n" 
+                "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n" 
+                "<text>Некоторый текст</text>\n" 
                 "</root>",
                 TDocument::String);
-            TNode n = xml.Root().Node("//a");
-            UNIT_ASSERT_VALUES_EQUAL(n.ToString(), "<a><b len=\"15\" correct=\"1\">hello world</b></a>");
-        }
-        {
-            // namespaces
-            TDocument xml(
-                "<?xml version=\"1.0\"?>\n"
-                "<root xmlns='http://hello.com/hello'>\n"
-                "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n"
-                "<text>Некоторый текст</text>\n"
+            TNode n = xml.Root().Node("//a"); 
+            UNIT_ASSERT_VALUES_EQUAL(n.ToString(), "<a><b len=\"15\" correct=\"1\">hello world</b></a>"); 
+        } 
+        { 
+            // namespaces 
+            TDocument xml( 
+                "<?xml version=\"1.0\"?>\n" 
+                "<root xmlns='http://hello.com/hello'>\n" 
+                "<a><b len=\"15\" correct=\"1\">hello world</b></a>\n" 
+                "<text>Некоторый текст</text>\n" 
                 "</root>",
                 TDocument::String);
-            TNamespacesForXPath nss;
-            TNamespaceForXPath ns = {"h", "http://hello.com/hello"};
-            nss.push_back(ns);
-
-            TNode n = xml.Root().Node("//h:a", false, nss);
-            UNIT_ASSERT_VALUES_EQUAL(n.ToString(), "<a><b len=\"15\" correct=\"1\">hello world</b></a>");
-        }
-    }
+            TNamespacesForXPath nss; 
+            TNamespaceForXPath ns = {"h", "http://hello.com/hello"}; 
+            nss.push_back(ns); 
+ 
+            TNode n = xml.Root().Node("//h:a", false, nss); 
+            UNIT_ASSERT_VALUES_EQUAL(n.ToString(), "<a><b len=\"15\" correct=\"1\">hello world</b></a>"); 
+        } 
+    } 
 
     Y_UNIT_TEST(ReuseXPathContext) {
         using namespace NXml;

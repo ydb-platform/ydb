@@ -44,14 +44,14 @@ ALLOW .* -> vendor/k8s.io/client-go/tools/remotecommand
 ALLOW .* -> vendor/k8s.io/client-go/tools/watch
 ALLOW .* -> vendor/k8s.io/client-go/util/flowcontrol
 ALLOW .* -> vendor/k8s.io/client-go/util/workqueue
-ALLOW .* -> vendor/k8s.io/api/apps/v1 
+ALLOW .* -> vendor/k8s.io/api/apps/v1
 ALLOW .* -> vendor/k8s.io/api/authentication/v1
 ALLOW .* -> vendor/k8s.io/api/batch/v1
-ALLOW .* -> vendor/k8s.io/api/core/v1 
+ALLOW .* -> vendor/k8s.io/api/core/v1
 ALLOW .* -> vendor/k8s.io/api/rbac/v1
-ALLOW .* -> vendor/k8s.io/apimachinery/pkg/apis/meta/v1 
-ALLOW .* -> vendor/k8s.io/client-go/util/homedir 
-ALLOW .* -> vendor/k8s.io/apimachinery/pkg/api/errors 
+ALLOW .* -> vendor/k8s.io/apimachinery/pkg/apis/meta/v1
+ALLOW .* -> vendor/k8s.io/client-go/util/homedir
+ALLOW .* -> vendor/k8s.io/apimachinery/pkg/api/errors
 ALLOW .* -> vendor/k8s.io/apimachinery/pkg/labels
 ALLOW .* -> vendor/k8s.io/apimachinery/pkg/runtime
 ALLOW .* -> vendor/k8s.io/apimachinery/pkg/runtime/schema
@@ -61,7 +61,7 @@ ALLOW .* -> vendor/k8s.io/apimachinery/pkg/util/clock
 ALLOW .* -> vendor/k8s.io/apimachinery/pkg/util/runtime
 ALLOW .* -> vendor/k8s.io/apimachinery/pkg/util/wait
 ALLOW .* -> vendor/k8s.io/apimachinery/pkg/watch
-ALLOW .* -> vendor/k8s.io/apimachinery/pkg/api/resource 
+ALLOW .* -> vendor/k8s.io/apimachinery/pkg/api/resource
 
 # CONTRIB-2279
 ALLOW .* -> vendor/sigs.k8s.io/controller-runtime
@@ -129,7 +129,7 @@ ALLOW .* -> vendor/github.com/streadway/amqp
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/aws
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/s3
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/sqs
-ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/kms 
+ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/kms
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/ec2
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/route53
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/kinesis
@@ -471,9 +471,9 @@ ALLOW .* -> vendor/github.com/tarm/serial
 ALLOW .* -> vendor/github.com/tinylib/msgp
 ALLOW .* -> vendor/github.com/vmihailenco/msgpack
 
-# Generate fancy REST API from grpc api 
-ALLOW .* -> vendor/github.com/grpc-ecosystem/grpc-gateway 
- 
+# Generate fancy REST API from grpc api
+ALLOW .* -> vendor/github.com/grpc-ecosystem/grpc-gateway
+
 # tus: the open protocol for resumable file uploads
 ALLOW .* -> vendor/github.com/tus/tusd
 
@@ -504,9 +504,9 @@ ALLOW .* -> vendor/github.com/opentracing/opentracing-go
 # CONTRIB-1778
 ALLOW .* -> vendor/github.com/opentracing-contrib/go-stdlib
 
-# CONTRIB-1299. Date parser. resposible: tserakhau@ 
-ALLOW .* -> vendor/github.com/araddon/dateparse 
- 
+# CONTRIB-1299. Date parser. resposible: tserakhau@
+ALLOW .* -> vendor/github.com/araddon/dateparse
+
 # Semantic versioning parsing and comparision library
 ALLOW .* -> vendor/github.com/blang/semver/v4
 
@@ -537,9 +537,9 @@ ALLOW .* -> vendor/github.com/sideshow/apns2
 # CONTRIB-1459 Merging same-type structs with exported fields initialized as zero value of their type and same-types maps
 ALLOW .* -> vendor/github.com/imdario/mergo
 
-# CONTRIB-1468 Terminal interactive progress bar 
-ALLOW .* -> vendor/github.com/vbauerster/mpb 
- 
+# CONTRIB-1468 Terminal interactive progress bar
+ALLOW .* -> vendor/github.com/vbauerster/mpb
+
 # CONTRIB-1451 Google firebase library
 ALLOW .* -> vendor/firebase.google.com/go
 #transitive dependency for firebase
@@ -572,9 +572,9 @@ ALLOW .* -> vendor/github.com/iovisor/gobpf
 # CONTRIB-1878 pure Go library for loading, compiling, and debugging eBPF programs
 ALLOW .* -> vendor/github.com/cilium/ebpf
 
-# CONTRIB-1561 Go pretty format for numbers 
-ALLOW .* -> vendor/github.com/dustin/go-humanize 
- 
+# CONTRIB-1561 Go pretty format for numbers
+ALLOW .* -> vendor/github.com/dustin/go-humanize
+
 # CONTRIB-1615 Go pretty table formatter similar to python PrettyTable
 ALLOW .* -> vendor/github.com/olekukonko/tablewriter
 
@@ -590,14 +590,14 @@ ALLOW .* -> vendor/github.com/intel/govmm/qemu
 # CONTRIB-1650 golang ftp server library with a sample implementation
 ALLOW .* -> vendor/github.com/fclairamb/ftpserver
 
-# CONTRIB-1647 golang binlog replication implementation 
-ALLOW .* -> vendor/github.com/siddontang/go-mysql/replication 
-ALLOW .* -> vendor/github.com/siddontang/go-mysql/canal 
-ALLOW .* -> vendor/github.com/siddontang/go-mysql/mysql 
- 
-# CONTRIB-1849 binding to internal log for binlog replication 
-ALLOW library/go/core/log/compat/golog -> vendor/github.com/siddontang/go-log/log 
- 
+# CONTRIB-1647 golang binlog replication implementation
+ALLOW .* -> vendor/github.com/siddontang/go-mysql/replication
+ALLOW .* -> vendor/github.com/siddontang/go-mysql/canal
+ALLOW .* -> vendor/github.com/siddontang/go-mysql/mysql
+
+# CONTRIB-1849 binding to internal log for binlog replication
+ALLOW library/go/core/log/compat/golog -> vendor/github.com/siddontang/go-log/log
+
 # CONTRIB-1656 golang sftp server library
 ALLOW .* -> vendor/github.com/pkg/sftp
 
@@ -686,9 +686,9 @@ ALLOW .* -> vendor/github.com/coredns/coredns/plugin/loadbalance
 # CONTRIB-2021
 ALLOW .* -> vendor/github.com/shopspring/decimal
 
-# CONTRIB-2050 
+# CONTRIB-2050
 ALLOW .* -> vendor/github.com/brianvoe/gofakeit/v6
- 
+
 # CONTRIB-2051
 ALLOW .* -> vendor/github.com/envoyproxy/go-control-plane
 

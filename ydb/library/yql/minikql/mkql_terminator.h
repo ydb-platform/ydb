@@ -23,7 +23,7 @@ struct TBindTerminator : private TNonCopyable {
 
     static thread_local ITerminator* Terminator;
 private:
-    ITerminator* PreviousTerminator;
+    ITerminator* PreviousTerminator; 
 };
 
 [[noreturn]] void MKQLTerminate(const char* message);

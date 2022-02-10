@@ -52,7 +52,7 @@ public:
 
         Bounds_.clear();
         Values_.clear();
-        InfPresented_ = false;
+        InfPresented_ = false; 
 
         return snapshot;
     }

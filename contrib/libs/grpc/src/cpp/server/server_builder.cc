@@ -397,7 +397,7 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
   for (auto& port : ports_) {
     int r = server->AddListeningPort(port.addr, port.creds.get());
     if (!r) {
-      server->Shutdown();
+      server->Shutdown(); 
       return nullptr;
     }
     if (port.selected_port != nullptr) {

@@ -1,92 +1,92 @@
 {
-  "ts":"2017-07-14T02:40:00.000000Z",
-  "labels":
+  "ts":"2017-07-14T02:40:00.000000Z", 
+  "labels": 
     {
       "project":"solomon"
     },
-  "metrics":
+  "metrics": 
     [
       {
-        "type":"COUNTER",
+        "type":"COUNTER", 
         "labels":
           {
-            "labels":"l1"
+            "labels":"l1" 
           },
-        "name":"single",
-        "ts":"2017-11-05T01:02:03.000000Z",
+        "name":"single", 
+        "ts":"2017-11-05T01:02:03.000000Z", 
         "value":17
       },
       {
-        "type":"RATE",
+        "type":"RATE", 
         "labels":
           {
-            "labels":"l2"
+            "labels":"l2" 
           },
-        "name":"single",
-        "ts":"2017-11-05T01:02:03.000000Z",
+        "name":"single", 
+        "ts":"2017-11-05T01:02:03.000000Z", 
         "value":17
       },
       {
-        "type":"DGAUGE",
+        "type":"DGAUGE", 
         "labels":
           {
-            "labels":"l3"
+            "labels":"l3" 
           },
-        "name":"single",
-        "ts":"2017-11-05T01:02:03.000000Z",
+        "name":"single", 
+        "ts":"2017-11-05T01:02:03.000000Z", 
         "value":3.14
       },
       {
-        "type":"IGAUGE",
+        "type":"IGAUGE", 
         "labels":
           {
-            "labels":"l4"
+            "labels":"l4" 
           },
-        "name":"single_igauge",
-        "ts":"2017-11-05T01:02:03.000000Z",
-        "value":42
-      },
-      {
-        "type":"DGAUGE",
-        "labels":
-          {
-            "labels":"l5"
-          },
-        "name":"multiple",
+        "name":"single_igauge", 
+        "ts":"2017-11-05T01:02:03.000000Z", 
+        "value":42 
+      }, 
+      { 
+        "type":"DGAUGE", 
+        "labels": 
+          { 
+            "labels":"l5" 
+          }, 
+        "name":"multiple", 
         "timeseries":
           [
             {
-              "ts":"2017-11-05T01:02:03.000000Z",
+              "ts":"2017-11-05T01:02:03.000000Z", 
               "value":"nan"
             },
             {
-              "ts":"2017-11-05T01:02:18.000000Z",
+              "ts":"2017-11-05T01:02:18.000000Z", 
               "value":"inf"
             },
             {
-              "ts":"2017-11-05T01:02:33.000000Z",
+              "ts":"2017-11-05T01:02:33.000000Z", 
               "value":"-inf"
             }
           ]
       },
       {
-        "type":"COUNTER",
+        "type":"COUNTER", 
         "timeseries":
           [
             {
-              "ts":"2017-11-05T01:02:03.000000Z",
+              "ts":"2017-11-05T01:02:03.000000Z", 
               "value":1337
             },
             {
-              "ts":"2017-11-05T01:02:18.000000Z",
+              "ts":"2017-11-05T01:02:18.000000Z", 
               "value":1338
             }
           ],
         "labels":
           {
-            "labels":"l6"
-          },
-        "name":"multiple"
+            "labels":"l6" 
+          }, 
+        "name":"multiple" 
       }
     ]
 }

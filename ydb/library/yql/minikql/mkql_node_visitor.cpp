@@ -166,11 +166,11 @@ void TThrowingNodeVisitor::Visit(TTaggedType& node) {
     ThrowUnexpectedNodeType();
 }
 
-void TThrowingNodeVisitor::Visit(TBlockType& node) {
-    Y_UNUSED(node);
-    ThrowUnexpectedNodeType();
-}
-
+void TThrowingNodeVisitor::Visit(TBlockType& node) { 
+    Y_UNUSED(node); 
+    ThrowUnexpectedNodeType(); 
+} 
+ 
 void TThrowingNodeVisitor::ThrowUnexpectedNodeType() {
     THROW yexception() << "Unexpected node type";
 }
@@ -299,10 +299,10 @@ void TEmptyNodeVisitor::Visit(TTaggedType& node) {
     Y_UNUSED(node);
 }
 
-void TEmptyNodeVisitor::Visit(TBlockType& node) {
-    Y_UNUSED(node);
-}
-
+void TEmptyNodeVisitor::Visit(TBlockType& node) { 
+    Y_UNUSED(node); 
+} 
+ 
 void TExploringNodeVisitor::Visit(TTypeType& node) {
     Y_VERIFY_DEBUG(node.GetType() == &node);
 }
@@ -476,11 +476,11 @@ void TExploringNodeVisitor::Visit(TTaggedType& node) {
     AddChildNode(&node, *node.GetBaseType());
 }
 
-void TExploringNodeVisitor::Visit(TBlockType& node) {
-    AddChildNode(&node, *node.GetType());
-    AddChildNode(&node, *node.GetItemType());
-}
-
+void TExploringNodeVisitor::Visit(TBlockType& node) { 
+    AddChildNode(&node, *node.GetType()); 
+    AddChildNode(&node, *node.GetItemType()); 
+} 
+ 
 void TExploringNodeVisitor::AddChildNode(TNode* parent, TNode& child) {
     Stack->push_back(&child);
 

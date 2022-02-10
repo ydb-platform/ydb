@@ -103,7 +103,7 @@ class KikimrConfigGenerator(object):
             use_log_files=True,
             grpc_ssl_enable=False,
             use_in_memory_pdisks=False,
-            enable_pqcd=False,
+            enable_pqcd=False, 
             enable_metering=False,
             grpc_tls_data_path=None,
             yql_config_path=None,

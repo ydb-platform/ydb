@@ -1,8 +1,8 @@
 #include "buffered_encoder_base.h"
 
-#include <util/string/join.h>
-#include <util/string/builder.h>
-
+#include <util/string/join.h> 
+#include <util/string/builder.h> 
+ 
 namespace NMonitoring {
 
 void TBufferedEncoderBase::OnStreamBegin() {
@@ -42,8 +42,8 @@ void TBufferedEncoderBase::OnMetricEnd() {
 
                 Y_ENSURE(existing.GetValueType() == metric.TimeSeries.GetValueType(),
                     "Time series point type mismatch: expected " << existing.GetValueType()
-                    << " but found " << metric.TimeSeries.GetValueType()
-                    << ", labels '" << FormatLabels(metric.Labels) << "'");
+                    << " but found " << metric.TimeSeries.GetValueType() 
+                    << ", labels '" << FormatLabels(metric.Labels) << "'"); 
 
                 existing.CopyFrom(metric.TimeSeries);
                 Metrics_.pop_back();
@@ -144,27 +144,27 @@ void TBufferedEncoderBase::OnLogHistogram(TInstant time, TLogHistogramSnapshotPt
     metric.TimeSeries.Add(time, s.Get());
 }
 
-TString TBufferedEncoderBase::FormatLabels(const TPooledLabels& labels) const {
-    auto formattedLabels = TVector<TString>(Reserve(labels.size() + CommonLabels_.size()));
-    auto addLabel = [&](const TPooledLabel& l) {
-        auto formattedLabel = TStringBuilder() << LabelNamesPool_.Get(l.Key) << '=' << LabelValuesPool_.Get(l.Value);
-        formattedLabels.push_back(std::move(formattedLabel));
-    };
-
-    for (const auto& l: labels) {
-        addLabel(l);
-    }
-    for (const auto& l: CommonLabels_) {
-        const auto it = FindIf(labels, [&](const TPooledLabel& label) {
-            return label.Key == l.Key;
-        });
-        if (it == labels.end()) {
-            addLabel(l);
-        }
-    }
-    Sort(formattedLabels);
-
-    return TStringBuilder() << "{" <<  JoinSeq(", ", formattedLabels) << "}";
-}
-
+TString TBufferedEncoderBase::FormatLabels(const TPooledLabels& labels) const { 
+    auto formattedLabels = TVector<TString>(Reserve(labels.size() + CommonLabels_.size())); 
+    auto addLabel = [&](const TPooledLabel& l) { 
+        auto formattedLabel = TStringBuilder() << LabelNamesPool_.Get(l.Key) << '=' << LabelValuesPool_.Get(l.Value); 
+        formattedLabels.push_back(std::move(formattedLabel)); 
+    }; 
+ 
+    for (const auto& l: labels) { 
+        addLabel(l); 
+    } 
+    for (const auto& l: CommonLabels_) { 
+        const auto it = FindIf(labels, [&](const TPooledLabel& label) { 
+            return label.Key == l.Key; 
+        }); 
+        if (it == labels.end()) { 
+            addLabel(l); 
+        } 
+    } 
+    Sort(formattedLabels); 
+ 
+    return TStringBuilder() << "{" <<  JoinSeq(", ", formattedLabels) << "}"; 
+} 
+ 
 } // namespace NMonitoring

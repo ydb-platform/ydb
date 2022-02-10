@@ -23,15 +23,15 @@ namespace NMonitoring {
                 IOutputStream* out,
                 ETimePrecision timePrecision,
                 ECompression compression,
-                EMetricsMergingMode mergingMode,
-                ESpackV1Version version,
-                TStringBuf metricNameLabel
+                EMetricsMergingMode mergingMode, 
+                ESpackV1Version version, 
+                TStringBuf metricNameLabel 
             )
                 : Out_(out)
                 , TimePrecision_(timePrecision)
                 , Compression_(compression)
-                , Version_(version)
-                , MetricName_(Version_ >= SV1_02 ? LabelNamesPool_.PutIfAbsent(metricNameLabel) : nullptr)
+                , Version_(version) 
+                , MetricName_(Version_ >= SV1_02 ? LabelNamesPool_.PutIfAbsent(metricNameLabel) : nullptr) 
             {
                 MetricsMergingMode_ = mergingMode;
 
@@ -89,7 +89,7 @@ namespace NMonitoring {
 
                 // (1) write header
                 TSpackHeader header;
-                header.Version = Version_;
+                header.Version = Version_; 
                 header.TimePrecision = EncodeTimePrecision(TimePrecision_);
                 header.Compression = EncodeCompression(Compression_);
                 header.LabelNamesSize = static_cast<ui32>(
@@ -119,7 +119,7 @@ namespace NMonitoring {
                 WriteTime(CommonTime_);
 
                 // (4) write common labels' indexes
-                WriteLabels(CommonLabels_, nullptr);
+                WriteLabels(CommonLabels_, nullptr); 
 
                 // (5) write metrics
                 // metrics count already written in header
@@ -132,19 +132,19 @@ namespace NMonitoring {
                     ui8 flagsByte = 0x00;
                     Out_->Write(&flagsByte, sizeof(flagsByte));
 
-                    // v1.2 format addition — metric name
-                    if (Version_ >= SV1_02) {
-                        const auto it = FindIf(metric.Labels, [&](const auto& l) {
-                            return l.Key == MetricName_;
-                        });
-                        Y_ENSURE(it != metric.Labels.end(),
-                                 "metric name label '" << LabelNamesPool_.Get(MetricName_->Index) << "' not found, "
-                                 << "all metric labels '" << FormatLabels(metric.Labels) << "'");
-                        WriteVarUInt32(Out_, it->Value->Index);
-                    }
-
+                    // v1.2 format addition — metric name 
+                    if (Version_ >= SV1_02) { 
+                        const auto it = FindIf(metric.Labels, [&](const auto& l) { 
+                            return l.Key == MetricName_; 
+                        }); 
+                        Y_ENSURE(it != metric.Labels.end(), 
+                                 "metric name label '" << LabelNamesPool_.Get(MetricName_->Index) << "' not found, " 
+                                 << "all metric labels '" << FormatLabels(metric.Labels) << "'"); 
+                        WriteVarUInt32(Out_, it->Value->Index); 
+                    } 
+ 
                     // (5.2) labels
-                    WriteLabels(metric.Labels, MetricName_);
+                    WriteLabels(metric.Labels, MetricName_); 
 
                     // (5.3) values
                     switch (metric.TimeSeries.Size()) {
@@ -190,12 +190,12 @@ namespace NMonitoring {
                 return (static_cast<ui8>(metric.MetricType) << 2) | static_cast<ui8>(valueType);
             }
 
-            void WriteLabels(const TPooledLabels& labels, const TPooledStr* skipKey) {
-                WriteVarUInt32(Out_, static_cast<ui32>(skipKey ? labels.size() - 1 : labels.size()));
+            void WriteLabels(const TPooledLabels& labels, const TPooledStr* skipKey) { 
+                WriteVarUInt32(Out_, static_cast<ui32>(skipKey ? labels.size() - 1 : labels.size())); 
                 for (auto&& label : labels) {
-                    if (label.Key == skipKey) {
-                        continue;
-                    }
+                    if (label.Key == skipKey) { 
+                        continue; 
+                    } 
                     WriteVarUInt32(Out_, label.Key->Index);
                     WriteVarUInt32(Out_, label.Value->Index);
                 }
@@ -289,8 +289,8 @@ namespace NMonitoring {
             IOutputStream* Out_;
             ETimePrecision TimePrecision_;
             ECompression Compression_;
-            ESpackV1Version Version_;
-            const TPooledStr* MetricName_;
+            ESpackV1Version Version_; 
+            const TPooledStr* MetricName_; 
             bool Closed_ = false;
         };
 
@@ -302,17 +302,17 @@ namespace NMonitoring {
         ECompression compression,
         EMetricsMergingMode mergingMode
     ) {
-        return MakeHolder<TEncoderSpackV1>(out, timePrecision, compression, mergingMode, SV1_01, "");
+        return MakeHolder<TEncoderSpackV1>(out, timePrecision, compression, mergingMode, SV1_01, ""); 
     }
 
-    IMetricEncoderPtr EncoderSpackV12(
-        IOutputStream* out,
-        ETimePrecision timePrecision,
-        ECompression compression,
-        EMetricsMergingMode mergingMode,
-        TStringBuf metricNameLabel
-    ) {
-        Y_ENSURE(!metricNameLabel.Empty(), "metricNameLabel can't be empty");
-        return MakeHolder<TEncoderSpackV1>(out, timePrecision, compression, mergingMode, SV1_02, metricNameLabel);
-    }
+    IMetricEncoderPtr EncoderSpackV12( 
+        IOutputStream* out, 
+        ETimePrecision timePrecision, 
+        ECompression compression, 
+        EMetricsMergingMode mergingMode, 
+        TStringBuf metricNameLabel 
+    ) { 
+        Y_ENSURE(!metricNameLabel.Empty(), "metricNameLabel can't be empty"); 
+        return MakeHolder<TEncoderSpackV1>(out, timePrecision, compression, mergingMode, SV1_02, metricNameLabel); 
+    } 
 }

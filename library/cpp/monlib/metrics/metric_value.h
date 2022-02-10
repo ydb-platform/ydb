@@ -384,35 +384,35 @@ namespace NMonitoring {
 
         template <typename T>
         void Add(TInstant time, T value) {
-            Add(TPoint(time, value), TValueType<T>::Type);
-        }
-
-        void Add(TPoint point, EMetricValueType valueType) {
+            Add(TPoint(time, value), TValueType<T>::Type); 
+        } 
+ 
+        void Add(TPoint point, EMetricValueType valueType) { 
             if (Empty()) {
-                ValueType_ = valueType;
+                ValueType_ = valueType; 
             } else {
-                CheckTypes(ValueType_, valueType);
+                CheckTypes(ValueType_, valueType); 
             }
-            Points_.push_back(point);
+            Points_.push_back(point); 
 
             if (ValueType_ == EMetricValueType::SUMMARY) {
-                TPoint& p = Points_.back();
-                p.GetValue().AsSummaryDouble()->Ref();
+                TPoint& p = Points_.back(); 
+                p.GetValue().AsSummaryDouble()->Ref(); 
             } else if (ValueType_ == EMetricValueType::HISTOGRAM) {
-                TPoint& p = Points_.back();
-                p.GetValue().AsHistogram()->Ref();
+                TPoint& p = Points_.back(); 
+                p.GetValue().AsHistogram()->Ref(); 
             } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) {
-                TPoint& p = Points_.back();
-                p.GetValue().AsLogHistogram()->Ref();
+                TPoint& p = Points_.back(); 
+                p.GetValue().AsLogHistogram()->Ref(); 
             }
         }
 
         void CopyFrom(const TMetricTimeSeries& other) {
-            if (Empty()) {
-                ValueType_ = other.ValueType_;
-            } else {
-                CheckTypes(GetValueType(), other.GetValueType());
-            }
+            if (Empty()) { 
+                ValueType_ = other.ValueType_; 
+            } else { 
+                CheckTypes(GetValueType(), other.GetValueType()); 
+            } 
 
             size_t prevSize = Points_.size();
             Copy(std::begin(other.Points_), std::end(other.Points_),

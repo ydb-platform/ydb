@@ -37,10 +37,10 @@ namespace NMonitoring {
             return StrVector_.at(index).first;
         }
 
-        TStringBuf Get(const TValue* value) const {
-            return StrVector_.at(value->Index).first;
-        }
-
+        TStringBuf Get(const TValue* value) const { 
+            return StrVector_.at(value->Index).first; 
+        } 
+ 
         template <typename TConsumer>
         void ForEach(TConsumer&& c) {
             Y_ENSURE(IsBuilt_, "Pool must be sorted first");

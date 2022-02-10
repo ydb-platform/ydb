@@ -8,7 +8,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/str.h>
-#include <util/string/builder.h>
+#include <util/string/builder.h> 
 
 #include <limits>
 
@@ -136,171 +136,171 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
     const TInstant now = TInstant::ParseIso8601Deprecated("2017-11-05T01:02:03Z");
 
     Y_UNIT_TEST(Encode) {
-        auto check = [](bool cloud, bool buffered, TStringBuf expectedResourceKey) {
-            TString json;
-            TStringOutput out(json);
-            auto e = cloud
-                ? (buffered ? BufferedEncoderCloudJson(&out, 2, "metric") : EncoderCloudJson(&out, 2, "metric"))
-                : (buffered ? BufferedEncoderJson(&out, 2) : EncoderJson(&out, 2));
-            e->OnStreamBegin();
-            { // common time
-                e->OnCommonTime(TInstant::Seconds(1500000000));
+        auto check = [](bool cloud, bool buffered, TStringBuf expectedResourceKey) { 
+            TString json; 
+            TStringOutput out(json); 
+            auto e = cloud 
+                ? (buffered ? BufferedEncoderCloudJson(&out, 2, "metric") : EncoderCloudJson(&out, 2, "metric")) 
+                : (buffered ? BufferedEncoderJson(&out, 2) : EncoderJson(&out, 2)); 
+            e->OnStreamBegin(); 
+            { // common time 
+                e->OnCommonTime(TInstant::Seconds(1500000000)); 
             }
-            { // common labels
+            { // common labels 
                 e->OnLabelsBegin();
-                e->OnLabel("project", "solomon");
+                e->OnLabel("project", "solomon"); 
                 e->OnLabelsEnd();
             }
-            { // metric #1
-                e->OnMetricBegin(EMetricType::COUNTER);
-                {
-                    e->OnLabelsBegin();
-                    e->OnLabel("metric", "single");
-                    e->OnLabel("labels", "l1");
-                    e->OnLabelsEnd();
-                }
-                e->OnUint64(now, 17);
-                e->OnMetricEnd();
+            { // metric #1 
+                e->OnMetricBegin(EMetricType::COUNTER); 
+                { 
+                    e->OnLabelsBegin(); 
+                    e->OnLabel("metric", "single"); 
+                    e->OnLabel("labels", "l1"); 
+                    e->OnLabelsEnd(); 
+                } 
+                e->OnUint64(now, 17); 
+                e->OnMetricEnd(); 
             }
-            { // metric #2
-                e->OnMetricBegin(EMetricType::RATE);
-                {
-                    e->OnLabelsBegin();
-                    e->OnLabel("metric", "single");
-                    e->OnLabel("labels", "l2");
-                    e->OnLabelsEnd();
-                }
-                e->OnUint64(now, 17);
-                e->OnMetricEnd();
+            { // metric #2 
+                e->OnMetricBegin(EMetricType::RATE); 
+                { 
+                    e->OnLabelsBegin(); 
+                    e->OnLabel("metric", "single"); 
+                    e->OnLabel("labels", "l2"); 
+                    e->OnLabelsEnd(); 
+                } 
+                e->OnUint64(now, 17); 
+                e->OnMetricEnd(); 
             }
-            { // metric #3
-                e->OnMetricBegin(EMetricType::GAUGE);
-                e->OnDouble(now, 3.14);
-                {
-                    e->OnLabelsBegin();
-                    e->OnLabel("metric", "single");
-                    e->OnLabel("labels", "l3");
-                    e->OnLabelsEnd();
-                }
-                e->OnMetricEnd();
-            }
-            { // metric #4
-                e->OnMetricBegin(EMetricType::IGAUGE);
-                e->OnInt64(now, 42);
-                {
-                    e->OnLabelsBegin();
-                    e->OnLabel("metric", "single_igauge");
-                    e->OnLabel("labels", "l4");
-                    e->OnLabelsEnd();
-                }
-                e->OnMetricEnd();
-            }
-            { // metric #5
-                e->OnMetricBegin(EMetricType::GAUGE);
-                {
-                    e->OnLabelsBegin();
-                    e->OnLabel("metric", "multiple");
-                    e->OnLabel("labels", "l5");
-                    e->OnLabelsEnd();
-                }
-                e->OnDouble(now, std::numeric_limits<double>::quiet_NaN());
-                e->OnDouble(now + TDuration::Seconds(15), std::numeric_limits<double>::infinity());
-                e->OnDouble(now + TDuration::Seconds(30), -std::numeric_limits<double>::infinity());
-                e->OnMetricEnd();
-            }
-
-            { // metric #6
-                e->OnMetricBegin(EMetricType::COUNTER);
-                e->OnUint64(now, 1337);
-                e->OnUint64(now + TDuration::Seconds(15), 1338);
-                {
-                    e->OnLabelsBegin();
-                    e->OnLabel("metric", "multiple");
-                    e->OnLabel("labels", "l6");
-                    e->OnLabelsEnd();
-                }
-                e->OnMetricEnd();
-            }
-            e->OnStreamEnd();
-            e->Close();
-            json += "\n";
-
+            { // metric #3 
+                e->OnMetricBegin(EMetricType::GAUGE); 
+                e->OnDouble(now, 3.14); 
+                { 
+                    e->OnLabelsBegin(); 
+                    e->OnLabel("metric", "single"); 
+                    e->OnLabel("labels", "l3"); 
+                    e->OnLabelsEnd(); 
+                } 
+                e->OnMetricEnd(); 
+            } 
+            { // metric #4 
+                e->OnMetricBegin(EMetricType::IGAUGE); 
+                e->OnInt64(now, 42); 
+                { 
+                    e->OnLabelsBegin(); 
+                    e->OnLabel("metric", "single_igauge"); 
+                    e->OnLabel("labels", "l4"); 
+                    e->OnLabelsEnd(); 
+                } 
+                e->OnMetricEnd(); 
+            } 
+            { // metric #5 
+                e->OnMetricBegin(EMetricType::GAUGE); 
+                { 
+                    e->OnLabelsBegin(); 
+                    e->OnLabel("metric", "multiple"); 
+                    e->OnLabel("labels", "l5"); 
+                    e->OnLabelsEnd(); 
+                } 
+                e->OnDouble(now, std::numeric_limits<double>::quiet_NaN()); 
+                e->OnDouble(now + TDuration::Seconds(15), std::numeric_limits<double>::infinity()); 
+                e->OnDouble(now + TDuration::Seconds(30), -std::numeric_limits<double>::infinity()); 
+                e->OnMetricEnd(); 
+            } 
+ 
+            { // metric #6 
+                e->OnMetricBegin(EMetricType::COUNTER); 
+                e->OnUint64(now, 1337); 
+                e->OnUint64(now + TDuration::Seconds(15), 1338); 
+                { 
+                    e->OnLabelsBegin(); 
+                    e->OnLabel("metric", "multiple"); 
+                    e->OnLabel("labels", "l6"); 
+                    e->OnLabelsEnd(); 
+                } 
+                e->OnMetricEnd(); 
+            } 
+            e->OnStreamEnd(); 
+            e->Close(); 
+            json += "\n"; 
+ 
             auto parseJson = [] (auto buf) {
                 NJson::TJsonValue value;
                 NJson::ReadJsonTree(buf, &value, true);
                 return value;
             };
 
-            const auto expectedJson = NResource::Find(expectedResourceKey);
+            const auto expectedJson = NResource::Find(expectedResourceKey); 
             UNIT_ASSERT_EQUAL(parseJson(json), parseJson(expectedJson));
-        };
-
-        check(false, false, "/expected.json");
-        check(false, true, "/expected_buffered.json");
-        check(true, false, "/expected_cloud.json");
-        check(true, true, "/expected_cloud_buffered.json");
-    }
-
-    TLogHistogramSnapshotPtr TestLogHistogram(ui32 v = 1) {
-        TVector<double> buckets{0.5 * v, 0.25 * v, 0.25 * v, 0.5 * v};
-        return MakeIntrusive<TLogHistogramSnapshot>(1.5, 1u, 0, std::move(buckets));
-    }
-
-    Y_UNIT_TEST(HistogramAndSummaryMetricTypesAreNotSupportedByCloudJson) {
-        const TInstant now = TInstant::ParseIso8601Deprecated("2017-11-05T01:02:03Z");
-
-        auto emit = [&](IMetricEncoder* encoder, EMetricType metricType) {
-            encoder->OnStreamBegin();
+        }; 
+ 
+        check(false, false, "/expected.json"); 
+        check(false, true, "/expected_buffered.json"); 
+        check(true, false, "/expected_cloud.json"); 
+        check(true, true, "/expected_cloud_buffered.json"); 
+    } 
+ 
+    TLogHistogramSnapshotPtr TestLogHistogram(ui32 v = 1) { 
+        TVector<double> buckets{0.5 * v, 0.25 * v, 0.25 * v, 0.5 * v}; 
+        return MakeIntrusive<TLogHistogramSnapshot>(1.5, 1u, 0, std::move(buckets)); 
+    } 
+ 
+    Y_UNIT_TEST(HistogramAndSummaryMetricTypesAreNotSupportedByCloudJson) { 
+        const TInstant now = TInstant::ParseIso8601Deprecated("2017-11-05T01:02:03Z"); 
+ 
+        auto emit = [&](IMetricEncoder* encoder, EMetricType metricType) { 
+            encoder->OnStreamBegin(); 
             {
-                encoder->OnMetricBegin(metricType);
-                {
-                    encoder->OnLabelsBegin();
-                    encoder->OnLabel("name", "m");
-                    encoder->OnLabelsEnd();
-                }
-
-                switch (metricType) {
-                    case EMetricType::HIST: {
-                        auto histogram = ExponentialHistogram(6, 2);
-                        encoder->OnHistogram(now, histogram->Snapshot());
-                        break;
-                    }
-                    case EMetricType::LOGHIST: {
-                        auto histogram = TestLogHistogram();
-                        encoder->OnLogHistogram(now, histogram);
-                        break;
-                    }
-                    case EMetricType::DSUMMARY: {
-                        auto summary = MakeIntrusive<TSummaryDoubleSnapshot>(10., -0.5, 0.5, 0.3, 30u);
-                        encoder->OnSummaryDouble(now, summary);
-                        break;
-                    }
-                    default:
-                        Y_FAIL("unexpected metric type [%s]", ToString(metricType).c_str());
-                }
-
-                encoder->OnMetricEnd();
+                encoder->OnMetricBegin(metricType); 
+                { 
+                    encoder->OnLabelsBegin(); 
+                    encoder->OnLabel("name", "m"); 
+                    encoder->OnLabelsEnd(); 
+                } 
+ 
+                switch (metricType) { 
+                    case EMetricType::HIST: { 
+                        auto histogram = ExponentialHistogram(6, 2); 
+                        encoder->OnHistogram(now, histogram->Snapshot()); 
+                        break; 
+                    } 
+                    case EMetricType::LOGHIST: { 
+                        auto histogram = TestLogHistogram(); 
+                        encoder->OnLogHistogram(now, histogram); 
+                        break; 
+                    } 
+                    case EMetricType::DSUMMARY: { 
+                        auto summary = MakeIntrusive<TSummaryDoubleSnapshot>(10., -0.5, 0.5, 0.3, 30u); 
+                        encoder->OnSummaryDouble(now, summary); 
+                        break; 
+                    } 
+                    default: 
+                        Y_FAIL("unexpected metric type [%s]", ToString(metricType).c_str()); 
+                } 
+ 
+                encoder->OnMetricEnd(); 
             }
-            encoder->OnStreamEnd();
-            encoder->Close();
-        };
+            encoder->OnStreamEnd(); 
+            encoder->Close(); 
+        }; 
 
-        auto doTest = [&](bool buffered, EMetricType metricType) {
-            TString json;
-            TStringOutput out(json);
-            auto encoder = buffered ? BufferedEncoderCloudJson(&out, 2) : EncoderCloudJson(&out, 2);
-            const TString expectedMessage = TStringBuilder()
-                << "metric type '" << metricType << "' is not supported by cloud json format";
-            UNIT_ASSERT_EXCEPTION_CONTAINS_C(emit(encoder.Get(), metricType), yexception, expectedMessage,
-                                             TString("buffered: ") + ToString(buffered));
-        };
-
-        doTest(false, EMetricType::HIST);
-        doTest(false, EMetricType::LOGHIST);
-        doTest(false, EMetricType::DSUMMARY);
-        doTest(true, EMetricType::HIST);
-        doTest(true, EMetricType::LOGHIST);
-        doTest(true, EMetricType::DSUMMARY);
+        auto doTest = [&](bool buffered, EMetricType metricType) { 
+            TString json; 
+            TStringOutput out(json); 
+            auto encoder = buffered ? BufferedEncoderCloudJson(&out, 2) : EncoderCloudJson(&out, 2); 
+            const TString expectedMessage = TStringBuilder() 
+                << "metric type '" << metricType << "' is not supported by cloud json format"; 
+            UNIT_ASSERT_EXCEPTION_CONTAINS_C(emit(encoder.Get(), metricType), yexception, expectedMessage, 
+                                             TString("buffered: ") + ToString(buffered)); 
+        }; 
+ 
+        doTest(false, EMetricType::HIST); 
+        doTest(false, EMetricType::LOGHIST); 
+        doTest(false, EMetricType::DSUMMARY); 
+        doTest(true, EMetricType::HIST); 
+        doTest(true, EMetricType::LOGHIST); 
+        doTest(true, EMetricType::DSUMMARY); 
     }
 
     Y_UNIT_TEST(MetricsWithDifferentLabelOrderGetMerged) {
@@ -369,13 +369,13 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         UNIT_ASSERT_VALUES_EQUAL(samples.CommonLabelsSize(), 1);
         AssertLabelEqual(samples.GetCommonLabels(0), "project", "solomon");
 
-        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 6); 
         {
             const NProto::TMultiSample& s = samples.GetSamples(0);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::COUNTER);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
             AssertLabelEqual(s.GetLabels(0), "metric", "single");
-            AssertLabelEqual(s.GetLabels(1), "labels", "l1");
+            AssertLabelEqual(s.GetLabels(1), "labels", "l1"); 
 
             UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
             AssertPointEqual(s.GetPoints(0), now, ui64(17));
@@ -385,7 +385,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::RATE);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
             AssertLabelEqual(s.GetLabels(0), "metric", "single");
-            AssertLabelEqual(s.GetLabels(1), "labels", "l2");
+            AssertLabelEqual(s.GetLabels(1), "labels", "l2"); 
 
             UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
             AssertPointEqual(s.GetPoints(0), now, ui64(17));
@@ -395,27 +395,27 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
             AssertLabelEqual(s.GetLabels(0), "metric", "single");
-            AssertLabelEqual(s.GetLabels(1), "labels", "l3");
+            AssertLabelEqual(s.GetLabels(1), "labels", "l3"); 
 
             UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
             AssertPointEqual(s.GetPoints(0), now, 3.14);
         }
         {
             const NProto::TMultiSample& s = samples.GetSamples(3);
-            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::IGAUGE);
-            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
-            AssertLabelEqual(s.GetLabels(0), "metric", "single_igauge");
-            AssertLabelEqual(s.GetLabels(1), "labels", "l4");
-
-            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
-            AssertPointEqual(s.GetPoints(0), now, i64(42));
-        }
-        {
-            const NProto::TMultiSample& s = samples.GetSamples(4);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::IGAUGE); 
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2); 
+            AssertLabelEqual(s.GetLabels(0), "metric", "single_igauge"); 
+            AssertLabelEqual(s.GetLabels(1), "labels", "l4"); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1); 
+            AssertPointEqual(s.GetPoints(0), now, i64(42)); 
+        } 
+        { 
+            const NProto::TMultiSample& s = samples.GetSamples(4); 
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
             AssertLabelEqual(s.GetLabels(0), "metric", "multiple");
-            AssertLabelEqual(s.GetLabels(1), "labels", "l5");
+            AssertLabelEqual(s.GetLabels(1), "labels", "l5"); 
 
             UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 3);
             AssertPointEqualNan(s.GetPoints(0), now);
@@ -423,11 +423,11 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             AssertPointEqualInf(s.GetPoints(2), now + TDuration::Seconds(30), -11);
         }
         {
-            const NProto::TMultiSample& s = samples.GetSamples(5);
+            const NProto::TMultiSample& s = samples.GetSamples(5); 
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::COUNTER);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
             AssertLabelEqual(s.GetLabels(0), "metric", "multiple");
-            AssertLabelEqual(s.GetLabels(1), "labels", "l6");
+            AssertLabelEqual(s.GetLabels(1), "labels", "l6"); 
 
             UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 2);
             AssertPointEqual(s.GetPoints(0), now, ui64(1337));
@@ -1158,61 +1158,61 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/int_gauge.json"));
     }
 
-    Y_UNIT_TEST(InconsistentMetricTypes) {
-        auto emitMetrics = [](IMetricEncoder& encoder, const TString& expectedError) {
-            encoder.OnMetricBegin(EMetricType::GAUGE);
-            {
-                encoder.OnLabelsBegin();
-                encoder.OnLabel("name", "m");
-                encoder.OnLabel("l1", "v1");
-                encoder.OnLabel("l2", "v2");
-                encoder.OnLabelsEnd();
-            }
-            encoder.OnDouble(now, 1.0);
-            encoder.OnMetricEnd();
-
-            encoder.OnMetricBegin(EMetricType::COUNTER);
-            {
-                encoder.OnLabelsBegin();
-                encoder.OnLabel("name", "m");
-                encoder.OnLabel("l1", "v1");
-                encoder.OnLabel("l2", "v2");
-                encoder.OnLabelsEnd();
-            }
-            encoder.OnUint64(now, 1);
-
-            UNIT_ASSERT_EXCEPTION_CONTAINS(encoder.OnMetricEnd(),
-                yexception,
-                expectedError);
-        };
-
-        {
-            TStringStream out;
-            auto encoder = BufferedEncoderJson(&out);
-
-            encoder->OnStreamBegin();
-            encoder->OnLabelsBegin();
-            encoder->OnLabel("c", "cv");
-            encoder->OnLabelsEnd();
-            emitMetrics(*encoder,
-                "Time series point type mismatch: expected DOUBLE but found UINT64, "
-                "labels '{c=cv, l1=v1, l2=v2, name=m}'");
-        }
-
-        {
-            TStringStream out;
-            auto encoder = BufferedEncoderJson(&out);
-
-            encoder->OnStreamBegin();
-            encoder->OnLabelsBegin();
-            encoder->OnLabel("l1", "v100");
-            encoder->OnLabelsEnd();
-            emitMetrics(*encoder,
-                "Time series point type mismatch: expected DOUBLE but found UINT64, "
-                "labels '{l1=v1, l2=v2, name=m}'");
-        }
-    }
-
+    Y_UNIT_TEST(InconsistentMetricTypes) { 
+        auto emitMetrics = [](IMetricEncoder& encoder, const TString& expectedError) { 
+            encoder.OnMetricBegin(EMetricType::GAUGE); 
+            { 
+                encoder.OnLabelsBegin(); 
+                encoder.OnLabel("name", "m"); 
+                encoder.OnLabel("l1", "v1"); 
+                encoder.OnLabel("l2", "v2"); 
+                encoder.OnLabelsEnd(); 
+            } 
+            encoder.OnDouble(now, 1.0); 
+            encoder.OnMetricEnd(); 
+ 
+            encoder.OnMetricBegin(EMetricType::COUNTER); 
+            { 
+                encoder.OnLabelsBegin(); 
+                encoder.OnLabel("name", "m"); 
+                encoder.OnLabel("l1", "v1"); 
+                encoder.OnLabel("l2", "v2"); 
+                encoder.OnLabelsEnd(); 
+            } 
+            encoder.OnUint64(now, 1); 
+ 
+            UNIT_ASSERT_EXCEPTION_CONTAINS(encoder.OnMetricEnd(), 
+                yexception, 
+                expectedError); 
+        }; 
+ 
+        { 
+            TStringStream out; 
+            auto encoder = BufferedEncoderJson(&out); 
+ 
+            encoder->OnStreamBegin(); 
+            encoder->OnLabelsBegin(); 
+            encoder->OnLabel("c", "cv"); 
+            encoder->OnLabelsEnd(); 
+            emitMetrics(*encoder, 
+                "Time series point type mismatch: expected DOUBLE but found UINT64, " 
+                "labels '{c=cv, l1=v1, l2=v2, name=m}'"); 
+        } 
+ 
+        { 
+            TStringStream out; 
+            auto encoder = BufferedEncoderJson(&out); 
+ 
+            encoder->OnStreamBegin(); 
+            encoder->OnLabelsBegin(); 
+            encoder->OnLabel("l1", "v100"); 
+            encoder->OnLabelsEnd(); 
+            emitMetrics(*encoder, 
+                "Time series point type mismatch: expected DOUBLE but found UINT64, " 
+                "labels '{l1=v1, l2=v2, name=m}'"); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(IntGaugeDecode) {
         NProto::TMultiSamplesList samples;
         {

@@ -16,7 +16,7 @@ namespace NMiniKQL {
 
 namespace {
 
-
+ 
 ui64 g_Yield = std::numeric_limits<ui64>::max();
 ui64 g_TestStreamData[] = {0, 0, 1, 0, 0, 0, 1, 2, 3};
 ui64 g_TestYieldStreamData[] = {0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, g_Yield, 1, 2};

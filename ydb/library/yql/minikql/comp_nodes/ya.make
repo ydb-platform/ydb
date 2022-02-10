@@ -16,8 +16,8 @@ SRCS(
     mkql_append.h
     mkql_apply.cpp
     mkql_apply.h
-    mkql_block_add.cpp
-    mkql_blocks.cpp
+    mkql_block_add.cpp 
+    mkql_blocks.cpp 
     mkql_callable.cpp
     mkql_callable.h
     mkql_chain_map.cpp
@@ -210,7 +210,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow 
     ydb/library/binary_json
     ydb/library/yql/minikql
     ydb/library/yql/minikql/invoke_builtins

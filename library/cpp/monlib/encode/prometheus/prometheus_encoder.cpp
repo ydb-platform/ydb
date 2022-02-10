@@ -249,9 +249,9 @@ namespace NMonitoring {
         ///////////////////////////////////////////////////////////////////////
         class TPrometheusEncoder final: public IMetricEncoder {
         public:
-            explicit TPrometheusEncoder(IOutputStream* out, TStringBuf metricNameLabel)
+            explicit TPrometheusEncoder(IOutputStream* out, TStringBuf metricNameLabel) 
                 : Writer_(out)
-                , MetricNameLabel_(metricNameLabel)
+                , MetricNameLabel_(metricNameLabel) 
             {
             }
 
@@ -358,10 +358,10 @@ namespace NMonitoring {
                     MetricState_.Labels.Add(l.Name(), l.Value());
                 }
 
-                TMaybe<TLabel> nameLabel = MetricState_.Labels.Extract(MetricNameLabel_);
+                TMaybe<TLabel> nameLabel = MetricState_.Labels.Extract(MetricNameLabel_); 
                 Y_ENSURE(nameLabel,
                          "labels " << MetricState_.Labels <<
-                         " does not contain label '" << MetricNameLabel_ << '\'');
+                         " does not contain label '" << MetricNameLabel_ << '\''); 
 
                 const TString& metricName = ToString(nameLabel->Value());
                 if (MetricState_.Type != EMetricType::DSUMMARY) {
@@ -399,15 +399,15 @@ namespace NMonitoring {
         private:
             TEncoderState State_;
             TPrometheusWriter Writer_;
-            TString MetricNameLabel_;
+            TString MetricNameLabel_; 
             TInstant CommonTime_ = TInstant::Zero();
             TLabels CommonLabels_;
             TMetricState MetricState_;
         };
     }
 
-    IMetricEncoderPtr EncoderPrometheus(IOutputStream* out, TStringBuf metricNameLabel) {
-        return MakeHolder<TPrometheusEncoder>(out, metricNameLabel);
+    IMetricEncoderPtr EncoderPrometheus(IOutputStream* out, TStringBuf metricNameLabel) { 
+        return MakeHolder<TPrometheusEncoder>(out, metricNameLabel); 
     }
 
 } // namespace NMonitoring

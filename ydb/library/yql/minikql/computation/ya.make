@@ -56,7 +56,7 @@ LLVM_BC(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow 
     library/cpp/enumbitset
     library/cpp/packedtypes
     library/cpp/random_provider

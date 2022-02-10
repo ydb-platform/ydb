@@ -64,7 +64,7 @@ namespace NKiwiAggr {
 
         TVector<ui64> GetIds() const {
             TVector<ui64> result(0);
-            for (THistogramsMap::const_iterator it = Histograms.begin(); it != Histograms.end(); ++it) {
+            for (THistogramsMap::const_iterator it = Histograms.begin(); it != Histograms.end(); ++it) { 
                 result.push_back(it->first);
             }
             return result;

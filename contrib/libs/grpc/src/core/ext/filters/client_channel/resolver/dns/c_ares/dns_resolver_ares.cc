@@ -491,7 +491,7 @@ static bool should_use_ares(const char* resolver_env) {
 static bool should_use_ares(const char* resolver_env) {
   // TODO(lidiz): Remove the "g_custom_iomgr_enabled" flag once c-ares support
   // custom IO managers (e.g. gevent).
-  return !g_custom_iomgr_enabled && resolver_env != nullptr && (gpr_stricmp(resolver_env, "ares") == 0);
+  return !g_custom_iomgr_enabled && resolver_env != nullptr && (gpr_stricmp(resolver_env, "ares") == 0); 
 }
 #endif /* GRPC_UV */
 

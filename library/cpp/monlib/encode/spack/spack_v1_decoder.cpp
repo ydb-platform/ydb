@@ -27,9 +27,9 @@ namespace NMonitoring {
         ///////////////////////////////////////////////////////////////////////
         class TDecoderSpackV1 {
         public:
-            TDecoderSpackV1(IInputStream* in, TStringBuf metricNameLabel)
+            TDecoderSpackV1(IInputStream* in, TStringBuf metricNameLabel) 
                 : In_(in)
-                , MetricNameLabel_(metricNameLabel)
+                , MetricNameLabel_(metricNameLabel) 
             {
             }
 
@@ -83,9 +83,9 @@ namespace NMonitoring {
 
                 // (4) read common labels
                 if (ui32 commonLabelsCount = ReadVarint()) {
-                    c->OnLabelsBegin();
+                    c->OnLabelsBegin(); 
                     ReadLabels(labelNames, labelValues, commonLabelsCount, c);
-                    c->OnLabelsEnd();
+                    c->OnLabelsEnd(); 
                 }
 
                 // (5) read metrics
@@ -110,20 +110,20 @@ namespace NMonitoring {
                     // TODO: use it
                     ReadFixed<ui8>(); // skip flags byte
 
-                    auto metricNameValueIndex = std::numeric_limits<ui32>::max();
-                    if (Header_.Version >= SV1_02) {
-                        metricNameValueIndex = ReadVarint();
-                    }
-
+                    auto metricNameValueIndex = std::numeric_limits<ui32>::max(); 
+                    if (Header_.Version >= SV1_02) { 
+                        metricNameValueIndex = ReadVarint(); 
+                    } 
+ 
                     // (5.2) labels
                     ui32 labelsCount = ReadVarint();
-                    DECODE_ENSURE(Header_.Version >= SV1_02 || labelsCount > 0, "metric #" << i << " has no labels");
-                    c->OnLabelsBegin();
-                    if (Header_.Version >= SV1_02) {
-                        c->OnLabel(MetricNameLabel_, labelValues.Get(metricNameValueIndex));
-                    }
+                    DECODE_ENSURE(Header_.Version >= SV1_02 || labelsCount > 0, "metric #" << i << " has no labels"); 
+                    c->OnLabelsBegin(); 
+                    if (Header_.Version >= SV1_02) { 
+                        c->OnLabel(MetricNameLabel_, labelValues.Get(metricNameValueIndex)); 
+                    } 
                     ReadLabels(labelNames, labelValues, labelsCount, c);
-                    c->OnLabelsEnd();
+                    c->OnLabelsEnd(); 
 
                     // (5.3) values
                     switch (valueType) {
@@ -214,7 +214,7 @@ namespace NMonitoring {
                 ui32 bucketsCount = ReadVarint();
                 auto s = TExplicitHistogramSnapshot::New(bucketsCount);
 
-                if (SV1_00 == Header_.Version) { // v1.0
+                if (SV1_00 == Header_.Version) { // v1.0 
                     for (ui32 i = 0; i < bucketsCount; i++) {
                         i64 bound = ReadFixed<i64>();
                         double doubleBound = (bound != Max<i64>())
@@ -275,7 +275,7 @@ namespace NMonitoring {
 
         private:
             IInputStream* In_;
-            TString MetricNameLabel_;
+            TString MetricNameLabel_; 
             ETimePrecision TimePrecision_;
             TSpackHeader Header_;
         }; // class TDecoderSpackV1
@@ -450,8 +450,8 @@ namespace NMonitoring {
         }
     }
 
-    void DecodeSpackV1(IInputStream* in, IMetricConsumer* c, TStringBuf metricNameLabel) {
-        TDecoderSpackV1 decoder(in, metricNameLabel);
+    void DecodeSpackV1(IInputStream* in, IMetricConsumer* c, TStringBuf metricNameLabel) { 
+        TDecoderSpackV1 decoder(in, metricNameLabel); 
         decoder.Decode(c);
     }
 

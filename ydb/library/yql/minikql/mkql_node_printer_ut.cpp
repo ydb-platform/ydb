@@ -76,8 +76,8 @@ namespace {
         structBuilder.Add("41", TRuntimeNode(env.GetEmptyList(), true));
         structBuilder.Add("42", TRuntimeNode(env.GetEmptyDict(), true));
         structBuilder.Add("43", TRuntimeNode(TTaggedType::Create(dtype1, "mytag", env), true));
-        structBuilder.Add("44", TRuntimeNode(TBlockType::Create(dtype1, TBlockType::EShape::Single, env), true));
-        structBuilder.Add("45", TRuntimeNode(TBlockType::Create(dtype2, TBlockType::EShape::Many, env), true));
+        structBuilder.Add("44", TRuntimeNode(TBlockType::Create(dtype1, TBlockType::EShape::Single, env), true)); 
+        structBuilder.Add("45", TRuntimeNode(TBlockType::Create(dtype2, TBlockType::EShape::Many, env), true)); 
         return structBuilder.Build();
     }
 }

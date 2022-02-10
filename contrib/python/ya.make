@@ -5,7 +5,7 @@ RECURSE(
     adblockparser
     aenum
     ago
-    aio-pika 
+    aio-pika
     aioboto3
     aiobotocore
     aioch
@@ -13,7 +13,7 @@ RECURSE(
     aiodns
     aiodocker
     aiofiles
-    aioftp 
+    aioftp
     aiogram
     aiographite
     aiohttp
@@ -31,7 +31,7 @@ RECURSE(
     aioredis
     aioredis-lock
     aioresponses
-    aiormq 
+    aiormq
     aiosignal
     aiosmtpd
     aiosmtplib
@@ -700,7 +700,7 @@ RECURSE(
     paginate
     pamela
     pampy
-    pamqp 
+    pamqp
     panamap
     panamap_proto
     pandas

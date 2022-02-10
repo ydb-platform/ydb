@@ -32,7 +32,7 @@ struct TTestContext {
     TMemoryUsageInfo MemInfo;
     THolderFactory HolderFactory;
     TDefaultValueBuilder Vb;
-    NDqProto::EDataTransportVersion TransportVersion;
+    NDqProto::EDataTransportVersion TransportVersion; 
     TDqDataSerializer Ds;
     TStructType* OutputType = nullptr;
 
@@ -42,8 +42,8 @@ struct TTestContext {
         , MemInfo("Mem")
         , HolderFactory(Alloc.Ref(), MemInfo)
         , Vb(HolderFactory)
-        , TransportVersion(transportVersion)
-        , Ds(TypeEnv, HolderFactory, TransportVersion)
+        , TransportVersion(transportVersion) 
+        , Ds(TypeEnv, HolderFactory, TransportVersion) 
     {
         if (bigRows) {
             TStructMember members[3] = {
@@ -296,7 +296,7 @@ void TestBigRow(TTestContext& ctx, bool quantum) {
 }
 
 
-void TestSpillWithMockStorage(TTestContext& ctx) {
+void TestSpillWithMockStorage(TTestContext& ctx) { 
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 100;
     settings.MaxChunkBytes = 10;
@@ -414,7 +414,7 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetValuesCount(/* inMemoryOnly */ false));
 }
 
-void TestOverflowWithMockStorage(TTestContext& ctx) {
+void TestOverflowWithMockStorage(TTestContext& ctx) { 
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 100;
     settings.MaxChunkBytes = 10;
@@ -446,40 +446,40 @@ void TestOverflowWithMockStorage(TTestContext& ctx) {
     }
 }
 
-} // anonymous namespace
-
-Y_UNIT_TEST_SUITE(DqOutputChannelNoStorageTests) {
-
-Y_UNIT_TEST(SingleRead) {
-    TTestContext ctx;
+} // anonymous namespace 
+ 
+Y_UNIT_TEST_SUITE(DqOutputChannelNoStorageTests) { 
+ 
+Y_UNIT_TEST(SingleRead) { 
+    TTestContext ctx; 
     TestSingleRead(ctx, false);
 }
-
+ 
 Y_UNIT_TEST(SingleReadQ) {
     TTestContext ctx;
     TestSingleRead(ctx, true);
 }
 
-Y_UNIT_TEST(SingleReadWithArrow) {
-    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
+Y_UNIT_TEST(SingleReadWithArrow) { 
+    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0); 
     TestSingleRead(ctx, false);
-}
-
+} 
+ 
 Y_UNIT_TEST(SingleReadWithArrowQ) {
     TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
     TestSingleRead(ctx, true);
 }
 
-Y_UNIT_TEST(PartialRead) {
-    TTestContext ctx;
+Y_UNIT_TEST(PartialRead) { 
+    TTestContext ctx; 
     TestPartialRead(ctx, false);
-}
-
+} 
+ 
 Y_UNIT_TEST(PartialReadQ) {
     TTestContext ctx;
     TestPartialRead(ctx, true);
-}
-
+} 
+ 
 // too heavy messages...
 //Y_UNIT_TEST(PartialReadWithArrow) {
 //    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
@@ -491,46 +491,46 @@ Y_UNIT_TEST(PartialReadQ) {
 //    TestPartialRead(ctx, true);
 //}
 
-Y_UNIT_TEST(Overflow) {
-    TTestContext ctx;
+Y_UNIT_TEST(Overflow) { 
+    TTestContext ctx; 
     TestOverflow(ctx, false);
-}
-
+} 
+ 
 Y_UNIT_TEST(OverflowQ) {
     TTestContext ctx;
     TestOverflow(ctx, true);
 }
 
-Y_UNIT_TEST(OverflowWithArrow) {
-    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
+Y_UNIT_TEST(OverflowWithArrow) { 
+    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0); 
     TestOverflow(ctx, false);
-}
-
+} 
+ 
 Y_UNIT_TEST(OverflowWithArrowQ) {
     TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
     TestOverflow(ctx, true);
 }
 
-Y_UNIT_TEST(PopAll) {
-    TTestContext ctx;
+Y_UNIT_TEST(PopAll) { 
+    TTestContext ctx; 
     TestPopAll(ctx, false);
-}
-
+} 
+ 
 Y_UNIT_TEST(PopAllQ) {
     TTestContext ctx;
     TestPopAll(ctx, true);
 }
 
-Y_UNIT_TEST(PopAllWithArrow) {
-    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
+Y_UNIT_TEST(PopAllWithArrow) { 
+    TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0); 
     TestPopAll(ctx, false);
-}
+} 
 
 Y_UNIT_TEST(PopAllWithArrowQ) {
     TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
     TestPopAll(ctx, true);
-}
-
+} 
+ 
 Y_UNIT_TEST(BigRow) {
     TTestContext ctx(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
     TestBigRow(ctx, false);
@@ -543,27 +543,27 @@ Y_UNIT_TEST(BigRowQ) {
 
 }
 
-Y_UNIT_TEST_SUITE(DqOutputChannelWithStorageTests) {
-
-Y_UNIT_TEST(Spill) {
-    TTestContext ctx;
-    TestSpillWithMockStorage(ctx);
-}
-
-// Fail because arrow serialization has a big overhead
-// Y_UNIT_TEST(SpillWithArrow) {
-//     TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
-//     TestSpillWithMockStorage(ctx);
-// }
-
-Y_UNIT_TEST(Overflow) {
-    TTestContext ctx;
-    TestOverflowWithMockStorage(ctx);
-}
-
-// Fail because arrow serialization has a big overhead
-// Y_UNIT_TEST(OverflowWithArrow) {
-//     TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0);
-//     TestOverflowWithMockStorage(ctx);
-// }
-}
+Y_UNIT_TEST_SUITE(DqOutputChannelWithStorageTests) { 
+ 
+Y_UNIT_TEST(Spill) { 
+    TTestContext ctx; 
+    TestSpillWithMockStorage(ctx); 
+} 
+ 
+// Fail because arrow serialization has a big overhead 
+// Y_UNIT_TEST(SpillWithArrow) { 
+//     TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0); 
+//     TestSpillWithMockStorage(ctx); 
+// } 
+ 
+Y_UNIT_TEST(Overflow) { 
+    TTestContext ctx; 
+    TestOverflowWithMockStorage(ctx); 
+} 
+ 
+// Fail because arrow serialization has a big overhead 
+// Y_UNIT_TEST(OverflowWithArrow) { 
+//     TTestContext ctx(NDqProto::DATA_TRANSPORT_ARROW_1_0); 
+//     TestOverflowWithMockStorage(ctx); 
+// } 
+} 

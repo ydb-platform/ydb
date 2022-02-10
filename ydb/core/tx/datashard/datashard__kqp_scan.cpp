@@ -38,7 +38,7 @@ public:
         NDataShard::TUserTable::TCPtr tableInfo, const TSmallVec<TSerializedTableRange>&& tableRanges,
         const TSmallVec<NTable::TTag>&& columnTags, const TSmallVec<bool>&& skipNullKeys,
         const NYql::NDqProto::EDqStatsMode& statsMode, ui64 timeoutMs, ui32 generation,
-        NKikimrTxDataShard::EScanDataFormat dataFormat)
+        NKikimrTxDataShard::EScanDataFormat dataFormat) 
         : TActor(&TKqpScan::StateScan)
         , ComputeActorId(computeActorId)
         , DatashardActorId(datashardActorId)
@@ -52,33 +52,33 @@ public:
         , StatsMode(statsMode)
         , Deadline(TInstant::Now() + (timeoutMs ? TDuration::MilliSeconds(timeoutMs) + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
         , Generation(generation)
-        , DataFormat(dataFormat)
+        , DataFormat(dataFormat) 
         , PeerFreeSpace(0)
         , Sleep(true)
         , IsLocal(computeActorId.NodeId() == datashardActorId.NodeId())
-    {
-        if (DataFormat == NKikimrTxDataShard::EScanDataFormat::ARROW) {
-            BatchBuilder = MakeHolder<NArrow::TArrowBatchBuilder>();
-            TVector<std::pair<TString, NScheme::TTypeId>> schema;
-            if (!Tags.empty()) {
-                Types.reserve(Tags.size());
-                schema.reserve(Tags.size());
-                for (const auto tag: Tags) {
-                    const auto& column = TableInfo->Columns.at(tag);
-                    Types.emplace_back(column.Type);
-                    schema.emplace_back(column.Name, column.Type);
-                }
+    { 
+        if (DataFormat == NKikimrTxDataShard::EScanDataFormat::ARROW) { 
+            BatchBuilder = MakeHolder<NArrow::TArrowBatchBuilder>(); 
+            TVector<std::pair<TString, NScheme::TTypeId>> schema; 
+            if (!Tags.empty()) { 
+                Types.reserve(Tags.size()); 
+                schema.reserve(Tags.size()); 
+                for (const auto tag: Tags) { 
+                    const auto& column = TableInfo->Columns.at(tag); 
+                    Types.emplace_back(column.Type); 
+                    schema.emplace_back(column.Name, column.Type); 
+                } 
                 BatchBuilder->Reserve(INIT_BATCH_ROWS);
                 bool started = BatchBuilder->Start(schema);
-                YQL_ENSURE(started, "Failed to start BatchBuilder");
-            }
-        }
+                YQL_ENSURE(started, "Failed to start BatchBuilder"); 
+            } 
+        } 
 
         for (auto& range : TableRanges) {
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "--> Scan range: "
                 << DebugPrintRange(TableInfo->KeyColumnTypes, range.ToTableRange(), *AppData()->TypeRegistry));
         }
-    }
+    } 
 
 private:
     STATEFN(StateScan) {
@@ -266,7 +266,7 @@ private:
             }
         }
 
-        MakeResult();
+        MakeResult(); 
 
         if (Y_UNLIKELY(IsProfile())) {
             Result->WaitTime += TInstant::Now() - StartWaitTime;
@@ -278,7 +278,7 @@ private:
             }
         };
 
-        AddRow(row);
+        AddRow(row); 
 
         auto sent = SendResult(/* pageFault */ false);
 
@@ -359,8 +359,8 @@ private:
             } else {
                 Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, Generation);
             }
-            auto send = SendResult(Result->PageFault, true);
-            Y_VERIFY_DEBUG(send);
+            auto send = SendResult(Result->PageFault, true); 
+            Y_VERIFY_DEBUG(send); 
         }
 
         Driver = nullptr;
@@ -376,80 +376,80 @@ private:
         out << "TExecuteKqpScanTxUnit, TKqpScan";
     }
 
-    void MakeResult() {
-        if (!Result) {
-            Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, Generation);
-            switch (DataFormat) {
-                case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-                case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
-                    Result->Rows.reserve(INIT_BATCH_ROWS);
-                    break;
-                }
-                case NKikimrTxDataShard::EScanDataFormat::ARROW: {
-                }
-            }
-        }
-    }
-
-    void AddRow(const TRow& row) {
-        ++Rows;
-        // NOTE: Some per-row overhead to deal with the case when no columns were requested
-        if (Tags.empty()) {
-            CellvecBytes += 8;
-        }
-        for (auto& cell: *row) {
-            CellvecBytes += std::max((ui64)8, (ui64)cell.Size());
-        }
-        switch (DataFormat) {
-            case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-            case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
-                Result->Rows.emplace_back(TOwnedCellVec::Make(*row));
-                break;
-            }
-            case NKikimrTxDataShard::EScanDataFormat::ARROW: {
-                NKikimr::TDbTupleRef key;
-                Y_VERIFY_DEBUG((*row).size() == Types.size());
-                NKikimr::TDbTupleRef value = NKikimr::TDbTupleRef(Types.data(), (*row).data(), Types.size());
-                BatchBuilder->AddRow(key, value);
-                break;
-            }
-        }
-    }
-
-    bool SendResult(bool pageFault, bool finish = false) noexcept {
-        if (Rows >= MAX_BATCH_ROWS || CellvecBytes >= PeerFreeSpace ||
-            (pageFault && (Rows >= MIN_BATCH_ROWS_ON_PAGEFAULT || CellvecBytes >= MIN_BATCH_SIZE_ON_PAGEFAULT)) || finish)
+    void MakeResult() { 
+        if (!Result) { 
+            Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, Generation); 
+            switch (DataFormat) { 
+                case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED: 
+                case NKikimrTxDataShard::EScanDataFormat::CELLVEC: { 
+                    Result->Rows.reserve(INIT_BATCH_ROWS); 
+                    break; 
+                } 
+                case NKikimrTxDataShard::EScanDataFormat::ARROW: { 
+                } 
+            } 
+        } 
+    } 
+ 
+    void AddRow(const TRow& row) { 
+        ++Rows; 
+        // NOTE: Some per-row overhead to deal with the case when no columns were requested 
+        if (Tags.empty()) { 
+            CellvecBytes += 8; 
+        } 
+        for (auto& cell: *row) { 
+            CellvecBytes += std::max((ui64)8, (ui64)cell.Size()); 
+        } 
+        switch (DataFormat) { 
+            case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED: 
+            case NKikimrTxDataShard::EScanDataFormat::CELLVEC: { 
+                Result->Rows.emplace_back(TOwnedCellVec::Make(*row)); 
+                break; 
+            } 
+            case NKikimrTxDataShard::EScanDataFormat::ARROW: { 
+                NKikimr::TDbTupleRef key; 
+                Y_VERIFY_DEBUG((*row).size() == Types.size()); 
+                NKikimr::TDbTupleRef value = NKikimr::TDbTupleRef(Types.data(), (*row).data(), Types.size()); 
+                BatchBuilder->AddRow(key, value); 
+                break; 
+            } 
+        } 
+    } 
+ 
+    bool SendResult(bool pageFault, bool finish = false) noexcept { 
+        if (Rows >= MAX_BATCH_ROWS || CellvecBytes >= PeerFreeSpace || 
+            (pageFault && (Rows >= MIN_BATCH_ROWS_ON_PAGEFAULT || CellvecBytes >= MIN_BATCH_SIZE_ON_PAGEFAULT)) || finish) 
         {
             Result->PageFault = pageFault;
             Result->PageFaults = PageFaults;
-            if (finish) {
-                Result->Finished = true;
-            } else {
-                Result->LastKey = LastKey;
-            }
-            auto sendBytes = CellvecBytes;
+            if (finish) { 
+                Result->Finished = true; 
+            } else { 
+                Result->LastKey = LastKey; 
+            } 
+            auto sendBytes = CellvecBytes; 
 
-            if (DataFormat == NKikimrTxDataShard::EScanDataFormat::ARROW) {
-                FlushBatchToResult();
-                sendBytes = NArrow::GetBatchDataSize(Result->ArrowBatch);
-                // Batch is stored inside BatchBuilder until we flush it into Result. So we verify number of rows here.
-                YQL_ENSURE(Rows == 0 && Result->ArrowBatch == nullptr || Result->ArrowBatch->num_rows() == (i64) Rows);
-            } else {
-                YQL_ENSURE(Result->Rows.size() == Rows);
-            }
-
+            if (DataFormat == NKikimrTxDataShard::EScanDataFormat::ARROW) { 
+                FlushBatchToResult(); 
+                sendBytes = NArrow::GetBatchDataSize(Result->ArrowBatch); 
+                // Batch is stored inside BatchBuilder until we flush it into Result. So we verify number of rows here. 
+                YQL_ENSURE(Rows == 0 && Result->ArrowBatch == nullptr || Result->ArrowBatch->num_rows() == (i64) Rows); 
+            } else { 
+                YQL_ENSURE(Result->Rows.size() == Rows); 
+            } 
+ 
             PageFaults = 0;
 
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send ScanData"
                 << ", from: " << ScanActorId << ", to: " << ComputeActorId
                 << ", scanId: " << ScanId << ", table: " << TablePath
-                << ", bytes: " << sendBytes << ", rows: " << Rows << ", page faults: " << Result->PageFaults
+                << ", bytes: " << sendBytes << ", rows: " << Rows << ", page faults: " << Result->PageFaults 
                 << ", finished: " << Result->Finished << ", pageFault: " << Result->PageFault);
 
-            if (PeerFreeSpace < sendBytes) {
+            if (PeerFreeSpace < sendBytes) { 
                 PeerFreeSpace = 0;
             } else {
-                PeerFreeSpace -= sendBytes;
+                PeerFreeSpace -= sendBytes; 
             }
 
             if (sendBytes >= 48_MB) {
@@ -479,20 +479,20 @@ private:
         return false;
     }
 
-    // Call only after MakeResult method.
-    void FlushBatchToResult() {
-        // FlushBatch reset Batch pointer in BatchBuilder only if some rows were added after. So we if we have already
-        // send a batch and try to send an empty batch again without adding rows, then a copy of the batch will be send
-        // instead. So we check Rows here.
-        if (Rows != 0) {
+    // Call only after MakeResult method. 
+    void FlushBatchToResult() { 
+        // FlushBatch reset Batch pointer in BatchBuilder only if some rows were added after. So we if we have already 
+        // send a batch and try to send an empty batch again without adding rows, then a copy of the batch will be send 
+        // instead. So we check Rows here. 
+        if (Rows != 0) { 
             Result->ArrowBatch = Tags.empty() ? NArrow::CreateNoColumnsBatch(Rows) : BatchBuilder->FlushBatch(true);
-        }
-    }
-
+        } 
+    } 
+ 
     void ReportDatashardStats() {
         Send(DatashardActorId, new TDataShard::TEvPrivate::TEvScanStats(Rows, CellvecBytes));
         Rows = 0;
-        CellvecBytes = 0;
+        CellvecBytes = 0; 
     }
 
     bool IsProfile() const {
@@ -508,12 +508,12 @@ private:
     const TSmallVec<TSerializedTableRange> TableRanges;
     ui32 CurrentRange;
     const TSmallVec<NTable::TTag> Tags;
-    TSmallVec<NScheme::TTypeId> Types;
+    TSmallVec<NScheme::TTypeId> Types; 
     const TSmallVec<bool> SkipNullKeys;
     const NYql::NDqProto::EDqStatsMode StatsMode;
     const TInstant Deadline;
     const ui32 Generation;
-    const NKikimrTxDataShard::EScanDataFormat DataFormat;
+    const NKikimrTxDataShard::EScanDataFormat DataFormat; 
     ui64 PeerFreeSpace = 0;
     bool Sleep;
     const bool IsLocal;
@@ -523,10 +523,10 @@ private:
     TActorId TimeoutActorId;
     TAutoPtr<TEvKqp::TEvAbortExecution> AbortEvent;
 
-    THolder<NArrow::TArrowBatchBuilder> BatchBuilder;
+    THolder<NArrow::TArrowBatchBuilder> BatchBuilder; 
     THolder<TEvKqpCompute::TEvScanData> Result;
     ui64 Rows = 0;
-    ui64 CellvecBytes = 0;
+    ui64 CellvecBytes = 0; 
     ui32 PageFaults = 0;
     TInstant StartWaitTime;
 
@@ -631,8 +631,8 @@ void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&
         std::move(TSmallVec<bool>(request.GetSkipNullKeys().begin(), request.GetSkipNullKeys().end())),
         request.GetStatsMode(),
         request.GetTimeoutMs(),
-        generation,
-        request.GetDataFormat()
+        generation, 
+        request.GetDataFormat() 
     );
 
     auto scanOptions = TScanOptions()

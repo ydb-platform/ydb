@@ -9,12 +9,12 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
 ENDIF()
 
 SRCS(
-    # kqp_spilling_file_ut.cpp
-    kqp_scan_data_ut.cpp
+    # kqp_spilling_file_ut.cpp 
+    kqp_scan_data_ut.cpp 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/testlib/basics

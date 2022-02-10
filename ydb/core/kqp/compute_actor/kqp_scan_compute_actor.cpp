@@ -376,29 +376,29 @@ private:
 
                     LastKey = std::move(msg.LastKey);
 
-                    ui64 bytes = 0;
-                    ui64 rowsCount = 0;
-                    {
-                        auto guard = TaskRunner->BindAllocator();
-                        switch (msg.GetDataFormat()) {
-                            case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
-                            case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED: {
-                                if (!msg.Rows.empty()) {
-                                    bytes = ScanData->AddRows(msg.Rows, state.TabletId, TaskRunner->GetHolderFactory());
-                                    rowsCount = msg.Rows.size();
-                                }
-                                break;
-                            }
-                            case NKikimrTxDataShard::EScanDataFormat::ARROW: {
+                    ui64 bytes = 0; 
+                    ui64 rowsCount = 0; 
+                    { 
+                        auto guard = TaskRunner->BindAllocator(); 
+                        switch (msg.GetDataFormat()) { 
+                            case NKikimrTxDataShard::EScanDataFormat::CELLVEC: 
+                            case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED: { 
+                                if (!msg.Rows.empty()) { 
+                                    bytes = ScanData->AddRows(msg.Rows, state.TabletId, TaskRunner->GetHolderFactory()); 
+                                    rowsCount = msg.Rows.size(); 
+                                } 
+                                break; 
+                            } 
+                            case NKikimrTxDataShard::EScanDataFormat::ARROW: { 
                                 if (msg.ArrowBatch != nullptr) {
-                                    bytes = ScanData->AddRows(*msg.ArrowBatch, state.TabletId, TaskRunner->GetHolderFactory());
-                                    rowsCount = msg.ArrowBatch->num_rows();
-                                }
-                                break;
-                            }
-                        }
-                    }
-
+                                    bytes = ScanData->AddRows(*msg.ArrowBatch, state.TabletId, TaskRunner->GetHolderFactory()); 
+                                    rowsCount = msg.ArrowBatch->num_rows(); 
+                                } 
+                                break; 
+                            } 
+                        } 
+                    } 
+ 
                     CA_LOG_D("Got EvScanData, rows: " << rowsCount << ", bytes: " << bytes << ", finished: " << msg.Finished
                         << ", from: " << ev->Sender << ", shards remain: " << Shards.size()
                         << ", delayed for: " << latency.SecondsFloat() << " seconds by ratelimitter");
@@ -421,7 +421,7 @@ private:
                             StartTableScan();
                         } else {
                             CA_LOG_D("Finish scans");
-                            ScanData->Finish();
+                            ScanData->Finish(); 
 
                             if (ScanData->BasicStats) {
                                 ScanData->BasicStats->AffectedShards = AffectedShards.size();
@@ -809,7 +809,7 @@ private:
 
         auto ev = MakeHolder<TEvDataShard::TEvKqpScan>();
         ev->Record.SetLocalPathId(ScanData->TableId.PathId.LocalPathId);
-        for (auto& column: ScanData->GetColumns()) {
+        for (auto& column: ScanData->GetColumns()) { 
             ev->Record.AddColumnTags(column.Tag);
             ev->Record.AddColumnTypes(column.Type);
         }
@@ -849,8 +849,8 @@ private:
             );
         }
 
-        ev->Record.SetDataFormat(Meta.GetDataFormat());
-
+        ev->Record.SetDataFormat(Meta.GetDataFormat()); 
+ 
         bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
         CA_LOG_D("Send EvKqpScan to shardId: " << state.TabletId << ", tablePath: " << ScanData->TablePath
@@ -930,8 +930,8 @@ private:
                                  state.Ranges.back().To.GetCells(), state.Ranges.back().ToInclusive);
 
         TVector<TKeyDesc::TColumnOp> columns;
-        columns.reserve(ScanData->GetColumns().size());
-        for (const auto& column : ScanData->GetColumns()) {
+        columns.reserve(ScanData->GetColumns().size()); 
+        for (const auto& column : ScanData->GetColumns()) { 
             TKeyDesc::TColumnOp op;
             op.Column = column.Tag;
             op.Operation = TKeyDesc::EColumnOperation::Read;
@@ -963,8 +963,8 @@ private:
     THolder<IDestructable> GetSourcesState() override {
         if (ScanData) {
             auto state = MakeHolder<TScanFreeSpace>();
-            state->FreeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes()
-                ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes()
+            state->FreeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes() 
+                ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes() 
                 : 0ul;
             return state;
         }
@@ -978,12 +978,12 @@ private:
 
         auto& state = Shards.front();
 
-        ui64 freeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes()
-            ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes()
+        ui64 freeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes() 
+            ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes() 
             : 0ul;
         ui64 prevFreeSpace = static_cast<TScanFreeSpace*>(prev.Get())->FreeSpace;
 
-        CA_LOG_T("Scan over tablet " << state.TabletId << " finished: " << ScanData->IsFinished()
+        CA_LOG_T("Scan over tablet " << state.TabletId << " finished: " << ScanData->IsFinished() 
             << ", prevFreeSpace: " << prevFreeSpace << ", freeSpace: " << freeSpace << ", peer: " << state.ActorId);
 
         if (!ScanData->IsFinished() && state.State != EShardState::PostRunning

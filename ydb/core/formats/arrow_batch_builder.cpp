@@ -40,7 +40,7 @@ arrow::Status AppendCell(arrow::Decimal128Builder& builder, const TCell& cell) {
         return builder.AppendNull();
     }
 
-    /// @warning There's no conversion for special YQL Decimal valies here,
+    /// @warning There's no conversion for special YQL Decimal valies here, 
     /// so we could convert them to Arrow and back but cannot calculate anything on them.
     /// We need separate Arrow.Decimal, YQL.Decimal, CH.Decimal and YDB.Decimal in future.
     return builder.Append(cell.Data());
@@ -52,18 +52,18 @@ arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, 
     return AppendCell(*builder.GetFieldAs<TBuilderType>(colNum), cell);
 }
 
-arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum, NScheme::TTypeId type) {
-    arrow::Status result;
-    auto callback = [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
-        Y_UNUSED(typeHolder);
-        result = AppendCell<TType>(builder, cell, colNum);
-        return true;
-    };
-    auto success = SwitchYqlTypeToArrowType(type, std::move(callback));
-    if(!success) {
-        return arrow::Status::TypeError("Unsupported type");
+arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum, NScheme::TTypeId type) { 
+    arrow::Status result; 
+    auto callback = [&]<typename TType>(TTypeWrapper<TType> typeHolder) { 
+        Y_UNUSED(typeHolder); 
+        result = AppendCell<TType>(builder, cell, colNum); 
+        return true; 
+    }; 
+    auto success = SwitchYqlTypeToArrowType(type, std::move(callback)); 
+    if(!success) { 
+        return arrow::Status::TypeError("Unsupported type"); 
     }
-    return result;
+    return result; 
 }
 
 }
@@ -166,18 +166,18 @@ TString TArrowBatchBuilder::Finish() {
     return str;
 }
 
-std::shared_ptr<arrow::RecordBatch> CreateNoColumnsBatch(ui64 rowsCount) {
-    auto field = std::make_shared<arrow::Field>("", std::make_shared<arrow::NullType>());
-    std::shared_ptr<arrow::Schema> schema = std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>({field}));
-    std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder;
-    auto status = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), &batchBuilder);
-    Y_VERIFY_DEBUG(status.ok(), "Failed to create BatchBuilder");
-    status = batchBuilder->GetFieldAs<arrow::NullBuilder>(0)->AppendNulls(rowsCount);
-    Y_VERIFY_DEBUG(status.ok(), "Failed to Append nulls");
-    std::shared_ptr<arrow::RecordBatch> batch;
-    status = batchBuilder->Flush(&batch);
-    Y_VERIFY_DEBUG(status.ok(), "Failed to Flush Batch");
-    return batch;
-}
-
+std::shared_ptr<arrow::RecordBatch> CreateNoColumnsBatch(ui64 rowsCount) { 
+    auto field = std::make_shared<arrow::Field>("", std::make_shared<arrow::NullType>()); 
+    std::shared_ptr<arrow::Schema> schema = std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>({field})); 
+    std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder; 
+    auto status = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), &batchBuilder); 
+    Y_VERIFY_DEBUG(status.ok(), "Failed to create BatchBuilder"); 
+    status = batchBuilder->GetFieldAs<arrow::NullBuilder>(0)->AppendNulls(rowsCount); 
+    Y_VERIFY_DEBUG(status.ok(), "Failed to Append nulls"); 
+    std::shared_ptr<arrow::RecordBatch> batch; 
+    status = batchBuilder->Flush(&batch); 
+    Y_VERIFY_DEBUG(status.ok(), "Failed to Flush Batch"); 
+    return batch; 
+} 
+ 
 }

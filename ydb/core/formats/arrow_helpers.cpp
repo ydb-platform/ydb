@@ -181,39 +181,39 @@ std::shared_ptr<arrow::UInt64Array> SortPermutation(const std::shared_ptr<arrow:
 #endif
 }
 
-template <typename TType>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
-    return std::make_shared<TType>();
-}
+template <typename TType> 
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() { 
+    return std::make_shared<TType>(); 
+} 
 
-template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
-    return arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
-}
-
-template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>() {
-    return arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO);
-}
-
-template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>() {
-    return arrow::duration(arrow::TimeUnit::TimeUnit::MICRO);
-}
-
-std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeId typeId) {
-    std::shared_ptr<arrow::DataType> result;
-    bool success = SwitchYqlTypeToArrowType(typeId, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
-        Y_UNUSED(typeHolder);
-        result = CreateEmptyArrowImpl<TType>();
-        return true;
-    });
-    if (success) {
-        return result;
-    }
-    return std::make_shared<arrow::NullType>();
-}
-
+template <> 
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() { 
+    return arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE); 
+} 
+ 
+template <> 
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>() { 
+    return arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO); 
+} 
+ 
+template <> 
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>() { 
+    return arrow::duration(arrow::TimeUnit::TimeUnit::MICRO); 
+} 
+ 
+std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeId typeId) { 
+    std::shared_ptr<arrow::DataType> result; 
+    bool success = SwitchYqlTypeToArrowType(typeId, [&]<typename TType>(TTypeWrapper<TType> typeHolder) { 
+        Y_UNUSED(typeHolder); 
+        result = CreateEmptyArrowImpl<TType>(); 
+        return true; 
+    }); 
+    if (success) { 
+        return result; 
+    } 
+    return std::make_shared<arrow::NullType>(); 
+} 
+ 
 std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pair<TString, NScheme::TTypeId>>& columns) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(columns.size());
@@ -224,7 +224,7 @@ std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pa
     return fields;
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const TVector<std::pair<TString, NScheme::TTypeId>>& ydbColumns) {
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const TVector<std::pair<TString, NScheme::TTypeId>>& ydbColumns) { 
     return std::make_shared<arrow::Schema>(MakeArrowFields(ydbColumns));
 }
 
@@ -604,70 +604,70 @@ TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema) {
     return out;
 }
 
-ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch) {
+ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch) { 
     if (!batch) {
-        return 0;
-    }
-    ui64 bytes = 0;
+        return 0; 
+    } 
+    ui64 bytes = 0; 
     for (auto& column : batch->columns()) { // TODO: use column_data() instead of columns()
         bytes += GetArrayDataSize(column);
-    }
-    return bytes;
-}
-
-template <typename TType>
-ui64 GetArrayDataSizeImpl(const std::shared_ptr<arrow::Array>& column) {
-    return sizeof(typename TType::c_type) * column->length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::NullType>(const std::shared_ptr<arrow::Array>& column) {
-    return column->length() * 8; // Special value for empty lines
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::StringType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::StringArray>(column);
-    return typedColumn->total_values_length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::LargeStringType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::StringArray>(column);
-    return typedColumn->total_values_length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::BinaryType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::BinaryArray>(column);
-    return typedColumn->total_values_length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::LargeBinaryType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::BinaryArray>(column);
-    return typedColumn->total_values_length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::FixedSizeBinaryType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
-    return typedColumn->byte_width() * typedColumn->length();
-}
-
-template <>
-ui64 GetArrayDataSizeImpl<arrow::Decimal128Type>(const std::shared_ptr<arrow::Array>& column) {
-    return sizeof(ui64) * 2 * column->length();
-}
-
+    } 
+    return bytes; 
+} 
+ 
+template <typename TType> 
+ui64 GetArrayDataSizeImpl(const std::shared_ptr<arrow::Array>& column) { 
+    return sizeof(typename TType::c_type) * column->length(); 
+} 
+ 
+template <> 
+ui64 GetArrayDataSizeImpl<arrow::NullType>(const std::shared_ptr<arrow::Array>& column) { 
+    return column->length() * 8; // Special value for empty lines 
+} 
+ 
+template <> 
+ui64 GetArrayDataSizeImpl<arrow::StringType>(const std::shared_ptr<arrow::Array>& column) { 
+    auto typedColumn = std::static_pointer_cast<arrow::StringArray>(column); 
+    return typedColumn->total_values_length(); 
+} 
+ 
+template <> 
+ui64 GetArrayDataSizeImpl<arrow::LargeStringType>(const std::shared_ptr<arrow::Array>& column) { 
+    auto typedColumn = std::static_pointer_cast<arrow::StringArray>(column); 
+    return typedColumn->total_values_length(); 
+} 
+ 
+template <> 
+ui64 GetArrayDataSizeImpl<arrow::BinaryType>(const std::shared_ptr<arrow::Array>& column) { 
+    auto typedColumn = std::static_pointer_cast<arrow::BinaryArray>(column); 
+    return typedColumn->total_values_length(); 
+} 
+ 
+template <> 
+ui64 GetArrayDataSizeImpl<arrow::LargeBinaryType>(const std::shared_ptr<arrow::Array>& column) { 
+    auto typedColumn = std::static_pointer_cast<arrow::BinaryArray>(column); 
+    return typedColumn->total_values_length(); 
+} 
+ 
+template <> 
+ui64 GetArrayDataSizeImpl<arrow::FixedSizeBinaryType>(const std::shared_ptr<arrow::Array>& column) { 
+    auto typedColumn = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column); 
+    return typedColumn->byte_width() * typedColumn->length(); 
+} 
+ 
+template <> 
+ui64 GetArrayDataSizeImpl<arrow::Decimal128Type>(const std::shared_ptr<arrow::Array>& column) { 
+    return sizeof(ui64) * 2 * column->length(); 
+} 
+ 
 ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
     auto type = column->type();
-    ui64 bytes = 0;
-    bool success = SwitchTypeWithNull(type->id(), [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
-        Y_UNUSED(typeHolder);
-        bytes = GetArrayDataSizeImpl<TType>(column);
-        return true;
-    });
+    ui64 bytes = 0; 
+    bool success = SwitchTypeWithNull(type->id(), [&]<typename TType>(TTypeWrapper<TType> typeHolder) { 
+        Y_UNUSED(typeHolder); 
+        bytes = GetArrayDataSizeImpl<TType>(column); 
+        return true; 
+    }); 
 
     // Add null bit mask overhead if any.
     if (HasNulls(column)) {
@@ -675,9 +675,9 @@ ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
     }
 
     Y_VERIFY_DEBUG(success, "Unsupported arrow type %s", type->ToString().data());
-    return bytes;
-}
-
+    return bytes; 
+} 
+ 
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size) {
     auto res = arrow::MakeArrayFromScalar(arrow::UInt64Scalar(value), size);
     Y_VERIFY(res.ok());
@@ -924,7 +924,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
             return false;
         }
         allColumns.emplace_back(std::move(column));
-    }
+    } 
 
     std::vector<TSmallVec<TCell>> cells;
     i64 row = 0;
@@ -982,12 +982,12 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
             }
 
             bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
-                Y_UNUSED(typeHolder);
+                Y_UNUSED(typeHolder); 
                 cells[0][col] = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, row);
-                return true;
-            });
+                return true; 
+            }); 
 
-            if (!success) {
+            if (!success) { 
                 errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType)
                         << " at column '" << colName << "'";
                 return false;

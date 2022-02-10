@@ -32,7 +32,7 @@ public:
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
                      ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie,
                      const TString& table, TDuration timeout, TVector<TTxScan::TReadMetadataPtr>&& readMetadataList,
-                     NKikimrTxDataShard::EScanDataFormat dataFormat)
+                     NKikimrTxDataShard::EScanDataFormat dataFormat) 
         : ColumnShardActorId(columnShardActorId)
         , ScanComputeActorId(scanComputeActorId)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
@@ -40,7 +40,7 @@ public:
         , TxId(txId)
         , ScanGen(scanGen)
         , RequestCookie(requestCookie)
-        , DataFormat(dataFormat)
+        , DataFormat(dataFormat) 
         , TablePath(table)
         , ReadMetadataRanges(std::move(readMetadataList))
         , ReadMetadataIndex(0)
@@ -151,7 +151,7 @@ private:
         auto result = ScanIterator->GetBatch();
         if (ResultYqlSchema.empty() && DataFormat != NKikimrTxDataShard::EScanDataFormat::ARROW) {
             ResultYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetResultYqlSchema();
-        }
+        } 
         if (!result.ResultBatch) {
             // No data is ready yet
             return false;
@@ -303,28 +303,28 @@ private:
             if (reserveRows) {
                 Y_VERIFY(DataFormat != NKikimrTxDataShard::EScanDataFormat::ARROW);
                 Result->Rows.reserve(reserveRows);
-            }
+            } 
         }
     }
 
-    void NextReadMetadata() {
+    void NextReadMetadata() { 
         ScanIterator.reset();
 
-        ++ReadMetadataIndex;
-
+        ++ReadMetadataIndex; 
+ 
         if (ReadMetadataIndex == ReadMetadataRanges.size()) {
-            // Send empty batch with "finished" flag
+            // Send empty batch with "finished" flag 
             MakeResult();
-            SendResult(false, true);
-            return Finish();
-        }
-
+            SendResult(false, true); 
+            return Finish(); 
+        } 
+ 
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan();
-
-        // Used in TArrowToYdbConverter
+ 
+        // Used in TArrowToYdbConverter 
         ResultYqlSchema.clear();
-    }
-
+    } 
+ 
     void AddRow(const TConstArrayRef<TCell>& row) override {
         Result->Rows.emplace_back(TOwnedCellVec::Make(row));
         ++Rows;
@@ -430,7 +430,7 @@ private:
     const ui32 ScanGen;
     const ui64 RequestCookie;
     const i64 MaxReadAheadBytes = DEFAULT_READ_AHEAD_BYTES;
-    const NKikimrTxDataShard::EScanDataFormat DataFormat;
+    const NKikimrTxDataShard::EScanDataFormat DataFormat; 
 
     const TString TablePath;
 
@@ -669,7 +669,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const ui64 txId = request.GetTxId();
     const ui32 scanGen = request.GetGeneration();
     TString table = request.GetTablePath();
-    auto dataFormat = request.GetDataFormat();
+    auto dataFormat = request.GetDataFormat(); 
     TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
 
     if (scanGen > 1) {

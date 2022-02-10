@@ -15,7 +15,7 @@ public:
     TArrowBatchBuilder(arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED);
     ~TArrowBatchBuilder() = default;
 
-    bool Start(const TVector<std::pair<TString, NScheme::TTypeId>>& columns,
+    bool Start(const TVector<std::pair<TString, NScheme::TTypeId>>& columns, 
                ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) override {
         Y_UNUSED(maxRowsInBlock);
         Y_UNUSED(maxBytesInBlock);
@@ -66,8 +66,8 @@ private:
     }
 };
 
-// Creates a batch with single column of type NullType and with num_rows equal rowsCount. All values are null. We need
-// this function, because batch can not have zero columns. And NullType conusumes the least place in memory.
-std::shared_ptr<arrow::RecordBatch> CreateNoColumnsBatch(ui64 rowsCount);
-
+// Creates a batch with single column of type NullType and with num_rows equal rowsCount. All values are null. We need 
+// this function, because batch can not have zero columns. And NullType conusumes the least place in memory. 
+std::shared_ptr<arrow::RecordBatch> CreateNoColumnsBatch(ui64 rowsCount); 
+ 
 }

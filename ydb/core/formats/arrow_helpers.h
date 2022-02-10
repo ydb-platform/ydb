@@ -1,5 +1,5 @@
 #pragma once
-#include "switch_type.h"
+#include "switch_type.h" 
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -23,7 +23,7 @@ public:
     }
 };
 
-std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeId typeId);
+std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeId typeId); 
 
 template <typename T>
 inline bool ArrayEqualValue(const std::shared_ptr<arrow::Array>& x, const std::shared_ptr<arrow::Array>& y) {
@@ -90,9 +90,9 @@ std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse = fal
 std::shared_ptr<arrow::BooleanArray> MakeFilter(const std::vector<bool>& bits);
 std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2);
 TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
-// Return size in bytes including size of bitmap mask
-ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch);
-// Return size in bytes *not* including size of bitmap mask
+// Return size in bytes including size of bitmap mask 
+ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch); 
+// Return size in bytes *not* including size of bitmap mask 
 ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column);
 
 enum class ECompareType {
@@ -160,26 +160,26 @@ private:
         return TCell(data.data(), data.size());
     }
 
-    template <typename TArrayType>
+    template <typename TArrayType> 
     TCell MakeCell(const std::shared_ptr<arrow::Array>& column, i64 row) {
         return MakeCellFromValue<TArrayType>(column, row);
-    }
-
-    template <>
+    } 
+ 
+    template <> 
     TCell MakeCell<arrow::BinaryArray>(const std::shared_ptr<arrow::Array>& column, i64 row) {
         return MakeCellFromView<arrow::BinaryArray>(column, row);
-    }
-
-    template <>
+    } 
+ 
+    template <> 
     TCell MakeCell<arrow::StringArray>(const std::shared_ptr<arrow::Array>& column, i64 row) {
         return MakeCellFromView<arrow::StringArray>(column, row);
-    }
-
-    template <>
+    } 
+ 
+    template <> 
     TCell MakeCell<arrow::Decimal128Array>(const std::shared_ptr<arrow::Array>& column, i64 row) {
         return MakeCellFromView<arrow::Decimal128Array>(column, row);
-    }
-
+    } 
+ 
 public:
     TArrowToYdbConverter(const TVector<std::pair<TString, NScheme::TTypeId>>& ydbSchema, IRowWriter& rowWriter)
         : YdbSchema(ydbSchema)

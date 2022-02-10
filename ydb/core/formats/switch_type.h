@@ -10,15 +10,15 @@ struct TTypeWrapper
     using T = TType;
 };
 
-template <typename TFunc, bool EnableNull = false>
+template <typename TFunc, bool EnableNull = false> 
 bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
     switch (typeId) {
-        case arrow::Type::NA: {
-            if constexpr (EnableNull) {
-                return f(TTypeWrapper<arrow::NullType>());
-            }
+        case arrow::Type::NA: { 
+            if constexpr (EnableNull) { 
+                return f(TTypeWrapper<arrow::NullType>()); 
+            } 
             break;
-        }
+        } 
         case arrow::Type::BOOL:
             return f(TTypeWrapper<arrow::BooleanType>());
         case arrow::Type::UINT8:
@@ -48,7 +48,7 @@ bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
         case arrow::Type::BINARY:
             return f(TTypeWrapper<arrow::BinaryType>());
         case arrow::Type::FIXED_SIZE_BINARY:
-            return f(TTypeWrapper<arrow::FixedSizeBinaryType>());
+            return f(TTypeWrapper<arrow::FixedSizeBinaryType>()); 
         case arrow::Type::DATE32:
             return f(TTypeWrapper<arrow::Date32Type>());
         case arrow::Type::DATE64:
@@ -61,8 +61,8 @@ bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
             return f(TTypeWrapper<arrow::Time64Type>());
         case arrow::Type::INTERVAL_MONTHS:
             return f(TTypeWrapper<arrow::MonthIntervalType>());
-        case arrow::Type::DECIMAL:
-            return f(TTypeWrapper<arrow::Decimal128Type>());
+        case arrow::Type::DECIMAL: 
+            return f(TTypeWrapper<arrow::Decimal128Type>()); 
         case arrow::Type::DURATION:
             return f(TTypeWrapper<arrow::DurationType>());
         case arrow::Type::LARGE_STRING:
@@ -88,77 +88,77 @@ bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
 }
 
 template <typename TFunc>
-bool SwitchTypeWithNull(arrow::Type::type typeId, TFunc&& f) {
-    return SwitchType<TFunc, true>(typeId, std::move(f));
-}
-
-template <typename TFunc>
+bool SwitchTypeWithNull(arrow::Type::type typeId, TFunc&& f) { 
+    return SwitchType<TFunc, true>(typeId, std::move(f)); 
+} 
+ 
+template <typename TFunc> 
 bool SwitchArrayType(const arrow::Datum& column, TFunc&& f) {
     auto type = column.type();
     Y_VERIFY(type);
     return SwitchType(type->id(), std::forward<TFunc>(f));
 }
 
-/**
- * @brief Function to switch yql type correctly and uniformly converting it to arrow type using callback
- *
- * @tparam TFunc Callback type
- * @param typeId Type of data callback work with.
- * @param callback Template function of signature (TTypeWrapper) -> bool
- * @return Result of execution of callback or false if the type typeId is not supported.
- */
-template <typename TFunc>
-bool SwitchYqlTypeToArrowType(NScheme::TTypeId typeId, TFunc&& callback) {
-    switch (typeId) {
-        case NScheme::NTypeIds::Bool:
-            return callback(TTypeWrapper<arrow::BooleanType>());
-        case NScheme::NTypeIds::Int8:
-            return callback(TTypeWrapper<arrow::Int8Type>());
-        case NScheme::NTypeIds::Uint8:
-            return callback(TTypeWrapper<arrow::UInt8Type>());
-        case NScheme::NTypeIds::Int16:
-            return callback(TTypeWrapper<arrow::Int16Type>());
-        case NScheme::NTypeIds::Date:
-        case NScheme::NTypeIds::Uint16:
-            return callback(TTypeWrapper<arrow::UInt16Type>());
-        case NScheme::NTypeIds::Int32:
-            return callback(TTypeWrapper<arrow::Int32Type>());
-        case NScheme::NTypeIds::Datetime:
-        case NScheme::NTypeIds::Uint32:
-            return callback(TTypeWrapper<arrow::UInt32Type>());
-        case NScheme::NTypeIds::Int64:
-            return callback(TTypeWrapper<arrow::Int64Type>());
-        case NScheme::NTypeIds::Uint64:
-            return callback(TTypeWrapper<arrow::UInt64Type>());
-        case NScheme::NTypeIds::Float:
-            return callback(TTypeWrapper<arrow::FloatType>());
-        case NScheme::NTypeIds::Double:
-            return callback(TTypeWrapper<arrow::DoubleType>());
-        case NScheme::NTypeIds::Utf8:
-            return callback(TTypeWrapper<arrow::StringType>());
-        case NScheme::NTypeIds::String:
-        case NScheme::NTypeIds::String4k:
-        case NScheme::NTypeIds::String2m:
-        case NScheme::NTypeIds::Yson:
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::DyNumber:
-        case NScheme::NTypeIds::JsonDocument:
-            return callback(TTypeWrapper<arrow::BinaryType>());
-        case NScheme::NTypeIds::Timestamp:
-            return callback(TTypeWrapper<arrow::TimestampType>());
-        case NScheme::NTypeIds::Interval:
-            return callback(TTypeWrapper<arrow::DurationType>());
-        case NScheme::NTypeIds::Decimal:
-            return callback(TTypeWrapper<arrow::Decimal128Type>());
-
-        case NScheme::NTypeIds::PairUi64Ui64:
-        case NScheme::NTypeIds::ActorId:
-        case NScheme::NTypeIds::StepOrderId:
-            break; // Deprecated types
-    }
-    return false;
-}
-
+/** 
+ * @brief Function to switch yql type correctly and uniformly converting it to arrow type using callback 
+ * 
+ * @tparam TFunc Callback type 
+ * @param typeId Type of data callback work with. 
+ * @param callback Template function of signature (TTypeWrapper) -> bool 
+ * @return Result of execution of callback or false if the type typeId is not supported. 
+ */ 
+template <typename TFunc> 
+bool SwitchYqlTypeToArrowType(NScheme::TTypeId typeId, TFunc&& callback) { 
+    switch (typeId) { 
+        case NScheme::NTypeIds::Bool: 
+            return callback(TTypeWrapper<arrow::BooleanType>()); 
+        case NScheme::NTypeIds::Int8: 
+            return callback(TTypeWrapper<arrow::Int8Type>()); 
+        case NScheme::NTypeIds::Uint8: 
+            return callback(TTypeWrapper<arrow::UInt8Type>()); 
+        case NScheme::NTypeIds::Int16: 
+            return callback(TTypeWrapper<arrow::Int16Type>()); 
+        case NScheme::NTypeIds::Date: 
+        case NScheme::NTypeIds::Uint16: 
+            return callback(TTypeWrapper<arrow::UInt16Type>()); 
+        case NScheme::NTypeIds::Int32: 
+            return callback(TTypeWrapper<arrow::Int32Type>()); 
+        case NScheme::NTypeIds::Datetime: 
+        case NScheme::NTypeIds::Uint32: 
+            return callback(TTypeWrapper<arrow::UInt32Type>()); 
+        case NScheme::NTypeIds::Int64: 
+            return callback(TTypeWrapper<arrow::Int64Type>()); 
+        case NScheme::NTypeIds::Uint64: 
+            return callback(TTypeWrapper<arrow::UInt64Type>()); 
+        case NScheme::NTypeIds::Float: 
+            return callback(TTypeWrapper<arrow::FloatType>()); 
+        case NScheme::NTypeIds::Double: 
+            return callback(TTypeWrapper<arrow::DoubleType>()); 
+        case NScheme::NTypeIds::Utf8: 
+            return callback(TTypeWrapper<arrow::StringType>()); 
+        case NScheme::NTypeIds::String: 
+        case NScheme::NTypeIds::String4k: 
+        case NScheme::NTypeIds::String2m: 
+        case NScheme::NTypeIds::Yson: 
+        case NScheme::NTypeIds::Json: 
+        case NScheme::NTypeIds::DyNumber: 
+        case NScheme::NTypeIds::JsonDocument: 
+            return callback(TTypeWrapper<arrow::BinaryType>()); 
+        case NScheme::NTypeIds::Timestamp: 
+            return callback(TTypeWrapper<arrow::TimestampType>()); 
+        case NScheme::NTypeIds::Interval: 
+            return callback(TTypeWrapper<arrow::DurationType>()); 
+        case NScheme::NTypeIds::Decimal: 
+            return callback(TTypeWrapper<arrow::Decimal128Type>()); 
+ 
+        case NScheme::NTypeIds::PairUi64Ui64: 
+        case NScheme::NTypeIds::ActorId: 
+        case NScheme::NTypeIds::StepOrderId: 
+            break; // Deprecated types 
+    } 
+    return false; 
+} 
+ 
 template <typename T>
 bool Append(arrow::ArrayBuilder& builder, const typename T::c_type& value) {
     using TBuilder = typename arrow::TypeTraits<T>::BuilderType;

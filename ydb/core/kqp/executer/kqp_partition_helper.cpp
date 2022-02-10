@@ -75,7 +75,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(const NDq::TMkqlV
         shardData.ParamType = itemType;
     }
 
-    NDq::TDqDataSerializer dataSerializer{typeEnv, holderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0};
+    NDq::TDqDataSerializer dataSerializer{typeEnv, holderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0}; 
     for (auto& [shardId, data] : ret) {
         ret[shardId].ParamValues = dataSerializer.Serialize(shardParamValues[shardId], itemType);
     }
@@ -159,7 +159,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(const NDq::
         }
     }
 
-    NDq::TDqDataSerializer dataSerializer(typeEnv, holderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0);
+    NDq::TDqDataSerializer dataSerializer(typeEnv, holderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0); 
     for (auto& [shardId, data] : ret) {
         data.ParamValues = dataSerializer.Serialize(shardParamValues[shardId], itemType);
     }

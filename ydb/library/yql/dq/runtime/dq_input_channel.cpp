@@ -8,8 +8,8 @@ class TDqInputChannel : public TDqInputImpl<TDqInputChannel, IDqInputChannel> {
     friend TBaseImpl;
 public:
     TDqInputChannel(ui64 channelId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, bool collectProfileStats,
-        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        NDqProto::EDataTransportVersion transportVersion)
+        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory, 
+        NDqProto::EDataTransportVersion transportVersion) 
         : TBaseImpl(inputType, maxBufferBytes)
         , ChannelId(channelId)
         , BasicStats(ChannelId)

@@ -137,12 +137,12 @@ enum EKqpTransactionType {
     KQP_TX_TYPE_SCAN = 2;
 }
 
-enum EScanDataFormat {
-    UNSPECIFIED = 0;
-    CELLVEC = 1;
-    ARROW = 2;
-}
-
+enum EScanDataFormat { 
+    UNSPECIFIED = 0; 
+    CELLVEC = 1; 
+    ARROW = 2; 
+} 
+ 
 message TKqpTransaction {
     message TColumnMeta {
         optional uint32 Id = 1;
@@ -211,7 +211,7 @@ message TKqpTransaction {
          optional uint64 ItemsLimit = 6;
          optional bool Reverse = 7;
          reserved 8; // optional bytes ProcessProgram = 8;
-         optional EScanDataFormat DataFormat = 9;
+         optional EScanDataFormat DataFormat = 9; 
          optional NKikimrSSA.TOlapProgram OlapProgram = 10; // Currently only for OLAP tables
     }
 
@@ -1392,7 +1392,7 @@ message TEvKqpScan {
     reserved 14;
     optional uint64 ItemsLimit = 15;
     optional bool Reverse = 16;
-    optional EScanDataFormat DataFormat = 17;
+    optional EScanDataFormat DataFormat = 17; 
     optional NYql.NDqProto.EDqStatsMode StatsMode = 18;
     optional bytes OlapProgram = 19;
     optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 20;

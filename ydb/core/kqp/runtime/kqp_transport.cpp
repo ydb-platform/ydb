@@ -86,26 +86,26 @@ void TKqpProtoBuilder::BuildValue(const TVector<NDqProto::TData>& data, const NK
     auto mkqlType = ImportTypeFromProto(result->GetType(), *TypeEnv);
 
     TUnboxedValueVector buffer;
-    auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-    if (!data.empty()) {
-        switch (data.front().GetTransportVersion()) {
-            case 10000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_YSON_1_0;
-                break;
-            }
-            case 20000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
-                break;
-            }
-            case 30000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_ARROW_1_0;
-                break;
-            }
-            default:
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-        }
-    }
-    NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
+    auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED; 
+    if (!data.empty()) { 
+        switch (data.front().GetTransportVersion()) { 
+            case 10000: { 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_YSON_1_0; 
+                break; 
+            } 
+            case 20000: { 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0; 
+                break; 
+            } 
+            case 30000: { 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_ARROW_1_0; 
+                break; 
+            } 
+            default: 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED; 
+        } 
+    } 
+    NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion); 
     for (auto& part : data) {
         dataSerializer.Deserialize(part, mkqlType, buffer);
     }
@@ -143,27 +143,27 @@ void TKqpProtoBuilder::BuildStream(const TVector<NDqProto::TData>& data, const N
         guard = MakeHolder<TGuard<TScopedAlloc>>(*Alloc);
     }
 
-    auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-    if (!data.empty()) {
-        switch (data.front().GetTransportVersion()) {
-            case 10000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_YSON_1_0;
-                break;
-            }
-            case 20000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
-                break;
-            }
-            case 30000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_ARROW_1_0;
-                break;
-            }
-            default:
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-        }
-    }
-    NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
-
+    auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED; 
+    if (!data.empty()) { 
+        switch (data.front().GetTransportVersion()) { 
+            case 10000: { 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_YSON_1_0; 
+                break; 
+            } 
+            case 20000: { 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0; 
+                break; 
+            } 
+            case 30000: { 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_ARROW_1_0; 
+                break; 
+            } 
+            default: 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED; 
+        } 
+    } 
+    NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion); 
+ 
     if (dstRowType) {
         YQL_ENSURE(dstRowType->GetKind() == NKikimrMiniKQL::Struct);
         newRowType->CopyFrom(*dstRowType);
@@ -281,26 +281,26 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(const TVector<NDqProto::TData
         guard = MakeHolder<TGuard<TScopedAlloc>>(*Alloc);
     }
 
-    auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-    if (!data.empty()) {
-        switch (data.front().GetTransportVersion()) {
-            case 10000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_YSON_1_0;
-                break;
-            }
-            case 20000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
-                break;
-            }
-            case 30000: {
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_ARROW_1_0;
-                break;
-            }
-            default:
-                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-        }
-    }
-    NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
+    auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED; 
+    if (!data.empty()) { 
+        switch (data.front().GetTransportVersion()) { 
+            case 10000: { 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_YSON_1_0; 
+                break; 
+            } 
+            case 20000: { 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0; 
+                break; 
+            } 
+            case 30000: { 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_ARROW_1_0; 
+                break; 
+            } 
+            default: 
+                transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED; 
+        } 
+    } 
+    NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion); 
 
     for (auto& part : data) {
         if (part.GetRows()) {

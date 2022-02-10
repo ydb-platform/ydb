@@ -120,7 +120,7 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 
 #define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
 
-NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
+NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type, 
     TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory)
 {
     switch (inputDesc.GetTypeCase()) {
@@ -420,8 +420,8 @@ public:
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
                     auto inputChannel = CreateDqInputChannel(channelId, ProgramParsed.InputItemTypes[i],
-                        memoryLimits.ChannelBufferSize, Settings.CollectProfileStats, typeEnv, holderFactory,
-                        inputChannelDesc.GetTransportVersion());
+                        memoryLimits.ChannelBufferSize, Settings.CollectProfileStats, typeEnv, holderFactory, 
+                        inputChannelDesc.GetTransportVersion()); 
                     auto ret = InputChannels.emplace(channelId, inputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated input channelId: " << channelId);
                     inputs.emplace_back(inputChannel);

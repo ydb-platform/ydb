@@ -369,11 +369,11 @@ private:
         TString lastKey;
         size_t rowsExtracted = 0;
         bool skippedBeforeMinKey = false;
-
-        if (ev->Get()->GetDataFormat() == NKikimrTxDataShard::ARROW) {
-            return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Arrow format not supported yet", ctx);
-        }
-
+ 
+        if (ev->Get()->GetDataFormat() == NKikimrTxDataShard::ARROW) { 
+            return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Arrow format not supported yet", ctx); 
+        } 
+ 
         for (auto&& row : ev->Get()->Rows) {
             ++rowsExtracted;
             if (row.size() != keyColumnCount + ValueColumnTypes.size()) {

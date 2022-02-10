@@ -547,18 +547,18 @@ message TEvRemoteScanData {
     optional bool PageFault = 5;
     optional bool Finished = 6;
     optional bytes LastKey = 7;
-    optional uint32 Generation = 9;
-
-    message TArrowBatch {
-        optional bytes Schema = 1;
-        optional bytes Batch = 2;
-    }
-
-    // Only one of the fields Rows and ArrowBatch must be filled. However, we can not use oneof feature because Rows
-    // field is repeated. Moving it into oneof is impossible. We may wrap it into a message but this would break
-    // backwards comparability.
+    optional uint32 Generation = 9; 
+ 
+    message TArrowBatch { 
+        optional bytes Schema = 1; 
+        optional bytes Batch = 2; 
+    } 
+ 
+    // Only one of the fields Rows and ArrowBatch must be filled. However, we can not use oneof feature because Rows 
+    // field is repeated. Moving it into oneof is impossible. We may wrap it into a message but this would break 
+    // backwards comparability. 
     repeated bytes Rows = 8;
-    optional TArrowBatch ArrowBatch = 10;
+    optional TArrowBatch ArrowBatch = 10; 
 }
 
 message TEvRemoteScanDataAck {

@@ -138,19 +138,19 @@ Y_UNIT_TEST_SUITE(TSchemeJsonTest) {
         UNIT_ASSERT_JSON_EQ_JSON(a, b);
     }
 
-    Y_UNIT_TEST(TestJsonEmptyContainers) {
-        {
-            NSc::TValue a = NSc::NUt::AssertFromJson("{a:[]}");
-            NSc::TValue b = NSc::TValue::FromJsonValue(a.ToJsonValue());
-            UNIT_ASSERT_JSON_EQ_JSON(a, b);
-        }
-        {
-            NSc::TValue a = NSc::NUt::AssertFromJson("{a:{}}");
-            NSc::TValue b = NSc::TValue::FromJsonValue(a.ToJsonValue());
-            UNIT_ASSERT_JSON_EQ_JSON(a, b);
-        }
-    }
-
+    Y_UNIT_TEST(TestJsonEmptyContainers) { 
+        { 
+            NSc::TValue a = NSc::NUt::AssertFromJson("{a:[]}"); 
+            NSc::TValue b = NSc::TValue::FromJsonValue(a.ToJsonValue()); 
+            UNIT_ASSERT_JSON_EQ_JSON(a, b); 
+        } 
+        { 
+            NSc::TValue a = NSc::NUt::AssertFromJson("{a:{}}"); 
+            NSc::TValue b = NSc::TValue::FromJsonValue(a.ToJsonValue()); 
+            UNIT_ASSERT_JSON_EQ_JSON(a, b); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestDuplicateKeys) {
         const TStringBuf duplicatedKeys = "{\"a\":[{\"b\":1, \"b\":42}]}";
         UNIT_ASSERT_NO_EXCEPTION(NSc::TValue::FromJsonThrow(duplicatedKeys));

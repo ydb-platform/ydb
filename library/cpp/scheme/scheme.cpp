@@ -418,14 +418,14 @@ namespace NSc {
                 core.SetString(val.GetString());
                 break;
             case NJson::JSON_ARRAY: {
-                core.SetArray();
+                core.SetArray(); 
                 for (const auto& item : val.GetArray()) {
                     FromJsonValue(core.Push(), item);
                 }
                 break;
             }
             case NJson::JSON_MAP: {
-                core.SetDict();
+                core.SetDict(); 
                 for (const auto& item : val.GetMap()) {
                     FromJsonValue(core.Add(item.first), item.second);
                 }

@@ -55,74 +55,74 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
     }
 
     Y_UNIT_TEST(TestValidZeroTerm) {
-        char r[10]; 
- 
-        CGIUnescape(r, "1234"); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "1234"); 
- 
-        CGIUnescape(r, "%3d"); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "="); 
- 
-        CGIUnescape(r, "12%3D34"); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "12=34"); 
-    } 
- 
+        char r[10];
+
+        CGIUnescape(r, "1234");
+        UNIT_ASSERT_VALUES_EQUAL(r, "1234");
+
+        CGIUnescape(r, "%3d");
+        UNIT_ASSERT_VALUES_EQUAL(r, "=");
+
+        CGIUnescape(r, "12%3D34");
+        UNIT_ASSERT_VALUES_EQUAL(r, "12=34");
+    }
+
     Y_UNIT_TEST(TestInvalidZeroTerm) {
-        char r[10]; 
- 
-        CGIUnescape(r, "%"); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "%"); 
- 
-        CGIUnescape(r, "%3"); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "%3"); 
- 
-        CGIUnescape(r, "%3g"); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "%3g"); 
- 
-        CGIUnescape(r, "12%3g34"); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "12%3g34"); 
- 
+        char r[10];
+
+        CGIUnescape(r, "%");
+        UNIT_ASSERT_VALUES_EQUAL(r, "%");
+
+        CGIUnescape(r, "%3");
+        UNIT_ASSERT_VALUES_EQUAL(r, "%3");
+
+        CGIUnescape(r, "%3g");
+        UNIT_ASSERT_VALUES_EQUAL(r, "%3g");
+
+        CGIUnescape(r, "12%3g34");
+        UNIT_ASSERT_VALUES_EQUAL(r, "12%3g34");
+
         CGIUnescape(r, "%3u123");
-        UNIT_ASSERT_VALUES_EQUAL(r, "%3u123"); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(r, "%3u123");
+    }
+
     Y_UNIT_TEST(TestValidNotZeroTerm) {
-        char r[10]; 
- 
-        CGIUnescape(r, "123456789", 4); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "1234"); 
- 
-        CGIUnescape(r, "%3d1234", 3); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "="); 
- 
-        CGIUnescape(r, "12%3D345678", 7); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "12=34"); 
-    } 
- 
+        char r[10];
+
+        CGIUnescape(r, "123456789", 4);
+        UNIT_ASSERT_VALUES_EQUAL(r, "1234");
+
+        CGIUnescape(r, "%3d1234", 3);
+        UNIT_ASSERT_VALUES_EQUAL(r, "=");
+
+        CGIUnescape(r, "12%3D345678", 7);
+        UNIT_ASSERT_VALUES_EQUAL(r, "12=34");
+    }
+
     Y_UNIT_TEST(TestInvalidNotZeroTerm) {
-        char r[10]; 
- 
-        CGIUnescape(r, "%3d", 1); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "%"); 
- 
-        CGIUnescape(r, "%3d", 2); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "%3"); 
- 
-        CGIUnescape(r, "%3g1234", 3); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "%3g"); 
- 
-        CGIUnescape(r, "12%3g345678", 7); 
-        UNIT_ASSERT_VALUES_EQUAL(r, "12%3g34"); 
- 
+        char r[10];
+
+        CGIUnescape(r, "%3d", 1);
+        UNIT_ASSERT_VALUES_EQUAL(r, "%");
+
+        CGIUnescape(r, "%3d", 2);
+        UNIT_ASSERT_VALUES_EQUAL(r, "%3");
+
+        CGIUnescape(r, "%3g1234", 3);
+        UNIT_ASSERT_VALUES_EQUAL(r, "%3g");
+
+        CGIUnescape(r, "12%3g345678", 7);
+        UNIT_ASSERT_VALUES_EQUAL(r, "12%3g34");
+
         CGIUnescape(r, "%3u1234", 2);
-        UNIT_ASSERT_VALUES_EQUAL(r, "%3"); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(r, "%3");
+
         CGIUnescape(r, "%3u1234", 3);
-        UNIT_ASSERT_VALUES_EQUAL(r, "%3u"); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(r, "%3u");
+
         CGIUnescape(r, "%3u1234", 4);
-        UNIT_ASSERT_VALUES_EQUAL(r, "%3u1"); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL(r, "%3u1");
+    }
 
     Y_UNIT_TEST(StrokaOutParameterInplace) {
         TString s;
@@ -176,8 +176,8 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
         CGIUnescape(s);
         UNIT_ASSERT_VALUES_EQUAL(s, "");
     }
-} 
- 
+}
+
 Y_UNIT_TEST_SUITE(TUrlEscapeTest) {
     Y_UNIT_TEST(EscapeEscaped) {
         TString s;

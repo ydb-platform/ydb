@@ -22,18 +22,18 @@
     } while (0)
 
 
-namespace { 
-    class TFromHexZeroTerm { 
-    public: 
+namespace {
+    class TFromHexZeroTerm {
+    public:
         static inline char x2c(const char*& x) {
             if (!IsAsciiHex((ui8)x[0]) || !IsAsciiHex((ui8)x[1]))
-                return '%'; 
-            ui8 c = 0; 
+                return '%';
+            ui8 c = 0;
 
             GETXC;
             GETXC;
-            return c; 
-        } 
+            return c;
+        }
 
         static inline char x2c(TStringBuf& x) {
             if (!IsAsciiHex((ui8)x[0]) || !IsAsciiHex((ui8)x[1]))
@@ -44,24 +44,24 @@ namespace {
             GETSBXC;
             return c;
         }
-    }; 
- 
-    class TFromHexLenLimited { 
-    public: 
-        TFromHexLenLimited(const char* end) 
-            : End(end) 
-        { 
-        } 
- 
+    };
+
+    class TFromHexLenLimited {
+    public:
+        TFromHexLenLimited(const char* end)
+            : End(end)
+        {
+        }
+
         inline char x2c(const char*& x) {
-            if (x + 2 > End) 
-                return '%'; 
-            return TFromHexZeroTerm::x2c(x); 
-        } 
- 
-    private: 
-        const char* End; 
-    }; 
+            if (x + 2 > End)
+                return '%';
+            return TFromHexZeroTerm::x2c(x);
+        }
+
+    private:
+        const char* End;
+    };
 }
 
 static inline char d2x(unsigned x) {
@@ -122,12 +122,12 @@ static inline It1 Escape(It1 to, It2 from, It3 end, const bool* escape_map = cha
     return to;
 }
 
-template <class It1, class It2, class It3, class FromHex> 
+template <class It1, class It2, class It3, class FromHex>
 static inline It1 Unescape(It1 to, It2 from, It3 end, FromHex fromHex) {
     (void)fromHex;
 
-    while (from != end) { 
-        switch (*from) { 
+    while (from != end) {
+        switch (*from) {
             case '%':
                 ++from;
                 *to++ = fromHex.x2c(from);
@@ -138,12 +138,12 @@ static inline It1 Unescape(It1 to, It2 from, It3 end, FromHex fromHex) {
                 break;
             default:
                 *to++ = *from++;
-        } 
-    } 
-    *to = 0; 
-    return to; 
-} 
- 
+        }
+    }
+    *to = 0;
+    return to;
+}
+
 // CGIEscape returns pointer to the end of the result string
 // so as it could be possible to populate single long buffer
 // with several calls to CGIEscape in a row.
@@ -216,7 +216,7 @@ void Quote(TString& url, const char* safe) {
 
 char* CGIUnescape(char* to, const char* from) {
     return Unescape(to, FixZero(from), TCStringEndIterator(), TFromHexZeroTerm());
-} 
+}
 
 char* CGIUnescape(char* to, const char* from, size_t len) {
     return Unescape(to, from, from + len, TFromHexLenLimited(from + len));

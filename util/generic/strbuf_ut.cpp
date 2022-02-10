@@ -227,18 +227,18 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT_EQUAL(buf1.rfind('3'), 5);
         UNIT_ASSERT_EQUAL(buf1.rfind('4'), 6);
         UNIT_ASSERT_EQUAL(buf1.rfind('7'), TStringBuf::npos);
- 
-        TStringBuf buf2; 
+
+        TStringBuf buf2;
         UNIT_ASSERT_EQUAL(buf2.rfind('3'), TStringBuf::npos);
- 
-        TStringBuf buf3 = TStringBuf("123123456", 6); 
-        UNIT_ASSERT_EQUAL(buf3.rfind('3'), 5); 
+
+        TStringBuf buf3 = TStringBuf("123123456", 6);
+        UNIT_ASSERT_EQUAL(buf3.rfind('3'), 5);
         UNIT_ASSERT_EQUAL(buf3.rfind('4'), TStringBuf::npos);
         UNIT_ASSERT_EQUAL(buf3.rfind('7'), TStringBuf::npos);
- 
-        TStringBuf buf4 = TStringBuf("123123456", 5); 
-        UNIT_ASSERT_EQUAL(buf4.rfind('3'), 2); 
-    } 
+
+        TStringBuf buf4 = TStringBuf("123123456", 5);
+        UNIT_ASSERT_EQUAL(buf4.rfind('3'), 2);
+    }
 
     Y_UNIT_TEST(TestRNextTok) {
         TStringBuf buf1("a.b.c");

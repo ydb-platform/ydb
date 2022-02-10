@@ -78,12 +78,12 @@ namespace NCompTriePrivate {
     struct TCmp {
         template <class T>
         inline bool operator()(const T& l, const T& r) {
-            return (unsigned char)(l.Label[0]) < (unsigned char)(r.Label[0]);
+            return (unsigned char)(l.Label[0]) < (unsigned char)(r.Label[0]); 
         }
 
         template <class T>
         inline bool operator()(const T& l, char r) {
-            return (unsigned char)(l.Label[0]) < (unsigned char)r;
+            return (unsigned char)(l.Label[0]) < (unsigned char)r; 
         }
     };
 }

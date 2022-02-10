@@ -792,7 +792,7 @@ template <class T, class C, class D>
 class TSharedPtr: public TPointerBase<TSharedPtr<T, C, D>, T> {
     template <class TT, class CC, class DD>
     friend class TSharedPtr;
-
+ 
 public:
     inline TSharedPtr() noexcept
         : T_(nullptr)
@@ -846,7 +846,7 @@ public:
     {
         Ref();
     }
-
+ 
     template <class TT, class = TGuardConversion<T, TT>>
     inline TSharedPtr(TSharedPtr<TT, C, D>&& t) noexcept
         : T_(t.T_)
